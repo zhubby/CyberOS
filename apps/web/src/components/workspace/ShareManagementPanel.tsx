@@ -982,7 +982,7 @@ export function shareStatusTone(summary: ShareSummary | null, loading: boolean, 
   if (loading) {
     return "neutral";
   }
-  if ((error && !summary) || (summary?.issues.length ?? 0) > 0) {
+  if ((error && !summary) || (summary?.issues.length ?? 0) > 0 || hasUnhealthyEnabledShareServices(summary)) {
     return "warning";
   }
   return summary?.enabled ? "ready" : "neutral";
@@ -1008,10 +1008,24 @@ export function shareStatusDetail(summary: ShareSummary | null, loading: boolean
   if (!summary?.enabled) {
     return t("workspace.management.shares.disabledDetail");
   }
-  if (summary.issues.length > 0) {
+  if (summary.issues.length > 0 || hasUnhealthyEnabledShareServices(summary)) {
     return t("workspace.management.shares.partialDetail");
   }
   return t("workspace.management.shares.readyDetail");
+}
+
+function hasUnhealthyEnabledShareServices(summary: ShareSummary | null): boolean {
+  if (!summary?.enabled) {
+    return false;
+  }
+
+  return SHARE_PROTOCOLS.some((protocol) => {
+    const protocolSummary = summary.protocols[protocol];
+    return protocolSummary.enabledShares > 0 && (
+      protocolSummary.services.length === 0
+      || protocolSummary.services.some((service) => service.status !== "active")
+    );
+  });
 }
 
 function protocolSummaryTone(summary: ShareSummary | null, protocol: ShareProtocol): StatusTone {
