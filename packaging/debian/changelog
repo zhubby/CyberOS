@@ -1,3 +1,9 @@
+sigmaos (0.9.18) unstable; urgency=medium
+
+  * Report inactive share services accurately in the Web management panel.
+
+ -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sun, 11 Oct 2026 06:30:15 +0000
+
 sigmaos (0.9.17) unstable; urgency=medium
 
   * Repair worker startup when upgrading installations with the legacy Pi runtime directory
