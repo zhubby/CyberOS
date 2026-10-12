@@ -390,6 +390,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("awk '$1 ~ /^sigmaos-/ { print }'");
     expect(deployWorkflow).toContain("[ -x /usr/local/bin/node ]");
     expect(deployWorkflow).toContain("CM5 runtime requires Node.js 22");
+    expect(deployWorkflow).toContain("sigmaos-indexer.service");
+    expect(deployWorkflow).toContain("/api/indexer/status");
+    expect(deployWorkflow).toContain("payload?.queue?.stalled !== false");
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
     expect(deployWorkflow).toContain('local_parts_dir="$release_dir/parts"');
     expect(deployWorkflow).toContain('remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"');
@@ -570,6 +573,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("systemctl restart $RUNTIME_SERVICES");
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
     expect(deploy).toContain("sigmaos-downloader.service sigmaos-indexer.service sigmaos-hostd.service");
+    expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
     expect(deploy).toContain('die "one or more services restarted during stabilization"');
     expect(deploy).toContain('version $manifest_version is already installed; recovering runtime and release state');
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"');
@@ -596,6 +600,8 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("sigmaos-termux");
     expect(deploy).toContain("package.deb must be a regular file");
     expect(deploy).toContain("/api/roots/readiness");
+    expect(deploy).toContain("/api/indexer/status");
+    expect(deploy).toContain('status?.queue?.stalled === false');
     expect(deploy).toContain("/api/system/build-info");
     expect(bootstrap).toContain("/usr/local/sbin/sigmaos-deploy");
     expect(bootstrap).toContain("/usr/lib/sigmaos/scripts/sigmaos-deploy");

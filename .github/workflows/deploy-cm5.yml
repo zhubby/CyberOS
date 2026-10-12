@@ -577,6 +577,7 @@ jobs:
               sigmaos-worker@1.service \
               sigmaos-photostaff.service \
               sigmaos-downloader.service \
+              sigmaos-indexer.service \
               sigmaos-hostd.service \
               sigmaos-termux.service; do
               main_pid="$(systemctl show --property=MainPID --value "$unit")"
@@ -590,8 +591,10 @@ jobs:
             sigmaos-worker@1.service \
             sigmaos-photostaff.service \
             sigmaos-downloader.service \
+            sigmaos-indexer.service \
             sigmaos-hostd.service \
             sigmaos-termux.service; do
+            systemctl is-enabled --quiet "$unit"
             check_active_unit "$unit"
           done
           runtime_before="$(runtime_fingerprint)"
@@ -601,6 +604,7 @@ jobs:
             sigmaos-worker@1.service \
             sigmaos-photostaff.service \
             sigmaos-downloader.service \
+            sigmaos-indexer.service \
             sigmaos-hostd.service \
             sigmaos-termux.service; do
             check_active_unit "$unit"
@@ -627,6 +631,16 @@ jobs:
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/roots/readiness > "$check_dir/readiness.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/health > "$check_dir/system-health.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/indexer/status > "$check_dir/indexer-status.json"
+
+          node - "$check_dir/indexer-status.json" <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (payload?.service?.status !== "ready" || payload.service.freshWorkers < 1 ||
+              payload?.watcher?.status !== "ready" || payload?.queue?.stalled !== false) {
+            throw new Error(`indexer is not ready: ${JSON.stringify(payload)}`);
+          }
+          NODE
 
           node - "$check_dir/build-info.json" "$expected_version" "$expected_commit_sha" <<'NODE'
           const fs = require("node:fs");

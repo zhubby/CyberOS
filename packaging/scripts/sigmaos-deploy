@@ -123,6 +123,32 @@ wait_for_url() {
   return 1
 }
 
+wait_for_indexer_ready() {
+  status_path="$work_dir/indexer-status.json"
+  attempts=1
+  while [ "$attempts" -le 120 ]; do
+    if curl --fail --silent --show-error --max-time 10 \
+      http://127.0.0.1:3010/api/indexer/status > "$status_path" && \
+      node --input-type=module - "$status_path" <<'NODE'
+import fs from "node:fs";
+
+const status = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const ready = status?.service?.status === "ready" &&
+  status.service.freshWorkers > 0 &&
+  status?.watcher?.status === "ready" &&
+  status?.queue?.stalled === false;
+process.exit(ready ? 0 : 1);
+NODE
+    then
+      return 0
+    fi
+    sleep 2
+    attempts=$((attempts + 1))
+  done
+  [ ! -s "$status_path" ] || cat "$status_path" >&2
+  return 1
+}
+
 activate_runtime() {
   log "enabling and restarting SigmaOS services"
   systemctl enable $RUNTIME_SERVICES
@@ -132,6 +158,7 @@ activate_runtime() {
 verify_runtime() {
   log "checking SigmaOS services"
   for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do
+    systemctl is-enabled --quiet "$unit" || die "service is not enabled: $unit"
     systemctl is-active --quiet "$unit" || die "service is not active: $unit"
   done
 
@@ -156,6 +183,7 @@ verify_runtime() {
   wait_for_url http://127.0.0.1:3010/api/roots/readiness || die "root readiness check failed"
   wait_for_url http://127.0.0.1:3010/api/system/health || die "system health endpoint failed"
   wait_for_url http://127.0.0.1:3010/api/system/build-info || die "build-info endpoint failed"
+  wait_for_indexer_ready || die "indexer readiness check failed"
 }
 
 runtime_fingerprint() {
@@ -200,7 +228,7 @@ capture_runtime_diagnostics() {
   target_diagnostics_path=$1
   systemctl status $RUNTIME_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
   systemctl --failed --no-legend --plain > "$target_diagnostics_path/failed-units.txt" 2>&1 || true
-  journalctl -u sigmaos-api.service -u sigmaos-worker@1.service -u sigmaos-photostaff.service -u sigmaos-downloader.service -u sigmaos-hostd.service -u sigmaos-termux.service -n 200 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
+  journalctl -u sigmaos-api.service -u sigmaos-worker@1.service -u sigmaos-photostaff.service -u sigmaos-downloader.service -u sigmaos-indexer.service -u sigmaos-hostd.service -u sigmaos-termux.service -n 200 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
 
   log "service status at failure:" >&2
   cat "$target_diagnostics_path/services-status.txt" >&2
