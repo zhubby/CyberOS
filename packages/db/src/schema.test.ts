@@ -90,8 +90,42 @@ describe("SQLite schema migrations", () => {
       "020_docker_compose_apps",
       "021_vm_direct_actions",
       "022_downloader_reliability",
-      "023_photostaff_reliability"
+      "023_photostaff_reliability",
+      "024_rust_indexer"
     ]);
+  });
+
+  it("installs the Rust indexer queue, content state, FTS, worker, and root state", () => {
+    const database = openSigmaDb(path.join(tempDir, "rust-indexer.sqlite"));
+    try {
+      const tables = database.prepare(`
+        SELECT name FROM sqlite_master WHERE name LIKE 'index%'
+      `).pluck().all();
+      expect(tables).toEqual(expect.arrayContaining([
+        "index_queue",
+        "index_content_state",
+        "indexed_content_fts",
+        "indexer_workers",
+        "index_root_state"
+      ]));
+      const indexedFileColumns = database.prepare("PRAGMA table_info(indexed_files)").all()
+        .map((column) => (column as { name: string }).name);
+      expect(indexedFileColumns).toEqual(expect.arrayContaining([
+        "storage_pool_id",
+        "source_device",
+        "source_inode",
+        "scan_generation",
+        "extraction_source",
+        "extraction_status",
+        "extraction_error"
+      ]));
+      expect(database.prepare(`
+        SELECT json_extract(value_json, '$.scanConcurrency')
+        FROM system_settings WHERE key = 'indexer_settings'
+      `).pluck().get()).toBe(4);
+    } finally {
+      database.close();
+    }
   });
 
   it("installs downloader reliability state, journals, reservations, workers, and claim index", () => {

@@ -621,6 +621,114 @@ export interface IndexerAlert {
   details: string | null;
 }
 
+export type IndexRunKind = "full" | "incremental" | "manual";
+export type IndexQueueStatus = "queued" | "running" | "retrying" | "failed";
+export type IndexExtractionSource = "plain_text" | "pdftotext" | "docx" | "xlsx" | "pptx" | "ocr";
+export type IndexExtractionStatus = "pending" | "ready" | "stale" | "error" | "skipped";
+export type IndexWatcherStatus = "starting" | "ready" | "degraded" | "unsupported";
+export type IndexRebuildStatus = "legacy" | "copying" | "rebuilding" | "ready" | "failed";
+
+export interface IndexerSettingsRecord {
+  scanConcurrency: number;
+  extractionConcurrency: number;
+  reconciliationIntervalMs: number;
+  maxExtractedTextBytes: number;
+  maxSourceDocumentBytes: number;
+  commandTimeoutMs: number;
+  maxPdfTextPages: number;
+  maxOcrPages: number;
+  ocrRootIds: string[];
+  updatedAt: string;
+}
+
+export interface IndexerWorkerHealth {
+  status: "ready" | "stale" | "unavailable";
+  freshWorkers: number;
+  lastHeartbeatAt: string | null;
+}
+
+export interface IndexerWatcherHealth {
+  status: IndexWatcherStatus;
+  degradedRoots: string[];
+  reason: string | null;
+}
+
+export interface IndexerQueueHealth {
+  queued: number;
+  running: number;
+  retrying: number;
+  failed: number;
+  oldestQueuedAt: string | null;
+  stalled: boolean;
+}
+
+export interface IndexerRebuildHealth {
+  status: IndexRebuildStatus;
+  copied: number;
+  total: number;
+  rootsReady: number;
+  rootsTotal: number;
+}
+
+export interface IndexerServiceStatus {
+  service: IndexerWorkerHealth;
+  watcher: IndexerWatcherHealth;
+  queue: IndexerQueueHealth;
+  rebuild: IndexerRebuildHealth;
+}
+
+export type IndexSearchCategory = "text" | "document" | "spreadsheet" | "presentation" | "pdf" | "other";
+export type IndexSearchSortField = "relevance" | "name" | "mtime" | "size";
+
+export interface IndexSearchRequest {
+  rootId: string;
+  storagePoolId: string;
+  path?: string;
+  query?: string;
+  mimeTypes?: string[];
+  categories?: IndexSearchCategory[];
+  modifiedFrom?: string;
+  modifiedTo?: string;
+  sizeMin?: number;
+  sizeMax?: number;
+  extractionSources?: IndexExtractionSource[];
+  extractionStatuses?: IndexExtractionStatus[];
+  sort?: { field: IndexSearchSortField; direction: "asc" | "desc" };
+  cursor?: string | null;
+  limit?: number;
+}
+
+export interface IndexSearchHighlightRange {
+  start: number;
+  end: number;
+}
+
+export interface IndexSearchResult {
+  fileId: string;
+  rootId: string;
+  path: string;
+  name: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  mtimeMs: number;
+  score: number | null;
+  snippet: string;
+  highlightRanges: IndexSearchHighlightRange[];
+  extractionSource: IndexExtractionSource | null;
+  extractionStatus: IndexExtractionStatus;
+}
+
+export interface IndexSearchPage {
+  files: IndexSearchResult[];
+  nextCursor: string | null;
+}
+
+export interface IndexReindexRequest {
+  rootId: string;
+  path?: string;
+  recursive?: boolean;
+}
+
 export interface SystemHealthSummary {
   status: "ready" | "degraded" | "failed";
   checkedAt: string;
@@ -634,6 +742,7 @@ export interface SystemHealthSummary {
   indexerFreshnessMs: number | null;
   backupFreshnessMs: number | null;
   downloader: DownloadWorkerHealth;
+  indexer?: IndexerServiceStatus;
   photostaff: PhotostaffWorkerHealth;
   vodPlayer: VodPlayerHealth;
 }

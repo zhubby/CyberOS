@@ -53,7 +53,7 @@ install -d "$OUT_DIR"
 mmdebstrap \
   --architectures="$ARCH" \
   --variant=minbase \
-  --include=systemd-sysv,ca-certificates,curl,nodejs,npm,sqlite3,tmux,nginx,restic,git,rsync,network-manager,wpasupplicant,dnsmasq-base,wireless-regdb,iw,docker.io,docker-cli,docker-compose,libvirt-daemon-system,libvirt-clients,qemu-system-arm,qemu-efi-aarch64,qemu-utils,virtinst,ipxe-qemu,gzip,unzip,libarchive-tools,unrar-free,mdadm,btrfs-progs,tesseract-ocr,poppler-utils,ffmpeg,libraw-bin,imagemagick,libheif-examples,libimage-exiftool-perl,libvips-tools,mpv,seatd,smartmontools,samba,apache2,apache2-utils,vsftpd,libpam-pwdfile,nfs-kernel-server,minidlna \
+  --include=systemd-sysv,ca-certificates,curl,nodejs,npm,sqlite3,tmux,nginx,restic,git,rsync,network-manager,wpasupplicant,dnsmasq-base,wireless-regdb,iw,docker.io,docker-cli,docker-compose,libvirt-daemon-system,libvirt-clients,qemu-system-arm,qemu-efi-aarch64,qemu-utils,virtinst,ipxe-qemu,gzip,unzip,libarchive-tools,unrar-free,mdadm,btrfs-progs,tesseract-ocr,tesseract-ocr-chi-sim,tesseract-ocr-eng,poppler-utils,ffmpeg,libraw-bin,imagemagick,libheif-examples,libimage-exiftool-perl,libvips-tools,mpv,seatd,smartmontools,samba,apache2,apache2-utils,vsftpd,libpam-pwdfile,nfs-kernel-server,minidlna \
   "$SUITE" "$ROOTFS" "$MIRROR"
 
 case "$ARCH" in
@@ -82,9 +82,9 @@ systemd-nspawn -D "$ROOTFS" /usr/lib/sigmaos/scripts/sigmaos-nginx.sh
 if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
   systemd-nspawn -D "$ROOTFS" /bin/sh -eu -c \
     'sed -i "/^\\[vod_player\\]/,/^\\[/ s/^enabled = false$/enabled = true/" /etc/sigmaos/config.toml'
-  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.timer sigmaos-scheduler.timer sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer
+  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-scheduler.timer sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer
 else
-  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service sigmaos-hostd.service sigmaos-termux.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.timer sigmaos-scheduler.timer sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer
+  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service sigmaos-hostd.service sigmaos-termux.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-scheduler.timer sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer
 fi
 
 tar --numeric-owner -C "$ROOTFS" -cpf "$TARBALL" .

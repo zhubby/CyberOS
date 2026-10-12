@@ -31,6 +31,14 @@ import type {
   GitDirectoryStatus,
   GitFileStatus,
   IndexRootStatus,
+  IndexReindexRequest as SharedIndexReindexRequest,
+  IndexSearchCategory as SharedIndexSearchCategory,
+  IndexSearchPage as SharedIndexSearchPage,
+  IndexSearchRequest as SharedIndexSearchRequest,
+  IndexSearchResult as SharedIndexSearchResult,
+  IndexSearchSortField as SharedIndexSearchSortField,
+  IndexerServiceStatus as SharedIndexerServiceStatus,
+  IndexerSettingsRecord as SharedIndexerSettingsRecord,
   ModelProviderName as SharedModelProviderName,
   PublicBuildInfo,
   PublicModelProviderSettings,
@@ -129,6 +137,18 @@ export interface FileSearchResult {
 }
 
 export type IndexerRootStatus = IndexRootStatus;
+export type IndexReindexRequest = SharedIndexReindexRequest;
+export type IndexSearchCategory = SharedIndexSearchCategory;
+export type IndexSearchPage = SharedIndexSearchPage;
+export type IndexSearchRequest = SharedIndexSearchRequest;
+export type IndexSearchResult = SharedIndexSearchResult;
+export type IndexSearchSortField = SharedIndexSearchSortField;
+export type IndexerServiceStatus = SharedIndexerServiceStatus;
+export type IndexerSettings = SharedIndexerSettingsRecord;
+
+export interface IndexerOverview extends IndexerServiceStatus {
+  roots: IndexerRootStatus[];
+}
 
 export interface BackupStatus {
   enabled: boolean;
@@ -1390,6 +1410,16 @@ export async function searchFiles(
   return (await response.json()) as FileSearchResult;
 }
 
+export async function searchIndex(request: IndexSearchRequest): Promise<IndexSearchPage> {
+  const response = await fetch("/api/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request)
+  });
+  await ensureOk(response);
+  return (await response.json()) as IndexSearchPage;
+}
+
 export async function getIndexerStatus(rootId?: string): Promise<IndexerRootStatus[]> {
   const params = new URLSearchParams();
   if (rootId) {
@@ -1400,6 +1430,44 @@ export async function getIndexerStatus(rootId?: string): Promise<IndexerRootStat
   await ensureOk(response);
   const body = (await response.json()) as { roots: IndexerRootStatus[] };
   return body.roots;
+}
+
+export async function getIndexerOverview(rootId?: string): Promise<IndexerOverview> {
+  const params = new URLSearchParams();
+  if (rootId) params.set("rootId", rootId);
+  const query = params.size ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/indexer/status${query}`);
+  await ensureOk(response);
+  return (await response.json()) as IndexerOverview;
+}
+
+export async function getIndexerSettings(): Promise<IndexerSettings> {
+  const response = await fetch("/api/settings/indexer");
+  await ensureOk(response);
+  const body = (await response.json()) as { settings: IndexerSettings };
+  return body.settings;
+}
+
+export async function updateIndexerSettings(
+  patch: Partial<Omit<IndexerSettings, "updatedAt">>
+): Promise<IndexerSettings> {
+  const response = await fetch("/api/settings/indexer", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch)
+  });
+  await ensureOk(response);
+  const body = (await response.json()) as { settings: IndexerSettings };
+  return body.settings;
+}
+
+export async function requestReindex(input: IndexReindexRequest): Promise<void> {
+  const response = await fetch("/api/indexer/reindex", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  await ensureOk(response);
 }
 
 export async function getRootReadiness(rootId?: string): Promise<RootReadiness[]> {

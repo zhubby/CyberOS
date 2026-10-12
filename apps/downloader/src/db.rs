@@ -242,13 +242,13 @@ impl Db {
             let ready = self
                 .call(|connection| {
                     let found: Option<i64> = connection
-                    .query_row(
-                        "SELECT 1 FROM schema_migrations WHERE id = '022_downloader_reliability'",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .optional()
-                    .unwrap_or(None);
+                        .query_row(
+                            "SELECT 1 FROM schema_migrations WHERE id = '024_rust_indexer'",
+                            [],
+                            |row| row.get(0),
+                        )
+                        .optional()
+                        .unwrap_or(None);
                     Ok(found.is_some())
                 })
                 .await
@@ -259,7 +259,7 @@ impl Db {
             if started.elapsed() >= timeout {
                 return Err(DownloadError::new(
                     ErrorCode::Database,
-                    "database migration 022_downloader_reliability is not available",
+                    "database migration 024_rust_indexer is not available",
                     true,
                 ));
             }
@@ -750,6 +750,15 @@ impl Db {
                 params![i64_from(journal.size_bytes)?, i64_from(journal.size_bytes)?, journal.sha256, now, now,
                     journal.operation_id, now, journal.task_id],
             ).map_err(DownloadError::database)?;
+            transaction.execute(
+                "INSERT INTO index_queue (id, root_id, storage_pool_id, path, recursive, kind, generation, priority, status, created_at, updated_at) \
+                 VALUES (?, ?, ?, ?, 0, 'incremental', 1, 50, 'queued', ?, ?) \
+                 ON CONFLICT(root_id, path) DO UPDATE SET storage_pool_id = excluded.storage_pool_id, \
+                   generation = index_queue.generation + 1, priority = MAX(index_queue.priority, 50), status = 'queued', \
+                   retry_count = 0, next_retry_at = NULL, worker_id = NULL, lease_expires_at = NULL, \
+                   error = NULL, error_code = NULL, updated_at = excluded.updated_at, finished_at = NULL",
+                params![format!("{}-index", journal.operation_id), task.root_id, task.storage_pool_id, task.target_path, now, now],
+            ).map_err(DownloadError::database)?;
             transaction.execute("DELETE FROM download_publish_journal WHERE task_id = ?", [&journal.task_id])
                 .map_err(DownloadError::database)?;
             transaction.execute("DELETE FROM download_segments WHERE task_id = ?", [&journal.task_id])
@@ -1015,6 +1024,14 @@ CREATE TABLE download_workers (
   worker_id TEXT PRIMARY KEY, version TEXT NOT NULL,
   started_at TEXT NOT NULL, heartbeat_at TEXT NOT NULL
 );
+CREATE TABLE index_queue (
+  id TEXT PRIMARY KEY, root_id TEXT NOT NULL, storage_pool_id TEXT, path TEXT NOT NULL,
+  recursive INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 1,
+  priority INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'queued', retry_count INTEGER NOT NULL DEFAULT 0,
+  next_retry_at TEXT, worker_id TEXT, lease_expires_at TEXT, error TEXT, error_code TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
+  UNIQUE(root_id, path)
+);
 CREATE TABLE system_settings (
   key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at TEXT NOT NULL
 );
@@ -1188,6 +1205,36 @@ mod tests {
         assert_eq!(
             db.get_task(&task.id).await.unwrap().unwrap().status,
             "completed"
+        );
+        let queued_index = db
+            .test_call(|connection| {
+                connection
+                    .query_row(
+                        "SELECT root_id, storage_pool_id, path, generation, status FROM index_queue WHERE root_id = 'root' AND path = 'complete.bin'",
+                        [],
+                        |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, String>(1)?,
+                                row.get::<_, String>(2)?,
+                                row.get::<_, i64>(3)?,
+                                row.get::<_, String>(4)?,
+                            ))
+                        },
+                    )
+                    .map_err(DownloadError::database)
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            queued_index,
+            (
+                "root".to_owned(),
+                "/tmp".to_owned(),
+                "complete.bin".to_owned(),
+                1,
+                "queued".to_owned()
+            )
         );
 
         db.test_call(|connection| insert_queued_task(connection, "retry"))

@@ -18,7 +18,7 @@ units = [
   "sigmaos-worker@1.service",
   "sigmaos-photostaff.service",
   "sigmaos-downloader.service",
-  "sigmaos-indexer.timer",
+  "sigmaos-indexer.service",
   "sigmaos-scheduler.timer",
   "sigmaos-maintenance.timer",
   "sigmaos-backup-daily.timer",
@@ -63,6 +63,8 @@ ai = [
 ]
 ocr_media_helpers = [
   "tesseract-ocr",
+  "tesseract-ocr-chi-sim",
+  "tesseract-ocr-eng",
   "poppler-utils",
   "imagemagick"
 ]

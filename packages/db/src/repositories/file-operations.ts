@@ -8,6 +8,7 @@ import type {
 import type { SigmaDatabase } from "../connection.js";
 import { mapOperation, mapTrashEntry } from "./operation-mappers.js";
 import type { DbOperationRow, DbTrashEntryRow } from "./repository-rows.js";
+import { enqueueIndexTask } from "./indexer-queue.js";
 
 export function recordAppliedOperation(
   db: SigmaDatabase,
@@ -43,7 +44,71 @@ export function recordAppliedOperation(
     metadataJson: JSON.stringify(operation.metadata)
   });
 
+  if (operation.status === "applied") {
+    enqueueAppliedOperationPaths(db, operation);
+  }
+
   return operation;
+}
+
+function enqueueAppliedOperationPaths(db: SigmaDatabase, operation: FileOperationRecord): void {
+  const rootId = typeof operation.metadata.rootId === "string" ? operation.metadata.rootId : null;
+  if (!rootId) return;
+  const storagePoolId = typeof operation.metadata.storagePoolId === "string"
+    ? operation.metadata.storagePoolId
+    : null;
+  const paths = indexableOperationPaths(operation);
+  for (const path of paths) {
+    try {
+      enqueueIndexTask(db, {
+        rootId,
+        storagePoolId,
+        path,
+        recursive: ["copy", "extract", "mkdir", "move", "rename", "restore", "trash"].includes(operation.operation),
+        kind: "incremental"
+      });
+    } catch (error) {
+      const now = new Date().toISOString();
+      const scope = `${rootId}:${path}`;
+      db.prepare(`
+        INSERT INTO health_alerts (
+          id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, details
+        ) VALUES (?, 'index_enqueue_failed', ?, ?, 'warning', 'active', ?, ?, ?)
+        ON CONFLICT(code, scope) DO UPDATE SET
+          status = 'active', last_seen_at = excluded.last_seen_at,
+          resolved_at = NULL, details = excluded.details
+      `).run(
+        randomUUID(),
+        scope,
+        rootId,
+        now,
+        now,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+}
+
+function indexableOperationPaths(operation: FileOperationRecord): string[] {
+  const candidates = (() => {
+    switch (operation.operation) {
+      case "move":
+      case "rename":
+        return [operation.sourcePath, operation.targetPath];
+      case "edit":
+      case "tag":
+      case "trash":
+        return [operation.sourcePath];
+      case "copy":
+      case "download":
+      case "extract":
+      case "mkdir":
+      case "restore":
+      case "upload":
+        return [operation.targetPath];
+    }
+  })();
+  return [...new Set(candidates.filter((value): value is string => Boolean(value)))];
 }
 
 export function getFileOperation(db: SigmaDatabase, operationId: string): FileOperationRecord | null {

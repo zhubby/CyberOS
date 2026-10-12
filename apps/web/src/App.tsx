@@ -13,6 +13,8 @@ import {
   getVmOperations,
   getDockerSettings,
   getDownloadSettings,
+  getIndexerOverview,
+  getIndexerSettings,
   getFileBlobUrl,
   getFileDownloadUrl,
   getFileVideoUrl,
@@ -38,14 +40,16 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   rollbackOperation,
+  requestReindex,
   saveDockerSettings,
   saveModelProviderSettings,
   savePiToolPolicySettings,
-  searchFiles,
+  searchIndex,
   sendMessage,
   sendVodPlayerCommand,
   updateSessionPath,
   updateDownloadSettings,
+  updateIndexerSettings,
   updatePhotostaffProcessingSettings,
   uploadFile,
   type AgentEvent,
@@ -57,6 +61,10 @@ import {
   type VmOperation,
   type DockerSettings,
   type DownloadSettings,
+  type IndexerOverview,
+  type IndexerSettings,
+  type IndexSearchRequest,
+  type IndexSearchResult,
   type SaveEditableTextResult,
   type FileListing,
   type ModelProviderSettings,
@@ -82,7 +90,12 @@ import { ChatPane, composeAgentMessage } from "./components/chat/ChatPane.js";
 import { NotificationCenter } from "./components/notifications/NotificationCenter.js";
 import { FileEditorModal } from "./components/editor/FileEditorModal.js";
 import { SettingsModal } from "./components/settings/SettingsModal.js";
-import { WorkspacePane } from "./components/workspace/WorkspacePane.js";
+import {
+  WorkspacePane,
+  defaultWorkspaceSearchOptions,
+  hasWorkspaceSearchFilters,
+  type WorkspaceSearchOptions
+} from "./components/workspace/WorkspacePane.js";
 import {
   defaultToolPolicyForm,
   dockerSettingsToForm,
@@ -204,6 +217,9 @@ export function App() {
   const [messageSubmitting, setMessageSubmitting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchOptions, setSearchOptions] = useState<WorkspaceSearchOptions>(() => defaultWorkspaceSearchOptions());
+  const [searchResults, setSearchResults] = useState<IndexSearchResult[] | null>(null);
+  const [searchNextCursor, setSearchNextCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<AppStatus>("starting");
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
@@ -223,6 +239,8 @@ export function App() {
   const [toolPolicySettings, setToolPolicySettings] = useState<PiToolPolicySettings | null>(null);
   const [dockerSettings, setDockerSettings] = useState<DockerSettings | null>(null);
   const [downloadSettings, setDownloadSettings] = useState<DownloadSettings | null>(null);
+  const [indexerSettings, setIndexerSettings] = useState<IndexerSettings | null>(null);
+  const [indexerStatus, setIndexerStatus] = useState<IndexerOverview | null>(null);
   const [photostaffSettings, setPhotostaffSettings] = useState<PhotostaffLibrarySettings | null>(null);
   const [photostaffStatus, setPhotostaffStatus] = useState<PhotostaffLibraryStatus | null>(null);
   const [photostaffProcessingSettings, setPhotostaffProcessingSettings] = useState<PhotostaffProcessingSettings | null>(null);
@@ -497,6 +515,8 @@ export function App() {
     setError(null);
     setSearchQuery("");
     activeSearchQueryRef.current = "";
+    setSearchResults(null);
+    setSearchNextCursor(null);
     setSelectedFilePath(null);
     setPreviewMeta(null);
     setTextPreview(null);
@@ -839,6 +859,8 @@ export function App() {
         toolPolicyResult,
         dockerSettingsResult,
         downloadSettingsResult,
+        indexerSettingsResult,
+        indexerStatusResult,
         photostaffSettingsResult,
         photostaffProcessingSettingsResult,
         photostaffStatusResult,
@@ -849,6 +871,8 @@ export function App() {
         getPiToolPolicySettings(),
         getDockerSettings(),
         getDownloadSettings(),
+        getIndexerSettings(),
+        getIndexerOverview(),
         getPhotostaffLibrarySettings(),
         getPhotostaffProcessingSettings(),
         getPhotostaffStatus(),
@@ -883,6 +907,20 @@ export function App() {
       } else {
         setDownloadSettings(null);
         errors.push(toErrorMessage(downloadSettingsResult.reason));
+      }
+
+      if (indexerSettingsResult.status === "fulfilled") {
+        setIndexerSettings(indexerSettingsResult.value);
+      } else {
+        setIndexerSettings(null);
+        errors.push(toErrorMessage(indexerSettingsResult.reason));
+      }
+
+      if (indexerStatusResult.status === "fulfilled") {
+        setIndexerStatus(indexerStatusResult.value);
+      } else {
+        setIndexerStatus(null);
+        errors.push(toErrorMessage(indexerStatusResult.reason));
       }
 
       if (photostaffSettingsResult.status === "fulfilled") {
@@ -997,6 +1035,28 @@ export function App() {
     setError(null);
     try {
       setDownloadSettings(await updateDownloadSettings(patch));
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+      throw nextError;
+    }
+  }
+
+  async function changeIndexerSettings(patch: Partial<Omit<IndexerSettings, "updatedAt">>) {
+    setError(null);
+    try {
+      setIndexerSettings(await updateIndexerSettings(patch));
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+      throw nextError;
+    }
+  }
+
+  async function reindexRoot(rootId: string) {
+    setError(null);
+    try {
+      await requestReindex({ rootId, path: ".", recursive: true });
+      setIndexerStatus(await getIndexerOverview());
+      setSuccessNotice(String(t("settings.indexer.reindexQueued")));
     } catch (nextError) {
       setError(toErrorMessage(nextError));
       throw nextError;
@@ -1133,6 +1193,9 @@ export function App() {
     if (!selectedRootId || !selectedStoragePoolId) {
       return false;
     }
+    if (query) {
+      return executeAdvancedSearch(undefined, null, false);
+    }
     const fileRequestId = beginFileListingRequest();
     const listing = await loadFileListingForView(selectedRootId, currentPath, query, selectedStoragePoolId);
     return commitFileListing(fileRequestId, listing);
@@ -1140,31 +1203,75 @@ export function App() {
 
   async function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await executeAdvancedSearch();
+  }
+
+  async function executeAdvancedSearch(
+    options = searchOptions,
+    cursor: string | null = null,
+    append = false
+  ): Promise<boolean> {
     const query = searchQuery.trim();
-    if (!selectedRootId || !selectedStoragePoolId || !query) {
+    const hasFilters = hasWorkspaceSearchFilters(options);
+    if (!selectedRootId || !selectedStoragePoolId) return false;
+    if (!query && !hasFilters) {
       activeSearchQueryRef.current = "";
+      setSearchResults(null);
+      setSearchNextCursor(null);
       await refreshFiles();
-      return;
+      return true;
     }
 
     setStatus("searching");
-    activeSearchQueryRef.current = query;
+    activeSearchQueryRef.current = query || "__filters__";
     const fileRequestId = beginFileListingRequest();
     try {
-      const result = await searchFiles(selectedRootId, currentPath, query, selectedStoragePoolId);
-      if (!commitFileListing(fileRequestId, { entries: result.files, git: result.git })) {
-        return;
+      const request: IndexSearchRequest = {
+        rootId: selectedRootId,
+        storagePoolId: selectedStoragePoolId,
+        path: currentPath,
+        sort: options.sort,
+        cursor,
+        limit: 50,
+        ...(query ? { query } : {}),
+        ...(options.categories.length ? { categories: options.categories } : {}),
+        ...(options.extractionSources.length ? { extractionSources: options.extractionSources } : {}),
+        ...(options.extractionStatuses.length ? { extractionStatuses: options.extractionStatuses } : {}),
+        ...optionalProperty("mimeTypes", splitSearchValues(options.mimeTypes)),
+        ...optionalProperty("modifiedFrom", searchDateBoundary(options.modifiedFrom, false)),
+        ...optionalProperty("modifiedTo", searchDateBoundary(options.modifiedTo, true)),
+        ...optionalProperty("sizeMin", optionalSearchNumber(options.sizeMin)),
+        ...optionalProperty("sizeMax", optionalSearchNumber(options.sizeMax))
+      };
+      const page = await searchIndex(request);
+      const combined = append ? [...(searchResults ?? []), ...page.files] : page.files;
+      const entries = combined.map(indexSearchResultToFileEntry);
+      if (!commitFileListing(fileRequestId, { entries, git: null })) {
+        return false;
       }
+      setSearchResults(combined);
+      setSearchNextCursor(page.nextCursor);
       setSelectedFilePath(null);
       setPreviewCollapsed(false);
       setStatus("ready");
+      return true;
     } catch (nextError) {
       if (!isCurrentFileListingRequest(fileRequestId)) {
-        return;
+        return false;
       }
       setError(toErrorMessage(nextError));
       setStatus("error");
+      return false;
     }
+  }
+
+  function applySearchFilters(options?: WorkspaceSearchOptions) {
+    if (options) setSearchOptions(options);
+    void executeAdvancedSearch(options ?? searchOptions);
+  }
+
+  function loadMoreSearchResults() {
+    if (searchNextCursor) void executeAdvancedSearch(searchOptions, searchNextCursor, true);
   }
 
   async function openDirectory(pathname: string) {
@@ -1181,6 +1288,8 @@ export function App() {
     setError(null);
     setSearchQuery("");
     activeSearchQueryRef.current = "";
+    setSearchResults(null);
+    setSearchNextCursor(null);
     setSelectedFilePath(null);
     setPreviewMeta(null);
     setTextPreview(null);
@@ -1823,6 +1932,8 @@ export function App() {
     }
     activeSearchQueryRef.current = "";
     setSearchQuery("");
+    setSearchResults(null);
+    setSearchNextCursor(null);
     setComposerPath(null);
     setWarningNotice(null);
     setSelectedFilePath(null);
@@ -1994,6 +2105,8 @@ export function App() {
 
       activeSearchQueryRef.current = "";
       setSearchQuery("");
+      setSearchResults(null);
+      setSearchNextCursor(null);
       const parentPath = workspaceParentPath(linkedMeta.path);
       if (currentPathRef.current !== parentPath || hadActiveSearch) {
         await openDirectory(parentPath);
@@ -2214,6 +2327,9 @@ export function App() {
         previewFileSizeLimitBytes={previewFileSizeLimitBytes}
         previewCollapsed={previewCollapsed}
         searchQuery={searchQuery}
+        searchOptions={searchOptions}
+        searchResults={searchResults}
+        searchNextCursor={searchNextCursor}
         operations={operations}
         uploadBatches={visibleUploadBatches}
         dockerOperations={dockerOperations}
@@ -2231,6 +2347,9 @@ export function App() {
         onRefreshFiles={() => void refreshFiles()}
         onSubmitSearch={(event) => void submitSearch(event)}
         onSearchQueryChange={setSearchQuery}
+        onSearchOptionsChange={setSearchOptions}
+        onApplySearchFilters={applySearchFilters}
+        onLoadMoreSearchResults={loadMoreSearchResults}
         onGoToBreadcrumb={goToBreadcrumb}
         onGoToStoragePool={goToStoragePool}
         onOpenEntry={openEntry}
@@ -2291,6 +2410,9 @@ export function App() {
           settings={modelSettings}
           dockerSettings={dockerSettings}
           downloadSettings={downloadSettings}
+          indexerSettings={indexerSettings}
+          indexerStatus={indexerStatus}
+          roots={roots}
           photostaffSettings={photostaffSettings}
           photostaffStatus={photostaffStatus}
           photostaffProcessingSettings={photostaffProcessingSettings}
@@ -2316,6 +2438,8 @@ export function App() {
           onFormChange={setModelSettingsForm}
           onDockerFormChange={setDockerSettingsForm}
           onDownloadSettingsChange={changeDownloadSettings}
+          onIndexerSettingsChange={changeIndexerSettings}
+          onIndexerReindex={reindexRoot}
           onPhotostaffProcessingSettingsChange={changePhotostaffProcessingSettings}
           onToolPolicyFormChange={setToolPolicyForm}
           onLanguagePreferenceChange={changeLanguagePreference}
@@ -2335,6 +2459,38 @@ function parseDockerShells(input: string): string[] {
     .split(/[\n,]/gu)
     .map((shell) => shell.trim())
     .filter(Boolean);
+}
+
+function splitSearchValues(input: string): string[] | undefined {
+  const values = [...new Set(input.split(",").map((value) => value.trim()).filter(Boolean))];
+  return values.length ? values : undefined;
+}
+
+function searchDateBoundary(value: string, endOfDay: boolean): string | undefined {
+  if (!value) return undefined;
+  return `${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`;
+}
+
+function optionalSearchNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
+}
+
+function indexSearchResultToFileEntry(result: IndexSearchResult): FileEntry {
+  return {
+    name: result.name,
+    path: result.path,
+    kind: "file",
+    sizeBytes: result.sizeBytes,
+    modifiedAt: new Date(result.mtimeMs).toISOString(),
+    isSafe: true,
+    ...(result.mimeType ? { mimeType: result.mimeType } : {})
+  };
+}
+
+function optionalProperty<Key extends string, Value>(key: Key, value: Value | undefined): { [Property in Key]?: Value } {
+  return value === undefined ? {} : { [key]: value } as { [Property in Key]?: Value };
 }
 
 function pathContains(containerPath: string, candidatePath: string): boolean {

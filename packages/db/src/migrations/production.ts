@@ -1016,5 +1016,150 @@ export const productionMigrations: Migration[] = [
       DROP TABLE photo_jobs;
       DROP TABLE photo_assets;
     `
+  },
+  {
+    id: "024_rust_indexer",
+    sql: `
+      CREATE TABLE IF NOT EXISTS indexed_files (
+        id TEXT PRIMARY KEY,
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        name TEXT NOT NULL,
+        mime_type TEXT,
+        size_bytes INTEGER NOT NULL DEFAULT 0,
+        mtime_ms INTEGER NOT NULL DEFAULT 0,
+        hash TEXT,
+        indexed_at TEXT NOT NULL,
+        UNIQUE(root_id, path)
+      );
+      CREATE VIRTUAL TABLE IF NOT EXISTS indexed_text USING fts5(
+        file_id UNINDEXED, root_id UNINDEXED, path, name, body
+      );
+
+      ALTER TABLE indexed_files ADD COLUMN storage_pool_id TEXT;
+      ALTER TABLE indexed_files ADD COLUMN source_device INTEGER;
+      ALTER TABLE indexed_files ADD COLUMN source_inode INTEGER;
+      ALTER TABLE indexed_files ADD COLUMN source_size_bytes INTEGER
+        CHECK (source_size_bytes IS NULL OR source_size_bytes >= 0);
+      ALTER TABLE indexed_files ADD COLUMN source_mtime_ns INTEGER;
+      ALTER TABLE indexed_files ADD COLUMN source_ctime_ns INTEGER;
+      ALTER TABLE indexed_files ADD COLUMN scan_generation TEXT;
+      ALTER TABLE indexed_files ADD COLUMN extraction_source TEXT
+        CHECK (extraction_source IS NULL OR extraction_source IN ('plain_text', 'pdftotext', 'docx', 'xlsx', 'pptx', 'ocr'));
+      ALTER TABLE indexed_files ADD COLUMN extraction_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (extraction_status IN ('pending', 'ready', 'stale', 'error', 'skipped'));
+      ALTER TABLE indexed_files ADD COLUMN extraction_error TEXT;
+
+      ALTER TABLE index_runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'full'
+        CHECK (kind IN ('full', 'incremental', 'manual'));
+      ALTER TABLE index_run_history ADD COLUMN kind TEXT NOT NULL DEFAULT 'full'
+        CHECK (kind IN ('full', 'incremental', 'manual'));
+
+      CREATE TABLE index_queue (
+        id TEXT PRIMARY KEY,
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE CASCADE,
+        storage_pool_id TEXT,
+        path TEXT NOT NULL,
+        recursive INTEGER NOT NULL DEFAULT 0 CHECK (recursive IN (0, 1)),
+        kind TEXT NOT NULL CHECK (kind IN ('full', 'incremental', 'manual')),
+        generation INTEGER NOT NULL DEFAULT 1 CHECK (generation > 0),
+        priority INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'queued'
+          CHECK (status IN ('queued', 'running', 'retrying', 'failed')),
+        retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
+        next_retry_at TEXT,
+        worker_id TEXT,
+        lease_expires_at TEXT,
+        error TEXT,
+        error_code TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        UNIQUE(root_id, path)
+      );
+      CREATE INDEX idx_index_queue_claim
+        ON index_queue(status, next_retry_at, priority DESC, created_at);
+      CREATE INDEX idx_index_queue_root
+        ON index_queue(root_id, status, updated_at);
+
+      CREATE TABLE index_content_state (
+        root_id TEXT PRIMARY KEY REFERENCES nas_roots(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'legacy'
+          CHECK (status IN ('legacy', 'copying', 'rebuilding', 'ready', 'failed')),
+        legacy_cursor INTEGER NOT NULL DEFAULT 0 CHECK (legacy_cursor >= 0),
+        copied_count INTEGER NOT NULL DEFAULT 0 CHECK (copied_count >= 0),
+        legacy_total INTEGER NOT NULL DEFAULT 0 CHECK (legacy_total >= 0),
+        error TEXT,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE VIRTUAL TABLE indexed_content_fts USING fts5(
+        file_id UNINDEXED,
+        root_id UNINDEXED,
+        path,
+        name,
+        body,
+        terms,
+        tokenize = 'unicode61 remove_diacritics 2',
+        prefix = '2 3'
+      );
+
+      CREATE TABLE indexer_workers (
+        worker_id TEXT PRIMARY KEY,
+        version TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        heartbeat_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_indexer_workers_heartbeat
+        ON indexer_workers(heartbeat_at DESC);
+
+      CREATE TABLE index_root_state (
+        root_id TEXT PRIMARY KEY REFERENCES nas_roots(id) ON DELETE CASCADE,
+        watcher_status TEXT NOT NULL DEFAULT 'starting'
+          CHECK (watcher_status IN ('starting', 'ready', 'degraded', 'unsupported')),
+        watcher_error TEXT,
+        reconcile_requested INTEGER NOT NULL DEFAULT 1 CHECK (reconcile_requested IN (0, 1)),
+        active_scan_generation TEXT,
+        completed_scan_generation TEXT,
+        mount_source TEXT,
+        mount_uuid TEXT,
+        mount_fstype TEXT,
+        last_event_at TEXT,
+        last_reconcile_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT INTO index_content_state (
+        root_id, status, legacy_cursor, copied_count, legacy_total, updated_at
+      )
+      SELECT r.id, 'legacy', 0, 0,
+        (SELECT COUNT(*) FROM indexed_text t
+          JOIN indexed_files f ON f.id = t.file_id AND f.root_id = t.root_id
+          WHERE t.root_id = r.id),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      FROM nas_roots r;
+
+      INSERT INTO index_root_state (root_id, updated_at)
+      SELECT id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM nas_roots;
+
+      INSERT OR IGNORE INTO system_settings (key, value_json, updated_at)
+      VALUES (
+        'indexer_settings',
+        json_object(
+          'scanConcurrency', 4,
+          'extractionConcurrency', 2,
+          'reconciliationIntervalMs', 1800000,
+          'maxExtractedTextBytes', 2097152,
+          'maxSourceDocumentBytes', 536870912,
+          'commandTimeoutMs', 120000,
+          'maxPdfTextPages', 500,
+          'maxOcrPages', 20,
+          'ocrRootIds', json('[]'),
+          'updatedAt', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        ),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      );
+    `
   }
 ];

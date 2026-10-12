@@ -25,7 +25,7 @@ dev-worker: ## Run the worker development process.
 	$(NPM) run dev -w @sigmaos/worker
 
 dev-indexer: ## Run the indexer in watch mode.
-	$(NPM) run dev -w @sigmaos/indexer
+	cargo run -p sigmaos-indexer
 
 dev-scheduler: ## Run the scheduler development process.
 	$(NPM) run dev -w @sigmaos/scheduler
@@ -64,7 +64,7 @@ start-worker: ## Start the built worker process.
 	$(NPM) run start -w @sigmaos/worker
 
 start-indexer: ## Start the built indexer process.
-	$(NPM) run start -w @sigmaos/indexer
+	target/release/sigmaos-indexer
 
 start-scheduler: ## Start the built scheduler process.
 	$(NPM) run start -w @sigmaos/scheduler

@@ -54,7 +54,7 @@ curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
 ```
 
-然后从浏览器验证 Web 和 `/docs/`，选择 NAS root，打开终端，上传一个小文件，执行一次索引并确认 `/api/indexer/status` 有完成记录。不要只以 systemd 的 `active` 判断 oneshot 任务成功；请查看对应 journal 和数据库状态。
+然后从浏览器验证 Web 和 `/docs/`，选择 NAS root，打开终端，上传一个小文件并确认 `/api/indexer/status` 的队列、watcher 与 heartbeat 正常。Indexer 应持续为 `active`；scheduler、health 等 oneshot 仍需结合退出码、journal 和数据库状态判断。
 
 hostd 的 root 状态目录应为 `/var/lib/sigmaos/docker-daemon` 和 `/var/lib/sigmaos/network-manager`，不能声明共享父目录或共享 LogsDirectory。父目录和数据库仍由 `sigmaos` 使用，两个恢复子目录为 `root:root 0700`。现有相同配置的 host drop-in 可保留，升级后检查实际合并 unit；在维护窗口按两种启动顺序验证，并观察 hostd 重启是否影响 API/worker。详见[目录所有权排查](/docs/operations/troubleshooting/#服务目录所有权与启动顺序)。
 
@@ -95,10 +95,10 @@ sudo -n stat -c '%U:%G %a %n' /usr/local/sbin/sigmaos-deploy /var/lib/sigmaos-de
 
 `sigmaos-deploy` 只能无密码执行 `/usr/local/sbin/sigmaos-deploy`（该路径由 bootstrap 链接到包内 helper）；不要给它通用 `sudo` 权限，也不要在 workflow 中保存 root 或登录密码。GitHub production environment 的 `CM5_HOST` 必须是 Tailscale 名称/IP，`CM5_DEPLOY_USER` 默认是 `sigmaos-deploy`。
 
-升级前停止 indexer、scheduler、maintenance、health、daily/weekly backup timers，并备份：
+升级前停止 indexer 常驻服务以及 scheduler、maintenance、health、daily/weekly backup timers，并备份：
 
 ```bash
-sudo systemctl stop sigmaos-indexer.timer sigmaos-scheduler.timer \
+sudo systemctl stop sigmaos-indexer.service sigmaos-scheduler.timer \
   sigmaos-maintenance.timer sigmaos-health.timer \
   sigmaos-backup-daily.timer sigmaos-backup-weekly.timer
 ```
@@ -116,7 +116,7 @@ sudo tar -C /var/lib -czf /srv/backup/sigmaos-upgrade/state-before-upgrade.tgz $
 
 示例目录必须未被之前升级占用，避免覆盖恢复材料。配置/state 包可能包含未加密秘密，限制权限并转存到加密备份仓库。它不包含默认 Docker volume 数据，容器工作负载需另行备份。
 
-安装新包后先启动 API、worker、hostd 和 termux，再串行运行 `sigmaos-indexer.service`、`sigmaos-scheduler.service`、`sigmaos-health.service`，最后重新启用 timers。保留旧 `.deb`、`config.toml.pre-termux.bak` 与状态备份，直到浏览器、API、终端身份、root readiness、索引和备份结果全部通过验收。
+安装新包后先启动 API、worker、hostd、termux 和 `sigmaos-indexer.service`，确认 Indexer heartbeat 后再串行运行 `sigmaos-scheduler.service`、`sigmaos-health.service`，最后重新启用 timers。保留旧 `.deb`、`config.toml.pre-termux.bak` 与状态备份，直到浏览器、API、终端身份、root readiness、索引和备份结果全部通过验收。
 
 降级不会自动回滚数据库 migration。若新版本已执行 schema migration，使用与旧包匹配的 SQLite/state 备份恢复，再安装旧包；不要在没有备份的情况下直接覆盖生产数据库。
 

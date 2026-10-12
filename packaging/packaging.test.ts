@@ -29,8 +29,12 @@ describe("native packaging artifacts", () => {
       expect(unit).toContain("NoNewPrivileges=yes");
       expect(unit).toContain("CapabilityBoundingSet=");
       expect(unit).toContain("ReadWritePaths=/var/lib/sigmaos");
-      expect(unit).toContain("ExecStart=/usr/local/bin/node");
-      expect(unit).not.toContain("ExecStart=/usr/bin/node");
+      if (serviceName === "sigmaos-indexer.service") {
+        expect(unit).toContain("ExecStart=/usr/lib/sigmaos/bin/sigmaos-indexer");
+      } else {
+        expect(unit).toContain("ExecStart=/usr/local/bin/node");
+        expect(unit).not.toContain("ExecStart=/usr/bin/node");
+      }
       expect(unit).not.toContain("RuntimeDirectory=sigmaos");
     }
 
@@ -78,7 +82,14 @@ describe("native packaging artifacts", () => {
     await expect(readPackagingFile("systemd", "sigmaos-maintenance.timer")).resolves.toContain(
       "OnCalendar=daily"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-indexer.timer")).resolves.toContain("OnBootSec=5min");
+    const indexerUnit = await readPackagingFile("systemd", "sigmaos-indexer.service");
+    expect(indexerUnit).toContain("Type=notify");
+    expect(indexerUnit).toContain("WatchdogSec=20s");
+    expect(indexerUnit).toContain("Restart=on-failure");
+    expect(indexerUnit).toContain("ReadOnlyPaths=/srv/nas");
+    expect(indexerUnit).toContain("MemoryMax=1G");
+    expect(indexerUnit).toContain("KillMode=control-group");
+    await expect(readPackagingFile("systemd", "sigmaos-indexer.timer")).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readPackagingFile("systemd", "sigmaos-health.timer")).resolves.toContain("OnBootSec=6min");
     await expect(readPackagingFile("debian", "postinst")).resolves.toContain("sigmaos-refresh-groups.sh");
     await expect(readPackagingFile("scripts", "sigmaos-refresh-groups.sh")).resolves.toContain("optional-groups.conf");
@@ -113,7 +124,8 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("target/release/sigmaos-photostaff usr/lib/sigmaos/bin/");
     expect(install).not.toContain("apps/photo-worker");
     expect(install).not.toContain("apps/photostaff/dist/");
-    expect(install).toContain("usr/lib/sigmaos/apps/indexer/dist/");
+    expect(install).toContain("target/release/sigmaos-indexer usr/lib/sigmaos/bin/");
+    expect(install).not.toContain("apps/indexer/dist/");
     expect(install).toContain("usr/lib/sigmaos/apps/backup/dist/");
     expect(install).toContain("usr/lib/sigmaos/apps/scheduler/dist/");
     expect(install).toContain("target/release/sigmaos-vod-player usr/lib/sigmaos/bin/");
@@ -164,7 +176,8 @@ describe("native packaging artifacts", () => {
     expect(tmpfiles).toContain("/run/sigmaos");
     expect(tmpfiles).toContain("/run/mdadm");
     expect(tmpfiles).toContain("d /run/samba 0755 root root -");
-    expect(control).toContain("Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, libheif-examples");
+    expect(control).toContain("Depends: nodejs (>= 22), sqlite3, tmux, util-linux, acl, adduser, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, libheif-examples");
+    expect(control).toMatch(/^Depends:.*poppler-utils.*tesseract-ocr-chi-sim.*tesseract-ocr-eng/m);
     expect(control).toMatch(/^Depends:.*libheif-examples/m);
     expect(control).not.toContain("Recommends: libheif-examples");
     expect(control).toContain("Build-Depends: debhelper-compat (= 13), nodejs, npm, cargo, rustc, acl");
@@ -240,6 +253,10 @@ describe("native packaging artifacts", () => {
     expect(buildImage).toMatch(/--include=.*(^|,)git(,|\\|\s)/s);
     expect(buildImage).toMatch(/--include=.*(^|,)samba(,|\\|\s)/s);
     expect(manifest).toContain("tesseract-ocr");
+    expect(manifest).toContain("tesseract-ocr-chi-sim");
+    expect(manifest).toContain("tesseract-ocr-eng");
+    expect(manifest).toContain("sigmaos-indexer.service");
+    expect(manifest).not.toContain("sigmaos-indexer.timer");
     expect(manifest).toContain("libheif-examples");
     expect(manifest).toContain("libimage-exiftool-perl");
     expect(manifest).toContain("libvips-tools");
@@ -358,7 +375,7 @@ describe("native packaging artifacts", () => {
     expect(rules).toContain("override_dh_shlibdeps:");
     expect(rules).toContain("dh_shlibdeps --exclude=.bare --exclude=linuxmusl");
     expect(control).toContain("Build-Depends: debhelper-compat (= 13), nodejs, npm, cargo, rustc");
-    expect(control).toContain("Depends: nodejs (>= 20)");
+    expect(control).toContain("Depends: nodejs (>= 22)");
     expect(control).toContain("qemu-efi-aarch64");
     expect(control).toContain("ipxe-qemu");
     expect(postinst).toContain("-m 0711 /var/lib/sigmaos/vmstore");
@@ -548,6 +565,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("activate_runtime");
     expect(deploy).toContain("systemctl restart $RUNTIME_SERVICES");
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
+    expect(deploy).toContain("sigmaos-downloader.service sigmaos-indexer.service sigmaos-hostd.service");
     expect(deploy).toContain('die "one or more services restarted during stabilization"');
     expect(deploy).toContain('version $manifest_version is already installed; recovering runtime and release state');
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"');

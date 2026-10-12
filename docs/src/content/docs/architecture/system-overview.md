@@ -26,4 +26,4 @@ flowchart LR
   Tools --> NAS[Configured NAS roots]
 ```
 
-依赖方向是 `web -> api`，`api -> db/nas-tools/shared`，`worker -> agent/db/shared`；Rust downloader 直接使用由 TypeScript migration catalog 管理的 SQLite schema，并通过 dirfd/`openat2` 访问 NAS。indexer、backup、scheduler 同样共享 SQLite。SigmaOS 是多进程原生服务，不使用 Docker 作为自身部署边界。
+依赖方向是 `web -> api`，`api -> db/nas-tools/shared`，`worker -> agent/db/shared`；Rust downloader 与 Rust indexer 直接使用由 TypeScript migration catalog 管理的 SQLite schema，并通过 dirfd/`openat2` 访问 NAS。backup、scheduler 同样共享 SQLite。SigmaOS 是多进程原生服务，不使用 Docker 作为自身部署边界。

@@ -28,6 +28,9 @@ import type {
   DockerSettings,
   DownloadSettings,
   FileOperation,
+  IndexerOverview,
+  IndexerSettings,
+  NasRoot,
   PendingApproval,
   ModelProviderSettings,
   PiToolPolicySettings,
@@ -73,6 +76,7 @@ import {
 import type { ResolvedTheme, ThemePreference } from "../../lib/theme-settings.js";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { VersionSettingsPage } from "./VersionSettingsPage.js";
+import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
 
 interface SettingsModalProps {
   activeSection: SettingsSectionId;
@@ -82,6 +86,9 @@ interface SettingsModalProps {
   saving: boolean;
   dockerSettings: DockerSettings | null;
   downloadSettings: DownloadSettings | null;
+  indexerSettings: IndexerSettings | null;
+  indexerStatus: IndexerOverview | null;
+  roots: NasRoot[];
   photostaffSettings: PhotostaffLibrarySettings | null;
   photostaffStatus: PhotostaffLibraryStatus | null;
   photostaffProcessingSettings: PhotostaffProcessingSettings | null;
@@ -109,6 +116,10 @@ interface SettingsModalProps {
   onDownloadSettingsChange: (
     patch: Partial<Omit<DownloadSettings, "updatedAt">>
   ) => Promise<void>;
+  onIndexerSettingsChange: (
+    patch: Partial<Omit<IndexerSettings, "updatedAt">>
+  ) => Promise<void>;
+  onIndexerReindex: (rootId: string) => Promise<void>;
   onPhotostaffProcessingSettingsChange: (
     patch: Partial<Omit<PhotostaffProcessingSettings, "updatedAt">>
   ) => Promise<void>;
@@ -135,6 +146,9 @@ export function SettingsModal({
   saving,
   dockerSettings,
   downloadSettings,
+  indexerSettings,
+  indexerStatus,
+  roots,
   photostaffSettings,
   photostaffStatus,
   photostaffProcessingSettings,
@@ -160,6 +174,8 @@ export function SettingsModal({
   onFormChange,
   onDockerFormChange,
   onDownloadSettingsChange,
+  onIndexerSettingsChange,
+  onIndexerReindex,
   onPhotostaffProcessingSettingsChange,
   onToolPolicyFormChange,
   onLanguagePreferenceChange,
@@ -192,7 +208,8 @@ export function SettingsModal({
     dockerSettings,
     buildInfo,
     downloadSettings,
-    photostaffStatus
+    photostaffStatus,
+    indexerSettings
   );
   const providerOptions = PROVIDER_OPTIONS.map((provider) => ({
     value: provider,
@@ -284,7 +301,7 @@ export function SettingsModal({
                     {settingsSectionIcon(section.id)}
                     <span>
                       <strong>{settingsSectionTitle(section, t)}</strong>
-                      <small>{settingsSectionLabel(section, settings, loading, t, dockerSettings, buildInfo, downloadSettings, photostaffSettings, photostaffStatus)}</small>
+                      <small>{settingsSectionLabel(section, settings, loading, t, dockerSettings, buildInfo, downloadSettings, photostaffSettings, photostaffStatus, indexerSettings)}</small>
                     </span>
                   </button>
                 ))}
@@ -310,7 +327,7 @@ export function SettingsModal({
               <div className="settings-header-meta" aria-label={t("settings.status")}>
                 <span data-state={currentState}>
                   {settingsStateIcon(currentState)}
-                  {settingsSectionLabel(currentSection, settings, loading, t, dockerSettings, buildInfo, downloadSettings, photostaffSettings, photostaffStatus)}
+                  {settingsSectionLabel(currentSection, settings, loading, t, dockerSettings, buildInfo, downloadSettings, photostaffSettings, photostaffStatus, indexerSettings)}
                 </span>
                 {activeSection === "version" ? (
                   <span>
@@ -572,6 +589,19 @@ export function SettingsModal({
               loading={loading}
               locale={resolvedLocale}
               onSettingsChange={onDownloadSettingsChange}
+              onClose={onClose}
+            />
+          ) : null}
+
+          {activeSection === "indexer" ? (
+            <SettingsIndexerPage
+              settings={indexerSettings}
+              status={indexerStatus}
+              roots={roots}
+              loading={loading}
+              locale={resolvedLocale}
+              onSettingsChange={onIndexerSettingsChange}
+              onReindex={onIndexerReindex}
               onClose={onClose}
             />
           ) : null}
@@ -2825,6 +2855,8 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Server aria-hidden="true" size={16} />;
     case "files":
       return <Folder aria-hidden="true" size={16} />;
+    case "indexer":
+      return <Database aria-hidden="true" size={16} />;
     case "photostaff":
       return <Images aria-hidden="true" size={16} />;
     case "downloads":

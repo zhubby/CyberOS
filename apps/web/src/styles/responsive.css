@@ -74,6 +74,15 @@
     grid-template-columns: 1fr;
   }
 
+  .settings-indexer-root {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settings-indexer-rebuild {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
   .settings-docker-runtime-grid {
     grid-template-columns: 1fr;
   }

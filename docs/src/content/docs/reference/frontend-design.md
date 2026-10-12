@@ -18,6 +18,7 @@ sourceOfTruth:
   - apps/web/src/components/workspace/PanelHeader.tsx
   - apps/web/src/components/workspace/WorkspacePane.tsx
   - apps/web/src/components/workspace/PhotostaffLibraryPanel.tsx
+  - apps/web/src/components/settings/SettingsIndexerPage.tsx
 sidebar:
   order: 2
 ---
@@ -147,6 +148,8 @@ Workspace 是操作工作区，不是装饰性资源卡片。文件列表、预�
 - 页头不展示 eyebrow、连接状态、运行状态、统计数据或其他辅助信息；不要为了保留这些信息新增独立状态徽标或工具栏，必要的业务状态由正文内容自然承载。
 - 工作区容器窄于 `620px` 时，图标和标题保持第一行，操作区换到第二行并右对齐；不能缩小点击区域、挤压标题或产生横向滚动。
 - 文件列表使用稳定的网格列：名称、操作、大小、修改时间；排序按钮是可访问的真实按钮。
+- 文件搜索默认保持紧凑单行；高级筛选从 `SlidersHorizontal` 图标按钮打开，菜单承载类别、MIME、时间、大小、提取来源/状态和排序，不在主工具栏长期占据多行空间。Escape 关闭菜单并恢复焦点。
+- 搜索结果正文只渲染纯文本和结构化高亮范围，不注入服务端 HTML；snippet 最多显示两行。分页使用稳定的“加载更多”操作追加结果，不改变当前筛选、排序或已有行的位置。
 - 文件操作集中在操作列，按钮组右侧保留可感知间距，不能贴住 `SIZE` 或时间列。
 - 行 hover、选中、禁用和键盘 focus 必须有区别；危险操作使用危险语义而不是单纯改变图标。
 - 文件名、路径、端口、镜像名等长内容使用省略、title 或安全换行，不能造成布局抖动。
@@ -166,6 +169,7 @@ Docker、虚拟机、网络、存储和共享面板使用同一套可编辑组�
 
 - 弹窗必须有标题、关闭按钮、焦点管理和 Escape 关闭行为。
 - 设置侧栏用于稳定导航，移动端切换为横向导航，不要在窄屏强行保留桌面双栏。
+- Indexer 设置沿用紧凑字段网格；并发和限制使用数字输入，OCR 使用逐 root 复选框，重建是每个 root 的明确命令。服务、watcher、queue 和 rebuild 状态放在同页状态区，不与编辑字段混排。
 - 破坏性操作需要明确的二次确认，确认按钮使用危险样式，取消操作保持低强调。
 - Toast 只用于短暂反馈，固定在整个视口顶部居中并自动消失，不属于 Agent 或 Workspace 的内容流；需要跨设备、可追溯或伴随操作生命周期的内容进入持久通知中心。
 

@@ -3,7 +3,7 @@ target/release/sigmaos-hostd usr/lib/sigmaos/bin/
 target/release/sigmaos-termux usr/lib/sigmaos/bin/
 apps/worker/dist/* usr/lib/sigmaos/apps/worker/dist/
 target/release/sigmaos-photostaff usr/lib/sigmaos/bin/
-apps/indexer/dist/* usr/lib/sigmaos/apps/indexer/dist/
+target/release/sigmaos-indexer usr/lib/sigmaos/bin/
 apps/backup/dist/* usr/lib/sigmaos/apps/backup/dist/
 apps/scheduler/dist/* usr/lib/sigmaos/apps/scheduler/dist/
 target/release/sigmaos-downloader usr/lib/sigmaos/bin/

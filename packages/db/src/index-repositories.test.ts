@@ -4,13 +4,19 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ensureNasRoots,
+  enqueueIndexTask,
+  defaultIndexerSettings,
+  getIndexerServiceStatus,
+  getIndexerSettings,
   getIndexRootStatus,
   listIndexRootStatuses,
   openSigmaDb,
+  queryIndexAdvanced,
   queryIndexedText,
   recordIndexFailure,
   startIndexRun,
   finishIndexRun,
+  saveIndexerSettings,
   upsertIndexedFile,
   type SigmaDatabase
 } from "./index.js";
@@ -172,6 +178,50 @@ describe("SQLite schema and repositories", () => {
     ).toBe(40 * 60 * 1000);
   });
 
+  it("keeps legacy root status tied to the latest full run", () => {
+    const full = startIndexRun(db, {
+      rootId: "local",
+      kind: "full",
+      now: new Date("2026-02-01T00:00:00.000Z")
+    });
+    finishIndexRun(db, {
+      runId: full.id,
+      status: "completed",
+      scanned: 10,
+      indexed: 4,
+      unchanged: 6,
+      removed: 0,
+      skipped: 0,
+      failed: 0,
+      finishedAt: new Date("2026-02-01T00:02:00.000Z")
+    });
+    const incremental = startIndexRun(db, {
+      rootId: "local",
+      kind: "incremental",
+      now: new Date("2026-02-01T00:10:00.000Z")
+    });
+    finishIndexRun(db, {
+      runId: incremental.id,
+      status: "failed",
+      scanned: 1,
+      indexed: 0,
+      unchanged: 0,
+      removed: 0,
+      skipped: 0,
+      failed: 1,
+      finishedAt: new Date("2026-02-01T00:11:00.000Z")
+    });
+
+    expect(getIndexRootStatus(db, "local", new Date("2026-02-01T00:32:00.000Z"))).toMatchObject({
+      status: "completed",
+      scanned: 10,
+      indexed: 4,
+      metrics: { freshnessMs: 30 * 60 * 1000, consecutiveFailures: 0 }
+    });
+    expect(db.prepare("SELECT kind FROM index_runs WHERE root_id = ? ORDER BY started_at").all("local"))
+      .toEqual([{ kind: "full" }, { kind: "incremental" }]);
+  });
+
   it("rejects index failure rows whose root does not match the run", () => {
     ensureNasRoots(db, [
       { id: "local", name: "Local", path: tempDir },
@@ -256,5 +306,126 @@ describe("SQLite schema and repositories", () => {
     expect(queryIndexedText(db, { rootId: "local", path: "100%", query: "alpha" })).toMatchObject([
       { path: "100%/readme.txt" }
     ]);
+  });
+
+  it("coalesces index tasks by path and advances their generation", () => {
+    const first = enqueueIndexTask(db, {
+      rootId: "local",
+      path: "docs/readme.txt",
+      kind: "incremental"
+    });
+    const second = enqueueIndexTask(db, {
+      rootId: "local",
+      path: "docs/readme.txt",
+      recursive: true,
+      kind: "manual"
+    });
+
+    expect(second).toMatchObject({ id: first.id, generation: 2, status: "queued" });
+    expect(db.prepare(`
+      SELECT kind, recursive, priority, status FROM index_queue WHERE id = ?
+    `).get(first.id)).toEqual({ kind: "manual", recursive: 1, priority: 100, status: "queued" });
+    expect(getIndexerServiceStatus(db)).toMatchObject({
+      queue: { queued: 1, running: 0, retrying: 0, failed: 0 }
+    });
+  });
+
+  it("validates and persists indexer settings", () => {
+    expect(getIndexerSettings(db)).toMatchObject({
+      scanConcurrency: 4,
+      extractionConcurrency: 2,
+      ocrRootIds: []
+    });
+    expect(saveIndexerSettings(db, {
+      ...defaultIndexerSettings(),
+      scanConcurrency: 8,
+      ocrRootIds: ["local", "local"]
+    })).toMatchObject({ scanConcurrency: 8, ocrRootIds: ["local"] });
+    expect(() => saveIndexerSettings(db, { scanConcurrency: 0 })).toThrow("scan concurrency");
+  });
+
+  it("searches the new FTS with safe snippets, stable cursors, and query-bound cursors", () => {
+    const firstId = upsertIndexedFile(db, {
+      rootId: "local",
+      path: "docs/alpha.txt",
+      name: "alpha.txt",
+      mimeType: "text/plain",
+      sizeBytes: 11,
+      mtimeMs: 1_700_000_000_000,
+      body: "legacy alpha"
+    });
+    const secondId = upsertIndexedFile(db, {
+      rootId: "local",
+      path: "docs/project.txt",
+      name: "project.txt",
+      mimeType: "text/plain",
+      sizeBytes: 12,
+      mtimeMs: 1_700_000_001_000,
+      body: "legacy alpha project"
+    });
+    db.prepare(`
+      UPDATE indexed_files SET extraction_source = 'plain_text', extraction_status = 'ready'
+      WHERE id IN (?, ?)
+    `).run(firstId, secondId);
+    const insertFts = db.prepare(`
+      INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms)
+      VALUES (?, 'local', ?, ?, ?, ?)
+    `);
+    insertFts.run(firstId, "docs/alpha.txt", "alpha.txt", "alpha body", "alpha body");
+    insertFts.run(secondId, "docs/project.txt", "project.txt", "alpha project body", "alpha project body");
+    db.prepare(`
+      INSERT INTO index_content_state (root_id, status, updated_at)
+      VALUES ('local', 'ready', ?)
+      ON CONFLICT(root_id) DO UPDATE SET status = 'ready', updated_at = excluded.updated_at
+    `).run(new Date().toISOString());
+
+    const firstPage = queryIndexAdvanced(db, {
+      rootId: "local",
+      storagePoolId: "pool",
+      path: "docs",
+      query: "ＡＬＰＨＡ",
+      sort: { field: "name", direction: "asc" },
+      limit: 1
+    });
+    expect(firstPage.files).toHaveLength(1);
+    expect(firstPage.files[0]).toMatchObject({
+      path: "docs/alpha.txt",
+      snippet: expect.stringContaining("alpha"),
+      extractionStatus: "ready"
+    });
+    expect(firstPage.files[0]?.snippet).not.toContain("<mark>");
+    expect(firstPage.files[0]?.highlightRanges.length).toBeGreaterThan(0);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    const secondPage = queryIndexAdvanced(db, {
+      rootId: "local",
+      storagePoolId: "pool",
+      path: "docs",
+      query: "alpha",
+      sort: { field: "name", direction: "asc" },
+      limit: 1,
+      cursor: firstPage.nextCursor
+    });
+    expect(secondPage.files).toMatchObject([{ path: "docs/project.txt" }]);
+    expect(secondPage.nextCursor).toBeNull();
+
+    expect(() => queryIndexAdvanced(db, {
+      rootId: "local",
+      storagePoolId: "pool",
+      path: "docs",
+      query: "project",
+      sort: { field: "name", direction: "asc" },
+      limit: 1,
+      cursor: firstPage.nextCursor
+    })).toThrow("cursor does not match");
+
+    const callerSort = { field: "relevance" as const, direction: "desc" as const };
+    queryIndexAdvanced(db, {
+      rootId: "local",
+      storagePoolId: "pool",
+      path: "docs",
+      sort: callerSort
+    });
+    expect(callerSort).toEqual({ field: "relevance", direction: "desc" });
   });
 });

@@ -81,6 +81,7 @@ if [ "$1" = "configure" ]; then
     systemctl disable --now sigmaos-share-helper.service 2>/dev/null || true
     systemctl disable --now sigmaos-player-helper.service 2>/dev/null || true
     systemctl disable --now sigmaos-photo-worker.service 2>/dev/null || true
+    systemctl disable --now sigmaos-indexer.timer 2>/dev/null || true
     rm -f /etc/systemd/system/sigmaos-terminal-helper.service.d/identity.conf
     rm -f /etc/systemd/system/sigmaos-player-helper.service.d/identity.conf
     rmdir /etc/systemd/system/sigmaos-terminal-helper.service.d 2>/dev/null || true
@@ -91,7 +92,7 @@ if [ "$1" = "configure" ]; then
     /usr/lib/sigmaos/scripts/sigmaos-refresh-groups.sh
     /usr/lib/sigmaos/scripts/sigmaos-refresh-termux.sh || true
     /usr/lib/sigmaos/scripts/sigmaos-refresh-vod-player.sh || true
-    systemctl enable sigmaos-hostd.service sigmaos-termux.service sigmaos-api.service sigmaos-worker@1.service sigmaos-downloader.service sigmaos-indexer.timer sigmaos-scheduler.timer sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer || true
+    systemctl enable sigmaos-hostd.service sigmaos-termux.service sigmaos-api.service sigmaos-worker@1.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-scheduler.timer sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer || true
     if [ -z "${2:-}" ] || [ "$photostaff_was_enabled" = "1" ]; then
       systemctl enable sigmaos-photostaff.service || true
     else

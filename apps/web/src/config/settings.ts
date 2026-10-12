@@ -3,6 +3,7 @@ import type {
   BuildInfo,
   DockerSettings,
   DownloadSettings,
+  IndexerSettings,
   ModelProviderSettings,
   ModelProviderName,
   PhotostaffLibrarySettings,
@@ -21,6 +22,7 @@ export type SettingsSectionId =
   | "agents"
   | "docker"
   | "files"
+  | "indexer"
   | "photostaff"
   | "downloads"
   | "security"
@@ -85,6 +87,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "workspace"
   },
   {
+    id: "indexer",
+    group: "workspace"
+  },
+  {
     id: "photostaff",
     group: "workspace"
   },
@@ -113,6 +119,7 @@ const SECTION_TITLE_KEYS = {
   agents: "settings.sections.agents.title",
   docker: "settings.sections.docker.title",
   files: "settings.sections.files.title",
+  indexer: "settings.sections.indexer.title",
   photostaff: "settings.sections.photostaff.title",
   downloads: "settings.sections.downloads.title",
   security: "settings.sections.security.title",
@@ -127,6 +134,7 @@ const SECTION_DESCRIPTION_KEYS = {
   agents: "settings.sections.agents.description",
   docker: "settings.sections.docker.description",
   files: "settings.sections.files.description",
+  indexer: "settings.sections.indexer.description",
   photostaff: "settings.sections.photostaff.description",
   downloads: "settings.sections.downloads.description",
   security: "settings.sections.security.description",
@@ -200,7 +208,8 @@ export function settingsSectionState(
   dockerSettings: DockerSettings | null,
   buildInfo: BuildInfo | null = null,
   downloadSettings: DownloadSettings | null = null,
-  photostaffStatus: PhotostaffLibraryStatus | null = null
+  photostaffStatus: PhotostaffLibraryStatus | null = null,
+  indexerSettings: IndexerSettings | null = null
 ): SettingsState {
   if (section.id === "model-providers") {
     return settings?.apiKeyConfigured ? "ready" : "missing";
@@ -213,6 +222,9 @@ export function settingsSectionState(
   }
   if (section.id === "downloads") {
     return downloadSettings ? "ready" : "missing";
+  }
+  if (section.id === "indexer") {
+    return indexerSettings ? "ready" : "missing";
   }
   if (section.id === "photostaff") {
     if (
@@ -240,7 +252,8 @@ export function settingsSectionLabel(
   buildInfo: BuildInfo | null = null,
   downloadSettings: DownloadSettings | null = null,
   photostaffSettings: PhotostaffLibrarySettings | null = null,
-  photostaffStatus: PhotostaffLibraryStatus | null = null
+  photostaffStatus: PhotostaffLibraryStatus | null = null,
+  indexerSettings: IndexerSettings | null = null
 ): string {
   if (
     loading &&
@@ -248,6 +261,7 @@ export function settingsSectionLabel(
       section.id === "docker" ||
       section.id === "version" ||
       section.id === "downloads" ||
+      section.id === "indexer" ||
       section.id === "photostaff")
   ) {
     return t("common.states.loading");
@@ -269,6 +283,14 @@ export function settingsSectionLabel(
       ? t("settings.downloads.connectionCount", { count: downloadSettings.concurrency })
       : t("settings.downloads.notLoaded");
   }
+  if (section.id === "indexer") {
+    return indexerSettings
+      ? t("settings.indexer.concurrencySummary", {
+          scan: indexerSettings.scanConcurrency,
+          extract: indexerSettings.extractionConcurrency
+        })
+      : t("settings.indexer.notLoaded");
+  }
   if (section.id === "photostaff") {
     if (!photostaffStatus) {
       return photostaffSettings ? t("common.states.configured") : t("common.states.unavailable");
@@ -281,7 +303,8 @@ export function settingsSectionLabel(
     dockerSettings,
     buildInfo,
     downloadSettings,
-    photostaffStatus
+    photostaffStatus,
+    indexerSettings
   );
   if (state === "ready") {
     return t("common.states.configured");

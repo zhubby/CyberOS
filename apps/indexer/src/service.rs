@@ -1,0 +1,342 @@
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+
+use sd_notify::NotifyState;
+use tokio::sync::{Mutex, mpsc};
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
+
+use crate::config::Config;
+use crate::db::{Db, IndexerSettings, QueueTask};
+use crate::error::{ErrorCode, IndexerError};
+use crate::scanner::run_task;
+use crate::watcher::{WatchMessage, merge_ancestor};
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OnceOptions {
+    pub root_id: Option<String>,
+    pub path: Option<String>,
+    pub recursive: bool,
+}
+
+pub struct Indexer {
+    db: Db,
+    worker_id: String,
+    shutdown: CancellationToken,
+}
+
+impl Indexer {
+    pub fn new(config: Config) -> Result<Self, IndexerError> {
+        Ok(Self {
+            db: Db::open(&config.database_path)?,
+            worker_id: Uuid::new_v4().to_string(),
+            shutdown: CancellationToken::new(),
+        })
+    }
+
+    pub fn shutdown_token(&self) -> CancellationToken {
+        self.shutdown.clone()
+    }
+
+    pub async fn run(self, once: Option<OnceOptions>) -> Result<(), IndexerError> {
+        self.db.wait_for_schema(Duration::from_secs(60)).await?;
+        let roots = self.db.roots().await?;
+        self.db.ensure_root_state(&roots).await?;
+        let settings = Arc::new(Mutex::new(self.db.settings().await?));
+        if once.is_none() {
+            self.db.heartbeat(&self.worker_id, VERSION).await?;
+        }
+
+        if let Some(options) = &once {
+            self.enqueue_once(&roots, options).await?;
+        }
+
+        let (watch_sender, watch_receiver) = mpsc::unbounded_channel();
+        let watcher = if once.is_none() {
+            match crate::watcher::start(&roots, watch_sender) {
+                Ok(watcher) => {
+                    for root in &roots {
+                        self.db.set_watcher_status(&root.id, "ready", None).await?;
+                    }
+                    Some(watcher)
+                }
+                Err(error) => {
+                    for root in &roots {
+                        self.db
+                            .set_watcher_status(&root.id, "degraded", Some(&error.message))
+                            .await?;
+                        self.db
+                            .enqueue(&root.id, None, ".", true, "full", 10)
+                            .await?;
+                    }
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let watch_task = if once.is_none() {
+            Some(tokio::spawn(watch_loop(
+                self.db.clone(),
+                watch_receiver,
+                self.shutdown.clone(),
+            )))
+        } else {
+            None
+        };
+
+        let heartbeat = once.is_none().then(|| {
+            tokio::spawn(heartbeat_loop(
+                self.db.clone(),
+                self.worker_id.clone(),
+                self.shutdown.clone(),
+            ))
+        });
+        if once.is_none() {
+            let _ = sd_notify::notify(&[NotifyState::Ready]);
+        }
+        tracing::info!(worker_id = %self.worker_id, "Indexer ready");
+
+        let mut poll = tokio::time::interval(Duration::from_millis(250));
+        poll.tick().await;
+        let mut settings_refresh = tokio::time::interval(Duration::from_secs(5));
+        settings_refresh.tick().await;
+        let mut idle_polls = 0_u8;
+        loop {
+            tokio::select! {
+                _ = self.shutdown.cancelled() => break,
+                _ = settings_refresh.tick() => {
+                    let next = self.db.settings().await?;
+                    *settings.lock().await = next;
+                }
+                _ = poll.tick() => {
+                    let snapshot = settings.lock().await.clone();
+                    if once.is_none() {
+                        self.db.ensure_reconciliation_tasks(Duration::from_millis(snapshot.reconciliation_interval_ms)).await?;
+                    }
+                    for root in &roots {
+                        if self.db.copy_legacy_batch(&root.id, 250, snapshot.max_extracted_text_bytes).await? {
+                            self.db.enqueue(&root.id, None, ".", true, "full", 20).await?;
+                        }
+                    }
+                    match self.db.claim(&self.worker_id).await? {
+                        Some(task) => {
+                            idle_polls = 0;
+                            self.process_task(task, &snapshot).await?;
+                        }
+                        None if once.is_some() => {
+                            idle_polls = idle_polls.saturating_add(1);
+                            if idle_polls >= 2 { break; }
+                        }
+                        None => {}
+                    }
+                }
+            }
+        }
+
+        if once.is_none() {
+            let _ = sd_notify::notify(&[NotifyState::Stopping]);
+        }
+        self.shutdown.cancel();
+        drop(watcher);
+        if let Some(task) = watch_task {
+            let _ = task.await;
+        }
+        if let Some(heartbeat) = heartbeat {
+            let _ = heartbeat.await;
+            self.db.release_worker(&self.worker_id).await?;
+        }
+        Ok(())
+    }
+
+    async fn enqueue_once(
+        &self,
+        roots: &[crate::db::Root],
+        options: &OnceOptions,
+    ) -> Result<(), IndexerError> {
+        let selected: Vec<_> = match &options.root_id {
+            Some(root_id) => {
+                let root = roots
+                    .iter()
+                    .find(|root| root.id == *root_id)
+                    .ok_or_else(|| {
+                        IndexerError::new(
+                            ErrorCode::InvalidPath,
+                            format!("Unknown NAS root: {root_id}"),
+                            false,
+                        )
+                    })?;
+                vec![root]
+            }
+            None => roots.iter().collect(),
+        };
+        for root in selected {
+            let path = normalize_cli_path(options.path.as_deref().unwrap_or("."))?;
+            self.db
+                .enqueue(
+                    &root.id,
+                    None,
+                    &path,
+                    options.recursive || path == ".",
+                    "manual",
+                    100,
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn process_task(
+        &self,
+        task: QueueTask,
+        settings: &IndexerSettings,
+    ) -> Result<(), IndexerError> {
+        let lease_stop = CancellationToken::new();
+        let lease_lost = CancellationToken::new();
+        let lease_task = {
+            let db = self.db.clone();
+            let task_id = task.id.clone();
+            let worker_id = self.worker_id.clone();
+            let stop = lease_stop.clone();
+            let lost = lease_lost.clone();
+            let generation = task.generation;
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(5));
+                interval.tick().await;
+                loop {
+                    tokio::select! {
+                        _ = stop.cancelled() => break,
+                        _ = interval.tick() => match db.renew_lease(&task_id, generation, &worker_id).await {
+                            Ok(true) => {}
+                            _ => { lost.cancel(); break; }
+                        }
+                    }
+                }
+            })
+        };
+        let result = tokio::select! {
+            _ = self.shutdown.cancelled() => Err(IndexerError::new(ErrorCode::Internal, "Indexer is stopping", true)),
+            _ = lease_lost.cancelled() => Err(IndexerError::new(ErrorCode::Database, "Indexer queue lease was lost", true)),
+            result = run_task(&self.db, &task, settings, &self.shutdown) => result.map(|_| ()),
+        };
+        lease_stop.cancel();
+        let _ = lease_task.await;
+        match result {
+            Ok(()) => {
+                self.db.complete_task(&task, &self.worker_id).await?;
+                Ok(())
+            }
+            Err(error) => {
+                self.db
+                    .retry_or_fail(&task, &self.worker_id, &error)
+                    .await?;
+                tracing::warn!(task_id = %task.id, code = error.code.as_str(), message = %error.message, "Indexer task failed");
+                Ok(())
+            }
+        }
+    }
+}
+
+async fn heartbeat_loop(db: Db, worker_id: String, shutdown: CancellationToken) {
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+    interval.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.cancelled() => break,
+            _ = interval.tick() => match db.heartbeat(&worker_id, VERSION).await {
+                Ok(()) => { let _ = sd_notify::notify(&[NotifyState::Watchdog]); }
+                Err(error) => tracing::warn!(code = error.code.as_str(), message = %error.message, "Indexer heartbeat failed"),
+            }
+        }
+    }
+}
+
+async fn watch_loop(
+    db: Db,
+    mut receiver: mpsc::UnboundedReceiver<WatchMessage>,
+    shutdown: CancellationToken,
+) {
+    let mut pending: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut debounce = tokio::time::interval(Duration::from_millis(750));
+    debounce.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.cancelled() => break,
+            message = receiver.recv() => match message {
+                Some(WatchMessage::Changed { root_id, path }) => {
+                    merge_ancestor(pending.entry(root_id).or_default(), path);
+                }
+                Some(WatchMessage::Degraded { root_ids, reason }) => {
+                    for root_id in root_ids {
+                        if let Err(error) = db.set_watcher_status(&root_id, "degraded", Some(&reason)).await {
+                            tracing::warn!(message = %error.message, "Could not persist watcher degradation");
+                        }
+                        let _ = db.enqueue(&root_id, None, ".", true, "full", 10).await;
+                    }
+                }
+                None => break,
+            },
+            _ = debounce.tick() => {
+                let events = std::mem::take(&mut pending);
+                for (root_id, paths) in events {
+                    for path in paths {
+                        if let Err(error) = db.enqueue(&root_id, None, &path, true, "incremental", 50).await {
+                            tracing::warn!(root_id = %root_id, path = %path, message = %error.message, "Could not enqueue filesystem event");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn normalize_cli_path(value: &str) -> Result<String, IndexerError> {
+    if value.is_empty() {
+        return Err(IndexerError::invalid_path("--path must not be empty"));
+    }
+    let normalized_separators = value.replace('\\', "/");
+    let path = Path::new(&normalized_separators);
+    if path.is_absolute() {
+        return Err(IndexerError::invalid_path(
+            "--path must stay inside the selected NAS root",
+        ));
+    }
+    let mut segments = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(segment) => segments.push(segment.to_string_lossy()),
+            _ => {
+                return Err(IndexerError::invalid_path(
+                    "--path must stay inside the selected NAS root",
+                ));
+            }
+        }
+    }
+    Ok(if segments.is_empty() {
+        ".".to_owned()
+    } else {
+        segments.join("/")
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_cli_path;
+
+    #[test]
+    fn cli_paths_are_canonical_relative_paths() {
+        assert_eq!(normalize_cli_path("docs/").unwrap(), "docs");
+        assert_eq!(normalize_cli_path("docs/./sub").unwrap(), "docs/sub");
+        assert_eq!(normalize_cli_path(r"docs\sub").unwrap(), "docs/sub");
+        assert_eq!(normalize_cli_path(".").unwrap(), ".");
+        assert!(normalize_cli_path("").is_err());
+        assert!(normalize_cli_path("../outside").is_err());
+        assert!(normalize_cli_path("/outside").is_err());
+    }
+}

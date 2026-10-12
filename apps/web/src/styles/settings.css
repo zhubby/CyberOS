@@ -279,8 +279,71 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.settings-downloads-grid {
+.settings-downloads-grid,
+.settings-indexer-grid {
   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+}
+
+.settings-indexer-roots {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-indexer-root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-indexer-root:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-indexer-root > span,
+.settings-indexer-root strong,
+.settings-indexer-root small {
+  display: block;
+  min-width: 0;
+}
+
+.settings-indexer-root strong,
+.settings-indexer-root small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-indexer-root strong {
+  font-size: 12.5px;
+}
+
+.settings-indexer-root small {
+  margin-top: 3px;
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.settings-indexer-ocr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.settings-indexer-ocr input {
+  margin: 0;
+}
+
+.settings-indexer-rebuild {
+  min-width: 96px;
 }
 
 .settings-main-stack,

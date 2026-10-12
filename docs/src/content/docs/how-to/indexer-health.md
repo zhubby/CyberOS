@@ -4,11 +4,19 @@ description: 运行索引、查看 freshness、mount readiness 和健康告警�
 type: how-to
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/indexer/src/run.ts, apps/scheduler/src/scheduler.ts, apps/api/src/routes/indexer.ts, apps/api/src/routes/health-status.ts]
+sourceOfTruth: [apps/indexer/src/service.rs, apps/indexer/src/scanner.rs, apps/indexer/src/watcher.rs, apps/api/src/routes/indexer.ts, apps/api/src/routes/health-status.ts]
 sidebar:
   order: 3
 ---
 
-Indexer 周期性遍历每个配置的 NAS root，不跟随符号链接，按 size 和 modification time 增量处理，并把正文写入 SQLite FTS5。文件读取失败保留最近一次成功索引；遍历不完整时跳过 stale cleanup。
+Indexer 通过 mutation queue 与 inotify 持续处理每个 NAS root，并每 30 分钟做一次全量校准。它不跟随符号链接，使用完整 source identity 跳过未变化文件，把规范化正文写入 SQLite FTS5。文件读取或提取失败会保留最近一次成功正文；遍历不完整或 mount identity 改变时跳过 stale cleanup。
 
-通过 `/api/indexer/status`、`/api/roots/readiness` 和 `/api/system/health` 检查运行计数、失败路径、mount 身份、freshness 和告警。索引是最终一致的，timer 默认每 30 分钟运行一次。
+通过 `/api/indexer/status`、`/api/roots/readiness` 和 `/api/system/health` 检查运行计数、失败路径、mount 身份、worker heartbeat、watcher degraded、队列停滞和旧索引 rebuild。常驻服务应保持 `active`；用 `journalctl -u sigmaos-indexer.service` 检查 watcher rebuild、提取器错误和重试。
+
+手动请求全量重建：
+
+```bash
+curl -X POST http://127.0.0.1:3010/api/indexer/reindex \
+  -H 'content-type: application/json' \
+  -d '{"rootId":"dev","recursive":true}'
+```

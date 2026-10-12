@@ -26,13 +26,14 @@ import {
   RefreshCw,
   Search,
   Share2,
+  SlidersHorizontal,
   TerminalSquare,
   Trash2,
   FolderUp,
   Upload,
   type LucideIcon
 } from "lucide-react";
-import type { DockerOperation, FileEntry, FileListing, FileMeta, FileOperation, NasRoot, PendingApproval, VodPlayerCommand, VodPlayerStatus, TextPreview, VmOperation } from "../../api.js";
+import type { DockerOperation, FileEntry, FileListing, FileMeta, FileOperation, IndexSearchCategory, IndexSearchRequest, IndexSearchResult, NasRoot, PendingApproval, VodPlayerCommand, VodPlayerStatus, TextPreview, VmOperation } from "../../api.js";
 import { describeFileVisual, isHiddenName } from "../../file-type-utils.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -136,6 +137,141 @@ export interface FileStoragePoolOption {
   status: "ready" | "warning" | "offline" | "unknown";
 }
 
+export interface WorkspaceSearchOptions {
+  categories: IndexSearchCategory[];
+  extractionSources: NonNullable<IndexSearchRequest["extractionSources"]>;
+  extractionStatuses: NonNullable<IndexSearchRequest["extractionStatuses"]>;
+  mimeTypes: string;
+  modifiedFrom: string;
+  modifiedTo: string;
+  sizeMin: string;
+  sizeMax: string;
+  sort: NonNullable<IndexSearchRequest["sort"]>;
+}
+
+export function defaultWorkspaceSearchOptions(): WorkspaceSearchOptions {
+  return {
+    categories: [],
+    extractionSources: [],
+    extractionStatuses: [],
+    mimeTypes: "",
+    modifiedFrom: "",
+    modifiedTo: "",
+    sizeMin: "",
+    sizeMax: "",
+    sort: { field: "relevance", direction: "desc" }
+  };
+}
+
+export function hasWorkspaceSearchFilters(options: WorkspaceSearchOptions): boolean {
+  return options.categories.length > 0
+    || options.extractionSources.length > 0
+    || options.extractionStatuses.length > 0
+    || Boolean(options.mimeTypes.trim() || options.modifiedFrom || options.modifiedTo || options.sizeMin || options.sizeMax)
+    || options.sort.field !== "relevance"
+    || options.sort.direction !== "desc";
+}
+
+const SEARCH_CATEGORIES: IndexSearchCategory[] = ["text", "document", "spreadsheet", "presentation", "pdf", "other"];
+const SEARCH_STATUSES: NonNullable<IndexSearchRequest["extractionStatuses"]> = ["pending", "ready", "stale", "error", "skipped"];
+const SEARCH_SOURCES: NonNullable<IndexSearchRequest["extractionSources"]> = ["plain_text", "pdftotext", "docx", "xlsx", "pptx", "ocr"];
+
+function SearchFilterMenu({ options, disabled, onChange, onApply }: {
+  options: WorkspaceSearchOptions;
+  disabled: boolean;
+  onChange: (options: WorkspaceSearchOptions) => void;
+  onApply: (options?: WorkspaceSearchOptions) => void;
+}) {
+  const { t } = useTranslation();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const active = hasWorkspaceSearchFilters(options);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function close(event: PointerEvent) {
+      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) setOpen(false);
+    }
+    function escape(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  function toggleList<Key extends "categories" | "extractionSources" | "extractionStatuses">(
+    key: Key,
+    value: WorkspaceSearchOptions[Key][number]
+  ) {
+    const values = options[key] as string[];
+    onChange({
+      ...options,
+      [key]: values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
+    });
+  }
+
+  return (
+    <div ref={containerRef} className="workspace-search-filter">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`workspace-search-filter-trigger${active ? " is-active" : ""}`}
+        aria-label={active ? t("workspace.search.filtersActive") : t("workspace.search.filters")}
+        title={t("workspace.search.filters")}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <SlidersHorizontal aria-hidden="true" size={16} />
+      </button>
+      {open ? (
+        <div className="workspace-search-filter-menu" role="dialog" aria-label={t("workspace.search.filters")}>
+          <fieldset>
+            <legend>{t("workspace.search.category")}</legend>
+            <div className="workspace-search-checks">
+              {SEARCH_CATEGORIES.map((category) => <label key={category}><input type="checkbox" checked={options.categories.includes(category)} onChange={() => toggleList("categories", category)} /><span>{t(`workspace.search.categories.${category}`)}</span></label>)}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>{t("workspace.search.extractionStatus")}</legend>
+            <div className="workspace-search-checks">
+              {SEARCH_STATUSES.map((status) => <label key={status}><input type="checkbox" checked={options.extractionStatuses.includes(status)} onChange={() => toggleList("extractionStatuses", status)} /><span>{t(`workspace.search.statuses.${status}`)}</span></label>)}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>{t("workspace.search.extractionSource")}</legend>
+            <div className="workspace-search-checks">
+              {SEARCH_SOURCES.map((source) => <label key={source}><input type="checkbox" checked={options.extractionSources.includes(source)} onChange={() => toggleList("extractionSources", source)} /><span>{t(`workspace.search.sources.${source}`)}</span></label>)}
+            </div>
+          </fieldset>
+          <label className="workspace-search-field"><span>{t("workspace.search.mimeTypes")}</span><input value={options.mimeTypes} placeholder={t("workspace.search.mimeTypesPlaceholder")} onChange={(event) => onChange({ ...options, mimeTypes: event.target.value })} /></label>
+          <div className="workspace-search-field-grid">
+            <label className="workspace-search-field"><span>{t("workspace.search.modifiedFrom")}</span><input type="date" value={options.modifiedFrom} onChange={(event) => onChange({ ...options, modifiedFrom: event.target.value })} /></label>
+            <label className="workspace-search-field"><span>{t("workspace.search.modifiedTo")}</span><input type="date" value={options.modifiedTo} onChange={(event) => onChange({ ...options, modifiedTo: event.target.value })} /></label>
+            <label className="workspace-search-field"><span>{t("workspace.search.sizeMin")}</span><input type="number" min="0" value={options.sizeMin} onChange={(event) => onChange({ ...options, sizeMin: event.target.value })} /></label>
+            <label className="workspace-search-field"><span>{t("workspace.search.sizeMax")}</span><input type="number" min="0" value={options.sizeMax} onChange={(event) => onChange({ ...options, sizeMax: event.target.value })} /></label>
+            <label className="workspace-search-field"><span>{t("workspace.search.sort")}</span><select value={options.sort.field} onChange={(event) => onChange({ ...options, sort: { ...options.sort, field: event.target.value as WorkspaceSearchOptions["sort"]["field"] } })}>{(["relevance", "name", "mtime", "size"] as const).map((field) => <option key={field} value={field}>{t(`workspace.search.sortFields.${field}`)}</option>)}</select></label>
+            <label className="workspace-search-field"><span>{t("workspace.search.sort")}</span><select value={options.sort.direction} onChange={(event) => onChange({ ...options, sort: { ...options.sort, direction: event.target.value as "asc" | "desc" } })}><option value="desc">{t("workspace.search.directions.desc")}</option><option value="asc">{t("workspace.search.directions.asc")}</option></select></label>
+          </div>
+          <div className="workspace-search-filter-actions">
+            <button type="button" className="secondary-button" onClick={() => { const reset = defaultWorkspaceSearchOptions(); onChange(reset); onApply(reset); setOpen(false); }}>{t("workspace.search.reset")}</button>
+            <button type="button" className="primary-button" onClick={() => { onApply(); setOpen(false); }}>{t("workspace.search.apply")}</button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function nextFileSort(current: FileSortState, key: FileSortKey): FileSortState {
   if (current.key !== key) {
     return { key, direction: "desc" };
@@ -156,6 +292,30 @@ function SortDirectionIcon({ direction }: { direction: FileSortDirection }) {
   const Icon = direction === "desc" ? ArrowDown : ArrowUp;
 
   return <Icon aria-hidden="true" size={12} />;
+}
+
+function HighlightedSnippet({ result }: { result: IndexSearchResult }) {
+  const { t } = useTranslation();
+  if (!result.snippet) {
+    return <span>{t("workspace.search.noSnippet")}</span>;
+  }
+  const ranges = result.highlightRanges
+    .map((range) => ({
+      start: Math.max(0, Math.min(result.snippet.length, range.start)),
+      end: Math.max(0, Math.min(result.snippet.length, range.end))
+    }))
+    .filter((range) => range.end > range.start)
+    .sort((left, right) => left.start - right.start);
+  const content = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    if (range.start < cursor) continue;
+    if (range.start > cursor) content.push(result.snippet.slice(cursor, range.start));
+    content.push(<mark key={`${range.start}-${range.end}`}>{result.snippet.slice(range.start, range.end)}</mark>);
+    cursor = range.end;
+  }
+  if (cursor < result.snippet.length) content.push(result.snippet.slice(cursor));
+  return <span>{content}</span>;
 }
 
 function StoragePoolSwitcher({
@@ -277,6 +437,9 @@ export function WorkspacePane({
   previewFileSizeLimitBytes,
   previewCollapsed,
   searchQuery,
+  searchOptions,
+  searchResults,
+  searchNextCursor,
   operations,
   uploadBatches,
   dockerOperations,
@@ -294,6 +457,9 @@ export function WorkspacePane({
   onRefreshFiles,
   onSubmitSearch,
   onSearchQueryChange,
+  onSearchOptionsChange,
+  onApplySearchFilters,
+  onLoadMoreSearchResults,
   onGoToBreadcrumb,
   onGoToStoragePool,
   onOpenEntry,
@@ -343,6 +509,9 @@ export function WorkspacePane({
   previewFileSizeLimitBytes: number;
   previewCollapsed: boolean;
   searchQuery: string;
+  searchOptions: WorkspaceSearchOptions;
+  searchResults: IndexSearchResult[] | null;
+  searchNextCursor: string | null;
   operations: FileOperation[];
   uploadBatches: UploadBatchState[];
   dockerOperations: DockerOperation[];
@@ -360,6 +529,9 @@ export function WorkspacePane({
   onRefreshFiles: () => void;
   onSubmitSearch: (event: FormEvent<HTMLFormElement>) => void;
   onSearchQueryChange: (query: string) => void;
+  onSearchOptionsChange: (options: WorkspaceSearchOptions) => void;
+  onApplySearchFilters: (options?: WorkspaceSearchOptions) => void;
+  onLoadMoreSearchResults: () => void;
   onGoToBreadcrumb: (index: number) => void;
   onGoToStoragePool: () => void;
   onOpenEntry: (entry: FileEntry) => void;
@@ -412,7 +584,14 @@ export function WorkspacePane({
   const hasStoragePool = Boolean(selectedStoragePool);
   const storagePoolPathDepth = selectedStoragePool?.path.split("/").filter(Boolean).length ?? 0;
   const visibleBreadcrumbs = selectedStoragePool ? breadcrumbs.slice(storagePoolPathDepth) : breadcrumbs;
-  const sortedEntries = useMemo(() => sortEntries(entries, fileSort), [entries, fileSort]);
+  const sortedEntries = useMemo(
+    () => searchResults ? entries : sortEntries(entries, fileSort),
+    [entries, fileSort, searchResults]
+  );
+  const searchResultByPath = useMemo(
+    () => new Map((searchResults ?? []).map((result) => [result.path, result])),
+    [searchResults]
+  );
   const gitChangeCount = gitStatus
     ? gitStatus.summary.staged + gitStatus.summary.modified + gitStatus.summary.untracked + gitStatus.summary.conflicted
     : 0;
@@ -888,16 +1067,25 @@ export function WorkspacePane({
                     )}
                   </div>
 
-                  <form className="search" onSubmit={onSubmitSearch}>
-                    <Search aria-hidden="true" size={17} />
-                    <input
-                      value={searchQuery}
-                      onChange={(event) => onSearchQueryChange(event.target.value)}
-                      placeholder={t("workspace.searchPlaceholder")}
-                      aria-label={t("workspace.searchAria")}
+                  <div className="workspace-search-controls">
+                    <form className="search" onSubmit={onSubmitSearch}>
+                      <Search aria-hidden="true" size={17} />
+                      <input
+                        value={searchQuery}
+                        onChange={(event) => onSearchQueryChange(event.target.value)}
+                        placeholder={t("workspace.searchPlaceholder")}
+                        aria-label={t("workspace.searchAria")}
+                        disabled={!hasStoragePool}
+                        maxLength={256}
+                      />
+                    </form>
+                    <SearchFilterMenu
+                      options={searchOptions}
                       disabled={!hasStoragePool}
+                      onChange={onSearchOptionsChange}
+                      onApply={onApplySearchFilters}
                     />
-                  </form>
+                  </div>
               </div>
 
               <div
@@ -993,6 +1181,7 @@ export function WorkspacePane({
                     </div>
                     {fileListingLoading ? <FileListSkeleton /> : sortedEntries.map((entry) => {
                       const fileVisual = describeFileVisual(entry);
+                      const searchResult = searchResultByPath.get(entry.path);
                       const isHidden = isHiddenName(entry.name);
                       const displaySize =
                         entry.kind === "directory"
@@ -1017,9 +1206,17 @@ export function WorkspacePane({
                           aria-selected={entry.path === selectedFilePath}
                           role="row"
                         >
-                          <span className="file-name" role="cell">
+                          <span className={`file-name${searchResult ? " is-search-result" : ""}`} role="cell">
                             <FileTypeIcon kind={fileVisual.kind} />
-                            <span className="file-name-text">{entry.name}</span>
+                            <span className="file-search-copy">
+                              <span className="file-name-text">{entry.name}</span>
+                              {searchResult ? (
+                                <span className="file-search-snippet">
+                                  <HighlightedSnippet result={searchResult} />
+                                  <small data-state={searchResult.extractionStatus}>{t("workspace.search.resultStatus", { status: t(`workspace.search.statuses.${searchResult.extractionStatus}`) })}</small>
+                                </span>
+                              ) : null}
+                            </span>
                             {entry.gitStatus ? (
                               <span
                                 className={`git-file-status git-file-status-${entry.gitStatus}`}
@@ -1092,6 +1289,13 @@ export function WorkspacePane({
                         </div>
                       );
                     })}
+                    {searchResults && searchNextCursor ? (
+                      <div className="workspace-search-more">
+                        <button type="button" className="secondary-button" disabled={fileListingLoading} onClick={onLoadMoreSearchResults}>
+                          {t("workspace.search.loadMore")}
+                        </button>
+                      </div>
+                    ) : null}
                     </div>
                   ) : (
                     <div className="workspace-empty-state" role="status">

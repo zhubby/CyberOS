@@ -18,8 +18,8 @@ import {
   searchFiles,
   type FileEntry
 } from "@sigmaos/nas-tools";
-import { appendEvent, createActionMessageAndJob, createPendingApproval, getSession, recordAppliedOperation } from "@sigmaos/db";
-import type { FileOperationProposal, NasRootRecord } from "@sigmaos/shared";
+import { appendEvent, createActionMessageAndJob, createPendingApproval, getSession, queryIndexAdvanced, recordAppliedOperation } from "@sigmaos/db";
+import type { FileOperationProposal, IndexSearchRequest, NasRootRecord } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   clampPreviewBytes,
@@ -39,6 +39,7 @@ import { VideoCache } from "../lib/video-cache.js";
 
 const MAX_EDIT_TEXT_BYTES = 1024 * 1024;
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024;
+const MAX_ADVANCED_SEARCH_SCOPE_PAGES = 20;
 
 export function registerFileRoutes(server: FastifyInstance, { config, db, system, videoTranscoder }: ApiRouteContext): void {
   const videoCache = videoTranscoder
@@ -519,6 +520,57 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       files: gitView.entries,
       git: gitView.git
     });
+  });
+
+  server.post<{ Body: Partial<IndexSearchRequest> }>("/api/search", async (request, reply) => {
+    try {
+      const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+      const searchPath = request.body?.path ?? scope.mountpointPath;
+      const safeSearchPath = await resolveScopedExistingPath(scope, searchPath);
+      const searchStat = await stat(safeSearchPath.realPath);
+      if (!searchStat.isDirectory()) {
+        reply.status(400).send({ error: "Search path must be a directory" });
+        return;
+      }
+      const requestedLimit = request.body?.limit ?? 50;
+      if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 100) {
+        throw new Error("Search limit must be an integer between 1 and 100");
+      }
+      const files = [];
+      let cursor = request.body?.cursor ?? null;
+      let nextCursor: string | null = cursor;
+      for (let pageNumber = 0; pageNumber < MAX_ADVANCED_SEARCH_SCOPE_PAGES && files.length < requestedLimit; pageNumber += 1) {
+        const page = queryIndexAdvanced(db, {
+          ...request.body,
+          rootId: scope.root.id,
+          storagePoolId: scope.pool.id,
+          path: safeSearchPath.relativePath,
+          limit: requestedLimit - files.length,
+          cursor
+        });
+        for (const file of page.files) {
+          try {
+            await resolveScopedTargetPath(scope, file.path);
+            try {
+              await resolveScopedExistingPath(scope, file.path);
+            } catch (error) {
+              if (!isMissingPathError(error)) throw error;
+            }
+            files.push(file);
+          } catch {
+            // Never let stale or malicious index rows escape the selected storage pool.
+          }
+        }
+        nextCursor = page.nextCursor;
+        if (!nextCursor) {
+          break;
+        }
+        cursor = nextCursor;
+      }
+      reply.send({ files, nextCursor });
+    } catch (error) {
+      reply.status(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 }
 

@@ -323,14 +323,14 @@ if command -v systemctl >/dev/null 2>&1; then
     sigmaos-api.service \
     sigmaos-worker@1.service \
     sigmaos-photostaff.service \
-    sigmaos-downloader.service
+    sigmaos-downloader.service \
+    sigmaos-indexer.service
   systemctl restart sigmaos-hostd.service sigmaos-termux.service \
-    sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service
+    sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service
   if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
     systemctl enable --now sigmaos-vod-player.service
   fi
   systemctl enable \
-    sigmaos-indexer.timer \
     sigmaos-scheduler.timer \
     sigmaos-maintenance.timer \
     sigmaos-backup-daily.timer \

@@ -167,7 +167,7 @@ describe("API server", () => {
     });
 
     expect(neverRun.statusCode).toBe(200);
-    expect(neverRun.json()).toEqual({
+    expect(neverRun.json()).toMatchObject({
       roots: [
         {
           rootId: "local",
@@ -183,6 +183,12 @@ describe("API server", () => {
           failures: []
         }
       ]
+    });
+    expect(neverRun.json()).toMatchObject({
+      service: { status: "unavailable" },
+      watcher: { status: "starting" },
+      queue: { queued: 0, stalled: false },
+      rebuild: { status: "legacy" }
     });
 
     const run = startIndexRun(db, { rootId: "local" });
@@ -243,6 +249,89 @@ describe("API server", () => {
       url: "/api/indexer/status?rootId=missing"
     });
     expect(missing.statusCode).toBe(404);
+    await server.close();
+  });
+
+  it("validates indexer settings and persists OCR root selection", async () => {
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const defaults = await server.inject({ method: "GET", url: "/api/settings/indexer" });
+    expect(defaults.statusCode).toBe(200);
+    expect(defaults.json().settings).toMatchObject({
+      scanConcurrency: 4,
+      extractionConcurrency: 2,
+      reconciliationIntervalMs: 30 * 60 * 1_000,
+      ocrRootIds: []
+    });
+
+    const saved = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/indexer",
+      payload: { scanConcurrency: 6, extractionConcurrency: 3, ocrRootIds: ["local"] }
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().settings).toMatchObject({
+      scanConcurrency: 6,
+      extractionConcurrency: 3,
+      ocrRootIds: ["local"]
+    });
+
+    const invalidLimit = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/indexer",
+      payload: { scanConcurrency: 0 }
+    });
+    const invalidRoot = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/indexer",
+      payload: { ocrRootIds: ["missing"] }
+    });
+    expect(invalidLimit.statusCode).toBe(400);
+    expect(invalidRoot.statusCode).toBe(400);
+    await server.close();
+  });
+
+  it("queues safe root and path-level manual reindex requests", async () => {
+    await mkdir(path.join(rootDir, "docs"));
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const pathRequest = await server.inject({
+      method: "POST",
+      url: "/api/indexer/reindex",
+      payload: { rootId: "local", path: "docs", recursive: true }
+    });
+    expect(pathRequest.statusCode).toBe(202);
+    expect(db.prepare(`
+      SELECT root_id, path, recursive, kind, priority, status
+      FROM index_queue WHERE id = ?
+    `).get(pathRequest.json().task.id)).toEqual({
+      root_id: "local",
+      path: "docs",
+      recursive: 1,
+      kind: "manual",
+      priority: 100,
+      status: "queued"
+    });
+
+    const rootRequest = await server.inject({
+      method: "POST",
+      url: "/api/indexer/reindex",
+      payload: { rootId: "local" }
+    });
+    const traversal = await server.inject({
+      method: "POST",
+      url: "/api/indexer/reindex",
+      payload: { rootId: "local", path: "../outside" }
+    });
+    const missingRoot = await server.inject({
+      method: "POST",
+      url: "/api/indexer/reindex",
+      payload: { rootId: "missing" }
+    });
+    expect(rootRequest.statusCode).toBe(202);
+    expect(rootRequest.json().task).toMatchObject({ status: "queued" });
+    expect(traversal.statusCode).toBe(400);
+    expect(missingRoot.statusCode).toBe(404);
     await server.close();
   });
 
@@ -495,6 +584,16 @@ describe("API server", () => {
       method: "GET",
       url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool&q=match`
     });
+    const scopedAdvancedSearch = await server.inject({
+      method: "POST",
+      url: "/api/search",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        path: "pool",
+        query: "match"
+      }
+    });
 
     expect(listing.statusCode).toBe(200);
     expect(listing.json().entries).toEqual(
@@ -509,6 +608,8 @@ describe("API server", () => {
     expect(crossPoolProposal.statusCode).toBe(403);
     expect(scopedSearch.statusCode).toBe(200);
     expect(scopedSearch.json().files).toEqual([]);
+    expect(scopedAdvancedSearch.statusCode).toBe(200);
+    expect(scopedAdvancedSearch.json().files).toEqual([]);
     await server.close();
   });
 
@@ -3841,6 +3942,16 @@ describe("API server", () => {
       }
     });
     await expect(readFile(path.join(rootDir, "hello.txt"), "utf8")).resolves.toBe("changed");
+    expect(db.prepare(`
+      SELECT storage_pool_id, path, recursive, kind, status
+      FROM index_queue WHERE root_id = 'local' AND path = 'hello.txt'
+    `).get()).toEqual({
+      storage_pool_id: TEST_STORAGE_POOL_ID,
+      path: "hello.txt",
+      recursive: 0,
+      kind: "incremental",
+      status: "queued"
+    });
     await server.close();
   });
 
@@ -3872,6 +3983,16 @@ describe("API server", () => {
       }
     });
     await expect(readFile(path.join(rootDir, "docs", "uploads", "notes.txt"), "utf8")).resolves.toBe("uploaded body");
+    expect(db.prepare(`
+      SELECT storage_pool_id, path, recursive, kind, status
+      FROM index_queue WHERE root_id = 'local' AND path = 'docs/uploads/notes.txt'
+    `).get()).toEqual({
+      storage_pool_id: TEST_STORAGE_POOL_ID,
+      path: "docs/uploads/notes.txt",
+      recursive: 0,
+      kind: "incremental",
+      status: "queued"
+    });
     await server.close();
   });
 
@@ -4451,6 +4572,178 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("supports filtered advanced search with safe snippets and query-bound cursors", async () => {
+    await mkdir(path.join(rootDir, "docs"));
+    await writeFile(path.join(rootDir, "docs", "alpha.txt"), "alpha plain body");
+    await writeFile(path.join(rootDir, "docs", "report.pdf"), "alpha report body");
+    const textId = upsertIndexedFile(db, {
+      rootId: "local",
+      path: "docs/alpha.txt",
+      name: "alpha.txt",
+      mimeType: "text/plain",
+      sizeBytes: 16,
+      mtimeMs: 1_700_000_000_000,
+      hash: "advanced-text",
+      body: "alpha plain body"
+    });
+    const pdfId = upsertIndexedFile(db, {
+      rootId: "local",
+      path: "docs/report.pdf",
+      name: "report.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 32,
+      mtimeMs: 1_710_000_000_000,
+      hash: "advanced-pdf",
+      body: "alpha report body"
+    });
+    db.prepare(`
+      UPDATE indexed_files
+      SET extraction_source = CASE id WHEN ? THEN 'plain_text' ELSE 'pdftotext' END,
+          extraction_status = 'ready'
+      WHERE id IN (?, ?)
+    `).run(textId, textId, pdfId);
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const filtered = await server.inject({
+      method: "POST",
+      url: "/api/search",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        path: "docs",
+        query: "ＡＬＰＨＡ",
+        mimeTypes: ["application/pdf"],
+        categories: ["pdf"],
+        modifiedFrom: "2024-01-01T00:00:00.000Z",
+        modifiedTo: "2025-01-01T00:00:00.000Z",
+        sizeMin: 20,
+        sizeMax: 40,
+        extractionSources: ["pdftotext"],
+        extractionStatuses: ["ready"],
+        sort: { field: "size", direction: "desc" }
+      }
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json()).toMatchObject({
+      files: [{
+        path: "docs/report.pdf",
+        mimeType: "application/pdf",
+        extractionSource: "pdftotext",
+        extractionStatus: "ready",
+        snippet: expect.stringContaining("alpha"),
+        highlightRanges: [expect.objectContaining({ start: expect.any(Number), end: expect.any(Number) })]
+      }],
+      nextCursor: null
+    });
+    expect(filtered.json().files[0].snippet).not.toContain("<mark>");
+
+    const firstPage = await server.inject({
+      method: "POST",
+      url: "/api/search",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        path: "docs",
+        query: "alpha",
+        sort: { field: "name", direction: "asc" },
+        limit: 1
+      }
+    });
+    expect(firstPage.statusCode).toBe(200);
+    expect(firstPage.json()).toMatchObject({
+      files: [{ path: "docs/alpha.txt" }],
+      nextCursor: expect.any(String)
+    });
+    const secondPage = await server.inject({
+      method: "POST",
+      url: "/api/search",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        path: "docs",
+        query: "alpha",
+        sort: { field: "name", direction: "asc" },
+        limit: 1,
+        cursor: firstPage.json().nextCursor
+      }
+    });
+    expect(secondPage.statusCode).toBe(200);
+    expect(secondPage.json()).toMatchObject({ files: [{ path: "docs/report.pdf" }], nextCursor: null });
+
+    const mismatchedCursor = await server.inject({
+      method: "POST",
+      url: "/api/search",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        path: "docs",
+        query: "alpha",
+        sort: { field: "size", direction: "asc" },
+        limit: 1,
+        cursor: firstPage.json().nextCursor
+      }
+    });
+    const literalOperators = await server.inject({
+      method: "POST",
+      url: "/api/search",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        path: "docs",
+        query: "alpha OR nonexistent"
+      }
+    });
+    expect(mismatchedCursor.statusCode).toBe(400);
+    expect(literalOperators.statusCode).toBe(200);
+    expect(literalOperators.json().files).toEqual([]);
+    await server.close();
+  });
+
+  it("continues advanced search past out-of-scope index rows", async () => {
+    await writeFile(path.join(rootDir, "valid.txt"), "alpha valid");
+    for (const [indexPath, name] of [
+      ["../outside-a.txt", "a.txt"],
+      ["../outside-b.txt", "b.txt"],
+      ["valid.txt", "z.txt"]
+    ] as const) {
+      const fileId = upsertIndexedFile(db, {
+        rootId: "local",
+        path: indexPath,
+        name,
+        mimeType: "text/plain",
+        sizeBytes: 10,
+        mtimeMs: 1_700_000_000_000,
+        body: "alpha body"
+      });
+      db.prepare(`
+        INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms)
+        VALUES (?, 'local', ?, ?, 'alpha body', 'alpha body')
+      `).run(fileId, indexPath, name);
+    }
+    db.prepare(`
+      INSERT INTO index_content_state (root_id, status, updated_at)
+      VALUES ('local', 'ready', ?)
+      ON CONFLICT(root_id) DO UPDATE SET status = 'ready', updated_at = excluded.updated_at
+    `).run(new Date().toISOString());
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/search",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        query: "alpha",
+        sort: { field: "name", direction: "asc" },
+        limit: 1
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ files: [{ path: "valid.txt" }], nextCursor: null });
+    await server.close();
+  });
+
   it("does not cancel terminal jobs", async () => {
     const session = createSession(db, { rootId: "local" });
     const { job } = createUserMessageAndJob(db, {
@@ -4611,6 +4904,13 @@ describe("API server", () => {
     await expect(readFile(path.join(rootDir, "hello.txt"), "utf8")).resolves.toBe("hello");
     await expect(stat(path.join(rootDir, "moved.txt"))).rejects.toThrow();
     expect(applied ? getFileOperation(db, applied.id)?.status : null).toBe("rolled_back");
+    expect(db.prepare(`
+      SELECT path, recursive, generation FROM index_queue
+      WHERE root_id = 'local' AND path IN ('hello.txt', 'moved.txt') ORDER BY path
+    `).all()).toEqual([
+      { path: "hello.txt", recursive: 1, generation: 2 },
+      { path: "moved.txt", recursive: 1, generation: 2 }
+    ]);
     await server.close();
   });
 
@@ -4711,6 +5011,10 @@ describe("API server", () => {
         (operation) => operation.operation === "restore" && operation.metadata.trashEntryId === trashEntryId
       )
     ).toBe(true);
+    expect(db.prepare(`
+      SELECT path, recursive, generation FROM index_queue
+      WHERE root_id = 'local' ORDER BY path
+    `).all()).toEqual([{ path: "hello.txt", recursive: 1, generation: 2 }]);
     await server.close();
   });
 

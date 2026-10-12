@@ -10,7 +10,7 @@
 
 SigmaOS is a single-user control plane for a personal Linux NAS. It combines a responsive file workspace with an AI agent, keeps state in a local SQLite database, and runs as a set of native `systemd` services instead of inside containers.
 
-The project is an npm workspaces monorepo written in strict TypeScript. Its production target is Node.js 22 on Debian-based systems, with a React/Vite frontend and a Fastify API.
+The project combines a strict TypeScript npm-workspaces application with Rust storage daemons. Its production target is Node.js 22 and Rust 1.95 on Debian-based systems, with a React/Vite frontend and a Fastify API.
 
 ## Project status
 
@@ -20,7 +20,7 @@ The following surfaces are intentionally limited today:
 
 - Virtual machine management supports libvirt/QEMU host discovery and approval-gated lifecycle operations when the optional runtime is installed.
 - Network inspection remains available on every supported backend; NetworkManager Wi-Fi/hotspot changes and approved storage-pool operations are applied through `sigmaos-hostd` when their host dependencies are available.
-- OCR is reserved as an indexer hook but is not implemented.
+- OCR is opt-in per NAS root and is limited to scanned PDFs with insufficient embedded text.
 - Local restic backup is opt-in; after explicit repository initialization, daily/weekly services perform encrypted snapshots and staging-only restore.
 - The appliance builder produces a generic root filesystem tarball, not a board-specific boot image.
 
@@ -198,7 +198,7 @@ npm run maintenance
 
 The Starlight documentation site is built separately with `npm run docs:build` and is served by the production API at `http://127.0.0.1:3010/docs/` when its static output is present. Use `npm run docs:dev` for the standalone documentation development server.
 
-The packaged `sigmaos-indexer.timer` runs every 30 minutes, so search is eventually consistent after uploads, edits, moves, and deletes. Run `npm run index` for an immediate development refresh. A failed file retains its last successful index entry, and an incomplete directory traversal does not remove stale entries that could not be verified.
+The packaged Rust `sigmaos-indexer.service` is resident: filesystem events and mutation queues normally make changes searchable within seconds, while a full reconciliation runs every 30 minutes. Run `npm run index` for a one-shot development refresh. A failed extraction retains its last successful body, and an incomplete traversal never removes stale entries that could not be verified.
 
 Inspect the latest run for every configured root, or one root, through the read-only status endpoint:
 
@@ -207,7 +207,7 @@ curl http://127.0.0.1:3010/api/indexer/status
 curl "http://127.0.0.1:3010/api/indexer/status?rootId=dev"
 ```
 
-Status responses include scan, reindex, unchanged, removal, skip, and failure counts plus root-relative failure paths. Symbolic links are always skipped. OCR, PDF/Office content extraction, real-time filesystem watchers, and mutation-triggered reindexing remain outside the v1 indexer baseline.
+Status responses include scan metrics and root-relative failures plus daemon heartbeat, watcher, durable queue, and compatibility rebuild state. Symbolic links are always skipped. Text, PDF, DOCX, XLSX, PPTX and root-enabled PDF OCR extraction feed the FTS5 search index.
 
 Configure an OpenAI or Anthropic provider, model, and API key in **Settings > Model Providers** before starting an AI turn. Provider secrets are stored in the local SQLite database; API reads only report whether a key is configured.
 
@@ -316,7 +316,7 @@ For an `arm64` CM5 (or an `amd64` Debian host), run the host installer from a ch
 sudo SIGMAOS_NAS_ROOT_PATH=/srv/nas packaging/scripts/install.sh
 ```
 
-The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps `sigmaos-hostd`, `sigmaos-termux`, and `better-sqlite3` compatible with the board. It starts the SigmaOS API, worker, hostd, termux, and an Nginx reverse proxy on port 80 by default; indexer, scheduler, maintenance, health, and backup timers are enabled for their scheduled runs. The API remains loopback-only and Nginx is the LAN entry point.
+The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the SigmaOS API, worker, hostd, termux, downloader, indexer, and an Nginx reverse proxy on port 80 by default; scheduler, maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
 
 The mirror defaults can be overridden for a private mirror or restored to another mirror with `SIGMAOS_APT_MIRROR`, `SIGMAOS_APT_SECURITY_MIRROR`, `SIGMAOS_RPI_MIRROR`, `SIGMAOS_NODE_MIRROR`, `SIGMAOS_NODE_VERSION`, and `SIGMAOS_NPM_REGISTRY`. The installer only rewrites known Debian/Raspberry Pi URIs, saves original source files under `/var/backups/sigmaos-apt`, preserves `signed-by`, suites, components, and unrelated sources, and disables any NodeSource entry after switching to the domestic Node.js binary distribution. To restore an original source, copy its backup from `/var/backups/sigmaos-apt` back to `/etc/apt/sources.list.d` (or uncomment the marked NodeSource line) before running the installer again with an explicit `SIGMAOS_NODE_MIRROR`.
 

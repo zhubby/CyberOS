@@ -633,6 +633,66 @@
   min-width: 0;
 }
 
+.file-row:has(.file-name.is-search-result) {
+  min-height: 62px;
+}
+
+.file-name.is-search-result {
+  align-items: flex-start;
+  padding: 7px 0;
+}
+
+.file-name.is-search-result > svg {
+  margin-top: 2px;
+}
+
+.file-search-copy,
+.file-search-snippet {
+  display: grid;
+  min-width: 0;
+}
+
+.file-search-snippet {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--muted-2);
+  font-size: 10.5px;
+}
+
+.file-search-snippet > span {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.35;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.file-search-snippet mark {
+  border-radius: 2px;
+  padding: 0 1px;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.file-search-snippet small {
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.file-search-snippet small[data-state="error"],
+.file-search-snippet small[data-state="stale"] {
+  color: var(--warning-text);
+}
+
+.workspace-search-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+}
+
 .git-file-status {
   display: inline-grid;
   flex: 0 0 auto;
@@ -2228,6 +2288,131 @@
   grid-column: 2;
 }
 
+.workspace-search-controls {
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workspace-search-controls .search {
+  grid-column: auto;
+  min-width: 0;
+}
+
+.workspace-search-filter {
+  position: relative;
+}
+
+.workspace-search-filter-trigger {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.workspace-search-filter-trigger:hover,
+.workspace-search-filter-trigger:focus-visible,
+.workspace-search-filter-trigger.is-active {
+  border-color: var(--accent);
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.workspace-search-filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 12;
+  display: grid;
+  width: min(480px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 170px));
+  gap: 13px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--dialog-bg);
+  box-shadow: var(--shadow);
+}
+
+.workspace-search-filter-menu fieldset {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.workspace-search-filter-menu legend,
+.workspace-search-field > span {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.workspace-search-checks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.workspace-search-checks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+}
+
+.workspace-search-checks input {
+  margin: 0;
+}
+
+.workspace-search-checks span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-search-field,
+.workspace-search-field-grid {
+  display: grid;
+  min-width: 0;
+}
+
+.workspace-search-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.workspace-search-field input,
+.workspace-search-field select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  padding: 0 9px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.workspace-search-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line-soft);
+}
+
 .files-navigation-bar .breadcrumbs button {
   height: 42px;
 }
@@ -2456,6 +2641,14 @@
 
   .files-navigation-bar .search {
     grid-column: 1;
+  }
+
+  .workspace-search-controls {
+    grid-column: 1;
+  }
+
+  .workspace-search-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

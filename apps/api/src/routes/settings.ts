@@ -2,19 +2,22 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
   DEFAULT_PI_TOOL_POLICY_SETTINGS,
+  defaultIndexerSettings,
   defaultPiToolPolicySettings,
   defaultDownloadSettings,
   getDockerSettings,
   getDownloadSettings,
+  getIndexerSettings,
   getModelProviderSettings,
   getPiToolPolicySettings,
   getShareSettings,
   saveDockerSettings,
   saveDownloadSettings,
+  saveIndexerSettings,
   saveModelProviderSettings,
   savePiToolPolicySettings
 } from "@sigmaos/db";
-import type { DownloadSettingsRecord, ModelProviderName, PiToolPolicySettingsRecord } from "@sigmaos/shared";
+import type { DownloadSettingsRecord, IndexerSettingsRecord, ModelProviderName, PiToolPolicySettingsRecord } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   defaultDockerSettings,
@@ -31,6 +34,26 @@ import {
 import { collectSystemInfo } from "../lib/system-info.js";
 
 export function registerSettingsRoutes(server: FastifyInstance, { config, db }: ApiRouteContext): void {
+  server.get("/api/settings/indexer", async () => ({
+    settings: getIndexerSettings(db) ?? defaultIndexerSettings()
+  }));
+
+  server.patch<{
+    Body: Partial<Omit<IndexerSettingsRecord, "updatedAt">>;
+  }>("/api/settings/indexer", async (request, reply) => {
+    try {
+      const existing = getIndexerSettings(db) ?? defaultIndexerSettings();
+      const next = { ...existing, ...request.body };
+      const rootIds = new Set(listNasRootsForIndexerSettings(db));
+      if (next.ocrRootIds.some((rootId) => !rootIds.has(rootId))) {
+        throw new Error("Indexer OCR roots must reference configured NAS roots");
+      }
+      reply.send({ settings: saveIndexerSettings(db, next) });
+    } catch (error) {
+      reply.status(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   server.get("/api/settings/downloads", async () => ({
     settings: getDownloadSettings(db) ?? defaultDownloadSettings()
   }));
@@ -184,6 +207,10 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db }: 
       });
     }
   });
+}
+
+function listNasRootsForIndexerSettings(db: ApiRouteContext["db"]): string[] {
+  return db.prepare("SELECT id FROM nas_roots WHERE enabled = 1 ORDER BY id").pluck().all() as string[];
 }
 
 function normalizeTextField(value: string | undefined, fallback: string, defaultValue: string): string {

@@ -27,13 +27,20 @@ export function getIndexRootStatus(db: SigmaDatabase, rootId: string, now = new 
   const row = db
     .prepare(`
       SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
-        duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at
+        duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at,
+        NULL AS failures_json, 0 AS archived
       FROM index_runs
-      WHERE root_id = ?
-      ORDER BY CASE WHEN status = 'running' THEN 0 ELSE 1 END, started_at DESC
+      WHERE root_id = ? AND kind = 'full'
+      UNION ALL
+      SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
+        duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at,
+        failures_json, 1 AS archived
+      FROM index_run_history
+      WHERE root_id = ? AND kind = 'full'
+      ORDER BY started_at DESC
       LIMIT 1
     `)
-    .get(rootId) as DbIndexRunRow | undefined;
+    .get(rootId, rootId) as (DbIndexRunRow & { failures_json: string | null; archived: number }) | undefined;
 
   if (!row) {
     return {
@@ -51,14 +58,16 @@ export function getIndexRootStatus(db: SigmaDatabase, rootId: string, now = new 
     };
   }
 
-  const failures = db
-    .prepare(`
-      SELECT path, reason
-      FROM index_failures
-      WHERE run_id = ?
-      ORDER BY created_at ASC, id ASC
-    `)
-    .all(row.id) as DbIndexFailureRow[];
+  const failures = row.archived
+    ? JSON.parse(row.failures_json ?? "[]") as DbIndexFailureRow[]
+    : db
+        .prepare(`
+          SELECT path, reason
+          FROM index_failures
+          WHERE run_id = ?
+          ORDER BY created_at ASC, id ASC
+        `)
+        .all(row.id) as DbIndexFailureRow[];
 
   const status = mapIndexRun(row, failures);
   if (status.metrics) {
@@ -70,7 +79,7 @@ export function getIndexRootStatus(db: SigmaDatabase, rootId: string, now = new 
 }
 
 function countConsecutiveIndexFailures(db: SigmaDatabase, rootId: string): number {
-  const rows = db.prepare("SELECT status, started_at FROM index_runs WHERE root_id = ? UNION ALL SELECT status, started_at FROM index_run_history WHERE root_id = ? ORDER BY started_at DESC LIMIT 30").all(rootId, rootId) as Array<{ status: string; started_at: string }>;
+  const rows = db.prepare("SELECT status, started_at FROM index_runs WHERE root_id = ? AND kind = 'full' UNION ALL SELECT status, started_at FROM index_run_history WHERE root_id = ? AND kind = 'full' ORDER BY started_at DESC LIMIT 30").all(rootId, rootId) as Array<{ status: string; started_at: string }>;
   let count = 0;
   for (const row of rows) {
     if (row.status !== "failed") break;
@@ -84,9 +93,9 @@ function getIndexFreshnessMs(db: SigmaDatabase, rootId: string, now = new Date()
     .prepare(`
       SELECT MAX(finished_at) AS finished_at
       FROM (
-        SELECT finished_at FROM index_runs WHERE root_id = ? AND status = 'completed'
+        SELECT finished_at FROM index_runs WHERE root_id = ? AND kind = 'full' AND status = 'completed'
         UNION ALL
-        SELECT finished_at FROM index_run_history WHERE root_id = ? AND status = 'completed'
+        SELECT finished_at FROM index_run_history WHERE root_id = ? AND kind = 'full' AND status = 'completed'
       )
     `)
     .get(rootId, rootId) as { finished_at: string | null } | undefined;
@@ -97,7 +106,7 @@ function getIndexFreshnessMs(db: SigmaDatabase, rootId: string, now = new Date()
 
 function getIndexSizeBytes(db: SigmaDatabase): number | null {
   try {
-    const row = db.prepare("SELECT SUM(pgsize) AS size FROM dbstat WHERE name IN ('indexed_files', 'indexed_text')").get() as { size: number | null };
+    const row = db.prepare("SELECT SUM(pgsize) AS size FROM dbstat WHERE name IN ('indexed_files', 'indexed_text') OR name GLOB 'indexed_content_fts*'").get() as { size: number | null };
     return row.size ?? null;
   } catch {
     return null;

@@ -9,7 +9,7 @@ sidebar:
   order: 1
 ---
 
-生产部署使用 Debian package、Node.js 22，以及 Rust `sigmaos-hostd` 和 `sigmaos-termux`，不把 SigmaOS 自身放入 Docker。API、worker、downloader、hostd、termux 是常驻服务；indexer、scheduler、maintenance、health、backup 由 oneshot service 和 timer 驱动。
+生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 SigmaOS 自身放入 Docker。API、worker、downloader、indexer、hostd、termux 是常驻服务；scheduler、maintenance、health、backup 由 oneshot service 和 timer 驱动。
 
 Nginx 只反向代理到 loopback API。运行时路径主要是 `/usr/lib/sigmaos`、`/etc/sigmaos`、`/var/lib/sigmaos`、`/run/sigmaos` 和配置的 `/srv` roots。API 静态提供 React Web 与 `/docs/` 文档站。
 
@@ -63,14 +63,15 @@ sudo SIGMAOS_ENABLE_NGINX=1 \
 核心服务会被 `enable --now`：
 
 ```bash
-sudo systemctl status sigmaos-api.service sigmaos-worker@1.service sigmaos-downloader.service
+sudo systemctl status sigmaos-api.service sigmaos-worker@1.service sigmaos-downloader.service sigmaos-indexer.service
 sudo systemctl status sigmaos-hostd.service sigmaos-termux.service
 ```
 
-索引、scheduler、maintenance、health 和 backup timers 默认只启用，不会在安装命令中立刻执行。需要立即刷新时运行：
+Indexer 会立即作为常驻服务启动；scheduler、maintenance、health 和 backup timers 默认只启用。需要立即刷新索引时使用 API，health 仍可手动启动：
 
 ```bash
-sudo systemctl start sigmaos-indexer.service
+curl -X POST http://127.0.0.1:3010/api/indexer/reindex \
+  -H 'content-type: application/json' -d '{"rootId":"local","recursive":true}'
 sudo systemctl start sigmaos-health.service
 ```
 
@@ -93,11 +94,11 @@ curl -fsS http://127.0.0.1:3010/api/system/health
 升级前保留当前 `.deb`、`/etc/sigmaos/config.toml`、`/var/lib/sigmaos` 和数据库备份；先暂停会访问 SQLite 或 NAS 的服务与 timers。完成包安装后，先确认挂载、运行 ACL 预览和迁移，最后再启动服务：
 
 ```bash
-sudo systemctl stop sigmaos-indexer.timer sigmaos-scheduler.timer \
+sudo systemctl stop sigmaos-scheduler.timer \
   sigmaos-maintenance.timer sigmaos-health.timer \
   sigmaos-backup-daily.timer sigmaos-backup-weekly.timer
 sudo systemctl stop sigmaos-downloader.service sigmaos-worker@1.service \
-  sigmaos-vod-player.service sigmaos-api.service sigmaos-termux.service \
+  sigmaos-indexer.service sigmaos-vod-player.service sigmaos-api.service sigmaos-termux.service \
   sigmaos-hostd.service
 sudo dpkg -i .sigmaos/sigmaos_<version>_<arch>.deb
 sudo systemctl daemon-reload
@@ -119,7 +120,7 @@ sudo /usr/lib/sigmaos/scripts/sigmaos-nas-acl.sh --apply --pool /srv/nas/pool1
 
 ```bash
 sudo systemctl start sigmaos-hostd.service sigmaos-termux.service \
-  sigmaos-api.service sigmaos-worker@1.service sigmaos-downloader.service \
+  sigmaos-api.service sigmaos-worker@1.service sigmaos-downloader.service sigmaos-indexer.service \
   sigmaos-vod-player.service
 sudo systemctl --failed
 sudo journalctl -u sigmaos-hostd.service -u sigmaos-termux.service -n 100 --no-pager

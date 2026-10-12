@@ -1,6 +1,7 @@
 import type {
   DownloadSettingsRecord,
   DockerSettingsRecord,
+  IndexerSettingsRecord,
   ModelProviderSettingsRecord,
   PhotostaffMapSettingsRecord,
   PhotostaffProcessingSettingsRecord,
@@ -39,6 +40,7 @@ const SHARE_SETTING_KEY = "share_settings";
 const DOWNLOAD_SETTING_KEY = "download_settings";
 const PHOTOSTAFF_MAP_SETTING_KEY = "photostaff_map_settings";
 const PHOTOSTAFF_PROCESSING_SETTING_KEY = "photostaff_processing_settings";
+const INDEXER_SETTING_KEY = "indexer_settings";
 
 export const DEFAULT_DOWNLOAD_CONCURRENCY = 1;
 export const DEFAULT_DOWNLOAD_SETTINGS: Omit<DownloadSettingsRecord, "updatedAt"> = {
@@ -68,6 +70,18 @@ export const DEFAULT_PHOTOSTAFF_PROCESSING_SETTINGS: Omit<PhotostaffProcessingSe
   maxIntermediateBytes: PHOTOSTAFF_DEFAULT_MAX_INTERMEDIATE_BYTES,
   minFreeSpaceBytes: PHOTOSTAFF_DEFAULT_MIN_FREE_SPACE_BYTES,
   maxDecodedPixels: PHOTOSTAFF_DEFAULT_MAX_DECODED_PIXELS
+};
+
+export const DEFAULT_INDEXER_SETTINGS: Omit<IndexerSettingsRecord, "updatedAt"> = {
+  scanConcurrency: 4,
+  extractionConcurrency: 2,
+  reconciliationIntervalMs: 30 * 60 * 1_000,
+  maxExtractedTextBytes: 2 * 1024 * 1024,
+  maxSourceDocumentBytes: 512 * 1024 * 1024,
+  commandTimeoutMs: 120 * 1_000,
+  maxPdfTextPages: 500,
+  maxOcrPages: 20,
+  ocrRootIds: []
 };
 
 export { DEFAULT_PI_TOOL_POLICY_SETTINGS } from "./settings-constants.js";
@@ -227,6 +241,39 @@ export function saveDownloadSettings(
   return record;
 }
 
+export function getIndexerSettings(db: SigmaDatabase): IndexerSettingsRecord | null {
+  const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
+    .get(INDEXER_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
+  if (!row) return null;
+  try {
+    const parsed = JSON.parse(row.value_json) as Partial<IndexerSettingsRecord>;
+    return normalizeIndexerSettings(
+      parsed,
+      typeof parsed.updatedAt === "string" ? parsed.updatedAt : row.updated_at
+    );
+  } catch {
+    return null;
+  }
+}
+
+export function defaultIndexerSettings(): IndexerSettingsRecord {
+  return { ...DEFAULT_INDEXER_SETTINGS, ocrRootIds: [], updatedAt: new Date(0).toISOString() };
+}
+
+export function saveIndexerSettings(
+  db: SigmaDatabase,
+  settings: Partial<Omit<IndexerSettingsRecord, "updatedAt">>
+): IndexerSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = normalizeIndexerSettings(settings, updatedAt);
+  db.prepare(`
+    INSERT INTO system_settings (key, value_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+  `).run(INDEXER_SETTING_KEY, JSON.stringify(record), updatedAt);
+  return record;
+}
+
 export function getPhotostaffMapSettings(db: SigmaDatabase): PhotostaffMapSettingsRecord | null {
   const row = db
     .prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
@@ -368,6 +415,34 @@ function normalizePhotostaffProcessingSettings(
     maxIntermediateBytes: integer("Photostaff maximum intermediate size", value.maxIntermediateBytes, 64 * 1024 ** 2, 8 * 1024 ** 3),
     minFreeSpaceBytes: integer("Photostaff minimum free space", value.minFreeSpaceBytes, 0, 1024 ** 4),
     maxDecodedPixels: integer("Photostaff maximum decoded pixels", value.maxDecodedPixels, 1_000_000, 268_402_689),
+    updatedAt
+  };
+}
+
+function normalizeIndexerSettings(
+  settings: Partial<Omit<IndexerSettingsRecord, "updatedAt">>,
+  updatedAt: string
+): IndexerSettingsRecord {
+  const value = { ...DEFAULT_INDEXER_SETTINGS, ...settings };
+  const integer = (name: string, candidate: unknown, minimum: number, maximum: number): number => {
+    if (typeof candidate !== "number" || !Number.isSafeInteger(candidate) || candidate < minimum || candidate > maximum) {
+      throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
+    }
+    return candidate;
+  };
+  if (!Array.isArray(value.ocrRootIds) || value.ocrRootIds.some((rootId) => typeof rootId !== "string" || !rootId.trim())) {
+    throw new Error("Indexer OCR roots must be an array of root IDs");
+  }
+  return {
+    scanConcurrency: integer("Indexer scan concurrency", value.scanConcurrency, 1, 16),
+    extractionConcurrency: integer("Indexer extraction concurrency", value.extractionConcurrency, 1, 8),
+    reconciliationIntervalMs: integer("Indexer reconciliation interval", value.reconciliationIntervalMs, 60_000, 86_400_000),
+    maxExtractedTextBytes: integer("Indexer extracted text limit", value.maxExtractedTextBytes, 64 * 1024, 16 * 1024 * 1024),
+    maxSourceDocumentBytes: integer("Indexer source document limit", value.maxSourceDocumentBytes, 1024 * 1024, 2 * 1024 ** 4),
+    commandTimeoutMs: integer("Indexer command timeout", value.commandTimeoutMs, 5_000, 900_000),
+    maxPdfTextPages: integer("Indexer PDF text page limit", value.maxPdfTextPages, 1, 5_000),
+    maxOcrPages: integer("Indexer OCR page limit", value.maxOcrPages, 1, 100),
+    ocrRootIds: [...new Set(value.ocrRootIds.map((rootId) => rootId.trim()))].sort(),
     updatedAt
   };
 }

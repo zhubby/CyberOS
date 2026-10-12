@@ -9,7 +9,7 @@ Rules-Requires-Root: no
 
 Package: sigmaos
 Architecture: any
-Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, libheif-examples, libimage-exiftool-perl, libvips-tools, ffmpeg, libraw-bin, ${misc:Depends}
+Depends: nodejs (>= 22), sqlite3, tmux, util-linux, acl, adduser, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, libheif-examples, libimage-exiftool-perl, libvips-tools, ffmpeg, libraw-bin, poppler-utils, tesseract-ocr, tesseract-ocr-chi-sim, tesseract-ocr-eng, ${misc:Depends}
 Suggests: git, mpv, seatd, gzip, unzip, libarchive-tools, unrar-free, mdadm, btrfs-progs, smartmontools, restic, nginx, docker.io, docker-cli, docker-compose, libvirt-daemon-system, libvirt-clients, qemu-system-arm, qemu-efi-aarch64, qemu-utils, virtinst, ipxe-qemu, samba, apache2, apache2-utils, vsftpd, libpam-pwdfile, nfs-kernel-server, minidlna
 Description: Native Linux NAS appliance with approval-gated AI file operations
  SigmaOS provides a local web UI, API service, agent worker, SQLite FTS

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { getDownloadWorkerHealth, getPhotostaffWorkerHealth, listHealthAlerts, listNasRoots, listRootReadiness, getIndexRootStatus, listBackupRuns } from "@sigmaos/db";
+import { getDownloadWorkerHealth, getIndexerServiceStatus, getPhotostaffWorkerHealth, listHealthAlerts, listNasRoots, listRootReadiness, getIndexRootStatus, listBackupRuns } from "@sigmaos/db";
 import type { SystemHealthSummary } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { createVodPlayerRuntime } from "../lib/vod-player.js";
@@ -41,6 +41,20 @@ export function registerHealthStatusRoutes(server: FastifyInstance, context: Api
         message: downloader.status === "stale" ? "Downloader heartbeat is stale" : "Downloader is unavailable"
       });
     }
+    const indexer = getIndexerServiceStatus(db);
+    if (indexer.service.status !== "ready") {
+      issues.push({
+        code: "indexer_unavailable",
+        severity: indexer.queue.queued + indexer.queue.running + indexer.queue.retrying > 0 ? "critical" : "warning",
+        message: indexer.service.status === "stale" ? "Indexer heartbeat is stale" : "Indexer is unavailable"
+      });
+    }
+    if (indexer.queue.stalled) {
+      issues.push({ code: "indexer_queue_stalled", severity: "critical", message: "Indexer queue has stopped making progress" });
+    }
+    if (indexer.watcher.status === "degraded") {
+      issues.push({ code: "indexer_watcher_degraded", severity: "warning", message: indexer.watcher.reason ?? "Indexer watcher is degraded" });
+    }
     const photostaff = getPhotostaffWorkerHealth(db);
     if (photostaff.status !== "ready") {
       issues.push({
@@ -55,7 +69,7 @@ export function registerHealthStatusRoutes(server: FastifyInstance, context: Api
     } else if (vodPlayer.status === "critical") {
       issues.push({ code: "vod_player_unavailable", severity: "critical", message: "VOD Player is unavailable" });
     }
-    return { status: issues.some((issue) => issue.severity === "critical") ? "failed" : issues.length ? "degraded" : "ready", checkedAt, issues, roots: readiness, indexerFreshnessMs: indexerFreshness.length ? Math.max(...indexerFreshness) : null, backupFreshnessMs, downloader, photostaff, vodPlayer };
+    return { status: issues.some((issue) => issue.severity === "critical") ? "failed" : issues.length ? "degraded" : "ready", checkedAt, issues, roots: readiness, indexerFreshnessMs: indexerFreshness.length ? Math.max(...indexerFreshness) : null, backupFreshnessMs, downloader, indexer, photostaff, vodPlayer };
   });
 }
 

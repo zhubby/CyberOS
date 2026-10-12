@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { getIndexRootStatus, getNasRoot, listIndexRootStatuses, listNasRoots, listHealthAlerts, listIndexRunHistory, listRootReadiness } from "@sigmaos/db";
+import { resolveSafeExistingPath, resolveSafeTargetPath } from "@sigmaos/nas-tools";
+import { enqueueIndexTask, getIndexerServiceStatus, getIndexRootStatus, getNasRoot, listIndexRootStatuses, listNasRoots, listHealthAlerts, listIndexRunHistory, listRootReadiness } from "@sigmaos/db";
+import type { IndexReindexRequest } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerIndexerRoutes(server: FastifyInstance, { db, config }: ApiRouteContext): void {
@@ -12,12 +14,41 @@ export function registerIndexerRoutes(server: FastifyInstance, { db, config }: A
         reply.status(404).send({ error: "NAS root not found" });
         return;
       }
-      reply.send({ roots: [serializeStatus(getIndexRootStatus(db, root.id), config.environment !== undefined, db)] });
+      reply.send({
+        roots: [serializeStatus(getIndexRootStatus(db, root.id), config.environment !== undefined, db)],
+        ...getIndexerServiceStatus(db)
+      });
       return;
     }
 
     const roots = listNasRoots(db);
-    reply.send({ roots: listIndexRootStatuses(db, roots.map((root) => root.id)).map((status) => serializeStatus(status, config.environment !== undefined, db)) });
+    reply.send({
+      roots: listIndexRootStatuses(db, roots.map((root) => root.id)).map((status) => serializeStatus(status, config.environment !== undefined, db)),
+      ...getIndexerServiceStatus(db)
+    });
+  });
+
+  server.post<{ Body: Partial<IndexReindexRequest> }>("/api/indexer/reindex", async (request, reply) => {
+    const root = getNasRoot(db, request.body?.rootId ?? "");
+    if (!root) {
+      reply.status(404).send({ error: "NAS root not found" });
+      return;
+    }
+    const requestedPath = request.body?.path?.trim() || ".";
+    try {
+      const safe = requestedPath === "."
+        ? await resolveSafeExistingPath(root.path, ".")
+        : await resolveSafeTargetPath(root.path, requestedPath);
+      const task = enqueueIndexTask(db, {
+        rootId: root.id,
+        path: safe.relativePath,
+        recursive: request.body?.recursive ?? safe.relativePath === ".",
+        kind: "manual"
+      });
+      reply.status(202).send({ task });
+    } catch (error) {
+      reply.status(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 }
 
