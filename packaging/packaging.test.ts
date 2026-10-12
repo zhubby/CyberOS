@@ -392,7 +392,10 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("CM5 runtime requires Node.js 22");
     expect(deployWorkflow).toContain("sigmaos-indexer.service");
     expect(deployWorkflow).toContain("/api/indexer/status");
-    expect(deployWorkflow).toContain("payload?.queue?.stalled !== false");
+    expect(deployWorkflow).toContain("payload?.queue?.stalled === false");
+    expect(deployWorkflow).toContain("wait_for_indexer_ready()");
+    expect(deployWorkflow).toContain('while [ "$attempt" -le 120 ]');
+    expect(deployWorkflow).toMatch(/- name: Verify CM5 services and build metadata\n\s+timeout-minutes: 10/u);
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
     expect(deployWorkflow).toContain('local_parts_dir="$release_dir/parts"');
     expect(deployWorkflow).toContain('remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"');

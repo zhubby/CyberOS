@@ -509,6 +509,7 @@ jobs:
           REMOTE
 
       - name: Verify CM5 services and build metadata
+        timeout-minutes: 10
         run: |
           set -euo pipefail
 
@@ -586,6 +587,30 @@ jobs:
             done
           }
 
+          wait_for_indexer_ready() {
+            status_path="$check_dir/indexer-status.json"
+            attempt=1
+            while [ "$attempt" -le 120 ]; do
+              if curl --fail --silent --show-error --max-time 15 \
+                http://127.0.0.1:3010/api/indexer/status > "$status_path" && \
+                node - "$status_path" <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const ready = payload?.service?.status === "ready" && payload.service.freshWorkers > 0 &&
+            payload?.watcher?.status === "ready" && payload?.queue?.stalled === false;
+          process.exit(ready ? 0 : 1);
+          NODE
+              then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            printf 'indexer did not become ready after 120 attempts\n' >&2
+            [ ! -s "$status_path" ] || cat "$status_path" >&2
+            return 1
+          }
+
           for unit in \
             sigmaos-api.service \
             sigmaos-worker@1.service \
@@ -631,16 +656,7 @@ jobs:
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/roots/readiness > "$check_dir/readiness.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/health > "$check_dir/system-health.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/indexer/status > "$check_dir/indexer-status.json"
-
-          node - "$check_dir/indexer-status.json" <<'NODE'
-          const fs = require("node:fs");
-          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          if (payload?.service?.status !== "ready" || payload.service.freshWorkers < 1 ||
-              payload?.watcher?.status !== "ready" || payload?.queue?.stalled !== false) {
-            throw new Error(`indexer is not ready: ${JSON.stringify(payload)}`);
-          }
-          NODE
+          wait_for_indexer_ready
 
           node - "$check_dir/build-info.json" "$expected_version" "$expected_commit_sha" <<'NODE'
           const fs = require("node:fs");
