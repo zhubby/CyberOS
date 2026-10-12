@@ -1,3 +1,9 @@
+sigmaos (0.9.20) unstable; urgency=medium
+
+  * Restore CM5 upgrades with the managed Node.js 22 runtime.
+
+ -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 12 Oct 2026 02:16:11 +0000
+
 sigmaos (0.9.19) unstable; urgency=medium
 
   * Replace the TypeScript indexer with a persistent Rust service, durable incremental indexing, advanced search, and indexer controls.
