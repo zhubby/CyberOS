@@ -1,6 +1,6 @@
 {
   "name": "@sigmaos/web",
-  "version": "0.9.18",
+  "version": "0.9.19",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@js-preview/excel": "^1.7.14",
-    "@sigmaos/shared": "0.9.18",
+    "@sigmaos/shared": "0.9.19",
     "@vitejs/plugin-react": "^5.0.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
