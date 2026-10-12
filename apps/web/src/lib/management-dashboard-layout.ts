@@ -58,6 +58,7 @@ const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly Manag
     { id: "metric-connected", size: "metric" },
     { id: "metric-addresses", size: "metric" },
     { id: "metric-defaultRoutes", size: "metric" },
+    { id: "ethernet", size: "wide" },
     { id: "wifi", size: "large" },
     { id: "traffic", size: "large" },
     { id: "interfaces", size: "wide" },
@@ -250,6 +251,9 @@ function sanitizeLayoutItem(stored: LayoutItem | undefined, fallback: LayoutItem
   }
   const minW = fallback.minW ?? 1;
   const minH = fallback.minH ?? 1;
+  if (stored.w < minW || stored.h < minH) {
+    return fallback;
+  }
   const w = clamp(stored.w, minW, Math.min(fallback.maxW ?? cols, cols));
   const h = Math.max(minH, Math.min(stored.h, fallback.maxH ?? Number.POSITIVE_INFINITY));
   return {

@@ -9,7 +9,8 @@ Group=sigmaos
 Environment=SIGMAOS_CONFIG=/etc/sigmaos/config.toml
 WorkingDirectory=/var/lib/sigmaos
 StateDirectory=sigmaos
-ExecStart=/usr/local/bin/node /usr/lib/sigmaos/apps/scheduler/dist/index.js --health
+ExecStart=/usr/local/bin/node /usr/lib/sigmaos/apps/ops/dist/index.js health
+TimeoutStartSec=2min
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/var/lib/sigmaos /var/log/sigmaos /srv/nas /srv/backup

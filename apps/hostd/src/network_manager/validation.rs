@@ -6,7 +6,7 @@ use super::model::NetworkRequest;
 
 pub(super) fn validate_request(request: &NetworkRequest) -> Result<(), HostdError> {
     match request {
-        NetworkRequest::Ping | NetworkRequest::Inspect => Ok(()),
+        NetworkRequest::Ping | NetworkRequest::Inspect | NetworkRequest::EthernetStatus => Ok(()),
         NetworkRequest::Scan { input } => validate_device(&input.device),
         NetworkRequest::Connect { input } => {
             validate_device(&input.device)?;
@@ -91,6 +91,31 @@ pub(super) fn validate_request(request: &NetworkRequest) -> Result<(), HostdErro
             }
             Ok(())
         }
+        NetworkRequest::EthernetSave { device_id, input } => {
+            if device_id.len() != 12
+                || !device_id.chars().all(|character| {
+                    character.is_ascii_hexdigit() && !character.is_ascii_uppercase()
+                })
+                || input.expected_revision.len() != 64
+                || !input.expected_revision.chars().all(|character| {
+                    character.is_ascii_hexdigit() && !character.is_ascii_uppercase()
+                })
+            {
+                return Err(HostdError::validation("Invalid Ethernet update request"));
+            }
+            Ok(())
+        }
+        NetworkRequest::EthernetApply { confirmed } => {
+            if *confirmed {
+                Ok(())
+            } else {
+                Err(HostdError::validation(
+                    "Ethernet apply confirmation is required",
+                ))
+            }
+        }
+        NetworkRequest::EthernetConfirm { transaction_id }
+        | NetworkRequest::EthernetRollback { transaction_id } => validate_uuid(transaction_id),
     }
 }
 

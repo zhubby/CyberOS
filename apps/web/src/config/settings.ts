@@ -23,6 +23,7 @@ export type SettingsSectionId =
   | "docker"
   | "files"
   | "indexer"
+  | "operations"
   | "photostaff"
   | "downloads"
   | "security"
@@ -83,6 +84,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "administration"
   },
   {
+    id: "operations",
+    group: "administration"
+  },
+  {
     id: "files",
     group: "workspace"
   },
@@ -120,6 +125,7 @@ const SECTION_TITLE_KEYS = {
   docker: "settings.sections.docker.title",
   files: "settings.sections.files.title",
   indexer: "settings.sections.indexer.title",
+  operations: "settings.sections.operations.title",
   photostaff: "settings.sections.photostaff.title",
   downloads: "settings.sections.downloads.title",
   security: "settings.sections.security.title",
@@ -135,6 +141,7 @@ const SECTION_DESCRIPTION_KEYS = {
   docker: "settings.sections.docker.description",
   files: "settings.sections.files.description",
   indexer: "settings.sections.indexer.description",
+  operations: "settings.sections.operations.description",
   photostaff: "settings.sections.photostaff.description",
   downloads: "settings.sections.downloads.description",
   security: "settings.sections.security.description",

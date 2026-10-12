@@ -6,6 +6,7 @@ import type { DockerDaemonRuntime } from "./lib/docker-daemon.js";
 import type { ShareManagementDependencies } from "./lib/share-service.js";
 import type { SystemManagementDependencies } from "./lib/system-management.js";
 import type { SystemPowerRuntime } from "./lib/power-management.js";
+import type { SystemOperationsRuntime } from "./lib/operations-management.js";
 import type { TerminalRuntime } from "./lib/terminal.js";
 import type { VideoTranscoder } from "./lib/video-cache.js";
 import type { VodPlayerRuntime } from "./lib/vod-player.js";
@@ -24,6 +25,7 @@ export interface ApiRouteContext {
   shares?: ShareManagementDependencies;
   system?: SystemManagementDependencies & {
     power?: SystemPowerRuntime;
+    operations?: SystemOperationsRuntime;
   };
   terminal?: TerminalRuntime;
   videoTranscoder?: VideoTranscoder;

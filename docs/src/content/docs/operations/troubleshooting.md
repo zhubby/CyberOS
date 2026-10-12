@@ -4,7 +4,7 @@ description: API、静态资源、terminal、timer、indexer、backup 和 SQLite
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, packaging/systemd/sigmaos-hostd.service, packaging/systemd/sigmaos-api.service, packaging/systemd/sigmaos-indexer.service, apps/api/src/web-static.ts]
+sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, packaging/systemd/sigmaos-hostd.service, packaging/systemd/sigmaos-api.service, packaging/systemd/sigmaos-indexer.service, apps/api/src/web-static.ts]
 sidebar:
   order: 4
 ---
@@ -75,6 +75,28 @@ sudo journalctl -u NetworkManager.service -u sigmaos-hostd.service -n 100 --no-p
 非 NetworkManager 主机不会自动迁移。`wlan0` 为 unmanaged 时检查 NetworkManager 配置和已有 Netplan renderer，不要直接删除外部 profile。扫描失败但状态可读通常表示 hostd、radio 或权限异常；确认 `/run/sigmaos/hostd.sock`、unit 的 `/etc/NetworkManager/system-connections` 写路径以及 `iw` 是否安装。
 
 热点启动失败时，检查 `/var/lib/sigmaos/network-manager/state.json` 和 NetworkManager journal。该文件只记录待恢复 profile UUID，不含密码；不要手工编辑正在使用的状态。若自动恢复失败，使用 `nmcli connection up uuid <uuid> ifname <device>` 恢复，确认客户端连接后再移除对应状态。Wi-Fi/热点密码位于 root-only `.nmconnection` 文件中，不要把文件正文复制到日志或工单。
+
+## 多网口 Ethernet 与 checkpoint
+
+有载波但没有地址的网口应显示为“链路已建立”，不是“已连接”。先同时检查永久 MAC、活动 profile、地址与默认路由：
+
+```bash
+nmcli -t -f DEVICE,TYPE,STATE,CONNECTION,CON-UUID device status
+ip -j address show
+ip -j route show default
+sudo journalctl -u NetworkManager.service -u sigmaos-hostd.service -n 120 --no-pager
+```
+
+SigmaOS 托管文件固定为 `/etc/NetworkManager/system-connections/sigmaos-ethernet-<mac>.nmconnection`，期望配置与事务位于 root-only `/var/lib/sigmaos/network-manager`。保存不会切换网络；只有全局应用会创建 checkpoint、发布全部 pending keyfile 并启动 90 秒确认窗口。高级 802.1X、多地址、自定义路由、Bond/Bridge/VLAN controller port 保持外部只读，不应通过删除外部 profile 强制接管。
+
+若页面断线，先从其他网口或本机重新打开页面并确认同一 transaction。超时后 NetworkManager 会恢复运行连接，hostd 会恢复磁盘 keyfile；hostd 启动时也会恢复未完成事务。若状态为“回滚失败”，保留 `/var/lib/sigmaos/network-manager/ethernet-transaction.json`，不要删除恢复材料。使用部署前保存的外部 profile UUID逐口恢复：
+
+```bash
+sudo nmcli connection reload
+sudo nmcli connection up uuid <external-profile-uuid> ifname <interface>
+```
+
+降级到不识别 Ethernet 类型的旧 hostd 前，先恢复外部 profile、确认管理链路与默认路由，再删除已核实的 `sigmaos-ethernet-*` 文件并 reload。不要删除未知管理员或 Netplan profile。
 
 ## Docker 拉取与资源能力
 

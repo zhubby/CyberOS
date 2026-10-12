@@ -1,4 +1,6 @@
 import type {
+  HostdEthernetApplyTransaction,
+  HostdEthernetStatus,
   HostdDockerDaemonSnapshot,
   HostdDockerDaemonUpdateResult,
   HostdNetworkInspectionResult as GeneratedNetworkInspectionResult,
@@ -12,6 +14,9 @@ import type {
 import type {
   DockerDaemonConfigSnapshot,
   DockerDaemonConfigUpdateResult,
+  SystemEthernetApplyTransaction,
+  SystemEthernetConfig,
+  SystemEthernetStatus,
   SystemWifiBand,
   SystemWifiScanResult,
   SystemWifiSecurity
@@ -23,7 +28,9 @@ export type HostdRequest<Operation extends HostdOperation> =
   Operation extends HostdOperation
     ? Extract<HostdRequestContract, { operation: Operation }>["payload"]
     : never;
-export type HostdNetworkMutationRequest = Exclude<HostdRequest<"network.manager">, { action: "ping" | "inspect" | "scan" }>;
+export type HostdNetworkMutationRequest = Exclude<HostdRequest<"network.manager">, {
+  action: "ping" | "inspect" | "scan" | "ethernet_status" | "ethernet_save" | "ethernet_apply" | "ethernet_confirm" | "ethernet_rollback";
+}>;
 
 type HostdOperationResult<Operation extends HostdOperation> =
   Operation extends HostdOperation
@@ -33,6 +40,7 @@ type HostdShareApplyResult = HostdOperationResult<"shares.apply">;
 type HostdStorageCommandResult = HostdOperationResult<"storage.command">;
 type HostdStorageOperationResult = HostdOperationResult<"storage.operation">;
 type HostdPowerResult = HostdOperationResult<"system.power">;
+type HostdOpsResult = HostdOperationResult<"system.ops">;
 
 type HostdNetworkProfileInspection = Omit<GeneratedNetworkProfileInspection, "security" | "mode" | "band"> & {
   security: SystemWifiSecurity;
@@ -50,7 +58,11 @@ type HostdNetworkResult<Request> = Request extends { action: "ping" }
     ? HostdNetworkInspectionResult
     : Request extends { action: "scan" }
       ? GeneratedNetworkScanResult & SystemWifiScanResult
-      : HostdNetworkMutationResult;
+      : Request extends { action: "ethernet_status" | "ethernet_save" }
+        ? HostdEthernetStatus & SystemEthernetStatus
+        : Request extends { action: "ethernet_apply" | "ethernet_confirm" | "ethernet_rollback" }
+          ? HostdEthernetApplyTransaction & SystemEthernetApplyTransaction
+          : HostdNetworkMutationResult;
 
 type HostdDockerResult<Request> = Request extends { action: "read" }
   ? HostdDockerDaemonSnapshot & DockerDaemonConfigSnapshot
@@ -67,7 +79,8 @@ export type HostdResult<Operation extends HostdOperation, Request extends HostdR
         : Operation extends "docker.daemon" ? HostdDockerResult<Request>
           : Operation extends "network.manager" ? HostdNetworkResult<Request>
             : Operation extends "system.power" ? HostdPowerResult
-              : never;
+              : Operation extends "system.ops" ? HostdOpsResult
+                : never;
 
 export function parseHostdResult<
   Operation extends HostdOperation,
@@ -92,6 +105,9 @@ export function parseHostdResult<
       break;
     case "system.power":
       parsed = parsePowerResult(request, value);
+      break;
+    case "system.ops":
+      parsed = parseOpsResult(request, value);
       break;
   }
   return parsed as HostdResult<Operation, Request> | null;
@@ -150,6 +166,10 @@ function parseNetworkResult(request: unknown, value: unknown): unknown {
   }
   if (request.action === "inspect") return parseNetworkInspection(value);
   if (request.action === "scan") return parseNetworkScan(value);
+  if (request.action === "ethernet_status" || request.action === "ethernet_save") return parseEthernetStatus(value);
+  if (request.action === "ethernet_apply" || request.action === "ethernet_confirm" || request.action === "ethernet_rollback") {
+    return parseEthernetTransaction(value);
+  }
   if (!isRecordWithKeys(value, ["rollback", "message"]) || !isRollback(value.rollback) || !isNullableString(value.message)) return null;
   return { rollback: value.rollback, message: value.message };
 }
@@ -158,6 +178,63 @@ function parseNetworkInspection(value: unknown): HostdNetworkInspectionResult | 
   if (!isRecordWithKeys(value, ["profiles", "recovery"]) || !Array.isArray(value.profiles) || !isRecord(value.recovery)) return null;
   if (!value.profiles.every(isNetworkProfile) || !Object.values(value.recovery).every(isRecoveryEntry)) return null;
   return value as HostdNetworkInspectionResult;
+}
+
+function parseEthernetStatus(value: unknown): SystemEthernetStatus | null {
+  if (!isRecordWithKeys(value, ["collectedAt", "backend", "hostdReady", "devices", "transaction", "warnings"])) return null;
+  if (typeof value.collectedAt !== "string" || value.backend !== "NetworkManager" || value.hostdReady !== true
+    || !Array.isArray(value.devices) || !value.devices.every(isEthernetDevice)
+    || (value.transaction !== null && !parseEthernetTransaction(value.transaction)) || !isStringArray(value.warnings)) return null;
+  return value as unknown as SystemEthernetStatus;
+}
+
+function isEthernetDevice(value: unknown): boolean {
+  if (!isRecordWithKeys(value, [
+    "id", "name", "permanentMac", "mac", "driver", "speedMbps", "carrier", "state", "addresses",
+    "ipv4Gateway", "ipv6Gateway", "activeProfileId", "activeProfileName", "managementState", "activeConfig",
+    "desiredConfig", "revision", "needsApply", "warnings"
+  ])) return false;
+  return typeof value.id === "string" && /^[0-9a-f]{12}$/u.test(value.id) && typeof value.name === "string"
+    && typeof value.permanentMac === "string" && typeof value.mac === "string" && isNullableString(value.driver)
+    && (value.speedMbps === null || isIntegerInRange(value.speedMbps, 1, 4_294_967_295)) && typeof value.carrier === "boolean"
+    && ["connected", "up", "down", "disabled", "unavailable"].includes(String(value.state))
+    && Array.isArray(value.addresses) && value.addresses.every(isEthernetAddress)
+    && isNullableString(value.ipv4Gateway) && isNullableString(value.ipv6Gateway)
+    && isNullableString(value.activeProfileId) && isNullableString(value.activeProfileName)
+    && ["managed", "pending", "external", "external_unsupported"].includes(String(value.managementState))
+    && (value.activeConfig === null || isEthernetConfig(value.activeConfig))
+    && (value.desiredConfig === null || isEthernetConfig(value.desiredConfig))
+    && typeof value.revision === "string" && typeof value.needsApply === "boolean" && isStringArray(value.warnings);
+}
+
+function isEthernetAddress(value: unknown): boolean {
+  if (!isRecordWithKeys(value, ["family", "address", "prefixLength", "cidr", "scope", "label"])) return false;
+  return ["inet", "inet6", "unknown"].includes(String(value.family)) && typeof value.address === "string"
+    && (value.prefixLength === null || isIntegerInRange(value.prefixLength, 0, 128))
+    && isNullableString(value.cidr) && isNullableString(value.scope) && isNullableString(value.label);
+}
+
+function isEthernetConfig(value: unknown): value is SystemEthernetConfig {
+  if (!isRecordWithKeys(value, ["enabled", "ipv4", "ipv6"]) || typeof value.enabled !== "boolean") return false;
+  return isEthernetFamily(value.ipv4, 4) && isEthernetFamily(value.ipv6, 6);
+}
+
+function isEthernetFamily(value: unknown, family: 4 | 6): boolean {
+  if (!isRecordWithKeys(value, ["mode", "address", "prefixLength", "gateway", "dnsMode", "dns", "useDefaultRoute", "routeMetric"])) return false;
+  const modes = family === 4 ? ["disabled", "dhcp", "static"] : ["disabled", "automatic", "static"];
+  return modes.includes(String(value.mode)) && isNullableString(value.address)
+    && (value.prefixLength === null || isIntegerInRange(value.prefixLength, 0, family === 4 ? 32 : 128))
+    && isNullableString(value.gateway) && (value.dnsMode === "automatic" || value.dnsMode === "manual")
+    && isStringArray(value.dns) && value.dns.length <= 3 && typeof value.useDefaultRoute === "boolean"
+    && isIntegerInRange(value.routeMetric, 1, 65_535);
+}
+
+function parseEthernetTransaction(value: unknown): SystemEthernetApplyTransaction | null {
+  if (!isRecordWithKeys(value, ["id", "status", "deviceIds", "createdAt", "deadlineAt", "rollback", "error"])) return null;
+  return typeof value.id === "string"
+    && ["applying", "awaiting_confirmation", "confirmed", "rolling_back", "rolled_back", "failed"].includes(String(value.status))
+    && isStringArray(value.deviceIds) && typeof value.createdAt === "string" && isNullableString(value.deadlineAt)
+    && isRollback(value.rollback) && isNullableString(value.error) ? value as unknown as SystemEthernetApplyTransaction : null;
 }
 
 function isNetworkProfile(value: unknown): value is HostdNetworkProfileInspection {
@@ -194,6 +271,12 @@ function parsePowerResult(request: unknown, value: unknown): HostdPowerResult | 
   if (!isRecord(request) || !isRecordWithKeys(value, ["action", "accepted"])) return null;
   return value.action === request.action && (value.action === "reboot" || value.action === "shutdown") && value.accepted === true
     ? value as HostdPowerResult : null;
+}
+
+function parseOpsResult(request: unknown, value: unknown): HostdOpsResult | null {
+  if (!isRecord(request) || !isRecordWithKeys(value, ["task", "accepted"])) return null;
+  return value.task === request.task && (value.task === "health" || value.task === "maintenance")
+    && value.accepted === true ? value as HostdOpsResult : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

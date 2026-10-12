@@ -54,7 +54,7 @@ curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
 ```
 
-然后从浏览器验证 Web 和 `/docs/`，选择 NAS root，打开终端，上传一个小文件并确认 `/api/indexer/status` 的队列、watcher 与 heartbeat 正常。Indexer 应持续为 `active`；scheduler、health 等 oneshot 仍需结合退出码、journal 和数据库状态判断。
+然后从浏览器验证 Web 和 `/docs/`，选择 NAS root，打开终端，上传一个小文件并确认 `/api/indexer/status` 的队列、watcher 与 heartbeat 正常。Indexer 应持续为 `active`；health、maintenance 等 oneshot 需结合退出码、journal 和运维页中的持久化历史判断。
 
 hostd 的 root 状态目录应为 `/var/lib/sigmaos/docker-daemon` 和 `/var/lib/sigmaos/network-manager`，不能声明共享父目录或共享 LogsDirectory。父目录和数据库仍由 `sigmaos` 使用，两个恢复子目录为 `root:root 0700`。现有相同配置的 host drop-in 可保留，升级后检查实际合并 unit；在维护窗口按两种启动顺序验证，并观察 hostd 重启是否影响 API/worker。详见[目录所有权排查](/docs/operations/troubleshooting/#服务目录所有权与启动顺序)。
 
@@ -69,6 +69,10 @@ curl -fsS http://127.0.0.1:3010/api/system/network
 ```
 
 页面应识别 `NetworkManager`、`wlan0` 和 AP 能力。依次验证扫描、连接/断开现有 profile、创建临时 WPA2 热点、客户端获取 `10.42.x.x` 地址、停止热点恢复原客户端连接，以及 autostart 开/关。验收后删除临时热点；不要在仅有 Wi-Fi 管理链路时测试 radio 关闭或热点切换。
+
+双网口 CM5 应先保留当前管理口和默认路由，再从 Network 面板接管。升级只派生待应用配置，不会在安装阶段切换网络。验收时确认两个永久 MAC 各自取得 DHCP 地址，主口仍持有较低 metric 的唯一默认路由；同一子网双地址会显示非对称路由警告。保存单口配置后实时地址不得变化。应用全部 pending 配置后，从备用地址重新打开页面，在 90 秒内执行“保留配置”。另做一次不确认测试，确认地址、默认路由和托管 keyfile 自动恢复。
+
+首次接管前为未配置端口创建的临时外部 profile 不使用 `sigmaos-` 前缀。只有在两个 SigmaOS 托管 profile 已确认、重启后仍稳定恢复时，才删除已知临时 profile；不得批量删除其他 Netplan 或管理员 profile。降级前按 troubleshooting 的步骤恢复外部 profile 并移除 `sigmaos-ethernet-*`。
 
 ## 升级、保留与回滚
 
@@ -95,15 +99,14 @@ sudo -n stat -c '%U:%G %a %n' /usr/local/sbin/sigmaos-deploy /var/lib/sigmaos-de
 
 `sigmaos-deploy` 只能无密码执行 `/usr/local/sbin/sigmaos-deploy`（该路径由 bootstrap 链接到包内 helper）；不要给它通用 `sudo` 权限，也不要在 workflow 中保存 root 或登录密码。GitHub production environment 的 `CM5_HOST` 必须是 Tailscale 名称/IP，`CM5_DEPLOY_USER` 默认是 `sigmaos-deploy`。
 
-升级前停止 indexer 常驻服务以及 scheduler、maintenance、health、daily/weekly backup timers，并备份：
+升级前停止 indexer 常驻服务以及 maintenance、health、daily/weekly backup timers，并备份：
 
 ```bash
-sudo systemctl stop sigmaos-indexer.service sigmaos-scheduler.timer \
-  sigmaos-maintenance.timer sigmaos-health.timer \
+sudo systemctl stop sigmaos-indexer.service sigmaos-maintenance.timer sigmaos-health.timer \
   sigmaos-backup-daily.timer sigmaos-backup-weekly.timer
 ```
 
-停止 timer 不会停止正在运行的任务。确认所有 oneshot 已退出，再停止 API、所有实际启用的 worker 实例、scheduler 和其他状态写入进程，确认 SQLite 没有写入者后才执行以下冷备份。不要对活跃数据库目录直接 tar，也不要只复制 `.sqlite` 而遗漏尚未 checkpoint 的 WAL。在独立备份介质上使用新的受限目录，保留旧包并记录此前启用的服务/timers：
+停止 timer 不会停止正在运行的任务。确认 health、maintenance、backup oneshot 已退出，再停止 API、所有实际启用的 worker 实例和其他状态写入进程，确认 SQLite 没有写入者后才执行以下冷备份。不要对活跃数据库目录直接 tar，也不要只复制 `.sqlite` 而遗漏尚未 checkpoint 的 WAL。在独立备份介质上使用新的受限目录，保留旧包并记录此前启用的服务/timers：
 
 ```bash
 sudo install -d -o root -g root -m 0700 /srv/backup/sigmaos-upgrade
@@ -116,7 +119,7 @@ sudo tar -C /var/lib -czf /srv/backup/sigmaos-upgrade/state-before-upgrade.tgz $
 
 示例目录必须未被之前升级占用，避免覆盖恢复材料。配置/state 包可能包含未加密秘密，限制权限并转存到加密备份仓库。它不包含默认 Docker volume 数据，容器工作负载需另行备份。
 
-安装新包后先启动 API、worker、hostd、termux 和 `sigmaos-indexer.service`，确认 Indexer heartbeat 后再串行运行 `sigmaos-scheduler.service`、`sigmaos-health.service`，最后重新启用 timers。保留旧 `.deb`、`config.toml.pre-termux.bak` 与状态备份，直到浏览器、API、终端身份、root readiness、索引和备份结果全部通过验收。
+安装新包后先启动 API、worker、hostd、termux 和 `sigmaos-indexer.service`，确认 Indexer heartbeat 后再串行运行 `sigmaos-health.service`、`sigmaos-maintenance.service`，最后重新启用 timers。升级会停用旧 scheduler timer 并移除旧 unit，但保留 `/var/lib/sigmaos/reports` 中已有 JSON 文件且不再更新。保留旧 `.deb`、`config.toml.pre-termux.bak` 与状态备份，直到浏览器、API、终端身份、root readiness、索引和备份结果全部通过验收。
 
 降级不会自动回滚数据库 migration。若新版本已执行 schema migration，使用与旧包匹配的 SQLite/state 备份恢复，再安装旧包；不要在没有备份的情况下直接覆盖生产数据库。
 

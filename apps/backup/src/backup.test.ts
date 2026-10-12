@@ -1,8 +1,15 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openSigmaDb, type SigmaDatabase } from "@sigmaos/db";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  acquireExecutionLock,
+  ensureNasRoots,
+  isExecutionLockOwner,
+  openSigmaDb,
+  releaseExecutionLock,
+  type SigmaDatabase
+} from "@sigmaos/db";
 import type { SigmaConfig } from "@sigmaos/shared";
 import { initBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
 
@@ -131,5 +138,48 @@ describe("backup workflow", () => {
 
     await expect(initBackup({ db, config: config(root, repo, password), restic })).resolves.toBeUndefined();
     expect(calls).toEqual([["init", "--repo", repo]]);
+  });
+
+  it("serializes init with other backup operations", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-backup-"));
+    const root = path.join(tempDir, "root");
+    const repo = path.join(tempDir, "repo");
+    await mkdir(root);
+    await mkdir(repo);
+    const password = path.join(tempDir, "password");
+    await writeFile(password, "secret\n");
+    db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
+    expect(acquireExecutionLock(db, { name: "backup", owner: "active-backup" })).toBe(true);
+    const restic = { run: vi.fn(async () => ({ stdout: "", stderr: "", code: 0 })) };
+
+    await expect(initBackup({ db, config: config(root, repo, password), restic }))
+      .rejects.toThrow("backup already running");
+    expect(restic.run).not.toHaveBeenCalled();
+    expect(releaseExecutionLock(db, { name: "backup", owner: "active-backup" })).toBe(true);
+  });
+
+  it("does not release a replacement lease when init loses ownership", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-backup-"));
+    const root = path.join(tempDir, "root");
+    const repo = path.join(tempDir, "repo");
+    await mkdir(root);
+    await mkdir(repo);
+    const password = path.join(tempDir, "password");
+    await writeFile(password, "secret\n");
+    db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
+    const restic = {
+      run: vi.fn(async () => {
+        db!.prepare("UPDATE execution_locks SET owner = ? WHERE name = 'backup'")
+          .run("replacement-owner");
+        return { stdout: "", stderr: "", code: 0 };
+      })
+    };
+
+    await expect(initBackup({ db, config: config(root, repo, password), restic }))
+      .rejects.toThrow("backup execution lease lost");
+    expect(isExecutionLockOwner(db, { name: "backup", owner: "replacement-owner" })).toBe(true);
+    expect(releaseExecutionLock(db, { name: "backup", owner: "replacement-owner" })).toBe(true);
   });
 });

@@ -1,3 +1,4 @@
+mod ethernet;
 mod model;
 mod nmcli;
 mod profiles;
@@ -68,6 +69,10 @@ async fn execute_with_options(
             NetworkResult::Ping(PingResult { ready: true })
         }
         NetworkRequest::Inspect => NetworkResult::Inspection(inspect(options).await?),
+        NetworkRequest::EthernetStatus => {
+            assert_available(runner).await?;
+            NetworkResult::EthernetStatus(ethernet::status(runner, options).await?)
+        }
         request => {
             assert_available(runner).await?;
             match request {
@@ -115,7 +120,25 @@ async fn execute_with_options(
                     stop_hotspot(&input.device, runner, options).await?;
                     NetworkResult::Mutation(delete_hotspot(&input.device, runner, options).await?)
                 }
-                NetworkRequest::Ping | NetworkRequest::Inspect => unreachable!(),
+                NetworkRequest::EthernetSave { device_id, input } => NetworkResult::EthernetStatus(
+                    ethernet::save(&device_id, &input, runner, options).await?,
+                ),
+                NetworkRequest::EthernetApply { confirmed } => NetworkResult::EthernetTransaction(
+                    ethernet::apply(confirmed, runner, options).await?,
+                ),
+                NetworkRequest::EthernetConfirm { transaction_id } => {
+                    NetworkResult::EthernetTransaction(
+                        ethernet::confirm(&transaction_id, runner, options).await?,
+                    )
+                }
+                NetworkRequest::EthernetRollback { transaction_id } => {
+                    NetworkResult::EthernetTransaction(
+                        ethernet::rollback(&transaction_id, runner, options).await?,
+                    )
+                }
+                NetworkRequest::Ping | NetworkRequest::Inspect | NetworkRequest::EthernetStatus => {
+                    unreachable!()
+                }
             }
         }
     };
@@ -144,6 +167,16 @@ async fn inspect(options: &NetworkOptions) -> Result<InspectionResult, HostdErro
         profiles,
         recovery: read_recovery_state(&options.state_dir).await?,
     })
+}
+
+pub(crate) async fn recover_on_startup(runner: &dyn CommandRunner) -> Result<(), HostdError> {
+    ethernet::recover_on_startup(runner, &NetworkOptions::default()).await
+}
+
+pub(crate) async fn recover_expired_transaction(
+    runner: &dyn CommandRunner,
+) -> Result<(), HostdError> {
+    ethernet::recover_expired(runner, &NetworkOptions::default()).await
 }
 
 async fn scan(input: &ScanInput, runner: &dyn CommandRunner) -> Result<ScanResult, HostdError> {
@@ -726,6 +759,7 @@ mod tests {
         NetworkOptions {
             connections_dir: temp.path().join("connections"),
             state_dir: temp.path().join("state"),
+            sys_class_net: temp.path().join("sys-class-net"),
         }
     }
 

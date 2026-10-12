@@ -1,0 +1,19 @@
+{
+  "name": "@sigmaos/ops",
+  "version": "0.9.24",
+  "type": "module",
+  "exports": {
+    ".": "./src/runner.ts"
+  },
+  "types": "./src/runner.ts",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "build": "cd ../.. && tsup apps/ops/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir apps/ops/dist"
+  },
+  "dependencies": {
+    "@sigmaos/db": "0.9.24",
+    "@sigmaos/shared": "0.9.24",
+    "@sigmaos/system-health": "0.9.24"
+  }
+}

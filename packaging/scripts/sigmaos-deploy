@@ -8,10 +8,10 @@ RELEASE_DIR="$BASE_DIR/releases"
 STATE_PATH="$BASE_DIR/current-release.json"
 LOCK_PATH=/run/lock/sigmaos-deploy.lock
 
-TIMERS='sigmaos-scheduler.timer sigmaos-maintenance.timer sigmaos-health.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer'
+TIMERS='sigmaos-maintenance.timer sigmaos-health.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer'
 RUNTIME_SERVICES='sigmaos-hostd.service sigmaos-termux.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service'
-WRITERS="sigmaos-indexer.service sigmaos-scheduler.service sigmaos-maintenance.service sigmaos-health.service sigmaos-backup-daily.service sigmaos-backup-weekly.service $RUNTIME_SERVICES sigmaos-vod-player.service"
-RETIRED_UNITS='sigmaos-share-helper.service sigmaos-terminal-helper.service sigmaos-player-helper.service'
+WRITERS="sigmaos-indexer.service sigmaos-maintenance.service sigmaos-health.service sigmaos-backup-daily.service sigmaos-backup-weekly.service $RUNTIME_SERVICES sigmaos-vod-player.service"
+RETIRED_UNITS='sigmaos-share-helper.service sigmaos-terminal-helper.service sigmaos-player-helper.service sigmaos-scheduler.timer sigmaos-scheduler.service'
 
 success=0
 work_dir=

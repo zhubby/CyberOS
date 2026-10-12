@@ -2,8 +2,8 @@
 set -e
 
 if [ "$1" = "remove" ] && command -v systemctl >/dev/null 2>&1; then
-  systemctl stop sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-api.service sigmaos-photostaff.service sigmaos-photo-worker.service sigmaos-downloader.service 'sigmaos-worker@*.service' sigmaos-indexer.service sigmaos-scheduler.service sigmaos-maintenance.service 2>/dev/null || true
-  systemctl disable sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-photo-worker.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-indexer.timer sigmaos-scheduler.timer sigmaos-maintenance.timer 2>/dev/null || true
+  systemctl stop sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-api.service sigmaos-photostaff.service sigmaos-photo-worker.service sigmaos-downloader.service 'sigmaos-worker@*.service' sigmaos-indexer.service sigmaos-scheduler.service sigmaos-health.service sigmaos-maintenance.service 2>/dev/null || true
+  systemctl disable sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-photo-worker.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-indexer.timer sigmaos-scheduler.timer sigmaos-health.timer sigmaos-maintenance.timer 2>/dev/null || true
   if command -v tmux >/dev/null 2>&1; then
     runuser -u sigmaos -- tmux -S /var/lib/sigmaos-termux/.sigmaos/tmux.sock kill-server 2>/dev/null || true
   fi

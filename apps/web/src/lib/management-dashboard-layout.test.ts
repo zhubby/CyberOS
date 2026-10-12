@@ -96,6 +96,36 @@ describe("management dashboard layouts", () => {
     expect(reset).toEqual(defaultManagementDashboardLayouts("network"));
   });
 
+  it("adds new network widgets to layouts saved by an older release", () => {
+    const storage = memoryStorage();
+    const defaults = defaultManagementDashboardLayouts("network");
+    const legacyLayouts = {
+      desktop: defaults.desktop.filter((item) => item.i !== "ethernet"),
+      tablet: defaults.tablet.map((item) => item.i === "ethernet"
+        ? { ...item, w: 1, h: 1, minW: undefined, minH: undefined }
+        : item)
+    };
+    storage.values.set(managementDashboardStorageKey("network"), JSON.stringify({
+      version: MANAGEMENT_DASHBOARD_LAYOUT_VERSION,
+      layouts: legacyLayouts
+    }));
+
+    const restored = readManagementDashboardLayouts("network", storage);
+    for (const breakpoint of ["desktop", "tablet"] as const) {
+      const ethernet = restored[breakpoint].find((item) => item.i === "ethernet");
+      expect(ethernet?.w).toBe(MANAGEMENT_DASHBOARD_COLUMNS[breakpoint]);
+      expect(ethernet?.h).toBe(14);
+      for (const item of restored[breakpoint].filter((candidate) => candidate.i !== "ethernet")) {
+        const overlaps = ethernet !== undefined
+          && ethernet.x < item.x + item.w
+          && ethernet.x + ethernet.w > item.x
+          && ethernet.y < item.y + item.h
+          && ethernet.y + ethernet.h > item.y;
+        expect(overlaps, `${breakpoint}: ethernet overlaps ${item.i}`).toBe(false);
+      }
+    }
+  });
+
   it("moves and resizes the active breakpoint while preserving the other layout", () => {
     const layouts = defaultManagementDashboardLayouts("docker");
     const originalTablet = layouts.tablet;

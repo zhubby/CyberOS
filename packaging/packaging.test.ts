@@ -15,7 +15,6 @@ describe("native packaging artifacts", () => {
       "sigmaos-api.service",
       "sigmaos-worker@.service",
       "sigmaos-indexer.service",
-      "sigmaos-scheduler.service",
       "sigmaos-maintenance.service",
       "sigmaos-backup-daily.service",
       "sigmaos-backup-weekly.service",
@@ -60,7 +59,10 @@ describe("native packaging artifacts", () => {
       "NoNewPrivileges=yes"
     );
     await expect(readPackagingFile("systemd", "sigmaos-hostd.service")).resolves.toContain(
-      "After=network-online.target local-fs.target systemd-tmpfiles-setup.service"
+      "After=local-fs.target systemd-tmpfiles-setup.service NetworkManager.service"
+    );
+    await expect(readPackagingFile("systemd", "sigmaos-hostd.service")).resolves.toContain(
+      "Before=network-online.target"
     );
     const vodPlayerUnit = await readPackagingFile("systemd", "sigmaos-vod-player.service");
     expect(vodPlayerUnit).toContain("ExecStart=/usr/lib/sigmaos/bin/sigmaos-vod-player");
@@ -79,9 +81,14 @@ describe("native packaging artifacts", () => {
     expect(photostaffUnit).not.toContain("RequiresMountsFor=/srv/nas");
     await expect(readPackagingFile("systemd", "sigmaos-photo-worker.service")).rejects.toMatchObject({ code: "ENOENT" });
 
-    await expect(readPackagingFile("systemd", "sigmaos-maintenance.timer")).resolves.toContain(
-      "OnCalendar=daily"
-    );
+    const maintenanceUnit = await readPackagingFile("systemd", "sigmaos-maintenance.service");
+    expect(maintenanceUnit).toContain("ExecStart=/usr/local/bin/node /usr/lib/sigmaos/apps/ops/dist/index.js maintenance");
+    expect(maintenanceUnit).toContain("TimeoutStartSec=2h");
+    expect(maintenanceUnit).not.toContain("RequiresMountsFor=");
+    const maintenanceTimer = await readPackagingFile("systemd", "sigmaos-maintenance.timer");
+    expect(maintenanceTimer).toContain("OnCalendar=*-*-* 04:30:00");
+    expect(maintenanceTimer).toContain("RandomizedDelaySec=30min");
+    expect(maintenanceTimer).toContain("Persistent=true");
     const indexerUnit = await readPackagingFile("systemd", "sigmaos-indexer.service");
     expect(indexerUnit).toContain("Type=notify");
     expect(indexerUnit).toContain("WatchdogSec=20s");
@@ -90,7 +97,16 @@ describe("native packaging artifacts", () => {
     expect(indexerUnit).toContain("MemoryMax=1G");
     expect(indexerUnit).toContain("KillMode=control-group");
     await expect(readPackagingFile("systemd", "sigmaos-indexer.timer")).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readPackagingFile("systemd", "sigmaos-health.timer")).resolves.toContain("OnBootSec=6min");
+    const healthUnit = await readPackagingFile("systemd", "sigmaos-health.service");
+    expect(healthUnit).toContain("ExecStart=/usr/local/bin/node /usr/lib/sigmaos/apps/ops/dist/index.js health");
+    expect(healthUnit).toContain("TimeoutStartSec=2min");
+    const healthTimer = await readPackagingFile("systemd", "sigmaos-health.timer");
+    expect(healthTimer).toContain("OnBootSec=6min");
+    expect(healthTimer).toContain("OnUnitActiveSec=15min");
+    expect(healthTimer).toContain("RandomizedDelaySec=2min");
+    expect(healthTimer).toContain("Persistent=true");
+    await expect(readPackagingFile("systemd", "sigmaos-scheduler.service")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readPackagingFile("systemd", "sigmaos-scheduler.timer")).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readPackagingFile("debian", "postinst")).resolves.toContain("sigmaos-refresh-groups.sh");
     await expect(readPackagingFile("scripts", "sigmaos-refresh-groups.sh")).resolves.toContain("optional-groups.conf");
     await expect(readPackagingFile("scripts", "sigmaos-refresh-groups.sh")).resolves.toContain("kvm");
@@ -127,7 +143,8 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("target/release/sigmaos-indexer usr/lib/sigmaos/bin/");
     expect(install).not.toContain("apps/indexer/dist/");
     expect(install).toContain("usr/lib/sigmaos/apps/backup/dist/");
-    expect(install).toContain("usr/lib/sigmaos/apps/scheduler/dist/");
+    expect(install).toContain("usr/lib/sigmaos/apps/ops/dist/");
+    expect(install).not.toContain("apps/scheduler");
     expect(install).toContain("target/release/sigmaos-vod-player usr/lib/sigmaos/bin/");
     expect(install).not.toContain("apps/player-helper");
     expect(install).toContain("target/release/sigmaos-downloader usr/lib/sigmaos/bin/");
@@ -202,6 +219,8 @@ describe("native packaging artifacts", () => {
     expect(postinst).toContain("legacy_vod_player_active");
     expect(postinst).toContain("photostaff_was_enabled");
     expect(postinst).toContain("systemctl disable --now sigmaos-photo-worker.service");
+    expect(postinst).toContain("systemctl disable --now sigmaos-scheduler.timer sigmaos-scheduler.service");
+    expect(postinst).not.toMatch(/systemctl enable [^\n]*sigmaos-scheduler/u);
     expect(postinst).toContain("systemctl restart sigmaos-photostaff.service");
     expect(postinst).toContain("systemctl start sigmaos-vod-player.service");
     expect(refreshVodPlayer).toContain("SIGMAOS_VOD_PLAYER_SOCKET_PATH");
@@ -274,12 +293,14 @@ describe("native packaging artifacts", () => {
     expect(manifest).toContain("unzip");
     expect(manifest).toContain("unrar-free");
     expect(manifest).toContain("sigmaos-maintenance.timer");
+    expect(manifest).not.toContain("sigmaos-scheduler");
     expect(manifest).toContain("sigmaos-backup-daily.timer");
     expect(manifest).toContain("sigmaos-backup-weekly.timer");
     expect(manifest).toContain("sigmaos-health.timer");
     expect(buildImage).toContain("sigmaos-backup-daily.timer");
     expect(buildImage).toContain("sigmaos-backup-weekly.timer");
     expect(buildImage).toContain("sigmaos-health.timer");
+    expect(buildImage).not.toContain("sigmaos-scheduler");
     expect(buildImage).toContain("sigmaos-nginx.sh");
     expect(buildImage).toContain("SIGMAOS_NODE_MIRROR");
     expect(buildImage).toContain("SHASUMS256.txt");
@@ -459,6 +480,8 @@ describe("native packaging artifacts", () => {
     expect(unit).not.toMatch(/^LogsDirectory=sigmaos$/mu);
     expect(unit).not.toContain("RuntimeDirectory=sigmaos");
     expect(unit).toContain("systemd-tmpfiles-setup.service");
+    expect(unit).toContain("Wants=NetworkManager.service");
+    expect(unit).not.toContain("Wants=network-online.target");
     expect(unit).toContain("Environment=SIGMAOS_CONFIG=/etc/sigmaos/config.toml");
     expect(unit).not.toContain("SIGMAOS_HOSTD_SOCKET_PATH=");
     expect(unit).toContain("ExecStart=/usr/lib/sigmaos/bin/sigmaos-hostd");

@@ -16,6 +16,6 @@ sidebar:
 | `apps/worker` | agent job claim 与事件持久化 |
 | `apps/photostaff` | Rust 图片、视频和 RAW 索引器，负责安全媒体探测、持久化扫描、元数据和 journaled WebP 衍生图 |
 | `apps/indexer` | NAS 扫描与 FTS5 索引 |
-| `apps/scheduler` / `apps/backup` | 报告、维护、restic |
+| `apps/ops` / `apps/backup` | 健康评估、安全维护与 restic |
 | `apps/hostd` / `apps/termux` | Rust 特权宿主机操作与非 root PTY/tmux 终端服务 |
 | `packages/db` / `nas-tools` / `agent` / `shared` | 共享持久化、安全、agent 和配置契约 |

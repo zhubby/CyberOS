@@ -1161,5 +1161,25 @@ export const productionMigrations: Migration[] = [
         strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       );
     `
+  },
+  {
+    id: "025_ops_runs",
+    sql: `
+      CREATE TABLE ops_runs (
+        id TEXT PRIMARY KEY,
+        task TEXT NOT NULL CHECK (task IN ('health', 'maintenance')),
+        status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed', 'interrupted')),
+        started_at TEXT NOT NULL,
+        heartbeat_at TEXT NOT NULL,
+        finished_at TEXT,
+        summary_json TEXT,
+        error TEXT
+      );
+
+      CREATE INDEX idx_ops_runs_task_started_at
+        ON ops_runs(task, started_at DESC, id DESC);
+      CREATE INDEX idx_ops_runs_status_heartbeat
+        ON ops_runs(status, heartbeat_at);
+    `
   }
 ];

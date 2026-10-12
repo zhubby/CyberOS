@@ -54,6 +54,9 @@ import type {
   ShareSummary as PublicShareSummary,
   SystemNetworkSummary,
   SystemNetworkTrafficSummary,
+  SystemEthernetApplyTransaction as SharedSystemEthernetApplyTransaction,
+  SystemEthernetStatus as SharedSystemEthernetStatus,
+  SystemEthernetUpdateInput,
   SystemPowerAction as SharedSystemPowerAction,
   SystemPowerResult as SharedSystemPowerResult,
   SystemWifiConnectInput,
@@ -89,6 +92,10 @@ import type {
   VodPlayerStatus as SharedVodPlayerStatus,
   VodPlayerCommand as SharedVodPlayerCommand,
   OperationNotificationRecord as SharedOperationNotification,
+  OpsRunRecord as SharedOpsRunRecord,
+  OpsTask as SharedOpsTask,
+  OpsTaskOverview as SharedOpsTaskOverview,
+  SystemOperationsResponse as SharedSystemOperationsResponse,
   PhotostaffAssetRecord as SharedPhotostaffAsset,
   PhotostaffJobRecord as SharedPhotostaffJob,
   PhotostaffLibrarySettingsRecord as SharedPhotostaffLibrarySettings,
@@ -163,6 +170,10 @@ export interface BackupStatus {
 
 export interface ReadinessResponse { roots: RootReadiness[]; }
 export type SystemHealth = SystemHealthSummary;
+export type OpsRun = SharedOpsRunRecord;
+export type OpsTask = SharedOpsTask;
+export type OpsTaskOverview = SharedOpsTaskOverview;
+export type SystemOperations = SharedSystemOperationsResponse;
 export type DownloadTask = SharedDownloadTask;
 export type DownloadSettings = PublicDownloadSettings;
 export type DownloadWorkerHealth = SharedDownloadWorkerHealth;
@@ -349,6 +360,8 @@ export type SystemInfoStorageVolume = PublicSystemInfo["storage"]["volumes"][num
 export type NetworkSummary = SystemNetworkSummary;
 export type NetworkTrafficSummary = SystemNetworkTrafficSummary;
 export type WifiStatus = SystemWifiStatus;
+export type EthernetStatus = SharedSystemEthernetStatus;
+export type EthernetApplyTransaction = SharedSystemEthernetApplyTransaction;
 export type StorageSummary = SystemStorageSummary;
 export type DockerSummary = PublicDockerSummary;
 export type DockerImageSummary = SharedDockerImageSummary;
@@ -529,6 +542,36 @@ export async function getSystemNetworkTraffic(): Promise<NetworkTrafficSummary> 
   await ensureOk(response);
   const body = (await response.json()) as { traffic: NetworkTrafficSummary };
   return body.traffic;
+}
+
+export async function getSystemEthernet(): Promise<EthernetStatus> {
+  const response = await fetch("/api/system/network/ethernet");
+  await ensureOk(response);
+  return ((await response.json()) as { ethernet: EthernetStatus }).ethernet;
+}
+
+export async function saveSystemEthernet(deviceId: string, input: SystemEthernetUpdateInput): Promise<EthernetStatus> {
+  const response = await fetch(`/api/system/network/ethernet/${encodeURIComponent(deviceId)}`, jsonRequest("PUT", input));
+  await ensureOk(response);
+  return ((await response.json()) as { ethernet: EthernetStatus }).ethernet;
+}
+
+export async function applySystemEthernet(confirmed: boolean): Promise<EthernetApplyTransaction> {
+  return ethernetTransaction("/api/system/network/ethernet/apply", { confirmed });
+}
+
+export async function confirmSystemEthernet(transactionId: string): Promise<EthernetApplyTransaction> {
+  return ethernetTransaction(`/api/system/network/ethernet/apply/${encodeURIComponent(transactionId)}/confirm`);
+}
+
+export async function rollbackSystemEthernet(transactionId: string): Promise<EthernetApplyTransaction> {
+  return ethernetTransaction(`/api/system/network/ethernet/apply/${encodeURIComponent(transactionId)}/rollback`);
+}
+
+async function ethernetTransaction(url: string, input?: unknown): Promise<EthernetApplyTransaction> {
+  const response = await fetch(url, input === undefined ? { method: "POST" } : jsonRequest("POST", input));
+  await ensureOk(response);
+  return ((await response.json()) as { transaction: EthernetApplyTransaction }).transaction;
 }
 
 export async function scanSystemWifi(input: SystemWifiScanInput): Promise<SystemWifiScanResult> {
@@ -1490,6 +1533,31 @@ export async function getSystemHealth(): Promise<SystemHealth> {
   const response = await fetch("/api/system/health");
   await ensureOk(response);
   return (await response.json()) as SystemHealth;
+}
+
+export async function getSystemOperations(
+  task?: OpsTask,
+  limit = 60
+): Promise<SystemOperations> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (task) params.set("task", task);
+  const response = await fetch(`/api/system/operations?${params.toString()}`);
+  await ensureOk(response);
+  return (await response.json()) as SystemOperations;
+}
+
+export async function runSystemOperation(
+  task: OpsTask,
+  confirmed = false
+): Promise<{ task: OpsTask; accepted: true }> {
+  const response = await fetch(`/api/system/operations/${task}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(task === "maintenance" ? { confirmed } : {})
+  });
+  await ensureOk(response);
+  const body = (await response.json()) as { result: { task: OpsTask; accepted: true } };
+  return body.result;
 }
 
 export async function getFileMeta(rootId: string, currentPath: string, storagePoolId: string): Promise<FileMeta> {

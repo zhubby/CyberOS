@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type {
+  SystemEthernetStatus,
+  SystemEthernetUpdateInput,
   SystemPowerAction,
   SystemWifiConnectInput,
   SystemWifiHotspotActionInput,
@@ -10,6 +12,11 @@ import type {
 } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { unknownBuildInfo } from "../lib/build-info.js";
+import {
+  EthernetManagerRequestError,
+  SystemEthernetManagerRuntime,
+  type EthernetManagerRuntime
+} from "../lib/ethernet-manager.js";
 import {
   NetworkManagerRequestError,
   safeNetworkManagerMessage,
@@ -28,13 +35,16 @@ const MAX_WIFI_BODY_BYTES = 64 * 1024;
 const MAX_POWER_BODY_BYTES = 1024;
 const WIFI_SAMPLE_MS = 1000;
 const WIFI_HEARTBEAT_MS = 15_000;
+const ETHERNET_SAMPLE_MS = 1000;
+const ETHERNET_HEARTBEAT_MS = 15_000;
 
 export function registerSystemRoutes(server: FastifyInstance, { buildInfo, config, system }: ApiRouteContext): void {
   const networkManager = system?.networkManager ?? new SystemNetworkManagerRuntime({
     ...(system?.commandRunner ? { commandRunner: system.commandRunner } : {}),
     hostdSocketPath: config.hostd.socketPath
   });
-  const systemDependencies = { ...system, networkManager };
+  const ethernetManager = system?.ethernetManager ?? new SystemEthernetManagerRuntime(config.hostd.socketPath);
+  const systemDependencies = { ...system, networkManager, ethernetManager };
   const power = system?.power ?? new HostdSystemPowerRuntime(config.hostd.socketPath);
 
   server.get("/api/system/build-info", async () => ({
@@ -48,6 +58,71 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
   server.get("/api/system/network/traffic", async () => ({
     traffic: await collectSystemNetworkTraffic(system)
   }));
+
+  server.get("/api/system/network/ethernet", async (_request, reply) => {
+    try {
+      reply.send({ ethernet: await ethernetManager.getStatus() });
+    } catch (error) {
+      sendEthernetManagerError(reply, error);
+    }
+  });
+
+  server.put<{ Params: { id: string }; Body: SystemEthernetUpdateInput }>(
+    "/api/system/network/ethernet/:id",
+    { bodyLimit: MAX_WIFI_BODY_BYTES },
+    async (request, reply) => {
+      try {
+        reply.send({ ethernet: await ethernetManager.save(request.params.id, request.body) });
+      } catch (error) {
+        sendEthernetManagerError(reply, error);
+      }
+    }
+  );
+
+  server.post<{ Body: { confirmed?: boolean } }>(
+    "/api/system/network/ethernet/apply",
+    { bodyLimit: MAX_WIFI_BODY_BYTES },
+    async (request, reply) => {
+      try {
+        reply.status(202).send({ transaction: await ethernetManager.apply(request.body?.confirmed === true) });
+      } catch (error) {
+        sendEthernetManagerError(reply, error);
+      }
+    }
+  );
+
+  server.post<{ Params: { transactionId: string } }>(
+    "/api/system/network/ethernet/apply/:transactionId/confirm",
+    async (request, reply) => {
+      try {
+        reply.send({ transaction: await ethernetManager.confirm(request.params.transactionId) });
+      } catch (error) {
+        sendEthernetManagerError(reply, error);
+      }
+    }
+  );
+
+  server.post<{ Params: { transactionId: string } }>(
+    "/api/system/network/ethernet/apply/:transactionId/rollback",
+    async (request, reply) => {
+      try {
+        reply.send({ transaction: await ethernetManager.rollback(request.params.transactionId) });
+      } catch (error) {
+        sendEthernetManagerError(reply, error);
+      }
+    }
+  );
+
+  server.get("/api/system/network/ethernet/events", async (request, reply) => {
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+      "x-accel-buffering": "no"
+    });
+    await streamEthernetEvents(request.raw, reply.raw, ethernetManager);
+  });
 
   server.get("/api/system/storage", async () => ({
     storage: await collectSystemStorage(system)
@@ -201,6 +276,75 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
   });
 }
 
+export async function streamEthernetEvents(
+  closeSignal: WifiEventCloseSignal,
+  output: WifiEventOutput,
+  ethernetManager: Pick<EthernetManagerRuntime, "getStatus">,
+  options: { sampleMs?: number; heartbeatMs?: number } = {}
+): Promise<void> {
+  const sampleMs = options.sampleMs ?? ETHERNET_SAMPLE_MS;
+  const heartbeatMs = options.heartbeatMs ?? ETHERNET_HEARTBEAT_MS;
+  let closed = false;
+  let sampling = false;
+  let lastSignature: string | null = null;
+  let sampleTimer: ReturnType<typeof setInterval> | null = null;
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  closeSignal.on("close", () => {
+    closed = true;
+    if (sampleTimer) clearInterval(sampleTimer);
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+  });
+  output.write("retry: 2000\n\n");
+
+  const sample = async () => {
+    if (closed || sampling) return;
+    sampling = true;
+    try {
+      const status = await ethernetManager.getStatus();
+      const signature = ethernetStatusSignature(status);
+      if (!closed && signature !== lastSignature) {
+        lastSignature = signature;
+        output.write("event: system.ethernet.status\n");
+        output.write(`data: ${JSON.stringify(status)}\n\n`);
+      }
+    } catch {
+      const status: SystemEthernetStatus = {
+        collectedAt: new Date().toISOString(),
+        backend: "unknown",
+        hostdReady: false,
+        devices: [],
+        transaction: null,
+        warnings: []
+      };
+      const signature = ethernetStatusSignature(status);
+      if (!closed && signature !== lastSignature) {
+        lastSignature = signature;
+        output.write("event: system.ethernet.status\n");
+        output.write(`data: ${JSON.stringify(status)}\n\n`);
+      }
+    } finally {
+      sampling = false;
+    }
+  };
+
+  await sample();
+  if (closed) return;
+  sampleTimer = setInterval(() => void sample(), sampleMs);
+  heartbeatTimer = setInterval(() => {
+    if (!closed) output.write(": heartbeat\n\n");
+  }, heartbeatMs);
+}
+
+function ethernetStatusSignature(status: SystemEthernetStatus): string {
+  return JSON.stringify({
+    backend: status.backend,
+    hostdReady: status.hostdReady,
+    devices: status.devices,
+    transaction: status.transaction,
+    warnings: status.warnings
+  });
+}
+
 interface WifiEventCloseSignal {
   on(event: "close", listener: () => void): unknown;
 }
@@ -298,6 +442,13 @@ function sendNetworkManagerError(reply: FastifyReply, error: unknown): void {
   reply.status(error instanceof NetworkManagerRequestError ? error.statusCode : 503).send({
     error: safeNetworkManagerMessage(error),
     ...(error instanceof NetworkManagerRequestError ? { rollback: error.rollback } : {})
+  });
+}
+
+function sendEthernetManagerError(reply: FastifyReply, error: unknown): void {
+  reply.status(error instanceof EthernetManagerRequestError ? error.statusCode : 503).send({
+    error: safeNetworkManagerMessage(error),
+    ...(error instanceof EthernetManagerRequestError ? { rollback: error.rollback } : {})
   });
 }
 

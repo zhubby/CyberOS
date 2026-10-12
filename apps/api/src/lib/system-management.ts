@@ -24,6 +24,7 @@ import type {
   SystemStorageSummary
 } from "@sigmaos/shared";
 import type { NetworkManagerRuntime } from "./network-manager.js";
+import type { EthernetManagerRuntime } from "./ethernet-manager.js";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 
 const execFileAsync = promisify(execFile);
@@ -38,6 +39,7 @@ export interface SystemCommandRunner {
 export interface SystemManagementDependencies {
   commandRunner?: SystemCommandRunner;
   networkManager?: NetworkManagerRuntime;
+  ethernetManager?: EthernetManagerRuntime;
 }
 
 class NodeSystemCommandRunner implements SystemCommandRunner {
@@ -153,34 +155,40 @@ export async function collectSystemNetwork(
       mapNetworkInterface(name, linksByName.get(name) ?? null, addressesByName.get(name) ?? null, defaultRouteDevices)
     )
   );
-  let wifi: SystemNetworkSummary["wifi"] = unavailableWifiSummary();
-  if (dependencies.networkManager) {
+  let wifi = unavailableWifiSummary();
+  try {
+    wifi = await (dependencies.networkManager?.getSummary() ?? Promise.resolve(wifi));
+  } catch (error) {
+    issues.push({ source: "Wi-Fi status", message: safeSystemMessage(error) });
+  }
+  let ethernet = unavailableEthernetStatus();
+  if (wifi.backend !== "systemd-networkd" && dependencies.ethernetManager) {
     try {
-      wifi = await dependencies.networkManager.getSummary();
+      ethernet = await dependencies.ethernetManager.getStatus();
     } catch (error) {
-      issues.push({
-        source: "Wi-Fi status",
-        message: safeSystemMessage(error)
-      });
+      issues.push({ source: "Ethernet status", message: safeSystemMessage(error) });
     }
   }
   const status = collectionStatus(interfaces.length > 0 || routes.length > 0, issues);
+  const networkManagerBackend = wifi.backend === "NetworkManager" || ethernet.backend === "NetworkManager";
+  const hostdReady = wifi.hostdReady || ethernet.hostdReady;
 
   return {
     collectedAt: new Date().toISOString(),
     status,
     capabilities: {
-      backend: wifi.backend,
-      canApplyConfiguration: wifi.backend === "NetworkManager" && wifi.hostdReady,
+      backend: networkManagerBackend ? "NetworkManager" : wifi.backend,
+      canApplyConfiguration: networkManagerBackend && hostdReady,
       canConfigureBridge: false,
       canConfigureBond: false,
       canConfigureVlan: false,
+      canManageEthernet: ethernet.backend === "NetworkManager" && ethernet.hostdReady && ethernet.devices.length > 0,
       canManageWifi: wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.length > 0,
       canManageHotspot:
         wifi.backend === "NetworkManager" &&
         wifi.hostdReady &&
         wifi.devices.some((device) => device.capabilities.accessPoint),
-      hostdReady: wifi.hostdReady
+      hostdReady
     },
     metrics: {
       interfaces: interfaces.length,
@@ -190,8 +198,20 @@ export async function collectSystemNetwork(
     },
     interfaces,
     routes,
+    ethernet,
     wifi,
     issues
+  };
+}
+
+function unavailableEthernetStatus(): SystemNetworkSummary["ethernet"] {
+  return {
+    collectedAt: new Date().toISOString(),
+    backend: "unknown",
+    hostdReady: false,
+    devices: [],
+    transaction: null,
+    warnings: []
   };
 }
 
@@ -353,18 +373,19 @@ async function mapNetworkInterface(
 ): Promise<SystemNetworkInterface> {
   const flags = stringArrayField(link, "flags");
   const operState = stringField(link, "operstate");
+  const addresses = recordsFrom(recordField(addressRecord, "addr_info")).map(mapNetworkAddress);
   return {
     id: name,
     index: numberField(link, "ifindex"),
     name,
     kind: networkInterfaceKind(name, link),
-    state: networkInterfaceState(flags, operState),
+    state: networkInterfaceState(flags, operState, addresses.length > 0),
     operState,
     flags,
     mac: stringField(link, "address"),
     mtu: numberField(link, "mtu"),
     speedMbps: await readInterfaceSpeed(name),
-    addresses: recordsFrom(recordField(addressRecord, "addr_info")).map(mapNetworkAddress),
+    addresses,
     hasDefaultRoute: defaultRouteDevices.has(name)
   };
 }
@@ -462,11 +483,11 @@ function networkInterfaceKind(name: string, link: Record<string, unknown> | null
   return "unknown";
 }
 
-function networkInterfaceState(flags: string[], operState: string | null): SystemNetworkInterfaceState {
-  if (flags.includes("LOWER_UP") || operState === "UP") {
+function networkInterfaceState(flags: string[], operState: string | null, hasAddress: boolean): SystemNetworkInterfaceState {
+  if ((flags.includes("LOWER_UP") || operState === "UP") && hasAddress) {
     return "connected";
   }
-  if (flags.includes("UP")) {
+  if (flags.includes("UP") || flags.includes("LOWER_UP") || operState === "UP") {
     return "up";
   }
   if (operState === "DOWN") {

@@ -1286,6 +1286,28 @@ export const en = {
           error: "Live traffic data is unavailable.",
           window: "{{count}} samples · 2 second interval"
         },
+        ethernet: {
+          title: "Ethernet",
+          description: "Manage physical Ethernet ports, addressing, DNS, and default-route priority.",
+          apply: "Apply network configuration",
+          pendingCount: "{{count}} pending",
+          needsApply: "Pending apply",
+          edit: "Configure {{name}}",
+          noDevices: "No physical Ethernet adapters are available.",
+          unavailableTitle: "Ethernet management is unavailable",
+          unavailableDescription: "NetworkManager and the host integration service are required for managed Ethernet changes.",
+          dialogEyebrow: "Ethernet configuration",
+          states: { connected: "Connected", up: "Link up", down: "Link down", disabled: "Disabled", unavailable: "Unavailable", reconnecting: "Reconnecting" },
+          management: { managed: "Managed", pending: "Pending takeover", external: "External", external_unsupported: "Unsupported profile" },
+          fields: { addresses: "Addresses", gateway: "Gateway", speed: "Speed", profile: "Active profile", enabled: "Enable this port", mode: "Address mode", address: "Address", prefix: "Prefix", dnsMode: "DNS mode", dns: "DNS servers", defaultRoute: "Use as default route", metric: "Route metric" },
+          modes: { disabled: "Disabled", dhcp: "DHCP", automatic: "Automatic", static: "Static" },
+          dns: { automatic: "Automatic", manual: "Custom" },
+          warnings: { noIpv4DefaultRoute: "No IPv4 default route is enabled.", noIpv6DefaultRoute: "No IPv6 default route is enabled.", asymmetricSubnetRoutes: "Multiple ports share a subnet with asymmetric default-route settings. Replies may leave through a different port.", unsupportedProfile: "This profile uses advanced Ethernet settings that SigmaOS will not overwrite." },
+          confirm: { eyebrow: "Network change", title: "Apply all pending Ethernet changes?", description: "{{count}} port configurations will be activated together. SigmaOS access may move to another address; unconfirmed changes roll back automatically after 90 seconds.", apply: "Apply changes" },
+          transaction: { eyebrow: "Confirmation window", title: "Is SigmaOS still reachable?", description: "The new configuration is active on {{count}} ports. Keep it before the timer expires or roll back now.", keep: "Keep configuration", rollback: "Roll back now" },
+          messages: { saved: "Ethernet configuration saved and waiting to be applied.", applying: "Ethernet configuration applied; confirm connectivity within 90 seconds.", confirmed: "Ethernet configuration kept.", rolledBack: "Ethernet configuration rolled back." },
+          errors: { operation: "The Ethernet operation failed.", metricConflict: "Default routes in the same address family must use different metrics.", invalid: "Correct the invalid address, prefix, DNS, gateway, or metric values before saving." }
+        },
         wifi: {
           title: "Wi-Fi",
           description: "Manage wireless adapters, saved networks, and a local hotspot.",
@@ -1826,6 +1848,10 @@ export const en = {
         title: "Indexer",
         description: "Search indexing, document extraction, OCR, and rebuild state."
       },
+      operations: {
+        title: "Operations",
+        description: "Health checks, maintenance status, and run history."
+      },
       photostaff: {
         title: "Photostaff",
         description: "Photostaff library location, indexing state, and processing limits."
@@ -1946,6 +1972,50 @@ export const en = {
         degraded: "Degraded",
         unsupported: "Unsupported"
       }
+    },
+    operations: {
+      tasksTitle: "Scheduled tasks",
+      tasksDescription: "System timers own the fixed schedule; manual runs use the same one-shot services.",
+      healthSchedule: "Every 15 minutes",
+      maintenanceSchedule: "Daily at 04:30",
+      tasks: {
+        health: "Health",
+        maintenance: "Maintenance"
+      },
+      states: {
+        never_run: "Never run",
+        running: "Running",
+        ready: "Ready",
+        failed: "Failed",
+        stale: "Stale"
+      },
+      runStates: {
+        running: "Running",
+        completed: "Completed",
+        failed: "Failed",
+        interrupted: "Interrupted"
+      },
+      lastSuccess: "Last success",
+      lastDuration: "Last duration",
+      never: "Never",
+      runNow: "Run now",
+      starting: "Starting",
+      historyTitle: "Run history",
+      historyDescription: "The most recent 60 health and maintenance runs.",
+      tabs: {
+        all: "All",
+        health: "Health",
+        maintenance: "Maintenance"
+      },
+      noHistory: "No operations have run yet.",
+      inProgress: "In progress",
+      polling: "Status refreshes automatically",
+      refreshFailed: "Status refresh failed",
+      loadFailed: "Could not load operations",
+      runFailed: "Could not start operation",
+      confirmTitle: "Run maintenance now?",
+      confirmDescription: "This cleans old history and restore staging older than 7 days. It does not delete NAS or trash files.",
+      confirmRun: "Run maintenance"
     },
     downloads: {
       concurrencyTitle: "Download concurrency",
@@ -3696,6 +3766,28 @@ export const zhCN = {
           error: "暂时无法读取实时流量数据。",
           window: "{{count}} 个采样点 · 2 秒间隔"
         },
+        ethernet: {
+          title: "有线网络",
+          description: "管理物理网口、地址、DNS 和默认路由优先级。",
+          apply: "应用网络配置",
+          pendingCount: "{{count}} 项待应用",
+          needsApply: "待应用",
+          edit: "配置 {{name}}",
+          noDevices: "没有可用的物理有线网卡。",
+          unavailableTitle: "有线网络管理不可用",
+          unavailableDescription: "托管有线网络需要 NetworkManager 和宿主机集成服务。",
+          dialogEyebrow: "有线网络配置",
+          states: { connected: "已连接", up: "链路已建立", down: "链路断开", disabled: "已停用", unavailable: "不可用", reconnecting: "正在重连" },
+          management: { managed: "已托管", pending: "待接管", external: "外部配置", external_unsupported: "不支持的配置" },
+          fields: { addresses: "地址", gateway: "网关", speed: "速率", profile: "当前配置", enabled: "启用此网口", mode: "地址模式", address: "地址", prefix: "前缀", dnsMode: "DNS 模式", dns: "DNS 服务器", defaultRoute: "用作默认路由", metric: "路由 Metric" },
+          modes: { disabled: "关闭", dhcp: "DHCP", automatic: "自动", static: "静态" },
+          dns: { automatic: "自动", manual: "自定义" },
+          warnings: { noIpv4DefaultRoute: "未启用 IPv4 默认路由。", noIpv6DefaultRoute: "未启用 IPv6 默认路由。", asymmetricSubnetRoutes: "多个网口位于同一子网，但默认路由设置不对称，响应流量可能从其他网口发出。", unsupportedProfile: "此配置包含 SigmaOS 不会覆盖的高级有线网络设置。" },
+          confirm: { eyebrow: "网络变更", title: "应用全部待生效的有线配置？", description: "将同时激活 {{count}} 个网口配置。SigmaOS 的访问地址可能变化；若 90 秒内未确认，配置会自动回滚。", apply: "应用配置" },
+          transaction: { eyebrow: "确认窗口", title: "SigmaOS 仍可访问吗？", description: "新配置已在 {{count}} 个网口生效。请在倒计时结束前保留配置，或立即回滚。", keep: "保留配置", rollback: "立即回滚" },
+          messages: { saved: "有线配置已保存，等待应用。", applying: "有线配置已应用，请在 90 秒内确认连接。", confirmed: "已保留有线配置。", rolledBack: "有线配置已回滚。" },
+          errors: { operation: "有线网络操作失败。", metricConflict: "同一地址族的默认路由必须使用不同的 Metric。", invalid: "请先修正地址、前缀、DNS、网关或 Metric。" }
+        },
         wifi: {
           title: "无线网络",
           description: "管理无线网卡、已保存网络和本机热点。",
@@ -4236,6 +4328,10 @@ export const zhCN = {
         title: "索引服务",
         description: "搜索索引、文档提取、OCR 和重建状态。"
       },
+      operations: {
+        title: "运维",
+        description: "健康检查、维护状态和运行历史。"
+      },
       photostaff: {
         title: "照片",
         description: "照片库位置、索引状态和处理限制。"
@@ -4356,6 +4452,50 @@ export const zhCN = {
         degraded: "降级",
         unsupported: "不支持"
       }
+    },
+    operations: {
+      tasksTitle: "定时任务",
+      tasksDescription: "固定计划由 systemd timer 管理，手动运行使用相同的 one-shot 服务。",
+      healthSchedule: "每 15 分钟",
+      maintenanceSchedule: "每天 04:30",
+      tasks: {
+        health: "健康检查",
+        maintenance: "维护"
+      },
+      states: {
+        never_run: "从未运行",
+        running: "运行中",
+        ready: "正常",
+        failed: "失败",
+        stale: "已过期"
+      },
+      runStates: {
+        running: "运行中",
+        completed: "已完成",
+        failed: "失败",
+        interrupted: "已中断"
+      },
+      lastSuccess: "最近成功",
+      lastDuration: "最近耗时",
+      never: "从未",
+      runNow: "立即运行",
+      starting: "正在启动",
+      historyTitle: "运行历史",
+      historyDescription: "最近 60 条健康检查和维护记录。",
+      tabs: {
+        all: "全部",
+        health: "健康检查",
+        maintenance: "维护"
+      },
+      noHistory: "暂无运维运行记录。",
+      inProgress: "进行中",
+      polling: "状态会自动刷新",
+      refreshFailed: "状态刷新失败",
+      loadFailed: "无法加载运维状态",
+      runFailed: "无法启动运维任务",
+      confirmTitle: "立即运行维护？",
+      confirmDescription: "维护会清理旧历史和超过 7 天的 restore staging，不会删除 NAS 或回收站文件。",
+      confirmRun: "运行维护"
     },
     downloads: {
       concurrencyTitle: "下载并发数",

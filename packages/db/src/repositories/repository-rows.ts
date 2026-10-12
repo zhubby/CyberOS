@@ -21,6 +21,8 @@ import type {
   JobStatus,
   OperationNotificationKind,
   OperationNotificationStatus,
+  OpsRunStatus,
+  OpsTask,
   PendingApprovalKind,
   RootReadinessStatus,
   PhotostaffAssetStatus,
@@ -180,6 +182,17 @@ export type DbAlertRow = {
   last_seen_at: string;
   resolved_at: string | null;
   details: string | null;
+};
+
+export type DbOpsRunRow = {
+  id: string;
+  task: OpsTask;
+  status: OpsRunStatus;
+  started_at: string;
+  heartbeat_at: string;
+  finished_at: string | null;
+  summary_json: string | null;
+  error: string | null;
 };
 
 export type DbApprovalRow = {

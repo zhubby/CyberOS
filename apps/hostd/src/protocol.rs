@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{ErrorCode, HostdError};
+use crate::ops::{OpsRequest, OpsResult};
 use crate::power::{PowerRequest, PowerResult};
 use crate::shares::{ShareApplyRequest, ShareApplyResult};
 use crate::storage::{StorageCommand, StorageCommandResult, StorageOperation, StorageResult};
@@ -35,6 +36,8 @@ pub(crate) enum HostdOperation {
     NetworkManager,
     #[serde(rename = "system.power")]
     SystemPower,
+    #[serde(rename = "system.ops")]
+    SystemOps,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,6 +57,8 @@ pub(crate) enum HostdRequest {
     NetworkManager(network_manager::NetworkRequest),
     #[serde(rename = "system.power")]
     SystemPower(PowerRequest),
+    #[serde(rename = "system.ops")]
+    SystemOps(OpsRequest),
 }
 
 #[derive(Debug, Serialize)]
@@ -65,6 +70,7 @@ pub(crate) enum HostdResult {
     DockerDaemon(docker_daemon::DockerResult),
     NetworkManager(network_manager::NetworkResult),
     SystemPower(PowerResult),
+    SystemOps(OpsResult),
 }
 
 #[derive(Debug, Serialize)]
@@ -139,6 +145,7 @@ impl HostdOperation {
             Self::DockerDaemon => "Invalid Docker daemon request",
             Self::NetworkManager => "Invalid NetworkManager request",
             Self::SystemPower => "A confirmed power action is required",
+            Self::SystemOps => "Invalid system.ops payload",
         }
     }
 }
@@ -204,6 +211,8 @@ mod tests {
         NetworkManager(network_manager::NetworkResult),
         #[serde(rename = "system.power")]
         SystemPower(PowerResult),
+        #[serde(rename = "system.ops")]
+        SystemOps(OpsResult),
     }
 
     #[test]
@@ -219,6 +228,7 @@ mod tests {
         crate::docker_daemon::export_protocol_bindings(&config);
         crate::network_manager::export_protocol_bindings(&config);
         crate::power::export_protocol_bindings(&config);
+        crate::ops::export_protocol_bindings(&config);
     }
 
     #[test]
@@ -249,7 +259,7 @@ mod tests {
             "/../../packages/shared/fixtures/hostd-protocol-v1.json"
         )))
         .unwrap();
-        assert_eq!(fixtures.contracts.len(), 20);
+        assert_eq!(fixtures.contracts.len(), 27);
 
         for contract in fixtures.contracts {
             let frame = serde_json::to_vec(&serde_json::json!({
@@ -286,6 +296,10 @@ mod tests {
             (
                 "system.power",
                 serde_json::json!({ "action": "unknown", "confirmed": true }),
+            ),
+            (
+                "system.ops",
+                serde_json::json!({ "task": "unknown", "confirmed": true }),
             ),
             ("shares.apply", serde_json::json!({})),
         ] {

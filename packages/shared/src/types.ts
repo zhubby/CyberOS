@@ -592,6 +592,58 @@ export interface BackupRunSummary {
 export type HealthAlertSeverity = "warning" | "critical";
 export type HealthAlertStatus = "active" | "resolved";
 
+export const OPS_TASKS = ["health", "maintenance"] as const;
+export type OpsTask = (typeof OPS_TASKS)[number];
+export type OpsRunStatus = "running" | "completed" | "failed" | "interrupted";
+export type OpsTaskStatus = "never_run" | "running" | "ready" | "failed" | "stale";
+
+export interface OpsRunRecord {
+  id: string;
+  task: OpsTask;
+  status: OpsRunStatus;
+  startedAt: string;
+  heartbeatAt: string;
+  finishedAt: string | null;
+  summary: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export interface OpsTaskOverview {
+  task: OpsTask;
+  status: OpsTaskStatus;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastDurationMs: number | null;
+  error: string | null;
+}
+
+export interface SystemOperationsResponse {
+  tasks: Record<OpsTask, OpsTaskOverview>;
+  runs: OpsRunRecord[];
+}
+
+export interface OpsMaintenanceSummary {
+  generatedAt: string;
+  walCheckpoint: {
+    busy: number;
+    logFrames: number;
+    checkpointedFrames: number;
+  };
+  trash: {
+    unrestoredEntries: number;
+  };
+  restoreStaging: {
+    status: "completed" | "deferred";
+    removed: number;
+    reason: string | null;
+  };
+  retention: {
+    operationNotificationsRemoved: number;
+    backupRunsRemoved: number;
+    resolvedAlertsRemoved: number;
+  };
+}
+
 export interface IndexerMetrics {
   durationMs: number | null;
   scanRate: number | null;
@@ -745,6 +797,7 @@ export interface SystemHealthSummary {
   indexer?: IndexerServiceStatus;
   photostaff: PhotostaffWorkerHealth;
   vodPlayer: VodPlayerHealth;
+  operations: Record<OpsTask, OpsTaskOverview>;
 }
 
 export interface VodPlayerHealth {
@@ -1318,6 +1371,98 @@ export interface SystemWifiOperationResult {
   message: string | null;
 }
 
+export type SystemEthernetIPv4Mode = "disabled" | "dhcp" | "static";
+export type SystemEthernetIPv6Mode = "disabled" | "automatic" | "static";
+export type SystemEthernetDnsMode = "automatic" | "manual";
+export type SystemEthernetManagementState = "managed" | "pending" | "external" | "external_unsupported";
+export type SystemEthernetLinkState = "connected" | "up" | "down" | "disabled" | "unavailable";
+
+export interface SystemEthernetIPv4Config {
+  mode: SystemEthernetIPv4Mode;
+  address: string | null;
+  prefixLength: number | null;
+  gateway: string | null;
+  dnsMode: SystemEthernetDnsMode;
+  dns: string[];
+  useDefaultRoute: boolean;
+  routeMetric: number;
+}
+
+export interface SystemEthernetIPv6Config {
+  mode: SystemEthernetIPv6Mode;
+  address: string | null;
+  prefixLength: number | null;
+  gateway: string | null;
+  dnsMode: SystemEthernetDnsMode;
+  dns: string[];
+  useDefaultRoute: boolean;
+  routeMetric: number;
+}
+
+export interface SystemEthernetConfig {
+  enabled: boolean;
+  ipv4: SystemEthernetIPv4Config;
+  ipv6: SystemEthernetIPv6Config;
+}
+
+export interface SystemEthernetDevice {
+  id: string;
+  name: string;
+  permanentMac: string;
+  mac: string;
+  driver: string | null;
+  speedMbps: number | null;
+  carrier: boolean;
+  state: SystemEthernetLinkState;
+  addresses: SystemNetworkAddress[];
+  ipv4Gateway: string | null;
+  ipv6Gateway: string | null;
+  activeProfileId: string | null;
+  activeProfileName: string | null;
+  managementState: SystemEthernetManagementState;
+  activeConfig: SystemEthernetConfig | null;
+  desiredConfig: SystemEthernetConfig | null;
+  revision: string;
+  needsApply: boolean;
+  warnings: string[];
+}
+
+export type SystemEthernetApplyStatus =
+  | "applying"
+  | "awaiting_confirmation"
+  | "confirmed"
+  | "rolling_back"
+  | "rolled_back"
+  | "failed";
+
+export interface SystemEthernetApplyTransaction {
+  id: string;
+  status: SystemEthernetApplyStatus;
+  deviceIds: string[];
+  createdAt: string;
+  deadlineAt: string | null;
+  rollback: SystemWifiRollbackResult;
+  error: string | null;
+}
+
+export interface SystemEthernetStatus {
+  collectedAt: string;
+  backend: SystemNetworkBackend;
+  hostdReady: boolean;
+  devices: SystemEthernetDevice[];
+  transaction: SystemEthernetApplyTransaction | null;
+  warnings: string[];
+}
+
+export interface SystemEthernetUpdateInput {
+  config: SystemEthernetConfig;
+  expectedRevision: string;
+}
+
+export interface SystemEthernetApplyInput {
+  confirmed: boolean;
+}
+
 export interface SystemNetworkSummary {
   collectedAt: string;
   status: SystemCollectionStatus;
@@ -1327,6 +1472,7 @@ export interface SystemNetworkSummary {
     canConfigureBridge: false;
     canConfigureBond: false;
     canConfigureVlan: false;
+    canManageEthernet: boolean;
     canManageWifi: boolean;
     canManageHotspot: boolean;
     hostdReady: boolean;
@@ -1339,6 +1485,7 @@ export interface SystemNetworkSummary {
   };
   interfaces: SystemNetworkInterface[];
   routes: SystemNetworkRoute[];
+  ethernet: SystemEthernetStatus;
   wifi: SystemWifiSummary;
   issues: SystemCollectionIssue[];
 }
