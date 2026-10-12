@@ -308,6 +308,12 @@ jobs:
             ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s <<'REMOTE'
           set -eu
           [ -f /etc/sigmaos/config.toml ] && [ -r /etc/sigmaos/config.toml ]
+          [ -x /usr/local/bin/node ]
+          runtime_node_version="$(/usr/local/bin/node --version)"
+          case "$runtime_node_version" in
+            v22.*) ;;
+            *) printf 'CM5 runtime requires Node.js 22; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
+          esac
           config_sha256="$(
             awk '
               /^\[terminal\][[:space:]]*(#.*)?$/ { in_terminal = 1; print; next }
@@ -318,13 +324,13 @@ jobs:
           )"
           package_version="$(dpkg-query -W -f='${Version}' sigmaos 2>/dev/null || true)"
           package_status="$(dpkg-query -W -f='${Status}' sigmaos 2>/dev/null || true)"
-          printf '%s\n%s\n%s\n' "$config_sha256" "$package_version" "$package_status"
+          printf '%s\n%s\n%s\n%s\n' "$config_sha256" "$package_version" "$package_status" "$runtime_node_version"
           REMOTE
           )
           [[ "${baseline[0]:-}" =~ ^[0-9a-f]{64}$ ]]
           printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-config.sha256"
-          printf 'CM5 upgrade baseline: version=%s status=%s\n' \
-            "${baseline[1]:-unknown}" "${baseline[2]:-unknown}"
+          printf 'CM5 upgrade baseline: version=%s status=%s node=%s\n' \
+            "${baseline[1]:-unknown}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}"
 
       - name: Stage and deploy release on CM5
         if: inputs.verify_only != true

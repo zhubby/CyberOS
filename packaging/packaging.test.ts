@@ -176,7 +176,7 @@ describe("native packaging artifacts", () => {
     expect(tmpfiles).toContain("/run/sigmaos");
     expect(tmpfiles).toContain("/run/mdadm");
     expect(tmpfiles).toContain("d /run/samba 0755 root root -");
-    expect(control).toContain("Depends: nodejs (>= 22), sqlite3, tmux, util-linux, acl, adduser, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, libheif-examples");
+    expect(control).toContain("Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, libheif-examples");
     expect(control).toMatch(/^Depends:.*poppler-utils.*tesseract-ocr-chi-sim.*tesseract-ocr-eng/m);
     expect(control).toMatch(/^Depends:.*libheif-examples/m);
     expect(control).not.toContain("Recommends: libheif-examples");
@@ -375,7 +375,9 @@ describe("native packaging artifacts", () => {
     expect(rules).toContain("override_dh_shlibdeps:");
     expect(rules).toContain("dh_shlibdeps --exclude=.bare --exclude=linuxmusl");
     expect(control).toContain("Build-Depends: debhelper-compat (= 13), nodejs, npm, cargo, rustc");
-    expect(control).toContain("Depends: nodejs (>= 22)");
+    // Production runs the separately managed Node.js 22 binary in /usr/local;
+    // Debian stable only needs to satisfy the package-level Node dependency.
+    expect(control).toContain("Depends: nodejs (>= 20)");
     expect(control).toContain("qemu-efi-aarch64");
     expect(control).toContain("ipxe-qemu");
     expect(postinst).toContain("-m 0711 /var/lib/sigmaos/vmstore");
@@ -386,6 +388,8 @@ describe("native packaging artifacts", () => {
     expect(releaseWorkflow).toMatch(/package-arm64:[\s\S]*?apt-get install[\s\S]*?\n\s+acl \\/u);
     expect(deployWorkflow).not.toContain('failed_units="$(systemctl --failed --no-legend --plain || true)"');
     expect(deployWorkflow).toContain("awk '$1 ~ /^sigmaos-/ { print }'");
+    expect(deployWorkflow).toContain("[ -x /usr/local/bin/node ]");
+    expect(deployWorkflow).toContain("CM5 runtime requires Node.js 22");
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
     expect(deployWorkflow).toContain('local_parts_dir="$release_dir/parts"');
     expect(deployWorkflow).toContain('remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"');
