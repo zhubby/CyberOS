@@ -43,6 +43,7 @@ import {
   createStoragePool,
   type NetworkSummary,
   type NetworkTrafficSummary,
+  type EthernetStatus,
   type WifiStatus,
   type StorageFilesystem,
   type StorageSummary,
@@ -67,6 +68,7 @@ import {
   useManagementDashboard
 } from "./ManagementDashboard.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
+import { SystemEthernetManagement } from "./SystemEthernetManagement.js";
 import { SystemWifiManagement } from "./SystemWifiManagement.js";
 
 type StatusTone = "ready" | "warning" | "offline" | "neutral";
@@ -154,15 +156,36 @@ export function SystemNetworkManagementPanel({
   const [error, setError] = useState<string | null>(null);
   const [selectedInterfaceId, setSelectedInterfaceId] = useState<string | null>(null);
   const reportedIssueSignature = useRef<string | null>(null);
+  const handleEthernetStatus = useCallback((ethernet: EthernetStatus) => {
+    setSummary((current) => current
+      ? {
+          ...current,
+          capabilities: {
+            ...current.capabilities,
+            backend: ethernet.backend === "NetworkManager" ? "NetworkManager" : current.capabilities.backend,
+            hostdReady: current.wifi.hostdReady || ethernet.hostdReady,
+            canApplyConfiguration:
+              (current.wifi.backend === "NetworkManager" && current.wifi.hostdReady)
+              || (ethernet.backend === "NetworkManager" && ethernet.hostdReady),
+            canManageEthernet: ethernet.backend === "NetworkManager" && ethernet.hostdReady && ethernet.devices.length > 0
+          },
+          ethernet
+        }
+      : current);
+  }, []);
   const handleWifiStatus = useCallback((wifiStatus: WifiStatus) => {
     setSummary((current) => current
       ? {
           ...current,
           capabilities: {
             ...current.capabilities,
-            backend: wifiStatus.backend,
-            hostdReady: wifiStatus.hostdReady,
-            canApplyConfiguration: wifiStatus.backend === "NetworkManager" && wifiStatus.hostdReady,
+            backend: wifiStatus.backend === "NetworkManager" || current.ethernet.backend === "NetworkManager"
+              ? "NetworkManager"
+              : wifiStatus.backend,
+            hostdReady: wifiStatus.hostdReady || current.ethernet.hostdReady,
+            canApplyConfiguration:
+              (wifiStatus.backend === "NetworkManager" && wifiStatus.hostdReady)
+              || (current.ethernet.backend === "NetworkManager" && current.ethernet.hostdReady),
             canManageWifi: wifiStatus.backend === "NetworkManager" && wifiStatus.hostdReady && wifiStatus.devices.length > 0,
             canManageHotspot:
               wifiStatus.backend === "NetworkManager" &&
@@ -274,7 +297,7 @@ export function SystemNetworkManagementPanel({
                       </div>
                       <dl className="management-fact-list">
                         <Fact label={t("workspace.management.network.facts.backend")} value={summary?.capabilities.backend ?? t("common.dash")} />
-                        <Fact label={translate("workspace.management.network.facts.mode")} value={summary?.capabilities.canManageWifi ? translate("workspace.management.network.wifi.managedMode") : translate("workspace.management.values.readOnly")} />
+                        <Fact label={translate("workspace.management.network.facts.mode")} value={summary?.capabilities.canManageWifi || summary?.capabilities.canManageEthernet ? translate("workspace.management.network.wifi.managedMode") : translate("workspace.management.values.readOnly")} />
                         <Fact label={t("workspace.management.network.facts.defaultRoutes")} value={formatLocaleNumber(summary?.metrics.defaultRoutes ?? 0, locale)} />
                         <Fact label={t("workspace.management.network.facts.interfaces")} value={formatLocaleNumber(summary?.metrics.interfaces ?? 0, locale)} />
                       </dl>
@@ -287,6 +310,26 @@ export function SystemNetworkManagementPanel({
                 title: metric.label,
                 content: <MetricCard key={metric.id} metric={metric} />
               })),
+              {
+                id: "ethernet",
+                title: String(t("workspace.management.network.ethernet.title")),
+                content: summary ? (
+                  <SystemEthernetManagement
+                    ethernet={summary.ethernet}
+                    canManageEthernet={summary.capabilities.canManageEthernet}
+                    locale={locale}
+                    onStatus={handleEthernetStatus}
+                    onRefresh={refreshSummary}
+                    onNotifySuccess={(message) => onNotifySuccess(message)}
+                    onNotifyError={(message) => onNotifyError(message)}
+                  />
+                ) : (
+                  <section className="management-section">
+                    <SectionHeader title={t("workspace.management.network.ethernet.title")} description={t("workspace.management.network.ethernet.description")} />
+                    <p className="management-empty">{error ?? t("workspace.management.network.loadError")}</p>
+                  </section>
+                )
+              },
               {
                 id: "wifi",
                 title: String(t("workspace.management.network.wifi.title")),

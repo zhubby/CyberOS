@@ -186,6 +186,42 @@
       "result": { "rollback": "not_required", "message": null }
     },
     {
+      "operation": "network.manager",
+      "request": { "action": "ethernet_status" },
+      "result": { "collectedAt": "2026-10-10T00:00:00Z", "backend": "NetworkManager", "hostdReady": true, "devices": [], "transaction": null, "warnings": [] }
+    },
+    {
+      "operation": "network.manager",
+      "request": {
+        "action": "ethernet_save",
+        "deviceId": "2ccf67c96807",
+        "input": {
+          "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "config": {
+            "enabled": true,
+            "ipv4": { "mode": "dhcp", "address": null, "prefixLength": null, "gateway": null, "dnsMode": "automatic", "dns": [], "useDefaultRoute": false, "routeMetric": 600 },
+            "ipv6": { "mode": "automatic", "address": null, "prefixLength": null, "gateway": null, "dnsMode": "automatic", "dns": [], "useDefaultRoute": false, "routeMetric": 600 }
+          }
+        }
+      },
+      "result": { "collectedAt": "2026-10-10T00:00:00Z", "backend": "NetworkManager", "hostdReady": true, "devices": [], "transaction": null, "warnings": [] }
+    },
+    {
+      "operation": "network.manager",
+      "request": { "action": "ethernet_apply", "confirmed": true },
+      "result": { "id": "550e8400-e29b-41d4-a716-446655440010", "status": "awaiting_confirmation", "deviceIds": ["2ccf67c96807"], "createdAt": "2026-10-10T00:00:00Z", "deadlineAt": "2026-10-10T00:01:30Z", "rollback": "not_required", "error": null }
+    },
+    {
+      "operation": "network.manager",
+      "request": { "action": "ethernet_confirm", "transactionId": "550e8400-e29b-41d4-a716-446655440010" },
+      "result": { "id": "550e8400-e29b-41d4-a716-446655440010", "status": "confirmed", "deviceIds": ["2ccf67c96807"], "createdAt": "2026-10-10T00:00:00Z", "deadlineAt": null, "rollback": "not_required", "error": null }
+    },
+    {
+      "operation": "network.manager",
+      "request": { "action": "ethernet_rollback", "transactionId": "550e8400-e29b-41d4-a716-446655440010" },
+      "result": { "id": "550e8400-e29b-41d4-a716-446655440010", "status": "rolled_back", "deviceIds": ["2ccf67c96807"], "createdAt": "2026-10-10T00:00:00Z", "deadlineAt": null, "rollback": "succeeded", "error": null }
+    },
+    {
       "operation": "system.power",
       "request": { "action": "reboot", "confirmed": true },
       "result": { "action": "reboot", "accepted": true }
@@ -194,6 +230,16 @@
       "operation": "system.power",
       "request": { "action": "shutdown", "confirmed": true },
       "result": { "action": "shutdown", "accepted": true }
+    },
+    {
+      "operation": "system.ops",
+      "request": { "task": "health" },
+      "result": { "task": "health", "accepted": true }
+    },
+    {
+      "operation": "system.ops",
+      "request": { "task": "maintenance", "confirmed": true },
+      "result": { "task": "maintenance", "accepted": true }
     }
   ]
 }

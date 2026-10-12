@@ -346,6 +346,300 @@
   min-width: 96px;
 }
 
+.settings-operations-page {
+  position: relative;
+}
+
+.settings-operations-grid {
+  gap: 16px;
+}
+
+.settings-operations-task-list,
+.settings-operations-run-list {
+  display: grid;
+}
+
+.settings-operations-task {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 112px;
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-operations-task:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-operations-task:last-child {
+  padding-bottom: 0;
+}
+
+.settings-operations-task-icon,
+.settings-operations-run-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.settings-operations-task-main,
+.settings-operations-task-main > * {
+  min-width: 0;
+}
+
+.settings-operations-task-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-operations-task-title strong {
+  font-size: 12.5px;
+}
+
+.settings-operations-task-title span,
+.settings-operations-run-result em {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: var(--neutral-status-text);
+  background: var(--neutral-status-bg);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.settings-operations-task-title span[data-state="ready"],
+.settings-operations-run-result em[data-state="completed"] {
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.settings-operations-task-title span[data-state="failed"],
+.settings-operations-task-title span[data-state="stale"],
+.settings-operations-run-result em[data-state="failed"],
+.settings-operations-run-result em[data-state="interrupted"] {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.settings-operations-task-title span[data-state="running"],
+.settings-operations-run-result em[data-state="running"] {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.settings-operations-task-main > small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted-2);
+  font-size: 11px;
+}
+
+.settings-operations-task-main dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 10px 0 0;
+}
+
+.settings-operations-task-main dl div {
+  min-width: 0;
+}
+
+.settings-operations-task-main dt,
+.settings-operations-task-main dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-operations-task-main dt {
+  color: var(--muted-2);
+  font-size: 10.5px;
+}
+
+.settings-operations-task-main dd {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.settings-operations-task-error {
+  margin: 9px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--danger-text);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settings-operations-run-button {
+  width: 112px;
+  height: 34px;
+  justify-content: center;
+}
+
+.settings-operations-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--subtle-bg);
+}
+
+.settings-operations-tabs button {
+  min-width: 88px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.settings-operations-tabs button.is-active {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.settings-operations-run {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(112px, auto);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-operations-run:first-child {
+  border-top: 0;
+}
+
+.settings-operations-run > span,
+.settings-operations-run strong,
+.settings-operations-run small {
+  display: block;
+  min-width: 0;
+}
+
+.settings-operations-run strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-operations-run small {
+  margin-top: 3px;
+  color: var(--muted-2);
+  font-size: 10.5px;
+}
+
+.settings-operations-run-result {
+  justify-self: end;
+  text-align: right;
+}
+
+.settings-operations-run-result em {
+  justify-content: center;
+}
+
+.settings-operations-run > p {
+  grid-column: 2 / -1;
+  margin: -2px 0 2px;
+  overflow-wrap: anywhere;
+  color: var(--danger-text);
+  font-size: 11px;
+}
+
+.settings-operations-empty {
+  padding: 22px 12px;
+  color: var(--muted-2);
+  font-size: 12px;
+  text-align: center;
+}
+
+.settings-operations-error {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--danger-border);
+  border-radius: 5px;
+  color: var(--danger-text);
+  background: var(--danger-bg-soft);
+  font-size: 11.5px;
+}
+
+.settings-ops-confirm-backdrop {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: grid;
+  padding: 20px;
+  place-items: center;
+  background: var(--modal-backdrop);
+}
+
+.settings-ops-confirm-dialog {
+  display: grid;
+  width: min(430px, 100%);
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--dialog-bg);
+  box-shadow: var(--shadow);
+}
+
+.settings-ops-confirm-dialog > header {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.settings-ops-confirm-dialog > header svg {
+  color: var(--warning-text);
+}
+
+.settings-ops-confirm-dialog h3,
+.settings-ops-confirm-dialog p {
+  margin: 0;
+}
+
+.settings-ops-confirm-dialog h3 {
+  font-size: 14px;
+}
+
+.settings-ops-confirm-dialog p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.settings-ops-confirm-dialog > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .settings-main-stack,
 .settings-side-stack {
   display: grid;

@@ -11,7 +11,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
 use tokio::task::JoinSet;
-use tokio::time::timeout;
+use tokio::time::{MissedTickBehavior, interval, timeout};
 
 use crate::command::{CommandRunner, SystemCommandRunner};
 use crate::config::{ConfiguredNasRoot, HostdConfig};
@@ -38,6 +38,7 @@ struct HostdState {
     docker_lock: Mutex<()>,
     network_lock: Mutex<()>,
     power_lock: Mutex<()>,
+    ops_lock: Mutex<()>,
 }
 
 impl HostdServer {
@@ -57,15 +58,25 @@ impl HostdServer {
                 docker_lock: Mutex::new(()),
                 network_lock: Mutex::new(()),
                 power_lock: Mutex::new(()),
+                ops_lock: Mutex::new(()),
             }),
         }
     }
 
     pub async fn run(self) -> Result<(), HostdError> {
+        if let Err(error) =
+            crate::network_manager::recover_on_startup(self.state.runner.as_ref()).await
+        {
+            tracing::error!(code = ?error.code, message = %error.message, "could not recover unfinished Ethernet transaction");
+            return Err(error);
+        }
         let listener = bind_socket(&self.config.socket_path, &self.config.socket_group).await?;
         tracing::info!(socket = %self.config.socket_path.display(), "hostd listening");
         let allowed_uids = Arc::new(self.config.allowed_uids);
         let mut connections = JoinSet::new();
+        let mut network_recovery = interval(Duration::from_secs(1));
+        network_recovery.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        network_recovery.tick().await;
         loop {
             tokio::select! {
                 result = listener.accept(), if connections.len() < MAX_CONNECTIONS => {
@@ -81,6 +92,12 @@ impl HostdServer {
                 result = connections.join_next(), if !connections.is_empty() => {
                     if let Some(Err(error)) = result {
                         tracing::warn!(message = %error, "hostd request task failed");
+                    }
+                }
+                _ = network_recovery.tick() => {
+                    let _guard = self.state.network_lock.lock().await;
+                    if let Err(error) = crate::network_manager::recover_expired_transaction(self.state.runner.as_ref()).await {
+                        tracing::error!(code = ?error.code, message = %error.message, "could not recover expired Ethernet transaction");
                     }
                 }
                 result = shutdown_signal() => {
@@ -300,12 +317,11 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
                 .await
                 .map(HostdResult::DockerDaemon)
         }
-        HostdRequest::NetworkManager(
-            request @ (crate::network_manager::NetworkRequest::Ping
-            | crate::network_manager::NetworkRequest::Inspect),
-        ) => crate::network_manager::handle(request, state.runner.as_ref())
-            .await
-            .map(HostdResult::NetworkManager),
+        HostdRequest::NetworkManager(request @ crate::network_manager::NetworkRequest::Ping) => {
+            crate::network_manager::handle(request, state.runner.as_ref())
+                .await
+                .map(HostdResult::NetworkManager)
+        }
         HostdRequest::NetworkManager(request) => {
             let _guard = state.network_lock.lock().await;
             crate::network_manager::handle(request, state.runner.as_ref())
@@ -317,6 +333,12 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
             crate::power::command(request, state.runner.as_ref())
                 .await
                 .map(HostdResult::SystemPower)
+        }
+        HostdRequest::SystemOps(request) => {
+            let _guard = state.ops_lock.lock().await;
+            crate::ops::command(request, state.runner.as_ref())
+                .await
+                .map(HostdResult::SystemOps)
         }
     }
 }
@@ -396,6 +418,7 @@ mod tests {
             docker_lock: Mutex::new(()),
             network_lock: Mutex::new(()),
             power_lock: Mutex::new(()),
+            ops_lock: Mutex::new(()),
         })
     }
 

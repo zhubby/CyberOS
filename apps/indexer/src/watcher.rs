@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::event::{MetadataKind, ModifyKind};
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc;
 
 use crate::db::Root;
@@ -30,7 +31,7 @@ pub fn start(
     let callback_sender = sender.clone();
     let mut watcher =
         notify::recommended_watcher(move |result: notify::Result<notify::Event>| match result {
-            Ok(event) => {
+            Ok(event) if should_enqueue(&event.kind) => {
                 for event_path in event.paths {
                     if let Some((root_id, root_path)) = best_scope(&callback_scopes, &event_path) {
                         let relative = event_path
@@ -45,6 +46,7 @@ pub fn start(
                     }
                 }
             }
+            Ok(_) => {}
             Err(error) => {
                 let root_ids = callback_scopes.iter().map(|(id, _)| id.clone()).collect();
                 let _ = callback_sender.send(WatchMessage::Degraded {
@@ -64,6 +66,13 @@ pub fn start(
         }
     }
     Ok(watcher)
+}
+
+fn should_enqueue(kind: &EventKind) -> bool {
+    !matches!(
+        kind,
+        EventKind::Access(_) | EventKind::Modify(ModifyKind::Metadata(MetadataKind::AccessTime))
+    )
 }
 
 fn best_scope<'a>(scopes: &'a [(String, PathBuf)], path: &Path) -> Option<&'a (String, PathBuf)> {
@@ -105,6 +114,27 @@ fn is_same_or_ancestor(ancestor: &str, path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use notify::event::{AccessKind, AccessMode, CreateKind, RemoveKind};
+
+    #[test]
+    fn ignores_access_events_caused_by_indexing_reads() {
+        assert!(!should_enqueue(&EventKind::Access(AccessKind::Any)));
+        assert!(!should_enqueue(&EventKind::Access(AccessKind::Open(
+            AccessMode::Any
+        ))));
+        assert!(!should_enqueue(&EventKind::Access(AccessKind::Close(
+            AccessMode::Read
+        ))));
+        assert!(!should_enqueue(&EventKind::Access(AccessKind::Close(
+            AccessMode::Write
+        ))));
+        assert!(!should_enqueue(&EventKind::Modify(ModifyKind::Metadata(
+            MetadataKind::AccessTime
+        ))));
+        assert!(should_enqueue(&EventKind::Create(CreateKind::Any)));
+        assert!(should_enqueue(&EventKind::Modify(ModifyKind::Any)));
+        assert!(should_enqueue(&EventKind::Remove(RemoveKind::Any)));
+    }
 
     #[test]
     fn merges_descendants_into_their_nearest_ancestor() {

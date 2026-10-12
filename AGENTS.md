@@ -13,7 +13,7 @@ a Docker container.
 - `apps/api`: Fastify API, WebSocket/SSE endpoints, and production static files.
 - `apps/worker`: agent job worker.
 - `apps/indexer`: SQLite/FTS NAS indexer.
-- `apps/scheduler`: scheduled maintenance, backup, and health jobs.
+- `apps/ops`: one-shot health evaluation and maintenance jobs.
 - `apps/backup`, `apps/hostd`, `apps/termux`: backup and host
   integration processes.
 - `packages/db`, `packages/nas-tools`, `packages/agent`, `packages/shared`:
@@ -68,12 +68,12 @@ SIGMAOS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
 npm run dev
 ```
 
-`npm run dev` starts the API, worker, and web Vite server. The indexer and
-scheduler are intentionally separate processes:
+`npm run dev` starts the API, worker, and web Vite server. The indexer and Ops
+tasks are intentionally separate processes:
 
 ```bash
 npm run index                 # one index pass
-npm run schedule              # scheduler process
+npm run health                # one health evaluation
 npm run maintenance           # one maintenance pass
 npm run docs:dev              # documentation site on 127.0.0.1:4321
 ```
@@ -99,7 +99,7 @@ make ci                       # make check + build
 The root Vitest config runs tests under `packages/**`, `apps/**`,
 `packaging/**`, and `scripts/**` in a Node environment with a threaded pool.
 The test suite includes API contracts, path/traversal safety, database/schema,
-worker/indexer/scheduler behavior, web components, packaging declarations, and
+worker/indexer/operations behavior, web components, packaging declarations, and
 build/version scripts. Add focused tests for behavior changes; preserve the
 wire shapes of `/api/files/meta` and `/api/files/text` with tests when touching
 file routes.
@@ -164,8 +164,8 @@ Nginx. `SIGMAOS_ENABLE_NGINX` defaults to `1`; Docker and VM support default to
 `SIGMAOS_ENABLE_VM=1`. Review `SIGMAOS_APT_*`, `SIGMAOS_NODE_*`, and
 `SIGMAOS_NPM_REGISTRY` before using internal or domestic mirrors.
 
-After installation, core services are enabled and started; indexer,
-scheduler, maintenance, health, and backup timers are enabled but do not all
+After installation, core services are enabled and started; maintenance,
+health, and backup timers are enabled but do not all
 run immediately. Nginx proxies the loopback API (`127.0.0.1:3010`) and serves
 the LAN entrypoint (default port 80).
 
@@ -211,7 +211,7 @@ service, for example `sudo systemctl start sigmaos-indexer.service`, rather
 than invoking a timer directly. After changing units or configuration, run
 `sudo systemctl daemon-reload` and restart affected resident services.
 
-For upgrades, stop all indexer/scheduler/maintenance/health/backup timers,
+For upgrades, stop the indexer and all maintenance/health/backup timers,
 save the current `.deb`, `/etc/sigmaos`, `/var/lib/sigmaos` and SQLite state,
 install the new package, and re-run the API, readiness, index, health, and
 backup acceptance checks before re-enabling timers. Database migrations have no
@@ -226,7 +226,7 @@ backup as well as the old package.
   a bypass or broaden the local fallback without explicit product direction.
 - Keep API response contracts stable unless an API change is explicitly
   requested and tested.
-- SQLite is shared by API, worker, indexer, scheduler, and backup; avoid
+- SQLite is shared by API, worker, indexer, Ops, and backup; avoid
   concurrent ad-hoc writers and consider migration/backfill safety for schema
   changes.
 - Production API binds to loopback. Use the packaged Nginx proxy for LAN access;

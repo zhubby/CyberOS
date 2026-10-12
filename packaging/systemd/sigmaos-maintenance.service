@@ -1,8 +1,7 @@
 [Unit]
-Description=SigmaOS SQLite and trash maintenance
+Description=SigmaOS SQLite and restore staging maintenance
 Documentation=file:///usr/share/doc/sigmaos/README.md
 After=local-fs.target
-RequiresMountsFor=/srv/nas /srv/backup
 
 [Service]
 Type=oneshot
@@ -12,10 +11,11 @@ Environment=SIGMAOS_CONFIG=/etc/sigmaos/config.toml
 WorkingDirectory=/var/lib/sigmaos
 StateDirectory=sigmaos
 LogsDirectory=sigmaos
-ExecStart=/usr/local/bin/node /usr/lib/sigmaos/apps/scheduler/dist/index.js --maintenance
+ExecStart=/usr/local/bin/node /usr/lib/sigmaos/apps/ops/dist/index.js maintenance
+TimeoutStartSec=2h
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/var/lib/sigmaos /var/log/sigmaos /srv/nas
+ReadWritePaths=/var/lib/sigmaos /var/log/sigmaos /srv/nas /srv/backup
 NoNewPrivileges=yes
 PrivateTmp=yes
 CapabilityBoundingSet=

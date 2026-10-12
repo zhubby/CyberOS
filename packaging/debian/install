@@ -5,7 +5,7 @@ apps/worker/dist/* usr/lib/sigmaos/apps/worker/dist/
 target/release/sigmaos-photostaff usr/lib/sigmaos/bin/
 target/release/sigmaos-indexer usr/lib/sigmaos/bin/
 apps/backup/dist/* usr/lib/sigmaos/apps/backup/dist/
-apps/scheduler/dist/* usr/lib/sigmaos/apps/scheduler/dist/
+apps/ops/dist/* usr/lib/sigmaos/apps/ops/dist/
 target/release/sigmaos-downloader usr/lib/sigmaos/bin/
 target/release/sigmaos-vod-player usr/lib/sigmaos/bin/
 apps/web/dist/* usr/lib/sigmaos/apps/web/dist/

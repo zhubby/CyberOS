@@ -4,6 +4,7 @@ pub mod config_migration;
 pub mod docker_daemon;
 pub mod error;
 pub mod network_manager;
+pub mod ops;
 pub mod power;
 pub mod protocol;
 pub mod server;

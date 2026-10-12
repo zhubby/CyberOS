@@ -1,6 +1,6 @@
 {
   "name": "sigmaos",
-  "version": "0.9.19",
+  "version": "0.9.24",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -12,8 +12,8 @@
     "dev": "npm run build:metadata && concurrently -n api,worker,photostaff,downloader,vod-player,web -c blue,green,yellow,cyan,white,magenta \"npm run dev -w @sigmaos/api\" \"npm run dev -w @sigmaos/worker\" \"cargo run -p sigmaos-photostaff\" \"cargo run -p sigmaos-downloader\" \"cargo run -p sigmaos-vod-player\" \"npm run dev -w @sigmaos/web\"",
     "index": "cargo run -p sigmaos-indexer -- --once",
     "backup": "npm run dev -w @sigmaos/backup",
-    "schedule": "npm run dev -w @sigmaos/scheduler",
-    "maintenance": "npm run dev -w @sigmaos/scheduler -- --maintenance",
+    "health": "npm run dev -w @sigmaos/ops -- health",
+    "maintenance": "npm run dev -w @sigmaos/ops -- maintenance",
     "docs:dev": "npm --prefix docs run dev",
     "docs:check": "npm --prefix docs run check",
     "docs:test": "npm --prefix docs test",

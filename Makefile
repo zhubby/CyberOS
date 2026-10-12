@@ -3,7 +3,7 @@ NPM ?= npm
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev dev-api dev-web dev-worker dev-indexer dev-scheduler docs-dev docs-check docs-test docs-build docs-browser index schedule maintenance preview-web start-api start-worker start-indexer start-scheduler protocol-check typecheck lint test build check ci clean deb appliance
+.PHONY: help install dev dev-api dev-web dev-worker dev-indexer dev-ops docs-dev docs-check docs-test docs-build docs-browser index health maintenance preview-web start-api start-worker start-indexer protocol-check typecheck lint test build check ci clean deb appliance
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-18s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -27,8 +27,8 @@ dev-worker: ## Run the worker development process.
 dev-indexer: ## Run the indexer in watch mode.
 	cargo run -p sigmaos-indexer
 
-dev-scheduler: ## Run the scheduler development process.
-	$(NPM) run dev -w @sigmaos/scheduler
+dev-ops: ## Run an Ops task (TASK=health|maintenance).
+	$(NPM) run dev -w @sigmaos/ops -- $(TASK)
 
 docs-dev: ## Run the Starlight development server.
 	$(NPM) run docs:dev
@@ -48,10 +48,10 @@ docs-browser: ## Run documentation browser smoke tests.
 index: ## Run one indexing pass.
 	$(NPM) run index
 
-schedule: ## Run the scheduler.
-	$(NPM) run schedule
+health: ## Run the health evaluator once.
+	$(NPM) run health
 
-maintenance: ## Run scheduler maintenance jobs once.
+maintenance: ## Run maintenance once.
 	$(NPM) run maintenance
 
 preview-web: ## Preview the built web app.
@@ -65,9 +65,6 @@ start-worker: ## Start the built worker process.
 
 start-indexer: ## Start the built indexer process.
 	target/release/sigmaos-indexer
-
-start-scheduler: ## Start the built scheduler process.
-	$(NPM) run start -w @sigmaos/scheduler
 
 protocol-check: ## Verify checked-in Rust-to-TypeScript protocol bindings.
 	$(NPM) run protocol:check

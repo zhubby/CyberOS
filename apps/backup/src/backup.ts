@@ -24,6 +24,8 @@ export interface BackupDependencies {
   mountCommandRunner?: MountCommandRunner;
 }
 
+const BACKUP_LOCK_NAME = "backup";
+
 export function shouldSkipScheduledBackup(config: SigmaConfig, command: string | undefined): boolean {
   return command === "run" && !config.backup?.enabled;
 }
@@ -80,12 +82,23 @@ export async function initBackup(input: BackupDependencies): Promise<void> {
   if (readiness.status !== "ready") throw new Error(`Backup target is not ready: ${readiness.reason ?? readiness.status}`);
   const runner = input.restic ?? new SystemResticRunner();
   const owner = randomUUID();
-  if (!acquireExecutionLock(input.db, { name: "maintenance", owner })) throw new Error("backup already running");
+  if (!acquireExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner })) throw new Error("backup already running");
+  const heartbeat = setInterval(() => {
+    heartbeatExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
+  }, 5_000);
+  heartbeat.unref?.();
   try {
+    if (!isExecutionLockOwner(input.db, { name: BACKUP_LOCK_NAME, owner })) {
+      throw new Error("backup execution lease lost");
+    }
     const result = await runResticWithRetry(runner, ["init", "--repo", config.repositoryPath], config);
+    if (!isExecutionLockOwner(input.db, { name: BACKUP_LOCK_NAME, owner })) {
+      throw new Error("backup execution lease lost");
+    }
     if (result.code !== 0) throw new Error(`restic init failed: ${summarizeResticOutput(result.stderr || result.stdout)}`);
   } finally {
-    releaseExecutionLock(input.db, { name: "maintenance", owner });
+    clearInterval(heartbeat);
+    releaseExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
   }
 }
 
@@ -95,18 +108,18 @@ export async function runBackup(input: BackupDependencies & { kind?: Exclude<Bac
   if (pathIssues.length) throw new Error(pathIssues.join("; "));
   const kind = input.kind ?? "daily";
   const owner = randomUUID();
-  if (!acquireExecutionLock(input.db, { name: "maintenance", owner })) throw new Error("backup already running");
+  if (!acquireExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner })) throw new Error("backup already running");
   const run = startBackupRun(input.db, input.now ? { kind, now: input.now } : { kind });
   console.log(JSON.stringify({ event: "backup.run.started", runId: run.id, kind }));
   const failures: Array<{ rootId: string; reason: string }> = [];
   const runner = input.restic ?? new SystemResticRunner();
   let staging: string | null = null;
   const heartbeat = setInterval(() => {
-    heartbeatExecutionLock(input.db, { name: "maintenance", owner });
+    heartbeatExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
   }, 5_000);
   heartbeat.unref?.();
   const ensureLease = (): void => {
-    if (!isExecutionLockOwner(input.db, { name: "maintenance", owner })) {
+    if (!isExecutionLockOwner(input.db, { name: BACKUP_LOCK_NAME, owner })) {
       throw new Error("backup execution lease lost");
     }
   };
@@ -225,7 +238,7 @@ export async function runBackup(input: BackupDependencies & { kind?: Exclude<Bac
   } finally {
     clearInterval(heartbeat);
     if (staging) await rm(staging, { recursive: true, force: true });
-    releaseExecutionLock(input.db, { name: "maintenance", owner });
+    releaseExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
   }
 }
 
@@ -235,14 +248,14 @@ export async function checkBackup(input: BackupDependencies): Promise<BackupRunS
   if (pathIssues.length) throw new Error(pathIssues.join("; "));
   const runner = input.restic ?? new SystemResticRunner();
   const owner = randomUUID();
-  if (!acquireExecutionLock(input.db, { name: "maintenance", owner })) throw new Error("backup already running");
+  if (!acquireExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner })) throw new Error("backup already running");
   const run = startBackupRun(input.db, { kind: "check" });
   const heartbeat = setInterval(() => {
-    heartbeatExecutionLock(input.db, { name: "maintenance", owner });
+    heartbeatExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
   }, 5_000);
   heartbeat.unref?.();
   const ensureLease = (): void => {
-    if (!isExecutionLockOwner(input.db, { name: "maintenance", owner })) {
+    if (!isExecutionLockOwner(input.db, { name: BACKUP_LOCK_NAME, owner })) {
       throw new Error("backup execution lease lost");
     }
   };
@@ -273,7 +286,7 @@ export async function checkBackup(input: BackupDependencies): Promise<BackupRunS
     return finishBackupRun(input.db, { runId: run.id, status: "completed", verified: true, error: null });
   } finally {
     clearInterval(heartbeat);
-    releaseExecutionLock(input.db, { name: "maintenance", owner });
+    releaseExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
   }
 }
 
@@ -283,15 +296,15 @@ export async function restoreBackup(input: BackupDependencies & { snapshot: stri
   if (pathIssues.length) throw new Error(pathIssues.join("; "));
   const runner = input.restic ?? new SystemResticRunner();
   const owner = randomUUID();
-  if (!acquireExecutionLock(input.db, { name: "maintenance", owner })) throw new Error("backup already running");
+  if (!acquireExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner })) throw new Error("backup already running");
   const run = startBackupRun(input.db, { kind: "restore" });
   let stagingPath = "";
   const heartbeat = setInterval(() => {
-    heartbeatExecutionLock(input.db, { name: "maintenance", owner });
+    heartbeatExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
   }, 5_000);
   heartbeat.unref?.();
   const ensureLease = (): void => {
-    if (!isExecutionLockOwner(input.db, { name: "maintenance", owner })) {
+    if (!isExecutionLockOwner(input.db, { name: BACKUP_LOCK_NAME, owner })) {
       throw new Error("backup execution lease lost");
     }
   };
@@ -331,7 +344,7 @@ export async function restoreBackup(input: BackupDependencies & { snapshot: stri
     throw error;
   } finally {
     clearInterval(heartbeat);
-    releaseExecutionLock(input.db, { name: "maintenance", owner });
+    releaseExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
   }
 }
 

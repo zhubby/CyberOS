@@ -1,8 +1,9 @@
 [Unit]
 Description=SigmaOS privileged host integration daemon
 Documentation=file:///usr/share/doc/sigmaos/README.md
-After=network-online.target local-fs.target systemd-tmpfiles-setup.service
-Wants=network-online.target
+After=local-fs.target systemd-tmpfiles-setup.service NetworkManager.service
+Before=network-online.target
+Wants=NetworkManager.service
 
 [Service]
 Type=simple

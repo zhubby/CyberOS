@@ -9,7 +9,7 @@ sidebar:
   order: 1
 ---
 
-生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 SigmaOS 自身放入 Docker。API、worker、downloader、indexer、hostd、termux 是常驻服务；scheduler、maintenance、health、backup 由 oneshot service 和 timer 驱动。
+生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 SigmaOS 自身放入 Docker。API、worker、downloader、indexer、hostd、termux 是常驻服务；maintenance、health、backup 由 oneshot service 和 timer 驱动。
 
 Nginx 只反向代理到 loopback API。运行时路径主要是 `/usr/lib/sigmaos`、`/etc/sigmaos`、`/var/lib/sigmaos`、`/run/sigmaos` 和配置的 `/srv` roots。API 静态提供 React Web 与 `/docs/` 文档站。
 
@@ -67,7 +67,7 @@ sudo systemctl status sigmaos-api.service sigmaos-worker@1.service sigmaos-downl
 sudo systemctl status sigmaos-hostd.service sigmaos-termux.service
 ```
 
-Indexer 会立即作为常驻服务启动；scheduler、maintenance、health 和 backup timers 默认只启用。需要立即刷新索引时使用 API，health 仍可手动启动：
+Indexer 会立即作为常驻服务启动；maintenance、health 和 backup timers 默认只启用。需要立即刷新索引时使用 API，health 仍可从运维设置页或 systemd 手动启动：
 
 ```bash
 curl -X POST http://127.0.0.1:3010/api/indexer/reindex \
@@ -94,8 +94,7 @@ curl -fsS http://127.0.0.1:3010/api/system/health
 升级前保留当前 `.deb`、`/etc/sigmaos/config.toml`、`/var/lib/sigmaos` 和数据库备份；先暂停会访问 SQLite 或 NAS 的服务与 timers。完成包安装后，先确认挂载、运行 ACL 预览和迁移，最后再启动服务：
 
 ```bash
-sudo systemctl stop sigmaos-scheduler.timer \
-  sigmaos-maintenance.timer sigmaos-health.timer \
+sudo systemctl stop sigmaos-maintenance.timer sigmaos-health.timer \
   sigmaos-backup-daily.timer sigmaos-backup-weekly.timer
 sudo systemctl stop sigmaos-downloader.service sigmaos-worker@1.service \
   sigmaos-indexer.service sigmaos-vod-player.service sigmaos-api.service sigmaos-termux.service \

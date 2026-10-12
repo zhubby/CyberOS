@@ -159,7 +159,20 @@ pub(super) async fn read_profiles(directory: &Path) -> Result<Vec<ManagedProfile
     paths.sort();
     let mut profiles = Vec::new();
     for path in paths {
-        profiles.push(read_profile(&path).await?);
+        let metadata = fs::symlink_metadata(&path).await?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(HostdError::validation(
+                "Managed NetworkManager profile must be a regular file",
+            ));
+        }
+        let content = fs::read_to_string(&path).await?;
+        let keyfile = parse_keyfile(&content);
+        if matches!(
+            keyfile_value(&keyfile, "connection", "type"),
+            Some("wifi" | "802-11-wireless")
+        ) {
+            profiles.push(read_profile(&path).await?);
+        }
     }
     Ok(profiles)
 }
@@ -322,4 +335,31 @@ fn revision(content: &str) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn wifi_discovery_ignores_managed_ethernet_profiles() {
+        let temp = TempDir::new().unwrap();
+        fs::write(
+            temp.path().join("sigmaos-ethernet-aabbccddeeff.nmconnection"),
+            "[connection]\nid=Ethernet\nuuid=550e8400-e29b-41d4-a716-446655440010\ntype=ethernet\n[ethernet]\nmac-address=aa:bb:cc:dd:ee:ff\n",
+        )
+        .await
+        .unwrap();
+        fs::write(
+            temp.path().join("sigmaos-wifi.nmconnection"),
+            "[connection]\nid=Wi-Fi\nuuid=550e8400-e29b-41d4-a716-446655440011\ntype=wifi\ninterface-name=wlan0\nautoconnect=true\n[wifi]\nssid=Home\nmode=infrastructure\n[ipv4]\nmethod=auto\n",
+        )
+        .await
+        .unwrap();
+
+        let profiles = read_profiles(temp.path()).await.unwrap();
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].inspection.ssid, "Home");
+    }
 }

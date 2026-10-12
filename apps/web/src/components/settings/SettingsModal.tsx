@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState, type KeyboardEvent, type ReactN
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
+  Activity,
   Bot,
   Check,
   Clock3,
@@ -77,6 +78,7 @@ import type { ResolvedTheme, ThemePreference } from "../../lib/theme-settings.js
 import { CustomSelect } from "../common/CustomSelect.js";
 import { VersionSettingsPage } from "./VersionSettingsPage.js";
 import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
+import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
 
 interface SettingsModalProps {
   activeSection: SettingsSectionId;
@@ -604,6 +606,10 @@ export function SettingsModal({
               onReindex={onIndexerReindex}
               onClose={onClose}
             />
+          ) : null}
+
+          {activeSection === "operations" ? (
+            <SettingsOperationsPage locale={resolvedLocale} onClose={onClose} />
           ) : null}
 
           {activeSection === "photostaff" ? (
@@ -2857,6 +2863,8 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Folder aria-hidden="true" size={16} />;
     case "indexer":
       return <Database aria-hidden="true" size={16} />;
+    case "operations":
+      return <Activity aria-hidden="true" size={16} />;
     case "photostaff":
       return <Images aria-hidden="true" size={16} />;
     case "downloads":

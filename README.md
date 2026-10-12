@@ -67,8 +67,8 @@ The following surfaces are intentionally limited today:
 ### Native appliance services
 
 - Debian package definitions for `amd64` and `arm64` release artifacts.
-- Hardened `systemd` units for the API, worker, indexer, scheduler, maintenance, and `sigmaos-hostd`.
-- Timers for indexing every 30 minutes, scheduled reports every 6 hours, daily/weekly restic backups, health evaluation every 15 minutes, and daily maintenance.
+- Hardened `systemd` units for the API, worker, indexer, one-shot operations, and `sigmaos-hostd`.
+- Timers for daily/weekly restic backups, health evaluation every 15 minutes, and maintenance at 04:30; the resident indexer reconciles internally every 30 minutes.
 - A Debian Bookworm rootfs scaffold built with `mmdebstrap` and `systemd-nspawn`.
 
 ## Architecture
@@ -82,7 +82,7 @@ flowchart LR
   Photostaff["Photostaff worker"]
   Agent["Pi agent runtime"]
   Indexer["Filesystem indexer"]
-  Scheduler["Scheduler / maintenance"]
+  Ops["Ops health / maintenance"]
   Tools["Path-safe NAS tools"]
   Roots[("Configured NAS roots")]
   Host["Linux, PTY, Docker socket"]
@@ -101,7 +101,7 @@ flowchart LR
   Tools <--> Roots
   Indexer --> Roots
   Indexer --> DB
-  Scheduler --> DB
+  Ops --> DB
   API --> Host
   API -->|Termux Protocol v1 over Unix socket| Termux[termux daemon]
   Termux -->|PTY as sigmaos user| Host
@@ -118,7 +118,7 @@ The main runtime components are:
 | `apps/worker` | Claims queued jobs, runs agent turns, persists events, and pauses work for approvals. |
 | `apps/photostaff` | Rust media worker with resumable scans, metadata extraction, and journaled image derivatives. |
 | `apps/indexer` | Walks NAS roots, hashes files, extracts bounded text, and maintains the FTS index. |
-| `apps/scheduler` | Generates duplicate, backup, provider, and health reports; checkpoints and optimizes SQLite. |
+| `apps/ops` | Runs one-shot health evaluation and safe maintenance with persisted lifecycle history. |
 | `apps/hostd` | Rust host integration daemon for approved shares, storage, Docker daemon, and NetworkManager changes. |
 | `apps/termux` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `sigmaos` account. |
 | `packages/agent` | Pi SDK integration, NAS-scoped tools, session persistence, and tool policy enforcement. |
@@ -188,11 +188,11 @@ npm run dev
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api`, `/health`, and WebSocket traffic to the API at `127.0.0.1:3010`.
 
-`npm run dev` starts the API, agent worker, Rust Photostaff, Rust downloader, Rust VOD player, and web UI. The Rust services use the API-owned TypeScript migrations and wait for their required schema versions before claiming work. The indexer and scheduled tasks remain explicit during development:
+`npm run dev` starts the API, agent worker, Rust Photostaff, Rust downloader, Rust VOD player, and web UI. The Rust services use the API-owned TypeScript migrations and wait for their required schema versions before claiming work. The indexer and one-shot operations remain explicit during development:
 
 ```bash
 npm run index
-npm run schedule
+npm run health
 npm run maintenance
 ```
 
@@ -316,7 +316,7 @@ For an `arm64` CM5 (or an `amd64` Debian host), run the host installer from a ch
 sudo SIGMAOS_NAS_ROOT_PATH=/srv/nas packaging/scripts/install.sh
 ```
 
-The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the SigmaOS API, worker, hostd, termux, downloader, indexer, and an Nginx reverse proxy on port 80 by default; scheduler, maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
+The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the SigmaOS API, worker, hostd, termux, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
 
 The mirror defaults can be overridden for a private mirror or restored to another mirror with `SIGMAOS_APT_MIRROR`, `SIGMAOS_APT_SECURITY_MIRROR`, `SIGMAOS_RPI_MIRROR`, `SIGMAOS_NODE_MIRROR`, `SIGMAOS_NODE_VERSION`, and `SIGMAOS_NPM_REGISTRY`. The installer only rewrites known Debian/Raspberry Pi URIs, saves original source files under `/var/backups/sigmaos-apt`, preserves `signed-by`, suites, components, and unrelated sources, and disables any NodeSource entry after switching to the domestic Node.js binary distribution. To restore an original source, copy its backup from `/var/backups/sigmaos-apt` back to `/etc/apt/sources.list.d` (or uncomment the marked NodeSource line) before running the installer again with an explicit `SIGMAOS_NODE_MIRROR`.
 
@@ -336,7 +336,7 @@ apps/
   backup/         Restic validate, backup, check, and staging restore CLI
   hostd/          Rust privileged host integration daemon
   indexer/        NAS scanner and SQLite FTS indexer
-  scheduler/      Reports and database maintenance
+  ops/            One-shot health evaluation and maintenance
   termux/         Rust PTY daemon with tmux-backed terminal persistence
   web/            React/Vite user interface
   worker/         Agent job processor

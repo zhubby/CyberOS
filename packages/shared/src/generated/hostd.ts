@@ -16,6 +16,22 @@ export type HostdDockerDaemonUpdateResult = { snapshot: HostdDockerDaemonSnapsho
 
 export type HostdErrorCode = "protocol_error" | "validation" | "forbidden" | "not_found" | "conflict" | "timeout" | "output_too_large" | "unavailable" | "operation_failed" | "restart_failed" | "internal";
 
+export type HostdEthernetAddress = { family: string, address: string, prefixLength: number | null, cidr: string | null, scope: string | null, label: string | null, };
+
+export type HostdEthernetApplyTransaction = { id: string, status: string, deviceIds: Array<string>, createdAt: string, deadlineAt: string | null, rollback: HostdNetworkRollbackStatus, error: string | null, };
+
+export type HostdEthernetConfig = { enabled: boolean, ipv4: HostdEthernetIpv4Config, ipv6: HostdEthernetIpv6Config, };
+
+export type HostdEthernetDevice = { id: string, name: string, permanentMac: string, mac: string, driver: string | null, speedMbps: number | null, carrier: boolean, state: string, addresses: Array<HostdEthernetAddress>, ipv4Gateway: string | null, ipv6Gateway: string | null, activeProfileId: string | null, activeProfileName: string | null, managementState: string, activeConfig: HostdEthernetConfig | null, desiredConfig: HostdEthernetConfig | null, revision: string, needsApply: boolean, warnings: Array<string>, };
+
+export type HostdEthernetIpv4Config = { mode: string, address: string | null, prefixLength: number | null, gateway: string | null, dnsMode: string, dns: Array<string>, useDefaultRoute: boolean, routeMetric: number, };
+
+export type HostdEthernetIpv6Config = { mode: string, address: string | null, prefixLength: number | null, gateway: string | null, dnsMode: string, dns: Array<string>, useDefaultRoute: boolean, routeMetric: number, };
+
+export type HostdEthernetStatus = { collectedAt: string, backend: string, hostdReady: boolean, devices: Array<HostdEthernetDevice>, transaction: HostdEthernetApplyTransaction | null, warnings: Array<string>, };
+
+export type HostdEthernetUpdateInput = { config: HostdEthernetConfig, expectedRevision: string, };
+
 export type HostdFtpConfig = { enabled: boolean, readOnly: boolean, allowGuest: boolean, port: number, passivePortStart: number, passivePortEnd: number, };
 
 export type HostdNasRoot = { id: string, path: string, };
@@ -30,9 +46,9 @@ export type HostdNetworkHotspotUpdateInput = { device: string, ssid: string, pas
 
 export type HostdNetworkInspectionResult = { profiles: Array<HostdNetworkProfileInspection>, recovery: { [key in string]: HostdNetworkRecoveryEntry }, };
 
-export type HostdNetworkManagerRequest = { "action": "ping" } | { "action": "inspect" } | { "action": "scan", input: HostdNetworkScanInput, } | { "action": "connect", input: HostdNetworkConnectInput, } | { "action": "disconnect", input: HostdNetworkConfirmedDeviceInput, } | { "action": "radio", input: HostdNetworkRadioInput, } | { "action": "update_profile", profileId: string, input: HostdNetworkProfileUpdateInput, } | { "action": "delete_profile", profileId: string, confirmed: boolean, } | { "action": "update_hotspot", input: HostdNetworkHotspotUpdateInput, } | { "action": "start_hotspot", input: HostdNetworkConfirmedDeviceInput, } | { "action": "stop_hotspot", input: HostdNetworkConfirmedDeviceInput, } | { "action": "delete_hotspot", input: HostdNetworkConfirmedDeviceInput, };
+export type HostdNetworkManagerRequest = { "action": "ping" } | { "action": "inspect" } | { "action": "ethernet_status" } | { "action": "scan", input: HostdNetworkScanInput, } | { "action": "connect", input: HostdNetworkConnectInput, } | { "action": "disconnect", input: HostdNetworkConfirmedDeviceInput, } | { "action": "radio", input: HostdNetworkRadioInput, } | { "action": "update_profile", profileId: string, input: HostdNetworkProfileUpdateInput, } | { "action": "delete_profile", profileId: string, confirmed: boolean, } | { "action": "update_hotspot", input: HostdNetworkHotspotUpdateInput, } | { "action": "start_hotspot", input: HostdNetworkConfirmedDeviceInput, } | { "action": "stop_hotspot", input: HostdNetworkConfirmedDeviceInput, } | { "action": "delete_hotspot", input: HostdNetworkConfirmedDeviceInput, } | { "action": "ethernet_save", deviceId: string, input: HostdEthernetUpdateInput, } | { "action": "ethernet_apply", confirmed: boolean, } | { "action": "ethernet_confirm", transactionId: string, } | { "action": "ethernet_rollback", transactionId: string, };
 
-export type HostdNetworkManagerResult = HostdNetworkPingResult | HostdNetworkInspectionResult | HostdNetworkScanResult | HostdNetworkMutationResult;
+export type HostdNetworkManagerResult = HostdNetworkPingResult | HostdNetworkInspectionResult | HostdNetworkScanResult | HostdNetworkMutationResult | HostdEthernetStatus | HostdEthernetApplyTransaction;
 
 export type HostdNetworkMutationResult = { rollback: HostdNetworkRollbackStatus, message: string | null, };
 
@@ -54,7 +70,13 @@ export type HostdNetworkScanResult = { device: string, scannedAt: string, access
 
 export type HostdNfsConfig = { enabled: boolean, readOnly: boolean, allowedCidrs: Array<string>, rootSquash: boolean, };
 
-export type HostdOperation = "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "system.power";
+export type HostdOperation = "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "system.power" | "system.ops";
+
+export type HostdOpsRequest = { task: HostdOpsTask, confirmed: boolean | null, };
+
+export type HostdOpsResult = { task: HostdOpsTask, accepted: true, };
+
+export type HostdOpsTask = "health" | "maintenance";
 
 export type HostdPowerAction = "reboot" | "shutdown";
 
@@ -62,9 +84,9 @@ export type HostdPowerRequest = { action: HostdPowerAction, confirmed: boolean, 
 
 export type HostdPowerResult = { action: HostdPowerAction, accepted: true, };
 
-export type HostdRequestContract = { "operation": "shares.apply", "payload": HostdShareApplyRequest } | { "operation": "storage.command", "payload": HostdStorageCommand } | { "operation": "storage.operation", "payload": HostdStorageOperation } | { "operation": "docker.daemon", "payload": HostdDockerDaemonRequest } | { "operation": "network.manager", "payload": HostdNetworkManagerRequest } | { "operation": "system.power", "payload": HostdPowerRequest };
+export type HostdRequestContract = { "operation": "shares.apply", "payload": HostdShareApplyRequest } | { "operation": "storage.command", "payload": HostdStorageCommand } | { "operation": "storage.operation", "payload": HostdStorageOperation } | { "operation": "docker.daemon", "payload": HostdDockerDaemonRequest } | { "operation": "network.manager", "payload": HostdNetworkManagerRequest } | { "operation": "system.power", "payload": HostdPowerRequest } | { "operation": "system.ops", "payload": HostdOpsRequest };
 
-export type HostdResultContract = { "operation": "shares.apply", "result": HostdShareApplyResult } | { "operation": "storage.command", "result": HostdStorageCommandResult } | { "operation": "storage.operation", "result": HostdStorageOperationResult } | { "operation": "docker.daemon", "result": HostdDockerDaemonResult } | { "operation": "network.manager", "result": HostdNetworkManagerResult } | { "operation": "system.power", "result": HostdPowerResult };
+export type HostdResultContract = { "operation": "shares.apply", "result": HostdShareApplyResult } | { "operation": "storage.command", "result": HostdStorageCommandResult } | { "operation": "storage.operation", "result": HostdStorageOperationResult } | { "operation": "docker.daemon", "result": HostdDockerDaemonResult } | { "operation": "network.manager", "result": HostdNetworkManagerResult } | { "operation": "system.power", "result": HostdPowerResult } | { "operation": "system.ops", "result": HostdOpsResult };
 
 export type HostdShareAccount = { username: string, password: string | null, };
 

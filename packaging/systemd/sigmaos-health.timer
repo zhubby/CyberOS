@@ -5,6 +5,7 @@ Description=Run SigmaOS health evaluator periodically
 # Keep health offset from the indexer so their SQLite write phases do not start together.
 OnBootSec=6min
 OnUnitActiveSec=15min
+RandomizedDelaySec=2min
 Persistent=true
 
 [Install]

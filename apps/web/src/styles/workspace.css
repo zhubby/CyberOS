@@ -1340,6 +1340,236 @@
   }
 }
 
+.system-ethernet-section {
+  container-name: system-ethernet-section;
+  container-type: inline-size;
+  display: grid;
+  grid-column: 1 / -1;
+}
+
+.management-section.system-ethernet-section {
+  grid-template-rows: none;
+  grid-auto-rows: max-content;
+  align-content: start;
+}
+
+.system-ethernet-header,
+.system-ethernet-actions,
+.system-ethernet-device-title,
+.system-ethernet-device-actions,
+.system-ethernet-dialog-actions,
+.system-ethernet-confirm-dialog > footer,
+.system-ethernet-countdown-dialog > footer {
+  display: flex;
+  align-items: center;
+}
+
+.system-ethernet-header { justify-content: space-between; gap: 16px; }
+.system-ethernet-actions { flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+
+.system-ethernet-actions > button,
+.system-ethernet-dialog-actions button,
+.system-ethernet-confirm-dialog > footer button,
+.system-ethernet-countdown-dialog > footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--subtle-bg);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.system-ethernet-actions > button.is-primary:not(:disabled),
+.system-ethernet-dialog-actions button.is-primary:not(:disabled),
+.system-ethernet-countdown-dialog > footer button.is-primary:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  background: var(--accent);
+}
+
+.system-ethernet-error,
+.system-ethernet-warnings,
+.system-ethernet-unavailable { margin: 0; border-bottom: 1px solid var(--line-soft); }
+.system-ethernet-error { padding: 9px 14px; color: var(--danger-text); background: var(--danger-bg); font-size: 11px; }
+.system-ethernet-warnings { display: grid; gap: 5px; padding: 9px 14px; color: var(--warning-text); background: var(--warning-bg); }
+.system-ethernet-warnings p,
+.system-ethernet-device-warning { display: flex; align-items: flex-start; margin: 0; gap: 6px; font-size: 11px; line-height: 1.4; }
+.system-ethernet-warnings svg,
+.system-ethernet-device-warning svg { flex: 0 0 auto; margin-top: 1px; }
+.system-ethernet-unavailable { display: flex; align-items: flex-start; gap: 10px; padding: 18px; color: var(--warning-text); background: var(--warning-bg); }
+.system-ethernet-unavailable p,
+.system-ethernet-unavailable strong { margin: 0; }
+.system-ethernet-unavailable p { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.system-ethernet-list { display: grid; }
+
+.system-ethernet-device {
+  display: grid;
+  grid-template-columns: minmax(190px, .8fr) minmax(320px, 1.6fr) auto;
+  align-items: center;
+  min-width: 0;
+  gap: 16px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.system-ethernet-device:last-child { border-bottom: 0; }
+.system-ethernet-device[data-pending] { box-shadow: inset 3px 0 0 var(--warning); }
+.system-ethernet-device-heading { display: flex; align-items: center; min-width: 0; gap: 10px; }
+.system-ethernet-device-heading > div:last-child { min-width: 0; }
+
+.system-ethernet-device-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--subtle-bg);
+}
+
+.system-ethernet-device-icon[data-state="ready"] { color: var(--success-text); background: var(--success-bg); }
+.system-ethernet-device-icon[data-state="warning"] { color: var(--warning-text); background: var(--warning-bg); }
+.system-ethernet-device-icon[data-state="offline"] { color: var(--danger-text); background: var(--danger-bg); }
+.system-ethernet-device-title { flex-wrap: wrap; min-width: 0; gap: 5px; }
+.system-ethernet-device-title strong { color: var(--text); font-size: 13px; }
+
+.system-ethernet-device-heading small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--muted-2);
+  font-family: var(--code-font-family);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-ethernet-device-warning { margin-top: 5px; color: var(--warning-text); }
+
+.system-ethernet-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(90px, .6fr) minmax(0, 1fr);
+  min-width: 0;
+  margin: 0;
+  gap: 8px 14px;
+}
+
+.system-ethernet-facts > div { min-width: 0; }
+.system-ethernet-facts dt { color: var(--muted-2); font-size: 9.5px; font-weight: 800; text-transform: uppercase; }
+.system-ethernet-facts dd { margin: 4px 0 0; overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.system-ethernet-device-actions { justify-content: flex-end; min-width: 38px; gap: 7px; }
+.system-ethernet-device-actions > span { color: var(--warning-text); font-size: 10px; font-weight: 800; }
+.system-ethernet-modal-backdrop { z-index: 74; }
+
+.system-ethernet-dialog,
+.system-ethernet-confirm-dialog,
+.system-ethernet-countdown-dialog {
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100dvh - 36px));
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  border-top: 3px solid var(--accent);
+}
+
+.system-ethernet-confirm-dialog,
+.system-ethernet-countdown-dialog { width: min(520px, 100%); }
+
+.system-ethernet-dialog > header,
+.system-ethernet-confirm-dialog > header,
+.system-ethernet-countdown-dialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--accent-soft-bg);
+}
+
+.system-ethernet-dialog > header h2,
+.system-ethernet-confirm-dialog > header h2,
+.system-ethernet-countdown-dialog > header h2 { margin: 3px 0 0; color: var(--text); font-size: 18px; }
+.system-ethernet-dialog > header p { margin: 4px 0 0; color: var(--muted-2); font-family: var(--code-font-family); font-size: 10px; }
+
+.system-ethernet-dialog > form {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.system-ethernet-form {
+  display: grid;
+  min-height: 0;
+  gap: 14px;
+  overflow: auto;
+  padding: 18px;
+}
+
+.system-ethernet-toggle { display: inline-flex; align-items: center; width: fit-content; gap: 8px; color: var(--text); font-size: 12px; font-weight: 700; }
+.system-ethernet-family { min-width: 0; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 5px; }
+.system-ethernet-family legend { padding: 0 6px; color: var(--accent-soft-text); font-family: var(--code-font-family); font-size: 10px; font-weight: 800; }
+.system-ethernet-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+
+.system-ethernet-form-grid > label:not(.system-ethernet-toggle) {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.system-ethernet-form-grid > label.is-wide { grid-column: span 2; }
+.system-ethernet-form-grid input,
+.system-ethernet-form-grid select { width: 100%; min-width: 0; min-height: 35px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: var(--input-deep-bg); }
+.system-ethernet-form-error { margin: 0; color: var(--danger-text); font-size: 11px; }
+
+.system-ethernet-dialog-actions,
+.system-ethernet-confirm-dialog > footer,
+.system-ethernet-countdown-dialog > footer { justify-content: flex-end; gap: 8px; padding: 13px 18px; border-top: 1px solid var(--line-soft); background: var(--surface); }
+.system-ethernet-confirm-body { display: flex; align-items: flex-start; gap: 12px; padding: 20px 18px; color: var(--warning-text); }
+.system-ethernet-confirm-body p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.system-ethernet-countdown { min-width: 64px; color: var(--warning-text); font-family: var(--code-font-family); font-size: 24px; font-weight: 800; text-align: right; }
+
+@container system-ethernet-section (max-width: 860px) {
+  .system-ethernet-device { grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.4fr) auto; }
+  .system-ethernet-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container system-ethernet-section (max-width: 620px) {
+  .system-ethernet-header,
+  .system-ethernet-device { align-items: stretch; grid-template-columns: minmax(0, 1fr); }
+  .system-ethernet-header { display: grid; }
+  .system-ethernet-actions { justify-content: flex-start; }
+  .system-ethernet-device-actions { justify-content: space-between; }
+}
+
+@media (max-width: 560px) {
+  .system-ethernet-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 390px) {
+  .system-ethernet-form-grid,
+  .system-ethernet-facts { grid-template-columns: minmax(0, 1fr); }
+  .system-ethernet-form-grid > label.is-wide { grid-column: auto; }
+  .system-ethernet-dialog-actions,
+  .system-ethernet-confirm-dialog > footer,
+  .system-ethernet-countdown-dialog > footer { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .system-ethernet-dialog-actions button,
+  .system-ethernet-confirm-dialog > footer button,
+  .system-ethernet-countdown-dialog > footer button { width: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .download-task-row,
   .download-task-icon,

@@ -18,6 +18,7 @@ import {
   createSession,
   createUserMessageAndJob,
   ensureNasRoots,
+  finishBackupRun,
   finishIndexRun,
   getApproval,
   getDockerSettings,
@@ -39,6 +40,7 @@ import {
   openSigmaDb,
   recordIndexFailure,
   saveDockerSettings,
+  startBackupRun,
   startIndexRun,
   upsertIndexedFile,
   upsertHealthAlert,
@@ -62,6 +64,9 @@ import type {
   ShareApplyRequest,
   ShareApplyResult,
   SigmaConfig,
+  SystemEthernetApplyTransaction,
+  SystemEthernetStatus,
+  SystemEthernetUpdateInput,
   SystemPowerAction,
   SystemPowerResult,
   SystemWifiConnectInput,
@@ -78,9 +83,10 @@ import { DockerComposeService, type DockerComposeRuntime } from "./lib/docker-co
 import { DockerRequestError, type DockerEngineRuntime, type DockerExecStream } from "./lib/docker-client.js";
 import { DockerDaemonRequestError, type DockerDaemonRuntime } from "./lib/docker-daemon.js";
 import type { NetworkManagerRuntime } from "./lib/network-manager.js";
+import { EthernetManagerRequestError, type EthernetManagerRuntime } from "./lib/ethernet-manager.js";
 import { SystemPowerRequestError, type SystemPowerRuntime } from "./lib/power-management.js";
 import { streamDockerDaemonEvents } from "./routes/docker.js";
-import { streamWifiEvents } from "./routes/system.js";
+import { streamEthernetEvents, streamWifiEvents } from "./routes/system.js";
 import type { SystemCommandRunner } from "./lib/system-management.js";
 import { buildServer as buildApiServer, type ServerDependencies } from "./server.js";
 
@@ -344,6 +350,16 @@ describe("API server", () => {
       code: "backup_failed",
       severity: "critical",
       details: "latest backup failed"
+    });
+    const failedBackup = startBackupRun(db, {
+      kind: "daily",
+      now: new Date(Date.now() - 60_000)
+    });
+    finishBackupRun(db, {
+      runId: failedBackup.id,
+      status: "failed",
+      error: "latest backup failed",
+      finishedAt: new Date(Date.now() - 59_000)
     });
     const config = {
       ...testConfig(tempDir),
@@ -1225,6 +1241,30 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("reports carrier without an address as up instead of connected", async () => {
+    const commandRunner = new FakeSystemCommandRunner({
+      "ip -j link": JSON.stringify([{
+        ifindex: 2,
+        ifname: "eth0",
+        flags: ["BROADCAST", "MULTICAST", "UP", "LOWER_UP"],
+        mtu: 1500,
+        operstate: "UP",
+        link_type: "ether",
+        address: "2c:cf:67:c9:68:07"
+      }]),
+      "ip -j addr": JSON.stringify([{ ifname: "eth0", addr_info: [] }]),
+      "ip -j route": "[]",
+      "systemctl is-active systemd-networkd.service": "active\n"
+    });
+    const server = await buildServer({ config: testConfig(tempDir), db, system: { commandRunner } });
+    const response = await server.inject({ method: "GET", url: "/api/system/network" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().network.interfaces).toEqual([expect.objectContaining({ name: "eth0", state: "up", addresses: [] })]);
+    expect(response.json().network.metrics.connected).toBe(0);
+    await server.close();
+  });
+
   it("keeps interface data when the Wi-Fi summary fails", async () => {
     const commandRunner = new FakeSystemCommandRunner({
       "ip -j link": JSON.stringify([
@@ -1250,7 +1290,12 @@ describe("API server", () => {
     });
     const networkManager = new FakeNetworkManager();
     networkManager.summaryError = new Error("nmcli failed: password=do-not-leak");
-    const server = await buildServer({ config: testConfig(tempDir), db, system: { commandRunner, networkManager } });
+    const ethernetManager = new FakeEthernetManager();
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      system: { commandRunner, networkManager, ethernetManager }
+    });
 
     const response = await server.inject({ method: "GET", url: "/api/system/network" });
 
@@ -1259,7 +1304,14 @@ describe("API server", () => {
       network: {
         status: "partial",
         interfaces: [expect.objectContaining({ name: "eth0", state: "connected" })],
+        ethernet: { backend: "NetworkManager", hostdReady: true },
         wifi: { backend: "unknown", hostdReady: false, devices: [] },
+        capabilities: {
+          backend: "NetworkManager",
+          hostdReady: true,
+          canApplyConfiguration: true,
+          canManageEthernet: false
+        },
         issues: [expect.objectContaining({ source: "Wi-Fi status" })]
       }
     });
@@ -1387,6 +1439,62 @@ describe("API server", () => {
       closeSignal.emit("close");
       await vi.advanceTimersByTimeAsync(500);
       expect(networkManager.statusCalls).toBe(callsAtClose);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("serves Ethernet status and the save/apply/confirm/rollback lifecycle", async () => {
+    const ethernetManager = new FakeEthernetManager();
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      system: { commandRunner: new FakeSystemCommandRunner({}), ethernetManager }
+    });
+
+    const status = await server.inject({ method: "GET", url: "/api/system/network/ethernet" });
+    const saved = await server.inject({
+      method: "PUT",
+      url: "/api/system/network/ethernet/2ccf67c96807",
+      payload: { config: testEthernetConfig(), expectedRevision: "a".repeat(64) }
+    });
+    const unconfirmed = await server.inject({ method: "POST", url: "/api/system/network/ethernet/apply", payload: { confirmed: false } });
+    const applied = await server.inject({ method: "POST", url: "/api/system/network/ethernet/apply", payload: { confirmed: true } });
+    const transactionId = applied.json().transaction.id as string;
+    const confirmed = await server.inject({ method: "POST", url: `/api/system/network/ethernet/apply/${transactionId}/confirm` });
+    const rolledBack = await server.inject({ method: "POST", url: `/api/system/network/ethernet/apply/${transactionId}/rollback` });
+
+    expect(status.statusCode).toBe(200);
+    expect(saved.statusCode).toBe(200);
+    expect(unconfirmed.statusCode).toBe(400);
+    expect(applied.statusCode).toBe(202);
+    expect(confirmed.json().transaction.status).toBe("confirmed");
+    expect(rolledBack.json().transaction.status).toBe("rolled_back");
+    expect(ethernetManager.saved).toEqual(["2ccf67c96807"]);
+    await server.close();
+  });
+
+  it("streams changed Ethernet states, heartbeats, and stops on close", async () => {
+    vi.useFakeTimers();
+    try {
+      const ethernetManager = new FakeEthernetManager();
+      const closeSignal = new EventEmitter();
+      const chunks: string[] = [];
+      await streamEthernetEvents(closeSignal, { write: (chunk) => chunks.push(chunk) }, ethernetManager, { sampleMs: 100, heartbeatMs: 250 });
+
+      expect(chunks.join("")).toContain("retry: 2000");
+      expect(chunks.filter((chunk) => chunk === "event: system.ethernet.status\n")).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(chunks.filter((chunk) => chunk === "event: system.ethernet.status\n")).toHaveLength(1);
+      ethernetManager.status.warnings = ["route warning"];
+      await vi.advanceTimersByTimeAsync(100);
+      expect(chunks.filter((chunk) => chunk === "event: system.ethernet.status\n")).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(chunks).toContain(": heartbeat\n\n");
+      const callsAtClose = ethernetManager.statusCalls;
+      closeSignal.emit("close");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(ethernetManager.statusCalls).toBe(callsAtClose);
     } finally {
       vi.useRealTimers();
     }
@@ -5104,6 +5212,62 @@ class FakeSystemPowerRuntime implements SystemPowerRuntime {
     this.actions.push(action);
     if (this.error) throw this.error;
     return { action, accepted: true };
+  }
+}
+
+function testEthernetConfig(): SystemEthernetUpdateInput["config"] {
+  return {
+    enabled: true,
+    ipv4: { mode: "dhcp", address: null, prefixLength: null, gateway: null, dnsMode: "automatic", dns: [], useDefaultRoute: true, routeMetric: 100 },
+    ipv6: { mode: "automatic", address: null, prefixLength: null, gateway: null, dnsMode: "automatic", dns: [], useDefaultRoute: false, routeMetric: 600 }
+  };
+}
+
+class FakeEthernetManager implements EthernetManagerRuntime {
+  statusCalls = 0;
+  saved: string[] = [];
+  status: SystemEthernetStatus = {
+    collectedAt: "2026-10-12T00:00:00.000Z",
+    backend: "NetworkManager",
+    hostdReady: true,
+    devices: [],
+    transaction: null,
+    warnings: []
+  };
+
+  async getStatus(): Promise<SystemEthernetStatus> {
+    this.statusCalls += 1;
+    return structuredClone(this.status);
+  }
+
+  async save(deviceId: string, _input: SystemEthernetUpdateInput): Promise<SystemEthernetStatus> {
+    this.saved.push(deviceId);
+    return this.getStatus();
+  }
+
+  async apply(confirmed: boolean): Promise<SystemEthernetApplyTransaction> {
+    if (!confirmed) throw new EthernetManagerRequestError("Ethernet apply confirmation is required", 400);
+    return this.transaction("awaiting_confirmation");
+  }
+
+  async confirm(_transactionId: string): Promise<SystemEthernetApplyTransaction> {
+    return this.transaction("confirmed");
+  }
+
+  async rollback(_transactionId: string): Promise<SystemEthernetApplyTransaction> {
+    return { ...this.transaction("rolled_back"), rollback: "succeeded" };
+  }
+
+  private transaction(status: SystemEthernetApplyTransaction["status"]): SystemEthernetApplyTransaction {
+    return {
+      id: "550e8400-e29b-41d4-a716-446655440010",
+      status,
+      deviceIds: ["2ccf67c96807"],
+      createdAt: "2026-10-12T00:00:00.000Z",
+      deadlineAt: status === "awaiting_confirmation" ? "2026-10-12T00:01:30.000Z" : null,
+      rollback: "not_required",
+      error: null
+    };
   }
 }
 

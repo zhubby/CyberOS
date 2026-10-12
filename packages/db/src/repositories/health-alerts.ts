@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import type {
   HealthAlertSeverity,
   HealthAlertStatus,
-  IndexerAlert
+  IndexerAlert,
+  SystemHealthSummary
 } from "@sigmaos/shared";
 import type { SigmaDatabase } from "../connection.js";
 import type { DbAlertRow } from "./repository-rows.js";
@@ -32,6 +33,49 @@ export function listHealthAlerts(db: SigmaDatabase, input: { status?: HealthAler
     ? db.prepare("SELECT id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts WHERE status = ? ORDER BY last_seen_at DESC LIMIT ?").all(input.status, input.limit ?? 100)
     : db.prepare("SELECT id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts ORDER BY last_seen_at DESC LIMIT ?").all(input.limit ?? 100);
   return (rows as DbAlertRow[]).map(mapAlert);
+}
+
+export function reconcileHealthAlerts(
+  db: SigmaDatabase,
+  input: {
+    ownedCodes: readonly string[];
+    issues: SystemHealthSummary["issues"];
+    now?: Date;
+  }
+): void {
+  const now = input.now ?? new Date();
+  const ownedCodes = new Set(input.ownedCodes);
+  const current = new Map<string, SystemHealthSummary["issues"][number]>();
+  for (const issue of input.issues) {
+    if (!ownedCodes.has(issue.code)) continue;
+    current.set(`${issue.code}:${issue.rootId ?? "system"}`, issue);
+  }
+
+  const reconcile = db.transaction(() => {
+    for (const issue of current.values()) {
+      upsertHealthAlert(db, {
+        code: issue.code,
+        scope: issue.rootId ?? "system",
+        rootId: issue.rootId ?? null,
+        severity: issue.severity,
+        details: issue.message,
+        now
+      });
+    }
+
+    if (input.ownedCodes.length === 0) return;
+    const placeholders = input.ownedCodes.map(() => "?").join(", ");
+    const activeRows = db.prepare(`
+      SELECT code, scope FROM health_alerts
+      WHERE status = 'active' AND code IN (${placeholders})
+    `).all(...input.ownedCodes) as Array<{ code: string; scope: string }>;
+    for (const row of activeRows) {
+      if (!current.has(`${row.code}:${row.scope}`)) {
+        resolveHealthAlert(db, { code: row.code, scope: row.scope, now });
+      }
+    }
+  });
+  reconcile.immediate();
 }
 
 function mapAlert(row: DbAlertRow): IndexerAlert {

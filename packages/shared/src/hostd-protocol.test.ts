@@ -20,6 +20,15 @@ const networkMutation = {
   message: null
 } as const;
 
+const ethernetStatus = {
+  collectedAt: "2026-10-10T00:00:00Z",
+  backend: "NetworkManager",
+  hostdReady: true,
+  devices: [],
+  transaction: null,
+  warnings: []
+} as const;
+
 describe("hostd protocol", () => {
   it("parses results for every top-level operation", () => {
     const sharesRequest: HostdRequest<"shares.apply"> = {
@@ -139,6 +148,7 @@ describe("hostd protocol", () => {
       }
     } as const;
     expect(parseHostdResult("network.manager", { action: "inspect" }, inspection)).toEqual(inspection);
+    expect(parseHostdResult("network.manager", { action: "ethernet_status" }, ethernetStatus)).toEqual(ethernetStatus);
 
     const scan = {
       device: "wlan0",
@@ -171,6 +181,17 @@ describe("hostd protocol", () => {
     for (const request of mutations) {
       expect(parseHostdResult("network.manager", request, networkMutation)).toEqual(networkMutation);
     }
+
+    const transaction = {
+      id: "550e8400-e29b-41d4-a716-446655440010",
+      status: "awaiting_confirmation",
+      deviceIds: ["2ccf67c96807"],
+      createdAt: "2026-10-10T00:00:00Z",
+      deadlineAt: "2026-10-10T00:01:30Z",
+      rollback: "not_required",
+      error: null
+    } as const;
+    expect(parseHostdResult("network.manager", { action: "ethernet_apply", confirmed: true }, transaction)).toEqual(transaction);
   });
 
   it("rejects mismatched, out-of-range, and non-exact result shapes", () => {
@@ -217,7 +238,7 @@ describe("hostd protocol", () => {
     const fixtures = JSON.parse(await readFile(new URL("../fixtures/hostd-protocol-v1.json", import.meta.url), "utf8")) as {
       contracts: HostdFixtureContract[];
     };
-    expect(fixtures.contracts).toHaveLength(20);
+    expect(fixtures.contracts).toHaveLength(27);
     for (const contract of fixtures.contracts) {
       expect(parseFixtureContract(contract)).toEqual(contract.result);
     }
@@ -225,7 +246,7 @@ describe("hostd protocol", () => {
 });
 
 interface HostdFixtureContract {
-  operation: "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "system.power";
+  operation: "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "system.power" | "system.ops";
   request: unknown;
   result: unknown;
 }
@@ -244,5 +265,7 @@ function parseFixtureContract(contract: HostdFixtureContract): unknown {
       return parseHostdResult(contract.operation, contract.request as HostdRequest<"network.manager">, contract.result);
     case "system.power":
       return parseHostdResult(contract.operation, contract.request as HostdRequest<"system.power">, contract.result);
+    case "system.ops":
+      return parseHostdResult(contract.operation, contract.request as HostdRequest<"system.ops">, contract.result);
   }
 }

@@ -4,7 +4,7 @@ description: API 传输面、端点分组和稳定契约。
 type: reference
 status: current
 audience: [developer]
-sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photostaff.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/web/src/api.ts]
+sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photostaff.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
 sidebar:
   order: 2
 ---
@@ -35,6 +35,15 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由 Rust photostaff 
 
 - `POST /api/system/power` 接收 `{ action: "reboot" | "shutdown", confirmed: true }`。请求通过 hostd 转交 systemd 正常停止服务、同步并卸载文件系统，成功排队返回 `202` 与 `{ result: { action, accepted: true } }`。
 - API 不直接运行电源命令，也不在 hostd 不可用时降级执行。缺少确认或动作不受支持返回 `400`，hostd/系统服务不可用返回对应安全错误，且不接受任意命令、参数或 unit 名称。
+
+## 物理有线网口
+
+- `GET /api/system/network/ethernet` 返回按永久 MAC 标识的物理 Ethernet 设备、当前连接、活动与期望配置、接管状态、revision、待应用标记及当前应用事务。虚拟接口、Bond、Bridge、VLAN 和 controller port 不进入托管列表。
+- 状态会警告没有默认路由的地址族，以及位于同一子网但默认路由设置不对称的多个端口；后者允许保存，但响应流量可能从不同网口发出。高级或在读取后发生漂移的外部 profile 保持只读，不会被托管配置静默覆盖。
+- `PUT /api/system/network/ethernet/:id` 只保存期望配置，不改动实时网络；请求携带 `expectedRevision`。IPv4 支持关闭、DHCP、静态，IPv6 支持关闭、自动、静态；每族最多三个 DNS，默认路由 metric 为 `1..65535`，同族默认路由不能使用相同 metric。
+- `POST /api/system/network/ethernet/apply` 要求 `confirmed: true`，一次应用所有待生效网口并返回 `202`。成功后进入 90 秒确认窗口；`POST .../apply/:transactionId/confirm` 保留配置，`POST .../rollback` 立即恢复。
+- `GET /api/system/network/ethernet/events` 立即发送 `system.ethernet.status`，每秒采样、仅变化时推送、每 15 秒 heartbeat，并给出 2 秒重连提示。断线后的旧状态不是实时状态。
+- 应用使用 NetworkManager D-Bus checkpoint。超时、手工回滚、校验失败或 hostd 重启会恢复托管 keyfile 和运行连接。输入错误为 `400`，设备不存在为 `404`，revision、外部 profile 漂移或事务冲突为 `409`，应用/回滚失败为 `502`，NetworkManager、hostd 或 `busctl` 不可用为 `503`。
 
 ## Wi-Fi 与热点
 

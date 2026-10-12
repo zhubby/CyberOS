@@ -1,5 +1,5 @@
 name = "sigmaos-appliance"
-version = "0.9.19"
+version = "0.9.24"
 base_suite = "bookworm"
 target_arch = "arm64"
 
@@ -19,7 +19,6 @@ units = [
   "sigmaos-photostaff.service",
   "sigmaos-downloader.service",
   "sigmaos-indexer.service",
-  "sigmaos-scheduler.timer",
   "sigmaos-maintenance.timer",
   "sigmaos-backup-daily.timer",
   "sigmaos-backup-weekly.timer",

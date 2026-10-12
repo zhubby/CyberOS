@@ -91,8 +91,36 @@ describe("SQLite schema migrations", () => {
       "021_vm_direct_actions",
       "022_downloader_reliability",
       "023_photostaff_reliability",
-      "024_rust_indexer"
+      "024_rust_indexer",
+      "025_ops_runs"
     ]);
+  });
+
+  it("installs operations runner history and lifecycle indexes", () => {
+    const database = openSigmaDb(path.join(tempDir, "ops-runs.sqlite"));
+    try {
+      const columns = database.prepare("PRAGMA table_info(ops_runs)").all()
+        .map((column) => (column as { name: string }).name);
+      expect(columns).toEqual([
+        "id",
+        "task",
+        "status",
+        "started_at",
+        "heartbeat_at",
+        "finished_at",
+        "summary_json",
+        "error"
+      ]);
+      const indexes = database.prepare(`
+        SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'ops_runs'
+      `).pluck().all();
+      expect(indexes).toEqual(expect.arrayContaining([
+        "idx_ops_runs_task_started_at",
+        "idx_ops_runs_status_heartbeat"
+      ]));
+    } finally {
+      database.close();
+    }
   });
 
   it("installs the Rust indexer queue, content state, FTS, worker, and root state", () => {

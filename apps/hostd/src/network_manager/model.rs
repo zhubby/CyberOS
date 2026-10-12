@@ -11,6 +11,7 @@ pub(super) const MANAGED_PREFIX: &str = "sigmaos-";
 pub struct NetworkOptions {
     pub connections_dir: PathBuf,
     pub state_dir: PathBuf,
+    pub sys_class_net: PathBuf,
 }
 
 impl Default for NetworkOptions {
@@ -18,6 +19,7 @@ impl Default for NetworkOptions {
         Self {
             connections_dir: CONNECTIONS_DIR.into(),
             state_dir: STATE_DIR.into(),
+            sys_class_net: "/sys/class/net".into(),
         }
     }
 }
@@ -32,6 +34,7 @@ impl Default for NetworkOptions {
 pub(crate) enum NetworkRequest {
     Ping,
     Inspect,
+    EthernetStatus,
     Scan {
         input: ScanInput,
     },
@@ -65,6 +68,22 @@ pub(crate) enum NetworkRequest {
     },
     DeleteHotspot {
         input: ConfirmedDeviceInput,
+    },
+    EthernetSave {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        input: EthernetUpdateInput,
+    },
+    EthernetApply {
+        confirmed: bool,
+    },
+    EthernetConfirm {
+        #[serde(rename = "transactionId")]
+        transaction_id: String,
+    },
+    EthernetRollback {
+        #[serde(rename = "transactionId")]
+        transaction_id: String,
     },
 }
 
@@ -157,7 +176,7 @@ pub(crate) struct HotspotUpdateInput {
     pub(super) confirmed: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(
     test,
@@ -179,6 +198,123 @@ pub(crate) enum RollbackStatus {
 pub(crate) struct MutationResult {
     pub(super) rollback: RollbackStatus,
     pub(super) message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdEthernetIpv4Config"))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EthernetIpv4Config {
+    pub(super) mode: String,
+    pub(super) address: Option<String>,
+    pub(super) prefix_length: Option<u8>,
+    pub(super) gateway: Option<String>,
+    pub(super) dns_mode: String,
+    pub(super) dns: Vec<String>,
+    pub(super) use_default_route: bool,
+    pub(super) route_metric: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdEthernetIpv6Config"))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EthernetIpv6Config {
+    pub(super) mode: String,
+    pub(super) address: Option<String>,
+    pub(super) prefix_length: Option<u8>,
+    pub(super) gateway: Option<String>,
+    pub(super) dns_mode: String,
+    pub(super) dns: Vec<String>,
+    pub(super) use_default_route: bool,
+    pub(super) route_metric: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdEthernetConfig"))]
+pub(crate) struct EthernetConfig {
+    pub(super) enabled: bool,
+    pub(super) ipv4: EthernetIpv4Config,
+    pub(super) ipv6: EthernetIpv6Config,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdEthernetUpdateInput"))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EthernetUpdateInput {
+    pub(super) config: EthernetConfig,
+    pub(super) expected_revision: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdEthernetAddress"))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EthernetAddress {
+    pub(super) family: String,
+    pub(super) address: String,
+    pub(super) prefix_length: Option<u8>,
+    pub(super) cidr: Option<String>,
+    pub(super) scope: Option<String>,
+    pub(super) label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdEthernetDevice"))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EthernetDevice {
+    pub(super) id: String,
+    pub(super) name: String,
+    pub(super) permanent_mac: String,
+    pub(super) mac: String,
+    pub(super) driver: Option<String>,
+    pub(super) speed_mbps: Option<u32>,
+    pub(super) carrier: bool,
+    pub(super) state: String,
+    pub(super) addresses: Vec<EthernetAddress>,
+    pub(super) ipv4_gateway: Option<String>,
+    pub(super) ipv6_gateway: Option<String>,
+    pub(super) active_profile_id: Option<String>,
+    pub(super) active_profile_name: Option<String>,
+    pub(super) management_state: String,
+    pub(super) active_config: Option<EthernetConfig>,
+    pub(super) desired_config: Option<EthernetConfig>,
+    pub(super) revision: String,
+    pub(super) needs_apply: bool,
+    pub(super) warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(
+    test,
+    ts(export_to = "hostd.ts", rename = "HostdEthernetApplyTransaction")
+)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EthernetApplyTransaction {
+    pub(super) id: String,
+    pub(super) status: String,
+    pub(super) device_ids: Vec<String>,
+    pub(super) created_at: String,
+    pub(super) deadline_at: Option<String>,
+    pub(super) rollback: RollbackStatus,
+    pub(super) error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdEthernetStatus"))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EthernetStatus {
+    pub(super) collected_at: String,
+    pub(super) backend: String,
+    pub(super) hostd_ready: bool,
+    pub(super) devices: Vec<EthernetDevice>,
+    pub(super) transaction: Option<EthernetApplyTransaction>,
+    pub(super) warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -289,4 +425,6 @@ pub(crate) enum NetworkResult {
     Inspection(InspectionResult),
     Scan(ScanResult),
     Mutation(MutationResult),
+    EthernetStatus(EthernetStatus),
+    EthernetTransaction(EthernetApplyTransaction),
 }

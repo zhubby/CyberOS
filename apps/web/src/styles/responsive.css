@@ -83,6 +83,15 @@
     justify-self: stretch;
   }
 
+  .settings-operations-task {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .settings-operations-run-button {
+    grid-column: 2;
+    width: 100%;
+  }
+
   .settings-docker-runtime-grid {
     grid-template-columns: 1fr;
   }
@@ -325,6 +334,38 @@
 }
 
 @media (max-width: 620px) {
+  .settings-operations-task-main dl {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-operations-tabs {
+    overflow-x: auto;
+  }
+
+  .settings-operations-tabs button {
+    flex: 1 0 88px;
+  }
+
+  .settings-operations-run {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .settings-operations-run-result {
+    grid-column: 2;
+    justify-self: start;
+    text-align: left;
+  }
+
+  .settings-ops-confirm-dialog > footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-ops-confirm-dialog > footer button {
+    width: 100%;
+    min-width: 0;
+  }
+
   .management-dialog-backdrop {
     padding: 10px;
   }

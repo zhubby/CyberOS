@@ -4,20 +4,22 @@ description: Job、approval、operation、index、backup 和可用能力的当�
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/shared/src/types.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, packages/db/src/repositories/approval-status.ts, packages/db/src/repositories/index-run-status.ts, packages/db/src/repositories/backup-runs.ts]
+sourceOfTruth: [packages/shared/src/types.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, packages/db/src/repositories/approval-status.ts, packages/db/src/repositories/index-run-status.ts, packages/db/src/repositories/backup-runs.ts]
 sidebar:
   order: 4
 ---
 
 Job 状态包括 `queued`、`running`、`waiting_approval`、`completed`、`failed`、`cancelled`；approval 包括 `pending`、`approved`、`rejected`、`expired`、`applied`、`failed`；文件 operation 记录 proposed、applied、rolled_back、failed。
 
-当前已实现文件浏览、预览、上传、编辑、归档检查、搜索、照片完整标量元数据索引与多维查询、本地栅格 PMTiles 地图、视频播放、RAW 预览、XMP sidecar 联动、agent 只读照片查询、approval、trash/restore、Docker/VM/share/terminal 控制、NetworkManager Wi-Fi/热点控制、indexer、restic backup 和健康 API。
+当前已实现文件浏览、预览、上传、编辑、归档检查、搜索、照片完整标量元数据索引与多维查询、本地栅格 PMTiles 地图、视频播放、RAW 预览、XMP sidecar 联动、agent 只读照片查询、approval、trash/restore、Docker/VM/share/terminal 控制、NetworkManager 物理 Ethernet/Wi-Fi/热点控制、indexer、restic backup 和健康 API。
 
 照片能力不支持在线地图、矢量 PMTiles、地理编码、人物识别、语义图像搜索、手动相册、分享链接、媒体编辑或元数据写回。原媒体与 sidecar 不被修改，WebP 衍生图不保留元数据；“完整元数据”指防御性限额内的全部标量标签，不包含 MakerNote、嵌入缩略图和二进制负载。Agent 可按位置筛选，但结果不会向云模型返回精确 GPS、序列号、联系信息或人物区域。
 
 ## 网络后端与无线能力
 
 接口、地址和路由始终来自内核 `ip` 数据；网络配置后端单独检测。NetworkManager 正常运行时，`canManageWifi` 要求 root `sigmaos-hostd` 可用且至少存在一个无线设备；`canManageHotspot` 还要求设备声明 AP 能力。其他后端继续只读，界面不会把未知后端伪装为 `systemd-networkd`。
+
+`canManageEthernet` 还要求至少一个独立物理 Ethernet 设备。链路有载波但尚无地址时通用接口状态为 `up`，只有取得地址后才是 `connected`。Ethernet 的 daemon/backend 可用性、单口链路与地址、托管状态以及 90 秒应用事务分别展示，不能互相代替。
 
 无线设备状态通过 `system.wifi.status` SSE 独立更新。SSE 断开时界面显示 `reconnecting`，不把旧状态当作实时状态。扫描是显式请求，保留 BSSID 级结果；界面按 SSID 和安全模式分组并默认使用最强 AP。
 
