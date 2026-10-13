@@ -1,14 +1,14 @@
 {
   "name": "@sigmaos/system-health",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@sigmaos/db": "0.10.4",
-    "@sigmaos/nas-tools": "0.10.4",
-    "@sigmaos/shared": "0.10.4"
+    "@sigmaos/db": "0.10.5",
+    "@sigmaos/nas-tools": "0.10.5",
+    "@sigmaos/shared": "0.10.5"
   }
 }

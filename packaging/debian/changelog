@@ -1,3 +1,9 @@
+sigmaos (0.10.5) unstable; urgency=medium
+
+  * Add first-load skeletons for Terminal, Downloads, and Photos.
+
+ -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 23:18:26 +0000
+
 sigmaos (0.10.4) unstable; urgency=medium
 
   * Package the MapLibre worker so the Photos map loads without browser worker errors.
