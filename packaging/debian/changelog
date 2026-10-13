@@ -1,3 +1,9 @@
+sigmaos (0.10.4) unstable; urgency=medium
+
+  * Package the MapLibre worker so the Photos map loads without browser worker errors.
+
+ -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 09:54:21 +0000
+
 sigmaos (0.10.3) unstable; urgency=medium
 
   * Keep core systemd timers active after upgrades and verify Operations Health before completing CM5 deployments.
