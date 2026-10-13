@@ -35,36 +35,36 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  createPhotostaffExport,
-  getPhotostaffMetadata,
-  getPhotostaffMetadataFields,
-  getPhotostaffRecord,
-  getPhotostaffLibrarySettings,
-  getPhotostaffStatus,
-  proposePhotostaffOperation,
-  queryPhotostaff,
-  requestPhotostaffScan,
-  uploadPhotostaff,
-  type PhotostaffAsset,
-  type PhotostaffMetadataDetail,
-  type PhotostaffMetadataField,
-  type PhotostaffQueryAsset,
-  type PhotostaffLibrarySettings,
-  type PhotostaffLibraryStatus,
-  type PhotostaffWorkerHealth
+  createPhotoExport,
+  getPhotoMetadata,
+  getPhotoMetadataFields,
+  getPhotoRecord,
+  getPhotoLibrarySettings,
+  getPhotoStatus,
+  proposePhotoOperation,
+  queryPhotos,
+  requestPhotoScan,
+  uploadPhoto,
+  type PhotoAsset,
+  type PhotoMetadataDetail,
+  type PhotoMetadataField,
+  type PhotoQueryAsset,
+  type PhotoLibrarySettings,
+  type PhotoLibraryStatus,
+  type PhotoWorkerHealth
 } from "../../api.js";
 import {
   PHOTOSTAFF_UPLOAD_EXTENSIONS,
   PHOTOSTAFF_XMP_EXTENSION,
-  photostaffExtension,
-  photostaffMediaKind,
-  type PhotostaffMediaKind
+  photoExtension,
+  photoMediaKind,
+  type PhotoMediaKind
 } from "@sigmaos/shared/photostaff-config";
 import type {
-  PhotostaffMetadataCondition,
-  PhotostaffQueryFacets,
-  PhotostaffQueryFilters,
-  PhotostaffQuerySortField
+  PhotoMetadataCondition,
+  PhotoQueryFacets,
+  PhotoQueryFilters,
+  PhotoQuerySortField
 } from "@sigmaos/shared";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -73,11 +73,11 @@ import {
   StorageFilePickerDialog,
   type StorageFilePickerPool
 } from "./StorageFilePickerDialog.js";
-import { PhotostaffMapView } from "./PhotostaffMapView.js";
+import { PhotoMapView } from "./PhotoMapView.js";
 
-export const PHOTOSTAFF_ACCEPT = PHOTOSTAFF_UPLOAD_EXTENSIONS.join(",");
+export const PHOTO_ACCEPT = PHOTOSTAFF_UPLOAD_EXTENSIONS.join(",");
 
-export function PhotostaffLibraryPanel({
+export function PhotoLibraryPanel({
   pools,
   selectedRootId,
   sessionId,
@@ -106,21 +106,21 @@ export function PhotostaffLibraryPanel({
   onNotifyWarning: (message: string | null) => void;
 }) {
   const { t } = useTranslation();
-  const [settings, setSettings] = useState<PhotostaffLibrarySettings | null>(null);
-  const [status, setStatus] = useState<PhotostaffLibraryStatus | null>(null);
-  const [workerHealth, setWorkerHealth] = useState<PhotostaffWorkerHealth | null>(null);
+  const [settings, setSettings] = useState<PhotoLibrarySettings | null>(null);
+  const [status, setStatus] = useState<PhotoLibraryStatus | null>(null);
+  const [workerHealth, setWorkerHealth] = useState<PhotoWorkerHealth | null>(null);
   const [clock, setClock] = useState(() => Date.now());
-  const [photostaff, setPhotostaff] = useState<PhotostaffQueryAsset[]>([]);
+  const [photos, setPhotos] = useState<PhotoQueryAsset[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const [facets, setFacets] = useState<PhotostaffQueryFacets | null>(null);
-  const [filters, setFilters] = useState<PhotostaffQueryFilters>({});
-  const [sortField, setSortField] = useState<PhotostaffQuerySortField>("captured_at");
+  const [facets, setFacets] = useState<PhotoQueryFacets | null>(null);
+  const [filters, setFilters] = useState<PhotoQueryFilters>({});
+  const [sortField, setSortField] = useState<PhotoQuerySortField>("captured_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [view, setView] = useState<"timeline" | "map">("timeline");
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [metadataFields, setMetadataFields] = useState<PhotostaffMetadataField[]>([]);
-  const [metadata, setMetadata] = useState<PhotostaffMetadataDetail | null>(null);
+  const [metadataFields, setMetadataFields] = useState<PhotoMetadataField[]>([]);
+  const [metadata, setMetadata] = useState<PhotoMetadataDetail | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [sensitiveRevealed, setSensitiveRevealed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -143,18 +143,18 @@ export function PhotostaffLibraryPanel({
   const metadataRequestRef = useRef(0);
 
   const configuredPool = pools.find((pool) => pool.id === settings?.storagePoolId) ?? null;
-  const selected = photostaff.filter((photostaff) => selectedIds.has(photostaff.id));
-  const groupedPhotostaff = useMemo(() => groupPhotostaffByDate(photostaff, locale), [locale, photostaff]);
-  const lightboxIndex = lightboxId ? photostaff.findIndex((photostaff) => photostaff.id === lightboxId) : -1;
-  const lightboxPhotostaff = lightboxIndex >= 0 ? photostaff[lightboxIndex] ?? null : null;
-  const lightboxMediaKind = lightboxPhotostaff ? photostaffMediaKindForAsset(lightboxPhotostaff) : null;
+  const selected = photos.filter((photo) => selectedIds.has(photo.id));
+  const groupedPhotos = useMemo(() => groupPhotosByDate(photos, locale), [locale, photos]);
+  const lightboxIndex = lightboxId ? photos.findIndex((photo) => photo.id === lightboxId) : -1;
+  const lightboxPhoto = lightboxIndex >= 0 ? photos[lightboxIndex] ?? null : null;
+  const lightboxMediaKind = lightboxPhoto ? photoMediaKindForAsset(lightboxPhoto) : null;
   const canPropose = Boolean(sessionId && settings?.rootId === selectedRootId);
-  const statusBusy = isPhotostaffBusy(status?.state);
-  const queryFilters = useMemo(() => readyPhotostaffQueryFilters(filters, metadataFields), [filters, metadataFields]);
+  const statusBusy = isPhotoBusy(status?.state);
+  const queryFilters = useMemo(() => readyPhotoQueryFilters(filters, metadataFields), [filters, metadataFields]);
 
   const loadTimeline = useCallback(async (cursor: string | null = null) => {
     const requestId = cursor ? timelineRequestRef.current : ++timelineRequestRef.current;
-    const page = await queryPhotostaff({
+    const page = await queryPhotos({
       filters: queryFilters,
       sort: { field: sortField, direction: sortDirection },
       cursor,
@@ -162,7 +162,7 @@ export function PhotostaffLibraryPanel({
       includeFacets: !cursor
     });
     if (requestId !== timelineRequestRef.current) return;
-    setPhotostaff((current) => cursor ? mergePhotostaff(current, page.photostaff) : page.photostaff);
+    setPhotos((current) => cursor ? mergePhotos(current, page.photos) : page.photos);
     setNextCursor(page.nextCursor);
     setTotal(page.total);
     if (!cursor) setFacets(page.facets);
@@ -173,18 +173,18 @@ export function PhotostaffLibraryPanel({
     setLoadError(null);
     try {
       const [nextSettings, snapshot] = await Promise.all([
-        getPhotostaffLibrarySettings(),
-        getPhotostaffStatus()
+        getPhotoLibrarySettings(),
+        getPhotoStatus()
       ]);
       setSettings(nextSettings);
       setStatus(snapshot.status);
       setWorkerHealth(snapshot.workerHealth);
       if (nextSettings) {
-        const [, fields] = await Promise.all([loadTimeline(), getPhotostaffMetadataFields()]);
-        setMetadataFields((current) => samePhotostaffMetadataFields(current, fields) ? current : fields);
+        const [, fields] = await Promise.all([loadTimeline(), getPhotoMetadataFields()]);
+        setMetadataFields((current) => samePhotoMetadataFields(current, fields) ? current : fields);
       }
       else {
-        setPhotostaff([]);
+        setPhotos([]);
         setNextCursor(null);
         setTotal(0);
         setFacets(null);
@@ -209,9 +209,9 @@ export function PhotostaffLibraryPanel({
     const poll = async (): Promise<void> => {
       let nextBusy = statusBusy;
       try {
-        const snapshot = await getPhotostaffStatus();
+        const snapshot = await getPhotoStatus();
         if (!active) return;
-        nextBusy = isPhotostaffBusy(snapshot.status.state);
+        nextBusy = isPhotoBusy(snapshot.status.state);
         const timelineChanged = snapshot.status.updatedAt !== status?.updatedAt;
         setStatus(snapshot.status);
         setWorkerHealth(snapshot.workerHealth);
@@ -236,22 +236,22 @@ export function PhotostaffLibraryPanel({
   }, [status?.nextRetryAt]);
 
   useEffect(() => {
-    setSelectedIds((current) => new Set([...current].filter((id) => photostaff.some((photostaff) => photostaff.id === id))));
-  }, [photostaff]);
+    setSelectedIds((current) => new Set([...current].filter((id) => photos.some((photo) => photo.id === id))));
+  }, [photos]);
 
   useEffect(() => {
-    if (!lightboxPhotostaff) return undefined;
+    if (!lightboxPhoto) return undefined;
     const previouslyFocused = lightboxTriggerRef.current;
     const frame = window.requestAnimationFrame(() => lightboxRef.current?.focus());
     return () => {
       window.cancelAnimationFrame(frame);
       if (previouslyFocused?.isConnected) window.requestAnimationFrame(() => previouslyFocused.focus());
     };
-  }, [lightboxPhotostaff]);
+  }, [lightboxPhoto]);
 
   useEffect(() => {
     const requestId = ++metadataRequestRef.current;
-    if (!lightboxPhotostaff) {
+    if (!lightboxPhoto) {
       setMetadata(null);
       setSensitiveRevealed(false);
       return undefined;
@@ -260,7 +260,7 @@ export function PhotostaffLibraryPanel({
     setMetadataLoading(true);
     setMetadata(null);
     setSensitiveRevealed(false);
-    void getPhotostaffMetadata(lightboxPhotostaff.id).then((detail) => {
+    void getPhotoMetadata(lightboxPhoto.id).then((detail) => {
       if (active && requestId === metadataRequestRef.current) setMetadata(detail);
     }).catch((error) => {
       if (active) onNotifyError(errorMessage(error));
@@ -268,7 +268,7 @@ export function PhotostaffLibraryPanel({
       if (active && requestId === metadataRequestRef.current) setMetadataLoading(false);
     });
     return () => { active = false; };
-  }, [lightboxPhotostaff, onNotifyError]);
+  }, [lightboxPhoto, onNotifyError]);
 
   useEffect(() => {
     if (!deleteOpen) return undefined;
@@ -284,11 +284,11 @@ export function PhotostaffLibraryPanel({
     if (!settings || busyAction) return;
     setBusyAction("scan");
     try {
-      await requestPhotostaffScan();
-      const snapshot = await getPhotostaffStatus();
+      await requestPhotoScan();
+      const snapshot = await getPhotoStatus();
       setStatus(snapshot.status);
       setWorkerHealth(snapshot.workerHealth);
-      onNotifySuccess(t("workspace.photostaff.scanQueued"));
+      onNotifySuccess(t("workspace.photos.scanQueued"));
     } catch (error) {
       onNotifyError(errorMessage(error));
     } finally {
@@ -311,10 +311,10 @@ export function PhotostaffLibraryPanel({
   async function uploadFiles(files: File[]) {
     if (!settings || !files.length || busyAction) return;
     const supported = files
-      .filter((file) => photostaffMediaKind(file.name) !== null || photostaffExtension(file.name) === PHOTOSTAFF_XMP_EXTENSION)
-      .sort((left, right) => Number(photostaffExtension(left.name) === PHOTOSTAFF_XMP_EXTENSION) - Number(photostaffExtension(right.name) === PHOTOSTAFF_XMP_EXTENSION));
+      .filter((file) => photoMediaKind(file.name) !== null || photoExtension(file.name) === PHOTOSTAFF_XMP_EXTENSION)
+      .sort((left, right) => Number(photoExtension(left.name) === PHOTOSTAFF_XMP_EXTENSION) - Number(photoExtension(right.name) === PHOTOSTAFF_XMP_EXTENSION));
     if (!supported.length) {
-      onNotifyWarning(t("workspace.photostaff.unsupportedUpload"));
+      onNotifyWarning(t("workspace.photos.unsupportedUpload"));
       return;
     }
     setBusyAction("upload");
@@ -322,19 +322,19 @@ export function PhotostaffLibraryPanel({
     const failures: string[] = [];
     for (const file of supported) {
       try {
-        await uploadPhotostaff(file, settings.path);
+        await uploadPhoto(file, settings.path);
         completed += 1;
       } catch (error) {
         failures.push(`${file.name}: ${errorMessage(error)}`);
       }
     }
-    if (completed) onNotifySuccess(t("workspace.photostaff.uploaded", { count: completed }));
+    if (completed) onNotifySuccess(t("workspace.photos.uploaded", { count: completed }));
     if (failures.length) onNotifyWarning(failures.slice(0, 3).join("\n"));
     try {
-      const snapshot = await getPhotostaffStatus();
+      const snapshot = await getPhotoStatus();
       setStatus(snapshot.status);
       setWorkerHealth(snapshot.workerHealth);
-      if (!isPhotostaffBusy(snapshot.status.state)) await loadTimeline();
+      if (!isPhotoBusy(snapshot.status.state)) await loadTimeline();
     } catch (error) {
       onNotifyError(errorMessage(error));
     } finally {
@@ -388,21 +388,21 @@ export function PhotostaffLibraryPanel({
   }
 
   function selectAllLoaded() {
-    setSelectedIds(selectedIds.size === photostaff.length ? new Set() : new Set(photostaff.map((photostaff) => photostaff.id)));
+    setSelectedIds(selectedIds.size === photos.length ? new Set() : new Set(photos.map((photo) => photo.id)));
   }
 
-  function openLightbox(photostaff: PhotostaffQueryAsset, trigger: HTMLElement) {
+  function openLightbox(photo: PhotoQueryAsset, trigger: HTMLElement) {
     lightboxTriggerRef.current = trigger;
     setZoom(1);
-    setLightboxId(photostaff.id);
+    setLightboxId(photo.id);
   }
 
   async function openMapAsset(assetId: string) {
-    let asset = photostaff.find((candidate) => candidate.id === assetId);
+    let asset = photos.find((candidate) => candidate.id === assetId);
     if (!asset) {
       try {
-        asset = await getPhotostaffRecord(assetId);
-        setPhotostaff((current) => mergePhotostaff(current, [asset!]));
+        asset = await getPhotoRecord(assetId);
+        setPhotos((current) => mergePhotos(current, [asset!]));
       } catch (error) {
         onNotifyError(errorMessage(error));
         return;
@@ -412,11 +412,11 @@ export function PhotostaffLibraryPanel({
   }
 
   async function revealSensitiveMetadata() {
-    if (!lightboxPhotostaff || metadataLoading) return;
+    if (!lightboxPhoto || metadataLoading) return;
     const requestId = ++metadataRequestRef.current;
     setMetadataLoading(true);
     try {
-      const detail = await getPhotostaffMetadata(lightboxPhotostaff.id, true);
+      const detail = await getPhotoMetadata(lightboxPhoto.id, true);
       if (requestId !== metadataRequestRef.current) return;
       setMetadata(detail);
       setSensitiveRevealed(true);
@@ -427,7 +427,7 @@ export function PhotostaffLibraryPanel({
     }
   }
 
-  function updateFilter<K extends keyof PhotostaffQueryFilters>(key: K, value: PhotostaffQueryFilters[K]) {
+  function updateFilter<K extends keyof PhotoQueryFilters>(key: K, value: PhotoQueryFilters[K]) {
     setFilters((current) => {
       const next = { ...current, [key]: value };
       if (value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) delete next[key];
@@ -436,7 +436,7 @@ export function PhotostaffLibraryPanel({
     setSelectedIds(new Set());
   }
 
-  function updateAdvancedCondition(index: number, patch: Partial<PhotostaffMetadataCondition>) {
+  function updateAdvancedCondition(index: number, patch: Partial<PhotoMetadataCondition>) {
     const advanced = filters.advanced ?? { mode: "all" as const, conditions: [] };
     updateFilter("advanced", {
       ...advanced,
@@ -457,7 +457,7 @@ export function PhotostaffLibraryPanel({
   }
 
   function showAdjacent(offset: number) {
-    const next = photostaff[lightboxIndex + offset];
+    const next = photos[lightboxIndex + offset];
     if (!next) return;
     setZoom(1);
     setLightboxId(next.id);
@@ -467,10 +467,10 @@ export function PhotostaffLibraryPanel({
     if (!selected.length || busyAction) return;
     setBusyAction("download");
     try {
-      const result = await createPhotostaffExport(selected.map((photostaff) => photostaff.id));
+      const result = await createPhotoExport(selected.map((photo) => photo.id));
       const anchor = document.createElement("a");
       anchor.href = result.url;
-      anchor.download = selected.length === 1 ? selected[0]!.name : "sigmaos-photostaff.zip";
+      anchor.download = selected.length === 1 ? selected[0]!.name : "sigmaos-photos.zip";
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
@@ -485,9 +485,9 @@ export function PhotostaffLibraryPanel({
     if (!sessionId || !selected.length || busyAction) return;
     setBusyAction(operation);
     try {
-      await proposePhotostaffOperation({
+      await proposePhotoOperation({
         sessionId,
-        assetIds: selected.map((photostaff) => photostaff.id),
+        assetIds: selected.map((photo) => photo.id),
         operation,
         ...(targetDirectory ? { targetDirectory } : {})
       });
@@ -495,7 +495,7 @@ export function PhotostaffLibraryPanel({
       setDeleteOpen(false);
       setSelectedIds(new Set());
       await onWorkQueuesChanged();
-      onNotifyWarning(t("workspace.photostaff.approvalQueued"));
+      onNotifyWarning(t("workspace.photos.approvalQueued"));
     } catch (error) {
       onNotifyError(errorMessage(error));
     } finally {
@@ -529,8 +529,8 @@ export function PhotostaffLibraryPanel({
 
   return (
     <section
-      className={`photostaff-library${dropActive ? " is-drop-active" : ""}`}
-      aria-label={t("workspace.photostaff.title")}
+      className={`photo-library${dropActive ? " is-drop-active" : ""}`}
+      aria-label={t("workspace.photos.title")}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -540,7 +540,7 @@ export function PhotostaffLibraryPanel({
         ref={uploadInputRef}
         className="workspace-upload-input"
         type="file"
-        accept={PHOTOSTAFF_ACCEPT}
+        accept={PHOTO_ACCEPT}
         multiple
         tabIndex={-1}
         aria-hidden="true"
@@ -548,13 +548,13 @@ export function PhotostaffLibraryPanel({
       />
 
       <PanelHeader
-        className="photostaff-library-header"
+        className="photo-library-header"
         icon={<Images aria-hidden="true" size={20} />}
-        title={t("workspace.photostaff.title")}
-        subtitle={t("workspace.photostaff.description")}
-        actions={<PanelHeaderActions label={t("workspace.photostaff.actions")} className="photostaff-library-actions">
+        title={t("workspace.photos.title")}
+        subtitle={t("workspace.photos.description")}
+        actions={<PanelHeaderActions label={t("workspace.photos.actions")} className="photo-library-actions">
           <PanelHeaderAction
-            label={t("workspace.photostaff.scanNow")}
+            label={t("workspace.photos.scanNow")}
             type="button"
             onClick={() => void startScan()}
             disabled={!settings || Boolean(busyAction) || statusBusy}
@@ -562,7 +562,7 @@ export function PhotostaffLibraryPanel({
             <ScanLine aria-hidden="true" size={17} />
           </PanelHeaderAction>
           <PanelHeaderAction
-            label={t("workspace.photostaff.upload")}
+            label={t("workspace.photos.upload")}
             type="button"
             onClick={() => uploadInputRef.current?.click()}
             disabled={!settings || Boolean(busyAction) || status?.state === "offline"}
@@ -577,126 +577,126 @@ export function PhotostaffLibraryPanel({
       />
 
       {settings ? (
-        <div className="photostaff-library-bar">
-          <div className="photostaff-library-location" title={settings.path}>
+        <div className="photo-library-bar">
+          <div className="photo-library-location" title={settings.path}>
             <FolderInput aria-hidden="true" size={15} />
             <strong>{configuredPool?.name ?? settings.storagePoolId}</strong>
             <span>{settings.path}</span>
           </div>
-          <div className="photostaff-runtime-status" data-state={workerHealth?.status ?? "unavailable"}>
+          <div className="photo-runtime-status" data-state={workerHealth?.status ?? "unavailable"}>
             {statusBusy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={13} /> : null}
-            <strong>{t(`settings.photostaff.states.${status?.state ?? "offline"}`)}</strong>
-            {status?.phase ? <span>{t(`settings.photostaff.phases.${status.phase}`)}</span> : null}
-            <span>{t(`settings.photostaff.workerStates.${workerHealth?.status ?? "unavailable"}`)}</span>
-            {status?.nextRetryAt ? <span>{t("workspace.photostaff.retryIn", { value: retryCountdown(status.nextRetryAt, clock) })}</span> : null}
+            <strong>{t(`settings.photos.states.${status?.state ?? "offline"}`)}</strong>
+            {status?.phase ? <span>{t(`settings.photos.phases.${status.phase}`)}</span> : null}
+            <span>{t(`settings.photos.workerStates.${workerHealth?.status ?? "unavailable"}`)}</span>
+            {status?.nextRetryAt ? <span>{t("workspace.photos.retryIn", { value: retryCountdown(status.nextRetryAt, clock) })}</span> : null}
             {status?.errorCode ? <code>{status.errorCode}</code> : null}
           </div>
           {selected.length ? (
-            <div className="photostaff-selection-actions" aria-label={t("workspace.photostaff.selectionActions")}>
-              <span>{t("workspace.photostaff.selected", { count: selected.length })}</span>
-              <button type="button" onClick={selectAllLoaded} aria-pressed={selectedIds.size === photostaff.length} title={t("workspace.photostaff.selectAll")} aria-label={t("workspace.photostaff.selectAll")}>
-                {selectedIds.size === photostaff.length ? <CheckSquare aria-hidden="true" size={15} /> : <Square aria-hidden="true" size={15} />}
-                <span>{t("workspace.photostaff.selectAll")}</span>
+            <div className="photo-selection-actions" aria-label={t("workspace.photos.selectionActions")}>
+              <span>{t("workspace.photos.selected", { count: selected.length })}</span>
+              <button type="button" onClick={selectAllLoaded} aria-pressed={selectedIds.size === photos.length} title={t("workspace.photos.selectAll")} aria-label={t("workspace.photos.selectAll")}>
+                {selectedIds.size === photos.length ? <CheckSquare aria-hidden="true" size={15} /> : <Square aria-hidden="true" size={15} />}
+                <span>{t("workspace.photos.selectAll")}</span>
               </button>
-              <button type="button" onClick={() => void downloadSelection()} disabled={Boolean(busyAction)} title={t("workspace.photostaff.downloadSelected")} aria-label={t("workspace.photostaff.downloadSelected")}>
+              <button type="button" onClick={() => void downloadSelection()} disabled={Boolean(busyAction)} title={t("workspace.photos.downloadSelected")} aria-label={t("workspace.photos.downloadSelected")}>
                 <Download aria-hidden="true" size={15} />
-                <span>{t("workspace.photostaff.downloadSelected")}</span>
+                <span>{t("workspace.photos.downloadSelected")}</span>
               </button>
-              <button type="button" onClick={() => canPropose ? setPicker("move") : onNotifyWarning(t("workspace.photostaff.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photostaff.moveSelected")} aria-label={t("workspace.photostaff.moveSelected")}>
+              <button type="button" onClick={() => canPropose ? setPicker("move") : onNotifyWarning(t("workspace.photos.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photos.moveSelected")} aria-label={t("workspace.photos.moveSelected")}>
                 <FolderInput aria-hidden="true" size={15} />
-                <span>{t("workspace.photostaff.moveSelected")}</span>
+                <span>{t("workspace.photos.moveSelected")}</span>
               </button>
-              <button ref={deleteTriggerRef} className="is-danger" type="button" onClick={() => canPropose ? setDeleteOpen(true) : onNotifyWarning(t("workspace.photostaff.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photostaff.deleteSelected")} aria-label={t("workspace.photostaff.deleteSelected")}>
+              <button ref={deleteTriggerRef} className="is-danger" type="button" onClick={() => canPropose ? setDeleteOpen(true) : onNotifyWarning(t("workspace.photos.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photos.deleteSelected")} aria-label={t("workspace.photos.deleteSelected")}>
                 <Trash2 aria-hidden="true" size={15} />
-                <span>{t("workspace.photostaff.deleteSelected")}</span>
+                <span>{t("workspace.photos.deleteSelected")}</span>
               </button>
-              <button type="button" onClick={() => setSelectedIds(new Set())} title={t("workspace.photostaff.clearSelection")} aria-label={t("workspace.photostaff.clearSelection")}>
+              <button type="button" onClick={() => setSelectedIds(new Set())} title={t("workspace.photos.clearSelection")} aria-label={t("workspace.photos.clearSelection")}>
                 <X aria-hidden="true" size={15} />
               </button>
             </div>
-          ) : photostaff.length ? (
-            <button className="photostaff-select-all" type="button" onClick={selectAllLoaded} aria-label={t("workspace.photostaff.selectAll")} title={t("workspace.photostaff.selectAll")}>
+          ) : photos.length ? (
+            <button className="photo-select-all" type="button" onClick={selectAllLoaded} aria-label={t("workspace.photos.selectAll")} title={t("workspace.photos.selectAll")}>
               <Square aria-hidden="true" size={15} />
-              <span>{t("workspace.photostaff.selectAll")}</span>
+              <span>{t("workspace.photos.selectAll")}</span>
             </button>
           ) : null}
         </div>
       ) : null}
 
       {settings ? (
-        <div className="photostaff-query-panel">
-          <div className="photostaff-query-toolbar">
-            <label className="photostaff-search-field">
+        <div className="photo-query-panel">
+          <div className="photo-query-toolbar">
+            <label className="photo-search-field">
               <Search aria-hidden="true" size={15} />
               <input
                 type="search"
                 value={filters.text ?? ""}
                 onChange={(event) => updateFilter("text", event.target.value)}
-                placeholder={t("workspace.photostaff.searchPlaceholder")}
-                aria-label={t("workspace.photostaff.searchPlaceholder")}
+                placeholder={t("workspace.photos.searchPlaceholder")}
+                aria-label={t("workspace.photos.searchPlaceholder")}
               />
             </label>
-            <div className="photostaff-view-switch" role="tablist" aria-label={t("workspace.photostaff.views")}>
-              <button type="button" role="tab" aria-selected={view === "timeline"} onClick={() => setView("timeline")} title={t("workspace.photostaff.timelineView")}>
-                <List aria-hidden="true" size={15} /><span>{t("workspace.photostaff.timelineView")}</span>
+            <div className="photo-view-switch" role="tablist" aria-label={t("workspace.photos.views")}>
+              <button type="button" role="tab" aria-selected={view === "timeline"} onClick={() => setView("timeline")} title={t("workspace.photos.timelineView")}>
+                <List aria-hidden="true" size={15} /><span>{t("workspace.photos.timelineView")}</span>
               </button>
-              <button type="button" role="tab" aria-selected={view === "map"} onClick={() => setView("map")} title={t("workspace.photostaff.mapView")}>
-                <Map aria-hidden="true" size={15} /><span>{t("workspace.photostaff.mapView")}</span>
+              <button type="button" role="tab" aria-selected={view === "map"} onClick={() => setView("map")} title={t("workspace.photos.mapView")}>
+                <Map aria-hidden="true" size={15} /><span>{t("workspace.photos.mapView")}</span>
               </button>
             </div>
-            <label className="photostaff-sort-field">
-              <span>{t("workspace.photostaff.sort")}</span>
-              <select value={sortField} onChange={(event) => setSortField(event.target.value as PhotostaffQuerySortField)}>
-                <option value="captured_at">{t("workspace.photostaff.sortCaptured")}</option>
-                <option value="indexed_at">{t("workspace.photostaff.sortIndexed")}</option>
-                <option value="name">{t("workspace.photostaff.sortName")}</option>
-                <option value="size_bytes">{t("workspace.photostaff.sortSize")}</option>
-                <option value="rating">{t("workspace.photostaff.sortRating")}</option>
-                {filters.location?.kind === "near" ? <option value="distance">{t("workspace.photostaff.sortDistance")}</option> : null}
+            <label className="photo-sort-field">
+              <span>{t("workspace.photos.sort")}</span>
+              <select value={sortField} onChange={(event) => setSortField(event.target.value as PhotoQuerySortField)}>
+                <option value="captured_at">{t("workspace.photos.sortCaptured")}</option>
+                <option value="indexed_at">{t("workspace.photos.sortIndexed")}</option>
+                <option value="name">{t("workspace.photos.sortName")}</option>
+                <option value="size_bytes">{t("workspace.photos.sortSize")}</option>
+                <option value="rating">{t("workspace.photos.sortRating")}</option>
+                {filters.location?.kind === "near" ? <option value="distance">{t("workspace.photos.sortDistance")}</option> : null}
               </select>
-              <button type="button" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} title={t("workspace.photostaff.sortDirection")} aria-label={t("workspace.photostaff.sortDirection")}>
+              <button type="button" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} title={t("workspace.photos.sortDirection")} aria-label={t("workspace.photos.sortDirection")}>
                 {sortDirection === "asc" ? "↑" : "↓"}
               </button>
             </label>
-            <button type="button" className="photostaff-advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((current) => !current)}>
-              <SlidersHorizontal aria-hidden="true" size={15} />{t("workspace.photostaff.advanced")}
+            <button type="button" className="photo-advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((current) => !current)}>
+              <SlidersHorizontal aria-hidden="true" size={15} />{t("workspace.photos.advanced")}
             </button>
           </div>
-          <div className="photostaff-common-filters">
-            <PhotostaffFacetSelect
-              label={t("workspace.photostaff.mediaType")}
+          <div className="photo-common-filters">
+            <PhotoFacetSelect
+              label={t("workspace.photos.mediaType")}
               options={facets?.mediaKinds ?? []}
               selected={filters.mediaKinds ?? []}
-              allLabel={t("workspace.photostaff.allValues")}
-              selectedLabel={(count) => t("workspace.photostaff.selectedValues", { count })}
-              onChange={(value) => updateFilter("mediaKinds", value as PhotostaffMediaKind[])}
+              allLabel={t("workspace.photos.allValues")}
+              selectedLabel={(count) => t("workspace.photos.selectedValues", { count })}
+              onChange={(value) => updateFilter("mediaKinds", value as PhotoMediaKind[])}
             />
-            <PhotostaffFacetSelect
-              label={t("workspace.photostaff.camera")}
+            <PhotoFacetSelect
+              label={t("workspace.photos.camera")}
               options={facets?.cameraModels ?? []}
               selected={filters.cameraModels ?? []}
-              allLabel={t("workspace.photostaff.allValues")}
-              selectedLabel={(count) => t("workspace.photostaff.selectedValues", { count })}
+              allLabel={t("workspace.photos.allValues")}
+              selectedLabel={(count) => t("workspace.photos.selectedValues", { count })}
               onChange={(value) => updateFilter("cameraModels", value)}
             />
-            <PhotostaffFacetSelect
-              label={t("workspace.photostaff.lens")}
+            <PhotoFacetSelect
+              label={t("workspace.photos.lens")}
               options={facets?.lensModels ?? []}
               selected={filters.lensModels ?? []}
-              allLabel={t("workspace.photostaff.allValues")}
-              selectedLabel={(count) => t("workspace.photostaff.selectedValues", { count })}
+              allLabel={t("workspace.photos.allValues")}
+              selectedLabel={(count) => t("workspace.photos.selectedValues", { count })}
               onChange={(value) => updateFilter("lensModels", value)}
             />
-            <label><span>{t("workspace.photostaff.takenAt")}</span><div className="photostaff-range-inputs"><input type="date" value={filters.capturedAt?.from?.slice(0, 10) ?? ""} aria-label={t("workspace.photostaff.min")} onChange={(event) => updateFilter("capturedAt", dateRange(event.target.value, filters.capturedAt?.to))} /><input type="date" value={filters.capturedAt?.to?.slice(0, 10) ?? ""} aria-label={t("workspace.photostaff.max")} onChange={(event) => updateFilter("capturedAt", dateRange(filters.capturedAt?.from, event.target.value))} /></div></label>
-            <label><span>ISO</span><div className="photostaff-range-inputs"><input type="number" min="0" value={filters.iso?.min ?? ""} placeholder={t("workspace.photostaff.min")} onChange={(event) => updateFilter("iso", numberRange(event.target.value, filters.iso?.max))} /><input type="number" min="0" value={filters.iso?.max ?? ""} placeholder={t("workspace.photostaff.max")} onChange={(event) => updateFilter("iso", numberRange(filters.iso?.min, event.target.value))} /></div></label>
-            <label><span>{t("workspace.photostaff.aperture")}</span><div className="photostaff-range-inputs"><input type="number" min="0" step="0.1" value={filters.aperture?.min ?? ""} placeholder={t("workspace.photostaff.min")} onChange={(event) => updateFilter("aperture", numberRange(event.target.value, filters.aperture?.max))} /><input type="number" min="0" step="0.1" value={filters.aperture?.max ?? ""} placeholder={t("workspace.photostaff.max")} onChange={(event) => updateFilter("aperture", numberRange(filters.aperture?.min, event.target.value))} /></div></label>
-            <label><span>{t("workspace.photostaff.shutter")}</span><div className="photostaff-range-inputs"><input type="number" min="0" step="any" value={filters.exposureTimeSeconds?.min ?? ""} placeholder={t("workspace.photostaff.min")} onChange={(event) => updateFilter("exposureTimeSeconds", numberRange(event.target.value, filters.exposureTimeSeconds?.max))} /><input type="number" min="0" step="any" value={filters.exposureTimeSeconds?.max ?? ""} placeholder={t("workspace.photostaff.max")} onChange={(event) => updateFilter("exposureTimeSeconds", numberRange(filters.exposureTimeSeconds?.min, event.target.value))} /></div></label>
-            <label><span>{t("workspace.photostaff.focalLength")}</span><div className="photostaff-range-inputs"><input type="number" min="0" value={filters.focalLengthMm?.min ?? ""} placeholder={t("workspace.photostaff.min")} onChange={(event) => updateFilter("focalLengthMm", numberRange(event.target.value, filters.focalLengthMm?.max))} /><input type="number" min="0" value={filters.focalLengthMm?.max ?? ""} placeholder={t("workspace.photostaff.max")} onChange={(event) => updateFilter("focalLengthMm", numberRange(filters.focalLengthMm?.min, event.target.value))} /></div></label>
-            <label><span>{t("workspace.photostaff.rating")}</span><select value={filters.rating?.min ?? ""} onChange={(event) => updateFilter("rating", event.target.value ? { min: Number(event.target.value) } : undefined)}><option value="">{t("workspace.photostaff.allValues")}</option>{[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating}+ ({facets?.ratings.find((item) => Number(item.value) === rating)?.count ?? 0})</option>)}</select></label>
-            <label className="photostaff-location-filter"><input type="checkbox" checked={filters.hasLocation === true} onChange={(event) => updateFilter("hasLocation", event.target.checked ? true : undefined)} /><span>{t("workspace.photostaff.hasLocation")}</span></label>
+            <label><span>{t("workspace.photos.takenAt")}</span><div className="photo-range-inputs"><input type="date" value={filters.capturedAt?.from?.slice(0, 10) ?? ""} aria-label={t("workspace.photos.min")} onChange={(event) => updateFilter("capturedAt", dateRange(event.target.value, filters.capturedAt?.to))} /><input type="date" value={filters.capturedAt?.to?.slice(0, 10) ?? ""} aria-label={t("workspace.photos.max")} onChange={(event) => updateFilter("capturedAt", dateRange(filters.capturedAt?.from, event.target.value))} /></div></label>
+            <label><span>ISO</span><div className="photo-range-inputs"><input type="number" min="0" value={filters.iso?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("iso", numberRange(event.target.value, filters.iso?.max))} /><input type="number" min="0" value={filters.iso?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("iso", numberRange(filters.iso?.min, event.target.value))} /></div></label>
+            <label><span>{t("workspace.photos.aperture")}</span><div className="photo-range-inputs"><input type="number" min="0" step="0.1" value={filters.aperture?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("aperture", numberRange(event.target.value, filters.aperture?.max))} /><input type="number" min="0" step="0.1" value={filters.aperture?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("aperture", numberRange(filters.aperture?.min, event.target.value))} /></div></label>
+            <label><span>{t("workspace.photos.shutter")}</span><div className="photo-range-inputs"><input type="number" min="0" step="any" value={filters.exposureTimeSeconds?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("exposureTimeSeconds", numberRange(event.target.value, filters.exposureTimeSeconds?.max))} /><input type="number" min="0" step="any" value={filters.exposureTimeSeconds?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("exposureTimeSeconds", numberRange(filters.exposureTimeSeconds?.min, event.target.value))} /></div></label>
+            <label><span>{t("workspace.photos.focalLength")}</span><div className="photo-range-inputs"><input type="number" min="0" value={filters.focalLengthMm?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("focalLengthMm", numberRange(event.target.value, filters.focalLengthMm?.max))} /><input type="number" min="0" value={filters.focalLengthMm?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("focalLengthMm", numberRange(filters.focalLengthMm?.min, event.target.value))} /></div></label>
+            <label><span>{t("workspace.photos.rating")}</span><select value={filters.rating?.min ?? ""} onChange={(event) => updateFilter("rating", event.target.value ? { min: Number(event.target.value) } : undefined)}><option value="">{t("workspace.photos.allValues")}</option>{[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating}+ ({facets?.ratings.find((item) => Number(item.value) === rating)?.count ?? 0})</option>)}</select></label>
+            <label className="photo-location-filter"><input type="checkbox" checked={filters.hasLocation === true} onChange={(event) => updateFilter("hasLocation", event.target.checked ? true : undefined)} /><span>{t("workspace.photos.hasLocation")}</span></label>
           </div>
           {facets?.keywords.length ? (
-            <div className="photostaff-keyword-facets" aria-label={t("workspace.photostaff.keywords")}>
+            <div className="photo-keyword-facets" aria-label={t("workspace.photos.keywords")}>
               {facets.keywords.slice(0, 12).map((item) => {
                 const active = filters.keywords?.includes(item.value) ?? false;
                 return <button key={item.value} type="button" aria-pressed={active} onClick={() => updateFilter("keywords", active ? filters.keywords?.filter((value) => value !== item.value) : [...(filters.keywords ?? []), item.value])}>{item.value}<span>{item.count}</span></button>;
@@ -704,84 +704,84 @@ export function PhotostaffLibraryPanel({
             </div>
           ) : null}
           {advancedOpen ? (
-            <div className="photostaff-advanced-builder">
-              <div className="photostaff-advanced-heading">
-                <div className="photostaff-condition-mode" role="group" aria-label={t("workspace.photostaff.conditionMode")}>
-                  <button type="button" aria-pressed={(filters.advanced?.mode ?? "all") === "all"} onClick={() => updateFilter("advanced", { mode: "all", conditions: filters.advanced?.conditions ?? [] })}>{t("workspace.photostaff.matchAll")}</button>
-                  <button type="button" aria-pressed={filters.advanced?.mode === "any"} onClick={() => updateFilter("advanced", { mode: "any", conditions: filters.advanced?.conditions ?? [] })}>{t("workspace.photostaff.matchAny")}</button>
+            <div className="photo-advanced-builder">
+              <div className="photo-advanced-heading">
+                <div className="photo-condition-mode" role="group" aria-label={t("workspace.photos.conditionMode")}>
+                  <button type="button" aria-pressed={(filters.advanced?.mode ?? "all") === "all"} onClick={() => updateFilter("advanced", { mode: "all", conditions: filters.advanced?.conditions ?? [] })}>{t("workspace.photos.matchAll")}</button>
+                  <button type="button" aria-pressed={filters.advanced?.mode === "any"} onClick={() => updateFilter("advanced", { mode: "any", conditions: filters.advanced?.conditions ?? [] })}>{t("workspace.photos.matchAny")}</button>
                 </div>
-                <button type="button" onClick={addAdvancedCondition} disabled={!metadataFields.length || (filters.advanced?.conditions.length ?? 0) >= 25}><Plus aria-hidden="true" size={14} />{t("workspace.photostaff.addCondition")}</button>
+                <button type="button" onClick={addAdvancedCondition} disabled={!metadataFields.length || (filters.advanced?.conditions.length ?? 0) >= 25}><Plus aria-hidden="true" size={14} />{t("workspace.photos.addCondition")}</button>
               </div>
               {(filters.advanced?.conditions ?? []).map((condition, index) => (
-                <div className="photostaff-condition-row" key={`${index}:${condition.key}`}>
-                  <select className="photostaff-condition-field" value={condition.key} onChange={(event) => updateAdvancedCondition(index, { key: event.target.value })} aria-label={t("workspace.photostaff.metadataField")}>
+                <div className="photo-condition-row" key={`${index}:${condition.key}`}>
+                  <select className="photo-condition-field" value={condition.key} onChange={(event) => updateAdvancedCondition(index, { key: event.target.value })} aria-label={t("workspace.photos.metadataField")}>
                     {metadataFields.map((field) => <option key={`${field.key}:${field.valueType}`} value={field.key}>{field.key} ({field.count})</option>)}
                   </select>
-                  <select className="photostaff-condition-operator" value={condition.operator} onChange={(event) => updateAdvancedCondition(index, { operator: event.target.value as PhotostaffMetadataCondition["operator"] })} aria-label={t("workspace.photostaff.operator")}>
+                  <select className="photo-condition-operator" value={condition.operator} onChange={(event) => updateAdvancedCondition(index, { operator: event.target.value as PhotoMetadataCondition["operator"] })} aria-label={t("workspace.photos.operator")}>
                     {metadataOperatorOptions(t).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
-                  {condition.operator !== "exists" && condition.operator !== "not_exists" ? <input className="photostaff-condition-value" value={String(Array.isArray(condition.value) ? condition.value.join(",") : condition.value ?? "")} onChange={(event) => updateAdvancedCondition(index, { value: condition.operator === "in" ? event.target.value.split(",").map((value) => value.trim()).filter(Boolean) : event.target.value })} aria-label={t("workspace.photostaff.value")} /> : <span className="photostaff-condition-value" />}
-                  {condition.operator === "between" ? <input className="photostaff-condition-value-to" value={String(condition.valueTo ?? "")} onChange={(event) => updateAdvancedCondition(index, { valueTo: event.target.value })} aria-label={t("workspace.photostaff.max")} /> : <span className="photostaff-condition-value-to" />}
+                  {condition.operator !== "exists" && condition.operator !== "not_exists" ? <input className="photo-condition-value" value={String(Array.isArray(condition.value) ? condition.value.join(",") : condition.value ?? "")} onChange={(event) => updateAdvancedCondition(index, { value: condition.operator === "in" ? event.target.value.split(",").map((value) => value.trim()).filter(Boolean) : event.target.value })} aria-label={t("workspace.photos.value")} /> : <span className="photo-condition-value" />}
+                  {condition.operator === "between" ? <input className="photo-condition-value-to" value={String(condition.valueTo ?? "")} onChange={(event) => updateAdvancedCondition(index, { valueTo: event.target.value })} aria-label={t("workspace.photos.max")} /> : <span className="photo-condition-value-to" />}
                   <button type="button" onClick={() => {
                     const remaining = filters.advanced?.conditions.filter((_, conditionIndex) => conditionIndex !== index) ?? [];
                     updateFilter("advanced", remaining.length ? { mode: filters.advanced?.mode ?? "all", conditions: remaining } : undefined);
-                  }} title={t("workspace.photostaff.removeCondition")} aria-label={t("workspace.photostaff.removeCondition")}><X aria-hidden="true" size={14} /></button>
+                  }} title={t("workspace.photos.removeCondition")} aria-label={t("workspace.photos.removeCondition")}><X aria-hidden="true" size={14} /></button>
                 </div>
               ))}
             </div>
           ) : null}
-          <div className="photostaff-query-summary"><span>{t("workspace.photostaff.resultCount", { count: total })}</span>{status?.metadataIndex?.pending ? <span>{t("workspace.photostaff.metadataProgress", { indexed: status.metadataIndex.indexed, total: status.metadataIndex.total })}</span> : null}</div>
+          <div className="photo-query-summary"><span>{t("workspace.photos.resultCount", { count: total })}</span>{status?.metadataIndex?.pending ? <span>{t("workspace.photos.metadataProgress", { indexed: status.metadataIndex.indexed, total: status.metadataIndex.total })}</span> : null}</div>
         </div>
       ) : null}
 
-      <div className="photostaff-library-content">
+      <div className="photo-library-content">
         {dropActive ? (
           <div className="workspace-drop-overlay" role="presentation" aria-hidden="true">
             <div className="workspace-drop-panel">
               <Images aria-hidden="true" size={22} />
-              <strong>{t("workspace.photostaff.dropTitle")}</strong>
-              <p>{t("workspace.photostaff.dropBody")}</p>
+              <strong>{t("workspace.photos.dropTitle")}</strong>
+              <p>{t("workspace.photos.dropBody")}</p>
             </div>
           </div>
         ) : null}
 
         {loading ? (
-          <div className="workspace-empty-state" role="status"><LoaderCircle className="is-spinning" aria-hidden="true" size={24} /><strong>{t("workspace.photostaff.loading")}</strong></div>
+          <div className="workspace-empty-state" role="status"><LoaderCircle className="is-spinning" aria-hidden="true" size={24} /><strong>{t("workspace.photos.loading")}</strong></div>
         ) : loadError ? (
-          <div className="workspace-empty-state" role="alert"><ImageOff aria-hidden="true" size={28} /><strong>{t("workspace.photostaff.loadFailed")}</strong><p>{loadError}</p><button className="secondary-button" type="button" onClick={() => void loadLibrary()}>{t("common.actions.refresh")}</button></div>
+          <div className="workspace-empty-state" role="alert"><ImageOff aria-hidden="true" size={28} /><strong>{t("workspace.photos.loadFailed")}</strong><p>{loadError}</p><button className="secondary-button" type="button" onClick={() => void loadLibrary()}>{t("common.actions.refresh")}</button></div>
         ) : !settings ? (
-          <div className="workspace-empty-state photostaff-library-empty"><Images aria-hidden="true" size={34} /><strong>{t("workspace.photostaff.unconfiguredTitle")}</strong><p>{t("workspace.photostaff.unconfiguredBody")}</p></div>
+          <div className="workspace-empty-state photo-library-empty"><Images aria-hidden="true" size={34} /><strong>{t("workspace.photos.unconfiguredTitle")}</strong><p>{t("workspace.photos.unconfiguredBody")}</p></div>
         ) : view === "map" ? (
-          <PhotostaffMapView
+          <PhotoMapView
             filters={queryFilters}
             onOpenAsset={openMapAsset}
             onSearchBounds={(nextBounds) => updateFilter("location", nextBounds)}
             onError={(message) => onNotifyError(message)}
           />
-        ) : photostaff.length === 0 ? (
-          <div className="workspace-empty-state photostaff-library-empty" role="status">
+        ) : photos.length === 0 ? (
+          <div className="workspace-empty-state photo-library-empty" role="status">
             {statusBusy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={30} /> : <ImageOff aria-hidden="true" size={30} />}
-            <strong>{statusBusy ? t("workspace.photostaff.scanningTitle") : t("workspace.photostaff.emptyTitle")}</strong>
-            <p>{statusBusy ? t("workspace.photostaff.scanningBody", { count: status?.scanned ?? 0 }) : t("workspace.photostaff.emptyBody")}</p>
+            <strong>{statusBusy ? t("workspace.photos.scanningTitle") : t("workspace.photos.emptyTitle")}</strong>
+            <p>{statusBusy ? t("workspace.photos.scanningBody", { count: status?.scanned ?? 0 }) : t("workspace.photos.emptyBody")}</p>
           </div>
         ) : (
-          <div className="photostaff-timeline">
-            {groupedPhotostaff.map((group) => (
-              <section className="photostaff-day" key={group.key} aria-labelledby={`photostaff-day-${group.key}`}>
-                <header><h3 id={`photostaff-day-${group.key}`}>{group.label}</h3><span>{formatLocaleNumber(group.photostaff.length, locale)}</span></header>
-                <div className="photostaff-wall">
-                  {group.photostaff.map((photostaff) => {
-                    const isSelected = selectedIds.has(photostaff.id);
-                    const mediaKind = photostaffMediaKindForAsset(photostaff);
+          <div className="photo-timeline">
+            {groupedPhotos.map((group) => (
+              <section className="photo-day" key={group.key} aria-labelledby={`photo-day-${group.key}`}>
+                <header><h3 id={`photo-day-${group.key}`}>{group.label}</h3><span>{formatLocaleNumber(group.photos.length, locale)}</span></header>
+                <div className="photo-wall">
+                  {group.photos.map((photo) => {
+                    const isSelected = selectedIds.has(photo.id);
+                    const mediaKind = photoMediaKindForAsset(photo);
                     return (
-                      <article className={`photostaff-tile${isSelected ? " is-selected" : ""}`} key={photostaff.id}>
-                        <button className="photostaff-open" type="button" onClick={(event) => openLightbox(photostaff, event.currentTarget)} aria-label={t("workspace.photostaff.openPhotostaff", { name: photostaff.name })}>
-                          <img src={`/api/photostaff/${encodeURIComponent(photostaff.id)}/thumbnail`} alt="" loading="lazy" />
-                          {mediaKind === "video" ? <span className="photostaff-media-badge is-video" aria-hidden="true"><Play size={13} fill="currentColor" /></span> : null}
-                          {mediaKind === "raw" ? <span className="photostaff-media-badge is-raw" aria-hidden="true">RAW</span> : null}
-                          <span className="photostaff-name">{photostaff.name}</span>
+                      <article className={`photo-tile${isSelected ? " is-selected" : ""}`} key={photo.id}>
+                        <button className="photo-open" type="button" onClick={(event) => openLightbox(photo, event.currentTarget)} aria-label={t("workspace.photos.openPhoto", { name: photo.name })}>
+                          <img src={`/api/photos/${encodeURIComponent(photo.id)}/thumbnail`} alt="" loading="lazy" />
+                          {mediaKind === "video" ? <span className="photo-media-badge is-video" aria-hidden="true"><Play size={13} fill="currentColor" /></span> : null}
+                          {mediaKind === "raw" ? <span className="photo-media-badge is-raw" aria-hidden="true">RAW</span> : null}
+                          <span className="photo-name">{photo.name}</span>
                         </button>
-                        <button className="photostaff-select" type="button" aria-pressed={isSelected} onClick={() => toggleSelection(photostaff.id)} aria-label={isSelected ? t("workspace.photostaff.deselectPhotostaff", { name: photostaff.name }) : t("workspace.photostaff.selectPhotostaff", { name: photostaff.name })}>
+                        <button className="photo-select" type="button" aria-pressed={isSelected} onClick={() => toggleSelection(photo.id)} aria-label={isSelected ? t("workspace.photos.deselectPhoto", { name: photo.name }) : t("workspace.photos.selectPhoto", { name: photo.name })}>
                           {isSelected ? <Check aria-hidden="true" size={14} /> : <span aria-hidden="true" />}
                         </button>
                       </article>
@@ -790,7 +790,7 @@ export function PhotostaffLibraryPanel({
                 </div>
               </section>
             ))}
-            {nextCursor ? <button className="photostaff-load-more secondary-button" type="button" onClick={() => void loadMore()} disabled={loadingMore} aria-busy={loadingMore || undefined}>{loadingMore ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : null}{t("workspace.photostaff.loadMore")}</button> : null}
+            {nextCursor ? <button className="photo-load-more secondary-button" type="button" onClick={() => void loadMore()} disabled={loadingMore} aria-busy={loadingMore || undefined}>{loadingMore ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : null}{t("workspace.photos.loadMore")}</button> : null}
           </div>
         )}
       </div>
@@ -803,7 +803,7 @@ export function PhotostaffLibraryPanel({
           boundaryPath={settings.path}
           locale={locale}
           mode="directory"
-          directoryPurpose="photostaffMove"
+          directoryPurpose="photoMove"
           onCancel={() => setPicker(null)}
           onSelect={(selection) => void proposeBatch("move", selection.path)}
           {...(onRequestCreateFolder ? { onRequestCreateFolder } : {})}
@@ -817,7 +817,7 @@ export function PhotostaffLibraryPanel({
             className="file-action-dialog"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="photostaff-delete-title"
+            aria-labelledby="photo-delete-title"
             tabIndex={-1}
             onKeyDown={(event) => {
               if (event.key === "Escape" && !busyAction) {
@@ -828,68 +828,68 @@ export function PhotostaffLibraryPanel({
               }
             }}
           >
-            <header><span className="eyebrow">{t("workspace.photostaff.deleteSelected")}</span><h2 id="photostaff-delete-title">{t("workspace.photostaff.deleteTitle", { count: selected.length })}</h2></header>
-            <p>{t("workspace.photostaff.deleteBody")}</p>
-            <div className="file-action-actions"><button type="button" onClick={() => setDeleteOpen(false)} disabled={Boolean(busyAction)}>{t("common.actions.cancel")}</button><button className="danger-button" type="button" onClick={() => void proposeBatch("trash")} disabled={Boolean(busyAction)} aria-busy={busyAction === "trash" || undefined}>{t("workspace.photostaff.requestDelete")}</button></div>
+            <header><span className="eyebrow">{t("workspace.photos.deleteSelected")}</span><h2 id="photo-delete-title">{t("workspace.photos.deleteTitle", { count: selected.length })}</h2></header>
+            <p>{t("workspace.photos.deleteBody")}</p>
+            <div className="file-action-actions"><button type="button" onClick={() => setDeleteOpen(false)} disabled={Boolean(busyAction)}>{t("common.actions.cancel")}</button><button className="danger-button" type="button" onClick={() => void proposeBatch("trash")} disabled={Boolean(busyAction)} aria-busy={busyAction === "trash" || undefined}>{t("workspace.photos.requestDelete")}</button></div>
           </div>
         </div>
       ) : null}
 
-      {lightboxPhotostaff ? (
-        <div className="photostaff-lightbox-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setLightboxId(null)}>
-          <div ref={lightboxRef} className="photostaff-lightbox" role="dialog" aria-modal="true" aria-labelledby="photostaff-lightbox-title" tabIndex={-1} onKeyDown={handleLightboxKeyDown}>
-            <header className="photostaff-lightbox-header">
-              <div><span className="eyebrow">{t("workspace.photostaff.viewer")}</span><h2 id="photostaff-lightbox-title">{lightboxPhotostaff.name}</h2></div>
-              <div className="photostaff-lightbox-tools">
+      {lightboxPhoto ? (
+        <div className="photo-lightbox-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setLightboxId(null)}>
+          <div ref={lightboxRef} className="photo-lightbox" role="dialog" aria-modal="true" aria-labelledby="photo-lightbox-title" tabIndex={-1} onKeyDown={handleLightboxKeyDown}>
+            <header className="photo-lightbox-header">
+              <div><span className="eyebrow">{t("workspace.photos.viewer")}</span><h2 id="photo-lightbox-title">{lightboxPhoto.name}</h2></div>
+              <div className="photo-lightbox-tools">
                 {lightboxMediaKind !== "video" ? <>
-                  <button type="button" onClick={() => setZoom((current) => Math.max(1, current - 0.5))} disabled={zoom <= 1} title={t("workspace.photostaff.zoomOut")} aria-label={t("workspace.photostaff.zoomOut")}><Minus aria-hidden="true" size={17} /></button>
-                  <button type="button" onClick={() => setZoom(1)} title={t("workspace.photostaff.resetZoom")} aria-label={t("workspace.photostaff.resetZoom")}><Maximize2 aria-hidden="true" size={17} /><span>{Math.round(zoom * 100)}%</span></button>
-                  <button type="button" onClick={() => setZoom((current) => Math.min(4, current + 0.5))} disabled={zoom >= 4} title={t("workspace.photostaff.zoomIn")} aria-label={t("workspace.photostaff.zoomIn")}><Plus aria-hidden="true" size={17} /></button>
+                  <button type="button" onClick={() => setZoom((current) => Math.max(1, current - 0.5))} disabled={zoom <= 1} title={t("workspace.photos.zoomOut")} aria-label={t("workspace.photos.zoomOut")}><Minus aria-hidden="true" size={17} /></button>
+                  <button type="button" onClick={() => setZoom(1)} title={t("workspace.photos.resetZoom")} aria-label={t("workspace.photos.resetZoom")}><Maximize2 aria-hidden="true" size={17} /><span>{Math.round(zoom * 100)}%</span></button>
+                  <button type="button" onClick={() => setZoom((current) => Math.min(4, current + 0.5))} disabled={zoom >= 4} title={t("workspace.photos.zoomIn")} aria-label={t("workspace.photos.zoomIn")}><Plus aria-hidden="true" size={17} /></button>
                 </> : null}
                 <button type="button" onClick={() => setLightboxId(null)} title={t("common.actions.close")} aria-label={t("common.actions.close")}><X aria-hidden="true" size={18} /></button>
               </div>
             </header>
-            <div className="photostaff-lightbox-body">
-              <button className="photostaff-lightbox-nav is-previous" type="button" onClick={() => showAdjacent(-1)} disabled={lightboxIndex <= 0} title={t("workspace.photostaff.previous")} aria-label={t("workspace.photostaff.previous")}><ChevronLeft aria-hidden="true" size={24} /></button>
-              <div className="photostaff-lightbox-canvas">
+            <div className="photo-lightbox-body">
+              <button className="photo-lightbox-nav is-previous" type="button" onClick={() => showAdjacent(-1)} disabled={lightboxIndex <= 0} title={t("workspace.photos.previous")} aria-label={t("workspace.photos.previous")}><ChevronLeft aria-hidden="true" size={24} /></button>
+              <div className="photo-lightbox-canvas">
                 {lightboxMediaKind === "video" ? (
                   <video
-                    className="photostaff-lightbox-video"
-                    src={`/api/photostaff/${encodeURIComponent(lightboxPhotostaff.id)}/video`}
-                    poster={`/api/photostaff/${encodeURIComponent(lightboxPhotostaff.id)}/preview`}
+                    className="photo-lightbox-video"
+                    src={`/api/photos/${encodeURIComponent(lightboxPhoto.id)}/video`}
+                    poster={`/api/photos/${encodeURIComponent(lightboxPhoto.id)}/preview`}
                     controls
                     playsInline
                     preload="metadata"
                   />
                 ) : (
-                  <img src={`/api/photostaff/${encodeURIComponent(lightboxPhotostaff.id)}/preview`} alt={lightboxPhotostaff.name} style={{ width: `${zoom * 100}%` }} />
+                  <img src={`/api/photos/${encodeURIComponent(lightboxPhoto.id)}/preview`} alt={lightboxPhoto.name} style={{ width: `${zoom * 100}%` }} />
                 )}
               </div>
-              <button className="photostaff-lightbox-nav is-next" type="button" onClick={() => showAdjacent(1)} disabled={lightboxIndex >= photostaff.length - 1} title={t("workspace.photostaff.next")} aria-label={t("workspace.photostaff.next")}><ChevronRight aria-hidden="true" size={24} /></button>
-              <aside className="photostaff-lightbox-meta">
+              <button className="photo-lightbox-nav is-next" type="button" onClick={() => showAdjacent(1)} disabled={lightboxIndex >= photos.length - 1} title={t("workspace.photos.next")} aria-label={t("workspace.photos.next")}><ChevronRight aria-hidden="true" size={24} /></button>
+              <aside className="photo-lightbox-meta">
                 <dl>
-                  <div><dt>{t("workspace.photostaff.takenAt")}</dt><dd>{formatPhotostaffDateTime(lightboxPhotostaff.metadata?.capturedAtLocal ?? lightboxPhotostaff.takenAt, locale)}</dd></div>
-                  <div><dt>{t("workspace.photostaff.dimensions")}</dt><dd>{lightboxPhotostaff.width && lightboxPhotostaff.height ? `${lightboxPhotostaff.width} × ${lightboxPhotostaff.height}` : t("common.states.unknown")}</dd></div>
-                  <div><dt>{t("workspace.photostaff.fileSize")}</dt><dd>{formatBytes(lightboxPhotostaff.sizeBytes, locale)}</dd></div>
-                  <div><dt>{t("workspace.photostaff.format")}</dt><dd>{lightboxPhotostaff.mimeType}</dd></div>
-                  <div><dt>{t("workspace.photostaff.path")}</dt><dd title={lightboxPhotostaff.path}>{lightboxPhotostaff.path}</dd></div>
-                  {lightboxPhotostaff.metadata?.cameraModel ? <div><dt>{t("workspace.photostaff.camera")}</dt><dd>{lightboxPhotostaff.metadata.cameraModel}</dd></div> : null}
-                  {lightboxPhotostaff.metadata?.lensModel ? <div><dt>{t("workspace.photostaff.lens")}</dt><dd>{lightboxPhotostaff.metadata.lensModel}</dd></div> : null}
-                  {lightboxPhotostaff.metadata?.iso ? <div><dt>ISO</dt><dd>{lightboxPhotostaff.metadata.iso}</dd></div> : null}
-                  {lightboxPhotostaff.metadata?.aperture ? <div><dt>{t("workspace.photostaff.aperture")}</dt><dd>f/{lightboxPhotostaff.metadata.aperture}</dd></div> : null}
-                  {lightboxPhotostaff.metadata?.exposureTimeSeconds ? <div><dt>{t("workspace.photostaff.shutter")}</dt><dd>{formatExposure(lightboxPhotostaff.metadata.exposureTimeSeconds)}</dd></div> : null}
-                  {lightboxPhotostaff.metadata?.focalLengthMm ? <div><dt>{t("workspace.photostaff.focalLength")}</dt><dd>{lightboxPhotostaff.metadata.focalLengthMm} mm</dd></div> : null}
+                  <div><dt>{t("workspace.photos.takenAt")}</dt><dd>{formatPhotoDateTime(lightboxPhoto.metadata?.capturedAtLocal ?? lightboxPhoto.takenAt, locale)}</dd></div>
+                  <div><dt>{t("workspace.photos.dimensions")}</dt><dd>{lightboxPhoto.width && lightboxPhoto.height ? `${lightboxPhoto.width} × ${lightboxPhoto.height}` : t("common.states.unknown")}</dd></div>
+                  <div><dt>{t("workspace.photos.fileSize")}</dt><dd>{formatBytes(lightboxPhoto.sizeBytes, locale)}</dd></div>
+                  <div><dt>{t("workspace.photos.format")}</dt><dd>{lightboxPhoto.mimeType}</dd></div>
+                  <div><dt>{t("workspace.photos.path")}</dt><dd title={lightboxPhoto.path}>{lightboxPhoto.path}</dd></div>
+                  {lightboxPhoto.metadata?.cameraModel ? <div><dt>{t("workspace.photos.camera")}</dt><dd>{lightboxPhoto.metadata.cameraModel}</dd></div> : null}
+                  {lightboxPhoto.metadata?.lensModel ? <div><dt>{t("workspace.photos.lens")}</dt><dd>{lightboxPhoto.metadata.lensModel}</dd></div> : null}
+                  {lightboxPhoto.metadata?.iso ? <div><dt>ISO</dt><dd>{lightboxPhoto.metadata.iso}</dd></div> : null}
+                  {lightboxPhoto.metadata?.aperture ? <div><dt>{t("workspace.photos.aperture")}</dt><dd>f/{lightboxPhoto.metadata.aperture}</dd></div> : null}
+                  {lightboxPhoto.metadata?.exposureTimeSeconds ? <div><dt>{t("workspace.photos.shutter")}</dt><dd>{formatExposure(lightboxPhoto.metadata.exposureTimeSeconds)}</dd></div> : null}
+                  {lightboxPhoto.metadata?.focalLengthMm ? <div><dt>{t("workspace.photos.focalLength")}</dt><dd>{lightboxPhoto.metadata.focalLengthMm} mm</dd></div> : null}
                 </dl>
-                <section className="photostaff-metadata-inspector">
-                  <header><strong>{t("workspace.photostaff.metadata")}</strong>{metadataLoading ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : null}</header>
-                  {metadata?.warnings.length ? <div className="photostaff-metadata-warnings">{metadata.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div> : null}
+                <section className="photo-metadata-inspector">
+                  <header><strong>{t("workspace.photos.metadata")}</strong>{metadataLoading ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : null}</header>
+                  {metadata?.warnings.length ? <div className="photo-metadata-warnings">{metadata.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div> : null}
                   {Object.entries(metadata?.groups ?? {}).map(([source, entries]) => (
                     <details key={source}>
                       <summary>{source}<span>{Object.keys(entries).length}</span></summary>
                       <dl>{Object.entries(entries).map(([key, values]) => <div key={key}><dt>{key}</dt><dd>{values.join(", ")}</dd></div>)}</dl>
                     </details>
                   ))}
-                  {metadata?.sensitiveOmitted && !sensitiveRevealed ? <button type="button" className="photostaff-reveal-sensitive" onClick={() => void revealSensitiveMetadata()} disabled={metadataLoading}><SlidersHorizontal aria-hidden="true" size={14} />{t("workspace.photostaff.revealSensitive")}</button> : null}
+                  {metadata?.sensitiveOmitted && !sensitiveRevealed ? <button type="button" className="photo-reveal-sensitive" onClick={() => void revealSensitiveMetadata()} disabled={metadataLoading}><SlidersHorizontal aria-hidden="true" size={14} />{t("workspace.photos.revealSensitive")}</button> : null}
                   {Object.entries(metadata?.sensitiveGroups ?? {}).map(([source, entries]) => (
                     <details className="is-sensitive" key={source}>
                       <summary>{source}<span>{Object.keys(entries).length}</span></summary>
@@ -897,7 +897,7 @@ export function PhotostaffLibraryPanel({
                     </details>
                   ))}
                 </section>
-                <a className="secondary-button" href={`/api/photostaff/${encodeURIComponent(lightboxPhotostaff.id)}/original?download=1`} download={lightboxPhotostaff.name}><Download aria-hidden="true" size={15} />{t("workspace.photostaff.downloadOriginal")}</a>
+                <a className="secondary-button" href={`/api/photos/${encodeURIComponent(lightboxPhoto.id)}/original?download=1`} download={lightboxPhoto.name}><Download aria-hidden="true" size={15} />{t("workspace.photos.downloadOriginal")}</a>
               </aside>
             </div>
           </div>
@@ -907,11 +907,11 @@ export function PhotostaffLibraryPanel({
   );
 }
 
-export function groupPhotostaffByDate<T extends PhotostaffAsset & {
+export function groupPhotosByDate<T extends PhotoAsset & {
   metadata?: { capturedAtLocal?: string | null } | null;
 }>(assets: T[], locale: SupportedLocale) {
   const formatter = new Intl.DateTimeFormat(locale, { dateStyle: "full" });
-  const groups: Array<{ key: string; label: string; photostaff: T[] }> = [];
+  const groups: Array<{ key: string; label: string; photos: T[] }> = [];
   for (const asset of assets) {
     const localCaptureDate = localCalendarDate(asset.metadata?.capturedAtLocal);
     const takenAt = new Date(asset.takenAt);
@@ -920,13 +920,13 @@ export function groupPhotostaffByDate<T extends PhotostaffAsset & {
       ? asset.metadata!.capturedAtLocal!.slice(0, 10)
       : [validDate.getFullYear(), String(validDate.getMonth() + 1).padStart(2, "0"), String(validDate.getDate()).padStart(2, "0")].join("-");
     const previous = groups.at(-1);
-    if (previous?.key === key) previous.photostaff.push(asset);
-    else groups.push({ key, label: formatter.format(validDate), photostaff: [asset] });
+    if (previous?.key === key) previous.photos.push(asset);
+    else groups.push({ key, label: formatter.format(validDate), photos: [asset] });
   }
   return groups;
 }
 
-export function isPhotostaffBusy(state: PhotostaffLibraryStatus["state"] | undefined): boolean {
+export function isPhotoBusy(state: PhotoLibraryStatus["state"] | undefined): boolean {
   return state === "queued" || state === "discovering" || state === "processing" || state === "retrying";
 }
 
@@ -946,11 +946,11 @@ function localCalendarDate(value: string | null | undefined): Date | null {
   return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
 }
 
-export function photostaffMediaKindForAsset(photostaff: Pick<PhotostaffAsset, "name" | "mimeType">): PhotostaffMediaKind {
-  return photostaffMediaKind(photostaff.name) ?? (photostaff.mimeType.startsWith("video/") ? "video" : "image");
+export function photoMediaKindForAsset(photo: Pick<PhotoAsset, "name" | "mimeType">): PhotoMediaKind {
+  return photoMediaKind(photo.name) ?? (photo.mimeType.startsWith("video/") ? "video" : "image");
 }
 
-function PhotostaffFacetSelect({
+function PhotoFacetSelect({
   label,
   options,
   selected,
@@ -971,7 +971,7 @@ function PhotostaffFacetSelect({
       ? selected[0]!
       : selectedLabel(selected.length);
   return (
-    <label className="photostaff-facet-filter">
+    <label className="photo-facet-filter">
       <span>{label}</span>
       <select
         value=""
@@ -979,7 +979,7 @@ function PhotostaffFacetSelect({
         onChange={(event) => {
           const value = event.target.value;
           if (value === "__clear__") onChange(undefined);
-          else if (value) onChange(togglePhotostaffFacetValue(selected, value));
+          else if (value) onChange(togglePhotoFacetValue(selected, value));
         }}
       >
         <option value="" disabled>{summary}</option>
@@ -994,7 +994,7 @@ function PhotostaffFacetSelect({
   );
 }
 
-export function togglePhotostaffFacetValue<T extends string>(selected: T[] | undefined, value: T): T[] | undefined {
+export function togglePhotoFacetValue<T extends string>(selected: T[] | undefined, value: T): T[] | undefined {
   const current = selected ?? [];
   const next = current.includes(value)
     ? current.filter((entry) => entry !== value)
@@ -1002,7 +1002,7 @@ export function togglePhotostaffFacetValue<T extends string>(selected: T[] | und
   return next.length ? next : undefined;
 }
 
-function samePhotostaffMetadataFields(left: PhotostaffMetadataField[], right: PhotostaffMetadataField[]): boolean {
+function samePhotoMetadataFields(left: PhotoMetadataField[], right: PhotoMetadataField[]): boolean {
   return left.length === right.length && left.every((field, index) => {
     const other = right[index];
     return other !== undefined && field.key === other.key && field.valueType === other.valueType &&
@@ -1010,13 +1010,13 @@ function samePhotostaffMetadataFields(left: PhotostaffMetadataField[], right: Ph
   });
 }
 
-export function readyPhotostaffQueryFilters(
-  filters: PhotostaffQueryFilters,
-  metadataFields: PhotostaffMetadataField[] = []
-): PhotostaffQueryFilters {
+export function readyPhotoQueryFilters(
+  filters: PhotoQueryFilters,
+  metadataFields: PhotoMetadataField[] = []
+): PhotoQueryFilters {
   const advanced = filters.advanced;
   if (!advanced) return filters;
-  const conditions: PhotostaffMetadataCondition[] = [];
+  const conditions: PhotoMetadataCondition[] = [];
   for (const condition of advanced.conditions) {
     if (condition.operator === "exists" || condition.operator === "not_exists") {
       conditions.push(condition);
@@ -1030,7 +1030,7 @@ export function readyPhotostaffQueryFilters(
     if (coercedValues.some((value) => value === undefined)) continue;
     const valueTo = condition.valueTo === undefined ? undefined : coerceMetadataScalar(condition.valueTo, valueType);
     if (condition.valueTo !== undefined && valueTo === undefined) continue;
-    const nextCondition: PhotostaffMetadataCondition = {
+    const nextCondition: PhotoMetadataCondition = {
       ...condition,
       value: Array.isArray(condition.value)
         ? coercedValues as Array<string | number | boolean>
@@ -1048,7 +1048,7 @@ export function readyPhotostaffQueryFilters(
 
 function coerceMetadataScalar(
   value: string | number | boolean,
-  valueType: PhotostaffMetadataField["valueType"] | undefined
+  valueType: PhotoMetadataField["valueType"] | undefined
 ): string | number | boolean | undefined {
   if (valueType === "number") {
     const parsed = typeof value === "number" ? value : Number(value);
@@ -1064,9 +1064,9 @@ function coerceMetadataScalar(
   return value;
 }
 
-function mergePhotostaff(current: PhotostaffQueryAsset[], incoming: PhotostaffQueryAsset[]): PhotostaffQueryAsset[] {
-  const ids = new Set(current.map((photostaff) => photostaff.id));
-  return [...current, ...incoming.filter((photostaff) => !ids.has(photostaff.id))];
+function mergePhotos(current: PhotoQueryAsset[], incoming: PhotoQueryAsset[]): PhotoQueryAsset[] {
+  const ids = new Set(current.map((photo) => photo.id));
+  return [...current, ...incoming.filter((photo) => !ids.has(photo.id))];
 }
 
 function numberRange(
@@ -1096,7 +1096,7 @@ function dateRange(
 }
 
 function metadataOperatorOptions(translate: (key: string) => string): Array<{
-  value: PhotostaffMetadataCondition["operator"];
+  value: PhotoMetadataCondition["operator"];
   label: string;
 }> {
   return [
@@ -1104,8 +1104,8 @@ function metadataOperatorOptions(translate: (key: string) => string): Array<{
     ["exists", "exists"], ["not_exists", "notExists"], ["lt", "lessThan"],
     ["lte", "lessOrEqual"], ["gt", "greaterThan"], ["gte", "greaterOrEqual"], ["between", "between"]
   ].map(([value, label]) => ({
-    value: value as PhotostaffMetadataCondition["operator"],
-    label: translate(`workspace.photostaff.operators.${label}`)
+    value: value as PhotoMetadataCondition["operator"],
+    label: translate(`workspace.photos.operators.${label}`)
   }));
 }
 
@@ -1114,7 +1114,7 @@ function formatExposure(seconds: number): string {
   return `1/${Math.max(1, Math.round(1 / seconds))} s`;
 }
 
-function formatPhotostaffDateTime(value: string, locale: SupportedLocale): string {
+function formatPhotoDateTime(value: string, locale: SupportedLocale): string {
   const date = new Date(value);
   return Number.isFinite(date.getTime())
     ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(date)

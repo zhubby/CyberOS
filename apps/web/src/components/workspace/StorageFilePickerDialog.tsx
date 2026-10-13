@@ -48,7 +48,7 @@ export function StorageFilePickerDialog({
   initialPoolId: string;
   locale: SupportedLocale;
   mode?: "iso" | "directory";
-  directoryPurpose?: "downloads" | "photostaffMove";
+  directoryPurpose?: "downloads" | "photoMove";
   initialPath?: string;
   boundaryPath?: string;
   onCancel: () => void;
@@ -75,14 +75,14 @@ export function StorageFilePickerDialog({
   const [createFolderSubmitting, setCreateFolderSubmitting] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const loadRequestId = useRef(0);
-  const directoryCopy = directoryPurpose === "photostaffMove"
+  const directoryCopy = directoryPurpose === "photoMove"
     ? {
-        eyebrow: t("workspace.photostaff.moveDestination"),
-        title: t("workspace.photostaff.movePickerTitle"),
-        description: t("workspace.photostaff.movePickerDescription"),
-        list: t("workspace.photostaff.directoryPickerList"),
-        empty: t("workspace.photostaff.directoryPickerEmpty"),
-        select: t("workspace.photostaff.useMoveDestination")
+        eyebrow: t("workspace.photos.moveDestination"),
+        title: t("workspace.photos.movePickerTitle"),
+        description: t("workspace.photos.movePickerDescription"),
+        list: t("workspace.photos.directoryPickerList"),
+        empty: t("workspace.photos.directoryPickerEmpty"),
+        select: t("workspace.photos.useMoveDestination")
       }
     : {
         eyebrow: t("workspace.downloads.targetDirectory"),

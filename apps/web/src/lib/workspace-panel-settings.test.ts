@@ -30,6 +30,13 @@ describe("workspace panel settings helpers", () => {
     }
   });
 
+  it("migrates the accidentally persisted photostaff panel id", () => {
+    const storage = createMemoryStorage();
+    storage.setItem(WORKSPACE_PANEL_STORAGE_KEY, "photostaff");
+
+    expect(readStoredWorkspacePanel(storage)).toBe("photos");
+  });
+
   it("keeps session-only behavior when storage operations fail", () => {
     const unavailableStorage = {
       getItem: () => {
@@ -41,7 +48,7 @@ describe("workspace panel settings helpers", () => {
     };
 
     expect(readStoredWorkspacePanel(unavailableStorage)).toBe(DEFAULT_WORKSPACE_PANEL);
-    expect(() => writeStoredWorkspacePanel("photostaff", unavailableStorage)).not.toThrow();
+    expect(() => writeStoredWorkspacePanel("photos", unavailableStorage)).not.toThrow();
   });
 
   it("tolerates a browser that throws while exposing localStorage", () => {

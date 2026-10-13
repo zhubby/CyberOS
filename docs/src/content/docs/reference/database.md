@@ -13,7 +13,7 @@ SQLite 位于 data directory，使用 WAL、foreign keys 和 busy timeout。迁�
 
 FTS5 正文索引、照片资源与处理任务、index run history、backup runs、health alerts 和 execution locks 都属于同一数据库的运维状态，不应另起 Redis 或外部队列。
 
-Photostaff 图库配置保存在 `system_settings.photostaff_library_settings`；`photostaff_assets` 保持 root-relative 路径、hash、时间线、尺寸、source identity 和衍生图契约。`photostaff_asset_metadata` 保存规范字段、schema version、解析状态、警告和清洗后的来源分组 JSON；`photostaff_metadata_values` 按来源限定路径和类型保存标量，数组逐值索引；`photostaff_keywords`、`photostaff_metadata_fts` 与 `photostaff_geo_index` 分别承担关键词、FTS5 和 GPS RTree 查询。MakerNote、缩略图及二进制负载不进入数据库，每个资源受叶子数、单值、JSON 大小和深度限制。
+Photos 图库配置保存在内部键 `system_settings.photostaff_library_settings`；`photostaff` 仅作为 Rust 服务、数据库表和数据目录标识。`photostaff_assets` 保持 root-relative 路径、hash、时间线、尺寸、source identity 和衍生图契约。`photostaff_asset_metadata` 保存规范字段、schema version、解析状态、警告和清洗后的来源分组 JSON；`photostaff_metadata_values` 按来源限定路径和类型保存标量，数组逐值索引；`photostaff_keywords`、`photostaff_metadata_fts` 与 `photostaff_geo_index` 分别承担关键词、FTS5 和 GPS RTree 查询。MakerNote、缩略图及二进制负载不进入数据库，每个资源受叶子数、单值、JSON 大小和深度限制。
 
 旧版 `system_settings.photostaff_map_settings` 记录为代码回滚保留，但当前 API 与 Web 不再读取或更新它。托管离线地图不新增数据库表；状态由固定文件和进程内下载任务决定。
 

@@ -2,27 +2,27 @@ import { Crosshair, Download, LoaderCircle, Map as MapIcon, RefreshCw, Search } 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  downloadPhotostaffMap,
-  getPhotostaffMapSettings,
-  queryPhotostaffMap,
-  type PhotostaffMapQueryResult,
-  type PhotostaffMapSettingsResponse,
-  type PhotostaffQueryRequest
+  downloadPhotoMap,
+  getPhotoMapSettings,
+  queryPhotoMap,
+  type PhotoMapQueryResult,
+  type PhotoMapSettingsResponse,
+  type PhotoQueryRequest
 } from "../../api.js";
-import type { PhotostaffLocationBounds } from "@sigmaos/shared";
+import type { PhotoLocationBounds } from "@sigmaos/shared";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-const WORLD_BOUNDS: PhotostaffLocationBounds = { kind: "bounds", west: -180, south: -85, east: 180, north: 85 };
+const WORLD_BOUNDS: PhotoLocationBounds = { kind: "bounds", west: -180, south: -85, east: 180, north: 85 };
 
-export function PhotostaffMapView({
+export function PhotoMapView({
   filters,
   onOpenAsset,
   onSearchBounds,
   onError
 }: {
-  filters: PhotostaffQueryRequest["filters"];
+  filters: PhotoQueryRequest["filters"];
   onOpenAsset: (assetId: string) => void | Promise<void>;
-  onSearchBounds: (bounds: PhotostaffLocationBounds) => void;
+  onSearchBounds: (bounds: PhotoLocationBounds) => void;
   onError: (message: string) => void;
 }) {
   const { t } = useTranslation();
@@ -32,25 +32,25 @@ export function PhotostaffMapView({
   const errorRef = useRef(onError);
   const filtersRef = useRef(filters);
   const searchBoundsRef = useRef(onSearchBounds);
-  const clustersRef = useRef<PhotostaffMapQueryResult["clusters"]>([]);
+  const clustersRef = useRef<PhotoMapQueryResult["clusters"]>([]);
   const loadRequestRef = useRef(0);
-  const boundsRef = useRef<PhotostaffLocationBounds>(WORLD_BOUNDS);
-  const [mapStatus, setMapStatus] = useState<PhotostaffMapSettingsResponse | null>(null);
+  const boundsRef = useRef<PhotoLocationBounds>(WORLD_BOUNDS);
+  const [mapStatus, setMapStatus] = useState<PhotoMapSettingsResponse | null>(null);
   const [mapRequestError, setMapRequestError] = useState<string | null>(null);
   const [downloadBusy, setDownloadBusy] = useState(false);
-  const [result, setResult] = useState<PhotostaffMapQueryResult | null>(null);
-  const [bounds, setBounds] = useState<PhotostaffLocationBounds>(WORLD_BOUNDS);
-  const [pendingBounds, setPendingBounds] = useState<PhotostaffLocationBounds | null>(null);
+  const [result, setResult] = useState<PhotoMapQueryResult | null>(null);
+  const [bounds, setBounds] = useState<PhotoLocationBounds>(WORLD_BOUNDS);
+  const [pendingBounds, setPendingBounds] = useState<PhotoLocationBounds | null>(null);
   const [loading, setLoading] = useState(true);
 
   filtersRef.current = filters;
   searchBoundsRef.current = onSearchBounds;
 
-  const loadPoints = useCallback(async (nextBounds: PhotostaffLocationBounds, commitBounds = false) => {
+  const loadPoints = useCallback(async (nextBounds: PhotoLocationBounds, commitBounds = false) => {
     const requestId = ++loadRequestRef.current;
     setLoading(true);
     try {
-      const next = await queryPhotostaffMap({
+      const next = await queryPhotoMap({
         ...(filtersRef.current ? { filters: filtersRef.current } : {}),
         bounds: nextBounds,
         columns: 64,
@@ -78,7 +78,7 @@ export function PhotostaffMapView({
 
   useEffect(() => {
     let active = true;
-    void getPhotostaffMapSettings().then((response) => {
+    void getPhotoMapSettings().then((response) => {
       if (!active) return;
       setMapStatus(response);
       setMapRequestError(null);
@@ -104,7 +104,7 @@ export function PhotostaffMapView({
     let timer: number | null = null;
     const poll = async () => {
       try {
-        const next = await getPhotostaffMapSettings();
+        const next = await getPhotoMapSettings();
         if (!active) return;
         setMapStatus(next);
         setMapRequestError(null);
@@ -138,7 +138,7 @@ export function PhotostaffMapView({
       const protocol = new pmtilesModule.Protocol();
       maplibre.addProtocol("pmtiles", protocol.tile);
       removeProtocol = () => maplibre.removeProtocol("pmtiles");
-      const archiveUrl = `${window.location.origin}/api/photostaff/map/archive`;
+      const archiveUrl = `${window.location.origin}/api/photos/map/archive`;
       const initialBounds = settings.bounds ?? [-180, -85, 180, 85];
       const map = new maplibre.Map({
         container: hostRef.current,
@@ -156,14 +156,14 @@ export function PhotostaffMapView({
               tileSize: 256,
               attribution: settings.attribution ?? ""
             },
-            photostaff: { type: "geojson", data: emptyFeatureCollection() }
+            photos: { type: "geojson", data: emptyFeatureCollection() }
           },
           layers: [
             { id: "offline", type: "raster", source: "offline" },
             {
-              id: "photostaff-points",
+              id: "photo-points",
               type: "circle",
-              source: "photostaff",
+              source: "photos",
               paint: {
                 "circle-radius": ["interpolate", ["linear"], ["get", "count"], 1, 7, 100, 18],
                 "circle-color": "#f4c95d",
@@ -172,9 +172,9 @@ export function PhotostaffMapView({
               }
             },
             {
-              id: "photostaff-counts",
+              id: "photo-counts",
               type: "symbol",
-              source: "photostaff",
+              source: "photos",
               filter: [">", ["get", "count"], 1],
               layout: { "text-field": ["to-string", ["get", "count"]], "text-size": 11 },
               paint: { "text-color": "#16191f" }
@@ -184,16 +184,16 @@ export function PhotostaffMapView({
       });
       mapRef.current = map;
       map.on("load", () => {
-        const source = map.getSource("photostaff") as import("maplibre-gl").GeoJSONSource | undefined;
+        const source = map.getSource("photos") as import("maplibre-gl").GeoJSONSource | undefined;
         source?.setData(pointsToGeoJson(clustersRef.current));
       });
       map.on("moveend", () => {
         const viewport = map.getBounds();
-        setPendingBounds(photostaffViewportBounds(
+        setPendingBounds(photoViewportBounds(
           viewport.getWest(), viewport.getSouth(), viewport.getEast(), viewport.getNorth()
         ));
       });
-      map.on("click", "photostaff-points", (event: import("maplibre-gl").MapLayerMouseEvent) => {
+      map.on("click", "photo-points", (event: import("maplibre-gl").MapLayerMouseEvent) => {
         const feature = event.features?.[0];
         if (!feature || feature.geometry.type !== "Point") return;
         const count = Number(feature.properties?.count ?? 0);
@@ -213,13 +213,13 @@ export function PhotostaffMapView({
 
   useEffect(() => {
     clustersRef.current = result?.clusters ?? [];
-    const source = mapRef.current?.getSource("photostaff") as import("maplibre-gl").GeoJSONSource | undefined;
+    const source = mapRef.current?.getSource("photos") as import("maplibre-gl").GeoJSONSource | undefined;
     source?.setData(pointsToGeoJson(clustersRef.current));
   }, [result]);
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
-      onError(t("workspace.photostaff.locationUnavailable"));
+      onError(t("workspace.photos.locationUnavailable"));
       return;
     }
     navigator.geolocation.getCurrentPosition((position) => {
@@ -233,7 +233,7 @@ export function PhotostaffMapView({
     setDownloadBusy(true);
     setMapRequestError(null);
     try {
-      setMapStatus(await downloadPhotostaffMap());
+      setMapStatus(await downloadPhotoMap());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setMapRequestError(message);
@@ -246,36 +246,36 @@ export function PhotostaffMapView({
   const mapReady = mapArchiveReady(mapStatus);
   const mapLabel = mapStatus
     ? `${mapStatus.map.name} ${mapStatus.map.version}`
-    : t("workspace.photostaff.offlineMap");
+    : t("workspace.photos.offlineMap");
   return (
-    <section className="photostaff-map-view" aria-label={t("workspace.photostaff.mapView")}>
-      <div className="photostaff-map-toolbar">
+    <section className="photo-map-view" aria-label={t("workspace.photos.mapView")}>
+      <div className="photo-map-toolbar">
         <span>{mapLabel}</span>
         <div>
-          <button type="button" onClick={useCurrentLocation} disabled={!mapReady} title={t("workspace.photostaff.myLocation")} aria-label={t("workspace.photostaff.myLocation")}>
+          <button type="button" onClick={useCurrentLocation} disabled={!mapReady} title={t("workspace.photos.myLocation")} aria-label={t("workspace.photos.myLocation")}>
             <Crosshair aria-hidden="true" size={15} />
           </button>
           <button type="button" onClick={() => void loadPoints(pendingBounds ?? bounds, true)} disabled={!mapReady || !pendingBounds || loading}>
-            <Search aria-hidden="true" size={14} />{t("workspace.photostaff.searchArea")}
+            <Search aria-hidden="true" size={14} />{t("workspace.photos.searchArea")}
           </button>
         </div>
       </div>
-      <div className="photostaff-map-canvas">
+      <div className="photo-map-canvas">
         {!mapReady ? (
-          <div className="photostaff-coordinate-canvas">
-            <div className="photostaff-coordinate-grid" aria-hidden="true" />
-            <PhotostaffMapDownloadPanel
+          <div className="photo-coordinate-canvas">
+            <div className="photo-coordinate-grid" aria-hidden="true" />
+            <PhotoMapDownloadPanel
               status={mapStatus}
               requestError={mapRequestError}
               busy={downloadBusy}
               onDownload={() => void startDownload()}
             />
           </div>
-        ) : <div ref={hostRef} className="photostaff-maplibre" />}
-        {loading && mapReady ? <div className="photostaff-map-loading"><LoaderCircle className="is-spinning" aria-hidden="true" size={20} /></div> : null}
+        ) : <div ref={hostRef} className="photo-maplibre" />}
+        {loading && mapReady ? <div className="photo-map-loading"><LoaderCircle className="is-spinning" aria-hidden="true" size={20} /></div> : null}
       </div>
       {result?.metadataIndex.pending ? (
-        <p className="photostaff-index-progress">{t("workspace.photostaff.metadataProgress", {
+        <p className="photo-index-progress">{t("workspace.photos.metadataProgress", {
           indexed: result.metadataIndex.indexed,
           total: result.metadataIndex.total
         })}</p>
@@ -284,17 +284,17 @@ export function PhotostaffMapView({
   );
 }
 
-export function mapArchiveReady(status: PhotostaffMapSettingsResponse | null): boolean {
+export function mapArchiveReady(status: PhotoMapSettingsResponse | null): boolean {
   return status?.download.state === "ready" && status.settings !== null;
 }
 
-export function PhotostaffMapDownloadPanel({
+export function PhotoMapDownloadPanel({
   status,
   requestError,
   busy,
   onDownload
 }: {
-  status: PhotostaffMapSettingsResponse | null;
+  status: PhotoMapSettingsResponse | null;
   requestError: string | null;
   busy: boolean;
   onDownload: () => void;
@@ -309,21 +309,21 @@ export function PhotostaffMapDownloadPanel({
 
   if (!status && !error) {
     return (
-      <div className="photostaff-map-download-state" role="status" aria-live="polite">
+      <div className="photo-map-download-state" role="status" aria-live="polite">
         <LoaderCircle className="is-spinning" aria-hidden="true" size={22} />
-        <strong>{t("workspace.photostaff.mapChecking")}</strong>
+        <strong>{t("workspace.photos.mapChecking")}</strong>
       </div>
     );
   }
   if (state === "downloading") {
     return (
-      <div className="photostaff-map-download-state" role="status" aria-live="polite">
+      <div className="photo-map-download-state" role="status" aria-live="polite">
         <LoaderCircle className="is-spinning" aria-hidden="true" size={22} />
-        <strong>{t("workspace.photostaff.mapDownloading")}</strong>
-        <div className="photostaff-map-progress" role="progressbar" aria-label={t("workspace.photostaff.mapDownloading")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+        <strong>{t("workspace.photos.mapDownloading")}</strong>
+        <div className="photo-map-progress" role="progressbar" aria-label={t("workspace.photos.mapDownloading")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
           <span style={{ width: `${percent}%` }} />
         </div>
-        <small>{t("workspace.photostaff.mapDownloadProgress", {
+        <small>{t("workspace.photos.mapDownloadProgress", {
           percent,
           received: formatMapBytes(received),
           total: formatMapBytes(total)
@@ -333,24 +333,24 @@ export function PhotostaffMapDownloadPanel({
   }
   if (state === "failed" || error) {
     return (
-      <div className="photostaff-map-download-state is-error" role="alert">
+      <div className="photo-map-download-state is-error" role="alert">
         <MapIcon aria-hidden="true" size={22} />
-        <strong>{t("workspace.photostaff.mapDownloadFailed")}</strong>
+        <strong>{t("workspace.photos.mapDownloadFailed")}</strong>
         <p>{error}</p>
         <button className="primary-button" type="button" onClick={onDownload} disabled={busy} aria-busy={busy || undefined}>
           {busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <RefreshCw aria-hidden="true" size={16} />}
-          {t("workspace.photostaff.mapRetry")}
+          {t("workspace.photos.mapRetry")}
         </button>
       </div>
     );
   }
   return (
-    <div className="photostaff-map-download-state" role="status">
+    <div className="photo-map-download-state" role="status">
       <MapIcon aria-hidden="true" size={22} />
-      <strong>{t("workspace.photostaff.noBaseMap")}</strong>
+      <strong>{t("workspace.photos.noBaseMap")}</strong>
       <button className="primary-button" type="button" onClick={onDownload} disabled={busy} aria-busy={busy || undefined}>
         {busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <Download aria-hidden="true" size={16} />}
-        {t("workspace.photostaff.downloadOfflineMap")}
+        {t("workspace.photos.downloadOfflineMap")}
       </button>
     </div>
   );
@@ -362,7 +362,7 @@ function formatMapBytes(bytes: number): string {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
-function tupleToBounds(bounds: [number, number, number, number]): PhotostaffLocationBounds {
+function tupleToBounds(bounds: [number, number, number, number]): PhotoLocationBounds {
   return { kind: "bounds", west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] };
 }
 
@@ -373,7 +373,7 @@ function midpoint(bounds: [number, number, number, number]): [number, number] {
   return [longitude, (bounds[1] + bounds[3]) / 2];
 }
 
-function pointsToGeoJson(clusters: PhotostaffMapQueryResult["clusters"]): GeoJSON.FeatureCollection {
+function pointsToGeoJson(clusters: PhotoMapQueryResult["clusters"]): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
     features: clusters.map((cluster) => ({
@@ -388,12 +388,12 @@ function emptyFeatureCollection(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
 
-export function photostaffViewportBounds(
+export function photoViewportBounds(
   west: number,
   south: number,
   east: number,
   north: number
-): PhotostaffLocationBounds {
+): PhotoLocationBounds {
   if (east - west >= 360) {
     return { kind: "bounds", west: -180, south: Math.max(-90, south), east: 180, north: Math.min(90, north) };
   }

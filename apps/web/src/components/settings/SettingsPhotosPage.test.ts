@@ -3,16 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it } from "vitest";
 import { PHOTOSTAFF_SUPPORTED_EXTENSIONS } from "@sigmaos/shared/photostaff-config";
 import { i18n, initI18n } from "../../i18n/index.js";
-import { SettingsPhotostaffPage } from "./SettingsModal.js";
+import { SettingsPhotosPage } from "./SettingsModal.js";
 
 beforeAll(async () => {
   await initI18n();
   await i18n.changeLanguage("en");
 });
 
-describe("SettingsPhotostaffPage", () => {
-  it("renders the photostaff library, scan status, and server runtime configuration", () => {
-    const html = renderToStaticMarkup(createElement(SettingsPhotostaffPage, {
+describe("SettingsPhotosPage", () => {
+  it("renders the photo library, scan status, and server runtime configuration", () => {
+    const html = renderToStaticMarkup(createElement(SettingsPhotosPage, {
       settings: {
         rootId: "nas",
         storagePoolId: "pool-a",
@@ -68,7 +68,7 @@ describe("SettingsPhotostaffPage", () => {
   });
 
   it("shows an explicit unconfigured state without inventing library paths", () => {
-    const html = renderToStaticMarkup(createElement(SettingsPhotostaffPage, {
+    const html = renderToStaticMarkup(createElement(SettingsPhotosPage, {
       settings: null,
       status: {
         state: "unconfigured",
@@ -99,7 +99,7 @@ describe("SettingsPhotostaffPage", () => {
   });
 
   it("does not represent an unavailable status endpoint as zero activity", () => {
-    const html = renderToStaticMarkup(createElement(SettingsPhotostaffPage, {
+    const html = renderToStaticMarkup(createElement(SettingsPhotosPage, {
       settings: {
         rootId: "nas",
         storagePoolId: "pool-a",

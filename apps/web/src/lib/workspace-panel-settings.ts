@@ -2,7 +2,7 @@ export const WORKSPACE_PANEL_STORAGE_KEY = "sigmaos:last-workspace-panel";
 
 export const WORKSPACE_PANEL_IDS = [
   "files",
-  "photostaff",
+  "photos",
   "terminal",
   "downloads",
   "docker",
@@ -23,7 +23,8 @@ interface StorageLike {
 
 export function readStoredWorkspacePanel(storage: StorageLike | null = browserStorage()): WorkspacePanelId {
   try {
-    const panel = storage?.getItem(WORKSPACE_PANEL_STORAGE_KEY) ?? null;
+    const storedPanel = storage?.getItem(WORKSPACE_PANEL_STORAGE_KEY) ?? null;
+    const panel = storedPanel === "photostaff" ? "photos" : storedPanel;
     return isWorkspacePanelId(panel) ? panel : DEFAULT_WORKSPACE_PANEL;
   } catch {
     return DEFAULT_WORKSPACE_PANEL;

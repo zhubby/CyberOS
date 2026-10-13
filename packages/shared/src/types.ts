@@ -225,6 +225,12 @@ export interface PhotostaffTimelinePage {
   nextCursor: string | null;
 }
 
+/** Public Photos API timeline response. */
+export interface PhotoTimelinePage {
+  photos: PhotostaffAssetRecord[];
+  nextCursor: string | null;
+}
+
 export type PhotostaffMetadataStatus = "ready" | "partial";
 export type PhotostaffMetadataScalar = string | number | boolean;
 export type PhotostaffMetadataValueType = "text" | "number" | "date" | "boolean";
@@ -377,6 +383,15 @@ export interface PhotostaffQueryPage {
   metadataIndex: PhotostaffMetadataIndexStatus;
 }
 
+/** Public Photos API query response. */
+export interface PhotoQueryPage {
+  photos: PhotostaffQueryAsset[];
+  nextCursor: string | null;
+  total: number;
+  facets: PhotostaffQueryFacets | null;
+  metadataIndex: PhotostaffMetadataIndexStatus;
+}
+
 export interface PhotostaffMetadataField {
   key: string;
   valueType: PhotostaffMetadataValueType;
@@ -506,6 +521,29 @@ export interface PhotostaffWorkerHealth {
   queuedJobs: number;
   retryingJobs: number;
 }
+
+// Public Photos API and Web names. The underlying records remain owned by the
+// internal Photostaff service and database implementation.
+export type PhotoAssetRecord = PhotostaffAssetRecord;
+export type PhotoJobRecord = PhotostaffJobRecord;
+export type PhotoLibrarySettingsRecord = PhotostaffLibrarySettingsRecord;
+export type PhotoLibraryStatus = PhotostaffLibraryStatus;
+export type PhotoProcessingSettingsRecord = PhotostaffProcessingSettingsRecord;
+export type PhotoWorkerHealth = PhotostaffWorkerHealth;
+export type PhotoLocationBounds = PhotostaffLocationBounds;
+export type PhotoLocationNear = PhotostaffLocationNear;
+export type PhotoMetadataCondition = PhotostaffMetadataCondition;
+export type PhotoMetadataDetail = PhotostaffMetadataDetail;
+export type PhotoMetadataField = PhotostaffMetadataField;
+export type PhotoQueryAsset = PhotostaffQueryAsset;
+export type PhotoQueryFacets = PhotostaffQueryFacets;
+export type PhotoQueryFilters = PhotostaffQueryFilters;
+export type PhotoQueryRequest = PhotostaffQueryRequest;
+export type PhotoQuerySortField = PhotostaffQuerySortField;
+export type PhotoMapQueryRequest = PhotostaffMapQueryRequest;
+export type PhotoMapQueryResult = PhotostaffMapQueryResult;
+export type PhotoManagedMapSettings = PhotostaffManagedMapSettings;
+export type PhotoMapSettingsResponse = PhotostaffMapSettingsResponse;
 
 export type GitFileStatus = "tracked" | "staged" | "modified" | "untracked" | "conflicted";
 

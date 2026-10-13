@@ -4,7 +4,7 @@ description: 文件浏览、搜索、预览、上传、agent 对话和审批操�
 type: how-to
 status: current
 audience: [user, operator]
-sourceOfTruth: [apps/web/src/App.tsx, apps/web/src/components/workspace/WorkspacePane.tsx, apps/web/src/components/workspace/PhotostaffLibraryPanel.tsx, apps/web/src/components/workspace/LocalTerminalPanel.tsx, apps/web/src/components/workspace/DockerImageManagement.tsx, apps/web/src/components/chat/ChatPane.tsx, apps/web/src/components/preview/PreviewContent.tsx, apps/web/src/api.ts]
+sourceOfTruth: [apps/web/src/App.tsx, apps/web/src/components/workspace/WorkspacePane.tsx, apps/web/src/components/workspace/PhotoLibraryPanel.tsx, apps/web/src/components/workspace/LocalTerminalPanel.tsx, apps/web/src/components/workspace/DockerImageManagement.tsx, apps/web/src/components/chat/ChatPane.tsx, apps/web/src/components/preview/PreviewContent.tsx, apps/web/src/api.ts]
 sidebar:
   order: 1
 ---
@@ -36,7 +36,7 @@ sidebar:
 
 ## 使用相册
 
-Photostaff 面板使用系统配置中指定的唯一媒体目录，不在面板内切换目录。原媒体和 XMP sidecar 始终保持原字节；`sigmaos-photostaff.service` 递归扫描图片、视频和 RAW，索引 EXIF、IPTC、XMP、ICC/JFIF、RAW 与视频标签，并生成不携带原元数据的本地 WebP 缩略图与预览。扫描断点、重试和发布 journal 会在 daemon 或系统重启后恢复；界面显示处理阶段、worker health、重试倒计时和稳定错误码，旧时间线在重建期间仍可浏览。
+相册面板使用系统配置中指定的唯一媒体目录，不在面板内切换目录。原媒体和 XMP sidecar 始终保持原字节；内部 `sigmaos-photostaff.service` 递归扫描图片、视频和 RAW，索引 EXIF、IPTC、XMP、ICC/JFIF、RAW 与视频标签，并生成不携带原元数据的本地 WebP 缩略图与预览。扫描断点、重试和发布 journal 会在 daemon 或系统重启后恢复；界面显示处理阶段、worker health、重试倒计时和稳定错误码，旧时间线在重建期间仍可浏览。
 
 时间线支持全文、日期、类型、相机、镜头、ISO、光圈、快门、焦距、评分、关键词、位置和高级字段条件，并提供分面计数与稳定排序。查看器异步加载完整元数据；敏感组默认隐藏，需主动揭示。多文件上传先处理媒体再处理 `.xmp`；移动、trash 和 ZIP 会将确定关联的 sidecar 去重后成对处理，单独下载原图不附带 sidecar。
 

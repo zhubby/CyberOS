@@ -1,23 +1,23 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { PhotostaffAsset, PhotostaffMapSettingsResponse } from "../../api.js";
+import type { PhotoAsset, PhotoMapSettingsResponse } from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
 import {
-  groupPhotostaffByDate,
-  isPhotostaffBusy,
-  photostaffMediaKindForAsset,
-  PhotostaffLibraryPanel,
-  PHOTOSTAFF_ACCEPT,
-  readyPhotostaffQueryFilters,
+  groupPhotosByDate,
+  isPhotoBusy,
+  photoMediaKindForAsset,
+  PhotoLibraryPanel,
+  PHOTO_ACCEPT,
+  readyPhotoQueryFilters,
   retryCountdown,
-  togglePhotostaffFacetValue
-} from "./PhotostaffLibraryPanel.js";
+  togglePhotoFacetValue
+} from "./PhotoLibraryPanel.js";
 import {
   mapArchiveReady,
-  PhotostaffMapDownloadPanel,
-  photostaffViewportBounds
-} from "./PhotostaffMapView.js";
+  PhotoMapDownloadPanel,
+  photoViewportBounds
+} from "./PhotoMapView.js";
 import { PHOTOSTAFF_UPLOAD_EXTENSIONS } from "@sigmaos/shared/photostaff-config";
 
 beforeAll(async () => {
@@ -25,10 +25,10 @@ beforeAll(async () => {
   await i18n.changeLanguage("en");
 });
 
-describe("Photostaff offline map states", () => {
+describe("Photo offline map states", () => {
   it("renders download, progress, failure retry, and ready states", () => {
-    const render = (status: PhotostaffMapSettingsResponse, requestError: string | null = null) => renderToStaticMarkup(
-      createElement(PhotostaffMapDownloadPanel, {
+    const render = (status: PhotoMapSettingsResponse, requestError: string | null = null) => renderToStaticMarkup(
+      createElement(PhotoMapDownloadPanel, {
         status,
         requestError,
         busy: false,
@@ -37,7 +37,7 @@ describe("Photostaff offline map states", () => {
     );
     const initial = mapStatus("not_downloaded");
     expect(render(initial)).toContain("Download offline map");
-    const busyHtml = renderToStaticMarkup(createElement(PhotostaffMapDownloadPanel, {
+    const busyHtml = renderToStaticMarkup(createElement(PhotoMapDownloadPanel, {
       status: initial,
       requestError: null,
       busy: true,
@@ -72,7 +72,7 @@ describe("Photostaff offline map states", () => {
 
   it("renders the managed download action in Chinese", async () => {
     await i18n.changeLanguage("zh-CN");
-    const html = renderToStaticMarkup(createElement(PhotostaffMapDownloadPanel, {
+    const html = renderToStaticMarkup(createElement(PhotoMapDownloadPanel, {
       status: mapStatus("not_downloaded"),
       requestError: null,
       busy: false,
@@ -83,9 +83,9 @@ describe("Photostaff offline map states", () => {
   });
 });
 
-describe("photostaff timeline grouping", () => {
+describe("photo timeline grouping", () => {
   it("allows selecting multiple media files for upload", () => {
-    const html = renderToStaticMarkup(createElement(PhotostaffLibraryPanel, {
+    const html = renderToStaticMarkup(createElement(PhotoLibraryPanel, {
       pools: [],
       selectedRootId: "local",
       sessionId: null,
@@ -101,53 +101,53 @@ describe("photostaff timeline grouping", () => {
   });
 
   it("uses the shared media and XMP extension list for upload filtering", () => {
-    expect(PHOTOSTAFF_ACCEPT.split(",")).toEqual([...PHOTOSTAFF_UPLOAD_EXTENSIONS]);
+    expect(PHOTO_ACCEPT.split(",")).toEqual([...PHOTOSTAFF_UPLOAD_EXTENSIONS]);
   });
 
   it("toggles multiple values within one facet as an OR set", () => {
-    expect(togglePhotostaffFacetValue(["Alpha 1"], "Alpha 7")).toEqual(["Alpha 1", "Alpha 7"]);
-    expect(togglePhotostaffFacetValue(["Alpha 1", "Alpha 7"], "Alpha 1")).toEqual(["Alpha 7"]);
-    expect(togglePhotostaffFacetValue(["Alpha 1"], "Alpha 1")).toBeUndefined();
+    expect(togglePhotoFacetValue(["Alpha 1"], "Alpha 7")).toEqual(["Alpha 1", "Alpha 7"]);
+    expect(togglePhotoFacetValue(["Alpha 1", "Alpha 7"], "Alpha 1")).toEqual(["Alpha 7"]);
+    expect(togglePhotoFacetValue(["Alpha 1"], "Alpha 1")).toBeUndefined();
   });
 
   it("classifies video and RAW assets for timeline presentation", () => {
-    expect(photostaffMediaKindForAsset(photostaff("clip", "2026-09-22T12:00:00.000Z", "clip.mkv", "video/x-matroska"))).toBe("video");
-    expect(photostaffMediaKindForAsset(photostaff("raw", "2026-09-22T12:00:00.000Z", "camera.cr3", "image/x-canon-cr3"))).toBe("raw");
-    expect(photostaffMediaKindForAsset(photostaff("still", "2026-09-22T12:00:00.000Z"))).toBe("image");
+    expect(photoMediaKindForAsset(photo("clip", "2026-09-22T12:00:00.000Z", "clip.mkv", "video/x-matroska"))).toBe("video");
+    expect(photoMediaKindForAsset(photo("raw", "2026-09-22T12:00:00.000Z", "camera.cr3", "image/x-canon-cr3"))).toBe("raw");
+    expect(photoMediaKindForAsset(photo("still", "2026-09-22T12:00:00.000Z"))).toBe("image");
   });
 
-  it("keeps chronological input order while grouping photostaff by local calendar day", () => {
+  it("keeps chronological input order while grouping photos by local calendar day", () => {
     const assets = [
-      photostaff("newest", "2026-09-22T12:00:00.000Z"),
-      photostaff("same-day", "2026-09-22T08:00:00.000Z"),
-      photostaff("older", "2026-09-20T12:00:00.000Z")
+      photo("newest", "2026-09-22T12:00:00.000Z"),
+      photo("same-day", "2026-09-22T08:00:00.000Z"),
+      photo("older", "2026-09-20T12:00:00.000Z")
     ];
 
-    const groups = groupPhotostaffByDate(assets, "en");
+    const groups = groupPhotosByDate(assets, "en");
 
     expect(groups).toHaveLength(2);
-    expect(groups[0]?.photostaff.map((item) => item.id)).toEqual(["newest", "same-day"]);
-    expect(groups[1]?.photostaff.map((item) => item.id)).toEqual(["older"]);
+    expect(groups[0]?.photos.map((item) => item.id)).toEqual(["newest", "same-day"]);
+    expect(groups[1]?.photos.map((item) => item.id)).toEqual(["older"]);
   });
 
   it("falls back to file modification time for invalid dates", () => {
-    const asset = photostaff("fallback", "invalid");
+    const asset = photo("fallback", "invalid");
     asset.mtimeMs = Date.parse("2026-06-15T12:00:00.000Z");
 
-    expect(groupPhotostaffByDate([asset], "en")[0]?.key).toMatch(/^2026-06-1[45]$/u);
+    expect(groupPhotosByDate([asset], "en")[0]?.key).toMatch(/^2026-06-1[45]$/u);
   });
 
-  it("groups indexed photostaff by their original wall-clock date", () => {
+  it("groups indexed photos by their original wall-clock date", () => {
     const asset = {
-      ...photostaff("wall-clock", "2026-06-15T23:00:00.000Z"),
+      ...photo("wall-clock", "2026-06-15T23:00:00.000Z"),
       metadata: { capturedAtLocal: "2026-06-16T07:00:00" }
     };
 
-    expect(groupPhotostaffByDate([asset], "en")[0]?.key).toBe("2026-06-16");
+    expect(groupPhotosByDate([asset], "en")[0]?.key).toBe("2026-06-16");
   });
 
   it("keeps incomplete advanced conditions editable without sending invalid queries", () => {
-    expect(readyPhotostaffQueryFilters({
+    expect(readyPhotoQueryFilters({
       text: "coast",
       advanced: {
         mode: "all",
@@ -165,14 +165,14 @@ describe("photostaff timeline grouping", () => {
 
   it("treats discovery, processing, and retry waits as active work", () => {
     expect(["queued", "discovering", "processing", "retrying"].every((state) =>
-      isPhotostaffBusy(state as "queued" | "discovering" | "processing" | "retrying")
+      isPhotoBusy(state as "queued" | "discovering" | "processing" | "retrying")
     )).toBe(true);
-    expect(isPhotostaffBusy("ready")).toBe(false);
+    expect(isPhotoBusy("ready")).toBe(false);
     expect(retryCountdown("2026-09-22T12:01:05.000Z", Date.parse("2026-09-22T12:00:00.000Z"))).toBe("1m 5s");
   });
 
   it("coerces advanced numeric and boolean values using the metadata field catalog", () => {
-    expect(readyPhotostaffQueryFilters({
+    expect(readyPhotoQueryFilters({
       advanced: {
         mode: "all",
         conditions: [
@@ -195,22 +195,22 @@ describe("photostaff timeline grouping", () => {
   });
 
   it("keeps whole-world and antimeridian map viewports queryable", () => {
-    expect(photostaffViewportBounds(-180, -85, 180, 85)).toEqual({
+    expect(photoViewportBounds(-180, -85, 180, 85)).toEqual({
       kind: "bounds", west: -180, south: -85, east: 180, north: 85
     });
-    expect(photostaffViewportBounds(170, -10, 190, 10)).toEqual({
+    expect(photoViewportBounds(170, -10, 190, 10)).toEqual({
       kind: "bounds", west: 170, south: -10, east: -170, north: 10
     });
-    expect(photostaffViewportBounds(0, -10, 180, 10)).toEqual({
+    expect(photoViewportBounds(0, -10, 180, 10)).toEqual({
       kind: "bounds", west: 0, south: -10, east: 180, north: 10
     });
   });
 });
 
 function mapStatus(
-  state: PhotostaffMapSettingsResponse["download"]["state"],
-  overrides: Partial<PhotostaffMapSettingsResponse["download"]> = {}
-): PhotostaffMapSettingsResponse {
+  state: PhotoMapSettingsResponse["download"]["state"],
+  overrides: Partial<PhotoMapSettingsResponse["download"]> = {}
+): PhotoMapSettingsResponse {
   return {
     map: {
       name: "Natural Earth II",
@@ -229,12 +229,12 @@ function mapStatus(
   };
 }
 
-function photostaff(id: string, takenAt: string, name = `${id}.jpg`, mimeType = "image/jpeg"): PhotostaffAsset {
+function photo(id: string, takenAt: string, name = `${id}.jpg`, mimeType = "image/jpeg"): PhotoAsset {
   return {
     id,
     rootId: "local",
     storagePoolId: "pool-a",
-    path: `Photostaff/${name}`,
+    path: `Photo/${name}`,
     name,
     mimeType,
     sizeBytes: 100,

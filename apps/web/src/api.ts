@@ -96,22 +96,22 @@ import type {
   OpsTask as SharedOpsTask,
   OpsTaskOverview as SharedOpsTaskOverview,
   SystemOperationsResponse as SharedSystemOperationsResponse,
-  PhotostaffAssetRecord as SharedPhotostaffAsset,
-  PhotostaffJobRecord as SharedPhotostaffJob,
-  PhotostaffLibrarySettingsRecord as SharedPhotostaffLibrarySettings,
-  PhotostaffLibraryStatus as SharedPhotostaffLibraryStatus,
-  PhotostaffProcessingSettingsRecord as SharedPhotostaffProcessingSettings,
-  PhotostaffWorkerHealth as SharedPhotostaffWorkerHealth,
-  PhotostaffMapQueryRequest as SharedPhotostaffMapQueryRequest,
-  PhotostaffMapQueryResult as SharedPhotostaffMapQueryResult,
-  PhotostaffManagedMapSettings as SharedPhotostaffMapSettings,
-  PhotostaffMapSettingsResponse as SharedPhotostaffMapSettingsResponse,
-  PhotostaffMetadataDetail as SharedPhotostaffMetadataDetail,
-  PhotostaffMetadataField as SharedPhotostaffMetadataField,
-  PhotostaffQueryAsset as SharedPhotostaffQueryAsset,
-  PhotostaffQueryPage as SharedPhotostaffQueryPage,
-  PhotostaffQueryRequest as SharedPhotostaffQueryRequest,
-  PhotostaffTimelinePage as SharedPhotostaffTimelinePage,
+  PhotoAssetRecord as SharedPhotoAsset,
+  PhotoJobRecord as SharedPhotoJob,
+  PhotoLibrarySettingsRecord as SharedPhotoLibrarySettings,
+  PhotoLibraryStatus as SharedPhotoLibraryStatus,
+  PhotoProcessingSettingsRecord as SharedPhotoProcessingSettings,
+  PhotoWorkerHealth as SharedPhotoWorkerHealth,
+  PhotoMapQueryRequest as SharedPhotoMapQueryRequest,
+  PhotoMapQueryResult as SharedPhotoMapQueryResult,
+  PhotoManagedMapSettings as SharedPhotoMapSettings,
+  PhotoMapSettingsResponse as SharedPhotoMapSettingsResponse,
+  PhotoMetadataDetail as SharedPhotoMetadataDetail,
+  PhotoMetadataField as SharedPhotoMetadataField,
+  PhotoQueryAsset as SharedPhotoQueryAsset,
+  PhotoQueryPage as SharedPhotoQueryPage,
+  PhotoQueryRequest as SharedPhotoQueryRequest,
+  PhotoTimelinePage as SharedPhotoTimelinePage,
   TerminalTab as SharedTerminalTab,
   TerminalTabState as SharedTerminalTabState
 } from "@sigmaos/shared";
@@ -178,22 +178,22 @@ export type SystemOperations = SharedSystemOperationsResponse;
 export type DownloadTask = SharedDownloadTask;
 export type DownloadSettings = PublicDownloadSettings;
 export type DownloadWorkerHealth = SharedDownloadWorkerHealth;
-export type PhotostaffAsset = SharedPhotostaffAsset;
-export type PhotostaffJob = SharedPhotostaffJob;
-export type PhotostaffLibrarySettings = SharedPhotostaffLibrarySettings;
-export type PhotostaffLibraryStatus = SharedPhotostaffLibraryStatus;
-export type PhotostaffProcessingSettings = SharedPhotostaffProcessingSettings;
-export type PhotostaffWorkerHealth = SharedPhotostaffWorkerHealth;
-export type PhotostaffMapQueryRequest = SharedPhotostaffMapQueryRequest;
-export type PhotostaffMapQueryResult = SharedPhotostaffMapQueryResult;
-export type PhotostaffMapSettings = SharedPhotostaffMapSettings;
-export type PhotostaffMapSettingsResponse = SharedPhotostaffMapSettingsResponse;
-export type PhotostaffMetadataDetail = SharedPhotostaffMetadataDetail;
-export type PhotostaffMetadataField = SharedPhotostaffMetadataField;
-export type PhotostaffQueryAsset = SharedPhotostaffQueryAsset;
-export type PhotostaffQueryPage = SharedPhotostaffQueryPage;
-export type PhotostaffQueryRequest = SharedPhotostaffQueryRequest;
-export type PhotostaffTimelinePage = SharedPhotostaffTimelinePage;
+export type PhotoAsset = SharedPhotoAsset;
+export type PhotoJob = SharedPhotoJob;
+export type PhotoLibrarySettings = SharedPhotoLibrarySettings;
+export type PhotoLibraryStatus = SharedPhotoLibraryStatus;
+export type PhotoProcessingSettings = SharedPhotoProcessingSettings;
+export type PhotoWorkerHealth = SharedPhotoWorkerHealth;
+export type PhotoMapQueryRequest = SharedPhotoMapQueryRequest;
+export type PhotoMapQueryResult = SharedPhotoMapQueryResult;
+export type PhotoMapSettings = SharedPhotoMapSettings;
+export type PhotoMapSettingsResponse = SharedPhotoMapSettingsResponse;
+export type PhotoMetadataDetail = SharedPhotoMetadataDetail;
+export type PhotoMetadataField = SharedPhotoMetadataField;
+export type PhotoQueryAsset = SharedPhotoQueryAsset;
+export type PhotoQueryPage = SharedPhotoQueryPage;
+export type PhotoQueryRequest = SharedPhotoQueryRequest;
+export type PhotoTimelinePage = SharedPhotoTimelinePage;
 export type TerminalTab = SharedTerminalTab;
 export type TerminalTabState = SharedTerminalTabState;
 export type VmSummary = PublicVmSummary;
@@ -449,7 +449,7 @@ export interface FileProposalResult {
   approval: PendingApproval;
 }
 
-export interface PhotostaffExportResult {
+export interface PhotoExportResult {
   url: string;
   expiresAt: string | null;
 }
@@ -1174,115 +1174,115 @@ export async function getFiles(rootId: string, currentPath: string, storagePoolI
   return (await response.json()) as FileListing;
 }
 
-export async function getPhotostaffLibrarySettings(): Promise<PhotostaffLibrarySettings | null> {
-  const response = await fetch("/api/photostaff/settings");
+export async function getPhotoLibrarySettings(): Promise<PhotoLibrarySettings | null> {
+  const response = await fetch("/api/photos/settings");
   await ensureOk(response);
-  return ((await response.json()) as { settings: PhotostaffLibrarySettings | null }).settings;
+  return ((await response.json()) as { settings: PhotoLibrarySettings | null }).settings;
 }
 
-export async function savePhotostaffLibrarySettings(input: {
+export async function savePhotoLibrarySettings(input: {
   rootId: string;
   storagePoolId: string;
   path: string;
-}): Promise<{ settings: PhotostaffLibrarySettings; job: PhotostaffJob }> {
-  const response = await fetch("/api/photostaff/settings", jsonRequest("PUT", input));
+}): Promise<{ settings: PhotoLibrarySettings; job: PhotoJob }> {
+  const response = await fetch("/api/photos/settings", jsonRequest("PUT", input));
   await ensureOk(response);
-  return (await response.json()) as { settings: PhotostaffLibrarySettings; job: PhotostaffJob };
+  return (await response.json()) as { settings: PhotoLibrarySettings; job: PhotoJob };
 }
 
-export async function getPhotostaffTimeline(cursor?: string | null, limit = 60): Promise<PhotostaffTimelinePage> {
+export async function getPhotoTimeline(cursor?: string | null, limit = 60): Promise<PhotoTimelinePage> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
-  const response = await fetch(`/api/photostaff?${params.toString()}`);
+  const response = await fetch(`/api/photos?${params.toString()}`);
   await ensureOk(response);
-  return (await response.json()) as PhotostaffTimelinePage;
+  return (await response.json()) as PhotoTimelinePage;
 }
 
-export async function queryPhotostaff(input: PhotostaffQueryRequest): Promise<PhotostaffQueryPage> {
-  const response = await fetch("/api/photostaff/query", jsonRequest("POST", input));
+export async function queryPhotos(input: PhotoQueryRequest): Promise<PhotoQueryPage> {
+  const response = await fetch("/api/photos/query", jsonRequest("POST", input));
   await ensureOk(response);
-  return (await response.json()) as PhotostaffQueryPage;
+  return (await response.json()) as PhotoQueryPage;
 }
 
-export async function getPhotostaffMetadata(assetId: string, includeSensitive = false): Promise<PhotostaffMetadataDetail> {
+export async function getPhotoMetadata(assetId: string, includeSensitive = false): Promise<PhotoMetadataDetail> {
   const params = includeSensitive ? "?includeSensitive=1" : "";
-  const response = await fetch(`/api/photostaff/${encodeURIComponent(assetId)}/metadata${params}`);
+  const response = await fetch(`/api/photos/${encodeURIComponent(assetId)}/metadata${params}`);
   await ensureOk(response);
-  return ((await response.json()) as { metadata: PhotostaffMetadataDetail }).metadata;
+  return ((await response.json()) as { metadata: PhotoMetadataDetail }).metadata;
 }
 
-export async function getPhotostaffRecord(assetId: string): Promise<PhotostaffQueryAsset> {
-  const response = await fetch(`/api/photostaff/${encodeURIComponent(assetId)}/record`);
+export async function getPhotoRecord(assetId: string): Promise<PhotoQueryAsset> {
+  const response = await fetch(`/api/photos/${encodeURIComponent(assetId)}/record`);
   await ensureOk(response);
-  return ((await response.json()) as { photostaff: PhotostaffQueryAsset }).photostaff;
+  return ((await response.json()) as { photo: PhotoQueryAsset }).photo;
 }
 
-export async function getPhotostaffMetadataFields(query = ""): Promise<PhotostaffMetadataField[]> {
+export async function getPhotoMetadataFields(query = ""): Promise<PhotoMetadataField[]> {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
-  const response = await fetch(`/api/photostaff/metadata/fields?${params.toString()}`);
+  const response = await fetch(`/api/photos/metadata/fields?${params.toString()}`);
   await ensureOk(response);
-  return ((await response.json()) as { fields: PhotostaffMetadataField[] }).fields;
+  return ((await response.json()) as { fields: PhotoMetadataField[] }).fields;
 }
 
-export async function queryPhotostaffMap(input: PhotostaffMapQueryRequest): Promise<PhotostaffMapQueryResult> {
-  const response = await fetch("/api/photostaff/map/query", jsonRequest("POST", input));
+export async function queryPhotoMap(input: PhotoMapQueryRequest): Promise<PhotoMapQueryResult> {
+  const response = await fetch("/api/photos/map/query", jsonRequest("POST", input));
   await ensureOk(response);
-  return (await response.json()) as PhotostaffMapQueryResult;
+  return (await response.json()) as PhotoMapQueryResult;
 }
 
-export async function getPhotostaffMapSettings(): Promise<PhotostaffMapSettingsResponse> {
-  const response = await fetch("/api/photostaff/map/settings");
+export async function getPhotoMapSettings(): Promise<PhotoMapSettingsResponse> {
+  const response = await fetch("/api/photos/map/settings");
   await ensureOk(response);
-  return (await response.json()) as PhotostaffMapSettingsResponse;
+  return (await response.json()) as PhotoMapSettingsResponse;
 }
 
-export async function downloadPhotostaffMap(): Promise<PhotostaffMapSettingsResponse> {
-  const response = await fetch("/api/photostaff/map/download", { method: "POST" });
+export async function downloadPhotoMap(): Promise<PhotoMapSettingsResponse> {
+  const response = await fetch("/api/photos/map/download", { method: "POST" });
   await ensureOk(response);
-  return (await response.json()) as PhotostaffMapSettingsResponse;
+  return (await response.json()) as PhotoMapSettingsResponse;
 }
 
-export async function getPhotostaffLibraryStatus(): Promise<PhotostaffLibraryStatus> {
-  return (await getPhotostaffStatus()).status;
+export async function getPhotoLibraryStatus(): Promise<PhotoLibraryStatus> {
+  return (await getPhotoStatus()).status;
 }
 
-export async function getPhotostaffStatus(): Promise<{
-  status: PhotostaffLibraryStatus;
-  workerHealth: PhotostaffWorkerHealth;
+export async function getPhotoStatus(): Promise<{
+  status: PhotoLibraryStatus;
+  workerHealth: PhotoWorkerHealth;
 }> {
-  const response = await fetch("/api/photostaff/status");
+  const response = await fetch("/api/photos/status");
   await ensureOk(response);
   return (await response.json()) as {
-    status: PhotostaffLibraryStatus;
-    workerHealth: PhotostaffWorkerHealth;
+    status: PhotoLibraryStatus;
+    workerHealth: PhotoWorkerHealth;
   };
 }
 
-export async function getPhotostaffProcessingSettings(): Promise<PhotostaffProcessingSettings> {
-  const response = await fetch("/api/settings/photostaff");
+export async function getPhotoProcessingSettings(): Promise<PhotoProcessingSettings> {
+  const response = await fetch("/api/settings/photos");
   await ensureOk(response);
-  return ((await response.json()) as { settings: PhotostaffProcessingSettings }).settings;
+  return ((await response.json()) as { settings: PhotoProcessingSettings }).settings;
 }
 
-export async function updatePhotostaffProcessingSettings(
-  patch: Partial<Omit<PhotostaffProcessingSettings, "updatedAt">>
-): Promise<PhotostaffProcessingSettings> {
-  const response = await fetch("/api/settings/photostaff", jsonRequest("PATCH", patch));
+export async function updatePhotoProcessingSettings(
+  patch: Partial<Omit<PhotoProcessingSettings, "updatedAt">>
+): Promise<PhotoProcessingSettings> {
+  const response = await fetch("/api/settings/photos", jsonRequest("PATCH", patch));
   await ensureOk(response);
-  return ((await response.json()) as { settings: PhotostaffProcessingSettings }).settings;
+  return ((await response.json()) as { settings: PhotoProcessingSettings }).settings;
 }
 
-export async function requestPhotostaffScan(): Promise<PhotostaffJob> {
-  const response = await fetch("/api/photostaff/scans", { method: "POST" });
+export async function requestPhotoScan(): Promise<PhotoJob> {
+  const response = await fetch("/api/photos/scans", { method: "POST" });
   await ensureOk(response);
-  return ((await response.json()) as { job: PhotostaffJob }).job;
+  return ((await response.json()) as { job: PhotoJob }).job;
 }
 
-export async function uploadPhotostaff(file: File, directory?: string): Promise<{ path: string; operation: FileOperation }> {
+export async function uploadPhoto(file: File, directory?: string): Promise<{ path: string; operation: FileOperation }> {
   const params = new URLSearchParams({ name: file.name });
   if (directory) params.set("directory", directory);
-  const response = await fetch(`/api/photostaff/upload?${params.toString()}`, {
+  const response = await fetch(`/api/photos/upload?${params.toString()}`, {
     method: "PUT",
     headers: { "Content-Type": "application/octet-stream" },
     body: file
@@ -1291,21 +1291,21 @@ export async function uploadPhotostaff(file: File, directory?: string): Promise<
   return (await response.json()) as { path: string; operation: FileOperation };
 }
 
-export async function proposePhotostaffOperation(input: {
+export async function proposePhotoOperation(input: {
   sessionId: string;
   assetIds: string[];
   operation: "move" | "trash";
   targetDirectory?: string;
 }): Promise<FileProposalResult> {
-  const response = await fetch("/api/photostaff/proposals", jsonRequest("POST", input));
+  const response = await fetch("/api/photos/proposals", jsonRequest("POST", input));
   await ensureOk(response);
   return (await response.json()) as FileProposalResult;
 }
 
-export async function createPhotostaffExport(assetIds: string[]): Promise<PhotostaffExportResult> {
-  const response = await fetch("/api/photostaff/exports", jsonRequest("POST", { assetIds }));
+export async function createPhotoExport(assetIds: string[]): Promise<PhotoExportResult> {
+  const response = await fetch("/api/photos/exports", jsonRequest("POST", { assetIds }));
   await ensureOk(response);
-  return (await response.json()) as PhotostaffExportResult;
+  return (await response.json()) as PhotoExportResult;
 }
 
 export async function getDownloads(): Promise<{

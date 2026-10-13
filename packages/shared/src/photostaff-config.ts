@@ -85,6 +85,7 @@ export const PHOTOSTAFF_UPLOAD_EXTENSIONS = [
 ] as const;
 
 export type PhotostaffMediaKind = "image" | "video" | "raw";
+export type PhotoMediaKind = PhotostaffMediaKind;
 
 const PHOTOSTAFF_MIME_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -146,3 +147,7 @@ export function photostaffMediaKind(fileName: string): PhotostaffMediaKind | nul
 export function photostaffMimeType(fileName: string): string | null {
   return PHOTOSTAFF_MIME_TYPES[photostaffExtension(fileName)] ?? null;
 }
+
+export const photoExtension = photostaffExtension;
+export const photoMediaKind = photostaffMediaKind;
+export const photoMimeType = photostaffMimeType;
