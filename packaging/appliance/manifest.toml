@@ -1,5 +1,5 @@
 name = "sigmaos-appliance"
-version = "0.10.2"
+version = "0.10.3"
 base_suite = "bookworm"
 target_arch = "arm64"
 
