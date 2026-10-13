@@ -22,7 +22,7 @@ import { registerTerminalRoutes } from "./terminal.js";
 import { registerVmRoutes } from "./vms.js";
 import { registerVodPlayerRoutes } from "./vod-player.js";
 import { registerDownloadRoutes } from "./downloads.js";
-import { registerPhotostaffRoutes } from "./photostaff.js";
+import { registerPhotoRoutes } from "./photos.js";
 
 export function registerApiRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   registerHealthRoutes(server, context);
@@ -47,5 +47,5 @@ export function registerApiRoutes(server: FastifyInstance, context: ApiRouteCont
   registerVmRoutes(server, context);
   registerVodPlayerRoutes(server, context);
   registerDownloadRoutes(server, context);
-  registerPhotostaffRoutes(server, context);
+  registerPhotoRoutes(server, context);
 }

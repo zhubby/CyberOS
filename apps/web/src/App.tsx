@@ -31,9 +31,9 @@ import {
   getModelProviderSettings,
   getNotifications,
   getPiToolPolicySettings,
-  getPhotostaffLibrarySettings,
-  getPhotostaffProcessingSettings,
-  getPhotostaffStatus,
+  getPhotoLibrarySettings,
+  getPhotoProcessingSettings,
+  getPhotoStatus,
   proposeFileOperation,
   rejectRequest,
   requestSystemPower,
@@ -50,7 +50,7 @@ import {
   updateSessionPath,
   updateDownloadSettings,
   updateIndexerSettings,
-  updatePhotostaffProcessingSettings,
+  updatePhotoProcessingSettings,
   uploadFile,
   type AgentEvent,
   type BuildInfo,
@@ -71,10 +71,10 @@ import {
   type NasRoot,
   type OperationNotification,
   type PendingApproval,
-  type PhotostaffLibrarySettings,
-  type PhotostaffLibraryStatus,
-  type PhotostaffProcessingSettings,
-  type PhotostaffWorkerHealth,
+  type PhotoLibrarySettings,
+  type PhotoLibraryStatus,
+  type PhotoProcessingSettings,
+  type PhotoWorkerHealth,
   type PiToolPolicySettings,
   type Session,
   type SessionSummary,
@@ -241,10 +241,10 @@ export function App() {
   const [downloadSettings, setDownloadSettings] = useState<DownloadSettings | null>(null);
   const [indexerSettings, setIndexerSettings] = useState<IndexerSettings | null>(null);
   const [indexerStatus, setIndexerStatus] = useState<IndexerOverview | null>(null);
-  const [photostaffSettings, setPhotostaffSettings] = useState<PhotostaffLibrarySettings | null>(null);
-  const [photostaffStatus, setPhotostaffStatus] = useState<PhotostaffLibraryStatus | null>(null);
-  const [photostaffProcessingSettings, setPhotostaffProcessingSettings] = useState<PhotostaffProcessingSettings | null>(null);
-  const [photostaffWorkerHealth, setPhotostaffWorkerHealth] = useState<PhotostaffWorkerHealth | null>(null);
+  const [photoSettings, setPhotoSettings] = useState<PhotoLibrarySettings | null>(null);
+  const [photoStatus, setPhotoStatus] = useState<PhotoLibraryStatus | null>(null);
+  const [photoProcessingSettings, setPhotoProcessingSettings] = useState<PhotoProcessingSettings | null>(null);
+  const [photoWorkerHealth, setPhotoWorkerHealth] = useState<PhotoWorkerHealth | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [systemInfoError, setSystemInfoError] = useState<string | null>(null);
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
@@ -861,9 +861,9 @@ export function App() {
         downloadSettingsResult,
         indexerSettingsResult,
         indexerStatusResult,
-        photostaffSettingsResult,
-        photostaffProcessingSettingsResult,
-        photostaffStatusResult,
+        photoSettingsResult,
+        photoProcessingSettingsResult,
+        photoStatusResult,
         systemInfoResult,
         buildInfoResult
       ] = await Promise.allSettled([
@@ -873,9 +873,9 @@ export function App() {
         getDownloadSettings(),
         getIndexerSettings(),
         getIndexerOverview(),
-        getPhotostaffLibrarySettings(),
-        getPhotostaffProcessingSettings(),
-        getPhotostaffStatus(),
+        getPhotoLibrarySettings(),
+        getPhotoProcessingSettings(),
+        getPhotoStatus(),
         getSystemInfo(),
         getBuildInfo()
       ]);
@@ -923,27 +923,27 @@ export function App() {
         errors.push(toErrorMessage(indexerStatusResult.reason));
       }
 
-      if (photostaffSettingsResult.status === "fulfilled") {
-        setPhotostaffSettings(photostaffSettingsResult.value);
+      if (photoSettingsResult.status === "fulfilled") {
+        setPhotoSettings(photoSettingsResult.value);
       } else {
-        setPhotostaffSettings(null);
-        errors.push(toErrorMessage(photostaffSettingsResult.reason));
+        setPhotoSettings(null);
+        errors.push(toErrorMessage(photoSettingsResult.reason));
       }
 
-      if (photostaffProcessingSettingsResult.status === "fulfilled") {
-        setPhotostaffProcessingSettings(photostaffProcessingSettingsResult.value);
+      if (photoProcessingSettingsResult.status === "fulfilled") {
+        setPhotoProcessingSettings(photoProcessingSettingsResult.value);
       } else {
-        setPhotostaffProcessingSettings(null);
-        errors.push(toErrorMessage(photostaffProcessingSettingsResult.reason));
+        setPhotoProcessingSettings(null);
+        errors.push(toErrorMessage(photoProcessingSettingsResult.reason));
       }
 
-      if (photostaffStatusResult.status === "fulfilled") {
-        setPhotostaffStatus(photostaffStatusResult.value.status);
-        setPhotostaffWorkerHealth(photostaffStatusResult.value.workerHealth);
+      if (photoStatusResult.status === "fulfilled") {
+        setPhotoStatus(photoStatusResult.value.status);
+        setPhotoWorkerHealth(photoStatusResult.value.workerHealth);
       } else {
-        setPhotostaffStatus(null);
-        setPhotostaffWorkerHealth(null);
-        errors.push(toErrorMessage(photostaffStatusResult.reason));
+        setPhotoStatus(null);
+        setPhotoWorkerHealth(null);
+        errors.push(toErrorMessage(photoStatusResult.reason));
       }
 
       if (systemInfoResult.status === "fulfilled") {
@@ -1063,12 +1063,12 @@ export function App() {
     }
   }
 
-  async function changePhotostaffProcessingSettings(
-    patch: Partial<Omit<PhotostaffProcessingSettings, "updatedAt">>
+  async function changePhotoProcessingSettings(
+    patch: Partial<Omit<PhotoProcessingSettings, "updatedAt">>
   ) {
     setError(null);
     try {
-      setPhotostaffProcessingSettings(await updatePhotostaffProcessingSettings(patch));
+      setPhotoProcessingSettings(await updatePhotoProcessingSettings(patch));
     } catch (nextError) {
       setError(toErrorMessage(nextError));
       throw nextError;
@@ -2413,10 +2413,10 @@ export function App() {
           indexerSettings={indexerSettings}
           indexerStatus={indexerStatus}
           roots={roots}
-          photostaffSettings={photostaffSettings}
-          photostaffStatus={photostaffStatus}
-          photostaffProcessingSettings={photostaffProcessingSettings}
-          photostaffWorkerHealth={photostaffWorkerHealth}
+          photoSettings={photoSettings}
+          photoStatus={photoStatus}
+          photoProcessingSettings={photoProcessingSettings}
+          photoWorkerHealth={photoWorkerHealth}
           dockerForm={dockerSettingsForm}
           systemInfo={systemInfo}
           systemInfoError={systemInfoError}
@@ -2440,7 +2440,7 @@ export function App() {
           onDownloadSettingsChange={changeDownloadSettings}
           onIndexerSettingsChange={changeIndexerSettings}
           onIndexerReindex={reindexRoot}
-          onPhotostaffProcessingSettingsChange={changePhotostaffProcessingSettings}
+          onPhotoProcessingSettingsChange={changePhotoProcessingSettings}
           onToolPolicyFormChange={setToolPolicyForm}
           onLanguagePreferenceChange={changeLanguagePreference}
           onThemePreferenceChange={changeThemePreference}

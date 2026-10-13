@@ -4,33 +4,33 @@ description: API 传输面、端点分组和稳定契约。
 type: reference
 status: current
 audience: [developer]
-sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photostaff.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/shares.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
+sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photos.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/shares.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
 sidebar:
   order: 2
 ---
 
-REST 路由按 roots、files/search、photostaff、sessions/jobs/events、approvals/operations、indexer/readiness/health、backup、settings、system、storage、shares、Docker、VM 和 terminal 分组。
+REST 路由按 roots、files/search、photos、sessions/jobs/events、approvals/operations、indexer/readiness/health、backup、settings、system、storage、shares、Docker、VM 和 terminal 分组。
 
 Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM console 使用 WebSocket。写操作的 approval 要求以 route 实现和 `packages/shared/src/types.ts` 为准；本页不复制易漂移的完整 JSON schema。
 
-## Photostaff
+## Photos
 
-- `GET/PUT /api/photostaff/settings` 读取或设置唯一照片库。设置请求必须携带 `rootId`、`storagePoolId` 和池内现有目录；变更后旧索引失效并排队完整扫描。
-- `GET/PATCH /api/settings/photostaff` 读取或更新处理并发、扫描周期、自动重试、命令超时、大小/像素限制、scratch 上限和最低剩余空间。
-- `GET /api/photostaff` 使用不透明 cursor 返回按 `takenAt DESC, id DESC` 稳定排序的页面；`GET /api/photostaff/status` 返回 `unconfigured/queued/discovering/processing/retrying/ready/degraded/offline` 状态与 worker health，`POST /api/photostaff/scans` 排队手动扫描。
-- `POST /api/photostaff/query` 接收最多 64 KiB、25 个高级条件，支持文本、日期、媒体类型、相机、镜头、曝光、评分、关键词、位置和任意标量字段。排序 cursor 绑定查询指纹；响应包含精确总数、元数据升级进度、排除自身条件的分类分面和当前结果的数值范围。
-- `GET /api/photostaff/metadata/fields` 返回可查询字段目录；`GET /api/photostaff/:id/metadata` 默认排除 GPS、设备/镜头序列号、联系信息和人物区域，只有显式 `includeSensitive=1` 才返回敏感组。
-- `POST /api/photostaff/map/query` 在视口内返回最多 4096 个本地聚合点。地理查询先用 RTree 缩小候选，再用规范坐标或 Haversine 精确计算，支持反经线；距离排序必须提供附近查询中心。
-- `GET /api/photostaff/map/settings` 返回固定 Natural Earth II 3.2.0 资产信息及 `not_downloaded/downloading/ready/failed`、已下载字节、总字节和错误；`POST /api/photostaff/map/download` 无请求体，幂等启动或返回当前下载任务。客户端不能提交 URL 或文件路径，旧 `PUT /api/photostaff/map/settings` 不再存在。
-- `GET /api/photostaff/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${SIGMAOS_DATA_DIR}/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。
-- `GET /api/photostaff/:id/thumbnail|preview|original` 只解析当前照片库中的资源。缩略图和预览来自 data directory 的 hash-addressed WebP cache；GIF preview 保留动画原文件，视频 preview 是首帧海报。
-- `GET /api/photostaff/:id/video` 为视频资源提供带 Range 的播放流；MP4/WebM 直接流式返回，其他支持容器通过 FFmpeg 缓存为 MP4。
-- `PUT /api/photostaff/upload` 使用 `application/octet-stream`，查询参数传文件名和可选目录。媒体限制 512 MiB、原子发布并按 SHA-256 拒绝当前库中的重复内容；XMP sidecar 限制 16 MiB。
-- Photostaff 支持图片 `.jpg`、`.jpeg`、`.png`、`.webp`、`.gif`、`.heic`、`.heif`，视频 `.mp4`、`.mov`、`.m4v`、`.avi`、`.mkv`、`.webm`、`.mpeg`、`.mpg`，以及 RAW `.cr2`、`.cr3`、`.crw`、`.nef`、`.nrw`、`.arw`、`.srf`、`.sr2`、`.dng`、`.raf`、`.orf`、`.rw2`、`.pef`、`.rwl`、`.3fr`、`.x3f`、`.erf`、`.kdc`、`.mos`、`.mrw`、`.bay`。
-- `POST /api/photostaff/exports` 为单张原图或最多 100 张照片的短时 ZIP 创建下载地址；ZIP 会去重并包含关联 XMP，单张 original 仍只返回原媒体字节，token 使用一次后失效。
-- `POST /api/photostaff/proposals` 为最多 100 张照片创建一组 move 或 trash 文件提案，并去重加入关联 XMP。目标必须仍在照片库内，执行前继续走现有 approval，不提供绕过入口。
+- `GET/PUT /api/photos/settings` 读取或设置唯一照片库。设置请求必须携带 `rootId`、`storagePoolId` 和池内现有目录；变更后旧索引失效并排队完整扫描。
+- `GET/PATCH /api/settings/photos` 读取或更新处理并发、扫描周期、自动重试、命令超时、大小/像素限制、scratch 上限和最低剩余空间。
+- `GET /api/photos` 使用不透明 cursor 返回按 `takenAt DESC, id DESC` 稳定排序的页面；`GET /api/photos/status` 返回 `unconfigured/queued/discovering/processing/retrying/ready/degraded/offline` 状态与 worker health，`POST /api/photos/scans` 排队手动扫描。
+- `POST /api/photos/query` 接收最多 64 KiB、25 个高级条件，支持文本、日期、媒体类型、相机、镜头、曝光、评分、关键词、位置和任意标量字段。排序 cursor 绑定查询指纹；响应包含精确总数、元数据升级进度、排除自身条件的分类分面和当前结果的数值范围。
+- `GET /api/photos/metadata/fields` 返回可查询字段目录；`GET /api/photos/:id/metadata` 默认排除 GPS、设备/镜头序列号、联系信息和人物区域，只有显式 `includeSensitive=1` 才返回敏感组。
+- `POST /api/photos/map/query` 在视口内返回最多 4096 个本地聚合点。地理查询先用 RTree 缩小候选，再用规范坐标或 Haversine 精确计算，支持反经线；距离排序必须提供附近查询中心。
+- `GET /api/photos/map/settings` 返回固定 Natural Earth II 3.2.0 资产信息及 `not_downloaded/downloading/ready/failed`、已下载字节、总字节和错误；`POST /api/photos/map/download` 无请求体，幂等启动或返回当前下载任务。客户端不能提交 URL 或文件路径，旧 `PUT /api/photos/map/settings` 不再存在。
+- `GET /api/photos/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${SIGMAOS_DATA_DIR}/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。
+- `GET /api/photos/:id/thumbnail|preview|original` 只解析当前照片库中的资源。缩略图和预览来自 data directory 的 hash-addressed WebP cache；GIF preview 保留动画原文件，视频 preview 是首帧海报。
+- `GET /api/photos/:id/video` 为视频资源提供带 Range 的播放流；MP4/WebM 直接流式返回，其他支持容器通过 FFmpeg 缓存为 MP4。
+- `PUT /api/photos/upload` 使用 `application/octet-stream`，查询参数传文件名和可选目录。媒体限制 512 MiB、原子发布并按 SHA-256 拒绝当前库中的重复内容；XMP sidecar 限制 16 MiB。
+- Photos 支持图片 `.jpg`、`.jpeg`、`.png`、`.webp`、`.gif`、`.heic`、`.heif`，视频 `.mp4`、`.mov`、`.m4v`、`.avi`、`.mkv`、`.webm`、`.mpeg`、`.mpg`，以及 RAW `.cr2`、`.cr3`、`.crw`、`.nef`、`.nrw`、`.arw`、`.srf`、`.sr2`、`.dng`、`.raf`、`.orf`、`.rw2`、`.pef`、`.rwl`、`.3fr`、`.x3f`、`.erf`、`.kdc`、`.mos`、`.mrw`、`.bay`。
+- `POST /api/photos/exports` 为单张原图或最多 100 张照片的短时 ZIP 创建下载地址；ZIP 会去重并包含关联 XMP，单张 original 仍只返回原媒体字节，token 使用一次后失效。
+- `POST /api/photos/proposals` 为最多 100 张照片创建一组 move 或 trash 文件提案，并去重加入关联 XMP。目标必须仍在照片库内，执行前继续走现有 approval，不提供绕过入口。
 
-JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由 Rust photostaff 处理。ExifTool 提取 EXIF/IPTC/XMP/ICC/JFIF/RAW 标量，视频使用 `ffprobe`，libvips CLI 生成 WebP；同目录精确媒体名和同 stem XMP 按确定性规则关联，大小写冲突标记为 ambiguous。源文件由 storage-pool dirfd 与 `openat2` 打开后以继承 fd 交给子工具，发布使用空间预留、文件/目录 sync 和 journal。原图、视频流和文件变更每次访问都重新经过 root、storage pool、挂载、遍历和 symlink 校验；当前配置版本的缓存 WebP 缩略图与预览可以在存储池离线时继续读取。不要把索引记录当成原文件存在性的授权依据。
+JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `photostaff` 服务处理；`photostaff` 仅是模块和进程标识，公开产品与 HTTP 契约统一使用 Photos。ExifTool 提取 EXIF/IPTC/XMP/ICC/JFIF/RAW 标量，视频使用 `ffprobe`，libvips CLI 生成 WebP；同目录精确媒体名和同 stem XMP 按确定性规则关联，大小写冲突标记为 ambiguous。源文件由 storage-pool dirfd 与 `openat2` 打开后以继承 fd 交给子工具，发布使用空间预留、文件/目录 sync 和 journal。原图、视频流和文件变更每次访问都重新经过 root、storage pool、挂载、遍历和 symlink 校验；当前配置版本的缓存 WebP 缩略图与预览可以在存储池离线时继续读取。不要把索引记录当成原文件存在性的授权依据。
 
 ## 系统电源
 

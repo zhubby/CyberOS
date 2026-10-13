@@ -1,0 +1,42 @@
+{
+  "runId": "20261013-restore-photos-public-contract",
+  "mode": "autofix",
+  "execution": "sequential-main-thread",
+  "scope": {
+    "branch": "codex/restore-photos-public-contract",
+    "base": "origin/main",
+    "intent": "restore Photos public names and routes while retaining photostaff internal identifiers"
+  },
+  "verdict": "ready_with_fixes",
+  "findings": [],
+  "appliedFixes": [
+    "Clarified remaining product-facing documentation so lowercase photostaff is explicitly an internal service identifier.",
+    "Strengthened API regression coverage for response fields, export URLs, and removed legacy write routes.",
+    "Aligned the Chinese settings product label with the required 相册 name."
+  ],
+  "residualActionableWork": [],
+  "advisoryOutputs": {
+    "agentNativeGaps": [],
+    "testingGaps": [],
+    "residualRisks": [
+      "Third-party clients that adopted the short-lived /api/photostaff/* routes must return to the historical /api/photos/* contract; compatibility aliases are intentionally excluded."
+    ]
+  },
+  "coverage": {
+    "subagentsDispatched": false,
+    "suppressedCount": 0,
+    "failedReviewerCount": 0,
+    "pastSolutionsFound": false
+  },
+  "verification": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "tests": "Rust workspace passed; 124 Vitest files with 813 passed and 4 skipped; 5 docs tests passed",
+    "build": "passed",
+    "browserAcceptance": "passed at desktop, 820, 560, 390, and 320px in English/Chinese and dark/light themes"
+  },
+  "handoff": {
+    "committedByReview": false,
+    "pushedByReview": false
+  }
+}

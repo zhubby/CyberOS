@@ -10,14 +10,14 @@ sourceOfTruth:
   - apps/web/src/styles/layout.css
   - apps/web/src/styles/chat.css
   - apps/web/src/styles/workspace.css
-  - apps/web/src/styles/photostaff.css
+  - apps/web/src/styles/photos.css
   - apps/web/src/styles/responsive.css
   - apps/web/src/styles/interactions.css
   - apps/web/src/components/chat/ChatPane.tsx
   - apps/web/src/components/workspace/ManagementDashboard.tsx
   - apps/web/src/components/workspace/PanelHeader.tsx
   - apps/web/src/components/workspace/WorkspacePane.tsx
-  - apps/web/src/components/workspace/PhotostaffLibraryPanel.tsx
+  - apps/web/src/components/workspace/PhotoLibraryPanel.tsx
   - apps/web/src/components/settings/SettingsIndexerPage.tsx
 sidebar:
   order: 2

@@ -15,13 +15,13 @@ sidebar:
 
 ## 媒体扫描与解码
 
-Photostaff 面板长时间停在 queued/discovering/processing/retrying 或出现 degraded 时，先检查 worker、库状态和目录挂载：
+相册面板长时间停在 queued/discovering/processing/retrying 或出现 degraded 时，先检查内部 photostaff worker、图库状态和目录挂载：
 
 ```bash
 sudo systemctl status sigmaos-photostaff.service --no-pager
 sudo journalctl -u sigmaos-photostaff.service -n 100 --no-pager
-curl -fsS http://127.0.0.1:3010/api/photostaff/status
-curl -fsS http://127.0.0.1:3010/api/photostaff/map/settings
+curl -fsS http://127.0.0.1:3010/api/photos/status
+curl -fsS http://127.0.0.1:3010/api/photos/map/settings
 command -v exiftool
 command -v vipsthumbnail
 command -v heif-convert
@@ -39,11 +39,11 @@ command -v ffprobe
 地图下载失败时先读取托管状态和 API journal，再检查固定目录的空间与权限：
 
 ```bash
-curl -fsS http://127.0.0.1:3010/api/photostaff/map/settings
+curl -fsS http://127.0.0.1:3010/api/photos/map/settings
 sudo journalctl -u sigmaos-api.service -n 100 --no-pager
 sudo -u sigmaos test -w /var/lib/sigmaos/photostaff/maps
 df -h /var/lib/sigmaos
-curl -fsS -H 'Range: bytes=0-7' http://127.0.0.1:3010/api/photostaff/map/archive
+curl -fsS -H 'Range: bytes=0-7' http://127.0.0.1:3010/api/photos/map/archive
 ```
 
 `ready` 时最后一个请求应返回 `206`；`not_downloaded` 时归档接口返回 `404`。网络、长度、23,141,432 字节固定大小、SHA-256 或 PMTiles/JPEG 校验失败会进入 `failed`，无效 `.part` 文件会自动删除，界面“重试”从零下载。不要手工放入同名文件来绕过校验；若固定成品损坏，保留 journal 信息后移走该单一文件，再从界面重试。

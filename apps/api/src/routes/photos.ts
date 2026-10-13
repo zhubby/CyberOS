@@ -42,15 +42,16 @@ import {
   photostaffExtension,
   photostaffMediaKind,
   type FileOperationProposal,
-  type PhotostaffAssetRecord,
-  type PhotostaffLocationBounds,
-  type PhotostaffLocationNear,
-  type PhotostaffMapQueryRequest,
-  type PhotostaffProcessingSettingsRecord,
-  type PhotostaffMetadataCondition,
-  type PhotostaffQueryAsset,
-  type PhotostaffQueryRequest,
-  type PhotostaffTimelinePage
+  type PhotoAssetRecord,
+  type PhotoLocationBounds,
+  type PhotoLocationNear,
+  type PhotoMapQueryRequest,
+  type PhotoProcessingSettingsRecord,
+  type PhotoMetadataCondition,
+  type PhotoQueryAsset,
+  type PhotoQueryRequest,
+  type PhotoQueryPage,
+  type PhotoTimelinePage
 } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { sendFileStream } from "../lib/files.js";
@@ -68,17 +69,17 @@ import {
 } from "../lib/storage-scope.js";
 
 const MAX_BATCH_SIZE = 100;
-const PHOTOSTAFF_QUERY_BODY_LIMIT = 64 * 1024;
+const PHOTO_QUERY_BODY_LIMIT = 64 * 1024;
 const EXPORT_TTL_MS = 5 * 60 * 1_000;
-interface PhotostaffExport {
+interface PhotoExport {
   expiresAt: number;
   assetIds: string[];
   libraryUpdatedAt: string;
 }
 
-export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRouteContext): void {
+export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   const { db, system } = context;
-  const exports = new Map<string, PhotostaffExport>();
+  const exports = new Map<string, PhotoExport>();
   const videoCache = new VideoCache({
     dataDir: context.config.dataDir,
     transcoder: context.videoTranscoder ?? ffmpegVideoTranscoder
@@ -89,33 +90,33 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
   });
   server.addHook("onClose", async () => mapArchive.close());
 
-  server.get("/api/photostaff/settings", async () => ({ settings: getPhotostaffLibrarySettings(db) }));
+  server.get("/api/photos/settings", async () => ({ settings: getPhotostaffLibrarySettings(db) }));
 
-  server.get("/api/settings/photostaff", async () => ({
+  server.get("/api/settings/photos", async () => ({
     settings: getPhotostaffProcessingSettings(db) ?? defaultPhotostaffProcessingSettings()
   }));
 
-  server.patch<{ Body: Partial<Omit<PhotostaffProcessingSettingsRecord, "updatedAt">> }>(
-    "/api/settings/photostaff",
+  server.patch<{ Body: Partial<Omit<PhotoProcessingSettingsRecord, "updatedAt">> }>(
+    "/api/settings/photos",
     async (request, reply) => {
       try {
         const current = getPhotostaffProcessingSettings(db) ?? defaultPhotostaffProcessingSettings();
         const settings = savePhotostaffProcessingSettings(db, { ...current, ...request.body });
         reply.send({ settings });
       } catch (error) {
-        reply.status(400).send({ error: error instanceof Error ? error.message : "Photostaff settings are invalid" });
+        reply.status(400).send({ error: error instanceof Error ? error.message : "Photo settings are invalid" });
       }
     }
   );
 
   server.put<{
     Body: { rootId?: string; storagePoolId?: string; path?: string };
-  }>("/api/photostaff/settings", async (request, reply) => {
+  }>("/api/photos/settings", async (request, reply) => {
     const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
     const safe = await resolveScopedExistingPath(scope, request.body?.path ?? scope.mountpointPath);
     const directory = await stat(safe.realPath);
     if (!directory.isDirectory()) {
-      reply.status(400).send({ error: "Photostaff library path must be a directory" });
+      reply.status(400).send({ error: "Photo library path must be a directory" });
       return;
     }
     const settings = savePhotostaffLibrarySettings(db, {
@@ -129,16 +130,16 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
 
   server.get<{
     Querystring: { cursor?: string; limit?: string };
-  }>("/api/photostaff", async (request, reply) => {
+  }>("/api/photos", async (request, reply) => {
     const settings = getPhotostaffLibrarySettings(db);
     if (!settings) {
-      const empty: PhotostaffTimelinePage = { photostaff: [], nextCursor: null };
+      const empty: PhotoTimelinePage = { photos: [], nextCursor: null };
       reply.send(empty);
       return;
     }
     const cursor = decodeCursor(request.query.cursor);
     if (request.query.cursor && !cursor) {
-      reply.status(400).send({ error: "Photostaff cursor is invalid" });
+      reply.status(400).send({ error: "Photo cursor is invalid" });
       return;
     }
     const requestedLimit = Number(request.query.limit ?? "60");
@@ -146,19 +147,19 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
     const result = listPhotostaffAssets(db, { libraryUpdatedAt: settings.updatedAt, limit, cursor });
     const last = result.photostaff.at(-1);
     reply.send({
-      photostaff: result.photostaff,
+      photos: result.photostaff,
       nextCursor: result.hasMore && last ? encodeCursor({ takenAt: last.takenAt, id: last.id }) : null
-    } satisfies PhotostaffTimelinePage);
+    } satisfies PhotoTimelinePage);
   });
 
-  server.post<{ Body: PhotostaffQueryRequest }>(
-    "/api/photostaff/query",
-    { bodyLimit: PHOTOSTAFF_QUERY_BODY_LIMIT },
+  server.post<{ Body: PhotoQueryRequest }>(
+    "/api/photos/query",
+    { bodyLimit: PHOTO_QUERY_BODY_LIMIT },
     async (request, reply) => {
       const settings = getPhotostaffLibrarySettings(db);
       if (!settings) {
         reply.send({
-          photostaff: [],
+          photos: [],
           nextCursor: null,
           total: 0,
           facets: null,
@@ -166,16 +167,16 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
         });
         return;
       }
-      const query = validatePhotostaffQuery(request.body);
+      const query = validatePhotoQuery(request.body);
       if (!query.ok) {
         reply.status(400).send({ error: query.error });
         return;
       }
       const requestWithoutCursor = { ...query.value, cursor: undefined };
       const fingerprint = photostaffQueryFingerprint(requestWithoutCursor);
-      const cursor = decodePhotostaffQueryCursor(query.value.cursor);
+      const cursor = decodePhotoQueryCursor(query.value.cursor);
       if (query.value.cursor && (!cursor || cursor.fingerprint !== fingerprint)) {
-        reply.status(400).send({ error: "Photostaff query cursor is invalid or belongs to another query" });
+        reply.status(400).send({ error: "Photo query cursor is invalid or belongs to another query" });
         return;
       }
       const result = queryPhotostaffAssets(db, {
@@ -185,19 +186,19 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
       });
       const last = result.photostaff.at(-1);
       reply.send({
-        photostaff: result.photostaff,
+        photos: result.photostaff,
         nextCursor: result.hasMore && last
-          ? encodePhotostaffQueryCursor({ fingerprint, sortValue: photostaffSortValue(last, query.value), id: last.id })
+          ? encodePhotoQueryCursor({ fingerprint, sortValue: photoSortValue(last, query.value), id: last.id })
           : null,
         total: result.total,
         facets: result.facets,
         metadataIndex: getPhotostaffMetadataIndexStatus(db, settings.updatedAt)
-      });
+      } satisfies PhotoQueryPage);
     }
   );
 
   server.get<{ Querystring: { q?: string; limit?: string } }>(
-    "/api/photostaff/metadata/fields",
+    "/api/photos/metadata/fields",
     async (request, reply) => {
       const settings = getPhotostaffLibrarySettings(db);
       if (!settings) {
@@ -219,7 +220,7 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
   server.get<{
     Params: { id: string };
     Querystring: { includeSensitive?: string };
-  }>("/api/photostaff/:id/metadata", async (request, reply) => {
+  }>("/api/photos/:id/metadata", async (request, reply) => {
     const settings = getPhotostaffLibrarySettings(db);
     const detail = settings ? getPhotostaffMetadataDetail(db, {
       assetId: request.params.id,
@@ -227,17 +228,17 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
       includeSensitive: request.query.includeSensitive === "1"
     }) : null;
     if (!detail) {
-      reply.status(404).send({ error: "Photostaff not found" });
+      reply.status(404).send({ error: "Photo not found" });
       return;
     }
     reply.send({ metadata: detail });
   });
 
-  server.get<{ Params: { id: string } }>("/api/photostaff/:id/record", async (request, reply) => {
+  server.get<{ Params: { id: string } }>("/api/photos/:id/record", async (request, reply) => {
     const settings = getPhotostaffLibrarySettings(db);
     const asset = settings ? getPhotostaffAsset(db, request.params.id, settings.updatedAt) : null;
     if (!settings || !asset) {
-      reply.status(404).send({ error: "Photostaff not found" });
+      reply.status(404).send({ error: "Photo not found" });
       return;
     }
     const detail = getPhotostaffMetadataDetail(db, {
@@ -246,25 +247,25 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
       includeSensitive: false
     });
     reply.send({
-      photostaff: {
+      photo: {
         ...asset,
         metadata: detail?.summary ?? null,
         keywords: detail?.keywords ?? [],
         distanceMeters: null
-      } satisfies PhotostaffQueryAsset
+      } satisfies PhotoQueryAsset
     });
   });
 
-  server.post<{ Body: PhotostaffMapQueryRequest }>(
-    "/api/photostaff/map/query",
-    { bodyLimit: PHOTOSTAFF_QUERY_BODY_LIMIT },
+  server.post<{ Body: PhotoMapQueryRequest }>(
+    "/api/photos/map/query",
+    { bodyLimit: PHOTO_QUERY_BODY_LIMIT },
     async (request, reply) => {
       const settings = getPhotostaffLibrarySettings(db);
       if (!settings) {
         reply.send({ clusters: [], metadataIndex: emptyMetadataIndexStatus() });
         return;
       }
-      const mapQuery = validatePhotostaffMapQuery(request.body);
+      const mapQuery = validatePhotoMapQuery(request.body);
       if (!mapQuery.ok) {
         reply.status(400).send({ error: mapQuery.error });
         return;
@@ -276,16 +277,16 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
     }
   );
 
-  server.get("/api/photostaff/map/settings", async (_request, reply) => {
+  server.get("/api/photos/map/settings", async (_request, reply) => {
     reply.send(await mapArchive.getStatus());
   });
 
-  server.post("/api/photostaff/map/download", async (_request, reply) => {
+  server.post("/api/photos/map/download", async (_request, reply) => {
     const status = await mapArchive.startDownload();
     reply.status(status.download.state === "ready" ? 200 : 202).send(status);
   });
 
-  server.get("/api/photostaff/map/archive", async (request, reply) => {
+  server.get("/api/photos/map/archive", async (request, reply) => {
     try {
       const archive = await mapArchive.getArchive();
       reply.header("Cache-Control", "private, max-age=86400");
@@ -300,7 +301,7 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
     }
   });
 
-  server.get("/api/photostaff/status", async (_request, reply) => {
+  server.get("/api/photos/status", async (_request, reply) => {
     const settings = getPhotostaffLibrarySettings(db);
     const status = getPhotostaffLibraryStatus(db, settings);
     const workerHealth = getPhotostaffWorkerHealth(db);
@@ -320,31 +321,31 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
     }
   });
 
-  server.post("/api/photostaff/scans", async (_request, reply) => {
+  server.post("/api/photos/scans", async (_request, reply) => {
     const settings = getPhotostaffLibrarySettings(db);
     if (!settings) {
-      reply.status(409).send({ error: "Photostaff library is not configured" });
+      reply.status(409).send({ error: "Photo library is not configured" });
       return;
     }
     await resolveLibraryScope(context, settings);
     reply.status(202).send({ job: enqueuePhotostaffJob(db, { settings }) });
   });
 
-  server.get<{ Params: { id: string } }>("/api/photostaff/:id/thumbnail", async (request, reply) => {
+  server.get<{ Params: { id: string } }>("/api/photos/:id/thumbnail", async (request, reply) => {
     await sendDerivative(context, request.params.id, "thumbnail", reply);
   });
 
-  server.get<{ Params: { id: string } }>("/api/photostaff/:id/preview", async (request, reply) => {
+  server.get<{ Params: { id: string } }>("/api/photos/:id/preview", async (request, reply) => {
     await sendDerivative(context, request.params.id, "preview", reply);
   });
 
   server.get<{
     Params: { id: string };
     Querystring: { download?: string };
-  }>("/api/photostaff/:id/original", async (request, reply) => {
+  }>("/api/photos/:id/original", async (request, reply) => {
     const resolved = await resolveCurrentAsset(context, request.params.id);
     if (!resolved) {
-      reply.status(404).send({ error: "Photostaff not found" });
+      reply.status(404).send({ error: "Photo not found" });
       return;
     }
     if (request.query.download === "1") {
@@ -357,19 +358,19 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
     return reply.send(createReadStream(resolved.safe.realPath));
   });
 
-  server.get<{ Params: { id: string } }>("/api/photostaff/:id/video", async (request, reply) => {
+  server.get<{ Params: { id: string } }>("/api/photos/:id/video", async (request, reply) => {
     const resolved = await resolveCurrentAsset(context, request.params.id);
     if (!resolved) {
-      reply.status(404).send({ error: "Photostaff not found" });
+      reply.status(404).send({ error: "Photo not found" });
       return;
     }
     if (!resolved.asset.mimeType.startsWith("video/")) {
-      reply.status(415).send({ error: "Photostaff asset is not a video" });
+      reply.status(415).send({ error: "Photo asset is not a video" });
       return;
     }
     const sourceStat = await stat(resolved.safe.realPath);
     if (!sourceStat.isFile()) {
-      reply.status(404).send({ error: "Photostaff not found" });
+      reply.status(404).send({ error: "Photo not found" });
       return;
     }
 
@@ -404,16 +405,16 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
   server.put<{
     Querystring: { name?: string; directory?: string };
   }>(
-    "/api/photostaff/upload",
+    "/api/photos/upload",
     { bodyLimit: PHOTOSTAFF_MAX_FILE_SIZE_BYTES },
     async (request, reply) => {
       const settings = getPhotostaffLibrarySettings(db);
       if (!settings) {
-        reply.status(409).send({ error: "Photostaff library is not configured" });
+        reply.status(409).send({ error: "Photo library is not configured" });
         return;
       }
       if (!hasCompletedPhotostaffScan(db, settings.updatedAt)) {
-        reply.status(409).send({ error: "Wait for the initial photostaff scan to finish before uploading" });
+        reply.status(409).send({ error: "Wait for the initial photo scan to finish before uploading" });
         return;
       }
       const fileName = normalizeUploadFileName(request.query.name);
@@ -426,12 +427,12 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
       const { scope, library } = await resolveLibraryScope(context, settings);
       const directory = await resolveScopedExistingPath(scope, request.query.directory ?? settings.path);
       if (!isPathInside(library.realPath, directory.realPath) || !(await stat(directory.realPath)).isDirectory()) {
-        reply.status(400).send({ error: "Upload target must be a directory inside the photostaff library" });
+        reply.status(400).send({ error: "Upload target must be a directory inside the photo library" });
         return;
       }
       const target = await resolveScopedTargetPath(scope, path.join(directory.relativePath, fileName));
       if (!isPathInside(library.realPath, target.absolutePath)) {
-        reply.status(400).send({ error: "Upload target must stay inside the photostaff library" });
+        reply.status(400).send({ error: "Upload target must stay inside the photo library" });
         return;
       }
       if (await exists(target.absolutePath)) {
@@ -449,7 +450,7 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
           if (written > uploadLimit) {
             callback(Object.assign(new Error(isSidecar
               ? "XMP sidecar exceeds the 16 MiB upload limit"
-              : "Photostaff exceeds the 512 MiB upload limit"), { statusCode: 413, expose: true }));
+              : "Photo exceeds the 512 MiB upload limit"), { statusCode: 413, expose: true }));
             return;
           }
           hash.update(chunk);
@@ -476,7 +477,7 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
             return;
           }
           reservation = reserved.reservation;
-          if (!reservation) throw new Error("Photostaff upload reservation was not created");
+          if (!reservation) throw new Error("Photo upload reservation was not created");
         }
         try {
           await link(temporaryPath, target.absolutePath);
@@ -525,30 +526,30 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
 
   server.post<{
     Body: { sessionId?: string; assetIds?: string[]; operation?: "move" | "trash"; targetDirectory?: string };
-  }>("/api/photostaff/proposals", async (request, reply) => {
+  }>("/api/photos/proposals", async (request, reply) => {
     const settings = getPhotostaffLibrarySettings(db);
     if (!settings) {
-      reply.status(409).send({ error: "Photostaff library is not configured" });
+      reply.status(409).send({ error: "Photo library is not configured" });
       return;
     }
     const session = getSession(db, request.body?.sessionId ?? "");
     if (!session || session.rootId !== settings.rootId) {
-      reply.status(400).send({ error: "An active session for the photostaff library root is required" });
+      reply.status(400).send({ error: "An active session for the photo library root is required" });
       return;
     }
     const operation = request.body?.operation;
     if (operation !== "move" && operation !== "trash") {
-      reply.status(400).send({ error: "Unsupported photostaff operation" });
+      reply.status(400).send({ error: "Unsupported photo operation" });
       return;
     }
     const ids = uniqueIds(request.body?.assetIds);
     if (!ids.length || ids.length > MAX_BATCH_SIZE) {
-      reply.status(400).send({ error: `Select between 1 and ${MAX_BATCH_SIZE} photostaff` });
+      reply.status(400).send({ error: `Select between 1 and ${MAX_BATCH_SIZE} photos` });
       return;
     }
     const resolved = await Promise.all(ids.map((id) => resolveCurrentAsset(context, id)));
     if (resolved.some((item) => !item)) {
-      reply.status(404).send({ error: "One or more photostaff no longer exist" });
+      reply.status(404).send({ error: "One or more photos no longer exist" });
       return;
     }
     const assets = resolved as Array<NonNullable<(typeof resolved)[number]>>;
@@ -570,7 +571,7 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
       const { scope, library } = await resolveLibraryScope(context, settings);
       const targetDirectory = await resolveScopedExistingPath(scope, request.body?.targetDirectory ?? "");
       if (!isPathInside(library.realPath, targetDirectory.realPath) || !(await stat(targetDirectory.realPath)).isDirectory()) {
-        reply.status(400).send({ error: "Move target must be a directory inside the photostaff library" });
+        reply.status(400).send({ error: "Move target must be a directory inside the photo library" });
         return;
       }
       const targetPaths = new Set<string>();
@@ -599,7 +600,7 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
     }
 
     const sidecarCount = Math.max(0, proposals.length - assets.length);
-    const summary = `${operation === "trash" ? "Delete" : "Move"} ${assets.length} photostaff${assets.length === 1 ? "" : "s"}${sidecarCount ? ` with ${sidecarCount} XMP sidecar${sidecarCount === 1 ? "" : "s"}` : ""}`;
+    const summary = `${operation === "trash" ? "Delete" : "Move"} ${assets.length} photo${assets.length === 1 ? "" : "s"}${sidecarCount ? ` with ${sidecarCount} XMP sidecar${sidecarCount === 1 ? "" : "s"}` : ""}`;
     const { message, job } = createActionMessageAndJob(db, {
       sessionId: session.id,
       content: summary,
@@ -618,45 +619,45 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
 
   server.post<{
     Body: { assetIds?: string[] };
-  }>("/api/photostaff/exports", async (request, reply) => {
+  }>("/api/photos/exports", async (request, reply) => {
     pruneExports(exports);
     const ids = uniqueIds(request.body?.assetIds);
     if (!ids.length || ids.length > MAX_BATCH_SIZE) {
-      reply.status(400).send({ error: `Select between 1 and ${MAX_BATCH_SIZE} photostaff` });
+      reply.status(400).send({ error: `Select between 1 and ${MAX_BATCH_SIZE} photos` });
       return;
     }
     const settings = getPhotostaffLibrarySettings(db);
     if (!settings) {
-      reply.status(409).send({ error: "Photostaff library is not configured" });
+      reply.status(409).send({ error: "Photo library is not configured" });
       return;
     }
     const resolved = await Promise.all(ids.map((id) => resolveCurrentAsset(context, id)));
     if (resolved.some((item) => !item)) {
-      reply.status(404).send({ error: "One or more photostaff no longer exist" });
+      reply.status(404).send({ error: "One or more photos no longer exist" });
       return;
     }
     if (ids.length === 1) {
-      reply.send({ url: `/api/photostaff/${encodeURIComponent(ids[0]!)}/original?download=1`, expiresAt: null });
+      reply.send({ url: `/api/photos/${encodeURIComponent(ids[0]!)}/original?download=1`, expiresAt: null });
       return;
     }
     const token = randomUUID();
     const expiresAt = Date.now() + EXPORT_TTL_MS;
     exports.set(token, { assetIds: ids, libraryUpdatedAt: settings.updatedAt, expiresAt });
-    reply.status(201).send({ url: `/api/photostaff/exports/${token}`, expiresAt: new Date(expiresAt).toISOString() });
+    reply.status(201).send({ url: `/api/photos/exports/${token}`, expiresAt: new Date(expiresAt).toISOString() });
   });
 
-  server.get<{ Params: { token: string } }>("/api/photostaff/exports/:token", async (request, reply) => {
+  server.get<{ Params: { token: string } }>("/api/photos/exports/:token", async (request, reply) => {
     pruneExports(exports);
-    const photostaffExport = exports.get(request.params.token);
+    const photoExport = exports.get(request.params.token);
     const settings = getPhotostaffLibrarySettings(db);
-    if (!photostaffExport || !settings || settings.updatedAt !== photostaffExport.libraryUpdatedAt) {
-      reply.status(404).send({ error: "Photostaff export expired" });
+    if (!photoExport || !settings || settings.updatedAt !== photoExport.libraryUpdatedAt) {
+      reply.status(404).send({ error: "Photo export expired" });
       return;
     }
     exports.delete(request.params.token);
-    const resolved = await Promise.all(photostaffExport.assetIds.map((id) => resolveCurrentAsset(context, id)));
+    const resolved = await Promise.all(photoExport.assetIds.map((id) => resolveCurrentAsset(context, id)));
     if (resolved.some((item) => !item)) {
-      reply.status(404).send({ error: "One or more photostaff no longer exist" });
+      reply.status(404).send({ error: "One or more photos no longer exist" });
       return;
     }
     const archive = new ZipArchive({ zlib: { level: 6 } });
@@ -667,7 +668,7 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
       archive.file(item.realPath, { name: uniqueArchiveName(item.name, usedNames) });
     }
     reply.header("Content-Type", "application/zip");
-    reply.header("Content-Disposition", contentDisposition("sigmaos-photostaff.zip"));
+    reply.header("Content-Disposition", contentDisposition("sigmaos-photos.zip"));
     reply.send(archive);
     void archive.finalize();
     return reply;
@@ -677,7 +678,7 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
 async function resolveLibraryScope(context: ApiRouteContext, settings: NonNullable<ReturnType<typeof getPhotostaffLibrarySettings>>) {
   const scope = await resolveStoragePoolScope(context.db, context.system, settings.rootId, settings.storagePoolId);
   const library = await resolveScopedExistingPath(scope, settings.path);
-  if (!(await stat(library.realPath)).isDirectory()) throw new StorageScopeError("Photostaff library is unavailable", 503);
+  if (!(await stat(library.realPath)).isDirectory()) throw new StorageScopeError("Photo library is unavailable", 503);
   return { scope, library };
 }
 
@@ -700,7 +701,7 @@ async function sendDerivative(
 ): Promise<unknown> {
   const settings = getPhotostaffLibrarySettings(context.db);
   if (!settings) {
-    reply.status(404).send({ error: "Photostaff not found" });
+    reply.status(404).send({ error: "Photo not found" });
     return;
   }
   const asset = getPhotostaffAsset(context.db, id, settings.updatedAt);
@@ -710,13 +711,13 @@ async function sendDerivative(
     asset.storagePoolId !== settings.storagePoolId ||
     asset.status !== "ready"
   ) {
-    reply.status(404).send({ error: "Photostaff not found" });
+    reply.status(404).send({ error: "Photo not found" });
     return;
   }
   if (kind === "preview" && asset.mimeType === "image/gif") {
     const resolved = await resolveCurrentAsset(context, id);
     if (!resolved) {
-      reply.status(404).send({ error: "Photostaff not found" });
+      reply.status(404).send({ error: "Photo not found" });
       return;
     }
     reply.header("Content-Type", "image/gif");
@@ -725,33 +726,33 @@ async function sendDerivative(
   }
   const key = kind === "thumbnail" ? asset.thumbnailKey : asset.previewKey;
   if (!key) {
-    reply.status(404).send({ error: "Photostaff derivative is not available" });
+    reply.status(404).send({ error: "Photo derivative is not available" });
     return;
   }
   const cacheRoot = path.join(context.config.dataDir, PHOTOSTAFF_DATA_DIRECTORY_NAME);
   const candidatePath = path.resolve(cacheRoot, key);
   if (!isPathInside(cacheRoot, candidatePath)) {
-    reply.status(404).send({ error: "Photostaff derivative is not available" });
+    reply.status(404).send({ error: "Photo derivative is not available" });
     return;
   }
   let filePath: string;
   try {
     const [cacheRootRealPath, candidateRealPath] = await Promise.all([realpath(cacheRoot), realpath(candidatePath)]);
     if (!isPathInside(cacheRootRealPath, candidateRealPath)) {
-      reply.status(404).send({ error: "Photostaff derivative is not available" });
+      reply.status(404).send({ error: "Photo derivative is not available" });
       return;
     }
     filePath = candidateRealPath;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      reply.status(404).send({ error: "Photostaff derivative is not available" });
+      reply.status(404).send({ error: "Photo derivative is not available" });
       return;
     }
     throw error;
   }
   const fileStat = await stat(filePath);
   if (!fileStat.isFile()) {
-    reply.status(404).send({ error: "Photostaff derivative is not available" });
+    reply.status(404).send({ error: "Photo derivative is not available" });
     return;
   }
   reply.header("Content-Type", "image/webp");
@@ -801,7 +802,7 @@ async function exists(filePath: string): Promise<boolean> {
   }
 }
 
-function etagFor(asset: PhotostaffAssetRecord): string {
+function etagFor(asset: PhotoAssetRecord): string {
   return `"${asset.contentHash ?? `${asset.sizeBytes}-${asset.mtimeMs}`}"`;
 }
 
@@ -810,7 +811,7 @@ function contentDisposition(fileName: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
-function pruneExports(exports: Map<string, PhotostaffExport>): void {
+function pruneExports(exports: Map<string, PhotoExport>): void {
   const now = Date.now();
   for (const [token, value] of exports) if (value.expiresAt <= now) exports.delete(token);
 }
@@ -829,9 +830,9 @@ function uniqueArchiveName(fileName: string, used: Set<string>): string {
   return unique;
 }
 
-type ResolvedPhotostaffAsset = NonNullable<Awaited<ReturnType<typeof resolveCurrentAsset>>>;
+type ResolvedPhotoAsset = NonNullable<Awaited<ReturnType<typeof resolveCurrentAsset>>>;
 
-async function filesWithAssociatedSidecars(assets: ResolvedPhotostaffAsset[]): Promise<Array<{
+async function filesWithAssociatedSidecars(assets: ResolvedPhotoAsset[]): Promise<Array<{
   relativePath: string;
   realPath: string;
   name: string;
@@ -849,7 +850,7 @@ async function filesWithAssociatedSidecars(assets: ResolvedPhotostaffAsset[]): P
   return [...files.values()];
 }
 
-async function resolveAssociatedSidecar(item: ResolvedPhotostaffAsset): Promise<{
+async function resolveAssociatedSidecar(item: ResolvedPhotoAsset): Promise<{
   relativePath: string;
   realPath: string;
   name: string;
@@ -884,11 +885,11 @@ function emptyMetadataIndexStatus() {
   return { schemaVersion: PHOTOSTAFF_METADATA_SCHEMA_VERSION, total: 0, indexed: 0, partial: 0, pending: 0 };
 }
 
-function encodePhotostaffQueryCursor(cursor: { fingerprint: string; sortValue: string | number | null; id: string }): string {
+function encodePhotoQueryCursor(cursor: { fingerprint: string; sortValue: string | number | null; id: string }): string {
   return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
 
-function decodePhotostaffQueryCursor(value: string | null | undefined): {
+function decodePhotoQueryCursor(value: string | null | undefined): {
   fingerprint: string;
   sortValue: string | number | null;
   id: string;
@@ -911,14 +912,14 @@ function decodePhotostaffQueryCursor(value: string | null | undefined): {
   }
 }
 
-function photostaffSortValue(photostaff: PhotostaffQueryAsset, request: PhotostaffQueryRequest): string | number | null {
+function photoSortValue(photo: PhotoQueryAsset, request: PhotoQueryRequest): string | number | null {
   switch (request.sort?.field ?? "captured_at") {
-    case "indexed_at": return photostaff.indexedAt;
-    case "name": return sqliteLower(photostaff.name);
-    case "size_bytes": return photostaff.sizeBytes;
-    case "rating": return photostaff.metadata?.rating ?? null;
-    case "distance": return photostaff.distanceMeters;
-    case "captured_at": return photostaff.metadata?.capturedAt ?? photostaff.metadata?.capturedAtLocal ?? photostaff.takenAt;
+    case "indexed_at": return photo.indexedAt;
+    case "name": return sqliteLower(photo.name);
+    case "size_bytes": return photo.sizeBytes;
+    case "rating": return photo.metadata?.rating ?? null;
+    case "distance": return photo.distanceMeters;
+    case "captured_at": return photo.metadata?.capturedAt ?? photo.metadata?.capturedAtLocal ?? photo.takenAt;
   }
 }
 
@@ -928,17 +929,17 @@ function sqliteLower(value: string): string {
 
 type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-function validatePhotostaffQuery(body: unknown): ValidationResult<PhotostaffQueryRequest> {
-  if (!isObject(body)) return invalid("Photostaff query body must be an object");
+function validatePhotoQuery(body: unknown): ValidationResult<PhotoQueryRequest> {
+  if (!isObject(body)) return invalid("Photo query body must be an object");
   if (!hasOnlyKeys(body, ["filters", "sort", "cursor", "limit", "includeFacets"])) {
-    return invalid("Photostaff query body contains unknown fields");
+    return invalid("Photo query body contains unknown fields");
   }
-  const request = body as Partial<PhotostaffQueryRequest>;
+  const request = body as Partial<PhotoQueryRequest>;
   if (request.limit !== undefined && (!Number.isInteger(request.limit) || request.limit < 1 || request.limit > 100)) {
-    return invalid("Photostaff query limit must be an integer between 1 and 100");
+    return invalid("Photo query limit must be an integer between 1 and 100");
   }
   if (request.cursor !== undefined && request.cursor !== null && typeof request.cursor !== "string") {
-    return invalid("Photostaff query cursor must be a string");
+    return invalid("Photo query cursor must be a string");
   }
   if (request.includeFacets !== undefined && typeof request.includeFacets !== "boolean") {
     return invalid("includeFacets must be a boolean");
@@ -946,11 +947,11 @@ function validatePhotostaffQuery(body: unknown): ValidationResult<PhotostaffQuer
   const sortFields = new Set(["captured_at", "indexed_at", "name", "size_bytes", "rating", "distance"]);
   if (request.sort && (!isObject(request.sort) || !hasOnlyKeys(request.sort, ["field", "direction"]) ||
     !sortFields.has(request.sort.field) || !["asc", "desc"].includes(request.sort.direction))) {
-    return invalid("Photostaff query sort is invalid");
+    return invalid("Photo query sort is invalid");
   }
-  const filters = validatePhotostaffFilters(request.filters);
+  const filters = validatePhotoFilters(request.filters);
   if (!filters.ok) return filters;
-  const normalized: PhotostaffQueryRequest = {
+  const normalized: PhotoQueryRequest = {
     ...(filters.value ? { filters: filters.value } : {}),
     ...(request.sort ? { sort: request.sort } : {}),
     ...(request.cursor !== undefined ? { cursor: request.cursor } : {}),
@@ -963,16 +964,16 @@ function validatePhotostaffQuery(body: unknown): ValidationResult<PhotostaffQuer
   return { ok: true, value: normalized };
 }
 
-function validatePhotostaffFilters(value: unknown): ValidationResult<PhotostaffQueryRequest["filters"]> {
+function validatePhotoFilters(value: unknown): ValidationResult<PhotoQueryRequest["filters"]> {
   if (value === undefined) return { ok: true, value: undefined };
-  if (!isObject(value)) return invalid("Photostaff filters must be an object");
+  if (!isObject(value)) return invalid("Photo filters must be an object");
   if (!hasOnlyKeys(value, [
     "text", "capturedAt", "mediaKinds", "cameraModels", "lensModels", "iso", "aperture",
     "exposureTimeSeconds", "focalLengthMm", "rating", "keywords", "hasLocation", "location", "advanced"
-  ])) return invalid("Photostaff filters contain unknown fields");
-  const filters = value as NonNullable<PhotostaffQueryRequest["filters"]>;
+  ])) return invalid("Photo filters contain unknown fields");
+  const filters = value as NonNullable<PhotoQueryRequest["filters"]>;
   if (filters.text !== undefined && (typeof filters.text !== "string" || filters.text.length > 512)) {
-    return invalid("Photostaff text filter is invalid");
+    return invalid("Photo text filter is invalid");
   }
   for (const [key, list] of Object.entries({
     mediaKinds: filters.mediaKinds,
@@ -985,7 +986,7 @@ function validatePhotostaffFilters(value: unknown): ValidationResult<PhotostaffQ
     }
   }
   if (filters.mediaKinds?.some((kind) => !["image", "video", "raw"].includes(kind))) {
-    return invalid("Photostaff media type filter is invalid");
+    return invalid("Photo media type filter is invalid");
   }
   for (const [key, range] of Object.entries({
     iso: filters.iso,
@@ -1013,7 +1014,7 @@ function validatePhotostaffFilters(value: unknown): ValidationResult<PhotostaffQ
     return invalid("hasLocation must be a boolean");
   }
   if (filters.location !== undefined && !validLocation(filters.location)) {
-    return invalid("Photostaff location filter is invalid");
+    return invalid("Photo location filter is invalid");
   }
   if (filters.advanced !== undefined) {
     if (!isObject(filters.advanced) || !hasOnlyKeys(filters.advanced, ["mode", "conditions"]) ||
@@ -1032,7 +1033,7 @@ function validatePhotostaffFilters(value: unknown): ValidationResult<PhotostaffQ
 function validateMetadataCondition(value: unknown): string | null {
   if (!isObject(value)) return "Metadata condition must be an object";
   if (!hasOnlyKeys(value, ["key", "operator", "value", "valueTo"])) return "Metadata condition contains unknown fields";
-  const condition = value as Partial<PhotostaffMetadataCondition>;
+  const condition = value as Partial<PhotoMetadataCondition>;
   const operators = new Set(["eq", "contains", "prefix", "in", "exists", "not_exists", "lt", "lte", "gt", "gte", "between"]);
   if (typeof condition.key !== "string" || !/^[a-z0-9_.:-]{1,256}$/iu.test(condition.key)) return "Metadata field key is invalid";
   if (!condition.operator || !operators.has(condition.operator)) return "Metadata condition operator is invalid";
@@ -1055,16 +1056,16 @@ function validateMetadataCondition(value: unknown): string | null {
   return null;
 }
 
-function validatePhotostaffMapQuery(body: unknown): ValidationResult<PhotostaffMapQueryRequest> {
-  if (!isObject(body)) return invalid("Photostaff map bounds are invalid");
+function validatePhotoMapQuery(body: unknown): ValidationResult<PhotoMapQueryRequest> {
+  if (!isObject(body)) return invalid("Photo map bounds are invalid");
   if (!hasOnlyKeys(body, ["filters", "bounds", "columns", "rows"])) {
-    return invalid("Photostaff map query contains unknown fields");
+    return invalid("Photo map query contains unknown fields");
   }
   const bounds = body.bounds;
   if (!validLocation(bounds) || bounds.kind !== "bounds") {
-    return invalid("Photostaff map bounds are invalid");
+    return invalid("Photo map bounds are invalid");
   }
-  const filters = validatePhotostaffFilters(body.filters);
+  const filters = validatePhotoFilters(body.filters);
   if (!filters.ok) return filters;
   const columns = body.columns;
   const rows = body.rows;
@@ -1084,7 +1085,7 @@ function validatePhotostaffMapQuery(body: unknown): ValidationResult<PhotostaffM
   };
 }
 
-function validLocation(value: unknown): value is PhotostaffLocationBounds | PhotostaffLocationNear {
+function validLocation(value: unknown): value is PhotoLocationBounds | PhotoLocationNear {
   if (!isObject(value)) return false;
   if (value.kind === "bounds") {
     return hasOnlyKeys(value, ["kind", "west", "south", "east", "north"]) &&

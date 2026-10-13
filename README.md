@@ -49,12 +49,12 @@ The following surfaces are intentionally limited today:
 - Approval records for dangerous Pi tool calls before execution.
 - A model-free, read-only local fallback for development and testing.
 
-### Photostaff library
+### Photos library
 
 - Bind one directory on a mounted storage pool and index common images, videos, and RAW camera files recursively.
 - Build a chronological EXIF-first media timeline with cached WebP thumbnails and previews, plus in-panel video playback.
 - Upload with SHA-256 duplicate detection, view metadata, download originals or ZIP selections, and request approval-gated batch move/trash operations.
-- Run resumable immediate and periodic scans in the non-root Rust Photostaff daemon, with worker heartbeats, bounded media tools, and journaled derivative publication.
+- Run resumable immediate and periodic scans in the non-root internal Rust `photostaff` daemon, with worker heartbeats, bounded media tools, and journaled derivative publication.
 
 ### Host management
 
@@ -79,7 +79,7 @@ flowchart LR
   API["Fastify API"]
   DB[("SQLite WAL + FTS5")]
   Worker["Agent worker"]
-  Photostaff["Photostaff worker"]
+  PhotoWorker["Photos worker (photostaff)"]
   Agent["Pi agent runtime"]
   Indexer["Filesystem indexer"]
   Ops["Ops health / maintenance"]
@@ -94,8 +94,8 @@ flowchart LR
   API <--> DB
   Worker <--> DB
   Worker --> Agent
-  Photostaff <--> DB
-  Photostaff --> Roots
+  PhotoWorker <--> DB
+  PhotoWorker --> Roots
   Agent --> Tools
   API --> Tools
   Tools <--> Roots
@@ -188,7 +188,7 @@ npm run dev
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api`, `/health`, and WebSocket traffic to the API at `127.0.0.1:3010`.
 
-`npm run dev` starts the API, agent worker, Rust Photostaff, Rust downloader, Rust VOD player, and web UI. The Rust services use the API-owned TypeScript migrations and wait for their required schema versions before claiming work. The indexer and one-shot operations remain explicit during development:
+`npm run dev` starts the API, agent worker, internal Rust `photostaff`, Rust downloader, Rust VOD player, and web UI. The Rust services use the API-owned TypeScript migrations and wait for their required schema versions before claiming work. The indexer and one-shot operations remain explicit during development:
 
 ```bash
 npm run index

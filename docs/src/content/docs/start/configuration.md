@@ -30,7 +30,7 @@ SIGMAOS_BACKUP_ENABLED=0
 
 `SIGMAOS_NAS_ROOTS` 和 `SIGMAOS_VM_ISO_ROOTS` 支持逗号分隔的多个路径；带冒号的 root 使用 `id:name:path` 格式。生产模式会额外校验 NAS root 和 backup repository 必须位于允许的 `/srv` 范围内，且 backup、staging、data directory 不能互相覆盖。
 
-## Photostaff 离线地图镜像
+## Photos 离线地图镜像
 
 默认地图资产来自 SigmaOS 的固定 GitHub Release。只在设备无法访问 GitHub 时配置同字节 HTTPS 镜像：
 
@@ -39,7 +39,7 @@ SIGMAOS_BACKUP_ENABLED=0
 basemap_url = "https://mirror.example.com/sigmaos/natural-earth-ii-3.2.0-raster.pmtiles"
 ```
 
-环境变量 `SIGMAOS_PHOTOSTAFF_BASEMAP_URL` 优先于 TOML。该设置只替换下载地址，不能改变文件名、大小或 SHA-256；`http://`、不同版本和重新编码的文件都会被拒绝。成品仍写入 `${SIGMAOS_DATA_DIR}/photostaff/maps/`，不写入 NAS root。
+环境变量 `SIGMAOS_PHOTOSTAFF_BASEMAP_URL` 优先于 TOML。这里的 `photostaff` 是内部模块和数据目录标识；公开界面与 API 仍使用 Photos。该设置只替换下载地址，不能改变文件名、大小或 SHA-256；`http://`、不同版本和重新编码的文件都会被拒绝。成品仍写入 `${SIGMAOS_DATA_DIR}/photostaff/maps/`，不写入 NAS root。
 
 ## 生产配置检查
 

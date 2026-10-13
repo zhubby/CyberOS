@@ -489,8 +489,8 @@ export const en = {
     panels: {
       files: "Files",
       filesShort: "Files",
-      photostaff: "Photostaff",
-      photostaffShort: "Photostaff",
+      photos: "Photos",
+      photosShort: "Photos",
       docker: "Docker",
       dockerShort: "Docker",
       virtualMachines: "Virtual machines",
@@ -506,20 +506,20 @@ export const en = {
       downloads: "Downloads",
       downloadsShort: "DL"
     },
-    photostaff: {
-      eyebrow: "Photostaff library",
-      title: "Photostaff",
-      description: "The system-configured directory is the single photostaff and media library.",
+    photos: {
+      eyebrow: "Photo library",
+      title: "Photos",
+      description: "The system-configured directory is the single photo and media library.",
       summary: "{{count}} media items · chronological timeline",
-      actions: "Photostaff library actions",
+      actions: "Photo library actions",
       moveDestination: "Move destination",
-      movePickerTitle: "Move selected photostaff",
-      movePickerDescription: "Choose a directory inside the current photostaff library.",
+      movePickerTitle: "Move selected photos",
+      movePickerDescription: "Choose a directory inside the current photo library.",
       useMoveDestination: "Move here",
-      directoryPickerList: "Photostaff library directories",
+      directoryPickerList: "Photo library directories",
       directoryPickerEmpty: "No subdirectories in this location.",
       scanNow: "Scan now",
-      scanQueued: "Photostaff scan queued.",
+      scanQueued: "Photo scan queued.",
       upload: "Upload media",
       uploaded: "Uploaded {{count}} media items.",
       unsupportedUpload: "Choose a supported image, video, or RAW file.",
@@ -527,8 +527,8 @@ export const en = {
       dropBody: "Supported media will be added to the configured library directory.",
       loading: "Loading media library",
       loadFailed: "Unable to load media",
-      unconfiguredTitle: "Photostaff library is not configured",
-      unconfiguredBody: "Set the photostaff directory in system settings before using Photostaff.",
+      unconfiguredTitle: "Photo library is not configured",
+      unconfiguredBody: "Set the photo directory in system settings before using Photos.",
       scanningTitle: "Building media timeline",
       scanningBody: "{{count}} files scanned. New media appears when processing completes.",
       retryIn: "Retry in {{value}}",
@@ -539,14 +539,14 @@ export const en = {
       selected: "{{count}} selected",
       selectAll: "Select all",
       clearSelection: "Clear selection",
-      selectPhotostaff: "Select {{name}}",
-      deselectPhotostaff: "Deselect {{name}}",
-      openPhotostaff: "Open {{name}}",
+      selectPhoto: "Select {{name}}",
+      deselectPhoto: "Deselect {{name}}",
+      openPhoto: "Open {{name}}",
       downloadSelected: "Download",
       moveSelected: "Move",
       deleteSelected: "Delete",
-      switchRootForManagement: "Switch the active Agent to the photostaff library root before moving or deleting photostaff.",
-      approvalQueued: "Photostaff operation is waiting for approval.",
+      switchRootForManagement: "Switch the active Agent to the photo library root before moving or deleting photos.",
+      approvalQueued: "Photo operation is waiting for approval.",
       deleteTitle: "Delete {{count}} selected items?",
       deleteBody: "The selected media will move to SigmaOS trash after approval.",
       requestDelete: "Request delete",
@@ -563,10 +563,10 @@ export const en = {
       format: "Format",
       path: "Path",
       downloadOriginal: "Download original",
-      views: "Photostaff views",
+      views: "Photo views",
       timelineView: "Timeline",
       mapView: "Map",
-      searchPlaceholder: "Search photostaff and metadata",
+      searchPlaceholder: "Search photos and metadata",
       sort: "Sort",
       sortCaptured: "Taken time",
       sortIndexed: "Indexed time",
@@ -1860,9 +1860,9 @@ export const en = {
         title: "Operations",
         description: "Health checks, maintenance status, and run history."
       },
-      photostaff: {
-        title: "Photostaff",
-        description: "Photostaff library location, indexing state, and processing limits."
+      photos: {
+        title: "Photos",
+        description: "Photo library location, indexing state, and processing limits."
       },
       security: {
         title: "Security",
@@ -2284,10 +2284,10 @@ export const en = {
       megabytes: "MB",
       pixels: "px"
     },
-    photostaff: {
+    photos: {
       readOnly: "Read-only runtime",
-      libraryTitle: "Photostaff Library",
-      libraryDescription: "System-configured NAS location used as the single photostaff library.",
+      libraryTitle: "Photo Library",
+      libraryDescription: "System-configured NAS location used as the single photo library.",
       libraryPath: "Library path",
       rootId: "Root ID",
       storagePoolId: "Storage pool ID",
@@ -2327,9 +2327,9 @@ export const en = {
       maxDecodedPixels: "Maximum decoded pixels",
       runtimeTitle: "Runtime Capabilities",
       runtimeDescription: "Installed media formats and fixed derivative dimensions.",
-      saved: "Photostaff settings saved",
+      saved: "Photo settings saved",
       ready: "Reliability settings ready",
-      dataDir: "Photostaff data directory",
+      dataDir: "Photo data directory",
       maxFileSize: "Max file size",
       thumbnailSize: "Thumbnail size",
       previewSize: "Preview size",
@@ -2977,8 +2977,8 @@ export const zhCN = {
     panels: {
       files: "文件",
       filesShort: "文件",
-      photostaff: "相册",
-      photostaffShort: "相册",
+      photos: "相册",
+      photosShort: "相册",
       docker: "Docker",
       dockerShort: "Docker",
       virtualMachines: "虚拟机",
@@ -2994,7 +2994,7 @@ export const zhCN = {
       downloads: "下载",
       downloadsShort: "下载"
     },
-    photostaff: {
+    photos: {
       eyebrow: "照片库",
       title: "相册",
       description: "照片目录由系统配置指定，并作为唯一照片和媒体库。",
@@ -3016,7 +3016,7 @@ export const zhCN = {
       loading: "正在加载媒体库",
       loadFailed: "无法加载媒体",
       unconfiguredTitle: "照片库未配置",
-      unconfiguredBody: "请先在系统配置中指定照片目录，再使用 Photostaff。",
+      unconfiguredBody: "请先在系统配置中指定照片目录，再使用相册。",
       scanningTitle: "正在建立媒体时间线",
       scanningBody: "已扫描 {{count}} 个文件，处理完成后会显示新媒体。",
       retryIn: "{{value}} 后重试",
@@ -3027,9 +3027,9 @@ export const zhCN = {
       selected: "已选 {{count}} 项",
       selectAll: "全选",
       clearSelection: "清除选择",
-      selectPhotostaff: "选择 {{name}}",
-      deselectPhotostaff: "取消选择 {{name}}",
-      openPhotostaff: "打开 {{name}}",
+      selectPhoto: "选择 {{name}}",
+      deselectPhoto: "取消选择 {{name}}",
+      openPhoto: "打开 {{name}}",
       downloadSelected: "下载",
       moveSelected: "移动",
       deleteSelected: "删除",
@@ -4348,8 +4348,8 @@ export const zhCN = {
         title: "运维",
         description: "健康检查、维护状态和运行历史。"
       },
-      photostaff: {
-        title: "照片",
+      photos: {
+        title: "相册",
         description: "照片库位置、索引状态和处理限制。"
       },
       security: {
@@ -4772,7 +4772,7 @@ export const zhCN = {
       megabytes: "MB",
       pixels: "px"
     },
-    photostaff: {
+    photos: {
       readOnly: "只读运行配置",
       libraryTitle: "照片库",
       libraryDescription: "系统配置指定的 NAS 位置，作为唯一照片库。",
@@ -4815,9 +4815,9 @@ export const zhCN = {
       maxDecodedPixels: "最大解码像素数",
       runtimeTitle: "运行能力",
       runtimeDescription: "已安装的媒体格式和固定派生图尺寸。",
-      saved: "Photostaff 设置已保存",
+      saved: "相册设置已保存",
       ready: "可靠性设置就绪",
-      dataDir: "Photostaff 数据目录",
+      dataDir: "相册数据目录",
       maxFileSize: "单文件上限",
       thumbnailSize: "缩略图尺寸",
       previewSize: "预览图尺寸",
