@@ -11,8 +11,15 @@ import {
 } from "../../api.js";
 import type { PhotoLocationBounds } from "@sigmaos/shared";
 import "maplibre-gl/dist/maplibre-gl.css";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
 const WORLD_BOUNDS: PhotoLocationBounds = { kind: "bounds", west: -180, south: -85, east: 180, north: 85 };
+
+export function configureMapLibreWorker(
+  maplibre: Pick<typeof import("maplibre-gl"), "setWorkerUrl">
+): void {
+  maplibre.setWorkerUrl(maplibreWorkerUrl);
+}
 
 export function PhotoMapView({
   filters,
@@ -136,6 +143,7 @@ export function PhotoMapView({
       if (disposed || !hostRef.current) return;
       const maplibre = mapModule;
       const protocol = new pmtilesModule.Protocol();
+      configureMapLibreWorker(maplibre);
       maplibre.addProtocol("pmtiles", protocol.tile);
       removeProtocol = () => maplibre.removeProtocol("pmtiles");
       const archiveUrl = `${window.location.origin}/api/photos/map/archive`;

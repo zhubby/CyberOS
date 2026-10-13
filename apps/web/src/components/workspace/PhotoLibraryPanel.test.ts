@@ -14,6 +14,7 @@ import {
   togglePhotoFacetValue
 } from "./PhotoLibraryPanel.js";
 import {
+  configureMapLibreWorker,
   mapArchiveReady,
   PhotoMapDownloadPanel,
   photoViewportBounds
@@ -26,6 +27,18 @@ beforeAll(async () => {
 });
 
 describe("Photo offline map states", () => {
+  it("configures MapLibre to load its packaged worker asset", () => {
+    let configuredUrl = "";
+
+    configureMapLibreWorker({
+      setWorkerUrl: (url) => {
+        configuredUrl = url;
+      }
+    });
+
+    expect(configuredUrl).toContain("maplibre-gl-worker.mjs");
+  });
+
   it("renders download, progress, failure retry, and ready states", () => {
     const render = (status: PhotoMapSettingsResponse, requestError: string | null = null) => renderToStaticMarkup(
       createElement(PhotoMapDownloadPanel, {
