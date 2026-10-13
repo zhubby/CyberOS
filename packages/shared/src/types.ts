@@ -425,6 +425,36 @@ export interface PhotostaffMapSettingsRecord {
   updatedAt: string;
 }
 
+export interface PhotostaffManagedMapInfo {
+  name: string;
+  version: string;
+  attribution: string | null;
+  sizeBytes: number;
+}
+
+export interface PhotostaffManagedMapSettings extends PhotostaffManagedMapInfo {
+  tileType: "png" | "jpeg" | "webp";
+  minZoom: number;
+  maxZoom: number;
+  bounds: [number, number, number, number] | null;
+  updatedAt: string;
+}
+
+export type PhotostaffMapDownloadState = "not_downloaded" | "downloading" | "ready" | "failed";
+
+export interface PhotostaffMapDownloadStatus {
+  state: PhotostaffMapDownloadState;
+  receivedBytes: number;
+  totalBytes: number;
+  error: string | null;
+}
+
+export interface PhotostaffMapSettingsResponse {
+  map: PhotostaffManagedMapInfo;
+  settings: PhotostaffManagedMapSettings | null;
+  download: PhotostaffMapDownloadStatus;
+}
+
 export interface PhotostaffJobRecord {
   id: string;
   kind: PhotostaffJobKind;
@@ -985,6 +1015,9 @@ export interface SigmaConfig {
   shares: ShareConfig;
   terminal: TerminalConfig;
   vodPlayer: VodPlayerConfig;
+  photostaff?: {
+    baseMapUrl: string;
+  };
   nasRoots: NasRootConfig[];
   backup?: BackupConfig;
   health?: {

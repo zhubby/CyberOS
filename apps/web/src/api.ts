@@ -104,7 +104,8 @@ import type {
   PhotostaffWorkerHealth as SharedPhotostaffWorkerHealth,
   PhotostaffMapQueryRequest as SharedPhotostaffMapQueryRequest,
   PhotostaffMapQueryResult as SharedPhotostaffMapQueryResult,
-  PhotostaffMapSettingsRecord as SharedPhotostaffMapSettings,
+  PhotostaffManagedMapSettings as SharedPhotostaffMapSettings,
+  PhotostaffMapSettingsResponse as SharedPhotostaffMapSettingsResponse,
   PhotostaffMetadataDetail as SharedPhotostaffMetadataDetail,
   PhotostaffMetadataField as SharedPhotostaffMetadataField,
   PhotostaffQueryAsset as SharedPhotostaffQueryAsset,
@@ -186,6 +187,7 @@ export type PhotostaffWorkerHealth = SharedPhotostaffWorkerHealth;
 export type PhotostaffMapQueryRequest = SharedPhotostaffMapQueryRequest;
 export type PhotostaffMapQueryResult = SharedPhotostaffMapQueryResult;
 export type PhotostaffMapSettings = SharedPhotostaffMapSettings;
+export type PhotostaffMapSettingsResponse = SharedPhotostaffMapSettingsResponse;
 export type PhotostaffMetadataDetail = SharedPhotostaffMetadataDetail;
 export type PhotostaffMetadataField = SharedPhotostaffMetadataField;
 export type PhotostaffQueryAsset = SharedPhotostaffQueryAsset;
@@ -387,6 +389,11 @@ export type {
 };
 export type ShareSettings = PublicShareSettings;
 export type ShareSummary = PublicShareSummary;
+export interface ShareAccountUpdateInput {
+  username: string;
+  password?: string;
+  expectedUpdatedAt: string;
+}
 export type ShareSettingsInput = Omit<ShareSettings, "account" | "updatedAt"> & {
   account: {
     username: string;
@@ -809,6 +816,19 @@ export async function getShareSettings(): Promise<ShareSettings> {
   return body.settings;
 }
 
+export async function updateShareAccount(input: ShareAccountUpdateInput): Promise<ShareSettings> {
+  const response = await fetch("/api/shares/account", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+  await ensureOk(response);
+  const body = (await response.json()) as { settings: ShareSettings };
+  return body.settings;
+}
+
 export async function getShareSummary(): Promise<ShareSummary> {
   const response = await fetch("/api/shares/summary");
   await ensureOk(response);
@@ -1211,29 +1231,16 @@ export async function queryPhotostaffMap(input: PhotostaffMapQueryRequest): Prom
   return (await response.json()) as PhotostaffMapQueryResult;
 }
 
-export async function getPhotostaffMapSettings(): Promise<{
-  settings: PhotostaffMapSettings | null;
-  unavailable?: boolean;
-  error?: string;
-}> {
+export async function getPhotostaffMapSettings(): Promise<PhotostaffMapSettingsResponse> {
   const response = await fetch("/api/photostaff/map/settings");
   await ensureOk(response);
-  return (await response.json()) as {
-    settings: PhotostaffMapSettings | null;
-    unavailable?: boolean;
-    error?: string;
-  };
+  return (await response.json()) as PhotostaffMapSettingsResponse;
 }
 
-export async function savePhotostaffMapSettings(input: {
-  rootId: string;
-  storagePoolId: string;
-  path: string;
-  attribution?: string | null;
-}): Promise<PhotostaffMapSettings> {
-  const response = await fetch("/api/photostaff/map/settings", jsonRequest("PUT", input));
+export async function downloadPhotostaffMap(): Promise<PhotostaffMapSettingsResponse> {
+  const response = await fetch("/api/photostaff/map/download", { method: "POST" });
   await ensureOk(response);
-  return ((await response.json()) as { settings: PhotostaffMapSettings }).settings;
+  return (await response.json()) as PhotostaffMapSettingsResponse;
 }
 
 export async function getPhotostaffLibraryStatus(): Promise<PhotostaffLibraryStatus> {

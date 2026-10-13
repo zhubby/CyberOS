@@ -11,7 +11,7 @@ sidebar:
 
 Job 状态包括 `queued`、`running`、`waiting_approval`、`completed`、`failed`、`cancelled`；approval 包括 `pending`、`approved`、`rejected`、`expired`、`applied`、`failed`；文件 operation 记录 proposed、applied、rolled_back、failed。
 
-当前已实现文件浏览、预览、上传、编辑、归档检查、搜索、照片完整标量元数据索引与多维查询、本地栅格 PMTiles 地图、视频播放、RAW 预览、XMP sidecar 联动、agent 只读照片查询、approval、trash/restore、Docker/VM/share/terminal 控制、NetworkManager 物理 Ethernet/Wi-Fi/热点控制、indexer、restic backup 和健康 API。
+当前已实现文件浏览、预览、上传、编辑、归档检查、搜索、照片完整标量元数据索引与多维查询、一键下载的 Natural Earth II 栅格 PMTiles 地图、视频播放、RAW 预览、XMP sidecar 联动、agent 只读照片查询、approval、trash/restore、Docker/VM/share/terminal 控制、NetworkManager 物理 Ethernet/Wi-Fi/热点控制、indexer、restic backup 和健康 API。
 
 照片能力不支持在线地图、矢量 PMTiles、地理编码、人物识别、语义图像搜索、手动相册、分享链接、媒体编辑或元数据写回。原媒体与 sidecar 不被修改，WebP 衍生图不保留元数据；“完整元数据”指防御性限额内的全部标量标签，不包含 MakerNote、嵌入缩略图和二进制负载。Agent 可按位置筛选，但结果不会向云模型返回精确 GPS、序列号、联系信息或人物区域。
 

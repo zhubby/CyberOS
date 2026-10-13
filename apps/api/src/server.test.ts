@@ -40,6 +40,7 @@ import {
   openSigmaDb,
   recordIndexFailure,
   saveDockerSettings,
+  saveShareSettings,
   startBackupRun,
   startIndexRun,
   upsertIndexedFile,
@@ -63,6 +64,7 @@ import type {
   DockerVolumeDetails,
   ShareApplyRequest,
   ShareApplyResult,
+  ShareSettingsRecord,
   SigmaConfig,
   SystemEthernetApplyTransaction,
   SystemEthernetStatus,
@@ -2105,6 +2107,107 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("updates the share account directly without creating an approval", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    const existing = saveShareSettings(db, shareSettingsPayload("old-secret"));
+    const hostd = new FakeShareHostd();
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      shares: { hostd }
+    });
+
+    const updated = await server.inject({
+      method: "PUT",
+      url: "/api/shares/account",
+      payload: {
+        username: "media-share",
+        password: "new-secret",
+        expectedUpdatedAt: existing.updatedAt
+      }
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      settings: {
+        account: {
+          username: "media-share",
+          passwordConfigured: true
+        }
+      },
+      appliedAt: "2026-01-01T00:00:00.000Z"
+    });
+    expect(updated.payload).not.toContain("new-secret");
+    expect(hostd.requests).toHaveLength(1);
+    expect(hostd.requests[0]?.settings.account).toEqual({
+      username: "media-share",
+      password: "new-secret"
+    });
+    expect(getShareSettings(db)?.account).toEqual({
+      username: "media-share",
+      password: "new-secret"
+    });
+    expect(listPendingApprovals(db)).toEqual([]);
+
+    const retained = await server.inject({
+      method: "PUT",
+      url: "/api/shares/account",
+      payload: {
+        username: "archive-share",
+        password: "",
+        expectedUpdatedAt: updated.json().settings.updatedAt
+      }
+    });
+    expect(retained.statusCode).toBe(200);
+    expect(getShareSettings(db)?.account).toEqual({
+      username: "archive-share",
+      password: "new-secret"
+    });
+
+    const stale = await server.inject({
+      method: "PUT",
+      url: "/api/shares/account",
+      payload: {
+        username: "stale-share",
+        expectedUpdatedAt: "2000-01-01T00:00:00.000Z"
+      }
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(hostd.requests).toHaveLength(2);
+    await server.close();
+  });
+
+  it("keeps the saved share account when direct host application fails", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    const existing = saveShareSettings(db, shareSettingsPayload("old-secret"));
+    const hostd = new FakeShareHostd();
+    hostd.failApply = true;
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      shares: { hostd }
+    });
+
+    const response = await server.inject({
+      method: "PUT",
+      url: "/api/shares/account",
+      payload: {
+        username: "media-share",
+        password: "new-secret",
+        expectedUpdatedAt: existing.updatedAt
+      }
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.payload).not.toContain("new-secret");
+    expect(getShareSettings(db)?.account).toEqual({
+      username: "sigma-share",
+      password: "old-secret"
+    });
+    expect(listPendingApprovals(db)).toEqual([]);
+    await server.close();
+  });
+
   it("creates share approvals and applies them only after approval", async () => {
     await mkdir(path.join(rootDir, "media"));
     const session = createSession(db, { rootId: "local" });
@@ -2194,6 +2297,52 @@ describe("API server", () => {
     expect(getShareOperationByApproval(db, proposed.json().approval.id)).toMatchObject({
       action: "apply_settings",
       status: "applied"
+    });
+    await server.close();
+  });
+
+  it("does not let an older share approval overwrite directly updated credentials", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    const session = createSession(db, { rootId: "local" });
+    const hostd = new FakeShareHostd();
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      shares: { hostd }
+    });
+    const proposed = await server.inject({
+      method: "POST",
+      url: "/api/shares/proposals",
+      payload: {
+        sessionId: session.id,
+        settings: shareSettingsPayload("approval-secret")
+      }
+    });
+    const accountUpdated = await server.inject({
+      method: "PUT",
+      url: "/api/shares/account",
+      payload: {
+        username: "latest-share",
+        password: "latest-secret",
+        expectedUpdatedAt: new Date(0).toISOString()
+      }
+    });
+
+    expect(accountUpdated.statusCode).toBe(200);
+    const approved = await server.inject({
+      method: "POST",
+      url: `/api/approvals/${proposed.json().approval.id}/approve`
+    });
+
+    expect(approved.statusCode).toBe(202);
+    expect(hostd.requests).toHaveLength(2);
+    expect(hostd.requests[1]?.settings.account).toEqual({
+      username: "latest-share",
+      password: "latest-secret"
+    });
+    expect(getShareSettings(db)?.account).toEqual({
+      username: "latest-share",
+      password: "latest-secret"
     });
     await server.close();
   });
@@ -5636,7 +5785,7 @@ function testConfig(dataDir: string): SigmaConfig {
   };
 }
 
-function shareSettingsPayload(password: string) {
+function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "updatedAt"> {
   return {
     enabled: true,
     account: {

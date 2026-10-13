@@ -8,7 +8,6 @@ import {
   FolderPlus,
   HardDrive,
   LoaderCircle,
-  Map as MapIcon,
   RefreshCw,
   X
 } from "lucide-react";
@@ -48,7 +47,7 @@ export function StorageFilePickerDialog({
   pools: StorageFilePickerPool[];
   initialPoolId: string;
   locale: SupportedLocale;
-  mode?: "iso" | "directory" | "pmtiles";
+  mode?: "iso" | "directory";
   directoryPurpose?: "downloads" | "photostaffMove";
   initialPath?: string;
   boundaryPath?: string;
@@ -93,25 +92,15 @@ export function StorageFilePickerDialog({
         empty: t("workspace.downloads.directoryPickerEmpty"),
         select: t("workspace.downloads.selectCurrentDirectory")
       };
-  const fileCopy = mode === "pmtiles"
-    ? {
-        eyebrow: t("workspace.photostaff.mapArchive"),
-        title: t("workspace.photostaff.mapPickerTitle"),
-        description: t("workspace.photostaff.mapPickerDescription"),
-        list: t("workspace.photostaff.mapPickerFiles"),
-        empty: t("workspace.photostaff.mapPickerEmpty"),
-        none: t("workspace.photostaff.mapPickerNone"),
-        select: t("workspace.photostaff.mapPickerSelect")
-      }
-    : {
-        eyebrow: t("workspace.management.virtualMachines.createIsoSource"),
-        title: t("workspace.management.virtualMachines.isoPickerTitle"),
-        description: t("workspace.management.virtualMachines.isoPickerDescription"),
-        list: t("workspace.management.virtualMachines.isoPickerFiles"),
-        empty: t("workspace.management.virtualMachines.isoPickerEmpty"),
-        none: t("workspace.management.virtualMachines.isoPickerNoneSelected"),
-        select: t("workspace.management.virtualMachines.isoPickerSelect")
-      };
+  const fileCopy = {
+    eyebrow: t("workspace.management.virtualMachines.createIsoSource"),
+    title: t("workspace.management.virtualMachines.isoPickerTitle"),
+    description: t("workspace.management.virtualMachines.isoPickerDescription"),
+    list: t("workspace.management.virtualMachines.isoPickerFiles"),
+    empty: t("workspace.management.virtualMachines.isoPickerEmpty"),
+    none: t("workspace.management.virtualMachines.isoPickerNoneSelected"),
+    select: t("workspace.management.virtualMachines.isoPickerSelect")
+  };
   const pickerRootPath = boundaryPath && selectedPool?.id === initialPool?.id ? boundaryPath : selectedPool?.path ?? ".";
 
   const loadDirectory = useCallback(async () => {
@@ -127,9 +116,7 @@ export function StorageFilePickerDialog({
       if (requestId !== loadRequestId.current) return;
       setEntries(listing.entries.filter((entry) => mode === "directory"
         ? isDirectoryPickerEntry(entry)
-        : mode === "pmtiles"
-          ? isPmtilesPickerEntry(entry)
-          : isIsoPickerEntry(entry)));
+        : isIsoPickerEntry(entry)));
     } catch (nextError) {
       if (requestId !== loadRequestId.current) return;
       setEntries([]);
@@ -275,7 +262,7 @@ export function StorageFilePickerDialog({
       >
         <header className="storage-file-picker-header">
           <div className="storage-file-picker-heading">
-            <span className="vm-create-icon" aria-hidden="true">{mode === "directory" ? <FolderOpen size={20} /> : mode === "pmtiles" ? <MapIcon size={20} /> : <Disc3 size={20} />}</span>
+            <span className="vm-create-icon" aria-hidden="true">{mode === "directory" ? <FolderOpen size={20} /> : <Disc3 size={20} />}</span>
             <div>
               <span className="eyebrow">
                 {mode === "directory"
@@ -300,7 +287,7 @@ export function StorageFilePickerDialog({
             onClick={onCancel}
             aria-label={mode === "directory"
               ? t("common.actions.close")
-              : mode === "pmtiles" ? t("common.actions.close") : t("workspace.management.virtualMachines.isoPickerClose")}
+              : t("workspace.management.virtualMachines.isoPickerClose")}
           >
             <X aria-hidden="true" size={16} />
           </button>
@@ -418,7 +405,7 @@ export function StorageFilePickerDialog({
                 <div className="storage-file-picker-state"><HardDrive aria-hidden="true" size={19} /><span>{t("workspace.management.virtualMachines.isoPickerNoPools")}</span></div>
               ) : entries.length === 0 ? (
                 <div className="storage-file-picker-state">
-                  {mode === "directory" ? <Folder aria-hidden="true" size={19} /> : mode === "pmtiles" ? <MapIcon aria-hidden="true" size={19} /> : <Disc3 aria-hidden="true" size={19} />}
+                  {mode === "directory" ? <Folder aria-hidden="true" size={19} /> : <Disc3 aria-hidden="true" size={19} />}
                   <span>{mode === "directory" ? directoryCopy.empty : fileCopy.empty}</span>
                 </div>
               ) : (
@@ -435,7 +422,7 @@ export function StorageFilePickerDialog({
                       onClick={() => isDirectory ? openDirectory(entry.path) : setSelection(entry)}
                     >
                       <span className="storage-file-picker-file-icon" data-kind={isDirectory ? "directory" : "iso"}>
-                        {isDirectory ? <Folder aria-hidden="true" size={17} /> : mode === "pmtiles" ? <MapIcon aria-hidden="true" size={17} /> : <Disc3 aria-hidden="true" size={17} />}
+                        {isDirectory ? <Folder aria-hidden="true" size={17} /> : <Disc3 aria-hidden="true" size={17} />}
                       </span>
                       <span className="storage-file-picker-file-name">{entry.name}</span>
                       <span className="storage-file-picker-file-meta">
@@ -478,10 +465,6 @@ export function isIsoPickerEntry(entry: FileEntry): boolean {
 
 export function isDirectoryPickerEntry(entry: FileEntry): boolean {
   return entry.isSafe && entry.kind === "directory";
-}
-
-export function isPmtilesPickerEntry(entry: FileEntry): boolean {
-  return entry.isSafe && (entry.kind === "directory" || (entry.kind === "file" && entry.name.toLowerCase().endsWith(".pmtiles")));
 }
 
 export function parentPickerPath(poolPath: string, currentPath: string): string {

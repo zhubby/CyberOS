@@ -6,6 +6,7 @@ import {
   Database,
   Folder,
   HardDrive,
+  KeyRound,
   LoaderCircle,
   Lock,
   Network,
@@ -48,6 +49,7 @@ import {
   useManagementDashboard
 } from "./ManagementDashboard.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
+import { ShareAccountDialog } from "./ShareAccountDialog.js";
 
 type StatusTone = "ready" | "warning" | "offline" | "neutral";
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -87,6 +89,7 @@ export function ShareManagementPanel({
   const [error, setError] = useState<string | null>(null);
   const [newShare, setNewShare] = useState<ShareDefinitionFormState | null>(null);
   const [newShareError, setNewShareError] = useState<string | null>(null);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const reportedIssueSignature = useRef<string | null>(null);
   const reportedPendingApprovalId = useRef<string | null>(null);
   const pendingShareApproval = pendingApprovals.find((approval) => approval.kind === "share_operation") ?? null;
@@ -222,16 +225,6 @@ export function ShareManagementPanel({
     }
   }
 
-  function updateAccount(patch: Partial<ShareSettingsFormState["account"]>) {
-    setForm((current) => ({
-      ...current,
-      account: {
-        ...current.account,
-        ...patch
-      }
-    }));
-  }
-
   function updateShare(index: number, patch: Partial<ShareDefinitionFormState>) {
     if (newShare && index === form.shares.length) {
       updateNewShare(patch);
@@ -351,6 +344,14 @@ export function ShareManagementPanel({
         actions={<PanelHeaderActions label={t("workspace.management.actions.label")}>
           <ManagementDashboardControls dashboard={dashboard} disabled={loading || submitting} />
           <PanelHeaderAction
+            label={t("workspace.management.shares.editAccount")}
+            type="button"
+            onClick={() => setAccountDialogOpen(true)}
+            disabled={loading || submitting}
+          >
+            <KeyRound aria-hidden="true" size={17} />
+          </PanelHeaderAction>
+          <PanelHeaderAction
             label={t("common.actions.refresh")}
             type="button"
             onClick={refreshShareData}
@@ -458,10 +459,10 @@ export function ShareManagementPanel({
               },
               {
                 id: "account",
-                title: String(t("workspace.management.shares.accountTitle")),
+                title: String(t("workspace.management.shares.publishingTitle")),
                 content: <section className="management-section share-account-section">
-          <SectionHeader title={t("workspace.management.shares.accountTitle")} description={t("workspace.management.shares.accountDescription")} />
-          <fieldset className="share-field-grid">
+          <SectionHeader title={t("workspace.management.shares.publishingTitle")} description={t("workspace.management.shares.publishingDescription")} />
+          <fieldset className="share-field-grid share-global-settings-grid">
             <div className="share-form-field">
               <span className="share-field-label">{t("workspace.management.shares.fields.enabled")}</span>
               <SwitchControl
@@ -473,35 +474,6 @@ export function ShareManagementPanel({
                 }}
               />
             </div>
-            <label>
-              <span>{t("workspace.management.shares.fields.username")}</span>
-              <input
-                value={form.account.username}
-                onChange={(event) => updateAccount({ username: event.target.value })}
-                placeholder="sigma-share"
-              />
-            </label>
-            <label>
-              <span>{t("workspace.management.shares.fields.password")}</span>
-              <input
-                type="password"
-                value={form.account.password}
-                onChange={(event) => updateAccount({ password: event.target.value, clearPassword: false })}
-                placeholder={
-                  form.account.passwordConfigured
-                    ? t("workspace.management.shares.passwordConfiguredPlaceholder")
-                    : t("workspace.management.shares.passwordPlaceholder")
-                }
-              />
-            </label>
-            <SwitchControl
-              className="share-field-wide"
-              checked={form.account.clearPassword}
-              disabled={!form.account.passwordConfigured || form.account.password.length > 0}
-              label={t("workspace.management.shares.fields.clearPassword")}
-              accessibilityLabel={t("workspace.management.shares.fields.clearPassword")}
-              onChange={(clearPassword) => updateAccount({ clearPassword })}
-            />
           </fieldset>
         </section>
               },
@@ -832,6 +804,40 @@ export function ShareManagementPanel({
           ]}
         />
       </form>
+      {accountDialogOpen ? (
+        <ShareAccountDialog
+          settings={{
+            account: {
+              username: form.account.username,
+              passwordConfigured: form.account.passwordConfigured
+            },
+            updatedAt: form.updatedAt
+          }}
+          onClose={() => setAccountDialogOpen(false)}
+          onSaved={(settings) => {
+            setForm((current) => ({
+              ...current,
+              account: {
+                username: settings.account.username,
+                password: "",
+                clearPassword: false,
+                passwordConfigured: settings.account.passwordConfigured
+              },
+              updatedAt: settings.updatedAt
+            }));
+            void getShareSummary()
+              .then((nextSummary) => {
+                setSummary(nextSummary);
+                notifySummaryIssues(nextSummary.issues, onNotifyError, reportedIssueSignature);
+              })
+              .catch((nextError) => {
+                const message = errorMessage(nextError);
+                setError(message);
+                onNotifyError(message);
+              });
+          }}
+        />
+      ) : null}
     </section>
   );
 }

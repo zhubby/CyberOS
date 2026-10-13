@@ -8,6 +8,7 @@ import {
   getApproval,
   getDockerOperationByApproval,
   getShareOperationByApproval,
+  getShareSettings,
   getStorageOperationByApproval,
   getVmOperationByApproval,
   getNasRoot,
@@ -39,6 +40,7 @@ import { applyDockerOperation } from "../lib/docker-service.js";
 import {
   applyShareOperation,
   safeShareMessage,
+  serializeShareMutation,
   shareSettingsFromOperation,
   toPublicShareOperation
 } from "../lib/share-service.js";
@@ -162,10 +164,30 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
       }
 
       try {
-        const settings = shareSettingsFromOperation(operation);
-        const metadata = await applyShareOperation(config, operation, proposal, context.shares);
-        const { updatedAt: _proposedUpdatedAt, ...settingsToSave } = settings;
-        const saved = saveShareSettings(db, settingsToSave);
+        const { metadata, saved } = await serializeShareMutation(async () => {
+          const proposedSettings = shareSettingsFromOperation(operation);
+          const currentSettings = getShareSettings(db);
+          const settings = currentSettings
+            ? { ...proposedSettings, account: currentSettings.account }
+            : proposedSettings;
+          const metadata = await applyShareOperation(
+            config,
+            {
+              ...operation,
+              metadata: {
+                ...operation.metadata,
+                settings
+              }
+            },
+            proposal,
+            context.shares
+          );
+          const { updatedAt: _proposedUpdatedAt, ...settingsToSave } = settings;
+          return {
+            metadata,
+            saved: saveShareSettings(db, settingsToSave)
+          };
+        });
         const applied = updateShareOperationStatus(db, operation.id, "applied", {
           ...metadata,
           settingsUpdatedAt: saved.updatedAt,

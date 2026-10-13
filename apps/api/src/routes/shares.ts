@@ -5,14 +5,18 @@ import {
   createActionMessageAndJob,
   getSession,
   getShareSettings,
-  listNasRoots
+  listNasRoots,
+  saveShareSettings
 } from "@sigmaos/db";
 import type { ShareOperationProposal } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
+import { HostdRequestError } from "../lib/hostd-client.js";
 import { normalizeShareSettingsInput, type ShareSettingsInput } from "../lib/share-settings.js";
 import {
+  applyShareSettings,
   collectShareSummary,
   safeShareMessage,
+  serializeShareMutation,
   toPublicShareOperation
 } from "../lib/share-service.js";
 import { defaultShareSettings, toPublicShareSettings } from "../lib/settings.js";
@@ -25,6 +29,65 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
     return {
       summary: await collectShareSummary(settings, context.shares)
     };
+  });
+
+  server.put<{
+    Body: {
+      username?: string;
+      password?: string;
+      expectedUpdatedAt?: string;
+    };
+  }>("/api/shares/account", async (request, reply) => {
+    try {
+      const response = await serializeShareMutation(async () => {
+        const { username, password, expectedUpdatedAt } = request.body ?? {};
+        if (typeof username !== "string" || typeof expectedUpdatedAt !== "string" || !expectedUpdatedAt) {
+          throw new ShareAccountUpdateError(400, "Username and expected settings revision are required");
+        }
+        if (password !== undefined && typeof password !== "string") {
+          throw new ShareAccountUpdateError(400, "Password must be a string");
+        }
+
+        const existing = getShareSettings(db) ?? defaultShareSettings(config);
+        if (existing.updatedAt !== expectedUpdatedAt) {
+          throw new ShareAccountUpdateError(409, "Share settings changed; reload before saving the account");
+        }
+        const roots = listNasRoots(db);
+        let settings;
+        try {
+          settings = await normalizeShareSettingsInput({
+            account: {
+              username,
+              ...(password ? { password } : {})
+            }
+          }, existing, roots);
+        } catch (error) {
+          throw new ShareAccountUpdateError(400, safeShareMessage(error));
+        }
+
+        let applied;
+        try {
+          applied = await applyShareSettings(config, settings, roots, context.shares);
+        } catch (error) {
+          const statusCode = error instanceof HostdRequestError && error.statusCode === 503 ? 503 : 502;
+          throw new ShareAccountUpdateError(statusCode, safeShareMessage(error));
+        }
+
+        const { updatedAt: _normalizedAt, ...settingsToSave } = settings;
+        const saved = saveShareSettings(db, settingsToSave);
+        return {
+          settings: toPublicShareSettings(saved),
+          appliedAt: applied.appliedAt
+        };
+      });
+      reply.send(response);
+    } catch (error) {
+      if (error instanceof ShareAccountUpdateError) {
+        reply.status(error.statusCode).send({ error: error.message });
+        return;
+      }
+      throw error;
+    }
   });
 
   server.post<{
@@ -82,6 +145,13 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
       reply.status(400).send({ error: safeShareMessage(error) });
     }
   });
+}
+
+class ShareAccountUpdateError extends Error {
+  constructor(readonly statusCode: 400 | 409 | 502 | 503, message: string) {
+    super(message);
+    this.name = "ShareAccountUpdateError";
+  }
 }
 
 function shareProposalSummary(settings: Awaited<ReturnType<typeof normalizeShareSettingsInput>>): string {

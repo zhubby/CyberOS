@@ -32,7 +32,23 @@ command -v ffprobe
 
 `offline` 表示照片设置对应的 root、storage pool 或目录当前不可用；先恢复相同挂载，不要把其他目录挂到原路径伪装成照片库。元数据 `pending` 长时间不下降时检查 worker 日志中的 schema/sidecar 解析警告并手动排队一次扫描；单个资源 `partial` 不会阻止浏览。XMP 超过 16 MiB、结构化元数据超过限额或 sidecar 关联有歧义时会记录警告而不猜测。
 
-单个 HEIC/HEIF 失败时确认 `libheif-examples` 已安装；单个 RAW 失败时确认 `libraw-bin`/`dcraw_emu` 可执行并验证源文件；视频海报或播放失败时确认 `ffmpeg` 和 `ffprobe` 已安装。JPEG/PNG 等全部失败时检查 `/var/lib/sigmaos/photostaff` 与照片目录对 `sigmaos` 用户的读写权限。WebP 衍生图位于 `/var/lib/sigmaos/photostaff/thumbnail` 和 `/var/lib/sigmaos/photostaff/preview`，视频转码缓存位于 `/var/lib/sigmaos/media-cache/videos`。地图空白时确认 PMTiles 为栅格格式、归档路径仍位于在线 NAS pool，并用带 Range 的 `/api/photostaff/map/archive` 请求检查 `206`。单个文件解码失败只会将该媒体标记为 `failed`，其他媒体继续处理，原文件仍可下载；完整遍历失败不会清理未确认的旧资源。
+单个 HEIC/HEIF 失败时确认 `libheif-examples` 已安装；单个 RAW 失败时确认 `libraw-bin`/`dcraw_emu` 可执行并验证源文件；视频海报或播放失败时确认 `ffmpeg` 和 `ffprobe` 已安装。JPEG/PNG 等全部失败时检查 `/var/lib/sigmaos/photostaff` 与照片目录对 `sigmaos` 用户的读写权限。WebP 衍生图位于 `/var/lib/sigmaos/photostaff/thumbnail` 和 `/var/lib/sigmaos/photostaff/preview`，视频转码缓存位于 `/var/lib/sigmaos/media-cache/videos`。单个文件解码失败只会将该媒体标记为 `failed`，其他媒体继续处理，原文件仍可下载；完整遍历失败不会清理未确认的旧资源。
+
+## 离线地图下载
+
+地图下载失败时先读取托管状态和 API journal，再检查固定目录的空间与权限：
+
+```bash
+curl -fsS http://127.0.0.1:3010/api/photostaff/map/settings
+sudo journalctl -u sigmaos-api.service -n 100 --no-pager
+sudo -u sigmaos test -w /var/lib/sigmaos/photostaff/maps
+df -h /var/lib/sigmaos
+curl -fsS -H 'Range: bytes=0-7' http://127.0.0.1:3010/api/photostaff/map/archive
+```
+
+`ready` 时最后一个请求应返回 `206`；`not_downloaded` 时归档接口返回 `404`。网络、长度、23,141,432 字节固定大小、SHA-256 或 PMTiles/JPEG 校验失败会进入 `failed`，无效 `.part` 文件会自动删除，界面“重试”从零下载。不要手工放入同名文件来绕过校验；若固定成品损坏，保留 journal 信息后移走该单一文件，再从界面重试。
+
+受限网络可把 `SIGMAOS_PHOTOSTAFF_BASEMAP_URL` 或 TOML `[photostaff].basemap_url` 指向 HTTPS 镜像。镜像必须逐字节提供同一资产，内置 SHA-256 不可覆盖；镜像校验失败时修复镜像内容，而不是修改本机校验值。Natural Earth II 最高仅到 `z6`，放大后缺少街道细节是预期行为。
 
 ## 服务目录所有权与启动顺序
 

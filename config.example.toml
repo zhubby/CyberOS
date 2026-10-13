@@ -9,6 +9,10 @@ allowed_origins = []
 [worker]
 poll_ms = 750
 
+# Optional byte-identical HTTPS mirror for the managed offline map.
+# [photostaff]
+# basemap_url = "https://mirror.example.com/sigmaos/natural-earth-ii-3.2.0-raster.pmtiles"
+
 [admin]
 display_name = "SigmaOS Admin"
 auth_mode = "local-only"

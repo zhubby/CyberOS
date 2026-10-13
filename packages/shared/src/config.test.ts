@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.js";
+import { PHOTOSTAFF_BASE_MAP_RELEASE_URL } from "./photostaff-config.js";
 
 let tempDir: string | null = null;
 
@@ -14,6 +15,30 @@ afterEach(async () => {
 });
 
 describe("loadConfig", () => {
+  it("loads the fixed Photostaff base map URL and allows only HTTPS mirrors", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-map-"));
+    const missingConfig = path.join(tempDir, "missing.toml");
+    expect(loadConfig({ SIGMAOS_CONFIG: missingConfig } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
+      baseMapUrl: PHOTOSTAFF_BASE_MAP_RELEASE_URL
+    });
+
+    const configPath = path.join(tempDir, "config.toml");
+    await writeFile(configPath, `[photostaff]\nbasemap_url = "https://mirror.example.test/from-toml.pmtiles"\n`);
+    expect(loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
+      baseMapUrl: "https://mirror.example.test/from-toml.pmtiles"
+    });
+    expect(loadConfig({
+      SIGMAOS_CONFIG: configPath,
+      SIGMAOS_PHOTOSTAFF_BASEMAP_URL: "https://mirror.example.test/from-env.pmtiles"
+    } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
+      baseMapUrl: "https://mirror.example.test/from-env.pmtiles"
+    });
+    expect(() => loadConfig({
+      SIGMAOS_CONFIG: configPath,
+      SIGMAOS_PHOTOSTAFF_BASEMAP_URL: "http://mirror.example.test/map.pmtiles"
+    } as NodeJS.ProcessEnv, tempDir!)).toThrow("must use HTTPS");
+  });
+
   it("defaults file access to the system root when no roots are configured", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
     const config = loadConfig(

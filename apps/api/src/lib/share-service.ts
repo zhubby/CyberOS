@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import type {
   ShareApplyRequest,
   ShareApplyResult,
+  NasRootConfig,
   ShareOperationProposal,
   ShareOperationRecord,
   ShareProtocol,
@@ -20,6 +21,7 @@ const execFileAsync = promisify(execFile);
 const COMMAND_TIMEOUT_MS = 5_000;
 const COMMAND_MAX_BUFFER = 512 * 1024;
 const HOSTD_TIMEOUT_MS = 1_800_000;
+let shareMutationTail: Promise<void> = Promise.resolve();
 
 const PROTOCOL_SERVICES = {
   smb: ["smbd.service", "nmbd.service"],
@@ -36,6 +38,12 @@ export interface ShareHostdClient {
 export interface ShareManagementDependencies {
   hostd?: ShareHostdClient;
   commandRunner?: SystemCommandRunner;
+}
+
+export function serializeShareMutation<Result>(task: () => Promise<Result>): Promise<Result> {
+  const result = shareMutationTail.then(task, task);
+  shareMutationTail = result.then(() => undefined, () => undefined);
+  return result;
 }
 
 class NodeCommandRunner implements SystemCommandRunner {
@@ -128,17 +136,26 @@ export async function applyShareOperation(
     throw new Error("Unsupported share action");
   }
   const settings = shareSettingsFromOperation(operation);
-  const hostd = dependencies.hostd ?? new HostdShareClient(config.hostd.socketPath);
-  const result = await hostd.apply({
-    settings,
-    roots: config.nasRoots
-  });
+  const result = await applyShareSettings(config, settings, config.nasRoots, dependencies);
   return {
     action: proposal.action,
     files: result.files,
     services: result.services,
     hostdAppliedAt: result.appliedAt
   };
+}
+
+export async function applyShareSettings(
+  config: SigmaConfig,
+  settings: ShareSettingsRecord,
+  roots: NasRootConfig[],
+  dependencies: ShareManagementDependencies = {}
+): Promise<ShareApplyResult> {
+  const hostd = dependencies.hostd ?? new HostdShareClient(config.hostd.socketPath);
+  return hostd.apply({
+    settings,
+    roots
+  });
 }
 
 export function shareSettingsFromOperation(operation: ShareOperationRecord): ShareSettingsRecord {

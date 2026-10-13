@@ -11,12 +11,17 @@ import {
   finishPhotostaffJob,
   getPhotostaffLibrarySettings,
   openSigmaDb,
+  savePhotostaffMapSettings,
   upsertPhotostaffAsset,
   type PhotostaffMetadataWriteInput,
   type SigmaDatabase
 } from "@sigmaos/db";
 import { PHOTOSTAFF_METADATA_SCHEMA_VERSION, type PhotostaffLibrarySettingsRecord, type SigmaConfig } from "@sigmaos/shared";
 import { buildServer } from "../server.js";
+import {
+  PhotostaffMapArchiveManager,
+  type PhotostaffMapArchiveSource
+} from "../lib/photostaff-map.js";
 
 const poolId = "/dev/md/test-photostaff";
 let tempDir: string | null = null;
@@ -477,8 +482,9 @@ describe("photostaff API", () => {
     await app.close();
   });
 
-  it("uploads XMP sidecars, pairs them for operations and exports, and serves local PMTiles ranges", async () => {
-    const { app, root } = await setup();
+  it("uploads XMP sidecars, pairs them for operations and exports, and serves managed PMTiles ranges", async () => {
+    const mapFixture = pmtilesFixture(2);
+    const { app, root, mapManager } = await setup({ mounted: true }, mapFixture);
     await configure(app);
     const settings = getPhotostaffLibrarySettings(db!)!;
     completeInitialScan(settings);
@@ -521,15 +527,35 @@ describe("photostaff API", () => {
     const archive = await app.inject({ method: "GET", url: exportRequest.json().url });
     expect(archive.rawPayload.includes(Buffer.from("paired.jpg.xmp"))).toBe(true);
 
-    const rasterPath = path.join(root, "Photostaff", "offline.pmtiles");
-    await writeFile(rasterPath, pmtilesFixture(2));
-    const mapSettings = await app.inject({
+    savePhotostaffMapSettings(db!, {
+      rootId: "local",
+      storagePoolId: poolId,
+      path: path.join("Photostaff", "legacy.pmtiles"),
+      tileType: "png",
+      minZoom: 0,
+      maxZoom: 4,
+      bounds: null,
+      attribution: null
+    });
+    expect((await app.inject({ method: "GET", url: "/api/photostaff/map/settings" })).json()).toMatchObject({
+      map: { name: "Test map", version: "1", sizeBytes: mapFixture.length },
+      settings: null,
+      download: { state: "not_downloaded", receivedBytes: 0, totalBytes: mapFixture.length }
+    });
+    expect((await app.inject({
       method: "PUT",
       url: "/api/photostaff/map/settings",
-      payload: { rootId: "local", storagePoolId: poolId, path: path.join("Photostaff", "offline.pmtiles") }
+      payload: { rootId: "local", storagePoolId: poolId, path: path.join("Photostaff", "legacy.pmtiles") }
+    })).statusCode).toBe(404);
+
+    const started = await app.inject({ method: "POST", url: "/api/photostaff/map/download" });
+    expect(started.statusCode).toBe(202);
+    expect(started.json().download.state).toBe("downloading");
+    await mapManager!.waitForIdle();
+    expect((await app.inject({ method: "GET", url: "/api/photostaff/map/settings" })).json()).toMatchObject({
+      settings: { name: "Test map", version: "1", tileType: "png" },
+      download: { state: "ready", receivedBytes: mapFixture.length, totalBytes: mapFixture.length }
     });
-    expect(mapSettings.statusCode).toBe(200);
-    expect(mapSettings.json().settings).toMatchObject({ tileType: "png", minZoom: 0, maxZoom: 4 });
     const range = await app.inject({
       method: "GET",
       url: "/api/photostaff/map/archive",
@@ -537,37 +563,28 @@ describe("photostaff API", () => {
     });
     expect(range.statusCode).toBe(206);
     expect(range.rawPayload.toString()).toBe("PMTiles\u0003");
-
-    await writeFile(rasterPath, pmtilesFixture(1));
-    const replacedArchive = await app.inject({ method: "GET", url: "/api/photostaff/map/archive" });
-    expect(replacedArchive.statusCode).toBe(503);
-
-    await writeFile(path.join(root, "Photostaff", "vector.pmtiles"), pmtilesFixture(1));
-    const vector = await app.inject({
-      method: "PUT",
-      url: "/api/photostaff/map/settings",
-      payload: { rootId: "local", storagePoolId: poolId, path: path.join("Photostaff", "vector.pmtiles") }
-    });
-    expect(vector.statusCode).toBe(400);
-    expect(vector.json().error).toContain("raster");
-    await writeFile(path.join(root, "Photostaff", "broken.pmtiles"), "broken");
-    expect((await app.inject({
-      method: "PUT",
-      url: "/api/photostaff/map/settings",
-      payload: { rootId: "local", storagePoolId: poolId, path: path.join("Photostaff", "broken.pmtiles") }
-    })).statusCode).toBe(400);
     await app.close();
   });
 });
 
-async function setup(storageState = { mounted: true }) {
+async function setup(storageState = { mounted: true }, mapFixture?: Buffer) {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-photostaff-api-"));
   const root = path.join(tempDir, "root");
   await mkdir(path.join(root, "Photostaff"), { recursive: true });
   db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
-  const app = await buildServer({ config: testConfig(root), db, system: storageSystem(root, storageState) });
-  return { app, root };
+  const mapManager = mapFixture ? new PhotostaffMapArchiveManager({
+    dataDir: tempDir,
+    source: testMapSource(mapFixture),
+    fetchImpl: async () => new Response(new Uint8Array(mapFixture))
+  }) : null;
+  const app = await buildServer({
+    config: testConfig(root),
+    db,
+    system: storageSystem(root, storageState),
+    ...(mapManager ? { photostaffMap: mapManager } : {})
+  });
+  return { app, root, mapManager };
 }
 
 async function configure(app: Awaited<ReturnType<typeof buildServer>>) {
@@ -686,17 +703,21 @@ function indexedMetadata(overrides: {
 }
 
 function pmtilesFixture(tileType: 1 | 2): Buffer {
-  const buffer = Buffer.alloc(128);
+  const buffer = Buffer.alloc(133);
   buffer.write("PMTiles", 0, "ascii");
   buffer.writeUInt8(3, 7);
   buffer.writeBigUInt64LE(127n, 8);
-  buffer.writeBigUInt64LE(1n, 16);
-  buffer.writeBigUInt64LE(128n, 24);
+  buffer.writeBigUInt64LE(5n, 16);
+  buffer.writeBigUInt64LE(132n, 24);
   buffer.writeBigUInt64LE(0n, 32);
-  buffer.writeBigUInt64LE(128n, 40);
+  buffer.writeBigUInt64LE(132n, 40);
   buffer.writeBigUInt64LE(0n, 48);
-  buffer.writeBigUInt64LE(128n, 56);
-  buffer.writeBigUInt64LE(0n, 64);
+  buffer.writeBigUInt64LE(132n, 56);
+  buffer.writeBigUInt64LE(1n, 64);
+  buffer.writeBigUInt64LE(1n, 72);
+  buffer.writeBigUInt64LE(1n, 80);
+  buffer.writeBigUInt64LE(1n, 88);
+  buffer.writeUInt8(1, 96);
   buffer.writeUInt8(1, 97);
   buffer.writeUInt8(1, 98);
   buffer.writeUInt8(tileType, 99);
@@ -707,7 +728,21 @@ function pmtilesFixture(tileType: 1 | 2): Buffer {
   buffer.writeInt32LE(1800000000, 110);
   buffer.writeInt32LE(850000000, 114);
   buffer.writeUInt8(2, 118);
+  buffer.set([1, 0, 1, 1, 1], 127);
+  buffer.writeUInt8(0, 132);
   return buffer;
+}
+
+function testMapSource(body: Buffer): PhotostaffMapArchiveSource {
+  return {
+    name: "Test map",
+    version: "1",
+    fileName: "test-map.pmtiles",
+    url: "https://example.test/test-map.pmtiles",
+    sha256: createHash("sha256").update(body).digest("hex"),
+    sizeBytes: body.length,
+    attribution: "Test"
+  };
 }
 
 function testConfig(root: string): SigmaConfig {

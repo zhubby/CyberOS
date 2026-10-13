@@ -325,24 +325,6 @@
   width: 1px;
 }
 
-.photostaff-map-point {
-  position: absolute;
-  z-index: 2;
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  padding: 0;
-  transform: translate(-50%, -50%);
-  border: 2px solid var(--input-deep-bg);
-  border-radius: 50%;
-  color: #17191e;
-  background: #f4c95d;
-  font-size: 9px;
-  font-weight: 900;
-}
-
-.photostaff-map-empty-label,
 .photostaff-map-loading {
   position: absolute;
   inset: 50% auto auto 50%;
@@ -355,16 +337,86 @@
   pointer-events: none;
 }
 
-.photostaff-map-empty-label {
-  opacity: .72;
-}
-
 .photostaff-map-loading {
   z-index: 4;
   padding: 9px;
   border: 1px solid var(--line-soft);
   border-radius: 5px;
   background: var(--surface);
+}
+
+.photostaff-map-download-state {
+  position: absolute;
+  z-index: 3;
+  inset: 50% auto auto 50%;
+  display: grid;
+  width: min(300px, calc(100% - 32px));
+  min-height: 154px;
+  box-sizing: border-box;
+  align-content: center;
+  justify-items: center;
+  gap: 9px;
+  padding: 18px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface);
+  text-align: center;
+}
+
+.photostaff-map-download-state strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.photostaff-map-download-state small,
+.photostaff-map-download-state p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted-2);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.photostaff-map-download-state p {
+  max-height: 44px;
+  overflow: auto;
+}
+
+.photostaff-map-download-state.is-error > svg {
+  color: var(--danger-text);
+}
+
+.photostaff-map-download-state button {
+  display: inline-flex;
+  min-width: 176px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: white;
+  background: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.photostaff-map-progress {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--line-soft);
+}
+
+.photostaff-map-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 180ms ease-out;
 }
 
 .photostaff-index-progress {

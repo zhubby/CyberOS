@@ -1,12 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { link, lstat, open, readdir, realpath, stat, unlink } from "node:fs/promises";
+import { link, lstat, readdir, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { ZipArchive } from "archiver";
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { PMTiles, TileType, type Source } from "pmtiles";
 import {
   appendEvent,
   createActionMessageAndJob,
@@ -16,7 +15,6 @@ import {
   getPhotostaffLibrarySettings,
   getPhotostaffLibraryStatus,
   getPhotostaffWorkerHealth,
-  getPhotostaffMapSettings,
   getPhotostaffProcessingSettings,
   getPhotostaffMetadataDetail,
   getPhotostaffMetadataIndexStatus,
@@ -30,7 +28,6 @@ import {
   recordAppliedOperation,
   releasePhotostaffUploadReservation,
   reservePhotostaffUpload,
-  savePhotostaffMapSettings,
   savePhotostaffLibrarySettings,
   savePhotostaffProcessingSettings,
   defaultPhotostaffProcessingSettings
@@ -49,7 +46,6 @@ import {
   type PhotostaffLocationBounds,
   type PhotostaffLocationNear,
   type PhotostaffMapQueryRequest,
-  type PhotostaffMapSettingsRecord,
   type PhotostaffProcessingSettingsRecord,
   type PhotostaffMetadataCondition,
   type PhotostaffQueryAsset,
@@ -58,6 +54,11 @@ import {
 } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { sendFileStream } from "../lib/files.js";
+import {
+  defaultPhotostaffMapSource,
+  PhotostaffMapArchiveError,
+  PhotostaffMapArchiveManager
+} from "../lib/photostaff-map.js";
 import { ffmpegVideoTranscoder, VideoCache } from "../lib/video-cache.js";
 import {
   resolveScopedExistingPath,
@@ -82,6 +83,11 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
     dataDir: context.config.dataDir,
     transcoder: context.videoTranscoder ?? ffmpegVideoTranscoder
   });
+  const mapArchive = context.photostaffMap ?? new PhotostaffMapArchiveManager({
+    dataDir: context.config.dataDir,
+    source: defaultPhotostaffMapSource(context.config.photostaff?.baseMapUrl)
+  });
+  server.addHook("onClose", async () => mapArchive.close());
 
   server.get("/api/photostaff/settings", async () => ({ settings: getPhotostaffLibrarySettings(db) }));
 
@@ -271,59 +277,27 @@ export function registerPhotostaffRoutes(server: FastifyInstance, context: ApiRo
   );
 
   server.get("/api/photostaff/map/settings", async (_request, reply) => {
-    const settings = getPhotostaffMapSettings(db);
-    if (!settings) {
-      reply.send({ settings: null });
-      return;
-    }
+    reply.send(await mapArchive.getStatus());
+  });
+
+  server.post("/api/photostaff/map/download", async (_request, reply) => {
+    const status = await mapArchive.startDownload();
+    reply.status(status.download.state === "ready" ? 200 : 202).send(status);
+  });
+
+  server.get("/api/photostaff/map/archive", async (request, reply) => {
     try {
-      await resolvePhotostaffMapArchive(context, settings);
-      reply.send({ settings });
+      const archive = await mapArchive.getArchive();
+      reply.header("Cache-Control", "private, max-age=86400");
+      reply.header("ETag", `"${archive.settings.version}-${archive.settings.sizeBytes}"`);
+      return sendFileStream(reply, request.headers.range, archive.filePath, "application/vnd.pmtiles");
     } catch (error) {
-      if (error instanceof StorageScopeError) {
-        reply.send({ settings, unavailable: true, error: error.message });
+      if (error instanceof PhotostaffMapArchiveError) {
+        reply.status(error.statusCode).send({ error: error.message });
         return;
       }
       throw error;
     }
-  });
-
-  server.put<{
-    Body: { rootId?: string; storagePoolId?: string; path?: string; attribution?: string | null };
-  }>("/api/photostaff/map/settings", { bodyLimit: PHOTOSTAFF_QUERY_BODY_LIMIT }, async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
-    const safe = await resolveScopedExistingPath(scope, request.body?.path ?? "");
-    const archiveStat = await stat(safe.realPath);
-    if (!archiveStat.isFile() || path.extname(safe.relativePath).toLowerCase() !== ".pmtiles") {
-      reply.status(400).send({ error: "Select a PMTiles archive file" });
-      return;
-    }
-    const header = await readRasterPmtilesHeader(safe.realPath);
-    if (!header.ok) {
-      reply.status(400).send({ error: header.error });
-      return;
-    }
-    const settings = savePhotostaffMapSettings(db, {
-      rootId: scope.root.id,
-      storagePoolId: scope.pool.id,
-      path: safe.relativePath,
-      tileType: header.value.tileType,
-      minZoom: header.value.minZoom,
-      maxZoom: header.value.maxZoom,
-      bounds: header.value.bounds,
-      attribution: request.body?.attribution?.trim() || null
-    });
-    reply.send({ settings });
-  });
-
-  server.get("/api/photostaff/map/archive", async (request, reply) => {
-    const settings = getPhotostaffMapSettings(db);
-    if (!settings) {
-      reply.status(404).send({ error: "Photostaff map is not configured" });
-      return;
-    }
-    const archive = await resolvePhotostaffMapArchive(context, settings);
-    return sendFileStream(reply, request.headers.range, archive.safe.realPath, "application/vnd.pmtiles");
   });
 
   server.get("/api/photostaff/status", async (_request, reply) => {
@@ -1155,72 +1129,4 @@ function isMetadataScalar(value: unknown): value is string | number | boolean {
 
 function invalid<T>(error: string): ValidationResult<T> {
   return { ok: false, error };
-}
-
-async function readRasterPmtilesHeader(filePath: string): Promise<ValidationResult<{
-  tileType: PhotostaffMapSettingsRecord["tileType"];
-  minZoom: number;
-  maxZoom: number;
-  bounds: [number, number, number, number] | null;
-}>> {
-  try {
-    const archive = new PMTiles(new NodeFileRangeSource(filePath));
-    const header = await archive.getHeader();
-    const tileType = header.tileType === TileType.Png ? "png"
-      : header.tileType === TileType.Jpeg ? "jpeg"
-        : header.tileType === TileType.Webp ? "webp"
-          : null;
-    if (!tileType) return invalid("Only raster PNG, JPEG, or WebP PMTiles archives are supported");
-    return {
-      ok: true,
-      value: {
-        tileType,
-        minZoom: header.minZoom,
-        maxZoom: header.maxZoom,
-        bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat]
-      }
-    };
-  } catch {
-    return invalid("The PMTiles archive is damaged or unsupported");
-  }
-}
-
-class NodeFileRangeSource implements Source {
-  constructor(private readonly filePath: string) {}
-
-  getKey(): string {
-    return this.filePath;
-  }
-
-  async getBytes(offset: number, length: number): Promise<{ data: ArrayBuffer }> {
-    if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0) {
-      throw new Error("Invalid PMTiles byte range");
-    }
-    const handle = await open(this.filePath, "r");
-    try {
-      const fileStat = await handle.stat();
-      if (offset >= fileStat.size && length > 0) throw new Error("PMTiles byte range exceeds archive size");
-      const readLength = Math.min(length, Math.max(0, fileStat.size - offset));
-      const buffer = Buffer.alloc(readLength);
-      const { bytesRead } = await handle.read(buffer, 0, readLength, offset);
-      if (bytesRead !== readLength) throw new Error("PMTiles archive ended unexpectedly");
-      return { data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) };
-    } finally {
-      await handle.close();
-    }
-  }
-}
-
-async function resolvePhotostaffMapArchive(context: ApiRouteContext, settings: PhotostaffMapSettingsRecord) {
-  const scope = await resolveStoragePoolScope(context.db, context.system, settings.rootId, settings.storagePoolId);
-  const safe = await resolveScopedExistingPath(scope, settings.path);
-  const archiveStat = await stat(safe.realPath);
-  if (!archiveStat.isFile() || path.extname(safe.realPath).toLowerCase() !== ".pmtiles") {
-    throw new StorageScopeError("Photostaff map archive is unavailable", 503);
-  }
-  const header = await readRasterPmtilesHeader(safe.realPath);
-  if (!header.ok || header.value.tileType !== settings.tileType) {
-    throw new StorageScopeError("Photostaff map archive changed or is no longer a supported raster archive", 503);
-  }
-  return { scope, safe };
 }

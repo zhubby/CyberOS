@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../../api.js";
-import { isIsoPickerEntry, isPmtilesPickerEntry, parentPickerPath, pickerBreadcrumbs } from "./StorageFilePickerDialog.js";
+import { isIsoPickerEntry, parentPickerPath, pickerBreadcrumbs } from "./StorageFilePickerDialog.js";
 
 const entry = (name: string, kind: FileEntry["kind"], isSafe = true): FileEntry => ({
   name,
@@ -18,14 +18,6 @@ describe("StorageFilePickerDialog helpers", () => {
     expect(isIsoPickerEntry(entry("notes.txt", "file"))).toBe(false);
     expect(isIsoPickerEntry(entry("escape.iso", "symlink"))).toBe(false);
     expect(isIsoPickerEntry(entry("unsafe", "directory", false))).toBe(false);
-  });
-
-  it("only exposes safe directories and PMTiles archives for offline maps", () => {
-    expect(isPmtilesPickerEntry(entry("maps", "directory"))).toBe(true);
-    expect(isPmtilesPickerEntry(entry("world.PMTILES", "file"))).toBe(true);
-    expect(isPmtilesPickerEntry(entry("world.mbtiles", "file"))).toBe(false);
-    expect(isPmtilesPickerEntry(entry("escape.pmtiles", "symlink"))).toBe(false);
-    expect(isPmtilesPickerEntry(entry("unsafe", "directory", false))).toBe(false);
   });
 
   it("keeps parent navigation inside the selected pool", () => {

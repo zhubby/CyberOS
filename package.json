@@ -22,6 +22,8 @@
     "build": "npm run build:metadata && npm run build:rust && npm run build --workspaces --if-present && npm run docs:build",
     "build:rust": "cargo build --locked --release --workspace",
     "build:metadata": "node scripts/generate-build-info.mjs",
+    "map:build": "./scripts/build-photostaff-basemap.sh",
+    "map:validate": "node scripts/validate-photostaff-basemap.mjs",
     "protocol:generate": "node scripts/generate-protocol-bindings.mjs",
     "protocol:check": "node scripts/generate-protocol-bindings.mjs --check",
     "release": "node scripts/release.mjs",

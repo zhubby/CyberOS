@@ -44,7 +44,6 @@ import {
   proposePhotostaffOperation,
   queryPhotostaff,
   requestPhotostaffScan,
-  savePhotostaffMapSettings,
   uploadPhotostaff,
   type PhotostaffAsset,
   type PhotostaffMetadataDetail,
@@ -124,11 +123,10 @@ export function PhotostaffLibraryPanel({
   const [metadata, setMetadata] = useState<PhotostaffMetadataDetail | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [sensitiveRevealed, setSensitiveRevealed] = useState(false);
-  const [mapRefreshKey, setMapRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [picker, setPicker] = useState<"move" | "map" | null>(null);
+  const [picker, setPicker] = useState<"move" | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -505,20 +503,6 @@ export function PhotostaffLibraryPanel({
     }
   }
 
-  async function configureMap(selection: { rootId: string; storagePoolId: string; path: string }) {
-    setBusyAction("map");
-    try {
-      await savePhotostaffMapSettings(selection);
-      setPicker(null);
-      setMapRefreshKey((current) => current + 1);
-      onNotifySuccess(t("workspace.photostaff.mapConfigured"));
-    } catch (error) {
-      onNotifyError(errorMessage(error));
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
   function handleLightboxKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -770,8 +754,6 @@ export function PhotostaffLibraryPanel({
         ) : view === "map" ? (
           <PhotostaffMapView
             filters={queryFilters}
-            refreshKey={mapRefreshKey}
-            onConfigure={() => setPicker("map")}
             onOpenAsset={openMapAsset}
             onSearchBounds={(nextBounds) => updateFilter("location", nextBounds)}
             onError={(message) => onNotifyError(message)}
@@ -825,18 +807,6 @@ export function PhotostaffLibraryPanel({
           onCancel={() => setPicker(null)}
           onSelect={(selection) => void proposeBatch("move", selection.path)}
           {...(onRequestCreateFolder ? { onRequestCreateFolder } : {})}
-        />
-      ) : null}
-
-      {picker === "map" ? (
-        <StorageFilePickerDialog
-          pools={pools}
-          initialPoolId={settings?.storagePoolId ?? pools[0]?.id ?? ""}
-          {...(settings?.path ? { initialPath: settings.path } : {})}
-          locale={locale}
-          mode="pmtiles"
-          onCancel={() => setPicker(null)}
-          onSelect={(selection) => void configureMap(selection)}
         />
       ) : null}
 

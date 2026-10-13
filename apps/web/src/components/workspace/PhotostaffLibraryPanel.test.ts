@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { PhotostaffAsset } from "../../api.js";
+import type { PhotostaffAsset, PhotostaffMapSettingsResponse } from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
 import {
   groupPhotostaffByDate,
@@ -13,12 +13,74 @@ import {
   retryCountdown,
   togglePhotostaffFacetValue
 } from "./PhotostaffLibraryPanel.js";
-import { photostaffViewportBounds } from "./PhotostaffMapView.js";
+import {
+  mapArchiveReady,
+  PhotostaffMapDownloadPanel,
+  photostaffViewportBounds
+} from "./PhotostaffMapView.js";
 import { PHOTOSTAFF_UPLOAD_EXTENSIONS } from "@sigmaos/shared/photostaff-config";
 
 beforeAll(async () => {
   await initI18n();
   await i18n.changeLanguage("en");
+});
+
+describe("Photostaff offline map states", () => {
+  it("renders download, progress, failure retry, and ready states", () => {
+    const render = (status: PhotostaffMapSettingsResponse, requestError: string | null = null) => renderToStaticMarkup(
+      createElement(PhotostaffMapDownloadPanel, {
+        status,
+        requestError,
+        busy: false,
+        onDownload: () => undefined
+      })
+    );
+    const initial = mapStatus("not_downloaded");
+    expect(render(initial)).toContain("Download offline map");
+    const busyHtml = renderToStaticMarkup(createElement(PhotostaffMapDownloadPanel, {
+      status: initial,
+      requestError: null,
+      busy: true,
+      onDownload: () => undefined
+    }));
+    expect(busyHtml).toContain('class="primary-button"');
+    expect(busyHtml).toContain('disabled=""');
+    expect(busyHtml).toContain('aria-busy="true"');
+
+    const downloading = mapStatus("downloading", { receivedBytes: 50, totalBytes: 100 });
+    const progressHtml = render(downloading);
+    expect(progressHtml).toContain('role="progressbar"');
+    expect(progressHtml).toContain('aria-valuenow="50"');
+
+    const failed = mapStatus("failed", { error: "Checksum mismatch" });
+    const failedHtml = render(failed);
+    expect(failedHtml).toContain("Checksum mismatch");
+    expect(failedHtml).toContain("Retry");
+
+    const ready = mapStatus("ready");
+    ready.settings = {
+      ...ready.map,
+      tileType: "jpeg",
+      minZoom: 0,
+      maxZoom: 6,
+      bounds: [-180, -85, 180, 85],
+      updatedAt: "2026-10-13T00:00:00.000Z"
+    };
+    expect(mapArchiveReady(ready)).toBe(true);
+    expect(render(ready)).toBe("");
+  });
+
+  it("renders the managed download action in Chinese", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const html = renderToStaticMarkup(createElement(PhotostaffMapDownloadPanel, {
+      status: mapStatus("not_downloaded"),
+      requestError: null,
+      busy: false,
+      onDownload: () => undefined
+    }));
+    expect(html).toContain("下载离线地图");
+    await i18n.changeLanguage("en");
+  });
 });
 
 describe("photostaff timeline grouping", () => {
@@ -144,6 +206,28 @@ describe("photostaff timeline grouping", () => {
     });
   });
 });
+
+function mapStatus(
+  state: PhotostaffMapSettingsResponse["download"]["state"],
+  overrides: Partial<PhotostaffMapSettingsResponse["download"]> = {}
+): PhotostaffMapSettingsResponse {
+  return {
+    map: {
+      name: "Natural Earth II",
+      version: "3.2.0",
+      attribution: "Made with Natural Earth",
+      sizeBytes: 100
+    },
+    settings: null,
+    download: {
+      state,
+      receivedBytes: state === "ready" ? 100 : 0,
+      totalBytes: 100,
+      error: null,
+      ...overrides
+    }
+  };
+}
 
 function photostaff(id: string, takenAt: string, name = `${id}.jpg`, mimeType = "image/jpeg"): PhotostaffAsset {
   return {

@@ -4,7 +4,7 @@ description: API 传输面、端点分组和稳定契约。
 type: reference
 status: current
 audience: [developer]
-sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photostaff.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
+sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photostaff.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/shares.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
 sidebar:
   order: 2
 ---
@@ -21,7 +21,8 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 - `POST /api/photostaff/query` 接收最多 64 KiB、25 个高级条件，支持文本、日期、媒体类型、相机、镜头、曝光、评分、关键词、位置和任意标量字段。排序 cursor 绑定查询指纹；响应包含精确总数、元数据升级进度、排除自身条件的分类分面和当前结果的数值范围。
 - `GET /api/photostaff/metadata/fields` 返回可查询字段目录；`GET /api/photostaff/:id/metadata` 默认排除 GPS、设备/镜头序列号、联系信息和人物区域，只有显式 `includeSensitive=1` 才返回敏感组。
 - `POST /api/photostaff/map/query` 在视口内返回最多 4096 个本地聚合点。地理查询先用 RTree 缩小候选，再用规范坐标或 Haversine 精确计算，支持反经线；距离排序必须提供附近查询中心。
-- `GET/PUT /api/photostaff/map/settings` 读取或配置 NAS 上的栅格 PNG/JPEG/WebP PMTiles；`GET /api/photostaff/map/archive` 重新验证挂载和路径后提供 Range 流。矢量、损坏、越界或离线归档会被拒绝。
+- `GET /api/photostaff/map/settings` 返回固定 Natural Earth II 3.2.0 资产信息及 `not_downloaded/downloading/ready/failed`、已下载字节、总字节和错误；`POST /api/photostaff/map/download` 无请求体，幂等启动或返回当前下载任务。客户端不能提交 URL 或文件路径，旧 `PUT /api/photostaff/map/settings` 不再存在。
+- `GET /api/photostaff/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${SIGMAOS_DATA_DIR}/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。
 - `GET /api/photostaff/:id/thumbnail|preview|original` 只解析当前照片库中的资源。缩略图和预览来自 data directory 的 hash-addressed WebP cache；GIF preview 保留动画原文件，视频 preview 是首帧海报。
 - `GET /api/photostaff/:id/video` 为视频资源提供带 Range 的播放流；MP4/WebM 直接流式返回，其他支持容器通过 FFmpeg 缓存为 MP4。
 - `PUT /api/photostaff/upload` 使用 `application/octet-stream`，查询参数传文件名和可选目录。媒体限制 512 MiB、原子发布并按 SHA-256 拒绝当前库中的重复内容；XMP sidecar 限制 16 MiB。
@@ -67,6 +68,12 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由 Rust photostaff 
 标签 ID 和旧会话 ID 必须是 UUID；名称去除首尾空格后为 1–64 个字符，也可传 `null` 恢复默认名称。无效 root、ID 或名称返回 `400/404`，会话上限或旧 ID 冲突返回 `409`。删除活动标签时优先激活右侧标签，其次左侧；删除最后一个标签后活动项为 `null`。
 
 `GET /api/terminal?rootId=...` 使用 `sigmaos-terminal-v1` 和 `sigmaos-session.<uuid>` WebSocket subprotocol。已登记标签通过 Termux Protocol v1 以 persistent 模式打开；未登记 ID 保持旧客户端兼容并按空闲策略回收。一个标签只允许一个控制连接，新连接建立后旧连接收到 `{ "type": "taken_over" }`。内部 `session.open` 请求的 `persistent` 字段可选，省略时等同旧版非持久会话。
+
+## 共享账号
+
+- `PUT /api/shares/account` 直接更新 SMB、WebDAV 和 FTP 共用账号，不创建 approval、job 或 operation。请求包含 `username`、可选的新 `password` 和当前 `expectedUpdatedAt`；省略密码或传空字符串表示保留已有密码。
+- API 串行执行所有共享配置写入，先通过受限 hostd 应用完整当前配置，成功后才更新数据库。revision 不匹配返回 `409`，输入错误返回 `400`，hostd 不可用返回 `503`，宿主应用失败返回脱敏后的 `502`。
+- 响应只返回公开共享设置和 hostd 应用时间，密码永不回传。共享目录、协议、权限和全局启停仍通过 `POST /api/shares/proposals` 进入原有审批流程；审批执行时使用数据库中的最新账号，不能覆盖之后直接修改的凭证。
 
 ## HTTP 下载
 

@@ -5,6 +5,7 @@ import {
   TERMINAL_SESSION_DEFAULT_CONNECT_TIMEOUT_MS,
   TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS
 } from "./termux-protocol.js";
+import { PHOTOSTAFF_BASE_MAP_RELEASE_URL } from "./photostaff-config.js";
 import type {
   DlnaMediaType,
   NasRootConfig,
@@ -126,6 +127,9 @@ interface TomlConfig {
     hwdec?: "auto-safe" | "auto" | "no";
     user?: string;
   };
+  photostaff?: {
+    basemap_url?: string;
+  };
   nas_roots?: Array<{
     id?: string;
     name?: string;
@@ -211,10 +215,29 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
     shares: loadShareConfig(env, fileConfig),
     terminal: loadTerminalConfig(env, fileConfig),
     vodPlayer: loadVodPlayerConfig(env, fileConfig),
+    photostaff: {
+      baseMapUrl: loadPhotostaffBaseMapUrl(env, fileConfig)
+    },
     nasRoots,
     backup,
     health
   };
+}
+
+function loadPhotostaffBaseMapUrl(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string {
+  const value = normalizeText(env.SIGMAOS_PHOTOSTAFF_BASEMAP_URL) ??
+    normalizeText(fileConfig.photostaff?.basemap_url) ??
+    PHOTOSTAFF_BASE_MAP_RELEASE_URL;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Photostaff base map URL must be a valid HTTPS URL");
+  }
+  if (url.protocol !== "https:") {
+    throw new Error("Photostaff base map URL must use HTTPS");
+  }
+  return url.toString();
 }
 
 function loadHostdConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): SigmaConfig["hostd"] {

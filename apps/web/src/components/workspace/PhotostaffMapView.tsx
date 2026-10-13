@@ -1,11 +1,12 @@
-import { Crosshair, LoaderCircle, Map as MapIcon, MapPinned, Search } from "lucide-react";
+import { Crosshair, Download, LoaderCircle, Map as MapIcon, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  downloadPhotostaffMap,
   getPhotostaffMapSettings,
   queryPhotostaffMap,
   type PhotostaffMapQueryResult,
-  type PhotostaffMapSettings,
+  type PhotostaffMapSettingsResponse,
   type PhotostaffQueryRequest
 } from "../../api.js";
 import type { PhotostaffLocationBounds } from "@sigmaos/shared";
@@ -15,15 +16,11 @@ const WORLD_BOUNDS: PhotostaffLocationBounds = { kind: "bounds", west: -180, sou
 
 export function PhotostaffMapView({
   filters,
-  refreshKey,
-  onConfigure,
   onOpenAsset,
   onSearchBounds,
   onError
 }: {
   filters: PhotostaffQueryRequest["filters"];
-  refreshKey: number;
-  onConfigure: () => void;
   onOpenAsset: (assetId: string) => void | Promise<void>;
   onSearchBounds: (bounds: PhotostaffLocationBounds) => void;
   onError: (message: string) => void;
@@ -38,8 +35,9 @@ export function PhotostaffMapView({
   const clustersRef = useRef<PhotostaffMapQueryResult["clusters"]>([]);
   const loadRequestRef = useRef(0);
   const boundsRef = useRef<PhotostaffLocationBounds>(WORLD_BOUNDS);
-  const [settings, setSettings] = useState<PhotostaffMapSettings | null>(null);
-  const [settingsUnavailable, setSettingsUnavailable] = useState(false);
+  const [mapStatus, setMapStatus] = useState<PhotostaffMapSettingsResponse | null>(null);
+  const [mapRequestError, setMapRequestError] = useState<string | null>(null);
+  const [downloadBusy, setDownloadBusy] = useState(false);
   const [result, setResult] = useState<PhotostaffMapQueryResult | null>(null);
   const [bounds, setBounds] = useState<PhotostaffLocationBounds>(WORLD_BOUNDS);
   const [pendingBounds, setPendingBounds] = useState<PhotostaffLocationBounds | null>(null);
@@ -82,27 +80,56 @@ export function PhotostaffMapView({
     let active = true;
     void getPhotostaffMapSettings().then((response) => {
       if (!active) return;
-      setSettings(response.settings);
-      setSettingsUnavailable(Boolean(response.unavailable));
+      setMapStatus(response);
+      setMapRequestError(null);
       const initial = response.settings?.bounds
         ? tupleToBounds(response.settings.bounds)
         : WORLD_BOUNDS;
       void loadPoints(initial);
     }).catch((error) => {
-      if (active) errorRef.current(error instanceof Error ? error.message : String(error));
+      if (!active) return;
+      const message = error instanceof Error ? error.message : String(error);
+      setMapRequestError(message);
+      errorRef.current(message);
     });
     return () => {
       active = false;
       loadRequestRef.current += 1;
     };
-  }, [loadPoints, refreshKey]);
+  }, [loadPoints]);
+
+  useEffect(() => {
+    if (mapStatus?.download.state !== "downloading") return undefined;
+    let active = true;
+    let timer: number | null = null;
+    const poll = async () => {
+      try {
+        const next = await getPhotostaffMapSettings();
+        if (!active) return;
+        setMapStatus(next);
+        setMapRequestError(null);
+        if (next.download.state === "downloading") timer = window.setTimeout(() => void poll(), 1_000);
+      } catch (error) {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : String(error);
+        setMapRequestError(message);
+        timer = window.setTimeout(() => void poll(), 1_000);
+      }
+    };
+    timer = window.setTimeout(() => void poll(), 1_000);
+    return () => {
+      active = false;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [mapStatus?.download.state]);
 
   useEffect(() => {
     if (result) void loadPoints(boundsRef.current);
   }, [filters, loadPoints]);
 
   useEffect(() => {
-    if (!settings || settingsUnavailable || !hostRef.current) return undefined;
+    const settings = mapStatus?.settings;
+    if (!settings || mapStatus.download.state !== "ready" || !hostRef.current) return undefined;
     let disposed = false;
     let removeProtocol: (() => void) | null = null;
     void Promise.all([import("maplibre-gl"), import("pmtiles")]).then(([mapModule, pmtilesModule]) => {
@@ -182,7 +209,7 @@ export function PhotostaffMapView({
       mapRef.current = null;
       removeProtocol?.();
     };
-  }, [settings, settingsUnavailable]);
+  }, [mapStatus?.download.state, mapStatus?.settings]);
 
   useEffect(() => {
     clustersRef.current = result?.clusters ?? [];
@@ -197,56 +224,55 @@ export function PhotostaffMapView({
     }
     navigator.geolocation.getCurrentPosition((position) => {
       const center: [number, number] = [position.coords.longitude, position.coords.latitude];
-      if (mapRef.current) mapRef.current.easeTo({ center, zoom: Math.max(mapRef.current.getZoom(), 10) });
-      else {
-        const next = around(center[0], center[1], 1);
-        void loadPoints(next);
-      }
+      mapRef.current?.easeTo({ center, zoom: Math.max(mapRef.current.getZoom(), 6) });
     }, (error) => onError(error.message));
   }
 
-  const localCanvas = !settings || settingsUnavailable;
+  async function startDownload() {
+    if (downloadBusy || mapStatus?.download.state === "downloading") return;
+    setDownloadBusy(true);
+    setMapRequestError(null);
+    try {
+      setMapStatus(await downloadPhotostaffMap());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setMapRequestError(message);
+      errorRef.current(message);
+    } finally {
+      setDownloadBusy(false);
+    }
+  }
+
+  const mapReady = mapArchiveReady(mapStatus);
+  const mapLabel = mapStatus
+    ? `${mapStatus.map.name} ${mapStatus.map.version}`
+    : t("workspace.photostaff.offlineMap");
   return (
     <section className="photostaff-map-view" aria-label={t("workspace.photostaff.mapView")}>
       <div className="photostaff-map-toolbar">
-        <span>{localCanvas ? t("workspace.photostaff.localCoordinateMap") : settings.path}</span>
+        <span>{mapLabel}</span>
         <div>
-          <button type="button" onClick={useCurrentLocation} title={t("workspace.photostaff.myLocation")} aria-label={t("workspace.photostaff.myLocation")}>
+          <button type="button" onClick={useCurrentLocation} disabled={!mapReady} title={t("workspace.photostaff.myLocation")} aria-label={t("workspace.photostaff.myLocation")}>
             <Crosshair aria-hidden="true" size={15} />
           </button>
-          <button type="button" onClick={onConfigure} title={t("workspace.photostaff.configureMap")} aria-label={t("workspace.photostaff.configureMap")}>
-            <MapPinned aria-hidden="true" size={15} />
-          </button>
-          <button type="button" onClick={() => void loadPoints(pendingBounds ?? bounds, true)} disabled={!pendingBounds || loading}>
+          <button type="button" onClick={() => void loadPoints(pendingBounds ?? bounds, true)} disabled={!mapReady || !pendingBounds || loading}>
             <Search aria-hidden="true" size={14} />{t("workspace.photostaff.searchArea")}
           </button>
         </div>
       </div>
       <div className="photostaff-map-canvas">
-        {localCanvas ? (
-          <div className="photostaff-coordinate-canvas" role="img" aria-label={t("workspace.photostaff.localCoordinateMap")}>
+        {!mapReady ? (
+          <div className="photostaff-coordinate-canvas">
             <div className="photostaff-coordinate-grid" aria-hidden="true" />
-            {(result?.clusters ?? []).map((cluster, index) => (
-              <button
-                key={`${cluster.longitude}:${cluster.latitude}:${index}`}
-                type="button"
-                className="photostaff-map-point"
-                style={pointStyle(cluster.longitude, cluster.latitude, bounds)}
-                onClick={() => cluster.assetId
-                  ? void onOpenAsset(cluster.assetId)
-                  : void loadPoints(around(cluster.longitude, cluster.latitude, boundsSpan(bounds) / 4))}
-                aria-label={t("workspace.photostaff.mapPhotostaffCount", { count: cluster.count })}
-              >
-                {cluster.count > 1 ? cluster.count : ""}
-              </button>
-            ))}
-            <div className="photostaff-map-empty-label">
-              <MapIcon aria-hidden="true" size={20} />
-              <span>{settingsUnavailable ? t("workspace.photostaff.mapOffline") : t("workspace.photostaff.noBaseMap")}</span>
-            </div>
+            <PhotostaffMapDownloadPanel
+              status={mapStatus}
+              requestError={mapRequestError}
+              busy={downloadBusy}
+              onDownload={() => void startDownload()}
+            />
           </div>
         ) : <div ref={hostRef} className="photostaff-maplibre" />}
-        {loading ? <div className="photostaff-map-loading"><LoaderCircle className="is-spinning" aria-hidden="true" size={20} /></div> : null}
+        {loading && mapReady ? <div className="photostaff-map-loading"><LoaderCircle className="is-spinning" aria-hidden="true" size={20} /></div> : null}
       </div>
       {result?.metadataIndex.pending ? (
         <p className="photostaff-index-progress">{t("workspace.photostaff.metadataProgress", {
@@ -256,6 +282,84 @@ export function PhotostaffMapView({
       ) : null}
     </section>
   );
+}
+
+export function mapArchiveReady(status: PhotostaffMapSettingsResponse | null): boolean {
+  return status?.download.state === "ready" && status.settings !== null;
+}
+
+export function PhotostaffMapDownloadPanel({
+  status,
+  requestError,
+  busy,
+  onDownload
+}: {
+  status: PhotostaffMapSettingsResponse | null;
+  requestError: string | null;
+  busy: boolean;
+  onDownload: () => void;
+}) {
+  const { t } = useTranslation();
+  if (mapArchiveReady(status)) return null;
+  const state = status?.download.state;
+  const received = status?.download.receivedBytes ?? 0;
+  const total = status?.download.totalBytes ?? status?.map.sizeBytes ?? 0;
+  const percent = total > 0 ? Math.min(100, Math.floor((received / total) * 100)) : 0;
+  const error = requestError ?? status?.download.error;
+
+  if (!status && !error) {
+    return (
+      <div className="photostaff-map-download-state" role="status" aria-live="polite">
+        <LoaderCircle className="is-spinning" aria-hidden="true" size={22} />
+        <strong>{t("workspace.photostaff.mapChecking")}</strong>
+      </div>
+    );
+  }
+  if (state === "downloading") {
+    return (
+      <div className="photostaff-map-download-state" role="status" aria-live="polite">
+        <LoaderCircle className="is-spinning" aria-hidden="true" size={22} />
+        <strong>{t("workspace.photostaff.mapDownloading")}</strong>
+        <div className="photostaff-map-progress" role="progressbar" aria-label={t("workspace.photostaff.mapDownloading")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+          <span style={{ width: `${percent}%` }} />
+        </div>
+        <small>{t("workspace.photostaff.mapDownloadProgress", {
+          percent,
+          received: formatMapBytes(received),
+          total: formatMapBytes(total)
+        })}</small>
+      </div>
+    );
+  }
+  if (state === "failed" || error) {
+    return (
+      <div className="photostaff-map-download-state is-error" role="alert">
+        <MapIcon aria-hidden="true" size={22} />
+        <strong>{t("workspace.photostaff.mapDownloadFailed")}</strong>
+        <p>{error}</p>
+        <button className="primary-button" type="button" onClick={onDownload} disabled={busy} aria-busy={busy || undefined}>
+          {busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <RefreshCw aria-hidden="true" size={16} />}
+          {t("workspace.photostaff.mapRetry")}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="photostaff-map-download-state" role="status">
+      <MapIcon aria-hidden="true" size={22} />
+      <strong>{t("workspace.photostaff.noBaseMap")}</strong>
+      <button className="primary-button" type="button" onClick={onDownload} disabled={busy} aria-busy={busy || undefined}>
+        {busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <Download aria-hidden="true" size={16} />}
+        {t("workspace.photostaff.downloadOfflineMap")}
+      </button>
+    </div>
+  );
+}
+
+function formatMapBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
 function tupleToBounds(bounds: [number, number, number, number]): PhotostaffLocationBounds {
@@ -282,29 +386,6 @@ function pointsToGeoJson(clusters: PhotostaffMapQueryResult["clusters"]): GeoJSO
 
 function emptyFeatureCollection(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
-}
-
-function pointStyle(longitude: number, latitude: number, bounds: PhotostaffLocationBounds) {
-  const span = bounds.west <= bounds.east ? bounds.east - bounds.west : 360 - bounds.west + bounds.east;
-  const adjusted = longitude < bounds.west ? longitude + 360 : longitude;
-  const left = Math.max(0, Math.min(100, ((adjusted - bounds.west) / Math.max(span, 0.000001)) * 100));
-  const top = Math.max(0, Math.min(100, ((bounds.north - latitude) / Math.max(bounds.north - bounds.south, 0.000001)) * 100));
-  return { left: `${left}%`, top: `${top}%` };
-}
-
-function around(longitude: number, latitude: number, span: number): PhotostaffLocationBounds {
-  const half = Math.max(0.05, Math.min(90, span / 2));
-  return {
-    kind: "bounds",
-    west: normalizeLongitude(longitude - half),
-    south: Math.max(-90, latitude - half),
-    east: normalizeLongitude(longitude + half),
-    north: Math.min(90, latitude + half)
-  };
-}
-
-function boundsSpan(bounds: PhotostaffLocationBounds): number {
-  return bounds.west <= bounds.east ? bounds.east - bounds.west : 360 - bounds.west + bounds.east;
 }
 
 export function photostaffViewportBounds(
