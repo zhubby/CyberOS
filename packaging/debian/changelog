@@ -1,3 +1,9 @@
+sigmaos (0.10.1) unstable; urgency=medium
+
+  * Avoid status endpoint stalls on large SQLite indexes.
+
+ -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 01:44:57 +0000
+
 sigmaos (0.10.0) unstable; urgency=medium
 
   * Release the Rust terminal helper, resilient indexer, Photo configuration, unified panel actions, centered notifications, and hardened CM5 upgrades.

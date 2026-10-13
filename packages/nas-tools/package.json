@@ -1,12 +1,12 @@
 {
   "name": "@sigmaos/nas-tools",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@sigmaos/shared": "0.10.0"
+    "@sigmaos/shared": "0.10.1"
   }
 }
