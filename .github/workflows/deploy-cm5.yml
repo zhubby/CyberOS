@@ -622,6 +622,20 @@ jobs:
             systemctl is-enabled --quiet "$unit"
             check_active_unit "$unit"
           done
+          for unit in \
+            sigmaos-maintenance.timer \
+            sigmaos-health.timer \
+            sigmaos-backup-daily.timer \
+            sigmaos-backup-weekly.timer; do
+            systemctl is-enabled --quiet "$unit"
+            check_active_unit "$unit"
+            timer_schedule="$(systemctl show \
+              --property=NextElapseUSecRealtime \
+              --property=NextElapseUSecMonotonic \
+              "$unit")"
+            printf '%s\n' "$timer_schedule" | \
+              grep -Eq '^NextElapseUSec(Realtime|Monotonic)=.+$'
+          done
           runtime_before="$(runtime_fingerprint)"
           sleep 5
           for unit in \
@@ -665,6 +679,13 @@ jobs:
           const build = payload?.build;
           if (build?.version !== expectedVersion || build?.commitSha?.toLowerCase() !== expectedCommitSha.toLowerCase()) {
             throw new Error(`build metadata mismatch: ${JSON.stringify(build)}`);
+          }
+          NODE
+          node - "$check_dir/system-health.json" <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (payload?.operations?.health?.status !== "ready") {
+            throw new Error(`health operation is not ready: ${JSON.stringify(payload?.operations?.health)}`);
           }
           NODE
           REMOTE

@@ -149,10 +149,36 @@ NODE
   return 1
 }
 
+wait_for_health_operation_ready() {
+  status_path="$work_dir/system-health.json"
+  attempts=1
+  while [ "$attempts" -le 60 ]; do
+    if curl --fail --silent --show-error --max-time 10 \
+      http://127.0.0.1:3010/api/system/health > "$status_path" && \
+      node --input-type=module - "$status_path" <<'NODE'
+import fs from "node:fs";
+
+const health = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+process.exit(health?.operations?.health?.status === "ready" ? 0 : 1);
+NODE
+    then
+      return 0
+    fi
+    sleep 2
+    attempts=$((attempts + 1))
+  done
+  [ ! -s "$status_path" ] || cat "$status_path" >&2
+  return 1
+}
+
 activate_runtime() {
   log "enabling and restarting SigmaOS services"
   systemctl enable $RUNTIME_SERVICES
   systemctl restart $RUNTIME_SERVICES
+
+  log "enabling SigmaOS schedules and refreshing health"
+  systemctl enable --now $TIMERS
+  systemctl start sigmaos-health.service
 }
 
 verify_runtime() {
@@ -160,6 +186,18 @@ verify_runtime() {
   for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do
     systemctl is-enabled --quiet "$unit" || die "service is not enabled: $unit"
     systemctl is-active --quiet "$unit" || die "service is not active: $unit"
+  done
+
+  for unit in $TIMERS; do
+    systemctl is-enabled --quiet "$unit" || die "timer is not enabled: $unit"
+    systemctl is-active --quiet "$unit" || die "timer is not active: $unit"
+    timer_schedule=$(systemctl show \
+      --property=NextElapseUSecRealtime \
+      --property=NextElapseUSecMonotonic \
+      "$unit")
+    printf '%s\n' "$timer_schedule" | \
+      grep -Eq '^NextElapseUSec(Realtime|Monotonic)=.+$' || \
+      die "timer has no next trigger: $unit"
   done
 
   runtime_before=$(runtime_fingerprint)
@@ -184,6 +222,7 @@ verify_runtime() {
   wait_for_url http://127.0.0.1:3010/api/system/health || die "system health endpoint failed"
   wait_for_url http://127.0.0.1:3010/api/system/build-info || die "build-info endpoint failed"
   wait_for_indexer_ready || die "indexer readiness check failed"
+  wait_for_health_operation_ready || die "health operation is not ready"
 }
 
 runtime_fingerprint() {

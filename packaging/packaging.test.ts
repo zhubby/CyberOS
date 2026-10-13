@@ -449,6 +449,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('[ "$actual_config_sha256" = "$expected_config_sha256" ]');
     expect(deployWorkflow).toContain("END { exit (legacy || !socket || !user) ? 1 : 0 }");
     expect(deployWorkflow).toContain("/usr/lib/sigmaos/bin/sigmaos-termux");
+    expect(deployWorkflow).toContain("sigmaos-health.timer");
+    expect(deployWorkflow).toContain("NextElapseUSecMonotonic");
+    expect(deployWorkflow).toContain('payload?.operations?.health?.status !== "ready"');
     expect(deployWorkflow).toContain('runtime_before="$(runtime_fingerprint)"');
     expect(deployWorkflow).toContain('runtime_after="$(runtime_fingerprint)"');
     expect(deployWorkflow).toContain("! systemctl is-active --quiet sigmaos-terminal-helper.service");
@@ -597,6 +600,12 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("restore_unit_state \"$unit\" \"$state_dir\"");
     expect(deploy).toContain("activate_runtime");
     expect(deploy).toContain("systemctl restart $RUNTIME_SERVICES");
+    expect(deploy).toContain("systemctl enable --now $TIMERS");
+    expect(deploy).toContain("systemctl start sigmaos-health.service");
+    expect(deploy).toContain('systemctl is-active --quiet "$unit" || die "timer is not active: $unit"');
+    expect(deploy).toContain("NextElapseUSecMonotonic");
+    expect(deploy).toContain('health?.operations?.health?.status === "ready"');
+    expect(deploy).toContain("wait_for_health_operation_ready");
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
     expect(deploy).toContain("sigmaos-downloader.service sigmaos-indexer.service sigmaos-hostd.service");
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
