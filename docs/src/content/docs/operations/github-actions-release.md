@@ -182,7 +182,7 @@ git push origin "v${VERSION}"
 2. 使用 `tailscale/github-action@v4` 创建带 `tag:github-actions` 的临时节点；
 3. 经 Tailscale SSH 上传 `release-manifest.json`，并用 SFTP 将 package 切成可独立续传的分片；CM5 按顺序拼接并校验完整 SHA256 后，再原子替换 staging 中的 `package.deb`；
 4. 执行 `sudo -n /usr/local/sbin/sigmaos-deploy`；
-5. 再次检查常驻服务、failed units、API liveness、root readiness、system health，以及 build-info 的版本和 commit；
+5. 再次检查常驻服务、核心 timers 的启用/运行状态和下一次触发时间、failed units、API liveness、root readiness、Operations Health，以及 build-info 的版本和 commit；
 6. workflow 结束时 logout 并清理临时 Tailscale 节点。
 
 `concurrency: cm5-production` 串行化所有生产部署，且不会取消正在进行的升级。
@@ -195,7 +195,7 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 版本相同但 commit 不同时拒绝覆盖。
 - 版本和 commit 都相同时不重装，只重新验证服务和 build-info，因此可安全重试同一个 tag。
 - 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/etc/sigmaos` 和 `/var/lib/sigmaos`，再执行 `dpkg -i`。
-- 安装后只恢复升级前实际启用或运行的服务与 timers，并执行完整运行时检查。
+- 安装后先恢复升级前实际启用或运行的服务状态，再强制启用并启动 maintenance、health 和 backup 核心 timers；部署会立即运行一次 Health，并要求 Operations Health 为 `ready` 后才算成功。
 
 成功记录写入 `/var/lib/sigmaos-deploy/current-release.json`，已验证包保存在 `/var/lib/sigmaos-deploy/releases/<tag>/`。升级失败时，备份、旧包引用和诊断日志保留在 `/var/lib/sigmaos-deploy/backups/<tag>-<timestamp>/`，部署程序会尽力恢复此前的 systemd 状态。
 
@@ -220,7 +220,10 @@ sudo systemctl --failed
 sudo systemctl is-active \
   sigmaos-api.service sigmaos-worker@1.service \
   sigmaos-downloader.service sigmaos-hostd.service \
-  sigmaos-termux.service
+  sigmaos-termux.service sigmaos-maintenance.timer \
+  sigmaos-health.timer sigmaos-backup-daily.timer \
+  sigmaos-backup-weekly.timer
+sudo systemctl list-timers 'sigmaos-*'
 curl -fsS http://127.0.0.1:3010/health
 curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
@@ -234,7 +237,7 @@ sudo cat /var/lib/sigmaos-deploy/current-release.json
 gh workflow run deploy-cm5.yml --ref main -f tag=vX.Y.Z
 ```
 
-传输中断时，CM5 会保留 SHA256 命名的分片目录；从 `main` 重试同一个 tag 时，完整分片会先校验大小和 SHA256，较小分片从已有字节继续上传，最多四片并行。所有分片拼接且 checksum 匹配后，临时文件会原子替换为 `package.deb`，因此成功部署后的再次重试仍可能重新传输完整 package。若 GitHub runner 与 CM5 只能经 DERP 通信，上传可能需要数分钟。日志出现 `version X.Y.Z is already installed; verifying runtime only` 表示命中幂等验证分支。
+传输中断时，CM5 会保留 SHA256 命名的分片目录；从 `main` 重试同一个 tag 时，完整分片会先校验大小和 SHA256，较小分片从已有字节继续上传，最多四片并行。所有分片拼接且 checksum 匹配后，临时文件会原子替换为 `package.deb`，因此成功部署后的再次重试仍可能重新传输完整 package。若 GitHub runner 与 CM5 只能经 DERP 通信，上传可能需要数分钟。日志出现 `version X.Y.Z is already installed; recovering runtime and release state` 表示命中幂等恢复分支。
 
 ## 常见失败
 
