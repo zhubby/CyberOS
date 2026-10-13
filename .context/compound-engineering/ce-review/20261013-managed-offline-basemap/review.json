@@ -1,0 +1,46 @@
+{
+  "runId": "20261013-managed-offline-basemap",
+  "mode": "autofix",
+  "execution": "sequential-main-thread",
+  "scope": {
+    "branch": "codex/managed-offline-map",
+    "intent": "provide a fixed, verified, one-click Natural Earth II offline basemap for Photostaff",
+    "concurrentShareChangesExcluded": true
+  },
+  "verdict": "ready_with_fixes",
+  "findings": [],
+  "appliedFixes": [
+    "Serialized initial archive inspection before concurrent download starts.",
+    "Separated the Release asset name from the required stable local filename.",
+    "Restored readable light-theme CTA contrast and primary busy styling.",
+    "Recreated the pinned map-build virtual environment on each build.",
+    "Made the streamed-progress test deferred callback typecheck reliably."
+  ],
+  "residualActionableWork": [],
+  "advisoryOutputs": {
+    "agentNativeGaps": [],
+    "testingGaps": [],
+    "residualRisks": [
+      "The appliance needs access to GitHub Releases or a byte-identical HTTPS mirror for the user-triggered first download."
+    ]
+  },
+  "coverage": {
+    "subagentsDispatched": false,
+    "suppressedCount": 0,
+    "failedReviewerCount": 0,
+    "pastSolutionsFound": false
+  },
+  "verification": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "tests": "124 Vitest files; 811 passed and 4 skipped; Rust and docs tests passed",
+    "build": "passed",
+    "mapValidation": "passed",
+    "browserAcceptance": "passed at desktop, 820, 560, 390, and 320px in Chinese/English and dark/light themes"
+  },
+  "handoff": {
+    "committedByReview": false,
+    "pushedByReview": false,
+    "releaseAssetPublished": true
+  }
+}
