@@ -178,6 +178,28 @@ describe("SQLite schema and repositories", () => {
     ).toBe(40 * 60 * 1000);
   });
 
+  it("reports the allocated database size without scanning index contents", () => {
+    const run = startIndexRun(db, {
+      rootId: "local",
+      now: new Date("2026-02-01T00:00:00.000Z")
+    });
+    finishIndexRun(db, {
+      runId: run.id,
+      status: "completed",
+      scanned: 1,
+      indexed: 1,
+      unchanged: 0,
+      removed: 0,
+      skipped: 0,
+      failed: 0,
+      finishedAt: new Date("2026-02-01T00:01:00.000Z")
+    });
+
+    const pageCount = Number(db.pragma("page_count", { simple: true }));
+    const pageSize = Number(db.pragma("page_size", { simple: true }));
+    expect(getIndexRootStatus(db, "local").metrics?.indexSizeBytes).toBe(pageCount * pageSize);
+  });
+
   it("keeps legacy root status tied to the latest full run", () => {
     const full = startIndexRun(db, {
       rootId: "local",
