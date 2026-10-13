@@ -1,3 +1,9 @@
+sigmaos (0.10.2) unstable; urgency=medium
+
+  * Add managed Ethernet and operations, offline photo maps, share account credentials, and restored Photos API contracts.
+
+ -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 07:13:41 +0000
+
 sigmaos (0.10.1) unstable; urgency=medium
 
   * Avoid status endpoint stalls on large SQLite indexes.
