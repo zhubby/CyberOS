@@ -68,6 +68,7 @@ import type {
 } from "@sigmaos/shared";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
 import {
   StorageFilePickerDialog,
@@ -124,6 +125,8 @@ export function PhotoLibraryPanel({
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [sensitiveRevealed, setSensitiveRevealed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [hasLoadedSnapshot, setHasLoadedSnapshot] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [picker, setPicker] = useState<"move" | null>(null);
@@ -139,6 +142,7 @@ export function PhotoLibraryPanel({
   const deleteDialogRef = useRef<HTMLDivElement | null>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dragDepthRef = useRef(0);
+  const libraryRequestRef = useRef(0);
   const timelineRequestRef = useRef(0);
   const metadataRequestRef = useRef(0);
 
@@ -169,6 +173,7 @@ export function PhotoLibraryPanel({
   }, [queryFilters, sortDirection, sortField]);
 
   const loadLibrary = useCallback(async () => {
+    const requestId = ++libraryRequestRef.current;
     setLoading(true);
     setLoadError(null);
     try {
@@ -176,11 +181,13 @@ export function PhotoLibraryPanel({
         getPhotoLibrarySettings(),
         getPhotoStatus()
       ]);
+      if (requestId !== libraryRequestRef.current) return;
       setSettings(nextSettings);
       setStatus(snapshot.status);
       setWorkerHealth(snapshot.workerHealth);
       if (nextSettings) {
         const [, fields] = await Promise.all([loadTimeline(), getPhotoMetadataFields()]);
+        if (requestId !== libraryRequestRef.current) return;
         setMetadataFields((current) => samePhotoMetadataFields(current, fields) ? current : fields);
       }
       else {
@@ -189,18 +196,27 @@ export function PhotoLibraryPanel({
         setTotal(0);
         setFacets(null);
       }
+      setHasLoadedSnapshot(true);
     } catch (error) {
+      if (requestId !== libraryRequestRef.current) return;
       const message = errorMessage(error);
       setLoadError(message);
       onNotifyError(message);
     } finally {
-      setLoading(false);
+      if (requestId === libraryRequestRef.current) {
+        setLoading(false);
+        setInitialLoadComplete(true);
+      }
     }
   }, [loadTimeline, onNotifyError]);
 
   useEffect(() => {
     void loadLibrary();
   }, [approvalRefreshKey, loadLibrary]);
+
+  useEffect(() => () => {
+    libraryRequestRef.current += 1;
+  }, []);
 
   useEffect(() => {
     if (!settings) return undefined;
@@ -526,11 +542,13 @@ export function PhotoLibraryPanel({
   }
 
   const movePools = configuredPool ? [configuredPool] : [];
+  const loadMode = photoLibraryLoadMode(initialLoadComplete, hasLoadedSnapshot, loadError);
 
   return (
     <section
       className={`photo-library${dropActive ? " is-drop-active" : ""}`}
       aria-label={t("workspace.photos.title")}
+      aria-busy={loading || undefined}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -576,7 +594,11 @@ export function PhotoLibraryPanel({
         </PanelHeaderActions>}
       />
 
-      {settings ? (
+      {loadMode === "loading" ? <span className="visually-hidden" role="status">{t("common.states.loading")}</span> : null}
+
+      {loadMode === "loading" ? (
+        <PhotoLibraryBarSkeleton />
+      ) : settings ? (
         <div className="photo-library-bar">
           <div className="photo-library-location" title={settings.path}>
             <FolderInput aria-hidden="true" size={15} />
@@ -623,7 +645,9 @@ export function PhotoLibraryPanel({
         </div>
       ) : null}
 
-      {settings ? (
+      {loadMode === "loading" ? (
+        <PhotoQuerySkeleton />
+      ) : settings ? (
         <div className="photo-query-panel">
           <div className="photo-query-toolbar">
             <label className="photo-search-field">
@@ -745,9 +769,9 @@ export function PhotoLibraryPanel({
           </div>
         ) : null}
 
-        {loading ? (
-          <div className="workspace-empty-state" role="status"><LoaderCircle className="is-spinning" aria-hidden="true" size={24} /><strong>{t("workspace.photos.loading")}</strong></div>
-        ) : loadError ? (
+        {loadMode === "loading" ? (
+          <PhotoTimelineSkeleton />
+        ) : loadMode === "error" ? (
           <div className="workspace-empty-state" role="alert"><ImageOff aria-hidden="true" size={28} /><strong>{t("workspace.photos.loadFailed")}</strong><p>{loadError}</p><button className="secondary-button" type="button" onClick={() => void loadLibrary()}>{t("common.actions.refresh")}</button></div>
         ) : !settings ? (
           <div className="workspace-empty-state photo-library-empty"><Images aria-hidden="true" size={34} /><strong>{t("workspace.photos.unconfiguredTitle")}</strong><p>{t("workspace.photos.unconfiguredBody")}</p></div>
@@ -904,6 +928,76 @@ export function PhotoLibraryPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+export function photoLibraryLoadMode(
+  initialLoadComplete: boolean,
+  hasLoadedSnapshot: boolean,
+  loadError: string | null
+): "loading" | "error" | "content" {
+  if (!initialLoadComplete) return "loading";
+  if (loadError && !hasLoadedSnapshot) return "error";
+  return "content";
+}
+
+function PhotoLibraryBarSkeleton() {
+  return (
+    <div className="photo-library-bar photo-library-bar-skeleton" aria-hidden="true">
+      <div className="photo-library-location photo-library-location-skeleton">
+        <SkeletonBlock className="photo-skeleton-icon" />
+        <SkeletonBlock width="92px" />
+        <SkeletonBlock width="min(260px, 42vw)" />
+      </div>
+      <div className="photo-runtime-status photo-runtime-status-skeleton">
+        <SkeletonBlock width="58px" />
+        <SkeletonBlock width="76px" />
+      </div>
+    </div>
+  );
+}
+
+function PhotoQuerySkeleton() {
+  return (
+    <div className="photo-query-panel photo-query-panel-skeleton" aria-hidden="true">
+      <div className="photo-query-toolbar photo-query-toolbar-skeleton">
+        <SkeletonBlock className="photo-skeleton-search" />
+        <SkeletonBlock className="photo-skeleton-view" />
+        <SkeletonBlock className="photo-skeleton-sort" />
+        <SkeletonBlock className="photo-skeleton-advanced" />
+      </div>
+      <div className="photo-common-filters photo-common-filters-skeleton">
+        {["wide", "wide", "wide", "date", "range", "range", "range", "rating"].map((kind, index) => (
+          <div className={`photo-skeleton-filter is-${kind}`} key={`${kind}-${index}`}>
+            <SkeletonBlock width={index % 2 ? "42%" : "56%"} />
+            <SkeletonBlock className="photo-skeleton-input" />
+          </div>
+        ))}
+      </div>
+      <div className="photo-query-summary photo-query-summary-skeleton">
+        <SkeletonBlock width="72px" />
+      </div>
+    </div>
+  );
+}
+
+function PhotoTimelineSkeleton() {
+  return (
+    <div className="photo-timeline photo-timeline-skeleton" aria-hidden="true">
+      {Array.from({ length: 2 }, (_, groupIndex) => (
+        <section className="photo-day" key={groupIndex}>
+          <header>
+            <SkeletonBlock width={groupIndex === 0 ? "128px" : "104px"} />
+            <SkeletonBlock width="24px" />
+          </header>
+          <div className="photo-wall photo-skeleton-wall">
+            {Array.from({ length: groupIndex === 0 ? 10 : 6 }, (_, tileIndex) => (
+              <SkeletonBlock className="photo-skeleton-tile" key={tileIndex} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
 

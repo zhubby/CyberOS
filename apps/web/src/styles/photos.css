@@ -547,6 +547,93 @@
   overflow: auto;
 }
 
+.photo-library-bar-skeleton,
+.photo-query-panel-skeleton,
+.photo-timeline-skeleton {
+  pointer-events: none;
+  animation: management-skeleton-enter 280ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.photo-library-location-skeleton,
+.photo-runtime-status-skeleton {
+  display: flex;
+  align-items: center;
+}
+
+.photo-library-location-skeleton .management-skeleton-block,
+.photo-runtime-status-skeleton .management-skeleton-block {
+  flex: 0 0 auto;
+}
+
+.photo-skeleton-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.photo-query-toolbar-skeleton .management-skeleton-block {
+  height: 31px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+}
+
+.photo-query-toolbar-skeleton .photo-skeleton-search {
+  flex: 1 1 260px;
+  min-width: 160px;
+}
+
+.photo-skeleton-view { width: 122px; }
+.photo-skeleton-sort { width: 128px; }
+.photo-skeleton-advanced { width: 78px; }
+
+.photo-common-filters-skeleton {
+  align-items: start;
+}
+
+.photo-skeleton-filter {
+  display: grid;
+  flex: 1 1 116px;
+  gap: 4px;
+  min-width: 108px;
+}
+
+.photo-skeleton-filter.is-wide { flex-basis: 150px; }
+.photo-skeleton-filter.is-date { flex-basis: 232px; }
+
+.photo-skeleton-filter > .management-skeleton-block:first-child {
+  height: 8px;
+}
+
+.photo-skeleton-input {
+  width: 100%;
+  height: 29px;
+  border-radius: 4px;
+}
+
+.photo-query-summary-skeleton .management-skeleton-block {
+  height: 8px;
+}
+
+.photo-timeline-skeleton .photo-day {
+  animation: management-skeleton-row-enter 320ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.photo-timeline-skeleton .photo-day:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.photo-timeline-skeleton .photo-day > header .management-skeleton-block {
+  height: 11px;
+}
+
+.photo-skeleton-tile {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 5px;
+}
+
 .photo-library-empty .primary-button,
 .photo-library-empty .secondary-button {
   display: inline-flex;
@@ -971,6 +1058,10 @@
     flex-basis: 100%;
   }
 
+  .photo-skeleton-search {
+    flex-basis: 100%;
+  }
+
   .photo-condition-row {
     grid-template-areas:
       "field operator remove"
@@ -1136,7 +1227,14 @@
 
 @media (prefers-reduced-motion: reduce) {
   .photo-open img,
-  .photo-name {
+  .photo-name,
+  .photo-library-bar-skeleton,
+  .photo-query-panel-skeleton,
+  .photo-timeline-skeleton,
+  .photo-timeline-skeleton .photo-day {
+    animation: none;
     transition: none;
+    opacity: 1;
+    transform: none;
   }
 }

@@ -1177,6 +1177,74 @@
   background: var(--footer-bg);
 }
 
+.downloads-toolbar-skeleton,
+.downloads-list-skeleton {
+  pointer-events: none;
+  animation: management-skeleton-enter 280ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.downloads-filters-skeleton .management-skeleton-block {
+  flex: 0 0 auto;
+  height: 28px;
+  border-radius: 4px;
+}
+
+.downloads-summary-skeleton .download-header-stat {
+  align-content: center;
+  gap: 5px;
+}
+
+.downloads-summary-skeleton .management-skeleton-block:first-child {
+  height: 13px;
+}
+
+.downloads-summary-skeleton .management-skeleton-block:last-child {
+  height: 8px;
+}
+
+.download-task-row-skeleton {
+  pointer-events: none;
+  animation: management-skeleton-row-enter 320ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.download-task-row-skeleton:nth-child(2) { animation-delay: 45ms; }
+.download-task-row-skeleton:nth-child(3) { animation-delay: 90ms; }
+.download-task-row-skeleton:nth-child(4) { animation-delay: 135ms; }
+.download-task-row-skeleton:nth-child(5) { animation-delay: 180ms; }
+
+.download-skeleton-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.download-skeleton-status {
+  width: 54px;
+  height: 20px;
+}
+
+.download-skeleton-progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 2px;
+}
+
+.download-skeleton-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+}
+
+.download-skeleton-meta .management-skeleton-block {
+  height: 9px;
+}
+
+.download-skeleton-action {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+
 .download-task-row {
   --download-actions-width: 132px;
   --download-status-text: var(--neutral-status-text);
@@ -2007,6 +2075,37 @@
 .workspace-terminal-tabs-placeholder {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.workspace-terminal-tabs-skeleton {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 45px;
+  overflow: hidden;
+  pointer-events: none;
+  animation: management-skeleton-enter 280ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.workspace-terminal-tab-skeleton {
+  width: min(132px, 34%);
+  height: 29px;
+  flex: 0 1 132px;
+  border-radius: 4px;
+}
+
+.workspace-terminal-tab-skeleton.is-short {
+  width: min(104px, 28%);
+  flex-basis: 104px;
+}
+
+.workspace-terminal-new-tab-skeleton {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 4px;
 }
 
 .workspace-terminal-actions {
@@ -3549,6 +3648,10 @@
   .management-widget-skeleton,
   .file-list-skeleton,
   .workspace-terminal-skeleton,
+  .workspace-terminal-tabs-skeleton,
+  .downloads-toolbar-skeleton,
+  .downloads-list-skeleton,
+  .download-task-row-skeleton,
   .management-skeleton-table-row,
   .management-skeleton-workload,
   .management-skeleton-inventory-list .docker-inventory-row,

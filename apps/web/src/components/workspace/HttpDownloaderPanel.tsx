@@ -23,6 +23,7 @@ import {
 } from "../../api.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
 import { StorageFilePickerDialog, type StorageFilePickerPool, type StorageFileSelection } from "./StorageFilePickerDialog.js";
 
@@ -157,9 +158,10 @@ export function HttpDownloaderPanel({
   const activeCount = tasks.filter((task) => task.status === "running" || task.status === "paused").length;
   const queueCount = tasks.filter((task) => task.status === "queued").length;
   const totalSpeed = tasks.reduce((sum, task) => sum + (task.status === "running" ? task.speedBytesPerSecond : 0), 0);
+  const createControlState = downloadCreateControlState(loading, storagePoolsLoading, mountedPools.length > 0);
 
   function openCreateDialog() {
-    if (storagePoolsLoading) return;
+    if (loading || storagePoolsLoading) return;
     if (mountedPools.length === 0) {
       onNotifyWarning(t("workspace.downloads.configureStoragePool"));
       onOpenStorage();
@@ -270,7 +272,11 @@ export function HttpDownloaderPanel({
   }
 
   return (
-    <section className="workspace-management http-downloader-panel" aria-label={t("workspace.downloads.title")}>
+    <section
+      className="workspace-management http-downloader-panel"
+      aria-label={t("workspace.downloads.title")}
+      aria-busy={loading || undefined}
+    >
       <PanelHeader
         className="downloads-header"
         icon={<Download aria-hidden="true" size={20} />}
@@ -278,86 +284,95 @@ export function HttpDownloaderPanel({
         subtitle={t("workspace.downloads.description")}
         actions={<PanelHeaderActions label={t("workspace.management.actions.label")} className="downloads-header-actions">
           <PanelHeaderAction
-            label={t(storagePoolsLoading ? "workspace.downloads.loadingStoragePools" : "workspace.downloads.newDownload")}
-            tooltip={storagePoolsLoading
-              ? t("workspace.downloads.loadingStoragePools")
+            label={t(loading
+              ? "common.states.loading"
+              : storagePoolsLoading
+                ? "workspace.downloads.loadingStoragePools"
+                : "workspace.downloads.newDownload")}
+            tooltip={loading
+              ? t("common.states.loading")
+              : storagePoolsLoading
+                ? t("workspace.downloads.loadingStoragePools")
               : mountedPools.length
                 ? t("workspace.downloads.newDownload")
                 : t("workspace.downloads.configureStoragePool")}
             type="button"
             className="download-create-button"
             onClick={openCreateDialog}
-            disabled={storagePoolsLoading}
-            aria-busy={storagePoolsLoading || undefined}
-            data-state={storagePoolsLoading ? "loading" : mountedPools.length ? "ready" : "needs-storage"}
+            disabled={createControlState === "loading"}
+            aria-busy={createControlState === "loading" || undefined}
+            data-state={createControlState}
           >
-            {storagePoolsLoading
+            {createControlState === "loading"
               ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} />
               : <Plus aria-hidden="true" size={17} />}
           </PanelHeaderAction>
         </PanelHeaderActions>}
       />
 
-      <div className="downloads-toolbar">
-        <div className="downloads-filters" role="tablist" aria-label={t("workspace.downloads.filters")}>
-          {(["all", "active", "completed", "failed"] as DownloadFilter[]).map((value) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={filter === value}
-              className={filter === value ? "is-active" : ""}
-              onClick={() => setFilter(value)}
-            >
-              {t(`workspace.downloads.filter.${value}`)}
-            </button>
-          ))}
-        </div>
-        <div className="downloads-toolbar-meta">
-          <div className="downloads-summary" aria-label={t("workspace.downloads.title")}>
-            <div className="download-header-stat">
-              <strong>{formatLocaleNumber(activeCount, locale)}</strong>
-              <span>{t("workspace.downloads.active")}</span>
+      {loading ? (
+        <DownloadsInitialSkeleton />
+      ) : (
+        <>
+          <div className="downloads-toolbar">
+            <div className="downloads-filters" role="tablist" aria-label={t("workspace.downloads.filters")}>
+              {(["all", "active", "completed", "failed"] as DownloadFilter[]).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === value}
+                  className={filter === value ? "is-active" : ""}
+                  onClick={() => setFilter(value)}
+                >
+                  {t(`workspace.downloads.filter.${value}`)}
+                </button>
+              ))}
             </div>
-            <div className="download-header-stat">
-              <strong>{formatLocaleNumber(queueCount, locale)}</strong>
-              <span>{t("workspace.downloads.queued")}</span>
-            </div>
-            <div className="download-header-stat">
-              <strong>{formatBytes(totalSpeed, locale)}/s</strong>
-              <span>{t("workspace.downloads.speed")}</span>
-            </div>
-            <div className="download-header-stat" data-state={workerHealth?.status ?? "unavailable"}>
-              <strong>{t(`workspace.downloads.workerStatus.${workerHealth?.status ?? "unavailable"}`)}</strong>
-              <span>{t("workspace.downloads.worker")}</span>
+            <div className="downloads-toolbar-meta">
+              <div className="downloads-summary" aria-label={t("workspace.downloads.title")}>
+                <div className="download-header-stat">
+                  <strong>{formatLocaleNumber(activeCount, locale)}</strong>
+                  <span>{t("workspace.downloads.active")}</span>
+                </div>
+                <div className="download-header-stat">
+                  <strong>{formatLocaleNumber(queueCount, locale)}</strong>
+                  <span>{t("workspace.downloads.queued")}</span>
+                </div>
+                <div className="download-header-stat">
+                  <strong>{formatBytes(totalSpeed, locale)}/s</strong>
+                  <span>{t("workspace.downloads.speed")}</span>
+                </div>
+                <div className="download-header-stat" data-state={workerHealth?.status ?? "unavailable"}>
+                  <strong>{t(`workspace.downloads.workerStatus.${workerHealth?.status ?? "unavailable"}`)}</strong>
+                  <span>{t("workspace.downloads.worker")}</span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="downloads-list">
-        {loading ? (
-          <div className="downloads-state"><LoaderCircle className="is-spinning" aria-hidden="true" size={20} /><span>{t("common.states.loading")}</span></div>
-        ) : visibleTasks.length === 0 ? (
-          <div className="downloads-state">
-            <Download aria-hidden="true" size={22} />
-            <strong>{t("workspace.downloads.emptyTitle")}</strong>
-            <span>{t("workspace.downloads.emptyBody")}</span>
+          <div className="downloads-list">
+            {visibleTasks.length === 0 ? (
+              <div className="downloads-state">
+                <Download aria-hidden="true" size={22} />
+                <strong>{t("workspace.downloads.emptyTitle")}</strong>
+                <span>{t("workspace.downloads.emptyBody")}</span>
+              </div>
+            ) : (
+              visibleTasks.map((task) => (
+                <DownloadTaskRow
+                  key={task.id}
+                  task={task}
+                  locale={locale}
+                  pendingAction={pendingAction}
+                  onAction={(action) => void runAction(task, action)}
+                  onDelete={() => void removeTask(task)}
+                  onOpenDirectory={() => onOpenDirectory(task.rootId, task.storagePoolId, task.targetDirectory)}
+                />
+              ))
+            )}
           </div>
-        ) : (
-          visibleTasks.map((task) => (
-            <DownloadTaskRow
-              key={task.id}
-              task={task}
-              locale={locale}
-              pendingAction={pendingAction}
-              onAction={(action) => void runAction(task, action)}
-              onDelete={() => void removeTask(task)}
-              onOpenDirectory={() => onOpenDirectory(task.rootId, task.storagePoolId, task.targetDirectory)}
-            />
-          ))
-        )}
-      </div>
+        </>
+      )}
 
       {createOpen ? (
         <div className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && closeCreateDialog()}>
@@ -463,6 +478,65 @@ export function HttpDownloaderPanel({
         />
       ) : null}
     </section>
+  );
+}
+
+export function downloadCreateControlState(
+  initialLoading: boolean,
+  storagePoolsLoading: boolean,
+  hasMountedPool: boolean
+): "loading" | "ready" | "needs-storage" {
+  if (initialLoading || storagePoolsLoading) return "loading";
+  return hasMountedPool ? "ready" : "needs-storage";
+}
+
+function DownloadsInitialSkeleton() {
+  const { t } = useTranslation();
+  return (
+    <>
+      <span className="visually-hidden" role="status">{t("common.states.loading")}</span>
+      <div className="downloads-toolbar downloads-toolbar-skeleton" aria-hidden="true">
+        <div className="downloads-filters downloads-filters-skeleton">
+          {[52, 58, 76, 54].map((width) => <SkeletonBlock key={width} width={`${width}px`} />)}
+        </div>
+        <div className="downloads-summary downloads-summary-skeleton">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div className="download-header-stat" key={index}>
+              <SkeletonBlock width={index === 2 ? "56px" : "32px"} />
+              <SkeletonBlock width={index === 3 ? "48px" : "38px"} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="downloads-list downloads-list-skeleton" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, index) => (
+          <article className="download-task-row download-task-row-skeleton" key={index}>
+            <div className="download-task-main">
+              <div className="download-task-heading">
+                <SkeletonBlock className="download-skeleton-icon" />
+                <div>
+                  <SkeletonBlock width={index % 2 ? "58%" : "72%"} />
+                  <SkeletonBlock width={index % 2 ? "34%" : "42%"} />
+                </div>
+                <SkeletonBlock className="download-skeleton-status" />
+              </div>
+              <SkeletonBlock width={index % 2 ? "68%" : "82%"} />
+              <SkeletonBlock className="download-skeleton-progress" />
+              <div className="download-skeleton-meta">
+                <SkeletonBlock width="76px" />
+                <SkeletonBlock width="48px" />
+                <SkeletonBlock width="58px" />
+              </div>
+            </div>
+            <div className="download-task-actions">
+              {Array.from({ length: 3 }, (_, actionIndex) => (
+                <SkeletonBlock className="download-skeleton-action" key={actionIndex} />
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </>
   );
 }
 

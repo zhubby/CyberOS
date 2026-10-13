@@ -8,6 +8,7 @@ import {
   isPhotoBusy,
   photoMediaKindForAsset,
   PhotoLibraryPanel,
+  photoLibraryLoadMode,
   PHOTO_ACCEPT,
   readyPhotoQueryFilters,
   retryCountdown,
@@ -97,6 +98,34 @@ describe("Photo offline map states", () => {
 });
 
 describe("photo timeline grouping", () => {
+  it("renders the full library skeleton instead of an initial centered spinner", () => {
+    const html = renderToStaticMarkup(createElement(PhotoLibraryPanel, {
+      pools: [],
+      selectedRootId: "local",
+      sessionId: null,
+      approvalRefreshKey: "",
+      locale: "en",
+      onWorkQueuesChanged: () => undefined,
+      onNotifyError: () => undefined,
+      onNotifySuccess: () => undefined,
+      onNotifyWarning: () => undefined
+    }));
+
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain("photo-library-bar-skeleton");
+    expect(html).toContain("photo-query-panel-skeleton");
+    expect(html).toContain("photo-timeline-skeleton");
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('class="workspace-empty-state"');
+  });
+
+  it("shows initial failures but preserves loaded content across later refresh failures", () => {
+    expect(photoLibraryLoadMode(false, false, null)).toBe("loading");
+    expect(photoLibraryLoadMode(true, false, "Unavailable")).toBe("error");
+    expect(photoLibraryLoadMode(true, true, null)).toBe("content");
+    expect(photoLibraryLoadMode(true, true, "Refresh failed")).toBe("content");
+  });
+
   it("allows selecting multiple media files for upload", () => {
     const html = renderToStaticMarkup(createElement(PhotoLibraryPanel, {
       pools: [],

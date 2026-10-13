@@ -3,7 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { initI18n } from "../../i18n/index.js";
 import type { DownloadTask } from "../../api.js";
-import { DownloadTaskRow, HttpDownloaderPanel, type HttpDownloaderPool } from "./HttpDownloaderPanel.js";
+import {
+  downloadCreateControlState,
+  DownloadTaskRow,
+  HttpDownloaderPanel,
+  type HttpDownloaderPool
+} from "./HttpDownloaderPanel.js";
 
 const mountedPool: HttpDownloaderPool = {
   id: "pool-1",
@@ -30,38 +35,30 @@ describe("HttpDownloaderPanel download creation", () => {
     expect(html).not.toContain("downloads-connection");
   });
 
-  it("renders a stable busy control while storage pools load", () => {
-    const button = renderDownloadButton({ storagePoolsLoading: true, pools: [] });
+  it("renders the full initial skeleton and a stable busy creation control", () => {
+    const html = renderDownloader({ storagePoolsLoading: false, pools: [mountedPool] });
+    const button = renderDownloadButton({ storagePoolsLoading: false, pools: [mountedPool] });
 
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('class="downloads-toolbar downloads-toolbar-skeleton"');
+    expect(html).toContain('class="downloads-list downloads-list-skeleton"');
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('class="downloads-state"');
+    expect(html).not.toContain("Unavailable");
     expect(button).toContain("disabled");
     expect(button).toContain('aria-busy="true"');
-    expect(button).toContain('aria-label="Loading storage"');
-    expect(button).toContain('title="Loading storage"');
+    expect(button).toContain('aria-label="Loading"');
+    expect(button).toContain('title="Loading"');
     expect(button).toContain('data-state="loading"');
     expect(button).toContain("is-spinning");
     expect(visibleButtonText(button)).toBe("");
   });
 
-  it("keeps creation available as a storage configuration action when no pool is mounted", () => {
-    const button = renderDownloadButton({ storagePoolsLoading: false, pools: [] });
-
-    expect(button).not.toContain("disabled");
-    expect(button).not.toContain("aria-busy");
-    expect(button).toContain('aria-label="New download"');
-    expect(button).toContain('data-state="needs-storage"');
-    expect(button).toContain("Configure a mounted storage pool");
-    expect(visibleButtonText(button)).toBe("");
-  });
-
-  it("renders the normal creation action when a mounted pool is available", () => {
-    const button = renderDownloadButton({ storagePoolsLoading: false, pools: [mountedPool] });
-
-    expect(button).not.toContain("disabled");
-    expect(button).not.toContain("aria-busy");
-    expect(button).toContain('aria-label="New download"');
-    expect(button).toContain('title="New download"');
-    expect(button).toContain('data-state="ready"');
-    expect(visibleButtonText(button)).toBe("");
+  it("enables the correct creation behavior after the initial snapshot", () => {
+    expect(downloadCreateControlState(true, false, true)).toBe("loading");
+    expect(downloadCreateControlState(false, true, true)).toBe("loading");
+    expect(downloadCreateControlState(false, false, false)).toBe("needs-storage");
+    expect(downloadCreateControlState(false, false, true)).toBe("ready");
   });
 });
 

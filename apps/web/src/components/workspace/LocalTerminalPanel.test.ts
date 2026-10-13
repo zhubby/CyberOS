@@ -3,7 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { TerminalTab } from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
-import { LocalTerminalPanel, terminalReconnectDelay, TerminalTabBar } from "./LocalTerminalPanel.js";
+import {
+  LocalTerminalPanel,
+  terminalInitialLoadPending,
+  terminalReconnectDelay,
+  TerminalTabBar
+} from "./LocalTerminalPanel.js";
 
 const tabs: TerminalTab[] = [
   terminalTab("11111111-1111-4111-8111-111111111111", 1),
@@ -56,6 +61,31 @@ describe("LocalTerminalPanel", () => {
     expect(html).toContain('aria-label="Terminal actions"');
     expect(html).not.toContain("Local shell");
     expect(html).not.toContain("panel-inline-status");
+  });
+
+  it("renders tab and terminal skeletons on the first frame for a selected root", async () => {
+    await initI18n();
+    await i18n.changeLanguage("en");
+    const html = renderToStaticMarkup(createElement(LocalTerminalPanel, {
+      active: true,
+      root: { id: "local", name: "Primary NAS", path: "/srv/nas", homePath: null },
+      codeFontSettings: { familyId: "system", fontSizePx: 12 },
+      resolvedTheme: "dark"
+    }));
+
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('class="workspace-terminal-tabs-skeleton"');
+    expect(html).toContain('class="workspace-terminal-skeleton"');
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Loading");
+    expect(html.match(/disabled=""/gu)).toHaveLength(3);
+  });
+
+  it("keeps the skeleton only until the current root request settles", () => {
+    expect(terminalInitialLoadPending("local", null)).toBe(true);
+    expect(terminalInitialLoadPending("local", "other")).toBe(true);
+    expect(terminalInitialLoadPending("local", "local")).toBe(false);
+    expect(terminalInitialLoadPending(undefined, null)).toBe(false);
   });
 });
 

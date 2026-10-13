@@ -74,6 +74,7 @@ export function LocalTerminalPanel({
   const actionVersionRef = useRef(0);
   const [tabState, setTabState] = useState<TerminalTabState | null>(null);
   const [loading, setLoading] = useState(false);
+  const [settledRootId, setSettledRootId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -112,10 +113,12 @@ export function LocalTerminalPanel({
       if (requestVersion === requestVersionRef.current && currentRootIdRef.current === targetRootId) {
         applyState(nextState);
         setLoadError(null);
+        setSettledRootId(targetRootId);
       }
     } catch (error) {
       if (requestVersion === requestVersionRef.current && currentRootIdRef.current === targetRootId) {
         setLoadError(errorMessage(error));
+        setSettledRootId(targetRootId);
       }
     } finally {
       if (requestVersion === requestVersionRef.current && currentRootIdRef.current === targetRootId) {
@@ -129,6 +132,7 @@ export function LocalTerminalPanel({
     actionVersionRef.current += 1;
     setTabState(null);
     setLoading(false);
+    setSettledRootId(null);
     setLoadError(null);
     setActionError(null);
     setPendingAction(null);
@@ -323,16 +327,24 @@ export function LocalTerminalPanel({
     updateViewState(tabId, { status: "connecting", diagnostic: null });
   }
 
-  const tabs = tabState?.tabs ?? [];
+  const initialLoading = terminalInitialLoadPending(rootId, settledRootId);
+  const tabs = initialLoading ? [] : tabState?.tabs ?? [];
   const activeTab = tabs.find((tab) => tab.id === tabState?.activeTabId) ?? null;
   const activeViewState = activeTab
     ? viewStates[activeTab.id] ?? { status: "connecting" as const, diagnostic: null }
     : null;
   const atLocalLimit = Boolean(tabState && tabs.length >= tabState.maxSessions);
   const visibleTabs = tabs.filter((tab) => visitedTabIds.has(tab.id));
+  const currentLoadError = settledRootId === rootId ? loadError : null;
 
   return (
-    <section className="workspace-terminal-panel" hidden={!active} aria-hidden={!active} aria-label={t("workspace.terminal.title")}>
+    <section
+      className="workspace-terminal-panel"
+      hidden={!active}
+      aria-hidden={!active}
+      aria-label={t("workspace.terminal.title")}
+      aria-busy={initialLoading || loading || undefined}
+    >
       <PanelHeader
         className="workspace-terminal-overview"
         icon={<TerminalSquare aria-hidden="true" size={20} />}
@@ -343,7 +355,7 @@ export function LocalTerminalPanel({
             label={t("workspace.terminal.rename")}
             type="button"
             onClick={() => activeTab && openRenameDialog(activeTab)}
-            disabled={!activeTab || Boolean(pendingAction)}
+            disabled={initialLoading || !activeTab || Boolean(pendingAction)}
           >
             <Pencil aria-hidden="true" size={16} />
           </PanelHeaderAction>
@@ -351,7 +363,7 @@ export function LocalTerminalPanel({
             label={t("workspace.terminal.restart")}
             type="button"
             onClick={() => activeTab && void restartTab(activeTab.id)}
-            disabled={!activeTab || Boolean(pendingAction)}
+            disabled={initialLoading || !activeTab || Boolean(pendingAction)}
           >
             <RefreshCw aria-hidden="true" size={16} />
           </PanelHeaderAction>
@@ -363,7 +375,7 @@ export function LocalTerminalPanel({
               setActionError(null);
               if (activeTab) setCloseCandidate(activeTab);
             }}
-            disabled={!activeTab || Boolean(pendingAction)}
+            disabled={initialLoading || !activeTab || Boolean(pendingAction)}
           >
             <X aria-hidden="true" size={17} />
           </PanelHeaderAction>
@@ -371,7 +383,13 @@ export function LocalTerminalPanel({
       />
 
       <div className="workspace-terminal-header">
-        {tabState ? (
+        {initialLoading ? (
+          <div className="workspace-terminal-tabs-skeleton" aria-hidden="true">
+            <SkeletonBlock className="workspace-terminal-tab-skeleton" />
+            <SkeletonBlock className="workspace-terminal-tab-skeleton is-short" />
+            <SkeletonBlock className="workspace-terminal-new-tab-skeleton" />
+          </div>
+        ) : tabState ? (
           <TerminalTabBar
             tabs={tabs}
             activeTabId={tabState.activeTabId}
@@ -387,18 +405,19 @@ export function LocalTerminalPanel({
       </div>
 
       <div className="workspace-terminal-stage">
+        {initialLoading ? <span className="visually-hidden" role="status">{t("common.states.loading")}</span> : null}
         {!rootId ? (
           <TerminalEmptyState title={t("workspace.terminal.noRoot")} />
-        ) : loading && !tabState ? (
+        ) : initialLoading ? (
           <div className="workspace-terminal-skeleton" aria-hidden="true">
             <SkeletonBlock width="38%" />
             <SkeletonBlock width="64%" />
             <SkeletonBlock width="52%" />
           </div>
-        ) : loadError && !tabState ? (
+        ) : currentLoadError && !tabState ? (
           <TerminalEmptyState
             title={t("workspace.terminal.loadFailed")}
-            detail={loadError}
+            detail={currentLoadError}
             actionLabel={t("workspace.terminal.retry")}
             onAction={() => void refreshTabs(rootId, true)}
           />
@@ -810,6 +829,10 @@ function TerminalSessionView({
       hidden={!active}
     />
   );
+}
+
+export function terminalInitialLoadPending(rootId: string | undefined, settledRootId: string | null): boolean {
+  return Boolean(rootId && rootId !== settledRootId);
 }
 
 export function terminalReconnectDelay(attempt: number): number {
