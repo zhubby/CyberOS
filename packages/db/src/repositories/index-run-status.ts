@@ -106,8 +106,10 @@ function getIndexFreshnessMs(db: SigmaDatabase, rootId: string, now = new Date()
 
 function getIndexSizeBytes(db: SigmaDatabase): number | null {
   try {
-    const row = db.prepare("SELECT SUM(pgsize) AS size FROM dbstat WHERE name IN ('indexed_files', 'indexed_text') OR name GLOB 'indexed_content_fts*'").get() as { size: number | null };
-    return row.size ?? null;
+    const pageCount = Number(db.pragma("page_count", { simple: true }));
+    const pageSize = Number(db.pragma("page_size", { simple: true }));
+    const size = pageCount * pageSize;
+    return Number.isSafeInteger(size) ? size : null;
   } catch {
     return null;
   }
