@@ -327,7 +327,7 @@ jobs:
             migration_metadata="$(node - "$migration_payload" "$config_sha256" <<'NODE'
           const [serializedPayload, currentConfigSha256] = process.argv.slice(2);
           const payload = JSON.parse(serializedPayload);
-          if (!["none", "pending", "committed"].includes(payload.status)) {
+          if (!["none", "pending", "committed", "rolled_back"].includes(payload.status)) {
             throw new Error(`unsupported migration state: ${serializedPayload}`);
           }
           const sourceConfigSha256 = payload.status === "none"
@@ -380,15 +380,18 @@ jobs:
           )
           [[ "${baseline[0]:-}" == zos || "${baseline[0]:-}" == sigmaos ]]
           [[ "${baseline[1]:-}" =~ ^[0-9a-f]{64}$ ]]
-          [[ "${baseline[5]:-}" == none || "${baseline[5]:-}" == pending || "${baseline[5]:-}" == committed ]]
+          [[ "${baseline[5]:-}" == none || "${baseline[5]:-}" == pending || \
+             "${baseline[5]:-}" == committed || "${baseline[5]:-}" == rolled_back ]]
           [[ "${baseline[6]:-}" == zos || "${baseline[6]:-}" == legacy ]]
           [[ "${baseline[7]:-}" =~ ^[0-9a-f]{64}$ ]]
-          if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || "${baseline[6]}" == legacy ]] && \
+          if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || \
+                "${baseline[5]}" == rolled_back || "${baseline[6]}" == legacy ]] && \
               [[ "${{ github.event_name }}" != workflow_dispatch ]]; then
             echo "Legacy migration recovery requires an explicit workflow_dispatch with allow_legacy_migration=true" >&2
             exit 1
           fi
-          if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || "${baseline[6]}" == legacy ]] && \
+          if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || \
+                "${baseline[5]}" == rolled_back || "${baseline[6]}" == legacy ]] && \
               [[ "${{ inputs.allow_legacy_migration }}" != true ]]; then
             echo "Legacy migration recovery was not explicitly authorized" >&2
             exit 1
@@ -681,7 +684,8 @@ jobs:
           if [ "$previous_layout" = zos ]; then
             [ "$actual_config_sha256" = "$expected_config_sha256" ]
           fi
-          if [ "$previous_layout" = sigmaos ] || [ "$previous_migration_status" = pending ]; then
+          if [ "$previous_layout" = sigmaos ] || [ "$previous_migration_status" = pending ] || \
+              [ "$previous_migration_status" = rolled_back ]; then
             migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
             node - "$migration_status" "$expected_migration_source_config_sha256" <<'NODE'
           const [payload, expectedMigrationSourceConfigSha256] = process.argv.slice(2);

@@ -14,6 +14,7 @@ FSTAB_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-fstab.mjs
 DATABASE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-database.mjs
 LIBVIRT_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-libvirt.mjs
 MOUNT_RELOCATOR=/usr/lib/zos/scripts/zos-relocate-mount.sh
+NAS_ACL_MIGRATOR=/usr/lib/zos/scripts/zos-nas-acl.sh
 LIBVIRT_URI=qemu:///system
 
 LEGACY_TIMERS='sigmaos-maintenance.timer sigmaos-health.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer'
@@ -145,8 +146,7 @@ append_mapping() {
 }
 
 prepare_path_mappings() {
-  : > "$backup_dir/path-mappings.tsv"
-  node --input-type=module - "$backup_dir/config-report.json" <<'NODE' >> "$backup_dir/path-mappings.tsv"
+  node --input-type=module - "$backup_dir/config-report.json" <<'NODE' > "$backup_dir/nas-root-mappings.tsv"
 import fs from "node:fs";
 const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 for (const mapping of report.nasRootMappings ?? []) {
@@ -154,6 +154,7 @@ for (const mapping of report.nasRootMappings ?? []) {
   process.stdout.write(`${mapping.source}\t${mapping.target}\n`);
 }
 NODE
+  cp "$backup_dir/nas-root-mappings.tsv" "$backup_dir/path-mappings.tsv"
   append_mapping /srv/backup /zos/data/backup
   append_mapping /srv/apps /zos/apps
   append_mapping /srv/iso /zos/iso
@@ -173,6 +174,34 @@ NODE
     }
   ' "$backup_dir/path-mappings.tsv" || \
     die "invalid generated path mappings"
+}
+
+apply_nas_acls() {
+  [ -s "$backup_dir/mount-moves.tsv" ] || return 0
+  install -d -o root -g root -m 0700 "$backup_dir/nas-acl"
+  while IFS="$(printf '\t')" read -r _old_target new_target; do
+    while IFS="$(printf '\t')" read -r _source nas_root; do
+      case "$new_target" in
+        "$nas_root"/*)
+          log "granting ZOS access to migrated NAS pool $new_target"
+          ZOS_ACL_BACKUP_DIR="$backup_dir/nas-acl" \
+            "$NAS_ACL_MIGRATOR" --apply --pool "$new_target" --root "$nas_root" || return 1
+          ;;
+      esac
+    done < "$backup_dir/nas-root-mappings.tsv"
+  done < "$backup_dir/mount-moves.tsv"
+}
+
+restore_nas_acls() {
+  [ -d "$backup_dir/nas-acl" ] || return 0
+  acl_dumps=$backup_dir/nas-acl-dumps
+  find "$backup_dir/nas-acl" -mindepth 2 -maxdepth 2 -type f -name acl.dump -print > "$acl_dumps"
+  while IFS= read -r acl_dump; do
+    [ -n "$acl_dump" ] || continue
+    log "restoring NAS ACLs from $acl_dump"
+    setfacl --restore="$acl_dump" || return 1
+  done < "$acl_dumps"
+  rm -f "$acl_dumps"
 }
 
 replace_fstab() {
@@ -424,6 +453,11 @@ rollback_migration() {
     log "error: original VM definitions could not be restored" >&2
     return 1
   fi
+  if ! restore_nas_acls; then
+    write_status rollback_failed || true
+    log "error: NAS ACL rollback failed; migrated mounts remain in place for data safety" >&2
+    return 1
+  fi
   if ! restore_mounts; then
     write_status rollback_failed || true
     log "error: mount rollback failed; legacy services remain stopped for data safety" >&2
@@ -509,6 +543,7 @@ apply_migration() {
   [ -x "$DATABASE_MIGRATOR" ] || die "database migrator is missing"
   [ -x "$LIBVIRT_MIGRATOR" ] || die "libvirt migrator is missing"
   [ -x "$MOUNT_RELOCATOR" ] || die "mount relocator is missing"
+  [ -x "$NAS_ACL_MIGRATOR" ] || die "NAS ACL migrator is missing"
   [ -f "$LEGACY_DATABASE" ] || die "legacy database is missing"
 
   LEGACY_VERSION=$(dpkg-query -W -f='${Version}' sigmaos 2>/dev/null || true)
@@ -617,6 +652,7 @@ EOF
   fi
 
   move_legacy_mounts
+  apply_nas_acls
   /usr/local/bin/node "$FSTAB_MIGRATOR" /etc/fstab \
     "$backup_dir/path-mappings.tsv" "$backup_dir/fstab.migrated"
   replace_fstab "$backup_dir/fstab.migrated"

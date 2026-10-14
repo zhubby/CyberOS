@@ -97,6 +97,9 @@ impl Indexer {
                 self.shutdown.clone(),
             ))
         });
+        let watchdog = once
+            .is_none()
+            .then(|| tokio::spawn(watchdog_loop(self.shutdown.clone())));
         if once.is_none() {
             let _ = sd_notify::notify(&[NotifyState::Ready]);
         }
@@ -150,6 +153,9 @@ impl Indexer {
         if let Some(heartbeat) = heartbeat {
             let _ = heartbeat.await;
             self.db.release_worker(&self.worker_id).await?;
+        }
+        if let Some(watchdog) = watchdog {
+            let _ = watchdog.await;
         }
         Ok(())
     }
@@ -249,9 +255,20 @@ async fn heartbeat_loop(db: Db, worker_id: String, shutdown: CancellationToken) 
         tokio::select! {
             _ = shutdown.cancelled() => break,
             _ = interval.tick() => match db.heartbeat(&worker_id, VERSION).await {
-                Ok(()) => { let _ = sd_notify::notify(&[NotifyState::Watchdog]); }
+                Ok(()) => {}
                 Err(error) => tracing::warn!(code = error.code.as_str(), message = %error.message, "Indexer heartbeat failed"),
             }
+        }
+    }
+}
+
+async fn watchdog_loop(shutdown: CancellationToken) {
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+    interval.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.cancelled() => break,
+            _ = interval.tick() => { let _ = sd_notify::notify(&[NotifyState::Watchdog]); }
         }
     }
 }

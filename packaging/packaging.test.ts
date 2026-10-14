@@ -458,7 +458,8 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('if [[ "$staging_channel" == legacy ]]');
     expect(deployWorkflow).toContain("Legacy migration recovery was not explicitly authorized");
     expect(deployWorkflow).toContain("ZOS staging recovery requires legacy services to remain masked");
-    expect(deployWorkflow).toContain('[ "$previous_layout" = sigmaos ] || [ "$previous_migration_status" = pending ]');
+    expect(deployWorkflow).toContain('[ "$previous_migration_status" = rolled_back ]');
+    expect(deployWorkflow).toContain('"${baseline[5]:-}" == rolled_back');
     expect(deployWorkflow).toContain('[ "$installed_status" = "install ok installed" ]');
     expect(deployWorkflow).toContain('[ "$actual_config_sha256" = "$expected_config_sha256" ]');
     expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/zos-deploy --config-sha256");
@@ -703,6 +704,10 @@ describe("native packaging artifacts", () => {
     expect(migration).toContain("-xdev -exec chown -h zos:zos -- {} +");
     expect(migration).toContain("chmod 0751 /zos");
     expect(migration).toContain("chmod 0750 /zos/config");
+    expect(migration).toContain('ZOS_ACL_BACKUP_DIR="$backup_dir/nas-acl"');
+    expect(migration).toContain('"$NAS_ACL_MIGRATOR" --apply --pool "$new_target" --root "$nas_root"');
+    expect(migration).toContain('setfacl --restore="$acl_dump"');
+    expect(migration.indexOf("restore_nas_acls")).toBeLessThan(migration.indexOf("restore_mounts"));
     expect(migration).not.toContain("chown -R --one-file-system");
     expect(migration).toContain('chown root:root "$POINTER_PATH"');
     expect(migration).toContain('systemctl mask --force "$unit"');
