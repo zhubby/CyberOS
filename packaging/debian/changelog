@@ -1,3 +1,9 @@
+zos (1.0.2) unstable; urgency=medium
+
+  * Safely migrate legacy VM storage definitions and runtime state.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 14 Oct 2026 17:43:12 +0000
+
 zos (1.0.1) unstable; urgency=medium
 
   * Add guarded SigmaOS migration and CM5 deployment verification.
