@@ -324,14 +324,23 @@ jobs:
             package_name=zos
             config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
             migration_payload="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
-            migration_status="$(node - "$migration_payload" <<'NODE'
-          const payload = JSON.parse(process.argv[2]);
+            migration_metadata="$(node - "$migration_payload" "$config_sha256" <<'NODE'
+          const [serializedPayload, currentConfigSha256] = process.argv.slice(2);
+          const payload = JSON.parse(serializedPayload);
           if (!["none", "pending", "committed"].includes(payload.status)) {
-            throw new Error(`unsupported migration state: ${process.argv[2]}`);
+            throw new Error(`unsupported migration state: ${serializedPayload}`);
           }
-          process.stdout.write(payload.status);
+          const sourceConfigSha256 = payload.status === "none"
+            ? currentConfigSha256
+            : payload.sourceConfigSha256;
+          if (!/^[0-9a-f]{64}$/u.test(sourceConfigSha256 ?? "")) {
+            throw new Error(`invalid migration source config checksum: ${serializedPayload}`);
+          }
+          process.stdout.write(`${payload.status}:${sourceConfigSha256}`);
           NODE
             )"
+            migration_status="${migration_metadata%%:*}"
+            migration_source_config_sha256="${migration_metadata#*:}"
             if [ -d /zos/deploy/incoming ] && [ -w /zos/deploy/incoming ]; then
               staging_channel=zos
             else
@@ -355,6 +364,7 @@ jobs:
             package_name=sigmaos
             config_sha256="$(sha256sum /etc/sigmaos/config.toml | awk '{print $1}')"
             migration_status=none
+            migration_source_config_sha256="$config_sha256"
             staging_channel=legacy
           else
             printf 'CM5 has neither a valid ZOS nor a migratable SigmaOS installation\n' >&2
@@ -362,15 +372,17 @@ jobs:
           fi
           package_version="$(dpkg-query -W -f='${Version}' "$package_name")"
           package_status="$(dpkg-query -W -f='${Status}' "$package_name")"
-          printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+          printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
             "$layout" "$config_sha256" "$package_version" "$package_status" \
-            "$runtime_node_version" "$migration_status" "$staging_channel"
+            "$runtime_node_version" "$migration_status" "$staging_channel" \
+            "$migration_source_config_sha256"
           REMOTE
           )
           [[ "${baseline[0]:-}" == zos || "${baseline[0]:-}" == sigmaos ]]
           [[ "${baseline[1]:-}" =~ ^[0-9a-f]{64}$ ]]
           [[ "${baseline[5]:-}" == none || "${baseline[5]:-}" == pending || "${baseline[5]:-}" == committed ]]
           [[ "${baseline[6]:-}" == zos || "${baseline[6]:-}" == legacy ]]
+          [[ "${baseline[7]:-}" =~ ^[0-9a-f]{64}$ ]]
           if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || "${baseline[6]}" == legacy ]] && \
               [[ "${{ github.event_name }}" != workflow_dispatch ]]; then
             echo "Legacy migration recovery requires an explicit workflow_dispatch with allow_legacy_migration=true" >&2
@@ -385,6 +397,7 @@ jobs:
           printf '%s\n' "${baseline[1]}" > "$RUNNER_TEMP/cm5-config.sha256"
           printf '%s\n' "${baseline[5]}" > "$RUNNER_TEMP/cm5-migration-status"
           printf '%s\n' "${baseline[6]}" > "$RUNNER_TEMP/cm5-staging-channel"
+          printf '%s\n' "${baseline[7]}" > "$RUNNER_TEMP/cm5-migration-source-config.sha256"
           printf 'CM5 upgrade baseline: layout=%s version=%s status=%s node=%s migration=%s staging=%s\n' \
             "${baseline[0]}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}" \
             "${baseline[4]:-unknown}" "${baseline[5]}" "${baseline[6]}"
@@ -411,6 +424,7 @@ jobs:
           release_dir="$RUNNER_TEMP/cm5-release"
           layout="$(<"$RUNNER_TEMP/cm5-layout")"
           migration_status="$(<"$RUNNER_TEMP/cm5-migration-status")"
+          migration_source_config_sha256="$(<"$RUNNER_TEMP/cm5-migration-source-config.sha256")"
           staging_channel="$(<"$RUNNER_TEMP/cm5-staging-channel")"
 
           stage_release() {
@@ -586,12 +600,14 @@ jobs:
 
             expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
             ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-              "$RELEASE_VERSION" "$expected_config_sha256" "$layout" "$migration_status" <<'REMOTE'
+              "$RELEASE_VERSION" "$expected_config_sha256" "$layout" "$migration_status" \
+              "$migration_source_config_sha256" <<'REMOTE'
           set -eu
           expected_version=$1
           expected_config_sha256=$2
           previous_layout=$3
           expected_migration_status=$4
+          expected_migration_source_config_sha256=$5
           if [ "$previous_layout" = sigmaos ]; then
             expected_migration_status=pending
           fi
@@ -603,11 +619,13 @@ jobs:
             [ "$actual_config_sha256" = "$expected_config_sha256" ]
           fi
           migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
-          node - "$migration_status" "$expected_migration_status" "$expected_config_sha256" <<'NODE'
-          const [payload, expectedStatus, expectedConfigSha256] = process.argv.slice(2);
+          node - "$migration_status" "$expected_migration_status" \
+            "$expected_migration_source_config_sha256" <<'NODE'
+          const [payload, expectedStatus, expectedMigrationSourceConfigSha256] = process.argv.slice(2);
           const status = JSON.parse(payload);
           if (status.status !== expectedStatus ||
-              (expectedStatus === "pending" && status.sourceConfigSha256 !== expectedConfigSha256)) {
+              (expectedStatus === "pending" &&
+               status.sourceConfigSha256 !== expectedMigrationSourceConfigSha256)) {
             throw new Error(`unexpected migration state: ${payload}`);
           }
           NODE
@@ -640,16 +658,18 @@ jobs:
           )
           layout="$(<"$RUNNER_TEMP/cm5-layout")"
           previous_migration_status="$(<"$RUNNER_TEMP/cm5-migration-status")"
+          expected_migration_source_config_sha256="$(<"$RUNNER_TEMP/cm5-migration-source-config.sha256")"
           expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
             "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_config_sha256" \
-            "$layout" "$previous_migration_status" <<'REMOTE'
+            "$layout" "$previous_migration_status" "$expected_migration_source_config_sha256" <<'REMOTE'
           set -eu
           expected_version=$1
           expected_commit_sha=$2
           expected_config_sha256=$3
           previous_layout=$4
           previous_migration_status=$5
+          expected_migration_source_config_sha256=$6
           check_dir="$(mktemp -d /tmp/zos-deploy-check.XXXXXX)"
           trap 'rm -rf "$check_dir"' EXIT HUP INT TERM
 
@@ -663,10 +683,11 @@ jobs:
           fi
           if [ "$previous_layout" = sigmaos ] || [ "$previous_migration_status" = pending ]; then
             migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
-            node - "$migration_status" "$expected_config_sha256" <<'NODE'
-          const [payload, expectedConfigSha256] = process.argv.slice(2);
+            node - "$migration_status" "$expected_migration_source_config_sha256" <<'NODE'
+          const [payload, expectedMigrationSourceConfigSha256] = process.argv.slice(2);
           const status = JSON.parse(payload);
-          if (status.status !== "committed" || status.sourceConfigSha256 !== expectedConfigSha256 ||
+          if (status.status !== "committed" ||
+              status.sourceConfigSha256 !== expectedMigrationSourceConfigSha256 ||
               typeof status.backupPath !== "string" ||
               !status.backupPath.startsWith("/zos/system-backups/legacy-sigmaos-")) {
             throw new Error(`unexpected committed migration state: ${payload}`);

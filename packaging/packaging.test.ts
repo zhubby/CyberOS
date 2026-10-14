@@ -454,6 +454,7 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-config.sha256"');
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-migration-status"');
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-staging-channel"');
+    expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-migration-source-config.sha256"');
     expect(deployWorkflow).toContain('if [[ "$staging_channel" == legacy ]]');
     expect(deployWorkflow).toContain("Legacy migration recovery was not explicitly authorized");
     expect(deployWorkflow).toContain("ZOS staging recovery requires legacy services to remain masked");
@@ -464,6 +465,8 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain("[ -r /zos/config/config.toml ]");
     expect(deployWorkflow).toContain('expected_migration_status=pending');
     expect(deployWorkflow).toContain('status.status !== expectedStatus');
+    expect(deployWorkflow).toContain('status.sourceConfigSha256 !== expectedMigrationSourceConfigSha256');
+    expect(deployWorkflow).not.toContain('status.sourceConfigSha256 !== expectedConfigSha256');
     expect(deployWorkflow).toContain('status.backupPath.startsWith("/zos/system-backups/legacy-sigmaos-")');
     expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/zos-deploy --database-check");
     expect(deployWorkflow).toContain("/usr/lib/zos/bin/zos-termux");
