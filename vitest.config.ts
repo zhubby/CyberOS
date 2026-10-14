@@ -6,7 +6,13 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["packages/**/*.test.ts", "apps/**/*.test.ts", "packaging/**/*.test.ts", "scripts/**/*.test.mjs"],
+    include: [
+      "packages/**/*.test.ts",
+      "apps/**/*.test.ts",
+      "packaging/**/*.test.ts",
+      "packaging/**/*.test.mjs",
+      "scripts/**/*.test.mjs"
+    ],
     pool: "threads"
   },
   resolve: {

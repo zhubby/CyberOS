@@ -28,6 +28,16 @@ if [ "$1" = "configure" ]; then
   install -d -o root -g root -m 0700 \
     /zos/state/hostd/docker-daemon /zos/state/hostd/network-manager \
     /zos/system-backups/permissions
+
+  legacy_migration=0
+  if [ -f /etc/sigmaos/config.toml ]; then
+    legacy_migration=1
+    if ! /usr/lib/zos/scripts/zos-migrate-sigmaos.sh apply; then
+      /usr/lib/zos/scripts/zos-migrate-sigmaos.sh rollback || true
+      exit 1
+    fi
+  fi
+
   chown -R root:root /zos/state/hostd /zos/system-backups/permissions
   if [ -e /zos/config/config.toml ]; then
     chown root:zos /zos/config/config.toml
@@ -41,6 +51,13 @@ if [ "$1" = "configure" ]; then
 
   install -d -o root -g root -m 0755 /usr/local/sbin
   ln -sfn /usr/lib/zos/scripts/zos-deploy /usr/local/sbin/zos-deploy
+
+  if [ "$legacy_migration" = "1" ] && id sigmaos-deploy >/dev/null 2>&1; then
+    if ! ZOS_DEPLOY_USER=sigmaos-deploy /usr/lib/zos/scripts/zos-deploy-bootstrap.sh; then
+      /usr/lib/zos/scripts/zos-migrate-sigmaos.sh rollback || true
+      exit 1
+    fi
+  fi
 
   if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload || true

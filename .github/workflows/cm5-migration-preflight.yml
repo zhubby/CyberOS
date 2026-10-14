@@ -88,6 +88,37 @@ jobs:
           printf 'architecture=%s\n' "$(dpkg --print-architecture)"
           printf 'database_quick_check=%s\n' "$(sqlite3 /var/lib/sigmaos/sigmaos.sqlite 'PRAGMA quick_check;' 2>/dev/null || true)"
 
+          vm_summary_path="$(mktemp /tmp/sigmaos-vm-summary.XXXXXX)"
+          trap 'rm -f "$vm_summary_path"' EXIT HUP INT TERM
+          curl --fail --silent --show-error --max-time 30 \
+            http://127.0.0.1:3010/api/vms/summary > "$vm_summary_path"
+          /usr/local/bin/node - "$vm_summary_path" <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const summary = payload?.summary;
+          if (typeof summary?.enabled !== "boolean" || !Array.isArray(summary?.instances)) {
+            throw new Error("VM summary response is invalid");
+          }
+          const sources = summary.instances.flatMap((instance) =>
+            Array.isArray(instance?.disks)
+              ? instance.disks.map((disk) => disk?.source).filter((source) => typeof source === "string")
+              : []
+          );
+          const legacyPrefixes = ["/var/lib/sigmaos", "/srv/nas", "/srv/apps", "/srv/iso"];
+          const legacyReferences = sources.filter((source) =>
+            legacyPrefixes.some((prefix) => source === prefix || source.startsWith(`${prefix}/`))
+          ).length;
+          console.log(`vm_enabled=${summary.enabled}`);
+          console.log(`vm_count=${summary.instances.length}`);
+          console.log(`vm_legacy_disk_references=${legacyReferences}`);
+          if (summary.enabled && summary.host?.status !== "ready") {
+            throw new Error("enabled VM inventory is unavailable");
+          }
+          if (legacyReferences > 0) {
+            throw new Error("registered VMs still reference legacy storage paths");
+          }
+          NODE
+
           for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do
             printf 'unit=%s enabled=%s active=%s\n' "$unit" \
               "$(systemctl is-enabled "$unit" 2>/dev/null || true)" \

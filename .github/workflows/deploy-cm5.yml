@@ -17,6 +17,11 @@ name: Deploy CM5
         required: false
         default: false
         type: boolean
+      allow_legacy_migration:
+        description: Allow the one-time SigmaOS to ZOS production data migration
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -227,7 +232,7 @@ jobs:
           set -euo pipefail
           : "${CM5_HOST:?production variable CM5_HOST is required}"
           [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-zos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
           [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$CM5_DEPLOY_USER" != root ]]
 
@@ -235,7 +240,7 @@ jobs:
         env:
           TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}
           TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          EXPECTED_SUBJECT: repo:zhubby@9190779/ZOS@1341473177:environment:production
+          EXPECTED_SUBJECT: repo:zhubby@9190779/SigmaOS@1341473177:environment:production
         run: |
           set -euo pipefail
           : "${ACTIONS_ID_TOKEN_REQUEST_URL:?GitHub OIDC request URL is unavailable}"
@@ -296,7 +301,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-zos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -307,23 +312,45 @@ jobs:
           mapfile -t baseline < <(
             ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s <<'REMOTE'
           set -eu
-          [ -f /zos/config/config.toml ] && [ -r /zos/config/config.toml ]
           [ -x /usr/local/bin/node ]
           runtime_node_version="$(/usr/local/bin/node --version)"
           case "$runtime_node_version" in
             v22.*) ;;
             *) printf 'CM5 runtime requires Node.js 22; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
           esac
-          config_sha256="$(sha256sum /zos/config/config.toml | awk '{print $1}')"
-          package_version="$(dpkg-query -W -f='${Version}' zos 2>/dev/null || true)"
-          package_status="$(dpkg-query -W -f='${Status}' zos 2>/dev/null || true)"
-          printf '%s\n%s\n%s\n%s\n' "$config_sha256" "$package_version" "$package_status" "$runtime_node_version"
+          if [ "$(dpkg-query -W -f='${Status}' zos 2>/dev/null || true)" = "install ok installed" ] && \
+              [ -x /usr/local/sbin/zos-deploy ]; then
+            layout=zos
+            package_name=zos
+            config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
+          elif [ -f /etc/sigmaos/config.toml ] && [ -r /etc/sigmaos/config.toml ] && \
+              [ "$(dpkg-query -W -f='${Status}' sigmaos 2>/dev/null || true)" = "install ok installed" ]; then
+            layout=sigmaos
+            package_name=sigmaos
+            config_sha256="$(sha256sum /etc/sigmaos/config.toml | awk '{print $1}')"
+          else
+            printf 'CM5 has neither a valid ZOS nor a migratable SigmaOS installation\n' >&2
+            exit 1
+          fi
+          package_version="$(dpkg-query -W -f='${Version}' "$package_name")"
+          package_status="$(dpkg-query -W -f='${Status}' "$package_name")"
+          printf '%s\n%s\n%s\n%s\n%s\n' "$layout" "$config_sha256" "$package_version" "$package_status" "$runtime_node_version"
           REMOTE
           )
-          [[ "${baseline[0]:-}" =~ ^[0-9a-f]{64}$ ]]
-          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-config.sha256"
-          printf 'CM5 upgrade baseline: version=%s status=%s node=%s\n' \
-            "${baseline[1]:-unknown}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}"
+          [[ "${baseline[0]:-}" == zos || "${baseline[0]:-}" == sigmaos ]]
+          [[ "${baseline[1]:-}" =~ ^[0-9a-f]{64}$ ]]
+          if [[ "${baseline[0]}" == sigmaos && "${{ github.event_name }}" != workflow_dispatch ]]; then
+            echo "Legacy migration requires an explicit workflow_dispatch with allow_legacy_migration=true" >&2
+            exit 1
+          fi
+          if [[ "${baseline[0]}" == sigmaos && "${{ inputs.allow_legacy_migration }}" != true ]]; then
+            echo "Legacy migration was not explicitly authorized" >&2
+            exit 1
+          fi
+          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-layout"
+          printf '%s\n' "${baseline[1]}" > "$RUNNER_TEMP/cm5-config.sha256"
+          printf 'CM5 upgrade baseline: layout=%s version=%s status=%s node=%s\n' \
+            "${baseline[0]}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}" "${baseline[4]:-unknown}"
 
       - name: Stage and deploy release on CM5
         if: inputs.verify_only != true
@@ -332,7 +359,7 @@ jobs:
           set -euo pipefail
 
           : "${CM5_HOST:?production variable CM5_HOST is required}"
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-zos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
           [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
           [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$CM5_DEPLOY_USER" != root ]]
@@ -345,22 +372,26 @@ jobs:
             -o StrictHostKeyChecking=accept-new
           )
           release_dir="$RUNNER_TEMP/cm5-release"
-          scp "${ssh_options[@]}" \
-            "$release_dir/release-manifest.json" \
-            "$CM5_DEPLOY_USER@$CM5_HOST:/zos/deploy/incoming/"
+          layout="$(<"$RUNNER_TEMP/cm5-layout")"
 
-          incoming_dir=/zos/deploy/incoming
-          local_parts_dir="$release_dir/parts"
-          remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"
-          partial_package="$incoming_dir/package.deb.$RELEASE_SHA256.download"
-          rm -rf "$local_parts_dir"
-          mkdir -p "$local_parts_dir"
-          split -b 4m -d -a 4 "$release_dir/$RELEASE_ASSET" "$local_parts_dir/part-"
-          mapfile -t part_paths < <(find "$local_parts_dir" -type f -name 'part-*' -print | sort)
-          ((${#part_paths[@]} > 0))
+          stage_release() {
+            local incoming_dir=$1
+            local manifest_path=$2
+            local upload_name=$3
+            local local_parts_dir="$release_dir/parts-$upload_name"
+            local remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"
+            local partial_package="$incoming_dir/package.deb.$RELEASE_SHA256.download"
 
-          ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-            "$remote_parts_dir" "${part_paths[@]##*/}" <<'REMOTE'
+            scp "${ssh_options[@]}" "$manifest_path" \
+              "$CM5_DEPLOY_USER@$CM5_HOST:$incoming_dir/release-manifest.json"
+            rm -rf "$local_parts_dir"
+            mkdir -p "$local_parts_dir"
+            split -b 4m -d -a 4 "$release_dir/$RELEASE_ASSET" "$local_parts_dir/part-"
+            mapfile -t part_paths < <(find "$local_parts_dir" -type f -name 'part-*' -print | sort)
+            ((${#part_paths[@]} > 0))
+
+            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+              "$remote_parts_dir" "${part_paths[@]##*/}" <<'REMOTE'
           set -eu
           remote_parts_dir=$1
           shift
@@ -386,18 +417,18 @@ jobs:
           done
           REMOTE
 
-          upload_part() {
-            local part_path=$1
-            local part_name=${part_path##*/}
-            local expected_size
-            local expected_sha256
-            local remote_state
-            expected_size="$(stat --format=%s "$part_path")"
-            expected_sha256="$(sha256sum "$part_path" | awk '{print $1}')"
-            for attempt in 1 2 3; do
-              remote_state="$(
-                ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-                  "$remote_parts_dir/$part_name" "$expected_size" "$expected_sha256" <<'REMOTE'
+            upload_part() {
+              local part_path=$1
+              local part_name=${part_path##*/}
+              local expected_size
+              local expected_sha256
+              local remote_state
+              expected_size="$(stat --format=%s "$part_path")"
+              expected_sha256="$(sha256sum "$part_path" | awk '{print $1}')"
+              for attempt in 1 2 3; do
+                remote_state="$(
+                  ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+                    "$remote_parts_dir/$part_name" "$expected_size" "$expected_sha256" <<'REMOTE'
           set -eu
           remote_part_path=$1
           expected_size=$2
@@ -419,50 +450,51 @@ jobs:
           fi
           printf '%s\n' upload
           REMOTE
-              )"
-              if [ "$remote_state" = complete ]; then
-                return 0
-              fi
-              [ "$remote_state" = upload ]
-              if timeout --signal=TERM --kill-after=30s 900 \
-                  sftp -B 131072 -R 16 -b - "${ssh_options[@]}" \
-                  "$CM5_DEPLOY_USER@$CM5_HOST" <<SFTP
+                )"
+                if [ "$remote_state" = complete ]; then
+                  return 0
+                fi
+                [ "$remote_state" = upload ]
+                if timeout --signal=TERM --kill-after=30s 900 \
+                    sftp -B 131072 -R 16 -b - "${ssh_options[@]}" \
+                    "$CM5_DEPLOY_USER@$CM5_HOST" <<SFTP
           reput "$part_path" "$remote_parts_dir/$part_name"
           SFTP
-              then
-                return 0
-              fi
-              printf 'SFTP upload of %s attempt %s failed; preserving part for resume\n' "$part_name" "$attempt" >&2
-            done
-            return 1
-          }
+                then
+                  return 0
+                fi
+                printf 'SFTP upload of %s attempt %s failed; preserving part for resume\n' "$part_name" "$attempt" >&2
+              done
+              return 1
+            }
 
-          part_index=0
-          while ((part_index < ${#part_paths[@]})); do
-            part_pids=()
-            batch_end=$((part_index + 4))
-            while ((part_index < batch_end && part_index < ${#part_paths[@]})); do
-              upload_part "${part_paths[part_index]}" &
-              part_pids+=("$!")
-              part_index=$((part_index + 1))
+            part_index=0
+            while ((part_index < ${#part_paths[@]})); do
+              part_pids=()
+              batch_end=$((part_index + 4))
+              while ((part_index < batch_end && part_index < ${#part_paths[@]})); do
+                upload_part "${part_paths[part_index]}" &
+                part_pids+=("$!")
+                part_index=$((part_index + 1))
+              done
+              batch_failed=0
+              for part_pid in "${part_pids[@]}"; do
+                if ! wait "$part_pid"; then
+                  batch_failed=1
+                fi
+              done
+              ((batch_failed == 0))
             done
-            batch_failed=0
-            for part_pid in "${part_pids[@]}"; do
-              if ! wait "$part_pid"; then
-                batch_failed=1
-              fi
-            done
-            ((batch_failed == 0))
-          done
 
-          ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-            "$remote_parts_dir" "$partial_package" "$RELEASE_SHA256" "${#part_paths[@]}" <<'REMOTE'
+            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+              "$remote_parts_dir" "$partial_package" "$RELEASE_SHA256" \
+              "${#part_paths[@]}" "$incoming_dir" <<'REMOTE'
           set -eu
           remote_parts_dir=$1
           partial_package=$2
           expected_sha256=$3
           part_count=$4
-          incoming_dir=/zos/deploy/incoming
+          incoming_dir=$5
           if [ -L "$partial_package" ] || { [ -e "$partial_package" ] && [ ! -f "$partial_package" ]; }; then
             echo "Partial release package is not a regular file" >&2
             exit 1
@@ -473,7 +505,7 @@ jobs:
           while [ "$part_index" -lt "$part_count" ]; do
             part_name=$(printf 'part-%04d' "$part_index")
             part_path="$remote_parts_dir/$part_name"
-            if [ -L "$part_path" ] || { [ ! -f "$part_path" ]; }; then
+            if [ -L "$part_path" ] || [ ! -f "$part_path" ]; then
               echo "Release part is missing or not a regular file" >&2
               rm -f "$assembled_package"
               exit 1
@@ -496,17 +528,60 @@ jobs:
             exit 1
           }
           mv -f "$partial_package" "$incoming_dir/package.deb"
-          # v0.8.0 predates the helper's noninteractive conffile policy. The
-          # response preserves the local config while bootstrapping v0.8.1+.
-          printf 'N\n' | sudo -n /usr/local/sbin/zos-deploy
           REMOTE
+          }
+
+          if [[ "$layout" == sigmaos ]]; then
+            legacy_manifest="$release_dir/legacy-release-manifest.json"
+            jq --arg asset "sigmaos_${RELEASE_VERSION}_arm64.deb" '.asset = $asset' \
+              "$release_dir/release-manifest.json" > "$legacy_manifest"
+            stage_release /var/lib/sigmaos-deploy/incoming "$legacy_manifest" legacy
+
+            legacy_status=0
+            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
+              "printf 'N\\n' | sudo -n /usr/local/sbin/sigmaos-deploy" || legacy_status=$?
+            if ((legacy_status == 0)); then
+              echo "Legacy helper unexpectedly reported a completed ZOS migration" >&2
+              exit 1
+            fi
+
+            expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
+            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+              "$RELEASE_VERSION" "$expected_config_sha256" <<'REMOTE'
+          set -eu
+          expected_version=$1
+          expected_config_sha256=$2
+          [ "$(dpkg-query -W -f='${Status}' zos)" = "install ok installed" ]
+          [ "$(dpkg-query -W -f='${Version}' zos)" = "$expected_version" ]
+          [ -x /usr/local/sbin/zos-deploy ]
+          migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
+          node - "$migration_status" "$expected_config_sha256" <<'NODE'
+          const [payload, expectedConfigSha256] = process.argv.slice(2);
+          const status = JSON.parse(payload);
+          if (status.status !== "pending" || status.sourceConfigSha256 !== expectedConfigSha256) {
+            throw new Error(`unexpected migration state: ${payload}`);
+          }
+          NODE
+          if findmnt --fstab -rn -o TARGET | grep -Eq '^/srv/(nas|backup|apps|iso)(/|$)'; then
+            echo "Legacy mount targets remain in /etc/fstab" >&2
+            exit 1
+          fi
+          for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do
+            ! systemctl is-active --quiet "$unit"
+          done
+          REMOTE
+          fi
+
+          stage_release /zos/deploy/incoming "$release_dir/release-manifest.json" zos
+          ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
+            "printf 'N\\n' | sudo -n /usr/local/sbin/zos-deploy"
 
       - name: Verify CM5 services and build metadata
         timeout-minutes: 10
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-zos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -514,13 +589,15 @@ jobs:
             -o ServerAliveCountMax=4
             -o StrictHostKeyChecking=accept-new
           )
+          layout="$(<"$RUNNER_TEMP/cm5-layout")"
           expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_config_sha256" <<'REMOTE'
+            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_config_sha256" "$layout" <<'REMOTE'
           set -eu
           expected_version=$1
           expected_commit_sha=$2
           expected_config_sha256=$3
+          previous_layout=$4
           check_dir="$(mktemp -d /tmp/zos-deploy-check.XXXXXX)"
           trap 'rm -rf "$check_dir"' EXIT HUP INT TERM
 
@@ -529,8 +606,27 @@ jobs:
           [ "$installed_status" = "install ok installed" ]
           [ "$installed_version" = "$expected_version" ]
           [ -f /zos/config/config.toml ] && [ -r /zos/config/config.toml ]
-          actual_config_sha256="$(sha256sum /zos/config/config.toml | awk '{print $1}')"
-          [ "$actual_config_sha256" = "$expected_config_sha256" ]
+          actual_config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
+          if [ "$previous_layout" = zos ]; then
+            [ "$actual_config_sha256" = "$expected_config_sha256" ]
+          else
+            migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
+            node - "$migration_status" "$expected_config_sha256" <<'NODE'
+          const [payload, expectedConfigSha256] = process.argv.slice(2);
+          const status = JSON.parse(payload);
+          if (status.status !== "committed" || status.sourceConfigSha256 !== expectedConfigSha256) {
+            throw new Error(`unexpected committed migration state: ${payload}`);
+          }
+          NODE
+            if findmnt --fstab -rn -o TARGET | grep -Eq '^/srv/(nas|backup|apps|iso)(/|$)'; then
+              echo "Legacy mount targets remain in /etc/fstab" >&2
+              exit 1
+            fi
+            findmnt -rn --mountpoint /zos/data/primary/pool1 >/dev/null
+            for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do
+              ! systemctl is-active --quiet "$unit"
+            done
+          fi
 
           check_active_unit() {
             unit=$1
@@ -646,6 +742,9 @@ jobs:
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
           wait_for_indexer_ready
 
+          database_check="$(sudo -n /usr/local/sbin/zos-deploy --database-check)"
+          [ "$database_check" = ok ]
+
           node - "$check_dir/build-info.json" "$expected_version" "$expected_commit_sha" <<'NODE'
           const fs = require("node:fs");
           const [file, expectedVersion, expectedCommitSha] = process.argv.slice(2);
@@ -653,6 +752,14 @@ jobs:
           const build = payload?.build;
           if (build?.version !== expectedVersion || build?.commitSha?.toLowerCase() !== expectedCommitSha.toLowerCase()) {
             throw new Error(`build metadata mismatch: ${JSON.stringify(build)}`);
+          }
+          NODE
+          node - "$check_dir/readiness.json" <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (!Array.isArray(payload?.roots) || payload.roots.length === 0 ||
+              payload.roots.some((root) => root.status !== "ready")) {
+            throw new Error(`one or more NAS roots are not ready: ${JSON.stringify(payload?.roots)}`);
           }
           NODE
           node - "$check_dir/system-health.json" <<'NODE'

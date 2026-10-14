@@ -82,7 +82,7 @@ const shaPattern = /^[0-9a-f]{40}$/u;
 const checksumPattern = /^[0-9a-f]{64}$/u;
 
 if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("manifest must be an object");
-if (manifest.repository !== "zhubby/ZOS") throw new Error("manifest repository is not ZOS");
+if (!["zhubby/ZOS", "zhubby/SigmaOS"].includes(manifest.repository)) throw new Error("manifest repository is not trusted");
 if (typeof manifest.version !== "string" || !versionPattern.test(manifest.version)) throw new Error("manifest version is invalid");
 if (manifest.tag !== `v${manifest.version}` || !tagPattern.test(manifest.tag)) throw new Error("manifest tag is invalid");
 if (typeof manifest.commitSha !== "string" || !shaPattern.test(manifest.commitSha)) throw new Error("manifest commit SHA is invalid");
@@ -229,6 +229,40 @@ verify_runtime() {
   wait_for_health_operation_ready || die "health operation is not ready"
 }
 
+refresh_share_configuration() {
+  settings_path="$work_dir/share-settings.json"
+  request_path="$work_dir/share-settings-request.json"
+  response_path="$work_dir/share-settings-response.json"
+  curl --fail --silent --show-error --max-time 15 \
+    http://127.0.0.1:3010/api/settings/shares > "$settings_path"
+  node --input-type=module - "$settings_path" "$request_path" <<'NODE'
+import fs from "node:fs";
+
+const [settingsPath, requestPath] = process.argv.slice(2);
+const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"))?.settings;
+if (typeof settings?.account?.username !== "string" || typeof settings?.updatedAt !== "string") {
+  throw new Error("share settings response is invalid");
+}
+fs.writeFileSync(requestPath, JSON.stringify({
+  username: settings.account.username,
+  expectedUpdatedAt: settings.updatedAt
+}));
+NODE
+  curl --fail --silent --show-error --max-time 120 \
+    --request PUT \
+    --header 'content-type: application/json' \
+    --data-binary "@$request_path" \
+    http://127.0.0.1:3010/api/shares/account > "$response_path"
+  node --input-type=module - "$response_path" <<'NODE'
+import fs from "node:fs";
+
+const response = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (typeof response?.appliedAt !== "string") {
+  throw new Error(`share configuration refresh failed: ${JSON.stringify(response)}`);
+}
+NODE
+}
+
 runtime_fingerprint() {
   for unit in zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-hostd.service zos-termux.service; do
     main_pid=$(systemctl show --property=MainPID --value "$unit")
@@ -295,6 +329,7 @@ capture_failure() {
         restore_unit_state "$unit" "$state_dir" >/dev/null 2>&1 || true
       done
     fi
+    /usr/lib/zos/scripts/zos-migrate-sigmaos.sh rollback >/dev/null 2>&1 || true
   fi
   trap - EXIT
   exit "$status"
@@ -350,6 +385,30 @@ EOF
 trap capture_failure EXIT HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || die "must run as root"
+
+case "${1:-}" in
+  --migration-status)
+    exec /usr/lib/zos/scripts/zos-migrate-sigmaos.sh status
+    ;;
+  --config-sha256)
+    [ -f /zos/config/config.toml ] && [ ! -L /zos/config/config.toml ] || \
+      die "ZOS configuration must be a regular file"
+    sha256sum /zos/config/config.toml | awk '{ print $1 }'
+    exit 0
+    ;;
+  --database-check)
+    command -v sqlite3 >/dev/null 2>&1 || die "sqlite3 is required"
+    [ -f /zos/state/zos.sqlite ] && [ ! -L /zos/state/zos.sqlite ] || \
+      die "ZOS database must be a regular file"
+    database_check=$(sqlite3 /zos/state/zos.sqlite 'PRAGMA busy_timeout=5000; PRAGMA quick_check;' | tail -n 1)
+    [ "$database_check" = ok ] || die "ZOS database quick check failed: $database_check"
+    printf '%s\n' "$database_check"
+    exit 0
+    ;;
+  '') ;;
+  *) die "usage: zos-deploy [--migration-status|--config-sha256|--database-check]" ;;
+esac
+
 command -v node >/dev/null 2>&1 || die "Node.js is required"
 command -v apt-get >/dev/null 2>&1 || die "apt-get is required"
 command -v dpkg-deb >/dev/null 2>&1 || die "dpkg-deb is required"
@@ -406,7 +465,9 @@ if [ "$installed_status" = "install ok installed" ]; then
     log "version $manifest_version is already installed; recovering runtime and release state"
     activate_runtime
     verify_runtime
+    refresh_share_configuration
     verify_build_info "$manifest_version" "$manifest_commit_sha"
+    /usr/lib/zos/scripts/zos-migrate-sigmaos.sh commit
     record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"
     cleanup_deployment_artifacts
     success=1
@@ -468,7 +529,9 @@ done
 
 activate_runtime
 verify_runtime
+refresh_share_configuration
 verify_build_info "$manifest_version" "$manifest_commit_sha"
+/usr/lib/zos/scripts/zos-migrate-sigmaos.sh commit
 
 record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"
 cleanup_deployment_artifacts

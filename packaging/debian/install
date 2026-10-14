@@ -29,6 +29,10 @@ packaging/scripts/zos-share-acl.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-refresh-vod-player.sh usr/lib/zos/scripts/
 packaging/scripts/zos-deploy-bootstrap.sh usr/lib/zos/scripts/
 packaging/scripts/zos-deploy usr/lib/zos/scripts/
+packaging/scripts/zos-migrate-config.mjs usr/lib/zos/scripts/
+packaging/scripts/zos-migrate-database.mjs usr/lib/zos/scripts/
+packaging/scripts/zos-migrate-fstab.mjs usr/lib/zos/scripts/
+packaging/scripts/zos-migrate-sigmaos.sh usr/lib/zos/scripts/
 packaging/nginx/zos.conf usr/share/zos/nginx/
 packaging/etc/samba.conf usr/share/zos/
 packaging/systemd/*.service lib/systemd/system/

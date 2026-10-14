@@ -218,8 +218,8 @@ describe("native packaging artifacts", () => {
     const postrm = await readPackagingFile("debian", "postrm");
     const postinst = await readPackagingFile("debian", "postinst");
     const refreshVodPlayer = await readPackagingFile("scripts", "zos-refresh-vod-player.sh");
-    expect(postinst).not.toContain("legacy");
-    expect(postinst).not.toContain("migrate-config");
+    expect(postinst).toContain("zos-migrate-sigmaos.sh apply");
+    expect(postinst).toContain("ZOS_DEPLOY_USER=sigmaos-deploy");
     expect(postinst).toContain("/zos/state/hostd/docker-daemon");
     expect(postinst).toContain("/zos/state/hostd/network-manager");
     expect(refreshVodPlayer).toContain("ZOS_VOD_PLAYER_SOCKET_PATH");
@@ -339,6 +339,7 @@ describe("native packaging artifacts", () => {
     const firstBoot = await readPackagingFile("scripts", "zos-first-boot.sh");
     const releaseWorkflow = await readRepoFile(".github", "workflows", "package-release.yml");
     const deployWorkflow = await readRepoFile(".github", "workflows", "deploy-cm5.yml");
+    const migrationPreflight = await readRepoFile(".github", "workflows", "cm5-migration-preflight.yml");
 
     expect(installer).toContain("dpkg --print-architecture");
     expect(installer).toContain("ZOS_APT_MIRROR");
@@ -421,7 +422,7 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('while [ "$attempt" -le 120 ]');
     expect(deployWorkflow).toMatch(/- name: Verify CM5 services and build metadata\n\s+timeout-minutes: 10/u);
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
-    expect(deployWorkflow).toContain('local_parts_dir="$release_dir/parts"');
+    expect(deployWorkflow).toContain('local_parts_dir="$release_dir/parts-$upload_name"');
     expect(deployWorkflow).toContain('remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"');
     expect(deployWorkflow).toContain('split -b 4m -d -a 4');
     expect(deployWorkflow).toContain('partial_package="$incoming_dir/package.deb.$RELEASE_SHA256.download"');
@@ -446,11 +447,12 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('mv -f "$partial_package" "$incoming_dir/package.deb"');
     expect(deployWorkflow).toContain("ServerAliveInterval=15");
     expect(deployWorkflow).not.toContain("--continue-at -");
-    expect(deployWorkflow).toContain("printf 'N\\n' | sudo -n /usr/local/sbin/zos-deploy");
+    expect(deployWorkflow).toContain("printf 'N\\\\n' | sudo -n /usr/local/sbin/zos-deploy");
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-config.sha256"');
     expect(deployWorkflow).toContain('[ "$installed_status" = "install ok installed" ]');
     expect(deployWorkflow).toContain('[ "$actual_config_sha256" = "$expected_config_sha256" ]');
-    expect(deployWorkflow).toContain("sha256sum /zos/config/config.toml");
+    expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/zos-deploy --config-sha256");
+    expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/zos-deploy --database-check");
     expect(deployWorkflow).toContain("/usr/lib/zos/bin/zos-termux");
     expect(deployWorkflow).toContain("zos-health.timer");
     expect(deployWorkflow).toContain("NextElapseUSecMonotonic");
@@ -458,6 +460,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('runtime_before="$(runtime_fingerprint)"');
     expect(deployWorkflow).toContain('runtime_after="$(runtime_fingerprint)"');
     expect(deployWorkflow).not.toContain("zos-terminal-helper.service");
+    expect(migrationPreflight).toContain("/api/vms/summary");
+    expect(migrationPreflight).toContain("vm_legacy_disk_references");
+    expect(migrationPreflight).toContain("registered VMs still reference legacy storage paths");
     expect(deployWorkflow).not.toContain('cp "$package_path" "$release_dir/package.deb"');
     expect(deployWorkflow).not.toContain('"$release_dir/package.deb" \\\n            "$release_dir/release-manifest.json"');
   });
@@ -476,6 +481,7 @@ describe("native packaging artifacts", () => {
   });
 
   it("ships a constrained native host daemon", async () => {
+    const install = await readPackagingFile("debian", "install");
     const unit = await readPackagingFile("systemd", "zos-hostd.service");
 
     expect(unit).toContain("User=root");
@@ -508,12 +514,15 @@ describe("native packaging artifacts", () => {
     expect(apiUnit).not.toContain("/etc/docker");
     expect(apiUnit).not.toContain("/etc/NetworkManager");
     const postinst = await readPackagingFile("debian", "postinst");
-    expect(postinst).not.toContain("migrate-config");
+    expect(postinst).toContain("zos-migrate-sigmaos.sh apply");
     expect(postinst).toContain("/zos/state/hostd/docker-daemon");
     expect(postinst).toContain("/zos/state/hostd/network-manager");
     expect(postinst).toContain("/zos/home/share");
     expect(postinst).toContain("usermod --home /zos/home/share zos-share");
     expect(postinst).toContain("/zos/apps");
+    expect(install).toContain("zos-migrate-config.mjs usr/lib/zos/scripts/");
+    expect(install).toContain("zos-migrate-fstab.mjs usr/lib/zos/scripts/");
+    expect(install).toContain("zos-migrate-sigmaos.sh usr/lib/zos/scripts/");
     expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps");
     expect(apiUnit).toContain("CapabilityBoundingSet=\n");
   });
@@ -570,6 +579,7 @@ describe("native packaging artifacts", () => {
   it("ships a constrained CM5 deployment helper", async () => {
     const deploy = await readPackagingFile("scripts", "zos-deploy");
     const bootstrap = await readPackagingFile("scripts", "zos-deploy-bootstrap.sh");
+    const migration = await readPackagingFile("scripts", "zos-migrate-sigmaos.sh");
 
     expect(deploy).toContain("flock -n 9");
     expect(deploy).toContain("ZOS_DEPLOY_DIR must be under /zos/deploy");
@@ -592,6 +602,9 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("NextElapseUSecMonotonic");
     expect(deploy).toContain('health?.operations?.health?.status === "ready"');
     expect(deploy).toContain("wait_for_health_operation_ready");
+    expect(deploy).toContain("refresh_share_configuration");
+    expect(deploy).toContain("/api/settings/shares");
+    expect(deploy).toContain("/api/shares/account");
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
     expect(deploy).toContain("zos-downloader.service zos-indexer.service zos-hostd.service");
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
@@ -605,6 +618,13 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain('cat "$target_diagnostics_path/services-status.txt" >&2');
     expect(deploy).toContain('cat "$target_diagnostics_path/services-journal.txt" >&2');
     expect(deploy).toContain("cleanup_deployment_artifacts");
+    expect(deploy).toContain("zos-migrate-sigmaos.sh rollback");
+    expect(deploy).toContain("zos-migrate-sigmaos.sh commit");
+    expect(deploy).toContain("--migration-status)");
+    expect(deploy).toContain("--config-sha256");
+    expect(deploy).toContain("--database-check");
+    expect(deploy).toContain("ZOS configuration must be a regular file");
+    expect(deploy).toContain("ZOS database must be a regular file");
     expect(deploy).toContain("Keep the active release and one previous package");
     expect(deploy).toContain("Keep the current upgrade backup and one older backup");
     expect(deploy).toContain('find "$INCOMING_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +');
@@ -627,6 +647,23 @@ describe("native packaging artifacts", () => {
     expect(bootstrap).toContain("NOPASSWD: /usr/local/sbin/zos-deploy");
     expect(bootstrap).toContain("install -d -o root -g \"$DEPLOY_USER\" -m 0730");
     expect(bootstrap).toContain("visudo -cf");
+    expect(migration).toContain("PRAGMA integrity_check");
+    expect(migration).toContain("PRAGMA wal_checkpoint(TRUNCATE)");
+    expect(migration).toContain("legacy database WAL was not truncated");
+    expect(migration).toContain("zos-migrate-database.mjs");
+    expect(migration).toContain("tar --one-file-system");
+    expect(migration).toContain("SHARE_SERVICES=");
+    expect(migration).toContain("verify_capacity");
+    expect(migration).toContain("--apparent-size");
+    expect(migration).toContain("verify_legacy_libvirt_paths");
+    expect(migration).toContain("registered VM definitions contain");
+    expect(migration).toContain('mount --move "$mount_target" "$new_mount_target"');
+    expect(migration).toContain("chown -R --one-file-system zos:zos");
+    expect(migration).toContain('chown root:root "$POINTER_PATH"');
+    expect(migration).toContain('systemctl mask --force "$unit"');
+    expect(migration).toContain("zos-migrate-fstab.mjs");
+    expect(migration).toContain("write_status pending");
+    expect(migration).toContain("rollback_migration");
   });
 });
 
