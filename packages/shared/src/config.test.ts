@@ -156,8 +156,11 @@ describe("loadConfig", () => {
     await writeFile(configPath, `[vod_player]\nhwdec = "unsafe"\n`);
     expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("output configuration is invalid");
-    await writeFile(configPath, `[vod_player]\nsocket_path = "/tmp/vod-player.sock"\n`);
-    expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
+    expect(() => loadConfig({
+      ZOS_CONFIG: "/zos/config/config.toml",
+      ZOS_ENVIRONMENT: "production",
+      ZOS_VOD_PLAYER_SOCKET_PATH: "/tmp/vod-player.sock"
+    } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("cannot use /tmp or /var/tmp");
   });
 

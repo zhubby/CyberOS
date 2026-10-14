@@ -412,6 +412,9 @@ function validateConfig(input: {
     throw new Error(`VOD Player state must be under ${input.paths.vodPlayerStateDir}`);
   }
   if (input.environment !== "production") return;
+  if (isPrivateTemporaryPath(input.vodPlayer.socketPath) || isPrivateTemporaryPath(input.vodPlayer.statePath)) {
+    throw new Error("VOD Player socket_path and state_path cannot use /tmp or /var/tmp");
+  }
   const backup = input.backup;
   if (!backup.enabled) return;
   if (!backup.repositoryPath || !isUnder(backup.repositoryPath, input.paths.backupRoot)) {
@@ -531,9 +534,6 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, pat
   const playerUser = normalizeText(env.ZOS_VOD_PLAYER_USER) ?? normalizeText(player?.user) ?? "zos";
   if (!path.isAbsolute(socketPath) || !path.isAbsolute(statePath)) {
     throw new Error("VOD Player socket_path and state_path must be absolute");
-  }
-  if (isPrivateTemporaryPath(socketPath) || isPrivateTemporaryPath(statePath)) {
-    throw new Error("VOD Player socket_path and state_path cannot use /tmp or /var/tmp");
   }
   if (!/^[a-zA-Z0-9._-]+$/.test(playerUser) || playerUser === "root") {
     throw new Error("VOD Player user must name a non-root local account");

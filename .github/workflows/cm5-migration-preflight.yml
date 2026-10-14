@@ -1,0 +1,131 @@
+name: CM5 Migration Preflight
+
+'on':
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cm5-production
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Inspect legacy CM5 layout
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CM5_HOST: ${{ vars.CM5_HOST }}
+      CM5_DEPLOY_USER: ${{ vars.CM5_DEPLOY_USER }}
+    steps:
+      - name: Validate CM5 target
+        run: |
+          set -euo pipefail
+          : "${CM5_HOST:?production variable CM5_HOST is required}"
+          [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$CM5_DEPLOY_USER" != root ]]
+
+      - name: Verify GitHub OIDC identity
+        env:
+          TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          EXPECTED_SUBJECT: repo:zhubby@9190779/SigmaOS@1341473177:environment:production
+        run: |
+          set -euo pipefail
+          : "${ACTIONS_ID_TOKEN_REQUEST_URL:?GitHub OIDC request URL is unavailable}"
+          : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?GitHub OIDC request token is unavailable}"
+          : "${TS_AUDIENCE:?production secret TS_AUDIENCE is required}"
+          : "${TS_OAUTH_CLIENT_ID:?production secret TS_OAUTH_CLIENT_ID is required}"
+
+          expected_audience="api.tailscale.com/$TS_OAUTH_CLIENT_ID"
+          [[ "$TS_AUDIENCE" == "$expected_audience" ]]
+          token_response="$(curl --fail --silent --show-error \
+            --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$TS_AUDIENCE")"
+          oidc_token="$(jq -er '.value | select(type == "string" and length > 0)' <<<"$token_response")"
+
+          OIDC_TOKEN="$oidc_token" node <<'NODE'
+          const token = process.env.OIDC_TOKEN;
+          const expectedAudience = process.env.TS_AUDIENCE;
+          const expectedSubject = process.env.EXPECTED_SUBJECT;
+          const segments = token?.split(".") ?? [];
+          if (segments.length !== 3) throw new Error("GitHub returned an invalid OIDC token");
+          const claims = JSON.parse(Buffer.from(segments[1], "base64url").toString("utf8"));
+          if (claims.iss !== "https://token.actions.githubusercontent.com") throw new Error("unexpected GitHub OIDC issuer");
+          if (claims.sub !== expectedSubject) throw new Error(`unexpected GitHub OIDC subject: ${claims.sub}`);
+          if (claims.aud !== expectedAudience) throw new Error("GitHub OIDC audience does not match TS_AUDIENCE");
+          NODE
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:github-actions
+          ping: ${{ vars.CM5_HOST }}
+
+      - name: Inspect CM5 data and mounts
+        run: |
+          set -euo pipefail
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          ssh_options=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+            -o StrictHostKeyChecking=accept-new
+          )
+          ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s <<'REMOTE'
+          set -eu
+
+          printf 'package=%s\n' "$(dpkg-query -W -f='${Package}:${Version}:${Status}' sigmaos 2>/dev/null || true)"
+          printf 'node=%s\n' "$(/usr/local/bin/node --version 2>/dev/null || true)"
+          printf 'architecture=%s\n' "$(dpkg --print-architecture)"
+          printf 'database_quick_check=%s\n' "$(sqlite3 /var/lib/sigmaos/sigmaos.sqlite 'PRAGMA quick_check;' 2>/dev/null || true)"
+
+          for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do
+            printf 'unit=%s enabled=%s active=%s\n' "$unit" \
+              "$(systemctl is-enabled "$unit" 2>/dev/null || true)" \
+              "$(systemctl is-active "$unit" 2>/dev/null || true)"
+          done
+
+          for candidate in \
+            /etc/sigmaos \
+            /var/lib/sigmaos \
+            /var/lib/sigmaos-termux \
+            /var/lib/sigmaos-vod-player \
+            /var/lib/sigmaos-share \
+            /var/lib/sigmaos-deploy \
+            /srv/nas \
+            /srv/backup \
+            /srv/apps \
+            /srv/iso; do
+            if [ -e "$candidate" ]; then
+              size_bytes="$(du -sx --block-size=1 "$candidate" 2>/dev/null | awk '{print $1}' || true)"
+              metadata="$(stat -c '%U:%G:%a' "$candidate")"
+              mount_data="$(findmnt -rn -o SOURCE,TARGET,FSTYPE --target "$candidate" 2>/dev/null || true)"
+              printf 'path=%s size_bytes=%s metadata=%s mount=%s\n' "$candidate" "$size_bytes" "$metadata" "$mount_data"
+            else
+              printf 'path=%s missing\n' "$candidate"
+            fi
+          done
+
+          printf '%s\n' 'configured_paths_begin'
+          awk '
+            /^\[/ { section = $0 }
+            /^[[:space:]]*(data_dir|storage_path|iso_roots|socket_path|termux_socket_path|state_path|repository_path|password_file|staging_path|path)[[:space:]]*=/ {
+              printf "%s %s\n", section, $0
+            }
+          ' /etc/sigmaos/config.toml
+          printf '%s\n' 'configured_paths_end'
+
+          printf '%s\n' 'fstab_targets_begin'
+          findmnt --fstab -rn -o SOURCE,TARGET,FSTYPE | awk '$2 ~ /^\/(srv|var\/lib\/sigmaos|zos)(\/|$)/ { print }'
+          printf '%s\n' 'fstab_targets_end'
+          df -B1 --output=source,target,size,used,avail / /var/lib/sigmaos /srv/nas /srv/backup 2>/dev/null || true
+          REMOTE
