@@ -1,3 +1,9 @@
+sigmaos (0.10.7) unstable; urgency=medium
+
+  * Add modal file previews and streamed ZIP downloads
+
+ -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 14 Oct 2026 09:26:58 +0000
+
 sigmaos (0.10.6) unstable; urgency=medium
 
   * Add persistent file multi-select and batch operations
