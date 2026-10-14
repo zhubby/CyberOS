@@ -1,5 +1,5 @@
 name = "zos-appliance"
-version = "1.0.3"
+version = "1.0.4"
 base_suite = "bookworm"
 target_arch = "arm64"
 
