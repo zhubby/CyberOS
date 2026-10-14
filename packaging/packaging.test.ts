@@ -524,6 +524,7 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("zos-migrate-config.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-fstab.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-libvirt.mjs usr/lib/zos/scripts/");
+    expect(install).toContain("zos-relocate-mount.sh usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-sigmaos.sh usr/lib/zos/scripts/");
     expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps");
     expect(apiUnit).toContain("CapabilityBoundingSet=\n");
@@ -582,6 +583,7 @@ describe("native packaging artifacts", () => {
     const deploy = await readPackagingFile("scripts", "zos-deploy");
     const bootstrap = await readPackagingFile("scripts", "zos-deploy-bootstrap.sh");
     const migration = await readPackagingFile("scripts", "zos-migrate-sigmaos.sh");
+    const mountRelocator = await readPackagingFile("scripts", "zos-relocate-mount.sh");
 
     expect(deploy).toContain("flock -n 9");
     expect(deploy).toContain("ZOS_DEPLOY_DIR must be under /zos/deploy");
@@ -669,7 +671,15 @@ describe("native packaging artifacts", () => {
     expect(migration.indexOf('  commit)')).toBeLessThan(
       migration.indexOf('define_migrated_libvirt_domains || die')
     );
-    expect(migration).toContain('mount --move "$mount_target" "$new_mount_target"');
+    expect(migration).toContain('MOUNT_RELOCATOR=/usr/lib/zos/scripts/zos-relocate-mount.sh');
+    expect(migration).toContain('[ -x "$MOUNT_RELOCATOR" ] || die "mount relocator is missing"');
+    expect(migration).toContain('"$MOUNT_RELOCATOR" "$mount_target" "$new_mount_target"');
+    expect(mountRelocator).toContain('if mount --move "$source_mount" "$target_mount"');
+    expect(mountRelocator).toContain('mount --rbind "$source_mount" "$target_mount"');
+    expect(mountRelocator).toContain('mount --make-rprivate "$target_mount"');
+    expect(mountRelocator).toContain('umount --recursive "$source_mount"');
+    expect(migration).toContain('if [ "$old_mounted" -eq 1 ] && [ "$new_mounted" -eq 1 ]');
+    expect(migration).toContain('umount --recursive "$new_target" || return 1');
     expect(migration).toContain("chown -R --one-file-system zos:zos");
     expect(migration).toContain('chown root:root "$POINTER_PATH"');
     expect(migration).toContain('systemctl mask --force "$unit"');

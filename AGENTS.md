@@ -218,9 +218,12 @@ backup acceptance checks before re-enabling timers. Database migrations have no
 general reverse migration; a downgrade may require restoring a matching state
 backup as well as the old package.
 
-ZOS 1.0 does not support an in-place migration from the pre-ZOS product. Back
-up user data, then perform a clean install or reimage; do not reuse the old
-configuration, SQLite state, services, or browser state under `/zos`.
+The managed CM5 deployment workflow can perform a one-time migration from the
+pre-ZOS product when `allow_legacy_migration` is explicitly enabled. It takes a
+cold backup, migrates configuration, SQLite state, managed paths, NAS mounts,
+and libvirt definitions, then commits only after runtime verification. Keep the
+legacy layout and `/zos/system-backups` intact until the migration reports
+`committed` and the follow-up read-only deployment verification passes.
 
 ## Safety Boundaries
 

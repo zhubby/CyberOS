@@ -56,6 +56,9 @@ jobs:
       - name: Verify protocol bindings
         run: npm run protocol:check
 
+      - name: Test mount relocation under a shared parent
+        run: sudo env ZOS_MOUNT_TEST_NAMESPACE=isolated unshare --mount --propagation private packaging/zos-relocate-mount.test.sh
+
       - name: Typecheck
         run: npm run typecheck
 

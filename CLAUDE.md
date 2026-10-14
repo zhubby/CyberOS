@@ -59,9 +59,11 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
   `/health`, `/api/roots/readiness`, and `/api/system/health`; liveness alone is
   not NAS or backup readiness. Oneshot jobs normally become `inactive (dead)`
   after success, so inspect their exit status and journal.
-- ZOS 1.0 does not migrate pre-ZOS installations. Back up user data and use a
-  clean install or reimage; do not copy old configuration or SQLite state into
-  `/zos`. Future ZOS database migrations do not have a generic downgrade path.
+- The managed CM5 workflow supports a one-time pre-ZOS migration only when
+  `allow_legacy_migration` is explicitly enabled. Preserve the legacy layout
+  and `/zos/system-backups` until migration status is `committed` and the
+  read-only verification run passes. Future ZOS database migrations do not
+  have a generic downgrade path.
 
 ## Safety And UI Reminders
 

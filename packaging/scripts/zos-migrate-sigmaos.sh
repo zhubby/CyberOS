@@ -13,6 +13,7 @@ CONFIG_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-config.mjs
 FSTAB_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-fstab.mjs
 DATABASE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-database.mjs
 LIBVIRT_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-libvirt.mjs
+MOUNT_RELOCATOR=/usr/lib/zos/scripts/zos-relocate-mount.sh
 LIBVIRT_URI=qemu:///system
 
 LEGACY_TIMERS='sigmaos-maintenance.timer sigmaos-health.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer'
@@ -371,9 +372,12 @@ move_legacy_mounts() {
         suffix=${mount_target#"$source"}
         new_mount_target=$target$suffix
         install -d -o zos -g zos -m 0750 "$new_mount_target"
+        if findmnt -rn --mountpoint "$new_mount_target" >/dev/null 2>&1; then
+          die "migration mount target is already mounted: $new_mount_target"
+        fi
         log "moving mount $mount_target to $new_mount_target"
         printf '%s\t%s\n' "$mount_target" "$new_mount_target" >> "$backup_dir/mount-moves.tsv"
-        mount --move "$mount_target" "$new_mount_target"
+        "$MOUNT_RELOCATOR" "$mount_target" "$new_mount_target"
       done
     rm -f "$candidates"
   done < "$backup_dir/path-mappings.tsv"
@@ -385,12 +389,19 @@ restore_mounts() {
   tac "$backup_dir/mount-moves.tsv" > "$reverse_moves"
   while IFS="$(printf '\t')" read -r old_target new_target; do
     [ -n "$old_target" ] && [ -n "$new_target" ] || continue
-    if findmnt -rn --mountpoint "$old_target" >/dev/null 2>&1; then
+    old_mounted=0
+    new_mounted=0
+    findmnt -rn --mountpoint "$old_target" >/dev/null 2>&1 && old_mounted=1
+    findmnt -rn --mountpoint "$new_target" >/dev/null 2>&1 && new_mounted=1
+    if [ "$old_mounted" -eq 1 ] && [ "$new_mounted" -eq 1 ]; then
+      log "removing duplicate migrated mount at $new_target"
+      umount --recursive "$new_target" || return 1
+    elif [ "$old_mounted" -eq 1 ]; then
       continue
-    elif findmnt -rn --mountpoint "$new_target" >/dev/null 2>&1; then
+    elif [ "$new_mounted" -eq 1 ]; then
       install -d -m 0750 "$old_target"
       log "restoring mount $new_target to $old_target"
-      mount --move "$new_target" "$old_target"
+      "$MOUNT_RELOCATOR" "$new_target" "$old_target" || return 1
     else
       log "error: migrated mount is missing from both $old_target and $new_target" >&2
       return 1
@@ -497,6 +508,7 @@ apply_migration() {
   [ -x "$FSTAB_MIGRATOR" ] || die "fstab migrator is missing"
   [ -x "$DATABASE_MIGRATOR" ] || die "database migrator is missing"
   [ -x "$LIBVIRT_MIGRATOR" ] || die "libvirt migrator is missing"
+  [ -x "$MOUNT_RELOCATOR" ] || die "mount relocator is missing"
   [ -f "$LEGACY_DATABASE" ] || die "legacy database is missing"
 
   LEGACY_VERSION=$(dpkg-query -W -f='${Version}' sigmaos 2>/dev/null || true)

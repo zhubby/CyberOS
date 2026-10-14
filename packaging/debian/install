@@ -33,6 +33,7 @@ packaging/scripts/zos-migrate-config.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-database.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-fstab.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-libvirt.mjs usr/lib/zos/scripts/
+packaging/scripts/zos-relocate-mount.sh usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-sigmaos.sh usr/lib/zos/scripts/
 packaging/nginx/zos.conf usr/share/zos/nginx/
 packaging/etc/samba.conf usr/share/zos/
