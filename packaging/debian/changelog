@@ -1,3 +1,9 @@
+sigmaos (0.10.6) unstable; urgency=medium
+
+  * Add persistent file multi-select and batch operations
+
+ -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 14 Oct 2026 05:42:35 +0000
+
 sigmaos (0.10.5) unstable; urgency=medium
 
   * Add first-load skeletons for Terminal, Downloads, and Photos.
