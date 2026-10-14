@@ -621,9 +621,9 @@ EOF
     "$backup_dir/path-mappings.tsv" "$backup_dir/fstab.migrated"
   replace_fstab "$backup_dir/fstab.migrated"
 
-  # Never descend into migrated NAS mounts while normalizing ownership.
-  chown -R --one-file-system zos:zos \
-    /zos/state /zos/logs /zos/home/termux /zos/apps /zos/data /zos/vm /zos/iso
+  # Never descend into migrated NAS mounts or follow symlinks while normalizing ownership.
+  find /zos/state /zos/logs /zos/home/termux /zos/apps /zos/data /zos/vm /zos/iso \
+    -xdev -exec chown -h zos:zos -- {} +
   chown -R root:root /zos/state/hostd /zos/system-backups
   chown root:root "$POINTER_PATH"
   chmod 0600 "$POINTER_PATH"

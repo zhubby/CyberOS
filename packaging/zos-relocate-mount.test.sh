@@ -65,6 +65,13 @@ grep -Fxq root "$target_mount/root.txt"
 grep -Fxq nested "$target_mount/nested/nested.txt"
 [[ "$(findmnt -rn -o PROPAGATION --mountpoint "$target_mount")" == private ]]
 
+printf 'parent\n' > "$target_parent/parent.txt"
+chown 1:1 "$target_parent/parent.txt" "$target_mount/root.txt" "$target_mount/nested/nested.txt"
+find "$target_parent" -xdev -exec chown -h 0:0 -- {} +
+[[ "$(stat -c %u "$target_parent/parent.txt")" -eq 0 ]]
+[[ "$(stat -c %u "$target_mount/root.txt")" -eq 1 ]]
+[[ "$(stat -c %u "$target_mount/nested/nested.txt")" -eq 1 ]]
+
 mkdir -p "$source_mount"
 "$relocator" "$target_mount" "$source_mount"
 findmnt -rn --mountpoint "$source_mount" >/dev/null

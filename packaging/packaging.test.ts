@@ -680,7 +680,8 @@ describe("native packaging artifacts", () => {
     expect(mountRelocator).toContain('umount --recursive "$source_mount"');
     expect(migration).toContain('if [ "$old_mounted" -eq 1 ] && [ "$new_mounted" -eq 1 ]');
     expect(migration).toContain('umount --recursive "$new_target" || return 1');
-    expect(migration).toContain("chown -R --one-file-system zos:zos");
+    expect(migration).toContain("-xdev -exec chown -h zos:zos -- {} +");
+    expect(migration).not.toContain("chown -R --one-file-system");
     expect(migration).toContain('chown root:root "$POINTER_PATH"');
     expect(migration).toContain('systemctl mask --force "$unit"');
     expect(migration).toContain("zos-migrate-fstab.mjs");
