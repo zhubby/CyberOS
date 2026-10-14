@@ -2,6 +2,7 @@ import { FormEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useMemo
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X } from "lucide-react";
 import {
+  applyFileMutation,
   approveRequest,
   cancelJob,
   createFileBatch,
@@ -36,7 +37,6 @@ import {
   getPhotoLibrarySettings,
   getPhotoProcessingSettings,
   getPhotoStatus,
-  proposeFileOperation,
   rejectRequest,
   requestSystemPower,
   markAllNotificationsRead,
@@ -1769,20 +1769,45 @@ export function App() {
       throw new Error(t("workspace.actions.noSession"));
     }
 
-    setStatus("queued");
+    const requestRootId = selectedRootId;
+    const requestStoragePoolId = selectedStoragePoolId;
+    setStatus("applying");
     setError(null);
     try {
-      await proposeFileOperation({
+      const result = await applyFileMutation({
         sessionId: session.id,
-        rootId: selectedRootId,
-        storagePoolId: selectedStoragePoolId,
+        rootId: requestRootId,
+        storagePoolId: requestStoragePoolId,
         operation: "rename",
         sourcePath: entry.path,
         targetName
       });
-      await Promise.all([refreshWorkQueues(), reloadSessions()]);
-      setWarningNotice(t("notifications.operationPending"));
+      if (
+        selectedRootIdRef.current !== requestRootId ||
+        selectedStoragePoolIdRef.current !== requestStoragePoolId
+      ) {
+        return;
+      }
+      if (selectedFilePath && result.operation.sourcePath && result.operation.targetPath) {
+        const nextSelectedPath = renamedPath(
+          selectedFilePath,
+          result.operation.sourcePath,
+          result.operation.targetPath
+        );
+        if (nextSelectedPath) {
+          setSelectedFilePath(nextSelectedPath);
+          setPreviewCollapsed(false);
+        }
+      }
+      setOperations((current) => [
+        result.operation,
+        ...current.filter((operation) => operation.id !== result.operation.id)
+      ].slice(0, 100));
+      setSuccessNotice(t("notifications.operationSucceeded"));
       setStatus("ready");
+      void Promise.all([refreshWorkQueues(), refreshCurrentFileListing()]).catch((nextError: unknown) => {
+        setError(toErrorMessage(nextError));
+      });
     } catch (nextError) {
       setStatus("error");
       setError(toErrorMessage(nextError));
@@ -1808,20 +1833,34 @@ export function App() {
       return;
     }
 
-    setStatus("queued");
+    const requestRootId = selectedRootId;
+    const requestStoragePoolId = selectedStoragePool.id;
+    setStatus("applying");
     setError(null);
     try {
-      await proposeFileOperation({
+      const result = await applyFileMutation({
         sessionId: session.id,
-        rootId: selectedRootId,
-        storagePoolId: selectedStoragePool.id,
+        rootId: requestRootId,
+        storagePoolId: requestStoragePoolId,
         operation: "copy",
         sourcePath: entry.path,
         targetPath: joinNasPath(selectedStoragePool.path, targetPath)
       });
-      await Promise.all([refreshWorkQueues(), reloadSessions()]);
-      setWarningNotice(t("notifications.operationPending"));
+      if (
+        selectedRootIdRef.current !== requestRootId ||
+        selectedStoragePoolIdRef.current !== requestStoragePoolId
+      ) {
+        return;
+      }
+      setOperations((current) => [
+        result.operation,
+        ...current.filter((operation) => operation.id !== result.operation.id)
+      ].slice(0, 100));
+      setSuccessNotice(t("notifications.operationSucceeded"));
       setStatus("ready");
+      void Promise.all([refreshWorkQueues(), refreshCurrentFileListing()]).catch((nextError: unknown) => {
+        setError(toErrorMessage(nextError));
+      });
     } catch (nextError) {
       setStatus("error");
       setError(toErrorMessage(nextError));
@@ -1917,19 +1956,32 @@ export function App() {
       throw new Error(t("workspace.actions.noSession"));
     }
 
-    setStatus("queued");
+    setStatus("applying");
     setError(null);
     try {
-      await proposeFileOperation({
+      const result = await applyFileMutation({
         sessionId: session.id,
         rootId: input.rootId,
         storagePoolId: input.storagePoolId,
         operation: "mkdir",
         targetPath: joinNasPath(input.parentPath, input.name)
       });
-      await Promise.all([refreshWorkQueues(), reloadSessions()]);
-      setWarningNotice(t("notifications.operationPending"));
+      const refreshes: Promise<unknown>[] = [refreshWorkQueues()];
+      if (
+        selectedRootIdRef.current === input.rootId &&
+        selectedStoragePoolIdRef.current === input.storagePoolId
+      ) {
+        setOperations((current) => [
+          result.operation,
+          ...current.filter((operation) => operation.id !== result.operation.id)
+        ].slice(0, 100));
+        refreshes.push(refreshCurrentFileListing());
+      }
+      setSuccessNotice(t("notifications.operationSucceeded"));
       setStatus("ready");
+      void Promise.all(refreshes).catch((nextError: unknown) => {
+        setError(toErrorMessage(nextError));
+      });
     } catch (nextError) {
       setStatus("error");
       setError(toErrorMessage(nextError));

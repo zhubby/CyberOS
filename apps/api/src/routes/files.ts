@@ -23,7 +23,9 @@ import {
   createActionMessageAndJob,
   createFileBatch,
   createPendingApproval,
+  enqueuePhotostaffJob,
   FileBatchConflictError,
+  getPhotostaffLibrarySettings,
   getSession,
   listFileBatches,
   queryIndexAdvanced,
@@ -364,6 +366,102 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       job,
       approval
     });
+  });
+
+  server.post<{
+    Body: {
+      sessionId?: string;
+      rootId?: string;
+      storagePoolId?: string;
+      operation?: "mkdir" | "rename" | "copy";
+      sourcePath?: string;
+      targetName?: string;
+      targetPath?: string;
+    };
+  }>("/api/files/mutations", async (request, reply) => {
+    const session = getSession(db, request.body?.sessionId ?? "");
+    if (!session) {
+      reply.status(404).send({ error: "Session not found" });
+      return;
+    }
+
+    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+    const root = scope.root;
+    if (session.rootId !== root.id) {
+      reply.status(400).send({ error: "Session root does not match mutation root" });
+      return;
+    }
+
+    const operation = request.body?.operation;
+    if (operation !== "mkdir" && operation !== "rename" && operation !== "copy") {
+      reply.status(400).send({ error: "Unsupported direct file mutation operation" });
+      return;
+    }
+
+    let proposal:
+      | { proposal: FileOperationProposal }
+      | { statusCode: number; error: string };
+    if (operation === "mkdir") {
+      proposal = await buildMkdirProposal(root, scope, request.body?.targetPath);
+    } else {
+      const source = await getMutableSource(root, scope, request.body?.sourcePath ?? scope.mountpointPath);
+      if ("error" in source) {
+        reply.status(source.statusCode).send({ error: source.error });
+        return;
+      }
+      proposal = operation === "rename"
+        ? await buildRenameProposal(root, scope, source.safe.relativePath, request.body?.targetName)
+        : await buildTransferProposal(root, scope, source.safe, "copy", request.body?.targetPath);
+    }
+    if ("error" in proposal) {
+      reply.status(proposal.statusCode).send({ error: proposal.error });
+      return;
+    }
+    proposal.proposal.storagePoolId = scope.pool.id;
+
+    try {
+      const result = await applyFileMutation(root, proposal.proposal, path.join(config.dataDir, "trash"));
+      const applied = recordAppliedOperation(db, {
+        approvalId: null,
+        operation: result.proposal.operation,
+        sourcePath: result.sourcePath,
+        targetPath: result.targetPath,
+        status: "applied",
+        metadata: {
+          ...result.metadata,
+          rootId: root.id,
+          storagePoolId: scope.pool.id,
+          reversible: proposal.proposal.reversible
+        }
+      });
+
+      const photoSettings = getPhotostaffLibrarySettings(db);
+      if (
+        photoSettings?.rootId === root.id &&
+        photoSettings.storagePoolId === scope.pool.id &&
+        [result.sourcePath, result.targetPath].some((candidate) =>
+          candidate ? isPathWithin(photoSettings.path, candidate) : false
+        )
+      ) {
+        try {
+          enqueuePhotostaffJob(db, {
+            settings: photoSettings,
+            kind: "full_scan",
+            path: photoSettings.path
+          });
+        } catch (error) {
+          server.log.error({ err: error }, "Failed to queue photo library refresh after file mutation");
+        }
+      }
+
+      reply.status(201).send({
+        operation: applied,
+        targetPath: result.targetPath
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      reply.status(400).send({ error: message });
+    }
   });
 
   server.get<{
@@ -1040,6 +1138,15 @@ function normalizeTransferTargetPath(
     return { statusCode: 400, error: "Transfer target must be a relative path inside the NAS root" };
   }
   return { path: targetPath };
+}
+
+function isPathWithin(parentPath: string, candidatePath: string): boolean {
+  const relativePath = path.relative(parentPath, candidatePath);
+  return relativePath === "" || (
+    relativePath !== ".." &&
+    !relativePath.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relativePath)
+  );
 }
 
 async function pathExists(absolutePath: string): Promise<boolean> {

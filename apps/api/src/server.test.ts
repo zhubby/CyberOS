@@ -41,6 +41,7 @@ import {
   openSigmaDb,
   recordIndexFailure,
   saveDockerSettings,
+  savePhotostaffLibrarySettings,
   saveShareSettings,
   startBackupRun,
   startIndexRun,
@@ -4317,6 +4318,157 @@ describe("API server", () => {
     expect(listOperationNotifications(db)).toMatchObject([
       { jobId: response.json().job.id, kind: "file", status: "pending_approval" }
     ]);
+    await server.close();
+  });
+
+  it("applies file panel mutations directly without creating approvals", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const folder = await server.inject({
+      method: "POST",
+      url: "/api/files/mutations",
+      payload: {
+        sessionId: session.id,
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "mkdir",
+        targetPath: "projects"
+      }
+    });
+    expect(folder.statusCode).toBe(201);
+    expect(folder.json()).toMatchObject({
+      operation: {
+        approvalId: null,
+        operation: "mkdir",
+        targetPath: "projects",
+        status: "applied"
+      },
+      targetPath: "projects"
+    });
+    await expect(stat(path.join(rootDir, "projects"))).resolves.toMatchObject({});
+
+    const rename = await server.inject({
+      method: "POST",
+      url: "/api/files/mutations",
+      payload: {
+        sessionId: session.id,
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "rename",
+        sourcePath: "hello.txt",
+        targetName: "renamed.txt"
+      }
+    });
+    expect(rename.statusCode).toBe(201);
+    expect(rename.json().operation).toMatchObject({
+      approvalId: null,
+      operation: "rename",
+      sourcePath: "hello.txt",
+      targetPath: "renamed.txt",
+      status: "applied"
+    });
+    await expect(stat(path.join(rootDir, "hello.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(path.join(rootDir, "renamed.txt"), "utf8")).resolves.toBe("hello");
+
+    const copy = await server.inject({
+      method: "POST",
+      url: "/api/files/mutations",
+      payload: {
+        sessionId: session.id,
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "copy",
+        sourcePath: "renamed.txt",
+        targetPath: "projects/copied.txt"
+      }
+    });
+    expect(copy.statusCode).toBe(201);
+    expect(copy.json().operation).toMatchObject({
+      approvalId: null,
+      operation: "copy",
+      sourcePath: "renamed.txt",
+      targetPath: "projects/copied.txt",
+      status: "applied"
+    });
+    await expect(readFile(path.join(rootDir, "renamed.txt"), "utf8")).resolves.toBe("hello");
+    await expect(readFile(path.join(rootDir, "projects", "copied.txt"), "utf8")).resolves.toBe("hello");
+
+    expect(listPendingApprovals(db)).toHaveLength(0);
+    expect(listOperationNotifications(db)).toHaveLength(0);
+    expect(listFileOperations(db)).toHaveLength(3);
+    await server.close();
+  });
+
+  it("keeps direct file mutations inside the selected storage pool", async () => {
+    const poolDir = path.join(rootDir, "pool");
+    await mkdir(poolDir);
+    await writeFile(path.join(poolDir, "inside.txt"), "inside");
+    const session = createSession(db, { rootId: "local" });
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      system: { commandRunner: testStorageCommandRunnerFor(poolDir) }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/files/mutations",
+      payload: {
+        sessionId: session.id,
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "copy",
+        sourcePath: "pool/inside.txt",
+        targetPath: "outside.txt"
+      }
+    });
+
+    expect(response.statusCode).toBe(403);
+    await expect(stat(path.join(rootDir, "outside.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(listFileOperations(db)).toHaveLength(0);
+    expect(listPendingApprovals(db)).toHaveLength(0);
+    await server.close();
+  });
+
+  it("keeps a successful file mutation successful when photo refresh enqueue fails", async () => {
+    await mkdir(path.join(rootDir, "photos"));
+    const session = createSession(db, { rootId: "local" });
+    savePhotostaffLibrarySettings(db, {
+      rootId: "local",
+      storagePoolId: TEST_STORAGE_POOL_ID,
+      path: "photos"
+    });
+    db.exec(`
+      CREATE TRIGGER reject_photostaff_job_insert
+      BEFORE INSERT ON photostaff_jobs
+      BEGIN
+        SELECT RAISE(ABORT, 'photo queue unavailable');
+      END
+    `);
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/files/mutations",
+      payload: {
+        sessionId: session.id,
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "mkdir",
+        targetPath: "photos/new-album"
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().operation).toMatchObject({
+      approvalId: null,
+      operation: "mkdir",
+      targetPath: "photos/new-album",
+      status: "applied"
+    });
+    await expect(stat(path.join(rootDir, "photos", "new-album"))).resolves.toMatchObject({});
+    expect(listPendingApprovals(db)).toHaveLength(0);
     await server.close();
   });
 

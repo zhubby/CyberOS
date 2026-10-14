@@ -451,6 +451,11 @@ export interface FileProposalResult {
   approval: PendingApproval;
 }
 
+export interface FileMutationResult {
+  operation: FileOperation;
+  targetPath: string | null;
+}
+
 export interface PhotoExportResult {
   url: string;
   expiresAt: string | null;
@@ -1633,16 +1638,16 @@ export async function saveEditableText(input: {
   return (await response.json()) as SaveEditableTextResult;
 }
 
-export async function proposeFileOperation(input: {
+export async function applyFileMutation(input: {
   sessionId: string;
   rootId: string;
   storagePoolId: string;
-  operation: "mkdir" | "rename" | "trash" | "move" | "copy";
+  operation: "mkdir" | "rename" | "copy";
   sourcePath?: string;
   targetName?: string;
   targetPath?: string;
-}): Promise<FileProposalResult> {
-  const response = await fetch("/api/files/proposals", {
+}): Promise<FileMutationResult> {
+  const response = await fetch("/api/files/mutations", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -1650,7 +1655,7 @@ export async function proposeFileOperation(input: {
     body: JSON.stringify(input)
   });
   await ensureOk(response);
-  return (await response.json()) as FileProposalResult;
+  return (await response.json()) as FileMutationResult;
 }
 
 export async function createFileBatch(input: {

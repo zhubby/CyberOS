@@ -29,6 +29,16 @@ describe("i18n resources", () => {
     );
     expect(instance.t("preview.cannotPreview", { size: "8 KB" })).toBe("8 KB 无法内联预览。");
   });
+
+  it("describes file panel mutations as direct actions", () => {
+    const englishActions = Object.values(en.workspace.actions).join(" ").toLocaleLowerCase("en");
+    const chineseActions = Object.values(zhCN.workspace.actions).join(" ");
+
+    expect(englishActions).not.toContain("approval");
+    expect(englishActions).not.toContain("request ");
+    expect(chineseActions).not.toContain("审批");
+    expect(chineseActions).not.toContain("请求");
+  });
 });
 
 function flattenKeys(value: unknown, prefix = ""): string[] {
