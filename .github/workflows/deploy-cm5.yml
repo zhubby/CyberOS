@@ -323,34 +323,71 @@ jobs:
             layout=zos
             package_name=zos
             config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
+            migration_payload="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
+            migration_status="$(node - "$migration_payload" <<'NODE'
+          const payload = JSON.parse(process.argv[2]);
+          if (!["none", "pending", "committed"].includes(payload.status)) {
+            throw new Error(`unsupported migration state: ${process.argv[2]}`);
+          }
+          process.stdout.write(payload.status);
+          NODE
+            )"
+            if [ -d /zos/deploy/incoming ] && [ -w /zos/deploy/incoming ]; then
+              staging_channel=zos
+            else
+              staging_channel=legacy
+              [ -x /usr/local/sbin/sigmaos-deploy ] || {
+                echo "ZOS staging recovery requires the legacy deployment helper" >&2
+                exit 1
+              }
+              [ -d /var/lib/sigmaos-deploy/incoming ] && [ -w /var/lib/sigmaos-deploy/incoming ] || {
+                echo "ZOS staging recovery requires the writable legacy staging directory" >&2
+                exit 1
+              }
+              [ "$(systemctl is-enabled sigmaos-hostd.service 2>/dev/null || true)" = masked ] || {
+                echo "ZOS staging recovery requires legacy services to remain masked" >&2
+                exit 1
+              }
+            fi
           elif [ -f /etc/sigmaos/config.toml ] && [ -r /etc/sigmaos/config.toml ] && \
               [ "$(dpkg-query -W -f='${Status}' sigmaos 2>/dev/null || true)" = "install ok installed" ]; then
             layout=sigmaos
             package_name=sigmaos
             config_sha256="$(sha256sum /etc/sigmaos/config.toml | awk '{print $1}')"
+            migration_status=none
+            staging_channel=legacy
           else
             printf 'CM5 has neither a valid ZOS nor a migratable SigmaOS installation\n' >&2
             exit 1
           fi
           package_version="$(dpkg-query -W -f='${Version}' "$package_name")"
           package_status="$(dpkg-query -W -f='${Status}' "$package_name")"
-          printf '%s\n%s\n%s\n%s\n%s\n' "$layout" "$config_sha256" "$package_version" "$package_status" "$runtime_node_version"
+          printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+            "$layout" "$config_sha256" "$package_version" "$package_status" \
+            "$runtime_node_version" "$migration_status" "$staging_channel"
           REMOTE
           )
           [[ "${baseline[0]:-}" == zos || "${baseline[0]:-}" == sigmaos ]]
           [[ "${baseline[1]:-}" =~ ^[0-9a-f]{64}$ ]]
-          if [[ "${baseline[0]}" == sigmaos && "${{ github.event_name }}" != workflow_dispatch ]]; then
-            echo "Legacy migration requires an explicit workflow_dispatch with allow_legacy_migration=true" >&2
+          [[ "${baseline[5]:-}" == none || "${baseline[5]:-}" == pending || "${baseline[5]:-}" == committed ]]
+          [[ "${baseline[6]:-}" == zos || "${baseline[6]:-}" == legacy ]]
+          if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || "${baseline[6]}" == legacy ]] && \
+              [[ "${{ github.event_name }}" != workflow_dispatch ]]; then
+            echo "Legacy migration recovery requires an explicit workflow_dispatch with allow_legacy_migration=true" >&2
             exit 1
           fi
-          if [[ "${baseline[0]}" == sigmaos && "${{ inputs.allow_legacy_migration }}" != true ]]; then
-            echo "Legacy migration was not explicitly authorized" >&2
+          if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || "${baseline[6]}" == legacy ]] && \
+              [[ "${{ inputs.allow_legacy_migration }}" != true ]]; then
+            echo "Legacy migration recovery was not explicitly authorized" >&2
             exit 1
           fi
           printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-layout"
           printf '%s\n' "${baseline[1]}" > "$RUNNER_TEMP/cm5-config.sha256"
-          printf 'CM5 upgrade baseline: layout=%s version=%s status=%s node=%s\n' \
-            "${baseline[0]}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}" "${baseline[4]:-unknown}"
+          printf '%s\n' "${baseline[5]}" > "$RUNNER_TEMP/cm5-migration-status"
+          printf '%s\n' "${baseline[6]}" > "$RUNNER_TEMP/cm5-staging-channel"
+          printf 'CM5 upgrade baseline: layout=%s version=%s status=%s node=%s migration=%s staging=%s\n' \
+            "${baseline[0]}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}" \
+            "${baseline[4]:-unknown}" "${baseline[5]}" "${baseline[6]}"
 
       - name: Stage and deploy release on CM5
         if: inputs.verify_only != true
@@ -373,6 +410,8 @@ jobs:
           )
           release_dir="$RUNNER_TEMP/cm5-release"
           layout="$(<"$RUNNER_TEMP/cm5-layout")"
+          migration_status="$(<"$RUNNER_TEMP/cm5-migration-status")"
+          staging_channel="$(<"$RUNNER_TEMP/cm5-staging-channel")"
 
           stage_release() {
             local incoming_dir=$1
@@ -531,7 +570,7 @@ jobs:
           REMOTE
           }
 
-          if [[ "$layout" == sigmaos ]]; then
+          if [[ "$staging_channel" == legacy ]]; then
             legacy_manifest="$release_dir/legacy-release-manifest.json"
             jq --arg asset "sigmaos_${RELEASE_VERSION}_arm64.deb" '.asset = $asset' \
               "$release_dir/release-manifest.json" > "$legacy_manifest"
@@ -541,24 +580,34 @@ jobs:
             ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
               "printf 'N\\n' | sudo -n /usr/local/sbin/sigmaos-deploy" || legacy_status=$?
             if ((legacy_status == 0)); then
-              echo "Legacy helper unexpectedly reported a completed ZOS migration" >&2
+              echo "Legacy helper unexpectedly reported completed ZOS activation" >&2
               exit 1
             fi
 
             expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
             ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-              "$RELEASE_VERSION" "$expected_config_sha256" <<'REMOTE'
+              "$RELEASE_VERSION" "$expected_config_sha256" "$layout" "$migration_status" <<'REMOTE'
           set -eu
           expected_version=$1
           expected_config_sha256=$2
+          previous_layout=$3
+          expected_migration_status=$4
+          if [ "$previous_layout" = sigmaos ]; then
+            expected_migration_status=pending
+          fi
           [ "$(dpkg-query -W -f='${Status}' zos)" = "install ok installed" ]
           [ "$(dpkg-query -W -f='${Version}' zos)" = "$expected_version" ]
           [ -x /usr/local/sbin/zos-deploy ]
+          if [ "$previous_layout" = zos ]; then
+            actual_config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
+            [ "$actual_config_sha256" = "$expected_config_sha256" ]
+          fi
           migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
-          node - "$migration_status" "$expected_config_sha256" <<'NODE'
-          const [payload, expectedConfigSha256] = process.argv.slice(2);
+          node - "$migration_status" "$expected_migration_status" "$expected_config_sha256" <<'NODE'
+          const [payload, expectedStatus, expectedConfigSha256] = process.argv.slice(2);
           const status = JSON.parse(payload);
-          if (status.status !== "pending" || status.sourceConfigSha256 !== expectedConfigSha256) {
+          if (status.status !== expectedStatus ||
+              (expectedStatus === "pending" && status.sourceConfigSha256 !== expectedConfigSha256)) {
             throw new Error(`unexpected migration state: ${payload}`);
           }
           NODE
@@ -590,14 +639,17 @@ jobs:
             -o StrictHostKeyChecking=accept-new
           )
           layout="$(<"$RUNNER_TEMP/cm5-layout")"
+          previous_migration_status="$(<"$RUNNER_TEMP/cm5-migration-status")"
           expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_config_sha256" "$layout" <<'REMOTE'
+            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_config_sha256" \
+            "$layout" "$previous_migration_status" <<'REMOTE'
           set -eu
           expected_version=$1
           expected_commit_sha=$2
           expected_config_sha256=$3
           previous_layout=$4
+          previous_migration_status=$5
           check_dir="$(mktemp -d /tmp/zos-deploy-check.XXXXXX)"
           trap 'rm -rf "$check_dir"' EXIT HUP INT TERM
 
@@ -605,16 +657,18 @@ jobs:
           installed_version="$(dpkg-query -W -f='${Version}' zos)"
           [ "$installed_status" = "install ok installed" ]
           [ "$installed_version" = "$expected_version" ]
-          [ -f /zos/config/config.toml ] && [ -r /zos/config/config.toml ]
           actual_config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
           if [ "$previous_layout" = zos ]; then
             [ "$actual_config_sha256" = "$expected_config_sha256" ]
-          else
+          fi
+          if [ "$previous_layout" = sigmaos ] || [ "$previous_migration_status" = pending ]; then
             migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
             node - "$migration_status" "$expected_config_sha256" <<'NODE'
           const [payload, expectedConfigSha256] = process.argv.slice(2);
           const status = JSON.parse(payload);
-          if (status.status !== "committed" || status.sourceConfigSha256 !== expectedConfigSha256) {
+          if (status.status !== "committed" || status.sourceConfigSha256 !== expectedConfigSha256 ||
+              typeof status.backupPath !== "string" ||
+              !status.backupPath.startsWith("/zos/system-backups/legacy-sigmaos-")) {
             throw new Error(`unexpected committed migration state: ${payload}`);
           }
           NODE

@@ -16,7 +16,8 @@ if [ "$1" = "configure" ]; then
       --home /zos/home/share zos-share
   fi
 
-  install -d -o root -g zos -m 0750 /zos /zos/config
+  install -d -o root -g zos -m 0751 /zos
+  install -d -o root -g zos -m 0750 /zos/config
   install -d -o zos -g zos -m 0750 \
     /zos/state /zos/state/trash /zos/state/reports \
     /zos/state/pi-sessions /zos/state/pi-agent /zos/state/photostaff \

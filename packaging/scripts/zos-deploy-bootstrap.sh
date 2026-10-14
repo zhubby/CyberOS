@@ -42,6 +42,14 @@ command -v passwd >/dev/null 2>&1 || {
   printf 'zos-deploy-bootstrap: packaged deployment helper is missing\n' >&2
   exit 1
 }
+[ -d /zos ] && [ ! -L /zos ] || {
+  printf 'zos-deploy-bootstrap: /zos must be a real directory\n' >&2
+  exit 1
+}
+
+# Permit the unprivileged deployment identity to traverse to its private
+# staging directory without granting directory listing access to /zos.
+chmod 0751 /zos
 
 install -d -o root -g root -m 0755 /usr/local/sbin
 ln -sfn /usr/lib/zos/scripts/zos-deploy /usr/local/sbin/zos-deploy

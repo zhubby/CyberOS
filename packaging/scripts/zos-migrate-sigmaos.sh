@@ -628,7 +628,8 @@ EOF
   chown root:root "$POINTER_PATH"
   chmod 0600 "$POINTER_PATH"
   chown root:zos /zos /zos/config /zos/config/config.toml
-  chmod 0750 /zos /zos/config
+  chmod 0751 /zos
+  chmod 0750 /zos/config
   chmod 0640 /zos/config/config.toml
 
   log "masking legacy services until ZOS verification commits the migration"
