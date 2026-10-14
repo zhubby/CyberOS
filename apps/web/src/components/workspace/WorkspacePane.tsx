@@ -1,4 +1,4 @@
-import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
@@ -10,6 +10,7 @@ import {
   Container,
   Copy,
   Download,
+  Ellipsis,
   Files,
   FolderInput,
   FolderPlus,
@@ -20,8 +21,7 @@ import {
   MonitorPlay,
   MonitorCog,
   Network,
-  PanelRightClose,
-  PanelRightOpen,
+  LoaderCircle,
   PencilLine,
   RefreshCw,
   Search,
@@ -33,13 +33,13 @@ import {
   Upload,
   type LucideIcon
 } from "lucide-react";
-import type { DockerOperation, FileBatch, FileEntry, FileListing, FileMeta, FileOperation, IndexSearchCategory, IndexSearchRequest, IndexSearchResult, NasRoot, PendingApproval, VodPlayerCommand, VodPlayerStatus, TextPreview, VmOperation } from "../../api.js";
+import { createFileExport, getFileDownloadUrl, type DockerOperation, type FileBatch, type FileEntry, type FileListing, type FileMeta, type FileOperation, type IndexSearchCategory, type IndexSearchRequest, type IndexSearchResult, type NasRoot, type PendingApproval, type VodPlayerCommand, type VodPlayerStatus, type TextPreview, type VmOperation } from "../../api.js";
 import { describeFileVisual, isHiddenName } from "../../file-type-utils.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { sortEntries, type FileSortDirection, type FileSortKey, type FileSortState } from "../../lib/file-listing-sort.js";
 import { formatFileModifiedAt } from "../../lib/format.js";
-import { isInvalidFileMoveDestination, reconcileFileSelection, updateFileSelection } from "../../lib/file-selection.js";
+import { fileDownloadMode, isInvalidFileMoveDestination, reconcileFileSelection, updateFileSelection } from "../../lib/file-selection.js";
 import {
   readStoredWorkspacePanel,
   writeStoredWorkspacePanel,
@@ -47,7 +47,6 @@ import {
 } from "../../lib/workspace-panel-settings.js";
 import { ActivityMenu } from "../activity/ActivityMenu.js";
 import { FileTypeIcon } from "../file/FileTypeIcon.js";
-import { PreviewContent, previewIcon } from "../preview/PreviewContent.js";
 import { VodPlayerControls } from "../preview/VodPlayerControls.js";
 import {
   collectUploadSourcesFromDataTransfer,
@@ -65,6 +64,7 @@ import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeade
 import type { CodeFontSettings } from "../../lib/editor-settings.js";
 import type { ResolvedTheme } from "../../lib/theme-settings.js";
 import { StorageFilePickerDialog } from "./StorageFilePickerDialog.js";
+import { FilePreviewDialog } from "./FilePreviewDialog.js";
 
 const EPOCH_DATE = new Date(0).toISOString();
 
@@ -432,12 +432,10 @@ export function WorkspacePane({
   previewError,
   textPreview,
   blobUrl,
-  downloadUrl,
   videoUrl,
   vodPlayerStatus,
   vodPlayerBusy,
   previewFileSizeLimitBytes,
-  previewCollapsed,
   searchQuery,
   searchOptions,
   searchResults,
@@ -486,7 +484,7 @@ export function WorkspacePane({
   onNotifyError,
   onNotifySuccess,
   onNotifyWarning,
-  onTogglePreviewCollapsed,
+  onClosePreview,
   onRollback
 }: {
   active: boolean;
@@ -507,12 +505,10 @@ export function WorkspacePane({
   previewError: string | null;
   textPreview: TextPreview | null;
   blobUrl: string;
-  downloadUrl: string;
   videoUrl: string;
   vodPlayerStatus: VodPlayerStatus | null;
   vodPlayerBusy: boolean;
   previewFileSizeLimitBytes: number;
-  previewCollapsed: boolean;
   searchQuery: string;
   searchOptions: WorkspaceSearchOptions;
   searchResults: IndexSearchResult[] | null;
@@ -566,7 +562,7 @@ export function WorkspacePane({
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
   onNotifyWarning: (message: string | null) => void;
-  onTogglePreviewCollapsed: () => void;
+  onClosePreview: () => void;
   onRollback: (operation: FileOperation) => void;
 }) {
   const { t } = useTranslation();
@@ -580,6 +576,8 @@ export function WorkspacePane({
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
   const [selectionAnchorPath, setSelectionAnchorPath] = useState<string | null>(null);
   const [desktopMultiSelect, setDesktopMultiSelect] = useState(false);
+  const [downloadKey, setDownloadKey] = useState<string | null>(null);
+  const [rowActionMenu, setRowActionMenu] = useState<{ entry: FileEntry; top: number; right: number } | null>(null);
   const [transferTargetDirectory, setTransferTargetDirectory] = useState(currentPath);
   const [operationSubmitting, setOperationSubmitting] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkspacePanelId>(() => readStoredWorkspacePanel());
@@ -591,6 +589,9 @@ export function WorkspacePane({
   const [isDropActive, setIsDropActive] = useState(false);
   const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
   const folderUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const rowActionMenuRef = useRef<HTMLDivElement | null>(null);
+  const rowActionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const previewScopeRef = useRef(`${selectedRootId}\0${selectedStoragePoolId}\0${currentPath}`);
   const dragDepthRef = useRef(0);
   const selectedStoragePool = storagePools.find((pool) => pool.id === selectedStoragePoolId);
   const hasStoragePool = Boolean(selectedStoragePool);
@@ -647,7 +648,6 @@ export function WorkspacePane({
   const isPreviewLoading = previewLoading || (hasPreview && !previewMeta && !previewError);
   const canEditPreview = previewMeta?.kind === "file" && previewMeta.previewKind === "text";
   const canExtractPreview = previewMeta?.kind === "file" && isArchiveFileName(previewMeta.name);
-  const isPreviewCollapsed = hasPreview && previewCollapsed;
   const trimmedFolderName = folderName.trim();
   const folderNameInvalid =
     !trimmedFolderName ||
@@ -752,13 +752,74 @@ export function WorkspacePane({
   useEffect(() => {
     setSelectedPaths(new Set());
     setSelectionAnchorPath(null);
+    setRowActionMenu(null);
   }, [activePanel, currentPath, searchOptions, searchQuery, selectedRootId, selectedStoragePoolId]);
+
+  useEffect(() => {
+    const nextScope = `${selectedRootId}\0${selectedStoragePoolId}\0${currentPath}`;
+    if (previewScopeRef.current !== nextScope) {
+      previewScopeRef.current = nextScope;
+      onClosePreview();
+    }
+  }, [currentPath, onClosePreview, selectedRootId, selectedStoragePoolId]);
 
   useEffect(() => {
     const availablePaths = new Set(entries.map((entry) => entry.path));
     setSelectedPaths((current) => reconcileFileSelection(current, availablePaths));
     setSelectionAnchorPath((current) => current && availablePaths.has(current) ? current : null);
   }, [entries]);
+
+  useEffect(() => {
+    if (activePanel !== "files" || selectedPaths.size === 0) return;
+    const clearSelectionOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.key !== "Escape"
+        || event.defaultPrevented
+        || document.querySelector('[role="dialog"], [role="menu"]')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setSelectedPaths(new Set());
+      setSelectionAnchorPath(null);
+    };
+    document.addEventListener("keydown", clearSelectionOnEscape);
+    return () => document.removeEventListener("keydown", clearSelectionOnEscape);
+  }, [activePanel, selectedPaths.size]);
+
+  useEffect(() => {
+    if (selectedFilePath && !fileListingLoading && !entries.some((entry) => entry.path === selectedFilePath)) {
+      onClosePreview();
+    }
+  }, [entries, fileListingLoading, onClosePreview, selectedFilePath]);
+
+  useEffect(() => {
+    if (!rowActionMenu) return;
+    const frame = window.requestAnimationFrame(() => {
+      rowActionMenuRef.current?.querySelector<HTMLButtonElement>('button[role="menuitem"]')?.focus();
+    });
+    const closeOnPointerDown = (event: globalThis.PointerEvent) => {
+      if (!rowActionMenuRef.current?.contains(event.target as Node)) closeRowActionMenu(false);
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRowActionMenu(true);
+      }
+    };
+    const closeOnViewportChange = () => closeRowActionMenu(false);
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("scroll", closeOnViewportChange, true);
+    window.addEventListener("resize", closeOnViewportChange);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("scroll", closeOnViewportChange, true);
+      window.removeEventListener("resize", closeOnViewportChange);
+    };
+  }, [rowActionMenu]);
 
   useEffect(() => {
     if (filesPanelActivationId > 0) {
@@ -833,6 +894,68 @@ export function WorkspacePane({
     setDeleteState({ entries: selectedEntries });
   }
 
+  function closeRowActionMenu(restoreFocus: boolean) {
+    setRowActionMenu(null);
+    if (restoreFocus && rowActionTriggerRef.current?.isConnected) {
+      window.requestAnimationFrame(() => rowActionTriggerRef.current?.focus());
+    }
+  }
+
+  function openRowActionMenu(event: MouseEvent<HTMLButtonElement>, entry: FileEntry) {
+    event.stopPropagation();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const menuHeight = 224;
+    const top = window.innerHeight - bounds.bottom >= menuHeight
+      ? bounds.bottom + 5
+      : Math.max(8, bounds.top - menuHeight - 5);
+    rowActionTriggerRef.current = event.currentTarget;
+    setRowActionMenu({ entry, top, right: Math.max(8, window.innerWidth - bounds.right) });
+  }
+
+  function handleRowActionMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')];
+    if (!items.length) return;
+    event.preventDefault();
+    const currentIndex = items.findIndex((item) => item === document.activeElement);
+    if (event.key === "Home") {
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      items.at(-1)?.focus();
+    } else {
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      const nextIndex = currentIndex < 0
+        ? direction > 0 ? 0 : items.length - 1
+        : (currentIndex + direction + items.length) % items.length;
+      items[nextIndex]?.focus();
+    }
+  }
+
+  async function downloadEntries(downloadEntries: FileEntry[]) {
+    if (!downloadEntries.length || downloadKey) return;
+    const key = downloadEntries.map((entry) => entry.path).join("\0");
+    if (fileDownloadMode(downloadEntries) === "direct") {
+      const entry = downloadEntries[0]!;
+      triggerBrowserDownload(getFileDownloadUrl(selectedRootId, entry.path, selectedStoragePoolId), entry.name);
+      return;
+    }
+
+    setDownloadKey(key);
+    try {
+      const result = await createFileExport({
+        rootId: selectedRootId,
+        storagePoolId: selectedStoragePoolId,
+        sourcePaths: downloadEntries.map((entry) => entry.path)
+      });
+      triggerBrowserDownload(result.url, result.fileName);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      onNotifyError(`${t("workspace.batch.downloadFailed")} ${detail}`);
+    } finally {
+      setDownloadKey(null);
+    }
+  }
+
   function openEntryFromRow(entry: FileEntry) {
     if (operationSubmitting || !entry.isSafe) {
       return;
@@ -858,7 +981,14 @@ export function WorkspacePane({
       updateBatchSelection(entry, "range");
       return;
     }
+    event.currentTarget.focus({ preventScroll: true });
     openEntryFromRow(entry);
+  }
+
+  function handleRowPointerDown(event: ReactPointerEvent<HTMLDivElement>, entry: FileEntry) {
+    if (!desktopMultiSelect || !entry.isSafe || !(event.metaKey || event.ctrlKey || event.shiftKey)) return;
+    event.preventDefault();
+    event.currentTarget.focus({ preventScroll: true });
   }
 
   function selectPanel(panel: WorkspacePanelId) {
@@ -866,6 +996,8 @@ export function WorkspacePane({
       setTerminalMounted(true);
     }
     clearBatchSelection();
+    setRowActionMenu(null);
+    if (panel !== "files") onClosePreview();
     setActivePanel(panel);
   }
 
@@ -883,19 +1015,6 @@ export function WorkspacePane({
     }
     event.preventDefault();
     openEntryFromRow(entry);
-  }
-
-  function handleWorkspaceStageKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (
-      activePanel !== "files"
-      || event.key !== "Escape"
-      || selectedPaths.size === 0
-      || (event.target instanceof HTMLElement && event.target.closest('[role="dialog"], [role="menu"]'))
-    ) {
-      return;
-    }
-    event.preventDefault();
-    clearBatchSelection();
   }
 
   function triggerFileUpload() {
@@ -1104,7 +1223,7 @@ export function WorkspacePane({
         onChange={handleUploadFolderChange}
       />
       <div className="workspace-shell">
-        <div className="workspace-stage" data-panel={activePanel} onKeyDownCapture={handleWorkspaceStageKeyDown}>
+        <div className="workspace-stage" data-panel={activePanel}>
           {activePanel === "files" ? (
             <>
               <PanelHeader
@@ -1215,6 +1334,17 @@ export function WorkspacePane({
                       <button
                         type="button"
                         className="file-batch-action"
+                        onClick={() => void downloadEntries(selectedEntries)}
+                        disabled={Boolean(downloadKey)}
+                        aria-busy={Boolean(downloadKey) || undefined}
+                        title={downloadKey ? t("workspace.batch.preparingDownload") : t("workspace.batch.download")}
+                        aria-label={downloadKey ? t("workspace.batch.preparingDownload") : t("workspace.batch.download")}
+                      >
+                        {downloadKey ? <LoaderCircle className="spin" aria-hidden="true" size={16} /> : <Download aria-hidden="true" size={16} />}
+                      </button>
+                      <button
+                        type="button"
+                        className="file-batch-action"
                         onClick={openBatchMoveDialog}
                         disabled={operationSubmitting}
                         title={t("workspace.batch.move")}
@@ -1237,7 +1367,7 @@ export function WorkspacePane({
               </div>
 
               <div
-                className={`workspace-grid${hasPreview ? " has-preview" : ""}${isPreviewCollapsed ? " is-preview-collapsed" : ""}${isDropActive ? " is-drop-active" : ""}`}
+                className={`workspace-grid${isDropActive ? " is-drop-active" : ""}`}
                 onDragEnter={handleGridDragEnter}
                 onDragOver={handleGridDragOver}
                 onDragLeave={handleGridDragLeave}
@@ -1292,11 +1422,25 @@ export function WorkspacePane({
                   </header>
 
                   {fileListingLoading ? (
-                    <div className="file-list" role="table" aria-label={t("workspace.table.files")}>
+                    <div
+                      className="file-list"
+                      role="table"
+                      aria-label={t("workspace.table.files")}
+                      onClick={(event) => {
+                        if (event.target === event.currentTarget) clearBatchSelection();
+                      }}
+                    >
                       <FileListSkeleton />
                     </div>
                   ) : hasStoragePool ? (
-                    <div className="file-list" role="table" aria-label={t("workspace.table.files")}>
+                    <div
+                      className="file-list"
+                      role="table"
+                      aria-label={t("workspace.table.files")}
+                      onClick={(event) => {
+                        if (event.target === event.currentTarget) clearBatchSelection();
+                      }}
+                    >
                     <div className="file-row file-row-head" role="row">
                       <span role="columnheader" aria-sort={fileSortAria(fileSort, "name")}>
                         {t("workspace.table.name")}
@@ -1348,6 +1492,7 @@ export function WorkspacePane({
                           ]
                             .filter(Boolean)
                             .join(" ")}
+                          onPointerDown={(event) => handleRowPointerDown(event, entry)}
                           onClick={(event) => handleRowClick(event, entry)}
                           onKeyDown={(event) => handleRowKeyDown(event, entry)}
                           tabIndex={entry.isSafe ? 0 : -1}
@@ -1381,56 +1526,92 @@ export function WorkspacePane({
                           <span className="file-row-actions" role="cell" aria-label={t("workspace.table.actions")}>
                             <button
                               type="button"
-                              className="file-action-button file-action-button-send"
+                              className="file-action-button file-action-button-download"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                onInsertWorkspacePath(entry.path);
+                                void downloadEntries([entry]);
                               }}
-                              disabled={!entry.isSafe}
-                              title={t("workspace.actions.sendPathToAgent")}
-                              aria-label={t("workspace.actions.sendPathToAgentEntry", { name: entry.name })}
+                              disabled={!entry.isSafe || Boolean(downloadKey)}
+                              aria-busy={downloadKey === entry.path || undefined}
+                              title={downloadKey === entry.path
+                                ? t("workspace.batch.preparingDownload")
+                                : entry.kind === "directory"
+                                  ? t("workspace.actions.downloadFolder")
+                                  : t("workspace.downloadFile")}
+                              aria-label={downloadKey === entry.path
+                                ? t("workspace.batch.preparingDownload")
+                                : t("workspace.actions.downloadEntry", { name: entry.name })}
                             >
-                              <MessageSquarePlus aria-hidden="true" size={14} />
+                              {downloadKey === entry.path
+                                ? <LoaderCircle className="spin" aria-hidden="true" size={14} />
+                                : <Download aria-hidden="true" size={14} />}
                             </button>
+                            <span className="file-row-expanded-actions">
+                              <button
+                                type="button"
+                                className="file-action-button file-action-button-send"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onInsertWorkspacePath(entry.path);
+                                }}
+                                disabled={!entry.isSafe}
+                                title={t("workspace.actions.sendPathToAgent")}
+                                aria-label={t("workspace.actions.sendPathToAgentEntry", { name: entry.name })}
+                              >
+                                <MessageSquarePlus aria-hidden="true" size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="file-action-button"
+                                onClick={(event) => openTransferDialog(event, entry, "move")}
+                                disabled={!entry.isSafe}
+                                title={t("workspace.actions.move")}
+                                aria-label={t("workspace.actions.moveEntry", { name: entry.name })}
+                              >
+                                <FolderInput aria-hidden="true" size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="file-action-button"
+                                onClick={(event) => openTransferDialog(event, entry, "copy")}
+                                disabled={!entry.isSafe}
+                                title={t("workspace.actions.copy")}
+                                aria-label={t("workspace.actions.copyEntry", { name: entry.name })}
+                              >
+                                <Copy aria-hidden="true" size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="file-action-button"
+                                onClick={(event) => openRenameDialog(event, entry)}
+                                disabled={!entry.isSafe}
+                                title={t("workspace.actions.rename")}
+                                aria-label={t("workspace.actions.renameEntry", { name: entry.name })}
+                              >
+                                <PencilLine aria-hidden="true" size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="file-action-button is-danger"
+                                onClick={(event) => openDeleteDialog(event, entry)}
+                                disabled={!entry.isSafe}
+                                title={t("workspace.actions.delete")}
+                                aria-label={t("workspace.actions.deleteEntry", { name: entry.name })}
+                              >
+                                <Trash2 aria-hidden="true" size={14} />
+                              </button>
+                            </span>
                             <button
                               type="button"
-                              className="file-action-button"
-                              onClick={(event) => openTransferDialog(event, entry, "move")}
+                              className="file-action-button file-action-button-more"
+                              onClick={(event) => openRowActionMenu(event, entry)}
                               disabled={!entry.isSafe}
-                              title={t("workspace.actions.move")}
-                              aria-label={t("workspace.actions.moveEntry", { name: entry.name })}
+                              title={t("workspace.actions.more")}
+                              aria-label={t("workspace.actions.moreEntry", { name: entry.name })}
+                              aria-haspopup="menu"
+                              aria-expanded={rowActionMenu?.entry.path === entry.path}
                             >
-                              <FolderInput aria-hidden="true" size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              className="file-action-button"
-                              onClick={(event) => openTransferDialog(event, entry, "copy")}
-                              disabled={!entry.isSafe}
-                              title={t("workspace.actions.copy")}
-                              aria-label={t("workspace.actions.copyEntry", { name: entry.name })}
-                            >
-                              <Copy aria-hidden="true" size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              className="file-action-button"
-                              onClick={(event) => openRenameDialog(event, entry)}
-                              disabled={!entry.isSafe}
-                              title={t("workspace.actions.rename")}
-                              aria-label={t("workspace.actions.renameEntry", { name: entry.name })}
-                            >
-                              <PencilLine aria-hidden="true" size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              className="file-action-button is-danger"
-                              onClick={(event) => openDeleteDialog(event, entry)}
-                              disabled={!entry.isSafe}
-                              title={t("workspace.actions.delete")}
-                              aria-label={t("workspace.actions.deleteEntry", { name: entry.name })}
-                            >
-                              <Trash2 aria-hidden="true" size={14} />
+                              <Ellipsis aria-hidden="true" size={15} />
                             </button>
                           </span>
                           <span role="cell">{displaySize}</span>
@@ -1460,116 +1641,64 @@ export function WorkspacePane({
                   )}
                 </section>
 
-                <section
-                  className={`preview-pane${hasPreview ? " is-open" : " is-collapsed"}${isPreviewCollapsed ? " is-manual-collapsed" : ""}`}
-                  aria-label={t("workspace.preview")}
-                  aria-hidden={!hasPreview}
-                >
-                  {hasPreview && isPreviewCollapsed ? (
-                    <button
-                      type="button"
-                      className="preview-expand-button"
-                      onClick={onTogglePreviewCollapsed}
-                      title={t("workspace.expandPreview")}
-                      aria-label={t("workspace.expandPreview")}
-                      aria-expanded="false"
-                    >
-                      <PanelRightOpen aria-hidden="true" size={17} />
-                      <span>{previewTitle || t("workspace.preview")}</span>
-                    </button>
-                  ) : hasPreview ? (
-                    <>
-                      <div className="panel-heading">
-                        <div>
-                          <span className="eyebrow">{t("workspace.preview")}</span>
-                          <div className="preview-title-row">
-                            <h2>{previewTitle || t("workspace.selectFile")}</h2>
-                          </div>
-                        </div>
-                        <div className="preview-heading-actions">
-                          {previewMeta ? (
-                            <span className="preview-kind">
-                              {previewIcon(previewMeta.previewKind)}
-                              {t(`preview.kind.${previewMeta.previewKind}`)}
-                            </span>
-                          ) : null}
-                          {previewMeta?.previewKind === "video" ? (
-                            <button
-                              type="button"
-                              className="preview-tool-button"
-                              onClick={onPlayToVodPlayer}
-                              disabled={vodPlayerBusy}
-                              aria-busy={vodPlayerBusy || undefined}
-                              title={t("preview.vodPlayer.play")}
-                              aria-label={t("preview.vodPlayer.play")}
-                            >
-                              <MonitorPlay aria-hidden="true" size={14} />
-                            </button>
-                          ) : null}
-                          {canEditPreview && previewMeta ? (
-                            <button
-                              type="button"
-                              className="preview-tool-button"
-                              onClick={() => onOpenEditor(previewMeta)}
-                              title={t("editor.open")}
-                              aria-label={t("editor.open")}
-                            >
-                              <PencilLine aria-hidden="true" size={14} />
-                            </button>
-                          ) : null}
-                          {canExtractPreview && previewMeta ? (
-                            <button
-                              type="button"
-                              className="preview-tool-button"
-                              onClick={() => void submitExtract(previewMeta)}
-                              disabled={operationSubmitting}
-                              title={t("workspace.actions.extract")}
-                              aria-label={t("workspace.actions.extractEntry", { name: previewMeta.name })}
-                            >
-                              <ArchiveRestore aria-hidden="true" size={14} />
-                            </button>
-                          ) : null}
-                          <a
-                            className="preview-tool-button"
-                            href={downloadUrl}
-                            download={previewTitle || undefined}
-                            title={t("workspace.downloadFile")}
-                            aria-label={t("workspace.downloadFile")}
-                          >
-                            <Download aria-hidden="true" size={14} />
-                          </a>
-                          <button
-                            type="button"
-                            className="preview-tool-button"
-                            onClick={onTogglePreviewCollapsed}
-                            title={t("workspace.collapsePreview")}
-                            aria-label={t("workspace.collapsePreview")}
-                            aria-expanded="true"
-                          >
-                            <PanelRightClose aria-hidden="true" size={14} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <PreviewContent
-                        blobUrl={blobUrl}
-                        videoUrl={videoUrl}
-                        rootId={selectedRootId}
-                        loading={isPreviewLoading}
-                        meta={previewMeta}
-                        error={previewError}
-                        textPreview={textPreview}
-                        previewFileSizeLimitBytes={previewFileSizeLimitBytes}
-                        locale={locale}
-                        onOpenWorkspacePath={onOpenWorkspacePath}
-                      />
-                      {vodPlayerStatus ? (
-                        <VodPlayerControls status={vodPlayerStatus} busy={vodPlayerBusy} onCommand={onVodPlayerCommand} onRetry={onRetryVodPlayer} />
-                      ) : null}
-                    </>
-                  ) : null}
-                </section>
               </div>
+              {hasPreview ? (
+                <FilePreviewDialog
+                  title={previewTitle}
+                  meta={previewMeta}
+                  loading={isPreviewLoading}
+                  error={previewError}
+                  textPreview={textPreview}
+                  blobUrl={blobUrl}
+                  videoUrl={videoUrl}
+                  rootId={selectedRootId}
+                  previewFileSizeLimitBytes={previewFileSizeLimitBytes}
+                  locale={locale}
+                  onOpenWorkspacePath={onOpenWorkspacePath}
+                  onClose={onClosePreview}
+                  actions={<>
+                    {previewMeta?.previewKind === "video" ? (
+                      <button
+                        type="button"
+                        className="preview-tool-button"
+                        onClick={onPlayToVodPlayer}
+                        disabled={vodPlayerBusy}
+                        aria-busy={vodPlayerBusy || undefined}
+                        title={t("preview.vodPlayer.play")}
+                        aria-label={t("preview.vodPlayer.play")}
+                      >
+                        <MonitorPlay aria-hidden="true" size={14} />
+                      </button>
+                    ) : null}
+                    {canEditPreview && previewMeta ? (
+                      <button
+                        type="button"
+                        className="preview-tool-button"
+                        onClick={() => onOpenEditor(previewMeta)}
+                        title={t("editor.open")}
+                        aria-label={t("editor.open")}
+                      >
+                        <PencilLine aria-hidden="true" size={14} />
+                      </button>
+                    ) : null}
+                    {canExtractPreview && previewMeta ? (
+                      <button
+                        type="button"
+                        className="preview-tool-button"
+                        onClick={() => void submitExtract(previewMeta)}
+                        disabled={operationSubmitting}
+                        title={t("workspace.actions.extract")}
+                        aria-label={t("workspace.actions.extractEntry", { name: previewMeta.name })}
+                      >
+                        <ArchiveRestore aria-hidden="true" size={14} />
+                      </button>
+                    ) : null}
+                  </>}
+                  footer={vodPlayerStatus ? (
+                    <VodPlayerControls status={vodPlayerStatus} busy={vodPlayerBusy} onCommand={onVodPlayerCommand} onRetry={onRetryVodPlayer} />
+                  ) : null}
+                />
+              ) : null}
             </>
           ) : activePanel === "downloads" ? (
             <HttpDownloaderPanel
@@ -1646,6 +1775,75 @@ export function WorkspacePane({
           })}
         </nav>
       </div>
+
+      {rowActionMenu ? (
+        <div
+          ref={rowActionMenuRef}
+          className="file-row-action-menu"
+          role="menu"
+          aria-label={t("workspace.actions.moreEntry", { name: rowActionMenu.entry.name })}
+          style={{ top: rowActionMenu.top, right: rowActionMenu.right }}
+          onKeyDown={handleRowActionMenuKeyDown}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => {
+              event.stopPropagation();
+              onInsertWorkspacePath(rowActionMenu.entry.path);
+              closeRowActionMenu(true);
+            }}
+          >
+            <MessageSquarePlus aria-hidden="true" size={15} />
+            <span>{t("workspace.actions.sendPathToAgent")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => {
+              openTransferDialog(event, rowActionMenu.entry, "move");
+              closeRowActionMenu(false);
+            }}
+          >
+            <FolderInput aria-hidden="true" size={15} />
+            <span>{t("workspace.actions.move")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => {
+              openTransferDialog(event, rowActionMenu.entry, "copy");
+              closeRowActionMenu(false);
+            }}
+          >
+            <Copy aria-hidden="true" size={15} />
+            <span>{t("workspace.actions.copy")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => {
+              openRenameDialog(event, rowActionMenu.entry);
+              closeRowActionMenu(false);
+            }}
+          >
+            <PencilLine aria-hidden="true" size={15} />
+            <span>{t("workspace.actions.rename")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="is-danger"
+            onClick={(event) => {
+              openDeleteDialog(event, rowActionMenu.entry);
+              closeRowActionMenu(false);
+            }}
+          >
+            <Trash2 aria-hidden="true" size={15} />
+            <span>{t("workspace.actions.delete")}</span>
+          </button>
+        </div>
+      ) : null}
 
       {createFolderOpen ? (
         <div className="file-action-backdrop" role="presentation">
@@ -1822,6 +2020,15 @@ export function WorkspacePane({
 
 function isArchiveFileName(name: string): boolean {
   return /\.(?:zip|tar|gz|tgz|rar)$/iu.test(name);
+}
+
+function triggerBrowserDownload(url: string, fileName: string): void {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 function poolRelativePath(pathname: string, poolPath: string): string {

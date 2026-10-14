@@ -456,6 +456,12 @@ export interface FileMutationResult {
   targetPath: string | null;
 }
 
+export interface FileExportResult {
+  url: string;
+  expiresAt: string;
+  fileName: string;
+}
+
 export interface PhotoExportResult {
   url: string;
   expiresAt: string | null;
@@ -1789,6 +1795,16 @@ export function getFileDownloadUrl(rootId: string, currentPath: string, storageP
     download: "1"
   });
   return `/api/files/blob?${params.toString()}`;
+}
+
+export async function createFileExport(input: {
+  rootId: string;
+  storagePoolId: string;
+  sourcePaths: string[];
+}): Promise<FileExportResult> {
+  const response = await fetch("/api/files/exports", jsonRequest("POST", input));
+  await ensureOk(response);
+  return (await response.json()) as FileExportResult;
 }
 
 export function getFileVideoUrl(rootId: string, currentPath: string, storagePoolId: string): string {

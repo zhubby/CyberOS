@@ -4792,6 +4792,205 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("streams folders and mixed selections as one-time zip exports", async () => {
+    const folderName = "报告";
+    await mkdir(path.join(rootDir, folderName));
+    await mkdir(path.join(rootDir, folderName, "empty"));
+    await writeFile(path.join(rootDir, folderName, ".hidden.txt"), "hidden");
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        sourcePaths: [folderName, "hello.txt"]
+      }
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      fileName: "test-pool-selection.zip"
+    });
+    expect(created.json().url).toMatch(/^\/api\/files\/exports\//u);
+    expect(created.json().expiresAt).toMatch(/Z$/u);
+
+    const archive = await server.inject({ method: "GET", url: created.json().url });
+    expect(archive.statusCode).toBe(200);
+    expect(archive.headers["content-type"]).toBe("application/zip");
+    expect(archive.headers["cache-control"]).toBe("no-store");
+    expect(archive.headers["content-disposition"]).toContain("test-pool-selection.zip");
+    expect(archive.rawPayload.subarray(0, 2).toString()).toBe("PK");
+    expect(archive.rawPayload.includes(Buffer.from(`${folderName}/`))).toBe(true);
+    expect(archive.rawPayload.includes(Buffer.from(`${folderName}/empty/`))).toBe(true);
+    expect(archive.rawPayload.includes(Buffer.from(`${folderName}/.hidden.txt`))).toBe(true);
+    expect(archive.rawPayload.includes(Buffer.from("hello.txt"))).toBe(true);
+
+    const reused = await server.inject({ method: "GET", url: created.json().url });
+    expect(reused.statusCode).toBe(404);
+    await server.close();
+  });
+
+  it("names single-folder exports after the selected folder and expires unused tokens", async () => {
+    await mkdir(path.join(rootDir, "photos"));
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const now = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        sourcePaths: ["photos"]
+      }
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().fileName).toBe("photos.zip");
+
+    nowSpy.mockReturnValue(now + 5 * 60 * 1_000 + 1);
+    const expired = await server.inject({ method: "GET", url: created.json().url });
+    expect(expired.statusCode).toBe(404);
+    nowSpy.mockRestore();
+    await server.close();
+  });
+
+  it("renames duplicate top-level archive entries in stable source order", async () => {
+    await mkdir(path.join(rootDir, "one"));
+    await mkdir(path.join(rootDir, "two"));
+    await writeFile(path.join(rootDir, "one", "report.txt"), "first");
+    await writeFile(path.join(rootDir, "two", "report.txt"), "second");
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        sourcePaths: ["one/report.txt", "two/report.txt"]
+      }
+    });
+    const archive = await server.inject({ method: "GET", url: created.json().url });
+
+    expect(archive.statusCode).toBe(200);
+    expect(archive.rawPayload.includes(Buffer.from("report.txt"))).toBe(true);
+    expect(archive.rawPayload.includes(Buffer.from("report-2.txt"))).toBe(true);
+    await server.close();
+  });
+
+  it("consumes the export token when a source disappears before download", async () => {
+    await writeFile(path.join(rootDir, "temporary.txt"), "temporary");
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        sourcePaths: ["temporary.txt"]
+      }
+    });
+    await rm(path.join(rootDir, "temporary.txt"));
+
+    const missing = await server.inject({ method: "GET", url: created.json().url });
+    const reused = await server.inject({ method: "GET", url: created.json().url });
+
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ error: "One or more export sources no longer exist" });
+    expect(reused.statusCode).toBe(404);
+    await server.close();
+  });
+
+  it("rejects empty, duplicate, traversing, and symlink file exports", async () => {
+    await symlink(path.join(rootDir, "hello.txt"), path.join(rootDir, "hello-link.txt"));
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const basePayload = { rootId: "local", storagePoolId: TEST_STORAGE_POOL_ID };
+
+    const empty = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: { ...basePayload, sourcePaths: [] }
+    });
+    const duplicate = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: { ...basePayload, sourcePaths: ["hello.txt", "./hello.txt"] }
+    });
+    const traversal = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: { ...basePayload, sourcePaths: ["../outside.txt"] }
+    });
+    const link = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: { ...basePayload, sourcePaths: ["hello-link.txt"] }
+    });
+
+    expect(empty.statusCode).toBe(400);
+    expect(duplicate.statusCode).toBe(400);
+    expect(traversal.statusCode).toBe(400);
+    expect(link.statusCode).toBe(400);
+    await server.close();
+  });
+
+  it("does not cross nested storage pools while exporting directories", async () => {
+    const exportDirectory = path.join(rootDir, "exported");
+    const nestedPool = path.join(exportDirectory, "nested-pool");
+    await mkdir(nestedPool, { recursive: true });
+    await writeFile(path.join(exportDirectory, "visible.txt"), "visible");
+    await writeFile(path.join(nestedPool, "private.txt"), "private");
+    const nestedPoolId = "/dev/md/nested-pool";
+    const nestedRunner: SystemCommandRunner = {
+      async run(command, args) {
+        if (command === "lsblk") return JSON.stringify({ blockdevices: [] });
+        if (command === "findmnt") {
+          return JSON.stringify({
+            filesystems: [
+              { source: TEST_STORAGE_POOL_ID, target: rootDir, fstype: "ext4", size: 1024, used: 128, avail: 896, "use%": "12.5%" },
+              { source: nestedPoolId, target: nestedPool, fstype: "ext4", size: 512, used: 64, avail: 448, "use%": "12.5%" }
+            ]
+          });
+        }
+        if (command === "mdadm" && args[0] === "--detail" && args[1] === "--scan") {
+          return `ARRAY ${TEST_STORAGE_POOL_ID} name=test-pool UUID=test-pool\nARRAY ${nestedPoolId} name=nested-pool UUID=nested-pool`;
+        }
+        if (command === "mdadm" && args[0] === "--detail") {
+          const nested = args[1] === nestedPoolId;
+          return [
+            `Name : ${nested ? "nested-pool" : "test-pool"}`,
+            "Raid Level : raid1",
+            "State : clean",
+            `UUID : ${nested ? "nested-pool" : "test-pool"}`,
+            "Array Size : 1024 KiB"
+          ].join("\n");
+        }
+        if (command === "smartctl") return JSON.stringify({ devices: [] });
+        return JSON.stringify({});
+      }
+    };
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      system: { commandRunner: nestedRunner }
+    });
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: { rootId: "local", storagePoolId: TEST_STORAGE_POOL_ID, sourcePaths: ["exported"] }
+    });
+    expect(created.statusCode).toBe(201);
+    const archive = await server.inject({ method: "GET", url: created.json().url });
+    expect(archive.statusCode).toBe(200);
+    expect(archive.rawPayload.includes(Buffer.from("exported/visible.txt"))).toBe(true);
+    expect(archive.rawPayload.includes(Buffer.from("private.txt"))).toBe(false);
+    await server.close();
+  });
+
   it("streams byte ranges for file blobs", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({

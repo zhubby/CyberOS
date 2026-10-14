@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isInvalidFileMoveDestination, reconcileFileSelection, updateFileSelection } from "./file-selection.js";
+import { fileDownloadMode, isInvalidFileMoveDestination, reconcileFileSelection, updateFileSelection } from "./file-selection.js";
 
 const paths = ["pool/a.txt", "pool/b.txt", "pool/c", "pool/d.txt"];
 
@@ -35,5 +35,11 @@ describe("file selection", () => {
     expect(isInvalidFileMoveDestination(entries, "pool")).toBe(true);
     expect(isInvalidFileMoveDestination(entries, "pool/projects/archive")).toBe(true);
     expect(isInvalidFileMoveDestination(entries, "pool/archive")).toBe(false);
+  });
+
+  it("downloads one file directly and archives folders or multiple items", () => {
+    expect(fileDownloadMode([{ kind: "file" }])).toBe("direct");
+    expect(fileDownloadMode([{ kind: "directory" }])).toBe("archive");
+    expect(fileDownloadMode([{ kind: "file" }, { kind: "file" }])).toBe("archive");
   });
 });

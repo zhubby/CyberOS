@@ -186,7 +186,6 @@ button.vm-create-submit[aria-busy="true"] {
     .management-icon-action,
     .download-task-action,
     .preview-tool-button,
-    .preview-expand-button,
     .settings-icon-button
   ):hover:not(:disabled) {
     border-color: var(--line);

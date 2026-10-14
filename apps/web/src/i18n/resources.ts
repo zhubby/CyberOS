@@ -340,6 +340,9 @@ export const en = {
       activity: "Background file operations",
       actions: "Selected file actions",
       selected: "{{count}} selected",
+      download: "Download selected items",
+      preparingDownload: "Preparing ZIP download",
+      downloadFailed: "Unable to prepare download.",
       move: "Move selected items",
       delete: "Delete selected items",
       queued: "File operation queued.",
@@ -479,6 +482,10 @@ export const en = {
       }
     },
     actions: {
+      downloadFolder: "Download folder as ZIP",
+      downloadEntry: "Download {{name}}",
+      more: "More actions",
+      moreEntry: "More actions for {{name}}",
       move: "Move",
       moveEntry: "Move {{name}}",
       copy: "Copy",
@@ -2857,6 +2864,9 @@ export const zhCN = {
       activity: "后台文件操作",
       actions: "已选文件操作",
       selected: "已选择 {{count}} 项",
+      download: "下载已选项目",
+      preparingDownload: "正在准备 ZIP 下载",
+      downloadFailed: "无法准备下载。",
       move: "移动已选项目",
       delete: "删除已选项目",
       queued: "文件操作已加入后台队列。",
@@ -2996,6 +3006,10 @@ export const zhCN = {
       }
     },
     actions: {
+      downloadFolder: "将文件夹下载为 ZIP",
+      downloadEntry: "下载 {{name}}",
+      more: "更多操作",
+      moreEntry: "{{name}} 的更多操作",
       move: "移动",
       moveEntry: "移动 {{name}}",
       copy: "拷贝",

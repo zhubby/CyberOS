@@ -18,7 +18,6 @@ import {
   getIndexerOverview,
   getIndexerSettings,
   getFileBlobUrl,
-  getFileDownloadUrl,
   getFileVideoUrl,
   getVodPlayerStatus,
   getFileMeta,
@@ -214,7 +213,6 @@ export function App() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [vodPlayerStatus, setVodPlayerStatus] = useState<VodPlayerStatus | null>(null);
   const [vodPlayerBusy, setVodPlayerBusy] = useState(false);
-  const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [editorMeta, setEditorMeta] = useState<FileMeta | null>(null);
   const [message, setMessage] = useState("");
   const [composerPath, setComposerPath] = useState<string | null>(null);
@@ -362,9 +360,6 @@ export function App() {
   );
   const blobUrl = selectedRootId && selectedStoragePoolId && selectedFilePath
     ? getFileBlobUrl(selectedRootId, selectedFilePath, selectedStoragePoolId)
-    : "";
-  const downloadUrl = selectedRootId && selectedStoragePoolId && selectedFilePath
-    ? getFileDownloadUrl(selectedRootId, selectedFilePath, selectedStoragePoolId)
     : "";
   const videoUrl = selectedRootId && selectedStoragePoolId && selectedFilePath
     ? getFileVideoUrl(selectedRootId, selectedFilePath, selectedStoragePoolId)
@@ -525,7 +520,6 @@ export function App() {
     setPreviewMeta(null);
     setTextPreview(null);
     setPreviewError(null);
-    setPreviewCollapsed(false);
     setEditorMeta(null);
 
     getFiles(pool.rootId, pool.path, pool.id)
@@ -702,7 +696,6 @@ export function App() {
   useEffect(() => {
     const vodPlayerAreaVisible = Boolean(
       selectedFilePath &&
-        !previewCollapsed &&
         (typeof window === "undefined" || window.innerWidth > 860 || mobileView === "workspace")
     );
     if (!vodPlayerAreaVisible) {
@@ -727,7 +720,7 @@ export function App() {
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, [mobileView, previewCollapsed, selectedFilePath]);
+  }, [mobileView, selectedFilePath]);
 
   useEffect(() => {
     if (!resizing) {
@@ -1268,7 +1261,6 @@ export function App() {
       setSearchResults(combined);
       setSearchNextCursor(page.nextCursor);
       setSelectedFilePath(null);
-      setPreviewCollapsed(false);
       setStatus("ready");
       return true;
     } catch (nextError) {
@@ -1309,7 +1301,6 @@ export function App() {
     setSelectedFilePath(null);
     setPreviewMeta(null);
     setTextPreview(null);
-    setPreviewCollapsed(false);
     const fileRequestId = beginFileListingRequest();
     try {
       const nextListing = await getFiles(selectedRootId, pathname, selectedStoragePool.id);
@@ -1796,7 +1787,6 @@ export function App() {
         );
         if (nextSelectedPath) {
           setSelectedFilePath(nextSelectedPath);
-          setPreviewCollapsed(false);
         }
       }
       setOperations((current) => [
@@ -2016,14 +2006,12 @@ export function App() {
         setPreviewMeta(null);
         setTextPreview(null);
         setPreviewError(null);
-        setPreviewCollapsed(false);
         return;
       }
       if (proposal.operation === "rename" && proposal.sourcePath && proposal.targetPath) {
         const renamedSelection = renamedPath(selectedFilePath, proposal.sourcePath, proposal.targetPath);
         if (renamedSelection) {
           setSelectedFilePath(renamedSelection);
-          setPreviewCollapsed(false);
           return;
         }
       }
@@ -2062,7 +2050,6 @@ export function App() {
     setPreviewMeta(null);
     setTextPreview(null);
     setPreviewError(null);
-    setPreviewCollapsed(false);
     setEditorMeta(null);
     setEntries([]);
     setGitStatus(null);
@@ -2118,7 +2105,6 @@ export function App() {
     }
     if (entry.kind === "file") {
       setSelectedFilePath(entry.path);
-      setPreviewCollapsed(false);
       setMobileView("workspace");
     }
   }
@@ -2240,7 +2226,6 @@ export function App() {
         }
       }
       setSelectedFilePath(linkedMeta.path);
-      setPreviewCollapsed(false);
       setStatus("ready");
     } catch (nextError) {
       if (
@@ -2442,12 +2427,10 @@ export function App() {
         previewError={previewError}
         textPreview={textPreview}
         blobUrl={blobUrl}
-        downloadUrl={downloadUrl}
         videoUrl={videoUrl}
         vodPlayerStatus={vodPlayerStatus}
         vodPlayerBusy={vodPlayerBusy}
         previewFileSizeLimitBytes={previewFileSizeLimitBytes}
-        previewCollapsed={previewCollapsed}
         searchQuery={searchQuery}
         searchOptions={searchOptions}
         searchResults={searchResults}
@@ -2499,7 +2482,7 @@ export function App() {
         onNotifyError={setError}
         onNotifySuccess={setSuccessNotice}
         onNotifyWarning={setWarningNotice}
-        onTogglePreviewCollapsed={() => setPreviewCollapsed((collapsed) => !collapsed)}
+        onClosePreview={() => setSelectedFilePath(null)}
         onRollback={(operation) => void handleRollback(operation)}
       />
 

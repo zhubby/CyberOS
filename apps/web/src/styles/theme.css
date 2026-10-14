@@ -203,8 +203,7 @@
 }
 
 :root[data-theme="light"] .file-action-button:hover:not(:disabled),
-:root[data-theme="light"] .preview-tool-button:hover,
-:root[data-theme="light"] .preview-expand-button:hover {
+:root[data-theme="light"] .preview-tool-button:hover {
   border-color: var(--approval-border-hover);
 }
 
@@ -291,8 +290,7 @@
   background: var(--selection-bg);
 }
 
-:root[data-theme="light"] .preview-tool-button:focus-visible,
-:root[data-theme="light"] .preview-expand-button:focus-visible {
+:root[data-theme="light"] .preview-tool-button:focus-visible {
   outline-color: var(--focus-ring-soft);
 }
 

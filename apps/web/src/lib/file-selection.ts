@@ -1,4 +1,9 @@
 export type FileSelectionMode = "toggle" | "range";
+export type FileDownloadMode = "direct" | "archive";
+
+export function fileDownloadMode(entries: ReadonlyArray<{ kind: string }>): FileDownloadMode {
+  return entries.length === 1 && entries[0]?.kind === "file" ? "direct" : "archive";
+}
 
 export function updateFileSelection(
   current: ReadonlySet<string>,

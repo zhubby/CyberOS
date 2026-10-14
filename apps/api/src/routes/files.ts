@@ -1,10 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { lstat, mkdir, stat, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { ZipArchive } from "archiver";
 import type { FastifyInstance } from "fastify";
 import {
+  assertNoSymlinkPathSegments,
   inferMimeType,
   inferPreviewKind,
   applyFileMutation,
@@ -42,6 +45,7 @@ import {
 } from "../lib/files.js";
 import { getDirectoryGitView } from "../lib/git.js";
 import {
+  assertPathInsideStoragePool,
   resolveScopedExistingPath,
   resolveScopedTargetPath,
   resolveStoragePoolScope,
@@ -52,8 +56,19 @@ import { VideoCache } from "../lib/video-cache.js";
 const MAX_EDIT_TEXT_BYTES = 1024 * 1024;
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024;
 const MAX_ADVANCED_SEARCH_SCOPE_PAGES = 20;
+const FILE_EXPORT_BODY_LIMIT = 1024 * 1024;
+const FILE_EXPORT_TTL_MS = 5 * 60 * 1_000;
+
+interface FileExport {
+  rootId: string;
+  storagePoolId: string;
+  sourcePaths: string[];
+  fileName: string;
+  expiresAt: number;
+}
 
 export function registerFileRoutes(server: FastifyInstance, { config, db, system, videoTranscoder, fileBatches }: ApiRouteContext): void {
+  const exports = new Map<string, FileExport>();
   const videoCache = videoTranscoder
     ? new VideoCache({ dataDir: config.dataDir, transcoder: videoTranscoder })
     : new VideoCache({ dataDir: config.dataDir });
@@ -640,6 +655,119 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     return sendFileStream(reply, request.headers.range, safe.realPath, inferMimeType(safe.realPath));
   });
 
+  server.post<{
+    Body: {
+      rootId?: string;
+      storagePoolId?: string;
+      sourcePaths?: string[];
+    };
+  }>("/api/files/exports", { bodyLimit: FILE_EXPORT_BODY_LIMIT }, async (request, reply) => {
+    pruneFileExports(exports);
+    const sourcePaths = request.body?.sourcePaths;
+    if (!Array.isArray(sourcePaths) || sourcePaths.length === 0 || sourcePaths.some((item) => typeof item !== "string" || !item.trim())) {
+      reply.status(400).send({ error: "At least one source path is required" });
+      return;
+    }
+
+    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+    const sources = [];
+    const uniquePaths = new Set<string>();
+    for (const requestedPath of sourcePaths) {
+      const safe = await resolveScopedExistingPath(scope, requestedPath.trim());
+      await assertNoSymlinkPathSegments(scope.rootRealPath, safe.absolutePath);
+      const sourceStat = await lstat(safe.absolutePath);
+      if (!sourceStat.isFile() && !sourceStat.isDirectory()) {
+        reply.status(400).send({ error: "Export sources must be files or directories", sourcePath: requestedPath });
+        return;
+      }
+      if (uniquePaths.has(safe.relativePath)) {
+        reply.status(400).send({ error: "Source paths must be unique" });
+        return;
+      }
+      uniquePaths.add(safe.relativePath);
+      sources.push({ path: safe.relativePath, name: path.basename(safe.realPath), isDirectory: sourceStat.isDirectory() });
+    }
+
+    const token = randomUUID();
+    const expiresAt = Date.now() + FILE_EXPORT_TTL_MS;
+    const fileName = fileExportName(sources, scope);
+    exports.set(token, {
+      rootId: scope.root.id,
+      storagePoolId: scope.pool.id,
+      sourcePaths: sources.map((source) => source.path),
+      fileName,
+      expiresAt
+    });
+    reply.status(201).send({
+      url: `/api/files/exports/${token}`,
+      expiresAt: new Date(expiresAt).toISOString(),
+      fileName
+    });
+  });
+
+  server.get<{ Params: { token: string } }>("/api/files/exports/:token", async (request, reply) => {
+    pruneFileExports(exports);
+    const fileExport = exports.get(request.params.token);
+    if (!fileExport) {
+      reply.status(404).send({ error: "File export expired" });
+      return;
+    }
+    exports.delete(request.params.token);
+
+    const scope = await resolveStoragePoolScope(db, system, fileExport.rootId, fileExport.storagePoolId);
+    const sources: Array<{ absolutePath: string; archiveName: string }> = [];
+    const usedNames = new Set<string>();
+    try {
+      for (const sourcePath of fileExport.sourcePaths) {
+        const safe = await resolveScopedExistingPath(scope, sourcePath);
+        await assertNoSymlinkPathSegments(scope.rootRealPath, safe.absolutePath);
+        const sourceStat = await lstat(safe.absolutePath);
+        if (!sourceStat.isFile() && !sourceStat.isDirectory()) {
+          reply.status(409).send({ error: "One or more export sources are no longer available" });
+          return;
+        }
+        sources.push({
+          absolutePath: safe.absolutePath,
+          archiveName: uniqueExportEntryName(path.basename(safe.realPath), sourceStat.isDirectory(), usedNames)
+        });
+      }
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        reply.status(404).send({ error: "One or more export sources no longer exist" });
+        return;
+      }
+      throw error;
+    }
+
+    const archive = new ZipArchive({ zlib: { level: 6 } });
+    const abortController = new AbortController();
+    archive.once("warning", (error: Error) => archive.destroy(error));
+    const abortOnDisconnect = () => {
+      if (!reply.raw.writableEnded) {
+        abortController.abort();
+        archive.abort();
+      }
+    };
+    reply.raw.once("close", abortOnDisconnect);
+    archive.once("end", () => reply.raw.off("close", abortOnDisconnect));
+    reply.header("Cache-Control", "no-store");
+    reply.header("Content-Type", "application/zip");
+    reply.header("Content-Disposition", contentDisposition(fileExport.fileName));
+    reply.send(archive);
+    void (async () => {
+      for (const source of sources) {
+        await appendFileExportEntry(archive, scope, source.absolutePath, source.archiveName, abortController.signal);
+        if (abortController.signal.aborted) return;
+      }
+      await archive.finalize();
+    })().catch((error: unknown) => {
+      if (!archive.destroyed) {
+        archive.destroy(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+    return reply;
+  });
+
   server.get<{
     Querystring: { rootId?: string; storagePoolId?: string; path?: string };
   }>("/api/files/video", async (request, reply) => {
@@ -801,6 +929,71 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 function contentDisposition(fileName: string): string {
   const ascii = fileName.replace(/[^\x20-\x7E]/gu, "_").replace(/["\\]/gu, "_");
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
+function pruneFileExports(exports: Map<string, FileExport>): void {
+  const now = Date.now();
+  for (const [token, value] of exports) {
+    if (value.expiresAt <= now) exports.delete(token);
+  }
+}
+
+function fileExportName(
+  sources: Array<{ path: string; name: string; isDirectory: boolean }>,
+  scope: StoragePoolScope
+): string {
+  if (sources.length === 1 && sources[0]!.isDirectory) {
+    return `${sources[0]!.name}.zip`;
+  }
+  const parents = new Set(sources.map((source) => path.dirname(source.path)));
+  const parent = parents.size === 1 ? [...parents][0]! : scope.mountpointPath;
+  const atPoolRoot = parent === "." || parent === scope.mountpointPath;
+  const stem = atPoolRoot ? scope.pool.name : path.basename(parent);
+  return `${stem || "sigmaos"}-selection.zip`;
+}
+
+function uniqueExportEntryName(name: string, isDirectory: boolean, used: Set<string>): string {
+  if (!used.has(name)) {
+    used.add(name);
+    return name;
+  }
+  const extension = isDirectory ? "" : path.extname(name);
+  const stem = extension ? path.basename(name, extension) : name;
+  let index = 2;
+  while (used.has(`${stem}-${index}${extension}`)) index += 1;
+  const unique = `${stem}-${index}${extension}`;
+  used.add(unique);
+  return unique;
+}
+
+async function appendFileExportEntry(
+  archive: ZipArchive,
+  scope: StoragePoolScope,
+  absolutePath: string,
+  archivePath: string,
+  signal: AbortSignal
+): Promise<void> {
+  if (signal.aborted) return;
+  assertPathInsideStoragePool(scope, absolutePath);
+  const sourceStat = await lstat(absolutePath);
+  if (sourceStat.isSymbolicLink()) return;
+  if (sourceStat.isFile()) {
+    archive.file(absolutePath, { name: archivePath });
+    return;
+  }
+  if (!sourceStat.isDirectory()) return;
+
+  archive.append("", { name: `${archivePath.replace(/\/$/u, "")}/` });
+  const entries = await readdir(absolutePath, { withFileTypes: true });
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of entries) {
+    if (signal.aborted) return;
+    const childPath = path.join(absolutePath, entry.name);
+    if (entry.isSymbolicLink() || scope.nestedMountpointRealPaths.some((mountpoint) => isPathInside(mountpoint, childPath))) {
+      continue;
+    }
+    await appendFileExportEntry(archive, scope, childPath, `${archivePath}/${entry.name}`, signal);
+  }
 }
 
 async function filterScopedSearchResults(scope: StoragePoolScope, matches: FileEntry[]): Promise<FileEntry[]> {
