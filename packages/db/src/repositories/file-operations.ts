@@ -13,6 +13,7 @@ import { enqueueIndexTask } from "./indexer-queue.js";
 export function recordAppliedOperation(
   db: SigmaDatabase,
   input: {
+    id?: string;
     approvalId: string | null;
     operation: FileMutationOperation;
     sourcePath?: string | null;
@@ -23,7 +24,7 @@ export function recordAppliedOperation(
 ): FileOperationRecord {
   const now = new Date().toISOString();
   const operation: FileOperationRecord = {
-    id: randomUUID(),
+    id: input.id ?? randomUUID(),
     approvalId: input.approvalId,
     operation: input.operation,
     sourcePath: input.sourcePath ?? null,

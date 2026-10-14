@@ -92,6 +92,7 @@ import type {
   VodPlayerStatus as SharedVodPlayerStatus,
   VodPlayerCommand as SharedVodPlayerCommand,
   OperationNotificationRecord as SharedOperationNotification,
+  FileBatchRecord as SharedFileBatch,
   OpsRunRecord as SharedOpsRunRecord,
   OpsTask as SharedOpsTask,
   OpsTaskOverview as SharedOpsTaskOverview,
@@ -310,6 +311,7 @@ export interface AgentEvent {
 }
 
 export type OperationNotification = SharedOperationNotification;
+export type FileBatch = SharedFileBatch;
 
 export interface NotificationListResult {
   notifications: OperationNotification[];
@@ -1649,6 +1651,39 @@ export async function proposeFileOperation(input: {
   });
   await ensureOk(response);
   return (await response.json()) as FileProposalResult;
+}
+
+export async function createFileBatch(input: {
+  sessionId: string;
+  rootId: string;
+  storagePoolId: string;
+  operation: "move" | "trash";
+  sourcePaths: string[];
+  targetDirectory?: string;
+}): Promise<FileBatch> {
+  const response = await fetch("/api/files/batches", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { batch: FileBatch }).batch;
+}
+
+export async function getFileBatches(input: {
+  sessionId?: string | null;
+  rootId?: string | null;
+  storagePoolId?: string | null;
+  limit?: number;
+} = {}): Promise<FileBatch[]> {
+  const params = new URLSearchParams();
+  if (input.sessionId) params.set("sessionId", input.sessionId);
+  if (input.rootId) params.set("rootId", input.rootId);
+  if (input.storagePoolId) params.set("storagePoolId", input.storagePoolId);
+  params.set("limit", String(input.limit ?? 50));
+  const response = await fetch(`/api/files/batches?${params.toString()}`);
+  await ensureOk(response);
+  return ((await response.json()) as { batches: FileBatch[] }).batches;
 }
 
 export async function extractFile(input: { rootId: string; storagePoolId: string; path: string }): Promise<ExtractFileResult> {

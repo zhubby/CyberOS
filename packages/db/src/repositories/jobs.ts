@@ -33,6 +33,7 @@ export function createUserMessageAndJob(
     id: randomUUID(),
     sessionId: input.sessionId,
     messageId: message.id,
+    kind: "agent",
     status: input.status ?? "queued",
     createdAt: now,
     updatedAt: now,
@@ -45,8 +46,8 @@ export function createUserMessageAndJob(
       VALUES (@id, @sessionId, @role, @content, @createdAt)
     `).run(message);
     db.prepare(`
-      INSERT INTO jobs (id, session_id, message_id, status, error, created_at, updated_at)
-      VALUES (@id, @sessionId, @messageId, @status, @error, @createdAt, @updatedAt)
+      INSERT INTO jobs (id, session_id, message_id, kind, status, error, created_at, updated_at)
+      VALUES (@id, @sessionId, @messageId, @kind, @status, @error, @createdAt, @updatedAt)
     `).run(job);
     db.prepare("UPDATE agent_sessions SET updated_at = ? WHERE id = ?").run(now, input.sessionId);
   });
@@ -77,6 +78,7 @@ export function createActionMessageAndJob(
     id: randomUUID(),
     sessionId: input.sessionId,
     messageId: message.id,
+    kind: "agent",
     status: input.status,
     createdAt,
     updatedAt: createdAt,
@@ -89,8 +91,8 @@ export function createActionMessageAndJob(
       VALUES (@id, @sessionId, @role, @content, @createdAt)
     `).run(message);
     db.prepare(`
-      INSERT INTO jobs (id, session_id, message_id, status, error, created_at, updated_at)
-      VALUES (@id, @sessionId, @messageId, @status, @error, @createdAt, @updatedAt)
+      INSERT INTO jobs (id, session_id, message_id, kind, status, error, created_at, updated_at)
+      VALUES (@id, @sessionId, @messageId, @kind, @status, @error, @createdAt, @updatedAt)
     `).run(job);
     const notification = createOperationNotification(db, {
       jobId: job.id,
@@ -116,7 +118,7 @@ export function getMessage(db: SigmaDatabase, messageId: string): AgentMessageRe
 
 export function getJob(db: SigmaDatabase, jobId: string): JobRecord | null {
   const row = db
-    .prepare("SELECT id, session_id, message_id, status, created_at, updated_at, error FROM jobs WHERE id = ?")
+    .prepare("SELECT id, session_id, message_id, kind, status, created_at, updated_at, error FROM jobs WHERE id = ?")
     .get(jobId) as DbJobRow | undefined;
   return row ? mapJob(row) : null;
 }
@@ -130,12 +132,12 @@ export function claimNextJob(db: SigmaDatabase): JobRecord | null {
       WHERE id = (
         SELECT id
         FROM jobs
-        WHERE status = 'queued'
+        WHERE kind = 'agent' AND status = 'queued'
         ORDER BY created_at ASC
         LIMIT 1
       )
       AND status = 'queued'
-      RETURNING id, session_id, message_id, status, created_at, updated_at, error
+      RETURNING id, session_id, message_id, kind, status, created_at, updated_at, error
     `).get(now) as DbJobRow | undefined;
     if (row) {
       updateOperationNotificationForJob(db, {

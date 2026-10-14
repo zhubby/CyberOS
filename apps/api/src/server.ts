@@ -7,6 +7,7 @@ import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
 import { effectiveDockerConfig } from "./lib/settings.js";
 import { registerApiRoutes } from "./routes/index.js";
+import { FileBatchRunner } from "./lib/file-batch-runner.js";
 
 export type { ServerDependencies } from "./context.js";
 
@@ -33,6 +34,7 @@ export async function buildServer({ buildInfo, config, db, docker, vm, shares, s
     db
   );
   const dockerRuntime = { ...docker, compose };
+  const fileBatches = new FileBatchRunner({ config, db, ...(system ? { system } : {}), log: server.log });
   registerApiRoutes(server, {
     ...(buildInfo ? { buildInfo } : {}),
     config,
@@ -44,13 +46,19 @@ export async function buildServer({ buildInfo, config, db, docker, vm, shares, s
     ...(terminal ? { terminal } : {}),
     ...(videoTranscoder ? { videoTranscoder } : {}),
     ...(vodPlayer ? { vodPlayer } : {}),
-    ...(photostaffMap ? { photostaffMap } : {})
+    ...(photostaffMap ? { photostaffMap } : {}),
+    fileBatches
   });
 
   server.addHook("onReady", async () => {
+    fileBatches.start();
     await compose.reconcileAll().catch((error) => {
       server.log.error({ err: error }, "Failed to reconcile managed Docker Compose Apps");
     });
+  });
+
+  server.addHook("onClose", async () => {
+    await fileBatches.stop();
   });
 
   return server;

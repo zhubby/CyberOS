@@ -202,9 +202,10 @@ export async function resolveSafeTargetPath(
 export function trashPathFor(
   trashRootPath: string,
   rootId: string,
-  sourcePath: string
+  sourcePath: string,
+  requestedId?: string
 ): { id: string; relativeTrashPath: string; absoluteTrashPath: string } {
-  const id = randomUUID();
+  const id = requestedId ?? randomUUID();
   const basename = path.basename(sourcePath);
   const relativeTrashPath = path.join(rootId, `${id}-${basename}`);
   return {
@@ -318,7 +319,8 @@ async function applyTrash(
   }
 
   const source = await resolveSafeExistingPath(root.path, proposal.sourcePath);
-  const trash = trashPathFor(trashRootPath, root.id, source.relativePath);
+  const trash = trashPathFor(trashRootPath, root.id, source.relativePath, proposal.trashEntryId);
+  await assertTargetDoesNotExist(trash.absoluteTrashPath);
   await mkdir(path.dirname(trash.absoluteTrashPath), { recursive: true });
   await movePath(source.realPath, trash.absoluteTrashPath);
   return {

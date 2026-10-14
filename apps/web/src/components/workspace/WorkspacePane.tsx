@@ -33,12 +33,13 @@ import {
   Upload,
   type LucideIcon
 } from "lucide-react";
-import type { DockerOperation, FileEntry, FileListing, FileMeta, FileOperation, IndexSearchCategory, IndexSearchRequest, IndexSearchResult, NasRoot, PendingApproval, VodPlayerCommand, VodPlayerStatus, TextPreview, VmOperation } from "../../api.js";
+import type { DockerOperation, FileBatch, FileEntry, FileListing, FileMeta, FileOperation, IndexSearchCategory, IndexSearchRequest, IndexSearchResult, NasRoot, PendingApproval, VodPlayerCommand, VodPlayerStatus, TextPreview, VmOperation } from "../../api.js";
 import { describeFileVisual, isHiddenName } from "../../file-type-utils.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { sortEntries, type FileSortDirection, type FileSortKey, type FileSortState } from "../../lib/file-listing-sort.js";
 import { formatFileModifiedAt } from "../../lib/format.js";
+import { isInvalidFileMoveDestination, reconcileFileSelection, updateFileSelection } from "../../lib/file-selection.js";
 import {
   readStoredWorkspacePanel,
   writeStoredWorkspacePanel,
@@ -63,6 +64,7 @@ import { FileListSkeleton, SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
 import type { CodeFontSettings } from "../../lib/editor-settings.js";
 import type { ResolvedTheme } from "../../lib/theme-settings.js";
+import { StorageFilePickerDialog } from "./StorageFilePickerDialog.js";
 
 const EPOCH_DATE = new Date(0).toISOString();
 
@@ -441,6 +443,7 @@ export function WorkspacePane({
   searchResults,
   searchNextCursor,
   operations,
+  fileBatches,
   uploadBatches,
   dockerOperations,
   vmOperations,
@@ -474,9 +477,11 @@ export function WorkspacePane({
   onRequestRename,
   onRequestTrash,
   onRequestTransfer,
+  onRequestBatch,
   onRequestExtract,
   onUploadSources,
   onCancelUploadBatch,
+  onCancelFileBatch,
   onWorkQueuesChanged,
   onNotifyError,
   onNotifySuccess,
@@ -513,6 +518,7 @@ export function WorkspacePane({
   searchResults: IndexSearchResult[] | null;
   searchNextCursor: string | null;
   operations: FileOperation[];
+  fileBatches: FileBatch[];
   uploadBatches: UploadBatchState[];
   dockerOperations: DockerOperation[];
   vmOperations: VmOperation[];
@@ -551,9 +557,11 @@ export function WorkspacePane({
   onRequestRename: (entry: FileEntry, targetName: string) => Promise<void>;
   onRequestTrash: (entry: FileEntry) => Promise<void>;
   onRequestTransfer: (entry: FileEntry, operation: "move" | "copy", targetPath: string) => Promise<void>;
+  onRequestBatch: (entries: FileEntry[], operation: "move" | "trash", targetDirectory?: string) => Promise<void>;
   onRequestExtract: (meta: FileMeta) => Promise<void>;
   onUploadSources: (sources: UploadSource[]) => void | Promise<void>;
   onCancelUploadBatch: (batchId: string) => void;
+  onCancelFileBatch: (jobId: string) => void;
   onWorkQueuesChanged: () => void | Promise<void>;
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
@@ -566,8 +574,12 @@ export function WorkspacePane({
   const [folderName, setFolderName] = useState("");
   const [renameEntry, setRenameEntry] = useState<FileEntry | null>(null);
   const [renameName, setRenameName] = useState("");
-  const [deleteState, setDeleteState] = useState<{ entry: FileEntry; step: "initial" | "final" } | null>(null);
+  const [deleteState, setDeleteState] = useState<{ entries: FileEntry[] } | null>(null);
   const [transferState, setTransferState] = useState<{ entry: FileEntry; operation: "move" | "copy" } | null>(null);
+  const [batchMoveEntries, setBatchMoveEntries] = useState<FileEntry[] | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
+  const [selectionAnchorPath, setSelectionAnchorPath] = useState<string | null>(null);
+  const [desktopMultiSelect, setDesktopMultiSelect] = useState(false);
   const [transferTargetDirectory, setTransferTargetDirectory] = useState(currentPath);
   const [operationSubmitting, setOperationSubmitting] = useState(false);
   const [activePanel, setActivePanel] = useState<WorkspacePanelId>(() => readStoredWorkspacePanel());
@@ -587,6 +599,14 @@ export function WorkspacePane({
   const sortedEntries = useMemo(
     () => searchResults ? entries : sortEntries(entries, fileSort),
     [entries, fileSort, searchResults]
+  );
+  const selectablePaths = useMemo(
+    () => sortedEntries.filter((entry) => entry.isSafe).map((entry) => entry.path),
+    [sortedEntries]
+  );
+  const selectedEntries = useMemo(
+    () => sortedEntries.filter((entry) => selectedPaths.has(entry.path)),
+    [selectedPaths, sortedEntries]
   );
   const searchResultByPath = useMemo(
     () => new Map((searchResults ?? []).map((result) => [result.path, result])),
@@ -643,21 +663,21 @@ export function WorkspacePane({
     trimmedRenameName.includes("/") ||
     trimmedRenameName.includes("\\");
   const renameNameUnchanged = renameEntry ? trimmedRenameName === renameEntry.name : false;
-  const deleteIsDirectory = deleteState?.entry.kind === "directory";
-  const deleteIsFinal = deleteState?.step === "final";
+  const deleteEntries = deleteState?.entries ?? [];
+  const deleteDirectoryCount = deleteEntries.filter((entry) => entry.kind === "directory").length;
+  const deleteFileCount = deleteEntries.length - deleteDirectoryCount;
+  const deleteIsDirectory = deleteEntries.length === 1 && deleteEntries[0]?.kind === "directory";
   const deleteTitle = deleteState
-    ? deleteIsDirectory
-      ? deleteIsFinal
-        ? t("workspace.actions.deleteFolderFinalTitle")
-        : t("workspace.actions.deleteFolderTitle")
-      : t("workspace.actions.deleteTitle")
+    ? deleteEntries.length > 1
+      ? t("workspace.batch.deleteTitle", { count: deleteEntries.length })
+      : deleteIsDirectory
+        ? t("workspace.actions.deleteFolderTitle")
+        : t("workspace.actions.deleteTitle")
     : "";
   const deleteBody = deleteState
-    ? deleteIsDirectory
-      ? deleteIsFinal
-        ? t("workspace.actions.deleteFolderFinalBody", { name: deleteState.entry.name })
-        : t("workspace.actions.deleteFolderBody", { name: deleteState.entry.name })
-      : t("workspace.actions.deleteBody", { name: deleteState.entry.name })
+    ? deleteEntries.length > 1
+      ? t("workspace.batch.deleteBody", { files: deleteFileCount, directories: deleteDirectoryCount })
+      : t("workspace.actions.deleteBody", { name: deleteEntries[0]?.name ?? "" })
     : "";
   const createFolderLocation = selectedStoragePool ? poolRelativePath(currentPath, selectedStoragePool.path) : t("common.root");
   const transferDirectoryDisplay = selectedStoragePool
@@ -682,6 +702,14 @@ export function WorkspacePane({
     transferDirectoryInvalid ||
     transferTargetRootPath === transferState?.entry.path;
   const workspaceVisible = active || !compactLayout;
+
+  useEffect(() => {
+    const media = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const syncMultiSelect = () => setDesktopMultiSelect(media.matches);
+    syncMultiSelect();
+    media.addEventListener("change", syncMultiSelect);
+    return () => media.removeEventListener("change", syncMultiSelect);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1040px)");
@@ -717,8 +745,20 @@ export function WorkspacePane({
     setRenameName("");
     setDeleteState(null);
     setTransferState(null);
+    setBatchMoveEntries(null);
     setTransferTargetDirectory(".");
   }, [selectedStoragePool?.path, selectedStoragePoolId]);
+
+  useEffect(() => {
+    setSelectedPaths(new Set());
+    setSelectionAnchorPath(null);
+  }, [activePanel, currentPath, searchOptions, searchQuery, selectedRootId, selectedStoragePoolId]);
+
+  useEffect(() => {
+    const availablePaths = new Set(entries.map((entry) => entry.path));
+    setSelectedPaths((current) => reconcileFileSelection(current, availablePaths));
+    setSelectionAnchorPath((current) => current && availablePaths.has(current) ? current : null);
+  }, [entries]);
 
   useEffect(() => {
     if (filesPanelActivationId > 0) {
@@ -746,7 +786,7 @@ export function WorkspacePane({
     event.stopPropagation();
     setCreateFolderOpen(false);
     setRenameEntry(null);
-    setDeleteState({ entry, step: "initial" });
+    setDeleteState({ entries: [entry] });
   }
 
   function openTransferDialog(event: MouseEvent<HTMLButtonElement>, entry: FileEntry, operation: "move" | "copy") {
@@ -767,19 +807,65 @@ export function WorkspacePane({
     setRenameEntry(null);
     setDeleteState(null);
     setTransferState(null);
+    setBatchMoveEntries(null);
+  }
+
+  function clearBatchSelection() {
+    setSelectedPaths(new Set());
+    setSelectionAnchorPath(null);
+  }
+
+  function openBatchMoveDialog() {
+    if (!selectedEntries.length || operationSubmitting) return;
+    setCreateFolderOpen(false);
+    setRenameEntry(null);
+    setDeleteState(null);
+    setTransferState(null);
+    setBatchMoveEntries(selectedEntries);
+  }
+
+  function openBatchDeleteDialog() {
+    if (!selectedEntries.length || operationSubmitting) return;
+    setCreateFolderOpen(false);
+    setRenameEntry(null);
+    setTransferState(null);
+    setBatchMoveEntries(null);
+    setDeleteState({ entries: selectedEntries });
   }
 
   function openEntryFromRow(entry: FileEntry) {
     if (operationSubmitting || !entry.isSafe) {
       return;
     }
+    clearBatchSelection();
     onOpenEntry(entry);
+  }
+
+  function updateBatchSelection(entry: FileEntry, mode: "toggle" | "range") {
+    if (!desktopMultiSelect || operationSubmitting || !entry.isSafe) return;
+    setSelectedPaths((current) => updateFileSelection(current, selectablePaths, entry.path, selectionAnchorPath, mode));
+    if (mode === "toggle" || !selectionAnchorPath || !selectablePaths.includes(selectionAnchorPath)) {
+      setSelectionAnchorPath(entry.path);
+    }
+  }
+
+  function handleRowClick(event: MouseEvent<HTMLDivElement>, entry: FileEntry) {
+    if (desktopMultiSelect && (event.metaKey || event.ctrlKey)) {
+      updateBatchSelection(entry, "toggle");
+      return;
+    }
+    if (desktopMultiSelect && event.shiftKey) {
+      updateBatchSelection(entry, "range");
+      return;
+    }
+    openEntryFromRow(entry);
   }
 
   function selectPanel(panel: WorkspacePanelId) {
     if (panel === "terminal") {
       setTerminalMounted(true);
     }
+    clearBatchSelection();
     setActivePanel(panel);
   }
 
@@ -787,11 +873,29 @@ export function WorkspacePane({
     if (event.target !== event.currentTarget) {
       return;
     }
+    if (event.key === " " && desktopMultiSelect && (event.metaKey || event.ctrlKey || event.shiftKey)) {
+      event.preventDefault();
+      updateBatchSelection(entry, event.shiftKey ? "range" : "toggle");
+      return;
+    }
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
     event.preventDefault();
     openEntryFromRow(entry);
+  }
+
+  function handleWorkspaceStageKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (
+      activePanel !== "files"
+      || event.key !== "Escape"
+      || selectedPaths.size === 0
+      || (event.target instanceof HTMLElement && event.target.closest('[role="dialog"], [role="menu"]'))
+    ) {
+      return;
+    }
+    event.preventDefault();
+    clearBatchSelection();
   }
 
   function triggerFileUpload() {
@@ -909,18 +1013,33 @@ export function WorkspacePane({
   }
 
   async function submitDelete() {
-    if (!deleteState || operationSubmitting) {
-      return;
-    }
-    if (deleteState.entry.kind === "directory" && deleteState.step === "initial") {
-      setDeleteState({ entry: deleteState.entry, step: "final" });
+    if (!deleteState?.entries.length || operationSubmitting) {
       return;
     }
 
     setOperationSubmitting(true);
     try {
-      await onRequestTrash(deleteState.entry);
+      if (deleteState.entries.length === 1) {
+        await onRequestTrash(deleteState.entries[0]!);
+      } else {
+        await onRequestBatch(deleteState.entries, "trash");
+      }
       setDeleteState(null);
+      clearBatchSelection();
+    } catch (error) {
+      onNotifyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOperationSubmitting(false);
+    }
+  }
+
+  async function submitBatchMove(targetDirectory: string) {
+    if (!batchMoveEntries?.length || operationSubmitting) return;
+    setOperationSubmitting(true);
+    try {
+      await onRequestBatch(batchMoveEntries, "move", targetDirectory);
+      setBatchMoveEntries(null);
+      clearBatchSelection();
     } catch (error) {
       onNotifyError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -985,7 +1104,7 @@ export function WorkspacePane({
         onChange={handleUploadFolderChange}
       />
       <div className="workspace-shell">
-        <div className="workspace-stage" data-panel={activePanel}>
+        <div className="workspace-stage" data-panel={activePanel} onKeyDownCapture={handleWorkspaceStageKeyDown}>
           {activePanel === "files" ? (
             <>
               <PanelHeader
@@ -1042,17 +1161,19 @@ export function WorkspacePane({
                   </PanelHeaderAction>
                   <ActivityMenu
                     operations={operations}
+                    fileBatches={fileBatches}
                     operationsReady={operationsReady}
                     uploadBatches={uploadBatches}
                     locale={locale}
                     onCancelUploadBatch={onCancelUploadBatch}
+                    onCancelFileBatch={onCancelFileBatch}
                     onRollback={onRollback}
                   />
                 </PanelHeaderActions>}
               />
 
               <div
-                className={`files-navigation-bar${storagePools.length > 0 ? " has-storage-pool-switcher" : ""}`}
+                className={`files-navigation-bar${storagePools.length > 0 ? " has-storage-pool-switcher" : ""}${selectedPaths.size > 0 ? " has-batch-selection" : ""}`}
               >
                   <div className="root-control storage-pool-control">
                     <label htmlFor="storage-pool-switcher">{t("workspace.storagePoolLabel")}</label>
@@ -1086,6 +1207,33 @@ export function WorkspacePane({
                       onApply={onApplySearchFilters}
                     />
                   </div>
+                  {selectedPaths.size > 0 ? (
+                    <div className="file-batch-toolbar" role="toolbar" aria-label={t("workspace.batch.actions")}>
+                      <span className="file-batch-count" role="status" aria-live="polite">
+                        {t("workspace.batch.selected", { count: selectedPaths.size })}
+                      </span>
+                      <button
+                        type="button"
+                        className="file-batch-action"
+                        onClick={openBatchMoveDialog}
+                        disabled={operationSubmitting}
+                        title={t("workspace.batch.move")}
+                        aria-label={t("workspace.batch.move")}
+                      >
+                        <FolderInput aria-hidden="true" size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="file-batch-action is-danger"
+                        onClick={openBatchDeleteDialog}
+                        disabled={operationSubmitting}
+                        title={t("workspace.batch.delete")}
+                        aria-label={t("workspace.batch.delete")}
+                      >
+                        <Trash2 aria-hidden="true" size={16} />
+                      </button>
+                    </div>
+                  ) : null}
               </div>
 
               <div
@@ -1194,16 +1342,19 @@ export function WorkspacePane({
                           key={entry.path}
                           className={[
                             "file-row",
-                            entry.path === selectedFilePath ? "is-selected" : "",
+                            entry.path === selectedFilePath ? "is-previewed" : "",
+                            selectedPaths.has(entry.path) ? "is-batch-selected" : "",
                             isHidden ? "is-hidden" : ""
                           ]
                             .filter(Boolean)
                             .join(" ")}
-                          onClick={() => openEntryFromRow(entry)}
+                          onClick={(event) => handleRowClick(event, entry)}
                           onKeyDown={(event) => handleRowKeyDown(event, entry)}
                           tabIndex={entry.isSafe ? 0 : -1}
                           aria-disabled={!entry.isSafe}
-                          aria-selected={entry.path === selectedFilePath}
+                          aria-selected={selectedPaths.has(entry.path)}
+                          aria-current={entry.path === selectedFilePath ? "true" : undefined}
+                          data-previewed={entry.path === selectedFilePath || undefined}
                           role="row"
                         >
                           <span className={`file-name${searchResult ? " is-search-result" : ""}`} role="cell">
@@ -1588,9 +1739,7 @@ export function WorkspacePane({
               <button type="button" className="danger-button" onClick={() => void submitDelete()} disabled={operationSubmitting} aria-busy={operationSubmitting || undefined}>
                 {operationSubmitting
                   ? t("common.actions.saving")
-                  : deleteIsDirectory && !deleteIsFinal
-                    ? t("workspace.actions.continueDelete")
-                    : t("workspace.actions.requestDelete")}
+                  : t("workspace.batch.confirmDelete")}
               </button>
             </footer>
           </section>
@@ -1647,6 +1796,24 @@ export function WorkspacePane({
             </footer>
           </form>
         </div>
+      ) : null}
+
+      {batchMoveEntries && selectedStoragePool ? (
+        <StorageFilePickerDialog
+          pools={[selectedStoragePool]}
+          initialPoolId={selectedStoragePool.id}
+          locale={locale}
+          mode="directory"
+          directoryPurpose="fileMove"
+          initialPath={currentPath}
+          boundaryPath={selectedStoragePool.path}
+          directorySelectionDisabled={(path) => isInvalidFileMoveDestination(batchMoveEntries, path)}
+          directorySelectionDisabledReason={t("workspace.batch.invalidDestination")}
+          onCancel={() => {
+            if (!operationSubmitting) setBatchMoveEntries(null);
+          }}
+          onSelect={(selection) => void submitBatchMove(selection.path)}
+        />
       ) : null}
 
     </section>

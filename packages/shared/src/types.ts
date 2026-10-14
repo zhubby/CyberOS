@@ -9,6 +9,8 @@ export type JobStatus =
   | "failed"
   | "cancelled";
 
+export type JobKind = "agent" | "file_batch";
+
 export type AgentEventAudience = "chat" | "notification";
 
 export type OperationNotificationKind = "file" | "docker" | "vm" | "storage" | "share";
@@ -1764,10 +1766,41 @@ export interface JobRecord {
   id: string;
   sessionId: string;
   messageId: string;
+  kind: JobKind;
   status: JobStatus;
   createdAt: string;
   updatedAt: string;
   error: string | null;
+}
+
+export type FileBatchOperation = "move" | "trash";
+export type FileBatchItemStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export interface FileBatchFailure {
+  sourcePath: string;
+  error: string;
+}
+
+export interface FileBatchRecord {
+  id: string;
+  jobId: string;
+  sessionId: string;
+  rootId: string;
+  storagePoolId: string;
+  operation: FileBatchOperation;
+  targetDirectory: string | null;
+  status: Extract<JobStatus, "queued" | "running" | "completed" | "failed" | "cancelled">;
+  totalCount: number;
+  completedCount: number;
+  successCount: number;
+  failedCount: number;
+  cancelledCount: number;
+  currentSourcePath: string | null;
+  error: string | null;
+  failures: FileBatchFailure[];
+  createdAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
 }
 
 export interface AgentEventRecord<TPayload = unknown> {

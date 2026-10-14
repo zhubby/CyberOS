@@ -12,6 +12,7 @@ import type { VideoTranscoder } from "./lib/video-cache.js";
 import type { VodPlayerRuntime } from "./lib/vod-player.js";
 import type { VmRuntimeDependencies } from "./lib/vm-service.js";
 import type { PhotostaffMapArchiveRuntime } from "./lib/photostaff-map.js";
+import type { FileBatchRuntime } from "./lib/file-batch-runner.js";
 
 export interface ApiRouteContext {
   config: SigmaConfig;
@@ -32,6 +33,7 @@ export interface ApiRouteContext {
   videoTranscoder?: VideoTranscoder;
   vodPlayer?: VodPlayerRuntime;
   photostaffMap?: PhotostaffMapArchiveRuntime;
+  fileBatches?: FileBatchRuntime;
 }
 
 export type ServerDependencies = ApiRouteContext;

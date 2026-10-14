@@ -18,7 +18,17 @@ import {
   searchFiles,
   type FileEntry
 } from "@sigmaos/nas-tools";
-import { appendEvent, createActionMessageAndJob, createPendingApproval, getSession, queryIndexAdvanced, recordAppliedOperation } from "@sigmaos/db";
+import {
+  appendEvent,
+  createActionMessageAndJob,
+  createFileBatch,
+  createPendingApproval,
+  FileBatchConflictError,
+  getSession,
+  listFileBatches,
+  queryIndexAdvanced,
+  recordAppliedOperation
+} from "@sigmaos/db";
 import type { FileOperationProposal, IndexSearchRequest, NasRootRecord } from "@sigmaos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
@@ -41,7 +51,7 @@ const MAX_EDIT_TEXT_BYTES = 1024 * 1024;
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024;
 const MAX_ADVANCED_SEARCH_SCOPE_PAGES = 20;
 
-export function registerFileRoutes(server: FastifyInstance, { config, db, system, videoTranscoder }: ApiRouteContext): void {
+export function registerFileRoutes(server: FastifyInstance, { config, db, system, videoTranscoder, fileBatches }: ApiRouteContext): void {
   const videoCache = videoTranscoder
     ? new VideoCache({ dataDir: config.dataDir, transcoder: videoTranscoder })
     : new VideoCache({ dataDir: config.dataDir });
@@ -354,6 +364,122 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       job,
       approval
     });
+  });
+
+  server.get<{
+    Querystring: { sessionId?: string; rootId?: string; storagePoolId?: string; limit?: string };
+  }>("/api/files/batches", async (request, reply) => {
+    const rawLimit = request.query.limit === undefined ? 50 : Number.parseInt(request.query.limit, 10);
+    if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
+      reply.status(400).send({ error: "File batch limit must be between 1 and 100" });
+      return;
+    }
+    reply.send({
+      batches: listFileBatches(db, {
+        ...(request.query.sessionId ? { sessionId: request.query.sessionId } : {}),
+        ...(request.query.rootId ? { rootId: request.query.rootId } : {}),
+        ...(request.query.storagePoolId ? { storagePoolId: request.query.storagePoolId } : {}),
+        limit: rawLimit
+      })
+    });
+  });
+
+  server.post<{
+    Body: {
+      sessionId?: string;
+      rootId?: string;
+      storagePoolId?: string;
+      operation?: "move" | "trash";
+      sourcePaths?: string[];
+      targetDirectory?: string;
+    };
+  }>("/api/files/batches", { bodyLimit: 1024 * 1024 }, async (request, reply) => {
+    const session = getSession(db, request.body?.sessionId ?? "");
+    if (!session) {
+      reply.status(404).send({ error: "Session not found" });
+      return;
+    }
+    const operation = request.body?.operation;
+    if (operation !== "move" && operation !== "trash") {
+      reply.status(400).send({ error: "Unsupported file batch operation" });
+      return;
+    }
+    const sourcePaths = request.body?.sourcePaths;
+    if (!Array.isArray(sourcePaths) || sourcePaths.length === 0 || sourcePaths.some((item) => typeof item !== "string" || !item.trim())) {
+      reply.status(400).send({ error: "At least one source path is required" });
+      return;
+    }
+    const normalizedSources = sourcePaths.map((item) => item.trim());
+    if (new Set(normalizedSources).size !== normalizedSources.length) {
+      reply.status(400).send({ error: "Source paths must be unique" });
+      return;
+    }
+
+    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+    if (session.rootId !== scope.root.id) {
+      reply.status(400).send({ error: "Session root does not match batch root" });
+      return;
+    }
+
+    let targetDirectory: string | null = null;
+    if (operation === "move") {
+      const target = await resolveScopedExistingPath(scope, request.body?.targetDirectory ?? "");
+      const targetStat = await stat(target.realPath);
+      if (!targetStat.isDirectory()) {
+        reply.status(400).send({ error: "Move target must be a directory" });
+        return;
+      }
+      targetDirectory = target.relativePath;
+    }
+
+    const items: Array<{ sourcePath: string; targetPath?: string }> = [];
+    const targetPaths = new Set<string>();
+    for (const requestedSource of normalizedSources) {
+      const source = await getMutableSource(scope.root, scope, requestedSource);
+      if ("error" in source) {
+        reply.status(source.statusCode).send({ error: source.error, sourcePath: requestedSource });
+        return;
+      }
+      if (operation === "trash") {
+        items.push({ sourcePath: source.safe.relativePath });
+        continue;
+      }
+      const requestedTarget = path.join(targetDirectory!, path.basename(source.safe.relativePath));
+      const proposal = await buildTransferProposal(scope.root, scope, source.safe, "move", requestedTarget);
+      if ("error" in proposal) {
+        reply.status(proposal.statusCode).send({ error: proposal.error, sourcePath: requestedSource });
+        return;
+      }
+      const targetPath = proposal.proposal.targetPath!;
+      if (targetPaths.has(targetPath)) {
+        reply.status(409).send({ error: "Multiple selected files resolve to the same target", targetPath });
+        return;
+      }
+      targetPaths.add(targetPath);
+      items.push({ sourcePath: source.safe.relativePath, targetPath });
+    }
+
+    try {
+      const batch = createFileBatch(db, {
+        sessionId: session.id,
+        rootId: scope.root.id,
+        storagePoolId: scope.pool.id,
+        operation,
+        targetDirectory,
+        summary: operation === "move"
+          ? `Move ${items.length} item${items.length === 1 ? "" : "s"} to ${targetDirectory}`
+          : `Move ${items.length} item${items.length === 1 ? "" : "s"} to SigmaOS trash`,
+        items
+      });
+      fileBatches?.wake();
+      reply.status(202).send({ batch });
+    } catch (error) {
+      if (error instanceof FileBatchConflictError) {
+        reply.status(409).send({ error: error.message, sourcePaths: error.sourcePaths });
+        return;
+      }
+      throw error;
+    }
   });
 
   server.post<{

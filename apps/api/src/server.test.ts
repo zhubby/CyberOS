@@ -24,6 +24,7 @@ import {
   getDockerSettings,
   getDockerOperationByApproval,
   getFileOperation,
+  getFileBatch,
   getJob,
   getSession,
   getShareOperationByApproval,
@@ -4316,6 +4317,42 @@ describe("API server", () => {
     expect(listOperationNotifications(db)).toMatchObject([
       { jobId: response.json().job.id, kind: "file", status: "pending_approval" }
     ]);
+    await server.close();
+  });
+
+  it("queues direct file batches without creating approvals", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/files/batches",
+      payload: {
+        sessionId: session.id,
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "trash",
+        sourcePaths: ["hello.txt"]
+      }
+    });
+
+    expect(response.statusCode).toBe(202);
+    const batchId = response.json().batch.id as string;
+    expect(getFileBatch(db, batchId)).toMatchObject({
+      operation: "trash",
+      totalCount: 1
+    });
+    expect(listPendingApprovals(db)).toHaveLength(0);
+
+    await vi.waitFor(() => {
+      expect(getFileBatch(db, batchId)?.status).toBe("completed");
+    });
+    await expect(stat(path.join(rootDir, "hello.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(listFileOperations(db).find((operation) => operation.metadata.fileBatchId === batchId)).toMatchObject({
+      approvalId: null,
+      operation: "trash",
+      status: "applied"
+    });
     await server.close();
   });
 

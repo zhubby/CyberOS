@@ -92,7 +92,8 @@ describe("SQLite schema migrations", () => {
       "022_downloader_reliability",
       "023_photostaff_reliability",
       "024_rust_indexer",
-      "025_ops_runs"
+      "025_ops_runs",
+      "026_file_batches"
     ]);
   });
 

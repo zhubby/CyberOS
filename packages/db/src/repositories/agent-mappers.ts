@@ -31,6 +31,7 @@ export function mapJob(row: DbJobRow): JobRecord {
     id: row.id,
     sessionId: row.session_id,
     messageId: row.message_id,
+    kind: row.kind,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

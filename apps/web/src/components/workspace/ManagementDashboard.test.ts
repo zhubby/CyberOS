@@ -88,6 +88,12 @@ describe("ManagementDashboardGrid loading layout", () => {
     expect(html).toContain("real future");
     expect(html).not.toContain("data-skeleton-kind");
     expect(html).not.toContain('aria-busy="true"');
+    expect(html.match(/data-scroll-region="true"/g)).toHaveLength(dashboardItems.length);
+    expect(html.match(/role="region"/g)).toHaveLength(dashboardItems.length);
+    expect(html.match(/tabindex="0"/g)).toHaveLength(dashboardItems.length);
+    for (const item of dashboardItems) {
+      expect(html).toContain(`aria-label="${item.title}"`);
+    }
   });
 });
 

@@ -4,6 +4,7 @@ import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X }
 import {
   approveRequest,
   cancelJob,
+  createFileBatch,
   createSession,
   deleteSession,
   extractFile,
@@ -20,6 +21,7 @@ import {
   getFileVideoUrl,
   getVodPlayerStatus,
   getFileMeta,
+  getFileBatches,
   getFiles,
   getOperations,
   getRoots,
@@ -55,6 +57,7 @@ import {
   type AgentEvent,
   type BuildInfo,
   type FileEntry,
+  type FileBatch,
   type FileMeta,
   type FileOperation,
   type DockerOperation,
@@ -196,6 +199,7 @@ export function App() {
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [operations, setOperations] = useState<FileOperation[]>([]);
+  const [fileBatches, setFileBatches] = useState<FileBatch[]>([]);
   const [dockerOperations, setDockerOperations] = useState<DockerOperation[]>([]);
   const [vmOperations, setVmOperations] = useState<VmOperation[]>([]);
   const [operationsReady, setOperationsReady] = useState(false);
@@ -563,7 +567,19 @@ export function App() {
         if (notificationRefreshTimerRef.current) clearTimeout(notificationRefreshTimerRef.current);
         notificationRefreshTimerRef.current = setTimeout(() => {
           notificationRefreshTimerRef.current = null;
-          void refreshWorkQueues();
+          const fileBatchId = typeof parsed.payload.fileBatchId === "string" ? parsed.payload.fileBatchId : null;
+          if (fileBatchId) {
+            void refreshFileBatches();
+            if (
+              (parsed.type === "job.completed" || parsed.type === "job.failed" || parsed.type === "job.cancelled")
+              && parsed.payload.rootId === selectedRootIdRef.current
+              && parsed.payload.storagePoolId === selectedStoragePoolIdRef.current
+            ) {
+              void Promise.all([refreshWorkQueues(), refreshCurrentFileListing()]);
+            }
+          } else {
+            void refreshWorkQueues();
+          }
         }, 100);
         return;
       }
@@ -1588,9 +1604,10 @@ export function App() {
     const queueSessionId = session?.id ?? null;
     const queueStoragePoolId = selectedStoragePoolIdRef.current;
     try {
-      const [nextApprovals, nextOperations, nextDockerOperations, nextVmOperations, nextNotifications] = await Promise.all([
+      const [nextApprovals, nextOperations, nextFileBatches, nextDockerOperations, nextVmOperations, nextNotifications] = await Promise.all([
         getApprovals(),
         getOperations(),
+        getFileBatches({ sessionId: queueSessionId, rootId: selectedRootIdRef.current, storagePoolId: queueStoragePoolId }),
         getDockerOperations(queueSessionId),
         getVmOperations(queueSessionId),
         getNotifications()
@@ -1604,6 +1621,7 @@ export function App() {
           ? nextOperations.filter((operation) => operation.metadata.storagePoolId === queueStoragePoolId)
           : []
       );
+      setFileBatches(nextFileBatches);
       setDockerOperations(nextDockerOperations);
       setVmOperations(nextVmOperations);
       setNotifications(nextNotifications.notifications);
@@ -1614,6 +1632,32 @@ export function App() {
       if (queueSessionId !== (session?.id ?? null) || queueStoragePoolId !== selectedStoragePoolIdRef.current) {
         return;
       }
+      setError(toErrorMessage(nextError));
+    }
+  }
+
+  async function refreshFileBatches() {
+    const queueSessionId = session?.id ?? null;
+    const queueRootId = selectedRootIdRef.current;
+    const queueStoragePoolId = selectedStoragePoolIdRef.current;
+    if (!queueSessionId || !queueRootId || !queueStoragePoolId) {
+      setFileBatches([]);
+      return;
+    }
+    try {
+      const batches = await getFileBatches({
+        sessionId: queueSessionId,
+        rootId: queueRootId,
+        storagePoolId: queueStoragePoolId
+      });
+      if (
+        queueSessionId === (session?.id ?? null)
+        && queueRootId === selectedRootIdRef.current
+        && queueStoragePoolId === selectedStoragePoolIdRef.current
+      ) {
+        setFileBatches(batches);
+      }
+    } catch (nextError) {
       setError(toErrorMessage(nextError));
     }
   }
@@ -1747,8 +1791,21 @@ export function App() {
   }
 
   async function requestFileTrash(entry: FileEntry) {
-    if (!session || !selectedRootId || !selectedStoragePoolId) {
+    await requestFileBatch([entry], "trash");
+  }
+
+  async function requestFileTransfer(entry: FileEntry, operation: "move" | "copy", targetPath: string) {
+    if (!session || !selectedRootId || !selectedStoragePool) {
       throw new Error(t("workspace.actions.noSession"));
+    }
+
+    if (operation === "move") {
+      await requestFileBatch(
+        [entry],
+        "move",
+        workspaceParentPath(joinNasPath(selectedStoragePool.path, targetPath))
+      );
+      return;
     }
 
     setStatus("queued");
@@ -1757,9 +1814,10 @@ export function App() {
       await proposeFileOperation({
         sessionId: session.id,
         rootId: selectedRootId,
-        storagePoolId: selectedStoragePoolId,
-        operation: "trash",
-        sourcePath: entry.path
+        storagePoolId: selectedStoragePool.id,
+        operation: "copy",
+        sourcePath: entry.path,
+        targetPath: joinNasPath(selectedStoragePool.path, targetPath)
       });
       await Promise.all([refreshWorkQueues(), reloadSessions()]);
       setWarningNotice(t("notifications.operationPending"));
@@ -1771,29 +1829,41 @@ export function App() {
     }
   }
 
-  async function requestFileTransfer(entry: FileEntry, operation: "move" | "copy", targetPath: string) {
-    if (!session || !selectedRootId || !selectedStoragePool) {
+  async function requestFileBatch(
+    batchEntries: FileEntry[],
+    operation: "move" | "trash",
+    targetDirectory?: string
+  ) {
+    if (!session || !selectedRootId || !selectedStoragePoolId) {
       throw new Error(t("workspace.actions.noSession"));
     }
-
     setStatus("queued");
     setError(null);
     try {
-      await proposeFileOperation({
+      await createFileBatch({
         sessionId: session.id,
         rootId: selectedRootId,
-        storagePoolId: selectedStoragePool.id,
+        storagePoolId: selectedStoragePoolId,
         operation,
-        sourcePath: entry.path,
-        targetPath: joinNasPath(selectedStoragePool.path, targetPath)
+        sourcePaths: batchEntries.map((entry) => entry.path),
+        ...(targetDirectory ? { targetDirectory } : {})
       });
-      await Promise.all([refreshWorkQueues(), reloadSessions()]);
-      setWarningNotice(t("notifications.operationPending"));
+      await refreshWorkQueues();
+      setSuccessNotice(t("workspace.batch.queued"));
       setStatus("ready");
     } catch (nextError) {
       setStatus("error");
       setError(toErrorMessage(nextError));
       throw nextError;
+    }
+  }
+
+  async function cancelFileBatch(jobId: string) {
+    try {
+      await cancelJob(jobId);
+      await refreshWorkQueues();
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
     }
   }
 
@@ -2331,6 +2401,7 @@ export function App() {
         searchResults={searchResults}
         searchNextCursor={searchNextCursor}
         operations={operations}
+        fileBatches={fileBatches}
         uploadBatches={visibleUploadBatches}
         dockerOperations={dockerOperations}
         vmOperations={vmOperations}
@@ -2364,9 +2435,11 @@ export function App() {
         onRequestRename={(entry, targetName) => requestFileRename(entry, targetName)}
         onRequestTrash={(entry) => requestFileTrash(entry)}
         onRequestTransfer={(entry, operation, targetPath) => requestFileTransfer(entry, operation, targetPath)}
+        onRequestBatch={(batchEntries, operation, targetDirectory) => requestFileBatch(batchEntries, operation, targetDirectory)}
         onRequestExtract={(meta) => requestFileExtract(meta)}
         onUploadSources={(sources) => onUploadSources(sources)}
         onCancelUploadBatch={(batchId) => onCancelUploadBatch(batchId)}
+        onCancelFileBatch={(jobId) => void cancelFileBatch(jobId)}
         onWorkQueuesChanged={() => {
           void refreshWorkQueues();
           void refreshStorageSummary();

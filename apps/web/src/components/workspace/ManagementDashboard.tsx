@@ -278,7 +278,13 @@ function DashboardWidget({
           <span>{item.title}</span>
         </div>
       ) : null}
-      <div className="management-widget-content">
+      <div
+        className="management-widget-content"
+        data-scroll-region="true"
+        role="region"
+        tabIndex={0}
+        aria-label={item.title}
+      >
         {loading ? <ManagementWidgetSkeleton dashboardId={dashboard.dashboardId} widgetId={item.id} /> : item.content}
       </div>
     </div>

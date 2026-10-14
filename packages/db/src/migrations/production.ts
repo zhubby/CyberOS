@@ -1181,5 +1181,61 @@ export const productionMigrations: Migration[] = [
       CREATE INDEX idx_ops_runs_status_heartbeat
         ON ops_runs(status, heartbeat_at);
     `
+  },
+  {
+    id: "026_file_batches",
+    sql: `
+      ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'agent'
+        CHECK (kind IN ('agent', 'file_batch'));
+
+      DROP INDEX IF EXISTS idx_jobs_status_created_at;
+      CREATE INDEX idx_jobs_kind_status_created_at ON jobs(kind, status, created_at);
+
+      CREATE TABLE file_batches (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE RESTRICT,
+        storage_pool_id TEXT NOT NULL,
+        operation TEXT NOT NULL CHECK (operation IN ('move', 'trash')),
+        target_directory TEXT,
+        total_count INTEGER NOT NULL CHECK (total_count > 0),
+        completed_count INTEGER NOT NULL DEFAULT 0 CHECK (completed_count >= 0),
+        success_count INTEGER NOT NULL DEFAULT 0 CHECK (success_count >= 0),
+        failed_count INTEGER NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+        cancelled_count INTEGER NOT NULL DEFAULT 0 CHECK (cancelled_count >= 0),
+        current_source_path TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+
+      CREATE INDEX idx_file_batches_scope_created_at
+        ON file_batches(root_id, storage_pool_id, created_at DESC);
+      CREATE INDEX idx_file_batches_session_created_at
+        ON file_batches(session_id, created_at DESC);
+
+      CREATE TABLE file_batch_items (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL REFERENCES file_batches(id) ON DELETE CASCADE,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        source_path TEXT NOT NULL,
+        target_path TEXT,
+        trash_entry_id TEXT,
+        operation_id TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'queued'
+          CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(batch_id, source_path),
+        UNIQUE(batch_id, ordinal)
+      );
+
+      CREATE INDEX idx_file_batch_items_claim
+        ON file_batch_items(status, batch_id, ordinal);
+      CREATE INDEX idx_file_batch_items_source
+        ON file_batch_items(source_path, status);
+    `
   }
 ];

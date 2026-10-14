@@ -19,6 +19,7 @@ import type {
   HealthAlertStatus,
   IndexRunStatus,
   JobStatus,
+  JobKind,
   OperationNotificationKind,
   OperationNotificationStatus,
   OpsRunStatus,
@@ -58,6 +59,7 @@ export type DbJobRow = {
   id: string;
   session_id: string;
   message_id: string;
+  kind: JobKind;
   status: JobStatus;
   created_at: string;
   updated_at: string;

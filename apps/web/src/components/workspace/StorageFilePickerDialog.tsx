@@ -40,6 +40,8 @@ export function StorageFilePickerDialog({
   directoryPurpose = "downloads",
   initialPath,
   boundaryPath,
+  directorySelectionDisabled,
+  directorySelectionDisabledReason,
   onCancel,
   onSelect,
   onRequestCreateFolder
@@ -48,9 +50,11 @@ export function StorageFilePickerDialog({
   initialPoolId: string;
   locale: SupportedLocale;
   mode?: "iso" | "directory";
-  directoryPurpose?: "downloads" | "photoMove";
+  directoryPurpose?: "downloads" | "photoMove" | "fileMove";
   initialPath?: string;
   boundaryPath?: string;
+  directorySelectionDisabled?: (path: string) => boolean;
+  directorySelectionDisabledReason?: string;
   onCancel: () => void;
   onSelect: (selection: StorageFileSelection) => void;
   onRequestCreateFolder?: (input: {
@@ -84,7 +88,16 @@ export function StorageFilePickerDialog({
         empty: t("workspace.photos.directoryPickerEmpty"),
         select: t("workspace.photos.useMoveDestination")
       }
-    : {
+    : directoryPurpose === "fileMove"
+      ? {
+          eyebrow: t("workspace.batch.destination"),
+          title: t("workspace.batch.movePickerTitle"),
+          description: t("workspace.batch.movePickerDescription"),
+          list: t("workspace.batch.directoryList"),
+          empty: t("workspace.batch.directoryEmpty"),
+          select: t("workspace.batch.useDestination")
+        }
+      : {
         eyebrow: t("workspace.downloads.targetDirectory"),
         title: t("workspace.downloads.directoryPickerTitle"),
         description: t("workspace.downloads.directoryPickerDescription"),
@@ -102,6 +115,7 @@ export function StorageFilePickerDialog({
     select: t("workspace.management.virtualMachines.isoPickerSelect")
   };
   const pickerRootPath = boundaryPath && selectedPool?.id === initialPool?.id ? boundaryPath : selectedPool?.path ?? ".";
+  const currentDirectoryDisabled = mode === "directory" && Boolean(directorySelectionDisabled?.(currentPath));
 
   const loadDirectory = useCallback(async () => {
     if (!selectedPool) {
@@ -174,6 +188,7 @@ export function StorageFilePickerDialog({
   function confirmSelection() {
     if (!selectedPool) return;
     if (mode === "directory") {
+      if (currentDirectoryDisabled) return;
       onSelect({
         rootId: selectedPool.rootId,
         storagePoolId: selectedPool.id,
@@ -449,7 +464,13 @@ export function StorageFilePickerDialog({
           )}
           <div>
             <button type="button" onClick={onCancel}>{t("common.actions.cancel")}</button>
-            <button type="button" className="vm-create-submit" onClick={confirmSelection} disabled={mode !== "directory" && !selection}>
+            <button
+              type="button"
+              className="vm-create-submit"
+              onClick={confirmSelection}
+              disabled={currentDirectoryDisabled || (mode !== "directory" && !selection)}
+              title={currentDirectoryDisabled ? directorySelectionDisabledReason : undefined}
+            >
               {mode === "directory" ? directoryCopy.select : fileCopy.select}
             </button>
           </div>
