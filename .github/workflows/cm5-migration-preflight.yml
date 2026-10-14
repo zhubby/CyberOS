@@ -99,24 +99,38 @@ jobs:
           if (typeof summary?.enabled !== "boolean" || !Array.isArray(summary?.instances)) {
             throw new Error("VM summary response is invalid");
           }
-          const sources = summary.instances.flatMap((instance) =>
+          const legacyPrefixes = ["/var/lib/sigmaos", "/srv/nas", "/srv/apps", "/srv/iso"];
+          const legacyDisks = summary.instances.flatMap((instance) =>
             Array.isArray(instance?.disks)
-              ? instance.disks.map((disk) => disk?.source).filter((source) => typeof source === "string")
+              ? instance.disks
+                  .map((disk) => disk?.source)
+                  .filter((source) => typeof source === "string")
+                  .filter((source) => legacyPrefixes.some(
+                    (prefix) => source === prefix || source.startsWith(`${prefix}/`)
+                  ))
+                  .map((source) => ({ name: instance.name, uuid: instance.uuid, state: instance.state, source }))
               : []
           );
-          const legacyPrefixes = ["/var/lib/sigmaos", "/srv/nas", "/srv/apps", "/srv/iso"];
-          const legacyReferences = sources.filter((source) =>
-            legacyPrefixes.some((prefix) => source === prefix || source.startsWith(`${prefix}/`))
-          ).length;
           console.log(`vm_enabled=${summary.enabled}`);
           console.log(`vm_count=${summary.instances.length}`);
-          console.log(`vm_legacy_disk_references=${legacyReferences}`);
+          console.log(`vm_legacy_disk_references=${legacyDisks.length}`);
+          console.log(`vm_legacy_running_count=${new Set(
+            legacyDisks.filter((disk) => disk.state === "running").map((disk) => disk.uuid)
+          ).size}`);
+          for (const disk of legacyDisks) console.log(`vm_legacy_disk=${JSON.stringify(disk)}`);
           if (summary.enabled && summary.host?.status !== "ready") {
             throw new Error("enabled VM inventory is unavailable");
           }
-          if (legacyReferences > 0) {
-            throw new Error("registered VMs still reference legacy storage paths");
+          if (legacyDisks.length > 0 && summary.host?.libvirtUri !== "qemu:///system") {
+            throw new Error("legacy VM migration requires the qemu:///system libvirt URI");
           }
+          if (legacyDisks.some((disk) => typeof disk.uuid !== "string" || disk.uuid.length === 0)) {
+            throw new Error("a VM with legacy disks is missing its persistent UUID");
+          }
+          if (legacyDisks.some((disk) => !["running", "shutoff"].includes(disk.state))) {
+            throw new Error("VMs with legacy disks must be running or shut off before migration");
+          }
+          console.log("vm_legacy_migration_eligible=true");
           NODE
 
           for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do

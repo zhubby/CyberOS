@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+export LC_ALL=C
 
 ACTION=${1:-apply}
 LEGACY_CONFIG=/etc/sigmaos/config.toml
@@ -11,6 +12,8 @@ MIGRATION_ROOT=$ZOS_ROOT/system-backups
 CONFIG_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-config.mjs
 FSTAB_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-fstab.mjs
 DATABASE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-database.mjs
+LIBVIRT_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-libvirt.mjs
+LIBVIRT_URI=qemu:///system
 
 LEGACY_TIMERS='sigmaos-maintenance.timer sigmaos-health.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer'
 LEGACY_SERVICES='sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-webdav.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-maintenance.service sigmaos-health.service sigmaos-backup-daily.service sigmaos-backup-weekly.service'
@@ -219,20 +222,133 @@ verify_capacity() {
   log "capacity check passed: required=$required_bytes available=$available_bytes"
 }
 
-verify_legacy_libvirt_paths() {
+prepare_libvirt_migration() {
+  domains_file=$backup_dir/libvirt-domains.tsv
+  : > "$domains_file"
   [ -d /etc/libvirt/qemu ] || return 0
-  reference_count=0
-  for domain_xml in /etc/libvirt/qemu/*.xml; do
-    [ -f "$domain_xml" ] && [ ! -L "$domain_xml" ] || continue
-    while IFS="$(printf '\t')" read -r source _target; do
-      [ -n "$source" ] || continue
-      if grep -Fq -- "$source" "$domain_xml"; then
-        reference_count=$((reference_count + 1))
-      fi
-    done < "$backup_dir/path-mappings.tsv"
+
+  command -v virsh >/dev/null 2>&1 || die "virsh is required to migrate registered VMs"
+  [ -x "$LIBVIRT_MIGRATOR" ] || die "libvirt migrator is missing"
+  install -d -o root -g root -m 0700 \
+    "$backup_dir/libvirt-original" "$backup_dir/libvirt-migrated"
+
+  domain_uuids=$(virsh -c "$LIBVIRT_URI" list --all --uuid) || \
+    die "unable to list registered VMs"
+  for domain_uuid in $domain_uuids; do
+    case "$domain_uuid" in
+      [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) ;;
+      *) die "libvirt returned an invalid domain UUID" ;;
+    esac
+    original_xml=$backup_dir/libvirt-original/$domain_uuid.xml
+    migrated_xml=$backup_dir/libvirt-migrated/$domain_uuid.xml
+    virsh -c "$LIBVIRT_URI" dumpxml --inactive "$domain_uuid" > "$original_xml" || \
+      die "registered VM $domain_uuid does not have a persistent definition"
+    replacement_count=$(/usr/local/bin/node "$LIBVIRT_MIGRATOR" \
+      "$original_xml" "$backup_dir/path-mappings.tsv" "$migrated_xml") || \
+      die "unable to prepare migrated VM definition for $domain_uuid"
+    case "$replacement_count" in
+      ''|*[!0-9]*) die "libvirt migrator returned an invalid replacement count" ;;
+    esac
+    if grep -Eq "(/var/lib/sigmaos|/srv/nas|/srv/apps|/srv/iso)(/|[\"'<])" "$migrated_xml"; then
+      die "registered VM $domain_uuid contains a legacy path without an exact migration mapping"
+    fi
+    if [ "$replacement_count" -eq 0 ]; then
+      rm -f "$original_xml" "$migrated_xml"
+      continue
+    fi
+    if virsh -c "$LIBVIRT_URI" managedsave-dumpxml "$domain_uuid" >/dev/null 2>&1; then
+      die "registered VM $domain_uuid has a managed save image; restore or remove it before migration"
+    fi
+    domain_state=$(virsh -c "$LIBVIRT_URI" domstate "$domain_uuid" | sed -n '1p') || \
+      die "unable to inspect registered VM $domain_uuid"
+    case "$domain_state" in
+      running|'shut off') ;;
+      *) die "registered VM $domain_uuid must be running or shut off before migration; found $domain_state" ;;
+    esac
+    printf '%s\t%s\n' "$domain_uuid" "$domain_state" >> "$domains_file"
+    log "prepared $replacement_count path replacement(s) for registered VM $domain_uuid ($domain_state)"
   done
-  [ "$reference_count" -eq 0 ] || \
-    die "registered VM definitions contain $reference_count legacy storage path references"
+}
+
+wait_for_libvirt_domains_shutoff() {
+  [ -s "$backup_dir/libvirt-domains.tsv" ] || return 0
+  shutdown_deadline=$(( $(date +%s) + 120 ))
+  while :; do
+    pending_domains=0
+    while IFS="$(printf '\t')" read -r domain_uuid _original_state; do
+      current_state=$(virsh -c "$LIBVIRT_URI" domstate "$domain_uuid" | sed -n '1p') || return 1
+      [ "$current_state" = 'shut off' ] || pending_domains=$((pending_domains + 1))
+    done < "$backup_dir/libvirt-domains.tsv"
+    [ "$pending_domains" -eq 0 ] && return 0
+    [ "$(date +%s)" -lt "$shutdown_deadline" ] || return 1
+    sleep 2
+  done
+}
+
+stop_legacy_libvirt_domains() {
+  [ -s "$backup_dir/libvirt-domains.tsv" ] || return 0
+  while IFS="$(printf '\t')" read -r domain_uuid original_state; do
+    [ "$original_state" = running ] || continue
+    current_state=$(virsh -c "$LIBVIRT_URI" domstate "$domain_uuid" | sed -n '1p') || return 1
+    if [ "$current_state" = running ]; then
+      log "requesting shutdown of registered VM $domain_uuid"
+      virsh -c "$LIBVIRT_URI" shutdown "$domain_uuid" >/dev/null || return 1
+    elif [ "$current_state" != 'shut off' ]; then
+      return 1
+    fi
+  done < "$backup_dir/libvirt-domains.tsv"
+  wait_for_libvirt_domains_shutoff || \
+    die "registered VMs did not shut down within 120 seconds; refusing to copy live disks"
+}
+
+define_migrated_libvirt_domains() {
+  [ -s "$backup_dir/libvirt-domains.tsv" ] || return 0
+  while IFS="$(printf '\t')" read -r domain_uuid _original_state; do
+    migrated_xml=$backup_dir/libvirt-migrated/$domain_uuid.xml
+    virsh -c "$LIBVIRT_URI" define "$migrated_xml" >/dev/null || return 1
+    current_xml=$backup_dir/libvirt-current-$domain_uuid.xml
+    checked_xml=$backup_dir/libvirt-checked-$domain_uuid.xml
+    virsh -c "$LIBVIRT_URI" dumpxml --inactive "$domain_uuid" > "$current_xml" || return 1
+    replacement_count=$(/usr/local/bin/node "$LIBVIRT_MIGRATOR" \
+      "$current_xml" "$backup_dir/path-mappings.tsv" "$checked_xml") || return 1
+    rm -f "$current_xml" "$checked_xml"
+    [ "$replacement_count" -eq 0 ] || return 1
+  done < "$backup_dir/libvirt-domains.tsv"
+}
+
+restore_original_libvirt_domains() {
+  [ -s "$backup_dir/libvirt-domains.tsv" ] || return 0
+  while IFS="$(printf '\t')" read -r domain_uuid _original_state; do
+    virsh -c "$LIBVIRT_URI" define \
+      "$backup_dir/libvirt-original/$domain_uuid.xml" >/dev/null || return 1
+  done < "$backup_dir/libvirt-domains.tsv"
+}
+
+start_recorded_libvirt_domains() {
+  [ -s "$backup_dir/libvirt-domains.tsv" ] || return 0
+  while IFS="$(printf '\t')" read -r domain_uuid original_state; do
+    [ "$original_state" = running ] || continue
+    current_state=$(virsh -c "$LIBVIRT_URI" domstate "$domain_uuid" | sed -n '1p') || return 1
+    if [ "$current_state" = 'shut off' ]; then
+      virsh -c "$LIBVIRT_URI" start "$domain_uuid" >/dev/null || return 1
+    elif [ "$current_state" != running ]; then
+      return 1
+    fi
+  done < "$backup_dir/libvirt-domains.tsv"
+}
+
+stop_migrated_libvirt_domains() {
+  [ -s "$backup_dir/libvirt-domains.tsv" ] || return 0
+  while IFS="$(printf '\t')" read -r domain_uuid _original_state; do
+    current_state=$(virsh -c "$LIBVIRT_URI" domstate "$domain_uuid" | sed -n '1p') || return 1
+    if [ "$current_state" = running ]; then
+      log "requesting shutdown of migrated VM $domain_uuid before rollback"
+      virsh -c "$LIBVIRT_URI" shutdown "$domain_uuid" >/dev/null || return 1
+    elif [ "$current_state" != 'shut off' ]; then
+      return 1
+    fi
+  done < "$backup_dir/libvirt-domains.tsv"
+  wait_for_libvirt_domains_shutoff
 }
 
 move_legacy_mounts() {
@@ -287,6 +403,16 @@ rollback_migration() {
   for unit in $ZOS_SERVICES; do
     systemctl stop "$unit" >/dev/null 2>&1 || true
   done
+  if ! stop_migrated_libvirt_domains; then
+    write_status rollback_failed || true
+    log "error: VM shutdown failed; migrated mounts remain in place for data safety" >&2
+    return 1
+  fi
+  if ! restore_original_libvirt_domains; then
+    write_status rollback_failed || true
+    log "error: original VM definitions could not be restored" >&2
+    return 1
+  fi
   if ! restore_mounts; then
     write_status rollback_failed || true
     log "error: mount rollback failed; legacy services remain stopped for data safety" >&2
@@ -313,6 +439,10 @@ rollback_migration() {
       restore_failed=1
     fi
   done
+  if ! start_recorded_libvirt_domains; then
+    log "error: failed to restore the original VM runtime state" >&2
+    restore_failed=1
+  fi
   if [ "$restore_failed" -ne 0 ]; then
     write_status rollback_failed || true
     return 1
@@ -366,6 +496,7 @@ apply_migration() {
   [ -x "$CONFIG_MIGRATOR" ] || die "configuration migrator is missing"
   [ -x "$FSTAB_MIGRATOR" ] || die "fstab migrator is missing"
   [ -x "$DATABASE_MIGRATOR" ] || die "database migrator is missing"
+  [ -x "$LIBVIRT_MIGRATOR" ] || die "libvirt migrator is missing"
   [ -f "$LEGACY_DATABASE" ] || die "legacy database is missing"
 
   LEGACY_VERSION=$(dpkg-query -W -f='${Version}' sigmaos 2>/dev/null || true)
@@ -409,7 +540,6 @@ EOF
   command -v df >/dev/null 2>&1 || die "df is required"
   command -v grep >/dev/null 2>&1 || die "grep is required"
   verify_capacity
-  verify_legacy_libvirt_paths
 
   for unit in $LEGACY_SERVICES $LEGACY_TIMERS $SHARE_SERVICES; do
     record_unit_state "$unit"
@@ -421,6 +551,8 @@ EOF
   for unit in $LEGACY_TIMERS $LEGACY_SERVICES $SHARE_SERVICES; do
     unit_exists "$unit" && systemctl stop "$unit"
   done
+  prepare_libvirt_migration
+  stop_legacy_libvirt_domains
 
   database_check=$(sqlite3 "$LEGACY_DATABASE" 'PRAGMA integrity_check;')
   [ "$database_check" = ok ] || die "legacy database integrity check failed: $database_check"
@@ -515,6 +647,9 @@ case "$ACTION" in
     ;;
   commit)
     if load_state && [ "$(status_value)" = pending ]; then
+      log "updating persistent VM definitions for the ZOS layout"
+      define_migrated_libvirt_domains || die "failed to update persistent VM definitions"
+      start_recorded_libvirt_domains || die "failed to restore migrated VM runtime state"
       write_status committed
       log "migration committed"
     fi

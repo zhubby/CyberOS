@@ -462,7 +462,8 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain("zos-terminal-helper.service");
     expect(migrationPreflight).toContain("/api/vms/summary");
     expect(migrationPreflight).toContain("vm_legacy_disk_references");
-    expect(migrationPreflight).toContain("registered VMs still reference legacy storage paths");
+    expect(migrationPreflight).toContain("vm_legacy_running_count");
+    expect(migrationPreflight).toContain("vm_legacy_migration_eligible=true");
     expect(deployWorkflow).not.toContain('cp "$package_path" "$release_dir/package.deb"');
     expect(deployWorkflow).not.toContain('"$release_dir/package.deb" \\\n            "$release_dir/release-manifest.json"');
   });
@@ -522,6 +523,7 @@ describe("native packaging artifacts", () => {
     expect(postinst).toContain("/zos/apps");
     expect(install).toContain("zos-migrate-config.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-fstab.mjs usr/lib/zos/scripts/");
+    expect(install).toContain("zos-migrate-libvirt.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-sigmaos.sh usr/lib/zos/scripts/");
     expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps");
     expect(apiUnit).toContain("CapabilityBoundingSet=\n");
@@ -655,8 +657,18 @@ describe("native packaging artifacts", () => {
     expect(migration).toContain("SHARE_SERVICES=");
     expect(migration).toContain("verify_capacity");
     expect(migration).toContain("--apparent-size");
-    expect(migration).toContain("verify_legacy_libvirt_paths");
-    expect(migration).toContain("registered VM definitions contain");
+    expect(migration).toContain("prepare_libvirt_migration");
+    expect(migration).toContain("refusing to copy live disks");
+    expect(migration).toContain("managed save image");
+    expect(migration).toContain("define_migrated_libvirt_domains");
+    expect(migration).toContain("restore_original_libvirt_domains");
+    expect(migration.indexOf('log "stopping legacy writers and services"')).toBeLessThan(
+      migration.lastIndexOf('  prepare_libvirt_migration')
+    );
+    expect(migration.indexOf('write_status pending')).toBeLessThan(migration.indexOf('  commit)'));
+    expect(migration.indexOf('  commit)')).toBeLessThan(
+      migration.indexOf('define_migrated_libvirt_domains || die')
+    );
     expect(migration).toContain('mount --move "$mount_target" "$new_mount_target"');
     expect(migration).toContain("chown -R --one-file-system zos:zos");
     expect(migration).toContain('chown root:root "$POINTER_PATH"');
