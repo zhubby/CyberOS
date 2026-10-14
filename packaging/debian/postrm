@@ -2,13 +2,13 @@
 set -e
 
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
-  rm -f /etc/systemd/system/sigmaos-api.service.d/optional-groups.conf
-  rm -f /etc/systemd/system/sigmaos-termux.service.d/identity.conf
-  rm -f /etc/systemd/system/sigmaos-vod-player.service.d/identity.conf
-  rm -f /etc/polkit-1/rules.d/49-sigmaos-libvirt.rules
-  rmdir /etc/systemd/system/sigmaos-api.service.d 2>/dev/null || true
-  rmdir /etc/systemd/system/sigmaos-termux.service.d 2>/dev/null || true
-  rmdir /etc/systemd/system/sigmaos-vod-player.service.d 2>/dev/null || true
+  rm -f /etc/systemd/system/zos-api.service.d/optional-groups.conf
+  rm -f /etc/systemd/system/zos-termux.service.d/identity.conf
+  rm -f /etc/systemd/system/zos-vod-player.service.d/identity.conf
+  rm -f /etc/polkit-1/rules.d/49-zos-libvirt.rules
+  rmdir /etc/systemd/system/zos-api.service.d 2>/dev/null || true
+  rmdir /etc/systemd/system/zos-termux.service.d 2>/dev/null || true
+  rmdir /etc/systemd/system/zos-vod-player.service.d 2>/dev/null || true
 fi
 
 if command -v systemctl >/dev/null 2>&1; then

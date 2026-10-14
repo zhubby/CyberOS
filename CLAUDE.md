@@ -48,20 +48,20 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
   build native modules on the target architecture and keep `.deb`, `.changes`,
   and `.buildinfo` artifacts.
 - `packaging/scripts/install.sh` mutates a Debian host. It requires root and
-  `amd64`/`arm64`; the terminal always runs as the internal `sigmaos` user. Review
+  `amd64`/`arm64`; the terminal always runs as the internal `zos` user. Review
   mirror settings before it changes APT sources. Nginx defaults on; Docker and
   VM support default off.
 - `packaging/appliance/build-image.sh` consumes an already built `.deb` and
   emits a systemd rootfs tarball, not a bootable board image. It requires
-  `mmdebstrap` and `systemd-nspawn`; pass `SIGMAOS_DEB` explicitly when the
+  `mmdebstrap` and `systemd-nspawn`; pass `ZOS_DEB` explicitly when the
   artifact is not at the default path.
 - After installation, check the resident services, timers, and journald. Verify
   `/health`, `/api/roots/readiness`, and `/api/system/health`; liveness alone is
   not NAS or backup readiness. Oneshot jobs normally become `inactive (dead)`
   after success, so inspect their exit status and journal.
-- Before upgrades, stop SQLite-writing timers and back up `/etc/sigmaos`,
-  `/var/lib/sigmaos`, and the database. Database migrations do not have a
-  generic downgrade path.
+- ZOS 1.0 does not migrate pre-ZOS installations. Back up user data and use a
+  clean install or reimage; do not copy old configuration or SQLite state into
+  `/zos`. Future ZOS database migrations do not have a generic downgrade path.
 
 ## Safety And UI Reminders
 

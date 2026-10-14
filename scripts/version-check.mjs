@@ -15,7 +15,7 @@ const execFileAsync = promisify(execFile);
 const repoRoot = (await runGit(["rev-parse", "--show-toplevel"])).trim();
 const state = await readVersionState(repoRoot);
 const errors = versionStateErrors(state);
-const base = argumentValue("--base") ?? process.env.SIGMAOS_VERSION_BASE?.trim() ?? null;
+const base = argumentValue("--base") ?? process.env.ZOS_VERSION_BASE?.trim() ?? null;
 
 if (base) {
   const changedFiles = (await runGit(["diff", "--name-only", `${base}...HEAD`], repoRoot))
@@ -34,7 +34,7 @@ if (base) {
   }
 }
 
-const tag = process.env.SIGMAOS_RELEASE_TAG?.trim() ?? null;
+const tag = process.env.ZOS_RELEASE_TAG?.trim() ?? null;
 if (tag && tag !== `v${state.version}`) {
   errors.push(`Release tag ${JSON.stringify(tag)} does not match v${state.version}`);
 }

@@ -6,7 +6,7 @@ import type {
   SystemEthernetConfig,
   SystemEthernetStatus,
   SystemEthernetUpdateInput
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 import { safeNetworkManagerMessage } from "./network-manager.js";
 

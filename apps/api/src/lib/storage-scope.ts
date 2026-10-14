@@ -1,5 +1,5 @@
-import { getNasRoot, type SigmaDatabase } from "@sigmaos/db";
-import type { NasRootRecord, SystemStoragePool } from "@sigmaos/shared";
+import { getNasRoot, type ZosDatabase } from "@zos/db";
+import type { NasRootRecord, SystemStoragePool } from "@zos/shared";
 import {
   StorageScopeSafetyError,
   assertNoSymlinkPathSegments,
@@ -9,7 +9,7 @@ import {
   resolveStorageScopeTargetPath,
   type SafeStorageScope,
   type SafePathResult
-} from "@sigmaos/nas-tools";
+} from "@zos/nas-tools";
 import type { SystemManagementDependencies } from "./system-management.js";
 import { collectSystemStorage } from "./system-management.js";
 
@@ -38,7 +38,7 @@ export interface StoragePoolScope {
 }
 
 export async function resolveStoragePoolScope(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   system: SystemManagementDependencies | undefined,
   rootId: string | undefined,
   storagePoolId: string | undefined

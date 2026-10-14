@@ -51,7 +51,7 @@ describe("settings helpers", () => {
   it("reports the running version in the dedicated settings section", () => {
     const section: SettingsSection = {
       id: "version",
-      group: "sigmaos"
+      group: "zos"
     };
     const buildInfo = {
       version: "0.2.0",

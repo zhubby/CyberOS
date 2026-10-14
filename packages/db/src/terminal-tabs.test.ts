@@ -9,20 +9,20 @@ import {
   ensureNasRoots,
   getTerminalTabState,
   initializeTerminalTabs,
-  openSigmaDb,
+  openZosDb,
   renameTerminalTab,
-  type SigmaDatabase
+  type ZosDatabase
 } from "./index.js";
 
 const legacySessionId = "11111111-1111-4111-8111-111111111111";
 
 describe("terminal tab repository", () => {
   let tempDir: string;
-  let db: SigmaDatabase;
+  let db: ZosDatabase;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-terminal-tabs-"));
-    db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-terminal-tabs-"));
+    db = openZosDb(path.join(tempDir, "zos.sqlite"));
     ensureNasRoots(db, [
       { id: "root-a", name: "Root A", path: tempDir },
       { id: "root-b", name: "Root B", path: tempDir }

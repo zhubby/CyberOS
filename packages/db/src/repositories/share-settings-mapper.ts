@@ -3,7 +3,7 @@ import type {
   ShareDefinitionConfig,
   ShareProtocolConfig,
   ShareSettingsRecord
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import { DLNA_MEDIA_TYPES } from "./settings-constants.js";
 import type { DbSystemSettingRow } from "./repository-rows.js";
 
@@ -20,7 +20,7 @@ export function normalizeShareSettings(
   return {
     enabled: normalizeBoolean(settings.enabled, false),
     account: {
-      username: normalizeString(account.username) ?? "sigma-share",
+      username: normalizeString(account.username) ?? "zos-share",
       password: normalizeNullableString(account.password)
     },
     shares: normalizeShareDefinitions(settings.shares),

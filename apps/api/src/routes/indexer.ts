@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { resolveSafeExistingPath, resolveSafeTargetPath } from "@sigmaos/nas-tools";
-import { enqueueIndexTask, getIndexerServiceStatus, getIndexRootStatus, getNasRoot, listIndexRootStatuses, listNasRoots, listHealthAlerts, listIndexRunHistory, listRootReadiness } from "@sigmaos/db";
-import type { IndexReindexRequest } from "@sigmaos/shared";
+import { resolveSafeExistingPath, resolveSafeTargetPath } from "@zos/nas-tools";
+import { enqueueIndexTask, getIndexerServiceStatus, getIndexRootStatus, getNasRoot, listIndexRootStatuses, listNasRoots, listHealthAlerts, listIndexRunHistory, listRootReadiness } from "@zos/db";
+import type { IndexReindexRequest } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerIndexerRoutes(server: FastifyInstance, { db, config }: ApiRouteContext): void {

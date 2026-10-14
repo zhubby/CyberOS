@@ -2,15 +2,15 @@ import {
   finishOpsRun,
   heartbeatOpsRun,
   startOpsRun,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { OpsMaintenanceSummary, SigmaConfig, SystemHealthSummary } from "@sigmaos/shared";
-import { runScheduledHealthEvaluation } from "@sigmaos/system-health";
+  type ZosDatabase
+} from "@zos/db";
+import type { OpsMaintenanceSummary, ZosConfig, SystemHealthSummary } from "@zos/shared";
+import { runScheduledHealthEvaluation } from "@zos/system-health";
 import { runMaintenance } from "./maintenance.js";
 
 export async function runHealthTask(input: {
-  db: SigmaDatabase;
-  config: SigmaConfig;
+  db: ZosDatabase;
+  config: ZosConfig;
   now?: Date;
 }): Promise<SystemHealthSummary> {
   return runTrackedTask(input, "health", async () => {
@@ -20,8 +20,8 @@ export async function runHealthTask(input: {
 }
 
 export async function runMaintenanceTask(input: {
-  db: SigmaDatabase;
-  config: SigmaConfig;
+  db: ZosDatabase;
+  config: ZosConfig;
   now?: Date;
 }): Promise<OpsMaintenanceSummary> {
   return runTrackedTask(input, "maintenance", async () => {
@@ -31,7 +31,7 @@ export async function runMaintenanceTask(input: {
 }
 
 async function runTrackedTask<T>(
-  input: { db: SigmaDatabase; config: SigmaConfig; now?: Date },
+  input: { db: ZosDatabase; config: ZosConfig; now?: Date },
   task: "health" | "maintenance",
   execute: () => Promise<{ result: T; persisted: Record<string, unknown> }>
 ): Promise<T> {
@@ -63,7 +63,7 @@ async function runTrackedTask<T>(
   }
 }
 
-function sanitizeOpsError(error: unknown, config: SigmaConfig): string {
+function sanitizeOpsError(error: unknown, config: ZosConfig): string {
   let message = error instanceof Error ? error.message : "operation failed";
   const privatePaths = [config.dataDir, config.databasePath, ...config.nasRoots.map((root) => root.path)]
     .filter(Boolean)

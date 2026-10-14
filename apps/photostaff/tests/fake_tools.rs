@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::time::Duration;
 
-use sigmaos_photostaff::command::{CommandLimits, CommandRunner, child_media_path};
+use zos_photostaff::command::{CommandLimits, CommandRunner, child_media_path};
 
 fn limits() -> CommandLimits {
     CommandLimits {

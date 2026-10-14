@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { ensureNasRoots, openSigmaDb } from "@sigmaos/db";
-import { loadConfig } from "@sigmaos/shared";
+import { ensureNasRoots, openZosDb } from "@zos/db";
+import { loadConfig } from "@zos/shared";
 import { loadBuildInfo } from "./lib/build-info.js";
 import { createSystemCommandRunner } from "./lib/system-management.js";
 import { createTerminalRuntime } from "./lib/termux-client.js";
@@ -11,7 +11,7 @@ import { buildServer } from "./server.js";
 import { registerWebApp } from "./web-static.js";
 
 const config = loadConfig();
-const db = openSigmaDb(config.databasePath);
+const db = openZosDb(config.databasePath);
 const buildInfo = await loadBuildInfo();
 ensureNasRoots(db, config.nasRoots);
 
@@ -40,14 +40,14 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     shutdownPromise ??= shutdown(signal);
     void shutdownPromise.catch((error) => {
-      server.log.error({ err: error, signal }, "Failed to shut down SigmaOS API cleanly");
+      server.log.error({ err: error, signal }, "Failed to shut down ZOS API cleanly");
       process.exitCode = 1;
     });
   });
 }
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
-  server.log.info({ signal }, "Stopping SigmaOS API");
+  server.log.info({ signal }, "Stopping ZOS API");
   try {
     await server.close();
   } finally {
@@ -56,8 +56,8 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
 }
 
 function resolveWebDist(): string {
-  if (process.env.SIGMAOS_WEB_DIST) {
-    return process.env.SIGMAOS_WEB_DIST;
+  if (process.env.ZOS_WEB_DIST) {
+    return process.env.ZOS_WEB_DIST;
   }
 
   const candidates = [
@@ -69,12 +69,12 @@ function resolveWebDist(): string {
 }
 
 function resolveDocsDist(): string | undefined {
-  const configured = process.env.SIGMAOS_DOCS_DIST;
+  const configured = process.env.ZOS_DOCS_DIST;
   const candidates = [
     configured,
     path.resolve(process.cwd(), "docs/dist"),
     path.resolve(process.cwd(), "../docs/dist"),
-    "/usr/lib/sigmaos/docs/dist"
+    "/usr/lib/zos/docs/dist"
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   return candidates.find((candidate) => existsSync(candidate));

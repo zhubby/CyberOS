@@ -9,7 +9,7 @@ import {
   type RefObject
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { SystemEthernetConfig } from "@sigmaos/shared";
+import type { SystemEthernetConfig } from "@zos/shared";
 import {
   AlertTriangle,
   Cable,
@@ -276,7 +276,7 @@ function formatEthernetWarning(warning: string, t: Translate): string {
     "No IPv4 default route is enabled": "noIpv4DefaultRoute",
     "No IPv6 default route is enabled": "noIpv6DefaultRoute",
     "Ethernet ports share a subnet but use asymmetric default-route settings": "asymmetricSubnetRoutes",
-    "The active profile uses Ethernet features SigmaOS cannot safely manage": "unsupportedProfile"
+    "The active profile uses Ethernet features ZOS cannot safely manage": "unsupportedProfile"
   }[warning];
   return key ? t(`workspace.management.network.ethernet.warnings.${key}`) : warning;
 }

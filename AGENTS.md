@@ -5,7 +5,7 @@ short Claude-specific handoff; this file is the project source of truth.
 
 ## Project And Runtime
 
-SigmaOS is a TypeScript npm-workspaces monorepo for a single-user Linux NAS
+ZOS is a TypeScript npm-workspaces monorepo for a single-user Linux NAS
 appliance. It is deployed as native Node.js processes and systemd units, not as
 a Docker container.
 
@@ -40,7 +40,7 @@ for the target architecture.
 - Do not rewrite history, reset files, or run destructive commands unless the
   user explicitly asks.
 - Do not commit or push unless asked. Never add generated output such as
-  `node_modules`, `dist`, coverage, logs, `.sigmaos` build artifacts, or
+  `node_modules`, `dist`, coverage, logs, `.zos` build artifacts, or
   `docs/.astro`/`docs/test-results`.
 - Keep TypeScript strict; do not weaken compiler settings or use `any` to hide
   type errors.
@@ -60,11 +60,11 @@ Use an isolated development data directory so local processes cannot read or
 mutate production NAS paths:
 
 ```bash
-mkdir -p .sigmaos/dev-data/nas
-SIGMAOS_ENVIRONMENT=development \
-SIGMAOS_DATA_DIR="$PWD/.sigmaos/dev-data" \
-SIGMAOS_NAS_ROOTS="dev:Development NAS:$PWD/.sigmaos/dev-data/nas" \
-SIGMAOS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
+mkdir -p .zos/dev-root/data/primary
+ZOS_ENVIRONMENT=development \
+ZOS_ROOT="$PWD/.zos/dev-root" \
+ZOS_NAS_ROOTS="dev:Development NAS:$PWD/.zos/dev-root/data/primary" \
+ZOS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
 npm run dev
 ```
 
@@ -131,38 +131,38 @@ require the tag to be reachable from `main` and to match the Debian changelog.
 ### Debian package
 
 Build on the target architecture when possible. `build-deb.sh` copies the
-checkout to `.sigmaos/deb-build`, runs the Debian rules (fresh root/docs npm
+checkout to `.zos/deb-build`, runs the Debian rules (fresh root/docs npm
 installs, full build, and `npm test`), and writes package artifacts under
-`.sigmaos/`:
+`.zos/`:
 
 ```bash
-SIGMAOS_NPM_REGISTRY=https://registry.npmmirror.com \
+ZOS_NPM_REGISTRY=https://registry.npmmirror.com \
   ./packaging/scripts/build-deb.sh
 # or: make deb
 ```
 
 The package contains compiled app/docs assets, bundled workspace `node_modules`,
-build metadata, `/etc/sigmaos` defaults, and systemd units. It does not start
+build metadata, `/zos/config` defaults, and systemd units. It does not start
 services during `dpkg` installation; the host installer performs first boot
 and service activation.
 
 ### Host installer
 
 `packaging/scripts/install.sh` is a host-mutating operation. It must run as
-root on Debian-family `amd64`/`arm64`. The terminal identity is always `sigmaos`:
+root on Debian-family `amd64`/`arm64`. The terminal identity is always `zos`:
 
 ```bash
-sudo SIGMAOS_NAS_ROOT_PATH=/srv/nas \
+sudo ZOS_NAS_ROOT_PATH=/zos/data/primary \
   ./packaging/scripts/install.sh
 ```
 
 The script can install/verify Node.js 22, configure and back up known APT
-sources under `/var/backups/sigmaos-apt`, build/install the current checkout,
-initialize `/etc/sigmaos/config.toml` and `/var/lib/sigmaos`, and configure
-Nginx. `SIGMAOS_ENABLE_NGINX` defaults to `1`; Docker and VM support default to
-`0` and can be enabled explicitly with `SIGMAOS_ENABLE_DOCKER=1` and
-`SIGMAOS_ENABLE_VM=1`. Review `SIGMAOS_APT_*`, `SIGMAOS_NODE_*`, and
-`SIGMAOS_NPM_REGISTRY` before using internal or domestic mirrors.
+sources under `/zos/system-backups/apt`, build/install the current checkout,
+initialize `/zos/config/config.toml` and `/zos/state`, and configure
+Nginx. `ZOS_ENABLE_NGINX` defaults to `1`; Docker and VM support default to
+`0` and can be enabled explicitly with `ZOS_ENABLE_DOCKER=1` and
+`ZOS_ENABLE_VM=1`. Review `ZOS_APT_*`, `ZOS_NODE_*`, and
+`ZOS_NPM_REGISTRY` before using internal or domestic mirrors.
 
 After installation, core services are enabled and started; maintenance,
 health, and backup timers are enabled but do not all
@@ -176,15 +176,15 @@ flashable SD/eMMC image. It requires `node`, `mmdebstrap`, `systemd-nspawn`,
 `tar`, `curl`, and `sha256sum`, and consumes a previously built `.deb`:
 
 ```bash
-SIGMAOS_DEB="$PWD/.sigmaos/sigmaos_<version>_arm64.deb" \
-SIGMAOS_IMAGE_OUT="$PWD/.sigmaos/appliance" \
-SIGMAOS_TARGET_ARCH=arm64 \
+ZOS_DEB="$PWD/.zos/zos_<version>_arm64.deb" \
+ZOS_IMAGE_OUT="$PWD/.zos/appliance" \
+ZOS_TARGET_ARCH=arm64 \
   ./packaging/appliance/build-image.sh
 # or: make appliance (when the default .deb path is present)
 ```
 
-Defaults are Debian bookworm, `arm64`, and `.sigmaos/appliance`. The output is
-`.sigmaos/appliance/sigmaos-rootfs-<arch>.tar`; board-specific boot, network,
+Defaults are Debian bookworm, `arm64`, and `.zos/appliance`. The output is
+`.zos/appliance/zos-rootfs-<arch>.tar`; board-specific boot, network,
 mount, and first-boot configuration remain outside this script. Docker, VM,
 and backup are disabled by the generated first-boot defaults and must be
 enabled/configured deliberately.
@@ -195,10 +195,10 @@ Use service status and journald, not only a single liveness request:
 
 ```bash
 sudo systemctl --failed
-sudo systemctl is-active sigmaos-api.service sigmaos-worker@1.service \
-  sigmaos-termux.service sigmaos-hostd.service
-sudo systemctl list-timers 'sigmaos-*'
-sudo journalctl -u sigmaos-api.service -u sigmaos-worker@1.service -n 100 --no-pager
+sudo systemctl is-active zos-api.service zos-worker@1.service \
+  zos-termux.service zos-hostd.service
+sudo systemctl list-timers 'zos-*'
+sudo journalctl -u zos-api.service -u zos-worker@1.service -n 100 --no-pager
 curl -fsS http://127.0.0.1:3010/health
 curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
@@ -207,16 +207,20 @@ curl -fsS http://127.0.0.1:3010/api/system/health
 `/health` is API liveness only; it does not prove NAS mounts, indexing, or
 backup readiness. Oneshot units normally return to `inactive (dead)` after
 success, so inspect their exit code and journal. Manually run a task with its
-service, for example `sudo systemctl start sigmaos-indexer.service`, rather
+service, for example `sudo systemctl start zos-indexer.service`, rather
 than invoking a timer directly. After changing units or configuration, run
 `sudo systemctl daemon-reload` and restart affected resident services.
 
 For upgrades, stop the indexer and all maintenance/health/backup timers,
-save the current `.deb`, `/etc/sigmaos`, `/var/lib/sigmaos` and SQLite state,
+save the current `.deb`, `/zos/config`, `/zos/state` and SQLite state,
 install the new package, and re-run the API, readiness, index, health, and
 backup acceptance checks before re-enabling timers. Database migrations have no
 general reverse migration; a downgrade may require restoring a matching state
 backup as well as the old package.
+
+ZOS 1.0 does not support an in-place migration from the pre-ZOS product. Back
+up user data, then perform a clean install or reimage; do not reuse the old
+configuration, SQLite state, services, or browser state under `/zos`.
 
 ## Safety Boundaries
 

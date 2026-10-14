@@ -35,7 +35,7 @@
       "requires_verification": true,
       "confidence": 0.95,
       "evidence": [
-        "SIGMAOS_VERSION_BASE previously resolved only github.event.pull_request.base.sha even though the workflow also triggers on pushes to main."
+        "ZOS_VERSION_BASE previously resolved only github.event.pull_request.base.sha even though the workflow also triggers on pushes to main."
       ],
       "pre_existing": false,
       "status": "applied"

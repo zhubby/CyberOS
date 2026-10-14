@@ -1,11 +1,15 @@
 import { access, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const INTERNAL_PACKAGE_PREFIX = "@sigmaos/";
+const INTERNAL_PACKAGE_PREFIX = "@zos/";
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 const PRODUCT_CARGO_PACKAGES = [
-  { manifestPath: "apps/downloader/Cargo.toml", packageName: "sigmaos-downloader" },
-  { manifestPath: "apps/photostaff/Cargo.toml", packageName: "sigmaos-photostaff" }
+  { manifestPath: "apps/downloader/Cargo.toml", packageName: "zos-downloader" },
+  { manifestPath: "apps/hostd/Cargo.toml", packageName: "zos-hostd" },
+  { manifestPath: "apps/indexer/Cargo.toml", packageName: "zos-indexer" },
+  { manifestPath: "apps/photostaff/Cargo.toml", packageName: "zos-photostaff" },
+  { manifestPath: "apps/termux/Cargo.toml", packageName: "zos-termux" },
+  { manifestPath: "apps/vod-player/Cargo.toml", packageName: "zos-vod-player" }
 ];
 const STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 
@@ -262,7 +266,7 @@ function updateInternalDependencies(value, nextVersion) {
 }
 
 function readDebianVersion(changelog) {
-  return /^sigmaos \(([^)]+)\)/u.exec(changelog)?.[1] ?? null;
+  return /^zos \(([^)]+)\)/u.exec(changelog)?.[1] ?? null;
 }
 
 function readApplianceVersion(manifest) {
@@ -312,11 +316,11 @@ function locateTomlPackageVersion(document, tableHeader, packageName) {
 function prependDebianChangelog(changelog, version, note, now) {
   const timestamp = now.toUTCString().replace("GMT", "+0000");
   return [
-    `sigmaos (${version}) unstable; urgency=medium`,
+    `zos (${version}) unstable; urgency=medium`,
     "",
     `  * ${note}`,
     "",
-    ` -- SigmaOS Maintainers <maintainers@sigmaos.local>  ${timestamp}`,
+    ` -- ZOS Maintainers <maintainers@zos.local>  ${timestamp}`,
     "",
     changelog
   ].join("\n");

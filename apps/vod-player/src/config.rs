@@ -7,9 +7,9 @@ use serde::Deserialize;
 
 use crate::error::{ErrorCode, VodError};
 
-pub const DEFAULT_CONFIG_PATH: &str = "/etc/sigmaos/config.toml";
-pub const DEFAULT_SOCKET_PATH: &str = "/run/sigmaos/vod-player.sock";
-pub const DEFAULT_STATE_PATH: &str = "/var/lib/sigmaos-vod-player/session.json";
+pub const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
+pub const DEFAULT_SOCKET_PATH: &str = "/run/zos/vod-player.sock";
+pub const DEFAULT_STATE_PATH: &str = "/zos/state/vod-player/session.json";
 
 #[derive(Debug, Clone)]
 pub struct VodPlayerConfig {
@@ -71,21 +71,20 @@ struct FileNasRoot {
 
 impl VodPlayerConfig {
     pub fn load() -> Result<Self, VodError> {
-        reject_legacy_environment()?;
         let config_path = configured_path();
         let file = match std::fs::read_to_string(&config_path) {
             Ok(text) => toml_edit::de::from_str::<FileConfig>(&text)
-                .map_err(|error| VodError::internal(format!("Invalid SigmaOS config: {error}")))?,
+                .map_err(|error| VodError::internal(format!("Invalid ZOS config: {error}")))?,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => FileConfig::default(),
             Err(error) => return Err(error.into()),
         };
         let player = file.vod_player;
-        let enabled = bool_env("SIGMAOS_VOD_PLAYER_ENABLED")?
+        let enabled = bool_env("ZOS_VOD_PLAYER_ENABLED")?
             .or(player.enabled)
             .unwrap_or(false);
-        let user = text_env("SIGMAOS_VOD_PLAYER_USER")
+        let user = text_env("ZOS_VOD_PLAYER_USER")
             .or(player.user)
-            .unwrap_or_else(|| "sigmaos".to_owned());
+            .unwrap_or_else(|| "zos".to_owned());
         if user == "root"
             || !user
                 .chars()
@@ -113,25 +112,22 @@ impl VodPlayerConfig {
                 "VOD player daemon is running as the wrong user",
             ));
         }
-        let peer_uid = User::from_name("sigmaos")
+        let peer_uid = User::from_name("zos")
             .map_err(|error| VodError::unavailable(ErrorCode::PermissionDenied, error.to_string()))?
             .map(|account| account.uid.as_raw())
             .or_else(|| (!enabled).then(|| nix::unistd::Uid::current().as_raw()))
             .ok_or_else(|| {
-                VodError::unavailable(
-                    ErrorCode::PermissionDenied,
-                    "SigmaOS API user does not exist",
-                )
+                VodError::unavailable(ErrorCode::PermissionDenied, "ZOS API user does not exist")
             })?;
         let socket_path = absolute_path(
-            text_env("SIGMAOS_VOD_PLAYER_SOCKET_PATH")
+            text_env("ZOS_VOD_PLAYER_SOCKET_PATH")
                 .map(PathBuf::from)
                 .or(player.socket_path),
             DEFAULT_SOCKET_PATH,
             "socket_path",
         )?;
         let state_path = absolute_path(
-            text_env("SIGMAOS_VOD_PLAYER_STATE_PATH")
+            text_env("ZOS_VOD_PLAYER_STATE_PATH")
                 .map(PathBuf::from)
                 .or(player.state_path),
             DEFAULT_STATE_PATH,
@@ -144,10 +140,10 @@ impl VodPlayerConfig {
                 400,
             ));
         }
-        let retry_base_delay_ms = number_env("SIGMAOS_VOD_PLAYER_RETRY_BASE_DELAY_MS")?
+        let retry_base_delay_ms = number_env("ZOS_VOD_PLAYER_RETRY_BASE_DELAY_MS")?
             .or(player.retry_base_delay_ms)
             .unwrap_or(2_000);
-        let retry_max_delay_ms = number_env("SIGMAOS_VOD_PLAYER_RETRY_MAX_DELAY_MS")?
+        let retry_max_delay_ms = number_env("ZOS_VOD_PLAYER_RETRY_MAX_DELAY_MS")?
             .or(player.retry_max_delay_ms)
             .unwrap_or(60_000);
         if retry_base_delay_ms == 0 || retry_max_delay_ms < retry_base_delay_ms {
@@ -157,13 +153,13 @@ impl VodPlayerConfig {
                 400,
             ));
         }
-        let video_output = text_env("SIGMAOS_VOD_PLAYER_VIDEO_OUTPUT")
+        let video_output = text_env("ZOS_VOD_PLAYER_VIDEO_OUTPUT")
             .or(player.video_output)
             .unwrap_or_else(|| "drm".to_owned());
-        let audio_output = text_env("SIGMAOS_VOD_PLAYER_AUDIO_OUTPUT")
+        let audio_output = text_env("ZOS_VOD_PLAYER_AUDIO_OUTPUT")
             .or(player.audio_output)
             .unwrap_or_else(|| "alsa".to_owned());
-        let hwdec = text_env("SIGMAOS_VOD_PLAYER_HWDEC")
+        let hwdec = text_env("ZOS_VOD_PLAYER_HWDEC")
             .or(player.hwdec)
             .unwrap_or_else(|| "auto-safe".to_owned());
         if video_output != "drm"
@@ -176,23 +172,23 @@ impl VodPlayerConfig {
                 400,
             ));
         }
-        let nas_roots = resolve_nas_roots(text_env("SIGMAOS_NAS_ROOTS"), file.nas_roots)?;
+        let nas_roots = resolve_nas_roots(text_env("ZOS_NAS_ROOTS"), file.nas_roots)?;
         Ok(Self {
             enabled,
             socket_path,
             state_path,
             command_timeout_ms: positive_setting(
-                number_env("SIGMAOS_VOD_PLAYER_COMMAND_TIMEOUT_MS")?.or(player.command_timeout_ms),
+                number_env("ZOS_VOD_PLAYER_COMMAND_TIMEOUT_MS")?.or(player.command_timeout_ms),
                 5_000,
                 "command_timeout_ms",
             )?,
             startup_timeout_ms: positive_setting(
-                number_env("SIGMAOS_VOD_PLAYER_STARTUP_TIMEOUT_MS")?.or(player.startup_timeout_ms),
+                number_env("ZOS_VOD_PLAYER_STARTUP_TIMEOUT_MS")?.or(player.startup_timeout_ms),
                 15_000,
                 "startup_timeout_ms",
             )?,
             checkpoint_interval_ms: positive_setting(
-                number_env("SIGMAOS_VOD_PLAYER_CHECKPOINT_INTERVAL_MS")?
+                number_env("ZOS_VOD_PLAYER_CHECKPOINT_INTERVAL_MS")?
                     .or(player.checkpoint_interval_ms),
                 5_000,
                 "checkpoint_interval_ms",
@@ -201,11 +197,11 @@ impl VodPlayerConfig {
             retry_max_delay_ms,
             video_output,
             drm_connector: optional_text(
-                text_env("SIGMAOS_VOD_PLAYER_DRM_CONNECTOR").or(player.drm_connector),
+                text_env("ZOS_VOD_PLAYER_DRM_CONNECTOR").or(player.drm_connector),
             ),
             audio_output,
             audio_device: optional_text(
-                text_env("SIGMAOS_VOD_PLAYER_AUDIO_DEVICE").or(player.audio_device),
+                text_env("ZOS_VOD_PLAYER_AUDIO_DEVICE").or(player.audio_device),
             ),
             hwdec,
             user,
@@ -216,22 +212,9 @@ impl VodPlayerConfig {
 }
 
 pub fn configured_path() -> PathBuf {
-    env::var_os("SIGMAOS_CONFIG")
+    env::var_os("ZOS_CONFIG")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH))
-}
-
-fn reject_legacy_environment() -> Result<(), VodError> {
-    if let Some((name, _)) = env::vars()
-        .find(|(name, _)| name.starts_with("SIGMAOS_PLAYER_") || name == "SIGMAOS_ENABLE_PLAYER")
-    {
-        return Err(VodError::new(
-            ErrorCode::InvalidCommand,
-            format!("{name} is no longer supported; use SIGMAOS_VOD_PLAYER_*"),
-            400,
-        ));
-    }
-    Ok(())
 }
 
 fn text_env(name: &str) -> Option<String> {
@@ -405,7 +388,7 @@ mod tests {
             "/var/tmp/session.json"
         )));
         assert!(!is_private_temporary_path(Path::new(
-            "/run/sigmaos/vod-player.sock"
+            "/run/zos/vod-player.sock"
         )));
     }
 

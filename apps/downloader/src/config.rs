@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{DownloadError, ErrorCode};
 
-pub const DEFAULT_CONFIG_PATH: &str = "/etc/sigmaos/config.toml";
+pub const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -12,46 +12,41 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, DownloadError> {
-        if let Some(path) = env::var_os("SIGMAOS_DATABASE_PATH") {
-            return Ok(Self {
-                database_path: PathBuf::from(path),
-            });
-        }
-        let config_path = env::var_os("SIGMAOS_CONFIG")
+        let config_path = env::var_os("ZOS_CONFIG")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH));
-        let data_dir = resolve_data_dir(&config_path, env::var_os("SIGMAOS_DATA_DIR"))?;
+        let root_dir = resolve_root_dir(&config_path, env::var_os("ZOS_ROOT"))?;
         Ok(Self {
-            database_path: data_dir.join("sigmaos.sqlite"),
+            database_path: root_dir.join("state/zos.sqlite"),
         })
     }
 }
 
-fn resolve_data_dir(
+fn resolve_root_dir(
     config_path: &Path,
     environment_override: Option<std::ffi::OsString>,
 ) -> Result<PathBuf, DownloadError> {
     match environment_override {
         Some(path) => Ok(PathBuf::from(path)),
-        None if config_path.exists() => data_dir_from_file(config_path),
-        None => Ok(PathBuf::from(".sigmaos")),
+        None if config_path.exists() => root_dir_from_file(config_path),
+        None => Ok(PathBuf::from(".zos/dev-root")),
     }
 }
 
-fn data_dir_from_file(path: &Path) -> Result<PathBuf, DownloadError> {
+fn root_dir_from_file(path: &Path) -> Result<PathBuf, DownloadError> {
     let text = std::fs::read_to_string(path).map_err(DownloadError::storage)?;
     let document = text.parse::<toml_edit::DocumentMut>().map_err(|error| {
         DownloadError::new(
             ErrorCode::Internal,
-            format!("invalid SigmaOS config: {error}"),
+            format!("invalid ZOS config: {error}"),
             false,
         )
     })?;
     Ok(document
-        .get("data_dir")
+        .get("root_dir")
         .and_then(toml_edit::Item::as_str)
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".sigmaos")))
+        .unwrap_or_else(|| PathBuf::from(".zos/dev-root")))
 }
 
 #[cfg(test)]
@@ -59,16 +54,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn environment_data_directory_overrides_the_config_file() {
+    fn environment_root_directory_overrides_the_config_file() {
         let directory = tempfile::tempdir().unwrap();
         let config = directory.path().join("config.toml");
-        std::fs::write(&config, "data_dir = '/production'\n").unwrap();
+        std::fs::write(&config, "root_dir = '/production'\n").unwrap();
         assert_eq!(
-            resolve_data_dir(&config, Some("/isolated".into())).unwrap(),
+            resolve_root_dir(&config, Some("/isolated".into())).unwrap(),
             PathBuf::from("/isolated")
         );
         assert_eq!(
-            resolve_data_dir(&config, None).unwrap(),
+            resolve_root_dir(&config, None).unwrap(),
             PathBuf::from("/production")
         );
     }

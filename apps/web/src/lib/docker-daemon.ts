@@ -1,4 +1,4 @@
-import type { DockerDaemonStatus } from "@sigmaos/shared";
+import type { DockerDaemonStatus } from "@zos/shared";
 
 export type DockerDaemonTone = "ready" | "warning" | "offline" | "neutral";
 

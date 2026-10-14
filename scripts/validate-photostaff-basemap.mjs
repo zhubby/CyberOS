@@ -45,7 +45,7 @@ class NodeFileRangeSource {
 }
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const archivePath = path.resolve(process.argv[2] ?? path.join(repoRoot, ".sigmaos/map-assets", expected.asset));
+const archivePath = path.resolve(process.argv[2] ?? path.join(repoRoot, ".zos/map-assets", expected.asset));
 const archiveStat = await stat(archivePath);
 assert(archiveStat.isFile(), "Map archive is not a regular file");
 assert(archiveStat.size === expected.sizeBytes, `Expected ${expected.sizeBytes} bytes, got ${archiveStat.size}`);

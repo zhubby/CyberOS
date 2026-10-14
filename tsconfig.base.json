@@ -15,12 +15,12 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@sigmaos/agent": ["packages/agent/src/index.ts"],
-      "@sigmaos/db": ["packages/db/src/index.ts"],
-      "@sigmaos/nas-tools": ["packages/nas-tools/src/index.ts"],
-      "@sigmaos/shared": ["packages/shared/src/index.ts"],
-      "@sigmaos/shared/docker-images": ["packages/shared/src/docker-images.ts"],
-      "@sigmaos/shared/photostaff-config": ["packages/shared/src/photostaff-config.ts"]
+      "@zos/agent": ["packages/agent/src/index.ts"],
+      "@zos/db": ["packages/db/src/index.ts"],
+      "@zos/nas-tools": ["packages/nas-tools/src/index.ts"],
+      "@zos/shared": ["packages/shared/src/index.ts"],
+      "@zos/shared/docker-images": ["packages/shared/src/docker-images.ts"],
+      "@zos/shared/photostaff-config": ["packages/shared/src/photostaff-config.ts"]
     }
   }
 }

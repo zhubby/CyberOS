@@ -59,13 +59,13 @@ import {
   photoExtension,
   photoMediaKind,
   type PhotoMediaKind
-} from "@sigmaos/shared/photostaff-config";
+} from "@zos/shared/photostaff-config";
 import type {
   PhotoMetadataCondition,
   PhotoQueryFacets,
   PhotoQueryFilters,
   PhotoQuerySortField
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { SkeletonBlock } from "./ManagementSkeleton.js";
@@ -486,7 +486,7 @@ export function PhotoLibraryPanel({
       const result = await createPhotoExport(selected.map((photo) => photo.id));
       const anchor = document.createElement("a");
       anchor.href = result.url;
-      anchor.download = selected.length === 1 ? selected[0]!.name : "sigmaos-photos.zip";
+      anchor.download = selected.length === 1 ? selected[0]!.name : "zos-photos.zip";
       document.body.append(anchor);
       anchor.click();
       anchor.remove();

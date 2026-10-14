@@ -2,14 +2,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openSigmaDb, type SigmaDatabase } from "@sigmaos/db";
-import type { SigmaConfig, VodPlayerStatus } from "@sigmaos/shared";
+import { ensureNasRoots, openZosDb, type ZosDatabase } from "@zos/db";
+import type { ZosConfig, VodPlayerStatus } from "@zos/shared";
 import { VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { buildServer } from "../server.js";
 
 const poolId = "/dev/md/test-pool";
 let tempDir: string | null = null;
-let db: SigmaDatabase | null = null;
+let db: ZosDatabase | null = null;
 
 afterEach(async () => {
   db?.close();
@@ -145,21 +145,21 @@ describe("VOD Player API", () => {
 });
 
 async function setup(): Promise<{ server: Awaited<ReturnType<typeof buildServer>>; root: string }> {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-vod-player-api-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-vod-player-api-"));
   const root = path.join(tempDir, "root");
   await mkdir(root);
   await writeFile(path.join(root, "clip.mp4"), "video");
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
   const server = await buildServer({ config: testConfig(root, false), db, system: storageSystem(root) });
   return { server, root };
 }
 
-function testConfig(root: string, enabled: boolean): SigmaConfig {
+function testConfig(root: string, enabled: boolean): ZosConfig {
   return {
     environment: "development",
     dataDir: path.dirname(root),
-    databasePath: path.join(path.dirname(root), "sigmaos.sqlite"),
+    databasePath: path.join(path.dirname(root), "zos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test", authMode: "local-only" },
@@ -182,7 +182,7 @@ function testConfig(root: string, enabled: boolean): SigmaConfig {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "sigmaos"
+      user: "zos"
     },
     nasRoots: [{ id: "local", name: "Local", path: root }]
   };

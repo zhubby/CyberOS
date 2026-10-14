@@ -22,7 +22,7 @@ import type {
   SystemStoragePartition,
   SystemStoragePool,
   SystemStorageSummary
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import type { NetworkManagerRuntime } from "./network-manager.js";
 import type { EthernetManagerRuntime } from "./ethernet-manager.js";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";

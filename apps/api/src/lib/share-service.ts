@@ -10,10 +10,10 @@ import type {
   ShareProtocolServiceStatus,
   ShareSettingsRecord,
   ShareSummary,
-  SigmaConfig,
+  ZosConfig,
   SystemCollectionIssue
-} from "@sigmaos/shared";
-import { SHARE_PROTOCOLS } from "@sigmaos/shared";
+} from "@zos/shared";
+import { SHARE_PROTOCOLS } from "@zos/shared";
 import { HostdClient } from "./hostd-client.js";
 import type { SystemCommandRunner } from "./system-management.js";
 
@@ -25,7 +25,7 @@ let shareMutationTail: Promise<void> = Promise.resolve();
 
 const PROTOCOL_SERVICES = {
   smb: ["smbd.service", "nmbd.service"],
-  webdav: ["sigmaos-webdav.service"],
+  webdav: ["zos-webdav.service"],
   ftp: ["vsftpd.service"],
   nfs: ["nfs-server.service"],
   dlna: ["minidlna.service"]
@@ -127,7 +127,7 @@ export async function collectShareSummary(
 }
 
 export async function applyShareOperation(
-  config: SigmaConfig,
+  config: ZosConfig,
   operation: ShareOperationRecord,
   proposal: ShareOperationProposal,
   dependencies: ShareManagementDependencies = {}
@@ -146,7 +146,7 @@ export async function applyShareOperation(
 }
 
 export async function applyShareSettings(
-  config: SigmaConfig,
+  config: ZosConfig,
   settings: ShareSettingsRecord,
   roots: NasRootConfig[],
   dependencies: ShareManagementDependencies = {}

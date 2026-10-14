@@ -25,7 +25,7 @@
 - [x] Query services cover common and arbitrary-field filters, `all/any`, all requested operators, facets, keyset cursors, antimeridian/polar distance handling, field catalogs, details, map clusters, and progressive index status.
 - [x] API and Agent surfaces preserve the legacy timeline contract, validate the 64 KiB query body, hide sensitive metadata by default, enforce session-root isolation, and stream validated local raster PMTiles with Range support.
 - [x] Upload, move, trash, and ZIP export associate sidecars without changing original-download bytes; the Web uploader handles multiple media and XMP files in media-first order.
-- [x] Web timeline/map, common filters, advanced builder, metadata inspector, sensitive reveal, offline map fallback, local geolocation opt-in, and responsive layouts use existing SigmaOS tokens and components.
+- [x] Web timeline/map, common filters, advanced builder, metadata inspector, sensitive reveal, offline map fallback, local geolocation opt-in, and responsive layouts use existing ZOS tokens and components.
 - [x] User, API, database, Agent, troubleshooting, and capability documentation reflects the local-only metadata and raster-map boundaries.
 
 ### Applied Fixes

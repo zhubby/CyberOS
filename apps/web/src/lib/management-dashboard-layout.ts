@@ -27,7 +27,7 @@ export const MANAGEMENT_DASHBOARD_COLUMNS: Record<ManagementDashboardBreakpoint,
 export const MANAGEMENT_DASHBOARD_MOBILE_MAX_WIDTH = 620;
 export const MANAGEMENT_DASHBOARD_LAYOUT_VERSION = 1;
 
-const STORAGE_KEY_PREFIX = `sigmaos:management-dashboard-layout:v${MANAGEMENT_DASHBOARD_LAYOUT_VERSION}`;
+const STORAGE_KEY_PREFIX = `zos:management-dashboard-layout:v${MANAGEMENT_DASHBOARD_LAYOUT_VERSION}`;
 
 const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly ManagementDashboardWidgetDefinition[]> = {
   docker: [

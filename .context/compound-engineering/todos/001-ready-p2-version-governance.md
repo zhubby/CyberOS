@@ -6,11 +6,11 @@ tags: [release, versioning, observability, web]
 dependencies: []
 ---
 
-# Add SigmaOS Version Governance And Traceability
+# Add ZOS Version Governance And Traceability
 
 ## Problem Statement
 
-SigmaOS is fixed at version `0.1.0` across npm workspaces, Debian packaging, and the appliance manifest. Built installations do not expose enough immutable source and build metadata for operators to identify the exact deployed release.
+ZOS is fixed at version `0.1.0` across npm workspaces, Debian packaging, and the appliance manifest. Built installations do not expose enough immutable source and build metadata for operators to identify the exact deployed release.
 
 ## Findings
 

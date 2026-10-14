@@ -7,27 +7,27 @@ import {
   ensureNasRoots,
   getDockerComposeApp,
   listDockerComposeApps,
-  openSigmaDb,
+  openZosDb,
   upsertRootReadiness,
   type DockerRegistryCredentialRecord,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { DockerConfig } from "@sigmaos/shared";
+  type ZosDatabase
+} from "@zos/db";
+import type { DockerConfig } from "@zos/shared";
 import { DockerComposeService } from "./docker-compose.js";
 
 let tempDir: string;
 let appsRoot: string;
 let nasRoot: string;
 let dockerShim: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-docker-compose-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-docker-compose-"));
   appsRoot = path.join(tempDir, "apps");
   nasRoot = path.join(tempDir, "nas");
   dockerShim = path.join(tempDir, "docker");
   await mkdir(nasRoot, { recursive: true });
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "nas", name: "NAS", path: nasRoot }]);
   upsertRootReadiness(db, {
     rootId: "nas",
@@ -37,7 +37,7 @@ beforeEach(async () => {
     uuid: null,
     fstype: null
   });
-  vi.stubEnv("SIGMAOS_TEST_COMPOSE_OUTCOME", "success");
+  vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "success");
   await writeDockerShim();
 });
 
@@ -132,13 +132,13 @@ describe("DockerComposeService", () => {
     });
     expect(validation).toMatchObject({ risk: "high", warnings: [expect.stringContaining("NAS bind mount")] });
 
-    vi.stubEnv("SIGMAOS_TEST_COMPOSE_OUTCOME", "resolved-safe-bind");
+    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "resolved-safe-bind");
     await expect(service.validateApp({
       projectKey: "interpolated-safe",
       composeContent: "services:\n  app:\n    image: alpine\n    volumes:\n      - ${HOST_PATH}/data:/data\n",
       environment: [{ key: "HOST_PATH", value: nasRoot }]
     })).resolves.toMatchObject({ risk: "high", warnings: [expect.stringContaining("NAS bind mount")] });
-    vi.stubEnv("SIGMAOS_TEST_COMPOSE_OUTCOME", "success");
+    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "success");
 
     await expect(service.validateApp({
       projectKey: "outside",
@@ -161,14 +161,14 @@ describe("DockerComposeService", () => {
       environment: []
     })).rejects.toThrow(/unsupported driver options/);
 
-    vi.stubEnv("SIGMAOS_TEST_COMPOSE_OUTCOME", "resolved-escape");
+    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "resolved-escape");
     await expect(service.validateApp({
       projectKey: "interpolated-escape",
       composeContent: "services:\n  app:\n    image: alpine\n    volumes:\n      - ${HOST_PATH}:/data\n",
       environment: [{ key: "HOST_PATH", value: "/etc" }]
     })).rejects.toThrow(/outside a ready NAS root/);
 
-    vi.stubEnv("SIGMAOS_TEST_COMPOSE_OUTCOME", "resolved-elevated");
+    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "resolved-elevated");
     await expect(service.validateApp({
       projectKey: "interpolated-risk",
       composeContent: "services:\n  app:\n    image: alpine\n    privileged: ${PRIVILEGED}\n",
@@ -242,7 +242,7 @@ describe("DockerComposeService", () => {
       composeContent: "services:\n  app:\n    image: alpine\n",
       environment: [{ key: "TOKEN", value: "secret" }]
     });
-    await writeFile(path.join(appsRoot, "stable", ".sigmaos-app.json"), '{"id":"other"}\n');
+    await writeFile(path.join(appsRoot, "stable", ".zos-app.json"), '{"id":"other"}\n');
 
     await expect(service.updateApp(created.id, {
       name: "Changed",
@@ -318,7 +318,7 @@ describe("DockerComposeService", () => {
       composeContent: "services:\n  app:\n    image: alpine\n",
       environment: []
     });
-    await writeFile(path.join(appsRoot, "protected", ".sigmaos-app.json"), '{"id":"other"}\n');
+    await writeFile(path.join(appsRoot, "protected", ".zos-app.json"), '{"id":"other"}\n');
 
     await expect(service.deleteApp(created.id, {
       expectedRevision: created.revision,
@@ -348,7 +348,7 @@ describe("DockerComposeService", () => {
 
   it("redacts short and overlapping environment secrets from Compose validation errors", async () => {
     const service = composeService();
-    vi.stubEnv("SIGMAOS_TEST_COMPOSE_OUTCOME", "validation-error");
+    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "validation-error");
     await expect(service.validateApp({
       projectKey: "redacted",
       composeContent: "services:\n  app:\n    image: alpine\n",
@@ -362,7 +362,7 @@ describe("DockerComposeService", () => {
 
   it("reports a missing Docker Compose plugin as unavailable", async () => {
     const service = composeService();
-    vi.stubEnv("SIGMAOS_TEST_COMPOSE_OUTCOME", "plugin-missing");
+    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "plugin-missing");
     await expect(service.validateApp({
       projectKey: "missing-plugin",
       composeContent: "services:\n  app:\n    image: alpine\n",
@@ -380,7 +380,7 @@ describe("DockerComposeService", () => {
       environment: []
     });
     config.operationTimeoutMs = 50;
-    vi.stubEnv("SIGMAOS_TEST_COMPOSE_OUTCOME", "timeout");
+    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "timeout");
     await expect(service.runProjectAction({
       action: "compose_pull",
       targetType: "compose_project",
@@ -404,23 +404,23 @@ const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
 if (args.includes("config")) {
-  if (process.env.SIGMAOS_TEST_COMPOSE_OUTCOME === "validation-error") {
+  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "validation-error") {
     process.stderr.write("invalid " + fs.readFileSync(path.join(process.cwd(), ".env"), "utf8"));
     process.exit(1);
   }
-  if (process.env.SIGMAOS_TEST_COMPOSE_OUTCOME === "plugin-missing") {
+  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "plugin-missing") {
     process.stderr.write("docker: 'compose' is not a docker command.\\n");
     process.exit(1);
   }
-  if (process.env.SIGMAOS_TEST_COMPOSE_OUTCOME === "resolved-escape") {
+  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "resolved-escape") {
     console.log(JSON.stringify({ services: { app: { volumes: [{ type: "bind", source: "/etc", target: "/data" }] } } }));
     process.exit(0);
   }
-  if (process.env.SIGMAOS_TEST_COMPOSE_OUTCOME === "resolved-elevated") {
+  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "resolved-elevated") {
     console.log(JSON.stringify({ services: { app: { image: "alpine", privileged: true } } }));
     process.exit(0);
   }
-  if (process.env.SIGMAOS_TEST_COMPOSE_OUTCOME === "resolved-safe-bind") {
+  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "resolved-safe-bind") {
     console.log(JSON.stringify({ services: { app: { image: "alpine", volumes: [{
       type: "bind",
       source: path.join(${JSON.stringify(nasRoot)}, "data"),
@@ -433,7 +433,7 @@ if (args.includes("config")) {
 }
 const directory = process.env.DOCKER_CONFIG || "";
 fs.writeFileSync(${JSON.stringify(path.join(tempDir, "captured-config-directory"))}, directory);
-if (process.env.SIGMAOS_TEST_COMPOSE_OUTCOME === "timeout") {
+if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "timeout") {
   process.on("SIGTERM", () => process.exit(0));
   setInterval(() => {}, 1000);
 } else {

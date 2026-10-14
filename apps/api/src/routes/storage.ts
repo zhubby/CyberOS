@@ -7,8 +7,8 @@ import {
   getSession,
   updateJobStatus,
   updateStorageOperationStatus
-} from "@sigmaos/db";
-import type { StorageOperationProposal } from "@sigmaos/shared";
+} from "@zos/db";
+import type { StorageOperationProposal } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   applyStoragePoolOperation,

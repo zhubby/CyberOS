@@ -4,7 +4,7 @@ export const BYTES_PER_MEBIBYTE = 1024 * 1024;
 export const DEFAULT_PREVIEW_FILE_SIZE_LIMIT_BYTES = 10 * BYTES_PER_MEBIBYTE;
 export const MIN_PREVIEW_FILE_SIZE_LIMIT_BYTES = BYTES_PER_MEBIBYTE;
 export const MAX_PREVIEW_FILE_SIZE_LIMIT_BYTES = 1024 * BYTES_PER_MEBIBYTE;
-export const PREVIEW_FILE_SIZE_LIMIT_STORAGE_KEY = "sigmaos:preview-file-size-limit-bytes";
+export const PREVIEW_FILE_SIZE_LIMIT_STORAGE_KEY = "zos:preview-file-size-limit-bytes";
 
 interface StorageLike {
   getItem(key: string): string | null;

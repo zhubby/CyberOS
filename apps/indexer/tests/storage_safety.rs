@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use sigmaos_indexer::storage::{RootStorage, validate_relative_path};
+use zos_indexer::storage::{RootStorage, validate_relative_path};
 
 #[test]
 fn rejects_parent_paths_and_root_symlinks() {

@@ -52,7 +52,7 @@ describe("VOD player broker client", () => {
   });
 
   it("classifies a missing broker and returns a disabled snapshot without connecting", async () => {
-    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "sigmaos-vod-client-"));
+    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-vod-client-"));
     const socketPath = path.join(temporaryDirectory, "missing.sock");
     await expect(createVodPlayerRuntime(config(socketPath)).getStatus()).rejects.toBeInstanceOf(VodPlayerRuntimeError);
     await expect(createVodPlayerRuntime(config(socketPath)).getStatus()).rejects.toMatchObject({
@@ -69,7 +69,7 @@ describe("VOD player broker client", () => {
 async function startServer(
   respond: (request: { id: string }) => VodPlayerBrokerResponse
 ): Promise<string> {
-  temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "sigmaos-vod-client-"));
+  temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-vod-client-"));
   const socketPath = path.join(temporaryDirectory, "broker.sock");
   server = net.createServer((socket) => {
     socket.setEncoding("utf8");
@@ -93,7 +93,7 @@ function config(socketPath: string): VodPlayerConfig {
   return {
     enabled: true,
     socketPath,
-    statePath: "/var/lib/sigmaos-vod-player/session.json",
+    statePath: "/zos/state/vod-player/session.json",
     commandTimeoutMs: 5_000,
     startupTimeoutMs: 15_000,
     checkpointIntervalMs: 5_000,
@@ -104,7 +104,7 @@ function config(socketPath: string): VodPlayerConfig {
     audioOutput: "alsa",
     audioDevice: null,
     hwdec: "auto-safe",
-    user: "sigmaos"
+    user: "zos"
   };
 }
 

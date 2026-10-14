@@ -7,27 +7,27 @@ import {
   createTrashEntry,
   ensureNasRoots,
   getSystemOperations,
-  openSigmaDb,
+  openZosDb,
   releaseExecutionLock,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { SigmaConfig } from "@sigmaos/shared";
+  type ZosDatabase
+} from "@zos/db";
+import type { ZosConfig } from "@zos/shared";
 import { cleanupRestoreStaging, runMaintenance } from "./maintenance.js";
 import { runHealthTask } from "./runner.js";
 
 let tempDir: string;
 let rootDir: string;
 let stagingDir: string;
-let db: SigmaDatabase;
-let config: SigmaConfig;
+let db: ZosDatabase;
+let config: ZosConfig;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-ops-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-ops-"));
   rootDir = path.join(tempDir, "nas");
   stagingDir = path.join(tempDir, "backup-staging");
   await mkdir(rootDir);
   await mkdir(stagingDir);
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
   config = createConfig(tempDir, rootDir, stagingDir);
 });
@@ -105,19 +105,19 @@ describe("operations runner", () => {
   });
 });
 
-function createConfig(dataDir: string, rootPath: string, stagingPath: string): SigmaConfig {
+function createConfig(dataDir: string, rootPath: string, stagingPath: string): ZosConfig {
   return {
     dataDir,
-    databasePath: path.join(dataDir, "sigmaos.sqlite"),
+    databasePath: path.join(dataDir, "zos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
     model: { provider: "local", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120_000, consoleShells: ["/bin/sh"] },
-    shares: { enabled: false, account: { username: "sigma-share", password: null }, shares: [] },
+    shares: { enabled: false, account: { username: "zos-share", password: null }, shares: [] },
     hostd: { socketPath: path.join(dataDir, "hostd.sock") },
     terminal: { user: "test-user", termuxSocketPath: path.join(dataDir, "termux.sock") },
-    vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "sigmaos" },
+    vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
     backup: { enabled: false, repositoryPath: null, passwordFile: null, stagingPath, requireMount: false, retryCount: 1, timeoutMs: 1000, keepDaily: 7, keepWeekly: 4 },
     nasRoots: [{ id: "local", name: "Local", path: rootPath }]
   };

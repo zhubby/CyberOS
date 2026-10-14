@@ -1,5 +1,4 @@
 pub mod config;
-pub mod config_migration;
 pub mod error;
 pub mod protocol;
 pub mod pty;

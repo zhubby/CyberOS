@@ -61,7 +61,7 @@
 
 ### Agent-Native Gaps
 
-- Photo actions are available through the local HTTP API and approval system, but Sigma Agent has no dedicated photo-library tool vocabulary. This is advisory for a later agent-parity iteration and does not block the requested UI/API V1.
+- Photo actions are available through the local HTTP API and approval system, but ZOS Agent has no dedicated photo-library tool vocabulary. This is advisory for a later agent-parity iteration and does not block the requested UI/API V1.
 
 ### Schema Drift Check
 
@@ -70,9 +70,9 @@
 ### Deployment Notes
 
 - Pre-deploy: back up the SQLite database and confirm target-architecture Sharp installation plus `libheif-examples` availability.
-- Verify: `sigmaos-photo-worker.service` is active, migration `018_photo_upload_reservations` exists in `schema_migrations`, and a full scan reaches `ready` or an explained `degraded` state.
+- Verify: `zos-photo-worker.service` is active, migration `018_photo_upload_reservations` exists in `schema_migrations`, and a full scan reaches `ready` or an explained `degraded` state.
 - Rollback: the additive reservation table can remain in SQLite if an older package is restored; stop the photo worker before restoring a database snapshot.
-- Monitor: photo-worker journal errors, derivative cache growth under `/var/lib/sigmaos/photos`, and storage-pool mount identity failures.
+- Monitor: photo-worker journal errors, derivative cache growth under `/zos/state/photos`, and storage-pool mount identity failures.
 
 ### Coverage
 

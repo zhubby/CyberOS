@@ -20,12 +20,12 @@ describe("i18n resources", () => {
     });
 
     expect(instance.t("chat.deleteSessionBody", { title: "Root agent" })).toBe(
-      "Root agent and its chat history will be removed from SigmaOS."
+      "Root agent and its chat history will be removed from ZOS."
     );
 
     await instance.changeLanguage("zh-CN");
     expect(instance.t("chat.deleteSessionBody", { title: "根目录 agent" })).toBe(
-      "根目录 agent 及其聊天记录将从 SigmaOS 中移除。"
+      "根目录 agent 及其聊天记录将从 ZOS 中移除。"
     );
     expect(instance.t("preview.cannotPreview", { size: "8 KB" })).toBe("8 KB 无法内联预览。");
   });

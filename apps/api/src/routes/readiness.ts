@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { getNasRoot, getRootReadiness, listNasRoots, listRootReadiness } from "@sigmaos/db";
+import { getNasRoot, getRootReadiness, listNasRoots, listRootReadiness } from "@zos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerReadinessRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {

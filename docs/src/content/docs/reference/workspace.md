@@ -1,6 +1,6 @@
 ---
 title: Workspace 与服务矩阵
-description: SigmaOS monorepo、应用、包和运行进程的对应关系。
+description: ZOS monorepo、应用、包和运行进程的对应关系。
 type: reference
 status: current
 audience: [developer, operator]

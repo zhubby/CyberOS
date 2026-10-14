@@ -10,7 +10,7 @@ import { URL, fileURLToPath } from "node:url";
 const verifier = fileURLToPath(new URL("../scripts/verify-search-index.mjs", import.meta.url));
 
 test("rejects missing Pagefind output", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "sigmaos-search-missing-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "zos-search-missing-"));
   try {
     const result = await runVerifier(directory);
     assert.notEqual(result.code, 0);
@@ -68,7 +68,7 @@ test("prepare removes only the previous Pagefind output", async () => {
 });
 
 async function createFixture() {
-  const directory = await mkdtemp(path.join(tmpdir(), "sigmaos-search-index-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "zos-search-index-"));
   const output = path.join(directory, "dist/pagefind");
   await mkdir(output, { recursive: true });
   await writeFile(path.join(output, "pagefind.js"), "// browser bundle");

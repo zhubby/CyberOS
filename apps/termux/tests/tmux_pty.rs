@@ -2,15 +2,15 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use nix::unistd::{Gid, Uid};
-use sigmaos_termux::config::Account;
-use sigmaos_termux::{pty, tmux::TmuxManager};
 use tokio::time::{MissedTickBehavior, interval, timeout};
+use zos_termux::config::Account;
+use zos_termux::{pty, tmux::TmuxManager};
 
 #[tokio::test]
 async fn attaches_to_a_real_tmux_session_through_a_pty() {
     let directory = tempfile::tempdir().unwrap();
     let account = Account {
-        name: std::env::var("USER").unwrap_or_else(|_| "sigmaos-test".to_owned()),
+        name: std::env::var("USER").unwrap_or_else(|_| "zos-test".to_owned()),
         uid: Uid::current().as_raw(),
         gid: Gid::current().as_raw(),
         home: directory.path().to_owned(),
@@ -22,7 +22,7 @@ async fn attaches_to_a_real_tmux_session_through_a_pty() {
         return;
     }
 
-    let session = "sigmaos-integration";
+    let session = "zos-integration";
     manager.ensure_session(session, true).await.unwrap();
     let mut process = pty::spawn(manager.attach_command(session), 120, 32).unwrap();
     pty::write_all(&process.master, b"printf 'termux-integration-ready\\n'\r")

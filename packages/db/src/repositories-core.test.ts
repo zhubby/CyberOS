@@ -37,7 +37,7 @@ import {
   listOperationNotifications,
   markAllOperationNotificationsRead,
   markOperationNotificationRead,
-  openSigmaDb,
+  openZosDb,
   recordAppliedOperation,
   pruneOperationNotifications,
   saveAgentProviderSession,
@@ -56,15 +56,15 @@ import {
   updateDockerComposeApp,
   updateJobStatus,
   updateOperationNotificationForJob,
-  type SigmaDatabase
+  type ZosDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-db-"));
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-db-"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
@@ -247,7 +247,7 @@ describe("core repositories", () => {
     ]);
   });
 
-  it("persists Pi provider sessions by SigmaOS session id", () => {
+  it("persists Pi provider sessions by ZOS session id", () => {
     const session = createSession(db, { rootId: "local" });
 
     saveAgentProviderSession(db, {
@@ -736,7 +736,7 @@ describe("core repositories", () => {
       composeContent: created.composeContent,
       environment: [
         { key: "POSTGRES_PASSWORD" },
-        { key: "POSTGRES_USER", value: "sigmaos" }
+        { key: "POSTGRES_USER", value: "zos" }
       ],
       services: ["db"],
       warnings: ["Host bind mount"],
@@ -748,7 +748,7 @@ describe("core repositories", () => {
       projectKey: "postgres",
       environment: [
         { key: "POSTGRES_PASSWORD", value: "secret" },
-        { key: "POSTGRES_USER", value: "sigmaos" }
+        { key: "POSTGRES_USER", value: "zos" }
       ],
       warnings: ["Host bind mount"],
       risk: "high"

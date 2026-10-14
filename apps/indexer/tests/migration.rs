@@ -2,16 +2,16 @@ mod common;
 
 use std::time::Duration;
 
-use sigmaos_indexer::db::{Db, IndexedFileRecord};
-use sigmaos_indexer::error::{ErrorCode, IndexerError};
-use sigmaos_indexer::storage::FileIdentity;
+use zos_indexer::db::{Db, IndexedFileRecord};
+use zos_indexer::error::{ErrorCode, IndexerError};
+use zos_indexer::storage::FileIdentity;
 
 #[tokio::test]
 async fn waits_for_migration_024() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().join("root");
     std::fs::create_dir(&root).unwrap();
-    let database = directory.path().join("sigmaos.sqlite");
+    let database = directory.path().join("zos.sqlite");
     common::create_schema(&database, &root);
     let db = Db::open(&database).unwrap();
     db.wait_for_schema(Duration::from_millis(50)).await.unwrap();
@@ -22,7 +22,7 @@ async fn first_extraction_failure_is_persisted_for_diagnostics() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().join("root");
     std::fs::create_dir(&root).unwrap();
-    let database = directory.path().join("sigmaos.sqlite");
+    let database = directory.path().join("zos.sqlite");
     common::create_schema(&database, &root);
     let db = Db::open(&database).unwrap();
     db.record_extraction_error(
@@ -67,7 +67,7 @@ async fn legacy_copy_skips_content_without_a_live_file_row() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().join("root");
     std::fs::create_dir(&root).unwrap();
-    let database = directory.path().join("sigmaos.sqlite");
+    let database = directory.path().join("zos.sqlite");
     common::create_schema(&database, &root);
     let connection = rusqlite::Connection::open(&database).unwrap();
     connection.execute(

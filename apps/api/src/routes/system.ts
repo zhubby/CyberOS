@@ -9,7 +9,7 @@ import type {
   SystemWifiProfileUpdateInput,
   SystemWifiRadioInput,
   SystemWifiStatus
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { unknownBuildInfo } from "../lib/build-info.js";
 import {

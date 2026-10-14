@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import type { SystemPowerResult } from "@sigmaos/shared";
+import type { SystemPowerResult } from "@zos/shared";
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 
@@ -92,7 +92,7 @@ describe("HostdClient", () => {
     });
     await stalled.close();
 
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-hostd-client-missing-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-hostd-client-missing-"));
     const missingSocket = path.join(tempDir, "missing.sock");
     await expect(new HostdClient(missingSocket).request("network.manager", { action: "ping" }, 1000)).rejects.toMatchObject({
       statusCode: 503,
@@ -130,7 +130,7 @@ describe("HostdClient", () => {
 async function createServer(
   respond: (request: Record<string, unknown>) => Record<string, unknown>
 ): Promise<{ client: HostdClient; close: () => Promise<void> }> {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-hostd-client-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-hostd-client-"));
   const socketPath = path.join(tempDir, "hostd.sock");
   const server = net.createServer((socket) => {
     const chunks: Buffer[] = [];
@@ -153,7 +153,7 @@ async function createServer(
 async function createRawServer(
   onConnection: (socket: net.Socket) => void
 ): Promise<{ client: HostdClient; close: () => Promise<void> }> {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-hostd-client-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-hostd-client-"));
   const socketPath = path.join(tempDir, "hostd.sock");
   const server = net.createServer({ allowHalfOpen: true }, onConnection);
   await new Promise<void>((resolve, reject) => {

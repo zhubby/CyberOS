@@ -8,18 +8,18 @@ import {
   getSystemOperations,
   heartbeatOpsRun,
   listOpsRuns,
-  openSigmaDb,
+  openZosDb,
   recoverStaleOpsRuns,
   startOpsRun,
-  type SigmaDatabase
+  type ZosDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-ops-runs-"));
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-ops-runs-"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
 });
 
 afterEach(async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DockerRegistryCredentialRecord } from "@sigmaos/db";
+import type { DockerRegistryCredentialRecord } from "@zos/db";
 import {
   dockerConfigAuths,
   dockerRegistryAuthHeader,

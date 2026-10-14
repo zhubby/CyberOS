@@ -4,7 +4,7 @@ import type {
   SystemWifiDeviceState,
   SystemWifiSecurity,
   SystemWifiStatus
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 export interface SystemWifiNetworkGroup {
   id: string;

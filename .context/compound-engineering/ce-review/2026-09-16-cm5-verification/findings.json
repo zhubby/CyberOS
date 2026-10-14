@@ -29,7 +29,7 @@
       "owner": "review-fixer",
       "requires_verification": true,
       "confidence": 1,
-      "evidence": ["Full Vitest run reported Cannot find module @sigmaos/shared/docker-resources.", "Narrow alias now precedes @sigmaos/shared; all 80 test files and 531 tests pass."],
+      "evidence": ["Full Vitest run reported Cannot find module @zos/shared/docker-resources.", "Narrow alias now precedes @zos/shared; all 80 test files and 531 tests pass."],
       "pre_existing": false,
       "reviewers": ["testing"],
       "resolution": "Add narrow alias and rerun full tests."

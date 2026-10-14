@@ -19,7 +19,7 @@ import {
   updateJobStatus,
   updateApprovalStatus,
   updateVmOperationStatus
-} from "@sigmaos/db";
+} from "@zos/db";
 import type {
   VmCpuMode,
   VmDiskBus,
@@ -32,7 +32,7 @@ import type {
   VmOperationAction,
   VmOperationProposal,
   VmVideoModel
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { applyVmOperation, collectVmSummary, safeVmMessage, DEFAULT_VM_CONFIG } from "../lib/vm-service.js";
 import { resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
@@ -73,12 +73,12 @@ export function vmConsoleSpawnSpec(libvirtUri: string, domainName: string) {
     command: "script",
     args: [
       "-q", "-e", "-f", "-c",
-      'exec virsh -c "$SIGMAOS_VM_LIBVIRT_URI" console "$SIGMAOS_VM_DOMAIN"',
+      'exec virsh -c "$ZOS_VM_LIBVIRT_URI" console "$ZOS_VM_DOMAIN"',
       "/dev/null"
     ],
     env: {
-      SIGMAOS_VM_LIBVIRT_URI: libvirtUri,
-      SIGMAOS_VM_DOMAIN: domainName
+      ZOS_VM_LIBVIRT_URI: libvirtUri,
+      ZOS_VM_DOMAIN: domainName
     }
   };
 }

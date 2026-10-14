@@ -22,7 +22,7 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 - `GET /api/photos/metadata/fields` 返回可查询字段目录；`GET /api/photos/:id/metadata` 默认排除 GPS、设备/镜头序列号、联系信息和人物区域，只有显式 `includeSensitive=1` 才返回敏感组。
 - `POST /api/photos/map/query` 在视口内返回最多 4096 个本地聚合点。地理查询先用 RTree 缩小候选，再用规范坐标或 Haversine 精确计算，支持反经线；距离排序必须提供附近查询中心。
 - `GET /api/photos/map/settings` 返回固定 Natural Earth II 3.2.0 资产信息及 `not_downloaded/downloading/ready/failed`、已下载字节、总字节和错误；`POST /api/photos/map/download` 无请求体，幂等启动或返回当前下载任务。客户端不能提交 URL 或文件路径，旧 `PUT /api/photos/map/settings` 不再存在。
-- `GET /api/photos/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${SIGMAOS_DATA_DIR}/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。
+- `GET /api/photos/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${ZOS_ROOT}/state/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。
 - `GET /api/photos/:id/thumbnail|preview|original` 只解析当前照片库中的资源。缩略图和预览来自 data directory 的 hash-addressed WebP cache；GIF preview 保留动画原文件，视频 preview 是首帧海报。
 - `GET /api/photos/:id/video` 为视频资源提供带 Range 的播放流；MP4/WebM 直接流式返回，其他支持容器通过 FFmpeg 缓存为 MP4。
 - `PUT /api/photos/upload` 使用 `application/octet-stream`，查询参数传文件名和可选目录。媒体限制 512 MiB、原子发布并按 SHA-256 拒绝当前库中的重复内容；XMP sidecar 限制 16 MiB。
@@ -50,7 +50,7 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 
 - `GET /api/system/network` 同时返回内核接口/路由和 NetworkManager 无线摘要。`capabilities.backend` 为 `NetworkManager`、`systemd-networkd` 或 `unknown`；只有 NetworkManager 与 hostd 同时可用时才开放写操作。
 - `POST /api/system/network/wifi/scan|connect|disconnect` 分别扫描、连接和断开；`PUT /api/system/network/wifi/radio` 切换全局 Wi-Fi radio。
-- `PATCH/DELETE /api/system/network/wifi/profiles/:id` 只允许修改或遗忘 SigmaOS 创建的 profile。外部 profile 可以通过 `connect` 使用，但更新或删除返回 `409`。
+- `PATCH/DELETE /api/system/network/wifi/profiles/:id` 只允许修改或遗忘 ZOS 创建的 profile。外部 profile 可以通过 `connect` 使用，但更新或删除返回 `409`。
 - `PUT /api/system/network/wifi/hotspot` 保存 WPA2 热点；`POST .../hotspot/start|stop` 启停，`DELETE .../hotspot` 删除。热点使用 NetworkManager `ipv4.method=shared`，没有默认上行时仍提供本地网络。
 - `GET /api/system/network/wifi/events` 是状态 SSE：立即发送 `system.wifi.status`，每秒采样、仅变化时推送，每 15 秒 heartbeat，重连提示 2 秒。扫描结果不进入 SSE。
 
@@ -67,7 +67,7 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 
 标签 ID 和旧会话 ID 必须是 UUID；名称去除首尾空格后为 1–64 个字符，也可传 `null` 恢复默认名称。无效 root、ID 或名称返回 `400/404`，会话上限或旧 ID 冲突返回 `409`。删除活动标签时优先激活右侧标签，其次左侧；删除最后一个标签后活动项为 `null`。
 
-`GET /api/terminal?rootId=...` 使用 `sigmaos-terminal-v1` 和 `sigmaos-session.<uuid>` WebSocket subprotocol。已登记标签通过 Termux Protocol v1 以 persistent 模式打开；未登记 ID 保持旧客户端兼容并按空闲策略回收。一个标签只允许一个控制连接，新连接建立后旧连接收到 `{ "type": "taken_over" }`。内部 `session.open` 请求的 `persistent` 字段可选，省略时等同旧版非持久会话。
+`GET /api/terminal?rootId=...` 使用 `zos-terminal-v1` 和 `zos-session.<uuid>` WebSocket subprotocol。已登记标签通过 Termux Protocol v1 以 persistent 模式打开；未登记 ID 保持旧客户端兼容并按空闲策略回收。一个标签只允许一个控制连接，新连接建立后旧连接收到 `{ "type": "taken_over" }`。内部 `session.open` 请求的 `persistent` 字段可选，省略时等同旧版非持久会话。
 
 ## 共享账号
 
@@ -81,7 +81,7 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 - `GET /api/downloads` 返回全局历史和 downloader worker health；任务记录包含 phase、单流/分段模式、checksum、稳定错误码、重试计数/时间、控制请求和分段数。`GET /api/downloads/events` 用 SSE 推送相同快照。
 - `POST /api/downloads/:id/pause|cancel` 对运行任务写入协作式控制请求；`resume|retry` 按状态重新排队。发布已完成原子 rename 时最终状态始终为 `completed`。`DELETE /api/downloads/:id` 只移除非运行任务。
 - `GET/PATCH /api/settings/downloads` 管理任务并发、每任务 Range 并发、分段阈值、自动重试/退避、连接/响应头/空闲读取超时、最低剩余空间和可选最大文件大小。旧的 `{ concurrency }` 设置会自动补齐默认值。
-- Rust `sigmaos-downloader.service` 从 SQLite 领取带 30 秒租约的任务，每 5 秒写 worker/任务心跳。服务使用逐跳 DNS 公网校验、固定地址、最多五次安全重定向、持久化分段、空间预留、dirfd/`openat2` 路径边界、SHA-256 和 publish journal；崩溃或掉电后不会覆盖 identity 不匹配的用户文件。
+- Rust `zos-downloader.service` 从 SQLite 领取带 30 秒租约的任务，每 5 秒写 worker/任务心跳。服务使用逐跳 DNS 公网校验、固定地址、最多五次安全重定向、持久化分段、空间预留、dirfd/`openat2` 路径边界、SHA-256 和 publish journal；崩溃或掉电后不会覆盖 identity 不匹配的用户文件。
 
 ## Docker daemon
 
@@ -94,7 +94,7 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 ## Docker 镜像与 Registry
 
 - `GET /api/docker/summary` 的 `images` 来自与镜像计数相同的一次 Engine 查询，包含 ID、tags、digests、创建时间、大小、共享大小和容器引用数。容器列表包含 `imageId`；元数据完整时，引用数按 ImageID 汇总全部容器（包括已停止容器），不按可变 tag 匹配。旧 Engine/适配器未提供完整 ImageID 时保留 Engine 计数，未知为 `null`，不是零。
-- `POST /api/docker/images/pull` 接收 `reference`，同步等待 Engine 完成拉取。SigmaOS 按镜像引用选择匹配凭证，没有匹配项时匿名拉取。
+- `POST /api/docker/images/pull` 接收 `reference`，同步等待 Engine 完成拉取。ZOS 按镜像引用选择匹配凭证，没有匹配项时匿名拉取。
 - `POST /api/docker/images/remove` 接收 `reference` 和 `confirmed: true`。删除固定使用 `force=false`、`noprune=true`；被容器引用或存在多引用冲突时返回 `409`，不创建 approval 或 Docker operation。
 - `GET /api/docker/registries` 返回凭证摘要；`POST /api/docker/registries`、`PATCH /api/docker/registries/:id`、`DELETE /api/docker/registries/:id` 管理单条记录。创建/更新正文最多 64 KiB，所有响应只包含 `credentialConfigured`，不会返回密码或 access token。
 
@@ -104,7 +104,7 @@ Registry 地址只接受 hostname/IP 和可选端口；Docker Hub 别名归一�
 
 - `GET /api/docker/apps` 返回托管 App 摘要；`GET /api/docker/apps/:id` 额外返回 Compose YAML 和仅含键名/`valueConfigured` 的环境变量摘要，永不返回环境变量值。
 - `POST /api/docker/apps/validate` 在隔离临时目录执行结构化 YAML 检查和 `docker compose config`。编辑已有 App 时可携带 `appId`、`expectedRevision`，环境变量省略 `value` 表示沿用数据库中的值。
-- `POST /api/docker/apps`、`PUT /api/docker/apps/:id` 分别创建和更新 App；更新必须提供 `expectedRevision`。`projectKey` 创建后不可修改，托管路径固定为 `/srv/apps/<project-key>`。
+- `POST /api/docker/apps`、`PUT /api/docker/apps/:id` 分别创建和更新 App；更新必须提供 `expectedRevision`。`projectKey` 创建后不可修改，托管路径固定为 `/zos/apps/<project-key>`。
 - `DELETE /api/docker/apps/:id` 要求 `expectedRevision` 和 `confirmed: true`。Engine 不可查询或仍存在相同 Compose project label 的容器时拒绝删除；删除不会移除 images、named volumes、networks 或 NAS 数据。
 
 App 请求正文最多 512 KiB。非法 YAML、保留环境变量、本地 `build/env_file/include` 等额外文件依赖、相对 bind mount 或越过在线 NAS root 的绝对 bind mount 返回 `400`；revision/project key 冲突返回 `409`，Compose CLI 不可用返回 `503`，运行副本发布失败返回 `502`。创建和编辑不依赖 Engine readiness；部署仍通过 `/api/docker/proposals` 的 Compose Up approval。proposal 只保存 App ID、名称、revision、服务与风险，不保存 YAML、托管路径或秘密。

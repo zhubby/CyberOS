@@ -13,18 +13,18 @@ import {
   finishFileBatchItem,
   getFileBatch,
   getJob,
-  openSigmaDb,
+  openZosDb,
   updateJobStatus,
-  type SigmaDatabase
+  type ZosDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 let sessionId: string;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-file-batches-"));
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-file-batches-"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
   sessionId = createSession(db, { rootId: "local" }).id;
 });

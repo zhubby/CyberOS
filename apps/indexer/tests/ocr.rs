@@ -1,4 +1,4 @@
-use sigmaos_indexer::extractor::OCR_LANGUAGES;
+use zos_indexer::extractor::OCR_LANGUAGES;
 
 #[test]
 fn ocr_language_set_is_fixed_to_chinese_and_english() {

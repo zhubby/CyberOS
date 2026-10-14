@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PHOTOSTAFF_METADATA_SCHEMA_VERSION, type PhotostaffMetadataCondition } from "@sigmaos/shared";
+import { PHOTOSTAFF_METADATA_SCHEMA_VERSION, type PhotostaffMetadataCondition } from "@zos/shared";
 import type { PhotostaffMetadataWriteInput } from "./index.js";
 import {
   claimNextPhotostaffJob,
@@ -18,7 +18,7 @@ import {
   hasCompletedPhotostaffScan,
   listPhotostaffAssets,
   listPhotostaffMetadataFields,
-  openSigmaDb,
+  openZosDb,
   releasePhotostaffUploadReservation,
   removeStalePhotostaffAssets,
   removeStalePhotostaffUploadReservations,
@@ -28,15 +28,15 @@ import {
   savePhotostaffLibrarySettings,
   updatePhotostaffJobProgress,
   upsertPhotostaffAsset,
-  type SigmaDatabase
+  type ZosDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-photostaff-db-"));
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-photostaff-db-"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 

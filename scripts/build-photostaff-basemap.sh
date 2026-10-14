@@ -2,7 +2,7 @@
 set -eu
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-ASSET_DIR="$ROOT_DIR/.sigmaos/map-assets"
+ASSET_DIR="$ROOT_DIR/.zos/map-assets"
 SOURCE_URL="https://naciscdn.org/naturalearth/10m/raster/NE2_LR_LC_SR_W_DR.zip"
 SOURCE_SHA256="73eb7a00b182c702e69892332cbd380edc7aa00ccaf68ae0111deefb87303a0e"
 SOURCE_ARCHIVE="$ASSET_DIR/NE2_LR_LC_SR_W_DR.zip"
@@ -52,7 +52,7 @@ rm -f "$OUTPUT"
   --resampling bilinear \
   --baselayer \
   --name "Natural Earth II" \
-  --description "Natural Earth II 3.2.0 global overview for SigmaOS" \
+  --description "Natural Earth II 3.2.0 global overview for ZOS" \
   --attribution "Made with Natural Earth" \
   -j 4
 

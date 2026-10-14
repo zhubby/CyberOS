@@ -1,4 +1,4 @@
-import type { SystemEthernetConfig, SystemEthernetStatus } from "@sigmaos/shared";
+import type { SystemEthernetConfig, SystemEthernetStatus } from "@zos/shared";
 
 export type SystemEthernetTone = "ready" | "warning" | "offline" | "neutral";
 

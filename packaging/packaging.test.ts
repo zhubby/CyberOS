@@ -12,185 +12,187 @@ const execFileAsync = promisify(execFile);
 describe("native packaging artifacts", () => {
   it("defines hardened systemd services and timers", async () => {
     const serviceNames = [
-      "sigmaos-api.service",
-      "sigmaos-worker@.service",
-      "sigmaos-indexer.service",
-      "sigmaos-maintenance.service",
-      "sigmaos-backup-daily.service",
-      "sigmaos-backup-weekly.service",
-      "sigmaos-health.service"
+      "zos-api.service",
+      "zos-worker@.service",
+      "zos-indexer.service",
+      "zos-maintenance.service",
+      "zos-backup-daily.service",
+      "zos-backup-weekly.service",
+      "zos-health.service"
     ];
 
     for (const serviceName of serviceNames) {
       const unit = await readPackagingFile("systemd", serviceName);
-      expect(unit).toContain("User=sigmaos");
+      expect(unit).toContain("User=zos");
       expect(unit).toContain("ProtectSystem=strict");
       expect(unit).toContain("NoNewPrivileges=yes");
       expect(unit).toContain("CapabilityBoundingSet=");
-      expect(unit).toContain("ReadWritePaths=/var/lib/sigmaos");
-      if (serviceName === "sigmaos-indexer.service") {
-        expect(unit).toContain("ExecStart=/usr/lib/sigmaos/bin/sigmaos-indexer");
+      expect(unit).toContain("ReadWritePaths=/zos/state");
+      expect(unit).toContain("Environment=ZOS_ROOT=/zos");
+      if (serviceName === "zos-indexer.service") {
+        expect(unit).toContain("ExecStart=/usr/lib/zos/bin/zos-indexer");
       } else {
         expect(unit).toContain("ExecStart=/usr/local/bin/node");
         expect(unit).not.toContain("ExecStart=/usr/bin/node");
       }
-      expect(unit).not.toContain("RuntimeDirectory=sigmaos");
+      expect(unit).not.toContain("RuntimeDirectory=zos");
     }
 
-    await expect(readPackagingFile("systemd", "sigmaos-api.service")).resolves.toContain(
+    await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
       "After=network-online.target local-fs.target"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-downloader.service")).resolves.toContain(
-      "RequiresMountsFor=/srv/nas"
+    await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
+      "RequiresMountsFor=/zos/data"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-downloader.service")).resolves.toContain(
-      "ExecStart=/usr/lib/sigmaos/bin/sigmaos-downloader"
+    await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
+      "ExecStart=/usr/lib/zos/bin/zos-downloader"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-downloader.service")).resolves.toContain(
+    await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
       "TimeoutStopSec=30"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-downloader.service")).resolves.toContain(
-      "User=sigmaos"
+    await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
+      "User=zos"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-downloader.service")).resolves.toContain(
+    await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
+      "Environment=ZOS_ROOT=/zos"
+    );
+    await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
       "ProtectSystem=strict"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-downloader.service")).resolves.toContain(
+    await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
       "NoNewPrivileges=yes"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-hostd.service")).resolves.toContain(
+    await expect(readPackagingFile("systemd", "zos-hostd.service")).resolves.toContain(
       "After=local-fs.target systemd-tmpfiles-setup.service NetworkManager.service"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-hostd.service")).resolves.toContain(
+    await expect(readPackagingFile("systemd", "zos-hostd.service")).resolves.toContain(
       "Before=network-online.target"
     );
-    const vodPlayerUnit = await readPackagingFile("systemd", "sigmaos-vod-player.service");
-    expect(vodPlayerUnit).toContain("ExecStart=/usr/lib/sigmaos/bin/sigmaos-vod-player");
+    const vodPlayerUnit = await readPackagingFile("systemd", "zos-vod-player.service");
+    expect(vodPlayerUnit).toContain("ExecStart=/usr/lib/zos/bin/zos-vod-player");
     expect(vodPlayerUnit).toContain("Type=notify");
     expect(vodPlayerUnit).toContain("WatchdogSec=20s");
     expect(vodPlayerUnit).toContain("TimeoutStopSec=30s");
     expect(vodPlayerUnit).toContain("ProtectSystem=strict");
-    expect(vodPlayerUnit).not.toContain("RequiresMountsFor=/srv/nas");
-    const photostaffUnit = await readPackagingFile("systemd", "sigmaos-photostaff.service");
-    expect(photostaffUnit).toContain("ExecStart=/usr/lib/sigmaos/bin/sigmaos-photostaff");
+    expect(vodPlayerUnit).not.toContain("RequiresMountsFor=/zos/data");
+    const photostaffUnit = await readPackagingFile("systemd", "zos-photostaff.service");
+    expect(photostaffUnit).toContain("ExecStart=/usr/lib/zos/bin/zos-photostaff");
     expect(photostaffUnit).toContain("Type=notify");
     expect(photostaffUnit).toContain("WatchdogSec=20s");
     expect(photostaffUnit).toContain("TimeoutStopSec=30s");
     expect(photostaffUnit).toContain("KillMode=control-group");
     expect(photostaffUnit).toContain("RestrictAddressFamilies=AF_UNIX");
-    expect(photostaffUnit).not.toContain("RequiresMountsFor=/srv/nas");
-    await expect(readPackagingFile("systemd", "sigmaos-photo-worker.service")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(photostaffUnit).not.toContain("RequiresMountsFor=/zos/data");
+    await expect(readPackagingFile("systemd", "zos-photo-worker.service")).rejects.toMatchObject({ code: "ENOENT" });
 
-    const maintenanceUnit = await readPackagingFile("systemd", "sigmaos-maintenance.service");
-    expect(maintenanceUnit).toContain("ExecStart=/usr/local/bin/node /usr/lib/sigmaos/apps/ops/dist/index.js maintenance");
+    const maintenanceUnit = await readPackagingFile("systemd", "zos-maintenance.service");
+    expect(maintenanceUnit).toContain("ExecStart=/usr/local/bin/node /usr/lib/zos/apps/ops/dist/index.js maintenance");
     expect(maintenanceUnit).toContain("TimeoutStartSec=2h");
     expect(maintenanceUnit).not.toContain("RequiresMountsFor=");
-    const maintenanceTimer = await readPackagingFile("systemd", "sigmaos-maintenance.timer");
+    const maintenanceTimer = await readPackagingFile("systemd", "zos-maintenance.timer");
     expect(maintenanceTimer).toContain("OnCalendar=*-*-* 04:30:00");
     expect(maintenanceTimer).toContain("RandomizedDelaySec=30min");
     expect(maintenanceTimer).toContain("Persistent=true");
-    const indexerUnit = await readPackagingFile("systemd", "sigmaos-indexer.service");
+    const indexerUnit = await readPackagingFile("systemd", "zos-indexer.service");
     expect(indexerUnit).toContain("Type=notify");
     expect(indexerUnit).toContain("WatchdogSec=20s");
     expect(indexerUnit).toContain("Restart=on-failure");
-    expect(indexerUnit).toContain("ReadOnlyPaths=/srv/nas");
+    expect(indexerUnit).toContain("ReadOnlyPaths=/zos/data");
     expect(indexerUnit).toContain("MemoryMax=1G");
     expect(indexerUnit).toContain("KillMode=control-group");
-    await expect(readPackagingFile("systemd", "sigmaos-indexer.timer")).rejects.toMatchObject({ code: "ENOENT" });
-    const healthUnit = await readPackagingFile("systemd", "sigmaos-health.service");
-    expect(healthUnit).toContain("ExecStart=/usr/local/bin/node /usr/lib/sigmaos/apps/ops/dist/index.js health");
+    await expect(readPackagingFile("systemd", "zos-indexer.timer")).rejects.toMatchObject({ code: "ENOENT" });
+    const healthUnit = await readPackagingFile("systemd", "zos-health.service");
+    expect(healthUnit).toContain("ExecStart=/usr/local/bin/node /usr/lib/zos/apps/ops/dist/index.js health");
     expect(healthUnit).toContain("TimeoutStartSec=2min");
-    const healthTimer = await readPackagingFile("systemd", "sigmaos-health.timer");
+    const healthTimer = await readPackagingFile("systemd", "zos-health.timer");
     expect(healthTimer).toContain("OnBootSec=6min");
     expect(healthTimer).toContain("OnUnitActiveSec=15min");
     expect(healthTimer).toContain("RandomizedDelaySec=2min");
     expect(healthTimer).toContain("Persistent=true");
-    await expect(readPackagingFile("systemd", "sigmaos-scheduler.service")).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readPackagingFile("systemd", "sigmaos-scheduler.timer")).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readPackagingFile("debian", "postinst")).resolves.toContain("sigmaos-refresh-groups.sh");
-    await expect(readPackagingFile("scripts", "sigmaos-refresh-groups.sh")).resolves.toContain("optional-groups.conf");
-    await expect(readPackagingFile("scripts", "sigmaos-refresh-groups.sh")).resolves.toContain("kvm");
-    await expect(readPackagingFile("scripts", "sigmaos-refresh-groups.sh")).resolves.toContain(
+    await expect(readPackagingFile("systemd", "zos-scheduler.service")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readPackagingFile("systemd", "zos-scheduler.timer")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readPackagingFile("debian", "postinst")).resolves.toContain("zos-refresh-groups.sh");
+    await expect(readPackagingFile("scripts", "zos-refresh-groups.sh")).resolves.toContain("optional-groups.conf");
+    await expect(readPackagingFile("scripts", "zos-refresh-groups.sh")).resolves.toContain("kvm");
+    await expect(readPackagingFile("scripts", "zos-refresh-groups.sh")).resolves.toContain(
       "org.libvirt.unix.manage"
     );
     await expect(readPackagingFile("debian", "postrm")).resolves.toContain(
-      "49-sigmaos-libvirt.rules"
+      "49-zos-libvirt.rules"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-api.service")).resolves.toContain(
+    await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
       "BindReadOnlyPaths=-/run/libvirt/libvirt-sock"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-backup-daily.service")).resolves.toContain("LoadCredential=restic-password");
-    await expect(readPackagingFile("systemd", "sigmaos-backup-daily.service")).resolves.toContain("ConditionPathExists=/etc/sigmaos/restic-password");
-    await expect(readPackagingFile("systemd", "sigmaos-backup-weekly.service")).resolves.toContain("ConditionPathExists=/etc/sigmaos/restic-password");
-    await expect(readPackagingFile("systemd", "sigmaos-backup-weekly.timer")).resolves.toContain("OnCalendar=Sun");
+    await expect(readPackagingFile("systemd", "zos-backup-daily.service")).resolves.toContain("LoadCredential=restic-password");
+    await expect(readPackagingFile("systemd", "zos-backup-daily.service")).resolves.toContain("ConditionPathExists=/zos/config/restic-password");
+    await expect(readPackagingFile("systemd", "zos-backup-weekly.service")).resolves.toContain("ConditionPathExists=/zos/config/restic-password");
+    await expect(readPackagingFile("systemd", "zos-backup-weekly.timer")).resolves.toContain("OnCalendar=Sun");
   });
 
   it("declares Debian install paths required by the spec", async () => {
     const install = await readPackagingFile("debian", "install");
     const links = await readPackagingFile("debian", "links");
-    const maintscript = await readPackagingFile("debian", "sigmaos.maintscript");
+    const maintscript = await readPackagingFile("debian", "zos.maintscript");
     const control = await readPackagingFile("debian", "control");
-    const tmpfiles = await readPackagingFile("tmpfiles.d", "sigmaos.conf");
+    const tmpfiles = await readPackagingFile("tmpfiles.d", "zos.conf");
 
-    expect(install).toContain("usr/lib/sigmaos/apps/api/dist/");
-    expect(install).toContain("target/release/sigmaos-hostd usr/lib/sigmaos/bin/");
-    expect(install).toContain("target/release/sigmaos-termux usr/lib/sigmaos/bin/");
+    expect(install).toContain("usr/lib/zos/apps/api/dist/");
+    expect(install).toContain("target/release/zos-hostd usr/lib/zos/bin/");
+    expect(install).toContain("target/release/zos-termux usr/lib/zos/bin/");
     expect(install).not.toContain("apps/terminal-helper");
-    expect(install).toContain("usr/lib/sigmaos/apps/worker/dist/");
-    expect(install).toContain("target/release/sigmaos-photostaff usr/lib/sigmaos/bin/");
+    expect(install).toContain("usr/lib/zos/apps/worker/dist/");
+    expect(install).toContain("target/release/zos-photostaff usr/lib/zos/bin/");
     expect(install).not.toContain("apps/photo-worker");
     expect(install).not.toContain("apps/photostaff/dist/");
-    expect(install).toContain("target/release/sigmaos-indexer usr/lib/sigmaos/bin/");
+    expect(install).toContain("target/release/zos-indexer usr/lib/zos/bin/");
     expect(install).not.toContain("apps/indexer/dist/");
-    expect(install).toContain("usr/lib/sigmaos/apps/backup/dist/");
-    expect(install).toContain("usr/lib/sigmaos/apps/ops/dist/");
+    expect(install).toContain("usr/lib/zos/apps/backup/dist/");
+    expect(install).toContain("usr/lib/zos/apps/ops/dist/");
     expect(install).not.toContain("apps/scheduler");
-    expect(install).toContain("target/release/sigmaos-vod-player usr/lib/sigmaos/bin/");
+    expect(install).toContain("target/release/zos-vod-player usr/lib/zos/bin/");
     expect(install).not.toContain("apps/player-helper");
-    expect(install).toContain("target/release/sigmaos-downloader usr/lib/sigmaos/bin/");
+    expect(install).toContain("target/release/zos-downloader usr/lib/zos/bin/");
     expect(install).not.toContain("apps/downloader/dist/");
-    expect(install).toContain("node_modules/* usr/lib/sigmaos/node_modules/");
+    expect(install).toContain("node_modules/* usr/lib/zos/node_modules/");
     expect(install).toContain(
-      "packages/agent/node_modules/* usr/lib/sigmaos/packages/agent/node_modules/"
+      "packages/agent/node_modules/* usr/lib/zos/packages/agent/node_modules/"
     );
     expect(links).toContain(
-      "usr/lib/sigmaos/packages/agent/node_modules/@earendil-works/pi-coding-agent usr/lib/sigmaos/node_modules/@earendil-works/pi-coding-agent"
+      "usr/lib/zos/packages/agent/node_modules/@earendil-works/pi-coding-agent usr/lib/zos/node_modules/@earendil-works/pi-coding-agent"
     );
     expect(maintscript).toContain(
-      "dir_to_symlink /usr/lib/sigmaos/node_modules/@earendil-works/pi-coding-agent ../../packages/agent/node_modules/@earendil-works/pi-coding-agent 0.9.17~"
+      "dir_to_symlink /usr/lib/zos/node_modules/@earendil-works/pi-coding-agent ../../packages/agent/node_modules/@earendil-works/pi-coding-agent 0.9.17~"
     );
-    expect(links).toContain(
-      "lib/systemd/system/sigmaos-photostaff.service lib/systemd/system/sigmaos-photo-worker.service"
-    );
-    expect(install).toContain("docs/dist/* usr/lib/sigmaos/docs/dist/");
-    expect(install).toContain(".sigmaos/build-info.json usr/lib/sigmaos/");
+    expect(links).not.toContain("zos-photo-worker.service");
+    expect(install).toContain("docs/dist/* usr/lib/zos/docs/dist/");
+    expect(install).toContain(".zos/build-info.json usr/lib/zos/");
     expect(install).not.toContain("docs/node_modules");
-    await expect(readPackagingFile("systemd", "sigmaos-api.service")).resolves.toContain(
-      "Environment=SIGMAOS_DOCS_DIST=/usr/lib/sigmaos/docs/dist"
+    await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
+      "Environment=ZOS_DOCS_DIST=/usr/lib/zos/docs/dist"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-api.service")).resolves.toContain(
-      "Environment=SIGMAOS_BUILD_INFO_PATH=/usr/lib/sigmaos/build-info.json"
+    await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
+      "Environment=ZOS_BUILD_INFO_PATH=/usr/lib/zos/build-info.json"
     );
-    await expect(readPackagingFile("systemd", "sigmaos-api.service")).resolves.toContain(
-      "ReadWritePaths=/var/lib/sigmaos /var/log/sigmaos /srv/nas /var/lib/sigmaos/vmstore /srv/iso /srv/apps"
+    await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
+      "ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps"
     );
-    expect(install).toContain("packaging/scripts/sigmaos-nginx.sh usr/lib/sigmaos/scripts/");
-    expect(install).toContain("packaging/scripts/sigmaos-configure-locale.sh usr/lib/sigmaos/scripts/");
-    expect(install).toContain("packaging/scripts/sigmaos-refresh-termux.sh usr/lib/sigmaos/scripts/");
-    expect(install).toContain("packaging/scripts/sigmaos-nas-acl.sh usr/lib/sigmaos/scripts/");
-    expect(install).toContain("packaging/scripts/sigmaos-share-acl.mjs usr/lib/sigmaos/scripts/");
-    expect(install).toContain("packaging/etc/samba.conf usr/share/sigmaos/");
-    expect(install).toContain("packaging/systemd/smbd.service.d/sigmaos.conf lib/systemd/system/smbd.service.d/");
-    expect(install).toContain("packaging/systemd/vsftpd.service.d/sigmaos.conf lib/systemd/system/vsftpd.service.d/");
-    expect(install).toContain("packaging/systemd/minidlna.service.d/sigmaos.conf lib/systemd/system/minidlna.service.d/");
-    expect(install).toContain("packaging/scripts/sigmaos-refresh-vod-player.sh usr/lib/sigmaos/scripts/");
-    expect(install).toContain("packaging/scripts/sigmaos-deploy-bootstrap.sh usr/lib/sigmaos/scripts/");
-    expect(install).toContain("packaging/scripts/sigmaos-deploy usr/lib/sigmaos/scripts/");
-    expect(install).toContain("packaging/nginx/sigmaos.conf usr/share/sigmaos/nginx/");
-    expect(install).toContain("etc/sigmaos/");
+    expect(install).toContain("packaging/scripts/zos-nginx.sh usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/scripts/zos-configure-locale.sh usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/scripts/zos-refresh-termux.sh usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/scripts/zos-nas-acl.sh usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/scripts/zos-share-acl.mjs usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/etc/samba.conf usr/share/zos/");
+    expect(install).toContain("packaging/systemd/smbd.service.d/zos.conf lib/systemd/system/smbd.service.d/");
+    expect(install).toContain("packaging/systemd/vsftpd.service.d/zos.conf lib/systemd/system/vsftpd.service.d/");
+    expect(install).toContain("packaging/systemd/minidlna.service.d/zos.conf lib/systemd/system/minidlna.service.d/");
+    expect(install).toContain("packaging/scripts/zos-refresh-vod-player.sh usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/scripts/zos-deploy-bootstrap.sh usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/scripts/zos-deploy usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/nginx/zos.conf usr/share/zos/nginx/");
+    expect(install).toContain("packaging/etc/config.toml zos/config/");
     expect(install).toContain("lib/systemd/system/");
-    expect(install).toContain("tmpfiles.d/sigmaos.conf");
-    expect(tmpfiles).toContain("/run/sigmaos");
+    expect(install).toContain("tmpfiles.d/zos.conf");
+    expect(tmpfiles).toContain("/run/zos");
     expect(tmpfiles).toContain("/run/mdadm");
     expect(tmpfiles).toContain("d /run/samba 0755 root root -");
     expect(control).toContain("Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, libheif-examples");
@@ -215,43 +217,42 @@ describe("native packaging artifacts", () => {
     expect(control).not.toMatch(/^Depends:.*samba/m);
     const postrm = await readPackagingFile("debian", "postrm");
     const postinst = await readPackagingFile("debian", "postinst");
-    const refreshVodPlayer = await readPackagingFile("scripts", "sigmaos-refresh-vod-player.sh");
-    expect(postinst).toContain("legacy_vod_player_active");
-    expect(postinst).toContain("photostaff_was_enabled");
-    expect(postinst).toContain("systemctl disable --now sigmaos-photo-worker.service");
-    expect(postinst).toContain("systemctl disable --now sigmaos-scheduler.timer sigmaos-scheduler.service");
-    expect(postinst).not.toMatch(/systemctl enable [^\n]*sigmaos-scheduler/u);
-    expect(postinst).toContain("systemctl restart sigmaos-photostaff.service");
-    expect(postinst).toContain("systemctl start sigmaos-vod-player.service");
-    expect(refreshVodPlayer).toContain("SIGMAOS_VOD_PLAYER_SOCKET_PATH");
-    expect(refreshVodPlayer).toContain("SIGMAOS_VOD_PLAYER_STATE_PATH");
+    const refreshVodPlayer = await readPackagingFile("scripts", "zos-refresh-vod-player.sh");
+    expect(postinst).not.toContain("legacy");
+    expect(postinst).not.toContain("migrate-config");
+    expect(postinst).toContain("/zos/state/hostd/docker-daemon");
+    expect(postinst).toContain("/zos/state/hostd/network-manager");
+    expect(refreshVodPlayer).toContain("ZOS_VOD_PLAYER_SOCKET_PATH");
+    expect(refreshVodPlayer).toContain("ZOS_VOD_PLAYER_STATE_PATH");
     expect(refreshVodPlayer).toContain("ReadWritePaths=");
     expect(refreshVodPlayer).toContain("private temporary directory");
-    expect(refreshVodPlayer).toContain("SIGMAOS_ENABLE_PLAYER");
-    expect(postinst).toContain("sigmaos-vod-player migrate-config");
+    expect(refreshVodPlayer).toContain("state path must be under /zos/state/vod-player");
+    expect(refreshVodPlayer).not.toContain("ZOS_ENABLE_PLAYER");
     expect(postrm.indexOf("optional-groups.conf")).toBeLessThan(postrm.indexOf("systemctl daemon-reload"));
-    expect(postrm).toContain("sigmaos-termux.service.d/identity.conf");
-    expect(postrm).toContain("sigmaos-vod-player.service.d/identity.conf");
+    expect(postrm).toContain("zos-termux.service.d/identity.conf");
+    expect(postrm).toContain("zos-vod-player.service.d/identity.conf");
   });
 
   it("ships first-boot and appliance image scaffolding", async () => {
-    const firstBoot = await readPackagingFile("scripts", "sigmaos-first-boot.sh");
+    const firstBoot = await readPackagingFile("scripts", "zos-first-boot.sh");
     const manifest = await readPackagingFile("appliance", "manifest.toml");
     const buildImage = await readPackagingFile("appliance", "build-image.sh");
 
-    expect(firstBoot).toContain("SIGMAOS_ADMIN_DISPLAY_NAME");
-    expect(firstBoot).toContain("SIGMAOS_DOCKER_ENABLED");
-    expect(firstBoot).toContain("SIGMAOS_VM_ENABLED");
-    expect(firstBoot).toContain("SIGMAOS_VOD_PLAYER_ENABLED");
+    expect(firstBoot).toContain("ZOS_ADMIN_DISPLAY_NAME");
+    expect(firstBoot).toContain("ZOS_DOCKER_ENABLED");
+    expect(firstBoot).toContain("ZOS_VM_ENABLED");
+    expect(firstBoot).toContain("ZOS_VOD_PLAYER_ENABLED");
     expect(firstBoot).toContain("[vod_player]");
-    expect(firstBoot).toContain("SIGMAOS_TERMUX_USER");
-    expect(firstBoot).not.toContain('chown -R sigmaos:sigmaos "$DATA_DIR" "$NAS_ROOT_PATH"');
+    expect(firstBoot).toContain("ZOS_TERMUX_USER");
+    expect(firstBoot).not.toContain("chown -R zos:zos");
+    expect(firstBoot).toContain('environment = "production"');
+    expect(firstBoot).toContain('chown -R root:root "$STATE_DIR/hostd"');
     expect(firstBoot).toContain("[[nas_roots]]");
     expect(firstBoot).toContain("[model]");
     expect(firstBoot).toContain("[hostd]");
     expect(firstBoot).toContain("[shares]");
     expect(firstBoot).toContain('[ -e "$CONFIG_PATH" ]');
-    expect(firstBoot).toContain('SIGMAOS_FIRST_BOOT_FORCE:-0');
+    expect(firstBoot).toContain('ZOS_FIRST_BOOT_FORCE:-0');
     expect(manifest).toContain("nodejs");
     expect(manifest).toContain("sqlite3");
     expect(manifest).toContain("tmux");
@@ -259,14 +260,14 @@ describe("native packaging artifacts", () => {
     expect(manifest).toContain("docker-cli");
     expect(manifest).toContain("nginx.service");
     expect(manifest).toContain("git");
-    expect(manifest).toContain("sigmaos-hostd.service");
-    expect(manifest).not.toContain("sigmaos-share-helper.service");
-    expect(manifest).toContain("sigmaos-termux.service");
-    expect(manifest).not.toContain("sigmaos-terminal-helper.service");
-    expect(manifest).toContain("sigmaos-downloader.service");
-    expect(manifest).toContain("sigmaos-photostaff.service");
-    expect(manifest).toContain("sigmaos-vod-player.service");
-    expect(manifest).not.toContain("sigmaos-player-helper.service");
+    expect(manifest).toContain("zos-hostd.service");
+    expect(manifest).not.toContain("zos-share-helper.service");
+    expect(manifest).toContain("zos-termux.service");
+    expect(manifest).not.toContain("zos-terminal-helper.service");
+    expect(manifest).toContain("zos-downloader.service");
+    expect(manifest).toContain("zos-photostaff.service");
+    expect(manifest).toContain("zos-vod-player.service");
+    expect(manifest).not.toContain("zos-player-helper.service");
     expect(manifest).toContain("mpv");
     expect(manifest).toContain("samba");
     expect(buildImage).toMatch(/--include=.*(^|,)git(,|\\|\s)/s);
@@ -274,8 +275,8 @@ describe("native packaging artifacts", () => {
     expect(manifest).toContain("tesseract-ocr");
     expect(manifest).toContain("tesseract-ocr-chi-sim");
     expect(manifest).toContain("tesseract-ocr-eng");
-    expect(manifest).toContain("sigmaos-indexer.service");
-    expect(manifest).not.toContain("sigmaos-indexer.timer");
+    expect(manifest).toContain("zos-indexer.service");
+    expect(manifest).not.toContain("zos-indexer.timer");
     expect(manifest).toContain("libheif-examples");
     expect(manifest).toContain("libimage-exiftool-perl");
     expect(manifest).toContain("libvips-tools");
@@ -292,35 +293,35 @@ describe("native packaging artifacts", () => {
     expect(buildImage).toContain("btrfs-progs");
     expect(manifest).toContain("unzip");
     expect(manifest).toContain("unrar-free");
-    expect(manifest).toContain("sigmaos-maintenance.timer");
-    expect(manifest).not.toContain("sigmaos-scheduler");
-    expect(manifest).toContain("sigmaos-backup-daily.timer");
-    expect(manifest).toContain("sigmaos-backup-weekly.timer");
-    expect(manifest).toContain("sigmaos-health.timer");
-    expect(buildImage).toContain("sigmaos-backup-daily.timer");
-    expect(buildImage).toContain("sigmaos-backup-weekly.timer");
-    expect(buildImage).toContain("sigmaos-health.timer");
-    expect(buildImage).not.toContain("sigmaos-scheduler");
-    expect(buildImage).toContain("sigmaos-nginx.sh");
-    expect(buildImage).toContain("SIGMAOS_NODE_MIRROR");
+    expect(manifest).toContain("zos-maintenance.timer");
+    expect(manifest).not.toContain("zos-scheduler");
+    expect(manifest).toContain("zos-backup-daily.timer");
+    expect(manifest).toContain("zos-backup-weekly.timer");
+    expect(manifest).toContain("zos-health.timer");
+    expect(buildImage).toContain("zos-backup-daily.timer");
+    expect(buildImage).toContain("zos-backup-weekly.timer");
+    expect(buildImage).toContain("zos-health.timer");
+    expect(buildImage).not.toContain("zos-scheduler");
+    expect(buildImage).toContain("zos-nginx.sh");
+    expect(buildImage).toContain("ZOS_NODE_MIRROR");
     expect(buildImage).toContain("SHASUMS256.txt");
     expect(buildImage).toContain("/usr/local/bin/node");
     expect(buildImage).toContain("PRODUCT_VERSION");
-    expect(buildImage).not.toContain("sigmaos_0.1.0");
-    expect(firstBoot).toContain("password_file = \"/etc/sigmaos/restic-password\"");
+    expect(buildImage).not.toContain("zos_0.1.0");
+    expect(firstBoot).toContain('password_file = "$ROOT_DIR/config/restic-password"');
     expect(firstBoot).not.toContain("restic-password\" =");
-    await expect(readPackagingFile("systemd", "sigmaos-share-helper.service")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readPackagingFile("systemd", "zos-share-helper.service")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("preserves an existing first-boot configuration", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-first-boot-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-first-boot-"));
     const configPath = path.join(tempDir, "config.toml");
     const sentinel = "# operator-owned configuration\n";
     await writeFile(configPath, sentinel);
 
     try {
-      await execFileAsync("sh", [path.join(repoRoot, "packaging/scripts/sigmaos-first-boot.sh")], {
-        env: { ...process.env, SIGMAOS_CONFIG: configPath }
+      await execFileAsync("sh", [path.join(repoRoot, "packaging/scripts/zos-first-boot.sh")], {
+        env: { ...process.env, ZOS_CONFIG: configPath }
       });
       await expect(readFile(configPath, "utf8")).resolves.toBe(sentinel);
     } finally {
@@ -330,44 +331,46 @@ describe("native packaging artifacts", () => {
 
   it("ships an ARM-friendly host installer", async () => {
     const installer = await readPackagingFile("scripts", "install.sh");
-    const localeScript = await readPackagingFile("scripts", "sigmaos-configure-locale.sh");
+    const localeScript = await readPackagingFile("scripts", "zos-configure-locale.sh");
     const buildDeb = await readPackagingFile("scripts", "build-deb.sh");
     const rules = await readPackagingFile("debian", "rules");
     const control = await readPackagingFile("debian", "control");
     const postinst = await readPackagingFile("debian", "postinst");
-    const firstBoot = await readPackagingFile("scripts", "sigmaos-first-boot.sh");
+    const firstBoot = await readPackagingFile("scripts", "zos-first-boot.sh");
     const releaseWorkflow = await readRepoFile(".github", "workflows", "package-release.yml");
     const deployWorkflow = await readRepoFile(".github", "workflows", "deploy-cm5.yml");
 
     expect(installer).toContain("dpkg --print-architecture");
-    expect(installer).toContain("SIGMAOS_APT_MIRROR");
-    expect(installer).toContain("SIGMAOS_APT_SECURITY_MIRROR");
-    expect(installer).toContain("SIGMAOS_RPI_MIRROR");
-    expect(installer).toContain("SIGMAOS_NODE_MIRROR");
+    expect(installer).toContain("ZOS_APT_MIRROR");
+    expect(installer).toContain("ZOS_APT_SECURITY_MIRROR");
+    expect(installer).toContain("ZOS_RPI_MIRROR");
+    expect(installer).toContain("ZOS_NODE_MIRROR");
     expect(installer).toContain("mirrors.aliyun.com/nodejs-release");
     expect(installer).toContain("SHASUMS256.txt");
-    expect(installer).toContain("SIGMAOS_NPM_REGISTRY");
-    expect(installer).toContain("SIGMAOS_RUSTUP_INIT_URL");
+    expect(installer).toContain("ZOS_NPM_REGISTRY");
+    expect(installer).toContain("ZOS_RUSTUP_INIT_URL");
     expect(installer).toContain("RUST_VERSION_REQUIRED=1.95.0");
-    expect(installer).toContain("SIGMAOS_APT_BACKUP_DIR");
-    expect(installer).toContain("/var/backups/sigmaos-apt");
+    expect(installer).toContain("ZOS_APT_BACKUP_DIR");
+    expect(installer).toContain("/zos/system-backups/apt");
+    expect(installer).toContain("ZOS_APT_BACKUP_DIR must be under /zos/system-backups");
+    expect(localeScript).toContain("ZOS_CONFIG_BACKUP_DIR must be under /zos/system-backups");
     expect(installer).toContain("mirrors.aliyun.com/debian");
     expect(installer).toContain("mirrors.aliyun.com/raspberrypi");
     expect(installer).toContain("disable_nodesource_sources");
     expect(installer).not.toContain("deb.nodesource.com/node_22.x");
     expect(installer).toContain("packaging/scripts/build-deb.sh");
-    expect(installer).toContain("sigmaos-first-boot.sh");
-    expect(installer).toContain("SIGMAOS_CONFIG_EXISTS=0");
-    expect(installer).toContain("[ -e /etc/sigmaos/config.toml ]");
-    expect(installer).toContain('if [ "$SIGMAOS_CONFIG_EXISTS" = "0" ]; then');
-    expect(installer).not.toContain("SIGMAOS_EXISTING_INSTALL");
-    expect(installer).toContain("SIGMAOS_ENABLE_NGINX");
-    expect(installer).toContain("SIGMAOS_ENABLE_DOCKER");
+    expect(installer).toContain("zos-first-boot.sh");
+    expect(installer).toContain("ZOS_CONFIG_EXISTS=0");
+    expect(installer).toContain("[ -e /zos/config/config.toml ]");
+    expect(installer).toContain('if [ "$ZOS_CONFIG_EXISTS" = "0" ]; then');
+    expect(installer).not.toContain("ZOS_EXISTING_INSTALL");
+    expect(installer).toContain("ZOS_ENABLE_NGINX");
+    expect(installer).toContain("ZOS_ENABLE_DOCKER");
     expect(installer).toContain("docker-cli");
-    expect(installer).toContain("SIGMAOS_ENABLE_VM");
-    expect(installer).toContain("TERMINAL_USER=${SIGMAOS_TERMUX_USER:-sigmaos}");
+    expect(installer).toContain("ZOS_ENABLE_VM");
+    expect(installer).toContain("TERMINAL_USER=${ZOS_TERMUX_USER:-zos}");
     expect(installer).not.toContain("${SUDO_USER:-}");
-    expect(installer).toContain("SIGMAOS_LOCALE");
+    expect(installer).toContain("ZOS_LOCALE");
     expect(localeScript).toContain("AcceptEnv");
     expect(localeScript).toContain("LC_*");
     expect(localeScript).toContain("C.UTF-8");
@@ -382,13 +385,13 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("net-autostart default");
     expect(installer).toContain("net-start default");
     expect(installer).toContain("libvirt-daemon-system");
-    expect(installer).toContain("sigmaos-nginx.sh");
+    expect(installer).toContain("zos-nginx.sh");
     expect(installer).toContain("systemctl restart nginx");
     expect(installer).toContain("systemctl enable --now");
     expect(buildDeb).toContain("registry.npmmirror.com");
-    expect(buildDeb).toContain("SIGMAOS_BUILD_COMMIT_SHA");
-    expect(buildDeb).toContain("SIGMAOS_BUILD_DIRTY");
-    expect(buildDeb).toContain("SIGMAOS_BUILD_SOURCE");
+    expect(buildDeb).toContain("ZOS_BUILD_COMMIT_SHA");
+    expect(buildDeb).toContain("ZOS_BUILD_DIRTY");
+    expect(buildDeb).toContain("ZOS_BUILD_SOURCE");
     expect(buildDeb).toContain("--exclude target");
     expect(rules).toContain("npm ci --registry");
     expect(rules).toContain("override_dh_strip:");
@@ -401,17 +404,17 @@ describe("native packaging artifacts", () => {
     expect(control).toContain("Depends: nodejs (>= 20)");
     expect(control).toContain("qemu-efi-aarch64");
     expect(control).toContain("ipxe-qemu");
-    expect(postinst).toContain("-m 0711 /var/lib/sigmaos/vmstore");
-    expect(firstBoot).toContain("-m 0711 \"$DATA_DIR/vmstore\"");
+    expect(postinst).toContain("-m 0711 /zos/vm");
+    expect(firstBoot).toContain("-m 0711 \"$ROOT_DIR/vm\" \"$ROOT_DIR/iso\"");
     expect(releaseWorkflow).not.toContain("dtolnay/rust-toolchain@1.95.0");
     expect(releaseWorkflow.match(/uses: dtolnay\/rust-toolchain@[0-9a-f]{40}/gu)).toHaveLength(3);
     expect(releaseWorkflow.match(/toolchain: 1\.95\.0/gu)).toHaveLength(3);
     expect(releaseWorkflow).toMatch(/package-arm64:[\s\S]*?apt-get install[\s\S]*?\n\s+acl \\/u);
     expect(deployWorkflow).not.toContain('failed_units="$(systemctl --failed --no-legend --plain || true)"');
-    expect(deployWorkflow).toContain("awk '$1 ~ /^sigmaos-/ { print }'");
+    expect(deployWorkflow).toContain("awk '$1 ~ /^zos-/ { print }'");
     expect(deployWorkflow).toContain("[ -x /usr/local/bin/node ]");
     expect(deployWorkflow).toContain("CM5 runtime requires Node.js 22");
-    expect(deployWorkflow).toContain("sigmaos-indexer.service");
+    expect(deployWorkflow).toContain("zos-indexer.service");
     expect(deployWorkflow).toContain("/api/indexer/status");
     expect(deployWorkflow).toContain("payload?.queue?.stalled === false");
     expect(deployWorkflow).toContain("wait_for_indexer_ready()");
@@ -443,27 +446,27 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('mv -f "$partial_package" "$incoming_dir/package.deb"');
     expect(deployWorkflow).toContain("ServerAliveInterval=15");
     expect(deployWorkflow).not.toContain("--continue-at -");
-    expect(deployWorkflow).toContain("printf 'N\\n' | sudo -n /usr/local/sbin/sigmaos-deploy");
+    expect(deployWorkflow).toContain("printf 'N\\n' | sudo -n /usr/local/sbin/zos-deploy");
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-config.sha256"');
     expect(deployWorkflow).toContain('[ "$installed_status" = "install ok installed" ]');
     expect(deployWorkflow).toContain('[ "$actual_config_sha256" = "$expected_config_sha256" ]');
-    expect(deployWorkflow).toContain("END { exit (legacy || !socket || !user) ? 1 : 0 }");
-    expect(deployWorkflow).toContain("/usr/lib/sigmaos/bin/sigmaos-termux");
-    expect(deployWorkflow).toContain("sigmaos-health.timer");
+    expect(deployWorkflow).toContain("sha256sum /zos/config/config.toml");
+    expect(deployWorkflow).toContain("/usr/lib/zos/bin/zos-termux");
+    expect(deployWorkflow).toContain("zos-health.timer");
     expect(deployWorkflow).toContain("NextElapseUSecMonotonic");
     expect(deployWorkflow).toContain('payload?.operations?.health?.status !== "ready"');
     expect(deployWorkflow).toContain('runtime_before="$(runtime_fingerprint)"');
     expect(deployWorkflow).toContain('runtime_after="$(runtime_fingerprint)"');
-    expect(deployWorkflow).toContain("! systemctl is-active --quiet sigmaos-terminal-helper.service");
+    expect(deployWorkflow).not.toContain("zos-terminal-helper.service");
     expect(deployWorkflow).not.toContain('cp "$package_path" "$release_dir/package.deb"');
     expect(deployWorkflow).not.toContain('"$release_dir/package.deb" \\\n            "$release_dir/release-manifest.json"');
   });
 
   it("ships a loopback API reverse proxy for LAN access", async () => {
-    const nginx = await readPackagingFile("nginx", "sigmaos.conf");
-    const nginxScript = await readPackagingFile("scripts", "sigmaos-nginx.sh");
+    const nginx = await readPackagingFile("nginx", "zos.conf");
+    const nginxScript = await readPackagingFile("scripts", "zos-nginx.sh");
 
-    expect(nginx).toContain("listen __SIGMAOS_NGINX_PORT__;");
+    expect(nginx).toContain("listen __ZOS_NGINX_PORT__;");
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3010;");
     expect(nginx).toContain("proxy_set_header Upgrade $http_upgrade;");
     expect(nginx).toContain("client_max_body_size 4g;");
@@ -473,124 +476,107 @@ describe("native packaging artifacts", () => {
   });
 
   it("ships a constrained native host daemon", async () => {
-    const unit = await readPackagingFile("systemd", "sigmaos-hostd.service");
+    const unit = await readPackagingFile("systemd", "zos-hostd.service");
 
     expect(unit).toContain("User=root");
-    expect(unit).toContain("StateDirectory=sigmaos/docker-daemon\n");
-    expect(unit).toContain("StateDirectory=sigmaos/network-manager\n");
-    expect(unit).toContain("StateDirectoryMode=0700");
-    expect(unit).not.toMatch(/^StateDirectory=sigmaos$/mu);
-    expect(unit).not.toMatch(/^LogsDirectory=sigmaos$/mu);
-    expect(unit).not.toContain("RuntimeDirectory=sigmaos");
+    expect(unit).not.toContain("StateDirectory=");
+    expect(unit).not.toContain("LogsDirectory=");
+    expect(unit).not.toContain("RuntimeDirectory=zos");
     expect(unit).toContain("systemd-tmpfiles-setup.service");
     expect(unit).toContain("Wants=NetworkManager.service");
     expect(unit).not.toContain("Wants=network-online.target");
-    expect(unit).toContain("Environment=SIGMAOS_CONFIG=/etc/sigmaos/config.toml");
-    expect(unit).not.toContain("SIGMAOS_HOSTD_SOCKET_PATH=");
-    expect(unit).toContain("ExecStart=/usr/lib/sigmaos/bin/sigmaos-hostd");
+    expect(unit).toContain("Environment=ZOS_CONFIG=/zos/config/config.toml");
+    expect(unit).toContain("Environment=ZOS_ROOT=/zos");
+    expect(unit).not.toContain("ZOS_HOSTD_SOCKET_PATH=");
+    expect(unit).toContain("ExecStart=/usr/lib/zos/bin/zos-hostd");
     expect(unit).not.toContain("/node");
     expect(unit).toContain("TimeoutStopSec=180");
     expect(unit).toContain("/run/mdadm");
     expect(unit).toContain("ProtectSystem=strict");
-    expect(unit).toContain("ReadWritePaths=/etc /run/sigmaos /run/mdadm /srv/nas");
+    expect(unit).toContain("ReadWritePaths=/etc /run/zos /run/mdadm /zos/data");
     expect(unit).toContain("ReadWritePaths=-/run/samba -/var/lib/samba -/var/cache/samba -/var/log/samba");
-    expect(unit).toContain("ReadWritePaths=-/var/lib/sigmaos/docker-daemon /var/lib/sigmaos/network-manager");
-    expect(unit).not.toMatch(/ReadWritePaths=.*(?:^|\s)\/var\/lib\/sigmaos(?:\s|$)/mu);
-    expect(unit).not.toContain("/var/log/sigmaos");
+    expect(unit).toContain("ReadWritePaths=-/zos/state/hostd/docker-daemon /zos/state/hostd/network-manager");
+    expect(unit).not.toMatch(/ReadWritePaths=.*(?:^|\s)\/var\/lib\/zos(?:\s|$)/mu);
+    expect(unit).not.toContain("/zos/logs");
     expect(unit).toContain("CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER");
     expect(unit).toContain("CAP_MKNOD");
     expect(unit).toContain("CAP_SYS_ADMIN");
     expect(unit).toContain("CAP_SYS_RAWIO");
-    const apiUnit = await readPackagingFile("systemd", "sigmaos-api.service");
-    expect(apiUnit).toContain("User=sigmaos");
+    const apiUnit = await readPackagingFile("systemd", "zos-api.service");
+    expect(apiUnit).toContain("User=zos");
     expect(apiUnit).toContain("CapabilityBoundingSet=");
     expect(apiUnit).not.toContain("/etc/docker");
     expect(apiUnit).not.toContain("/etc/NetworkManager");
     const postinst = await readPackagingFile("debian", "postinst");
-    expect(postinst).toContain("sigmaos-hostd migrate-config");
-    expect(postinst).toContain("systemctl disable --now sigmaos-share-helper.service");
-    expect(postinst.indexOf("sigmaos-hostd migrate-config")).toBeLessThan(
-      postinst.indexOf("systemctl disable --now sigmaos-share-helper.service")
-    );
-    expect(postinst.indexOf("systemctl disable --now sigmaos-share-helper.service")).toBeLessThan(
-      postinst.indexOf("systemctl enable sigmaos-hostd.service")
-    );
-    expect(postinst).toContain("install -d -o root -g root -m 0700 /var/lib/sigmaos/docker-daemon");
-    expect(postinst).toContain("chown -R root:root /var/lib/sigmaos/docker-daemon");
-    expect(postinst).toContain("install -d -o root -g root -m 0700 /var/lib/sigmaos/network-manager");
-    expect(postinst).toContain("chown -R root:root /var/lib/sigmaos/network-manager");
-    expect(postinst).toContain("install -d -o root -g root -m 0755 /var/lib/sigmaos-share");
-    expect(postinst).toContain("usermod --home /var/lib/sigmaos-share sigma-share");
-    expect(postinst).toContain("install -d -o sigmaos -g sigmaos -m 0750 /srv/apps");
-    expect(apiUnit).toContain("ReadWritePaths=/var/lib/sigmaos /var/log/sigmaos /srv/nas /var/lib/sigmaos/vmstore /srv/iso /srv/apps");
+    expect(postinst).not.toContain("migrate-config");
+    expect(postinst).toContain("/zos/state/hostd/docker-daemon");
+    expect(postinst).toContain("/zos/state/hostd/network-manager");
+    expect(postinst).toContain("/zos/home/share");
+    expect(postinst).toContain("usermod --home /zos/home/share zos-share");
+    expect(postinst).toContain("/zos/apps");
+    expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps");
     expect(apiUnit).toContain("CapabilityBoundingSet=\n");
   });
 
   it("loads managed shares through each protocol's actual service entrypoint", async () => {
     const samba = await readPackagingFile("etc", "samba.conf");
-    const smbd = await readPackagingFile("systemd", "smbd.service.d", "sigmaos.conf");
-    const vsftpd = await readPackagingFile("systemd", "vsftpd.service.d", "sigmaos.conf");
-    const minidlna = await readPackagingFile("systemd", "minidlna.service.d", "sigmaos.conf");
-    const webdav = await readPackagingFile("systemd", "sigmaos-webdav.service");
+    const smbd = await readPackagingFile("systemd", "smbd.service.d", "zos.conf");
+    const vsftpd = await readPackagingFile("systemd", "vsftpd.service.d", "zos.conf");
+    const minidlna = await readPackagingFile("systemd", "minidlna.service.d", "zos.conf");
+    const webdav = await readPackagingFile("systemd", "zos-webdav.service");
 
     expect(samba).not.toContain("include = /etc/samba/smb.conf\n");
     expect(samba).toContain("map to guest = Bad User");
-    expect(samba).toContain("include = /etc/samba/smb.conf.d/sigmaos-shares.conf");
-    expect(smbd).toContain("--configfile=/usr/share/sigmaos/samba.conf");
-    expect(vsftpd).toContain("/etc/vsftpd.d/sigmaos-shares.conf");
-    expect(minidlna).toContain("-f /etc/minidlna.d/sigmaos.conf");
+    expect(samba).toContain("include = /etc/samba/smb.conf.d/zos-shares.conf");
+    expect(smbd).toContain("--configfile=/usr/share/zos/samba.conf");
+    expect(vsftpd).toContain("/etc/vsftpd.d/zos-shares.conf");
+    expect(minidlna).toContain("-f /etc/minidlna.d/zos.conf");
     expect(webdav).toContain("User=www-data");
-    expect(webdav).toContain("-f /etc/apache2/sites-available/sigmaos-webdav.conf");
-    expect(webdav).toContain("RuntimeDirectory=sigmaos-webdav");
+    expect(webdav).toContain("-f /etc/apache2/sites-available/zos-webdav.conf");
+    expect(webdav).toContain("RuntimeDirectory=zos-webdav");
   });
 
   it("ships an isolated Rust Termux daemon", async () => {
-    const unit = await readPackagingFile("systemd", "sigmaos-termux.service");
-    const refresh = await readPackagingFile("scripts", "sigmaos-refresh-termux.sh");
+    const unit = await readPackagingFile("systemd", "zos-termux.service");
+    const refresh = await readPackagingFile("scripts", "zos-refresh-termux.sh");
 
-    expect(unit).toContain("User=sigmaos");
+    expect(unit).toContain("User=zos");
+    expect(unit).toContain("Environment=ZOS_ROOT=/zos");
     expect(unit).toContain("ProtectHome=tmpfs");
     expect(unit).toContain("RestrictSUIDSGID=yes");
     expect(unit).toContain("termux.sock");
     expect(unit).toContain("CapabilityBoundingSet=");
-    expect(unit).toContain("InaccessiblePaths=/etc/sigmaos /var/lib/sigmaos /var/log/sigmaos");
-    expect(unit).toContain("ReadWritePaths=/run/sigmaos /srv/nas /var/lib/sigmaos-termux");
+    expect(unit).toContain("InaccessiblePaths=/zos/config /zos/state /zos/logs");
+    expect(unit).toContain("ReadWritePaths=/run/zos /zos/data /zos/home/termux");
     expect(unit).toContain("KillMode=process");
-    expect(unit).toContain("ExecStart=/usr/lib/sigmaos/bin/sigmaos-termux");
+    expect(unit).toContain("ExecStart=/usr/lib/zos/bin/zos-termux");
     expect(unit).not.toContain("/node");
     expect(refresh).toContain("User=%s\\n");
     expect(refresh).toContain("WorkingDirectory=%s\\n");
     expect(refresh).not.toContain("BindPaths=%s\\n");
-    expect(refresh).toContain("SIGMAOS_TERMUX_SOCKET_PATH");
-    expect(refresh).toContain("SIGMAOS_TERMUX_CONNECT_TIMEOUT_MS");
-    expect(refresh).toContain("terminal user must be sigmaos");
+    expect(refresh).toContain("ZOS_TERMUX_SOCKET_PATH");
+    expect(refresh).toContain("ZOS_TERMUX_CONNECT_TIMEOUT_MS");
+    expect(refresh).toContain("terminal user must be zos");
     expect(refresh).toContain("escape_systemd_value()");
     expect(refresh).toContain("s/%/%%/g");
     expect(refresh).toContain('ReadWritePaths="%s"\\n');
     const postinst = await readPackagingFile("debian", "postinst");
-    expect(postinst).toContain("sigmaos-termux migrate-config");
-    expect(postinst).toContain("systemctl disable --now sigmaos-terminal-helper.service");
-    expect(postinst).toContain("ln -sfn /usr/lib/sigmaos/scripts/sigmaos-deploy /usr/local/sbin/sigmaos-deploy");
-    expect(postinst).toContain("refusing to merge existing terminal homes");
-    expect(postinst.indexOf("refusing to merge existing terminal homes")).toBeLessThan(
-      postinst.indexOf("systemctl disable --now sigmaos-terminal-helper.service")
-    );
-    expect(postinst.indexOf("systemctl disable --now sigmaos-terminal-helper.service")).toBeLessThan(
-      postinst.indexOf('mv "$legacy_termux_home" "$termux_home"')
-    );
-    expect(await readPackagingFile("scripts", "sigmaos-nas-acl.sh")).toContain("findmnt -rn --mountpoint");
-    expect(await readPackagingFile("scripts", "sigmaos-nas-acl.sh")).toContain("getfacl --absolute-names");
+    expect(postinst).toContain("ln -sfn /usr/lib/zos/scripts/zos-deploy /usr/local/sbin/zos-deploy");
+    expect(postinst).not.toContain("legacy_termux_home");
+    expect(await readPackagingFile("scripts", "zos-nas-acl.sh")).toContain("findmnt -rn --mountpoint");
+    expect(await readPackagingFile("scripts", "zos-nas-acl.sh")).toContain("getfacl --absolute-names");
   });
 
   it("ships a constrained CM5 deployment helper", async () => {
-    const deploy = await readPackagingFile("scripts", "sigmaos-deploy");
-    const bootstrap = await readPackagingFile("scripts", "sigmaos-deploy-bootstrap.sh");
+    const deploy = await readPackagingFile("scripts", "zos-deploy");
+    const bootstrap = await readPackagingFile("scripts", "zos-deploy-bootstrap.sh");
 
     expect(deploy).toContain("flock -n 9");
+    expect(deploy).toContain("ZOS_DEPLOY_DIR must be under /zos/deploy");
     expect(deploy).toContain("package checksum does not match release manifest");
     expect(deploy).toContain("refusing to downgrade");
-    expect(deploy).toContain("tar -C /etc -czf");
-    expect(deploy).toContain("tar -C /var/lib -czf");
+    expect(deploy).not.toContain("tar -C /etc -czf");
+    expect(deploy).not.toContain("tar -C /var/lib -czf");
     expect(deploy).toContain('command -v apt-get >/dev/null 2>&1 || die "apt-get is required"');
     expect(deploy).toContain("apt-get install --yes --no-remove");
     expect(deploy).toContain("Dpkg::Options::=--force-confdef");
@@ -601,19 +587,19 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("activate_runtime");
     expect(deploy).toContain("systemctl restart $RUNTIME_SERVICES");
     expect(deploy).toContain("systemctl enable --now $TIMERS");
-    expect(deploy).toContain("systemctl start sigmaos-health.service");
+    expect(deploy).toContain("systemctl start zos-health.service");
     expect(deploy).toContain('systemctl is-active --quiet "$unit" || die "timer is not active: $unit"');
     expect(deploy).toContain("NextElapseUSecMonotonic");
     expect(deploy).toContain('health?.operations?.health?.status === "ready"');
     expect(deploy).toContain("wait_for_health_operation_ready");
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
-    expect(deploy).toContain("sigmaos-downloader.service sigmaos-indexer.service sigmaos-hostd.service");
+    expect(deploy).toContain("zos-downloader.service zos-indexer.service zos-hostd.service");
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
     expect(deploy).toContain('die "one or more services restarted during stabilization"');
     expect(deploy).toContain('version $manifest_version is already installed; recovering runtime and release state');
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"');
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"\n    cleanup_deployment_artifacts');
-    expect(deploy).toContain("awk '$1 ~ /^sigmaos-/ { print }'");
+    expect(deploy).toContain("awk '$1 ~ /^zos-/ { print }'");
     expect(deploy).toContain('failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"');
     expect(deploy).toContain('capture_runtime_diagnostics "$failure_dir"');
     expect(deploy).toContain('cat "$target_diagnostics_path/services-status.txt" >&2');
@@ -624,23 +610,21 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain('find "$INCOMING_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +');
     expect(deploy).toContain("traverse outside BASE_DIR");
     expect(deploy).toContain('find "$BASE_DIR" -mindepth 1 -maxdepth 1 -type d -name \'work.*\'');
-    expect(deploy).toContain('state_dir/sigmaos-share-helper.service.enabled');
-    expect(deploy).toContain('state_dir/sigmaos-hostd.service.enabled');
-    expect(deploy).toContain('state_dir/sigmaos-share-helper.service.active');
-    expect(deploy).toContain('state_dir/sigmaos-hostd.service.active');
-    expect(deploy).toContain('state_dir/sigmaos-terminal-helper.service.enabled');
-    expect(deploy).toContain('state_dir/sigmaos-termux.service.enabled');
-    expect(deploy).toContain('state_dir/sigmaos-terminal-helper.service.active');
-    expect(deploy).toContain('state_dir/sigmaos-termux.service.active');
-    expect(deploy).toContain("sigmaos-termux");
+    expect(deploy).not.toContain("zos-share-helper.service");
+    expect(deploy).not.toContain("zos-terminal-helper.service");
+    expect(deploy).not.toContain("zos-player-helper.service");
+    expect(deploy).toContain('tar -C /zos -czf "$backup_path/config.tgz" config');
+    expect(deploy).toContain('tar -C /zos -czf "$backup_path/state.tgz" state home');
+    expect(deploy).toContain("zos-termux");
     expect(deploy).toContain("package.deb must be a regular file");
     expect(deploy).toContain("/api/roots/readiness");
     expect(deploy).toContain("/api/indexer/status");
     expect(deploy).toContain('status?.queue?.stalled === false');
     expect(deploy).toContain("/api/system/build-info");
-    expect(bootstrap).toContain("/usr/local/sbin/sigmaos-deploy");
-    expect(bootstrap).toContain("/usr/lib/sigmaos/scripts/sigmaos-deploy");
-    expect(bootstrap).toContain("NOPASSWD: /usr/local/sbin/sigmaos-deploy");
+    expect(bootstrap).toContain("/usr/local/sbin/zos-deploy");
+    expect(bootstrap).toContain("/usr/lib/zos/scripts/zos-deploy");
+    expect(bootstrap).toContain("ZOS_DEPLOY_DIR must be under /zos/deploy");
+    expect(bootstrap).toContain("NOPASSWD: /usr/local/sbin/zos-deploy");
     expect(bootstrap).toContain("install -d -o root -g \"$DEPLOY_USER\" -m 0730");
     expect(bootstrap).toContain("visudo -cf");
   });

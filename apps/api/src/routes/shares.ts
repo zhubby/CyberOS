@@ -7,8 +7,8 @@ import {
   getShareSettings,
   listNasRoots,
   saveShareSettings
-} from "@sigmaos/db";
-import type { ShareOperationProposal } from "@sigmaos/shared";
+} from "@zos/db";
+import type { ShareOperationProposal } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { HostdRequestError } from "../lib/hostd-client.js";
 import { normalizeShareSettingsInput, type ShareSettingsInput } from "../lib/share-settings.js";

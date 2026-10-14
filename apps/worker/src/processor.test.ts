@@ -11,25 +11,25 @@ import {
   getJob,
   listEvents,
   listPendingApprovals,
-  openSigmaDb,
+  openZosDb,
   savePhotostaffLibrarySettings,
   upsertIndexedFile,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { PiAgentRunner } from "@sigmaos/agent";
-import type { SigmaConfig } from "@sigmaos/shared";
+  type ZosDatabase
+} from "@zos/db";
+import type { PiAgentRunner } from "@zos/agent";
+import type { ZosConfig } from "@zos/shared";
 import { photostaffAgentTools, processNextJob } from "./processor.js";
 
 let tempDir: string;
 let rootDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-worker-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-worker-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
   await writeFile(path.join(rootDir, "alpha.txt"), "alpha");
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
@@ -187,7 +187,7 @@ describe("worker processor", () => {
     });
   });
 
-  it("passes the saved Pi provider session back into the next job for the same SigmaOS session", async () => {
+  it("passes the saved Pi provider session back into the next job for the same ZOS session", async () => {
     const session = createSession(db, { rootId: "local" });
     createUserMessageAndJob(db, {
       sessionId: session.id,
@@ -235,10 +235,10 @@ describe("worker processor", () => {
   });
 });
 
-function testConfig(): SigmaConfig {
+function testConfig(): ZosConfig {
   return {
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "sigmaos.sqlite"),
+    databasePath: path.join(tempDir, "zos.sqlite"),
     api: {
       host: "127.0.0.1",
       port: 0,
@@ -266,14 +266,14 @@ function testConfig(): SigmaConfig {
     shares: {
       enabled: false,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: null
       },
       shares: []
     },
     hostd: { socketPath: "/tmp/hostd.sock" },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "sigmaos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }

@@ -68,7 +68,7 @@ describe("LocalTerminalPanel", () => {
     await i18n.changeLanguage("en");
     const html = renderToStaticMarkup(createElement(LocalTerminalPanel, {
       active: true,
-      root: { id: "local", name: "Primary NAS", path: "/srv/nas", homePath: null },
+      root: { id: "local", name: "Primary NAS", path: "/zos/data/primary", homePath: null },
       codeFontSettings: { familyId: "system", fontSizePx: 12 },
       resolvedTheme: "dark"
     }));

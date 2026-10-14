@@ -5,8 +5,8 @@ import type {
   PiDangerousToolPolicyMode,
   PiToolPolicyMode,
   PiToolPolicySettingsRecord
-} from "@sigmaos/shared";
-import { isModelProviderName } from "@sigmaos/shared";
+} from "@zos/shared";
+import { isModelProviderName } from "@zos/shared";
 import {
   DANGEROUS_PI_TOOL_POLICY_MODES,
   DANGEROUS_PI_TOOLS,

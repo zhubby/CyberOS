@@ -1,7 +1,7 @@
 export const DEFAULT_SPLIT_WIDTH = 560;
 export const MIN_CHAT_WIDTH = 560;
 export const MIN_WORKSPACE_WIDTH = 460;
-export const SPLIT_WIDTH_STORAGE_KEY = "sigmaos:split-width";
+export const SPLIT_WIDTH_STORAGE_KEY = "zos:split-width";
 
 interface SplitWidthStorage {
   getItem(key: string): string | null;

@@ -20,7 +20,7 @@ import {
   getVmOperation,
   listOperationNotifications,
   migrations,
-  openSigmaDb,
+  openZosDb,
   updateApprovalStatus,
   updateDockerOperationStatus,
   updateVmOperationStatus
@@ -30,8 +30,8 @@ let tempDir: string;
 
 function startMigrationProcess(databasePath: string, moduleUrl: string): Promise<void> {
   const childCode = [
-    `import { openSigmaDb } from ${JSON.stringify(moduleUrl)};`,
-    "const db = openSigmaDb(process.argv[1]);",
+    `import { openZosDb } from ${JSON.stringify(moduleUrl)};`,
+    "const db = openZosDb(process.argv[1]);",
     "db.close();"
   ].join(" ");
   return new Promise((resolve, reject) => {
@@ -56,7 +56,7 @@ function startMigrationProcess(databasePath: string, moduleUrl: string): Promise
 }
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-db-migration-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-db-migration-"));
 });
 
 afterEach(async () => {
@@ -98,7 +98,7 @@ describe("SQLite schema migrations", () => {
   });
 
   it("installs operations runner history and lifecycle indexes", () => {
-    const database = openSigmaDb(path.join(tempDir, "ops-runs.sqlite"));
+    const database = openZosDb(path.join(tempDir, "ops-runs.sqlite"));
     try {
       const columns = database.prepare("PRAGMA table_info(ops_runs)").all()
         .map((column) => (column as { name: string }).name);
@@ -125,7 +125,7 @@ describe("SQLite schema migrations", () => {
   });
 
   it("installs the Rust indexer queue, content state, FTS, worker, and root state", () => {
-    const database = openSigmaDb(path.join(tempDir, "rust-indexer.sqlite"));
+    const database = openZosDb(path.join(tempDir, "rust-indexer.sqlite"));
     try {
       const tables = database.prepare(`
         SELECT name FROM sqlite_master WHERE name LIKE 'index%'
@@ -158,7 +158,7 @@ describe("SQLite schema migrations", () => {
   });
 
   it("installs downloader reliability state, journals, reservations, workers, and claim index", () => {
-    const database = openSigmaDb(path.join(tempDir, "downloader-reliability.sqlite"));
+    const database = openZosDb(path.join(tempDir, "downloader-reliability.sqlite"));
     try {
       const columns = database.prepare("PRAGMA table_info(download_tasks)").all()
         .map((column) => (column as { name: string }).name);
@@ -201,7 +201,7 @@ describe("SQLite schema migrations", () => {
       Array.from({ length: 8 }, () => startMigrationProcess(databasePath, moduleUrl))
     );
 
-    const database = openSigmaDb(databasePath);
+    const database = openZosDb(databasePath);
     try {
       const columns = database.prepare("PRAGMA table_info(index_runs)").all()
         .map((column) => (column as { name: string }).name);
@@ -266,7 +266,7 @@ describe("SQLite schema migrations", () => {
     }
     legacy.close();
 
-    const upgraded = openSigmaDb(databasePath);
+    const upgraded = openZosDb(databasePath);
     try {
       const rows = upgraded.prepare(`
         SELECT id, status, received_bytes, phase, download_mode, retry_count,
@@ -393,7 +393,7 @@ describe("SQLite schema migrations", () => {
     );
     legacy.close();
 
-    const upgraded = openSigmaDb(databasePath);
+    const upgraded = openZosDb(databasePath);
     try {
       expect(upgraded.prepare("SELECT id, content_hash FROM photostaff_assets").get())
         .toEqual({ id: "asset-1", content_hash: "legacy-hash" });
@@ -437,7 +437,7 @@ describe("SQLite schema migrations", () => {
 
   it("retires pending VM approvals and preserves console authorizations for direct actions", () => {
     const databasePath = path.join(tempDir, "vm-direct-actions.sqlite");
-    const current = openSigmaDb(databasePath);
+    const current = openZosDb(databasePath);
     ensureNasRoots(current, [{ id: "local", name: "Local", path: tempDir }]);
     const session = createSession(current, { rootId: "local" });
     const { job } = createActionMessageAndJob(current, {
@@ -485,7 +485,7 @@ describe("SQLite schema migrations", () => {
     `);
     current.close();
 
-    const migrated = openSigmaDb(databasePath);
+    const migrated = openZosDb(databasePath);
     try {
       expect(getApproval(migrated, approval.id)?.status).toBe("expired");
       expect(getVmOperation(migrated, operation.id)).toMatchObject({
@@ -509,7 +509,7 @@ describe("SQLite schema migrations", () => {
 
   it("adds photostaff metadata, scalar, text, and spatial indexes without replacing photostaff assets", () => {
     const databasePath = path.join(tempDir, "photostaff-metadata.sqlite");
-    const database = openSigmaDb(databasePath);
+    const database = openZosDb(databasePath);
     try {
       const tables = database.prepare(`
         SELECT name FROM sqlite_master
@@ -532,7 +532,7 @@ describe("SQLite schema migrations", () => {
 
   it("adds managed Compose App tables to an existing database without replacing settings", () => {
     const databasePath = path.join(tempDir, "legacy-compose.sqlite");
-    const current = openSigmaDb(databasePath);
+    const current = openZosDb(databasePath);
     current.prepare(`
       INSERT INTO system_settings (key, value_json, updated_at)
       VALUES ('legacy_test', '{"preserved":true}', ?)
@@ -544,7 +544,7 @@ describe("SQLite schema migrations", () => {
     `);
     current.close();
 
-    const migrated = openSigmaDb(databasePath);
+    const migrated = openZosDb(databasePath);
     try {
       const tables = migrated.prepare(`
         SELECT name FROM sqlite_master
@@ -561,14 +561,14 @@ describe("SQLite schema migrations", () => {
 
   it("removes the legacy helper socket from persisted share settings", () => {
     const databasePath = path.join(tempDir, "hostd-config.sqlite");
-    const current = openSigmaDb(databasePath);
+    const current = openZosDb(databasePath);
     current.prepare(
       `INSERT INTO system_settings (key, value_json, updated_at)
        VALUES ('share_settings', ?, ?)`
     ).run(
       JSON.stringify({
         enabled: true,
-        helperSocketPath: "/run/sigmaos/share-helper.sock",
+        helperSocketPath: "/run/zos/share-helper.sock",
         account: { username: "share", password: null },
         shares: []
       }),
@@ -577,7 +577,7 @@ describe("SQLite schema migrations", () => {
     current.prepare("DELETE FROM schema_migrations WHERE id = '016_hostd_config'").run();
     current.close();
 
-    const migrated = openSigmaDb(databasePath);
+    const migrated = openZosDb(databasePath);
     try {
       const value = migrated
         .prepare("SELECT value_json FROM system_settings WHERE key = 'share_settings'")
@@ -595,7 +595,7 @@ describe("SQLite schema migrations", () => {
 
   it("preserves Docker operations and console foreign keys when adding resource creation", () => {
     const databasePath = path.join(tempDir, "docker-resource-create.sqlite");
-    const current = openSigmaDb(databasePath);
+    const current = openZosDb(databasePath);
     ensureNasRoots(current, [{ id: "local", name: "Local", path: tempDir }]);
     const session = createSession(current, { rootId: "local" });
     const { job } = createUserMessageAndJob(current, {
@@ -646,7 +646,7 @@ describe("SQLite schema migrations", () => {
     `);
     current.close();
 
-    const migrated = openSigmaDb(databasePath);
+    const migrated = openZosDb(databasePath);
     try {
       expect(getDockerOperation(migrated, operation.id)).toMatchObject({
         id: operation.id,
@@ -756,7 +756,7 @@ describe("SQLite schema migrations", () => {
     `);
     legacyDb.close();
 
-    const migrated = openSigmaDb(databasePath);
+    const migrated = openZosDb(databasePath);
     try {
       expect(getApproval(migrated, "approval-1")).toMatchObject({
         id: "approval-1",

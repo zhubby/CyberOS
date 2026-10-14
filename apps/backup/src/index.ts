@@ -1,9 +1,9 @@
-import { ensureNasRoots, openSigmaDb } from "@sigmaos/db";
-import { loadConfig } from "@sigmaos/shared";
+import { ensureNasRoots, openZosDb } from "@zos/db";
+import { loadConfig } from "@zos/shared";
 import { checkBackup, initBackup, restoreBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
 
 const config = loadConfig();
-const db = openSigmaDb(config.databasePath);
+const db = openZosDb(config.databasePath);
 ensureNasRoots(db, config.nasRoots);
 const [command, ...rest] = process.argv.slice(2);
 try {

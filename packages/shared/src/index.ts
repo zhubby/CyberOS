@@ -7,3 +7,4 @@ export * from "./vod-player-protocol.js";
 export * from "./vod-player-client.js";
 export * from "./termux-protocol.js";
 export * from "./types.js";
+export * from "./paths.js";

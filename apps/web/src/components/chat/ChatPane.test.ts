@@ -38,8 +38,8 @@ describe("shouldSubmitComposerMessage", () => {
 
 describe("composeAgentMessage", () => {
   it("keeps an attached path as one message-level block", () => {
-    expect(composeAgentMessage("Inspect this", "/srv/nas/docs/readme.md")).toBe("/srv/nas/docs/readme.md\nInspect this");
-    expect(composeAgentMessage("", "/srv/nas/docs/readme.md")).toBe("/srv/nas/docs/readme.md");
+    expect(composeAgentMessage("Inspect this", "/zos/data/primary/docs/readme.md")).toBe("/zos/data/primary/docs/readme.md\nInspect this");
+    expect(composeAgentMessage("", "/zos/data/primary/docs/readme.md")).toBe("/zos/data/primary/docs/readme.md");
     expect(composeAgentMessage("Inspect this", null)).toBe("Inspect this");
   });
 });
@@ -157,30 +157,30 @@ describe("ChatMessageContent", () => {
     const html = renderToStaticMarkup(
       createElement(ChatMessageContent, {
         role: "user",
-        content: "Open /srv/nas/docs/readme.md, not /srv/other/private.txt",
-        rootPath: "/srv/nas",
+        content: "Open /zos/data/primary/docs/readme.md, not /private/other/private.txt",
+        rootPath: "/zos/data/primary",
         onOpenWorkspacePath: () => undefined
       })
     );
 
     expect(html).toContain('class="message-path-button"');
     expect(html).toContain('data-workspace-path="docs/readme.md"');
-    expect(html).toContain("/srv/other/private.txt");
-    expect(html).not.toContain('data-workspace-path="/srv/other/private.txt"');
+    expect(html).toContain("/private/other/private.txt");
+    expect(html).not.toContain('data-workspace-path="/private/other/private.txt"');
   });
 
   it("renders a standalone user path with spaces as one button", () => {
     const html = renderToStaticMarkup(
       createElement(ChatMessageContent, {
         role: "user",
-        content: "/srv/nas/My Files/report (1).pdf\n这个文件是什么内容",
-        rootPath: "/srv/nas",
+        content: "/zos/data/primary/My Files/report (1).pdf\n这个文件是什么内容",
+        rootPath: "/zos/data/primary",
         onOpenWorkspacePath: () => undefined
       })
     );
 
     expect(html).toContain('data-workspace-path="My Files/report (1).pdf"');
-    expect(html).toContain("/srv/nas/My Files/report (1).pdf");
+    expect(html).toContain("/zos/data/primary/My Files/report (1).pdf");
     expect(html).toContain("这个文件是什么内容");
   });
 
@@ -189,17 +189,17 @@ describe("ChatMessageContent", () => {
       createElement(ChatMessageContent, {
         role: "assistant",
         content: [
-          "Open /srv/nas/docs/readme.md.",
+          "Open /zos/data/primary/docs/readme.md.",
           "",
-          "`/srv/nas/My Files/report.pdf`",
+          "`/zos/data/primary/My Files/report.pdf`",
           "",
-          "[linked report](/srv/nas/reports/latest.pdf)",
+          "[linked report](/zos/data/primary/reports/latest.pdf)",
           "",
           "```",
-          "/srv/nas/not-interactive.txt",
+          "/zos/data/primary/not-interactive.txt",
           "```"
         ].join("\n"),
-        rootPath: "/srv/nas",
+        rootPath: "/zos/data/primary",
         onOpenWorkspacePath: () => undefined
       })
     );
@@ -208,7 +208,7 @@ describe("ChatMessageContent", () => {
     expect(html).toContain('data-workspace-path="docs/readme.md"');
     expect(html).toContain('data-workspace-path="My Files/report.pdf"');
     expect(html).toContain('data-workspace-path="reports/latest.pdf"');
-    expect(html).toContain('<pre class="message-code-block"><code>/srv/nas/not-interactive.txt');
+    expect(html).toContain('<pre class="message-code-block"><code>/zos/data/primary/not-interactive.txt');
   });
 });
 
@@ -261,8 +261,8 @@ describe("ChatPane agent rail", () => {
     );
 
     expect(html).toContain('class="agent-brand-logo"');
-    expect(html).toContain('src="/sigmaos-icon.svg"');
-    expect(html).not.toContain("sigmaos-banner");
+    expect(html).toContain('src="/zos-icon.svg"');
+    expect(html).not.toContain("zos-banner");
     expect(html).toContain('class="session-item is-active"');
     expect(html).toContain("How can I help with your NAS?");
     expect(html).toContain('class="chat-header-subtitle"');

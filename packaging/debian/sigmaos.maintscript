@@ -1,1 +1,0 @@
-dir_to_symlink /usr/lib/sigmaos/node_modules/@earendil-works/pi-coding-agent ../../packages/agent/node_modules/@earendil-works/pi-coding-agent 0.9.17~

@@ -1,4 +1,4 @@
-export const STORAGE_POOL_STORAGE_KEY = "sigmaos:last-storage-pool";
+export const STORAGE_POOL_STORAGE_KEY = "zos:last-storage-pool";
 
 interface StorageLike {
   getItem(key: string): string | null;

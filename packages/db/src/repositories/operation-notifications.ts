@@ -3,8 +3,8 @@ import type {
   OperationNotificationKind,
   OperationNotificationRecord,
   OperationNotificationStatus
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import type { DbOperationNotificationRow } from "./repository-rows.js";
 
 const NOTIFICATION_COLUMNS = `
@@ -12,7 +12,7 @@ const NOTIFICATION_COLUMNS = `
 `;
 
 export function createOperationNotification(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     jobId: string;
     sessionId: string;
@@ -47,7 +47,7 @@ export function createOperationNotification(
 }
 
 export function getOperationNotificationByJob(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   jobId: string
 ): OperationNotificationRecord | null {
   const row = db.prepare(`SELECT ${NOTIFICATION_COLUMNS} FROM operation_notifications WHERE job_id = ?`)
@@ -56,7 +56,7 @@ export function getOperationNotificationByJob(
 }
 
 export function listOperationNotifications(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { limit?: number; now?: Date } = {}
 ): OperationNotificationRecord[] {
   const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
@@ -71,7 +71,7 @@ export function listOperationNotifications(
   return rows.map(mapOperationNotification);
 }
 
-export function countUnreadOperationNotifications(db: SigmaDatabase, now = new Date()): number {
+export function countUnreadOperationNotifications(db: ZosDatabase, now = new Date()): number {
   const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   return Number(db.prepare(`
     SELECT COUNT(*)
@@ -81,7 +81,7 @@ export function countUnreadOperationNotifications(db: SigmaDatabase, now = new D
 }
 
 export function markOperationNotificationRead(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   id: string,
   now = new Date()
 ): OperationNotificationRecord | null {
@@ -94,7 +94,7 @@ export function markOperationNotificationRead(
   return row ? mapOperationNotification(row) : null;
 }
 
-export function markAllOperationNotificationsRead(db: SigmaDatabase, now = new Date()): number {
+export function markAllOperationNotificationsRead(db: ZosDatabase, now = new Date()): number {
   const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   return db.prepare(`
     UPDATE operation_notifications
@@ -104,7 +104,7 @@ export function markAllOperationNotificationsRead(db: SigmaDatabase, now = new D
 }
 
 export function updateOperationNotificationForJob(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     jobId: string;
     status: OperationNotificationStatus;
@@ -126,7 +126,7 @@ export function updateOperationNotificationForJob(
   return row ? mapOperationNotification(row) : null;
 }
 
-export function pruneOperationNotifications(db: SigmaDatabase, now = new Date()): number {
+export function pruneOperationNotifications(db: ZosDatabase, now = new Date()): number {
   const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   return db.prepare("DELETE FROM operation_notifications WHERE updated_at < ?").run(cutoff).changes;
 }

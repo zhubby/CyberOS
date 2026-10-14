@@ -1,11 +1,11 @@
 import { realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { getNasRoot, listNasRoots, type SigmaDatabase } from "@sigmaos/db";
-import { isPathInside } from "@sigmaos/nas-tools";
-import type { NasRootRecord } from "@sigmaos/shared";
+import { getNasRoot, listNasRoots, type ZosDatabase } from "@zos/db";
+import { isPathInside } from "@zos/nas-tools";
+import type { NasRootRecord } from "@zos/shared";
 
-export function resolveRoot(db: SigmaDatabase, rootId: string | undefined) {
+export function resolveRoot(db: ZosDatabase, rootId: string | undefined) {
   if (rootId) {
     return getNasRoot(db, rootId);
   }

@@ -20,8 +20,8 @@ import {
   type DockerComposeAppRecord,
   type DockerComposeAppSummaryRecord,
   type DockerRegistryCredentialRecord,
-  type SigmaDatabase
-} from "@sigmaos/db";
+  type ZosDatabase
+} from "@zos/db";
 import type {
   DockerComposeAppCreateInput,
   DockerComposeAppDeleteInput,
@@ -33,16 +33,16 @@ import type {
   DockerConfig,
   DockerContainerSummary,
   DockerOperationProposal
-} from "@sigmaos/shared";
-import { isPathInside } from "@sigmaos/nas-tools";
+} from "@zos/shared";
+import { isPathInside } from "@zos/nas-tools";
 import { parseDocument } from "yaml";
 import { dockerConfigAuths, redactDockerRegistrySecrets } from "./docker-registry.js";
 
-export const DOCKER_APPS_ROOT = "/srv/apps";
+export const DOCKER_APPS_ROOT = "/zos/apps";
 
 const MANAGED_COMPOSE_FILE = "compose.yaml";
 const MANAGED_ENV_FILE = ".env";
-const MANAGED_MARKER_FILE = ".sigmaos-app.json";
+const MANAGED_MARKER_FILE = ".zos-app.json";
 const PROJECT_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}$/u;
 const ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const RESERVED_ENVIRONMENT_KEY_PATTERN = /^(?:COMPOSE_|DOCKER_)/u;
@@ -96,7 +96,7 @@ export class DockerComposeService implements DockerComposeRuntime {
 
   constructor(
     private readonly configSource: DockerConfig | (() => DockerConfig),
-    private readonly db: SigmaDatabase,
+    private readonly db: ZosDatabase,
     private readonly appsRoot = DOCKER_APPS_ROOT
   ) {}
 
@@ -384,7 +384,7 @@ function normalizeEnvironment(
 
 async function validateComposeDefinition(
   config: DockerConfig,
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { projectKey: string; composeContent: string; environment: DockerComposeAppEnvironmentRecord[] },
   appsRoot: string
 ): Promise<DockerComposeAppValidationResult> {
@@ -398,7 +398,7 @@ async function validateComposeDefinition(
     throw new DockerComposeValidationError("Compose YAML could not be parsed safely");
   }
   if ("include" in root || "name" in root) {
-    throw new DockerComposeValidationError("Compose include and top-level name are managed by SigmaOS");
+    throw new DockerComposeValidationError("Compose include and top-level name are managed by ZOS");
   }
   if (root.configs !== undefined || root.secrets !== undefined) {
     throw new DockerComposeValidationError("Local Compose configs and secrets are not supported");
@@ -429,7 +429,7 @@ async function validateComposeDefinition(
     collectServiceRisk(serviceName, service, warnings);
   }
 
-  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "sigmaos-compose-validate-"));
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-compose-validate-"));
   try {
     await writeFile(path.join(tempDirectory, MANAGED_COMPOSE_FILE), input.composeContent, { mode: 0o600 });
     await writeFile(path.join(tempDirectory, MANAGED_ENV_FILE), renderEnvironment(input.environment), { mode: 0o600 });
@@ -476,7 +476,7 @@ async function validateComposeDefinition(
 }
 
 async function validateServiceVolumes(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   serviceName: string,
   value: unknown,
   appsRoot: string,
@@ -508,7 +508,7 @@ async function validateServiceVolumes(
     const resolvedSource = await resolvePotentialPath(source);
     const resolvedAppsRoot = await realpath(appsRoot).catch(() => path.resolve(appsRoot));
     if (isPathInside(resolvedAppsRoot, resolvedSource)) {
-      throw new DockerComposeValidationError("Application data cannot be stored under /srv/apps");
+      throw new DockerComposeValidationError("Application data cannot be stored under /zos/apps");
     }
     let allowed = false;
     for (const root of listNasRoots(db)) {
@@ -740,7 +740,7 @@ function nonEmptyArray(value: unknown): boolean {
 }
 
 async function createDockerConfig(registryCredentials: DockerRegistryCredentialRecord[]): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "sigmaos-docker-config-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "zos-docker-config-"));
   try {
     await chmod(directory, 0o700);
     await writeFile(

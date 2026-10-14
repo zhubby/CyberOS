@@ -1,10 +1,10 @@
 ---
 title: HDMI 本地播放
-description: 在无桌面 Debian NAS 设备上使用 SigmaOS 将视频直接输出到 HDMI。
+description: 在无桌面 Debian NAS 设备上使用 ZOS 将视频直接输出到 HDMI。
 type: how-to
 status: current
 audience: [user, operator]
-sourceOfTruth: [apps/vod-player/src/controller.rs, apps/api/src/routes/vod-player.ts, apps/web/src/components/preview/VodPlayerControls.tsx, packaging/systemd/sigmaos-vod-player.service]
+sourceOfTruth: [apps/vod-player/src/controller.rs, apps/api/src/routes/vod-player.ts, apps/web/src/components/preview/VodPlayerControls.tsx, packaging/systemd/zos-vod-player.service]
 sidebar:
   order: 2
 ---
@@ -14,23 +14,23 @@ sidebar:
 通用安装默认不启用 HDMI 播放器。安装或重新安装时显式启用：
 
 ```bash
-sudo SIGMAOS_ENABLE_VOD_PLAYER=1 \
-  SIGMAOS_VOD_PLAYER_USER=sigmaos \
-  SIGMAOS_NAS_ROOT_PATH=/srv/nas \
+sudo ZOS_ENABLE_VOD_PLAYER=1 \
+  ZOS_VOD_PLAYER_USER=zos \
+  ZOS_NAS_ROOT_PATH=/zos/data/primary \
   ./packaging/scripts/install.sh
 ```
 
-安装脚本会安装 `mpv` 和 `seatd`，生成 `sigmaos-vod-player.service` 的权限 drop-in，并启用 VOD Player。服务以非 root 用户运行，只读访问配置的 NAS root。
+安装脚本会安装 `mpv` 和 `seatd`，生成 `zos-vod-player.service` 的权限 drop-in，并启用 VOD Player。服务以非 root 用户运行，只读访问配置的 NAS root。
 
-构建 appliance rootfs 时使用 `SIGMAOS_ENABLE_VOD_PLAYER=1`，镜像会启用播放器配置和 systemd 服务；默认值为 `0`。
+构建 appliance rootfs 时使用 `ZOS_ENABLE_VOD_PLAYER=1`，镜像会启用播放器配置和 systemd 服务；默认值为 `0`。
 
-如果只是修改配置，可以在 `/etc/sigmaos/config.toml` 中设置：
+如果只是修改配置，可以在 `/zos/config/config.toml` 中设置：
 
 ```toml
 [vod_player]
 enabled = true
-socket_path = "/run/sigmaos/vod-player.sock"
-state_path = "/var/lib/sigmaos-vod-player/session.json"
+socket_path = "/run/zos/vod-player.sock"
+state_path = "/zos/state/vod-player/session.json"
 command_timeout_ms = 5000
 startup_timeout_ms = 15000
 checkpoint_interval_ms = 5000
@@ -41,7 +41,7 @@ drm_connector = ""
 audio_output = "alsa"
 audio_device = ""
 hwdec = "auto-safe"
-user = "sigmaos"
+user = "zos"
 ```
 
 `socket_path` 必须位于 `/run` 等 API 与 VOD Player 共同可见的目录，`state_path` 必须位于持久存储；两者都不能放在 `/tmp` 或 `/var/tmp`。systemd 为两个服务启用了独立的临时目录命名空间，并且临时目录无法保存整机重启后的播放位置。
@@ -49,9 +49,9 @@ user = "sigmaos"
 修改后执行：
 
 ```bash
-sudo /usr/lib/sigmaos/scripts/sigmaos-refresh-vod-player.sh
+sudo /usr/lib/zos/scripts/zos-refresh-vod-player.sh
 sudo systemctl daemon-reload
-sudo systemctl restart sigmaos-vod-player.service
+sudo systemctl restart zos-vod-player.service
 ```
 
 ## 使用 Web UI
@@ -66,16 +66,16 @@ sudo systemctl restart sigmaos-vod-player.service
 
 ```bash
 ls -l /dev/dri /dev/snd
-systemctl is-active sigmaos-vod-player.service
-journalctl -u sigmaos-vod-player.service -n 100 --no-pager
+systemctl is-active zos-vod-player.service
+journalctl -u zos-vod-player.service -n 100 --no-pager
 curl -fsS http://127.0.0.1:3010/api/vod-player/status
 ```
 
 常见问题：
 
-- `mpv is not installed`：安装 `mpv`，或用 `SIGMAOS_ENABLE_VOD_PLAYER=1` 重新运行安装脚本。
+- `mpv is not installed`：安装 `mpv`，或用 `ZOS_ENABLE_VOD_PLAYER=1` 重新运行安装脚本。
 - `No DRM device found`：内核没有暴露 `/dev/dri/card*`，或设备没有加载 GPU/HDMI 驱动。
-- `permission denied`：确认播放器用户属于存在的 `video`、`render` 和 `audio` 组，并重新运行 `sigmaos-refresh-vod-player.sh`。
+- `permission denied`：确认播放器用户属于存在的 `video`、`render` 和 `audio` 组，并重新运行 `zos-refresh-vod-player.sh`。
 - 没有声音：检查 `/proc/asound`，然后把 `audio_device` 设置为对应的 ALSA HDMI 设备。
 
 `hwdec = "auto-safe"` 会优先尝试可用硬件解码，驱动不支持时由 mpv 回退软件解码。具体硬件的解码能力仍需在目标板卡上验证。

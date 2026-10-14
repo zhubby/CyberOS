@@ -4,11 +4,11 @@ import type {
   BackupRunKind,
   BackupRunStatus,
   BackupRunSummary
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import type { DbBackupFailureRow, DbBackupRunRow } from "./repository-rows.js";
 
-export function startBackupRun(db: SigmaDatabase, input: { kind: BackupRunKind; now?: Date }): BackupRunSummary {
+export function startBackupRun(db: ZosDatabase, input: { kind: BackupRunKind; now?: Date }): BackupRunSummary {
   const now = (input.now ?? new Date()).toISOString();
   const id = randomUUID();
   db.prepare("UPDATE backup_runs SET status = 'interrupted', finished_at = ?, error = 'interrupted' WHERE status IN ('validating', 'running')").run(now);
@@ -16,12 +16,12 @@ export function startBackupRun(db: SigmaDatabase, input: { kind: BackupRunKind; 
   return { id, kind: input.kind, status: "running", startedAt: now, finishedAt: null, snapshotIds: [], files: 0, bytes: 0, verified: false, error: null, failures: [] };
 }
 
-export function recordBackupFailure(db: SigmaDatabase, input: { runId: string; rootId?: string | null; path?: string | null; code?: string | null; reason: string; now?: Date }): void {
+export function recordBackupFailure(db: ZosDatabase, input: { runId: string; rootId?: string | null; path?: string | null; code?: string | null; reason: string; now?: Date }): void {
   db.prepare("INSERT INTO backup_failures (id, run_id, root_id, path, code, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
     .run(randomUUID(), input.runId, input.rootId ?? null, input.path ?? null, input.code ?? null, input.reason, (input.now ?? new Date()).toISOString());
 }
 
-export function finishBackupRun(db: SigmaDatabase, input: { runId: string; status: Exclude<BackupRunStatus, "never_run" | "validating" | "running">; snapshotIds?: string[]; files?: number; bytes?: number; verified?: boolean; error?: string | null; finishedAt?: Date }): BackupRunSummary | null {
+export function finishBackupRun(db: ZosDatabase, input: { runId: string; status: Exclude<BackupRunStatus, "never_run" | "validating" | "running">; snapshotIds?: string[]; files?: number; bytes?: number; verified?: boolean; error?: string | null; finishedAt?: Date }): BackupRunSummary | null {
   const finishedAt = (input.finishedAt ?? new Date()).toISOString();
   const result = db.prepare(`UPDATE backup_runs SET status = ?, finished_at = ?, snapshot_ids_json = ?, files = ?, bytes = ?, verified = ?, error = ? WHERE id = ? AND status IN ('validating', 'running')`)
     .run(input.status, finishedAt, JSON.stringify(input.snapshotIds ?? []), input.files ?? 0, input.bytes ?? 0, input.verified ? 1 : 0, input.error ?? null, input.runId);
@@ -29,18 +29,18 @@ export function finishBackupRun(db: SigmaDatabase, input: { runId: string; statu
   return getBackupRun(db, input.runId);
 }
 
-export function getBackupRun(db: SigmaDatabase, runId: string): BackupRunSummary | null {
+export function getBackupRun(db: ZosDatabase, runId: string): BackupRunSummary | null {
   const row = db.prepare("SELECT id, kind, status, started_at, finished_at, snapshot_ids_json, files, bytes, verified, error FROM backup_runs WHERE id = ?")
     .get(runId) as DbBackupRunRow | undefined;
   return row ? mapBackupRun(db, row) : null;
 }
 
-export function listBackupRuns(db: SigmaDatabase, limit = 30): BackupRunSummary[] {
+export function listBackupRuns(db: ZosDatabase, limit = 30): BackupRunSummary[] {
   const rows = db.prepare("SELECT id, kind, status, started_at, finished_at, snapshot_ids_json, files, bytes, verified, error FROM backup_runs ORDER BY started_at DESC LIMIT ?").all(limit) as DbBackupRunRow[];
   return rows.map((row) => mapBackupRun(db, row));
 }
 
-function mapBackupRun(db: SigmaDatabase, row: DbBackupRunRow): BackupRunSummary {
+function mapBackupRun(db: ZosDatabase, row: DbBackupRunRow): BackupRunSummary {
   const failures = db.prepare("SELECT root_id, path, code, reason FROM backup_failures WHERE run_id = ? ORDER BY created_at ASC, id ASC").all(row.id) as DbBackupFailureRow[];
   let snapshotIds: string[] = [];
   try {

@@ -1,383 +1,389 @@
-sigmaos (0.10.8) unstable; urgency=medium
+zos (1.0.0) unstable; urgency=medium
+
+  * Rename the product to ZOS and consolidate persistent data under /zos.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 14 Oct 2026 12:19:55 +0000
+
+zos (0.10.8) unstable; urgency=medium
 
   * Fix narrow-screen file actions and storage pool archive names.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 14 Oct 2026 10:25:38 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 14 Oct 2026 10:25:38 +0000
 
-sigmaos (0.10.7) unstable; urgency=medium
+zos (0.10.7) unstable; urgency=medium
 
   * Add modal file previews and streamed ZIP downloads
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 14 Oct 2026 09:26:58 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 14 Oct 2026 09:26:58 +0000
 
-sigmaos (0.10.6) unstable; urgency=medium
+zos (0.10.6) unstable; urgency=medium
 
   * Add persistent file multi-select and batch operations
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 14 Oct 2026 05:42:35 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 14 Oct 2026 05:42:35 +0000
 
-sigmaos (0.10.5) unstable; urgency=medium
+zos (0.10.5) unstable; urgency=medium
 
   * Add first-load skeletons for Terminal, Downloads, and Photos.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 23:18:26 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 13 Oct 2026 23:18:26 +0000
 
-sigmaos (0.10.4) unstable; urgency=medium
+zos (0.10.4) unstable; urgency=medium
 
   * Package the MapLibre worker so the Photos map loads without browser worker errors.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 09:54:21 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 13 Oct 2026 09:54:21 +0000
 
-sigmaos (0.10.3) unstable; urgency=medium
+zos (0.10.3) unstable; urgency=medium
 
   * Keep core systemd timers active after upgrades and verify Operations Health before completing CM5 deployments.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 09:06:02 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 13 Oct 2026 09:06:02 +0000
 
-sigmaos (0.10.2) unstable; urgency=medium
+zos (0.10.2) unstable; urgency=medium
 
   * Add managed Ethernet and operations, offline photo maps, share account credentials, and restored Photos API contracts.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 07:13:41 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 13 Oct 2026 07:13:41 +0000
 
-sigmaos (0.10.1) unstable; urgency=medium
+zos (0.10.1) unstable; urgency=medium
 
   * Avoid status endpoint stalls on large SQLite indexes.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 13 Oct 2026 01:44:57 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 13 Oct 2026 01:44:57 +0000
 
-sigmaos (0.10.0) unstable; urgency=medium
+zos (0.10.0) unstable; urgency=medium
 
   * Release the Rust terminal helper, resilient indexer, Photo configuration, unified panel actions, centered notifications, and hardened CM5 upgrades.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 12 Oct 2026 14:33:49 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 12 Oct 2026 14:33:49 +0000
 
-sigmaos (0.9.24) unstable; urgency=medium
+zos (0.9.24) unstable; urgency=medium
 
   * Keep managed Ethernet disable state persistent across reboot and align network capability reporting.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 12 Oct 2026 10:41:02 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 12 Oct 2026 10:41:02 +0000
 
-sigmaos (0.9.23) unstable; urgency=medium
+zos (0.9.23) unstable; urgency=medium
 
   * Add managed multi-port Ethernet configuration with safe NetworkManager rollback.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 12 Oct 2026 05:13:50 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 12 Oct 2026 05:13:50 +0000
 
-sigmaos (0.9.22) unstable; urgency=medium
+zos (0.9.22) unstable; urgency=medium
 
   * Add managed multi-port Ethernet configuration with NetworkManager checkpoint rollback.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 12 Oct 2026 04:50:30 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 12 Oct 2026 04:50:30 +0000
 
-sigmaos (0.9.21) unstable; urgency=medium
+zos (0.9.21) unstable; urgency=medium
 
   * Stop Indexer read events from requeueing scans and strengthen CM5 deployment verification.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 12 Oct 2026 04:09:17 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 12 Oct 2026 04:09:17 +0000
 
-sigmaos (0.9.20) unstable; urgency=medium
+zos (0.9.20) unstable; urgency=medium
 
   * Restore CM5 upgrades with the managed Node.js 22 runtime.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 12 Oct 2026 02:16:11 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 12 Oct 2026 02:16:11 +0000
 
-sigmaos (0.9.19) unstable; urgency=medium
+zos (0.9.19) unstable; urgency=medium
 
   * Replace the TypeScript indexer with a persistent Rust service, durable incremental indexing, advanced search, and indexer controls.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 12 Oct 2026 01:24:11 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 12 Oct 2026 01:24:11 +0000
 
-sigmaos (0.9.18) unstable; urgency=medium
+zos (0.9.18) unstable; urgency=medium
 
   * Report inactive share services accurately in the Web management panel.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sun, 11 Oct 2026 06:30:15 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sun, 11 Oct 2026 06:30:15 +0000
 
-sigmaos (0.9.17) unstable; urgency=medium
+zos (0.9.17) unstable; urgency=medium
 
   * Repair worker startup when upgrading installations with the legacy Pi runtime directory
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sun, 11 Oct 2026 05:25:25 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sun, 11 Oct 2026 05:25:25 +0000
 
-sigmaos (0.9.16) unstable; urgency=medium
+zos (0.9.16) unstable; urgency=medium
 
   * Fix CM5 upgrade compatibility and production worker dependencies
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sun, 11 Oct 2026 04:21:38 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sun, 11 Oct 2026 04:21:38 +0000
 
-sigmaos (0.9.15) unstable; urgency=medium
+zos (0.9.15) unstable; urgency=medium
 
   * Fix the Linux Photostaff build and ship the Rust photo service
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sun, 11 Oct 2026 03:42:51 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sun, 11 Oct 2026 03:42:51 +0000
 
-sigmaos (0.9.14) unstable; urgency=medium
+zos (0.9.14) unstable; urgency=medium
 
   * Replace the photo worker with the Rust Photostaff service
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sun, 11 Oct 2026 03:35:12 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sun, 11 Oct 2026 03:35:12 +0000
 
-sigmaos (0.9.13) unstable; urgency=medium
+zos (0.9.13) unstable; urgency=medium
 
   * Fix photo metadata extraction and refresh existing records
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 22:54:45 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 22:54:45 +0000
 
-sigmaos (0.9.12) unstable; urgency=medium
+zos (0.9.12) unstable; urgency=medium
 
   * Serialize concurrent SQLite schema migrations.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 17:26:02 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 17:26:02 +0000
 
-sigmaos (0.9.11) unstable; urgency=medium
+zos (0.9.11) unstable; urgency=medium
 
   * Stabilize cross-architecture package builds.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 16:26:46 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 16:26:46 +0000
 
-sigmaos (0.9.10) unstable; urgency=medium
+zos (0.9.10) unstable; urgency=medium
 
   * Increase SQLite startup lock tolerance for concurrent service restarts
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 16:07:26 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 16:07:26 +0000
 
-sigmaos (0.9.9) unstable; urgency=medium
+zos (0.9.9) unstable; urgency=medium
 
   * Avoid SQLite startup races during concurrent service initialization
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 15:19:44 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 15:19:44 +0000
 
-sigmaos (0.9.8) unstable; urgency=medium
+zos (0.9.8) unstable; urgency=medium
 
   * Fix CM5 worker startup by shipping the external Pi runtime dependency
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 14:21:36 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 14:21:36 +0000
 
-sigmaos (0.9.7) unstable; urgency=medium
+zos (0.9.7) unstable; urgency=medium
 
   * Exclude foreign native prebuilds from Debian stripping and dependency analysis.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 11:23:05 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 11:23:05 +0000
 
-sigmaos (0.9.6) unstable; urgency=medium
+zos (0.9.6) unstable; urgency=medium
 
   * Protect stale VOD socket cleanup when Linux reuses an inode.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 11:04:25 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 11:04:25 +0000
 
-sigmaos (0.9.5) unstable; urgency=medium
+zos (0.9.5) unstable; urgency=medium
 
   * Use portable Unix descriptor numbers for the Rust VOD helper process and harden its rejection tests.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 10:56:02 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 10:56:02 +0000
 
-sigmaos (0.9.4) unstable; urgency=medium
+zos (0.9.4) unstable; urgency=medium
 
   * Harden Linux helper-process descriptor inheritance and VOD socket shutdown handling.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 10:46:15 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 10:46:15 +0000
 
-sigmaos (0.9.3) unstable; urgency=medium
+zos (0.9.3) unstable; urgency=medium
 
   * Add the Rust VOD service, safe power controls, unified helper protocols, and dependency security updates.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sat, 10 Oct 2026 10:13:22 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sat, 10 Oct 2026 10:13:22 +0000
 
-sigmaos (0.9.2) unstable; urgency=medium
+zos (0.9.2) unstable; urgency=medium
 
   * Use a Debian-compatible rustls crypto provider for the Rust downloader.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Fri, 09 Oct 2026 13:46:21 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 09 Oct 2026 13:46:21 +0000
 
-sigmaos (0.9.1) unstable; urgency=medium
+zos (0.9.1) unstable; urgency=medium
 
   * Fix cross-platform disk space accounting for the Rust downloader.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Fri, 09 Oct 2026 13:30:38 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 09 Oct 2026 13:30:38 +0000
 
-sigmaos (0.9.0) unstable; urgency=medium
+zos (0.9.0) unstable; urgency=medium
 
   * Replace the downloader with a resilient Rust service and add Docker inspect details.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Fri, 09 Oct 2026 13:23:38 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 09 Oct 2026 13:23:38 +0000
 
-sigmaos (0.8.9) unstable; urgency=medium
+zos (0.8.9) unstable; urgency=medium
 
   * Add direct VM management workflows and remember the active workspace panel
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Fri, 09 Oct 2026 03:13:39 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 09 Oct 2026 03:13:39 +0000
 
-sigmaos (0.8.8) unstable; urgency=medium
+zos (0.8.8) unstable; urgency=medium
 
   * Add comprehensive photo metadata search, managed Compose apps, and hardened VM operations.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 08 Oct 2026 23:19:09 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 08 Oct 2026 23:19:09 +0000
 
-sigmaos (0.8.7) unstable; urgency=medium
+zos (0.8.7) unstable; urgency=medium
 
   * Add file download support for photo and media previews.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 08 Oct 2026 03:54:57 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 08 Oct 2026 03:54:57 +0000
 
-sigmaos (0.8.6) unstable; urgency=medium
+zos (0.8.6) unstable; urgency=medium
 
   * Unify workspace panel headers and resource actions
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 24 Sep 2026 07:57:37 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 24 Sep 2026 07:57:37 +0000
 
-sigmaos (0.8.5) unstable; urgency=medium
+zos (0.8.5) unstable; urgency=medium
 
   * Refresh CM5 deploy helper and prune artifacts on recovery
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 24 Sep 2026 05:28:10 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 24 Sep 2026 05:28:10 +0000
 
-sigmaos (0.8.4) unstable; urgency=medium
+zos (0.8.4) unstable; urgency=medium
 
   * Refine Photo and download UI, and prune obsolete CM5 deployment artifacts after upgrades.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 24 Sep 2026 03:59:59 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 24 Sep 2026 03:59:59 +0000
 
-sigmaos (0.8.3) unstable; urgency=medium
+zos (0.8.3) unstable; urgency=medium
 
   * Expose Photo library paths, indexing status, and processing limits in system settings.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 24 Sep 2026 01:41:39 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 24 Sep 2026 01:41:39 +0000
 
-sigmaos (0.8.2) unstable; urgency=medium
+zos (0.8.2) unstable; urgency=medium
 
   * Propagate terminal resize to persistent tmux sessions
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 23 Sep 2026 15:27:39 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 23 Sep 2026 15:27:39 +0000
 
-sigmaos (0.8.1) unstable; urgency=medium
+zos (0.8.1) unstable; urgency=medium
 
   * Preserve local appliance configuration during unattended package upgrades.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 23 Sep 2026 10:03:19 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 23 Sep 2026 10:03:19 +0000
 
-sigmaos (0.8.0) unstable; urgency=medium
+zos (0.8.0) unstable; urgency=medium
 
   * Replace the Node terminal helper with the hardened Rust termux daemon and Termux Protocol v1.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 23 Sep 2026 12:00:00 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 23 Sep 2026 12:00:00 +0000
 
-sigmaos (0.7.9) unstable; urgency=medium
+zos (0.7.9) unstable; urgency=medium
 
   * Unify Workspace panel headers with icon-only actions and inline status.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 23 Sep 2026 03:19:12 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 23 Sep 2026 03:19:12 +0000
 
-sigmaos (0.7.8) unstable; urgency=medium
+zos (0.7.8) unstable; urgency=medium
 
   * Align the Terminal workspace panel with the shared page heading and toolbar design.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 23 Sep 2026 01:20:11 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 23 Sep 2026 01:20:11 +0000
 
-sigmaos (0.7.7) unstable; urgency=medium
+zos (0.7.7) unstable; urgency=medium
 
   * Fix photo folder approvals and enable HEIC processing.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 22 Sep 2026 21:20:25 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 22 Sep 2026 21:20:25 +0000
 
-sigmaos (0.7.6) unstable; urgency=medium
+zos (0.7.6) unstable; urgency=medium
 
   * Preserve the archiver runtime module boundary and smoke-test the production API bundle.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 22 Sep 2026 20:05:56 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 22 Sep 2026 20:05:56 +0000
 
-sigmaos (0.7.5) unstable; urgency=medium
+zos (0.7.5) unstable; urgency=medium
 
-  * Scope failed-unit checks to SigmaOS and retain diagnostics for recovery retries.
+  * Scope failed-unit checks to ZOS and retain diagnostics for recovery retries.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 22 Sep 2026 19:29:40 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 22 Sep 2026 19:29:40 +0000
 
-sigmaos (0.7.4) unstable; urgency=medium
+zos (0.7.4) unstable; urgency=medium
 
   * Recover required services and expose deployment diagnostics after failed upgrades.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 22 Sep 2026 18:47:37 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 22 Sep 2026 18:47:37 +0000
 
-sigmaos (0.7.3) unstable; urgency=medium
+zos (0.7.3) unstable; urgency=medium
 
   * Recover CM5 upgrades when optional HEIF tooling is not preinstalled.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 22 Sep 2026 18:09:39 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 22 Sep 2026 18:09:39 +0000
 
-sigmaos (0.7.2) unstable; urgency=medium
+zos (0.7.2) unstable; urgency=medium
 
   * Fix Debian dependency analysis for foreign Bare and musl prebuilds.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 22 Sep 2026 17:33:54 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 22 Sep 2026 17:33:54 +0000
 
-sigmaos (0.7.1) unstable; urgency=medium
+zos (0.7.1) unstable; urgency=medium
 
   * Fix ARM64 packaging dependencies and exclude foreign Bare prebuilds from Debian stripping.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 22 Sep 2026 17:21:08 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 22 Sep 2026 17:21:08 +0000
 
-sigmaos (0.7.0) unstable; urgency=medium
+zos (0.7.0) unstable; urgency=medium
 
   * Add storage-backed photo library with indexing, uploads, exports, cached previews, and approval-gated management.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Tue, 22 Sep 2026 16:55:41 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 22 Sep 2026 16:55:41 +0000
 
-sigmaos (0.6.0) unstable; urgency=medium
+zos (0.6.0) unstable; urgency=medium
 
   * Add customizable drag-and-resize layouts across management dashboards.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 21 Sep 2026 05:41:13 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 21 Sep 2026 05:41:13 +0000
 
-sigmaos (0.5.1) unstable; urgency=medium
+zos (0.5.1) unstable; urgency=medium
 
   * Add verified Tailscale CI/CD deployment for CM5 releases.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 21 Sep 2026 01:21:08 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 21 Sep 2026 01:21:08 +0000
 
-sigmaos (0.5.0) unstable; urgency=medium
+zos (0.5.0) unstable; urgency=medium
 
   * Add Wi-Fi and hotspot management, persistent terminal sessions, and refined Agent navigation.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Sun, 20 Sep 2026 09:40:57 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Sun, 20 Sep 2026 09:40:57 +0000
 
-sigmaos (0.4.3) unstable; urgency=medium
+zos (0.4.3) unstable; urgency=medium
 
   * Unify button and control interaction feedback
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Fri, 18 Sep 2026 09:11:41 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 18 Sep 2026 09:11:41 +0000
 
-sigmaos (0.4.2) unstable; urgency=medium
+zos (0.4.2) unstable; urgency=medium
 
   * Add persistent operation notifications and keep internal actions out of agent chat.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Fri, 18 Sep 2026 05:48:25 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 18 Sep 2026 05:48:25 +0000
 
-sigmaos (0.4.1) unstable; urgency=medium
+zos (0.4.1) unstable; urgency=medium
 
   * Harden appliance workflows and unify the Agent and workspace interface.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Fri, 18 Sep 2026 01:30:11 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 18 Sep 2026 01:30:11 +0000
 
-sigmaos (0.4.0) unstable; urgency=medium
+zos (0.4.0) unstable; urgency=medium
 
   * Add persistent HTTP downloader panel and service
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 17 Sep 2026 05:47:20 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 17 Sep 2026 05:47:20 +0000
 
-sigmaos (0.3.0) unstable; urgency=medium
+zos (0.3.0) unstable; urgency=medium
 
   * Add Docker daemon configuration and image management with multiple registry credentials.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Wed, 16 Sep 2026 08:31:23 +0000
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 16 Sep 2026 08:31:23 +0000
 
-sigmaos (0.2.0) unstable; urgency=medium
+zos (0.2.0) unstable; urgency=medium
 
   * Add unified version governance and deployed build traceability.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Mon, 14 Sep 2026 14:13:01 +0800
+ -- ZOS Maintainers <maintainers@zos.local>  Mon, 14 Sep 2026 14:13:01 +0800
 
-sigmaos (0.1.0) unstable; urgency=medium
+zos (0.1.0) unstable; urgency=medium
 
   * Initial native NAS appliance package scaffold.
 
- -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 20 Aug 2026 18:20:00 +0800
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 20 Aug 2026 18:20:00 +0800

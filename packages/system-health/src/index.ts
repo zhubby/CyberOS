@@ -11,16 +11,16 @@ import {
   listRootReadiness,
   reconcileHealthAlerts,
   upsertRootReadiness,
-  type SigmaDatabase
-} from "@sigmaos/db";
+  type ZosDatabase
+} from "@zos/db";
 import {
   createVodPlayerRuntime,
   type RootReadiness,
-  type SigmaConfig,
+  type ZosConfig,
   type SystemHealthSummary,
   type VodPlayerRuntime
-} from "@sigmaos/shared";
-import { checkMountReadiness, type MountCommandRunner } from "@sigmaos/nas-tools";
+} from "@zos/shared";
+import { checkMountReadiness, type MountCommandRunner } from "@zos/nas-tools";
 
 export const HEALTH_OWNED_ALERT_CODES = [
   "mount_not_ready",
@@ -45,8 +45,8 @@ export const HEALTH_OWNED_ALERT_CODES = [
 const HEALTH_OWNED_ALERT_SET = new Set<string>(HEALTH_OWNED_ALERT_CODES);
 
 export interface SystemHealthEvaluationInput {
-  db: SigmaDatabase;
-  config: SigmaConfig;
+  db: ZosDatabase;
+  config: ZosConfig;
   now?: Date;
   vodPlayer?: VodPlayerRuntime;
   backupTargetReadiness?: RootReadiness | null;
@@ -285,8 +285,8 @@ export async function runScheduledHealthEvaluation(
 }
 
 export async function refreshRootReadiness(
-  db: SigmaDatabase,
-  config: SigmaConfig,
+  db: ZosDatabase,
+  config: ZosConfig,
   now = new Date(),
   commandRunner?: MountCommandRunner
 ): Promise<RootReadiness[]> {
@@ -300,7 +300,7 @@ export async function refreshRootReadiness(
 }
 
 async function inspectBackupTarget(
-  config: SigmaConfig,
+  config: ZosConfig,
   now: Date,
   commandRunner?: MountCommandRunner
 ): Promise<RootReadiness | null> {
@@ -314,7 +314,7 @@ async function inspectBackupTarget(
 }
 
 async function collectVodPlayerHealth(
-  config: SigmaConfig,
+  config: ZosConfig,
   now: Date,
   runtime = createVodPlayerRuntime(config.vodPlayer)
 ): Promise<SystemHealthSummary["vodPlayer"]> {

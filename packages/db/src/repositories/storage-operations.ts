@@ -4,14 +4,14 @@ import type {
   StorageOperationProposal,
   StorageOperationRecord,
   StorageOperationStatus
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import { mapStorageOperation } from "./operation-mappers.js";
 import type { DbStorageOperationRow } from "./repository-rows.js";
 
 export function createStorageOperationRecord(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { jobId: string; proposal: StorageOperationProposal }
 ): StorageOperationRecord {
   const job = getJob(db, input.jobId);
@@ -45,7 +45,7 @@ export function createStorageOperationRecord(
 }
 
 export function createStorageOperationApproval(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { jobId: string; proposal: StorageOperationProposal }
 ): { approval: PendingApprovalRecord; operation: StorageOperationRecord } {
   const job = getJob(db, input.jobId);
@@ -96,7 +96,7 @@ export function createStorageOperationApproval(
   return { approval, operation };
 }
 
-export function getStorageOperation(db: SigmaDatabase, operationId: string): StorageOperationRecord | null {
+export function getStorageOperation(db: ZosDatabase, operationId: string): StorageOperationRecord | null {
   const row = db
     .prepare(`
       SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
@@ -108,7 +108,7 @@ export function getStorageOperation(db: SigmaDatabase, operationId: string): Sto
 }
 
 export function getStorageOperationByApproval(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   approvalId: string
 ): StorageOperationRecord | null {
   const row = db
@@ -124,7 +124,7 @@ export function getStorageOperationByApproval(
 }
 
 export function listStorageOperations(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { sessionId?: string; limit?: number } = {}
 ): StorageOperationRecord[] {
   const rows = db
@@ -142,7 +142,7 @@ export function listStorageOperations(
 }
 
 export function updateStorageOperationStatus(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   operationId: string,
   status: StorageOperationStatus,
   metadata: Record<string, unknown> = {}

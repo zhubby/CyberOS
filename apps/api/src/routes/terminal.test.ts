@@ -2,20 +2,20 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openSigmaDb, type SigmaDatabase } from "@sigmaos/db";
-import type { SigmaConfig } from "@sigmaos/shared";
+import { ensureNasRoots, openZosDb, type ZosDatabase } from "@zos/db";
+import type { ZosConfig } from "@zos/shared";
 import { buildServer } from "../server.js";
 import { type TerminalPty, type TerminalRuntime } from "../lib/terminal.js";
 
 let tempDir: string;
 let rootDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-terminal-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-terminal-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
@@ -39,8 +39,8 @@ describe("terminal WebSocket", () => {
       name: "xterm-256color"
     });
 
-    runtime.terminal.emitData("sigma$ ");
-    expect(await nextMessage(socket)).toEqual({ type: "output", data: "sigma$ " });
+    runtime.terminal.emitData("zos$ ");
+    expect(await nextMessage(socket)).toEqual({ type: "output", data: "zos$ " });
 
     socket.send(JSON.stringify({ type: "input", data: "pwd\r" }));
     await waitFor(() => runtime.terminal.writes.includes("pwd\r"));
@@ -86,8 +86,8 @@ describe("terminal WebSocket", () => {
     const nextSessionId = "22222222-2222-4222-8222-222222222222";
 
     const resetSocket = await connect(server, "local", nextSessionId, [
-      `sigmaos-reset.${previousSessionId}`,
-      `sigmaos-next.${nextSessionId}`
+      `zos-reset.${previousSessionId}`,
+      `zos-next.${nextSessionId}`
     ]);
     expect(await nextMessage(resetSocket)).toMatchObject({ type: "ready", sessionId: nextSessionId });
     expect(runtime.spawnCount).toBe(2);
@@ -211,7 +211,7 @@ describe("terminal tab routes", () => {
     const deleted = await server.inject({ method: "DELETE", url: `/api/terminal/tabs/${secondId}` });
     expect(deleted.json()).toMatchObject({ activeTabId: legacySessionId });
     expect(deleted.json().tabs).toHaveLength(1);
-    expect(runtime.destroyedSessionNames).toEqual([expect.stringMatching(/^sigmaos-/u)]);
+    expect(runtime.destroyedSessionNames).toEqual([expect.stringMatching(/^zos-/u)]);
     await server.close();
   });
 
@@ -385,10 +385,10 @@ class FakeTerminal implements TerminalPty {
   }
 }
 
-function testConfig(): SigmaConfig {
+function testConfig(): ZosConfig {
   return {
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "sigmaos.sqlite"),
+    databasePath: path.join(tempDir, "zos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
@@ -402,12 +402,12 @@ function testConfig(): SigmaConfig {
     },
     shares: {
       enabled: false,
-      account: { username: "sigma-share", password: null },
+      account: { username: "zos-share", password: null },
       shares: []
     },
     hostd: { socketPath: "/tmp/hostd.sock" },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock", maxSessions: 4 },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "sigmaos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }
@@ -427,8 +427,8 @@ async function connect(
   }
   const query = new URLSearchParams({ rootId, ...(sessionId ? { sessionId } : {}) });
   const protocols = sessionId
-    ? ["sigmaos-terminal-v1", `sigmaos-session.${sessionId}`, ...extraProtocols]
-    : ["sigmaos-terminal-v1", ...extraProtocols];
+    ? ["zos-terminal-v1", `zos-session.${sessionId}`, ...extraProtocols]
+    : ["zos-terminal-v1", ...extraProtocols];
   const socket = new WebSocket(`ws://127.0.0.1:${address.port}/api/terminal?${query.toString()}`, protocols);
   messageQueues.set(socket, { queue: [], waiter: null });
   socket.addEventListener("message", (event) => {

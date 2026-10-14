@@ -1,5 +1,5 @@
-import type { SigmaDatabase } from "@sigmaos/db";
-import type { PublicBuildInfo, SigmaConfig } from "@sigmaos/shared";
+import type { ZosDatabase } from "@zos/db";
+import type { PublicBuildInfo, ZosConfig } from "@zos/shared";
 import type { DockerComposeRuntime } from "./lib/docker-compose.js";
 import type { DockerEngineRuntime } from "./lib/docker-client.js";
 import type { DockerDaemonRuntime } from "./lib/docker-daemon.js";
@@ -15,8 +15,8 @@ import type { PhotostaffMapArchiveRuntime } from "./lib/photostaff-map.js";
 import type { FileBatchRuntime } from "./lib/file-batch-runner.js";
 
 export interface ApiRouteContext {
-  config: SigmaConfig;
-  db: SigmaDatabase;
+  config: ZosConfig;
+  db: ZosDatabase;
   buildInfo?: PublicBuildInfo;
   docker?: {
     engine?: DockerEngineRuntime;

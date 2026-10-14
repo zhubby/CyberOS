@@ -3,8 +3,8 @@ import type {
   IndexerServiceStatus,
   IndexRunKind,
   IndexWatcherStatus
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 
 export interface EnqueueIndexTaskInput {
   rootId: string;
@@ -23,7 +23,7 @@ export interface EnqueuedIndexTask {
 }
 
 export function enqueueIndexTask(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: EnqueueIndexTaskInput
 ): EnqueuedIndexTask {
   const path = normalizeIndexPath(input.path ?? ".");
@@ -84,7 +84,7 @@ export function enqueueIndexTask(
 }
 
 export function getIndexerServiceStatus(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   now = new Date()
 ): IndexerServiceStatus {
   const freshCutoff = new Date(now.getTime() - 20_000).toISOString();

@@ -139,7 +139,7 @@
   ],
   "residual_actionable_work": [],
   "advisory": [
-    "Dedicated Sigma Agent photo-library tools are not included in UI/API V1.",
+    "Dedicated ZOS Agent photo-library tools are not included in UI/API V1.",
     "Run target Debian amd64/arm64 validation for HEIC conversion, Sharp native loading, systemd, and real storage mounts before release."
   ],
   "verification": {

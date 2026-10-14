@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
-import { inferMimeType, inferPreviewKind } from "@sigmaos/nas-tools";
-import type { VodPlayerCommand, VodPlayerErrorCode } from "@sigmaos/shared";
+import { inferMimeType, inferPreviewKind } from "@zos/nas-tools";
+import type { VodPlayerCommand, VodPlayerErrorCode } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { createVodPlayerRuntime, VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";

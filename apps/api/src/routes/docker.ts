@@ -24,7 +24,7 @@ import {
   updateDockerOperationStatus,
   updateJobStatus,
   type DockerRegistryCredentialRecord
-} from "@sigmaos/db";
+} from "@zos/db";
 import type {
   DockerDaemonConfigUpdateInput,
   DockerDaemonStatus,
@@ -43,7 +43,7 @@ import type {
   DockerOperationTargetType,
   DockerRegistryCredentialCreateInput,
   DockerRegistryCredentialUpdateInput
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { effectiveDockerConfig } from "../lib/settings.js";
 import {

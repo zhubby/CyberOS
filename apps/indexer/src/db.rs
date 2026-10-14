@@ -168,7 +168,7 @@ impl Db {
             .map_err(IndexerError::database)?;
         let (sender, receiver) = mpsc::channel::<DbJob>();
         std::thread::Builder::new()
-            .name("sigmaos-indexer-db".to_owned())
+            .name("zos-indexer-db".to_owned())
             .spawn(move || {
                 let mut connection = connection;
                 while let Ok(job) = receiver.recv() {

@@ -4,8 +4,8 @@ import type {
   FileBatchOperation,
   FileBatchRecord,
   JobStatus
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { createOperationNotification, updateOperationNotificationForJob } from "./operation-notifications.js";
 
 export interface FileBatchItemRecord {
@@ -75,7 +75,7 @@ const ITEM_COLUMNS = `
 `;
 
 export function createFileBatch(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     sessionId: string;
     rootId: string;
@@ -183,7 +183,7 @@ export class FileBatchConflictError extends Error {
   }
 }
 
-export function getFileBatch(db: SigmaDatabase, id: string): FileBatchRecord | null {
+export function getFileBatch(db: ZosDatabase, id: string): FileBatchRecord | null {
   const row = db.prepare(`
     SELECT ${BATCH_COLUMNS}
     FROM file_batches b
@@ -194,7 +194,7 @@ export function getFileBatch(db: SigmaDatabase, id: string): FileBatchRecord | n
 }
 
 export function listFileBatches(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { sessionId?: string; rootId?: string; storagePoolId?: string; limit?: number } = {}
 ): FileBatchRecord[] {
   const clauses: string[] = [];
@@ -224,7 +224,7 @@ export function listFileBatches(
   return rows.map((row) => mapFileBatch(db, row));
 }
 
-export function recoverInterruptedFileBatches(db: SigmaDatabase): number {
+export function recoverInterruptedFileBatches(db: ZosDatabase): number {
   const now = new Date().toISOString();
   const transaction = db.transaction(() => {
     const items = db.prepare(`
@@ -252,7 +252,7 @@ export function recoverInterruptedFileBatches(db: SigmaDatabase): number {
   return transaction.immediate();
 }
 
-export function claimNextFileBatchItem(db: SigmaDatabase): ClaimedFileBatchItem | null {
+export function claimNextFileBatchItem(db: ZosDatabase): ClaimedFileBatchItem | null {
   const now = new Date().toISOString();
   const transaction = db.transaction(() => {
     const candidate = db.prepare(`
@@ -294,7 +294,7 @@ export function claimNextFileBatchItem(db: SigmaDatabase): ClaimedFileBatchItem 
 }
 
 export function finishFileBatchItem(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { itemId: string; status: Extract<FileBatchItemStatus, "completed" | "failed">; error?: string | null }
 ): { batch: FileBatchRecord; finalStatus: Extract<JobStatus, "completed" | "failed" | "cancelled"> | null } {
   const now = new Date().toISOString();
@@ -350,7 +350,7 @@ export function finishFileBatchItem(
   return transaction.immediate();
 }
 
-export function cancelQueuedFileBatchItems(db: SigmaDatabase, jobId: string): FileBatchRecord | null {
+export function cancelQueuedFileBatchItems(db: ZosDatabase, jobId: string): FileBatchRecord | null {
   const now = new Date().toISOString();
   const transaction = db.transaction(() => {
     const row = db.prepare("SELECT id FROM file_batches WHERE job_id = ?").get(jobId) as { id: string } | undefined;
@@ -374,7 +374,7 @@ export function cancelQueuedFileBatchItems(db: SigmaDatabase, jobId: string): Fi
   return transaction.immediate();
 }
 
-function refreshBatchCounts(db: SigmaDatabase, batchId: string, now: string): void {
+function refreshBatchCounts(db: ZosDatabase, batchId: string, now: string): void {
   db.prepare(`
     UPDATE file_batches
     SET completed_count = (SELECT COUNT(*) FROM file_batch_items WHERE batch_id = ? AND status IN ('completed', 'failed', 'cancelled')),
@@ -386,13 +386,13 @@ function refreshBatchCounts(db: SigmaDatabase, batchId: string, now: string): vo
   `).run(batchId, batchId, batchId, batchId, now, batchId);
 }
 
-function getRequiredFileBatch(db: SigmaDatabase, id: string): FileBatchRecord {
+function getRequiredFileBatch(db: ZosDatabase, id: string): FileBatchRecord {
   const batch = getFileBatch(db, id);
   if (!batch) throw new Error("File batch not found");
   return batch;
 }
 
-function mapFileBatch(db: SigmaDatabase, row: FileBatchRow): FileBatchRecord {
+function mapFileBatch(db: ZosDatabase, row: FileBatchRow): FileBatchRecord {
   const failures = db.prepare(`
     SELECT source_path, error
     FROM file_batch_items

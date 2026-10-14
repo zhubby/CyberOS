@@ -13,7 +13,7 @@ import {
 let fixtureRoot;
 
 beforeEach(async () => {
-  fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "sigmaos-release-"));
+  fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "zos-release-"));
   await writeFixture(fixtureRoot);
 });
 
@@ -46,12 +46,12 @@ describe("release versioning", () => {
     const state = await readVersionState(fixtureRoot);
     expect(state.version).toBe("0.2.0");
     expect(versionStateErrors(state)).toEqual([]);
-    expect(state.manifests[1].value.dependencies["@sigmaos/shared"]).toBe("0.2.0");
-    expect(state.cargoManifests["apps/downloader/Cargo.toml"]).toContain('version = "0.2.0"');
-    expect(state.cargoManifests["apps/photostaff/Cargo.toml"]).toContain('version = "0.2.0"');
-    expect(state.cargoLock).toContain('name = "sigmaos-downloader"\nversion = "0.2.0"');
-    expect(state.cargoLock).toContain('name = "sigmaos-photostaff"\nversion = "0.2.0"');
-    expect(state.debianChangelog).toContain("sigmaos (0.2.0) unstable");
+    expect(state.manifests[1].value.dependencies["@zos/shared"]).toBe("0.2.0");
+    for (const { manifestPath, packageName } of PRODUCT_CARGO_PACKAGES) {
+      expect(state.cargoManifests[manifestPath]).toContain('version = "0.2.0"');
+      expect(state.cargoLock).toContain(`name = "${packageName}"\nversion = "0.2.0"`);
+    }
+    expect(state.debianChangelog).toContain("zos (0.2.0) unstable");
     expect(state.debianChangelog).toContain("* Add release traceability.");
   });
 
@@ -90,57 +90,61 @@ describe("release versioning", () => {
     );
   });
 
-  it("reports downloader Cargo version drift", async () => {
-    const manifestPath = path.join(fixtureRoot, "apps/downloader/Cargo.toml");
-    await writeFile(manifestPath, '[package]\nname = "sigmaos-downloader"\nversion = "0.0.9"\n');
-
-    const state = await readVersionState(fixtureRoot);
-    expect(versionStateErrors(state)).toContain(
-      'apps/downloader/Cargo.toml has version "0.0.9"; expected 0.1.0'
+  it.each(PRODUCT_CARGO_PACKAGES)("reports $packageName Cargo version drift", async ({ manifestPath, packageName }) => {
+    await writeFile(
+      path.join(fixtureRoot, manifestPath),
+      `[package]\nname = "${packageName}"\nversion = "0.0.9"\n`
     );
-  });
-
-  it("reports Photostaff Cargo version drift", async () => {
-    const manifestPath = path.join(fixtureRoot, "apps/photostaff/Cargo.toml");
-    await writeFile(manifestPath, '[package]\nname = "sigmaos-photostaff"\nversion = "0.0.9"\n');
 
     const state = await readVersionState(fixtureRoot);
     expect(versionStateErrors(state)).toContain(
-      'apps/photostaff/Cargo.toml has version "0.0.9"; expected 0.1.0'
+      `${manifestPath} has version "0.0.9"; expected 0.1.0`
     );
   });
 });
+
+const PRODUCT_CARGO_PACKAGES = [
+  ["apps/downloader/Cargo.toml", "zos-downloader"],
+  ["apps/hostd/Cargo.toml", "zos-hostd"],
+  ["apps/indexer/Cargo.toml", "zos-indexer"],
+  ["apps/photostaff/Cargo.toml", "zos-photostaff"],
+  ["apps/termux/Cargo.toml", "zos-termux"],
+  ["apps/vod-player/Cargo.toml", "zos-vod-player"]
+].map(([manifestPath, packageName]) => ({ manifestPath, packageName }));
 
 async function writeFixture(root) {
   await Promise.all([
     mkdir(path.join(root, "apps/api"), { recursive: true }),
     mkdir(path.join(root, "apps/downloader"), { recursive: true }),
     mkdir(path.join(root, "apps/hostd"), { recursive: true }),
+    mkdir(path.join(root, "apps/indexer"), { recursive: true }),
     mkdir(path.join(root, "apps/photostaff"), { recursive: true }),
+    mkdir(path.join(root, "apps/termux"), { recursive: true }),
+    mkdir(path.join(root, "apps/vod-player"), { recursive: true }),
     mkdir(path.join(root, "packages/shared"), { recursive: true }),
     mkdir(path.join(root, "packaging/debian"), { recursive: true }),
     mkdir(path.join(root, "packaging/appliance"), { recursive: true })
   ]);
 
-  const rootManifest = { name: "sigmaos", version: "0.1.0", workspaces: ["apps/*", "packages/*"] };
+  const rootManifest = { name: "zos", version: "0.1.0", workspaces: ["apps/*", "packages/*"] };
   const apiManifest = {
-    name: "@sigmaos/api",
+    name: "@zos/api",
     version: "0.1.0",
-    dependencies: { "@sigmaos/shared": "0.1.0" }
+    dependencies: { "@zos/shared": "0.1.0" }
   };
-  const sharedManifest = { name: "@sigmaos/shared", version: "0.1.0" };
+  const sharedManifest = { name: "@zos/shared", version: "0.1.0" };
   const lock = {
-    name: "sigmaos",
+    name: "zos",
     version: "0.1.0",
     lockfileVersion: 3,
     packages: {
-      "": { name: "sigmaos", version: "0.1.0", workspaces: ["apps/*", "packages/*"] },
+      "": { name: "zos", version: "0.1.0", workspaces: ["apps/*", "packages/*"] },
       "apps/api": {
-        name: "@sigmaos/api",
+        name: "@zos/api",
         version: "0.1.0",
-        dependencies: { "@sigmaos/shared": "0.1.0" }
+        dependencies: { "@zos/shared": "0.1.0" }
       },
-      "packages/shared": { name: "@sigmaos/shared", version: "0.1.0" }
+      "packages/shared": { name: "@zos/shared", version: "0.1.0" }
     }
   };
 
@@ -149,25 +153,23 @@ async function writeFixture(root) {
     writeFile(path.join(root, "apps/api/package.json"), JSON.stringify(apiManifest, null, 2)),
     writeFile(path.join(root, "packages/shared/package.json"), JSON.stringify(sharedManifest, null, 2)),
     writeFile(path.join(root, "package-lock.json"), JSON.stringify(lock, null, 2)),
-    writeFile(
-      path.join(root, "apps/downloader/Cargo.toml"),
-      '[package]\nname = "sigmaos-downloader"\nversion = "0.1.0"\n'
-    ),
-    writeFile(
-      path.join(root, "apps/photostaff/Cargo.toml"),
-      '[package]\nname = "sigmaos-photostaff"\nversion = "0.1.0"\n'
+    ...PRODUCT_CARGO_PACKAGES.map(({ manifestPath, packageName }) =>
+      writeFile(
+        path.join(root, manifestPath),
+        `[package]\nname = "${packageName}"\nversion = "0.1.0"\n`
+      )
     ),
     writeFile(
       path.join(root, "Cargo.lock"),
-      'version = 4\n\n[[package]]\nname = "dependency"\nversion = "1.2.3"\n\n[[package]]\nname = "sigmaos-downloader"\nversion = "0.1.0"\n\n[[package]]\nname = "sigmaos-photostaff"\nversion = "0.1.0"\n'
+      `version = 4\n\n[[package]]\nname = "dependency"\nversion = "1.2.3"\n\n${PRODUCT_CARGO_PACKAGES.map(({ packageName }) => `[[package]]\nname = "${packageName}"\nversion = "0.1.0"\n`).join("\n")}`
     ),
     writeFile(
       path.join(root, "packaging/debian/changelog"),
-      "sigmaos (0.1.0) unstable; urgency=medium\n\n  * Initial release.\n\n -- SigmaOS Maintainers <maintainers@sigmaos.local>  Thu, 20 Aug 2026 10:20:00 +0000\n"
+      "zos (0.1.0) unstable; urgency=medium\n\n  * Initial release.\n\n -- ZOS Maintainers <maintainers@zos.local>  Thu, 20 Aug 2026 10:20:00 +0000\n"
     ),
     writeFile(
       path.join(root, "packaging/appliance/manifest.toml"),
-      'name = "sigmaos-appliance"\nversion = "0.1.0"\n'
+      'name = "zos-appliance"\nversion = "0.1.0"\n'
     )
   ]);
 }

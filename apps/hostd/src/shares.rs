@@ -93,7 +93,7 @@ async fn apply_with_options(
                 }
             } else if matches!(
                 *service,
-                "sigmaos-webdav.service" | "vsftpd.service" | "minidlna.service"
+                "zos-webdav.service" | "vsftpd.service" | "minidlna.service"
             ) {
                 "stop"
             } else {
@@ -200,7 +200,7 @@ fn services_for_settings(settings: &ShareSettings) -> Vec<String> {
             services.extend(["smbd.service", "nmbd.service"]);
         }
         if share.protocols.webdav.enabled {
-            services.insert("sigmaos-webdav.service");
+            services.insert("zos-webdav.service");
         }
         if share.protocols.ftp.enabled {
             services.insert("vsftpd.service");
@@ -279,7 +279,7 @@ mod tests {
         serde_json::from_value(serde_json::json!({
             "settings": {
                 "enabled": true,
-                "account": { "username": "sigma_share", "password": null },
+                "account": { "username": "zos_share", "password": null },
                 "shares": [{
                     "id": "media", "name": "Media", "description": "LAN media",
                     "rootId": "primary", "path": "media",
@@ -288,7 +288,7 @@ mod tests {
                         "webdav": { "enabled": true, "readOnly": true, "allowGuest": false, "port": 8088, "pathPrefix": "/shares/media" },
                         "ftp": { "enabled": true, "readOnly": true, "allowGuest": false, "port": 2121, "passivePortStart": 50000, "passivePortEnd": 50100 },
                         "nfs": { "enabled": true, "readOnly": true, "allowedCidrs": ["192.168.1.0/24"], "rootSquash": true },
-                        "dlna": { "enabled": true, "mediaTypes": ["audio", "video"], "bindInterface": "eth0", "bindAddress": null, "friendlyName": "Sigma Media" }
+                        "dlna": { "enabled": true, "mediaTypes": ["audio", "video"], "bindInterface": "eth0", "bindAddress": null, "friendlyName": "ZOS Media" }
                     }
                 }]
             },
@@ -301,15 +301,15 @@ mod tests {
         let etc = temp.path().join("etc");
         ShareOptions {
             paths: SharePaths {
-                samba_config: etc.join("samba/sigmaos.conf"),
-                webdav_site: etc.join("apache/sigmaos.conf"),
-                ftp_config: etc.join("vsftpd/sigmaos.conf"),
-                nfs_exports: etc.join("exports/sigmaos.exports"),
-                dlna_config: etc.join("minidlna/sigmaos.conf"),
-                htpasswd: etc.join("sigmaos/shares.htpasswd"),
-                ftp_pam: etc.join("pam/vsftpd-sigmaos"),
+                samba_config: etc.join("samba/zos.conf"),
+                webdav_site: etc.join("apache/zos.conf"),
+                ftp_config: etc.join("vsftpd/zos.conf"),
+                nfs_exports: etc.join("exports/zos.exports"),
+                dlna_config: etc.join("minidlna/zos.conf"),
+                htpasswd: etc.join("zos/shares.htpasswd"),
+                ftp_pam: etc.join("pam/vsftpd-zos"),
             },
-            credential_group: "sigmaos".to_owned(),
+            credential_group: "zos".to_owned(),
             managed_roots: vec![etc],
             acl_script: temp.path().join("share-acl.mjs"),
             acl_state: temp.path().join("share-acl.json"),
@@ -343,8 +343,8 @@ mod tests {
         let samba = fs::read_to_string(&options.paths.samba_config)
             .await
             .unwrap();
-        assert!(samba.contains("[sigmaos-media]"));
-        assert!(samba.contains("valid users = sigma_share"));
+        assert!(samba.contains("[zos-media]"));
+        assert!(samba.contains("valid users = zos_share"));
         assert_eq!(
             fs::metadata(&options.paths.samba_config)
                 .await
@@ -375,8 +375,8 @@ mod tests {
         let webdav = fs::read_to_string(&options.paths.webdav_site)
             .await
             .unwrap();
-        assert!(webdav.contains("PidFile /run/sigmaos-webdav/apache2.pid"));
-        assert!(webdav.contains("ErrorLog /run/sigmaos-webdav/error.log"));
+        assert!(webdav.contains("PidFile /run/zos/webdav/apache2.pid"));
+        assert!(webdav.contains("ErrorLog /run/zos/webdav/error.log"));
         assert!(webdav.contains("LoadModule dav_fs_module"));
         let nfs = fs::read_to_string(&options.paths.nfs_exports)
             .await
@@ -399,13 +399,9 @@ mod tests {
         };
         let grants: Value = serde_json::from_slice(input).unwrap();
         let grants = grants["grants"].as_array().unwrap();
-        assert!(
-            grants
-                .iter()
-                .any(|grant| grant["principal"] == "sigma_share"
-                    && grant["access"] == "write"
-                    && grant["scope"] == "tree")
-        );
+        assert!(grants.iter().any(|grant| grant["principal"] == "zos_share"
+            && grant["access"] == "write"
+            && grant["scope"] == "tree"));
         assert!(
             grants
                 .iter()
@@ -470,7 +466,7 @@ mod tests {
             .await
             .unwrap();
         let runner = FakeRunner {
-            fail_service: Some("sigmaos-webdav.service".to_owned()),
+            fail_service: Some("zos-webdav.service".to_owned()),
             ..FakeRunner::default()
         };
         assert!(
@@ -520,7 +516,7 @@ mod tests {
         .await
         .unwrap();
         let runner = FakeRunner {
-            fail_service: Some("sigmaos-webdav.service".to_owned()),
+            fail_service: Some("zos-webdav.service".to_owned()),
             ..FakeRunner::default()
         };
 
@@ -564,7 +560,7 @@ mod tests {
         let webdav = render_webdav(
             &request.settings,
             &resolved,
-            Path::new("/etc/sigmaos/shares.htpasswd"),
+            Path::new("/zos/config/shares.htpasswd"),
         )
         .unwrap();
 
@@ -580,7 +576,7 @@ mod tests {
             render_webdav(
                 &request.settings,
                 &resolved,
-                Path::new("/etc/sigmaos/shares.htpasswd")
+                Path::new("/zos/config/shares.htpasswd")
             )
             .unwrap()
             .contains("Require all granted")
@@ -600,7 +596,7 @@ mod tests {
         let ftp = render_ftp(
             &request.settings,
             &resolved,
-            Path::new("/etc/pam.d/vsftpd-sigmaos"),
+            Path::new("/etc/pam.d/vsftpd-zos"),
         )
         .unwrap();
         assert!(ftp.contains("anonymous_enable=NO"));
@@ -618,7 +614,7 @@ mod tests {
         let ftp = render_ftp(
             &request.settings,
             &resolved,
-            Path::new("/etc/pam.d/vsftpd-sigmaos"),
+            Path::new("/etc/pam.d/vsftpd-zos"),
         )
         .unwrap();
         assert!(ftp.contains("anonymous_enable=YES"));
@@ -637,7 +633,7 @@ mod tests {
         let ftp = render_ftp(
             &request.settings,
             &resolved,
-            Path::new("/etc/pam.d/vsftpd-sigmaos"),
+            Path::new("/etc/pam.d/vsftpd-zos"),
         )
         .unwrap();
         assert!(ftp.contains("anon_upload_enable=YES"));
@@ -678,7 +674,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn global_disable_stops_sigmaos_owned_protocol_services() {
+    async fn global_disable_stops_zos_owned_protocol_services() {
         let temp = TempDir::new().unwrap();
         fs::create_dir_all(temp.path().join("nas/media"))
             .await
@@ -698,11 +694,7 @@ mod tests {
 
         assert!(result.services.is_empty());
         let calls = runner.calls.lock().unwrap();
-        for service in [
-            "sigmaos-webdav.service",
-            "vsftpd.service",
-            "minidlna.service",
-        ] {
+        for service in ["zos-webdav.service", "vsftpd.service", "minidlna.service"] {
             assert!(
                 calls
                     .iter()
@@ -807,7 +799,7 @@ mod tests {
             &request.settings,
             &test_options(&temp).paths,
             &runner,
-            "sigmaos",
+            "zos",
         )
         .await
         .unwrap();
@@ -816,13 +808,13 @@ mod tests {
             command == "useradd"
                 && args
                     .windows(2)
-                    .any(|pair| pair == ["--home-dir", "/var/lib/sigmaos-share"])
+                    .any(|pair| pair == ["--home-dir", "/zos/home/share"])
         }));
     }
 
     #[tokio::test]
     async fn rejects_share_paths_that_escape_the_root() {
-        let mut request = fixture(Path::new("/srv/nas"));
+        let mut request = fixture(Path::new("/zos/data/primary"));
         request.settings.shares[0].path = "../../etc".into();
         assert!(
             resolve_shares(&request.settings, &configured_roots(&request))
@@ -875,7 +867,7 @@ mod tests {
 
     #[test]
     fn rejects_nfs_export_injection_in_allowed_cidrs() {
-        let mut request = fixture(Path::new("/srv/nas"));
+        let mut request = fixture(Path::new("/zos/data/primary"));
         request.settings.shares[0].protocols.nfs.allowed_cidrs =
             vec!["*(rw,no_root_squash) 0.0.0.0/0".to_owned()];
 
@@ -890,7 +882,7 @@ mod tests {
         let request = fixture(Path::new("/"));
         let configured = vec![ConfiguredNasRoot {
             id: "primary".to_owned(),
-            path: PathBuf::from("/srv/nas"),
+            path: PathBuf::from("/zos/data/primary"),
         }];
 
         assert_eq!(

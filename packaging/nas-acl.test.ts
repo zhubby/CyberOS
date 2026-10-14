@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-const script = fileURLToPath(new URL("scripts/sigmaos-nas-acl.sh", import.meta.url));
+const script = fileURLToPath(new URL("scripts/zos-nas-acl.sh", import.meta.url));
 let directory: string | null = null;
 
 afterEach(async () => {
@@ -18,7 +18,7 @@ describe("NAS ACL migration", () => {
     const fixture = await setup();
     const preview = run(fixture, "--check");
     expect(preview.status, preview.stderr).toBe(0);
-    expect(preview.stdout).toContain("planned change: grant sigmaos rwx");
+    expect(preview.stdout).toContain("planned change: grant zos rwx");
     await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
     const applied = run(fixture, "--apply");
@@ -26,13 +26,13 @@ describe("NAS ACL migration", () => {
     const [backup] = await readdir(fixture.backups);
     expect(backup).toMatch(/^acl\./u);
     expect(await readFile(path.join(fixture.backups, backup!, "acl.dump"), "utf8")).toContain("# file:");
-    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -m u:sigmaos:rwx -- ${fixture.pool}`);
-    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -m d:u:sigmaos:rwx -- ${fixture.pool}`);
+    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -m u:zos:rwx -- ${fixture.pool}`);
+    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -m d:u:zos:rwx -- ${fixture.pool}`);
   });
 
   it("refuses an unmounted path before writing any ACL", async () => {
     const fixture = await setup();
-    const result = run(fixture, "--apply", { SIGMAOS_NAS_MOUNTED: "0" });
+    const result = run(fixture, "--apply", { ZOS_NAS_MOUNTED: "0" });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("pool is not mounted");
     await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
@@ -40,17 +40,17 @@ describe("NAS ACL migration", () => {
 
   it("reports an ACL masked below the requested permissions", async () => {
     const fixture = await setup();
-    const result = run(fixture, "--apply", { SIGMAOS_ACL_MASKED: "1" });
+    const result = run(fixture, "--apply", { ZOS_ACL_MASKED: "1" });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("sigmaos ACL is ineffective");
+    expect(result.stderr).toContain("zos ACL is ineffective");
   });
 
   it("rejects a restrictive mask before broadening unrelated accounts", async () => {
     const fixture = await setup();
-    const preview = run(fixture, "--check", { SIGMAOS_EXISTING_MASK: "r-x" });
+    const preview = run(fixture, "--check", { ZOS_EXISTING_MASK: "r-x" });
     expect(preview.status).not.toBe(0);
     expect(preview.stderr).toContain("existing access ACL mask needs separate review");
-    const result = run(fixture, "--apply", { SIGMAOS_EXISTING_MASK: "r-x" });
+    const result = run(fixture, "--apply", { ZOS_EXISTING_MASK: "r-x" });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("existing access ACL mask needs separate review");
     await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
@@ -58,23 +58,32 @@ describe("NAS ACL migration", () => {
 
   it("keeps a sufficient existing mask unchanged", async () => {
     const fixture = await setup();
-    const result = run(fixture, "--apply", { SIGMAOS_EXISTING_MASK: "rwx" });
+    const result = run(fixture, "--apply", { ZOS_EXISTING_MASK: "rwx" });
     expect(result.status, result.stderr).toBe(0);
-    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:sigmaos:rwx -- ${fixture.pool}`);
+    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:zos:rwx -- ${fixture.pool}`);
   });
 
-  it("keeps sigmaos-owned private partial files private", async () => {
+  it("keeps zos-owned private partial files private", async () => {
     const fixture = await setup();
     const partial = path.join(fixture.pool, ".download.part");
     await writeFile(partial, "partial");
-    const result = run(fixture, "--apply", { SIGMAOS_OWNER_FILE: partial });
+    const result = run(fixture, "--apply", { ZOS_OWNER_FILE: partial });
     expect(result.status, result.stderr).toBe(0);
     expect(await readFile(fixture.log, "utf8")).not.toContain(`-- ${partial}`);
+  });
+
+  it("rejects an ACL backup directory outside the configured ZOS root", async () => {
+    const fixture = await setup();
+    const result = run(fixture, "--apply", {
+      ZOS_ACL_BACKUP_DIR: path.join(os.tmpdir(), "outside-zos-root")
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("ZOS_ACL_BACKUP_DIR must be under");
   });
 });
 
 async function setup() {
-  directory = await mkdtemp(path.join(os.tmpdir(), "sigmaos-nas-acl-"));
+  directory = await mkdtemp(path.join(os.tmpdir(), "zos-nas-acl-"));
   const bin = path.join(directory, "bin");
   const root = path.join(directory, "nas");
   const pool = path.join(root, "pool1");
@@ -85,34 +94,34 @@ case "$(basename "$0")" in
   id) if [ "$1" = -u ] && [ "$#" -eq 1 ]; then printf '0\\n'; else printf '111\\n'; fi ;;
   realpath) for arg do :; done; printf '%s\\n' "$arg" ;;
   findmnt)
-    if [ "$SIGMAOS_NAS_MOUNTED" = 0 ]; then exit 0; fi
-    case " $* " in *' OPTIONS '*) printf 'rw,relatime\\n';; *) printf '%s\\n' "$SIGMAOS_POOL";; esac ;;
+    if [ "$ZOS_NAS_MOUNTED" = 0 ]; then exit 0; fi
+    case " $* " in *' OPTIONS '*) printf 'rw,relatime\\n';; *) printf '%s\\n' "$ZOS_POOL";; esac ;;
   find)
     case " $* " in
       *' -printf '*) printf '.' ;;
-      *' -print0 '*) printf '%s\\0' "$SIGMAOS_POOL"; if [ -n "$SIGMAOS_OWNER_FILE" ]; then printf '%s\\0' "$SIGMAOS_OWNER_FILE"; fi ;;
-      *' -exec '*) getfacl --absolute-names "$SIGMAOS_POOL" ;;
+      *' -print0 '*) printf '%s\\0' "$ZOS_POOL"; if [ -n "$ZOS_OWNER_FILE" ]; then printf '%s\\0' "$ZOS_OWNER_FILE"; fi ;;
+      *' -exec '*) getfacl --absolute-names "$ZOS_POOL" ;;
     esac ;;
   getfacl)
     for arg do :; done
-    if [ -n "$SIGMAOS_OWNER_FILE" ] && [ "$arg" = "$SIGMAOS_OWNER_FILE" ]; then
-      printf '# file: %s\\nuser::rw-\\nuser:sigmaos:rw-\\t#effective:---\\ngroup::---\\nmask::---\\nother::---\\n' "$arg"
+    if [ -n "$ZOS_OWNER_FILE" ] && [ "$arg" = "$ZOS_OWNER_FILE" ]; then
+      printf '# file: %s\\nuser::rw-\\nuser:zos:rw-\\t#effective:---\\ngroup::---\\nmask::---\\nother::---\\n' "$arg"
       exit 0
     fi
-    printf '# file: %s\\nuser::rwx\\n' "$SIGMAOS_POOL"
-    if [ -n "$SIGMAOS_EXISTING_MASK" ]; then
-      printf 'user:www-data:rwx\\ngroup::r-x\\nmask::%s\\ndefault:group::r-x\\ndefault:mask::%s\\n' "$SIGMAOS_EXISTING_MASK" "$SIGMAOS_EXISTING_MASK"
+    printf '# file: %s\\nuser::rwx\\n' "$ZOS_POOL"
+    if [ -n "$ZOS_EXISTING_MASK" ]; then
+      printf 'user:www-data:rwx\\ngroup::r-x\\nmask::%s\\ndefault:group::r-x\\ndefault:mask::%s\\n' "$ZOS_EXISTING_MASK" "$ZOS_EXISTING_MASK"
     fi
-    if [ "$SIGMAOS_ACL_MASKED" = 1 ]; then
-      printf 'user:sigmaos:rwx\\t#effective:r-x\\n'
+    if [ "$ZOS_ACL_MASKED" = 1 ]; then
+      printf 'user:zos:rwx\\t#effective:r-x\\n'
     else
-      printf 'user:sigmaos:rwx\\n'
+      printf 'user:zos:rwx\\n'
     fi ;;
   stat)
     for arg do :; done
-    if [ -n "$SIGMAOS_OWNER_FILE" ] && [ "$arg" = "$SIGMAOS_OWNER_FILE" ]; then printf '111\\n'; else printf '999\\n'; fi ;;
+    if [ -n "$ZOS_OWNER_FILE" ] && [ "$arg" = "$ZOS_OWNER_FILE" ]; then printf '111\\n'; else printf '999\\n'; fi ;;
   chmod) : ;;
-  setfacl) printf 'setfacl %s\\n' "$*" >> "$SIGMAOS_ACL_LOG" ;;
+  setfacl) printf 'setfacl %s\\n' "$*" >> "$ZOS_ACL_LOG" ;;
 esac
 `;
   for (const name of ["id", "realpath", "findmnt", "find", "getfacl", "stat", "chmod", "setfacl"]) {
@@ -120,7 +129,14 @@ esac
     await writeFile(target, shim);
     await chmod(target, 0o755);
   }
-  return { bin, root, pool, log: path.join(directory, "calls.log"), backups: path.join(directory, "backups") };
+  return {
+    zosRoot: directory,
+    bin,
+    root,
+    pool,
+    log: path.join(directory, "calls.log"),
+    backups: path.join(directory, "system-backups", "permissions")
+  };
 }
 
 function run(fixture: Awaited<ReturnType<typeof setup>>, mode: string, extraEnv: NodeJS.ProcessEnv = {}) {
@@ -129,10 +145,11 @@ function run(fixture: Awaited<ReturnType<typeof setup>>, mode: string, extraEnv:
     env: {
       ...process.env,
       PATH: `${fixture.bin}:${process.env.PATH ?? ""}`,
-      SIGMAOS_NAS_MOUNTED: "1",
-      SIGMAOS_POOL: fixture.pool,
-      SIGMAOS_ACL_BACKUP_DIR: fixture.backups,
-      SIGMAOS_ACL_LOG: fixture.log,
+      ZOS_ROOT: fixture.zosRoot,
+      ZOS_NAS_MOUNTED: "1",
+      ZOS_POOL: fixture.pool,
+      ZOS_ACL_BACKUP_DIR: fixture.backups,
+      ZOS_ACL_LOG: fixture.log,
       ...extraEnv
     }
   });

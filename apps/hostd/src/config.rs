@@ -6,8 +6,8 @@ use serde::Deserialize;
 
 use crate::error::HostdError;
 
-pub const DEFAULT_SOCKET_PATH: &str = "/run/sigmaos/hostd.sock";
-pub const DEFAULT_CONFIG_PATH: &str = "/etc/sigmaos/config.toml";
+pub const DEFAULT_SOCKET_PATH: &str = "/run/zos/hostd.sock";
+pub const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
 
 #[derive(Debug, Clone)]
 pub struct HostdConfig {
@@ -43,27 +43,26 @@ struct FileNasRoot {
 
 impl HostdConfig {
     pub fn load() -> Result<Self, HostdError> {
-        let config_path =
-            env::var("SIGMAOS_CONFIG").unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_owned());
+        let config_path = env::var("ZOS_CONFIG").unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_owned());
         let file_config = load_file_config(Path::new(&config_path))?;
         let socket_path = resolve_socket_path(
-            env::var("SIGMAOS_HOSTD_SOCKET_PATH").ok(),
+            env::var("ZOS_HOSTD_SOCKET_PATH").ok(),
             file_config.hostd.and_then(|config| config.socket_path),
         )?;
         let current_directory = env::current_dir()?;
         let nas_roots = resolve_nas_roots(
-            env::var("SIGMAOS_NAS_ROOTS").ok(),
+            env::var("ZOS_NAS_ROOTS").ok(),
             file_config.nas_roots,
             &current_directory,
         )?;
-        let sigmaos_uid = nix::unistd::User::from_name("sigmaos")
+        let zos_uid = nix::unistd::User::from_name("zos")
             .map_err(|error| HostdError::unavailable(error.to_string()))?
             .map(|user| user.uid.as_raw())
             .unwrap_or_else(|| nix::unistd::Uid::current().as_raw());
         Ok(Self {
             socket_path,
-            socket_group: env::var("SIGMAOS_HOSTD_GROUP").unwrap_or_else(|_| "sigmaos".to_owned()),
-            allowed_uids: vec![0, sigmaos_uid],
+            socket_group: env::var("ZOS_HOSTD_GROUP").unwrap_or_else(|_| "zos".to_owned()),
+            allowed_uids: vec![0, zos_uid],
             nas_roots,
         })
     }
@@ -87,7 +86,7 @@ fn resolve_socket_path(
 fn load_file_config(path: &Path) -> Result<FileConfig, HostdError> {
     match std::fs::read_to_string(path) {
         Ok(content) => toml_edit::de::from_str(&content)
-            .map_err(|_| HostdError::validation("SigmaOS configuration is invalid TOML")),
+            .map_err(|_| HostdError::validation("ZOS configuration is invalid TOML")),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(FileConfig::default()),
         Err(error) => Err(error.into()),
     }
@@ -212,10 +211,10 @@ mod tests {
     #[test]
     fn resolves_configured_nas_roots_with_environment_precedence() {
         let roots = resolve_nas_roots(
-            Some("dev:Development NAS:relative/tmp/../nas,/srv/archive".to_owned()),
+            Some("dev:Development NAS:relative/tmp/../nas,/mnt/archive".to_owned()),
             vec![FileNasRoot {
                 id: Some("ignored".to_owned()),
-                path: Some("/srv/ignored".to_owned()),
+                path: Some("/mnt/ignored".to_owned()),
             }],
             Path::new("/workspace"),
         )
@@ -230,7 +229,7 @@ mod tests {
                 },
                 ConfiguredNasRoot {
                     id: "root-2".to_owned(),
-                    path: PathBuf::from("/srv/archive"),
+                    path: PathBuf::from("/mnt/archive"),
                 },
             ]
         );
@@ -244,11 +243,11 @@ mod tests {
                 vec![
                     FileNasRoot {
                         id: Some("primary".to_owned()),
-                        path: Some("/srv/one".to_owned()),
+                        path: Some("/mnt/one".to_owned()),
                     },
                     FileNasRoot {
                         id: Some("primary".to_owned()),
-                        path: Some("/srv/two".to_owned()),
+                        path: Some("/mnt/two".to_owned()),
                     },
                 ],
                 Path::new("/workspace"),

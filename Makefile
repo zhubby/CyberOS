@@ -16,19 +16,19 @@ dev: ## Run the API, worker, and web development servers.
 	$(NPM) run dev
 
 dev-api: ## Run the API development server.
-	$(NPM) run dev -w @sigmaos/api
+	$(NPM) run dev -w @zos/api
 
 dev-web: ## Run the web development server.
-	$(NPM) run dev -w @sigmaos/web
+	$(NPM) run dev -w @zos/web
 
 dev-worker: ## Run the worker development process.
-	$(NPM) run dev -w @sigmaos/worker
+	$(NPM) run dev -w @zos/worker
 
 dev-indexer: ## Run the indexer in watch mode.
-	cargo run -p sigmaos-indexer
+	cargo run -p zos-indexer
 
 dev-ops: ## Run an Ops task (TASK=health|maintenance).
-	$(NPM) run dev -w @sigmaos/ops -- $(TASK)
+	$(NPM) run dev -w @zos/ops -- $(TASK)
 
 docs-dev: ## Run the Starlight development server.
 	$(NPM) run docs:dev
@@ -55,16 +55,16 @@ maintenance: ## Run maintenance once.
 	$(NPM) run maintenance
 
 preview-web: ## Preview the built web app.
-	$(NPM) run preview -w @sigmaos/web
+	$(NPM) run preview -w @zos/web
 
 start-api: ## Start the built API server.
-	$(NPM) run start -w @sigmaos/api
+	$(NPM) run start -w @zos/api
 
 start-worker: ## Start the built worker process.
-	$(NPM) run start -w @sigmaos/worker
+	$(NPM) run start -w @zos/worker
 
 start-indexer: ## Start the built indexer process.
-	target/release/sigmaos-indexer
+	target/release/zos-indexer
 
 protocol-check: ## Verify checked-in Rust-to-TypeScript protocol bindings.
 	$(NPM) run protocol:check
@@ -86,7 +86,7 @@ check: protocol-check typecheck lint test ## Run protocol drift, typecheck, lint
 ci: check build ## Run the full local verification suite.
 
 clean: ## Remove generated build and packaging artifacts.
-	rm -rf apps/*/dist packages/*/dist coverage target .sigmaos/deb-build .sigmaos/appliance
+	rm -rf apps/*/dist packages/*/dist coverage target .zos/deb-build .zos/appliance
 
 deb: ## Build the Debian package artifacts.
 	./packaging/scripts/build-deb.sh

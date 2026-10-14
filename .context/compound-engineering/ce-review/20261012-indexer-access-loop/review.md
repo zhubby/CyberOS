@@ -37,7 +37,7 @@ learnings, performance, reliability, adversarial, CLI-readiness.
 
 ### Deployment Notes
 
-- Confirm `sigmaos-indexer.service` is enabled and active after package installation.
+- Confirm `zos-indexer.service` is enabled and active after package installation.
 - Require fresh heartbeat, watcher `ready`, and queue `stalled=false` before accepting rollout.
 - Continue monitoring until the inherited queue drains; an immediate ready response alone does
   not prove the former self-triggering scan loop is gone.

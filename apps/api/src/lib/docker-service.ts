@@ -5,9 +5,9 @@ import type {
   DockerOperationProposal,
   DockerOperationRecord,
   DockerSummary,
-  SigmaConfig
-} from "@sigmaos/shared";
-import type { DockerRegistryCredentialRecord } from "@sigmaos/db";
+  ZosConfig
+} from "@zos/shared";
+import type { DockerRegistryCredentialRecord } from "@zos/db";
 import type { DockerComposeRuntime } from "./docker-compose.js";
 import { DockerSocketClient, type DockerEngineRuntime } from "./docker-client.js";
 import { SystemDockerDaemonRuntime, type DockerDaemonRuntime } from "./docker-daemon.js";
@@ -37,7 +37,7 @@ export function dockerCompose(config: DockerConfig, dependencies?: DockerRuntime
 }
 
 export async function collectDockerSummary(
-  config: SigmaConfig,
+  config: ZosConfig,
   dependencies?: DockerRuntimeDependencies
 ): Promise<DockerSummary> {
   const daemon = dependencies?.daemon ?? new SystemDockerDaemonRuntime({ hostdSocketPath: config.hostd.socketPath });
@@ -113,7 +113,7 @@ export function resolveDockerImageOccupancy(
 }
 
 export async function applyDockerOperation(
-  config: SigmaConfig,
+  config: ZosConfig,
   operation: DockerOperationRecord,
   proposal: DockerOperationProposal,
   dependencies?: DockerRuntimeDependencies,

@@ -10,10 +10,10 @@ import {
   recordAppliedOperation,
   recoverInterruptedFileBatches,
   type ClaimedFileBatchItem,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import { applyFileMutation, trashPathFor } from "@sigmaos/nas-tools";
-import type { FileBatchRecord, FileOperationProposal, SigmaConfig } from "@sigmaos/shared";
+  type ZosDatabase
+} from "@zos/db";
+import { applyFileMutation, trashPathFor } from "@zos/nas-tools";
+import type { FileBatchRecord, FileOperationProposal, ZosConfig } from "@zos/shared";
 import type { SystemManagementDependencies } from "./system-management.js";
 import {
   resolveScopedExistingPath,
@@ -34,8 +34,8 @@ export class FileBatchRunner implements FileBatchRuntime {
 
   constructor(
     private readonly dependencies: {
-      db: SigmaDatabase;
-      config: SigmaConfig;
+      db: ZosDatabase;
+      config: ZosConfig;
       system?: SystemManagementDependencies;
       log?: { error: (input: unknown, message?: string) => void };
     }
@@ -117,8 +117,8 @@ interface ProcessedFileBatchItem {
 
 export async function processNextFileBatchItem(
   dependencies: {
-    db: SigmaDatabase;
-    config: SigmaConfig;
+    db: ZosDatabase;
+    config: ZosConfig;
     system?: SystemManagementDependencies;
   },
   onStarted?: (batch: FileBatchRecord) => void
@@ -144,8 +144,8 @@ export async function processNextFileBatchItem(
 
 async function applyClaimedItem(
   { db, config, system }: {
-    db: SigmaDatabase;
-    config: SigmaConfig;
+    db: ZosDatabase;
+    config: ZosConfig;
     system?: SystemManagementDependencies;
   },
   { batch, item }: ClaimedFileBatchItem
@@ -179,7 +179,7 @@ async function applyClaimedItem(
         trashEntryId: item.trashEntryId!,
         risk: "medium",
         reversible: true,
-        summary: `Move ${item.sourcePath} to SigmaOS trash`
+        summary: `Move ${item.sourcePath} to ZOS trash`
       };
 
   const recovered = await recoverAppliedMutation(scope, proposal, trashRoot);

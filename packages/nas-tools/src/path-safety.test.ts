@@ -8,7 +8,7 @@ let tempDir: string;
 let rootDir: string;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-path-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-path-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
 });

@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { listDir } from "@sigmaos/nas-tools";
-import type { NasRootRecord } from "@sigmaos/shared";
+import { listDir } from "@zos/nas-tools";
+import type { NasRootRecord } from "@zos/shared";
 import {
   classifyGitStatusCode,
   getDirectoryGitView,
@@ -20,7 +20,7 @@ let rootDir: string;
 let root: NasRootRecord;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-git-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-git-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
   root = {
@@ -260,7 +260,7 @@ function statusFor(entries: Array<{ name: string; gitStatus?: string }>, name: s
 }
 
 async function git(args: string[], cwd = rootDir): Promise<void> {
-  await execFileAsync("git", ["-c", "user.name=SigmaOS", "-c", "user.email=sigmaos@example.test", ...args], {
+  await execFileAsync("git", ["-c", "user.name=ZOS", "-c", "user.email=zos@example.test", ...args], {
     cwd,
     env: {
       ...process.env,

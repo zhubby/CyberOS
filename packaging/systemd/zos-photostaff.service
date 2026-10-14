@@ -1,0 +1,35 @@
+[Unit]
+Description=ZOS Photostaff media worker
+Documentation=file:///usr/share/doc/zos/README.md
+After=local-fs.target zos-api.service
+Wants=zos-api.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+WatchdogSec=20s
+User=zos
+Group=zos
+Environment=ZOS_ROOT=/zos
+Environment=ZOS_CONFIG=/zos/config/config.toml
+WorkingDirectory=/zos/state
+ExecStart=/usr/lib/zos/bin/zos-photostaff
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30s
+KillMode=control-group
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=-/zos/data
+ReadWritePaths=/zos/state /zos/logs
+NoNewPrivileges=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+CapabilityBoundingSet=
+MemoryMax=1G
+CPUQuota=250%
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target

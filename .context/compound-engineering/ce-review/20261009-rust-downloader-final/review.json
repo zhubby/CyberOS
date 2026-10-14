@@ -5,7 +5,7 @@
   "scope": {
     "base": "34f4350332ceae06ec6bb72f5e32ea3b6ace0c11",
     "branch": "codex/rust-downloader",
-    "intent": "replace the Node downloader with the Rust sigmaos-downloader service and complete the reliability upgrade",
+    "intent": "replace the Node downloader with the Rust zos-downloader service and complete the reliability upgrade",
     "untrackedCoreFilesReviewed": true
   },
   "verdict": "ready_for_linux_release_acceptance",

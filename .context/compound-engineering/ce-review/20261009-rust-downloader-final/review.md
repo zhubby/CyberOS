@@ -49,12 +49,12 @@ None. Download creation, control, retry, deletion, settings, status, and health 
 ### Schema Drift Check
 
 - Clean: migration `022_downloader_reliability` only extends downloader state and adds its four owned tables plus claim/heartbeat indexes.
-- The legacy fixture applies the Node migration catalog through 021, preserves queued/running/paused/failed rows and a `.part`, then upgrades through the normal `openSigmaDb` path.
+- The legacy fixture applies the Node migration catalog through 021, preserves queued/running/paused/failed rows and a `.part`, then upgrades through the normal `openZosDb` path.
 
 ### Deployment Notes
 
-- Back up the current package, SQLite state, `/etc/sigmaos`, `/var/lib/sigmaos`, and downloader partial files before switching runtimes; rollback requires the matching pre-upgrade database and partial-file backup.
-- Verify migration 022 before starting the downloader, then confirm `sigmaos-downloader.service`, worker heartbeat freshness, `/api/downloads`, and `/api/system/health`.
+- Back up the current package, SQLite state, `/zos/config`, `/zos/state`, and downloader partial files before switching runtimes; rollback requires the matching pre-upgrade database and partial-file backup.
+- Verify migration 022 before starting the downloader, then confirm `zos-downloader.service`, worker heartbeat freshness, `/api/downloads`, and `/api/system/health`.
 - Exercise a large segmented transfer, a checked transfer, service restart during transfer, forced exit around publication, disk reserve exhaustion, and NAS detach/reattach before release.
 - Monitor downloader/API journals for `database`, `storage`, `source_changed`, `disk_space`, and repeated retry-wait transitions.
 
@@ -62,7 +62,7 @@ None. Download creation, control, retry, deletion, settings, status, and health 
 
 - Suppressed findings: 0; dropped malformed findings: 0; failed reviewers: 0.
 - `make ci` passed on the final tree: typecheck, Astro check, rustfmt, clippy with `-D warnings`, ESLint, all Rust/Vitest/docs tests, release build, Web build, docs build, and internal-link validation.
-- `sigmaos-downloader`: 29 Rust tests passed, including controlled HTTP and persistence/recovery tests.
+- `zos-downloader`: 29 Rust tests passed, including controlled HTTP and persistence/recovery tests.
 - Focused API/database/Web tests: 22 passed; the schema migration suite passed 10 tests.
 - `cargo check` passed for `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`; `npm run version:check` and `git diff --check` passed.
 - Browser checks passed at 1440, 820, 560, 390, and 320 px; the host had no mounted storage pool, so the create dialog itself remained component-tested rather than exercised against a live pool.

@@ -3,7 +3,7 @@ import {
   runReadOnlyAgentTurn,
   type PhotostaffAgentToolService,
   type PiAgentRunner
-} from "@sigmaos/agent";
+} from "@zos/agent";
 import {
   appendEvent,
   claimNextJob,
@@ -25,13 +25,13 @@ import {
   queryPhotostaffAssets,
   saveAgentProviderSession,
   updateJobStatus,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { ModelProviderSettingsRecord, SigmaConfig } from "@sigmaos/shared";
+  type ZosDatabase
+} from "@zos/db";
+import type { ModelProviderSettingsRecord, ZosConfig } from "@zos/shared";
 
 export interface ProcessNextJobDependencies {
-  db: SigmaDatabase;
-  config: SigmaConfig;
+  db: ZosDatabase;
+  config: ZosConfig;
   agentRunner?: PiAgentRunner;
   allowLocalFallback?: boolean;
 }
@@ -76,7 +76,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
 
   try {
     const shouldUseLocalFallback =
-      allowLocalFallback === true || process.env.SIGMAOS_ENABLE_LOCAL_AGENT_FALLBACK === "1";
+      allowLocalFallback === true || process.env.ZOS_ENABLE_LOCAL_AGENT_FALLBACK === "1";
     const result = shouldUseLocalFallback
       ? await runReadOnlyAgentTurn({
           session,
@@ -202,7 +202,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
   return true;
 }
 
-export function photostaffAgentTools(db: SigmaDatabase, sessionRootId: string): { photostaffTools?: PhotostaffAgentToolService } {
+export function photostaffAgentTools(db: ZosDatabase, sessionRootId: string): { photostaffTools?: PhotostaffAgentToolService } {
   const settings = getPhotostaffLibrarySettings(db);
   if (!settings || settings.rootId !== sessionRootId) return {};
   return {
@@ -235,7 +235,7 @@ export function photostaffAgentTools(db: SigmaDatabase, sessionRootId: string): 
   };
 }
 
-function defaultModelProviderSettings(config: SigmaConfig): ModelProviderSettingsRecord {
+function defaultModelProviderSettings(config: ZosConfig): ModelProviderSettingsRecord {
   return {
     providerName: "openai",
     baseUrl: config.model.localEndpoint,

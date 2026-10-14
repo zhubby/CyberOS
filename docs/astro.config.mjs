@@ -6,15 +6,15 @@ import starlightLinksValidator from "starlight-links-validator";
 export default defineConfig({
   output: "static",
   base: "/docs",
-  site: globalThis.process?.env.SIGMAOS_DOCS_SITE ?? "http://127.0.0.1:3010",
+  site: globalThis.process?.env.ZOS_DOCS_SITE ?? "http://127.0.0.1:3010",
   integrations: [
     mermaid(),
     starlight({
-      title: "SigmaOS",
-      description: "SigmaOS Linux NAS appliance 的技术实现、架构与运维文档。",
+      title: "ZOS",
+      description: "ZOS Linux NAS appliance 的技术实现、架构与运维文档。",
       logo: {
-        src: "./src/assets/sigmaos-icon.svg",
-        alt: "SigmaOS"
+        src: "./src/assets/zos-icon.svg",
+        alt: "ZOS"
       },
       locales: {
         root: { label: "简体中文", lang: "zh-CN" }

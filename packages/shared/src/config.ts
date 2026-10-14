@@ -6,6 +6,7 @@ import {
   TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS
 } from "./termux-protocol.js";
 import { PHOTOSTAFF_BASE_MAP_RELEASE_URL } from "./photostaff-config.js";
+import { resolveZosPaths, type ZosPaths } from "./paths.js";
 import type {
   DlnaMediaType,
   NasRootConfig,
@@ -13,16 +14,14 @@ import type {
   ShareDefinitionConfig,
   ShareProtocolConfig,
   VodPlayerConfig,
-  SigmaConfig,
+  ZosConfig,
   TerminalConfig,
   VmConfig
 } from "./types.js";
 
-const MANAGED_DOCKER_APPS_PATH = "/srv/apps";
-
 interface TomlConfig {
   environment?: "development" | "production";
-  data_dir?: string;
+  root_dir?: string;
   api?: {
     host?: string;
     port?: number;
@@ -160,61 +159,75 @@ interface TomlConfig {
   };
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): SigmaConfig {
-  const configPath = env.SIGMAOS_CONFIG ?? "/etc/sigmaos/config.toml";
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): ZosConfig {
+  for (const removedName of ["ZOS_DATA_DIR", "ZOS_DATABASE_PATH"] as const) {
+    if (env[removedName] !== undefined) {
+      throw new Error(`${removedName} is no longer supported; configure ZOS_ROOT instead`);
+    }
+  }
+  const configPath = env.ZOS_CONFIG ?? "/zos/config/config.toml";
   const fileConfig = loadTomlConfig(configPath);
   const workspaceRoot = findWorkspaceRoot(cwd);
-  const dataDir = path.resolve(
-    workspaceRoot,
-    env.SIGMAOS_DATA_DIR ?? fileConfig.data_dir ?? ".sigmaos"
-  );
   const environment = loadEnvironment(env, fileConfig);
-  const nasRoots = loadNasRoots(env, fileConfig, workspaceRoot, environment);
+  const rootDir = resolveRootDir(env, fileConfig, workspaceRoot, environment);
+  const paths = resolveZosPaths(rootDir);
+  const dataDir = paths.stateDir;
+  const nasRoots = loadNasRoots(env, fileConfig, workspaceRoot, environment, paths);
   const backup = loadBackupConfig(env, fileConfig, workspaceRoot, dataDir, environment);
   const health = loadHealthConfig(env, fileConfig);
-  const apiHost = env.SIGMAOS_API_HOST ?? fileConfig.api?.host ?? "127.0.0.1";
-  validateConfig({ environment, apiHost, dataDir, nasRoots, backup });
+  const apiHost = env.ZOS_API_HOST ?? fileConfig.api?.host ?? "127.0.0.1";
+  const vm = loadVmConfig(env, fileConfig, workspaceRoot, paths);
+  const vodPlayer = loadVodPlayerConfig(env, fileConfig, paths);
+  validateConfig({ environment, apiHost, configPath, paths, dataDir, nasRoots, backup, vm, vodPlayer });
 
   return {
     environment,
+    rootDir: paths.rootDir,
+    paths,
+    stateDir: paths.stateDir,
+    dataRoot: paths.dataRoot,
+    appsRoot: paths.appsRoot,
+    isoRoot: paths.isoRoot,
+    vmRoot: paths.vmRoot,
+    backupRoot: paths.backupRoot,
     dataDir,
-    databasePath: env.SIGMAOS_DATABASE_PATH ?? path.join(dataDir, "sigmaos.sqlite"),
+    databasePath: paths.databasePath,
     api: {
       host: apiHost,
-      port: toPort(env.SIGMAOS_API_PORT, fileConfig.api?.port ?? 3010),
+      port: toPort(env.ZOS_API_PORT, fileConfig.api?.port ?? 3010),
       allowedOrigins: loadAllowedOrigins(env, fileConfig)
     },
     worker: {
-      pollMs: toPositiveInteger(env.SIGMAOS_WORKER_POLL_MS, fileConfig.worker?.poll_ms ?? 750)
+      pollMs: toPositiveInteger(env.ZOS_WORKER_POLL_MS, fileConfig.worker?.poll_ms ?? 750)
     },
     admin: {
-      displayName: env.SIGMAOS_ADMIN_DISPLAY_NAME ?? fileConfig.admin?.display_name ?? "SigmaOS Admin",
+      displayName: env.ZOS_ADMIN_DISPLAY_NAME ?? fileConfig.admin?.display_name ?? "ZOS Admin",
       authMode: "local-only"
     },
     model: {
-      provider: loadModelProvider(env.SIGMAOS_MODEL_PROVIDER, fileConfig.model?.provider),
-      piCommand: env.SIGMAOS_PI_COMMAND ?? fileConfig.model?.pi_command ?? "pi",
-      localEndpoint: env.SIGMAOS_LOCAL_ENDPOINT ?? fileConfig.model?.local_endpoint ?? null
+      provider: loadModelProvider(env.ZOS_MODEL_PROVIDER, fileConfig.model?.provider),
+      piCommand: env.ZOS_PI_COMMAND ?? fileConfig.model?.pi_command ?? "pi",
+      localEndpoint: env.ZOS_LOCAL_ENDPOINT ?? fileConfig.model?.local_endpoint ?? null
     },
     docker: {
-      enabled: toBoolean(env.SIGMAOS_DOCKER_ENABLED, fileConfig.docker?.enabled ?? false),
+      enabled: toBoolean(env.ZOS_DOCKER_ENABLED, fileConfig.docker?.enabled ?? false),
       socketPath:
-        env.SIGMAOS_DOCKER_SOCKET_PATH ?? fileConfig.docker?.socket_path ?? "/var/run/docker.sock",
+        env.ZOS_DOCKER_SOCKET_PATH ?? fileConfig.docker?.socket_path ?? "/var/run/docker.sock",
       composeCommand:
-        normalizeText(env.SIGMAOS_DOCKER_COMPOSE_COMMAND) ??
+        normalizeText(env.ZOS_DOCKER_COMPOSE_COMMAND) ??
         normalizeText(fileConfig.docker?.compose_command) ??
         "docker",
       operationTimeoutMs: toPositiveInteger(
-        env.SIGMAOS_DOCKER_OPERATION_TIMEOUT_MS,
+        env.ZOS_DOCKER_OPERATION_TIMEOUT_MS,
         fileConfig.docker?.operation_timeout_ms ?? 120_000
       ),
       consoleShells: loadDockerConsoleShells(env, fileConfig)
     },
-    vm: loadVmConfig(env, fileConfig, workspaceRoot),
+    vm,
     hostd: loadHostdConfig(env, fileConfig),
     shares: loadShareConfig(env, fileConfig),
     terminal: loadTerminalConfig(env, fileConfig),
-    vodPlayer: loadVodPlayerConfig(env, fileConfig),
+    vodPlayer,
     photostaff: {
       baseMapUrl: loadPhotostaffBaseMapUrl(env, fileConfig)
     },
@@ -225,7 +238,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
 }
 
 function loadPhotostaffBaseMapUrl(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string {
-  const value = normalizeText(env.SIGMAOS_PHOTOSTAFF_BASEMAP_URL) ??
+  const value = normalizeText(env.ZOS_PHOTOSTAFF_BASEMAP_URL) ??
     normalizeText(fileConfig.photostaff?.basemap_url) ??
     PHOTOSTAFF_BASE_MAP_RELEASE_URL;
   let url: URL;
@@ -240,29 +253,29 @@ function loadPhotostaffBaseMapUrl(env: NodeJS.ProcessEnv, fileConfig: TomlConfig
   return url.toString();
 }
 
-function loadHostdConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): SigmaConfig["hostd"] {
+function loadHostdConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ZosConfig["hostd"] {
   const socketPath =
-    normalizeText(env.SIGMAOS_HOSTD_SOCKET_PATH) ??
+    normalizeText(env.ZOS_HOSTD_SOCKET_PATH) ??
     normalizeText(fileConfig.hostd?.socket_path) ??
-    "/run/sigmaos/hostd.sock";
+    "/run/zos/hostd.sock";
   return {
-    socketPath: path.isAbsolute(socketPath) ? socketPath : "/run/sigmaos/hostd.sock"
+    socketPath: path.isAbsolute(socketPath) ? socketPath : "/run/zos/hostd.sock"
   };
 }
 
-function loadVmConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, cwd: string): VmConfig {
+function loadVmConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, cwd: string, paths: ZosPaths): VmConfig {
   const vm = fileConfig.vm;
-  const isoRoots = env.SIGMAOS_VM_ISO_ROOTS
-    ? env.SIGMAOS_VM_ISO_ROOTS.split(",").map((value) => path.resolve(cwd, value.trim())).filter(Boolean)
-    : (vm?.iso_roots ?? []).map((value) => path.resolve(cwd, value));
+  const isoRoots = env.ZOS_VM_ISO_ROOTS
+    ? env.ZOS_VM_ISO_ROOTS.split(",").map((value) => path.resolve(cwd, value.trim())).filter(Boolean)
+    : (vm?.iso_roots ?? [paths.isoRoot]).map((value) => path.resolve(cwd, value));
   return {
-    enabled: toBoolean(env.SIGMAOS_VM_ENABLED, vm?.enabled ?? true),
-    libvirtUri: env.SIGMAOS_VM_LIBVIRT_URI ?? vm?.libvirt_uri ?? "qemu:///system",
-    storagePath: path.resolve(cwd, env.SIGMAOS_VM_STORAGE_PATH ?? vm?.storage_path ?? ".sigmaos/vmstore"),
-    networkName: env.SIGMAOS_VM_NETWORK_NAME ?? vm?.network_name ?? "default",
+    enabled: toBoolean(env.ZOS_VM_ENABLED, vm?.enabled ?? true),
+    libvirtUri: env.ZOS_VM_LIBVIRT_URI ?? vm?.libvirt_uri ?? "qemu:///system",
+    storagePath: path.resolve(cwd, env.ZOS_VM_STORAGE_PATH ?? vm?.storage_path ?? paths.vmRoot),
+    networkName: env.ZOS_VM_NETWORK_NAME ?? vm?.network_name ?? "default",
     isoRoots,
     operationTimeoutMs: toPositiveInteger(
-      env.SIGMAOS_VM_OPERATION_TIMEOUT_MS,
+      env.ZOS_VM_OPERATION_TIMEOUT_MS,
       vm?.operation_timeout_ms ?? 120_000
     ),
     consoleMode: "serial"
@@ -282,10 +295,11 @@ function loadNasRoots(
   env: NodeJS.ProcessEnv,
   fileConfig: TomlConfig,
   cwd: string,
-  environment: "development" | "production"
+  environment: "development" | "production",
+  paths: ZosPaths
 ): NasRootConfig[] {
-  if (env.SIGMAOS_NAS_ROOTS) {
-    return env.SIGMAOS_NAS_ROOTS.split(",")
+  if (env.ZOS_NAS_ROOTS) {
+    return env.ZOS_NAS_ROOTS.split(",")
       .map((entry, index) => parseNasRootEnv(entry.trim(), index, cwd))
       .filter((root): root is NasRootConfig => root !== null)
       .map((root) => ({ ...root, mountPolicy: root.mountPolicy ?? (environment === "production" ? "required" : "optional"), expectedSource: root.expectedSource ?? null, expectedUuid: root.expectedUuid ?? null, expectedFstype: root.expectedFstype ?? null }));
@@ -295,7 +309,7 @@ function loadNasRoots(
     return fileConfig.nas_roots.map((root, index) => ({
       id: root.id ?? `root-${index + 1}`,
       name: root.name ?? root.id ?? `Root ${index + 1}`,
-      path: path.resolve(cwd, root.path ?? cwd),
+      path: path.resolve(cwd, root.path ?? paths.defaultDataRoot),
       mountPolicy: root.mount_policy ?? (environment === "production" ? "required" : "optional"),
       expectedSource: normalizeText(root.expected_source),
       expectedUuid: normalizeText(root.expected_uuid),
@@ -303,14 +317,14 @@ function loadNasRoots(
     }));
   }
 
-  const fallback = { id: "local", name: "System root", path: systemRootPath(cwd) };
+  const fallback = { id: "primary", name: "Primary data", path: paths.defaultDataRoot };
   return environment === "production"
     ? [{ ...fallback, mountPolicy: "required", expectedSource: null, expectedUuid: null, expectedFstype: null }]
     : [fallback];
 }
 
 function loadEnvironment(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): "development" | "production" {
-  const value = (env.SIGMAOS_ENVIRONMENT ?? fileConfig.environment ?? "development").trim().toLowerCase();
+  const value = (env.ZOS_ENVIRONMENT ?? fileConfig.environment ?? "development").trim().toLowerCase();
   return value === "production" ? "production" : "development";
 }
 
@@ -320,22 +334,22 @@ function loadBackupConfig(
   cwd: string,
   dataDir: string,
   environment: "development" | "production"
-): NonNullable<SigmaConfig["backup"]> {
+): NonNullable<ZosConfig["backup"]> {
   const source = fileConfig.backup;
-  const repositoryRaw = normalizeText(env.SIGMAOS_BACKUP_REPOSITORY ?? env.SIGMAOS_BACKUP_REPOSITORY_PATH ?? source?.repository_path ?? source?.repository);
-  const passwordFileRaw = normalizeText(env.SIGMAOS_BACKUP_PASSWORD_FILE ?? source?.password_file);
-  const stagingRaw = normalizeText(env.SIGMAOS_BACKUP_STAGING_PATH ?? source?.staging_path);
-  const enabled = toBoolean(env.SIGMAOS_BACKUP_ENABLED, source?.enabled ?? Boolean(repositoryRaw));
+  const repositoryRaw = normalizeText(env.ZOS_BACKUP_REPOSITORY ?? env.ZOS_BACKUP_REPOSITORY_PATH ?? source?.repository_path ?? source?.repository);
+  const passwordFileRaw = normalizeText(env.ZOS_BACKUP_PASSWORD_FILE ?? source?.password_file);
+  const stagingRaw = normalizeText(env.ZOS_BACKUP_STAGING_PATH ?? source?.staging_path);
+  const enabled = toBoolean(env.ZOS_BACKUP_ENABLED, source?.enabled ?? Boolean(repositoryRaw));
   const result = {
     enabled,
     repositoryPath: repositoryRaw ? path.resolve(cwd, repositoryRaw) : null,
     passwordFile: passwordFileRaw ? path.resolve(cwd, passwordFileRaw) : null,
     stagingPath: stagingRaw ? path.resolve(cwd, stagingRaw) : path.join(dataDir, "backup-staging"),
-    requireMount: toBoolean(env.SIGMAOS_BACKUP_REQUIRE_MOUNT, source?.require_mount ?? environment === "production"),
-    retryCount: toPositiveInteger(env.SIGMAOS_BACKUP_RETRY_COUNT, source?.retry_count ?? 2),
-    timeoutMs: toPositiveInteger(env.SIGMAOS_BACKUP_TIMEOUT_MS, source?.timeout_ms ?? 300_000),
-    keepDaily: toPositiveInteger(env.SIGMAOS_BACKUP_KEEP_DAILY, source?.keep_daily ?? 7),
-    keepWeekly: toPositiveInteger(env.SIGMAOS_BACKUP_KEEP_WEEKLY, source?.keep_weekly ?? 4)
+    requireMount: toBoolean(env.ZOS_BACKUP_REQUIRE_MOUNT, source?.require_mount ?? environment === "production"),
+    retryCount: toPositiveInteger(env.ZOS_BACKUP_RETRY_COUNT, source?.retry_count ?? 2),
+    timeoutMs: toPositiveInteger(env.ZOS_BACKUP_TIMEOUT_MS, source?.timeout_ms ?? 300_000),
+    keepDaily: toPositiveInteger(env.ZOS_BACKUP_KEEP_DAILY, source?.keep_daily ?? 7),
+    keepWeekly: toPositiveInteger(env.ZOS_BACKUP_KEEP_WEEKLY, source?.keep_weekly ?? 4)
   };
   if (result.enabled && result.passwordFile) {
     try {
@@ -347,40 +361,61 @@ function loadBackupConfig(
   return result;
 }
 
-function loadHealthConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): NonNullable<SigmaConfig["health"]> {
+function loadHealthConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): NonNullable<ZosConfig["health"]> {
   const source = fileConfig.health;
   return {
-    staleIndexWarningMs: toPositiveInteger(env.SIGMAOS_HEALTH_STALE_INDEX_WARNING_MS, source?.stale_index_warning_ms ?? 2 * 60 * 60 * 1000),
-    staleIndexCriticalMs: toPositiveInteger(env.SIGMAOS_HEALTH_STALE_INDEX_CRITICAL_MS, source?.stale_index_critical_ms ?? 6 * 60 * 60 * 1000),
-    stalledRunMs: toPositiveInteger(env.SIGMAOS_HEALTH_STALLED_RUN_MS, source?.stalled_run_ms ?? 15 * 60 * 1000),
-    consecutiveFailureThreshold: toPositiveInteger(env.SIGMAOS_HEALTH_CONSECUTIVE_FAILURE_THRESHOLD, source?.consecutive_failure_threshold ?? 2),
-    backupStaleMs: toPositiveInteger(env.SIGMAOS_HEALTH_BACKUP_STALE_MS, source?.backup_stale_ms ?? 26 * 60 * 60 * 1000)
+    staleIndexWarningMs: toPositiveInteger(env.ZOS_HEALTH_STALE_INDEX_WARNING_MS, source?.stale_index_warning_ms ?? 2 * 60 * 60 * 1000),
+    staleIndexCriticalMs: toPositiveInteger(env.ZOS_HEALTH_STALE_INDEX_CRITICAL_MS, source?.stale_index_critical_ms ?? 6 * 60 * 60 * 1000),
+    stalledRunMs: toPositiveInteger(env.ZOS_HEALTH_STALLED_RUN_MS, source?.stalled_run_ms ?? 15 * 60 * 1000),
+    consecutiveFailureThreshold: toPositiveInteger(env.ZOS_HEALTH_CONSECUTIVE_FAILURE_THRESHOLD, source?.consecutive_failure_threshold ?? 2),
+    backupStaleMs: toPositiveInteger(env.ZOS_HEALTH_BACKUP_STALE_MS, source?.backup_stale_ms ?? 26 * 60 * 60 * 1000)
   };
 }
 
 function validateConfig(input: {
   environment: "development" | "production";
   apiHost: string;
+  configPath: string;
+  paths: ZosPaths;
   dataDir: string;
   nasRoots: NasRootConfig[];
-  backup: NonNullable<SigmaConfig["backup"]>;
+  backup: NonNullable<ZosConfig["backup"]>;
+  vm: VmConfig;
+  vodPlayer: VodPlayerConfig;
 }): void {
   if (!isLoopbackHost(input.apiHost)) {
-    throw new Error("SigmaOS API must bind to a loopback host");
+    throw new Error("ZOS API must bind to a loopback host");
+  }
+  if (input.environment === "production" && input.paths.rootDir !== "/zos") {
+    throw new Error(`Production ZOS root must be /zos: ${input.paths.rootDir}`);
+  }
+  if (input.environment === "production" && path.resolve(input.configPath) !== path.join(input.paths.configDir, "config.toml")) {
+    throw new Error(`Production ZOS config must be ${path.join(input.paths.configDir, "config.toml")}`);
+  }
+  for (const root of input.nasRoots) {
+    if (isUnder(root.path, input.paths.appsRoot) || isUnder(input.paths.appsRoot, root.path)) {
+      throw new Error(`Production NAS roots must not overlap ${input.paths.appsRoot}`);
+    }
+    if (path.dirname(path.resolve(root.path)) !== input.paths.dataRoot || path.resolve(root.path) === input.paths.backupRoot) {
+      throw new Error(`NAS roots must be direct children of ${input.paths.dataRoot}: ${root.path}`);
+    }
+  }
+  if (!isUnder(input.vm.storagePath, input.paths.vmRoot)) {
+    throw new Error(`VM storage must be under ${input.paths.vmRoot}`);
+  }
+  for (const isoRoot of input.vm.isoRoots) {
+    if (!isUnder(isoRoot, input.paths.isoRoot)) {
+      throw new Error(`VM ISO roots must be under ${input.paths.isoRoot}`);
+    }
+  }
+  if (!isUnder(input.vodPlayer.statePath, input.paths.vodPlayerStateDir)) {
+    throw new Error(`VOD Player state must be under ${input.paths.vodPlayerStateDir}`);
   }
   if (input.environment !== "production") return;
-  for (const root of input.nasRoots) {
-    if (isUnder(root.path, MANAGED_DOCKER_APPS_PATH) || isUnder(MANAGED_DOCKER_APPS_PATH, root.path)) {
-      throw new Error(`Production NAS roots must not overlap ${MANAGED_DOCKER_APPS_PATH}`);
-    }
-    if (root.mountPolicy === "required" && !isUnder(root.path, "/srv")) {
-      throw new Error(`Production NAS root must be under /srv: ${root.path}`);
-    }
-  }
   const backup = input.backup;
   if (!backup.enabled) return;
-  if (!backup.repositoryPath || !isUnder(path.resolve("/srv"), backup.repositoryPath)) {
-    throw new Error("Production backup repository must be configured under /srv");
+  if (!backup.repositoryPath || !isUnder(backup.repositoryPath, input.paths.backupRoot)) {
+    throw new Error(`Production backup repository must be configured under ${input.paths.backupRoot}`);
   }
   if (isUnder(backup.repositoryPath, input.dataDir) || isUnder(input.dataDir, backup.repositoryPath)) {
     throw new Error("Backup repository must not overlap dataDir");
@@ -393,6 +428,12 @@ function validateConfig(input: {
   if (isUnder(backup.repositoryPath, backup.stagingPath) || isUnder(backup.stagingPath, backup.repositoryPath)) {
     throw new Error("Backup repository and staging paths must not overlap");
   }
+  if (!isUnder(backup.stagingPath, input.paths.stateDir)) {
+    throw new Error(`Backup staging must be under ${input.paths.stateDir}`);
+  }
+  if (backup.passwordFile && !isUnder(backup.passwordFile, input.paths.configDir)) {
+    throw new Error(`Backup password file must be under ${input.paths.configDir}`);
+  }
 }
 
 function isUnder(candidate: string, parent: string): boolean {
@@ -401,14 +442,35 @@ function isUnder(candidate: string, parent: string): boolean {
   return child === base || child.startsWith(`${base}${path.sep}`);
 }
 
+function resolveRootDir(
+  env: NodeJS.ProcessEnv,
+  fileConfig: TomlConfig,
+  workspaceRoot: string,
+  environment: "development" | "production"
+): string {
+  const configured = normalizeText(env.ZOS_ROOT) ?? normalizeText(fileConfig.root_dir);
+  const root = configured
+    ? path.resolve(workspaceRoot, configured)
+    : environment === "production"
+      ? "/zos"
+      : path.resolve(workspaceRoot, ".zos", "dev-root");
+  if (environment === "production" && root !== "/zos") {
+    throw new Error(`Production ZOS root must be /zos: ${root}`);
+  }
+  if (root === path.parse(root).root) {
+    throw new Error(`ZOS root cannot be the filesystem root: ${root}`);
+  }
+  return root;
+}
+
 function isLoopbackHost(host: string): boolean {
   const normalized = host.trim().toLowerCase();
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
 }
 
 function loadDockerConsoleShells(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string[] {
-  const rawShells = env.SIGMAOS_DOCKER_CONSOLE_SHELLS
-    ? env.SIGMAOS_DOCKER_CONSOLE_SHELLS.split(",")
+  const rawShells = env.ZOS_DOCKER_CONSOLE_SHELLS
+    ? env.ZOS_DOCKER_CONSOLE_SHELLS.split(",")
     : fileConfig.docker?.console_shells;
   const shells = (rawShells ?? [])
     .map((shell) => normalizeText(shell))
@@ -419,12 +481,12 @@ function loadDockerConsoleShells(env: NodeJS.ProcessEnv, fileConfig: TomlConfig)
 function loadShareConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ShareConfig {
   const shares = fileConfig.shares;
   return {
-    enabled: toBoolean(env.SIGMAOS_SHARES_ENABLED, shares?.enabled ?? false),
+    enabled: toBoolean(env.ZOS_SHARES_ENABLED, shares?.enabled ?? false),
     account: {
       username:
-        normalizeText(env.SIGMAOS_SHARE_ACCOUNT_USERNAME) ??
+        normalizeText(env.ZOS_SHARE_ACCOUNT_USERNAME) ??
         normalizeText(shares?.account_username) ??
-        "sigma-share",
+        "zos-share",
       password: null
     },
     shares: (shares?.items ?? []).map(normalizeShareItem).filter((item): item is ShareDefinitionConfig => item !== null)
@@ -433,44 +495,40 @@ function loadShareConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ShareC
 
 function loadTerminalConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): TerminalConfig {
   return {
-    user: normalizeText(env.SIGMAOS_TERMUX_USER) ?? normalizeText(fileConfig.terminal?.user),
+    user: normalizeText(env.ZOS_TERMUX_USER) ?? normalizeText(fileConfig.terminal?.user),
     termuxSocketPath:
-      normalizeText(env.SIGMAOS_TERMUX_SOCKET_PATH) ??
+      normalizeText(env.ZOS_TERMUX_SOCKET_PATH) ??
       normalizeText(fileConfig.terminal?.termux_socket_path) ??
-      "/run/sigmaos/termux.sock",
+      "/run/zos/termux.sock",
     sessionIdleTimeoutMs: toPositiveInteger(
-      env.SIGMAOS_TERMUX_SESSION_IDLE_TIMEOUT_MS,
+      env.ZOS_TERMUX_SESSION_IDLE_TIMEOUT_MS,
       fileConfig.terminal?.session_idle_timeout_ms ?? TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS
     ),
     connectTimeoutMs: toPositiveInteger(
-      env.SIGMAOS_TERMUX_CONNECT_TIMEOUT_MS,
+      env.ZOS_TERMUX_CONNECT_TIMEOUT_MS,
       fileConfig.terminal?.connect_timeout_ms ?? TERMINAL_SESSION_DEFAULT_CONNECT_TIMEOUT_MS
     ),
     maxSessions: toPositiveInteger(
-      env.SIGMAOS_TERMUX_MAX_SESSIONS,
+      env.ZOS_TERMUX_MAX_SESSIONS,
       fileConfig.terminal?.max_sessions ?? 32
     )
   };
 }
 
-function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): VodPlayerConfig {
-  const legacyEnvironment = Object.keys(env).find((name) => name.startsWith("SIGMAOS_PLAYER_") || name === "SIGMAOS_ENABLE_PLAYER");
-  if (legacyEnvironment) {
-    throw new Error(`${legacyEnvironment} is no longer supported; use SIGMAOS_VOD_PLAYER_*`);
-  }
+function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, paths: ZosPaths): VodPlayerConfig {
   const player = fileConfig.vod_player;
-  const videoOutput = env.SIGMAOS_VOD_PLAYER_VIDEO_OUTPUT ?? player?.video_output ?? "drm";
-  const audioOutput = env.SIGMAOS_VOD_PLAYER_AUDIO_OUTPUT ?? player?.audio_output ?? "alsa";
-  const hwdec = env.SIGMAOS_VOD_PLAYER_HWDEC ?? player?.hwdec ?? "auto-safe";
+  const videoOutput = env.ZOS_VOD_PLAYER_VIDEO_OUTPUT ?? player?.video_output ?? "drm";
+  const audioOutput = env.ZOS_VOD_PLAYER_AUDIO_OUTPUT ?? player?.audio_output ?? "alsa";
+  const hwdec = env.ZOS_VOD_PLAYER_HWDEC ?? player?.hwdec ?? "auto-safe";
   const socketPath =
-    normalizeText(env.SIGMAOS_VOD_PLAYER_SOCKET_PATH) ??
+    normalizeText(env.ZOS_VOD_PLAYER_SOCKET_PATH) ??
     normalizeText(player?.socket_path) ??
-    "/run/sigmaos/vod-player.sock";
+    "/run/zos/vod-player.sock";
   const statePath =
-    normalizeText(env.SIGMAOS_VOD_PLAYER_STATE_PATH) ??
+    normalizeText(env.ZOS_VOD_PLAYER_STATE_PATH) ??
     normalizeText(player?.state_path) ??
-    "/var/lib/sigmaos-vod-player/session.json";
-  const playerUser = normalizeText(env.SIGMAOS_VOD_PLAYER_USER) ?? normalizeText(player?.user) ?? "sigmaos";
+    path.join(paths.vodPlayerStateDir, "session.json");
+  const playerUser = normalizeText(env.ZOS_VOD_PLAYER_USER) ?? normalizeText(player?.user) ?? "zos";
   if (!path.isAbsolute(socketPath) || !path.isAbsolute(statePath)) {
     throw new Error("VOD Player socket_path and state_path must be absolute");
   }
@@ -484,12 +542,12 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): Vo
     throw new Error("VOD Player output configuration is invalid");
   }
   const retryBaseDelayMs = strictPositiveInteger(
-    env.SIGMAOS_VOD_PLAYER_RETRY_BASE_DELAY_MS ?? player?.retry_base_delay_ms,
+    env.ZOS_VOD_PLAYER_RETRY_BASE_DELAY_MS ?? player?.retry_base_delay_ms,
     2_000,
     "retry_base_delay_ms"
   );
   const retryMaxDelayMs = strictPositiveInteger(
-    env.SIGMAOS_VOD_PLAYER_RETRY_MAX_DELAY_MS ?? player?.retry_max_delay_ms,
+    env.ZOS_VOD_PLAYER_RETRY_MAX_DELAY_MS ?? player?.retry_max_delay_ms,
     60_000,
     "retry_max_delay_ms"
   );
@@ -498,24 +556,24 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): Vo
   }
   return {
     enabled: strictBoolean(
-      env.SIGMAOS_VOD_PLAYER_ENABLED ?? player?.enabled,
+      env.ZOS_VOD_PLAYER_ENABLED ?? player?.enabled,
       false,
       "enabled"
     ),
     socketPath,
     statePath,
     commandTimeoutMs: strictPositiveInteger(
-      env.SIGMAOS_VOD_PLAYER_COMMAND_TIMEOUT_MS ?? player?.command_timeout_ms,
+      env.ZOS_VOD_PLAYER_COMMAND_TIMEOUT_MS ?? player?.command_timeout_ms,
       5_000,
       "command_timeout_ms"
     ),
     startupTimeoutMs: strictPositiveInteger(
-      env.SIGMAOS_VOD_PLAYER_STARTUP_TIMEOUT_MS ?? player?.startup_timeout_ms,
+      env.ZOS_VOD_PLAYER_STARTUP_TIMEOUT_MS ?? player?.startup_timeout_ms,
       15_000,
       "startup_timeout_ms"
     ),
     checkpointIntervalMs: strictPositiveInteger(
-      env.SIGMAOS_VOD_PLAYER_CHECKPOINT_INTERVAL_MS ?? player?.checkpoint_interval_ms,
+      env.ZOS_VOD_PLAYER_CHECKPOINT_INTERVAL_MS ?? player?.checkpoint_interval_ms,
       5_000,
       "checkpoint_interval_ms"
     ),
@@ -523,12 +581,12 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): Vo
     retryMaxDelayMs,
     videoOutput: "drm",
     drmConnector:
-      normalizeText(env.SIGMAOS_VOD_PLAYER_DRM_CONNECTOR) ??
+      normalizeText(env.ZOS_VOD_PLAYER_DRM_CONNECTOR) ??
       normalizeText(player?.drm_connector) ??
       null,
     audioOutput: "alsa",
     audioDevice:
-      normalizeText(env.SIGMAOS_VOD_PLAYER_AUDIO_DEVICE) ??
+      normalizeText(env.ZOS_VOD_PLAYER_AUDIO_DEVICE) ??
       normalizeText(player?.audio_device) ??
       null,
     hwdec: hwdec as VodPlayerConfig["hwdec"],
@@ -634,10 +692,6 @@ function idPath(value: string): string {
     .replace(/^-|-$/gu, "") || "share";
 }
 
-function systemRootPath(cwd: string): string {
-  return path.parse(path.resolve(cwd)).root || path.sep;
-}
-
 function parseNasRootEnv(entry: string, index: number, cwd: string): NasRootConfig | null {
   return parseNamedPathEnv(entry, index, cwd, "root");
 }
@@ -685,8 +739,8 @@ function loadModelProvider(
 }
 
 function loadAllowedOrigins(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string[] {
-  if (env.SIGMAOS_ALLOWED_ORIGINS) {
-    return env.SIGMAOS_ALLOWED_ORIGINS.split(",")
+  if (env.ZOS_ALLOWED_ORIGINS) {
+    return env.ZOS_ALLOWED_ORIGINS.split(",")
       .map((origin) => origin.trim())
       .filter(Boolean);
   }

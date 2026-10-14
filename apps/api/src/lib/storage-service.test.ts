@@ -1,4 +1,4 @@
-import type { SystemStorageSummary } from "@sigmaos/shared";
+import type { SystemStorageSummary } from "@zos/shared";
 import { describe, expect, it } from "vitest";
 import { buildStoragePoolDeleteProposal, buildStoragePoolProposal } from "./storage-service.js";
 
@@ -14,7 +14,7 @@ describe("storage service", () => {
       name: "archive",
       raidLevel: "1",
       filesystem: "ext4",
-      mountpoint: "/srv/nas/archive",
+      mountpoint: "/zos/data/archive",
       risk: "high"
     });
   });
@@ -43,7 +43,7 @@ describe("storage service", () => {
       raidPath: "/dev/md/archive",
       raidLevel: "raid1",
       status: "ready",
-      mountpoint: "/srv/nas/archive",
+      mountpoint: "/zos/data/archive",
       filesystem: "ext4",
       totalBytes: 200,
       usedBytes: 20,
@@ -59,7 +59,7 @@ describe("storage service", () => {
       action: "delete_pool",
       name: "archive",
       mdDevice: "/dev/md/archive",
-      mountpoint: "/srv/nas/archive"
+      mountpoint: "/zos/data/archive"
     });
   });
 
@@ -73,6 +73,13 @@ describe("storage service", () => {
     expect(() =>
       buildStoragePoolProposal({ name: "bad", raidLevel: "1", devices: ["/dev/sda", "/dev/sde"] }, summary())
     ).toThrow("already belongs");
+  });
+
+  it("reserves the backup mount for the backup target", () => {
+    expect(() => buildStoragePoolProposal(
+      { name: "backup", raidLevel: "1", devices: ["/dev/sda", "/dev/sdb"] },
+      summary()
+    )).toThrow("backup pool name is reserved");
   });
 });
 
@@ -138,7 +145,7 @@ function summary(): SystemStorageSummary {
     metrics: { pools: 0, arrays: 0, disks: 5, totalBytes: 500, usedBytes: null, availableBytes: null, smartPassed: 0, smartFailed: 0, smartUnknown: 5 },
     pools: [],
     arrays: [{ id: "/dev/md0", name: "old", path: "/dev/md0", level: "raid1", state: "clean", uuid: "old", sizeBytes: 100, activeDevices: 2, totalDevices: 2, failedDevices: 0, spareDevices: 0, memberDevices: ["/dev/sde"] }],
-    disks: [disk("/dev/sda"), disk("/dev/sdb"), disk("/dev/sdc", ["/srv/nas"]), disk("/dev/sdd", [], "ext4"), disk("/dev/sde")],
+    disks: [disk("/dev/sda"), disk("/dev/sdb"), disk("/dev/sdc", ["/zos/data/primary"]), disk("/dev/sdd", [], "ext4"), disk("/dev/sde")],
     mounts: [],
     issues: []
   };

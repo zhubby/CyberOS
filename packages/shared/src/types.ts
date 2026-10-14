@@ -1,5 +1,6 @@
 import type { PhotostaffMediaKind } from "./photostaff-config.js";
 import type { VodPlayerErrorCode, VodPlayerState } from "./vod-player-protocol.js";
+import type { ZosPaths } from "./paths.js";
 
 export type JobStatus =
   | "queued"
@@ -1028,8 +1029,16 @@ export interface PublicShareSettings extends Omit<ShareSettingsRecord, "account"
   account: PublicShareAccountConfig;
 }
 
-export interface SigmaConfig {
+export interface ZosConfig {
   environment?: DeploymentMode;
+  rootDir?: string;
+  paths?: ZosPaths;
+  stateDir?: string;
+  dataRoot?: string;
+  appsRoot?: string;
+  isoRoot?: string;
+  vmRoot?: string;
+  backupRoot?: string;
   dataDir: string;
   databasePath: string;
   api: {
@@ -1163,7 +1172,14 @@ export interface PublicSystemInfo {
     execPath: string;
     memory: PublicSystemInfoProcessMemory;
   };
-  sigma: {
+  zos: {
+    rootDir: string;
+    stateDir: string;
+    dataRoot: string;
+    appsRoot: string;
+    isoRoot: string;
+    vmRoot: string;
+    backupRoot: string;
     dataDir: string;
     databasePath: string;
     apiHost: string;

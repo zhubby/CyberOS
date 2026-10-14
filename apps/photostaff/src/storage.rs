@@ -420,19 +420,19 @@ mod tests {
 
     #[test]
     fn parses_mountinfo_escapes() {
-        assert_eq!(unescape_mount_field("/srv/My\\040NAS"), "/srv/My NAS");
+        assert_eq!(unescape_mount_field("/mnt/My\\040NAS"), "/mnt/My NAS");
     }
 
     #[test]
     fn selects_the_pool_mount_inside_the_configured_root_and_tracks_mount_id() {
         let mountinfo = concat!(
             "35 25 0:31 / /other rw - ext4 /dev/md0 rw\n",
-            "36 25 0:31 / /srv/My\\040NAS rw - ext4 /dev/md0 rw\n",
+            "36 25 0:31 / /mnt/My\\040NAS rw - ext4 /dev/md0 rw\n",
         );
         assert_eq!(
-            find_mountpoint_in(mountinfo, "/dev/md0", Path::new("/srv")),
+            find_mountpoint_in(mountinfo, "/dev/md0", Path::new("/mnt")),
             Some(MountLocation {
-                path: PathBuf::from("/srv/My NAS"),
+                path: PathBuf::from("/mnt/My NAS"),
                 mount_id: Some(36),
             })
         );

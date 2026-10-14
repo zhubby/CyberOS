@@ -31,7 +31,7 @@ describe("SettingsIndexerPage", () => {
         queue: { queued: 2, running: 1, retrying: 0, failed: 0, oldestQueuedAt: null, stalled: false },
         rebuild: { status: "rebuilding", copied: 75, total: 100, rootsReady: 0, rootsTotal: 1 }
       },
-      roots: [{ id: "nas", name: "Primary NAS", path: "/srv/nas", homePath: null }],
+      roots: [{ id: "nas", name: "Primary NAS", path: "/zos/data/primary", homePath: null }],
       loading: false,
       locale: "en",
       onSettingsChange: vi.fn(),
@@ -42,7 +42,7 @@ describe("SettingsIndexerPage", () => {
     expect(html).toContain("Scan concurrency");
     expect(html).toContain("Extraction concurrency");
     expect(html).toContain("Primary NAS");
-    expect(html).toContain("/srv/nas");
+    expect(html).toContain("/zos/data/primary");
     expect(html).toContain("OCR");
     expect(html).toContain("Rebuild");
     expect(html).toContain("2 queued · 1 running · 0 failed");

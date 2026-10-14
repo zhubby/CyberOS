@@ -2,7 +2,7 @@
 
 **Scope:** `f2033b0e58eb27f09d07b2be89d6737d21339b2c` to the current working tree (81 tracked changes and 37 pre-review untracked files). The 35 untracked implementation files for the Rust crate, IPC client, systemd unit, Cargo workspace, and toolchain were explicitly included; the other two files are the preserved earlier review artifact.
 
-**Intent:** Completely replace the privileged Node `share-helper` runtime with the Rust `sigmaos-hostd` daemon, rename its service, socket, environment, and configuration surfaces, preserve host-management behavior, and provide production-grade validation, rollback, packaging, upgrade migration, and test coverage.
+**Intent:** Completely replace the privileged Node `share-helper` runtime with the Rust `zos-hostd` daemon, rename its service, socket, environment, and configuration surfaces, preserve host-management behavior, and provide production-grade validation, rollback, packaging, upgrade migration, and test coverage.
 
 **Mode:** autofix; sequential main-thread fallback required by repository instructions. This final pass found no new safe-auto issues, so it made no code changes.
 
@@ -40,9 +40,9 @@ None. Hostd is an internal privilege boundary; users and agents continue to reac
 
 ### Deployment Notes
 
-- Pre-deploy: back up the current package, `/etc/sigmaos`, `/var/lib/sigmaos`, and SQLite state; keep all writer services and timers stopped during the upgrade.
-- Upgrade: install the new package, verify `config.toml.pre-hostd.bak`, confirm `[hostd].socket_path`, and confirm `sigmaos-share-helper.service` is disabled while `sigmaos-hostd.service` is enabled.
-- Healthy signals: `sigmaos-hostd.service` and `sigmaos-api.service` stay active, `/health`, `/api/roots/readiness`, and `/api/system/health` succeed, and representative approved share, storage, Docker, and NetworkManager operations complete without rollback errors.
+- Pre-deploy: back up the current package, `/zos/config`, `/zos/state`, and SQLite state; keep all writer services and timers stopped during the upgrade.
+- Upgrade: install the new package, verify `config.toml.pre-hostd.bak`, confirm `[hostd].socket_path`, and confirm `zos-share-helper.service` is disabled while `zos-hostd.service` is enabled.
+- Healthy signals: `zos-hostd.service` and `zos-api.service` stay active, `/health`, `/api/roots/readiness`, and `/api/system/health` succeed, and representative approved share, storage, Docker, and NetworkManager operations complete without rollback errors.
 - Failure signals: hostd restart loops, peer-credential or socket permission errors, migration failures, `restart_failed`, `operation_failed`, or `rollback: failed`. Stop rollout and restore the matching package, configuration, and state backup together.
 - Validation window and owner: the appliance operator should monitor hostd/API journals and service restart counters through the upgrade maintenance window and the first scheduled job cycle.
 
@@ -53,7 +53,7 @@ None. Hostd is an internal privilege boundary; users and agents continue to reac
 - The six focused `HostdClient` tests passed independently.
 - `npm run version:check` passed at `0.6.0`; `git diff --check` and `cargo fmt --all --check` passed.
 - The macOS review host does not provide `dpkg-buildpackage` or `systemd-analyze`, so a real Debian package install, systemd sandbox validation, and privileged mdadm/mount/NetworkManager/Docker acceptance remain Linux release gates.
-- Architecture risk: API, worker, and other services share the `sigmaos` UID accepted by hostd. A compromised peer process could invoke the hostd protocol directly; separating service identities or introducing a capability-scoped broker requires an explicit architecture decision.
+- Architecture risk: API, worker, and other services share the `zos` UID accepted by hostd. A compromised peer process could invoke the hostd protocol directly; separating service identities or introducing a capability-scoped broker requires an explicit architecture decision.
 - Cancellation risk: an API timeout closes the client socket but does not cancel a multi-command hostd operation already in progress. A cancellable operation protocol would be a separate contract change.
 - Installer supply-chain risk: the host installer downloads and executes the configured rustup bootstrap script over HTTPS without pinning its checksum.
 - Expected non-blocking output remains limited to the repository's existing React i18next test notice and Vite large-chunk warning.

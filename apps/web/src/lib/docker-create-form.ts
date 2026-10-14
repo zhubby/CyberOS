@@ -1,4 +1,4 @@
-import type { DockerCreateInput } from "@sigmaos/shared";
+import type { DockerCreateInput } from "@zos/shared";
 
 export type DockerCreateKind = "container" | "volume" | "network";
 

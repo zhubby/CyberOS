@@ -11,24 +11,24 @@ import {
   listEvents,
   listFileOperations,
   listPendingApprovals,
-  openSigmaDb,
+  openZosDb,
   recoverInterruptedFileBatches,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { SigmaConfig } from "@sigmaos/shared";
+  type ZosDatabase
+} from "@zos/db";
+import type { ZosConfig } from "@zos/shared";
 import type { SystemCommandRunner } from "./system-management.js";
 import { FileBatchRunner, processNextFileBatchItem } from "./file-batch-runner.js";
 
 let tempDir: string;
 let rootDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 let sessionId: string;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-file-runner-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-file-runner-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
   sessionId = createSession(db, { rootId: "local" }).id;
 });
@@ -165,10 +165,10 @@ function storageCommandRunner(): SystemCommandRunner {
   };
 }
 
-function testConfig(): SigmaConfig {
+function testConfig(): ZosConfig {
   return {
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "sigmaos.sqlite"),
+    databasePath: path.join(tempDir, "zos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
@@ -180,8 +180,8 @@ function testConfig(): SigmaConfig {
       operationTimeoutMs: 120_000,
       consoleShells: ["/bin/sh"]
     },
-    hostd: { socketPath: "/run/sigmaos/hostd.sock" },
-    shares: { enabled: false, account: { username: "sigma-share", password: null }, shares: [] },
+    hostd: { socketPath: "/run/zos/hostd.sock" },
+    shares: { enabled: false, account: { username: "zos-share", password: null }, shares: [] },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
     vodPlayer: {
       enabled: false,
@@ -197,7 +197,7 @@ function testConfig(): SigmaConfig {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "sigmaos"
+      user: "zos"
     },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };

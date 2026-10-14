@@ -20,7 +20,7 @@ import {
   PhotoMapDownloadPanel,
   photoViewportBounds
 } from "./PhotoMapView.js";
-import { PHOTOSTAFF_UPLOAD_EXTENSIONS } from "@sigmaos/shared/photostaff-config";
+import { PHOTOSTAFF_UPLOAD_EXTENSIONS } from "@zos/shared/photostaff-config";
 
 beforeAll(async () => {
   await initI18n();

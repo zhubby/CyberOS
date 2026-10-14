@@ -21,7 +21,7 @@ import type {
   HostdNetworkMutationRequest,
   HostdRequest,
   HostdResult
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import type { SystemCommandRunner } from "./system-management.js";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 

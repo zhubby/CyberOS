@@ -1,10 +1,10 @@
-import type { ApprovalStatus, PendingApprovalRecord } from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+import type { ApprovalStatus, PendingApprovalRecord } from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { mapApproval } from "./operation-mappers.js";
 import type { DbApprovalRow } from "./repository-rows.js";
 import { updateOperationNotificationForJob } from "./operation-notifications.js";
 
-export function listPendingApprovals(db: SigmaDatabase): PendingApprovalRecord[] {
+export function listPendingApprovals(db: ZosDatabase): PendingApprovalRecord[] {
   const rows = db
     .prepare(`
       SELECT a.id, a.job_id, a.kind, a.status, a.proposal_json, a.created_at, a.updated_at, j.session_id
@@ -18,7 +18,7 @@ export function listPendingApprovals(db: SigmaDatabase): PendingApprovalRecord[]
 }
 
 export function updateApprovalStatus(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   approvalId: string,
   status: ApprovalStatus,
   allowedFrom?: ApprovalStatus[]

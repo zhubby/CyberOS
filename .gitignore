@@ -3,7 +3,7 @@ dist/
 .vite/
 .astro/
 coverage/
-.sigmaos/
+.*os/
 *.log
 test-results/
 playwright-report/

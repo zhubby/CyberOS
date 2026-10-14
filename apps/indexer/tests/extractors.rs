@@ -1,8 +1,8 @@
 use std::io::Write;
 
-use sigmaos_indexer::db::IndexerSettings;
-use sigmaos_indexer::extractor::{ExtractionSource, extract_file};
 use zip::write::SimpleFileOptions;
+use zos_indexer::db::IndexerSettings;
+use zos_indexer::extractor::{ExtractionSource, extract_file};
 
 #[tokio::test]
 async fn extracts_plain_text_with_a_bounded_body() {

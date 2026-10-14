@@ -32,20 +32,20 @@ describe("terminal session storage", () => {
   });
 
   it("ignores blank session ids", () => {
-    storage.setItem("sigmaos:terminal-session:v2:local", "  ");
+    storage.setItem("zos:terminal-session:v2:local", "  ");
 
     expect(readStoredTerminalSessionId("local", storage)).toBeNull();
   });
 
   it("reads sessions saved by the previous storage key", () => {
-    storage.setItem("sigmaos:terminal-session:local", "legacy-session");
+    storage.setItem("zos:terminal-session:local", "legacy-session");
 
     expect(readStoredTerminalSessionId("local", storage)).toBe("legacy-session");
   });
 
   it("clears both current and legacy storage keys", () => {
-    storage.setItem("sigmaos:terminal-session:v2:local", "current-session");
-    storage.setItem("sigmaos:terminal-session:local", "legacy-session");
+    storage.setItem("zos:terminal-session:v2:local", "current-session");
+    storage.setItem("zos:terminal-session:local", "legacy-session");
 
     clearStoredTerminalSessionId("local", storage);
 

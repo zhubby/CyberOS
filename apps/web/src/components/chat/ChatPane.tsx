@@ -347,7 +347,7 @@ export function ChatPane({
     <section className={`chat-pane ${active ? "is-mobile-active" : ""}`} aria-label={t("chat.agents")}>
       <aside className="agent-list" aria-label={t("chat.agentSessions")}>
         <div className="brand">
-          <img className="agent-brand-logo" src="/sigmaos-icon.svg" alt="" aria-hidden="true" />
+          <img className="agent-brand-logo" src="/zos-icon.svg" alt="" aria-hidden="true" />
           <h1 className="visually-hidden">{t("common.appName")}</h1>
         </div>
 
@@ -441,7 +441,7 @@ export function ChatPane({
                   </div>
                   <div>
                     <header>
-                      <strong>{item.role === "assistant" ? t("chat.sigmaAgent") : t("chat.you")}</strong>
+                      <strong>{item.role === "assistant" ? t("chat.zosAgent") : t("chat.you")}</strong>
                       <time>{formatTime(item.createdAt, locale)}</time>
                     </header>
                     <ChatMessageContent
@@ -460,7 +460,7 @@ export function ChatPane({
                   </div>
                   <div>
                     <header>
-                      <strong>{t("chat.sigmaAgent")}</strong>
+                      <strong>{t("chat.zosAgent")}</strong>
                       <span className="message-meta">{t("chat.approvals")}</span>
                     </header>
                     {renderApprovalCard(approval)}

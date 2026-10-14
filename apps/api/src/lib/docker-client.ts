@@ -13,7 +13,7 @@ import type {
   DockerResourceCapabilities,
   DockerVolumeDetails,
   DockerVolumeSummary
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 export interface DockerEngineInfo {
   version: string | null;
@@ -1129,7 +1129,7 @@ function negotiateApiVersion(version: DockerVersionResponse): string | null {
     }
     if (compareApiVersions(negotiated, minimumVersion) < 0) {
       throw new DockerRequestError(
-        `Docker daemon requires API version ${minimumVersion}, but SigmaOS supports up to ${MAX_DOCKER_API_VERSION}`
+        `Docker daemon requires API version ${minimumVersion}, but ZOS supports up to ${MAX_DOCKER_API_VERSION}`
       );
     }
   }

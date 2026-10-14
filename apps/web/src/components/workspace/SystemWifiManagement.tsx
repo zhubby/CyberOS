@@ -332,7 +332,7 @@ export function SystemWifiManagement({
     if (!selectedDevice) return;
     setHotspotDialog({
       existing: hotspot,
-      ssid: hotspot?.ssid ?? "SigmaOS",
+      ssid: hotspot?.ssid ?? "ZOS",
       password: "",
       band: hotspot?.band ?? "auto",
       channel: hotspot?.channel ? String(hotspot.channel) : "",

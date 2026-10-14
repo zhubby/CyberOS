@@ -1,9 +1,9 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: sigmaos
-Source: https://sigmaos.local
+Upstream-Name: zos
+Source: https://zos.local
 
 Files: *
-Copyright: 2026 SigmaOS Maintainers
+Copyright: 2026 ZOS Maintainers
 License: MIT
 
 License: MIT

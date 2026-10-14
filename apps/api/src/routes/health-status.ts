@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { SystemHealthSummary } from "@sigmaos/shared";
-import { evaluateSystemHealth } from "@sigmaos/system-health";
+import type { SystemHealthSummary } from "@zos/shared";
+import { evaluateSystemHealth } from "@zos/system-health";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerHealthStatusRoutes(server: FastifyInstance, context: ApiRouteContext): void {

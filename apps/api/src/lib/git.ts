@@ -7,8 +7,8 @@ import {
   toRootRelative,
   type FileEntry,
   type SafePathResult
-} from "@sigmaos/nas-tools";
-import type { GitDirectoryStatus, GitFileStatus, GitStatusSummary } from "@sigmaos/shared";
+} from "@zos/nas-tools";
+import type { GitDirectoryStatus, GitFileStatus, GitStatusSummary } from "@zos/shared";
 
 const GIT_TIMEOUT_MS = 2_000;
 const MAX_GIT_OUTPUT_BYTES = 2 * 1024 * 1024;

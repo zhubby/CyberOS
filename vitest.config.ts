@@ -11,13 +11,13 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@sigmaos/agent": new URL("packages/agent/src/index.ts", `file://${root}`).pathname,
-      "@sigmaos/db": new URL("packages/db/src/index.ts", `file://${root}`).pathname,
-      "@sigmaos/nas-tools": new URL("packages/nas-tools/src/index.ts", `file://${root}`).pathname,
-      "@sigmaos/shared/docker-images": new URL("packages/shared/src/docker-images.ts", `file://${root}`).pathname,
-      "@sigmaos/shared/docker-resources": new URL("packages/shared/src/docker-resources.ts", `file://${root}`).pathname,
-      "@sigmaos/shared/photostaff-config": new URL("packages/shared/src/photostaff-config.ts", `file://${root}`).pathname,
-      "@sigmaos/shared": new URL("packages/shared/src/index.ts", `file://${root}`).pathname
+      "@zos/agent": new URL("packages/agent/src/index.ts", `file://${root}`).pathname,
+      "@zos/db": new URL("packages/db/src/index.ts", `file://${root}`).pathname,
+      "@zos/nas-tools": new URL("packages/nas-tools/src/index.ts", `file://${root}`).pathname,
+      "@zos/shared/docker-images": new URL("packages/shared/src/docker-images.ts", `file://${root}`).pathname,
+      "@zos/shared/docker-resources": new URL("packages/shared/src/docker-resources.ts", `file://${root}`).pathname,
+      "@zos/shared/photostaff-config": new URL("packages/shared/src/photostaff-config.ts", `file://${root}`).pathname,
+      "@zos/shared": new URL("packages/shared/src/index.ts", `file://${root}`).pathname
     }
   }
 });

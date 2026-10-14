@@ -1,5 +1,5 @@
-const TERMINAL_SESSION_KEY_PREFIX = "sigmaos:terminal-session:v2:";
-const LEGACY_TERMINAL_SESSION_KEY_PREFIX = "sigmaos:terminal-session:";
+const TERMINAL_SESSION_KEY_PREFIX = "zos:terminal-session:v2:";
+const LEGACY_TERMINAL_SESSION_KEY_PREFIX = "zos:terminal-session:";
 
 export interface TerminalSessionStorage {
   getItem(key: string): string | null;

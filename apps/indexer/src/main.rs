@@ -1,9 +1,9 @@
 use std::process::ExitCode;
 
-use sigmaos_indexer::config::Config;
-use sigmaos_indexer::error::{ErrorCode, IndexerError};
-use sigmaos_indexer::{Indexer, OnceOptions};
 use tracing_subscriber::EnvFilter;
+use zos_indexer::config::Config;
+use zos_indexer::error::{ErrorCode, IndexerError};
+use zos_indexer::{Indexer, OnceOptions};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -72,7 +72,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<RunMod
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: sigmaos-indexer [--once [--root ROOT_ID] [--path PATH] [--recursive]]"
+                    "Usage: zos-indexer [--once [--root ROOT_ID] [--path PATH] [--recursive]]"
                 );
                 return Ok(RunMode::Help);
             }

@@ -2,7 +2,7 @@
 
 **Scope:** `c6db6a336fc513ad78ce5eff7b40d0fcad0ea581` to the current working tree (the complete Rust Termux replacement, including intent-to-add files).
 
-**Intent:** Atomically replace the Node `terminal-helper` with the non-root Rust `sigmaos-termux` daemon, preserve tmux persistence and browser terminal behavior, introduce strict Termux Protocol v1, migrate runtime state safely, and prepare release `0.8.0`.
+**Intent:** Atomically replace the Node `terminal-helper` with the non-root Rust `zos-termux` daemon, preserve tmux persistence and browser terminal behavior, introduce strict Termux Protocol v1, migrate runtime state safely, and prepare release `0.8.0`.
 
 **Mode:** autofix; sequential main-thread execution required by repository instructions.
 
@@ -18,7 +18,7 @@
 | 4 | P1 | `packaging/debian/postinst` | Direct upgrades moved the old terminal home while the legacy helper could still be running. | Validate directory conflicts, stop the old helper, then move the home; packaging tests enforce the order. |
 | 5 | P2 | Rust and TypeScript protocol parsers | UUID and Base64 acceptance differed across implementations. | Enforced canonical hyphenated RFC UUIDs and canonical padded Base64 in both implementations with matching rejection tests. |
 | 6 | P2 | `apps/termux/src/tmux.rs` | Failed option initialization could leave a partially managed tmux session. | Repair the managed marker for existing sessions and destroy newly created sessions if metadata initialization fails. |
-| 7 | P2 | `packaging/scripts/sigmaos-refresh-termux.sh` | Dynamic NAS paths were emitted into systemd directives without escaping. | Quote and escape backslashes, quotes, and systemd `%` specifiers; extended the packaging contract test. |
+| 7 | P2 | `packaging/scripts/zos-refresh-termux.sh` | Dynamic NAS paths were emitted into systemd directives without escaping. | Quote and escape backslashes, quotes, and systemd `%` specifiers; extended the packaging contract test. |
 
 All findings were fixed and re-verified. No residual actionable code findings remain.
 
@@ -42,10 +42,10 @@ None. Termux is an internal runtime replacement; browser and API terminal capabi
 
 ## Deployment Notes
 
-- Before upgrade, stop terminal/API consumers and timers, then back up the current package, `/etc/sigmaos`, `/var/lib/sigmaos`, `/var/lib/sigmaos-terminal`, and SQLite state.
-- The package must refuse an upgrade if old and new terminal homes both exist. A successful upgrade disables `sigmaos-terminal-helper.service`, moves the old home, writes `config.toml.pre-termux.bak`, and enables `sigmaos-termux.service`.
-- Healthy signals are an active Termux/API service, no failed SigmaOS units, successful health/readiness endpoints, and a terminal that opens, resizes, reconnects, retains scrollback, and can be destroyed.
-- Rollback to `0.7.x` requires stopping Termux, restoring the old package and config backup, and moving `/var/lib/sigmaos-termux` back to `/var/lib/sigmaos-terminal` without merging directories.
+- Before upgrade, stop terminal/API consumers and timers, then back up the current package, `/zos/config`, `/zos/state`, `/zos/home/terminal`, and SQLite state.
+- The package must refuse an upgrade if old and new terminal homes both exist. A successful upgrade disables `zos-terminal-helper.service`, moves the old home, writes `config.toml.pre-termux.bak`, and enables `zos-termux.service`.
+- Healthy signals are an active Termux/API service, no failed ZOS units, successful health/readiness endpoints, and a terminal that opens, resizes, reconnects, retains scrollback, and can be destroyed.
+- Rollback to `0.7.x` requires stopping Termux, restoring the old package and config backup, and moving `/zos/home/termux` back to `/zos/home/terminal` without merging directories.
 
 ## Coverage
 
@@ -54,7 +54,7 @@ None. Termux is an internal runtime replacement; browser and API terminal capabi
 - Focused protocol, API client, socket ownership, cleanup, migration, packaging, shell syntax, and repeated socket regression checks passed. `git diff --check` passed.
 - Expected non-blocking output is limited to the pre-existing React i18next test notice, Vite large-chunk warning, and Astro empty-i18n/404 warnings.
 - This macOS host does not provide `dpkg-buildpackage` or `systemd-analyze`, so a real Debian package install, systemd sandbox validation, and CM5 runtime acceptance remain Linux release gates.
-- Multiple application services share the `sigmaos` UID accepted by Termux peer validation. This matches the current single-user architecture but is not process-level authorization isolation.
+- Multiple application services share the `zos` UID accepted by Termux peer validation. This matches the current single-user architecture but is not process-level authorization isolation.
 
 ---
 

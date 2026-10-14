@@ -10,14 +10,14 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const checkedInDirectory = path.join(root, "packages/shared/src/generated");
 const expectedFiles = ["hostd.ts", "termux.ts", "vod-player.ts"];
 const check = process.argv.includes("--check");
-const temporaryRoot = check ? await mkdtemp(path.join(os.tmpdir(), "sigmaos-protocol-")) : null;
+const temporaryRoot = check ? await mkdtemp(path.join(os.tmpdir(), "zos-protocol-")) : null;
 const outputDirectory = temporaryRoot ?? checkedInDirectory;
 
 try {
   await rm(outputDirectory, { recursive: true, force: true });
   await mkdir(outputDirectory, { recursive: true });
 
-  for (const packageName of ["sigmaos-vod-player", "sigmaos-termux", "sigmaos-hostd"]) {
+  for (const packageName of ["zos-vod-player", "zos-termux", "zos-hostd"]) {
     const result = spawnSync(
       "cargo",
       ["test", "--locked", "-p", packageName, "export_protocol_bindings", "--", "--ignored"],

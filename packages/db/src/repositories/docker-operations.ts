@@ -4,8 +4,8 @@ import type {
   DockerOperationRecord,
   DockerOperationStatus,
   PendingApprovalRecord
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import {
   dockerProposalTargetId,
@@ -14,7 +14,7 @@ import {
 import type { DbDockerOperationRow } from "./repository-rows.js";
 
 export function createDockerOperationApproval(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { jobId: string; proposal: DockerOperationProposal }
 ): { approval: PendingApprovalRecord; operation: DockerOperationRecord } {
   const job = getJob(db, input.jobId);
@@ -69,7 +69,7 @@ export function createDockerOperationApproval(
 }
 
 export function createDockerOperationRecord(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { jobId: string; proposal: DockerOperationProposal }
 ): DockerOperationRecord {
   const job = getJob(db, input.jobId);
@@ -106,7 +106,7 @@ export function createDockerOperationRecord(
   return operation;
 }
 
-export function getDockerOperation(db: SigmaDatabase, operationId: string): DockerOperationRecord | null {
+export function getDockerOperation(db: ZosDatabase, operationId: string): DockerOperationRecord | null {
   const row = db
     .prepare(`
       SELECT id, approval_id, action, target_type, target_id, status, metadata_json, created_at, updated_at
@@ -118,7 +118,7 @@ export function getDockerOperation(db: SigmaDatabase, operationId: string): Dock
 }
 
 export function getDockerOperationByApproval(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   approvalId: string
 ): DockerOperationRecord | null {
   const row = db
@@ -134,7 +134,7 @@ export function getDockerOperationByApproval(
 }
 
 export function listDockerOperations(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { sessionId?: string; limit?: number } = {}
 ): DockerOperationRecord[] {
   const rows = db
@@ -152,7 +152,7 @@ export function listDockerOperations(
 }
 
 export function updateDockerOperationStatus(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   operationId: string,
   status: DockerOperationStatus,
   metadata: Record<string, unknown> = {}

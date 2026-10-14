@@ -42,13 +42,13 @@ None. No downstream-resolver todo was created.
 
 1. Back up the SQLite database and both `photos`/`photostaff` cache paths before upgrade; rollback requires restoring them together.
 2. After package install, confirm migration `023_photostaff_reliability`, run `PRAGMA foreign_key_check`, and compare asset, metadata, FTS, RTree, upload-reservation, and job counts with the backup.
-3. Confirm `sigmaos-photo-worker.service` is disabled/absent and `sigmaos-photostaff.service` preserves the prior enabled/active state.
+3. Confirm `zos-photo-worker.service` is disabled/absent and `zos-photostaff.service` preserves the prior enabled/active state.
 4. Validate READY/WATCHDOG, stale/unavailable health thresholds, restart recovery, NAS detach/attach, media-tool timeout/crash, source replacement rejection, and journal recovery on target hardware.
-5. Inspect the Debian payload to ensure it contains `sigmaos-photostaff` and the new unit, and contains no `apps/photo-worker`, Sharp, exifr, or retired unit runtime.
+5. Inspect the Debian payload to ensure it contains `zos-photostaff` and the new unit, and contains no `apps/photo-worker`, Sharp, exifr, or retired unit runtime.
 
 ## Verification Completed
 
-- `cargo test -p sigmaos-photostaff --locked`: 35 passed
+- `cargo test -p zos-photostaff --locked`: 35 passed
 - Focused Rust Clippy with `-D warnings`: passed
 - Focused API/DB/UI Vitest selection: 176 passed
 - `npm run version:check`: passed (`0.9.13`)

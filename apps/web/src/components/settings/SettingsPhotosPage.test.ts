@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it } from "vitest";
-import { PHOTOSTAFF_SUPPORTED_EXTENSIONS } from "@sigmaos/shared/photostaff-config";
+import { PHOTOSTAFF_SUPPORTED_EXTENSIONS } from "@zos/shared/photostaff-config";
 import { i18n, initI18n } from "../../i18n/index.js";
 import { SettingsPhotosPage } from "./SettingsModal.js";
 
@@ -43,7 +43,7 @@ describe("SettingsPhotosPage", () => {
         retryingJobs: 0
       },
       runtime: {
-        dataDir: "/var/lib/sigmaos/photostaff",
+        dataDir: "/zos/state/photostaff",
         maxFileSizeBytes: 512 * 1024 * 1024,
         thumbnailSizePx: 512,
         previewMaxEdgePx: 2048,
@@ -57,7 +57,7 @@ describe("SettingsPhotosPage", () => {
 
     expect(html).toContain("Pictures/Library");
     expect(html).toContain("pool-a");
-    expect(html).toContain("/var/lib/sigmaos/photostaff");
+    expect(html).toContain("/zos/state/photostaff");
     expect(html).toContain("512.0 MB");
     expect(html).toContain("2,048 px max edge");
     expect(html).toContain(PHOTOSTAFF_SUPPORTED_EXTENSIONS.map((extension) => extension.slice(1).toUpperCase()).join(", "));

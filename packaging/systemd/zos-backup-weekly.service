@@ -1,0 +1,25 @@
+[Unit]
+Description=ZOS weekly restic check and retention
+After=local-fs.target
+RequiresMountsFor=/zos/data /zos/data/backup
+ConditionPathExists=/zos/config/restic-password
+
+[Service]
+Type=oneshot
+User=zos
+Group=zos
+Environment=ZOS_ROOT=/zos
+Environment=ZOS_CONFIG=/zos/config/config.toml
+Environment=ZOS_BACKUP_PASSWORD_FILE=%d/restic-password
+WorkingDirectory=/zos/state
+LoadCredential=restic-password:/zos/config/restic-password
+ExecStart=/usr/local/bin/node /usr/lib/zos/apps/backup/dist/index.js run --kind weekly
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/zos/state /zos/data /zos/data/backup
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+MemoryMax=1G
+CPUQuota=250%
+TasksMax=256

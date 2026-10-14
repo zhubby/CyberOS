@@ -10,16 +10,16 @@ import {
 
 describe("resolveWorkspaceMessagePath", () => {
   it("maps absolute paths inside the selected root to workspace paths", () => {
-    expect(resolveWorkspaceMessagePath("/srv/nas/docs/readme.md", "/srv/nas")).toEqual({
-      displayPath: "/srv/nas/docs/readme.md",
+    expect(resolveWorkspaceMessagePath("/zos/data/primary/docs/readme.md", "/zos/data/primary")).toEqual({
+      displayPath: "/zos/data/primary/docs/readme.md",
       workspacePath: "docs/readme.md"
     });
-    expect(resolveWorkspaceMessagePath("/srv/nas/", "/srv/nas/")).toEqual({
-      displayPath: "/srv/nas/",
+    expect(resolveWorkspaceMessagePath("/zos/data/primary/", "/zos/data/primary/")).toEqual({
+      displayPath: "/zos/data/primary/",
       workspacePath: "."
     });
-    expect(resolveWorkspaceMessagePath("/srv/nas/docs/../readme.md", "/srv/nas")).toEqual({
-      displayPath: "/srv/nas/docs/../readme.md",
+    expect(resolveWorkspaceMessagePath("/zos/data/primary/docs/../readme.md", "/zos/data/primary")).toEqual({
+      displayPath: "/zos/data/primary/docs/../readme.md",
       workspacePath: "readme.md"
     });
     expect(resolveWorkspaceMessagePath("/Users/zhubby/file.txt", "/")).toEqual({
@@ -29,24 +29,24 @@ describe("resolveWorkspaceMessagePath", () => {
   });
 
   it("rejects paths outside the selected root or sharing only its prefix", () => {
-    expect(resolveWorkspaceMessagePath("/srv/nas-backup/file.txt", "/srv/nas")).toBeNull();
-    expect(resolveWorkspaceMessagePath("/srv/other/file.txt", "/srv/nas")).toBeNull();
-    expect(resolveWorkspaceMessagePath("/srv/nas/../../etc/passwd", "/srv/nas")).toBeNull();
-    expect(resolveWorkspaceMessagePath("/srv/nas/docs/../../nas/file.txt", "/srv/nas")).toBeNull();
-    expect(resolveWorkspaceMessagePath("//srv/nas/file.txt", "/srv/nas")).toBeNull();
-    expect(resolveWorkspaceMessagePath("docs/readme.md", "/srv/nas")).toBeNull();
+    expect(resolveWorkspaceMessagePath("/zos/data/primary-backup/file.txt", "/zos/data/primary")).toBeNull();
+    expect(resolveWorkspaceMessagePath("/private/other/file.txt", "/zos/data/primary")).toBeNull();
+    expect(resolveWorkspaceMessagePath("/zos/data/primary/../../etc/passwd", "/zos/data/primary")).toBeNull();
+    expect(resolveWorkspaceMessagePath("/zos/data/primary/docs/../../nas/file.txt", "/zos/data/primary")).toBeNull();
+    expect(resolveWorkspaceMessagePath("//zos/data/primary/file.txt", "/zos/data/primary")).toBeNull();
+    expect(resolveWorkspaceMessagePath("docs/readme.md", "/zos/data/primary")).toBeNull();
   });
 });
 
 describe("resolveWorkspaceMessageLink", () => {
   it("decodes Markdown link paths before matching the selected root", () => {
-    expect(resolveWorkspaceMessageLink("/srv/nas/My%20Files/report.pdf#page=2", "/srv/nas")).toEqual({
-      displayPath: "/srv/nas/My Files/report.pdf",
+    expect(resolveWorkspaceMessageLink("/zos/data/primary/My%20Files/report.pdf#page=2", "/zos/data/primary")).toEqual({
+      displayPath: "/zos/data/primary/My Files/report.pdf",
       workspacePath: "My Files/report.pdf"
     });
-    expect(resolveWorkspaceMessageLink("https://example.com/srv/nas/file.txt", "/srv/nas")).toBeNull();
-    expect(resolveWorkspaceMessageLink("//srv/nas/file.txt", "/srv/nas")).toBeNull();
-    expect(resolveWorkspaceMessageLink("%E0%A4%A", "/srv/nas")).toBeNull();
+    expect(resolveWorkspaceMessageLink("https://example.com/zos/data/primary/file.txt", "/zos/data/primary")).toBeNull();
+    expect(resolveWorkspaceMessageLink("//zos/data/primary/file.txt", "/zos/data/primary")).toBeNull();
+    expect(resolveWorkspaceMessageLink("%E0%A4%A", "/zos/data/primary")).toBeNull();
   });
 });
 
@@ -54,22 +54,22 @@ describe("splitWorkspaceMessagePaths", () => {
   it("separates unquoted and quoted paths while preserving punctuation", () => {
     expect(
       splitWorkspaceMessagePaths(
-        'Found /srv/nas/docs/readme.md. Open "/srv/nas/My Files/report.pdf" next.',
-        "/srv/nas"
+        'Found /zos/data/primary/docs/readme.md. Open "/zos/data/primary/My Files/report.pdf" next.',
+        "/zos/data/primary"
       )
     ).toEqual([
       { kind: "text", value: "Found " },
       {
         kind: "path",
-        value: "/srv/nas/docs/readme.md",
-        displayPath: "/srv/nas/docs/readme.md",
+        value: "/zos/data/primary/docs/readme.md",
+        displayPath: "/zos/data/primary/docs/readme.md",
         workspacePath: "docs/readme.md"
       },
       { kind: "text", value: '. Open "' },
       {
         kind: "path",
-        value: "/srv/nas/My Files/report.pdf",
-        displayPath: "/srv/nas/My Files/report.pdf",
+        value: "/zos/data/primary/My Files/report.pdf",
+        displayPath: "/zos/data/primary/My Files/report.pdf",
         workspacePath: "My Files/report.pdf"
       },
       { kind: "text", value: '" next.' }
@@ -78,12 +78,12 @@ describe("splitWorkspaceMessagePaths", () => {
 
   it("keeps a standalone path with spaces together until the line break", () => {
     expect(
-      splitWorkspaceMessagePaths("/srv/nas/My Files/report (1).pdf\nPlease inspect this file", "/srv/nas")
+      splitWorkspaceMessagePaths("/zos/data/primary/My Files/report (1).pdf\nPlease inspect this file", "/zos/data/primary")
     ).toEqual([
       {
         kind: "path",
-        value: "/srv/nas/My Files/report (1).pdf",
-        displayPath: "/srv/nas/My Files/report (1).pdf",
+        value: "/zos/data/primary/My Files/report (1).pdf",
+        displayPath: "/zos/data/primary/My Files/report (1).pdf",
         workspacePath: "My Files/report (1).pdf"
       },
       { kind: "text", value: "\nPlease inspect this file" }
@@ -91,8 +91,8 @@ describe("splitWorkspaceMessagePaths", () => {
   });
 
   it("leaves external and root-relative paths as text", () => {
-    const text = "See /srv/other/file.txt and docs/readme.md";
-    expect(splitWorkspaceMessagePaths(text, "/srv/nas")).toEqual([{ kind: "text", value: text }]);
+    const text = "See /private/other/file.txt and docs/readme.md";
+    expect(splitWorkspaceMessagePaths(text, "/zos/data/primary")).toEqual([{ kind: "text", value: text }]);
   });
 });
 
@@ -104,25 +104,25 @@ describe("remarkWorkspacePaths", () => {
         {
           type: "paragraph",
           children: [
-            { type: "text", value: "Open /srv/nas/docs/readme.md" },
-            { type: "link", url: "/srv/nas/linked.md", children: [{ type: "text", value: "/srv/nas/linked.md" }] }
+            { type: "text", value: "Open /zos/data/primary/docs/readme.md" },
+            { type: "link", url: "/zos/data/primary/linked.md", children: [{ type: "text", value: "/zos/data/primary/linked.md" }] }
           ]
         },
-        { type: "code", value: "/srv/nas/not-interactive.txt" }
+        { type: "code", value: "/zos/data/primary/not-interactive.txt" }
       ]
     };
 
-    remarkWorkspacePaths({ rootPath: "/srv/nas" })(tree);
+    remarkWorkspacePaths({ rootPath: "/zos/data/primary" })(tree);
 
     expect(tree.children[0]).toEqual({
       type: "paragraph",
       children: [
         { type: "text", value: "Open " },
-        { type: "inlineCode", value: "/srv/nas/docs/readme.md" },
-        { type: "link", url: "/srv/nas/linked.md", children: [{ type: "text", value: "/srv/nas/linked.md" }] }
+        { type: "inlineCode", value: "/zos/data/primary/docs/readme.md" },
+        { type: "link", url: "/zos/data/primary/linked.md", children: [{ type: "text", value: "/zos/data/primary/linked.md" }] }
       ]
     });
-    expect(tree.children[1]).toEqual({ type: "code", value: "/srv/nas/not-interactive.txt" });
+    expect(tree.children[1]).toEqual({ type: "code", value: "/zos/data/primary/not-interactive.txt" });
   });
 });
 
@@ -135,8 +135,8 @@ describe("workspaceParentPath", () => {
 
 describe("workspaceAbsolutePath", () => {
   it("joins a root-relative path to an absolute NAS root", () => {
-    expect(workspaceAbsolutePath("/srv/nas", "docs/readme.md")).toBe("/srv/nas/docs/readme.md");
+    expect(workspaceAbsolutePath("/zos/data/primary", "docs/readme.md")).toBe("/zos/data/primary/docs/readme.md");
     expect(workspaceAbsolutePath("/", "docs/readme.md")).toBe("/docs/readme.md");
-    expect(workspaceAbsolutePath("/srv/nas/", ".")).toBe("/srv/nas");
+    expect(workspaceAbsolutePath("/zos/data/primary/", ".")).toBe("/zos/data/primary");
   });
 });

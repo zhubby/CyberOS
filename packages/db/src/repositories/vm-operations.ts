@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { PendingApprovalRecord, VmOperationProposal, VmOperationRecord, VmOperationStatus } from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+import type { PendingApprovalRecord, VmOperationProposal, VmOperationRecord, VmOperationStatus } from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import { mapVmOperation } from "./operation-mappers.js";
 import type { DbVmOperationRow } from "./repository-rows.js";
@@ -9,7 +9,7 @@ import { VM_CONSOLE_AUTHORIZATION_TTL_MS } from "./vm-console-authorizations.js"
 const EXPIRED_CONSOLE_ERROR = "VM console approval expired before the console was opened";
 
 export function createVmOperationApproval(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { jobId: string; proposal: VmOperationProposal }
 ): { approval: PendingApprovalRecord; operation: VmOperationRecord } {
   const job = getJob(db, input.jobId);
@@ -39,7 +39,7 @@ export function createVmOperationApproval(
 }
 
 export function createVmOperationRecord(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { jobId: string; proposal: VmOperationProposal }
 ): VmOperationRecord {
   const job = getJob(db, input.jobId);
@@ -57,26 +57,26 @@ export function createVmOperationRecord(
   return operation;
 }
 
-export function getVmOperation(db: SigmaDatabase, id: string): VmOperationRecord | null {
+export function getVmOperation(db: ZosDatabase, id: string): VmOperationRecord | null {
   const row = db.prepare(`SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
     FROM vm_operations WHERE id = ?`).get(id) as DbVmOperationRow | undefined;
   return row ? mapVmOperation(row) : null;
 }
 
-export function getVmOperationByApproval(db: SigmaDatabase, approvalId: string): VmOperationRecord | null {
+export function getVmOperationByApproval(db: ZosDatabase, approvalId: string): VmOperationRecord | null {
   const row = db.prepare(`SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
     FROM vm_operations WHERE approval_id = ? ORDER BY created_at DESC LIMIT 1`).get(approvalId) as DbVmOperationRow | undefined;
   return row ? mapVmOperation(row) : null;
 }
 
-export function getProposedVmOperationForTarget(db: SigmaDatabase, targetId: string): VmOperationRecord | null {
+export function getProposedVmOperationForTarget(db: ZosDatabase, targetId: string): VmOperationRecord | null {
   const row = db.prepare(`SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
     FROM vm_operations WHERE target_id = ? AND status = 'proposed' ORDER BY created_at DESC LIMIT 1`)
     .get(targetId) as DbVmOperationRow | undefined;
   return row ? mapVmOperation(row) : null;
 }
 
-export function expireStaleVmConsoleOperations(db: SigmaDatabase, now = new Date()): number {
+export function expireStaleVmConsoleOperations(db: ZosDatabase, now = new Date()): number {
   const timestamp = now.toISOString();
   const cutoff = new Date(now.getTime() - VM_CONSOLE_AUTHORIZATION_TTL_MS).toISOString();
   const rows = db.prepare(`SELECT o.id, o.approval_id, a.job_id
@@ -117,7 +117,7 @@ export function expireStaleVmConsoleOperations(db: SigmaDatabase, now = new Date
   return expire();
 }
 
-export function listVmOperations(db: SigmaDatabase, input: { sessionId?: string; limit?: number } = {}): VmOperationRecord[] {
+export function listVmOperations(db: ZosDatabase, input: { sessionId?: string; limit?: number } = {}): VmOperationRecord[] {
   const rows = db.prepare(`SELECT o.id, o.approval_id, o.action, o.target_id, o.status, o.metadata_json, o.created_at, o.updated_at
     FROM vm_operations o LEFT JOIN pending_approvals a ON a.id = o.approval_id
     LEFT JOIN jobs j ON j.id = COALESCE(a.job_id, json_extract(o.metadata_json, '$.jobId'))
@@ -127,7 +127,7 @@ export function listVmOperations(db: SigmaDatabase, input: { sessionId?: string;
 }
 
 export function updateVmOperationStatus(
-  db: SigmaDatabase, id: string, status: VmOperationStatus, metadata: Record<string, unknown> = {}
+  db: ZosDatabase, id: string, status: VmOperationStatus, metadata: Record<string, unknown> = {}
 ): VmOperationRecord | null {
   const existing = getVmOperation(db, id);
   if (!existing) return null;

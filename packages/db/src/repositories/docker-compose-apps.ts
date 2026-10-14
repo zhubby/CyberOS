@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { DockerComposeAppRisk } from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+import type { DockerComposeAppRisk } from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 
 export interface DockerComposeAppEnvironmentRecord {
   key: string;
@@ -48,7 +48,7 @@ export class DockerComposeAppProjectKeyConflictError extends Error {
   }
 }
 
-export function listDockerComposeApps(db: SigmaDatabase): DockerComposeAppRecord[] {
+export function listDockerComposeApps(db: ZosDatabase): DockerComposeAppRecord[] {
   const rows = db.prepare(`
     SELECT id, name, project_key, compose_content, services_json, warnings_json, risk,
            revision, deployed_revision, created_at, updated_at
@@ -59,7 +59,7 @@ export function listDockerComposeApps(db: SigmaDatabase): DockerComposeAppRecord
   return rows.map((row) => mapApp(row, environment.get(row.id) ?? []));
 }
 
-export function listDockerComposeAppSummaries(db: SigmaDatabase): DockerComposeAppSummaryRecord[] {
+export function listDockerComposeAppSummaries(db: ZosDatabase): DockerComposeAppSummaryRecord[] {
   return (db.prepare(`
     SELECT id, name, project_key, services_json, warnings_json, risk,
            revision, deployed_revision, created_at, updated_at
@@ -68,7 +68,7 @@ export function listDockerComposeAppSummaries(db: SigmaDatabase): DockerComposeA
   `).all() as DockerComposeAppSummaryRow[]).map(mapAppSummary);
 }
 
-export function getDockerComposeApp(db: SigmaDatabase, id: string): DockerComposeAppRecord | null {
+export function getDockerComposeApp(db: ZosDatabase, id: string): DockerComposeAppRecord | null {
   const row = db.prepare(`
     SELECT id, name, project_key, compose_content, services_json, warnings_json, risk,
            revision, deployed_revision, created_at, updated_at
@@ -79,7 +79,7 @@ export function getDockerComposeApp(db: SigmaDatabase, id: string): DockerCompos
 }
 
 export function getDockerComposeAppSummary(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   id: string
 ): DockerComposeAppSummaryRecord | null {
   const row = db.prepare(`
@@ -92,7 +92,7 @@ export function getDockerComposeAppSummary(
 }
 
 export function createDockerComposeApp(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: DockerComposeAppWriteInput
 ): DockerComposeAppRecord {
   return db.transaction(() => {
@@ -127,7 +127,7 @@ export function createDockerComposeApp(
 }
 
 export function updateDockerComposeApp(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   id: string,
   expectedRevision: string,
   input: Omit<DockerComposeAppWriteInput, "projectKey" | "environment"> & {
@@ -172,7 +172,7 @@ export function updateDockerComposeApp(
 }
 
 export function markDockerComposeAppDeployed(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   id: string,
   revision: string
 ): DockerComposeAppRecord | null {
@@ -186,7 +186,7 @@ export function markDockerComposeAppDeployed(
 }
 
 export function restoreDockerComposeApp(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   expectedRevision: string,
   app: DockerComposeAppRecord
 ): DockerComposeAppRecord {
@@ -215,7 +215,7 @@ export function restoreDockerComposeApp(
 }
 
 export function deleteDockerComposeApp(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   id: string,
   expectedRevision: string
 ): "deleted" | "not_found" | "conflict" {
@@ -243,7 +243,7 @@ interface DockerComposeAppRow {
 type DockerComposeAppSummaryRow = Omit<DockerComposeAppRow, "compose_content">;
 
 function environmentByApp(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   appIds: string[]
 ): Map<string, DockerComposeAppEnvironmentRecord[]> {
   const result = new Map<string, DockerComposeAppEnvironmentRecord[]>();
@@ -264,7 +264,7 @@ function environmentByApp(
 }
 
 function replaceEnvironment(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   appId: string,
   environment: DockerComposeAppEnvironmentRecord[],
   updatedAt: string

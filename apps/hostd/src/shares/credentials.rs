@@ -65,7 +65,7 @@ pub(super) async fn apply_credentials(
                 "--system",
                 "--no-create-home",
                 "--home-dir",
-                "/var/lib/sigmaos-share",
+                "/zos/home/share",
                 "--shell",
                 "/usr/sbin/nologin",
                 &settings.account.username,

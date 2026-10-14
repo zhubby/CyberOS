@@ -1,7 +1,7 @@
 import cors from "@fastify/cors";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
-import { getDockerSettings } from "@sigmaos/db";
+import { getDockerSettings } from "@zos/db";
 import type { ServerDependencies } from "./context.js";
 import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
@@ -13,7 +13,7 @@ export type { ServerDependencies } from "./context.js";
 
 export async function buildServer({ buildInfo, config, db, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photostaffMap }: ServerDependencies): Promise<FastifyInstance> {
   if (!isLoopbackHost(config.api.host)) {
-    throw new Error("SigmaOS API must bind to a loopback host");
+    throw new Error("ZOS API must bind to a loopback host");
   }
   const server = Fastify({
     logger: {
@@ -31,7 +31,8 @@ export async function buildServer({ buildInfo, config, db, docker, vm, shares, s
   await server.register(fastifyWebsocket);
   const compose = docker?.compose ?? new DockerComposeService(
     () => effectiveDockerConfig(config, getDockerSettings(db)).docker,
-    db
+    db,
+    config.paths?.appsRoot ?? config.appsRoot
   );
   const dockerRuntime = { ...docker, compose };
   const fileBatches = new FileBatchRunner({ config, db, ...(system ? { system } : {}), log: server.log });

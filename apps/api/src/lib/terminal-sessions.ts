@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS } from "@sigmaos/shared";
+import { TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS } from "@zos/shared";
 import {
   DEFAULT_TERMINAL_COLS,
   DEFAULT_TERMINAL_ROWS,
@@ -482,7 +482,7 @@ function createTerminalSession(
 
 export function terminalSessionName(rootId: string, sessionId: string): string {
   const digest = createHash("sha256").update(rootId).update("\0").update(sessionId).digest("hex");
-  return `sigmaos-${digest.slice(0, 48)}`;
+  return `zos-${digest.slice(0, 48)}`;
 }
 
 function terminalSessionKey(rootId: string, sessionId: string): string {

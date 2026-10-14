@@ -2,14 +2,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { ModelProviderSettingsRecord, PhotostaffMetadataDetail, PhotostaffQueryPage } from "@sigmaos/shared";
+import type { ModelProviderSettingsRecord, PhotostaffMetadataDetail, PhotostaffQueryPage } from "@zos/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPhotostaffAgentTools, registerConfiguredProvider } from "./pi-agent.js";
 
 let tempDir: string;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-pi-agent-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-pi-agent-"));
 });
 
 afterEach(async () => {

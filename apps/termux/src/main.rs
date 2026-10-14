@@ -1,10 +1,9 @@
 use std::process::ExitCode;
 
-use sigmaos_termux::config::TermuxConfig;
-use sigmaos_termux::config_migration::{configured_path, migrate_config};
-use sigmaos_termux::error::{ErrorCode, TermuxError};
-use sigmaos_termux::server::TermuxServer;
 use tracing_subscriber::EnvFilter;
+use zos_termux::config::TermuxConfig;
+use zos_termux::error::{ErrorCode, TermuxError};
+use zos_termux::server::TermuxServer;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -25,27 +24,12 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> Result<(), TermuxError> {
-    let mut arguments = std::env::args_os().skip(1);
-    match arguments
-        .next()
-        .and_then(|argument| argument.into_string().ok())
-    {
-        None => TermuxServer::new(TermuxConfig::load()?).run().await,
-        Some(command) if command == "migrate-config" && arguments.next().is_none() => {
-            let path = configured_path();
-            let outcome = migrate_config(&path)?;
-            tracing::info!(
-                path = %path.display(),
-                changed = outcome.changed,
-                backup = outcome.backup_path.as_ref().map(|path| path.display().to_string()),
-                "termux configuration migration complete"
-            );
-            Ok(())
-        }
-        _ => Err(TermuxError::new(
+    if std::env::args_os().nth(1).is_some() {
+        return Err(TermuxError::new(
             400,
             ErrorCode::Validation,
-            "usage: sigmaos-termux [migrate-config]",
-        )),
+            "usage: zos-termux",
+        ));
     }
+    TermuxServer::new(TermuxConfig::load()?).run().await
 }

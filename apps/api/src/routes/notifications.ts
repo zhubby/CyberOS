@@ -5,7 +5,7 @@ import {
   listOperationNotifications,
   markAllOperationNotificationsRead,
   markOperationNotificationRead
-} from "@sigmaos/db";
+} from "@zos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerNotificationRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {

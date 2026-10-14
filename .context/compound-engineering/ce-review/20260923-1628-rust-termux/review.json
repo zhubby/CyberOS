@@ -3,7 +3,7 @@
   "mode": "autofix",
   "execution": "sequential-main-thread",
   "base": "c6db6a336fc513ad78ce5eff7b40d0fcad0ea581",
-  "intent": "Replace the Node terminal-helper atomically with the Rust sigmaos-termux daemon and Termux Protocol v1 for release 0.8.0.",
+  "intent": "Replace the Node terminal-helper atomically with the Rust zos-termux daemon and Termux Protocol v1 for release 0.8.0.",
   "verdict": "ready_to_merge_linux_acceptance_required",
   "findings": [
     {
@@ -50,7 +50,7 @@
     },
     {
       "severity": "P2",
-      "area": "packaging/scripts/sigmaos-refresh-termux.sh",
+      "area": "packaging/scripts/zos-refresh-termux.sh",
       "title": "Dynamic systemd paths were not escaped",
       "resolution": "applied",
       "verification": "shell syntax and packaging contract tests"
@@ -66,7 +66,7 @@
       "systemd sandbox analysis and CM5 runtime acceptance require the Linux release environment."
     ],
     "residual_risks": [
-      "Peer credentials distinguish the sigmaos account, not individual processes sharing that account."
+      "Peer credentials distinguish the zos account, not individual processes sharing that account."
     ]
   },
   "verification": {

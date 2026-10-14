@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { VmConsoleAuthorizationRecord } from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+import type { VmConsoleAuthorizationRecord } from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { mapVmConsoleAuthorization } from "./operation-mappers.js";
 import type { DbVmConsoleAuthorizationRow } from "./repository-rows.js";
 
 export const VM_CONSOLE_AUTHORIZATION_TTL_MS = 5 * 60_000;
 
 export function createVmConsoleAuthorization(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { operationId: string; approvalId: string | null; domainName: string }
 ): VmConsoleAuthorizationRecord {
   const now = new Date();
@@ -22,7 +22,7 @@ export function createVmConsoleAuthorization(
   return record;
 }
 
-export function consumeVmConsoleAuthorization(db: SigmaDatabase, id: string): VmConsoleAuthorizationRecord | null {
+export function consumeVmConsoleAuthorization(db: ZosDatabase, id: string): VmConsoleAuthorizationRecord | null {
   const row = db.prepare(`SELECT id, operation_id, approval_id, domain_name, status, created_at, expires_at, used_at
     FROM vm_console_authorizations WHERE id = ?`).get(id) as DbVmConsoleAuthorizationRow | undefined;
   if (!row) return null;

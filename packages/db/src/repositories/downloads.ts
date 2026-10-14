@@ -7,8 +7,8 @@ import type {
   DownloadTaskRecord,
   DownloadTaskStatus,
   DownloadWorkerHealth
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import type { DbDownloadTaskRow } from "./repository-rows.js";
 
 const DOWNLOAD_COLUMNS = `
@@ -22,7 +22,7 @@ const DOWNLOAD_COLUMNS = `
 `;
 
 export function createDownloadTask(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     url: string;
     rootId: string;
@@ -37,7 +37,7 @@ export function createDownloadTask(
 ): DownloadTaskRecord {
   const id = randomUUID();
   const now = (input.now ?? new Date()).toISOString();
-  const partialPath = input.partialPath ?? `${input.targetDirectory}/.${id}.sigmaos-download.part`;
+  const partialPath = input.partialPath ?? `${input.targetDirectory}/.${id}.zos-download.part`;
   db.prepare(`
     INSERT INTO download_tasks (
       id, url, root_id, storage_pool_id, target_directory, target_file_name,
@@ -60,7 +60,7 @@ export function createDownloadTask(
   return getRequiredDownloadTask(db, id);
 }
 
-export function getDownloadTask(db: SigmaDatabase, id: string): DownloadTaskRecord | null {
+export function getDownloadTask(db: ZosDatabase, id: string): DownloadTaskRecord | null {
   const row = db
     .prepare(`SELECT ${DOWNLOAD_COLUMNS} FROM download_tasks WHERE id = ?`)
     .get(id) as DbDownloadTaskRow | undefined;
@@ -68,7 +68,7 @@ export function getDownloadTask(db: SigmaDatabase, id: string): DownloadTaskReco
 }
 
 export function listDownloadTasks(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { statuses?: DownloadTaskStatus[]; limit?: number } = {}
 ): DownloadTaskRecord[] {
   const limit = Math.max(1, Math.min(input.limit ?? 500, 1_000));
@@ -86,7 +86,7 @@ export function listDownloadTasks(
   return rows.map(mapDownloadTask);
 }
 
-export function recoverExpiredDownloadTasks(db: SigmaDatabase, now = new Date()): number {
+export function recoverExpiredDownloadTasks(db: ZosDatabase, now = new Date()): number {
   const nowIso = now.toISOString();
   const result = db.prepare(`
     UPDATE download_tasks
@@ -117,7 +117,7 @@ export function recoverExpiredDownloadTasks(db: SigmaDatabase, now = new Date())
 }
 
 export function claimNextDownloadTask(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { workerId: string; leaseMs: number; now?: Date }
 ): DownloadTaskRecord | null {
   const now = input.now ?? new Date();
@@ -157,7 +157,7 @@ export function claimNextDownloadTask(
 }
 
 export function renewDownloadTaskLease(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { id: string; workerId: string; leaseMs: number; now?: Date }
 ): boolean {
   const now = input.now ?? new Date();
@@ -175,7 +175,7 @@ export function renewDownloadTaskLease(
 }
 
 export function updateDownloadTaskProgress(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     id: string;
     workerId: string;
@@ -226,7 +226,7 @@ export function updateDownloadTaskProgress(
 }
 
 export function transitionDownloadTask(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     id: string;
     from: DownloadTaskStatus[];
@@ -297,7 +297,7 @@ export function transitionDownloadTask(
 }
 
 export function completeDownloadTask(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     id: string;
     workerId: string;
@@ -343,7 +343,7 @@ export function completeDownloadTask(
 }
 
 export function resetDownloadTaskPartialState(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { id: string; workerId: string; now?: Date }
 ): boolean {
   const nowIso = (input.now ?? new Date()).toISOString();
@@ -365,7 +365,7 @@ export function resetDownloadTaskPartialState(
 }
 
 export function requestDownloadTaskControl(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { id: string; request: DownloadControlRequest; now?: Date }
 ): DownloadTaskRecord | null {
   const row = db.prepare(`
@@ -381,7 +381,7 @@ export function requestDownloadTaskControl(
   return row ? mapDownloadTask(row) : null;
 }
 
-export function getDownloadWorkerHealth(db: SigmaDatabase, now = new Date()): DownloadWorkerHealth {
+export function getDownloadWorkerHealth(db: ZosDatabase, now = new Date()): DownloadWorkerHealth {
   const readyCutoff = new Date(now.getTime() - 15_000).toISOString();
   const staleCutoff = new Date(now.getTime() - 60_000).toISOString();
   const workers = db.prepare(`
@@ -409,12 +409,12 @@ export function getDownloadWorkerHealth(db: SigmaDatabase, now = new Date()): Do
   };
 }
 
-export function deleteDownloadTask(db: SigmaDatabase, id: string): boolean {
+export function deleteDownloadTask(db: ZosDatabase, id: string): boolean {
   const result = db.prepare("DELETE FROM download_tasks WHERE id = ? AND status <> 'running'").run(id);
   return result.changes === 1;
 }
 
-function getRequiredDownloadTask(db: SigmaDatabase, id: string): DownloadTaskRecord {
+function getRequiredDownloadTask(db: ZosDatabase, id: string): DownloadTaskRecord {
   const task = getDownloadTask(db, id);
   if (!task) {
     throw new Error("Download task not found after write");

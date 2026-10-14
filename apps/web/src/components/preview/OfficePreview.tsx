@@ -39,7 +39,7 @@ export function OfficePreview({ blobUrl, meta }: { blobUrl: string; meta: FileMe
         const { renderAsync } = await import("docx-preview");
         if (disposed) return;
         await renderAsync(data, host, host, {
-          className: "sigmaos-docx",
+          className: "zos-docx",
           inWrapper: true,
           breakPages: true,
           ignoreLastRenderedPageBreak: false,

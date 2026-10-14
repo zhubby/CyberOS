@@ -6,15 +6,15 @@ import type {
   PublicSystemInfoCpu,
   PublicSystemInfoNetworkAddress,
   PublicSystemInfoStorageVolume,
-  SigmaConfig
-} from "@sigmaos/shared";
+  ZosConfig
+} from "@zos/shared";
 import {
   PHOTOSTAFF_DATA_DIRECTORY_NAME,
   PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
   PHOTOSTAFF_PREVIEW_MAX_EDGE_PX,
   PHOTOSTAFF_SUPPORTED_EXTENSIONS,
   PHOTOSTAFF_THUMBNAIL_SIZE_PX
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 interface StorageCandidate {
   id: string;
@@ -24,7 +24,7 @@ interface StorageCandidate {
   rootId: string | null;
 }
 
-export async function collectSystemInfo(config: SigmaConfig): Promise<PublicSystemInfo> {
+export async function collectSystemInfo(config: ZosConfig): Promise<PublicSystemInfo> {
   const cpus = os.cpus().map(toPublicCpu);
   const totalMemoryBytes = os.totalmem();
   const freeMemoryBytes = os.freemem();
@@ -85,7 +85,14 @@ export async function collectSystemInfo(config: SigmaConfig): Promise<PublicSyst
         arrayBuffersBytes: processMemory.arrayBuffers
       }
     },
-    sigma: {
+    zos: {
+      rootDir: config.paths?.rootDir ?? config.rootDir ?? path.dirname(config.dataDir),
+      stateDir: config.paths?.stateDir ?? config.stateDir ?? config.dataDir,
+      dataRoot: config.paths?.dataRoot ?? config.dataRoot ?? path.join(path.dirname(config.dataDir), "data"),
+      appsRoot: config.paths?.appsRoot ?? config.appsRoot ?? "/zos/apps",
+      isoRoot: config.paths?.isoRoot ?? config.isoRoot ?? "/zos/iso",
+      vmRoot: config.paths?.vmRoot ?? config.vmRoot ?? path.join(config.dataDir, "vm"),
+      backupRoot: config.paths?.backupRoot ?? config.backupRoot ?? path.join(path.dirname(config.dataDir), "data", "backup"),
       dataDir: config.dataDir,
       databasePath: config.databasePath,
       apiHost: config.api.host,
@@ -121,7 +128,7 @@ function toPublicCpu(cpu: ReturnType<typeof os.cpus>[number]): PublicSystemInfoC
   };
 }
 
-function storageCandidates(config: SigmaConfig): StorageCandidate[] {
+function storageCandidates(config: ZosConfig): StorageCandidate[] {
   return [
     {
       id: "data-dir",

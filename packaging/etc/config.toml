@@ -1,4 +1,4 @@
-data_dir = "/var/lib/sigmaos"
+root_dir = "/zos"
 environment = "production"
 
 [api]
@@ -10,7 +10,7 @@ allowed_origins = []
 poll_ms = 750
 
 [admin]
-display_name = "SigmaOS Admin"
+display_name = "ZOS Admin"
 auth_mode = "local-only"
 
 [model]
@@ -28,30 +28,30 @@ console_shells = ["/bin/sh", "/bin/bash"]
 [vm]
 enabled = false
 libvirt_uri = "qemu:///system"
-storage_path = "/var/lib/sigmaos/vmstore"
+storage_path = "/zos/vm"
 network_name = "default"
-iso_roots = ["/srv/iso"]
+iso_roots = ["/zos/iso"]
 operation_timeout_ms = 120000
 console_mode = "serial"
 
 [hostd]
-socket_path = "/run/sigmaos/hostd.sock"
+socket_path = "/run/zos/hostd.sock"
 
 [shares]
 enabled = false
-account_username = "sigma-share"
+account_username = "zos-share"
 
 [terminal]
-user = "sigmaos"
-termux_socket_path = "/run/sigmaos/termux.sock"
+user = "zos"
+termux_socket_path = "/run/zos/termux.sock"
 session_idle_timeout_ms = 1800000
 connect_timeout_ms = 10000
 max_sessions = 32
 
 [vod_player]
 enabled = false
-socket_path = "/run/sigmaos/vod-player.sock"
-state_path = "/var/lib/sigmaos-vod-player/session.json"
+socket_path = "/run/zos/vod-player.sock"
+state_path = "/zos/state/vod-player/session.json"
 command_timeout_ms = 5000
 startup_timeout_ms = 15000
 checkpoint_interval_ms = 5000
@@ -62,19 +62,19 @@ drm_connector = ""
 audio_output = "alsa"
 audio_device = ""
 hwdec = "auto-safe"
-user = "sigmaos"
+user = "zos"
 
 [[nas_roots]]
 id = "primary"
 name = "Primary NAS"
-path = "/srv/nas"
+path = "/zos/data/primary"
 mount_policy = "required"
 
 [backup]
 enabled = false
-repository_path = "/srv/backup/restic"
-password_file = "/etc/sigmaos/restic-password"
-staging_path = "/var/lib/sigmaos/backup-staging"
+repository_path = "/zos/data/backup/restic"
+password_file = "/zos/config/restic-password"
+staging_path = "/zos/state/backup-staging"
 require_mount = true
 retry_count = 2
 timeout_ms = 300000

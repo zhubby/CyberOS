@@ -65,7 +65,7 @@ None. No unresolved code finding is assigned to a downstream resolver, so no tod
 - No subagents were dispatched. Historical suppression/drop counts were not retained across the continuation; no unverified aggregate count is asserted here.
 - Full gates passed: `npm run typecheck`, `npm run lint`, `npm test` (77 Vitest files, 514 tests, plus documentation tests), and `npm run build`.
 - Playwright regression passed at desktop and 520px: Registry CRUD/empty-password edits, search, pull validation/failure/lock/success, multi-tag details/removal, occupied-image rejection, and Engine availability transitions. No browser runtime errors were observed.
-- Screenshots and the browser script are ignored local verification output under `.sigmaos/verification`; they were not staged.
+- Screenshots and the browser script are ignored local verification output under `.zos/verification`; they were not staged.
 - Local Docker management is disabled. Browser Engine responses were simulated; actual private Registry pulls and Compose behavior need Linux acceptance.
 - Registry secrets remain unencrypted inside restricted SQLite by the approved design. Device-state backups can contain them; do not expose database or temporary configuration contents in diagnostics.
 - This feature does not broaden helper, systemd capabilities, daemon configuration, internet exposure, or authentication boundaries. Existing daemon-related worktree changes are outside this feature's privilege scope.

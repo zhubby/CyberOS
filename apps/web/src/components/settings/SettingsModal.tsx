@@ -276,7 +276,7 @@ export function SettingsModal({
       >
         <aside className="settings-rail" aria-label={t("settings.sectionsLabel")}>
           <div className="settings-rail-brand">
-            <img className="settings-brand-logo" src="/sigmaos-icon.svg" alt={t("common.appName")} />
+            <img className="settings-brand-logo" src="/zos-icon.svg" alt={t("common.appName")} />
           </div>
 
           <label className="settings-search">
@@ -618,7 +618,7 @@ export function SettingsModal({
               status={photoStatus}
               processingSettings={photoProcessingSettings}
               workerHealth={photoWorkerHealth}
-              runtime={systemInfo?.sigma.photostaff ?? null}
+              runtime={systemInfo?.zos.photostaff ?? null}
               loading={loading}
               locale={resolvedLocale}
               onSettingsChange={onPhotoProcessingSettingsChange}
@@ -698,7 +698,7 @@ function SettingsOverview({
           label: t("settings.system.metrics.uptime")
         },
         {
-          value: formatLocaleNumber(systemInfo.sigma.nasRoots.length, locale),
+          value: formatLocaleNumber(systemInfo.zos.nasRoots.length, locale),
           label: t("settings.system.metrics.nasRoots")
         }
       ]
@@ -942,29 +942,29 @@ function SettingsSystemDetails({
       value: formatBytes(runtimeMemory.arrayBuffersBytes, locale)
     }
   ];
-  const sigmaRows: SettingsInfoRow[] = [
+  const zosRows: SettingsInfoRow[] = [
     {
       label: t("settings.system.labels.dataDir"),
-      value: systemInfo.sigma.dataDir,
+      value: systemInfo.zos.dataDir,
       mono: true
     },
     {
       label: t("settings.system.labels.databasePath"),
-      value: systemInfo.sigma.databasePath,
+      value: systemInfo.zos.databasePath,
       mono: true
     },
     {
       label: t("settings.system.labels.apiBind"),
-      value: `${systemInfo.sigma.apiHost}:${systemInfo.sigma.apiPort}`
+      value: `${systemInfo.zos.apiHost}:${systemInfo.zos.apiPort}`
     },
     {
       label: t("settings.system.labels.allowedOrigins"),
-      value: formatLocaleNumber(systemInfo.sigma.allowedOriginCount, locale)
+      value: formatLocaleNumber(systemInfo.zos.allowedOriginCount, locale)
     },
     {
       label: t("settings.system.labels.workerPoll"),
       value: t("settings.system.values.milliseconds", {
-        value: formatLocaleNumber(systemInfo.sigma.workerPollMs, locale)
+        value: formatLocaleNumber(systemInfo.zos.workerPollMs, locale)
       })
     },
     {
@@ -973,11 +973,11 @@ function SettingsSystemDetails({
     },
     {
       label: t("settings.system.labels.modelMode"),
-      value: systemInfo.sigma.modelProvider
+      value: systemInfo.zos.modelProvider
     },
     {
       label: t("settings.system.labels.localEndpoint"),
-      value: systemInfo.sigma.localEndpointConfigured ? t("settings.system.values.configured") : t("settings.system.values.notConfigured")
+      value: systemInfo.zos.localEndpointConfigured ? t("settings.system.values.configured") : t("settings.system.values.notConfigured")
     }
   ];
 
@@ -1127,12 +1127,12 @@ function SettingsSystemDetails({
 
       <SettingsInfoCard
         icon={<HardDrive aria-hidden="true" size={17} />}
-        title={t("settings.system.cards.sigma")}
-        description={t("settings.system.cards.sigmaDescription")}
-        rows={sigmaRows}
+        title={t("settings.system.cards.zos")}
+        description={t("settings.system.cards.zosDescription")}
+        rows={zosRows}
       >
         <div className="settings-root-list" aria-label={t("settings.system.labels.nasRoots")}>
-          {systemInfo.sigma.nasRoots.map((root) => (
+          {systemInfo.zos.nasRoots.map((root) => (
             <div key={root.id}>
               <strong>{root.name}</strong>
               <span>{root.id}</span>
@@ -1580,7 +1580,7 @@ export function SettingsPhotosPage({
   status: PhotoLibraryStatus | null;
   processingSettings: PhotoProcessingSettings | null;
   workerHealth: PhotoWorkerHealth | null;
-  runtime: SystemInfo["sigma"]["photostaff"] | null;
+  runtime: SystemInfo["zos"]["photostaff"] | null;
   loading: boolean;
   locale: SupportedLocale;
   onSettingsChange: (patch: Partial<PhotoSettingsDraft>) => Promise<void>;
@@ -2409,7 +2409,7 @@ function SettingsDockerPage({
                 </div>
                 <div>
                   <dt>{t("settings.docker.managedAppsPath")}</dt>
-                  <dd className="is-mono">/srv/apps</dd>
+                  <dd className="is-mono">/zos/apps</dd>
                 </div>
                 <div>
                   <dt>{t("settings.docker.operationTimeout")}</dt>
@@ -2501,7 +2501,7 @@ function SettingsSecurityPage({
       label: t("settings.security.allowedOrigins"),
       detail: t("settings.security.allowedOriginsDetail"),
       value: systemInfo
-        ? formatLocaleNumber(systemInfo.sigma.allowedOriginCount, locale)
+        ? formatLocaleNumber(systemInfo.zos.allowedOriginCount, locale)
         : systemValue ?? t("common.states.unavailable"),
       state: systemState
     },
@@ -2509,7 +2509,7 @@ function SettingsSecurityPage({
       label: t("settings.security.nasRoots"),
       detail: t("settings.security.nasRootsDetail"),
       value: systemInfo
-        ? formatLocaleNumber(systemInfo.sigma.nasRoots.length, locale)
+        ? formatLocaleNumber(systemInfo.zos.nasRoots.length, locale)
         : systemValue ?? t("common.states.unavailable"),
       state: systemState
     },
@@ -2632,16 +2632,16 @@ function SettingsAdvancedPage({
   const serviceRows: SettingsInfoRow[] = [
     {
       label: t("settings.system.labels.apiBind"),
-      value: `${systemInfo.sigma.apiHost}:${systemInfo.sigma.apiPort}`
+      value: `${systemInfo.zos.apiHost}:${systemInfo.zos.apiPort}`
     },
     {
       label: t("settings.system.labels.allowedOrigins"),
-      value: formatLocaleNumber(systemInfo.sigma.allowedOriginCount, locale)
+      value: formatLocaleNumber(systemInfo.zos.allowedOriginCount, locale)
     },
     {
       label: t("settings.system.labels.workerPoll"),
       value: t("settings.system.values.milliseconds", {
-        value: formatLocaleNumber(systemInfo.sigma.workerPollMs, locale)
+        value: formatLocaleNumber(systemInfo.zos.workerPollMs, locale)
       })
     },
     {
@@ -2650,11 +2650,11 @@ function SettingsAdvancedPage({
     },
     {
       label: t("settings.system.labels.modelMode"),
-      value: systemInfo.sigma.modelProvider
+      value: systemInfo.zos.modelProvider
     },
     {
       label: t("settings.system.labels.localEndpoint"),
-      value: systemInfo.sigma.localEndpointConfigured
+      value: systemInfo.zos.localEndpointConfigured
         ? t("settings.system.values.configured")
         : t("settings.system.values.notConfigured")
     }
@@ -2694,17 +2694,17 @@ function SettingsAdvancedPage({
   const pathRows: SettingsInfoRow[] = [
     {
       label: t("settings.system.labels.dataDir"),
-      value: systemInfo.sigma.dataDir,
+      value: systemInfo.zos.dataDir,
       mono: true
     },
     {
       label: t("settings.system.labels.databasePath"),
-      value: systemInfo.sigma.databasePath,
+      value: systemInfo.zos.databasePath,
       mono: true
     },
     {
       label: t("settings.system.labels.nasRoots"),
-      value: formatLocaleNumber(systemInfo.sigma.nasRoots.length, locale)
+      value: formatLocaleNumber(systemInfo.zos.nasRoots.length, locale)
     }
   ];
 
@@ -2741,7 +2741,7 @@ function SettingsAdvancedPage({
           rows={pathRows}
         >
           <div className="settings-root-list" aria-label={t("settings.system.labels.nasRoots")}>
-            {systemInfo.sigma.nasRoots.map((root) => (
+            {systemInfo.zos.nasRoots.map((root) => (
               <div key={root.id}>
                 <strong>{root.name}</strong>
                 <span>{root.id}</span>

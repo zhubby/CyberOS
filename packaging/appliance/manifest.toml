@@ -1,5 +1,5 @@
-name = "sigmaos-appliance"
-version = "0.10.8"
+name = "zos-appliance"
+version = "1.0.0"
 base_suite = "bookworm"
 target_arch = "arm64"
 
@@ -7,22 +7,22 @@ target_arch = "arm64"
 node = ">=22"
 database = "sqlite"
 init = "systemd"
-package = "sigmaos.deb"
+package = "zos.deb"
 
 [services]
 units = [
-  "sigmaos-api.service",
-  "sigmaos-termux.service",
-  "sigmaos-vod-player.service",
-  "sigmaos-hostd.service",
-  "sigmaos-worker@1.service",
-  "sigmaos-photostaff.service",
-  "sigmaos-downloader.service",
-  "sigmaos-indexer.service",
-  "sigmaos-maintenance.timer",
-  "sigmaos-backup-daily.timer",
-  "sigmaos-backup-weekly.timer",
-  "sigmaos-health.timer",
+  "zos-api.service",
+  "zos-termux.service",
+  "zos-vod-player.service",
+  "zos-hostd.service",
+  "zos-worker@1.service",
+  "zos-photostaff.service",
+  "zos-downloader.service",
+  "zos-indexer.service",
+  "zos-maintenance.timer",
+  "zos-backup-daily.timer",
+  "zos-backup-weekly.timer",
+  "zos-health.timer",
   "nginx.service",
   "docker.service",
   "libvirtd.service"

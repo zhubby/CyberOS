@@ -11,24 +11,25 @@ const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 
 it("starts the production API bundle", async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-api-bundle-"));
-  const nasRoot = path.join(tempDir, "nas");
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-api-bundle-"));
+  const zosRoot = path.join(tempDir, "root");
+  const nasRoot = path.join(zosRoot, "data", "test");
   const port = await reservePort();
-  await mkdir(nasRoot);
-  await execFileAsync("npm", ["run", "build", "-w", "@sigmaos/api"], { cwd: repoRoot });
+  await mkdir(nasRoot, { recursive: true });
+  await execFileAsync("npm", ["run", "build", "-w", "@zos/api"], { cwd: repoRoot });
 
   const child = spawn(process.execPath, [path.join(repoRoot, "apps/api/dist/index.js")], {
     cwd: repoRoot,
     env: {
       ...process.env,
-      SIGMAOS_CONFIG: path.join(tempDir, "missing.toml"),
-      SIGMAOS_ENVIRONMENT: "development",
-      SIGMAOS_DATA_DIR: tempDir,
-      SIGMAOS_NAS_ROOTS: `test:Test NAS:${nasRoot}`,
-      SIGMAOS_API_HOST: "127.0.0.1",
-      SIGMAOS_API_PORT: String(port),
-      SIGMAOS_WEB_DIST: path.join(tempDir, "missing-web"),
-      SIGMAOS_DOCS_DIST: path.join(tempDir, "missing-docs")
+      ZOS_CONFIG: path.join(tempDir, "missing.toml"),
+      ZOS_ENVIRONMENT: "development",
+      ZOS_ROOT: zosRoot,
+      ZOS_NAS_ROOTS: `test:Test NAS:${nasRoot}`,
+      ZOS_API_HOST: "127.0.0.1",
+      ZOS_API_PORT: String(port),
+      ZOS_WEB_DIST: path.join(tempDir, "missing-web"),
+      ZOS_DOCS_DIST: path.join(tempDir, "missing-docs")
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -50,7 +51,7 @@ it("starts the production API bundle", async () => {
 
   try {
     const response = await waitForHealth(port, () => exited);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, service: "sigmaos-api" });
+    await expect(response.json()).resolves.toMatchObject({ ok: true, service: "zos-api" });
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\nstdout:\n${stdout}\nstderr:\n${stderr}`

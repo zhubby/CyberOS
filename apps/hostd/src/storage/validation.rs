@@ -64,10 +64,11 @@ pub(super) fn validate_operation(operation: &StorageOperation) -> Result<(), Hos
     };
     let unique = devices.iter().collect::<HashSet<_>>();
     if !is_pool_name(name)
+        || name == "backup"
         || risk != "high"
         || devices.iter().any(|device| !is_device_path(device))
         || unique.len() != devices.len()
-        || mountpoint != &PathBuf::from(format!("/srv/nas/{name}"))
+        || mountpoint != &PathBuf::from(format!("/zos/data/{name}"))
     {
         return Err(HostdError::validation("Invalid storage operation request"));
     }

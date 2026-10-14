@@ -1,5 +1,5 @@
-import type { DockerRegistryCredentialRecord } from "@sigmaos/db";
-import { normalizeDockerRegistryServerAddress, parseDockerImageReference, type DockerRegistryCredentialSummary } from "@sigmaos/shared";
+import type { DockerRegistryCredentialRecord } from "@zos/db";
+import { normalizeDockerRegistryServerAddress, parseDockerImageReference, type DockerRegistryCredentialSummary } from "@zos/shared";
 
 const DOCKER_HUB = "docker.io";
 const MAX_IMAGE_REFERENCE_LENGTH = 512;

@@ -5,13 +5,13 @@ import os from "node:os";
 import { promisify } from "node:util";
 import { XMLParser } from "fast-xml-parser";
 import type {
-  SigmaConfig,
+  ZosConfig,
   VmConfig,
   VmInstanceSummary,
   VmOperationProposal,
   VmOperationRecord,
   VmSummary
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 const execFileAsync = promisify(execFile);
 const COMMAND_MAX_BUFFER = 4 * 1024 * 1024;
@@ -33,7 +33,7 @@ export function vmQemuCommand(architecture = process.arch): "qemu-system-aarch64
 export const DEFAULT_VM_CONFIG: VmConfig = {
   enabled: false,
   libvirtUri: "qemu:///system",
-  storagePath: ".sigmaos/vmstore",
+  storagePath: ".zos/vmstore",
   networkName: "default",
   isoRoots: [],
   operationTimeoutMs: 120_000,
@@ -57,7 +57,7 @@ class NodeVmCommandRunner implements VmCommandRunner {
   }
 }
 
-export function vmCommandRunner(config: SigmaConfig, dependencies?: VmRuntimeDependencies): VmCommandRunner {
+export function vmCommandRunner(config: ZosConfig, dependencies?: VmRuntimeDependencies): VmCommandRunner {
   const vm = config.vm ?? DEFAULT_VM_CONFIG;
   return dependencies?.commandRunner ?? new NodeVmCommandRunner(
     vm.operationTimeoutMs,
@@ -65,7 +65,7 @@ export function vmCommandRunner(config: SigmaConfig, dependencies?: VmRuntimeDep
   );
 }
 
-export async function collectVmSummary(config: SigmaConfig, dependencies?: VmRuntimeDependencies): Promise<VmSummary> {
+export async function collectVmSummary(config: ZosConfig, dependencies?: VmRuntimeDependencies): Promise<VmSummary> {
   const vm = config.vm ?? DEFAULT_VM_CONFIG;
   if (!vm.enabled) return unavailableSummary(vm, "disabled");
   const runner = vmCommandRunner(config, dependencies);
@@ -123,7 +123,7 @@ export async function collectVmSummary(config: SigmaConfig, dependencies?: VmRun
 }
 
 export async function applyVmOperation(
-  config: SigmaConfig,
+  config: ZosConfig,
   operation: VmOperationRecord,
   proposal: VmOperationProposal,
   dependencies?: VmRuntimeDependencies

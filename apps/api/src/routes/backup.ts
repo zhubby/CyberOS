@@ -1,6 +1,6 @@
 import { access, constants as fsConstants } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
-import { listBackupRuns, listHealthAlerts } from "@sigmaos/db";
+import { listBackupRuns, listHealthAlerts } from "@zos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerBackupRoutes(server: FastifyInstance, { db, config }: ApiRouteContext): void {

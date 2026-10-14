@@ -5,7 +5,7 @@
   "scope": {
     "base": "359be23",
     "branch": "codex/rust-vod-player",
-    "intent": "replace the Node player-helper with the Rust sigmaos-vod-player service and complete the reliability and naming migration",
+    "intent": "replace the Node player-helper with the Rust zos-vod-player service and complete the reliability and naming migration",
     "untrackedCoreFilesReviewed": true
   },
   "verdict": "ready_for_linux_release_acceptance",
@@ -14,7 +14,7 @@
     "Moved controller shutdown to a dedicated high-priority signal and deduplicated recovery scheduling across mpv failure events.",
     "Classified transient startup failures as recoverable while keeping deterministic media failures terminal.",
     "Stabilized permission error mapping and made corrupt-session quarantine best effort.",
-    "Added SIGMAOS_NAS_ROOTS parity and persistent socket/state path validation compatible with PrivateTmp.",
+    "Added ZOS_NAS_ROOTS parity and persistent socket/state path validation compatible with PrivateTmp.",
     "Hardened refresh-script TOML parsing and added broker-client and fake-mpv timeout coverage.",
     "Documented persistent path constraints and the legacy service upgrade sequence."
   ],

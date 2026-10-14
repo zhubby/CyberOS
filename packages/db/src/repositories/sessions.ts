@@ -4,8 +4,8 @@ import type {
   AgentProviderSessionRecord,
   AgentSessionRecord,
   ModelProviderName
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import {
   mapMessage,
   mapSession
@@ -18,7 +18,7 @@ import type {
 } from "./repository-rows.js";
 
 export function createSession(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId: string; currentPath?: string }
 ): AgentSessionRecord {
   const now = new Date().toISOString();
@@ -38,7 +38,7 @@ export function createSession(
   return session;
 }
 
-export function getSession(db: SigmaDatabase, sessionId: string): AgentSessionRecord | null {
+export function getSession(db: ZosDatabase, sessionId: string): AgentSessionRecord | null {
   const row = db
     .prepare("SELECT id, root_id, current_path, created_at, updated_at FROM agent_sessions WHERE id = ?")
     .get(sessionId) as DbSessionRow | undefined;
@@ -46,7 +46,7 @@ export function getSession(db: SigmaDatabase, sessionId: string): AgentSessionRe
 }
 
 export function listSessions(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId?: string; limit?: number } = {}
 ): AgentSessionRecord[] {
   const limit = input.limit ?? 50;
@@ -73,7 +73,7 @@ export function listSessions(
 }
 
 export function updateSessionPath(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { sessionId: string; currentPath: string }
 ): AgentSessionRecord | null {
   const now = new Date().toISOString();
@@ -89,7 +89,7 @@ export function updateSessionPath(
   return row ? mapSession(row) : null;
 }
 
-export function hasActiveJobsForSession(db: SigmaDatabase, sessionId: string): boolean {
+export function hasActiveJobsForSession(db: ZosDatabase, sessionId: string): boolean {
   const row = db
     .prepare(`
       SELECT 1 AS marker
@@ -102,13 +102,13 @@ export function hasActiveJobsForSession(db: SigmaDatabase, sessionId: string): b
   return Boolean(row);
 }
 
-export function deleteSession(db: SigmaDatabase, sessionId: string): boolean {
+export function deleteSession(db: ZosDatabase, sessionId: string): boolean {
   const result = db.prepare("DELETE FROM agent_sessions WHERE id = ?").run(sessionId);
   return result.changes === 1;
 }
 
 export function getAgentProviderSession(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   sessionId: string
 ): AgentProviderSessionRecord | null {
   const row = db
@@ -123,7 +123,7 @@ export function getAgentProviderSession(
 }
 
 export function saveAgentProviderSession(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     sessionId: string;
     providerSessionId: string;
@@ -171,7 +171,7 @@ export function saveAgentProviderSession(
 }
 
 export function listMessages(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { sessionId: string; limit?: number }
 ): AgentMessageRecord[] {
   const rows = db

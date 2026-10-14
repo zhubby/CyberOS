@@ -1,5 +1,5 @@
-import type { AgentSessionRecord, FileOperationProposal, NasRootRecord, PendingApprovalRecord } from "@sigmaos/shared";
-import { listDir, previewFile, readText, searchFiles, statPath } from "@sigmaos/nas-tools";
+import type { AgentSessionRecord, FileOperationProposal, NasRootRecord, PendingApprovalRecord } from "@zos/shared";
+import { listDir, previewFile, readText, searchFiles, statPath } from "@zos/nas-tools";
 import { readOnlySystemPrompt } from "./system-prompt.js";
 
 export interface AgentEmitEvent {
@@ -464,7 +464,7 @@ function parseMutationProposal(message: string, rootId: string): FileOperationPr
       sourcePath,
       risk: "medium",
       reversible: true,
-      summary: `Move ${sourcePath} to SigmaOS trash`
+      summary: `Move ${sourcePath} to ZOS trash`
     };
   }
 

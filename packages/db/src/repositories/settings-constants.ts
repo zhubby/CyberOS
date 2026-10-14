@@ -4,7 +4,7 @@ import type {
   PiToolName,
   PiToolPolicyMode,
   PiToolPolicySettingsRecord
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 export const READ_ONLY_PI_TOOLS = ["read", "grep", "find", "ls"] as const satisfies PiToolName[];
 export const DANGEROUS_PI_TOOLS = ["bash", "edit", "write"] as const satisfies PiToolName[];

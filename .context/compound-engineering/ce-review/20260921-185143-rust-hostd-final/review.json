@@ -8,7 +8,7 @@
     "trackedChanges": 81,
     "untrackedFilesBeforeArtifact": 37,
     "untrackedCoreFilesIncluded": 35,
-    "intent": "replace the Node share helper with the Rust sigmaos-hostd daemon and rename the complete runtime surface"
+    "intent": "replace the Node share helper with the Rust zos-hostd daemon and rename the complete runtime surface"
   },
   "verdict": "ready_to_merge_linux_acceptance_required",
   "findings": [],
@@ -29,7 +29,7 @@
       "A Debian package was not built or installed during this local review because dpkg-buildpackage is unavailable."
     ],
     "residualRisks": [
-      "Multiple services share the sigmaos UID accepted by hostd, so peer identity is not isolated from API approval authority.",
+      "Multiple services share the zos UID accepted by hostd, so peer identity is not isolated from API approval authority.",
       "Client timeouts do not cancel hostd work already in progress.",
       "The host installer executes rustup bootstrap content fetched over HTTPS without a pinned checksum."
     ]

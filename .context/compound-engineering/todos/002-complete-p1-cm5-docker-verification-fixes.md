@@ -52,7 +52,7 @@ CM5, change existing credentials, or mutate RustFS data in this work item.
 
 - User authorized fixing the issues from CM5 verification.
 - Worktree was clean; main remains selected under the user's earlier direction.
-- Existing .sigmaos verification records were read without exposing credentials.
+- Existing .zos verification records were read without exposing credentials.
 - No institutional solutions or critical-patterns files exist yet.
 
 ### 2026-09-16 - Implementation and Verification
@@ -67,7 +67,7 @@ CM5, change existing credentials, or mutate RustFS data in this work item.
 - Full tests: 80 Vitest files / 531 tests, plus documentation content tests.
 - Browser checks used isolated localhost fixtures at desktop/520px: capability states,
   disabled controls, retained inputs, explicit clearing, final confirmation lock and unknown occupancy.
-- No new page errors after the browser-safe entry fix. Screenshots are ignored .sigmaos artifacts.
+- No new page errors after the browser-safe entry fix. Screenshots are ignored .zos artifacts.
 - Temporary fixture servers stopped; original development server preserved.
 - No remote deployment, host reboot, credential changes or RustFS data mutation performed.
 - Final gates passed: version check (0.3.0), typecheck, lint, full tests, production build;

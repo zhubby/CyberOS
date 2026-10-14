@@ -1,6 +1,6 @@
 {
-  "name": "@sigmaos/ops",
-  "version": "0.10.8",
+  "name": "@zos/ops",
+  "version": "1.0.0",
   "type": "module",
   "exports": {
     ".": "./src/runner.ts"
@@ -12,8 +12,8 @@
     "build": "cd ../.. && tsup apps/ops/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir apps/ops/dist"
   },
   "dependencies": {
-    "@sigmaos/db": "0.10.8",
-    "@sigmaos/shared": "0.10.8",
-    "@sigmaos/system-health": "0.10.8"
+    "@zos/db": "1.0.0",
+    "@zos/shared": "1.0.0",
+    "@zos/system-health": "1.0.0"
   }
 }

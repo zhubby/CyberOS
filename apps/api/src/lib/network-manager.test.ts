@@ -95,7 +95,7 @@ describe("NetworkManager runtime", () => {
       "nmcli --get-values WIFI-PROPERTIES.AP,WIFI-PROPERTIES.2GHZ,WIFI-PROPERTIES.5GHZ device show wlan0":
         "yes\nyes\nyes\n",
       "nmcli --terse --escape yes --fields NAME,UUID,TYPE,AUTOCONNECT,DEVICE,FILENAME connection show":
-        `Home:${CLIENT_ID}:wifi:yes:--:/etc/NetworkManager/system-connections/sigmaos-home.nmconnection\n`
+        `Home:${CLIENT_ID}:wifi:yes:--:/etc/NetworkManager/system-connections/zos-home.nmconnection\n`
     });
     const runtime = new SystemNetworkManagerRuntime({ commandRunner: runner, hostd, hostdSocketPath: "/unused" });
 
@@ -193,7 +193,7 @@ class FakeHostd implements NetworkManagerHostdClient {
 function managedProfile() {
   return {
     id: CLIENT_ID,
-    name: "SigmaOS Home",
+    name: "ZOS Home",
     ssid: "Home",
     device: "wlan0",
     security: "wpa2" as const,

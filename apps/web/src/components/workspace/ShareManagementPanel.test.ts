@@ -10,7 +10,7 @@ const summary: ShareSummary = {
   metrics: { shares: 1, enabledProtocols: 5, authenticatedProtocols: 3 },
   protocols: {
     smb: { protocol: "smb", enabledShares: 1, services: [{ name: "smbd.service", status: "active", error: null }] },
-    webdav: { protocol: "webdav", enabledShares: 1, services: [{ name: "sigmaos-webdav.service", status: "active", error: null }] },
+    webdav: { protocol: "webdav", enabledShares: 1, services: [{ name: "zos-webdav.service", status: "active", error: null }] },
     ftp: { protocol: "ftp", enabledShares: 1, services: [{ name: "vsftpd.service", status: "active", error: null }] },
     nfs: { protocol: "nfs", enabledShares: 1, services: [{ name: "nfs-server.service", status: "active", error: null }] },
     dlna: { protocol: "dlna", enabledShares: 1, services: [{ name: "minidlna.service", status: "active", error: null }] }

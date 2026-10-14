@@ -37,7 +37,7 @@ import type {
   StorageOperationStatus
   , VmOperationAction
   , VmOperationStatus
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 export type DbSessionRow = {
   id: string;

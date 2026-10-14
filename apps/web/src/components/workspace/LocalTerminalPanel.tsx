@@ -874,7 +874,7 @@ function terminalWebSocketUrl(rootId: string): string {
 }
 
 function terminalWebSocketProtocols(sessionId: string): string[] {
-  return ["sigmaos-terminal-v1", `sigmaos-session.${sessionId}`];
+  return ["zos-terminal-v1", `zos-session.${sessionId}`];
 }
 
 function parseTerminalMessage(raw: unknown): TerminalMessage | null {

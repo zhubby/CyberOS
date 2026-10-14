@@ -48,7 +48,6 @@ impl Photostaff {
 
     pub async fn run(self) -> Result<(), PhotostaffError> {
         self.db.wait_for_schema(Duration::from_secs(60)).await?;
-        self.config.migrate_cache()?;
         verify_tools()?;
         {
             let cleanup_lock = CacheLock::exclusive(&self.config.cache_root).await?;

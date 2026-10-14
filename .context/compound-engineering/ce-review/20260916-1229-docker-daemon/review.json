@@ -24,7 +24,7 @@
       "status": "applied"
     },
     {
-      "title": "Package upgrade exposes root recovery material to sigmaos",
+      "title": "Package upgrade exposes root recovery material to zos",
       "severity": "P1",
       "file": "packaging/debian/postinst",
       "why_it_matters": "The recursive state-directory chown changed the owner of daemon.json baselines that can contain proxy or registry credentials.",
@@ -33,7 +33,7 @@
       "requires_verification": true,
       "confidence": 0.96,
       "evidence": [
-        "postinst ran chown -R sigmaos:sigmaos /var/lib/sigmaos after the helper stored recovery files below that path."
+        "postinst ran chown -R zos:zos /zos/state after the helper stored recovery files below that path."
       ],
       "pre_existing": false,
       "status": "applied"

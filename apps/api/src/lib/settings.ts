@@ -5,12 +5,12 @@ import type {
   PublicShareSettings,
   ShareConfig,
   ShareSettingsRecord,
-  SigmaConfig
-} from "@sigmaos/shared";
-import { isModelProviderName as sharedIsModelProviderName } from "@sigmaos/shared";
-import { defaultPiToolPolicySettings } from "@sigmaos/db";
+  ZosConfig
+} from "@zos/shared";
+import { isModelProviderName as sharedIsModelProviderName } from "@zos/shared";
+import { defaultPiToolPolicySettings } from "@zos/db";
 
-export function defaultModelProviderSettings(config: SigmaConfig): ModelProviderSettingsRecord {
+export function defaultModelProviderSettings(config: ZosConfig): ModelProviderSettingsRecord {
   return {
     providerName: "openai",
     baseUrl: config.model.localEndpoint,
@@ -46,7 +46,7 @@ export function toPublicPiToolPolicySettings(settings = defaultPiToolPolicySetti
   return settings;
 }
 
-export function defaultDockerSettings(config: SigmaConfig): DockerSettingsRecord {
+export function defaultDockerSettings(config: ZosConfig): DockerSettingsRecord {
   return {
     ...config.docker,
     updatedAt: new Date(0).toISOString()
@@ -57,7 +57,7 @@ export function toPublicDockerSettings(settings: DockerSettingsRecord): DockerSe
   return settings;
 }
 
-export function defaultShareSettings(config: SigmaConfig): ShareSettingsRecord {
+export function defaultShareSettings(config: ZosConfig): ShareSettingsRecord {
   return {
     ...config.shares,
     updatedAt: new Date(0).toISOString()
@@ -94,14 +94,14 @@ export function dockerSettingsToConfig(settings: DockerSettingsRecord): DockerCo
   };
 }
 
-export function effectiveDockerConfig(config: SigmaConfig, settings: DockerSettingsRecord | null): SigmaConfig {
+export function effectiveDockerConfig(config: ZosConfig, settings: DockerSettingsRecord | null): ZosConfig {
   return {
     ...config,
     docker: settings ? dockerSettingsToConfig(settings) : config.docker
   };
 }
 
-export function effectiveShareConfig(config: SigmaConfig, settings: ShareSettingsRecord | null): SigmaConfig {
+export function effectiveShareConfig(config: ZosConfig, settings: ShareSettingsRecord | null): ZosConfig {
   return {
     ...config,
     shares: settings ? shareSettingsToConfig(settings) : config.shares

@@ -36,13 +36,13 @@ sidebar:
 
 ## 使用相册
 
-相册面板使用系统配置中指定的唯一媒体目录，不在面板内切换目录。原媒体和 XMP sidecar 始终保持原字节；内部 `sigmaos-photostaff.service` 递归扫描图片、视频和 RAW，索引 EXIF、IPTC、XMP、ICC/JFIF、RAW 与视频标签，并生成不携带原元数据的本地 WebP 缩略图与预览。扫描断点、重试和发布 journal 会在 daemon 或系统重启后恢复；界面显示处理阶段、worker health、重试倒计时和稳定错误码，旧时间线在重建期间仍可浏览。
+相册面板使用系统配置中指定的唯一媒体目录，不在面板内切换目录。原媒体和 XMP sidecar 始终保持原字节；内部 `zos-photostaff.service` 递归扫描图片、视频和 RAW，索引 EXIF、IPTC、XMP、ICC/JFIF、RAW 与视频标签，并生成不携带原元数据的本地 WebP 缩略图与预览。扫描断点、重试和发布 journal 会在 daemon 或系统重启后恢复；界面显示处理阶段、worker health、重试倒计时和稳定错误码，旧时间线在重建期间仍可浏览。
 
 时间线支持全文、日期、类型、相机、镜头、ISO、光圈、快门、焦距、评分、关键词、位置和高级字段条件，并提供分面计数与稳定排序。查看器异步加载完整元数据；敏感组默认隐藏，需主动揭示。多文件上传先处理媒体再处理 `.xmp`；移动、trash 和 ZIP 会将确定关联的 sidecar 去重后成对处理，单独下载原图不附带 sidecar。
 
-地图视图首次打开时显示“下载离线地图”，只有点击后 API 才下载固定的 Natural Earth II 3.2.0 全球概览图；下载期间每秒恢复进度，离开页面不会中止服务端任务，完成后无需刷新即可加载。文件保存在 data directory 的 `photostaff/maps/natural-earth-ii-3.2.0.pmtiles`，生产路径为 `/var/lib/sigmaos/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`，会跨服务重启和软件升级保留。
+地图视图首次打开时显示“下载离线地图”，只有点击后 API 才下载固定的 Natural Earth II 3.2.0 全球概览图；下载期间每秒恢复进度，离开页面不会中止服务端任务，完成后无需刷新即可加载。文件保存在 data directory 的 `photostaff/maps/natural-earth-ii-3.2.0.pmtiles`，生产路径为 `/zos/state/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`，会跨服务重启和软件升级保留。
 
-该 JPEG PMTiles 只覆盖 `z0–z6`，适合按国家、地区和城市群浏览照片，不提供道路、门牌或街道级细节。下载完成后地图瓦片只从本机同源 API 读取；SigmaOS 不请求在线瓦片、遥测、反向地理编码或第三方坐标服务。当前位置仍只在点击按钮后请求浏览器权限。
+该 JPEG PMTiles 只覆盖 `z0–z6`，适合按国家、地区和城市群浏览照片，不提供道路、门牌或街道级细节。下载完成后地图瓦片只从本机同源 API 读取；ZOS 不请求在线瓦片、遥测、反向地理编码或第三方坐标服务。当前位置仍只在点击按钮后请求浏览器权限。
 
 ## 使用 Agent
 
@@ -59,7 +59,7 @@ sidebar:
 
 - 点击 **Approve** 后 API 才会执行对应操作；
 - 点击 **Reject** 不改变文件系统；
-- 文件移除进入 SigmaOS trash，而不是永久删除；
+- 文件移除进入 ZOS trash，而不是永久删除；
 - 已应用的文件操作可在 Activity 中执行 rollback；
 - trash 项可通过 restore 恢复，恢复失败时保留原条目并查看 API 错误。
 
@@ -71,9 +71,9 @@ Workspace 的 Terminal 使用 Rust termux 和 tmux 承载受限 PTY。每个 NAS
 
 切换标签时浏览器保留已经打开标签的本地显示缓冲，但只有活动标签连接 WebSocket。刷新页面、断开浏览器或重启 API/termux 不会终止已登记标签的 tmux shell；重启标签或确认关闭标签会终止其中的 shell 和所有子进程。关闭最后一个标签后保持空状态，不会立即自动创建新标签。未登记的旧客户端会话仍使用原有空闲回收策略。
 
-同一标签同时只允许一个控制端。另一个浏览器连接时，原连接会显示“会话已在其他位置打开”并停止自动重连；点击重新接管会把控制权取回。整机重启后 SQLite 中的标签、名称、顺序和活动项仍保留，但 tmux 进程和 scrollback 不会恢复，首次重新连接会启动新的 shell。连接失败时检查 `tmux`、`sigmaos-termux.service` 和 termux identity drop-in。
+同一标签同时只允许一个控制端。另一个浏览器连接时，原连接会显示“会话已在其他位置打开”并停止自动重连；点击重新接管会把控制权取回。整机重启后 SQLite 中的标签、名称、顺序和活动项仍保留，但 tmux 进程和 scrollback 不会恢复，首次重新连接会启动新的 shell。连接失败时检查 `tmux`、`zos-termux.service` 和 termux identity drop-in。
 
-Downloads 面板使用独立 Rust `sigmaos-downloader.service`，支持公网 HTTP/HTTPS 地址、可选 SHA-256、目录选择、排队、协作式暂停/继续、取消、自动重试和历史。任务行显示 worker health、单流/分段模式、校验/发布阶段、重试倒计时和稳定错误码；失败任务保留 `.part` 文件，取消任务清理临时文件，同名目标不会覆盖。大文件在来源提供可靠 validator 时最多使用设置中指定的 Range 并发；设置页还可调整分段阈值、重试、超时、最低剩余空间和最大文件大小。Docker、VM、Shares、Storage 面板只在配置和宿主机能力可用时展示完整操作；Docker 资源创建和全部 VM 操作是直接执行的管理流程，Docker 生命周期和 Compose 变更仍通过 approval。
+Downloads 面板使用独立 Rust `zos-downloader.service`，支持公网 HTTP/HTTPS 地址、可选 SHA-256、目录选择、排队、协作式暂停/继续、取消、自动重试和历史。任务行显示 worker health、单流/分段模式、校验/发布阶段、重试倒计时和稳定错误码；失败任务保留 `.part` 文件，取消任务清理临时文件，同名目标不会覆盖。大文件在来源提供可靠 validator 时最多使用设置中指定的 Range 并发；设置页还可调整分段阈值、重试、超时、最低剩余空间和最大文件大小。Docker、VM、Shares、Storage 面板只在配置和宿主机能力可用时展示完整操作；Docker 资源创建和全部 VM 操作是直接执行的管理流程，Docker 生命周期和 Compose 变更仍通过 approval。
 
 Docker 面板的镜像区域可以搜索本地镜像、查看完整 ID/tags/digests/占用信息、拉取镜像和删除未被容器引用的具体 tag。删除需要在详情弹窗中再次确认，不会强制删除，也不进入 agent approval。多标签镜像必须先选择要删除的具体 tag；无标签镜像使用完整 ID。
 
@@ -83,7 +83,7 @@ Docker 面板的镜像区域可以搜索本地镜像、查看完整 ID/tags/dige
 
 Registry 凭证入口即使 Engine 离线或 Docker 管理关闭也可使用。每个规范化 Registry 只保存一组用户名与密码/access token；编辑时密码字段始终为空，留空表示保留已有凭证。未限定 Registry 的镜像使用 Docker Hub 凭证，显式私有 Registry 只做精确匹配。手动拉取、容器创建的自动拉取以及 Compose `pull/up` 都在执行时读取当前凭证。
 
-Compose 项目区的“创建”按钮用于管理系统托管 App。名称用于显示，`projectKey` 创建后不可修改；Compose YAML 和环境变量保存在 SQLite，`/srv/apps/<project-key>` 只是 SigmaOS 自动发布的运行副本，不在文件面板中显示，也不应手工编辑。已有环境变量只显示“已配置”，留空保存表示保留原值，从列表移除才会删除。
+Compose 项目区的“创建”按钮用于管理系统托管 App。名称用于显示，`projectKey` 创建后不可修改；Compose YAML 和环境变量保存在 SQLite，`/zos/apps/<project-key>` 只是 ZOS 自动发布的运行副本，不在文件面板中显示，也不应手工编辑。已有环境变量只显示“已配置”，留空保存表示保留原值，从列表移除才会删除。
 
 “保存”只生成新的 revision 并显示“需要部署”；“保存并部署”在保存成功后发起现有 Compose Up approval，审批创建失败不会撤销已保存内容。Engine 离线时仍可查看、创建和编辑，但不能部署或删除。删除前必须先通过 Down approval 移除项目容器，再进行独立二次确认；删除 App 不会清理镜像、named volume、网络或 NAS bind mount 数据。
 

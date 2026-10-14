@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SystemEthernetConfig } from "@sigmaos/shared";
+import type { SystemEthernetConfig } from "@zos/shared";
 import {
   EthernetManagerRequestError,
   SystemEthernetManagerRuntime,

@@ -7,7 +7,7 @@ import { collectBuildInfo, writeBuildInfo } from "./generate-build-info.mjs";
 let repoRoot;
 
 beforeEach(async () => {
-  repoRoot = await mkdtemp(path.join(os.tmpdir(), "sigmaos-build-info-"));
+  repoRoot = await mkdtemp(path.join(os.tmpdir(), "zos-build-info-"));
   await writeFile(path.join(repoRoot, "package.json"), JSON.stringify({ version: "0.2.0" }));
 });
 
@@ -20,12 +20,12 @@ describe("build metadata generation", () => {
     const info = await collectBuildInfo({
       repoRoot,
       env: {
-        SIGMAOS_BUILD_COMMIT_SHA: "ABCDEF0123456789",
-        SIGMAOS_BUILD_TAG: "v0.2.0",
-        SIGMAOS_BUILD_BRANCH: "main",
-        SIGMAOS_BUILD_TIME: "2026-09-14T08:00:00+08:00",
-        SIGMAOS_BUILD_SOURCE: "release",
-        SIGMAOS_BUILD_DIRTY: "false"
+        ZOS_BUILD_COMMIT_SHA: "ABCDEF0123456789",
+        ZOS_BUILD_TAG: "v0.2.0",
+        ZOS_BUILD_BRANCH: "main",
+        ZOS_BUILD_TIME: "2026-09-14T08:00:00+08:00",
+        ZOS_BUILD_SOURCE: "release",
+        ZOS_BUILD_DIRTY: "false"
       },
       runGit: async () => {
         throw new Error("Git should not be required for explicit metadata");

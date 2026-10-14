@@ -1,10 +1,9 @@
 use std::process::ExitCode;
 
-use sigmaos_hostd::config::{DEFAULT_CONFIG_PATH, HostdConfig};
-use sigmaos_hostd::config_migration::migrate_config;
-use sigmaos_hostd::error::{ErrorCode, HostdError};
-use sigmaos_hostd::server::HostdServer;
 use tracing_subscriber::EnvFilter;
+use zos_hostd::config::HostdConfig;
+use zos_hostd::error::{ErrorCode, HostdError};
+use zos_hostd::server::HostdServer;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -26,32 +25,13 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> Result<(), HostdError> {
-    let mut arguments = std::env::args_os().skip(1);
-    match arguments
-        .next()
-        .and_then(|argument| argument.into_string().ok())
-    {
-        None => {
-            let config = HostdConfig::load()?;
-            HostdServer::new(config).run().await
-        }
-        Some(command) if command == "migrate-config" && arguments.next().is_none() => {
-            let config_path = std::env::var_os("SIGMAOS_CONFIG")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_CONFIG_PATH));
-            let outcome = migrate_config(&config_path)?;
-            tracing::info!(
-                path = %config_path.display(),
-                changed = outcome.changed,
-                backup = outcome.backup_path.as_ref().map(|path| path.display().to_string()),
-                "hostd configuration migration complete"
-            );
-            Ok(())
-        }
-        _ => Err(HostdError::new(
+    if std::env::args_os().nth(1).is_some() {
+        return Err(HostdError::new(
             400,
             ErrorCode::Validation,
-            "usage: sigmaos-hostd [migrate-config]",
-        )),
+            "usage: zos-hostd",
+        ));
     }
+    let config = HostdConfig::load()?;
+    HostdServer::new(config).run().await
 }

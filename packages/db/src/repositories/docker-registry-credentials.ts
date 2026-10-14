@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { SigmaDatabase } from "../connection.js";
+import type { ZosDatabase } from "../connection.js";
 import type { DbSystemSettingRow } from "./repository-rows.js";
 
 const DOCKER_REGISTRY_CREDENTIALS_KEY = "docker_registry_credentials";
@@ -21,7 +21,7 @@ export class DockerRegistryCredentialConflictError extends Error {
   }
 }
 
-export function listDockerRegistryCredentials(db: SigmaDatabase): DockerRegistryCredentialRecord[] {
+export function listDockerRegistryCredentials(db: ZosDatabase): DockerRegistryCredentialRecord[] {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(DOCKER_REGISTRY_CREDENTIALS_KEY) as DbSystemSettingRow | undefined;
@@ -43,7 +43,7 @@ export function listDockerRegistryCredentials(db: SigmaDatabase): DockerRegistry
 }
 
 export function createDockerRegistryCredential(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: Pick<DockerRegistryCredentialRecord, "name" | "serverAddress" | "username" | "password">
 ): DockerRegistryCredentialRecord {
   return db.transaction(() => {
@@ -62,7 +62,7 @@ export function createDockerRegistryCredential(
 }
 
 export function updateDockerRegistryCredential(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   id: string,
   input: Partial<Pick<DockerRegistryCredentialRecord, "name" | "serverAddress" | "username" | "password">>
 ): DockerRegistryCredentialRecord | null {
@@ -89,7 +89,7 @@ export function updateDockerRegistryCredential(
   })();
 }
 
-export function deleteDockerRegistryCredential(db: SigmaDatabase, id: string): boolean {
+export function deleteDockerRegistryCredential(db: ZosDatabase, id: string): boolean {
   return db.transaction(() => {
     const records = listDockerRegistryCredentials(db);
     const remaining = records.filter((record) => record.id !== id);
@@ -107,7 +107,7 @@ function assertUniqueServer(records: DockerRegistryCredentialRecord[], serverAdd
   }
 }
 
-function saveRecords(db: SigmaDatabase, records: DockerRegistryCredentialRecord[], updatedAt: string): void {
+function saveRecords(db: ZosDatabase, records: DockerRegistryCredentialRecord[], updatedAt: string): void {
   db.prepare(`
     INSERT INTO system_settings (key, value_json, updated_at)
     VALUES (?, ?, ?)

@@ -1,5 +1,5 @@
-import { ensureNasRoots, openSigmaDb } from "@sigmaos/db";
-import { loadConfig } from "@sigmaos/shared";
+import { ensureNasRoots, openZosDb } from "@zos/db";
+import { loadConfig } from "@zos/shared";
 import { runHealthTask, runMaintenanceTask } from "./runner.js";
 
 const [command, ...rest] = process.argv.slice(2);
@@ -8,7 +8,7 @@ if ((command !== "health" && command !== "maintenance") || rest.length > 0) {
   process.exitCode = 2;
 } else {
   const config = loadConfig();
-  const db = openSigmaDb(config.databasePath);
+  const db = openZosDb(config.databasePath);
   ensureNasRoots(db, config.nasRoots);
   try {
     const summary = command === "health"

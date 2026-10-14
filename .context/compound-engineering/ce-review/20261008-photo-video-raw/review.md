@@ -35,7 +35,7 @@
 
 - Built transcode cache identities from the live source file size and modification time.
 - Verified RAW decoder output is a decodable image before derivative generation and retained sanitized failure messages.
-- Declared the Web workspace's direct dependency on `@sigmaos/shared`.
+- Declared the Web workspace's direct dependency on `@zos/shared`.
 - Preserved native video-control arrow-key handling inside the lightbox.
 - Reused the semantic deep-input background token for the video canvas.
 - Expanded regression coverage for all supported extensions, RAW cleanup/failure isolation, media safety limits, Range streaming, transcode deduplication, cache invalidation, and storage-boundary failures.

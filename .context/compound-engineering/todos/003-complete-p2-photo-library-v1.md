@@ -10,7 +10,7 @@ dependencies: []
 
 ## Problem Statement
 
-SigmaOS has file browsing and image preview, but no photo-oriented library that can bind to a storage-pool directory, index media metadata, render a chronological photo wall, or manage photos in place.
+ZOS has file browsing and image preview, but no photo-oriented library that can bind to a storage-pool directory, index media metadata, render a chronological photo wall, or manage photos in place.
 
 ## Findings
 

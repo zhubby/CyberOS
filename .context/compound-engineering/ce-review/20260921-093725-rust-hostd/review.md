@@ -2,7 +2,7 @@
 
 **Scope:** `f2033b0e58eb27f09d07b2be89d6737d21339b2c` to the current working tree (87 tracked/untracked entries). The 19 untracked Rust, IPC client, systemd, Cargo, and toolchain files were intentionally included because they are the core implementation, despite the normal autofix exclusion for untracked files.
 
-**Intent:** Replace the root Node share helper with a Rust host integration daemon named `sigmaos-hostd`, preserve share/storage/Docker/NetworkManager behavior, migrate configuration and packaging, and remove the old runtime implementation and name.
+**Intent:** Replace the root Node share helper with a Rust host integration daemon named `zos-hostd`, preserve share/storage/Docker/NetworkManager behavior, migrate configuration and packaging, and remove the old runtime implementation and name.
 
 **Mode:** autofix; sequential main-thread fallback required by repository instructions. No review subagents were dispatched.
 
@@ -25,13 +25,13 @@ All confirmed high-severity findings were fixed and verified; none remains open.
 |---|------|-------|----------|------------|-------|
 | 5 | `apps/hostd/src/command.rs:68` | Command timeout previously excluded blocked stdin writes and could hang hostd | reliability | 0.98 | `safe_auto -> review-fixer`, applied |
 | 6 | `apps/hostd/src/storage.rs:547` | Orphan RAID cleanup inspected the wrong sysfs holders directory | correctness | 0.99 | `safe_auto -> review-fixer`, applied |
-| 7 | `packaging/systemd/sigmaos-hostd.service:11` | A unit-level socket override would ignore the socket path migrated into TOML | deployment, data-migration | 0.98 | `safe_auto -> review-fixer`, applied |
+| 7 | `packaging/systemd/zos-hostd.service:11` | A unit-level socket override would ignore the socket path migrated into TOML | deployment, data-migration | 0.98 | `safe_auto -> review-fixer`, applied |
 | 8 | `packaging/scripts/build-deb.sh:62` | Debian source copying could include stale local Rust target output | project-standards, deployment | 0.96 | `safe_auto -> review-fixer`, applied |
 | 9 | `apps/hostd/src/shares.rs:264` | A later service reload failure restored files but left earlier services running the failed transaction's configuration | correctness, reliability | 0.97 | `safe_auto -> review-fixer`, applied |
 
 ### Applied Fixes
 
-- Added a Rust workspace and `sigmaos-hostd` binary with versioned, bounded JSONL IPC over `/run/sigmaos/hostd.sock`, peer UID checks, domain locks, bounded command output, and command timeouts.
+- Added a Rust workspace and `zos-hostd` binary with versioned, bounded JSONL IPC over `/run/zos/hostd.sock`, peer UID checks, domain locks, bounded command output, and command timeouts.
 - Ported shares, storage, Docker daemon, and NetworkManager operations; removed the Node `apps/share-helper` implementation and old unit.
 - Added authoritative hostd NAS-root loading, client-root equality checks, realpath containment, and strict NFS CIDR validation.
 - Read child stdout/stderr concurrently and included stdin delivery in command deadlines.
@@ -60,9 +60,9 @@ None. Hostd is an internal privilege boundary; supported actions remain reachabl
 
 ### Deployment Notes
 
-- Pre-deploy: back up `/etc/sigmaos`, `/var/lib/sigmaos`, SQLite state, and the current package; verify Rust 1.95.0 is available to the package build.
-- Upgrade: stop writer services and timers, install the package, confirm the TOML backup and migrated `[hostd].socket_path`, and verify the retired `sigmaos-share-helper.service` is disabled.
-- Verify: `systemctl is-active sigmaos-hostd.service sigmaos-api.service`, inspect both journals, then run `/health`, `/api/roots/readiness`, `/api/system/health`, one index pass, and representative approved share/storage/network operations.
+- Pre-deploy: back up `/zos/config`, `/zos/state`, SQLite state, and the current package; verify Rust 1.95.0 is available to the package build.
+- Upgrade: stop writer services and timers, install the package, confirm the TOML backup and migrated `[hostd].socket_path`, and verify the retired `zos-share-helper.service` is disabled.
+- Verify: `systemctl is-active zos-hostd.service zos-api.service`, inspect both journals, then run `/health`, `/api/roots/readiness`, `/api/system/health`, one index pass, and representative approved share/storage/network operations.
 - Rollback: configuration and database migrations have no general reverse migration. Restore the matching package, config, and state backup together.
 - Release gate: build and install the Debian package on Linux `amd64` and `arm64`; this macOS review host cannot validate systemd sandbox paths or real privileged commands.
 
@@ -72,9 +72,9 @@ None. Hostd is an internal privilege boundary; supported actions remain reachabl
 - Full gate passed twice: `make ci` (typecheck, Rustfmt, Clippy, ESLint, 46 Rust tests, 605 Vitest tests, documentation tests, release build, and docs build).
 - `npm run version:check` passed at version `0.6.0`; `git diff --check` and `cargo fmt --all --check` passed.
 - Focused coverage includes IPC framing/errors, command output and timeout bounds, TOML/SQLite migration, configured-root and symlink containment, NFS injection, service rollback reloads, storage rollback/sysfs behavior, Docker race/rollback behavior, NetworkManager credential/recovery behavior, and packaging declarations.
-- Inherited trust risk: hostd authenticates UID, while API, worker, and several jobs share the `sigmaos` UID. A compromised peer process can bypass API approval workflows. Separating the API into a dedicated hostd socket group or using a capability-scoped broker requires an explicit architecture decision.
+- Inherited trust risk: hostd authenticates UID, while API, worker, and several jobs share the `zos` UID. A compromised peer process can bypass API approval workflows. Separating the API into a dedicated hostd socket group or using a capability-scoped broker requires an explicit architecture decision.
 - Inherited timeout risk: API deadlines (30/35/120 seconds) do not cancel hostd work and can expire while a multi-command operation continues. A cancellable request protocol or operation-status model requires a contract decision.
-- Inherited service risk: disabling one sharing protocol while sharing remains globally enabled does not refresh a previously running service for that protocol. The correct policy depends on whether SigmaOS owns or shares those host services.
+- Inherited service risk: disabling one sharing protocol while sharing remains globally enabled does not refresh a previously running service for that protocol. The correct policy depends on whether ZOS owns or shares those host services.
 - Durability risk: several rename/remove paths do not fsync parent directories, and fstab recovery writes in place. Power-loss guarantees need Linux filesystem-level verification.
 - Installer supply-chain risk: the host installer executes rustup bootstrap content fetched from the configured HTTPS URL without a pinned checksum.
 - Expected non-blocking output remained: one React i18next test warning and Vite's existing large-chunk warning.

@@ -2,13 +2,13 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { SigmaConfig, VmOperationRecord } from "@sigmaos/shared";
+import type { ZosConfig, VmOperationRecord } from "@zos/shared";
 import { applyVmOperation, buildVmCreateArgs, collectVmSummary, safeVmMessage, vmQemuCommand, type VmCommandRunner } from "./vm-service.js";
 
-function config(): SigmaConfig {
+function config(): ZosConfig {
   return {
-    dataDir: "/tmp/sigmaos",
-    databasePath: "/tmp/sigmaos/db.sqlite",
+    dataDir: "/tmp/zos",
+    databasePath: "/tmp/zos/db.sqlite",
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 750 },
     admin: { displayName: "Admin", authMode: "local-only" },
@@ -18,7 +18,7 @@ function config(): SigmaConfig {
     hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "sigmaos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
     nasRoots: []
   };
 }
@@ -200,7 +200,7 @@ describe("VM service", () => {
   });
 
   it("removes a newly-created disk when virt-install fails before defining the domain", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-vm-create-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-vm-create-"));
     const storagePath = path.join(tempDir, "vmstore");
     const isoPath = path.join(tempDir, "installer.iso");
     const diskPath = path.join(storagePath, "guest.qcow2");
@@ -252,10 +252,10 @@ describe("VM service", () => {
   });
 
   it("restricts an existing VM disk before handing it to virt-install", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-vm-disk-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-vm-disk-"));
     const diskPath = path.join(tempDir, "guest.qcow2");
     await writeFile(diskPath, "disk", { mode: 0o644 });
-    const nextConfig: SigmaConfig = {
+    const nextConfig: ZosConfig = {
       ...config(),
       vm: { ...config().vm!, storagePath: tempDir }
     };
@@ -297,7 +297,7 @@ describe("VM service", () => {
   });
 
   it("removes lifecycle metadata and NVRAM when deleting a VM", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-vm-delete-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-vm-delete-"));
     const baseDisk = path.join(tempDir, "guest.qcow2");
     const snapshotDisk = path.join(tempDir, "guest.snapshot");
     const latestDisk = path.join(tempDir, "guest.latest");
@@ -307,7 +307,7 @@ describe("VM service", () => {
       run: async (command, args) => {
         calls.push([command, ...args]);
         if (command === "virsh" && args.includes("dumpxml")) {
-          return `<domain><devices><disk type="file" device="disk"><source file="${latestDisk}"/><backingStore type="file"><source file="${snapshotDisk}"/><backingStore type="file"><source file="${baseDisk}"/></backingStore></backingStore></disk><disk type="file" device="cdrom"><source file="/srv/iso/installer.iso"/></disk></devices></domain>`;
+          return `<domain><devices><disk type="file" device="disk"><source file="${latestDisk}"/><backingStore type="file"><source file="${snapshotDisk}"/><backingStore type="file"><source file="${baseDisk}"/></backingStore></backingStore></disk><disk type="file" device="cdrom"><source file="/zos/iso/installer.iso"/></disk></devices></domain>`;
         }
         return "";
       }
@@ -353,7 +353,7 @@ describe("VM service", () => {
   });
 
   it("rejects a VM delete before undefine when a disk escapes vmstore", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-vm-scope-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-vm-scope-"));
     const storagePath = path.join(tempDir, "vmstore");
     const outsideDisk = path.join(tempDir, "outside.qcow2");
     await mkdir(storagePath);

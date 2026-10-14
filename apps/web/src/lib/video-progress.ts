@@ -1,4 +1,4 @@
-export const VIDEO_PROGRESS_STORAGE_PREFIX = "sigmaos:video-progress:";
+export const VIDEO_PROGRESS_STORAGE_PREFIX = "zos:video-progress:";
 
 export interface VideoProgressIdentity {
   rootId: string;

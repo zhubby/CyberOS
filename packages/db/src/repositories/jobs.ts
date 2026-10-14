@@ -8,8 +8,8 @@ import type {
   JobStatus,
   OperationNotificationKind,
   OperationNotificationStatus
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { mapEvent, mapJob, mapMessage } from "./agent-mappers.js";
 import type { DbEventRow, DbJobRow, DbMessageRow } from "./repository-rows.js";
 import {
@@ -18,7 +18,7 @@ import {
 } from "./operation-notifications.js";
 
 export function createUserMessageAndJob(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { sessionId: string; content: string; status?: JobStatus }
 ): { message: AgentMessageRecord; job: JobRecord } {
   const now = new Date().toISOString();
@@ -57,7 +57,7 @@ export function createUserMessageAndJob(
 }
 
 export function createActionMessageAndJob(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     sessionId: string;
     content: string;
@@ -109,21 +109,21 @@ export function createActionMessageAndJob(
   return { message, job, notification: tx() };
 }
 
-export function getMessage(db: SigmaDatabase, messageId: string): AgentMessageRecord | null {
+export function getMessage(db: ZosDatabase, messageId: string): AgentMessageRecord | null {
   const row = db
     .prepare("SELECT id, session_id, role, content, created_at FROM agent_messages WHERE id = ?")
     .get(messageId) as DbMessageRow | undefined;
   return row ? mapMessage(row) : null;
 }
 
-export function getJob(db: SigmaDatabase, jobId: string): JobRecord | null {
+export function getJob(db: ZosDatabase, jobId: string): JobRecord | null {
   const row = db
     .prepare("SELECT id, session_id, message_id, kind, status, created_at, updated_at, error FROM jobs WHERE id = ?")
     .get(jobId) as DbJobRow | undefined;
   return row ? mapJob(row) : null;
 }
 
-export function claimNextJob(db: SigmaDatabase): JobRecord | null {
+export function claimNextJob(db: ZosDatabase): JobRecord | null {
   const now = new Date().toISOString();
   const tx = db.transaction(() => {
     const row = db.prepare(`
@@ -154,7 +154,7 @@ export function claimNextJob(db: SigmaDatabase): JobRecord | null {
 }
 
 export function updateJobStatus(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   jobId: string,
   status: JobStatus,
   error: string | null = null,
@@ -198,7 +198,7 @@ export function updateJobStatus(
 }
 
 export function appendEvent<TPayload>(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     sessionId: string;
     jobId?: string | null;
@@ -226,7 +226,7 @@ export function appendEvent<TPayload>(
 }
 
 export function listEvents(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { sessionId: string; afterId?: number; limit?: number }
 ): AgentEventRecord[] {
   const rows = db
@@ -260,7 +260,7 @@ function notificationStatusForJob(status: JobStatus): OperationNotificationStatu
   return null;
 }
 
-function eventAudience(db: SigmaDatabase, jobId: string | null): AgentEventAudience {
+function eventAudience(db: ZosDatabase, jobId: string | null): AgentEventAudience {
   if (!jobId) return "chat";
   const role = db.prepare(`
     SELECT agent_messages.role

@@ -23,8 +23,8 @@ import {
   updateVmOperationStatus,
   updateApprovalStatus,
   updateJobStatus
-} from "@sigmaos/db";
-import { applyFileMutation } from "@sigmaos/nas-tools";
+} from "@zos/db";
+import { applyFileMutation } from "@zos/nas-tools";
 import type {
   DockerOperationProposal,
   FileOperationProposal,
@@ -32,7 +32,7 @@ import type {
   ShareOperationProposal,
   StorageOperationProposal,
   VmOperationProposal
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { effectiveDockerConfig } from "../lib/settings.js";
 import { redactDockerRegistrySecrets } from "../lib/docker-registry.js";

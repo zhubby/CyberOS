@@ -11,10 +11,7 @@ pub fn render_samba(
 ) -> Result<String, HostdError> {
     let mut lines = header("Samba");
     if !settings.enabled {
-        lines.extend([
-            "# Sharing is disabled in SigmaOS.".to_owned(),
-            String::new(),
-        ]);
+        lines.extend(["# Sharing is disabled in ZOS.".to_owned(), String::new()]);
         return Ok(lines.join("\n"));
     }
     for resolved in shares
@@ -22,7 +19,7 @@ pub fn render_samba(
         .filter(|item| item.share.protocols.smb.enabled)
     {
         let share = resolved.share;
-        lines.push(format!("[sigmaos-{}]", safe_token(&share.id)));
+        lines.push(format!("[zos-{}]", safe_token(&share.id)));
         lines.push(format!("  comment = {}", safe_inline(&share.name)?));
         lines.push(format!("  path = {}", resolved.absolute_path.display()));
         if !share.protocols.smb.allow_guest {
@@ -58,10 +55,10 @@ pub fn render_webdav(
     lines.extend([
         "ServerRoot /etc/apache2".to_owned(),
         "ServerName localhost".to_owned(),
-        "PidFile /run/sigmaos-webdav/apache2.pid".to_owned(),
+        "PidFile /run/zos/webdav/apache2.pid".to_owned(),
         "User www-data".to_owned(),
         "Group www-data".to_owned(),
-        "ErrorLog /run/sigmaos-webdav/error.log".to_owned(),
+        "ErrorLog /run/zos/webdav/error.log".to_owned(),
         "LogLevel warn".to_owned(),
         "IncludeOptional /etc/apache2/mods-enabled/*.load".to_owned(),
         "<IfModule !dav_module>".to_owned(),
@@ -71,7 +68,7 @@ pub fn render_webdav(
         "  LoadModule dav_fs_module /usr/lib/apache2/modules/mod_dav_fs.so".to_owned(),
         "</IfModule>".to_owned(),
         "IncludeOptional /etc/apache2/mods-enabled/*.conf".to_owned(),
-        "DavLockDB /run/sigmaos-webdav/DavLock".to_owned(),
+        "DavLockDB /run/zos/webdav/DavLock".to_owned(),
         "<Directory />".to_owned(),
         "  Require all denied".to_owned(),
         "</Directory>".to_owned(),
@@ -140,10 +137,7 @@ pub fn render_ftp(
 ) -> Result<String, HostdError> {
     let mut lines = header("vsftpd");
     if !settings.enabled {
-        lines.extend([
-            "# Sharing is disabled in SigmaOS.".to_owned(),
-            String::new(),
-        ]);
+        lines.extend(["# Sharing is disabled in ZOS.".to_owned(), String::new()]);
         return Ok(lines.join("\n"));
     }
     let Some(resolved) = shares.iter().find(|item| item.share.protocols.ftp.enabled) else {
@@ -184,7 +178,7 @@ pub fn render_ftp(
             ftp_pam
                 .file_name()
                 .and_then(|name| name.to_str())
-                .unwrap_or("vsftpd-sigmaos")
+                .unwrap_or("vsftpd-zos")
         ),
         "pasv_enable=YES".to_owned(),
         format!("pasv_min_port={}", ftp.passive_port_start),
@@ -203,9 +197,9 @@ pub fn render_nfs(
             .iter()
             .any(|item| item.share.protocols.nfs.enabled && !item.share.protocols.nfs.read_only)
     {
-        let user = nix::unistd::User::from_name("sigmaos-nfs")
+        let user = nix::unistd::User::from_name("zos-nfs")
             .map_err(|error| HostdError::unavailable(error.to_string()))?
-            .ok_or_else(|| HostdError::validation("NFS identity sigmaos-nfs does not exist"))?;
+            .ok_or_else(|| HostdError::validation("NFS identity zos-nfs does not exist"))?;
         Some((user.uid.as_raw(), user.gid.as_raw()))
     } else {
         None
@@ -220,10 +214,7 @@ pub(super) fn render_nfs_with_identity(
 ) -> Result<String, HostdError> {
     let mut lines = header("NFS exports");
     if !settings.enabled {
-        lines.extend([
-            "# Sharing is disabled in SigmaOS.".to_owned(),
-            String::new(),
-        ]);
+        lines.extend(["# Sharing is disabled in ZOS.".to_owned(), String::new()]);
         return Ok(lines.join("\n"));
     }
     for resolved in shares
@@ -241,7 +232,7 @@ pub(super) fn render_nfs_with_identity(
             String::new()
         } else {
             let (uid, gid) = identity
-                .ok_or_else(|| HostdError::validation("NFS identity sigmaos-nfs does not exist"))?;
+                .ok_or_else(|| HostdError::validation("NFS identity zos-nfs does not exist"))?;
             format!(",all_squash,anonuid={uid},anongid={gid}")
         };
         for cidr in &nfs.allowed_cidrs {
@@ -268,10 +259,7 @@ pub fn render_dlna(
 ) -> Result<String, HostdError> {
     let mut lines = header("MiniDLNA");
     if !settings.enabled {
-        lines.extend([
-            "# Sharing is disabled in SigmaOS.".to_owned(),
-            String::new(),
-        ]);
+        lines.extend(["# Sharing is disabled in ZOS.".to_owned(), String::new()]);
         return Ok(lines.join("\n"));
     }
     let enabled = shares
@@ -302,7 +290,7 @@ pub fn render_dlna(
     let friendly_name = enabled
         .first()
         .map(|item| item.share.protocols.dlna.friendly_name.as_str())
-        .unwrap_or("SigmaOS DLNA");
+        .unwrap_or("ZOS DLNA");
     lines.extend([
         format!("friendly_name={}", safe_inline(friendly_name)?),
         "inotify=yes".to_owned(),
@@ -313,7 +301,7 @@ pub fn render_dlna(
 
 pub fn render_ftp_pam(htpasswd: &Path) -> String {
     [
-        "# Managed by SigmaOS. Do not edit this file directly.".to_owned(),
+        "# Managed by ZOS. Do not edit this file directly.".to_owned(),
         format!(
             "auth required pam_pwdfile.so pwdfile {}",
             htpasswd.display()
@@ -326,7 +314,7 @@ pub fn render_ftp_pam(htpasswd: &Path) -> String {
 
 fn header(name: &str) -> Vec<String> {
     vec![
-        "# Managed by SigmaOS. Do not edit this file directly.".to_owned(),
+        "# Managed by ZOS. Do not edit this file directly.".to_owned(),
         format!("# {name} share configuration."),
         String::new(),
     ]

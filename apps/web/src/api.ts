@@ -115,7 +115,7 @@ import type {
   PhotoTimelinePage as SharedPhotoTimelinePage,
   TerminalTab as SharedTerminalTab,
   TerminalTabState as SharedTerminalTabState
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 export interface NasRoot {
   id: string;

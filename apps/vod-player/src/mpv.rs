@@ -835,7 +835,7 @@ done
     #[test]
     fn redacts_paths_from_diagnostics() {
         let message = sanitize_diagnostic(
-            "failed '/srv/nas/private/movie.mkv' source=/srv/nas/private path='/srv/secret' fdclose://9",
+            "failed '/zos/data/primary/private/movie.mkv' source=/zos/data/primary/private path='/private/secret' fdclose://9",
         );
         assert_eq!(message, "failed [path] [path] [path] [path]");
     }

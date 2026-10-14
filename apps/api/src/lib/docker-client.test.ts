@@ -16,7 +16,7 @@ let resourceInfo: Record<string, unknown>;
 const receivedRequests: Array<{ method: string; url: string; body: unknown; registryAuth?: string }> = [];
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-docker-client-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-docker-client-"));
   socketPath = path.join(tempDir, "docker.sock");
   daemonApiVersion = "1.55";
   daemonMinimumApiVersion = "1.24";
@@ -157,7 +157,7 @@ beforeEach(async () => {
           Labels: { "app.role": "media" }
         },
         HostConfig: { RestartPolicy: { Name: "unless-stopped" } },
-        Mounts: [{ Source: "/srv/media", Destination: "/media", Mode: "rw", Type: "bind" }],
+        Mounts: [{ Source: "/zos/data/primary/media", Destination: "/media", Mode: "rw", Type: "bind" }],
         NetworkSettings: { Networks: { bridge: {} } }
       });
       return;
@@ -336,7 +336,7 @@ describe("DockerSocketClient", () => {
       command: "/init",
       entrypoint: ["/sbin/tini"],
       environment: ["TZ"],
-      mounts: [{ source: "/srv/media", destination: "/media", mode: "rw", type: "bind" }],
+      mounts: [{ source: "/zos/data/primary/media", destination: "/media", mode: "rw", type: "bind" }],
       networks: ["bridge"],
       restartPolicy: "unless-stopped",
       hostname: "media",
@@ -431,7 +431,7 @@ describe("DockerSocketClient", () => {
     daemonMinimumApiVersion = "1.57";
     const incompatibleClient = new DockerSocketClient({ socketPath, timeoutMs: 1000 });
     await expect(incompatibleClient.getInfo()).rejects.toThrow(
-      "Docker daemon requires API version 1.57, but SigmaOS supports up to 1.56"
+      "Docker daemon requires API version 1.57, but ZOS supports up to 1.56"
     );
   });
 
@@ -479,7 +479,7 @@ describe("DockerSocketClient", () => {
       readOnlyRootfs: true,
       privileged: false,
       mounts: [
-        { type: "bind", source: "/srv/media", target: "/media", readOnly: true },
+        { type: "bind", source: "/zos/data/primary/media", target: "/media", readOnly: true },
         { type: "volume", source: "config", target: "/config", readOnly: false, noCopy: true },
         { type: "tmpfs", target: "/tmp", readOnly: false, sizeBytes: 16_777_216, mode: 0o1777 }
       ],
@@ -532,7 +532,7 @@ describe("DockerSocketClient", () => {
           ReadonlyRootfs: true,
           Privileged: false,
           Mounts: [
-            { Type: "bind", Source: "/srv/media", Target: "/media", ReadOnly: true },
+            { Type: "bind", Source: "/zos/data/primary/media", Target: "/media", ReadOnly: true },
             { Type: "volume", Source: "config", Target: "/config", ReadOnly: false, VolumeOptions: { NoCopy: true } },
             { Type: "tmpfs", Target: "/tmp", ReadOnly: false, TmpfsOptions: { SizeBytes: 16_777_216, Mode: 0o1777 } }
           ],

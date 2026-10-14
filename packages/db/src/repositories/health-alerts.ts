@@ -4,11 +4,11 @@ import type {
   HealthAlertStatus,
   IndexerAlert,
   SystemHealthSummary
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import type { DbAlertRow } from "./repository-rows.js";
 
-export function upsertHealthAlert(db: SigmaDatabase, input: { code: string; scope?: string; rootId?: string | null; severity: HealthAlertSeverity; details?: string | null; now?: Date }): IndexerAlert {
+export function upsertHealthAlert(db: ZosDatabase, input: { code: string; scope?: string; rootId?: string | null; severity: HealthAlertSeverity; details?: string | null; now?: Date }): IndexerAlert {
   const now = (input.now ?? new Date()).toISOString();
   const scope = input.scope ?? input.rootId ?? "system";
   const id = randomUUID();
@@ -22,13 +22,13 @@ export function upsertHealthAlert(db: SigmaDatabase, input: { code: string; scop
   return mapAlert(row);
 }
 
-export function resolveHealthAlert(db: SigmaDatabase, input: { code: string; scope?: string; now?: Date }): boolean {
+export function resolveHealthAlert(db: ZosDatabase, input: { code: string; scope?: string; now?: Date }): boolean {
   const scope = input.scope ?? "system";
   const result = db.prepare("UPDATE health_alerts SET status = 'resolved', resolved_at = ?, last_seen_at = ? WHERE code = ? AND scope = ? AND status = 'active'").run((input.now ?? new Date()).toISOString(), (input.now ?? new Date()).toISOString(), input.code, scope);
   return result.changes === 1;
 }
 
-export function listHealthAlerts(db: SigmaDatabase, input: { status?: HealthAlertStatus; limit?: number } = {}): IndexerAlert[] {
+export function listHealthAlerts(db: ZosDatabase, input: { status?: HealthAlertStatus; limit?: number } = {}): IndexerAlert[] {
   const rows = input.status
     ? db.prepare("SELECT id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts WHERE status = ? ORDER BY last_seen_at DESC LIMIT ?").all(input.status, input.limit ?? 100)
     : db.prepare("SELECT id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts ORDER BY last_seen_at DESC LIMIT ?").all(input.limit ?? 100);
@@ -36,7 +36,7 @@ export function listHealthAlerts(db: SigmaDatabase, input: { status?: HealthAler
 }
 
 export function reconcileHealthAlerts(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     ownedCodes: readonly string[];
     issues: SystemHealthSummary["issues"];

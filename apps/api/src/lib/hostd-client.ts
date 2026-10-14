@@ -5,7 +5,7 @@ import {
   type HostdOperation,
   type HostdRequest,
   type HostdResult
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 const HOSTD_PROTOCOL_VERSION = 1;
 const MAX_FRAME_BYTES = 1024 * 1024;

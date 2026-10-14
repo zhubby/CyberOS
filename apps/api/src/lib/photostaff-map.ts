@@ -18,7 +18,7 @@ import {
   PHOTOSTAFF_DATA_DIRECTORY_NAME,
   type PhotostaffManagedMapSettings,
   type PhotostaffMapSettingsResponse
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 const DOWNLOAD_DISK_HEADROOM_BYTES = 64 * 1024 * 1024;
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000;

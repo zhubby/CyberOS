@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { SigmaDatabase } from "../connection.js";
+import type { ZosDatabase } from "../connection.js";
 
 export function upsertIndexedFile(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     id?: string;
     rootId: string;
@@ -61,7 +61,7 @@ export function upsertIndexedFile(
 }
 
 export function removeMissingIndexedFiles(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId: string; seenPaths: string[] }
 ): number {
   const existing = db

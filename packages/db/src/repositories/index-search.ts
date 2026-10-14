@@ -4,11 +4,11 @@ import type {
   IndexSearchRequest,
   IndexSearchResult,
   IndexSearchSortField
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 
 export function queryIndexedText(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId: string; query: string; path?: string; limit?: number }
 ): Array<{
   fileId: string;
@@ -105,7 +105,7 @@ interface AdvancedSearchRow {
 const HIGHLIGHT_START = "\u0001";
 const HIGHLIGHT_END = "\u0002";
 
-export function queryIndexAdvanced(db: SigmaDatabase, request: IndexSearchRequest): IndexSearchPage {
+export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest): IndexSearchPage {
   const normalized = normalizeAdvancedRequest(request);
   const signature = createHash("sha256").update(JSON.stringify(normalized.signature)).digest("base64url");
   const cursor = decodeSearchCursor(normalized.cursor, signature);

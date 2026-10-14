@@ -566,15 +566,15 @@ mod tests {
 
     #[test]
     fn decodes_mountinfo_paths() {
-        assert_eq!(unescape_mount_field("/srv/My\\040NAS"), "/srv/My NAS");
+        assert_eq!(unescape_mount_field("/mnt/My\\040NAS"), "/mnt/My NAS");
     }
 
     #[test]
     fn converts_root_relative_paths_to_mount_relative_paths() {
         assert_eq!(
             relative_directory_within_mount(
-                Path::new("/srv/nas"),
-                Path::new("/srv/nas/pool-a"),
+                Path::new("/zos/data/primary"),
+                Path::new("/zos/data/primary/pool-a"),
                 Path::new("pool-a/downloads"),
             )
             .unwrap(),
@@ -582,8 +582,8 @@ mod tests {
         );
         assert_eq!(
             relative_directory_within_mount(
-                Path::new("/srv/nas"),
-                Path::new("/srv/nas"),
+                Path::new("/zos/data/primary"),
+                Path::new("/zos/data/primary"),
                 Path::new("downloads"),
             )
             .unwrap(),
@@ -591,8 +591,8 @@ mod tests {
         );
         assert!(
             relative_directory_within_mount(
-                Path::new("/srv/nas"),
-                Path::new("/srv/nas/pool-a"),
+                Path::new("/zos/data/primary"),
+                Path::new("/zos/data/primary/pool-a"),
                 Path::new("pool-b/downloads"),
             )
             .is_err()

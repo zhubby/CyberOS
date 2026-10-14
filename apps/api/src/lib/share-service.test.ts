@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ShareSettingsRecord } from "@sigmaos/shared";
+import type { ShareSettingsRecord } from "@zos/shared";
 import { collectShareSummary } from "./share-service.js";
 
 describe("share service status", () => {
@@ -7,7 +7,7 @@ describe("share service status", () => {
     const queried: string[] = [];
     const settings: ShareSettingsRecord = {
       enabled: true,
-      account: { username: "sigma-share", password: null },
+      account: { username: "zos-share", password: null },
       updatedAt: "2026-09-22T00:00:00.000Z",
       shares: [{
         id: "shares",
@@ -35,10 +35,10 @@ describe("share service status", () => {
       }
     });
 
-    expect(queried).toContain("sigmaos-webdav.service");
+    expect(queried).toContain("zos-webdav.service");
     expect(queried).not.toContain("apache2.service");
     expect(summary.protocols.webdav.services).toEqual([
-      { name: "sigmaos-webdav.service", status: "active", error: null }
+      { name: "zos-webdav.service", status: "active", error: null }
     ]);
   });
 });

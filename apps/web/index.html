@@ -2,17 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/sigmaos-icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/zos-icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SigmaOS</title>
+    <title>ZOS</title>
     <script>
       (() => {
         const root = document.documentElement;
         let theme = "dark";
         let language = navigator.language?.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
         try {
-          const storedTheme = localStorage.getItem("sigmaos:theme");
-          const storedLanguage = localStorage.getItem("sigmaos:language");
+          const storedTheme = localStorage.getItem("zos:theme");
+          const storedLanguage = localStorage.getItem("zos:language");
           theme = storedTheme === "light" || storedTheme === "dark"
             ? storedTheme
             : window.matchMedia?.("(prefers-color-scheme: light)").matches
@@ -70,7 +70,7 @@
         background: var(--boot-bg);
       }
 
-      #sigmaos-boot {
+      #zos-boot {
         position: fixed;
         inset: 0;
         z-index: 9999;
@@ -87,8 +87,8 @@
         transition: opacity 380ms cubic-bezier(.2, .72, .2, 1), visibility 380ms linear;
       }
 
-      #sigmaos-boot::before,
-      #sigmaos-boot::after {
+      #zos-boot::before,
+      #zos-boot::after {
         position: absolute;
         left: 50%;
         width: min(720px, 76vw);
@@ -98,21 +98,21 @@
         transform: translateX(-50%);
       }
 
-      #sigmaos-boot::before {
+      #zos-boot::before {
         top: 22%;
       }
 
-      #sigmaos-boot::after {
+      #zos-boot::after {
         bottom: 22%;
       }
 
-      #sigmaos-boot.is-exiting {
+      #zos-boot.is-exiting {
         visibility: hidden;
         opacity: 0;
         pointer-events: none;
       }
 
-      .sigmaos-boot-shell {
+      .zos-boot-shell {
         position: relative;
         display: grid;
         justify-items: center;
@@ -124,10 +124,10 @@
         background: var(--boot-panel);
         box-shadow: 0 24px 80px rgb(0 0 0 / 22%), inset 0 1px 0 var(--boot-panel-soft);
         text-align: center;
-        animation: sigmaos-boot-arrive 520ms cubic-bezier(.2, .72, .2, 1) both;
+        animation: zos-boot-arrive 520ms cubic-bezier(.2, .72, .2, 1) both;
       }
 
-      .sigmaos-boot-brand {
+      .zos-boot-brand {
         display: inline-flex;
         align-items: center;
         gap: 10px;
@@ -136,14 +136,14 @@
         letter-spacing: .035em;
       }
 
-      .sigmaos-boot-brand img {
+      .zos-boot-brand img {
         width: 34px;
         height: 34px;
         border-radius: 9px;
         box-shadow: 0 0 0 1px var(--boot-line), 0 0 24px rgb(88 101 242 / 24%);
       }
 
-      .sigmaos-boot-orbit {
+      .zos-boot-orbit {
         position: relative;
         display: grid;
         place-items: center;
@@ -154,28 +154,28 @@
         border-radius: 50%;
       }
 
-      .sigmaos-boot-orbit::before,
-      .sigmaos-boot-orbit::after {
+      .zos-boot-orbit::before,
+      .zos-boot-orbit::after {
         position: absolute;
         border-radius: 50%;
         content: "";
       }
 
-      .sigmaos-boot-orbit::before {
+      .zos-boot-orbit::before {
         inset: 10px;
         border: 2px solid var(--boot-panel-soft);
         border-top-color: var(--boot-accent-strong);
         border-right-color: var(--boot-teal);
-        animation: sigmaos-boot-spin 1.5s linear infinite;
+        animation: zos-boot-spin 1.5s linear infinite;
       }
 
-      .sigmaos-boot-orbit::after {
+      .zos-boot-orbit::after {
         inset: 23px;
         border: 1px dashed var(--boot-line);
-        animation: sigmaos-boot-spin 4.5s linear infinite reverse;
+        animation: zos-boot-spin 4.5s linear infinite reverse;
       }
 
-      .sigmaos-boot-orbit img {
+      .zos-boot-orbit img {
         position: relative;
         z-index: 1;
         width: 52px;
@@ -183,23 +183,23 @@
         border-radius: 13px;
       }
 
-      .sigmaos-boot-copy {
+      .zos-boot-copy {
         display: grid;
         gap: 7px;
       }
 
-      .sigmaos-boot-copy strong {
+      .zos-boot-copy strong {
         color: var(--boot-text);
         font-size: 14px;
         letter-spacing: .01em;
       }
 
-      .sigmaos-boot-copy span {
+      .zos-boot-copy span {
         color: var(--boot-muted);
         font-size: 11.5px;
       }
 
-      .sigmaos-boot-progress {
+      .zos-boot-progress {
         width: 100%;
         height: 4px;
         margin-top: 26px;
@@ -208,16 +208,16 @@
         background: var(--boot-panel-soft);
       }
 
-      .sigmaos-boot-progress span {
+      .zos-boot-progress span {
         display: block;
         width: 34%;
         height: 100%;
         border-radius: inherit;
         background: linear-gradient(90deg, var(--boot-teal), var(--boot-accent-strong));
-        animation: sigmaos-boot-progress 1.7s ease-in-out infinite;
+        animation: zos-boot-progress 1.7s ease-in-out infinite;
       }
 
-      .sigmaos-boot-footer {
+      .zos-boot-footer {
         display: flex;
         justify-content: space-between;
         width: 100%;
@@ -229,21 +229,21 @@
         text-transform: uppercase;
       }
 
-      .sigmaos-boot-footer span:last-child {
+      .zos-boot-footer span:last-child {
         color: var(--boot-accent);
       }
 
-      #sigmaos-boot[data-state="error"] .sigmaos-boot-orbit::before {
+      #zos-boot[data-state="error"] .zos-boot-orbit::before {
         border-top-color: #da373c;
         border-right-color: #ffb3b6;
         animation: none;
       }
 
-      #sigmaos-boot[data-state="error"] .sigmaos-boot-progress {
+      #zos-boot[data-state="error"] .zos-boot-progress {
         display: none;
       }
 
-      .sigmaos-boot-retry {
+      .zos-boot-retry {
         display: none;
         min-height: 32px;
         margin-top: 22px;
@@ -258,47 +258,47 @@
         font-weight: 800;
       }
 
-      .sigmaos-boot-retry:hover {
+      .zos-boot-retry:hover {
         border-color: var(--boot-accent);
         background: var(--boot-panel);
       }
 
-      #sigmaos-boot[data-state="error"] .sigmaos-boot-retry {
+      #zos-boot[data-state="error"] .zos-boot-retry {
         display: inline-flex;
         align-items: center;
       }
 
-      @keyframes sigmaos-boot-arrive {
+      @keyframes zos-boot-arrive {
         from { opacity: 0; transform: translateY(10px) scale(.985); }
         to { opacity: 1; transform: translateY(0) scale(1); }
       }
 
-      @keyframes sigmaos-boot-spin {
+      @keyframes zos-boot-spin {
         to { transform: rotate(360deg); }
       }
 
-      @keyframes sigmaos-boot-progress {
+      @keyframes zos-boot-progress {
         0% { transform: translateX(-125%); }
         55%, 100% { transform: translateX(320%); }
       }
 
       @media (max-width: 520px) {
-        #sigmaos-boot::before,
-        #sigmaos-boot::after {
+        #zos-boot::before,
+        #zos-boot::after {
           width: 88vw;
         }
 
-        .sigmaos-boot-shell {
+        .zos-boot-shell {
           padding: 29px 24px 23px;
         }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        #sigmaos-boot,
-        .sigmaos-boot-shell,
-        .sigmaos-boot-orbit::before,
-        .sigmaos-boot-orbit::after,
-        .sigmaos-boot-progress span {
+        #zos-boot,
+        .zos-boot-shell,
+        .zos-boot-orbit::before,
+        .zos-boot-orbit::after,
+        .zos-boot-progress span {
           animation: none;
           transition: none;
         }
@@ -307,30 +307,30 @@
   </head>
   <body>
     <div id="root"></div>
-    <div id="sigmaos-boot" role="status" aria-live="polite" aria-busy="true">
-      <div class="sigmaos-boot-shell">
-        <div class="sigmaos-boot-brand">
-          <img src="/sigmaos-icon.svg" alt="" width="34" height="34" />
-          <span>SigmaOS</span>
+    <div id="zos-boot" role="status" aria-live="polite" aria-busy="true">
+      <div class="zos-boot-shell">
+        <div class="zos-boot-brand">
+          <img src="/zos-icon.svg" alt="" width="34" height="34" />
+          <span>ZOS</span>
         </div>
-        <div class="sigmaos-boot-orbit" aria-hidden="true">
-          <img src="/sigmaos-icon.svg" alt="" width="52" height="52" />
+        <div class="zos-boot-orbit" aria-hidden="true">
+          <img src="/zos-icon.svg" alt="" width="52" height="52" />
         </div>
-        <div class="sigmaos-boot-copy">
+        <div class="zos-boot-copy">
           <strong data-boot-title>Preparing workspace</strong>
           <span data-boot-detail>Connecting to local services</span>
         </div>
-        <div class="sigmaos-boot-progress" aria-hidden="true"><span></span></div>
-        <div class="sigmaos-boot-footer">
+        <div class="zos-boot-progress" aria-hidden="true"><span></span></div>
+        <div class="zos-boot-footer">
           <span data-boot-system>Local system</span>
           <span>...</span>
         </div>
-        <button class="sigmaos-boot-retry" type="button" data-boot-retry>Reload</button>
+        <button class="zos-boot-retry" type="button" data-boot-retry>Reload</button>
       </div>
     </div>
     <script>
       (() => {
-        const bootScreen = document.getElementById("sigmaos-boot");
+        const bootScreen = document.getElementById("zos-boot");
         if (!bootScreen) return;
 
         const bootTitle = bootScreen.querySelector("[data-boot-title]");
@@ -343,7 +343,7 @@
           if (ready) return;
           bootScreen.dataset.state = "error";
           bootScreen.setAttribute("aria-busy", "false");
-          if (bootTitle) bootTitle.textContent = isChinese ? "SigmaOS 启动失败" : "SigmaOS could not start";
+          if (bootTitle) bootTitle.textContent = isChinese ? "ZOS 启动失败" : "ZOS could not start";
           if (bootDetail) bootDetail.textContent = isChinese ? "请重新加载页面后再试" : "Reload the page to try again";
         };
 
@@ -358,10 +358,10 @@
 
         window.addEventListener("error", handleError, true);
         window.addEventListener("unhandledrejection", handleError);
-        window.addEventListener("sigmaos:ready", handleReady, { once: true });
+        window.addEventListener("zos:ready", handleReady, { once: true });
         bootRetry?.addEventListener("click", () => {
           const url = new URL(window.location.href);
-          url.searchParams.set("_sigmaos_reload", Date.now().toString());
+          url.searchParams.set("_zos_reload", Date.now().toString());
           window.location.replace(url.toString());
         });
       })();

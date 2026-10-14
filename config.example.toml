@@ -1,4 +1,4 @@
-data_dir = "/var/lib/sigmaos"
+root_dir = ".zos/dev-root"
 environment = "development"
 
 [api]
@@ -11,10 +11,10 @@ poll_ms = 750
 
 # Optional byte-identical HTTPS mirror for the managed offline map.
 # [photostaff]
-# basemap_url = "https://mirror.example.com/sigmaos/natural-earth-ii-3.2.0-raster.pmtiles"
+# basemap_url = "https://mirror.example.com/zos/natural-earth-ii-3.2.0-raster.pmtiles"
 
 [admin]
-display_name = "SigmaOS Admin"
+display_name = "ZOS Admin"
 auth_mode = "local-only"
 
 [model]
@@ -30,28 +30,28 @@ operation_timeout_ms = 120000
 console_shells = ["/bin/sh", "/bin/bash"]
 
 # Docker socket access is root-equivalent. Only enable this on a trusted
-# single-user appliance, and grant the sigmaos service access deliberately.
-# Managed Compose Apps always use /srv/apps; this path is not configurable.
+# single-user appliance, and grant the zos service access deliberately.
+# Managed Compose Apps always use /zos/apps; this path is not configurable.
 
 [vm]
 enabled = true
 libvirt_uri = "qemu:///system"
-storage_path = "/var/lib/sigmaos/vmstore"
+storage_path = ".zos/dev-root/vm"
 network_name = "default"
-iso_roots = ["/srv/iso"]
+iso_roots = [".zos/dev-root/iso"]
 operation_timeout_ms = 120000
 console_mode = "serial"
 
 [[nas_roots]]
 id = "primary"
 name = "Primary NAS"
-path = "/srv/nas"
+path = ".zos/dev-root/data/primary"
 
 [backup]
 enabled = false
-repository_path = "/srv/backup/restic"
-password_file = "/etc/sigmaos/restic-password"
-staging_path = "/var/lib/sigmaos/backup-staging"
+repository_path = ".zos/dev-root/data/backup/restic"
+password_file = ".zos/dev-root/config/restic-password"
+staging_path = ".zos/dev-root/state/backup-staging"
 require_mount = false
 retry_count = 2
 timeout_ms = 300000

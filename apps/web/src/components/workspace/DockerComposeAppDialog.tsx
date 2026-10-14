@@ -72,7 +72,7 @@ export function DockerComposeAppDialog({
   const previousFocus = useRef<HTMLElement | null>(null);
   const formError = useMemo(() => dockerComposeAppFormError(form), [form]);
   const busy = loading || validating || submitAction !== null || deleting;
-  const managedPath = `/srv/apps/${form.projectKey || "..."}`;
+  const managedPath = `/zos/apps/${form.projectKey || "..."}`;
 
   useEffect(() => {
     if (!app) return;

@@ -26,7 +26,7 @@ import {
   resolveSafeTargetPath,
   searchFiles,
   toRootRelative
-} from "@sigmaos/nas-tools";
+} from "@zos/nas-tools";
 import type {
   AgentProviderSessionRecord,
   AgentSessionRecord,
@@ -41,7 +41,7 @@ import type {
   PhotostaffMetadataDetail,
   PhotostaffQueryPage,
   PhotostaffQueryRequest
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 export interface PiAgentEmitEvent {
   type:
@@ -226,9 +226,9 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
       noContextFiles: true,
       appendSystemPrompt: [
         [
-          "You are running inside SigmaOS.",
-          "All filesystem access must go through SigmaOS tools and stay inside the configured NAS root.",
-          "Use bash, edit, and write only when needed; SigmaOS will ask the user for approval before executing them."
+          "You are running inside ZOS.",
+          "All filesystem access must go through ZOS tools and stay inside the configured NAS root.",
+          "Use bash, edit, and write only when needed; ZOS will ask the user for approval before executing them."
         ].join("\n")
       ]
     });
@@ -240,7 +240,7 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
       modelRuntime,
       ...(model ? { model } : {}),
       tools: ALL_PI_TOOL_NAMES,
-      customTools: createSigmaPiTools(input),
+      customTools: createZosPiTools(input),
       resourceLoader,
       settingsManager,
       sessionManager
@@ -325,7 +325,7 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
   }
 }
 
-function createSigmaPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
+function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
   const read = createReadToolDefinition(input.root.path);
   const bash = createBashToolDefinition(input.root.path);
   const edit = createEditToolDefinition(input.root.path);
@@ -338,7 +338,7 @@ function createSigmaPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
       ...read,
       execute: async (_toolCallId: string, params: Parameters<typeof read.execute>[1]) => {
         if (input.toolPolicy.read === "disabled") {
-          return textResult("SigmaOS policy denied read.");
+          return textResult("ZOS policy denied read.");
         }
         const preview = await readText(input.root, params.path, MAX_TOOL_OUTPUT_BYTES);
         const content = sliceLines(preview.content, params.offset, params.limit);
@@ -351,7 +351,7 @@ function createSigmaPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
       ...ls,
       execute: async (_toolCallId: string, params: Parameters<typeof ls.execute>[1]) => {
         if (input.toolPolicy.ls === "disabled") {
-          return textResult("SigmaOS policy denied ls.");
+          return textResult("ZOS policy denied ls.");
         }
         const entries = await listDir(input.root, params.path ?? ".");
         const limit = params.limit ?? 100;
@@ -370,7 +370,7 @@ function createSigmaPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
       ...find,
       execute: async (_toolCallId: string, params: Parameters<typeof find.execute>[1]) => {
         if (input.toolPolicy.find === "disabled") {
-          return textResult("SigmaOS policy denied find.");
+          return textResult("ZOS policy denied find.");
         }
         const query = params.pattern.replaceAll("*", "").trim() || params.pattern;
         const matches = await searchFiles(input.root, {
@@ -387,7 +387,7 @@ function createSigmaPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
       ...grep,
       execute: async (_toolCallId: string, params: Parameters<typeof grep.execute>[1]) => {
         if (input.toolPolicy.grep === "disabled") {
-          return textResult("SigmaOS policy denied grep.");
+          return textResult("ZOS policy denied grep.");
         }
         const matches = await grepNasRoot(input.root, {
           pattern: params.pattern,
@@ -524,7 +524,7 @@ export function createPhotostaffAgentTools(service: PhotostaffAgentToolService):
   const searchPhotostaff = {
     name: "search_photostaff",
     label: "Search Photostaff",
-    description: "Search the current SigmaOS photostaff library by text, camera, exposure, rating, keyword, date, location, or indexed metadata fields. Location filtering is local; results never include exact coordinates or other sensitive metadata.",
+    description: "Search the current ZOS photostaff library by text, camera, exposure, rating, keyword, date, location, or indexed metadata fields. Location filtering is local; results never include exact coordinates or other sensitive metadata.",
     parameters: Type.Object({
       filters: Type.Optional(photostaffFiltersSchema),
       sort: Type.Optional(Type.Object({
@@ -547,7 +547,7 @@ export function createPhotostaffAgentTools(service: PhotostaffAgentToolService):
   const getPhotostaffMetadata = {
     name: "get_photostaff_metadata",
     label: "Get photostaff metadata",
-    description: "Get non-sensitive indexed metadata for one photostaff in the current SigmaOS photostaff library. Exact GPS, serial numbers, contact details, and person regions are always omitted.",
+    description: "Get non-sensitive indexed metadata for one photostaff in the current ZOS photostaff library. Exact GPS, serial numbers, contact details, and person regions are always omitted.",
     parameters: Type.Object({ assetId: Type.String({ minLength: 1, maxLength: 256 }) }),
     execute: async (_toolCallId: string, params: { assetId: string }) => {
       const detail = await service.getPhotostaffMetadata(params.assetId);
@@ -615,7 +615,7 @@ async function withApproval(
   }
 ): Promise<TextToolResult> {
   if (input.toolPolicy[approval.toolName] === "disabled") {
-    return textResult(`SigmaOS policy denied ${approval.toolName}.`);
+    return textResult(`ZOS policy denied ${approval.toolName}.`);
   }
 
   const request = await input.createToolApproval({
@@ -642,7 +642,7 @@ async function withApproval(
     return textResult(`The user rejected ${approval.toolName}: ${approval.summary}`);
   }
   if (status !== "approved") {
-    return textResult(`SigmaOS stopped waiting for ${approval.toolName}: approval is ${status}.`);
+    return textResult(`ZOS stopped waiting for ${approval.toolName}: approval is ${status}.`);
   }
 
   return approval.execute();

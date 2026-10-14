@@ -3,11 +3,11 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { runMigrations } from "./schema.js";
 
-export type SigmaDatabase = Database.Database;
+export type ZosDatabase = Database.Database;
 
 const SQLITE_BUSY_TIMEOUT_MS = 30_000;
 
-export function openSigmaDb(databasePath: string): SigmaDatabase {
+export function openZosDb(databasePath: string): ZosDatabase {
   mkdirSync(path.dirname(databasePath), { recursive: true });
 
   const db = new Database(databasePath);

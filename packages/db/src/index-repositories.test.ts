@@ -10,7 +10,7 @@ import {
   getIndexerSettings,
   getIndexRootStatus,
   listIndexRootStatuses,
-  openSigmaDb,
+  openZosDb,
   queryIndexAdvanced,
   queryIndexedText,
   recordIndexFailure,
@@ -18,15 +18,15 @@ import {
   finishIndexRun,
   saveIndexerSettings,
   upsertIndexedFile,
-  type SigmaDatabase
+  type ZosDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-db-"));
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-db-"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [
     {
       id: "local",

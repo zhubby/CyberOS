@@ -12,8 +12,8 @@ import {
   listNasRoots,
   listSessions,
   updateSessionPath
-} from "@sigmaos/db";
-import { resolveSafeExistingPath } from "@sigmaos/nas-tools";
+} from "@zos/db";
+import { resolveSafeExistingPath } from "@zos/nas-tools";
 import type { ApiRouteContext } from "../context.js";
 import { getAgentMessageContent, getAgentMessageRole, getFailedJobMessageContent, getInitialEventId } from "../lib/events.js";
 

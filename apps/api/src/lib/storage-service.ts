@@ -4,11 +4,11 @@ import type {
   StorageFilesystem,
   StorageRaidLevel,
   SystemStorageSummary
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import { HostdClient } from "./hostd-client.js";
 
 const HOSTD_TIMEOUT_MS = 120_000;
-const STORAGE_MOUNT_ROOT = "/srv/nas";
+const STORAGE_MOUNT_ROOT = "/zos/data";
 const POOL_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/u;
 const RAID_MINIMUMS: Record<StorageRaidLevel, number> = {
   "0": 2,
@@ -38,6 +38,9 @@ export function buildStoragePoolProposal(
   const name = input.name?.trim() ?? "";
   if (!POOL_NAME_PATTERN.test(name)) {
     throw new Error("Pool name must start with a lowercase letter and contain only a-z, 0-9, _ or -");
+  }
+  if (name === "backup") {
+    throw new Error("The backup pool name is reserved");
   }
 
   const raidLevel = parseRaidLevel(input.raidLevel);
@@ -103,7 +106,7 @@ export function buildStoragePoolDeleteProposal(
   if (!pool) {
     throw new Error("Storage pool is no longer available; refresh the inventory");
   }
-  if (!pool.mountpoint || !/^\/srv\/nas\/[a-z][a-z0-9_-]{0,31}$/u.test(pool.mountpoint)) {
+  if (!pool.mountpoint || !/^\/zos\/data\/[a-z][a-z0-9_-]{0,31}$/u.test(pool.mountpoint) || pool.mountpoint === "/zos/data/backup") {
     throw new Error("Storage pool mountpoint is invalid");
   }
   if (!/^\/dev\/md(?:\/[A-Za-z0-9._-]+|\d+)$/u.test(pool.raidPath)) {

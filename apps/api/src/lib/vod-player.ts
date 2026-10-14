@@ -2,4 +2,4 @@ export {
   createVodPlayerRuntime,
   VodPlayerRuntimeError,
   type VodPlayerRuntime
-} from "@sigmaos/shared";
+} from "@zos/shared";

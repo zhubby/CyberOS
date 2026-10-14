@@ -4,7 +4,7 @@ import { App } from "./App.js";
 import { initI18n } from "./i18n/index.js";
 import "./styles.css";
 
-const bootScreen = document.getElementById("sigmaos-boot");
+const bootScreen = document.getElementById("zos-boot");
 const bootTitle = bootScreen?.querySelector<HTMLElement>("[data-boot-title]");
 const bootDetail = bootScreen?.querySelector<HTMLElement>("[data-boot-detail]");
 const bootSystem = bootScreen?.querySelector<HTMLElement>("[data-boot-system]");
@@ -38,7 +38,7 @@ function showBootError(): void {
   bootScreen.dataset.state = "error";
   bootScreen.setAttribute("aria-busy", "false");
   if (bootTitle) {
-    bootTitle.textContent = isChinese ? "SigmaOS 启动失败" : "SigmaOS could not start";
+    bootTitle.textContent = isChinese ? "ZOS 启动失败" : "ZOS could not start";
   }
   if (bootDetail) {
     bootDetail.textContent = isChinese ? "请重新加载页面后再试" : "Reload the page to try again";
@@ -52,7 +52,7 @@ void initI18n()
         <App />
       </StrictMode>
     );
-    window.dispatchEvent(new Event("sigmaos:ready"));
+    window.dispatchEvent(new Event("zos:ready"));
     window.requestAnimationFrame(() => dismissBootScreen());
   })
   .catch(() => showBootError());

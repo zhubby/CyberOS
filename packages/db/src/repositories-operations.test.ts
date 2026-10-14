@@ -10,18 +10,18 @@ import {
   getApproval,
   getShareOperation,
   getShareSettings,
-  openSigmaDb,
+  openZosDb,
   saveShareSettings,
   updateShareOperationStatus,
-  type SigmaDatabase
+  type ZosDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-db-"));
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-db-"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
@@ -37,7 +37,7 @@ describe("operation repositories", () => {
     const saved = saveShareSettings(db, {
       enabled: true,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: "secret"
       },
       shares: [
@@ -90,7 +90,7 @@ describe("operation repositories", () => {
     expect(saved).toMatchObject({
       enabled: true,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: "secret"
       },
       shares: [
@@ -113,7 +113,7 @@ describe("operation repositories", () => {
       JSON.stringify({
         enabled: true,
         account: {
-          username: "sigma-share"
+          username: "zos-share"
         },
         shares: [
           {
@@ -130,7 +130,7 @@ describe("operation repositories", () => {
     expect(getShareSettings(db)).toMatchObject({
       enabled: true,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: null
       },
       shares: [
@@ -162,7 +162,7 @@ describe("operation repositories", () => {
     const settings = {
       enabled: true,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: "secret"
       },
       shares: [],
@@ -179,7 +179,7 @@ describe("operation repositories", () => {
         settings: {
           ...settings,
           account: {
-            username: "sigma-share",
+            username: "zos-share",
             passwordConfigured: true
           }
         }
@@ -193,7 +193,7 @@ describe("operation repositories", () => {
           action: "apply_settings",
           settings: {
             account: {
-              username: "sigma-share",
+              username: "zos-share",
               passwordConfigured: true
             }
           }

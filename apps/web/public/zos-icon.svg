@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="zos-mark" x1="15" y1="14" x2="49" y2="51" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#55e0cf" />
+      <stop offset="0.48" stop-color="#d9e8ea" />
+      <stop offset="1" stop-color="#7380ff" />
+    </linearGradient>
+    <linearGradient id="zos-frame" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#55e0cf" stop-opacity="0.38" />
+      <stop offset="1" stop-color="#7380ff" stop-opacity="0.3" />
+    </linearGradient>
+  </defs>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="16" fill="#12151c" />
+  <rect x="3" y="3" width="58" height="58" rx="15.5" fill="none" stroke="url(#zos-frame)" />
+  <path
+    d="M18.5 14.5H45.5L18.5 49.5H45.5"
+    fill="none"
+    stroke="url(#zos-mark)"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="4.8"
+  />
+</svg>

@@ -9,8 +9,8 @@ import type {
   PhotostaffLibraryStatus,
   PhotostaffWorkerHealth,
   PhotostaffTakenAtSource
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import type { DbPhotostaffAssetRow, DbPhotostaffJobRow, DbSystemSettingRow } from "./repository-rows.js";
 import {
   getPhotostaffMetadataIndexStatus,
@@ -59,7 +59,7 @@ export interface PhotostaffUploadReservationResult {
   conflict: "content_hash" | "path" | null;
 }
 
-export function getPhotostaffLibrarySettings(db: SigmaDatabase): PhotostaffLibrarySettingsRecord | null {
+export function getPhotostaffLibrarySettings(db: ZosDatabase): PhotostaffLibrarySettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(PHOTOSTAFF_LIBRARY_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -81,7 +81,7 @@ export function getPhotostaffLibrarySettings(db: SigmaDatabase): PhotostaffLibra
 }
 
 export function savePhotostaffLibrarySettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: Omit<PhotostaffLibrarySettingsRecord, "updatedAt">,
   now = new Date()
 ): PhotostaffLibrarySettingsRecord {
@@ -128,7 +128,7 @@ export function savePhotostaffLibrarySettings(
 }
 
 export function enqueuePhotostaffJob(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     settings: PhotostaffLibrarySettingsRecord;
     kind?: PhotostaffJobKind;
@@ -173,7 +173,7 @@ export function enqueuePhotostaffJob(
 }
 
 export function ensurePeriodicPhotostaffScan(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: PhotostaffLibrarySettingsRecord,
   input: { intervalMs: number; now?: Date }
 ): PhotostaffJobRecord | null {
@@ -190,7 +190,7 @@ export function ensurePeriodicPhotostaffScan(
   return enqueuePhotostaffJob(db, { settings, now });
 }
 
-export function recoverExpiredPhotostaffJobs(db: SigmaDatabase, now = new Date()): number {
+export function recoverExpiredPhotostaffJobs(db: ZosDatabase, now = new Date()): number {
   const nowIso = now.toISOString();
   return db.prepare(`
     UPDATE photostaff_jobs
@@ -202,7 +202,7 @@ export function recoverExpiredPhotostaffJobs(db: SigmaDatabase, now = new Date()
 }
 
 export function claimNextPhotostaffJob(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { workerId: string; leaseMs: number; now?: Date }
 ): PhotostaffJobRecord | null {
   const now = input.now ?? new Date();
@@ -232,7 +232,7 @@ export function claimNextPhotostaffJob(
 }
 
 export function updatePhotostaffJobProgress(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     id: string;
     workerId: string;
@@ -266,7 +266,7 @@ export function updatePhotostaffJobProgress(
 }
 
 export function finishPhotostaffJob(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { id: string; workerId: string; error?: string | null; now?: Date }
 ): PhotostaffJobRecord | null {
   const nowIso = (input.now ?? new Date()).toISOString();
@@ -284,7 +284,7 @@ export function finishPhotostaffJob(
 }
 
 export function upsertPhotostaffAsset(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     settings: PhotostaffLibrarySettingsRecord;
     path: string;
@@ -365,7 +365,7 @@ export function upsertPhotostaffAsset(
   return tx();
 }
 
-export function getPhotostaffAsset(db: SigmaDatabase, id: string, libraryUpdatedAt: string): PhotostaffAssetRecord | null {
+export function getPhotostaffAsset(db: ZosDatabase, id: string, libraryUpdatedAt: string): PhotostaffAssetRecord | null {
   const row = db.prepare(`
     SELECT ${PHOTOSTAFF_ASSET_COLUMNS} FROM photostaff_assets
     WHERE id = ? AND library_updated_at = ?
@@ -374,7 +374,7 @@ export function getPhotostaffAsset(db: SigmaDatabase, id: string, libraryUpdated
 }
 
 export function getPhotostaffAssetByPath(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId: string; storagePoolId: string; path: string }
 ): PhotostaffAssetRecord | null {
   const row = db.prepare(`
@@ -385,7 +385,7 @@ export function getPhotostaffAssetByPath(
 }
 
 export function findPhotostaffAssetByHash(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { libraryUpdatedAt: string; contentHash: string }
 ): PhotostaffAssetRecord | null {
   const row = db.prepare(`
@@ -397,7 +397,7 @@ export function findPhotostaffAssetByHash(
 }
 
 export function reservePhotostaffUpload(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: PhotostaffUploadReservationInput
 ): PhotostaffUploadReservationResult {
   const reserve = db.transaction(() => {
@@ -442,7 +442,7 @@ export function reservePhotostaffUpload(
 }
 
 export function releasePhotostaffUploadReservation(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { id: string; libraryUpdatedAt: string }
 ): boolean {
   return db.prepare(`
@@ -452,7 +452,7 @@ export function releasePhotostaffUploadReservation(
 }
 
 export function removeStalePhotostaffUploadReservations(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { libraryUpdatedAt: string; createdBefore: string }
 ): number {
   return db.prepare(`
@@ -461,7 +461,7 @@ export function removeStalePhotostaffUploadReservations(
   `).run(input.libraryUpdatedAt, input.createdBefore).changes;
 }
 
-export function hasCompletedPhotostaffScan(db: SigmaDatabase, libraryUpdatedAt: string): boolean {
+export function hasCompletedPhotostaffScan(db: ZosDatabase, libraryUpdatedAt: string): boolean {
   return Boolean(db.prepare(`
     SELECT 1 FROM photostaff_jobs
     WHERE library_updated_at = ? AND kind = 'full_scan' AND status = 'completed'
@@ -470,7 +470,7 @@ export function hasCompletedPhotostaffScan(db: SigmaDatabase, libraryUpdatedAt: 
 }
 
 export function listPhotostaffAssets(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { libraryUpdatedAt: string; limit: number; cursor?: PhotostaffTimelineCursor | null }
 ): { photostaff: PhotostaffAssetRecord[]; hasMore: boolean } {
   const limit = Math.max(1, Math.min(input.limit, 100));
@@ -487,7 +487,7 @@ export function listPhotostaffAssets(
 }
 
 export function removeStalePhotostaffAssets(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { libraryUpdatedAt: string; indexedBefore: string }
 ): number {
   return db.prepare(`
@@ -495,7 +495,7 @@ export function removeStalePhotostaffAssets(
   `).run(input.libraryUpdatedAt, input.indexedBefore).changes;
 }
 
-export function listPhotostaffDerivativeKeys(db: SigmaDatabase, libraryUpdatedAt: string): Set<string> {
+export function listPhotostaffDerivativeKeys(db: ZosDatabase, libraryUpdatedAt: string): Set<string> {
   const rows = db.prepare(`
     SELECT thumbnail_key, preview_key FROM photostaff_assets
     WHERE library_updated_at = ? AND status = 'ready'
@@ -504,7 +504,7 @@ export function listPhotostaffDerivativeKeys(db: SigmaDatabase, libraryUpdatedAt
 }
 
 export function getPhotostaffLibraryStatus(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: PhotostaffLibrarySettingsRecord | null
 ): PhotostaffLibraryStatus {
   if (!settings) {
@@ -556,7 +556,7 @@ export function getPhotostaffLibraryStatus(
   };
 }
 
-export function getPhotostaffWorkerHealth(db: SigmaDatabase, now = new Date()): PhotostaffWorkerHealth {
+export function getPhotostaffWorkerHealth(db: ZosDatabase, now = new Date()): PhotostaffWorkerHealth {
   const worker = db.prepare("SELECT heartbeat_at FROM photostaff_workers ORDER BY heartbeat_at DESC LIMIT 1")
     .get() as { heartbeat_at: string } | undefined;
   const counts = db.prepare(`
@@ -581,14 +581,14 @@ export function getPhotostaffWorkerHealth(db: SigmaDatabase, now = new Date()): 
   };
 }
 
-function getRequiredPhotostaffJob(db: SigmaDatabase, id: string): PhotostaffJobRecord {
+function getRequiredPhotostaffJob(db: ZosDatabase, id: string): PhotostaffJobRecord {
   const row = db.prepare(`SELECT ${PHOTOSTAFF_JOB_COLUMNS} FROM photostaff_jobs WHERE id = ?`).get(id) as DbPhotostaffJobRow | undefined;
   if (!row) throw new Error(`Photostaff job ${id} was not created`);
   return mapPhotostaffJob(row);
 }
 
 function getPhotostaffUploadReservation(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { libraryUpdatedAt: string; contentHash?: string; path?: string }
 ): PhotostaffUploadReservationRecord | null {
   const column = input.contentHash !== undefined ? "content_hash" : "path";

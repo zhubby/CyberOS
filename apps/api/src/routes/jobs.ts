@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { appendEvent, cancelQueuedFileBatchItems, getJob, updateJobStatus } from "@sigmaos/db";
+import { appendEvent, cancelQueuedFileBatchItems, getJob, updateJobStatus } from "@zos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerJobRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {

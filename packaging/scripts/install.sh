@@ -5,47 +5,44 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 ARCH=$(dpkg --print-architecture 2>/dev/null || true)
 NODE_MAJOR_REQUIRED=22
 RUST_VERSION_REQUIRED=1.95.0
-SIGMAOS_APT_MIRROR=${SIGMAOS_APT_MIRROR:-https://mirrors.aliyun.com/debian}
-SIGMAOS_APT_SECURITY_MIRROR=${SIGMAOS_APT_SECURITY_MIRROR:-https://mirrors.aliyun.com/debian-security}
-SIGMAOS_RPI_MIRROR=${SIGMAOS_RPI_MIRROR:-https://mirrors.aliyun.com/raspberrypi}
-SIGMAOS_NODE_MIRROR=${SIGMAOS_NODE_MIRROR:-https://mirrors.aliyun.com/nodejs-release}
-SIGMAOS_NODE_VERSION=${SIGMAOS_NODE_VERSION:-22.23.2}
-SIGMAOS_NPM_REGISTRY=${SIGMAOS_NPM_REGISTRY:-https://registry.npmmirror.com}
-SIGMAOS_RUSTUP_INIT_URL=${SIGMAOS_RUSTUP_INIT_URL:-https://sh.rustup.rs}
-SIGMAOS_CARGO_HOME=${SIGMAOS_CARGO_HOME:-/root/.cargo}
-SIGMAOS_RUSTUP_HOME=${SIGMAOS_RUSTUP_HOME:-/root/.rustup}
-SIGMAOS_APT_BACKUP_DIR=${SIGMAOS_APT_BACKUP_DIR:-/var/backups/sigmaos-apt}
-SIGMAOS_LOCALE=${SIGMAOS_LOCALE:-C.UTF-8}
-NGINX_ENABLED=${SIGMAOS_ENABLE_NGINX:-1}
-DOCKER_ENABLED=${SIGMAOS_ENABLE_DOCKER:-0}
-VM_ENABLED=${SIGMAOS_ENABLE_VM:-0}
-VOD_PLAYER_ENABLED=${SIGMAOS_ENABLE_VOD_PLAYER:-0}
-VOD_PLAYER_USER=${SIGMAOS_VOD_PLAYER_USER:-sigmaos}
-TERMINAL_USER=${SIGMAOS_TERMUX_USER:-sigmaos}
+ZOS_APT_MIRROR=${ZOS_APT_MIRROR:-https://mirrors.aliyun.com/debian}
+ZOS_APT_SECURITY_MIRROR=${ZOS_APT_SECURITY_MIRROR:-https://mirrors.aliyun.com/debian-security}
+ZOS_RPI_MIRROR=${ZOS_RPI_MIRROR:-https://mirrors.aliyun.com/raspberrypi}
+ZOS_NODE_MIRROR=${ZOS_NODE_MIRROR:-https://mirrors.aliyun.com/nodejs-release}
+ZOS_NODE_VERSION=${ZOS_NODE_VERSION:-22.23.2}
+ZOS_NPM_REGISTRY=${ZOS_NPM_REGISTRY:-https://registry.npmmirror.com}
+ZOS_RUSTUP_INIT_URL=${ZOS_RUSTUP_INIT_URL:-https://sh.rustup.rs}
+ZOS_CARGO_HOME=${ZOS_CARGO_HOME:-/root/.cargo}
+ZOS_RUSTUP_HOME=${ZOS_RUSTUP_HOME:-/root/.rustup}
+ZOS_APT_BACKUP_DIR=${ZOS_APT_BACKUP_DIR:-/zos/system-backups/apt}
+ZOS_LOCALE=${ZOS_LOCALE:-C.UTF-8}
+NGINX_ENABLED=${ZOS_ENABLE_NGINX:-1}
+DOCKER_ENABLED=${ZOS_ENABLE_DOCKER:-0}
+VM_ENABLED=${ZOS_ENABLE_VM:-0}
+VOD_PLAYER_ENABLED=${ZOS_ENABLE_VOD_PLAYER:-0}
+VOD_PLAYER_USER=${ZOS_VOD_PLAYER_USER:-zos}
+TERMINAL_USER=${ZOS_TERMUX_USER:-zos}
 DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND
-export CARGO_HOME="$SIGMAOS_CARGO_HOME"
-export RUSTUP_HOME="$SIGMAOS_RUSTUP_HOME"
+export CARGO_HOME="$ZOS_CARGO_HOME"
+export RUSTUP_HOME="$ZOS_RUSTUP_HOME"
 PATH="$CARGO_HOME/bin:$PATH"
 export PATH
 
-SIGMAOS_APT_MIRROR=${SIGMAOS_APT_MIRROR%/}
-SIGMAOS_APT_SECURITY_MIRROR=${SIGMAOS_APT_SECURITY_MIRROR%/}
-SIGMAOS_RPI_MIRROR=${SIGMAOS_RPI_MIRROR%/}
-SIGMAOS_NODE_MIRROR=${SIGMAOS_NODE_MIRROR%/}
-SIGMAOS_NPM_REGISTRY=${SIGMAOS_NPM_REGISTRY%/}
+ZOS_APT_MIRROR=${ZOS_APT_MIRROR%/}
+ZOS_APT_SECURITY_MIRROR=${ZOS_APT_SECURITY_MIRROR%/}
+ZOS_RPI_MIRROR=${ZOS_RPI_MIRROR%/}
+ZOS_NODE_MIRROR=${ZOS_NODE_MIRROR%/}
+ZOS_NPM_REGISTRY=${ZOS_NPM_REGISTRY%/}
 
 log() {
-  printf 'sigmaos-install: %s\n' "$*"
+  printf 'zos-install: %s\n' "$*"
 }
 
 die() {
-  printf 'sigmaos-install: error: %s\n' "$*" >&2
+  printf 'zos-install: error: %s\n' "$*" >&2
   exit 1
 }
-
-legacy_player_environment=$(env | awk -F= '$1 == "SIGMAOS_ENABLE_PLAYER" || $1 ~ /^SIGMAOS_PLAYER_/ { print $1; exit }')
-[ -z "$legacy_player_environment" ] || die "$legacy_player_environment is no longer supported; use SIGMAOS_VOD_PLAYER_*"
 
 apt_install() {
   apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 \
@@ -55,8 +52,8 @@ apt_install() {
 
 backup_apt_source() {
   source=$1
-  install -d -m 0755 "$SIGMAOS_APT_BACKUP_DIR"
-  backup="$SIGMAOS_APT_BACKUP_DIR/$(basename "$source")"
+  install -d -m 0755 "$ZOS_APT_BACKUP_DIR"
+  backup="$ZOS_APT_BACKUP_DIR/$(basename "$source")"
   [ -e "$backup" ] || cp -p "$source" "$backup"
 }
 
@@ -80,12 +77,12 @@ disable_nodesource_sources() {
     case "$source" in
       *.list)
         backup_apt_source "$source"
-        sed -i '/deb\.nodesource\.com/s/^/# sigmaos disabled NodeSource: /' "$source"
+        sed -i '/deb\.nodesource\.com/s/^/# zos disabled NodeSource: /' "$source"
         log "disabled NodeSource entry in $source"
         ;;
       *.sources)
         backup_apt_source "$source"
-        mv "$source" "$SIGMAOS_APT_BACKUP_DIR/$(basename "$source").sigmaos-disabled"
+        mv "$source" "$ZOS_APT_BACKUP_DIR/$(basename "$source").zos-disabled"
         log "disabled NodeSource source file $source"
         ;;
     esac
@@ -96,12 +93,12 @@ configure_domestic_apt_mirrors() {
   log "configuring domestic APT mirrors"
   # Replace only known upstream URIs. Signed-By, suites, components, and any
   # unrelated administrator-managed sources remain unchanged.
-  rewrite_apt_uri 'http://deb.debian.org/debian-security' "$SIGMAOS_APT_SECURITY_MIRROR"
-  rewrite_apt_uri 'https://deb.debian.org/debian-security' "$SIGMAOS_APT_SECURITY_MIRROR"
-  rewrite_apt_uri 'http://deb.debian.org/debian' "$SIGMAOS_APT_MIRROR"
-  rewrite_apt_uri 'https://deb.debian.org/debian' "$SIGMAOS_APT_MIRROR"
-  rewrite_apt_uri 'http://archive.raspberrypi.com/debian' "$SIGMAOS_RPI_MIRROR"
-  rewrite_apt_uri 'https://archive.raspberrypi.com/debian' "$SIGMAOS_RPI_MIRROR"
+  rewrite_apt_uri 'http://deb.debian.org/debian-security' "$ZOS_APT_SECURITY_MIRROR"
+  rewrite_apt_uri 'https://deb.debian.org/debian-security' "$ZOS_APT_SECURITY_MIRROR"
+  rewrite_apt_uri 'http://deb.debian.org/debian' "$ZOS_APT_MIRROR"
+  rewrite_apt_uri 'https://deb.debian.org/debian' "$ZOS_APT_MIRROR"
+  rewrite_apt_uri 'http://archive.raspberrypi.com/debian' "$ZOS_RPI_MIRROR"
+  rewrite_apt_uri 'https://archive.raspberrypi.com/debian' "$ZOS_RPI_MIRROR"
   disable_nodesource_sources
 }
 
@@ -113,37 +110,43 @@ case "$ARCH" in
   *) die "unsupported Debian architecture: ${ARCH:-unknown}; use arm64 or amd64" ;;
 esac
 
-[ -n "$SIGMAOS_APT_MIRROR" ] || die "SIGMAOS_APT_MIRROR must not be empty"
-[ -n "$SIGMAOS_APT_SECURITY_MIRROR" ] || die "SIGMAOS_APT_SECURITY_MIRROR must not be empty"
-[ -n "$SIGMAOS_RPI_MIRROR" ] || die "SIGMAOS_RPI_MIRROR must not be empty"
-[ -n "$SIGMAOS_NODE_MIRROR" ] || die "SIGMAOS_NODE_MIRROR must not be empty"
-[ -n "$SIGMAOS_NODE_VERSION" ] || die "SIGMAOS_NODE_VERSION must not be empty"
-[ -n "$SIGMAOS_NPM_REGISTRY" ] || die "SIGMAOS_NPM_REGISTRY must not be empty"
-[ -n "$SIGMAOS_RUSTUP_INIT_URL" ] || die "SIGMAOS_RUSTUP_INIT_URL must not be empty"
-[ -n "$SIGMAOS_CARGO_HOME" ] || die "SIGMAOS_CARGO_HOME must not be empty"
-[ -n "$SIGMAOS_RUSTUP_HOME" ] || die "SIGMAOS_RUSTUP_HOME must not be empty"
-[ -n "$SIGMAOS_APT_BACKUP_DIR" ] || die "SIGMAOS_APT_BACKUP_DIR must not be empty"
-[ -n "$SIGMAOS_LOCALE" ] || die "SIGMAOS_LOCALE must not be empty"
-[ "$TERMINAL_USER" = sigmaos ] || die "SIGMAOS_TERMUX_USER must be sigmaos"
+[ -n "$ZOS_APT_MIRROR" ] || die "ZOS_APT_MIRROR must not be empty"
+[ -n "$ZOS_APT_SECURITY_MIRROR" ] || die "ZOS_APT_SECURITY_MIRROR must not be empty"
+[ -n "$ZOS_RPI_MIRROR" ] || die "ZOS_RPI_MIRROR must not be empty"
+[ -n "$ZOS_NODE_MIRROR" ] || die "ZOS_NODE_MIRROR must not be empty"
+[ -n "$ZOS_NODE_VERSION" ] || die "ZOS_NODE_VERSION must not be empty"
+[ -n "$ZOS_NPM_REGISTRY" ] || die "ZOS_NPM_REGISTRY must not be empty"
+[ -n "$ZOS_RUSTUP_INIT_URL" ] || die "ZOS_RUSTUP_INIT_URL must not be empty"
+[ -n "$ZOS_CARGO_HOME" ] || die "ZOS_CARGO_HOME must not be empty"
+[ -n "$ZOS_RUSTUP_HOME" ] || die "ZOS_RUSTUP_HOME must not be empty"
+[ -n "$ZOS_APT_BACKUP_DIR" ] || die "ZOS_APT_BACKUP_DIR must not be empty"
+[ -n "$ZOS_LOCALE" ] || die "ZOS_LOCALE must not be empty"
+[ "$TERMINAL_USER" = zos ] || die "ZOS_TERMUX_USER must be zos"
+
+ZOS_APT_BACKUP_DIR=$(realpath -m -- "$ZOS_APT_BACKUP_DIR")
+case "$ZOS_APT_BACKUP_DIR" in
+  /zos/system-backups|/zos/system-backups/*) ;;
+  *) die "ZOS_APT_BACKUP_DIR must be under /zos/system-backups" ;;
+esac
 
 case "$NGINX_ENABLED" in
   0|1) ;;
-  *) die "SIGMAOS_ENABLE_NGINX must be 0 or 1" ;;
+  *) die "ZOS_ENABLE_NGINX must be 0 or 1" ;;
 esac
 case "$DOCKER_ENABLED" in
   0|1) ;;
-  *) die "SIGMAOS_ENABLE_DOCKER must be 0 or 1" ;;
+  *) die "ZOS_ENABLE_DOCKER must be 0 or 1" ;;
 esac
 case "$VM_ENABLED" in
   0|1) ;;
-  *) die "SIGMAOS_ENABLE_VM must be 0 or 1" ;;
+  *) die "ZOS_ENABLE_VM must be 0 or 1" ;;
 esac
 case "$VOD_PLAYER_ENABLED" in
   0|1) ;;
-  *) die "SIGMAOS_ENABLE_VOD_PLAYER must be 0 or 1" ;;
+  *) die "ZOS_ENABLE_VOD_PLAYER must be 0 or 1" ;;
 esac
 case "$VOD_PLAYER_USER" in
-  *[!a-zA-Z0-9._-]*|root) die "SIGMAOS_VOD_PLAYER_USER must name a non-root local user" ;;
+  *[!a-zA-Z0-9._-]*|root) die "ZOS_VOD_PLAYER_USER must name a non-root local user" ;;
 esac
 
 install_build_dependencies() {
@@ -162,7 +165,7 @@ install_rust_toolchain() {
   if [ ! -x "$CARGO_HOME/bin/rustup" ]; then
     log "installing rustup"
     rustup_init=$(mktemp)
-    curl -fsSL "$SIGMAOS_RUSTUP_INIT_URL" -o "$rustup_init"
+    curl -fsSL "$ZOS_RUSTUP_INIT_URL" -o "$rustup_init"
     sh "$rustup_init" -y --profile minimal --default-toolchain "$RUST_VERSION_REQUIRED"
     rm -f "$rustup_init"
   fi
@@ -234,20 +237,20 @@ install_node_22() {
     arm64) node_arch=arm64 ;;
     amd64) node_arch=x64 ;;
   esac
-  node_filename="node-v${SIGMAOS_NODE_VERSION}-linux-${node_arch}.tar.xz"
-  node_dir="/opt/sigmaos/node/node-v${SIGMAOS_NODE_VERSION}-linux-${node_arch}"
+  node_filename="node-v${ZOS_NODE_VERSION}-linux-${node_arch}.tar.xz"
+  node_dir="/opt/zos/node/node-v${ZOS_NODE_VERSION}-linux-${node_arch}"
   node_tmp=$(mktemp -d)
   trap 'rm -rf "$node_tmp"' EXIT HUP INT TERM
-  curl -fsSL "$SIGMAOS_NODE_MIRROR/v${SIGMAOS_NODE_VERSION}/$node_filename" \
+  curl -fsSL "$ZOS_NODE_MIRROR/v${ZOS_NODE_VERSION}/$node_filename" \
     -o "$node_tmp/$node_filename"
-  curl -fsSL "$SIGMAOS_NODE_MIRROR/v${SIGMAOS_NODE_VERSION}/SHASUMS256.txt" \
+  curl -fsSL "$ZOS_NODE_MIRROR/v${ZOS_NODE_VERSION}/SHASUMS256.txt" \
     -o "$node_tmp/SHASUMS256.txt"
   node_sha256=$(awk -v filename="$node_filename" '$2 == filename { print $1; exit }' "$node_tmp/SHASUMS256.txt")
   [ -n "$node_sha256" ] || die "Node.js checksum is missing for $node_filename"
   printf '%s  %s\n' "$node_sha256" "$node_tmp/$node_filename" | sha256sum -c - \
     || die "Node.js archive checksum did not match"
-  install -d -m 0755 /opt/sigmaos/node
-  tar -xJf "$node_tmp/$node_filename" -C /opt/sigmaos/node
+  install -d -m 0755 /opt/zos/node
+  tar -xJf "$node_tmp/$node_filename" -C /opt/zos/node
   [ -x "$node_dir/bin/node" ] || die "Node.js archive did not contain $node_dir/bin/node"
   ln -sfn "$node_dir/bin/node" /usr/local/bin/node
   ln -sfn "$node_dir/bin/npm" /usr/local/bin/npm
@@ -256,8 +259,8 @@ install_node_22() {
 
 configure_domestic_apt_mirrors
 
-SIGMAOS_LOCALE="$SIGMAOS_LOCALE" \
-  "$ROOT_DIR/packaging/scripts/sigmaos-configure-locale.sh"
+ZOS_LOCALE="$ZOS_LOCALE" \
+  "$ROOT_DIR/packaging/scripts/zos-configure-locale.sh"
 
 if [ "$(node_major)" -lt "$NODE_MAJOR_REQUIRED" ] 2>/dev/null || nodejs_from_nodesource || [ ! -x /usr/local/bin/node ]; then
   install_node_22
@@ -266,19 +269,19 @@ fi
 node --version | grep -Eq '^v22\.' || die "Node.js 22 is required; found $(node --version 2>/dev/null || printf 'none')"
 install_build_dependencies
 install_rust_toolchain
-npm config set registry "$SIGMAOS_NPM_REGISTRY" --global
+npm config set registry "$ZOS_NPM_REGISTRY" --global
 install_optional_runtime
 
-SIGMAOS_CONFIG_EXISTS=0
-if [ -e /etc/sigmaos/config.toml ]; then
-  SIGMAOS_CONFIG_EXISTS=1
+ZOS_CONFIG_EXISTS=0
+if [ -e /zos/config/config.toml ]; then
+  ZOS_CONFIG_EXISTS=1
 fi
 
 log "building the native ${ARCH} Debian package"
 "$ROOT_DIR/packaging/scripts/build-deb.sh"
 
-DEB_PATH=$(find "$ROOT_DIR/.sigmaos" -maxdepth 1 -type f \
-  -name "sigmaos_*_${ARCH}.deb" ! -name '*dbgsym*' -print | sort | tail -n 1)
+DEB_PATH=$(find "$ROOT_DIR/.zos" -maxdepth 1 -type f \
+  -name "zos_*_${ARCH}.deb" ! -name '*dbgsym*' -print | sort | tail -n 1)
 [ -n "$DEB_PATH" ] || die "could not find the ${ARCH} Debian package"
 
 log "installing $DEB_PATH"
@@ -286,26 +289,26 @@ log "installing $DEB_PATH"
 # to replace an already-installed package from an earlier checkout revision.
 apt_install install -y --no-install-recommends --reinstall "$DEB_PATH"
 
-if [ "$SIGMAOS_CONFIG_EXISTS" = "0" ]; then
-  log "initializing SigmaOS configuration"
-  SIGMAOS_FIRST_BOOT_FORCE=1 \
-  SIGMAOS_ADMIN_DISPLAY_NAME=${SIGMAOS_ADMIN_DISPLAY_NAME:-SigmaOS Admin} \
-  SIGMAOS_NAS_ROOT_PATH=${SIGMAOS_NAS_ROOT_PATH:-/srv/nas} \
-  SIGMAOS_DOCKER_ENABLED="$DOCKER_ENABLED" \
-  SIGMAOS_VM_ENABLED="$VM_ENABLED" \
-  SIGMAOS_VOD_PLAYER_ENABLED="$VOD_PLAYER_ENABLED" \
-  SIGMAOS_VOD_PLAYER_USER="$VOD_PLAYER_USER" \
-  SIGMAOS_TERMUX_USER="$TERMINAL_USER" \
-    /usr/lib/sigmaos/scripts/sigmaos-first-boot.sh
+if [ "$ZOS_CONFIG_EXISTS" = "0" ]; then
+  log "initializing ZOS configuration"
+  ZOS_FIRST_BOOT_FORCE=1 \
+  ZOS_ADMIN_DISPLAY_NAME=${ZOS_ADMIN_DISPLAY_NAME:-ZOS Admin} \
+  ZOS_NAS_ROOT_PATH=${ZOS_NAS_ROOT_PATH:-/zos/data/primary} \
+  ZOS_DOCKER_ENABLED="$DOCKER_ENABLED" \
+  ZOS_VM_ENABLED="$VM_ENABLED" \
+  ZOS_VOD_PLAYER_ENABLED="$VOD_PLAYER_ENABLED" \
+  ZOS_VOD_PLAYER_USER="$VOD_PLAYER_USER" \
+  ZOS_TERMUX_USER="$TERMINAL_USER" \
+    /usr/lib/zos/scripts/zos-first-boot.sh
 else
-  log "preserving existing SigmaOS configuration"
+  log "preserving existing ZOS configuration"
 fi
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload
-  /usr/lib/sigmaos/scripts/sigmaos-refresh-groups.sh
-  /usr/lib/sigmaos/scripts/sigmaos-refresh-termux.sh
-  SIGMAOS_VOD_PLAYER_USER="$VOD_PLAYER_USER" /usr/lib/sigmaos/scripts/sigmaos-refresh-vod-player.sh
+  /usr/lib/zos/scripts/zos-refresh-groups.sh
+  /usr/lib/zos/scripts/zos-refresh-termux.sh
+  ZOS_VOD_PLAYER_USER="$VOD_PLAYER_USER" /usr/lib/zos/scripts/zos-refresh-vod-player.sh
   if [ "$DOCKER_ENABLED" = "1" ]; then
     systemctl enable --now docker.service
   fi
@@ -318,35 +321,35 @@ if command -v systemctl >/dev/null 2>&1; then
     ensure_vm_network
   fi
   systemctl enable --now \
-    sigmaos-hostd.service \
-    sigmaos-termux.service \
-    sigmaos-api.service \
-    sigmaos-worker@1.service \
-    sigmaos-photostaff.service \
-    sigmaos-downloader.service \
-    sigmaos-indexer.service
-  systemctl restart sigmaos-hostd.service sigmaos-termux.service \
-    sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service
+    zos-hostd.service \
+    zos-termux.service \
+    zos-api.service \
+    zos-worker@1.service \
+    zos-photostaff.service \
+    zos-downloader.service \
+    zos-indexer.service
+  systemctl restart zos-hostd.service zos-termux.service \
+    zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service
   if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
-    systemctl enable --now sigmaos-vod-player.service
+    systemctl enable --now zos-vod-player.service
   fi
   systemctl enable \
-    sigmaos-maintenance.timer \
-    sigmaos-backup-daily.timer \
-    sigmaos-backup-weekly.timer \
-    sigmaos-health.timer
+    zos-maintenance.timer \
+    zos-backup-daily.timer \
+    zos-backup-weekly.timer \
+    zos-health.timer
 fi
 
 if [ "$NGINX_ENABLED" = "1" ]; then
   log "installing Nginx reverse proxy"
   apt_install install -y --no-install-recommends nginx
-  SIGMAOS_NGINX_PORT=${SIGMAOS_NGINX_PORT:-80} \
-    /usr/lib/sigmaos/scripts/sigmaos-nginx.sh
+  ZOS_NGINX_PORT=${ZOS_NGINX_PORT:-80} \
+    /usr/lib/zos/scripts/zos-nginx.sh
   if command -v systemctl >/dev/null 2>&1; then
     systemctl enable nginx
     systemctl restart nginx
   fi
-  log "installed successfully; web UI is available on http://<host>:${SIGMAOS_NGINX_PORT:-80}"
+  log "installed successfully; web UI is available on http://<host>:${ZOS_NGINX_PORT:-80}"
 else
   log "installed successfully; Nginx reverse proxy disabled"
   log "API listens on http://127.0.0.1:3010"

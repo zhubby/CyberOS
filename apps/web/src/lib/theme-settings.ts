@@ -1,4 +1,4 @@
-export const THEME_STORAGE_KEY = "sigmaos:theme";
+export const THEME_STORAGE_KEY = "zos:theme";
 export const RESOLVED_THEMES = ["light", "dark"] as const;
 
 export type ResolvedTheme = (typeof RESOLVED_THEMES)[number];

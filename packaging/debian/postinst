@@ -2,114 +2,52 @@
 set -e
 
 if [ "$1" = "configure" ]; then
-  photostaff_was_enabled=0
-  photostaff_was_active=0
-  legacy_vod_player_enabled=0
-  legacy_vod_player_active=0
-  if command -v systemctl >/dev/null 2>&1 && { systemctl is-enabled --quiet sigmaos-photostaff.service 2>/dev/null || systemctl is-enabled --quiet sigmaos-photo-worker.service 2>/dev/null; }; then
-    photostaff_was_enabled=1
+  if ! getent group zos >/dev/null; then
+    addgroup --system zos
   fi
-  if command -v systemctl >/dev/null 2>&1 && { systemctl is-active --quiet sigmaos-photostaff.service 2>/dev/null || systemctl is-active --quiet sigmaos-photo-worker.service 2>/dev/null; }; then
-    photostaff_was_active=1
+  if ! id zos >/dev/null 2>&1; then
+    adduser --system --ingroup zos --home /zos/home/termux --no-create-home --shell /bin/bash zos
   fi
-  if command -v systemctl >/dev/null 2>&1 && systemctl is-enabled --quiet sigmaos-player-helper.service 2>/dev/null; then
-    legacy_vod_player_enabled=1
+  if ! id zos-nfs >/dev/null 2>&1; then
+    adduser --system --no-create-home --disabled-login --shell /usr/sbin/nologin zos-nfs
   fi
-  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet sigmaos-player-helper.service 2>/dev/null; then
-    legacy_vod_player_active=1
-  fi
-  if ! getent group sigmaos >/dev/null; then
-    addgroup --system sigmaos
-  fi
-  if ! id sigmaos >/dev/null 2>&1; then
-    adduser --system --ingroup sigmaos --home /var/lib/sigmaos --no-create-home sigmaos
-  fi
-  if ! id sigmaos-nfs >/dev/null 2>&1; then
-    adduser --system --no-create-home --disabled-login --shell /usr/sbin/nologin sigmaos-nfs
-  fi
-  legacy_termux_home=/var/lib/sigmaos-terminal
-  termux_home=/var/lib/sigmaos-termux
-  if [ -d "$legacy_termux_home" ] && [ -e "$termux_home" ]; then
-    printf 'sigmaos: refusing to merge existing terminal homes: %s and %s\n' "$legacy_termux_home" "$termux_home" >&2
-    exit 1
-  fi
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl disable --now sigmaos-terminal-helper.service 2>/dev/null || true
-  fi
-  if [ -d "$legacy_termux_home" ]; then
-    mv "$legacy_termux_home" "$termux_home"
-  fi
-  install -d -o sigmaos -g sigmaos -m 0700 "$termux_home"
-  chown -R sigmaos:sigmaos "$termux_home"
-  usermod --home "$termux_home" --shell /bin/bash sigmaos
-  install -d -o root -g root -m 0700 /var/backups/sigmaos-permissions
-  install -d -o root -g root -m 0755 /var/lib/sigmaos-share
-  if id sigma-share >/dev/null 2>&1; then
-    usermod --home /var/lib/sigmaos-share sigma-share
+  if ! id zos-share >/dev/null 2>&1; then
+    adduser --system --no-create-home --disabled-login --shell /usr/sbin/nologin \
+      --home /zos/home/share zos-share
   fi
 
-  install -d -o sigmaos -g sigmaos -m 0750 /var/lib/sigmaos /var/lib/sigmaos/trash /var/lib/sigmaos/reports /var/lib/sigmaos/pi-sessions
-  install -d -o sigmaos -g sigmaos -m 0750 /var/lib/sigmaos-vod-player
-  install -d -o sigmaos -g sigmaos -m 0711 /var/lib/sigmaos/vmstore
-  install -d -o sigmaos -g sigmaos -m 0755 /srv/nas /srv/iso
-  install -d -o sigmaos -g sigmaos -m 0750 /srv/apps
-  chown -R sigmaos:sigmaos /var/lib/sigmaos
-  install -d -o root -g root -m 0700 /var/lib/sigmaos/docker-daemon
-  chown -R root:root /var/lib/sigmaos/docker-daemon
-  install -d -o root -g root -m 0700 /var/lib/sigmaos/network-manager
-  chown -R root:root /var/lib/sigmaos/network-manager
-
-  if [ -f /etc/sigmaos/config.toml ]; then
-    /usr/lib/sigmaos/bin/sigmaos-hostd migrate-config
-    /usr/lib/sigmaos/bin/sigmaos-termux migrate-config
-    /usr/lib/sigmaos/bin/sigmaos-vod-player migrate-config
+  install -d -o root -g zos -m 0750 /zos /zos/config
+  install -d -o zos -g zos -m 0750 \
+    /zos/state /zos/state/trash /zos/state/reports \
+    /zos/state/pi-sessions /zos/state/pi-agent /zos/state/photostaff \
+    /zos/state/media-cache /zos/state/backup-staging /zos/state/vod-player \
+    /zos/logs /zos/home /zos/home/termux /zos/apps /zos/deploy \
+    /zos/system-backups /zos/data/backup /zos/data/primary
+  install -d -o zos -g zos -m 0711 /zos/vm /zos/iso
+  install -d -o root -g root -m 0755 /zos/home/share /zos/state/hostd
+  install -d -o root -g root -m 0700 \
+    /zos/state/hostd/docker-daemon /zos/state/hostd/network-manager \
+    /zos/system-backups/permissions
+  chown -R root:root /zos/state/hostd /zos/system-backups/permissions
+  if [ -e /zos/config/config.toml ]; then
+    chown root:zos /zos/config/config.toml
+    chmod 0640 /zos/config/config.toml
   fi
+  usermod --home /zos/home/termux --shell /bin/bash zos
+  usermod --home /zos/home/share zos-share
 
-  SIGMAOS_LOCALE=${SIGMAOS_LOCALE:-C.UTF-8} \
-    /usr/lib/sigmaos/scripts/sigmaos-configure-locale.sh
+  ZOS_LOCALE=${ZOS_LOCALE:-C.UTF-8} \
+    /usr/lib/zos/scripts/zos-configure-locale.sh
 
-  # Keep the constrained deployment entrypoint pointed at the packaged helper
-  # after upgrades, including hosts bootstrapped before the helper was added.
   install -d -o root -g root -m 0755 /usr/local/sbin
-  ln -sfn /usr/lib/sigmaos/scripts/sigmaos-deploy /usr/local/sbin/sigmaos-deploy
+  ln -sfn /usr/lib/zos/scripts/zos-deploy /usr/local/sbin/zos-deploy
 
   if command -v systemctl >/dev/null 2>&1; then
-    # The Ops runner replaces the legacy scheduler. Preserve generated reports,
-    # but make sure the retired timer cannot continue writing new ones.
-    systemctl disable --now sigmaos-scheduler.timer sigmaos-scheduler.service 2>/dev/null || true
     systemctl daemon-reload || true
-    systemd-tmpfiles --create sigmaos.conf || true
-
-    # Stop retired helpers before activating their Rust replacements.
-    systemctl disable --now sigmaos-share-helper.service 2>/dev/null || true
-    systemctl disable --now sigmaos-player-helper.service 2>/dev/null || true
-    systemctl disable --now sigmaos-photo-worker.service 2>/dev/null || true
-    systemctl disable --now sigmaos-indexer.timer 2>/dev/null || true
-    rm -f /etc/systemd/system/sigmaos-terminal-helper.service.d/identity.conf
-    rm -f /etc/systemd/system/sigmaos-player-helper.service.d/identity.conf
-    rmdir /etc/systemd/system/sigmaos-terminal-helper.service.d 2>/dev/null || true
-    rmdir /etc/systemd/system/sigmaos-player-helper.service.d 2>/dev/null || true
-
-    # Optional runtime groups are host-dependent; keep the drop-in valid even
-    # when Docker/libvirt/KVM are installed after the SigmaOS package.
-    /usr/lib/sigmaos/scripts/sigmaos-refresh-groups.sh
-    /usr/lib/sigmaos/scripts/sigmaos-refresh-termux.sh || true
-    /usr/lib/sigmaos/scripts/sigmaos-refresh-vod-player.sh || true
-    systemctl enable sigmaos-hostd.service sigmaos-termux.service sigmaos-api.service sigmaos-worker@1.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer || true
-    if [ -z "${2:-}" ] || [ "$photostaff_was_enabled" = "1" ]; then
-      systemctl enable sigmaos-photostaff.service || true
-    else
-      systemctl disable sigmaos-photostaff.service 2>/dev/null || true
-    fi
-    if [ "$photostaff_was_active" = "1" ]; then
-      systemctl restart sigmaos-photostaff.service || true
-    fi
-    if [ "$legacy_vod_player_enabled" = "1" ]; then
-      systemctl enable sigmaos-vod-player.service || true
-    fi
-    if [ "$legacy_vod_player_active" = "1" ]; then
-      systemctl start sigmaos-vod-player.service || true
-    fi
+    systemd-tmpfiles --create zos.conf || true
+    /usr/lib/zos/scripts/zos-refresh-groups.sh
+    /usr/lib/zos/scripts/zos-refresh-termux.sh || true
+    /usr/lib/zos/scripts/zos-refresh-vod-player.sh || true
   fi
 fi
 

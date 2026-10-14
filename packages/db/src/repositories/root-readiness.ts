@@ -1,8 +1,8 @@
-import type { RootReadiness } from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+import type { RootReadiness } from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import type { DbReadinessRow } from "./repository-rows.js";
 
-export function upsertRootReadiness(db: SigmaDatabase, input: RootReadiness | (Omit<RootReadiness, "checkedAt"> & { checkedAt?: Date | string | null })): RootReadiness {
+export function upsertRootReadiness(db: ZosDatabase, input: RootReadiness | (Omit<RootReadiness, "checkedAt"> & { checkedAt?: Date | string | null })): RootReadiness {
   const checkedAt = input.checkedAt instanceof Date ? input.checkedAt.toISOString() : input.checkedAt ?? new Date().toISOString();
   db.prepare(`
     INSERT INTO nas_root_readiness (root_id, status, checked_at, reason, source, uuid, fstype)
@@ -13,13 +13,13 @@ export function upsertRootReadiness(db: SigmaDatabase, input: RootReadiness | (O
   return { ...input, checkedAt };
 }
 
-export function getRootReadiness(db: SigmaDatabase, rootId: string): RootReadiness | null {
+export function getRootReadiness(db: ZosDatabase, rootId: string): RootReadiness | null {
   const row = db.prepare("SELECT root_id, status, checked_at, reason, source, uuid, fstype FROM nas_root_readiness WHERE root_id = ?")
     .get(rootId) as DbReadinessRow | undefined;
   return row ? mapReadiness(row) : null;
 }
 
-export function listRootReadiness(db: SigmaDatabase, rootIds?: string[]): RootReadiness[] {
+export function listRootReadiness(db: ZosDatabase, rootIds?: string[]): RootReadiness[] {
   const rows = rootIds !== undefined
     ? rootIds.length
       ? db.prepare(`SELECT root_id, status, checked_at, reason, source, uuid, fstype FROM nas_root_readiness WHERE root_id IN (${rootIds.map(() => "?").join(",")})`).all(...rootIds)

@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type {
   DockerConsoleAuthorizationRecord
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { mapDockerConsoleAuthorization } from "./operation-mappers.js";
 import type { DbDockerConsoleAuthorizationRow } from "./repository-rows.js";
 
 export function createDockerConsoleAuthorization(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     operationId: string;
     approvalId: string;
@@ -57,7 +57,7 @@ export function createDockerConsoleAuthorization(
 }
 
 export function consumeDockerConsoleAuthorization(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   authorizationId: string
 ): DockerConsoleAuthorizationRecord | null {
   const row = db
@@ -93,7 +93,7 @@ export function consumeDockerConsoleAuthorization(
   return updated ? mapDockerConsoleAuthorization(updated) : null;
 }
 
-export function markDockerConsoleAuthorizationFailed(db: SigmaDatabase, authorizationId: string): boolean {
+export function markDockerConsoleAuthorizationFailed(db: ZosDatabase, authorizationId: string): boolean {
   const result = db
     .prepare("UPDATE docker_console_authorizations SET status = 'failed' WHERE id = ? AND status IN ('active', 'used')")
     .run(authorizationId);

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { TerminalTab, TerminalTabState } from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+import type { TerminalTab, TerminalTabState } from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 
 interface DbTerminalTabRow {
   id: string;
@@ -19,7 +19,7 @@ interface DbTerminalTabSetRow {
   updated_at: string;
 }
 
-export function getTerminalTab(db: SigmaDatabase, id: string): TerminalTab | null {
+export function getTerminalTab(db: ZosDatabase, id: string): TerminalTab | null {
   const row = db.prepare(`
     SELECT id, root_id, ordinal, custom_title, created_at, updated_at
     FROM terminal_tabs
@@ -29,7 +29,7 @@ export function getTerminalTab(db: SigmaDatabase, id: string): TerminalTab | nul
 }
 
 export function getTerminalTabState(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   rootId: string,
   maxSessions: number
 ): TerminalTabState {
@@ -43,7 +43,7 @@ export function getTerminalTabState(
 }
 
 export function initializeTerminalTabs(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId: string; maxSessions: number; legacySessionId?: string }
 ): TerminalTabState {
   const initialize = db.transaction(() => {
@@ -66,7 +66,7 @@ export function initializeTerminalTabs(
 }
 
 export function createTerminalTab(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId: string; maxSessions: number }
 ): TerminalTabState {
   const create = db.transaction(() => {
@@ -80,7 +80,7 @@ export function createTerminalTab(
 }
 
 export function activateTerminalTab(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { id: string; maxSessions: number }
 ): TerminalTabState | null {
   const activate = db.transaction(() => {
@@ -100,7 +100,7 @@ export function activateTerminalTab(
 }
 
 export function renameTerminalTab(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { id: string; customTitle: string | null; maxSessions: number }
 ): TerminalTabState | null {
   const rename = db.transaction(() => {
@@ -121,7 +121,7 @@ export function renameTerminalTab(
 }
 
 export function deleteTerminalTab(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { id: string; maxSessions: number }
 ): TerminalTabState | null {
   const remove = db.transaction(() => {
@@ -156,7 +156,7 @@ export function deleteTerminalTab(
 }
 
 function insertTerminalTab(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   rootId: string,
   maxSessions: number,
   requestedId?: string
@@ -190,7 +190,7 @@ function insertTerminalTab(
   return tab;
 }
 
-function createTerminalTabSet(db: SigmaDatabase, rootId: string): void {
+function createTerminalTabSet(db: ZosDatabase, rootId: string): void {
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO terminal_tab_sets (root_id, active_tab_id, next_ordinal, initialized_at, updated_at)
@@ -198,7 +198,7 @@ function createTerminalTabSet(db: SigmaDatabase, rootId: string): void {
   `).run(rootId, now, now);
 }
 
-function listTerminalTabs(db: SigmaDatabase, rootId: string): TerminalTab[] {
+function listTerminalTabs(db: ZosDatabase, rootId: string): TerminalTab[] {
   const rows = db.prepare(`
     SELECT id, root_id, ordinal, custom_title, created_at, updated_at
     FROM terminal_tabs
@@ -208,7 +208,7 @@ function listTerminalTabs(db: SigmaDatabase, rootId: string): TerminalTab[] {
   return rows.map(mapTerminalTab);
 }
 
-function getTerminalTabSet(db: SigmaDatabase, rootId: string): DbTerminalTabSetRow | null {
+function getTerminalTabSet(db: ZosDatabase, rootId: string): DbTerminalTabSetRow | null {
   return (db.prepare(`
     SELECT root_id, active_tab_id, next_ordinal, initialized_at, updated_at
     FROM terminal_tab_sets

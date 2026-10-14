@@ -1,8 +1,8 @@
 use std::process::ExitCode;
 
-use sigmaos_downloader::Downloader;
-use sigmaos_downloader::config::Config;
 use tracing_subscriber::EnvFilter;
+use zos_downloader::Downloader;
+use zos_downloader::config::Config;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -22,7 +22,7 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn run() -> Result<(), sigmaos_downloader::error::DownloadError> {
+async fn run() -> Result<(), zos_downloader::error::DownloadError> {
     let config = Config::load()?;
     let downloader = Downloader::new(&config)?;
     let shutdown = downloader.shutdown_token();

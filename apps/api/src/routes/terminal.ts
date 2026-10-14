@@ -8,8 +8,8 @@ import {
   getTerminalTabState,
   initializeTerminalTabs,
   renameTerminalTab
-} from "@sigmaos/db";
-import { TERMUX_MAX_SESSIONS } from "@sigmaos/shared";
+} from "@zos/db";
+import { TERMUX_MAX_SESSIONS } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { terminalMessage } from "../lib/terminal.js";
 import { createTerminalRuntime } from "../lib/termux-client.js";
@@ -388,13 +388,13 @@ function parseTerminalProtocol(value: string | string[] | undefined): TerminalPr
   const protocols = Array.isArray(value) ? value : value ? value.split(",") : [];
   const result: TerminalProtocolData = { reset: false };
   for (const protocol of protocols.map((item) => item.trim())) {
-    if (protocol.startsWith("sigmaos-session.")) {
-      result.sessionId = protocol.slice("sigmaos-session.".length);
-    } else if (protocol.startsWith("sigmaos-reset.")) {
-      result.resetSessionId = protocol.slice("sigmaos-reset.".length);
+    if (protocol.startsWith("zos-session.")) {
+      result.sessionId = protocol.slice("zos-session.".length);
+    } else if (protocol.startsWith("zos-reset.")) {
+      result.resetSessionId = protocol.slice("zos-reset.".length);
       result.reset = true;
-    } else if (protocol.startsWith("sigmaos-next.")) {
-      result.nextSessionId = protocol.slice("sigmaos-next.".length);
+    } else if (protocol.startsWith("zos-next.")) {
+      result.nextSessionId = protocol.slice("zos-next.".length);
       result.reset = true;
     }
   }

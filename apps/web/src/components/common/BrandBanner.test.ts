@@ -5,12 +5,12 @@ import { BrandBanner } from "./BrandBanner.js";
 
 describe("BrandBanner", () => {
   it("renders theme-specific artwork with one accessible name", () => {
-    const html = renderToStaticMarkup(createElement(BrandBanner, { alt: "SigmaOS" }));
+    const html = renderToStaticMarkup(createElement(BrandBanner, { alt: "ZOS" }));
 
     expect(html).toContain('role="img"');
-    expect(html).toContain('aria-label="SigmaOS"');
-    expect(html).toContain('src="/sigmaos-banner.svg"');
-    expect(html).toContain('src="/sigmaos-banner-light.svg"');
+    expect(html).toContain('aria-label="ZOS"');
+    expect(html).toContain('src="/zos-banner.svg"');
+    expect(html).toContain('src="/zos-banner-light.svg"');
     expect(html.match(/alt=""/g)).toHaveLength(2);
   });
 

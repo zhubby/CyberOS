@@ -316,12 +316,12 @@ mod tests {
         let mountinfo = concat!(
             "malformed line\n",
             "35 25 0:31 / /other rw - ext4 /dev/md0 rw\n",
-            "36 25 0:31 / /srv/My\\040NAS rw - ext4 /dev/md0 rw\n",
+            "36 25 0:31 / /mnt/My\\040NAS rw - ext4 /dev/md0 rw\n",
         );
         assert_eq!(
-            find_mountpoint_in(mountinfo, "/dev/md0", Path::new("/srv")),
+            find_mountpoint_in(mountinfo, "/dev/md0", Path::new("/mnt")),
             Some(MountLocation {
-                path: PathBuf::from("/srv/My NAS"),
+                path: PathBuf::from("/mnt/My NAS"),
                 mount_id: Some(36)
             })
         );

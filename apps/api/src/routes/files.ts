@@ -20,7 +20,7 @@ import {
   resolveSafeTargetPath,
   searchFiles,
   type FileEntry
-} from "@sigmaos/nas-tools";
+} from "@zos/nas-tools";
 import {
   appendEvent,
   createActionMessageAndJob,
@@ -33,8 +33,8 @@ import {
   listFileBatches,
   queryIndexAdvanced,
   recordAppliedOperation
-} from "@sigmaos/db";
-import type { FileOperationProposal, IndexSearchRequest, NasRootRecord } from "@sigmaos/shared";
+} from "@zos/db";
+import type { FileOperationProposal, IndexSearchRequest, NasRootRecord } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   clampPreviewBytes,
@@ -581,7 +581,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
         targetDirectory,
         summary: operation === "move"
           ? `Move ${items.length} item${items.length === 1 ? "" : "s"} to ${targetDirectory}`
-          : `Move ${items.length} item${items.length === 1 ? "" : "s"} to SigmaOS trash`,
+          : `Move ${items.length} item${items.length === 1 ? "" : "s"} to ZOS trash`,
         items
       });
       fileBatches?.wake();
@@ -950,7 +950,7 @@ function fileExportName(
   const atPoolRoot = parent === "." || parent === scope.mountpointPath;
   const poolStem = scope.mountpointPath === "." ? scope.pool.name : path.basename(scope.mountpointPath);
   const stem = atPoolRoot ? poolStem : path.basename(parent);
-  return `${stem || "sigmaos"}-selection.zip`;
+  return `${stem || "zos"}-selection.zip`;
 }
 
 function uniqueExportEntryName(name: string, isDirectory: boolean, used: Set<string>): string {
@@ -1294,7 +1294,7 @@ function buildTrashProposal(
       sourcePath,
       risk: "medium",
       reversible: true,
-      summary: `Move ${sourcePath} to SigmaOS trash`
+      summary: `Move ${sourcePath} to ZOS trash`
     }
   };
 }

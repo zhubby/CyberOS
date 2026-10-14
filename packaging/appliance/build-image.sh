@@ -2,21 +2,15 @@
 set -eu
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-OUT_DIR="${SIGMAOS_IMAGE_OUT:-$ROOT_DIR/.sigmaos/appliance}"
-SUITE="${SIGMAOS_BASE_SUITE:-bookworm}"
-ARCH="${SIGMAOS_TARGET_ARCH:-arm64}"
-MIRROR="${SIGMAOS_APT_MIRROR:-https://mirrors.aliyun.com/debian}"
+OUT_DIR="${ZOS_IMAGE_OUT:-$ROOT_DIR/.zos/appliance}"
+SUITE="${ZOS_BASE_SUITE:-bookworm}"
+ARCH="${ZOS_TARGET_ARCH:-arm64}"
+MIRROR="${ZOS_APT_MIRROR:-https://mirrors.aliyun.com/debian}"
 MIRROR="${MIRROR%/}"
-NODE_MIRROR="${SIGMAOS_NODE_MIRROR:-https://mirrors.aliyun.com/nodejs-release}"
+NODE_MIRROR="${ZOS_NODE_MIRROR:-https://mirrors.aliyun.com/nodejs-release}"
 NODE_MIRROR="${NODE_MIRROR%/}"
-NODE_VERSION="${SIGMAOS_NODE_VERSION:-22.23.2}"
-VOD_PLAYER_ENABLED="${SIGMAOS_ENABLE_VOD_PLAYER:-0}"
-
-legacy_player_environment=$(env | awk -F= '$1 == "SIGMAOS_ENABLE_PLAYER" || $1 ~ /^SIGMAOS_PLAYER_/ { print $1; exit }')
-if [ -n "$legacy_player_environment" ]; then
-  printf "%s is no longer supported; use SIGMAOS_ENABLE_VOD_PLAYER\n" "$legacy_player_environment" >&2
-  exit 1
-fi
+NODE_VERSION="${ZOS_NODE_VERSION:-22.23.2}"
+VOD_PLAYER_ENABLED="${ZOS_ENABLE_VOD_PLAYER:-0}"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -27,9 +21,9 @@ need() {
 
 need node
 PRODUCT_VERSION=$(node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(value.version);' "$ROOT_DIR/package.json")
-DEB_PATH="${SIGMAOS_DEB:-$OUT_DIR/sigmaos_${PRODUCT_VERSION}_${ARCH}.deb}"
+DEB_PATH="${ZOS_DEB:-$OUT_DIR/zos_${PRODUCT_VERSION}_${ARCH}.deb}"
 ROOTFS="$OUT_DIR/rootfs"
-TARBALL="$OUT_DIR/sigmaos-rootfs-${ARCH}.tar"
+TARBALL="$OUT_DIR/zos-rootfs-${ARCH}.tar"
 
 need mmdebstrap
 need systemd-nspawn
@@ -39,11 +33,11 @@ need sha256sum
 
 case "$VOD_PLAYER_ENABLED" in
   0|1) ;;
-  *) printf "SIGMAOS_ENABLE_VOD_PLAYER must be 0 or 1\n" >&2; exit 1 ;;
+  *) printf "ZOS_ENABLE_VOD_PLAYER must be 0 or 1\n" >&2; exit 1 ;;
 esac
 
 if [ ! -f "$DEB_PATH" ]; then
-  printf "Missing SigmaOS deb at %s. Build it first with packaging/scripts/build-deb.sh or set SIGMAOS_DEB.\n" "$DEB_PATH" >&2
+  printf "Missing ZOS deb at %s. Build it first with packaging/scripts/build-deb.sh or set ZOS_DEB.\n" "$DEB_PATH" >&2
   exit 1
 fi
 
@@ -69,23 +63,23 @@ curl -fsSL "$NODE_MIRROR/v${NODE_VERSION}/SHASUMS256.txt" -o "$node_tmp/SHASUMS2
 node_sha256=$(awk -v filename="$node_filename" '$2 == filename { print $1; exit }' "$node_tmp/SHASUMS256.txt")
 [ -n "$node_sha256" ] || { printf "Missing Node.js checksum for %s\n" "$node_filename" >&2; exit 1; }
 printf '%s  %s\n' "$node_sha256" "$node_tmp/$node_filename" | sha256sum -c -
-node_dir="/opt/sigmaos/node/node-v${NODE_VERSION}-linux-${node_arch}"
-install -d -m 0755 "$ROOTFS/opt/sigmaos/node" "$ROOTFS/usr/local/bin"
-tar -xJf "$node_tmp/$node_filename" -C "$ROOTFS/opt/sigmaos/node"
+node_dir="/opt/zos/node/node-v${NODE_VERSION}-linux-${node_arch}"
+install -d -m 0755 "$ROOTFS/opt/zos/node" "$ROOTFS/usr/local/bin"
+tar -xJf "$node_tmp/$node_filename" -C "$ROOTFS/opt/zos/node"
 ln -sfn "$node_dir/bin/node" "$ROOTFS/usr/local/bin/node"
 ln -sfn "$node_dir/bin/npm" "$ROOTFS/usr/local/bin/npm"
 ln -sfn "$node_dir/bin/npx" "$ROOTFS/usr/local/bin/npx"
 
-cp "$DEB_PATH" "$ROOTFS/tmp/sigmaos.deb"
-systemd-nspawn -D "$ROOTFS" /bin/sh -eu -c "apt-get update && apt-get install -y /tmp/sigmaos.deb && rm /tmp/sigmaos.deb"
-systemd-nspawn -D "$ROOTFS" /usr/lib/sigmaos/scripts/sigmaos-nginx.sh
+cp "$DEB_PATH" "$ROOTFS/tmp/zos.deb"
+systemd-nspawn -D "$ROOTFS" /bin/sh -eu -c "apt-get update && apt-get install -y /tmp/zos.deb && rm /tmp/zos.deb"
+systemd-nspawn -D "$ROOTFS" /usr/lib/zos/scripts/zos-nginx.sh
 if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
   systemd-nspawn -D "$ROOTFS" /bin/sh -eu -c \
-    'sed -i "/^\\[vod_player\\]/,/^\\[/ s/^enabled = false$/enabled = true/" /etc/sigmaos/config.toml'
-  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer
+    'sed -i "/^\\[vod_player\\]/,/^\\[/ s/^enabled = false$/enabled = true/" /zos/config/config.toml'
+  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service zos-hostd.service zos-termux.service zos-vod-player.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-maintenance.timer zos-backup-daily.timer zos-backup-weekly.timer zos-health.timer
 else
-  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service sigmaos-hostd.service sigmaos-termux.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-maintenance.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer sigmaos-health.timer
+  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-maintenance.timer zos-backup-daily.timer zos-backup-weekly.timer zos-health.timer
 fi
 
 tar --numeric-owner -C "$ROOTFS" -cpf "$TARBALL" .
-printf "SigmaOS appliance rootfs written to %s\n" "$TARBALL"
+printf "ZOS appliance rootfs written to %s\n" "$TARBALL"

@@ -8,20 +8,20 @@ import {
   ensureNasRoots,
   finishBackupRun,
   listHealthAlerts,
-  openSigmaDb,
+  openZosDb,
   resolveHealthAlert,
   runOpsMaintenanceRetention,
   startBackupRun,
   upsertHealthAlert,
-  type SigmaDatabase
+  type ZosDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-ops-maintenance-"));
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-ops-maintenance-"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
 });
 
 afterEach(async () => {

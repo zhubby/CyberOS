@@ -16,43 +16,55 @@ afterEach(async () => {
 
 describe("loadConfig", () => {
   it("loads the fixed Photostaff base map URL and allows only HTTPS mirrors", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-map-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-map-"));
     const missingConfig = path.join(tempDir, "missing.toml");
-    expect(loadConfig({ SIGMAOS_CONFIG: missingConfig } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
+    expect(loadConfig({ ZOS_CONFIG: missingConfig } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
       baseMapUrl: PHOTOSTAFF_BASE_MAP_RELEASE_URL
     });
 
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(configPath, `[photostaff]\nbasemap_url = "https://mirror.example.test/from-toml.pmtiles"\n`);
-    expect(loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
+    expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
       baseMapUrl: "https://mirror.example.test/from-toml.pmtiles"
     });
     expect(loadConfig({
-      SIGMAOS_CONFIG: configPath,
-      SIGMAOS_PHOTOSTAFF_BASEMAP_URL: "https://mirror.example.test/from-env.pmtiles"
+      ZOS_CONFIG: configPath,
+      ZOS_PHOTOSTAFF_BASEMAP_URL: "https://mirror.example.test/from-env.pmtiles"
     } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
       baseMapUrl: "https://mirror.example.test/from-env.pmtiles"
     });
     expect(() => loadConfig({
-      SIGMAOS_CONFIG: configPath,
-      SIGMAOS_PHOTOSTAFF_BASEMAP_URL: "http://mirror.example.test/map.pmtiles"
+      ZOS_CONFIG: configPath,
+      ZOS_PHOTOSTAFF_BASEMAP_URL: "http://mirror.example.test/map.pmtiles"
     } as NodeJS.ProcessEnv, tempDir!)).toThrow("must use HTTPS");
   });
 
-  it("defaults file access to the system root when no roots are configured", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+  it("defaults development paths to the isolated ZOS root", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const config = loadConfig(
       {
-        SIGMAOS_CONFIG: path.join(tempDir, "missing.toml")
+        ZOS_CONFIG: path.join(tempDir, "missing.toml")
       } as NodeJS.ProcessEnv,
       tempDir
     );
 
+    const rootDir = path.join(tempDir, ".zos", "dev-root");
+    expect(config).toMatchObject({
+      rootDir,
+      stateDir: path.join(rootDir, "state"),
+      dataDir: path.join(rootDir, "state"),
+      databasePath: path.join(rootDir, "state", "zos.sqlite"),
+      dataRoot: path.join(rootDir, "data"),
+      appsRoot: path.join(rootDir, "apps"),
+      isoRoot: path.join(rootDir, "iso"),
+      vmRoot: path.join(rootDir, "vm"),
+      backupRoot: path.join(rootDir, "data", "backup")
+    });
     expect(config.nasRoots).toEqual([
       {
-        id: "local",
-        name: "System root",
-        path: path.parse(path.resolve(tempDir)).root
+        id: "primary",
+        name: "Primary data",
+        path: path.join(rootDir, "data", "primary")
       }
     ]);
     expect(config.docker).toMatchObject({
@@ -65,23 +77,23 @@ describe("loadConfig", () => {
     expect(config.shares).toMatchObject({
       enabled: false,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: null
       },
       shares: []
     });
-    expect(config.hostd).toEqual({ socketPath: "/run/sigmaos/hostd.sock" });
+    expect(config.hostd).toEqual({ socketPath: "/run/zos/hostd.sock" });
     expect(config.terminal).toEqual({
       user: null,
-      termuxSocketPath: "/run/sigmaos/termux.sock",
+      termuxSocketPath: "/run/zos/termux.sock",
       sessionIdleTimeoutMs: 1_800_000,
       connectTimeoutMs: 10_000,
       maxSessions: 32
     });
     expect(config.vodPlayer).toEqual({
       enabled: false,
-      socketPath: "/run/sigmaos/vod-player.sock",
-      statePath: "/var/lib/sigmaos-vod-player/session.json",
+      socketPath: "/run/zos/vod-player.sock",
+      statePath: path.join(rootDir, "state", "vod-player", "session.json"),
       commandTimeoutMs: 5_000,
       startupTimeoutMs: 15_000,
       checkpointIntervalMs: 5_000,
@@ -92,12 +104,12 @@ describe("loadConfig", () => {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "sigmaos"
+      user: "zos"
     });
   });
 
   it("loads VOD Player settings from TOML and environment overrides", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(
       configPath,
@@ -105,7 +117,7 @@ describe("loadConfig", () => {
         [vod_player]
         enabled = true
         socket_path = "/run/custom/vod-player.sock"
-        state_path = "/var/lib/custom-vod-player/session.json"
+        state_path = "${path.join(tempDir, ".zos", "dev-root", "state", "vod-player", "session.json")}"
         drm_connector = "HDMI-A-1"
         audio_device = "alsa/plughw:1,0"
         hwdec = "auto"
@@ -113,19 +125,19 @@ describe("loadConfig", () => {
       `
     );
 
-    expect(loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).vodPlayer).toMatchObject({
+    expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).vodPlayer).toMatchObject({
       enabled: true,
       socketPath: "/run/custom/vod-player.sock",
-      statePath: "/var/lib/custom-vod-player/session.json",
+      statePath: path.join(tempDir, ".zos", "dev-root", "state", "vod-player", "session.json"),
       drmConnector: "HDMI-A-1",
       audioDevice: "alsa/plughw:1,0",
       hwdec: "auto",
       user: "operator"
     });
     expect(loadConfig({
-      SIGMAOS_CONFIG: configPath,
-      SIGMAOS_VOD_PLAYER_ENABLED: "0",
-      SIGMAOS_VOD_PLAYER_SOCKET_PATH: "/run/override-vod-player.sock"
+      ZOS_CONFIG: configPath,
+      ZOS_VOD_PLAYER_ENABLED: "0",
+      ZOS_VOD_PLAYER_SOCKET_PATH: "/run/override-vod-player.sock"
     } as NodeJS.ProcessEnv, tempDir).vodPlayer).toMatchObject({
       enabled: false,
       socketPath: "/run/override-vod-player.sock"
@@ -133,29 +145,24 @@ describe("loadConfig", () => {
   });
 
   it("rejects unsafe or internally inconsistent VOD Player settings", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-player-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-player-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(configPath, `[vod_player]\nuser = "root"\nsocket_path = "relative.sock"\n`);
-    expect(() => loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
+    expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("socket_path and state_path must be absolute");
     await writeFile(configPath, `[vod_player]\nretry_base_delay_ms = 1000\nretry_max_delay_ms = 500\n`);
-    expect(() => loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
+    expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("retry_max_delay_ms must be at least retry_base_delay_ms");
     await writeFile(configPath, `[vod_player]\nhwdec = "unsafe"\n`);
-    expect(() => loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
+    expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("output configuration is invalid");
     await writeFile(configPath, `[vod_player]\nsocket_path = "/tmp/vod-player.sock"\n`);
-    expect(() => loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
+    expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("cannot use /tmp or /var/tmp");
   });
 
-  it("rejects removed player environment variables", () => {
-    expect(() => loadConfig({ SIGMAOS_PLAYER_ENABLED: "1" } as NodeJS.ProcessEnv, process.cwd()))
-      .toThrow("SIGMAOS_PLAYER_ENABLED is no longer supported");
-  });
-
   it("loads Docker settings from TOML", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(
       configPath,
@@ -166,15 +173,10 @@ describe("loadConfig", () => {
         compose_command = "/usr/bin/docker"
         operation_timeout_ms = 45000
         console_shells = ["/bin/sh"]
-
-        [[docker.compose_roots]]
-        id = "apps"
-        name = "Apps"
-        path = "compose/apps"
       `
     );
 
-    const config = loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
+    const config = loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
 
     expect(config.docker).toMatchObject({
       enabled: true,
@@ -186,7 +188,7 @@ describe("loadConfig", () => {
   });
 
   it("loads the terminal user and Termux socket from TOML and environment", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(
       configPath,
@@ -197,7 +199,7 @@ describe("loadConfig", () => {
       `
     );
 
-    expect(loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).terminal).toEqual({
+    expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).terminal).toEqual({
       user: "zhubby",
       termuxSocketPath: "/tmp/termux.sock",
       sessionIdleTimeoutMs: 1_800_000,
@@ -205,9 +207,9 @@ describe("loadConfig", () => {
       maxSessions: 32
     });
     expect(loadConfig({
-      SIGMAOS_CONFIG: configPath,
-      SIGMAOS_TERMUX_USER: "operator",
-      SIGMAOS_TERMUX_SOCKET_PATH: "/run/operator-termux.sock"
+      ZOS_CONFIG: configPath,
+      ZOS_TERMUX_USER: "operator",
+      ZOS_TERMUX_SOCKET_PATH: "/run/operator-termux.sock"
     } as NodeJS.ProcessEnv, tempDir).terminal).toEqual({
       user: "operator",
       termuxSocketPath: "/run/operator-termux.sock",
@@ -218,32 +220,31 @@ describe("loadConfig", () => {
   });
 
   it("lets the hostd socket environment override the TOML value", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(configPath, `[hostd]\nsocket_path = "/tmp/toml-hostd.sock"\n`);
 
-    expect(loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).hostd).toEqual({
+    expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).hostd).toEqual({
       socketPath: "/tmp/toml-hostd.sock"
     });
     expect(loadConfig({
-      SIGMAOS_CONFIG: configPath,
-      SIGMAOS_HOSTD_SOCKET_PATH: "/run/override-hostd.sock"
+      ZOS_CONFIG: configPath,
+      ZOS_HOSTD_SOCKET_PATH: "/run/override-hostd.sock"
     } as NodeJS.ProcessEnv, tempDir).hostd).toEqual({
       socketPath: "/run/override-hostd.sock"
     });
   });
 
   it("loads Docker settings from environment overrides", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const config = loadConfig(
       {
-        SIGMAOS_CONFIG: path.join(tempDir, "missing.toml"),
-        SIGMAOS_DOCKER_ENABLED: "1",
-        SIGMAOS_DOCKER_SOCKET_PATH: "/tmp/env-docker.sock",
-        SIGMAOS_DOCKER_COMPOSE_COMMAND: "/opt/bin/docker",
-        SIGMAOS_DOCKER_OPERATION_TIMEOUT_MS: "90000",
-        SIGMAOS_DOCKER_CONSOLE_SHELLS: "/bin/sh,/bin/bash",
-        SIGMAOS_DOCKER_COMPOSE_ROOTS: "media:Media:compose/media,lab:Lab:/srv/lab"
+        ZOS_CONFIG: path.join(tempDir, "missing.toml"),
+        ZOS_DOCKER_ENABLED: "1",
+        ZOS_DOCKER_SOCKET_PATH: "/tmp/env-docker.sock",
+        ZOS_DOCKER_COMPOSE_COMMAND: "/opt/bin/docker",
+        ZOS_DOCKER_OPERATION_TIMEOUT_MS: "90000",
+        ZOS_DOCKER_CONSOLE_SHELLS: "/bin/sh,/bin/bash"
       } as NodeJS.ProcessEnv,
       tempDir
     );
@@ -258,12 +259,12 @@ describe("loadConfig", () => {
   });
 
   it("defaults environment-configured production roots to required mounts", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const config = loadConfig(
       {
-        SIGMAOS_CONFIG: path.join(tempDir, "missing.toml"),
-        SIGMAOS_ENVIRONMENT: "production",
-        SIGMAOS_NAS_ROOTS: "primary:Primary:/srv/nas"
+        ZOS_CONFIG: "/zos/config/config.toml",
+        ZOS_ENVIRONMENT: "production",
+        ZOS_NAS_ROOTS: "primary:Primary:/zos/data/primary"
       } as NodeJS.ProcessEnv,
       tempDir
     );
@@ -272,35 +273,114 @@ describe("loadConfig", () => {
       {
         id: "primary",
         name: "Primary",
-        path: "/srv/nas",
+        path: "/zos/data/primary",
         mountPolicy: "required",
         expectedSource: null,
         expectedUuid: null,
         expectedFstype: null
       }
     ]);
+    expect(config).toMatchObject({
+      rootDir: "/zos",
+      stateDir: "/zos/state",
+      databasePath: "/zos/state/zos.sqlite",
+      dataRoot: "/zos/data",
+      appsRoot: "/zos/apps",
+      isoRoot: "/zos/iso",
+      vmRoot: "/zos/vm",
+      backupRoot: "/zos/data/backup"
+    });
   });
 
-  it("rejects production NAS roots that expose the managed Docker Apps path", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+  it("rejects noncanonical production root and config paths", () => {
+    expect(() => loadConfig({
+      ZOS_CONFIG: "/zos/config/config.toml",
+      ZOS_ENVIRONMENT: "production",
+      ZOS_ROOT: "/opt/zos"
+    } as NodeJS.ProcessEnv, process.cwd())).toThrow("Production ZOS root must be /zos");
+    expect(() => loadConfig({
+      ZOS_CONFIG: "/tmp/zos-config.toml",
+      ZOS_ENVIRONMENT: "production"
+    } as NodeJS.ProcessEnv, process.cwd())).toThrow("Production ZOS config must be /zos/config/config.toml");
+  });
+
+  it("rejects production NAS roots outside direct /zos/data children", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const configDir = tempDir;
     const environment = {
-      SIGMAOS_CONFIG: path.join(configDir, "missing.toml"),
-      SIGMAOS_ENVIRONMENT: "production"
+      ZOS_CONFIG: "/zos/config/config.toml",
+      ZOS_ENVIRONMENT: "production"
     } as NodeJS.ProcessEnv;
 
     expect(() => loadConfig({
       ...environment,
-      SIGMAOS_NAS_ROOTS: "system:System:/srv"
-    }, configDir)).toThrow("must not overlap /srv/apps");
+      ZOS_NAS_ROOTS: "system:System:/outside"
+    }, configDir)).toThrow("must be direct children of /zos/data");
     expect(() => loadConfig({
       ...environment,
-      SIGMAOS_NAS_ROOTS: "apps:Apps:/srv/apps/data"
-    }, configDir)).toThrow("must not overlap /srv/apps");
+      ZOS_NAS_ROOTS: "nested:Nested:/zos/data/primary/nested"
+    }, configDir)).toThrow("must be direct children of /zos/data");
+    expect(() => loadConfig({
+      ...environment,
+      ZOS_NAS_ROOTS: "backup:Backup:/zos/data/backup"
+    }, configDir)).toThrow("must be direct children of /zos/data");
+    expect(() => loadConfig({
+      ...environment,
+      ZOS_NAS_ROOTS: "apps:Apps:/zos/apps/data"
+    }, configDir)).toThrow("must not overlap /zos/apps");
+  });
+
+  it("rejects production VM, VOD Player, and backup paths outside their ZOS directories", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-paths-"));
+    const base = {
+      ZOS_CONFIG: "/zos/config/config.toml",
+      ZOS_ENVIRONMENT: "production",
+      ZOS_NAS_ROOTS: "primary:Primary:/zos/data/primary"
+    } as NodeJS.ProcessEnv;
+
+    expect(() => loadConfig({ ...base, ZOS_VM_STORAGE_PATH: "/zos/state/vms" }, tempDir!))
+      .toThrow("VM storage must be under /zos/vm");
+    expect(() => loadConfig({ ...base, ZOS_VM_ISO_ROOTS: "/zos/data/primary/iso" }, tempDir!))
+      .toThrow("VM ISO roots must be under /zos/iso");
+    expect(() => loadConfig({ ...base, ZOS_VOD_PLAYER_STATE_PATH: "/zos/state/player.json" }, tempDir!))
+      .toThrow("VOD Player state must be under /zos/state/vod-player");
+    expect(() => loadConfig({
+      ...base,
+      ZOS_BACKUP_ENABLED: "1",
+      ZOS_BACKUP_REPOSITORY: "/zos/data/primary/backups"
+    }, tempDir!)).toThrow("Production backup repository must be configured under /zos/data/backup");
+    expect(() => loadConfig({
+      ...base,
+      ZOS_BACKUP_ENABLED: "1",
+      ZOS_BACKUP_REPOSITORY: "/zos/data/backup/restic",
+      ZOS_BACKUP_STAGING_PATH: "/zos/logs/backup-staging"
+    }, tempDir!)).toThrow("Backup staging must be under /zos/state");
+
+    const passwordFile = path.join(tempDir, "restic-password");
+    await writeFile(passwordFile, "secret\n");
+    expect(() => loadConfig({
+      ...base,
+      ZOS_BACKUP_ENABLED: "1",
+      ZOS_BACKUP_REPOSITORY: "/zos/data/backup/restic",
+      ZOS_BACKUP_PASSWORD_FILE: passwordFile
+    }, tempDir!)).toThrow("Backup password file must be under /zos/config");
+  });
+
+  it("rejects removed data and database path overrides", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    const cwd = tempDir;
+    expect(() => loadConfig({
+      ZOS_ROOT: path.join(cwd, "root"),
+      ZOS_DATA_DIR: path.join(cwd, "state")
+    } as NodeJS.ProcessEnv, cwd)).toThrow("ZOS_DATA_DIR");
+    expect(() => loadConfig({
+      ZOS_ROOT: path.join(cwd, "root"),
+      ZOS_DATABASE_PATH: path.join(cwd, "db.sqlite")
+    } as NodeJS.ProcessEnv, cwd)).toThrow("ZOS_DATABASE_PATH");
   });
 
   it("loads share settings from TOML", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(
       configPath,
@@ -310,7 +390,7 @@ describe("loadConfig", () => {
 
         [shares]
         enabled = true
-        account_username = "sigma-share"
+        account_username = "zos-share"
 
         [[shares.items]]
         id = "media"
@@ -343,17 +423,17 @@ describe("loadConfig", () => {
         enabled = true
         media_types = ["audio", "video"]
         bind_interface = "eth0"
-        friendly_name = "Sigma Media"
+        friendly_name = "ZOS Media"
       `
     );
 
-    const config = loadConfig({ SIGMAOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
+    const config = loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
 
     expect(config.hostd).toEqual({ socketPath: "/tmp/hostd.sock" });
     expect(config.shares).toMatchObject({
       enabled: true,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: null
       },
       shares: [
@@ -390,7 +470,7 @@ describe("loadConfig", () => {
               enabled: true,
               mediaTypes: ["audio", "video"],
               bindInterface: "eth0",
-              friendlyName: "Sigma Media"
+              friendlyName: "ZOS Media"
             }
           }
         }

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { getSystemOperations, isOpsTask } from "@sigmaos/db";
-import type { OpsTask, SystemOperationsResponse } from "@sigmaos/shared";
+import { getSystemOperations, isOpsTask } from "@zos/db";
+import type { OpsTask, SystemOperationsResponse } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   HostdSystemOperationsRuntime,

@@ -4,7 +4,7 @@ export const PHOTOSTAFF_BASE_MAP_NAME = "Natural Earth II";
 export const PHOTOSTAFF_BASE_MAP_VERSION = "3.2.0";
 export const PHOTOSTAFF_BASE_MAP_FILE_NAME = "natural-earth-ii-3.2.0.pmtiles";
 export const PHOTOSTAFF_BASE_MAP_RELEASE_URL =
-  "https://github.com/zhubby/SigmaOS/releases/download/map-natural-earth-ii-3.2.0/natural-earth-ii-3.2.0-raster.pmtiles";
+  "https://github.com/zhubby/ZOS/releases/download/map-natural-earth-ii-3.2.0/natural-earth-ii-3.2.0-raster.pmtiles";
 export const PHOTOSTAFF_BASE_MAP_SIZE_BYTES = 23_141_432;
 export const PHOTOSTAFF_BASE_MAP_SHA256 = "a9b54608526b54ef348862b15c43d0e79a9b491ad573ccbc121202d2f196f1ba";
 export const PHOTOSTAFF_BASE_MAP_ATTRIBUTION = "Made with Natural Earth";

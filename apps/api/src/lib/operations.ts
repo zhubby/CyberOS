@@ -5,9 +5,9 @@ import {
   getNasRoot,
   getTrashEntry,
   markTrashEntryRestored,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import { rollbackFileMutation, restoreTrashPath } from "@sigmaos/nas-tools";
+  type ZosDatabase
+} from "@zos/db";
+import { rollbackFileMutation, restoreTrashPath } from "@zos/nas-tools";
 import type { SystemManagementDependencies } from "./system-management.js";
 import { resolveScopedTargetPath, resolveStoragePoolScope, validateStoragePoolProposal } from "./storage-scope.js";
 
@@ -24,7 +24,7 @@ export class TrashRestoreError extends Error {
 }
 
 export async function rollbackTrashOperation(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   operation: FileOperationRecord,
   system?: SystemManagementDependencies
 ) {
@@ -50,7 +50,7 @@ export async function rollbackTrashOperation(
 }
 
 export async function restoreTrashEntry(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   trashEntryId: string,
   system?: SystemManagementDependencies
 ) {
@@ -86,7 +86,7 @@ export async function restoreTrashEntry(
 }
 
 export async function rollbackRegularOperation(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   operation: FileOperationRecord,
   trashRootPath: string,
   system?: SystemManagementDependencies

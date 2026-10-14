@@ -68,7 +68,7 @@ Affected components include `apps/termux`, the API termux client, shared protoco
 **By:** Codex
 
 **Actions:**
-- Replaced the Node helper and `node-pty` with the non-root Rust `sigmaos-termux` daemon, native PTYs, tmux lifecycle management, and Termux Protocol v1.
+- Replaced the Node helper and `node-pty` with the non-root Rust `zos-termux` daemon, native PTYs, tmux lifecycle management, and Termux Protocol v1.
 - Renamed the runtime, socket, environment, configuration, home, systemd, packaging, CM5, and documentation surfaces to `termux` with atomic upgrade migration.
 - Hardened active-socket detection, PTY cleanup, handshake buffering, strict UUID/Base64 parsing, partial tmux initialization, home migration ordering, and systemd path escaping during autofix review.
 - Prepared release version `0.8.0` and removed the obsolete Node runtime and permission repair hook.

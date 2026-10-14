@@ -112,10 +112,10 @@ jobs:
              (.version | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
              (.commitSha | type == "string" and test("^[0-9a-f]{40}$")) and
              (.architecture == "arm64") and
-             (.asset | type == "string" and test("^sigmaos_[0-9]+\\.[0-9]+\\.[0-9]+_arm64\\.deb$")) and
+             (.asset | type == "string" and test("^zos_[0-9]+\\.[0-9]+\\.[0-9]+_arm64\\.deb$")) and
              (.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
              (.tag == ("v" + .version)) and
-             (.asset == ("sigmaos_" + .version + "_arm64.deb")) and
+             (.asset == ("zos_" + .version + "_arm64.deb")) and
              ($expected_commit_sha == "" or .commitSha == $expected_commit_sha) and
              .tag == $expected_tag' \
             "$manifest_path"; then
@@ -227,7 +227,7 @@ jobs:
           set -euo pipefail
           : "${CM5_HOST:?production variable CM5_HOST is required}"
           [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-zos-deploy}"
           [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$CM5_DEPLOY_USER" != root ]]
 
@@ -235,7 +235,7 @@ jobs:
         env:
           TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}
           TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          EXPECTED_SUBJECT: repo:zhubby@9190779/SigmaOS@1341473177:environment:production
+          EXPECTED_SUBJECT: repo:zhubby@9190779/ZOS@1341473177:environment:production
         run: |
           set -euo pipefail
           : "${ACTIONS_ID_TOKEN_REQUEST_URL:?GitHub OIDC request URL is unavailable}"
@@ -296,7 +296,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-zos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -307,23 +307,16 @@ jobs:
           mapfile -t baseline < <(
             ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s <<'REMOTE'
           set -eu
-          [ -f /etc/sigmaos/config.toml ] && [ -r /etc/sigmaos/config.toml ]
+          [ -f /zos/config/config.toml ] && [ -r /zos/config/config.toml ]
           [ -x /usr/local/bin/node ]
           runtime_node_version="$(/usr/local/bin/node --version)"
           case "$runtime_node_version" in
             v22.*) ;;
             *) printf 'CM5 runtime requires Node.js 22; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
           esac
-          config_sha256="$(
-            awk '
-              /^\[terminal\][[:space:]]*(#.*)?$/ { in_terminal = 1; print; next }
-              /^\[/ { in_terminal = 0 }
-              in_terminal && /^[[:space:]]*(user|helper_socket_path|termux_socket_path)[[:space:]]*=/ { next }
-              { print }
-            ' /etc/sigmaos/config.toml | sha256sum | awk '{print $1}'
-          )"
-          package_version="$(dpkg-query -W -f='${Version}' sigmaos 2>/dev/null || true)"
-          package_status="$(dpkg-query -W -f='${Status}' sigmaos 2>/dev/null || true)"
+          config_sha256="$(sha256sum /zos/config/config.toml | awk '{print $1}')"
+          package_version="$(dpkg-query -W -f='${Version}' zos 2>/dev/null || true)"
+          package_status="$(dpkg-query -W -f='${Status}' zos 2>/dev/null || true)"
           printf '%s\n%s\n%s\n%s\n' "$config_sha256" "$package_version" "$package_status" "$runtime_node_version"
           REMOTE
           )
@@ -339,7 +332,7 @@ jobs:
           set -euo pipefail
 
           : "${CM5_HOST:?production variable CM5_HOST is required}"
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-zos-deploy}"
           [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
           [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$CM5_DEPLOY_USER" != root ]]
@@ -354,9 +347,9 @@ jobs:
           release_dir="$RUNNER_TEMP/cm5-release"
           scp "${ssh_options[@]}" \
             "$release_dir/release-manifest.json" \
-            "$CM5_DEPLOY_USER@$CM5_HOST:/var/lib/sigmaos-deploy/incoming/"
+            "$CM5_DEPLOY_USER@$CM5_HOST:/zos/deploy/incoming/"
 
-          incoming_dir=/var/lib/sigmaos-deploy/incoming
+          incoming_dir=/zos/deploy/incoming
           local_parts_dir="$release_dir/parts"
           remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"
           partial_package="$incoming_dir/package.deb.$RELEASE_SHA256.download"
@@ -469,7 +462,7 @@ jobs:
           partial_package=$2
           expected_sha256=$3
           part_count=$4
-          incoming_dir=/var/lib/sigmaos-deploy/incoming
+          incoming_dir=/zos/deploy/incoming
           if [ -L "$partial_package" ] || { [ -e "$partial_package" ] && [ ! -f "$partial_package" ]; }; then
             echo "Partial release package is not a regular file" >&2
             exit 1
@@ -505,7 +498,7 @@ jobs:
           mv -f "$partial_package" "$incoming_dir/package.deb"
           # v0.8.0 predates the helper's noninteractive conffile policy. The
           # response preserves the local config while bootstrapping v0.8.1+.
-          printf 'N\n' | sudo -n /usr/local/sbin/sigmaos-deploy
+          printf 'N\n' | sudo -n /usr/local/sbin/zos-deploy
           REMOTE
 
       - name: Verify CM5 services and build metadata
@@ -513,7 +506,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-zos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -528,31 +521,16 @@ jobs:
           expected_version=$1
           expected_commit_sha=$2
           expected_config_sha256=$3
-          check_dir="$(mktemp -d /tmp/sigmaos-deploy-check.XXXXXX)"
+          check_dir="$(mktemp -d /tmp/zos-deploy-check.XXXXXX)"
           trap 'rm -rf "$check_dir"' EXIT HUP INT TERM
 
-          installed_status="$(dpkg-query -W -f='${Status}' sigmaos)"
-          installed_version="$(dpkg-query -W -f='${Version}' sigmaos)"
+          installed_status="$(dpkg-query -W -f='${Status}' zos)"
+          installed_version="$(dpkg-query -W -f='${Version}' zos)"
           [ "$installed_status" = "install ok installed" ]
           [ "$installed_version" = "$expected_version" ]
-          [ -f /etc/sigmaos/config.toml ] && [ -r /etc/sigmaos/config.toml ]
-          actual_config_sha256="$(
-            awk '
-              /^\[terminal\][[:space:]]*(#.*)?$/ { in_terminal = 1; print; next }
-              /^\[/ { in_terminal = 0 }
-              in_terminal && /^[[:space:]]*(user|helper_socket_path|termux_socket_path)[[:space:]]*=/ { next }
-              { print }
-            ' /etc/sigmaos/config.toml | sha256sum | awk '{print $1}'
-          )"
+          [ -f /zos/config/config.toml ] && [ -r /zos/config/config.toml ]
+          actual_config_sha256="$(sha256sum /zos/config/config.toml | awk '{print $1}')"
           [ "$actual_config_sha256" = "$expected_config_sha256" ]
-          awk '
-            /^\[terminal\][[:space:]]*(#.*)?$/ { in_terminal = 1; next }
-            /^\[/ { in_terminal = 0 }
-            in_terminal && /^[[:space:]]*helper_socket_path[[:space:]]*=/ { legacy = 1 }
-            in_terminal && /^[[:space:]]*termux_socket_path[[:space:]]*=/ { socket = 1 }
-            in_terminal && /^[[:space:]]*user[[:space:]]*=[[:space:]]*"sigmaos"[[:space:]]*(#.*)?$/ { user = 1 }
-            END { exit (legacy || !socket || !user) ? 1 : 0 }
-          ' /etc/sigmaos/config.toml
 
           check_active_unit() {
             unit=$1
@@ -574,13 +552,13 @@ jobs:
 
           runtime_fingerprint() {
             for unit in \
-              sigmaos-api.service \
-              sigmaos-worker@1.service \
-              sigmaos-photostaff.service \
-              sigmaos-downloader.service \
-              sigmaos-indexer.service \
-              sigmaos-hostd.service \
-              sigmaos-termux.service; do
+              zos-api.service \
+              zos-worker@1.service \
+              zos-photostaff.service \
+              zos-downloader.service \
+              zos-indexer.service \
+              zos-hostd.service \
+              zos-termux.service; do
               main_pid="$(systemctl show --property=MainPID --value "$unit")"
               restart_count="$(systemctl show --property=NRestarts --value "$unit")"
               printf '%s:%s:%s\n' "$unit" "$main_pid" "$restart_count"
@@ -612,21 +590,21 @@ jobs:
           }
 
           for unit in \
-            sigmaos-api.service \
-            sigmaos-worker@1.service \
-            sigmaos-photostaff.service \
-            sigmaos-downloader.service \
-            sigmaos-indexer.service \
-            sigmaos-hostd.service \
-            sigmaos-termux.service; do
+            zos-api.service \
+            zos-worker@1.service \
+            zos-photostaff.service \
+            zos-downloader.service \
+            zos-indexer.service \
+            zos-hostd.service \
+            zos-termux.service; do
             systemctl is-enabled --quiet "$unit"
             check_active_unit "$unit"
           done
           for unit in \
-            sigmaos-maintenance.timer \
-            sigmaos-health.timer \
-            sigmaos-backup-daily.timer \
-            sigmaos-backup-weekly.timer; do
+            zos-maintenance.timer \
+            zos-health.timer \
+            zos-backup-daily.timer \
+            zos-backup-weekly.timer; do
             systemctl is-enabled --quiet "$unit"
             check_active_unit "$unit"
             timer_schedule="$(systemctl show \
@@ -639,13 +617,13 @@ jobs:
           runtime_before="$(runtime_fingerprint)"
           sleep 5
           for unit in \
-            sigmaos-api.service \
-            sigmaos-worker@1.service \
-            sigmaos-photostaff.service \
-            sigmaos-downloader.service \
-            sigmaos-indexer.service \
-            sigmaos-hostd.service \
-            sigmaos-termux.service; do
+            zos-api.service \
+            zos-worker@1.service \
+            zos-photostaff.service \
+            zos-downloader.service \
+            zos-indexer.service \
+            zos-hostd.service \
+            zos-termux.service; do
             check_active_unit "$unit"
           done
           runtime_after="$(runtime_fingerprint)"
@@ -654,13 +632,9 @@ jobs:
               "$runtime_before" "$runtime_after" >&2
             exit 1
           fi
-          systemctl show --property ExecStart --value sigmaos-termux.service | \
-            grep -Fq /usr/lib/sigmaos/bin/sigmaos-termux
-          ! systemctl is-active --quiet sigmaos-terminal-helper.service
-          ! systemctl is-enabled --quiet sigmaos-terminal-helper.service 2>/dev/null
-          ! systemctl cat sigmaos-terminal-helper.service >/dev/null 2>&1
-
-          failed_units="$(systemctl --failed --no-legend --plain | awk '$1 ~ /^sigmaos-/ { print }' || true)"
+          systemctl show --property ExecStart --value zos-termux.service | \
+            grep -Fq /usr/lib/zos/bin/zos-termux
+          failed_units="$(systemctl --failed --no-legend --plain | awk '$1 ~ /^zos-/ { print }' || true)"
           if [ -n "$failed_units" ]; then
             printf '%s\n' "$failed_units" >&2
             exit 1

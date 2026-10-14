@@ -6,15 +6,15 @@ import {
   acquireExecutionLock,
   ensureNasRoots,
   isExecutionLockOwner,
-  openSigmaDb,
+  openZosDb,
   releaseExecutionLock,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { SigmaConfig } from "@sigmaos/shared";
+  type ZosDatabase
+} from "@zos/db";
+import type { ZosConfig } from "@zos/shared";
 import { initBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
 
 let tempDir: string | undefined;
-let db: SigmaDatabase | undefined;
+let db: ZosDatabase | undefined;
 
 afterEach(async () => {
   db?.close();
@@ -23,11 +23,11 @@ afterEach(async () => {
   tempDir = undefined;
 });
 
-function config(root: string, repository: string, passwordFile: string): SigmaConfig {
+function config(root: string, repository: string, passwordFile: string): ZosConfig {
   return {
     environment: "development",
     dataDir: path.join(path.dirname(root), "data"),
-    databasePath: path.join(path.dirname(root), "sigmaos.sqlite"),
+    databasePath: path.join(path.dirname(root), "zos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test", authMode: "local-only" },
@@ -36,7 +36,7 @@ function config(root: string, repository: string, passwordFile: string): SigmaCo
     hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "sigmaos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
     nasRoots: [{ id: "local", name: "Local", path: root, mountPolicy: "optional" }],
     backup: { enabled: true, repositoryPath: repository, passwordFile, stagingPath: path.join(path.dirname(root), "staging"), requireMount: false, retryCount: 1, timeoutMs: 1000, keepDaily: 7, keepWeekly: 4 },
     health: { staleIndexWarningMs: 7200000, staleIndexCriticalMs: 21600000, stalledRunMs: 900000, consecutiveFailureThreshold: 2, backupStaleMs: 93600000 }
@@ -53,14 +53,14 @@ describe("backup workflow", () => {
   });
 
   it("validates credentials and records a completed restic run", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
     const root = path.join(tempDir, "root");
     const repo = path.join(tempDir, "repo");
     await mkdir(root);
     await mkdir(repo);
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+    db = openZosDb(path.join(tempDir, "zos.sqlite"));
     ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const calls: string[][] = [];
     const restic = { run: async (args: string[]) => { calls.push(args); if (args[0] === "snapshots") return { stdout: calls.filter((entry) => entry[0] === "backup").length ? '[{"id":"abc123"}]' : "[]", stderr: "", code: 0 }; return { stdout: '{"id":"abc123"}\n', stderr: "", code: 0 }; } };
@@ -72,7 +72,7 @@ describe("backup workflow", () => {
   });
 
   it("continues backing up ready roots but skips retention when another root is unavailable", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
     const badRoot = path.join(tempDir, "bad-root");
     const goodRoot = path.join(tempDir, "good-root");
     const repo = path.join(tempDir, "repo");
@@ -81,7 +81,7 @@ describe("backup workflow", () => {
     await mkdir(repo);
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+    db = openZosDb(path.join(tempDir, "zos.sqlite"));
     ensureNasRoots(db, [
       { id: "bad", name: "Bad", path: badRoot, mountPolicy: "required" },
       { id: "good", name: "Good", path: goodRoot, mountPolicy: "optional" }
@@ -95,7 +95,7 @@ describe("backup workflow", () => {
       }
     };
     const base = config(goodRoot, repo, password);
-    const cfg: SigmaConfig = {
+    const cfg: ZosConfig = {
       ...base,
       nasRoots: [
         { id: "bad", name: "Bad", path: badRoot, mountPolicy: "required" },
@@ -119,14 +119,14 @@ describe("backup workflow", () => {
   });
 
   it("allows explicit init to create a repository directory that does not exist yet", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
     const root = path.join(tempDir, "root");
     const repo = path.join(tempDir, "nested", "repo");
     await mkdir(root);
     await mkdir(path.dirname(repo), { recursive: true });
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+    db = openZosDb(path.join(tempDir, "zos.sqlite"));
     ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const calls: string[][] = [];
     const restic = {
@@ -141,14 +141,14 @@ describe("backup workflow", () => {
   });
 
   it("serializes init with other backup operations", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
     const root = path.join(tempDir, "root");
     const repo = path.join(tempDir, "repo");
     await mkdir(root);
     await mkdir(repo);
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+    db = openZosDb(path.join(tempDir, "zos.sqlite"));
     ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     expect(acquireExecutionLock(db, { name: "backup", owner: "active-backup" })).toBe(true);
     const restic = { run: vi.fn(async () => ({ stdout: "", stderr: "", code: 0 })) };
@@ -160,14 +160,14 @@ describe("backup workflow", () => {
   });
 
   it("does not release a replacement lease when init loses ownership", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
     const root = path.join(tempDir, "root");
     const repo = path.join(tempDir, "repo");
     await mkdir(root);
     await mkdir(repo);
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+    db = openZosDb(path.join(tempDir, "zos.sqlite"));
     ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const restic = {
       run: vi.fn(async () => {

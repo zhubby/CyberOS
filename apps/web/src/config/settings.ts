@@ -30,7 +30,7 @@ export type SettingsSectionId =
   | "appearance"
   | "advanced";
 
-export type SettingsGroupId = "sigmaos" | "ai" | "workspace" | "administration";
+export type SettingsGroupId = "zos" | "ai" | "workspace" | "administration";
 export type SettingsState = "ready" | "missing" | "loading";
 
 type Translate = TFunction<"translation">;
@@ -65,11 +65,11 @@ export const DANGEROUS_TOOL_POLICY_OPTIONS: PiDangerousToolPolicyMode[] = ["ask"
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "overview",
-    group: "sigmaos"
+    group: "zos"
   },
   {
     id: "version",
-    group: "sigmaos"
+    group: "zos"
   },
   {
     id: "model-providers",
@@ -109,7 +109,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   },
   {
     id: "appearance",
-    group: "sigmaos"
+    group: "zos"
   },
   {
     id: "advanced",
@@ -150,7 +150,7 @@ const SECTION_DESCRIPTION_KEYS = {
 } as const satisfies Record<SettingsSectionId, string>;
 
 const GROUP_LABEL_KEYS = {
-  sigmaos: "settings.groups.sigmaos",
+  zos: "settings.groups.zos",
   ai: "settings.groups.ai",
   workspace: "settings.groups.workspace",
   administration: "settings.groups.administration"

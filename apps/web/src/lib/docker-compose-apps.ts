@@ -2,7 +2,7 @@ import type {
   DockerComposeAppDetail,
   DockerComposeEnvironmentCreateInput,
   DockerComposeEnvironmentUpdateInput
-} from "@sigmaos/shared";
+} from "@zos/shared";
 
 export interface DockerComposeEnvironmentFormRow {
   key: string;

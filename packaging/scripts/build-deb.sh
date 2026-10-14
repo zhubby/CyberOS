@@ -2,61 +2,61 @@
 set -eu
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-BUILD_DIR="$ROOT_DIR/.sigmaos/deb-build"
-SIGMAOS_NPM_REGISTRY=${SIGMAOS_NPM_REGISTRY:-https://registry.npmmirror.com}
-export SIGMAOS_NPM_REGISTRY
+BUILD_DIR="$ROOT_DIR/.zos/deb-build"
+ZOS_NPM_REGISTRY=${ZOS_NPM_REGISTRY:-https://registry.npmmirror.com}
+export ZOS_NPM_REGISTRY
 
 git_value() {
   git -C "$ROOT_DIR" "$@" 2>/dev/null || true
 }
 
-if [ -z "${SIGMAOS_BUILD_COMMIT_SHA:-}" ]; then
-  SIGMAOS_BUILD_COMMIT_SHA=${GITHUB_SHA:-$(git_value rev-parse HEAD)}
+if [ -z "${ZOS_BUILD_COMMIT_SHA:-}" ]; then
+  ZOS_BUILD_COMMIT_SHA=${GITHUB_SHA:-$(git_value rev-parse HEAD)}
 fi
-if [ -z "${SIGMAOS_BUILD_TAG:-}" ]; then
+if [ -z "${ZOS_BUILD_TAG:-}" ]; then
   if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
-    SIGMAOS_BUILD_TAG=${GITHUB_REF_NAME:-}
+    ZOS_BUILD_TAG=${GITHUB_REF_NAME:-}
   else
-    SIGMAOS_BUILD_TAG=$(git_value describe --tags --exact-match HEAD)
+    ZOS_BUILD_TAG=$(git_value describe --tags --exact-match HEAD)
   fi
 fi
-if [ -z "${SIGMAOS_BUILD_BRANCH:-}" ]; then
+if [ -z "${ZOS_BUILD_BRANCH:-}" ]; then
   if [ -n "${GITHUB_HEAD_REF:-}" ]; then
-    SIGMAOS_BUILD_BRANCH=$GITHUB_HEAD_REF
+    ZOS_BUILD_BRANCH=$GITHUB_HEAD_REF
   elif [ "${GITHUB_REF_TYPE:-}" = "branch" ]; then
-    SIGMAOS_BUILD_BRANCH=${GITHUB_REF_NAME:-}
+    ZOS_BUILD_BRANCH=${GITHUB_REF_NAME:-}
   else
-    SIGMAOS_BUILD_BRANCH=$(git_value branch --show-current)
+    ZOS_BUILD_BRANCH=$(git_value branch --show-current)
   fi
 fi
-if [ -z "${SIGMAOS_BUILD_DIRTY:-}" ] && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [ -z "${ZOS_BUILD_DIRTY:-}" ] && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if [ -n "$(git_value status --porcelain=v1 --untracked-files=normal)" ]; then
-    SIGMAOS_BUILD_DIRTY=true
+    ZOS_BUILD_DIRTY=true
   else
-    SIGMAOS_BUILD_DIRTY=false
+    ZOS_BUILD_DIRTY=false
   fi
 fi
-if [ -z "${SIGMAOS_BUILD_SOURCE:-}" ]; then
+if [ -z "${ZOS_BUILD_SOURCE:-}" ]; then
   if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-    if [ -n "${SIGMAOS_BUILD_TAG:-}" ]; then
-      SIGMAOS_BUILD_SOURCE=release
+    if [ -n "${ZOS_BUILD_TAG:-}" ]; then
+      ZOS_BUILD_SOURCE=release
     else
-      SIGMAOS_BUILD_SOURCE=ci
+      ZOS_BUILD_SOURCE=ci
     fi
-  elif [ -n "${SIGMAOS_BUILD_COMMIT_SHA:-}" ]; then
-    SIGMAOS_BUILD_SOURCE=local
+  elif [ -n "${ZOS_BUILD_COMMIT_SHA:-}" ]; then
+    ZOS_BUILD_SOURCE=local
   else
-    SIGMAOS_BUILD_SOURCE=unknown
+    ZOS_BUILD_SOURCE=unknown
   fi
 fi
-export SIGMAOS_BUILD_COMMIT_SHA SIGMAOS_BUILD_TAG SIGMAOS_BUILD_BRANCH SIGMAOS_BUILD_SOURCE
-if [ -n "${SIGMAOS_BUILD_DIRTY:-}" ]; then
-  export SIGMAOS_BUILD_DIRTY
+export ZOS_BUILD_COMMIT_SHA ZOS_BUILD_TAG ZOS_BUILD_BRANCH ZOS_BUILD_SOURCE
+if [ -n "${ZOS_BUILD_DIRTY:-}" ]; then
+  export ZOS_BUILD_DIRTY
 fi
 
 rm -rf "$BUILD_DIR"
 install -d "$BUILD_DIR"
-rsync -a --exclude node_modules --exclude target --exclude .git --exclude .sigmaos "$ROOT_DIR/" "$BUILD_DIR/"
+rsync -a --exclude node_modules --exclude target --exclude .git --exclude .zos "$ROOT_DIR/" "$BUILD_DIR/"
 cd "$BUILD_DIR"
 cp -R packaging/debian debian
 dpkg-buildpackage -us -uc -b

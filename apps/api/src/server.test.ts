@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PHOTOSTAFF_SUPPORTED_EXTENSIONS } from "@sigmaos/shared";
+import { PHOTOSTAFF_SUPPORTED_EXTENSIONS, resolveZosPaths } from "@zos/shared";
 import {
   appendEvent,
   createActionMessageAndJob,
@@ -38,7 +38,7 @@ import {
   listMessages,
   listPendingApprovals,
   listOperationNotifications,
-  openSigmaDb,
+  openZosDb,
   recordIndexFailure,
   saveDockerSettings,
   savePhotostaffLibrarySettings,
@@ -50,8 +50,8 @@ import {
   updateJobStatus,
   updateDockerRegistryCredential,
   type DockerRegistryCredentialRecord,
-  type SigmaDatabase
-} from "@sigmaos/db";
+  type ZosDatabase
+} from "@zos/db";
 import type {
   DockerComposeProjectSummary,
   DockerContainerSummary,
@@ -67,7 +67,7 @@ import type {
   ShareApplyRequest,
   ShareApplyResult,
   ShareSettingsRecord,
-  SigmaConfig,
+  ZosConfig,
   SystemEthernetApplyTransaction,
   SystemEthernetStatus,
   SystemEthernetUpdateInput,
@@ -82,7 +82,7 @@ import type {
   SystemWifiStatus,
   SystemWifiSummary,
   StorageOperationProposal
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import { DockerComposeService, type DockerComposeRuntime } from "./lib/docker-compose.js";
 import { DockerRequestError, type DockerEngineRuntime, type DockerExecStream } from "./lib/docker-client.js";
 import { DockerDaemonRequestError, type DockerDaemonRuntime } from "./lib/docker-daemon.js";
@@ -100,7 +100,7 @@ const TEST_WIFI_PROFILE_ID = "12345678-1234-4123-8123-123456789abc";
 
 let tempDir: string;
 let rootDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 async function buildServer(dependencies: ServerDependencies) {
   return await buildApiServer({
@@ -155,11 +155,11 @@ function testStorageCommandRunnerFor(target: string, poolId = TEST_STORAGE_POOL_
 }
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-api-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-api-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
   await writeFile(path.join(rootDir, "hello.txt"), "hello");
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
@@ -866,7 +866,7 @@ describe("API server", () => {
 
   it("keeps file listing available when Git metadata is invalid", async () => {
     await mkdir(path.join(rootDir, "broken"));
-    await writeFile(path.join(rootDir, "broken", ".git"), "gitdir: /missing/sigmaos/repo");
+    await writeFile(path.join(rootDir, "broken", ".git"), "gitdir: /missing/zos/repo");
     await writeFile(path.join(rootDir, "broken", "visible.txt"), "visible");
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
@@ -982,7 +982,7 @@ describe("API server", () => {
   });
 
   it("returns detailed system information without exposing environment values", async () => {
-    process.env.SIGMAOS_TEST_SECRET = "do-not-leak-from-system-info";
+    process.env.ZOS_TEST_SECRET = "do-not-leak-from-system-info";
     const server = await buildServer({ config: testConfig(tempDir), db });
     try {
       const response = await server.inject({
@@ -1008,9 +1008,9 @@ describe("API server", () => {
               totalBytes: expect.any(Number)
             }
           },
-          sigma: {
+          zos: {
             dataDir: tempDir,
-            databasePath: path.join(tempDir, "sigmaos.sqlite"),
+            databasePath: path.join(tempDir, "zos.sqlite"),
             photostaff: {
               dataDir: path.join(tempDir, "photostaff"),
               maxFileSizeBytes: 512 * 1024 * 1024,
@@ -1033,13 +1033,13 @@ describe("API server", () => {
       expect(response.json().info.hardware.memory.totalBytes).toBeGreaterThan(0);
       expect(response.payload).not.toContain("do-not-leak-from-system-info");
     } finally {
-      delete process.env.SIGMAOS_TEST_SECRET;
+      delete process.env.ZOS_TEST_SECRET;
       await server.close();
     }
   });
 
   it("returns immutable public build information for deployment traceability", async () => {
-    process.env.SIGMAOS_TEST_SECRET = "do-not-leak-from-build-info";
+    process.env.ZOS_TEST_SECRET = "do-not-leak-from-build-info";
     const server = await buildServer({
       config: testConfig(tempDir),
       db,
@@ -1072,7 +1072,7 @@ describe("API server", () => {
       });
       expect(response.payload).not.toContain("do-not-leak-from-build-info");
     } finally {
-      delete process.env.SIGMAOS_TEST_SECRET;
+      delete process.env.ZOS_TEST_SECRET;
       await server.close();
     }
   });
@@ -1577,7 +1577,7 @@ describe("API server", () => {
             raidPath: "/dev/md0",
             raidLevel: "raid1",
             status: "ready",
-            mountpoint: "/srv/storage",
+            mountpoint: "/mnt/storage",
             filesystem: "ext4",
             usedPercent: 0.4,
             memberDevices: ["/dev/sda1", "/dev/sdb1"]
@@ -1718,7 +1718,7 @@ describe("API server", () => {
         ]
       }),
       "findmnt --json --bytes --output SOURCE,TARGET,FSTYPE,SIZE,USED,AVAIL,USE%": JSON.stringify({
-        filesystems: [{ source: "/dev/sda1", target: "/srv/storage", fstype: "ext4", size: 1000, used: 250, avail: 750, "use%": "25%" }]
+        filesystems: [{ source: "/dev/sda1", target: "/mnt/storage", fstype: "ext4", size: 1000, used: 250, avail: 750, "use%": "25%" }]
       })
     });
     const server = await buildServer({ config: testConfig(tempDir), db, system: { commandRunner } });
@@ -1772,7 +1772,7 @@ describe("API server", () => {
         raidLevel: "1",
         devices: ["/dev/sda", "/dev/sdb"],
         filesystem: "ext4",
-        mountpoint: "/srv/nas/media",
+        mountpoint: "/zos/data/media",
         mdDevice: "/dev/md/media",
         uuid: "11111111-2222-3333-4444-555555555555"
       };
@@ -1856,7 +1856,7 @@ describe("API server", () => {
       return {
         action: "delete_pool",
         name: "storage",
-        mountpoint: "/srv/storage",
+        mountpoint: "/mnt/storage",
         mdDevice: "/dev/md0",
         devices: ["/dev/sda1", "/dev/sdb1"]
       };
@@ -1865,7 +1865,7 @@ describe("API server", () => {
     const server = await buildServer({
       config,
       db,
-      system: { commandRunner: storageCommandRunner({ mountpoint: "/srv/nas/storage" }) }
+      system: { commandRunner: storageCommandRunner({ mountpoint: "/zos/data/storage" }) }
     });
 
     const missingConfirmation = await server.inject({
@@ -1935,7 +1935,7 @@ describe("API server", () => {
       action: "delete_pool",
       name: "storage",
       mdDevice: "/dev/md0",
-      mountpoint: "/srv/nas/storage"
+      mountpoint: "/zos/data/storage"
     });
 
     await server.close();
@@ -1956,7 +1956,7 @@ describe("API server", () => {
         raidLevel: "1",
         devices: ["/dev/sda", "/dev/sdb"],
         filesystem: "ext4",
-        mountpoint: "/srv/nas/media",
+        mountpoint: "/zos/data/media",
         mdDevice: "/dev/md/media",
         uuid: "11111111-2222-3333-4444-555555555555"
       };
@@ -1968,9 +1968,9 @@ describe("API server", () => {
       raidLevel: "1",
       devices: ["/dev/sda", "/dev/sdb"],
       filesystem: "ext4",
-      mountpoint: "/srv/nas/media",
+      mountpoint: "/zos/data/media",
       risk: "high",
-      summary: "Create RAID 1 pool media at /srv/nas/media using /dev/sda, /dev/sdb. All selected disks will be erased."
+      summary: "Create RAID 1 pool media at /zos/data/media using /dev/sda, /dev/sdb. All selected disks will be erased."
     };
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
@@ -2099,7 +2099,7 @@ describe("API server", () => {
       settings: {
         enabled: false,
         account: {
-          username: "sigma-share",
+          username: "zos-share",
           passwordConfigured: false
         },
         shares: []
@@ -2203,7 +2203,7 @@ describe("API server", () => {
     expect(response.statusCode).toBe(502);
     expect(response.payload).not.toContain("new-secret");
     expect(getShareSettings(db)?.account).toEqual({
-      username: "sigma-share",
+      username: "zos-share",
       password: "old-secret"
     });
     expect(listPendingApprovals(db)).toEqual([]);
@@ -2246,7 +2246,7 @@ describe("API server", () => {
             risk: "high",
             settings: {
               account: {
-                username: "sigma-share",
+                username: "zos-share",
                 passwordConfigured: true
               }
             }
@@ -2274,7 +2274,7 @@ describe("API server", () => {
     expect(getShareSettings(db)).toMatchObject({
       enabled: true,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: "secret"
       },
       shares: [
@@ -2814,6 +2814,34 @@ describe("API server", () => {
     })).statusCode).toBe(200);
     await expect(access(path.join(appsRoot, "managed-media"))).rejects.toThrow();
     await enabledServer.close();
+  });
+
+  it("uses the configured apps directory for the default Compose runtime", async () => {
+    const composeCommand = await writeComposeTestCommand();
+    const paths = resolveZosPaths(path.join(tempDir, "configured-zos-root"));
+    const config = {
+      ...testConfig(tempDir),
+      paths,
+      docker: { ...testConfig(tempDir).docker, composeCommand }
+    };
+    const server = await buildServer({ config, db });
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/docker/apps",
+      payload: {
+        name: "Configured Root",
+        projectKey: "configured-root",
+        composeContent: "services:\n  app:\n    image: alpine\n",
+        environment: []
+      }
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json().app.managedPath).toBe(path.join(paths.appsRoot, "configured-root"));
+    await expect(readFile(path.join(paths.appsRoot, "configured-root", "compose.yaml"), "utf8"))
+      .resolves.toContain("image: alpine");
+    await server.close();
   });
 
   it("pins Compose deployment approvals to the saved App revision", async () => {
@@ -5586,7 +5614,7 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("rolls back an applied trash operation by restoring from SigmaOS trash", async () => {
+  it("rolls back an applied trash operation by restoring from ZOS trash", async () => {
     const session = createSession(db, { rootId: "local" });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
@@ -5963,7 +5991,7 @@ class FakeNetworkManager implements NetworkManagerRuntime {
 function storageCommandRunner({
   smartSdb,
   failSmartSdb = false,
-  mountpoint = "/srv/storage"
+  mountpoint = "/mnt/storage"
 }: {
   smartSdb?: string;
   failSmartSdb?: boolean;
@@ -6137,10 +6165,10 @@ async function closeNetServer(server: net.Server): Promise<void> {
   });
 }
 
-function testConfig(dataDir: string): SigmaConfig {
+function testConfig(dataDir: string): ZosConfig {
   return {
     dataDir,
-    databasePath: path.join(dataDir, "sigmaos.sqlite"),
+    databasePath: path.join(dataDir, "zos.sqlite"),
     api: {
       host: "127.0.0.1",
       port: 3010,
@@ -6166,12 +6194,12 @@ function testConfig(dataDir: string): SigmaConfig {
       consoleShells: ["/bin/sh", "/bin/bash"],
     },
     hostd: {
-      socketPath: "/run/sigmaos/hostd.sock"
+      socketPath: "/run/zos/hostd.sock"
     },
     shares: {
       enabled: false,
       account: {
-        username: "sigma-share",
+        username: "zos-share",
         password: null
       },
       shares: []
@@ -6194,7 +6222,7 @@ function testConfig(dataDir: string): SigmaConfig {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "sigmaos"
+      user: "zos"
     },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
@@ -6204,7 +6232,7 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
   return {
     enabled: true,
     account: {
-      username: "sigma-share",
+      username: "zos-share",
       password
     },
     shares: [
@@ -6255,7 +6283,7 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
   };
 }
 
-function dockerEnabledConfig(dataDir: string, overrides: Partial<SigmaConfig["docker"]> = {}): SigmaConfig {
+function dockerEnabledConfig(dataDir: string, overrides: Partial<ZosConfig["docker"]> = {}): ZosConfig {
   const config = testConfig(dataDir);
   return {
     ...config,
@@ -6505,7 +6533,7 @@ class FakeShareHostd {
     }
     return {
       appliedAt: "2026-01-01T00:00:00.000Z",
-      files: ["/etc/samba/smb.conf.d/sigmaos-shares.conf"],
+      files: ["/etc/samba/smb.conf.d/zos-shares.conf"],
       services: ["smbd.service", "nmbd.service"]
     };
   }
@@ -6521,7 +6549,7 @@ class FakeDockerCompose implements DockerComposeRuntime {
         id: "compose-root:compose.yml",
         name: "media",
         projectKey: "media",
-        managedPath: "/srv/apps/media",
+        managedPath: "/zos/apps/media",
         services: ["jellyfin"],
         warnings: [],
         risk: "medium",
@@ -6600,5 +6628,5 @@ async function git(args: string[], cwd = rootDir): Promise<void> {
 }
 
 async function gitCommit(message: string, cwd = rootDir): Promise<void> {
-  await git(["-c", "user.name=SigmaOS", "-c", "user.email=sigmaos@example.test", "commit", "-m", message], cwd);
+  await git(["-c", "user.name=ZOS", "-c", "user.email=zos@example.test", "commit", "-m", message], cwd);
 }

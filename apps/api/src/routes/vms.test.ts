@@ -8,10 +8,10 @@ import {
   ensureNasRoots,
   listEvents,
   listOperationNotifications,
-  openSigmaDb,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { SigmaConfig } from "@sigmaos/shared";
+  openZosDb,
+  type ZosDatabase
+} from "@zos/db";
+import type { ZosConfig } from "@zos/shared";
 import { buildServer } from "../server.js";
 import { vmQemuCommand, type VmCommandRunner } from "../lib/vm-service.js";
 import { vmConsoleSpawnSpec } from "./vms.js";
@@ -21,13 +21,13 @@ const TEST_STORAGE_POOL_ID = "/dev/md/test-pool";
 
 let tempDir: string;
 let rootDir: string;
-let db: SigmaDatabase;
+let db: ZosDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "sigmaos-vms-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-vms-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
-  db = openSigmaDb(path.join(tempDir, "sigmaos.sqlite"));
+  db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
@@ -42,12 +42,12 @@ describe("VM routes", () => {
       command: "script",
       args: [
         "-q", "-e", "-f", "-c",
-        'exec virsh -c "$SIGMAOS_VM_LIBVIRT_URI" console "$SIGMAOS_VM_DOMAIN"',
+        'exec virsh -c "$ZOS_VM_LIBVIRT_URI" console "$ZOS_VM_DOMAIN"',
         "/dev/null"
       ],
       env: {
-        SIGMAOS_VM_LIBVIRT_URI: "qemu:///system; unsafe",
-        SIGMAOS_VM_DOMAIN: "guest-name"
+        ZOS_VM_LIBVIRT_URI: "qemu:///system; unsafe",
+        ZOS_VM_DOMAIN: "guest-name"
       }
     });
   });
@@ -460,10 +460,10 @@ describe("VM routes", () => {
   });
 });
 
-function testConfig(): SigmaConfig {
+function testConfig(): ZosConfig {
   return {
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "sigmaos.sqlite"),
+    databasePath: path.join(tempDir, "zos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
@@ -473,7 +473,7 @@ function testConfig(): SigmaConfig {
     hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "sigmaos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }

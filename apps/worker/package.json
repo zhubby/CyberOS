@@ -1,6 +1,6 @@
 {
-  "name": "@sigmaos/worker",
-  "version": "0.10.8",
+  "name": "@zos/worker",
+  "version": "1.0.0",
   "type": "module",
   "exports": {
     ".": "./src/processor.ts"
@@ -12,8 +12,8 @@
     "build": "cd ../.. && tsup apps/worker/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --external=@earendil-works/pi-coding-agent --out-dir apps/worker/dist"
   },
   "dependencies": {
-    "@sigmaos/agent": "0.10.8",
-    "@sigmaos/db": "0.10.8",
-    "@sigmaos/shared": "0.10.8"
+    "@zos/agent": "1.0.0",
+    "@zos/db": "1.0.0",
+    "@zos/shared": "1.0.0"
   }
 }

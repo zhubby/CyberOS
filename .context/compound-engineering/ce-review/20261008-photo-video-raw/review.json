@@ -45,7 +45,7 @@
       "owner": "review-fixer",
       "requires_verification": true,
       "confidence": 0.99,
-      "evidence": ["The workspace now declares @sigmaos/shared, matching its direct photo-config import."],
+      "evidence": ["The workspace now declares @zos/shared, matching its direct photo-config import."],
       "pre_existing": false,
       "resolution": "applied"
     },

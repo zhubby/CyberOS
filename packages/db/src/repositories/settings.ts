@@ -7,7 +7,7 @@ import type {
   PhotostaffProcessingSettingsRecord,
   PiToolPolicySettingsRecord,
   ShareSettingsRecord
-} from "@sigmaos/shared";
+} from "@zos/shared";
 import {
   PHOTOSTAFF_DEFAULT_COMMAND_TIMEOUT_MS,
   PHOTOSTAFF_DEFAULT_MAX_AUTO_RETRIES,
@@ -20,8 +20,8 @@ import {
   PHOTOSTAFF_DEFAULT_SCAN_INTERVAL_MS,
   PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
   PHOTOSTAFF_XMP_MAX_FILE_SIZE_BYTES
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import {
   mapDockerSettings,
   mapModelProviderSettings,
@@ -86,7 +86,7 @@ export const DEFAULT_INDEXER_SETTINGS: Omit<IndexerSettingsRecord, "updatedAt"> 
 
 export { DEFAULT_PI_TOOL_POLICY_SETTINGS } from "./settings-constants.js";
 
-export function getModelProviderSettings(db: SigmaDatabase): ModelProviderSettingsRecord | null {
+export function getModelProviderSettings(db: ZosDatabase): ModelProviderSettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(MODEL_PROVIDER_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -95,7 +95,7 @@ export function getModelProviderSettings(db: SigmaDatabase): ModelProviderSettin
 }
 
 export function saveModelProviderSettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: Omit<ModelProviderSettingsRecord, "updatedAt">
 ): ModelProviderSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -125,7 +125,7 @@ export function defaultPiToolPolicySettings(): PiToolPolicySettingsRecord {
   };
 }
 
-export function getPiToolPolicySettings(db: SigmaDatabase): PiToolPolicySettingsRecord | null {
+export function getPiToolPolicySettings(db: ZosDatabase): PiToolPolicySettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(PI_TOOL_POLICY_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -134,7 +134,7 @@ export function getPiToolPolicySettings(db: SigmaDatabase): PiToolPolicySettings
 }
 
 export function savePiToolPolicySettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: Omit<PiToolPolicySettingsRecord, "updatedAt">
 ): PiToolPolicySettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -151,7 +151,7 @@ export function savePiToolPolicySettings(
   return record;
 }
 
-export function getDockerSettings(db: SigmaDatabase): DockerSettingsRecord | null {
+export function getDockerSettings(db: ZosDatabase): DockerSettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(DOCKER_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -160,7 +160,7 @@ export function getDockerSettings(db: SigmaDatabase): DockerSettingsRecord | nul
 }
 
 export function saveDockerSettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: Omit<DockerSettingsRecord, "updatedAt">
 ): DockerSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -184,7 +184,7 @@ export function saveDockerSettings(
   return record;
 }
 
-export function getShareSettings(db: SigmaDatabase): ShareSettingsRecord | null {
+export function getShareSettings(db: ZosDatabase): ShareSettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(SHARE_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -193,7 +193,7 @@ export function getShareSettings(db: SigmaDatabase): ShareSettingsRecord | null 
 }
 
 export function saveShareSettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: Omit<ShareSettingsRecord, "updatedAt">
 ): ShareSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -210,7 +210,7 @@ export function saveShareSettings(
   return record;
 }
 
-export function getDownloadSettings(db: SigmaDatabase): DownloadSettingsRecord | null {
+export function getDownloadSettings(db: ZosDatabase): DownloadSettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(DOWNLOAD_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -226,7 +226,7 @@ export function defaultDownloadSettings(): DownloadSettingsRecord {
 }
 
 export function saveDownloadSettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: Partial<Omit<DownloadSettingsRecord, "updatedAt">>
 ): DownloadSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -241,7 +241,7 @@ export function saveDownloadSettings(
   return record;
 }
 
-export function getIndexerSettings(db: SigmaDatabase): IndexerSettingsRecord | null {
+export function getIndexerSettings(db: ZosDatabase): IndexerSettingsRecord | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(INDEXER_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
@@ -261,7 +261,7 @@ export function defaultIndexerSettings(): IndexerSettingsRecord {
 }
 
 export function saveIndexerSettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: Partial<Omit<IndexerSettingsRecord, "updatedAt">>
 ): IndexerSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -274,7 +274,7 @@ export function saveIndexerSettings(
   return record;
 }
 
-export function getPhotostaffMapSettings(db: SigmaDatabase): PhotostaffMapSettingsRecord | null {
+export function getPhotostaffMapSettings(db: ZosDatabase): PhotostaffMapSettingsRecord | null {
   const row = db
     .prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(PHOTOSTAFF_MAP_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
@@ -304,7 +304,7 @@ export function getPhotostaffMapSettings(db: SigmaDatabase): PhotostaffMapSettin
 }
 
 export function savePhotostaffMapSettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: Omit<PhotostaffMapSettingsRecord, "updatedAt">
 ): PhotostaffMapSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -319,7 +319,7 @@ export function savePhotostaffMapSettings(
   return record;
 }
 
-export function getPhotostaffProcessingSettings(db: SigmaDatabase): PhotostaffProcessingSettingsRecord | null {
+export function getPhotostaffProcessingSettings(db: ZosDatabase): PhotostaffProcessingSettingsRecord | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(PHOTOSTAFF_PROCESSING_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
@@ -336,7 +336,7 @@ export function defaultPhotostaffProcessingSettings(): PhotostaffProcessingSetti
 }
 
 export function savePhotostaffProcessingSettings(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   settings: Partial<Omit<PhotostaffProcessingSettingsRecord, "updatedAt">>
 ): PhotostaffProcessingSettingsRecord {
   const updatedAt = new Date().toISOString();

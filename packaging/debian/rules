@@ -4,8 +4,8 @@
 	dh $@
 
 override_dh_auto_build:
-	npm ci --registry="$${SIGMAOS_NPM_REGISTRY:-https://registry.npmmirror.com}"
-	npm --prefix docs ci --registry="$${SIGMAOS_NPM_REGISTRY:-https://registry.npmmirror.com}"
+	npm ci --registry="$${ZOS_NPM_REGISTRY:-https://registry.npmmirror.com}"
+	npm --prefix docs ci --registry="$${ZOS_NPM_REGISTRY:-https://registry.npmmirror.com}"
 	npm run build
 
 override_dh_auto_test:

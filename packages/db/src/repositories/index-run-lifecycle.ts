@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { IndexRunKind, IndexRunStatus } from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+import type { IndexRunKind, IndexRunStatus } from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import type { DbIndexFailureRow, DbIndexRunRow } from "./repository-rows.js";
 
 export function recoverInterruptedIndexRuns(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId?: string; now?: Date } = {}
 ): number {
   const now = (input.now ?? new Date()).toISOString();
@@ -38,7 +38,7 @@ export function recoverInterruptedIndexRuns(
   return tx();
 }
 
-function retainLatestFinalizedIndexRun(db: SigmaDatabase, rootId: string): void {
+function retainLatestFinalizedIndexRun(db: ZosDatabase, rootId: string): void {
   const runs = db
     .prepare(`
       SELECT id, kind
@@ -62,7 +62,7 @@ function retainLatestFinalizedIndexRun(db: SigmaDatabase, rootId: string): void 
   for (const { id } of archivedStale) db.prepare("DELETE FROM index_run_history WHERE id = ?").run(id);
 }
 
-function archiveIndexRun(db: SigmaDatabase, runId: string): void {
+function archiveIndexRun(db: ZosDatabase, runId: string): void {
   const row = db.prepare(`SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error, duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at, kind FROM index_runs WHERE id = ? AND status <> 'running'`).get(runId) as (DbIndexRunRow & { kind: IndexRunKind }) | undefined;
   if (!row) return;
   const failures = db.prepare("SELECT path, reason FROM index_failures WHERE run_id = ? ORDER BY created_at ASC, id ASC").all(runId) as DbIndexFailureRow[];
@@ -70,7 +70,7 @@ function archiveIndexRun(db: SigmaDatabase, runId: string): void {
 }
 
 export function startIndexRun(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { rootId: string; kind?: IndexRunKind; now?: Date }
 ): { id: string; rootId: string; startedAt: string } {
   recoverInterruptedIndexRuns(db, {
@@ -86,7 +86,7 @@ export function startIndexRun(
   return { id, rootId: input.rootId, startedAt };
 }
 
-export function isIndexRunRunning(db: SigmaDatabase, runId: string): boolean {
+export function isIndexRunRunning(db: ZosDatabase, runId: string): boolean {
   return Boolean(
     db
       .prepare("SELECT 1 FROM index_runs WHERE id = ? AND status = 'running'")
@@ -95,7 +95,7 @@ export function isIndexRunRunning(db: SigmaDatabase, runId: string): boolean {
 }
 
 export function recordIndexFailure(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { runId: string; rootId?: string; path: string; reason: string; now?: Date }
 ): void {
   const run = db
@@ -114,7 +114,7 @@ export function recordIndexFailure(
 }
 
 export function finishIndexRun(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     runId: string;
     status: Exclude<IndexRunStatus, "never_run" | "running">;
@@ -182,7 +182,7 @@ export function finishIndexRun(
 }
 
 export function updateIndexRunProgress(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: {
     runId: string;
     scanned: number;

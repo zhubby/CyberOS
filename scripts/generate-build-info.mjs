@@ -13,15 +13,15 @@ const BUILD_SOURCES = new Set(["release", "ci", "local", "unknown"]);
 
 export async function collectBuildInfo({ repoRoot, env = process.env, now = new Date(), runGit = defaultRunGit }) {
   const packageManifest = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  const explicitCommit = optionalText(env.SIGMAOS_BUILD_COMMIT_SHA) ?? optionalText(env.GITHUB_SHA);
+  const explicitCommit = optionalText(env.ZOS_BUILD_COMMIT_SHA) ?? optionalText(env.GITHUB_SHA);
   const gitCommit = explicitCommit ? null : await optionalGit(runGit, repoRoot, ["rev-parse", "HEAD"]);
   const commitSha = normalizeCommitSha(explicitCommit ?? gitCommit);
   const tag =
-    optionalText(env.SIGMAOS_BUILD_TAG) ??
+    optionalText(env.ZOS_BUILD_TAG) ??
     (env.GITHUB_REF_TYPE === "tag" ? optionalText(env.GITHUB_REF_NAME) : null) ??
     (await optionalGit(runGit, repoRoot, ["describe", "--tags", "--exact-match", "HEAD"]));
   const branch =
-    optionalText(env.SIGMAOS_BUILD_BRANCH) ??
+    optionalText(env.ZOS_BUILD_BRANCH) ??
     optionalText(env.GITHUB_HEAD_REF) ??
     (env.GITHUB_REF_TYPE === "branch" ? optionalText(env.GITHUB_REF_NAME) : null) ??
     (await optionalGit(runGit, repoRoot, ["branch", "--show-current"]));
@@ -40,7 +40,7 @@ export async function collectBuildInfo({ repoRoot, env = process.env, now = new 
 }
 
 export async function writeBuildInfo(repoRoot, buildInfo) {
-  const outputPath = path.join(repoRoot, ".sigmaos/build-info.json");
+  const outputPath = path.join(repoRoot, ".zos/build-info.json");
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(buildInfo, null, 2)}\n`, "utf8");
   return outputPath;
@@ -54,11 +54,11 @@ async function main() {
 }
 
 async function resolveDirtyState(env, runGit, repoRoot) {
-  const explicit = optionalText(env.SIGMAOS_BUILD_DIRTY);
+  const explicit = optionalText(env.ZOS_BUILD_DIRTY);
   if (explicit) {
     if (["1", "true"].includes(explicit.toLowerCase())) return true;
     if (["0", "false"].includes(explicit.toLowerCase())) return false;
-    throw new Error("SIGMAOS_BUILD_DIRTY must be true, false, 1, or 0");
+    throw new Error("ZOS_BUILD_DIRTY must be true, false, 1, or 0");
   }
 
   const status = await optionalGit(runGit, repoRoot, ["status", "--porcelain=v1", "--untracked-files=normal"]);
@@ -66,11 +66,11 @@ async function resolveDirtyState(env, runGit, repoRoot) {
 }
 
 function resolveBuildTime(env, now) {
-  const explicit = optionalText(env.SIGMAOS_BUILD_TIME);
+  const explicit = optionalText(env.ZOS_BUILD_TIME);
   if (explicit) {
     const parsed = new Date(explicit);
     if (Number.isNaN(parsed.getTime())) {
-      throw new Error("SIGMAOS_BUILD_TIME must be a valid date");
+      throw new Error("ZOS_BUILD_TIME must be a valid date");
     }
     return parsed.toISOString();
   }
@@ -88,10 +88,10 @@ function resolveBuildTime(env, now) {
 }
 
 function resolveBuildSource(env, tag, commitSha) {
-  const explicit = optionalText(env.SIGMAOS_BUILD_SOURCE);
+  const explicit = optionalText(env.ZOS_BUILD_SOURCE);
   if (explicit) {
     if (!BUILD_SOURCES.has(explicit)) {
-      throw new Error(`Unsupported SIGMAOS_BUILD_SOURCE ${JSON.stringify(explicit)}`);
+      throw new Error(`Unsupported ZOS_BUILD_SOURCE ${JSON.stringify(explicit)}`);
     }
     return explicit;
   }

@@ -17,7 +17,7 @@
 | # | File | Issue | Reviewer | Confidence | Route |
 |---|------|-------|----------|------------|-------|
 | 1 | `apps/share-helper/src/helper.ts` | External edits made during validation or restart could be overwritten by save or rollback | correctness, security, reliability, adversarial | 0.98 | `safe_auto -> review-fixer` |
-| 2 | `packaging/debian/postinst` | Package upgrades recursively changed daemon recovery material to the unprivileged `sigmaos` owner | security, project-standards | 0.96 | `safe_auto -> review-fixer` |
+| 2 | `packaging/debian/postinst` | Package upgrades recursively changed daemon recovery material to the unprivileged `zos` owner | security, project-standards | 0.96 | `safe_auto -> review-fixer` |
 
 ### P2 -- Moderate
 
@@ -42,7 +42,7 @@
 
 - Added revision checks after dockerd validation, immediately before atomic rename, before restart, and before rollback replacement.
 - Preserved external edits and retained recovery material when rollback cannot safely replace the pending file.
-- Restored `/var/lib/sigmaos/docker-daemon` to `0700 root:root` after package state ownership changes.
+- Restored `/zos/state/hostd/docker-daemon` to `0700 root:root` after package state ownership changes.
 - Extracted the SSE stream lifecycle into a testable function and covered initial state, deduplication, heartbeat, and close cleanup.
 - Added API revision-shape validation, helper-unavailable redaction coverage, and `reloading` normalization.
 

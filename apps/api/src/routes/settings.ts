@@ -16,8 +16,8 @@ import {
   saveIndexerSettings,
   saveModelProviderSettings,
   savePiToolPolicySettings
-} from "@sigmaos/db";
-import type { DownloadSettingsRecord, IndexerSettingsRecord, ModelProviderName, PiToolPolicySettingsRecord } from "@sigmaos/shared";
+} from "@zos/db";
+import type { DownloadSettingsRecord, IndexerSettingsRecord, ModelProviderName, PiToolPolicySettingsRecord } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   defaultDockerSettings,

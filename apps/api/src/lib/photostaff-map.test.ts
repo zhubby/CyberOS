@@ -278,7 +278,7 @@ describe("PhotostaffMapArchiveManager", () => {
 });
 
 async function temporaryDirectory(): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "sigmaos-map-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "zos-map-"));
   temporaryDirectories.push(directory);
   return directory;
 }

@@ -5,14 +5,14 @@ import type {
   ShareOperationRecord,
   ShareOperationStatus,
   ShareSettingsRecord
-} from "@sigmaos/shared";
-import type { SigmaDatabase } from "../connection.js";
+} from "@zos/shared";
+import type { ZosDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import { mapShareOperation } from "./operation-mappers.js";
 import type { DbShareOperationRow } from "./repository-rows.js";
 
 export function createShareOperationApproval(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { jobId: string; proposal: ShareOperationProposal; settings: ShareSettingsRecord }
 ): { approval: PendingApprovalRecord; operation: ShareOperationRecord } {
   const job = getJob(db, input.jobId);
@@ -66,7 +66,7 @@ export function createShareOperationApproval(
   return { approval, operation };
 }
 
-export function getShareOperation(db: SigmaDatabase, operationId: string): ShareOperationRecord | null {
+export function getShareOperation(db: ZosDatabase, operationId: string): ShareOperationRecord | null {
   const row = db
     .prepare(`
       SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
@@ -78,7 +78,7 @@ export function getShareOperation(db: SigmaDatabase, operationId: string): Share
 }
 
 export function getShareOperationByApproval(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   approvalId: string
 ): ShareOperationRecord | null {
   const row = db
@@ -94,7 +94,7 @@ export function getShareOperationByApproval(
 }
 
 export function listShareOperations(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   input: { sessionId?: string; limit?: number } = {}
 ): ShareOperationRecord[] {
   const rows = db
@@ -112,7 +112,7 @@ export function listShareOperations(
 }
 
 export function updateShareOperationStatus(
-  db: SigmaDatabase,
+  db: ZosDatabase,
   operationId: string,
   status: ShareOperationStatus,
   metadata: Record<string, unknown> = {}

@@ -34,18 +34,18 @@ describe("hostd protocol", () => {
     const sharesRequest: HostdRequest<"shares.apply"> = {
       settings: {
         enabled: false,
-        account: { username: "sigma_share", password: null },
+        account: { username: "zos_share", password: null },
         shares: []
       },
-      roots: [{ id: "primary", path: "/srv/nas" }]
+      roots: [{ id: "primary", path: "/zos/data/mediaprimary" }]
     };
     expect(parseHostdResult("shares.apply", sharesRequest, {
       appliedAt: "2026-10-10T00:00:00Z",
-      files: ["/etc/samba/smb.conf.d/sigmaos-shares.conf"],
+      files: ["/etc/samba/smb.conf.d/zos-shares.conf"],
       services: ["smbd.service"]
     })).toEqual({
       appliedAt: "2026-10-10T00:00:00Z",
-      files: ["/etc/samba/smb.conf.d/sigmaos-shares.conf"],
+      files: ["/etc/samba/smb.conf.d/zos-shares.conf"],
       services: ["smbd.service"]
     });
 
@@ -66,7 +66,7 @@ describe("hostd protocol", () => {
       raidLevel: "1",
       devices: ["/dev/sda", "/dev/sdb"],
       filesystem: "ext4",
-      mountpoint: "/srv/nas/media",
+      mountpoint: "/zos/data/media",
       risk: "high"
     } satisfies HostdRequest<"storage.operation">;
     const createResult = {
@@ -75,7 +75,7 @@ describe("hostd protocol", () => {
       raidLevel: "1",
       devices: ["/dev/sda", "/dev/sdb"],
       filesystem: "ext4",
-      mountpoint: "/srv/nas/media",
+      mountpoint: "/zos/data/media",
       mdDevice: "/dev/md/media",
       uuid: "array-uuid"
     } as const;
@@ -86,13 +86,13 @@ describe("hostd protocol", () => {
       name: "media",
       mdDevice: "/dev/md/media",
       devices: ["/dev/sda", "/dev/sdb"],
-      mountpoint: "/srv/nas/media",
+      mountpoint: "/zos/data/media",
       risk: "high"
     } satisfies HostdRequest<"storage.operation">;
     const deleteResult = {
       action: "delete_pool",
       name: "media",
-      mountpoint: "/srv/nas/media",
+      mountpoint: "/zos/data/media",
       mdDevice: "/dev/md/media",
       devices: ["/dev/sda", "/dev/sdb"]
     } as const;
@@ -129,7 +129,7 @@ describe("hostd protocol", () => {
     const inspection = {
       profiles: [{
         id: "550e8400-e29b-41d4-a716-446655440000",
-        name: "SigmaOS Home",
+        name: "ZOS Home",
         ssid: "Home",
         device: "wlan0",
         security: "wpa2",
@@ -173,7 +173,7 @@ describe("hostd protocol", () => {
       { action: "radio", input: { enabled: true, confirmed: true } },
       { action: "update_profile", profileId: "profile", input: { expectedRevision: "revision", confirmed: true } },
       { action: "delete_profile", profileId: "profile", confirmed: true },
-      { action: "update_hotspot", input: { device: "wlan0", ssid: "SigmaOS", band: "5", autostart: true, confirmed: true } },
+      { action: "update_hotspot", input: { device: "wlan0", ssid: "ZOS", band: "5", autostart: true, confirmed: true } },
       { action: "start_hotspot", input: { device: "wlan0", confirmed: true } },
       { action: "stop_hotspot", input: { device: "wlan0", confirmed: true } },
       { action: "delete_hotspot", input: { device: "wlan0", confirmed: true } }
@@ -196,7 +196,7 @@ describe("hostd protocol", () => {
 
   it("rejects mismatched, out-of-range, and non-exact result shapes", () => {
     expect(parseHostdResult("shares.apply", {
-      settings: { enabled: false, account: { username: "sigma_share", password: null }, shares: [] },
+      settings: { enabled: false, account: { username: "zos_share", password: null }, shares: [] },
       roots: []
     }, {
       appliedAt: "2026-10-10T00:00:00Z",

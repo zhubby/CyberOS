@@ -8,17 +8,17 @@ import {
   isExecutionLockOwner,
   releaseExecutionLock,
   runOpsMaintenanceRetention,
-  type SigmaDatabase
-} from "@sigmaos/db";
-import type { OpsMaintenanceSummary, SigmaConfig } from "@sigmaos/shared";
+  type ZosDatabase
+} from "@zos/db";
+import type { OpsMaintenanceSummary, ZosConfig } from "@zos/shared";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAINTENANCE_LOCK = "ops:maintenance";
 const BACKUP_LOCK = "backup";
 
 export async function runMaintenance(input: {
-  db: SigmaDatabase;
-  config: SigmaConfig;
+  db: ZosDatabase;
+  config: ZosConfig;
   now?: Date;
 }): Promise<OpsMaintenanceSummary> {
   const now = input.now ?? new Date();
@@ -58,8 +58,8 @@ export async function runMaintenance(input: {
 }
 
 export async function cleanupRestoreStaging(
-  db: SigmaDatabase,
-  config: SigmaConfig,
+  db: ZosDatabase,
+  config: ZosConfig,
   now = new Date()
 ): Promise<OpsMaintenanceSummary["restoreStaging"]> {
   const owner = randomUUID();
