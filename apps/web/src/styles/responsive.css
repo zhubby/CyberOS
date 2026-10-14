@@ -1055,7 +1055,7 @@
   }
 
   .file-row {
-    grid-template-columns: minmax(120px, 1fr) 142px;
+    grid-template-columns: minmax(120px, 1fr) 76px;
   }
 
   .file-row > span:nth-child(3),

@@ -4832,6 +4832,33 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("names pool-root selections after the visible mountpoint", async () => {
+    const poolDir = path.join(rootDir, "pool1");
+    await mkdir(poolDir);
+    await writeFile(path.join(poolDir, "first.txt"), "first");
+    await writeFile(path.join(poolDir, "second.txt"), "second");
+    const poolId = "/dev/md/pool1";
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      system: { commandRunner: testStorageCommandRunnerFor(poolDir, poolId) }
+    });
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/files/exports",
+      payload: {
+        rootId: "local",
+        storagePoolId: poolId,
+        sourcePaths: ["pool1/first.txt", "pool1/second.txt"]
+      }
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json().fileName).toBe("pool1-selection.zip");
+    await server.close();
+  });
+
   it("names single-folder exports after the selected folder and expires unused tokens", async () => {
     await mkdir(path.join(rootDir, "photos"));
     const server = await buildServer({ config: testConfig(tempDir), db });

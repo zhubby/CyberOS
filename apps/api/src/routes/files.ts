@@ -948,7 +948,8 @@ function fileExportName(
   const parents = new Set(sources.map((source) => path.dirname(source.path)));
   const parent = parents.size === 1 ? [...parents][0]! : scope.mountpointPath;
   const atPoolRoot = parent === "." || parent === scope.mountpointPath;
-  const stem = atPoolRoot ? scope.pool.name : path.basename(parent);
+  const poolStem = scope.mountpointPath === "." ? scope.pool.name : path.basename(scope.mountpointPath);
+  const stem = atPoolRoot ? poolStem : path.basename(parent);
   return `${stem || "sigmaos"}-selection.zip`;
 }
 
