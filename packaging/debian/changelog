@@ -1,3 +1,9 @@
+zos (1.0.1) unstable; urgency=medium
+
+  * Add guarded SigmaOS migration and CM5 deployment verification.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 14 Oct 2026 16:59:52 +0000
+
 zos (1.0.0) unstable; urgency=medium
 
   * Rename the product to ZOS and consolidate persistent data under /zos.
