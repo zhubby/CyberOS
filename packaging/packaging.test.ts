@@ -464,6 +464,8 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-staging-channel"');
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-migration-source-config.sha256"');
     expect(deployWorkflow).toContain('if [[ "$staging_channel" == legacy ]]');
+    expect(deployWorkflow).toContain('--arg repository "zhubby/SigmaOS"');
+    expect(deployWorkflow).toContain("'.repository = $repository | .asset = $asset'");
     expect(deployWorkflow).toContain("Legacy migration recovery was not explicitly authorized");
     expect(deployWorkflow).toContain("ZOS staging recovery requires legacy services to remain masked");
     expect(deployWorkflow).toContain('[ "$previous_migration_status" = rolled_back ]');

@@ -598,7 +598,9 @@ jobs:
 
           if [[ "$staging_channel" == legacy ]]; then
             legacy_manifest="$release_dir/legacy-release-manifest.json"
-            jq --arg asset "sigmaos_${RELEASE_VERSION}_arm64.deb" '.asset = $asset' \
+            jq --arg repository "zhubby/SigmaOS" \
+              --arg asset "sigmaos_${RELEASE_VERSION}_arm64.deb" \
+              '.repository = $repository | .asset = $asset' \
               "$release_dir/release-manifest.json" > "$legacy_manifest"
             stage_release /var/lib/sigmaos-deploy/incoming "$legacy_manifest" legacy
 
