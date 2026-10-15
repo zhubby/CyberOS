@@ -1,3 +1,9 @@
+zos (1.0.10) unstable; urgency=medium
+
+  * Retry transient executable replacement while starting the VOD player.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 15 Oct 2026 05:42:08 +0000
+
 zos (1.0.9) unstable; urgency=medium
 
   * Migrate legacy share ACL state before refreshing ZOS share services.
