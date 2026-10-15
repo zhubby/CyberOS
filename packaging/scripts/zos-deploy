@@ -381,6 +381,7 @@ capture_failure() {
   if [ "$success" -eq 0 ] && [ -n "$failure_dir" ]; then
     log "deployment failed; diagnostics retained at $failure_dir" >&2
     capture_runtime_diagnostics "$failure_dir"
+    /usr/lib/zos/scripts/zos-migrate-sigmaos.sh rollback >/dev/null 2>&1 || true
     # dpkg may fail after the package has been unpacked. Restore the exact
     # service/timer state captured before the upgrade so a failed deployment
     # does not leave the appliance permanently stopped.
@@ -390,7 +391,6 @@ capture_failure() {
         restore_unit_state "$unit" "$state_dir" >/dev/null 2>&1 || true
       done
     fi
-    /usr/lib/zos/scripts/zos-migrate-sigmaos.sh rollback >/dev/null 2>&1 || true
   fi
   trap - EXIT
   exit "$status"
@@ -454,8 +454,11 @@ case "${1:-}" in
     printf '%s\n' "$database_check"
     exit 0
     ;;
+  --migration-backup-check)
+    exec /usr/lib/zos/scripts/zos-migrate-sigmaos.sh backup-check
+    ;;
   '') ;;
-  *) die "usage: zos-deploy [--migration-status|--config-sha256|--database-check]" ;;
+  *) die "usage: zos-deploy [--migration-status|--config-sha256|--database-check|--migration-backup-check]" ;;
 esac
 
 command -v node >/dev/null 2>&1 || die "Node.js is required"

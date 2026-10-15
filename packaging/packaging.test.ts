@@ -431,7 +431,7 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("payload?.queue?.stalled === false");
     expect(deployWorkflow).toContain("wait_for_indexer_ready()");
     expect(deployWorkflow).toContain('while [ "$attempt" -le 120 ]');
-    expect(deployWorkflow).toMatch(/- name: Verify CM5 services and build metadata\n\s+timeout-minutes: 10/u);
+    expect(deployWorkflow).toMatch(/- name: Verify CM5 services and build metadata\n\s+timeout-minutes: 20/u);
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
     expect(deployWorkflow).toContain('local_parts_dir="$release_dir/parts-$upload_name"');
     expect(deployWorkflow).toContain('remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"');
@@ -560,6 +560,7 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("zos-migrate-libvirt.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-relocate-mount.sh usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-sigmaos.sh usr/lib/zos/scripts/");
+    expect(install).toContain("zos-migration-copy-growth.mjs usr/lib/zos/scripts/");
     expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps");
     expect(apiUnit).toContain("CapabilityBoundingSet=\n");
   });
@@ -620,6 +621,7 @@ describe("native packaging artifacts", () => {
     const bootstrap = await readPackagingFile("scripts", "zos-deploy-bootstrap.sh");
     const migration = await readPackagingFile("scripts", "zos-migrate-sigmaos.sh");
     const mountRelocator = await readPackagingFile("scripts", "zos-relocate-mount.sh");
+    const nasAcl = await readPackagingFile("scripts", "zos-nas-acl.sh");
 
     expect(deploy).toContain("flock -n 9");
     expect(deploy).toContain("ZOS_DEPLOY_DIR must be under /zos/deploy");
@@ -702,9 +704,13 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("cleanup_deployment_artifacts");
     expect(deploy).toContain("zos-migrate-sigmaos.sh rollback");
     expect(deploy).toContain("zos-migrate-sigmaos.sh commit");
+    expect(deploy.indexOf("zos-migrate-sigmaos.sh rollback")).toBeLessThan(
+      deploy.indexOf('restore_unit_state "$unit" "$state_dir"')
+    );
     expect(deploy).toContain("--migration-status)");
     expect(deploy).toContain("--config-sha256");
     expect(deploy).toContain("--database-check");
+    expect(deploy).toContain("--migration-backup-check");
     expect(deploy).toContain("ZOS configuration must be a regular file");
     expect(deploy).toContain("ZOS database must be a regular file");
     expect(deploy).toContain("Keep the active release and one previous package");
@@ -748,6 +754,17 @@ describe("native packaging artifacts", () => {
     expect(migration).toContain("SHARE_SERVICES=");
     expect(migration).toContain("verify_capacity");
     expect(migration).toContain("--apparent-size");
+    expect(migration).toContain("select_mounted_cold_backup");
+    expect(migration).toContain("zos-migration-copy-growth.mjs");
+    expect(migration).toContain(".zos/system-backups");
+    expect(migration).toContain("cold-backup.json");
+    expect(migration).toContain("verify_cold_backup_after_mount_move");
+    expect(migration).toContain("harden_mounted_cold_backup");
+    expect(migration.indexOf("-xdev -exec chown -h zos:zos")).toBeLessThan(
+      migration.lastIndexOf("harden_mounted_cold_backup")
+    );
+    expect(migration).toContain("backup-check)");
+    expect(nasAcl).toContain('-path "$pool/.zos" -prune');
     expect(migration).toContain("prepare_libvirt_migration");
     expect(migration).toContain("refusing to copy live disks");
     expect(migration).toContain("managed save image");

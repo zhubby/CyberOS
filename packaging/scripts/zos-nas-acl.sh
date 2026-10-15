@@ -46,13 +46,15 @@ pool=$(realpath -e -- "$pool")
   printf 'pool is read-only: %s\n' "$pool" >&2; exit 1;
 }
 printf 'pool: %s\nfiles and directories: ' "$pool"
-find -P "$pool" -xdev \( -type f -o -type d \) -printf '.' | wc -c
+find -P "$pool" -xdev -path "$pool/.zos" -prune -o \
+  \( -type f -o -type d \) -printf '.' | wc -c
 printf 'pool ACL and owner before migration:\n'
 getfacl --absolute-names -e -- "$pool"
 printf 'planned change: grant zos rwx on directories (including default ACL), rw on files; preserve owners and existing effective ACL permissions\n'
 items=$(mktemp)
 trap 'rm -f "$items"' EXIT
-find -P "$pool" -xdev \( -type f -o -type d \) -print0 > "$items"
+find -P "$pool" -xdev -path "$pool/.zos" -prune -o \
+  \( -type f -o -type d \) -print0 > "$items"
 
 mask_for_scope() {
   local acl=$1 scope=$2
@@ -178,7 +180,8 @@ done < "$items"
 install -d -m 0700 -- "$backup_root"
 backup=$(mktemp -d "$backup_root/acl.XXXXXXXX")
 chmod 0700 "$backup"
-find -P "$pool" -xdev \( -type f -o -type d \) -exec getfacl --absolute-names -- {} + > "$backup/acl.dump"
+find -P "$pool" -xdev -path "$pool/.zos" -prune -o \
+  \( -type f -o -type d \) -exec getfacl --absolute-names -- {} + > "$backup/acl.dump"
 chmod 0600 "$backup/acl.dump"
 mv -- "$items" "$backup/items"
 chmod 0600 "$backup/items"

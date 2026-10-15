@@ -12,6 +12,7 @@ MIGRATION_ROOT=$ZOS_ROOT/system-backups
 CONFIG_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-config.mjs
 FSTAB_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-fstab.mjs
 DATABASE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-database.mjs
+COPY_GROWTH_CALCULATOR=/usr/lib/zos/scripts/zos-migration-copy-growth.mjs
 SHARE_ACL_STATE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-share-acl.mjs
 LIBVIRT_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-libvirt.mjs
 MOUNT_RELOCATOR=/usr/lib/zos/scripts/zos-relocate-mount.sh
@@ -28,6 +29,14 @@ state_file=
 status_file=
 rollback_required=0
 preparation_required=0
+COLD_BACKUP_STORAGE=root
+COLD_BACKUP_LEGACY_MOUNT=
+COLD_BACKUP_MIGRATED_MOUNT=
+COLD_BACKUP_LEGACY_PATH=
+COLD_BACKUP_MIGRATED_PATH=
+COLD_BACKUP_RELATIVE_PATH=
+COLD_BACKUP_TEMP=
+CAPACITY_RESERVE_BYTES=1073741824
 
 log() {
   printf 'zos-migrate-sigmaos: %s\n' "$*"
@@ -97,10 +106,11 @@ load_state() {
 write_status() {
   migration_status=$1
   node --input-type=module - "$status_file" "$migration_status" "$LEGACY_VERSION" \
-    "$SOURCE_CONFIG_SHA256" "$STARTED_AT" "$backup_dir" <<'NODE'
+    "$SOURCE_CONFIG_SHA256" "$STARTED_AT" "$backup_dir" \
+    "$backup_dir/cold-backup.json" <<'NODE'
 import fs from "node:fs";
 
-const [file, status, sourceVersion, sourceConfigSha256, startedAt, backupPath] = process.argv.slice(2);
+const [file, status, sourceVersion, sourceConfigSha256, startedAt, backupPath, coldBackupPath] = process.argv.slice(2);
 const payload = {
   status,
   sourcePackage: "sigmaos",
@@ -110,6 +120,19 @@ const payload = {
   backupPath,
   updatedAt: new Date().toISOString()
 };
+if (fs.existsSync(coldBackupPath)) {
+  const coldBackup = JSON.parse(fs.readFileSync(coldBackupPath, "utf8"));
+  if (!["root", "mounted"].includes(coldBackup.storage) ||
+      typeof coldBackup.legacyPath !== "string" ||
+      typeof coldBackup.migratedPath !== "string" ||
+      typeof coldBackup.relativePath !== "string" ||
+      typeof coldBackup.sizeBytes !== "number" ||
+      !Number.isSafeInteger(coldBackup.sizeBytes) || coldBackup.sizeBytes < 1 ||
+      typeof coldBackup.sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(coldBackup.sha256)) {
+    throw new Error("cold backup metadata is invalid");
+  }
+  payload.coldBackup = coldBackup;
+}
 const temporary = `${file}.tmp.${process.pid}`;
 fs.writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
 fs.renameSync(temporary, file);
@@ -230,27 +253,173 @@ path_size_bytes() {
   du -sx --apparent-size --block-size=1 "$1" | awk '{ print $1 }'
 }
 
+copy_growth_bytes() {
+  /usr/local/bin/node "$COPY_GROWTH_CALCULATOR" "$@"
+}
+
+select_mounted_cold_backup() {
+  backup_bytes=$1
+  best_available=0
+  best_legacy_mount=
+  best_migrated_mount=
+  mounted_targets=$backup_dir/mounted-storage-targets
+  findmnt -rn -o TARGET > "$mounted_targets"
+  while IFS="$(printf '\t')" read -r source target; do
+    while IFS= read -r mount_target; do
+      case "$mount_target" in
+        "$source"|"$source"/*) ;;
+        *) continue ;;
+      esac
+      findmnt -rn --mountpoint "$mount_target" >/dev/null 2>&1 || continue
+      filesystem_type=$(findmnt -rn -o FSTYPE --mountpoint "$mount_target")
+      case "$filesystem_type" in
+        btrfs|ext4|xfs) ;;
+        *) continue ;;
+      esac
+      mount_options=$(findmnt -rn -o OPTIONS --mountpoint "$mount_target")
+      case ",$mount_options," in
+        *,rw,*) ;;
+        *) continue ;;
+      esac
+      available_bytes=$(df -B1 --output=avail "$mount_target" | awk 'NR == 2 { print $1 }')
+      case "$available_bytes" in
+        ''|*[!0-9]*) continue ;;
+      esac
+      [ "$available_bytes" -ge $((backup_bytes + CAPACITY_RESERVE_BYTES)) ] || continue
+      if [ "$available_bytes" -gt "$best_available" ]; then
+        best_available=$available_bytes
+        best_legacy_mount=$mount_target
+        best_migrated_mount=$target${mount_target#"$source"}
+      fi
+    done < "$mounted_targets"
+  done < "$backup_dir/path-mappings.tsv"
+  rm -f "$mounted_targets"
+
+  [ -n "$best_legacy_mount" ] || return 1
+  COLD_BACKUP_STORAGE=mounted
+  COLD_BACKUP_LEGACY_MOUNT=$best_legacy_mount
+  COLD_BACKUP_MIGRATED_MOUNT=$best_migrated_mount
+  COLD_BACKUP_RELATIVE_PATH=.zos/system-backups/$(basename "$backup_dir")/state.tar
+  COLD_BACKUP_LEGACY_PATH=$best_legacy_mount/$COLD_BACKUP_RELATIVE_PATH
+  COLD_BACKUP_MIGRATED_PATH=$best_migrated_mount/$COLD_BACKUP_RELATIVE_PATH
+  log "using mounted storage for the cold backup: $best_legacy_mount -> $best_migrated_mount"
+}
+
 verify_capacity() {
-  required_bytes=1073741824
-  for source_path in \
-    /var/lib/sigmaos \
-    /var/lib/sigmaos-termux \
-    /var/lib/sigmaos-vod-player \
-    /var/lib/sigmaos-share; do
-    source_size=$(path_size_bytes "$source_path")
-    required_bytes=$((required_bytes + source_size * 2))
-  done
-  while IFS="$(printf '\t')" read -r source _target; do
+  backup_bytes=0
+  copy_growth=0
+  while IFS="$(printf '\t')" read -r source target; do
     source_size=$(path_size_bytes "$source")
-    required_bytes=$((required_bytes + source_size))
+    backup_bytes=$((backup_bytes + source_size))
+    if [ "$source" = /var/lib/sigmaos ] && [ "$target" = /zos/state ]; then
+      growth_size=$(copy_growth_bytes "$source" "$target" sigmaos.sqlite zos.sqlite)
+    else
+      growth_size=$(copy_growth_bytes "$source" "$target")
+    fi
+    copy_growth=$((copy_growth + growth_size))
+  done <<EOF
+/var/lib/sigmaos	/zos/state
+/var/lib/sigmaos-termux	/zos/home/termux
+/var/lib/sigmaos-vod-player	/zos/state/vod-player
+/var/lib/sigmaos-share	/zos/home/share
+EOF
+  while IFS="$(printf '\t')" read -r source target; do
+    growth_size=$(copy_growth_bytes "$source" "$target")
+    copy_growth=$((copy_growth + growth_size))
   done < "$backup_dir/path-mappings.tsv"
   available_bytes=$(df -B1 --output=avail "$ZOS_ROOT" | awk 'NR == 2 { print $1 }')
   case "$available_bytes" in
     ''|*[!0-9]*) die "unable to determine free space for migration" ;;
   esac
-  [ "$available_bytes" -ge "$required_bytes" ] || \
-    die "migration needs at least $required_bytes free bytes under /zos; only $available_bytes are available"
-  log "capacity check passed: required=$required_bytes available=$available_bytes"
+  root_backup_required=$((CAPACITY_RESERVE_BYTES + backup_bytes + copy_growth))
+  root_copy_required=$((CAPACITY_RESERVE_BYTES + copy_growth))
+  if [ "$available_bytes" -ge "$root_backup_required" ]; then
+    COLD_BACKUP_STORAGE=root
+    COLD_BACKUP_RELATIVE_PATH=state.tar
+    COLD_BACKUP_LEGACY_PATH=$backup_dir/state.tar
+    COLD_BACKUP_MIGRATED_PATH=$COLD_BACKUP_LEGACY_PATH
+    log "capacity check passed on /zos: required=$root_backup_required available=$available_bytes"
+    return 0
+  fi
+  [ "$available_bytes" -ge "$root_copy_required" ] || \
+    die "migration copies need at least $root_copy_required free bytes under /zos; only $available_bytes are available"
+  select_mounted_cold_backup "$backup_bytes" || \
+    die "migration needs $root_backup_required bytes under /zos or a mapped writable filesystem with $((backup_bytes + CAPACITY_RESERVE_BYTES)) bytes available"
+  log "capacity check passed with mounted cold backup: root_required=$root_copy_required root_available=$available_bytes backup_bytes=$backup_bytes"
+}
+
+prepare_cold_backup_destination() {
+  [ "$COLD_BACKUP_STORAGE" = mounted ] || return 0
+  archive_namespace=$COLD_BACKUP_LEGACY_MOUNT/.zos
+  archive_root=$archive_namespace/system-backups
+  archive_dir=${COLD_BACKUP_LEGACY_PATH%/*}
+  for private_dir in "$archive_namespace" "$archive_root"; do
+    if [ -L "$private_dir" ] || { [ -e "$private_dir" ] && [ ! -d "$private_dir" ]; }; then
+      die "cold backup parent is not a real directory: $private_dir"
+    fi
+    if [ -d "$private_dir" ]; then
+      [ "$(stat -c '%U:%G:%a' "$private_dir")" = root:root:700 ] || \
+        die "existing cold backup parent is not private: $private_dir"
+    else
+      install -d -o root -g root -m 0700 "$private_dir"
+    fi
+  done
+  [ ! -e "$archive_dir" ] || die "cold backup directory already exists: $archive_dir"
+  install -d -o root -g root -m 0700 "$archive_dir"
+}
+
+record_cold_backup() {
+  chmod 0600 "$COLD_BACKUP_LEGACY_PATH"
+  cold_backup_size=$(stat -c '%s' "$COLD_BACKUP_LEGACY_PATH")
+  cold_backup_sha256=$(sha256sum "$COLD_BACKUP_LEGACY_PATH" | awk '{ print $1 }')
+  node --input-type=module - "$backup_dir/cold-backup.json" \
+    "$COLD_BACKUP_STORAGE" "$COLD_BACKUP_LEGACY_PATH" \
+    "$COLD_BACKUP_MIGRATED_PATH" "$COLD_BACKUP_RELATIVE_PATH" \
+    "$cold_backup_size" "$cold_backup_sha256" <<'NODE'
+import fs from "node:fs";
+
+const [file, storage, legacyPath, migratedPath, relativePath, sizeBytesRaw, sha256] = process.argv.slice(2);
+const payload = {
+  storage,
+  legacyPath,
+  migratedPath,
+  relativePath,
+  sizeBytes: Number(sizeBytesRaw),
+  sha256
+};
+fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
+NODE
+}
+
+harden_mounted_cold_backup() {
+  [ "$COLD_BACKUP_STORAGE" = mounted ] || return 0
+  archive_namespace=$COLD_BACKUP_MIGRATED_MOUNT/.zos
+  archive_root=$archive_namespace/system-backups
+  archive_dir=${COLD_BACKUP_MIGRATED_PATH%/*}
+  setfacl -b -k -- "$archive_namespace" "$archive_root" "$archive_dir"
+  setfacl -b -- "$COLD_BACKUP_MIGRATED_PATH"
+  chown root:root "$archive_namespace" "$archive_root" "$archive_dir" \
+    "$COLD_BACKUP_MIGRATED_PATH"
+  chmod 0700 "$archive_namespace" "$archive_root" "$archive_dir"
+  chmod 0600 "$COLD_BACKUP_MIGRATED_PATH"
+  [ "$(stat -c '%U:%G:%a' "$archive_namespace")" = root:root:700 ] || \
+    die "cold backup namespace is not private"
+  [ "$(stat -c '%U:%G:%a' "$COLD_BACKUP_MIGRATED_PATH")" = root:root:600 ] || \
+    die "cold backup archive is not private"
+}
+
+verify_cold_backup_after_mount_move() {
+  [ -f "$COLD_BACKUP_MIGRATED_PATH" ] && [ ! -L "$COLD_BACKUP_MIGRATED_PATH" ] || \
+    die "cold backup is unavailable after mount migration: $COLD_BACKUP_MIGRATED_PATH"
+  expected_sha256=$(node --input-type=module - "$backup_dir/cold-backup.json" <<'NODE'
+import fs from "node:fs";
+const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+process.stdout.write(payload.sha256);
+NODE
+  )
+  actual_sha256=$(sha256sum "$COLD_BACKUP_MIGRATED_PATH" | awk '{ print $1 }')
+  [ "$actual_sha256" = "$expected_sha256" ] || die "cold backup checksum changed during mount migration"
+  log "cold backup verified: $COLD_BACKUP_MIGRATED_PATH"
 }
 
 prepare_libvirt_migration() {
@@ -501,6 +670,7 @@ rollback_migration() {
 rollback_on_failure() {
   status=$?
   trap - EXIT HUP INT TERM
+  [ -z "$COLD_BACKUP_TEMP" ] || rm -f -- "$COLD_BACKUP_TEMP"
   if [ "$rollback_required" -eq 1 ] && [ -n "$backup_dir" ]; then
     log "migration failed; restoring legacy mounts, fstab, and services" >&2
     rollback_migration || true
@@ -542,6 +712,7 @@ apply_migration() {
   [ -x "$CONFIG_MIGRATOR" ] || die "configuration migrator is missing"
   [ -x "$FSTAB_MIGRATOR" ] || die "fstab migrator is missing"
   [ -x "$DATABASE_MIGRATOR" ] || die "database migrator is missing"
+  [ -f "$COPY_GROWTH_CALCULATOR" ] || die "copy growth calculator is missing"
   [ -x "$SHARE_ACL_STATE_MIGRATOR" ] || die "share ACL state migrator is missing"
   [ -x "$LIBVIRT_MIGRATOR" ] || die "libvirt migrator is missing"
   [ -x "$MOUNT_RELOCATOR" ] || die "mount relocator is missing"
@@ -621,21 +792,29 @@ EOF
   [ -d /var/lib/sigmaos-termux ] && state_paths="$state_paths sigmaos-termux"
   [ -d /var/lib/sigmaos-vod-player ] && state_paths="$state_paths sigmaos-vod-player"
   [ -d /var/lib/sigmaos-share ] && state_paths="$state_paths sigmaos-share"
+  prepare_cold_backup_destination
+  COLD_BACKUP_TEMP=$COLD_BACKUP_LEGACY_PATH.tmp.$$
   # shellcheck disable=SC2086
-  tar --one-file-system -C /var/lib -cf "$backup_dir/state.tar" $state_paths
+  tar --one-file-system -C /var/lib -cf "$COLD_BACKUP_TEMP" $state_paths
+  mv -f "$COLD_BACKUP_TEMP" "$COLD_BACKUP_LEGACY_PATH"
+  COLD_BACKUP_TEMP=
+  record_cold_backup
   cp -p /etc/fstab "$backup_dir/fstab"
 
   log "copying legacy state into the ZOS layout"
   copy_tree /etc/sigmaos /zos/config
+  rm -f /zos/state/zos.sqlite /zos/state/zos.sqlite-wal /zos/state/zos.sqlite-shm
+  rm -f /zos/state/sigmaos.sqlite /zos/state/sigmaos.sqlite-wal /zos/state/sigmaos.sqlite-shm
   copy_tree /var/lib/sigmaos /zos/state
   copy_tree /var/lib/sigmaos-termux /zos/home/termux
   copy_tree /var/lib/sigmaos-vod-player /zos/state/vod-player
   copy_tree /var/lib/sigmaos-share /zos/home/share
   copy_managed_paths
 
-  cp -p "$LEGACY_DATABASE" /zos/state/zos.sqlite
+  [ -f /zos/state/sigmaos.sqlite ] || die "copied legacy database is missing"
+  mv /zos/state/sigmaos.sqlite /zos/state/zos.sqlite
   rm -f /zos/state/zos.sqlite-wal /zos/state/zos.sqlite-shm
-  rm -f /zos/state/sigmaos.sqlite /zos/state/sigmaos.sqlite-wal /zos/state/sigmaos.sqlite-shm
+  rm -f /zos/state/sigmaos.sqlite-wal /zos/state/sigmaos.sqlite-shm
   /usr/local/bin/node "$DATABASE_MIGRATOR" /zos/state/zos.sqlite \
     "$backup_dir/path-mappings.tsv" "$backup_dir/database-migration.json"
   if [ -f /zos/config/share-acl.json ]; then
@@ -660,6 +839,7 @@ EOF
   fi
 
   move_legacy_mounts
+  verify_cold_backup_after_mount_move
   apply_nas_acls
   /usr/local/bin/node "$FSTAB_MIGRATOR" /etc/fstab \
     "$backup_dir/path-mappings.tsv" "$backup_dir/fstab.migrated"
@@ -668,6 +848,7 @@ EOF
   # Never descend into migrated NAS mounts or follow symlinks while normalizing ownership.
   find /zos/state /zos/logs /zos/home/termux /zos/apps /zos/data /zos/vm /zos/iso \
     -xdev -exec chown -h zos:zos -- {} +
+  harden_mounted_cold_backup
   chown -R root:root /zos/state/hostd /zos/system-backups
   chown root:root "$POINTER_PATH"
   chmod 0600 "$POINTER_PATH"
@@ -717,7 +898,38 @@ case "$ACTION" in
       rollback_migration
     fi
     ;;
+  backup-check)
+    load_state || die "migration state is unavailable"
+    backup_check=$(node --input-type=module - "$status_file" <<'NODE'
+import fs from "node:fs";
+
+const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const backup = payload.coldBackup;
+if (!backup || !["pending", "committed", "rolled_back"].includes(payload.status)) process.exit(1);
+const activePath = payload.status === "rolled_back" ? backup.legacyPath : backup.migratedPath;
+if (typeof activePath !== "string" || typeof backup.sha256 !== "string" ||
+    typeof backup.sizeBytes !== "number" || !Number.isSafeInteger(backup.sizeBytes)) process.exit(1);
+process.stdout.write(`${activePath}\t${backup.sizeBytes}\t${backup.sha256}`);
+NODE
+    ) || die "cold backup metadata is unavailable"
+    IFS="$(printf '\t')" read -r active_backup_path expected_backup_size expected_backup_sha256 <<EOF
+$backup_check
+EOF
+    case "$active_backup_path" in
+      /zos/system-backups/legacy-sigmaos-*/state.tar|\
+      /zos/data/*/.zos/system-backups/legacy-sigmaos-*/state.tar|\
+      /srv/*/.zos/system-backups/legacy-sigmaos-*/state.tar) ;;
+      *) die "cold backup path is invalid" ;;
+    esac
+    [ -f "$active_backup_path" ] && [ ! -L "$active_backup_path" ] || \
+      die "cold backup is missing"
+    actual_backup_size=$(stat -c '%s' "$active_backup_path")
+    [ "$actual_backup_size" = "$expected_backup_size" ] || die "cold backup size does not match"
+    actual_backup_sha256=$(sha256sum "$active_backup_path" | awk '{ print $1 }')
+    [ "$actual_backup_sha256" = "$expected_backup_sha256" ] || die "cold backup checksum does not match"
+    printf 'ok\n'
+    ;;
   *)
-    die "usage: zos-migrate-sigmaos.sh [apply|status|commit|rollback]"
+    die "usage: zos-migrate-sigmaos.sh [apply|status|commit|rollback|backup-check]"
     ;;
 esac

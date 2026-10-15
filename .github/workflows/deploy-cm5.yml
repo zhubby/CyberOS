@@ -658,7 +658,7 @@ jobs:
             "printf 'N\\n' | sudo -n /usr/local/sbin/zos-deploy"
 
       - name: Verify CM5 services and build metadata
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           set -euo pipefail
 
@@ -708,6 +708,7 @@ jobs:
             throw new Error(`unexpected committed migration state: ${payload}`);
           }
           NODE
+            [ "$(sudo -n /usr/local/sbin/zos-deploy --migration-backup-check)" = ok ]
             if findmnt --fstab -rn -o TARGET | grep -Eq '^/srv/(nas|backup|apps|iso)(/|$)'; then
               echo "Legacy mount targets remain in /etc/fstab" >&2
               exit 1
