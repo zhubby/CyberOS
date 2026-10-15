@@ -528,7 +528,7 @@ describe("native packaging artifacts", () => {
     expect(unit).toContain("TimeoutStopSec=180");
     expect(unit).toContain("/run/mdadm");
     expect(unit).toContain("ProtectSystem=strict");
-    expect(unit).toContain("ReadWritePaths=/etc /run/zos /run/mdadm /zos/data");
+    expect(unit).toContain("ReadWritePaths=/etc /run/zos /run/mdadm /zos/config /zos/data");
     expect(unit).toContain("ReadWritePaths=-/run/samba -/var/lib/samba -/var/cache/samba -/var/log/samba");
     expect(unit).toContain("ReadWritePaths=-/zos/state/hostd/docker-daemon /zos/state/hostd/network-manager");
     expect(unit).not.toMatch(/ReadWritePaths=.*(?:^|\s)\/var\/lib\/zos(?:\s|$)/mu);

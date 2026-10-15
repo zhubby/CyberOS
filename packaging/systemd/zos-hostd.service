@@ -19,7 +19,7 @@ TimeoutStopSec=180
 ProtectSystem=strict
 ProtectHome=read-only
 # Dynamic share accounts require useradd to atomically replace passwd/shadow files.
-ReadWritePaths=/etc /run/zos /run/mdadm /zos/data
+ReadWritePaths=/etc /run/zos /run/mdadm /zos/config /zos/data
 # smbpasswd needs Samba's lock, state, cache, and log directories to initialize its databases.
 ReadWritePaths=-/run/samba -/var/lib/samba -/var/cache/samba -/var/log/samba
 ReadWritePaths=-/zos/state/hostd/docker-daemon /zos/state/hostd/network-manager
