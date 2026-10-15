@@ -489,6 +489,10 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("sleep 30");
     expect(deployWorkflow).not.toContain("zos-terminal-helper.service");
     expect(migrationPreflight).toContain("/api/vms/summary");
+    expect(migrationPreflight).toContain("recovery_audit");
+    expect(migrationPreflight).toContain("package_zos=");
+    expect(migrationPreflight).toContain("/zos/system-backups");
+    expect(migrationPreflight).toContain("vm_summary_unavailable=true");
     expect(migrationPreflight).toContain("vm_legacy_disk_references");
     expect(migrationPreflight).toContain("vm_legacy_running_count");
     expect(migrationPreflight).toContain("vm_legacy_migration_eligible=true");
