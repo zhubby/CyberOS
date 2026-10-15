@@ -1,3 +1,9 @@
+zos (1.0.12) unstable; urgency=medium
+
+  * Harden legacy migration recovery and SQLite writer startup.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 15 Oct 2026 09:03:17 +0000
+
 zos (1.0.11) unstable; urgency=medium
 
   * Serialize deployment startup to prevent concurrent SQLite writer contention.
