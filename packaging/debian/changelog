@@ -1,3 +1,9 @@
+zos (1.0.8) unstable; urgency=medium
+
+  * Preserve existing effective permissions while widening NAS ACL masks for ZOS migration.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 15 Oct 2026 01:49:57 +0000
+
 zos (1.0.7) unstable; urgency=medium
 
   * Allow NAS migration when existing ACL masks already grant ZOS the required access.
