@@ -1,14 +1,14 @@
 {
   "name": "@zos/system-health",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@zos/db": "1.0.16",
-    "@zos/nas-tools": "1.0.16",
-    "@zos/shared": "1.0.16"
+    "@zos/db": "1.0.17",
+    "@zos/nas-tools": "1.0.17",
+    "@zos/shared": "1.0.17"
   }
 }
