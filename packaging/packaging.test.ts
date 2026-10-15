@@ -563,6 +563,7 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("zos-relocate-mount.sh usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-sigmaos.sh usr/lib/zos/scripts/");
     expect(install).toContain("zos-migration-copy-growth.mjs usr/lib/zos/scripts/");
+    expect(install).toContain("zos-migration-recovery.mjs usr/lib/zos/scripts/");
     expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps");
     expect(apiUnit).toContain("CapabilityBoundingSet=\n");
   });
@@ -713,6 +714,9 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("--config-sha256");
     expect(deploy).toContain("--database-check");
     expect(deploy).toContain("--migration-backup-check");
+    expect(deploy).toContain("configure_backup_dir");
+    expect(deploy).toContain("using mounted storage for deployment backups");
+    expect(deploy).toContain("zos-migration-recovery.mjs");
     expect(deploy).toContain("ZOS configuration must be a regular file");
     expect(deploy).toContain("ZOS database must be a regular file");
     expect(deploy).toContain("Keep the active release and one previous package");
@@ -758,6 +762,13 @@ describe("native packaging artifacts", () => {
     expect(migration).toContain("--apparent-size");
     expect(migration).toContain("select_mounted_cold_backup");
     expect(migration).toContain("zos-migration-copy-growth.mjs");
+    expect(migration).toContain("zos-migration-recovery.mjs");
+    expect(migration).toContain("recover_rolled_back_pointer");
+    expect(migration).toContain('write_pointer "$PREVIOUS_BACKUP_DIR"');
+    expect(migration).toContain("relocate_deployment_archives");
+    expect(migration).toContain("verify_relocated_deployment_archives_after_mount_move");
+    expect(migration).toContain("deployment-archives");
+    expect(migration).toContain("archive_sha256");
     expect(migration).toContain(".zos/system-backups");
     expect(migration).toContain("cold-backup.json");
     expect(migration).toContain("verify_cold_backup_after_mount_move");

@@ -115,6 +115,32 @@ process.stdout.write(build.commitSha.toLowerCase());
 NODE
 }
 
+configure_backup_dir() {
+  migration_payload=$(/usr/lib/zos/scripts/zos-migrate-sigmaos.sh status 2>/dev/null || true)
+  mounted_backup_path=$(node /usr/lib/zos/scripts/zos-migration-recovery.mjs \
+    active-mounted-backup "$migration_payload") || die "migration backup metadata is invalid"
+  [ -n "$mounted_backup_path" ] || return 0
+  case "$mounted_backup_path" in
+    /zos/data/*/.zos/system-backups/legacy-sigmaos-*/state.tar|\
+    /srv/*/.zos/system-backups/legacy-sigmaos-*/state.tar) ;;
+    *) die "mounted migration backup path is invalid" ;;
+  esac
+  [ -f "$mounted_backup_path" ] && [ ! -L "$mounted_backup_path" ] || \
+    die "mounted migration backup is unavailable"
+  [ "$(/usr/lib/zos/scripts/zos-migrate-sigmaos.sh backup-check)" = ok ] || \
+    die "mounted migration backup verification failed"
+  mounted_system_backups=${mounted_backup_path%/legacy-sigmaos-*/state.tar}
+  case "$mounted_system_backups" in
+    /zos/data/*/.zos/system-backups|/srv/*/.zos/system-backups) ;;
+    *) die "mounted system backup root is invalid" ;;
+  esac
+  [ -d "$mounted_system_backups" ] && [ ! -L "$mounted_system_backups" ] && \
+    [ "$(stat -c '%U:%G:%a' "$mounted_system_backups")" = root:root:700 ] || \
+    die "mounted system backup root is not private"
+  BACKUP_DIR=$mounted_system_backups/deploy
+  log "using mounted storage for deployment backups: $BACKUP_DIR"
+}
+
 wait_for_url() {
   url=$1
   attempts=1
@@ -468,10 +494,11 @@ command -v flock >/dev/null 2>&1 || die "flock is required"
 command -v systemctl >/dev/null 2>&1 || die "systemd is required"
 
 [ -d "$BASE_DIR" ] || die "deployment directory is missing: $BASE_DIR"
-install -d -o root -g root -m 0700 "$BACKUP_DIR" "$RELEASE_DIR"
 install -d -o root -g root -m 0700 /run/lock
 exec 9>"$LOCK_PATH"
 flock -n 9 || die "another ZOS deployment is already running"
+configure_backup_dir
+install -d -o root -g root -m 0700 "$BACKUP_DIR" "$RELEASE_DIR"
 
 [ -d "$INCOMING_DIR" ] || die "incoming directory is missing: $INCOMING_DIR"
 [ -f "$INCOMING_DIR/package.deb" ] || die "package.deb is missing from incoming directory"

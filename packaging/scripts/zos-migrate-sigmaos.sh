@@ -13,6 +13,7 @@ CONFIG_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-config.mjs
 FSTAB_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-fstab.mjs
 DATABASE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-database.mjs
 COPY_GROWTH_CALCULATOR=/usr/lib/zos/scripts/zos-migration-copy-growth.mjs
+RECOVERY_HELPER=/usr/lib/zos/scripts/zos-migration-recovery.mjs
 SHARE_ACL_STATE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-share-acl.mjs
 LIBVIRT_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-libvirt.mjs
 MOUNT_RELOCATOR=/usr/lib/zos/scripts/zos-relocate-mount.sh
@@ -36,6 +37,9 @@ COLD_BACKUP_LEGACY_PATH=
 COLD_BACKUP_MIGRATED_PATH=
 COLD_BACKUP_RELATIVE_PATH=
 COLD_BACKUP_TEMP=
+PREVIOUS_BACKUP_DIR=
+MAPPED_STORAGE_LEGACY_MOUNT=
+MAPPED_STORAGE_MIGRATED_MOUNT=
 CAPACITY_RESERVE_BYTES=1073741824
 
 log() {
@@ -101,6 +105,26 @@ load_state() {
   [ -f "$state_file" ] && [ ! -L "$state_file" ] || die "migration state is missing"
   # The state file is root-owned and contains only values generated below.
   . "$state_file"
+}
+
+write_pointer() {
+  pointer_backup_dir=$1
+  pointer_temp=$(mktemp "$ZOS_ROOT/state/.legacy-migration-backup.XXXXXX")
+  if ! printf '%s\n' "$pointer_backup_dir" > "$pointer_temp" ||
+      ! chown root:root "$pointer_temp" ||
+      ! chmod 0600 "$pointer_temp" ||
+      ! mv -f "$pointer_temp" "$POINTER_PATH"; then
+    rm -f "$pointer_temp"
+    return 1
+  fi
+}
+
+recover_rolled_back_pointer() {
+  [ ! -e "$POINTER_PATH" ] || return 0
+  recovered_backup_dir=$(/usr/local/bin/node "$RECOVERY_HELPER" find-rolled-back "$MIGRATION_ROOT")
+  [ -n "$recovered_backup_dir" ] || return 0
+  write_pointer "$recovered_backup_dir" || die "failed to restore the rolled-back migration pointer"
+  log "restored rolled-back migration state from $recovered_backup_dir"
 }
 
 write_status() {
@@ -257,8 +281,8 @@ copy_growth_bytes() {
   /usr/local/bin/node "$COPY_GROWTH_CALCULATOR" "$@"
 }
 
-select_mounted_cold_backup() {
-  backup_bytes=$1
+select_mapped_storage() {
+  required_bytes=$1
   best_available=0
   best_legacy_mount=
   best_migrated_mount=
@@ -285,7 +309,7 @@ select_mounted_cold_backup() {
       case "$available_bytes" in
         ''|*[!0-9]*) continue ;;
       esac
-      [ "$available_bytes" -ge $((backup_bytes + CAPACITY_RESERVE_BYTES)) ] || continue
+      [ "$available_bytes" -ge "$required_bytes" ] || continue
       if [ "$available_bytes" -gt "$best_available" ]; then
         best_available=$available_bytes
         best_legacy_mount=$mount_target
@@ -296,13 +320,154 @@ select_mounted_cold_backup() {
   rm -f "$mounted_targets"
 
   [ -n "$best_legacy_mount" ] || return 1
+  MAPPED_STORAGE_LEGACY_MOUNT=$best_legacy_mount
+  MAPPED_STORAGE_MIGRATED_MOUNT=$best_migrated_mount
+}
+
+select_mounted_cold_backup() {
+  backup_bytes=$1
+  select_mapped_storage $((backup_bytes + CAPACITY_RESERVE_BYTES)) || return 1
   COLD_BACKUP_STORAGE=mounted
-  COLD_BACKUP_LEGACY_MOUNT=$best_legacy_mount
-  COLD_BACKUP_MIGRATED_MOUNT=$best_migrated_mount
+  COLD_BACKUP_LEGACY_MOUNT=$MAPPED_STORAGE_LEGACY_MOUNT
+  COLD_BACKUP_MIGRATED_MOUNT=$MAPPED_STORAGE_MIGRATED_MOUNT
   COLD_BACKUP_RELATIVE_PATH=.zos/system-backups/$(basename "$backup_dir")/state.tar
-  COLD_BACKUP_LEGACY_PATH=$best_legacy_mount/$COLD_BACKUP_RELATIVE_PATH
-  COLD_BACKUP_MIGRATED_PATH=$best_migrated_mount/$COLD_BACKUP_RELATIVE_PATH
-  log "using mounted storage for the cold backup: $best_legacy_mount -> $best_migrated_mount"
+  COLD_BACKUP_LEGACY_PATH=$COLD_BACKUP_LEGACY_MOUNT/$COLD_BACKUP_RELATIVE_PATH
+  COLD_BACKUP_MIGRATED_PATH=$COLD_BACKUP_MIGRATED_MOUNT/$COLD_BACKUP_RELATIVE_PATH
+  log "using mounted storage for the cold backup: $COLD_BACKUP_LEGACY_MOUNT -> $COLD_BACKUP_MIGRATED_MOUNT"
+}
+
+prepare_private_directory() {
+  private_dir=$1
+  if [ -L "$private_dir" ] || { [ -e "$private_dir" ] && [ ! -d "$private_dir" ]; }; then
+    die "backup parent is not a real directory: $private_dir"
+  fi
+  if [ -d "$private_dir" ]; then
+    [ "$(stat -c '%U:%G:%a' "$private_dir")" = root:root:700 ] || \
+      die "existing backup parent is not private: $private_dir"
+  else
+    install -d -o root -g root -m 0700 "$private_dir"
+  fi
+}
+
+relocate_deployment_archives() {
+  archive_list=$backup_dir/deployment-archives.list
+  : > "$archive_list"
+  for deployment_backup_root in /zos/deploy/backups /var/lib/sigmaos-deploy/backups; do
+    [ -d "$deployment_backup_root" ] && [ ! -L "$deployment_backup_root" ] || continue
+    find "$deployment_backup_root" -mindepth 2 -maxdepth 2 -type f -name state.tgz -print >> "$archive_list"
+  done
+  [ -s "$archive_list" ] || return 0
+
+  archive_bytes=0
+  while IFS= read -r archive_source; do
+    archive_size=$(stat -c '%s' "$archive_source")
+    archive_bytes=$((archive_bytes + archive_size))
+  done < "$archive_list"
+  select_mapped_storage $((archive_bytes + CAPACITY_RESERVE_BYTES)) || \
+    die "deployment archives need $archive_bytes bytes on mapped storage before migration"
+
+  archive_namespace=$MAPPED_STORAGE_LEGACY_MOUNT/.zos
+  archive_system_root=$archive_namespace/system-backups
+  archive_root=$archive_system_root/deployment-archives
+  prepare_private_directory "$archive_namespace"
+  prepare_private_directory "$archive_system_root"
+  prepare_private_directory "$archive_root"
+
+  while IFS= read -r archive_source; do
+    case "$archive_source" in
+      /zos/deploy/backups/*/state.tgz) archive_kind=zos-deploy ;;
+      /var/lib/sigmaos-deploy/backups/*/state.tgz) archive_kind=sigmaos-deploy ;;
+      *) die "deployment archive path is invalid: $archive_source" ;;
+    esac
+    archive_name=$(basename "$(dirname "$archive_source")")
+    case "$archive_name" in
+      ''|*[!A-Za-z0-9._-]*) die "deployment archive name is invalid: $archive_name" ;;
+    esac
+    archive_kind_root=$archive_root/$archive_kind
+    archive_destination_dir=$archive_kind_root/$archive_name
+    prepare_private_directory "$archive_kind_root"
+    prepare_private_directory "$archive_destination_dir"
+    archive_destination=$archive_destination_dir/state.tgz
+    archive_destination_temp=$archive_destination.tmp.$$
+    archive_metadata=$archive_source.relocated.json
+    archive_metadata_temp=$archive_metadata.tmp.$$
+    archive_size=$(stat -c '%s' "$archive_source")
+    archive_sha256=$(sha256sum "$archive_source" | awk '{ print $1 }')
+    if [ -e "$archive_destination" ]; then
+      [ -f "$archive_destination" ] && [ ! -L "$archive_destination" ] || \
+        die "relocated deployment archive is not a regular file: $archive_destination"
+      [ "$(stat -c '%s' "$archive_destination")" = "$archive_size" ] && \
+        [ "$(sha256sum "$archive_destination" | awk '{ print $1 }')" = "$archive_sha256" ] || \
+        die "relocated deployment archive conflicts with $archive_source"
+    else
+      cp -p --reflink=auto --sparse=always "$archive_source" "$archive_destination_temp"
+      chown root:root "$archive_destination_temp"
+      chmod 0600 "$archive_destination_temp"
+      [ "$(stat -c '%s' "$archive_destination_temp")" = "$archive_size" ] && \
+        [ "$(sha256sum "$archive_destination_temp" | awk '{ print $1 }')" = "$archive_sha256" ] || \
+        die "deployment archive verification failed: $archive_source"
+      mv -f "$archive_destination_temp" "$archive_destination"
+      sync -f "$archive_destination"
+    fi
+    archive_migrated_destination=$MAPPED_STORAGE_MIGRATED_MOUNT${archive_destination#"$MAPPED_STORAGE_LEGACY_MOUNT"}
+    /usr/local/bin/node --input-type=module - "$archive_metadata_temp" \
+      "$archive_source" "$archive_destination" "$archive_migrated_destination" \
+      "$archive_size" "$archive_sha256" <<'NODE'
+import fs from "node:fs";
+
+const [file, sourcePath, legacyPath, migratedPath, sizeBytes, sha256] = process.argv.slice(2);
+fs.writeFileSync(file, `${JSON.stringify({
+  sourcePath,
+  legacyPath,
+  migratedPath,
+  sizeBytes: Number(sizeBytes),
+  sha256,
+  relocatedAt: new Date().toISOString()
+}, null, 2)}\n`, { mode: 0o600 });
+NODE
+    chown root:root "$archive_metadata_temp"
+    chmod 0600 "$archive_metadata_temp"
+    mv -f "$archive_metadata_temp" "$archive_metadata"
+    sync -f "$archive_metadata"
+    rm -f "$archive_source"
+    log "relocated deployment archive: $archive_source -> $archive_destination"
+  done < "$archive_list"
+}
+
+verify_relocated_deployment_archives_after_mount_move() {
+  relocation_metadata_list=$backup_dir/deployment-archive-metadata.list
+  : > "$relocation_metadata_list"
+  for deployment_backup_root in /zos/deploy/backups /var/lib/sigmaos-deploy/backups; do
+    [ -d "$deployment_backup_root" ] && [ ! -L "$deployment_backup_root" ] || continue
+    find "$deployment_backup_root" -mindepth 2 -maxdepth 2 -type f \
+      -name state.tgz.relocated.json -print >> "$relocation_metadata_list"
+  done
+  while IFS= read -r relocation_metadata; do
+    relocation_values=$(/usr/local/bin/node --input-type=module - "$relocation_metadata" <<'NODE'
+import fs from "node:fs";
+
+const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (typeof payload.migratedPath !== "string" || typeof payload.sizeBytes !== "number" ||
+    !Number.isSafeInteger(payload.sizeBytes) || payload.sizeBytes < 1 ||
+    typeof payload.sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(payload.sha256)) process.exit(1);
+process.stdout.write(`${payload.migratedPath}\t${payload.sizeBytes}\t${payload.sha256}`);
+NODE
+    ) || die "relocated deployment archive metadata is invalid: $relocation_metadata"
+    IFS="$(printf '\t')" read -r relocated_archive expected_archive_size expected_archive_sha256 <<EOF
+$relocation_values
+EOF
+    case "$relocated_archive" in
+      /zos/data/*/.zos/system-backups/deployment-archives/zos-deploy/*/state.tgz|\
+      /zos/data/*/.zos/system-backups/deployment-archives/sigmaos-deploy/*/state.tgz) ;;
+      *) die "relocated deployment archive path is invalid: $relocated_archive" ;;
+    esac
+    [ -f "$relocated_archive" ] && [ ! -L "$relocated_archive" ] || \
+      die "relocated deployment archive is unavailable: $relocated_archive"
+    [ "$(stat -c '%s' "$relocated_archive")" = "$expected_archive_size" ] && \
+      [ "$(sha256sum "$relocated_archive" | awk '{ print $1 }')" = "$expected_archive_sha256" ] || \
+      die "relocated deployment archive verification failed: $relocated_archive"
+    log "verified relocated deployment archive: $relocated_archive"
+  done < "$relocation_metadata_list"
 }
 
 verify_capacity() {
@@ -354,15 +519,7 @@ prepare_cold_backup_destination() {
   archive_root=$archive_namespace/system-backups
   archive_dir=${COLD_BACKUP_LEGACY_PATH%/*}
   for private_dir in "$archive_namespace" "$archive_root"; do
-    if [ -L "$private_dir" ] || { [ -e "$private_dir" ] && [ ! -d "$private_dir" ]; }; then
-      die "cold backup parent is not a real directory: $private_dir"
-    fi
-    if [ -d "$private_dir" ]; then
-      [ "$(stat -c '%U:%G:%a' "$private_dir")" = root:root:700 ] || \
-        die "existing cold backup parent is not private: $private_dir"
-    else
-      install -d -o root -g root -m 0700 "$private_dir"
-    fi
+    prepare_private_directory "$private_dir"
   done
   [ ! -e "$archive_dir" ] || die "cold backup directory already exists: $archive_dir"
   install -d -o root -g root -m 0700 "$archive_dir"
@@ -675,7 +832,13 @@ rollback_on_failure() {
     log "migration failed; restoring legacy mounts, fstab, and services" >&2
     rollback_migration || true
   elif [ "$preparation_required" -eq 1 ] && [ -n "$backup_dir" ]; then
-    rm -f "$POINTER_PATH"
+    if [ -n "$PREVIOUS_BACKUP_DIR" ]; then
+      if ! write_pointer "$PREVIOUS_BACKUP_DIR"; then
+        log "error: failed to restore the previous migration pointer" >&2
+      fi
+    else
+      rm -f "$POINTER_PATH"
+    fi
     log "migration preparation failed before legacy data was changed; retry is safe" >&2
   fi
   exit "$status"
@@ -686,6 +849,7 @@ apply_migration() {
     log "legacy configuration is absent; no migration required"
     return 0
   }
+  recover_rolled_back_pointer
   if load_state; then
     current_status=$(status_value || true)
     case "$current_status" in
@@ -695,6 +859,7 @@ apply_migration() {
         ;;
       rolled_back)
         log "starting a new migration attempt after the previous rollback"
+        PREVIOUS_BACKUP_DIR=$backup_dir
         rm -f "$POINTER_PATH"
         backup_dir=
         state_file=
@@ -713,6 +878,7 @@ apply_migration() {
   [ -x "$FSTAB_MIGRATOR" ] || die "fstab migrator is missing"
   [ -x "$DATABASE_MIGRATOR" ] || die "database migrator is missing"
   [ -f "$COPY_GROWTH_CALCULATOR" ] || die "copy growth calculator is missing"
+  [ -f "$RECOVERY_HELPER" ] || die "migration recovery helper is missing"
   [ -x "$SHARE_ACL_STATE_MIGRATOR" ] || die "share ACL state migrator is missing"
   [ -x "$LIBVIRT_MIGRATOR" ] || die "libvirt migrator is missing"
   [ -x "$MOUNT_RELOCATOR" ] || die "mount relocator is missing"
@@ -731,8 +897,7 @@ apply_migration() {
   chown root:root "$backup_dir"
   chmod 0700 "$backup_dir"
   install -d -o root -g root -m 0700 "$backup_dir/systemd-state"
-  printf '%s\n' "$backup_dir" > "$POINTER_PATH"
-  chmod 0600 "$POINTER_PATH"
+  write_pointer "$backup_dir" || die "failed to record the migration backup pointer"
   preparation_required=1
   trap rollback_on_failure EXIT
   trap 'exit 129' HUP
@@ -759,6 +924,8 @@ EOF
   command -v du >/dev/null 2>&1 || die "du is required"
   command -v df >/dev/null 2>&1 || die "df is required"
   command -v grep >/dev/null 2>&1 || die "grep is required"
+  command -v sync >/dev/null 2>&1 || die "sync is required"
+  relocate_deployment_archives
   verify_capacity
 
   for unit in $LEGACY_SERVICES $LEGACY_TIMERS $SHARE_SERVICES; do
@@ -839,6 +1006,7 @@ EOF
   fi
 
   move_legacy_mounts
+  verify_relocated_deployment_archives_after_mount_move
   verify_cold_backup_after_mount_move
   apply_nas_acls
   /usr/local/bin/node "$FSTAB_MIGRATOR" /etc/fstab \

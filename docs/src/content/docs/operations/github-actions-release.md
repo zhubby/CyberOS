@@ -197,9 +197,9 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/zos/config` 和 `/zos/state`，再执行 `dpkg -i`。
 - 安装后先恢复升级前实际启用或运行的服务状态，再强制启用并启动 maintenance、health 和 backup 核心 timers；部署会立即运行一次 Health，并要求 Operations Health 为 `ready` 后才算成功。
 
-成功记录写入 `/zos/deploy/current-release.json`，已验证包保存在 `/zos/deploy/releases/<tag>/`。升级失败时，备份、旧包引用和诊断日志保留在 `/zos/deploy/backups/<tag>-<timestamp>/`，部署程序会尽力恢复此前的 systemd 状态。
+成功记录写入 `/zos/deploy/current-release.json`，已验证包保存在 `/zos/deploy/releases/<tag>/`。升级失败时，部署程序会尽力恢复此前的 systemd 状态。迁移状态引用已挂载的冷备份时，升级备份和诊断写入该数据盘的 `.zos/system-backups/deploy/<tag>-<timestamp>/`；否则保留在 `/zos/deploy/backups/<tag>-<timestamp>/`。
 
-部署成功后 helper 会在部署锁内清理受它管理的临时构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录以及旧 release 包。默认保留当前 release 和一个上一版本 release；`/zos/deploy/backups/` 中的升级备份与失败诊断不会自动删除，保留期限和清理动作必须由运维显式决定。它不会清理 `/zos/state`、`/zos/config`、Photo 数据、数据库或服务日志。
+部署成功后 helper 会在部署锁内清理受它管理的临时构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录以及旧 release 包。默认保留当前 release 和一个上一版本 release；升级备份与失败诊断不会自动删除，保留期限和清理动作必须由运维显式决定。旧布局迁移若发现系统盘上的 `state.tgz` 部署归档，会先复制到已映射数据盘的 `.zos/system-backups/deployment-archives/`，核对大小与 SHA-256 后再释放系统盘副本，并在原诊断目录写入 `state.tgz.relocated.json`。该元数据同时记录迁移前后的绝对路径；不要删除归档或定位元数据。helper 不会清理 `/zos/state`、`/zos/config`、Photo 数据、数据库或服务日志。
 
 部署程序不自动回滚 Debian 包或数据库 migration。schema 变化后的回滚必须使用与旧包匹配的状态备份，不能只重新安装旧 `.deb`。
 
