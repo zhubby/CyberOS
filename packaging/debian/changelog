@@ -1,3 +1,9 @@
+zos (1.0.9) unstable; urgency=medium
+
+  * Migrate legacy share ACL state before refreshing ZOS share services.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 15 Oct 2026 05:20:52 +0000
+
 zos (1.0.8) unstable; urgency=medium
 
   * Preserve existing effective permissions while widening NAS ACL masks for ZOS migration.
