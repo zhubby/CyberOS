@@ -129,10 +129,10 @@ describe("NAS ACL migration", () => {
     expect(updated.status, updated.stderr).toBe(0);
     const after = spawnSync("getfacl", ["-c", "-n", "-e", "--", restrictedFile], { encoding: "utf8" });
     expect(after.status, after.stderr).toBe(0);
-    expect(after.stdout).toMatch(/^user:42420:r--$/mu);
-    expect(after.stdout).toMatch(/^user:42422:rw-$/mu);
-    expect(after.stdout).toMatch(/^group::r--$/mu);
-    expect(after.stdout).toMatch(/^group:42421:r--$/mu);
+    expect(after.stdout).toMatch(/^user:42420:r--\s+#effective:r--$/mu);
+    expect(after.stdout).toMatch(/^user:42422:rw-\s+#effective:rw-$/mu);
+    expect(after.stdout).toMatch(/^group::r--\s+#effective:r--$/mu);
+    expect(after.stdout).toMatch(/^group:42421:r--\s+#effective:r--$/mu);
     expect(after.stdout).toMatch(/^mask::rw-$/mu);
   });
 
