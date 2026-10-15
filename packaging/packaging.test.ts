@@ -636,6 +636,9 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("refresh_share_configuration");
     expect(deploy).toContain("/api/settings/shares");
     expect(deploy).toContain("/api/shares/account");
+    expect(deploy).toContain("--write-out '%{http_code}'");
+    expect(deploy).toContain("response did not contain a safe error message");
+    expect(deploy).toContain("share configuration refresh returned HTTP");
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
     expect(deploy).toContain("zos-downloader.service zos-indexer.service zos-hostd.service");
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
@@ -646,6 +649,9 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("awk '$1 ~ /^zos-/ { print }'");
     expect(deploy).toContain('failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"');
     expect(deploy).toContain('capture_runtime_diagnostics "$failure_dir"');
+    expect(deploy).toContain("SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'");
+    expect(deploy).toContain("systemctl status $RUNTIME_SERVICES $SHARE_SERVICES");
+    expect(deploy).toContain("-u vsftpd.service -u nfs-server.service -u minidlna.service");
     expect(deploy).toContain('cat "$target_diagnostics_path/services-status.txt" >&2');
     expect(deploy).toContain('cat "$target_diagnostics_path/services-journal.txt" >&2');
     expect(deploy).toContain("cleanup_deployment_artifacts");

@@ -15,6 +15,7 @@ LOCK_PATH=/run/lock/zos-deploy.lock
 
 TIMERS='zos-maintenance.timer zos-health.timer zos-backup-daily.timer zos-backup-weekly.timer'
 RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'
+SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'
 WRITERS="zos-indexer.service zos-maintenance.service zos-health.service zos-backup-daily.service zos-backup-weekly.service $RUNTIME_SERVICES zos-vod-player.service"
 
 success=0
@@ -248,15 +249,35 @@ fs.writeFileSync(requestPath, JSON.stringify({
   expectedUpdatedAt: settings.updatedAt
 }));
 NODE
-  curl --fail --silent --show-error --max-time 120 \
-    --request PUT \
-    --header 'content-type: application/json' \
-    --data-binary "@$request_path" \
-    http://127.0.0.1:3010/api/shares/account > "$response_path"
-  node --input-type=module - "$response_path" <<'NODE'
+  if ! response_status=$(curl --silent --show-error --max-time 120 \
+      --output "$response_path" \
+      --write-out '%{http_code}' \
+      --request PUT \
+      --header 'content-type: application/json' \
+      --data-binary "@$request_path" \
+      http://127.0.0.1:3010/api/shares/account); then
+    die "share configuration refresh request failed"
+  fi
+  node --input-type=module - "$response_path" "$response_status" <<'NODE'
 import fs from "node:fs";
 
-const response = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const [responsePath, statusRaw] = process.argv.slice(2);
+const status = Number(statusRaw);
+let response;
+try {
+  response = JSON.parse(fs.readFileSync(responsePath, "utf8"));
+} catch {
+  response = null;
+}
+if (!Number.isInteger(status) || status < 200 || status >= 300) {
+  const message = typeof response?.error === "string"
+    ? response.error
+        .replace(/password["']?\s*[:=]\s*["']?[^\s,"'}]+/giu, "password: [redacted]")
+        .replace(/Authorization:\s*\S+/giu, "Authorization: [redacted]")
+        .slice(0, 500)
+    : "response did not contain a safe error message";
+  throw new Error(`share configuration refresh returned HTTP ${statusRaw}: ${message}`);
+}
 if (typeof response?.appliedAt !== "string") {
   throw new Error(`share configuration refresh failed: ${JSON.stringify(response)}`);
 }
@@ -303,9 +324,9 @@ EOF
 
 capture_runtime_diagnostics() {
   target_diagnostics_path=$1
-  systemctl status $RUNTIME_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
+  systemctl status $RUNTIME_SERVICES $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
   systemctl --failed --no-legend --plain > "$target_diagnostics_path/failed-units.txt" 2>&1 || true
-  journalctl -u zos-api.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-termux.service -n 200 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
+  journalctl -u zos-api.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-termux.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
 
   log "service status at failure:" >&2
   cat "$target_diagnostics_path/services-status.txt" >&2

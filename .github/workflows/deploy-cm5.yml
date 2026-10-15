@@ -860,3 +860,47 @@ jobs:
           }
           NODE
           REMOTE
+
+      - name: Capture CM5 failure diagnostics
+        if: failure()
+        run: |
+          set -euo pipefail
+
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          ssh_options=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+            -o StrictHostKeyChecking=accept-new
+          )
+          ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s <<'REMOTE'
+          set -u
+          for endpoint in \
+            /api/settings/shares \
+            /api/roots \
+            /api/shares/summary; do
+            printf '\n===== GET %s =====\n' "$endpoint"
+            curl --fail --silent --show-error --max-time 15 \
+              "http://127.0.0.1:3010$endpoint" || true
+            printf '\n'
+          done
+          printf '\n===== share service status =====\n'
+          systemctl status \
+            smbd.service \
+            nmbd.service \
+            zos-webdav.service \
+            vsftpd.service \
+            nfs-server.service \
+            minidlna.service \
+            --no-pager --full || true
+          printf '\n===== share service journal =====\n'
+          journalctl \
+            -u smbd.service \
+            -u nmbd.service \
+            -u zos-webdav.service \
+            -u vsftpd.service \
+            -u nfs-server.service \
+            -u minidlna.service \
+            -n 300 --no-pager || true
+          REMOTE
