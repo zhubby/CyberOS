@@ -1,3 +1,9 @@
+zos (1.0.13) unstable; urgency=medium
+
+  * Allow migrated share credentials to be refreshed by the hardened host daemon.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 15 Oct 2026 10:28:29 +0000
+
 zos (1.0.12) unstable; urgency=medium
 
   * Harden legacy migration recovery and SQLite writer startup.
