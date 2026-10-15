@@ -1,3 +1,9 @@
+zos (1.0.7) unstable; urgency=medium
+
+  * Allow NAS migration when existing ACL masks already grant ZOS the required access.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 15 Oct 2026 00:35:17 +0000
+
 zos (1.0.6) unstable; urgency=medium
 
   * Keep the indexer healthy and migrate NAS access safely during SigmaOS recovery.
