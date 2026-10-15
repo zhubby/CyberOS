@@ -16,7 +16,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
 use tokio::net::UnixStream;
 use tokio::process::Command;
 use tokio::sync::mpsc;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 use crate::config::VodPlayerConfig;
 use crate::error::{ErrorCode, VodError};
@@ -26,6 +26,8 @@ use crate::storage::OpenedMedia;
 const MPV_IPC_FD: RawFd = 3;
 const MPV_MEDIA_FD: RawFd = 4;
 const CHILD_FD_DUPLICATE_MINIMUM: RawFd = 200;
+const TEXT_FILE_BUSY_RETRIES: usize = 5;
+const TEXT_FILE_BUSY_RETRY_DELAY: Duration = Duration::from_millis(10);
 
 pub struct CapabilityProbe {
     pub capabilities: Capabilities,
@@ -171,20 +173,32 @@ impl MpvHandle {
                 Ok(())
             });
         }
-        let mut child = command.spawn().map_err(|error| {
-            if error.kind() == std::io::ErrorKind::PermissionDenied {
-                VodError::new(
-                    ErrorCode::PermissionDenied,
-                    "Permission denied while starting mpv",
-                    403,
-                )
-            } else {
-                VodError::unavailable(
-                    ErrorCode::MpvUnavailable,
-                    format!("Unable to start mpv: {error}"),
-                )
+        let mut text_file_busy_retries = 0;
+        let mut child = loop {
+            match command.spawn() {
+                Ok(child) => break child,
+                Err(error)
+                    if error.raw_os_error() == Some(nix::libc::ETXTBSY)
+                        && text_file_busy_retries < TEXT_FILE_BUSY_RETRIES =>
+                {
+                    text_file_busy_retries += 1;
+                    sleep(TEXT_FILE_BUSY_RETRY_DELAY).await;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                    return Err(VodError::new(
+                        ErrorCode::PermissionDenied,
+                        "Permission denied while starting mpv",
+                        403,
+                    ));
+                }
+                Err(error) => {
+                    return Err(VodError::unavailable(
+                        ErrorCode::MpvUnavailable,
+                        format!("Unable to start mpv: {error}"),
+                    ));
+                }
             }
-        })?;
+        };
         drop(child_ipc_source);
         drop(child_media_source);
         let pid = Pid::from_raw(
@@ -932,6 +946,35 @@ done
             .await
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::PlaybackFailed);
+        handle.shutdown().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn retries_text_file_busy_while_starting_mpv() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = fake_mpv(directory.path());
+        let writer = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&executable)
+            .unwrap();
+        let release_writer = tokio::spawn(async move {
+            sleep(Duration::from_millis(25)).await;
+            drop(writer);
+        });
+
+        let handle = MpvHandle::start_with_executable(
+            &config(directory.path()),
+            media(directory.path()),
+            0.0,
+            80.0,
+            false,
+            executable.as_os_str(),
+        )
+        .await
+        .unwrap();
+
+        release_writer.await.unwrap();
         handle.shutdown().await;
     }
 
