@@ -127,7 +127,7 @@ function remapJsonValue(value, mappings, report) {
   return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, remapJsonValue(entry, mappings, report)]));
 }
 
-function remapPath(value, mappings) {
+export function remapPath(value, mappings) {
   if (typeof value !== "string" || !value.startsWith("/")) return value;
   for (const [source, target] of mappings) {
     if (value === source) return target;

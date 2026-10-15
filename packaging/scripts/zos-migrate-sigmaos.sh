@@ -12,6 +12,7 @@ MIGRATION_ROOT=$ZOS_ROOT/system-backups
 CONFIG_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-config.mjs
 FSTAB_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-fstab.mjs
 DATABASE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-database.mjs
+SHARE_ACL_STATE_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-share-acl.mjs
 LIBVIRT_MIGRATOR=/usr/lib/zos/scripts/zos-migrate-libvirt.mjs
 MOUNT_RELOCATOR=/usr/lib/zos/scripts/zos-relocate-mount.sh
 NAS_ACL_MIGRATOR=/usr/lib/zos/scripts/zos-nas-acl.sh
@@ -541,6 +542,7 @@ apply_migration() {
   [ -x "$CONFIG_MIGRATOR" ] || die "configuration migrator is missing"
   [ -x "$FSTAB_MIGRATOR" ] || die "fstab migrator is missing"
   [ -x "$DATABASE_MIGRATOR" ] || die "database migrator is missing"
+  [ -x "$SHARE_ACL_STATE_MIGRATOR" ] || die "share ACL state migrator is missing"
   [ -x "$LIBVIRT_MIGRATOR" ] || die "libvirt migrator is missing"
   [ -x "$MOUNT_RELOCATOR" ] || die "mount relocator is missing"
   [ -x "$NAS_ACL_MIGRATOR" ] || die "NAS ACL migrator is missing"
@@ -636,6 +638,12 @@ EOF
   rm -f /zos/state/sigmaos.sqlite /zos/state/sigmaos.sqlite-wal /zos/state/sigmaos.sqlite-shm
   /usr/local/bin/node "$DATABASE_MIGRATOR" /zos/state/zos.sqlite \
     "$backup_dir/path-mappings.tsv" "$backup_dir/database-migration.json"
+  if [ -f /zos/config/share-acl.json ]; then
+    share_acl_report=$(/usr/local/bin/node "$SHARE_ACL_STATE_MIGRATOR" \
+      /zos/config/share-acl.json "$backup_dir/path-mappings.tsv" \
+      "$backup_dir/share-acl-migration.json")
+    log "share ACL state migration: $share_acl_report"
+  fi
   if [ -d /zos/state/docker-daemon ]; then
     copy_tree /zos/state/docker-daemon /zos/state/hostd/docker-daemon
     rm -rf /zos/state/docker-daemon

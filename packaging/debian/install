@@ -31,6 +31,7 @@ packaging/scripts/zos-deploy-bootstrap.sh usr/lib/zos/scripts/
 packaging/scripts/zos-deploy usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-config.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-database.mjs usr/lib/zos/scripts/
+packaging/scripts/zos-migrate-share-acl.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-fstab.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-libvirt.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-relocate-mount.sh usr/lib/zos/scripts/

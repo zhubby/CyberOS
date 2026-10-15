@@ -549,6 +549,7 @@ describe("native packaging artifacts", () => {
     expect(postinst).toContain("usermod --home /zos/home/share zos-share");
     expect(postinst).toContain("/zos/apps");
     expect(install).toContain("zos-migrate-config.mjs usr/lib/zos/scripts/");
+    expect(install).toContain("zos-migrate-share-acl.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-fstab.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-migrate-libvirt.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-relocate-mount.sh usr/lib/zos/scripts/");
@@ -692,6 +693,12 @@ describe("native packaging artifacts", () => {
     expect(migration).toContain("PRAGMA wal_checkpoint(TRUNCATE)");
     expect(migration).toContain("legacy database WAL was not truncated");
     expect(migration).toContain("zos-migrate-database.mjs");
+    expect(migration).toContain("zos-migrate-share-acl.mjs");
+    expect(migration).toContain('share ACL state migration: $share_acl_report');
+    expect(migration).toContain('/zos/config/share-acl.json "$backup_dir/path-mappings.tsv"');
+    expect(migration.indexOf('/zos/config/share-acl.json "$backup_dir/path-mappings.tsv"')).toBeLessThan(
+      migration.lastIndexOf("  move_legacy_mounts")
+    );
     expect(migration).toContain("tar --one-file-system");
     expect(migration).toContain("SHARE_SERVICES=");
     expect(migration).toContain("verify_capacity");
