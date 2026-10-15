@@ -63,6 +63,20 @@ describe("NAS ACL migration", () => {
     expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:zos:rwx -- ${fixture.pool}`);
   });
 
+  it("accepts masked group execute rights on a regular file", async () => {
+    const fixture = await setup();
+    const regularFile = path.join(fixture.pool, "document.txt");
+    await writeFile(regularFile, "content");
+    const environment = { ZOS_REGULAR_FILE: regularFile };
+
+    const preview = run(fixture, "--check", environment);
+    expect(preview.status, preview.stderr).toBe(0);
+
+    const result = run(fixture, "--apply", environment);
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:zos:rw- -- ${regularFile}`);
+  });
+
   it("keeps zos-owned private partial files private", async () => {
     const fixture = await setup();
     const partial = path.join(fixture.pool, ".download.part");
@@ -99,13 +113,21 @@ case "$(basename "$0")" in
   find)
     case " $* " in
       *' -printf '*) printf '.' ;;
-      *' -print0 '*) printf '%s\\0' "$ZOS_POOL"; if [ -n "$ZOS_OWNER_FILE" ]; then printf '%s\\0' "$ZOS_OWNER_FILE"; fi ;;
+      *' -print0 '*) printf '%s\\0' "$ZOS_POOL"; if [ -n "$ZOS_OWNER_FILE" ]; then printf '%s\\0' "$ZOS_OWNER_FILE"; fi; if [ -n "$ZOS_REGULAR_FILE" ]; then printf '%s\\0' "$ZOS_REGULAR_FILE"; fi ;;
       *' -exec '*) getfacl --absolute-names "$ZOS_POOL" ;;
     esac ;;
   getfacl)
     for arg do :; done
     if [ -n "$ZOS_OWNER_FILE" ] && [ "$arg" = "$ZOS_OWNER_FILE" ]; then
       printf '# file: %s\\nuser::rw-\\nuser:zos:rw-\\t#effective:---\\ngroup::---\\nmask::---\\nother::---\\n' "$arg"
+      exit 0
+    fi
+    if [ -n "$ZOS_REGULAR_FILE" ] && [ "$arg" = "$ZOS_REGULAR_FILE" ]; then
+      printf '# file: %s\\nuser::rw-\\nuser:sigmaos:rwx\\n' "$arg"
+      if [ -f "$ZOS_ACL_LOG" ] && grep -Fq "setfacl -n -m u:zos:rw- -- $arg" "$ZOS_ACL_LOG"; then
+        printf 'user:zos:rw-\\n'
+      fi
+      printf 'group::r-x\\nmask::rw-\\nother::---\\n'
       exit 0
     fi
     printf '# file: %s\\nuser::rwx\\n' "$ZOS_POOL"

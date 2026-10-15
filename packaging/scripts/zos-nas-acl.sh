@@ -59,28 +59,18 @@ check_masks() {
   getfacl --absolute-names -c -- "$item" | awk -v item="$item" -v kind="$kind" -v owned="$owned" '
     /^mask::/ { access_mask = substr($1, 7) }
     /^default:mask::/ { default_mask = substr($1, 15) }
-    /^group::|^group:[^:]+:|^user:[^:]+:/ {
-      if ($1 !~ /^user:zos:/) access_entries = access_entries " " substr($1, length($1) - 2)
-    }
-    /^default:group::|^default:group:[^:]+:|^default:user:[^:]+:/ {
-      if ($1 !~ /^default:user:zos:/) default_entries = default_entries " " substr($1, length($1) - 2)
-    }
     END {
-      if (owned != 1 && access_mask != "" && !safe(access_mask, kind == "directory" ? "rwx" : "rw", access_entries)) {
+      if (owned != 1 && access_mask != "" && !safe(access_mask, kind == "directory" ? "rwx" : "rw")) {
         printf "existing access ACL mask needs separate review: %s\n", item > "/dev/stderr"
         exit 1
       }
-      if (kind == "directory" && default_mask != "" && !safe(default_mask, "rwx", default_entries)) {
+      if (kind == "directory" && default_mask != "" && !safe(default_mask, "rwx")) {
         printf "existing default ACL mask needs separate review: %s\n", item > "/dev/stderr"
         exit 1
       }
     }
-    function safe(mask, required, entries,  i, j, parts) {
+    function safe(mask, required,  i) {
       for (i = 1; i <= length(required); i++) if (index(mask, substr(required, i, 1)) == 0) return 0
-      split(entries, parts, " ")
-      for (i in parts) for (j = 1; j <= length(parts[i]); j++) {
-        if (index(mask, substr(parts[i], j, 1)) == 0 && substr(parts[i], j, 1) != "-") return 0
-      }
       return 1
     }
   '
