@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 const script = fileURLToPath(new URL("scripts/zos-nas-acl.sh", import.meta.url));
+const hasLinuxAclTools =
+  process.platform === "linux" &&
+  spawnSync("getfacl", ["--version"]).status === 0 &&
+  spawnSync("setfacl", ["--version"]).status === 0;
 let directory: string | null = null;
 
 afterEach(async () => {
@@ -98,6 +102,38 @@ describe("NAS ACL migration", () => {
     expect(await readFile(fixture.log, "utf8")).toContain(
       `setfacl -n -m u:sigmaos:r--,g::r--,u:zos:rw-,m::rw- -- ${restrictedFile}`
     );
+  });
+
+  it.runIf(hasLinuxAclTools)("preserves effective permissions with real Linux ACL tools", async () => {
+    const fixture = await setup();
+    const restrictedFile = path.join(fixture.pool, "linux-acl.txt");
+    await writeFile(restrictedFile, "content");
+
+    const seeded = spawnSync(
+      "setfacl",
+      ["-n", "-m", "u:42420:rwx,g::r-x,g:42421:rwx,m::r--", "--", restrictedFile],
+      { encoding: "utf8" }
+    );
+    expect(seeded.status, seeded.stderr).toBe(0);
+    const before = spawnSync("getfacl", ["-c", "-n", "-e", "--", restrictedFile], { encoding: "utf8" });
+    expect(before.status, before.stderr).toBe(0);
+    expect(before.stdout).toMatch(/^user:42420:rwx\s+#effective:r--$/mu);
+    expect(before.stdout).toMatch(/^group::r-x\s+#effective:r--$/mu);
+    expect(before.stdout).toMatch(/^group:42421:rwx\s+#effective:r--$/mu);
+
+    const updated = spawnSync(
+      "setfacl",
+      ["-n", "-m", "u:42420:r--,g::r--,g:42421:r--,u:42422:rw-,m::rw-", "--", restrictedFile],
+      { encoding: "utf8" }
+    );
+    expect(updated.status, updated.stderr).toBe(0);
+    const after = spawnSync("getfacl", ["-c", "-n", "-e", "--", restrictedFile], { encoding: "utf8" });
+    expect(after.status, after.stderr).toBe(0);
+    expect(after.stdout).toMatch(/^user:42420:r--$/mu);
+    expect(after.stdout).toMatch(/^user:42422:rw-$/mu);
+    expect(after.stdout).toMatch(/^group::r--$/mu);
+    expect(after.stdout).toMatch(/^group:42421:r--$/mu);
+    expect(after.stdout).toMatch(/^mask::rw-$/mu);
   });
 
   it("keeps zos-owned private partial files private", async () => {
