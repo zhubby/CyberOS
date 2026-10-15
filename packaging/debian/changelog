@@ -1,3 +1,9 @@
+zos (1.0.18) unstable; urgency=medium
+
+  * Preserve legacy migration recovery state and move deployment archives to mapped storage before retrying constrained hosts.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 15 Oct 2026 17:57:40 +0000
+
 zos (1.0.17) unstable; urgency=medium
 
   * Keep indexer readiness healthy when protected ZOS metadata directories are intentionally unreadable.
