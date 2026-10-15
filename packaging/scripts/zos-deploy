@@ -176,14 +176,51 @@ NODE
   return 1
 }
 
-activate_runtime() {
-  log "enabling and restarting ZOS services"
-  systemctl enable $RUNTIME_SERVICES
-  systemctl restart $RUNTIME_SERVICES
+start_service_stably() {
+  unit=$1
+  stabilization_seconds=${2:-5}
 
-  log "enabling ZOS schedules and refreshing health"
-  systemctl enable --now $TIMERS
+  systemctl start "$unit"
+  systemctl is-active --quiet "$unit" || die "service failed to start: $unit"
+  service_before=$(systemctl show --property=MainPID --property=NRestarts "$unit")
+  sleep "$stabilization_seconds"
+  systemctl is-active --quiet "$unit" || die "service did not remain active: $unit"
+  service_after=$(systemctl show --property=MainPID --property=NRestarts "$unit")
+  [ "$service_before" = "$service_after" ] || die "service restarted during startup: $unit"
+}
+
+activate_runtime() {
+  state_dir=$1
+
+  log "stopping ZOS writers before runtime activation"
+  for unit in $TIMERS $WRITERS; do
+    stop_unit "$unit"
+  done
+
+  log "enabling ZOS services"
+  systemctl enable $RUNTIME_SERVICES
+
+  log "starting ZOS runtime prerequisites"
+  start_service_stably zos-hostd.service 1
+  start_service_stably zos-termux.service 1
+  restore_unit_state zos-vod-player.service "$state_dir"
+
+  log "starting the API and waiting for startup recovery"
+  start_service_stably zos-api.service
+  wait_for_url http://127.0.0.1:3010/health || die "API startup recovery failed"
+
+  log "refreshing health before background database writers start"
   systemctl start zos-health.service
+
+  log "starting background database writers sequentially"
+  start_service_stably zos-worker@1.service
+  start_service_stably zos-photostaff.service
+  start_service_stably zos-downloader.service
+  start_service_stably zos-indexer.service
+
+  log "enabling ZOS schedules"
+  systemctl enable $TIMERS
+  systemctl start $TIMERS
 }
 
 verify_runtime() {
@@ -482,9 +519,15 @@ if [ "$installed_status" = "install ok installed" ]; then
     [ "$installed_commit" = "$(printf '%s' "$manifest_commit_sha" | tr '[:upper:]' '[:lower:]')" ] || die "same package version has a different commit"
     retry_timestamp=$(date -u +%Y%m%dT%H%M%SZ)
     failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"
-    install -d -o root -g root -m 0700 "$failure_dir"
+    backup_path=$failure_dir
+    state_dir="$work_dir/systemd-state"
+    install -d -o root -g root -m 0700 "$failure_dir" "$state_dir"
+    for unit in $TIMERS $WRITERS; do
+      record_unit_state "$unit" "$state_dir"
+    done
+    cp -a "$state_dir" "$failure_dir/systemd-state"
     log "version $manifest_version is already installed; recovering runtime and release state"
-    activate_runtime
+    activate_runtime "$state_dir"
     verify_runtime
     refresh_share_configuration
     verify_build_info "$manifest_version" "$manifest_commit_sha"
@@ -544,11 +587,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-remove \
   "$work_dir/package.deb"
 systemctl daemon-reload
 
-for unit in $WRITERS $TIMERS; do
-  restore_unit_state "$unit" "$state_dir"
-done
-
-activate_runtime
+activate_runtime "$state_dir"
 verify_runtime
 refresh_share_configuration
 verify_build_info "$manifest_version" "$manifest_commit_sha"

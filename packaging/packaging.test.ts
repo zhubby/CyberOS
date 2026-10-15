@@ -627,9 +627,36 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("systemctl daemon-reload");
     expect(deploy).toContain("restore_unit_state \"$unit\" \"$state_dir\"");
     expect(deploy).toContain("activate_runtime");
-    expect(deploy).toContain("systemctl restart $RUNTIME_SERVICES");
-    expect(deploy).toContain("systemctl enable --now $TIMERS");
+    expect(deploy).not.toContain("systemctl restart $RUNTIME_SERVICES");
+    expect(deploy).not.toContain("systemctl enable --now $TIMERS");
     expect(deploy).toContain("systemctl start zos-health.service");
+    const activateRuntime = deploy.slice(
+      deploy.indexOf("activate_runtime() {"),
+      deploy.indexOf("\nverify_runtime() {")
+    );
+    const activationOrder = [
+      "for unit in $TIMERS $WRITERS; do",
+      "systemctl enable $RUNTIME_SERVICES",
+      "start_service_stably zos-hostd.service",
+      "start_service_stably zos-termux.service",
+      'restore_unit_state zos-vod-player.service "$state_dir"',
+      "start_service_stably zos-api.service",
+      "wait_for_url http://127.0.0.1:3010/health",
+      "systemctl start zos-health.service",
+      "start_service_stably zos-worker@1.service",
+      "start_service_stably zos-photostaff.service",
+      "start_service_stably zos-downloader.service",
+      "start_service_stably zos-indexer.service",
+      "systemctl enable $TIMERS",
+      "systemctl start $TIMERS"
+    ];
+    for (let index = 1; index < activationOrder.length; index += 1) {
+      expect(activateRuntime.indexOf(activationOrder[index - 1]!)).toBeGreaterThanOrEqual(0);
+      expect(activateRuntime.indexOf(activationOrder[index]!)).toBeGreaterThan(
+        activateRuntime.indexOf(activationOrder[index - 1]!)
+      );
+    }
+    expect(deploy).toContain('activate_runtime "$state_dir"');
     expect(deploy).toContain('systemctl is-active --quiet "$unit" || die "timer is not active: $unit"');
     expect(deploy).toContain("NextElapseUSecMonotonic");
     expect(deploy).toContain('health?.operations?.health?.status === "ready"');
