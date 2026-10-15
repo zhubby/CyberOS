@@ -493,6 +493,7 @@ describe("native packaging artifacts", () => {
     expect(migrationPreflight).toContain("package_zos=");
     expect(migrationPreflight).toContain("/zos/system-backups");
     expect(migrationPreflight).toContain("vm_summary_unavailable=true");
+    expect(migrationPreflight).toContain("mounted_storage_capacity_begin");
     expect(migrationPreflight).toContain("vm_legacy_disk_references");
     expect(migrationPreflight).toContain("vm_legacy_running_count");
     expect(migrationPreflight).toContain("vm_legacy_migration_eligible=true");

@@ -181,6 +181,15 @@ jobs:
           printf '%s\n' 'fstab_targets_begin'
           findmnt --fstab -rn -o SOURCE,TARGET,FSTYPE | awk '$2 ~ /^\/(srv|var\/lib\/sigmaos|zos)(\/|$)/ { print }'
           printf '%s\n' 'fstab_targets_end'
+          printf '%s\n' 'mounted_storage_capacity_begin'
+          findmnt -rn -o TARGET | while IFS= read -r mount_target; do
+            case "$mount_target" in
+              /srv/*|/zos/data/*)
+                df -B1 --output=source,target,size,used,avail "$mount_target" | tail -n 1
+                ;;
+            esac
+          done
+          printf '%s\n' 'mounted_storage_capacity_end'
           df -B1 --output=source,target,size,used,avail \
             / /var/lib/sigmaos /srv/nas /srv/backup /zos /zos/data/primary/pool1 \
             2>/dev/null || true
