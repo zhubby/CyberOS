@@ -240,14 +240,23 @@ jobs:
         env:
           TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}
           TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          EXPECTED_SUBJECT: repo:zhubby@9190779/SigmaOS@1341473177:environment:production
         run: |
           set -euo pipefail
           : "${ACTIONS_ID_TOKEN_REQUEST_URL:?GitHub OIDC request URL is unavailable}"
           : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?GitHub OIDC request token is unavailable}"
+          : "${GITHUB_REPOSITORY:?GitHub repository is unavailable}"
+          : "${GITHUB_REPOSITORY_ID:?GitHub repository ID is unavailable}"
+          : "${GITHUB_REPOSITORY_OWNER:?GitHub repository owner is unavailable}"
+          : "${GITHUB_REPOSITORY_OWNER_ID:?GitHub repository owner ID is unavailable}"
           : "${TS_AUDIENCE:?production secret TS_AUDIENCE is required}"
           : "${TS_OAUTH_CLIENT_ID:?production secret TS_OAUTH_CLIENT_ID is required}"
 
+          repository_name="${GITHUB_REPOSITORY#*/}"
+          [[ "$GITHUB_REPOSITORY" == "$GITHUB_REPOSITORY_OWNER/$repository_name" ]]
+          [[ "$repository_name" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$GITHUB_REPOSITORY_ID" =~ ^[0-9]+$ ]]
+          [[ "$GITHUB_REPOSITORY_OWNER_ID" =~ ^[0-9]+$ ]]
+          expected_subject="repo:${GITHUB_REPOSITORY_OWNER}@${GITHUB_REPOSITORY_OWNER_ID}/${repository_name}@${GITHUB_REPOSITORY_ID}:environment:production"
           expected_audience="api.tailscale.com/$TS_OAUTH_CLIENT_ID"
           [[ "$TS_AUDIENCE" == "$expected_audience" ]] || {
             echo "TS_AUDIENCE does not match the configured Tailscale client ID" >&2
@@ -259,7 +268,7 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$TS_AUDIENCE")"
           oidc_token="$(jq -er '.value | select(type == "string" and length > 0)' <<<"$token_response")"
 
-          OIDC_TOKEN="$oidc_token" node <<'NODE'
+          EXPECTED_SUBJECT="$expected_subject" OIDC_TOKEN="$oidc_token" node <<'NODE'
           const token = process.env.OIDC_TOKEN;
           const expectedAudience = process.env.TS_AUDIENCE;
           const expectedSubject = process.env.EXPECTED_SUBJECT;

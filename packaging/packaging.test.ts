@@ -414,6 +414,14 @@ describe("native packaging artifacts", () => {
     expect(releaseWorkflow.match(/uses: dtolnay\/rust-toolchain@[0-9a-f]{40}/gu)).toHaveLength(3);
     expect(releaseWorkflow.match(/toolchain: 1\.95\.0/gu)).toHaveLength(3);
     expect(releaseWorkflow).toMatch(/package-arm64:[\s\S]*?apt-get install[\s\S]*?\n\s+acl \\/u);
+    for (const workflow of [deployWorkflow, migrationPreflight]) {
+      expect(workflow).toContain('repository_name="${GITHUB_REPOSITORY#*/}"');
+      expect(workflow).toContain(
+        'expected_subject="repo:${GITHUB_REPOSITORY_OWNER}@${GITHUB_REPOSITORY_OWNER_ID}/${repository_name}@${GITHUB_REPOSITORY_ID}:environment:production"'
+      );
+      expect(workflow).toContain('EXPECTED_SUBJECT="$expected_subject" OIDC_TOKEN="$oidc_token" node');
+      expect(workflow).not.toContain("EXPECTED_SUBJECT: repo:");
+    }
     expect(deployWorkflow).not.toContain('failed_units="$(systemctl --failed --no-legend --plain || true)"');
     expect(deployWorkflow).toContain("awk '$1 ~ /^zos-/ { print }'");
     expect(deployWorkflow).toContain("[ -x /usr/local/bin/node ]");
