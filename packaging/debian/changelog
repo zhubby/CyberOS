@@ -1,3 +1,9 @@
+zos (1.0.15) unstable; urgency=medium
+
+  * Align the WebDAV runtime directory with its systemd sandbox so share configuration refreshes succeed during migration.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 15 Oct 2026 13:25:01 +0000
+
 zos (1.0.14) unstable; urgency=medium
 
   * Decouple the Photostaff systemd watchdog from SQLite heartbeats so production migrations remain stable during database contention.
