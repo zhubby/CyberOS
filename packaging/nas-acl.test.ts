@@ -45,15 +45,21 @@ describe("NAS ACL migration", () => {
     expect(result.stderr).toContain("zos ACL is ineffective");
   });
 
-  it("rejects a restrictive mask before broadening unrelated accounts", async () => {
+  it("widens restrictive directory masks without broadening unrelated accounts", async () => {
     const fixture = await setup();
     const preview = run(fixture, "--check", { ZOS_EXISTING_MASK: "r-x" });
-    expect(preview.status).not.toBe(0);
-    expect(preview.stderr).toContain("existing access ACL mask needs separate review");
-    const result = run(fixture, "--apply", { ZOS_EXISTING_MASK: "r-x" });
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("existing access ACL mask needs separate review");
+    expect(preview.status, preview.stderr).toBe(0);
     await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+    const result = run(fixture, "--apply", { ZOS_EXISTING_MASK: "r-x" });
+    expect(result.status, result.stderr).toBe(0);
+    const log = await readFile(fixture.log, "utf8");
+    expect(log).toContain(
+      `setfacl -n -m u:www-data:r-x,g::r-x,g:operators:r-x,u:zos:rwx,m::rwx -- ${fixture.pool}`
+    );
+    expect(log).toContain(
+      `setfacl -n -m d:u:www-data:r-x,d:g::r-x,d:g:operators:r-x,d:u:zos:rwx,d:m::rwx -- ${fixture.pool}`
+    );
   });
 
   it("keeps a sufficient existing mask unchanged", async () => {
@@ -75,6 +81,23 @@ describe("NAS ACL migration", () => {
     const result = run(fixture, "--apply", environment);
     expect(result.status, result.stderr).toBe(0);
     expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:zos:rw- -- ${regularFile}`);
+  });
+
+  it("widens a restrictive file mask while preserving every existing effective permission", async () => {
+    const fixture = await setup();
+    const restrictedFile = path.join(fixture.pool, ".env");
+    await writeFile(restrictedFile, "SECRET=value\n");
+    const environment = { ZOS_RESTRICTIVE_FILE: restrictedFile };
+
+    const preview = run(fixture, "--check", environment);
+    expect(preview.status, preview.stderr).toBe(0);
+    await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+    const result = run(fixture, "--apply", environment);
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(fixture.log, "utf8")).toContain(
+      `setfacl -n -m u:sigmaos:r--,g::r--,u:zos:rw-,m::rw- -- ${restrictedFile}`
+    );
   });
 
   it("keeps zos-owned private partial files private", async () => {
@@ -113,7 +136,7 @@ case "$(basename "$0")" in
   find)
     case " $* " in
       *' -printf '*) printf '.' ;;
-      *' -print0 '*) printf '%s\\0' "$ZOS_POOL"; if [ -n "$ZOS_OWNER_FILE" ]; then printf '%s\\0' "$ZOS_OWNER_FILE"; fi; if [ -n "$ZOS_REGULAR_FILE" ]; then printf '%s\\0' "$ZOS_REGULAR_FILE"; fi ;;
+      *' -print0 '*) printf '%s\\0' "$ZOS_POOL"; if [ -n "$ZOS_OWNER_FILE" ]; then printf '%s\\0' "$ZOS_OWNER_FILE"; fi; if [ -n "$ZOS_REGULAR_FILE" ]; then printf '%s\\0' "$ZOS_REGULAR_FILE"; fi; if [ -n "$ZOS_RESTRICTIVE_FILE" ]; then printf '%s\\0' "$ZOS_RESTRICTIVE_FILE"; fi ;;
       *' -exec '*) getfacl --absolute-names "$ZOS_POOL" ;;
     esac ;;
   getfacl)
@@ -130,9 +153,18 @@ case "$(basename "$0")" in
       printf 'group::r-x\\nmask::rw-\\nother::---\\n'
       exit 0
     fi
+    if [ -n "$ZOS_RESTRICTIVE_FILE" ] && [ "$arg" = "$ZOS_RESTRICTIVE_FILE" ]; then
+      printf '# file: %s\\nuser::rw-\\n' "$arg"
+      if [ -f "$ZOS_ACL_LOG" ] && grep -Fq "setfacl -n -m u:sigmaos:r--,g::r--,u:zos:rw-,m::rw- -- $arg" "$ZOS_ACL_LOG"; then
+        printf 'user:sigmaos:r--\\nuser:zos:rw-\\ngroup::r--\\nmask::rw-\\nother::---\\n'
+      else
+        printf 'user:sigmaos:rwx\\t#effective:r--\\ngroup::r-x\\t#effective:r--\\nmask::r--\\nother::---\\n'
+      fi
+      exit 0
+    fi
     printf '# file: %s\\nuser::rwx\\n' "$ZOS_POOL"
     if [ -n "$ZOS_EXISTING_MASK" ]; then
-      printf 'user:www-data:rwx\\ngroup::r-x\\nmask::%s\\ndefault:group::r-x\\ndefault:mask::%s\\n' "$ZOS_EXISTING_MASK" "$ZOS_EXISTING_MASK"
+      printf 'user:www-data:rwx\\ngroup::r-x\\ngroup:operators:rwx\\nmask::%s\\ndefault:user::rwx\\ndefault:user:www-data:rwx\\ndefault:group::r-x\\ndefault:group:operators:rwx\\ndefault:mask::%s\\ndefault:other::r-x\\n' "$ZOS_EXISTING_MASK" "$ZOS_EXISTING_MASK"
     fi
     if [ "$ZOS_ACL_MASKED" = 1 ]; then
       printf 'user:zos:rwx\\t#effective:r-x\\n'
