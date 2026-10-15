@@ -68,24 +68,12 @@ impl Photostaff {
         let _ = sd_notify::notify(&[NotifyState::Ready]);
         tracing::info!(worker_id = %self.worker_id, "Photostaff worker ready");
 
-        let heartbeat_shutdown = self.shutdown.clone();
-        let heartbeat_db = self.db.clone();
-        let heartbeat_worker = self.worker_id.clone();
-        let heartbeat = tokio::spawn(async move {
-            let mut timer = tokio::time::interval(Duration::from_secs(5));
-            timer.tick().await;
-            loop {
-                tokio::select! {
-                    _ = heartbeat_shutdown.cancelled() => break,
-                    _ = timer.tick() => {
-                        match heartbeat_db.heartbeat(&heartbeat_worker, VERSION).await {
-                            Ok(()) => { let _ = sd_notify::notify(&[NotifyState::Watchdog]); }
-                            Err(error) => tracing::warn!(code = error.code.as_str(), message = %error.message, "Photostaff heartbeat failed"),
-                        }
-                    }
-                }
-            }
-        });
+        let heartbeat = tokio::spawn(heartbeat_loop(
+            self.db.clone(),
+            self.worker_id.clone(),
+            self.shutdown.clone(),
+        ));
+        let watchdog = tokio::spawn(watchdog_loop(self.shutdown.clone()));
 
         let mut poll = tokio::time::interval(Duration::from_secs(1));
         poll.tick().await;
@@ -102,6 +90,7 @@ impl Photostaff {
         let _ = sd_notify::notify(&[NotifyState::Stopping]);
         self.shutdown.cancel();
         let _ = heartbeat.await;
+        let _ = watchdog.await;
         self.db.release_worker(&self.worker_id).await?;
         Ok(())
     }
@@ -137,6 +126,31 @@ impl Photostaff {
                 .await?;
         }
         Ok(())
+    }
+}
+
+async fn heartbeat_loop(db: Db, worker_id: String, shutdown: CancellationToken) {
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+    interval.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.cancelled() => break,
+            _ = interval.tick() => match db.heartbeat(&worker_id, VERSION).await {
+                Ok(()) => {}
+                Err(error) => tracing::warn!(code = error.code.as_str(), message = %error.message, "Photostaff heartbeat failed"),
+            }
+        }
+    }
+}
+
+async fn watchdog_loop(shutdown: CancellationToken) {
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+    interval.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.cancelled() => break,
+            _ = interval.tick() => { let _ = sd_notify::notify(&[NotifyState::Watchdog]); }
+        }
     }
 }
 
