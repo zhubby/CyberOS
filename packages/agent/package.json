@@ -1,6 +1,6 @@
 {
   "name": "@zos/agent",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -8,8 +8,8 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^1.1.0",
-    "@zos/nas-tools": "1.0.13",
-    "@zos/shared": "1.0.13",
+    "@zos/nas-tools": "1.0.14",
+    "@zos/shared": "1.0.14",
     "typebox": "1.1.38"
   }
 }
