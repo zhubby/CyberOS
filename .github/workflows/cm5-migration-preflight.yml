@@ -108,10 +108,28 @@ jobs:
           printf 'architecture=%s\n' "$(dpkg --print-architecture)"
           printf 'legacy_database_quick_check=%s\n' "$(sqlite3 /var/lib/sigmaos/sigmaos.sqlite 'PRAGMA quick_check;' 2>/dev/null || true)"
           if [ -x /usr/local/sbin/zos-deploy ]; then
-            printf 'migration_status=%s\n' "$(sudo -n /usr/local/sbin/zos-deploy --migration-status 2>&1 || true)"
+            migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status 2>&1 || true)"
+            printf 'migration_status=%s\n' "$migration_status"
+            if [ "$recovery_audit" = true ]; then
+              migration_state="$(/usr/local/bin/node -e '
+                const payload = JSON.parse(process.argv[1]);
+                process.stdout.write(String(payload.status ?? "unknown"));
+              ' "$migration_status" 2>/dev/null || printf unknown)"
+              case "$migration_state" in
+                pending|committed|rolled_back)
+                  migration_backup_check="$(sudo -n /usr/local/sbin/zos-deploy --migration-backup-check)"
+                  [ "$migration_backup_check" = ok ]
+                  printf 'migration_backup_check=%s\n' "$migration_backup_check"
+                  ;;
+                *) printf '%s\n' 'migration_backup_check=not-applicable' ;;
+              esac
+            fi
             printf 'zos_database_quick_check=%s\n' "$(sudo -n /usr/local/sbin/zos-deploy --database-check 2>&1 || true)"
           else
             printf '%s\n' 'migration_status=helper-unavailable'
+            if [ "$recovery_audit" = true ]; then
+              printf '%s\n' 'migration_backup_check=helper-unavailable'
+            fi
             printf '%s\n' 'zos_database_quick_check=helper-unavailable'
           fi
 

@@ -490,6 +490,8 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain("zos-terminal-helper.service");
     expect(migrationPreflight).toContain("/api/vms/summary");
     expect(migrationPreflight).toContain("recovery_audit");
+    expect(migrationPreflight).toContain("--migration-backup-check");
+    expect(migrationPreflight).toContain('migration_backup_check="$(sudo -n');
     expect(migrationPreflight).toContain("package_zos=");
     expect(migrationPreflight).toContain("/zos/system-backups");
     expect(migrationPreflight).toContain("vm_summary_unavailable=true");
