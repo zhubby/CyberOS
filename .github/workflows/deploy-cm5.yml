@@ -800,8 +800,9 @@ jobs:
             printf '%s\n' "$timer_schedule" | \
               grep -Eq '^NextElapseUSec(Realtime|Monotonic)=.+$'
           done
+          wait_for_indexer_ready
           runtime_before="$(runtime_fingerprint)"
-          sleep 5
+          sleep 30
           for unit in \
             zos-api.service \
             zos-worker@1.service \

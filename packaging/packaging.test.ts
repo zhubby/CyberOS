@@ -486,6 +486,7 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('payload?.operations?.health?.status !== "ready"');
     expect(deployWorkflow).toContain('runtime_before="$(runtime_fingerprint)"');
     expect(deployWorkflow).toContain('runtime_after="$(runtime_fingerprint)"');
+    expect(deployWorkflow).toContain("sleep 30");
     expect(deployWorkflow).not.toContain("zos-terminal-helper.service");
     expect(migrationPreflight).toContain("/api/vms/summary");
     expect(migrationPreflight).toContain("vm_legacy_disk_references");
@@ -668,10 +669,19 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("response did not contain a safe error message");
     expect(deploy).toContain("share configuration refresh returned HTTP");
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
+    expect(deploy).toContain("sleep 30");
     expect(deploy).toContain("zos-downloader.service zos-indexer.service zos-hostd.service");
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
     expect(deploy).toContain('die "one or more services restarted during stabilization"');
     expect(deploy).toContain('version $manifest_version is already installed; recovering runtime and release state');
+    const sameVersionRecovery = deploy.slice(
+      deploy.indexOf('version $manifest_version is already installed; recovering runtime and release state'),
+      deploy.indexOf('log "recovered $manifest_tag successfully"')
+    );
+    expect(sameVersionRecovery.indexOf("zos-migrate-sigmaos.sh apply")).toBeGreaterThanOrEqual(0);
+    expect(sameVersionRecovery.indexOf('activate_runtime "$state_dir"')).toBeGreaterThan(
+      sameVersionRecovery.indexOf("zos-migrate-sigmaos.sh apply")
+    );
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"');
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"\n    cleanup_deployment_artifacts');
     expect(deploy).toContain("awk '$1 ~ /^zos-/ { print }'");
@@ -691,7 +701,8 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("ZOS configuration must be a regular file");
     expect(deploy).toContain("ZOS database must be a regular file");
     expect(deploy).toContain("Keep the active release and one previous package");
-    expect(deploy).toContain("Keep the current upgrade backup and one older backup");
+    expect(deploy).toContain("Retention is an explicit operator action");
+    expect(deploy).not.toContain('find "$BACKUP_DIR"');
     expect(deploy).toContain('find "$INCOMING_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +');
     expect(deploy).toContain("traverse outside BASE_DIR");
     expect(deploy).toContain('find "$BASE_DIR" -mindepth 1 -maxdepth 1 -type d -name \'work.*\'');

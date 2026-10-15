@@ -199,7 +199,7 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 
 成功记录写入 `/zos/deploy/current-release.json`，已验证包保存在 `/zos/deploy/releases/<tag>/`。升级失败时，备份、旧包引用和诊断日志保留在 `/zos/deploy/backups/<tag>-<timestamp>/`，部署程序会尽力恢复此前的 systemd 状态。
 
-部署成功后 helper 会在部署锁内清理受它管理的构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录、旧 release 包和旧升级备份。默认保留当前 release、一个上一版本 release、当前升级备份和一个较旧备份，便于快速回滚。它不会清理 `/zos/state`、`/zos/config`、Photo 数据、数据库或服务日志。
+部署成功后 helper 会在部署锁内清理受它管理的临时构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录以及旧 release 包。默认保留当前 release 和一个上一版本 release；`/zos/deploy/backups/` 中的升级备份与失败诊断不会自动删除，保留期限和清理动作必须由运维显式决定。它不会清理 `/zos/state`、`/zos/config`、Photo 数据、数据库或服务日志。
 
 部署程序不自动回滚 Debian 包或数据库 migration。schema 变化后的回滚必须使用与旧包匹配的状态备份，不能只重新安装旧 `.deb`。
 

@@ -167,7 +167,7 @@ impl Db {
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(PhotostaffError::database)?;
         connection
-            .pragma_update(None, "busy_timeout", 5_000)
+            .pragma_update(None, "busy_timeout", 30_000)
             .map_err(PhotostaffError::database)?;
         connection
             .pragma_update(None, "synchronous", "FULL")

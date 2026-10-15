@@ -242,11 +242,21 @@ verify_runtime() {
       die "timer has no next trigger: $unit"
   done
 
+  wait_for_url http://127.0.0.1:3010/health || die "API liveness check failed"
+  wait_for_url http://127.0.0.1:3010/api/roots/readiness || die "root readiness check failed"
+  wait_for_url http://127.0.0.1:3010/api/system/health || die "system health endpoint failed"
+  wait_for_url http://127.0.0.1:3010/api/system/build-info || die "build-info endpoint failed"
+  wait_for_indexer_ready || die "indexer readiness check failed"
+  wait_for_health_operation_ready || die "health operation is not ready"
+
   runtime_before=$(runtime_fingerprint)
-  sleep 5
+  sleep 30
   for unit in zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-hostd.service zos-termux.service; do
     systemctl is-active --quiet "$unit" || die "service did not remain active: $unit"
   done
+  wait_for_url http://127.0.0.1:3010/health || die "API liveness check failed after stabilization"
+  wait_for_indexer_ready || die "indexer readiness check failed after stabilization"
+  wait_for_health_operation_ready || die "health operation is not ready after stabilization"
   runtime_after=$(runtime_fingerprint)
   if [ "$runtime_before" != "$runtime_after" ]; then
     printf 'runtime before stabilization:\n%s\nruntime after stabilization:\n%s\n' "$runtime_before" "$runtime_after" >&2
@@ -258,13 +268,6 @@ verify_runtime() {
     printf '%s\n' "$failed_units" >&2
     die "systemd has failed units"
   fi
-
-  wait_for_url http://127.0.0.1:3010/health || die "API liveness check failed"
-  wait_for_url http://127.0.0.1:3010/api/roots/readiness || die "root readiness check failed"
-  wait_for_url http://127.0.0.1:3010/api/system/health || die "system health endpoint failed"
-  wait_for_url http://127.0.0.1:3010/api/system/build-info || die "build-info endpoint failed"
-  wait_for_indexer_ready || die "indexer readiness check failed"
-  wait_for_health_operation_ready || die "health operation is not ready"
 }
 
 refresh_share_configuration() {
@@ -396,7 +399,6 @@ capture_failure() {
 cleanup_deployment_artifacts() {
   current_release_path="$RELEASE_DIR/$manifest_tag"
   retained_release_count=0
-  retained_backup_count=0
 
   log "cleaning obsolete deployment artifacts"
 
@@ -420,19 +422,8 @@ cleanup_deployment_artifacts() {
 $(find "$RELEASE_DIR" -mindepth 1 -maxdepth 1 -type d -name 'v[0-9]*' -printf '%T@ %p\n' 2>/dev/null | sort -nr)
 EOF
 
-  # Keep the current upgrade backup and one older backup. Older backups contain
-  # duplicate package copies and are no longer useful for routine rollback.
-  while IFS= read -r backup_entry; do
-    backup_path_candidate=${backup_entry#* }
-    [ "$backup_path_candidate" = "$backup_path" ] && continue
-    if [ "$retained_backup_count" -lt 1 ]; then
-      retained_backup_count=$((retained_backup_count + 1))
-      continue
-    fi
-    rm -rf -- "$backup_path_candidate" 2>/dev/null || log "warning: unable to remove $backup_path_candidate"
-  done <<EOF
-$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 2>/dev/null | sort -nr)
-EOF
+  # Deployment backups can contain state needed for migration rollback and
+  # failure diagnostics. Retention is an explicit operator action.
 
   # Failed runs can leave work directories beside the managed state. Never
   # traverse outside BASE_DIR and never touch /zos/state here.
@@ -527,6 +518,7 @@ if [ "$installed_status" = "install ok installed" ]; then
     done
     cp -a "$state_dir" "$failure_dir/systemd-state"
     log "version $manifest_version is already installed; recovering runtime and release state"
+    /usr/lib/zos/scripts/zos-migrate-sigmaos.sh apply
     activate_runtime "$state_dir"
     verify_runtime
     refresh_share_configuration

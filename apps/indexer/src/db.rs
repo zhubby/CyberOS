@@ -161,7 +161,7 @@ impl Db {
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(IndexerError::database)?;
         connection
-            .pragma_update(None, "busy_timeout", 5_000)
+            .pragma_update(None, "busy_timeout", 30_000)
             .map_err(IndexerError::database)?;
         connection
             .pragma_update(None, "synchronous", "FULL")
@@ -760,8 +760,7 @@ impl Db {
     ) -> DbResult<bool> {
         let root_id = root_id.to_owned();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(IndexerError::database)?;
-            let state = transaction.query_row(
+            let state = connection.query_row(
                 "SELECT status, legacy_cursor FROM index_content_state WHERE root_id = ?",
                 [&root_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
             ).optional().map_err(IndexerError::database)?;
@@ -769,11 +768,7 @@ impl Db {
             if matches!(status.as_str(), "rebuilding" | "ready") {
                 return Ok(false);
             }
-            transaction.execute(
-                "UPDATE index_content_state SET status = 'copying', updated_at = ? WHERE root_id = ?",
-                params![now_iso(), root_id],
-            ).map_err(IndexerError::database)?;
-            let mut statement = transaction.prepare(
+            let mut statement = connection.prepare(
                 "SELECT t.rowid, t.file_id, t.path, t.name, t.body FROM indexed_text t
                  JOIN indexed_files f ON f.id = t.file_id AND f.root_id = t.root_id
                  WHERE t.root_id = ? AND t.rowid > ? ORDER BY t.rowid LIMIT ?"
@@ -784,10 +779,20 @@ impl Db {
             ))).map_err(IndexerError::database)?
                 .collect::<Result<Vec<_>, _>>().map_err(IndexerError::database)?;
             drop(statement);
-            let mut last = cursor;
+            let rows = rows.into_iter().map(|(rowid, file_id, path, name, body)| {
+                let terms = normalized_terms(&body, text_limit);
+                (rowid, file_id, path, name, body, terms)
+            }).collect::<Vec<_>>();
+            let last = rows.last().map(|row| row.0).unwrap_or(cursor);
+            let complete = rows.len() < batch_size;
+
+            let transaction = connection.transaction().map_err(IndexerError::database)?;
+            transaction.execute(
+                "UPDATE index_content_state SET status = 'copying', updated_at = ? WHERE root_id = ?",
+                params![now_iso(), root_id],
+            ).map_err(IndexerError::database)?;
             let mut copied = 0_i64;
-            for (rowid, file_id, path, name, body) in &rows {
-                last = *rowid;
+            for (_, file_id, path, name, body, terms) in &rows {
                 let exists: bool = transaction.query_row(
                     "SELECT EXISTS(SELECT 1 FROM indexed_content_fts WHERE file_id = ?)",
                     [file_id], |row| row.get(0),
@@ -795,12 +800,11 @@ impl Db {
                 if !exists {
                     transaction.execute(
                         "INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms) VALUES (?, ?, ?, ?, ?, ?)",
-                        params![file_id, root_id, path, name, body, normalized_terms(body, text_limit)],
+                        params![file_id, root_id, path, name, body, terms],
                     ).map_err(IndexerError::database)?;
                     copied += 1;
                 }
             }
-            let complete = rows.len() < batch_size;
             transaction.execute(
                 "UPDATE index_content_state SET status = ?, legacy_cursor = ?, copied_count = copied_count + ?, updated_at = ? WHERE root_id = ?",
                 params![if complete { "rebuilding" } else { "copying" }, last, copied, now_iso(), root_id],
