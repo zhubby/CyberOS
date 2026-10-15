@@ -575,6 +575,8 @@ describe("native packaging artifacts", () => {
     expect(webdav).toContain("User=www-data");
     expect(webdav).toContain("-f /etc/apache2/sites-available/zos-webdav.conf");
     expect(webdav).toContain("RuntimeDirectory=zos-webdav");
+    expect(webdav).toContain("ReadWritePaths=/run/zos-webdav /zos/data");
+    expect(webdav).not.toContain("/run/zos/webdav");
   });
 
   it("ships an isolated Rust Termux daemon", async () => {

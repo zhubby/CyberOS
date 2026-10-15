@@ -375,8 +375,9 @@ mod tests {
         let webdav = fs::read_to_string(&options.paths.webdav_site)
             .await
             .unwrap();
-        assert!(webdav.contains("PidFile /run/zos/webdav/apache2.pid"));
-        assert!(webdav.contains("ErrorLog /run/zos/webdav/error.log"));
+        assert!(webdav.contains("PidFile /run/zos-webdav/apache2.pid"));
+        assert!(webdav.contains("ErrorLog /run/zos-webdav/error.log"));
+        assert!(webdav.contains("DavLockDB /run/zos-webdav/DavLock"));
         assert!(webdav.contains("LoadModule dav_fs_module"));
         let nfs = fs::read_to_string(&options.paths.nfs_exports)
             .await

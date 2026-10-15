@@ -17,7 +17,7 @@ RestartSec=3
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/run/zos/webdav /zos/data
+ReadWritePaths=/run/zos-webdav /zos/data
 PrivateTmp=yes
 CapabilityBoundingSet=
 
