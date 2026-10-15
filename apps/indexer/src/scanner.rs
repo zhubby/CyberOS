@@ -266,6 +266,10 @@ fn ignored_ancestor(path: &Path) -> Option<String> {
     None
 }
 
+pub(crate) fn is_ignored_path(path: &Path) -> bool {
+    ignored_ancestor(path).is_some()
+}
+
 async fn mount_identity(task: &QueueTask) -> Result<Option<MountIdentity>, IndexerError> {
     probe_mount_identity(
         Path::new(&task.root_path),
@@ -438,6 +442,8 @@ mod tests {
             Some("docs/.git".to_owned())
         );
         assert_eq!(ignored_ancestor(Path::new("docs/file.txt")), None);
+        assert!(is_ignored_path(Path::new("docs/.zos/state.tar")));
+        assert!(!is_ignored_path(Path::new("docs/file.txt")));
     }
 
     #[test]
