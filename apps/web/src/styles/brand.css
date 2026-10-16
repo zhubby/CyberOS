@@ -93,8 +93,10 @@ textarea {
   height: 38px;
 }
 
-.brand:hover .agent-brand-logo {
-  transform: rotate(-2deg) translateY(-1px);
+.brand:hover .agent-brand-logo,
+.brand:hover .brand-banner-mark,
+.settings-rail-brand:hover .brand-banner-mark {
+  transform: none;
 }
 
 :root[data-theme="dark"] :where(.agent-brand-logo, .settings-brand-logo, .brand-banner-mark) {
