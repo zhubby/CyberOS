@@ -190,6 +190,7 @@ export function SettingsModal({
   const { t } = useTranslation();
   const [settingsSearch, setSettingsSearch] = useState("");
   const dialogRef = useRef<HTMLElement | null>(null);
+  const activeSectionButtonRef = useRef<HTMLButtonElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const currentSection = SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0]!;
@@ -230,6 +231,19 @@ export function SettingsModal({
       }
     };
   }, []);
+
+  useEffect(() => {
+    const revealActiveSection = () => {
+      activeSectionButtonRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    const frame = window.requestAnimationFrame(revealActiveSection);
+    window.addEventListener("resize", revealActiveSection);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", revealActiveSection);
+    };
+  }, [activeSection, normalizedSearch]);
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape" && !event.defaultPrevented) {
@@ -295,6 +309,7 @@ export function SettingsModal({
                 <h3>{settingsGroupLabel(group, t)}</h3>
                 {visibleSections.filter((section) => section.group === group).map((section) => (
                   <button
+                    ref={section.id === activeSection ? activeSectionButtonRef : undefined}
                     key={section.id}
                     type="button"
                     className={section.id === activeSection ? "is-active" : ""}
