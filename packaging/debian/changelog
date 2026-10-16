@@ -1,3 +1,9 @@
+zos (1.1.0) unstable; urgency=medium
+
+  * Refresh the ZOS visual identity and add backup-free CM5 deployment.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 16 Oct 2026 06:18:23 +0000
+
 zos (1.0.18) unstable; urgency=medium
 
   * Preserve legacy migration recovery state and move deployment archives to mapped storage before retrying constrained hosts.
