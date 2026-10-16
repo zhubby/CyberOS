@@ -112,6 +112,11 @@
       .zos-boot-brand img {
         width: 38px;
         height: 38px;
+        filter: none;
+      }
+
+      :root[data-theme="dark"] .zos-boot-brand img {
+        filter: invert(1);
       }
 
       .zos-boot-copy {

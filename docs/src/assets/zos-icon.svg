@@ -2,7 +2,7 @@
   <path
     d="M44 19H18c-7 0-7 11 0 11l15-11h11c8 0 9 9 3 14L22 50h22c8 0 8-10 0-10l-9 10"
     fill="none"
-    stroke="#d97757"
+    stroke="#000000"
     stroke-linecap="round"
     stroke-linejoin="round"
     stroke-width="3.8"
@@ -10,7 +10,7 @@
   <path
     d="M46 8 24 57"
     fill="none"
-    stroke="#d97757"
+    stroke="#000000"
     stroke-linecap="round"
     stroke-linejoin="round"
     stroke-width="3.8"

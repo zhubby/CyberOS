@@ -1,6 +1,6 @@
 # Code Review Results
 
-- Scope: `origin/main` to staged working tree, 25 files.
+- Scope: `origin/main` to the complete v1.1.0 working tree, including the final monochrome mark update.
 - Intent: refresh the ZOS visual identity and theme, and deploy v1.1.0 to CM5 without creating upgrade backups.
 - Mode: autofix, executed sequentially because repository instructions prohibit subagents.
 - Reviewers: correctness, testing, maintainability, project standards, agent-native, learnings, adversarial, TypeScript.
@@ -22,6 +22,7 @@ No residual P0-P3 findings after confidence gating and fixes.
 - `sh -n packaging/scripts/zos-deploy`
 - Focused packaging Vitest
 - Headless browser checks at 1440px, 390px, and 320px in light and dark themes
+- Final Web and documentation production builds plus light/dark visual checks for the monochrome mark
 
 ## Residual Risks
 

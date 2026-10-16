@@ -82,15 +82,23 @@ textarea {
 }
 
 .agent-brand-logo,
-.settings-brand-logo {
-  width: 38px;
-  height: 38px;
+.settings-brand-logo,
+.brand-banner-mark {
   filter: none;
 }
 
+.agent-brand-logo,
+.settings-brand-logo {
+  width: 38px;
+  height: 38px;
+}
+
 .brand:hover .agent-brand-logo {
-  filter: none;
   transform: rotate(-2deg) translateY(-1px);
+}
+
+:root[data-theme="dark"] :where(.agent-brand-logo, .settings-brand-logo, .brand-banner-mark) {
+  filter: invert(1);
 }
 
 .brand-banner {

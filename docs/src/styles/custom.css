@@ -94,6 +94,11 @@ h1 {
 .site-title img {
   width: 2rem;
   height: 2rem;
+  filter: invert(1);
+}
+
+:root[data-theme="light"] .site-title img {
+  filter: none;
 }
 
 .header {
