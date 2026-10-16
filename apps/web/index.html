@@ -8,54 +8,56 @@
     <script>
       (() => {
         const root = document.documentElement;
-        let theme = "dark";
+        let theme = "light";
+        let themePreference = "light";
         let language = navigator.language?.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
         try {
           const storedTheme = localStorage.getItem("zos:theme");
           const storedLanguage = localStorage.getItem("zos:language");
-          theme = storedTheme === "light" || storedTheme === "dark"
+          themePreference = storedTheme === "light" || storedTheme === "dark" || storedTheme === "system"
             ? storedTheme
-            : window.matchMedia?.("(prefers-color-scheme: light)").matches
-              ? "light"
-              : "dark";
+            : "light";
+          theme = themePreference === "system"
+            ? window.matchMedia?.("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+            : themePreference;
           language = storedLanguage === "zh-CN"
             ? "zh-CN"
             : storedLanguage === "en"
               ? "en"
               : language;
         } catch {
-          theme = window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          theme = "light";
+          themePreference = "light";
         }
         root.dataset.theme = theme;
-        root.dataset.themePreference = "system";
+        root.dataset.themePreference = themePreference;
         root.lang = language;
       })();
     </script>
     <style>
-      :root {
-        --boot-bg: #0f1015;
-        --boot-panel: rgb(30 32 41 / 88%);
-        --boot-panel-soft: rgb(255 255 255 / 4%);
-        --boot-line: rgb(255 255 255 / 10%);
-        --boot-text: #f2f3f5;
-        --boot-muted: #b5bac1;
-        --boot-muted-2: #858b98;
-        --boot-accent: #8ea1ff;
-        --boot-accent-strong: #5865f2;
-        --boot-teal: #21d6c2;
+      :root,
+      :root[data-theme="light"] {
+        --boot-bg: #faf9f5;
+        --boot-panel: #fffdfa;
+        --boot-line: #d1cfc5;
+        --boot-text: #141413;
+        --boot-muted: #5e5d59;
+        --boot-muted-2: #6b6964;
+        --boot-accent: #d97757;
+        --boot-danger: #953f3f;
       }
 
-      :root[data-theme="light"] {
-        --boot-bg: #eef2f7;
-        --boot-panel: rgb(255 255 255 / 92%);
-        --boot-panel-soft: rgb(15 23 42 / 4%);
-        --boot-line: rgb(24 34 50 / 12%);
-        --boot-text: #182232;
-        --boot-muted: #526174;
-        --boot-muted-2: #748095;
-        --boot-accent: #4353d8;
-        --boot-accent-strong: #3342b9;
-        --boot-teal: #08766b;
+      :root[data-theme="dark"] {
+        --boot-bg: #1c1b19;
+        --boot-panel: #292723;
+        --boot-line: #4a463f;
+        --boot-text: #f4f1e8;
+        --boot-muted: #c2bcb1;
+        --boot-muted-2: #aaa49a;
+        --boot-accent: #e58a6c;
+        --boot-danger: #eca0a0;
       }
 
       html,
@@ -76,34 +78,10 @@
         z-index: 9999;
         display: grid;
         place-items: center;
-        overflow: hidden;
         color: var(--boot-text);
-        background:
-          linear-gradient(90deg, transparent 49.9%, var(--boot-panel-soft) 50%, transparent 50.1%),
-          linear-gradient(0deg, transparent 49.9%, var(--boot-panel-soft) 50%, transparent 50.1%),
-          var(--boot-bg);
-        background-size: 72px 72px;
+        background: var(--boot-bg);
         opacity: 1;
-        transition: opacity 380ms cubic-bezier(.2, .72, .2, 1), visibility 380ms linear;
-      }
-
-      #zos-boot::before,
-      #zos-boot::after {
-        position: absolute;
-        left: 50%;
-        width: min(720px, 76vw);
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--boot-line), transparent);
-        content: "";
-        transform: translateX(-50%);
-      }
-
-      #zos-boot::before {
-        top: 22%;
-      }
-
-      #zos-boot::after {
-        bottom: 22%;
+        transition: opacity 260ms cubic-bezier(.2, .72, .2, 1), visibility 260ms linear;
       }
 
       #zos-boot.is-exiting {
@@ -113,130 +91,70 @@
       }
 
       .zos-boot-shell {
-        position: relative;
         display: grid;
         justify-items: center;
-        width: min(400px, calc(100vw - 40px));
+        width: min(340px, calc(100vw - 40px));
         box-sizing: border-box;
-        padding: 34px 34px 27px;
-        border: 1px solid var(--boot-line);
-        border-radius: 8px;
-        background: var(--boot-panel);
-        box-shadow: 0 24px 80px rgb(0 0 0 / 22%), inset 0 1px 0 var(--boot-panel-soft);
+        padding: 28px;
         text-align: center;
-        animation: zos-boot-arrive 520ms cubic-bezier(.2, .72, .2, 1) both;
+        animation: zos-boot-arrive 320ms cubic-bezier(.2, .72, .2, 1) both;
       }
 
       .zos-boot-brand {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
+        gap: 9px;
         color: var(--boot-text);
-        font: 600 18px/1 "Iowan Old Style", "Baskerville", "Palatino Linotype", "Book Antiqua", Georgia, serif;
-        letter-spacing: .035em;
+        font: 600 24px/1 Newsreader, Georgia, serif;
+        letter-spacing: 0;
       }
 
       .zos-boot-brand img {
-        width: 34px;
-        height: 34px;
-        border-radius: 9px;
-        box-shadow: 0 0 0 1px var(--boot-line), 0 0 24px rgb(88 101 242 / 24%);
-      }
-
-      .zos-boot-orbit {
-        position: relative;
-        display: grid;
-        place-items: center;
-        width: 118px;
-        height: 118px;
-        margin: 28px 0 22px;
-        border: 1px solid var(--boot-line);
-        border-radius: 50%;
-      }
-
-      .zos-boot-orbit::before,
-      .zos-boot-orbit::after {
-        position: absolute;
-        border-radius: 50%;
-        content: "";
-      }
-
-      .zos-boot-orbit::before {
-        inset: 10px;
-        border: 2px solid var(--boot-panel-soft);
-        border-top-color: var(--boot-accent-strong);
-        border-right-color: var(--boot-teal);
-        animation: zos-boot-spin 1.5s linear infinite;
-      }
-
-      .zos-boot-orbit::after {
-        inset: 23px;
-        border: 1px dashed var(--boot-line);
-        animation: zos-boot-spin 4.5s linear infinite reverse;
-      }
-
-      .zos-boot-orbit img {
-        position: relative;
-        z-index: 1;
-        width: 52px;
-        height: 52px;
-        border-radius: 13px;
+        width: 38px;
+        height: 38px;
       }
 
       .zos-boot-copy {
         display: grid;
-        gap: 7px;
+        gap: 6px;
+        margin-top: 30px;
       }
 
       .zos-boot-copy strong {
         color: var(--boot-text);
-        font-size: 14px;
-        letter-spacing: .01em;
+        font: 500 22px/1.2 Newsreader, Georgia, serif;
+        letter-spacing: 0;
       }
 
       .zos-boot-copy span {
         color: var(--boot-muted);
-        font-size: 11.5px;
+        font: 400 12px/1.5 Inter, system-ui, sans-serif;
       }
 
       .zos-boot-progress {
-        width: 100%;
-        height: 4px;
-        margin-top: 26px;
+        width: 96px;
+        height: 2px;
+        margin-top: 24px;
         overflow: hidden;
-        border-radius: 999px;
-        background: var(--boot-panel-soft);
+        background: color-mix(in srgb, var(--boot-line) 70%, transparent);
       }
 
       .zos-boot-progress span {
         display: block;
-        width: 34%;
+        width: 42%;
         height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, var(--boot-teal), var(--boot-accent-strong));
-        animation: zos-boot-progress 1.7s ease-in-out infinite;
+        background: var(--boot-accent);
+        animation: zos-boot-progress 1.35s ease-in-out infinite;
       }
 
       .zos-boot-footer {
-        display: flex;
-        justify-content: space-between;
-        width: 100%;
-        margin-top: 18px;
+        margin-top: 16px;
         color: var(--boot-muted-2);
-        font-size: 9px;
-        font-weight: 800;
-        letter-spacing: .12em;
-        text-transform: uppercase;
+        font: 500 10px/1.4 Inter, system-ui, sans-serif;
       }
 
-      .zos-boot-footer span:last-child {
-        color: var(--boot-accent);
-      }
-
-      #zos-boot[data-state="error"] .zos-boot-orbit::before {
-        border-top-color: #da373c;
-        border-right-color: #ffb3b6;
-        animation: none;
+      #zos-boot[data-state="error"] .zos-boot-brand {
+        color: var(--boot-danger);
       }
 
       #zos-boot[data-state="error"] .zos-boot-progress {
@@ -245,22 +163,20 @@
 
       .zos-boot-retry {
         display: none;
-        min-height: 32px;
+        min-height: 38px;
         margin-top: 22px;
-        padding: 0 13px;
-        border: 1px solid var(--boot-line);
-        border-radius: 5px;
-        color: var(--boot-text);
-        background: var(--boot-panel-soft);
+        padding: 0 16px;
+        border: 1px solid var(--boot-text);
+        border-radius: 7px;
+        color: var(--boot-bg);
+        background: var(--boot-text);
         cursor: pointer;
-        font: inherit;
-        font-size: 11px;
-        font-weight: 800;
+        font: 600 12px/1 Inter, system-ui, sans-serif;
       }
 
       .zos-boot-retry:hover {
         border-color: var(--boot-accent);
-        background: var(--boot-panel);
+        background: var(--boot-accent);
       }
 
       #zos-boot[data-state="error"] .zos-boot-retry {
@@ -269,35 +185,18 @@
       }
 
       @keyframes zos-boot-arrive {
-        from { opacity: 0; transform: translateY(10px) scale(.985); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
-      }
-
-      @keyframes zos-boot-spin {
-        to { transform: rotate(360deg); }
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
       }
 
       @keyframes zos-boot-progress {
-        0% { transform: translateX(-125%); }
-        55%, 100% { transform: translateX(320%); }
-      }
-
-      @media (max-width: 520px) {
-        #zos-boot::before,
-        #zos-boot::after {
-          width: 88vw;
-        }
-
-        .zos-boot-shell {
-          padding: 29px 24px 23px;
-        }
+        0% { transform: translateX(-120%); }
+        60%, 100% { transform: translateX(245%); }
       }
 
       @media (prefers-reduced-motion: reduce) {
         #zos-boot,
         .zos-boot-shell,
-        .zos-boot-orbit::before,
-        .zos-boot-orbit::after,
         .zos-boot-progress span {
           animation: none;
           transition: none;
@@ -310,11 +209,8 @@
     <div id="zos-boot" role="status" aria-live="polite" aria-busy="true">
       <div class="zos-boot-shell">
         <div class="zos-boot-brand">
-          <img src="/zos-icon.svg" alt="" width="34" height="34" />
+          <img src="/zos-icon.svg" alt="" width="38" height="38" />
           <span>ZOS</span>
-        </div>
-        <div class="zos-boot-orbit" aria-hidden="true">
-          <img src="/zos-icon.svg" alt="" width="52" height="52" />
         </div>
         <div class="zos-boot-copy">
           <strong data-boot-title>Preparing workspace</strong>
@@ -323,7 +219,6 @@
         <div class="zos-boot-progress" aria-hidden="true"><span></span></div>
         <div class="zos-boot-footer">
           <span data-boot-system>Local system</span>
-          <span>...</span>
         </div>
         <button class="zos-boot-retry" type="button" data-boot-retry>Reload</button>
       </div>

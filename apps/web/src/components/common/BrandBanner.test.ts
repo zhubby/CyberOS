@@ -4,14 +4,14 @@ import { describe, expect, it } from "vitest";
 import { BrandBanner } from "./BrandBanner.js";
 
 describe("BrandBanner", () => {
-  it("renders theme-specific artwork with one accessible name", () => {
+  it("renders the shared mark and text wordmark with one accessible name", () => {
     const html = renderToStaticMarkup(createElement(BrandBanner, { alt: "ZOS" }));
 
     expect(html).toContain('role="img"');
     expect(html).toContain('aria-label="ZOS"');
-    expect(html).toContain('src="/zos-banner.svg"');
-    expect(html).toContain('src="/zos-banner-light.svg"');
-    expect(html.match(/alt=""/g)).toHaveLength(2);
+    expect(html).toContain('src="/zos-icon.svg"');
+    expect(html).toContain("ZOS");
+    expect(html.match(/alt=""/g)).toHaveLength(1);
   });
 
   it("stays hidden from assistive technology when decorative", () => {

@@ -1,20 +1,3 @@
-:root[data-theme="light"] .brand-banner {
-  filter: drop-shadow(0 8px 18px rgb(67 83 216 / 12%));
-}
-
-:root[data-theme="light"] .brand-banner-art-dark {
-  opacity: 0;
-}
-
-:root[data-theme="light"] .brand-banner-art-light {
-  opacity: 1;
-}
-
-:root[data-theme="light"] .brand:hover .brand-banner,
-:root[data-theme="light"] .settings-rail-brand:hover .brand-banner {
-  filter: drop-shadow(0 9px 20px rgb(8 118 107 / 15%));
-}
-
 :root[data-theme="light"] .agent-list,
 :root[data-theme="light"] .settings-rail {
   border-right-color: var(--rail-border);
@@ -214,7 +197,7 @@
 }
 
 :root[data-theme="light"] .file-action-button-send:hover:not(:disabled) {
-  color: white;
+  color: var(--accent-contrast);
   border-color: var(--accent);
   background: var(--accent);
 }

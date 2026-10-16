@@ -1,5 +1,6 @@
 export const THEME_STORAGE_KEY = "zos:theme";
 export const RESOLVED_THEMES = ["light", "dark"] as const;
+export const DEFAULT_THEME_PREFERENCE = "light" as const;
 
 export type ResolvedTheme = (typeof RESOLVED_THEMES)[number];
 export type ThemePreference = "system" | ResolvedTheme;
@@ -11,7 +12,7 @@ interface StorageLike {
 }
 
 export function normalizeThemePreference(value: string | null | undefined): ThemePreference {
-  return value === "light" || value === "dark" || value === "system" ? value : "system";
+  return value === "light" || value === "dark" || value === "system" ? value : DEFAULT_THEME_PREFERENCE;
 }
 
 export function resolveThemePreference(
@@ -25,7 +26,7 @@ export function readStoredThemePreference(storage = browserStorage()): ThemePref
   try {
     return normalizeThemePreference(storage?.getItem(THEME_STORAGE_KEY));
   } catch {
-    return "system";
+    return DEFAULT_THEME_PREFERENCE;
   }
 }
 
@@ -35,10 +36,6 @@ export function writeStoredThemePreference(preference: ThemePreference, storage 
   }
 
   try {
-    if (preference === "system") {
-      storage.removeItem(THEME_STORAGE_KEY);
-      return;
-    }
     storage.setItem(THEME_STORAGE_KEY, preference);
   } catch {
     // Theme switching still works for the current session when persistence is unavailable.
@@ -47,7 +44,7 @@ export function writeStoredThemePreference(preference: ThemePreference, storage 
 
 export function readSystemTheme(): ResolvedTheme {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return "dark";
+    return "light";
   }
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }

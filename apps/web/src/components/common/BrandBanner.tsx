@@ -12,8 +12,8 @@ export function BrandBanner({ alt = "" }: BrandBannerProps) {
       aria-label={decorative ? undefined : alt}
       aria-hidden={decorative || undefined}
     >
-      <img className="brand-banner-art brand-banner-art-dark" src="/zos-banner.svg" alt="" />
-      <img className="brand-banner-art brand-banner-art-light" src="/zos-banner-light.svg" alt="" />
+      <img className="brand-banner-mark" src="/zos-icon.svg" alt="" />
+      <span className="brand-banner-wordmark" aria-hidden="true">ZOS</span>
     </span>
   );
 }

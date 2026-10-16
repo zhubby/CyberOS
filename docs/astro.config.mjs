@@ -12,9 +12,10 @@ export default defineConfig({
     starlight({
       title: "ZOS",
       description: "ZOS Linux NAS appliance 的技术实现、架构与运维文档。",
+      customCss: ["./src/styles/custom.css"],
       logo: {
         src: "./src/assets/zos-icon.svg",
-        alt: "ZOS"
+        alt: ""
       },
       locales: {
         root: { label: "简体中文", lang: "zh-CN" }

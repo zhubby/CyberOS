@@ -8,12 +8,12 @@ import {
 } from "./theme-settings.js";
 
 describe("theme settings helpers", () => {
-  it("normalizes unsupported theme preferences to system", () => {
+  it("defaults unsupported and missing preferences to light", () => {
     expect(normalizeThemePreference("light")).toBe("light");
     expect(normalizeThemePreference("dark")).toBe("dark");
     expect(normalizeThemePreference("system")).toBe("system");
-    expect(normalizeThemePreference("sepia")).toBe("system");
-    expect(normalizeThemePreference(null)).toBe("system");
+    expect(normalizeThemePreference("sepia")).toBe("light");
+    expect(normalizeThemePreference(null)).toBe("light");
   });
 
   it("resolves explicit preferences before the system theme", () => {
@@ -23,7 +23,7 @@ describe("theme settings helpers", () => {
     expect(resolveThemePreference("dark", "light")).toBe("dark");
   });
 
-  it("removes the override for system default and persists explicit preferences", () => {
+  it("persists explicit and system preferences", () => {
     const storage = createMemoryStorage();
 
     writeStoredThemePreference("light", storage);
@@ -31,14 +31,14 @@ describe("theme settings helpers", () => {
     expect(readStoredThemePreference(storage)).toBe("light");
 
     writeStoredThemePreference("system", storage);
-    expect(storage.getItem(THEME_STORAGE_KEY)).toBeNull();
+    expect(storage.getItem(THEME_STORAGE_KEY)).toBe("system");
     expect(readStoredThemePreference(storage)).toBe("system");
   });
 
   it("falls back to system behavior when storage is unavailable", () => {
     const storage = createThrowingStorage();
 
-    expect(readStoredThemePreference(storage)).toBe("system");
+    expect(readStoredThemePreference(storage)).toBe("light");
     expect(() => writeStoredThemePreference("dark", storage)).not.toThrow();
     expect(() => writeStoredThemePreference("system", storage)).not.toThrow();
   });

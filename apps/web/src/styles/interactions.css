@@ -63,7 +63,7 @@ button:disabled {
 
 .primary-button:not(:disabled):not([aria-busy="true"]),
 .vm-create-submit:not(:disabled):not([aria-busy="true"]) {
-  color: white;
+  color: var(--accent-contrast);
   background: var(--accent);
 }
 
@@ -73,12 +73,13 @@ button:disabled {
 }
 
 .danger-button:not(:disabled):not([aria-busy="true"]) {
-  color: white;
+  color: var(--danger-contrast);
   background: var(--red);
 }
 
 .primary-button:hover:not(:disabled):not([aria-busy="true"]),
 .vm-create-submit:hover:not(:disabled):not([aria-busy="true"]) {
+  color: var(--accent-contrast);
   background: var(--accent-hover);
   box-shadow: var(--control-hover-shadow);
 }
