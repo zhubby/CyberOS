@@ -22,6 +22,8 @@ success=0
 work_dir=
 backup_path=
 failure_dir=
+state_dir=
+create_upgrade_backup=1
 
 log() {
   printf 'zos-deploy: %s\n' "$*"
@@ -411,7 +413,7 @@ capture_failure() {
     # dpkg may fail after the package has been unpacked. Restore the exact
     # service/timer state captured before the upgrade so a failed deployment
     # does not leave the appliance permanently stopped.
-    if [ -n "$backup_path" ] && [ -n "$state_dir" ] && [ -d "$state_dir" ]; then
+    if [ -n "$state_dir" ] && [ -d "$state_dir" ]; then
       systemctl daemon-reload >/dev/null 2>&1 || true
       for unit in $WRITERS $TIMERS; do
         restore_unit_state "$unit" "$state_dir" >/dev/null 2>&1 || true
@@ -483,9 +485,13 @@ case "${1:-}" in
   --migration-backup-check)
     exec /usr/lib/zos/scripts/zos-migrate-sigmaos.sh backup-check
     ;;
+  --no-upgrade-backup)
+    create_upgrade_backup=0
+    ;;
   '') ;;
-  *) die "usage: zos-deploy [--migration-status|--config-sha256|--database-check|--migration-backup-check]" ;;
+  *) die "usage: zos-deploy [--no-upgrade-backup|--migration-status|--config-sha256|--database-check|--migration-backup-check]" ;;
 esac
+[ "$#" -le 1 ] || die "usage: zos-deploy [--no-upgrade-backup|--migration-status|--config-sha256|--database-check|--migration-backup-check]"
 
 command -v node >/dev/null 2>&1 || die "Node.js is required"
 command -v apt-get >/dev/null 2>&1 || die "apt-get is required"
@@ -497,8 +503,13 @@ command -v systemctl >/dev/null 2>&1 || die "systemd is required"
 install -d -o root -g root -m 0700 /run/lock
 exec 9>"$LOCK_PATH"
 flock -n 9 || die "another ZOS deployment is already running"
-configure_backup_dir
-install -d -o root -g root -m 0700 "$BACKUP_DIR" "$RELEASE_DIR"
+if [ "$create_upgrade_backup" -eq 1 ]; then
+  configure_backup_dir
+  install -d -o root -g root -m 0700 "$BACKUP_DIR" "$RELEASE_DIR"
+else
+  log "upgrade backups disabled for this deployment"
+  install -d -o root -g root -m 0700 "$RELEASE_DIR"
+fi
 
 [ -d "$INCOMING_DIR" ] || die "incoming directory is missing: $INCOMING_DIR"
 [ -f "$INCOMING_DIR/package.deb" ] || die "package.deb is missing from incoming directory"
@@ -538,15 +549,23 @@ if [ "$installed_status" = "install ok installed" ]; then
   if [ "$manifest_version" = "$installed_version" ]; then
     installed_commit=$(build_commit /usr/lib/zos/build-info.json 2>/dev/null || true)
     [ "$installed_commit" = "$(printf '%s' "$manifest_commit_sha" | tr '[:upper:]' '[:lower:]')" ] || die "same package version has a different commit"
-    retry_timestamp=$(date -u +%Y%m%dT%H%M%SZ)
-    failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"
-    backup_path=$failure_dir
     state_dir="$work_dir/systemd-state"
-    install -d -o root -g root -m 0700 "$failure_dir" "$state_dir"
+    if [ "$create_upgrade_backup" -eq 1 ]; then
+      retry_timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+      failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"
+      backup_path=$failure_dir
+      install -d -o root -g root -m 0700 "$failure_dir"
+    else
+      failure_dir="$work_dir/failure-diagnostics"
+      install -d -o root -g root -m 0700 "$failure_dir"
+    fi
+    install -d -o root -g root -m 0700 "$state_dir"
     for unit in $TIMERS $WRITERS; do
       record_unit_state "$unit" "$state_dir"
     done
-    cp -a "$state_dir" "$failure_dir/systemd-state"
+    if [ "$create_upgrade_backup" -eq 1 ]; then
+      cp -a "$state_dir" "$failure_dir/systemd-state"
+    fi
     log "version $manifest_version is already installed; recovering runtime and release state"
     /usr/lib/zos/scripts/zos-migrate-sigmaos.sh apply
     activate_runtime "$state_dir"
@@ -564,18 +583,27 @@ if [ "$installed_status" = "install ok installed" ]; then
   fi
 fi
 
-timestamp=$(date -u +%Y%m%dT%H%M%SZ)
-backup_path="$BACKUP_DIR/${manifest_tag}-${timestamp}"
-failure_dir=$backup_path
 state_dir="$work_dir/systemd-state"
-install -d -o root -g root -m 0700 "$backup_path" "$state_dir"
+install -d -o root -g root -m 0700 "$state_dir"
+
+if [ "$create_upgrade_backup" -eq 1 ]; then
+  timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+  backup_path="$BACKUP_DIR/${manifest_tag}-${timestamp}"
+  failure_dir=$backup_path
+  install -d -o root -g root -m 0700 "$backup_path"
+else
+  failure_dir="$work_dir/failure-diagnostics"
+  install -d -o root -g root -m 0700 "$failure_dir"
+fi
 
 for unit in $TIMERS $WRITERS; do
   record_unit_state "$unit" "$state_dir"
 done
-cp -a "$state_dir" "$backup_path/systemd-state"
+if [ "$create_upgrade_backup" -eq 1 ]; then
+  cp -a "$state_dir" "$backup_path/systemd-state"
+fi
 
-if [ -f "$STATE_PATH" ]; then
+if [ "$create_upgrade_backup" -eq 1 ] && [ -f "$STATE_PATH" ]; then
   previous_package=$(node --input-type=module - "$STATE_PATH" <<'NODE'
 import fs from "node:fs";
 
@@ -599,8 +627,10 @@ for unit in $TIMERS $WRITERS; do
   stop_unit "$unit"
 done
 
-tar -C /zos -czf "$backup_path/config.tgz" config
-tar -C /zos -czf "$backup_path/state.tgz" state home
+if [ "$create_upgrade_backup" -eq 1 ]; then
+  tar -C /zos -czf "$backup_path/config.tgz" config
+  tar -C /zos -czf "$backup_path/state.tgz" state home
+fi
 
 log "installing $manifest_tag"
 DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-remove \

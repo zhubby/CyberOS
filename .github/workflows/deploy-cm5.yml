@@ -655,7 +655,7 @@ jobs:
 
           stage_release /zos/deploy/incoming "$release_dir/release-manifest.json" zos
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
-            "printf 'N\\n' | sudo -n /usr/local/sbin/zos-deploy"
+            "printf 'N\\n' | sudo -n /usr/local/sbin/zos-deploy --no-upgrade-backup"
 
       - name: Verify CM5 services and build metadata
         timeout-minutes: 20

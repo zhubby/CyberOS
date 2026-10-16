@@ -458,7 +458,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('mv -f "$partial_package" "$incoming_dir/package.deb"');
     expect(deployWorkflow).toContain("ServerAliveInterval=15");
     expect(deployWorkflow).not.toContain("--continue-at -");
-    expect(deployWorkflow).toContain("printf 'N\\\\n' | sudo -n /usr/local/sbin/zos-deploy");
+    expect(deployWorkflow).toContain(
+      "printf 'N\\\\n' | sudo -n /usr/local/sbin/zos-deploy --no-upgrade-backup"
+    );
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-config.sha256"');
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-migration-status"');
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-staging-channel"');
@@ -714,6 +716,9 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("--config-sha256");
     expect(deploy).toContain("--database-check");
     expect(deploy).toContain("--migration-backup-check");
+    expect(deploy).toContain("--no-upgrade-backup)");
+    expect(deploy).toContain('log "upgrade backups disabled for this deployment"');
+    expect(deploy).toContain('if [ "$create_upgrade_backup" -eq 1 ]; then');
     expect(deploy).toContain("configure_backup_dir");
     expect(deploy).toContain("using mounted storage for deployment backups");
     expect(deploy).toContain("zos-migration-recovery.mjs");
