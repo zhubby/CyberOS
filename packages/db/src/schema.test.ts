@@ -18,6 +18,7 @@ import {
   getDockerOperation,
   getJob,
   getVmOperation,
+  listTranscriptItems,
   listOperationNotifications,
   migrations,
   openZosDb,
@@ -93,8 +94,84 @@ describe("SQLite schema migrations", () => {
       "023_photostaff_reliability",
       "024_rust_indexer",
       "025_ops_runs",
-      "026_file_batches"
+      "026_file_batches",
+      "027_agent_transcript_sequence"
     ]);
+  });
+
+  it("backfills a deterministic transcript sequence from legacy timestamps", () => {
+    const databasePath = path.join(tempDir, "legacy-transcript.sqlite");
+    const initial = openZosDb(databasePath);
+    const transcriptMigration = migrations.at(-1);
+    expect(transcriptMigration?.id).toBe("027_agent_transcript_sequence");
+    try {
+      ensureNasRoots(initial, [{ id: "local", name: "Local", path: tempDir }]);
+      initial.exec("DROP TABLE agent_transcript_items");
+      initial.prepare("DELETE FROM schema_migrations WHERE id = ?").run(transcriptMigration?.id);
+      initial.prepare(`
+        INSERT INTO agent_sessions (id, root_id, current_path, created_at, updated_at)
+        VALUES ('session-1', 'local', '.', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+      `).run();
+      const insertMessage = initial.prepare(`
+        INSERT INTO agent_messages (id, session_id, role, content, created_at)
+        VALUES (?, 'session-1', ?, ?, ?)
+      `);
+      insertMessage.run("message-offset", "user", "offset", "2026-01-01T08:00:00+08:00");
+      insertMessage.run("message-late", "user", "late", "2026-01-01T00:30:00.000Z");
+      insertMessage.run("message-tie", "user", "tie", "2026-01-01T09:00:00+08:00");
+      insertMessage.run("message-system", "system", "hidden", "2026-01-01T00:45:00.000Z");
+      const insertJob = initial.prepare(`
+        INSERT INTO jobs (id, session_id, message_id, kind, status, created_at, updated_at)
+        VALUES (?, 'session-1', ?, 'agent', 'completed', ?, ?)
+      `);
+      insertJob.run("job-chat", "message-tie", "2026-01-01T01:00:00.000Z", "2026-01-01T01:00:00.000Z");
+      insertJob.run("job-system", "message-system", "2026-01-01T00:45:00.000Z", "2026-01-01T00:45:00.000Z");
+      const insertEvent = initial.prepare(`
+        INSERT INTO agent_events (id, session_id, job_id, type, payload_json, created_at)
+        VALUES (?, 'session-1', ?, ?, ?, ?)
+      `);
+      insertEvent.run(10, "job-chat", "agent.message", '{"content":"event ten"}', "2026-01-01T01:00:00.000Z");
+      insertEvent.run(2, "job-chat", "job.failed", '{"error":"event two"}', "2026-01-01T01:00:00.000Z");
+      insertEvent.run(11, "job-chat", "agent.completed", '{}', "2026-01-01T00:15:00.000Z");
+      insertEvent.run(12, "job-system", "job.failed", '{"error":"hidden"}', "2026-01-01T00:45:00.000Z");
+    } finally {
+      initial.close();
+    }
+
+    const migrated = openZosDb(databasePath);
+    try {
+      expect(listTranscriptItems(migrated, { sessionId: "session-1" }).map((item) => ({
+        sequence: item.sequence,
+        source: item.message?.id ?? item.event?.id
+      }))).toEqual([
+        { sequence: 1, source: "message-offset" },
+        { sequence: 2, source: "message-late" },
+        { sequence: 3, source: "message-tie" },
+        { sequence: 4, source: 2 },
+        { sequence: 5, source: 10 }
+      ]);
+      expect(migrated.pragma("foreign_key_check")).toEqual([]);
+      migrated.prepare(`
+        INSERT INTO agent_sessions (id, root_id, current_path, created_at, updated_at)
+        VALUES ('session-2', 'local', '.', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+      `).run();
+      expect(() => migrated.prepare(`
+        UPDATE agent_transcript_items
+        SET session_id = 'session-2'
+        WHERE message_id = 'message-offset'
+      `).run()).toThrow("transcript source/session mismatch");
+    } finally {
+      migrated.close();
+    }
+
+    const reopened = openZosDb(databasePath);
+    try {
+      expect(listTranscriptItems(reopened, { sessionId: "session-1" })).toHaveLength(5);
+      reopened.prepare("DELETE FROM agent_sessions WHERE id = ?").run("session-1");
+      expect(reopened.prepare("SELECT COUNT(*) FROM agent_transcript_items").pluck().get()).toBe(0);
+    } finally {
+      reopened.close();
+    }
   });
 
   it("installs operations runner history and lifecycle indexes", () => {
@@ -718,6 +795,14 @@ describe("SQLite schema migrations", () => {
         error TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      );
+      CREATE TABLE agent_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+        job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+        type TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
       );
       CREATE TABLE pending_approvals (
         id TEXT PRIMARY KEY,

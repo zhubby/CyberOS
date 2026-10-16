@@ -74,6 +74,7 @@ export type DbEventRow = {
   payload_json: string;
   created_at: string;
   message_role?: AgentMessageRecord["role"] | null;
+  transcript_sequence?: number | null;
 };
 
 export type DbOperationNotificationRow = {

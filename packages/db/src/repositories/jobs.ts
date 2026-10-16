@@ -20,7 +20,7 @@ import {
 export function createUserMessageAndJob(
   db: ZosDatabase,
   input: { sessionId: string; content: string; status?: JobStatus }
-): { message: AgentMessageRecord; job: JobRecord } {
+): { message: AgentMessageRecord; job: JobRecord; transcriptSequence: number } {
   const now = new Date().toISOString();
   const message: AgentMessageRecord = {
     id: randomUUID(),
@@ -49,11 +49,16 @@ export function createUserMessageAndJob(
       INSERT INTO jobs (id, session_id, message_id, kind, status, error, created_at, updated_at)
       VALUES (@id, @sessionId, @messageId, @kind, @status, @error, @createdAt, @updatedAt)
     `).run(job);
+    const transcriptResult = db.prepare(`
+      INSERT INTO agent_transcript_items (session_id, message_id)
+      VALUES (?, ?)
+    `).run(input.sessionId, message.id);
     db.prepare("UPDATE agent_sessions SET updated_at = ? WHERE id = ?").run(now, input.sessionId);
+    return Number(transcriptResult.lastInsertRowid);
   });
 
-  tx();
-  return { message, job };
+  const transcriptSequence = tx();
+  return { message, job, transcriptSequence };
 }
 
 export function createActionMessageAndJob(
@@ -207,19 +212,35 @@ export function appendEvent<TPayload>(
   }
 ): AgentEventRecord<TPayload> {
   const createdAt = new Date().toISOString();
-  const result = db
-    .prepare(`
-      INSERT INTO agent_events (session_id, job_id, type, payload_json, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `)
-    .run(input.sessionId, input.jobId ?? null, input.type, JSON.stringify(input.payload), createdAt);
+  const jobId = input.jobId ?? null;
+  const audience = eventAudience(db, jobId);
+  const tx = db.transaction(() => {
+    const result = db
+      .prepare(`
+        INSERT INTO agent_events (session_id, job_id, type, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(input.sessionId, jobId, input.type, JSON.stringify(input.payload), createdAt);
+    const eventId = Number(result.lastInsertRowid);
+    let transcriptSequence: number | null = null;
+    if (audience === "chat" && (input.type === "agent.message" || input.type === "job.failed")) {
+      const transcriptResult = db.prepare(`
+        INSERT INTO agent_transcript_items (session_id, event_id)
+        VALUES (?, ?)
+      `).run(input.sessionId, eventId);
+      transcriptSequence = Number(transcriptResult.lastInsertRowid);
+    }
+    return { eventId, transcriptSequence };
+  });
+  const result = tx();
 
   return {
-    id: Number(result.lastInsertRowid),
+    id: result.eventId,
     sessionId: input.sessionId,
-    jobId: input.jobId ?? null,
+    jobId,
     type: input.type,
-    audience: eventAudience(db, input.jobId ?? null),
+    audience,
+    transcriptSequence: result.transcriptSequence,
     payload: input.payload,
     createdAt
   };
@@ -238,10 +259,12 @@ export function listEvents(
         agent_events.type,
         agent_events.payload_json,
         agent_events.created_at,
-        agent_messages.role AS message_role
+        agent_messages.role AS message_role,
+        agent_transcript_items.sequence AS transcript_sequence
       FROM agent_events
       LEFT JOIN jobs ON jobs.id = agent_events.job_id
       LEFT JOIN agent_messages ON agent_messages.id = jobs.message_id
+      LEFT JOIN agent_transcript_items ON agent_transcript_items.event_id = agent_events.id
       WHERE agent_events.session_id = ? AND agent_events.id > ?
       ORDER BY agent_events.id ASC
       LIMIT ?

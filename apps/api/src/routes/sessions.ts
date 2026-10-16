@@ -11,6 +11,7 @@ import {
   listMessages,
   listNasRoots,
   listSessions,
+  listTranscriptItems,
   updateSessionPath
 } from "@zos/db";
 import { resolveSafeExistingPath } from "@zos/nas-tools";
@@ -122,38 +123,34 @@ export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteC
       return;
     }
 
-    const userMessages = listMessages(db, {
+    const transcript = listTranscriptItems(db, {
       sessionId: session.id,
       limit: 500
     })
-      .filter((message) => message.role === "user")
-      .map((message) => ({
-      id: `message:${message.id}`,
-      role: message.role,
-      content: message.content,
-      createdAt: message.createdAt
-      }));
-
-    const agentMessages = listEvents(db, {
-      sessionId: session.id,
-      limit: 500
-    })
-      .filter((event) =>
-        event.audience === "chat"
-        && (event.type === "agent.message" || event.type === "job.failed")
-        && typeof event.payload === "object"
-      )
-      .map((event) => ({
-        id: `event:${event.id}`,
-        role: event.type === "job.failed" ? "assistant" : getAgentMessageRole(event.payload),
-        content: event.type === "job.failed" ? getFailedJobMessageContent(event.payload) : getAgentMessageContent(event.payload),
-        createdAt: event.createdAt
-      }))
-      .filter((message) => message.content);
-
-    const transcript = [...userMessages, ...agentMessages]
-      .filter((message) => message.role === "user" || message.role === "assistant")
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+      .map((item) => {
+        if (item.message?.role === "user") {
+          return {
+            id: `message:${item.message.id}`,
+            role: item.message.role,
+            content: item.message.content,
+            createdAt: item.message.createdAt,
+            sequence: item.sequence
+          };
+        }
+        if (item.event) {
+          return {
+            id: `event:${item.event.id}`,
+            role: item.event.type === "job.failed" ? "assistant" : getAgentMessageRole(item.event.payload),
+            content: item.event.type === "job.failed"
+              ? getFailedJobMessageContent(item.event.payload)
+              : getAgentMessageContent(item.event.payload),
+            createdAt: item.event.createdAt,
+            sequence: item.sequence
+          };
+        }
+        return null;
+      })
+      .filter((message) => message !== null && message.content);
 
     reply.send({ session, transcript });
   });
@@ -178,7 +175,17 @@ export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteC
       sessionId: session.id,
       content
     });
-    reply.status(202).send(result);
+    reply.status(202).send({
+      message: result.message,
+      job: result.job,
+      transcriptMessage: {
+        id: `message:${result.message.id}`,
+        role: "user",
+        content: result.message.content,
+        createdAt: result.message.createdAt,
+        sequence: result.transcriptSequence
+      }
+    });
   });
 
   server.get<{

@@ -1237,5 +1237,97 @@ export const productionMigrations: Migration[] = [
       CREATE INDEX idx_file_batch_items_source
         ON file_batch_items(source_path, status);
     `
+  },
+  {
+    id: "027_agent_transcript_sequence",
+    sql: `
+      CREATE TABLE agent_transcript_items (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+        message_id TEXT UNIQUE REFERENCES agent_messages(id) ON DELETE CASCADE,
+        event_id INTEGER UNIQUE REFERENCES agent_events(id) ON DELETE CASCADE,
+        CHECK ((message_id IS NOT NULL) <> (event_id IS NOT NULL))
+      );
+
+      CREATE INDEX idx_agent_transcript_items_session_sequence
+        ON agent_transcript_items(session_id, sequence);
+
+      CREATE TRIGGER trg_agent_transcript_items_validate_insert
+      BEFORE INSERT ON agent_transcript_items
+      WHEN (
+        NEW.message_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_messages
+          WHERE agent_messages.id = NEW.message_id
+            AND agent_messages.session_id = NEW.session_id
+        )
+      ) OR (
+        NEW.event_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_events
+          WHERE agent_events.id = NEW.event_id
+            AND agent_events.session_id = NEW.session_id
+        )
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'transcript source/session mismatch');
+      END;
+
+      CREATE TRIGGER trg_agent_transcript_items_validate_update
+      BEFORE UPDATE OF session_id, message_id, event_id ON agent_transcript_items
+      WHEN (
+        NEW.message_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_messages
+          WHERE agent_messages.id = NEW.message_id
+            AND agent_messages.session_id = NEW.session_id
+        )
+      ) OR (
+        NEW.event_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_events
+          WHERE agent_events.id = NEW.event_id
+            AND agent_events.session_id = NEW.session_id
+        )
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'transcript source/session mismatch');
+      END;
+
+      INSERT INTO agent_transcript_items (session_id, message_id, event_id)
+      SELECT session_id, message_id, event_id
+      FROM (
+        SELECT
+          agent_messages.session_id,
+          agent_messages.id AS message_id,
+          NULL AS event_id,
+          agent_messages.created_at,
+          0 AS source_rank,
+          agent_messages.id AS source_id
+        FROM agent_messages
+        WHERE agent_messages.role = 'user'
+
+        UNION ALL
+
+        SELECT
+          agent_events.session_id,
+          NULL AS message_id,
+          agent_events.id AS event_id,
+          agent_events.created_at,
+          1 AS source_rank,
+          printf('%020d', agent_events.id) AS source_id
+        FROM agent_events
+        LEFT JOIN jobs ON jobs.id = agent_events.job_id
+        LEFT JOIN agent_messages ON agent_messages.id = jobs.message_id
+        WHERE agent_events.type IN ('agent.message', 'job.failed')
+          AND (agent_events.job_id IS NULL OR agent_messages.role IS NULL OR agent_messages.role <> 'system')
+      ) AS legacy_transcript
+      ORDER BY
+        julianday(created_at) IS NULL,
+        julianday(created_at),
+        CASE WHEN julianday(created_at) IS NULL THEN created_at END,
+        source_rank,
+        source_id;
+    `
   }
 ];

@@ -1825,6 +1825,7 @@ export interface AgentEventRecord<TPayload = unknown> {
   jobId: string | null;
   type: AgentEventType;
   audience: AgentEventAudience;
+  transcriptSequence: number | null;
   payload: TPayload;
   createdAt: string;
 }

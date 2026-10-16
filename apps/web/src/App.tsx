@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { FormEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X } from "lucide-react";
 import {
@@ -84,7 +84,6 @@ import {
   type SystemPowerAction,
   type StorageSummary,
   type TextPreview,
-  type TranscriptMessage,
   type VodPlayerCommand,
   type VodPlayerStatus
 } from "./api.js";
@@ -116,6 +115,7 @@ import {
   type LanguagePreference
 } from "./i18n/locale.js";
 import { eventToTranscriptMessage, getEventJobId } from "./lib/events.js";
+import { initialTranscriptState, transcriptReducer } from "./lib/transcript.js";
 import { workspaceAbsolutePath, workspaceParentPath } from "./lib/chat-paths.js";
 import {
   codeFontFamilyValue,
@@ -195,7 +195,8 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [session, setSession] = useState<Session | null>(null);
-  const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
+  const [transcriptState, dispatchTranscript] = useReducer(transcriptReducer, initialTranscriptState);
+  const transcript = transcriptState.messages;
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [operations, setOperations] = useState<FileOperation[]>([]);
   const [fileBatches, setFileBatches] = useState<FileBatch[]>([]);
@@ -434,6 +435,8 @@ export function App() {
     let active = true;
     const rootId = selectedRootId;
     const sessionRequestId = beginSessionViewRequest();
+    let transcriptSessionId: string | null = null;
+    dispatchTranscript({ type: "prepare" });
     async function loadRootWorkspace() {
       setStatus("loading");
       setError(null);
@@ -446,26 +449,33 @@ export function App() {
         nextSessionList = await getSessions(rootId);
       }
 
+      if (!active || !isCurrentSessionViewRequest(sessionRequestId)) {
+        return;
+      }
+
+      transcriptSessionId = nextSession.id;
+      seenEvents.current.clear();
+      setSessions(nextSessionList);
+      setSession(nextSession);
+      setActiveSessionId(nextSession.id);
+      setComposerPath(null);
+      dispatchTranscript({ type: "begin", sessionId: nextSession.id });
       const nextTranscript = await getTranscript(nextSession.id);
 
       if (!active || !isCurrentSessionViewRequest(sessionRequestId)) {
         return;
       }
 
-      seenEvents.current.clear();
-      setSessions(nextSessionList);
-      setSession(nextSession);
-      setActiveSessionId(nextSession.id);
-      setTranscript(nextTranscript);
-      setComposerPath(null);
+      dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
       setStatus("ready");
       void refreshWorkQueues();
     }
 
     loadRootWorkspace().catch((nextError: unknown) => {
-      if (!active) {
+      if (!active || !isCurrentSessionViewRequest(sessionRequestId)) {
         return;
       }
+      dispatchTranscript({ type: "failed", sessionId: transcriptSessionId });
       setError(toErrorMessage(nextError));
       setStatus("error");
     });
@@ -580,9 +590,7 @@ export function App() {
 
       const transcriptMessage = eventToTranscriptMessage(parsed);
       if (transcriptMessage) {
-        setTranscript((current) =>
-          current.some((item) => item.id === transcriptMessage.id) ? current : [...current, transcriptMessage]
-        );
+        dispatchTranscript({ type: "event", sessionId: session.id, message: transcriptMessage });
       }
 
       if (parsed.type === "job.running") {
@@ -1097,16 +1105,18 @@ export function App() {
       setSession(nextSession);
       setActiveSessionId(nextSession.id);
       setComposerPath(null);
+      dispatchTranscript({ type: "begin", sessionId: nextSession.id });
       const nextTranscript = await getTranscript(nextSession.id);
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
         return;
       }
-      setTranscript(nextTranscript);
+      dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
       setStatus("ready");
     } catch (nextError) {
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
         return;
       }
+      dispatchTranscript({ type: "failed", sessionId: nextSession.id });
       setError(toErrorMessage(nextError));
       setStatus("error");
     }
@@ -1119,22 +1129,34 @@ export function App() {
     const sessionRequestId = beginSessionViewRequest();
     setStatus("creating-agent");
     setError(null);
-    const nextSession = await createSession(selectedRootId, currentPath);
-    const [nextSessions, nextTranscript] = await Promise.all([
-      getSessions(selectedRootId),
-      getTranscript(nextSession.id)
-    ]);
-    if (!isCurrentSessionViewRequest(sessionRequestId)) {
-      return;
+    dispatchTranscript({ type: "prepare" });
+    let nextSession: Session | null = null;
+    try {
+      nextSession = await createSession(selectedRootId, currentPath);
+      seenEvents.current.clear();
+      setSession(nextSession);
+      setActiveSessionId(nextSession.id);
+      setComposerPath(null);
+      dispatchTranscript({ type: "begin", sessionId: nextSession.id });
+      const [nextSessions, nextTranscript] = await Promise.all([
+        getSessions(selectedRootId),
+        getTranscript(nextSession.id)
+      ]);
+      if (!isCurrentSessionViewRequest(sessionRequestId)) {
+        return;
+      }
+      setSessions(nextSessions);
+      dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
+      setStatus("ready");
+      setMobileView("chat");
+    } catch (nextError) {
+      if (!isCurrentSessionViewRequest(sessionRequestId)) {
+        return;
+      }
+      dispatchTranscript({ type: "failed", sessionId: nextSession?.id ?? null });
+      setError(toErrorMessage(nextError));
+      setStatus("error");
     }
-    setSessions(nextSessions);
-    seenEvents.current.clear();
-    setSession(nextSession);
-    setActiveSessionId(nextSession.id);
-    setComposerPath(null);
-    setTranscript(nextTranscript);
-    setStatus("ready");
-    setMobileView("chat");
   }
 
   async function loadSessionIntoView(nextSession: Session | SessionSummary): Promise<void> {
@@ -1142,12 +1164,20 @@ export function App() {
     seenEvents.current.clear();
     setSession(nextSession);
     setActiveSessionId(nextSession.id);
-    const nextTranscript = await getTranscript(nextSession.id);
-    if (!isCurrentSessionViewRequest(sessionRequestId)) {
-      return;
+    dispatchTranscript({ type: "begin", sessionId: nextSession.id });
+    try {
+      const nextTranscript = await getTranscript(nextSession.id);
+      if (!isCurrentSessionViewRequest(sessionRequestId)) {
+        return;
+      }
+      dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
+      setComposerPath(null);
+    } catch (error) {
+      if (isCurrentSessionViewRequest(sessionRequestId)) {
+        dispatchTranscript({ type: "failed", sessionId: nextSession.id });
+      }
+      throw error;
     }
-    setTranscript(nextTranscript);
-    setComposerPath(null);
   }
 
   async function deleteActiveSession() {
@@ -1347,7 +1377,7 @@ export function App() {
     const typedContent = message.trim();
     const attachedPath = composerPath;
     const content = composeAgentMessage(typedContent, attachedPath);
-    if (!session || !content || messageSubmitting) {
+    if (!session || !content || messageSubmitting || transcriptState.phase === "loading") {
       return;
     }
 
@@ -1356,23 +1386,30 @@ export function App() {
       id: `local:${now}`,
       role: "user" as const,
       content,
-      createdAt: now
+      createdAt: now,
+      sequence: null
     };
 
     setMessageSubmitting(true);
     setMessage("");
     setComposerPath(null);
     setError(null);
-    setTranscript((current) => [...current, optimisticMessage]);
+    dispatchTranscript({ type: "optimistic", sessionId: session.id, message: optimisticMessage });
     setStatus("queued");
     try {
       const syncedSession = await syncSessionPath(session, currentPath);
       setSession((current) => (current?.id === syncedSession.id ? syncedSession : current));
-      const job = await sendMessage(syncedSession.id, content);
-      setActiveJobId(job.id);
+      const result = await sendMessage(syncedSession.id, content);
+      dispatchTranscript({
+        type: "acknowledge",
+        sessionId: syncedSession.id,
+        optimisticId: optimisticMessage.id,
+        message: result.transcriptMessage
+      });
+      setActiveJobId(result.job.id);
       void reloadSessions();
     } catch (nextError) {
-      setTranscript((current) => current.filter((item) => item.id !== optimisticMessage.id));
+      dispatchTranscript({ type: "rollback", sessionId: session.id, optimisticId: optimisticMessage.id });
       setMessage((current) => (current.length > 0 ? current : typedContent));
       setComposerPath((current) => current ?? attachedPath);
       setError(toErrorMessage(nextError));
@@ -2037,7 +2074,7 @@ export function App() {
       setSessions([]);
       setSession(null);
       setActiveSessionId("");
-      setTranscript([]);
+      dispatchTranscript({ type: "reset" });
       setActiveJobId(null);
     }
     activeSearchQueryRef.current = "";
@@ -2314,6 +2351,7 @@ export function App() {
         sessions={sessions}
         activeSessionId={activeSessionId}
         transcript={transcript}
+        transcriptPhase={transcriptState.phase}
         activeApprovals={activeApprovals}
         message={message}
         composerPath={composerPath}

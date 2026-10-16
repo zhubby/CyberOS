@@ -6,8 +6,11 @@ describe("event helpers", () => {
   it("converts non-empty agent messages into transcript messages", () => {
     const event: AgentEvent = {
       id: 42,
+      sessionId: "session-1",
+      jobId: "job-1",
       type: "agent.message",
       audience: "chat",
+      transcriptSequence: 7,
       payload: { content: "Done" },
       createdAt: "2026-08-21T00:00:00.000Z"
     };
@@ -16,7 +19,8 @@ describe("event helpers", () => {
       id: "event:42",
       role: "assistant",
       content: "Done",
-      createdAt: "2026-08-21T00:00:00.000Z"
+      createdAt: "2026-08-21T00:00:00.000Z",
+      sequence: 7
     });
   });
 
@@ -24,8 +28,11 @@ describe("event helpers", () => {
     expect(
       eventToTranscriptMessage({
         id: 1,
+        sessionId: "session-1",
+        jobId: "job-1",
         type: "job.running",
         audience: "chat",
+        transcriptSequence: null,
         payload: { content: "ignored" },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -33,8 +40,11 @@ describe("event helpers", () => {
     expect(
       eventToTranscriptMessage({
         id: 2,
+        sessionId: "session-1",
+        jobId: "job-1",
         type: "agent.message",
         audience: "chat",
+        transcriptSequence: 2,
         payload: { content: "" },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -42,8 +52,11 @@ describe("event helpers", () => {
     expect(
       eventToTranscriptMessage({
         id: 3,
+        sessionId: "session-1",
+        jobId: "job-1",
         type: "agent.message",
         audience: "chat",
+        transcriptSequence: 3,
         payload: { content: null },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -54,8 +67,11 @@ describe("event helpers", () => {
     expect(
       eventToTranscriptMessage({
         id: 4,
+        sessionId: "session-1",
+        jobId: "job-1",
         type: "job.failed",
         audience: "chat",
+        transcriptSequence: 4,
         payload: { error: "Pi model is unavailable" },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -63,7 +79,8 @@ describe("event helpers", () => {
       id: "event:4",
       role: "assistant",
       content: "Agent failed: Pi model is unavailable",
-      createdAt: "2026-08-21T00:00:00.000Z"
+      createdAt: "2026-08-21T00:00:00.000Z",
+      sequence: 4
     });
   });
 
@@ -71,8 +88,11 @@ describe("event helpers", () => {
     expect(
       eventToTranscriptMessage({
         id: 5,
+        sessionId: "session-1",
+        jobId: "job-1",
         type: "agent.failed",
         audience: "chat",
+        transcriptSequence: null,
         payload: { error: "Pi model is unavailable" },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -82,8 +102,11 @@ describe("event helpers", () => {
   it("does not turn notification events into chat replies", () => {
     expect(eventToTranscriptMessage({
       id: 6,
+      sessionId: "session-1",
+      jobId: "job-1",
       type: "job.failed",
       audience: "notification",
+      transcriptSequence: null,
       payload: { error: "Docker failed" },
       createdAt: "2026-08-21T00:00:00.000Z"
     })).toBeNull();

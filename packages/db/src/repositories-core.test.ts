@@ -34,6 +34,7 @@ import {
   listDockerRegistryCredentials,
   listNasRoots,
   listMessages,
+  listTranscriptItems,
   listOperationNotifications,
   markAllOperationNotificationsRead,
   markOperationNotificationRead,
@@ -104,6 +105,61 @@ describe("core repositories", () => {
         payload: { summary: "done" }
       }
     ]);
+  });
+
+  it("persists visible chat items with one monotonic transaction sequence", () => {
+    const session = createSession(db, { rootId: "local" });
+    const first = createUserMessageAndJob(db, { sessionId: session.id, content: "First" });
+    const reply = appendEvent(db, {
+      sessionId: session.id,
+      jobId: first.job.id,
+      type: "agent.message",
+      payload: { content: "Reply" }
+    });
+    const second = createUserMessageAndJob(db, { sessionId: session.id, content: "Second" });
+    const lifecycle = appendEvent(db, {
+      sessionId: session.id,
+      jobId: second.job.id,
+      type: "agent.completed",
+      payload: { summary: "done" }
+    });
+    const failed = appendEvent(db, {
+      sessionId: session.id,
+      jobId: second.job.id,
+      type: "job.failed",
+      payload: { error: "Unavailable" }
+    });
+
+    expect([
+      first.transcriptSequence,
+      reply.transcriptSequence,
+      second.transcriptSequence,
+      failed.transcriptSequence
+    ]).toEqual([1, 2, 3, 4]);
+    expect(lifecycle.transcriptSequence).toBeNull();
+    expect(listTranscriptItems(db, { sessionId: session.id }).map((item) => item.sequence)).toEqual([1, 2, 3, 4]);
+
+    db.exec(`
+      CREATE TRIGGER reject_test_transcript_event
+      BEFORE INSERT ON agent_transcript_items
+      WHEN NEW.event_id IS NOT NULL
+      BEGIN
+        SELECT RAISE(ABORT, 'test transcript failure');
+      END;
+    `);
+    expect(() => appendEvent(db, {
+      sessionId: session.id,
+      jobId: second.job.id,
+      type: "agent.message",
+      payload: { content: "Must roll back" }
+    })).toThrow("test transcript failure");
+    expect(listEvents(db, { sessionId: session.id }).some((event) =>
+      event.type === "agent.message"
+      && typeof event.payload === "object"
+      && event.payload !== null
+      && "content" in event.payload
+      && event.payload.content === "Must roll back"
+    )).toBe(false);
   });
 
   it("filters roots removed from the current config", () => {

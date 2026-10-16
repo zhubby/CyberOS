@@ -18,7 +18,8 @@ export function eventToTranscriptMessage(event: AgentEvent): TranscriptMessage |
     id: `event:${event.id}`,
     role: "assistant",
     content,
-    createdAt: event.createdAt
+    createdAt: event.createdAt,
+    sequence: event.transcriptSequence ?? null
   };
 }
 
@@ -31,7 +32,8 @@ function failedJobToTranscriptMessage(event: AgentEvent): TranscriptMessage | nu
     id: `event:${event.id}`,
     role: "assistant",
     content: `Agent failed: ${error}`,
-    createdAt: event.createdAt
+    createdAt: event.createdAt,
+    sequence: event.transcriptSequence ?? null
   };
 }
 

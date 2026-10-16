@@ -46,6 +46,7 @@ import {
   splitWorkspaceMessagePaths
 } from "../../lib/chat-paths.js";
 import { sessionTitle } from "../../lib/session.js";
+import type { TranscriptPhase } from "../../lib/transcript.js";
 import { PowerControl } from "../power/PowerControl.js";
 
 type ApprovalRisk = PendingApproval["proposal"][number]["risk"];
@@ -179,6 +180,7 @@ export function ChatPane({
   sessions,
   activeSessionId,
   transcript,
+  transcriptPhase,
   activeApprovals,
   message,
   composerPath,
@@ -210,6 +212,7 @@ export function ChatPane({
   sessions: SessionSummary[];
   activeSessionId: string;
   transcript: TranscriptMessage[];
+  transcriptPhase: TranscriptPhase;
   activeApprovals: PendingApproval[];
   message: string;
   composerPath: string | null;
@@ -431,8 +434,15 @@ export function ChatPane({
           </button>
         </header>
 
-        <div ref={transcriptRef} className="transcript" aria-label={t("chat.transcript")}>
-          {hasConversationContent ? (
+        <div
+          ref={transcriptRef}
+          className="transcript"
+          aria-label={t("chat.transcript")}
+          aria-busy={transcriptPhase === "loading"}
+        >
+          {transcriptPhase === "loading" ? (
+            <TranscriptSkeleton />
+          ) : hasConversationContent ? (
             <>
               {transcript.map((item) => (
                 <article key={item.id} className={`message message-${item.role}`}>
@@ -468,13 +478,13 @@ export function ChatPane({
                 </article>
               ))}
             </>
-          ) : (
+          ) : transcriptPhase === "ready" ? (
             <div className="empty-state">
               <Bot aria-hidden="true" size={22} />
               <strong>{t("chat.emptyTitle")}</strong>
               <span>{t("chat.emptyBody")}</span>
             </div>
-          )}
+          ) : null}
         </div>
 
         <form className="composer" onSubmit={onSubmitMessage} aria-busy={messageSubmitting}>
@@ -533,7 +543,12 @@ export function ChatPane({
               <button
                 className="primary-button"
                 type="submit"
-                disabled={!hasSession || (!message.trim() && !composerPath) || messageSubmitting}
+                disabled={
+                  !hasSession
+                  || (!message.trim() && !composerPath)
+                  || messageSubmitting
+                  || transcriptPhase === "loading"
+                }
                 aria-busy={messageSubmitting || undefined}
                 aria-label={t("common.actions.send")}
                 title={t("common.actions.send")}
@@ -580,6 +595,23 @@ export function ChatPane({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function TranscriptSkeleton() {
+  return (
+    <div className="transcript-skeleton" aria-hidden="true">
+      {["assistant", "user", "assistant", "user"].map((role, index) => (
+        <div key={`${role}-${index}`} className={`transcript-skeleton-row is-${role}`}>
+          <span className="transcript-skeleton-avatar" />
+          <span className="transcript-skeleton-copy">
+            <span className="transcript-skeleton-heading" />
+            <span className="transcript-skeleton-line" />
+            <span className="transcript-skeleton-line is-short" />
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 

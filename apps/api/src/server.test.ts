@@ -3920,19 +3920,33 @@ describe("API server", () => {
 
   it("reconstructs chat transcripts from user messages and agent events", async () => {
     const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
+    const first = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List this folder"
     });
-    appendEvent(db, {
+    const firstReply = appendEvent(db, {
       sessionId: session.id,
-      jobId: job.id,
+      jobId: first.job.id,
       type: "agent.message",
       payload: {
         role: "assistant",
         content: "hello.txt is available"
       }
     });
+    const second = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Open it"
+    });
+    const failure = appendEvent(db, {
+      sessionId: session.id,
+      jobId: second.job.id,
+      type: "job.failed",
+      payload: { error: "Preview unavailable" }
+    });
+    db.prepare("UPDATE agent_messages SET created_at = ? WHERE id = ?")
+      .run("2099-01-01T00:00:00.000Z", first.message.id);
+    db.prepare("UPDATE agent_events SET created_at = ? WHERE id = ?")
+      .run("2000-01-01T00:00:00.000Z", firstReply.id);
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
@@ -3941,18 +3955,36 @@ describe("API server", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      transcript: [
-        {
-          role: "user",
-          content: "List this folder"
-        },
-        {
-          role: "assistant",
-          content: "hello.txt is available"
-        }
-      ]
-    });
+    expect(response.json().transcript).toEqual([
+      {
+        id: `message:${first.message.id}`,
+        role: "user",
+        content: "List this folder",
+        createdAt: "2099-01-01T00:00:00.000Z",
+        sequence: first.transcriptSequence
+      },
+      {
+        id: `event:${firstReply.id}`,
+        role: "assistant",
+        content: "hello.txt is available",
+        createdAt: "2000-01-01T00:00:00.000Z",
+        sequence: firstReply.transcriptSequence
+      },
+      {
+        id: `message:${second.message.id}`,
+        role: "user",
+        content: "Open it",
+        createdAt: second.message.createdAt,
+        sequence: second.transcriptSequence
+      },
+      {
+        id: `event:${failure.id}`,
+        role: "assistant",
+        content: "Agent failed: Preview unavailable",
+        createdAt: failure.createdAt,
+        sequence: failure.transcriptSequence
+      }
+    ]);
     await server.close();
   });
 
@@ -4042,11 +4074,61 @@ describe("API server", () => {
     });
 
     expect(response.statusCode).toBe(202);
-    expect(response.json().message).toMatchObject({ role: "user", content: "Show disk usage" });
+    const body = response.json();
+    expect(body.message).toMatchObject({ role: "user", content: "Show disk usage" });
+    expect(body).not.toHaveProperty("transcriptSequence");
+    expect(body.transcriptMessage).toEqual({
+      id: `message:${body.message.id}`,
+      role: "user",
+      content: "Show disk usage",
+      createdAt: body.message.createdAt,
+      sequence: expect.any(Number)
+    });
     expect(listMessages(db, { sessionId: session.id })).toMatchObject([
       { role: "user", content: "Show disk usage" }
     ]);
     await server.close();
+  });
+
+  it("streams transcript sequence metadata with chat events", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Hello" });
+    const event = appendEvent(db, {
+      sessionId: session.id,
+      jobId: job.id,
+      type: "agent.message",
+      payload: { content: "Hi" }
+    });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    await server.listen({ host: "127.0.0.1", port: 0 });
+    const address = server.server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected an ephemeral TCP listener");
+    }
+    const controller = new AbortController();
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/sessions/${session.id}/events`, {
+        signal: controller.signal
+      });
+      expect(response.status).toBe(200);
+      const reader = response.body?.getReader();
+      expect(reader).toBeDefined();
+      let streamText = "";
+      while (!streamText.includes(`id: ${event.id}\n`)) {
+        const chunk = await reader?.read();
+        if (!chunk || chunk.done) break;
+        streamText += new TextDecoder().decode(chunk.value, { stream: true });
+      }
+      const dataLine = streamText.split("\n").find((line) => line.startsWith("data: "));
+      expect(dataLine).toBeDefined();
+      expect(JSON.parse(dataLine?.slice(6) ?? "{}")).toMatchObject({
+        id: event.id,
+        transcriptSequence: event.transcriptSequence
+      });
+    } finally {
+      controller.abort();
+      await server.close();
+    }
   });
 
   it("lists and marks persistent operation notifications", async () => {

@@ -223,6 +223,7 @@ export interface TranscriptMessage {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  sequence: number | null;
 }
 
 export interface Job {
@@ -304,8 +305,11 @@ export type StorageRaidLevel = SharedStorageRaidLevel;
 
 export interface AgentEvent {
   id: number;
+  sessionId: string;
+  jobId: string | null;
   type: string;
   audience: "chat" | "notification";
+  transcriptSequence: number | null;
   payload: Record<string, unknown>;
   createdAt: string;
 }
@@ -1173,7 +1177,10 @@ export async function getTranscript(sessionId: string): Promise<TranscriptMessag
   const response = await fetch(`/api/sessions/${sessionId}/transcript`);
   await ensureOk(response);
   const body = (await response.json()) as { transcript: TranscriptMessage[] };
-  return body.transcript;
+  return body.transcript.map((message) => ({
+    ...message,
+    sequence: message.sequence ?? null
+  }));
 }
 
 export async function getFiles(rootId: string, currentPath: string, storagePoolId: string): Promise<FileListing> {
@@ -1902,7 +1909,10 @@ export async function rollbackOperation(operationId: string): Promise<void> {
   await ensureOk(response);
 }
 
-export async function sendMessage(sessionId: string, content: string): Promise<Job> {
+export async function sendMessage(
+  sessionId: string,
+  content: string
+): Promise<{ job: Job; transcriptMessage: TranscriptMessage }> {
   const response = await fetch(`/api/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: {
@@ -1911,8 +1921,33 @@ export async function sendMessage(sessionId: string, content: string): Promise<J
     body: JSON.stringify({ content })
   });
   await ensureOk(response);
-  const body = (await response.json()) as { job: Job };
-  return body.job;
+  const body = (await response.json()) as {
+    job: Job;
+    message?: AgentMessage;
+    transcriptMessage?: TranscriptMessage;
+  };
+  if (body.transcriptMessage) {
+    return {
+      job: body.job,
+      transcriptMessage: {
+        ...body.transcriptMessage,
+        sequence: body.transcriptMessage.sequence ?? null
+      }
+    };
+  }
+  if (body.message?.role === "user") {
+    return {
+      job: body.job,
+      transcriptMessage: {
+        id: `message:${body.message.id}`,
+        role: "user",
+        content: body.message.content,
+        createdAt: body.message.createdAt,
+        sequence: null
+      }
+    };
+  }
+  throw new Error("Message response did not include a transcript message");
 }
 
 export async function cancelJob(jobId: string): Promise<void> {

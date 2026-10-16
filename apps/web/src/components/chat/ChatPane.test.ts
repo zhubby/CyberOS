@@ -233,6 +233,7 @@ describe("ChatPane agent rail", () => {
         sessions: [session],
         activeSessionId: session.id,
         transcript: [],
+        transcriptPhase: "ready",
         activeApprovals: [],
         message: "",
         composerPath: null,
@@ -275,5 +276,61 @@ describe("ChatPane agent rail", () => {
     expect(html.indexOf('class="session-list"')).toBeLessThan(html.indexOf('class="agent-footer"'));
     expect(html.indexOf('class="agent-notification-button"')).toBeLessThan(html.indexOf('class="settings-button agent-settings-button"'));
     expect(html.indexOf('class="settings-button agent-settings-button"')).toBeLessThan(html.indexOf('class="agent-power-button"'));
+  });
+
+  it("shows an accessible transcript skeleton while keeping the composer editable", async () => {
+    await initI18n();
+    const session = {
+      id: "session-1",
+      rootId: "root-1",
+      currentPath: ".",
+      createdAt: "2026-09-17T10:00:00.000Z",
+      updatedAt: "2026-09-17T10:00:00.000Z",
+      firstMessage: null,
+      lastMessage: null
+    };
+    const noop = () => undefined;
+    const html = renderToStaticMarkup(
+      createElement(ChatPane, {
+        active: true,
+        selectedRoot: undefined,
+        activeSessionSummary: session,
+        sessions: [session],
+        activeSessionId: session.id,
+        transcript: [],
+        transcriptPhase: "loading",
+        activeApprovals: [],
+        message: "Draft stays editable",
+        composerPath: null,
+        status: "loading",
+        locale: "en",
+        modelSettings: null,
+        activeJobId: null,
+        messageSubmitting: false,
+        hasSession: true,
+        transcriptRef: createRef<HTMLDivElement>(),
+        onCreateAgent: noop,
+        onDeleteSession: noop,
+        onOpenSettings: noop,
+        onOpenNotifications: noop,
+        onRequestSystemPower: async () => true,
+        notificationUnreadCount: 0,
+        onSelectSession: noop,
+        onApprove: noop,
+        onReject: noop,
+        onSubmitMessage: noop,
+        onMessageChange: noop,
+        onClearComposerPath: noop,
+        onCancelActiveJob: noop,
+        onOpenWorkspacePath: noop
+      })
+    );
+
+    expect(html).toContain('class="transcript" aria-label="Transcript" aria-busy="true"');
+    expect(html).toContain('class="transcript-skeleton" aria-hidden="true"');
+    expect(html.match(/class="transcript-skeleton-row/gu)).toHaveLength(4);
+    expect(html).not.toContain('class="empty-state"');
+    expect(html).not.toMatch(/<textarea[^>]*disabled/gu);
+    expect(html).toMatch(/<button class="primary-button" type="submit" disabled=""/gu);
   });
 });
