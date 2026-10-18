@@ -1,6 +1,6 @@
 {
   "name": "@zos/worker",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "exports": {
     ".": "./src/processor.ts"
@@ -12,8 +12,8 @@
     "build": "cd ../.. && tsup apps/worker/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --external=@earendil-works/pi-coding-agent --out-dir apps/worker/dist"
   },
   "dependencies": {
-    "@zos/agent": "1.2.0",
-    "@zos/db": "1.2.0",
-    "@zos/shared": "1.2.0"
+    "@zos/agent": "1.2.1",
+    "@zos/db": "1.2.1",
+    "@zos/shared": "1.2.1"
   }
 }

@@ -1,3 +1,9 @@
+zos (1.2.1) unstable; urgency=medium
+
+  * Ensure upgrades activate newly installed runtime services and verify monitoring readiness on CM5.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Sun, 18 Oct 2026 05:11:01 +0000
+
 zos (1.2.0) unstable; urgency=medium
 
   * Add built-in appliance monitoring and refine management settings.
