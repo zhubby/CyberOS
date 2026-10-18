@@ -1,6 +1,6 @@
 {
   "name": "@zos/monitor",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "build": "cd ../.. && tsup apps/monitor/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir apps/monitor/dist"
   },
   "dependencies": {
-    "@zos/monitoring": "1.1.0",
-    "@zos/shared": "1.1.0"
+    "@zos/monitoring": "1.2.0",
+    "@zos/shared": "1.2.0"
   }
 }

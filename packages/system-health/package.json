@@ -1,15 +1,15 @@
 {
   "name": "@zos/system-health",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@zos/db": "1.1.0",
-    "@zos/monitoring": "1.1.0",
-    "@zos/nas-tools": "1.1.0",
-    "@zos/shared": "1.1.0"
+    "@zos/db": "1.2.0",
+    "@zos/monitoring": "1.2.0",
+    "@zos/nas-tools": "1.2.0",
+    "@zos/shared": "1.2.0"
   }
 }
