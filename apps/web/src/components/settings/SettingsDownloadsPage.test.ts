@@ -27,7 +27,6 @@ describe("SettingsDownloadsPage", () => {
         updatedAt: "2026-01-01T00:00:00.000Z"
       },
       loading: false,
-      locale: "en",
       onSettingsChange: vi.fn(),
       onClose: vi.fn()
     }));
@@ -38,5 +37,7 @@ describe("SettingsDownloadsPage", () => {
     expect(html).toContain("Response header timeout (ms)");
     expect(html).toContain("Minimum free space (bytes)");
     expect(html).toContain("Maximum file size (bytes)");
+    expect(html).not.toContain("Download runtime");
+    expect(html).not.toContain("Resume when supported");
   });
 });

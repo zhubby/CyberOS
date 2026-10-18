@@ -13,6 +13,7 @@ describe("native packaging artifacts", () => {
   it("defines hardened systemd services and timers", async () => {
     const serviceNames = [
       "zos-api.service",
+      "zos-monitor.service",
       "zos-worker@.service",
       "zos-indexer.service",
       "zos-maintenance.service",
@@ -41,6 +42,15 @@ describe("native packaging artifacts", () => {
     await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
       "After=network-online.target local-fs.target"
     );
+    const monitorUnit = await readPackagingFile("systemd", "zos-monitor.service");
+    expect(monitorUnit).toContain("After=local-fs.target zos-api.service");
+    expect(monitorUnit).toContain("ExecStart=/usr/local/bin/node /usr/lib/zos/apps/monitor/dist/index.js");
+    expect(monitorUnit).toContain("ReadOnlyPaths=-/zos/data");
+    expect(monitorUnit).toContain("ReadWritePaths=/zos/state");
+    expect(monitorUnit).toContain("RestrictAddressFamilies=AF_UNIX");
+    expect(monitorUnit).toContain("MemoryMax=256M");
+    expect(monitorUnit).toContain("CPUWeight=20");
+    expect(monitorUnit).toContain("IOWeight=20");
     await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
       "RequiresMountsFor=/zos/data"
     );
@@ -137,6 +147,7 @@ describe("native packaging artifacts", () => {
     const tmpfiles = await readPackagingFile("tmpfiles.d", "zos.conf");
 
     expect(install).toContain("usr/lib/zos/apps/api/dist/");
+    expect(install).toContain("usr/lib/zos/apps/monitor/dist/");
     expect(install).toContain("target/release/zos-hostd usr/lib/zos/bin/");
     expect(install).toContain("target/release/zos-termux usr/lib/zos/bin/");
     expect(install).not.toContain("apps/terminal-helper");
@@ -217,6 +228,7 @@ describe("native packaging artifacts", () => {
     expect(control).not.toMatch(/^Depends:.*samba/m);
     const postrm = await readPackagingFile("debian", "postrm");
     const postinst = await readPackagingFile("debian", "postinst");
+    const defaultConfig = await readPackagingFile("etc", "config.toml");
     const refreshVodPlayer = await readPackagingFile("scripts", "zos-refresh-vod-player.sh");
     expect(postinst).toContain("zos-migrate-sigmaos.sh apply");
     expect(postinst).toContain("ZOS_DEPLOY_USER=sigmaos-deploy");
@@ -225,6 +237,8 @@ describe("native packaging artifacts", () => {
     expect(postinst).not.toContain("install -d -o root -g zos -m 0755 /zos");
     expect(postinst).toContain("/zos/state/hostd/docker-daemon");
     expect(postinst).toContain("/zos/state/hostd/network-manager");
+    expect(defaultConfig).toContain("[monitoring]");
+    expect(defaultConfig).toContain("max_database_bytes = 536870912");
     expect(refreshVodPlayer).toContain("ZOS_VOD_PLAYER_SOCKET_PATH");
     expect(refreshVodPlayer).toContain("ZOS_VOD_PLAYER_STATE_PATH");
     expect(refreshVodPlayer).toContain("ReadWritePaths=");
@@ -253,6 +267,7 @@ describe("native packaging artifacts", () => {
     expect(firstBoot).toContain("[[nas_roots]]");
     expect(firstBoot).toContain("[model]");
     expect(firstBoot).toContain("[hostd]");
+    expect(firstBoot).toContain("[monitoring]");
     expect(firstBoot).toContain("[shares]");
     expect(firstBoot).toContain('[ -e "$CONFIG_PATH" ]');
     expect(firstBoot).toContain('ZOS_FIRST_BOOT_FORCE:-0');
@@ -264,6 +279,7 @@ describe("native packaging artifacts", () => {
     expect(manifest).toContain("nginx.service");
     expect(manifest).toContain("git");
     expect(manifest).toContain("zos-hostd.service");
+    expect(manifest).toContain("zos-monitor.service");
     expect(manifest).not.toContain("zos-share-helper.service");
     expect(manifest).toContain("zos-termux.service");
     expect(manifest).not.toContain("zos-terminal-helper.service");
@@ -304,6 +320,7 @@ describe("native packaging artifacts", () => {
     expect(buildImage).toContain("zos-backup-daily.timer");
     expect(buildImage).toContain("zos-backup-weekly.timer");
     expect(buildImage).toContain("zos-health.timer");
+    expect(buildImage).toContain("zos-monitor.service");
     expect(buildImage).not.toContain("zos-scheduler");
     expect(buildImage).toContain("zos-nginx.sh");
     expect(buildImage).toContain("ZOS_NODE_MIRROR");
@@ -392,6 +409,8 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("zos-nginx.sh");
     expect(installer).toContain("systemctl restart nginx");
     expect(installer).toContain("systemctl enable --now");
+    expect(installer).toContain("systemctl restart zos-monitor.service");
+    expect(installer).toContain("systemctl start zos-health.service");
     expect(buildDeb).toContain("registry.npmmirror.com");
     expect(buildDeb).toContain("ZOS_BUILD_COMMIT_SHA");
     expect(buildDeb).toContain("ZOS_BUILD_DIRTY");
@@ -645,6 +664,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).not.toContain("systemctl restart $RUNTIME_SERVICES");
     expect(deploy).not.toContain("systemctl enable --now $TIMERS");
     expect(deploy).toContain("systemctl start zos-health.service");
+    expect(deploy).toContain('RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service"');
     const activateRuntime = deploy.slice(
       deploy.indexOf("activate_runtime() {"),
       deploy.indexOf("\nverify_runtime() {")
@@ -657,6 +677,7 @@ describe("native packaging artifacts", () => {
       'restore_unit_state zos-vod-player.service "$state_dir"',
       "start_service_stably zos-api.service",
       "wait_for_url http://127.0.0.1:3010/health",
+      "systemctl start zos-monitor.service",
       "systemctl start zos-health.service",
       "start_service_stably zos-worker@1.service",
       "start_service_stably zos-photostaff.service",
@@ -672,6 +693,9 @@ describe("native packaging artifacts", () => {
       );
     }
     expect(deploy).toContain('activate_runtime "$state_dir"');
+    expect(deploy).toContain("/api/monitoring/overview");
+    expect(deploy).toContain("monitoring is degraded; core runtime verification will continue");
+    expect(deploy).toContain('$1 != "zos-monitor.service"');
     expect(deploy).toContain('systemctl is-active --quiet "$unit" || die "timer is not active: $unit"');
     expect(deploy).toContain("NextElapseUSecMonotonic");
     expect(deploy).toContain('health?.operations?.health?.status === "ready"');
@@ -684,7 +708,9 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("share configuration refresh returned HTTP");
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
     expect(deploy).toContain("sleep 30");
-    expect(deploy).toContain("zos-downloader.service zos-indexer.service zos-hostd.service");
+    expect(deploy).toContain(
+      "CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'"
+    );
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
     expect(deploy).toContain('die "one or more services restarted during stabilization"');
     expect(deploy).toContain('version $manifest_version is already installed; recovering runtime and release state');
@@ -698,7 +724,9 @@ describe("native packaging artifacts", () => {
     );
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"');
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"\n    cleanup_deployment_artifacts');
-    expect(deploy).toContain("awk '$1 ~ /^zos-/ { print }'");
+    expect(deploy).toContain(
+      "awk '$1 ~ /^zos-/ && $1 != \"zos-monitor.service\" { print }'"
+    );
     expect(deploy).toContain('failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"');
     expect(deploy).toContain('capture_runtime_diagnostics "$failure_dir"');
     expect(deploy).toContain("SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'");

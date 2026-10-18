@@ -195,7 +195,7 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 版本相同但 commit 不同时拒绝覆盖。
 - 版本和 commit 都相同时不重装，只重新验证服务和 build-info，因此可安全重试同一个 tag。
 - 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/zos/config` 和 `/zos/state`，再执行 `dpkg -i`。
-- 安装后先恢复升级前实际启用或运行的服务状态，再强制启用并启动 maintenance、health 和 backup 核心 timers；部署会立即运行一次 Health，并要求 Operations Health 为 `ready` 后才算成功。
+- 安装后先启动 API，再启动 monitor、立即运行一次 Health，然后恢复后台服务并强制启用 maintenance、health 和 backup 核心 timers。monitor 失败会报告 monitoring degraded，但不会阻断核心 API 部署；其他核心服务及 Operations Health 仍须通过。
 
 成功记录写入 `/zos/deploy/current-release.json`，已验证包保存在 `/zos/deploy/releases/<tag>/`。升级失败时，部署程序会尽力恢复此前的 systemd 状态。迁移状态引用已挂载的冷备份时，升级备份和诊断写入该数据盘的 `.zos/system-backups/deploy/<tag>-<timestamp>/`；否则保留在 `/zos/deploy/backups/<tag>-<timestamp>/`。
 
@@ -219,7 +219,7 @@ gh run watch <run-id> --exit-status
 sudo systemctl --failed
 sudo systemctl is-active \
   zos-api.service zos-worker@1.service \
-  zos-downloader.service zos-hostd.service \
+  zos-monitor.service zos-downloader.service zos-hostd.service \
   zos-termux.service zos-maintenance.timer \
   zos-health.timer zos-backup-daily.timer \
   zos-backup-weekly.timer
@@ -227,6 +227,7 @@ sudo systemctl list-timers 'zos-*'
 curl -fsS http://127.0.0.1:3010/health
 curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
+curl -fsS http://127.0.0.1:3010/api/monitoring/overview
 curl -fsS http://127.0.0.1:3010/api/system/build-info
 sudo cat /zos/deploy/current-release.json
 ```

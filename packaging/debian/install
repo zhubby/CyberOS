@@ -1,4 +1,5 @@
 apps/api/dist/* usr/lib/zos/apps/api/dist/
+apps/monitor/dist/* usr/lib/zos/apps/monitor/dist/
 target/release/zos-hostd usr/lib/zos/bin/
 target/release/zos-termux usr/lib/zos/bin/
 apps/worker/dist/* usr/lib/zos/apps/worker/dist/

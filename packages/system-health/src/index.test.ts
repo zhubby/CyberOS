@@ -14,7 +14,8 @@ import {
   upsertRootReadiness,
   type ZosDatabase
 } from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
+import { MetricsWriter } from "@zos/monitoring";
+import { DEFAULT_MONITORING_CONFIG, type ZosConfig } from "@zos/shared";
 import { evaluateSystemHealth, runScheduledHealthEvaluation } from "./index.js";
 
 let tempDir: string;
@@ -153,12 +154,39 @@ describe("shared system health evaluator", () => {
       expect.objectContaining({ code: "ops_maintenance_unhealthy", severity: "warning" })
     ]));
   });
+
+  it("adds a warning when enabled monitoring has stopped sampling", async () => {
+    const sampledAt = Date.parse("2026-01-01T00:00:00.000Z");
+    const writer = new MetricsWriter(config.metricsDatabasePath!, config.monitoring!);
+    writer.recordCollectorStatus({
+      collector: "host",
+      state: "ready",
+      attemptedAtMs: sampledAt,
+      durationMs: 1
+    });
+    writer.close();
+
+    const summary = await evaluateSystemHealth({
+      db,
+      config,
+      now: new Date(sampledAt + 31_000)
+    });
+    expect(summary.monitoring).toEqual({
+      status: "unavailable",
+      lastSampleAt: "2026-01-01T00:00:00.000Z"
+    });
+    expect(summary.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "monitoring_unavailable", severity: "warning" })
+    ]));
+  });
 });
 
 function createConfig(dataDir: string, rootPath: string): ZosConfig {
   return {
     dataDir,
     databasePath: path.join(dataDir, "zos.sqlite"),
+    metricsDatabasePath: path.join(dataDir, "metrics.sqlite"),
+    monitoring: { ...DEFAULT_MONITORING_CONFIG },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test Admin", authMode: "local-only" },

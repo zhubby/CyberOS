@@ -2,8 +2,6 @@ import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Database, RefreshCw } from "lucide-react";
 import type { IndexerOverview, IndexerSettings, NasRoot } from "../../api.js";
-import { formatBytes, formatDate } from "../../i18n/format.js";
-import type { SupportedLocale } from "../../i18n/locale.js";
 
 type IndexerSettingsDraft = Omit<IndexerSettings, "updatedAt">;
 
@@ -12,7 +10,6 @@ export function SettingsIndexerPage({
   status,
   roots,
   loading,
-  locale,
   onSettingsChange,
   onReindex,
   onClose
@@ -21,7 +18,6 @@ export function SettingsIndexerPage({
   status: IndexerOverview | null;
   roots: NasRoot[];
   loading: boolean;
-  locale: SupportedLocale;
   onSettingsChange: (patch: Partial<IndexerSettingsDraft>) => Promise<void>;
   onReindex: (rootId: string) => Promise<void>;
   onClose: () => void;
@@ -65,7 +61,6 @@ export function SettingsIndexerPage({
     <form className="settings-form" onSubmit={(event) => void submit(event)}>
       <div className="settings-content-body">
         <div className="settings-page-grid settings-indexer-grid">
-          <div className="settings-main-stack">
             <section className="settings-section-card">
               <header>
                 <div>
@@ -142,32 +137,35 @@ export function SettingsIndexerPage({
                 })}
               </div>
             </section>
-          </div>
 
-          <aside className="settings-side-stack" aria-label={t("settings.indexer.statusTitle")}>
-            <section className="settings-section-card settings-route-card">
-              <header>
-                <div>
-                  <h3>{t("settings.indexer.statusTitle")}</h3>
-                  <p>{t("settings.indexer.statusDescription")}</p>
-                </div>
-                <Database aria-hidden="true" size={17} />
-              </header>
-              <dl className="settings-summary-list">
-                <StatusRow label={t("settings.indexer.service")} value={status ? t(`settings.indexer.states.${status.service.status}`) : t("common.states.unavailable")} />
-                <StatusRow label={t("settings.indexer.watcher")} value={status ? t(`settings.indexer.states.${status.watcher.status}`) : t("common.states.unavailable")} />
-                <StatusRow label={t("settings.indexer.queue")} value={status ? t("settings.indexer.queueSummary", { queued: status.queue.queued, running: status.queue.running, failed: status.queue.failed }) : t("common.states.unavailable")} />
-                <StatusRow label={t("settings.indexer.rebuild")} value={status ? t("settings.indexer.rebuildSummary", { copied: status.rebuild.copied, total: status.rebuild.total }) : t("common.states.unavailable")} />
-                <StatusRow label={t("settings.indexer.textLimit")} value={settings ? formatBytes(settings.maxExtractedTextBytes, locale) : t("common.states.unavailable")} />
-                <StatusRow label={t("settings.modelProvider.updated")} value={settings ? formatDate(settings.updatedAt, locale) : t("settings.indexer.notLoaded")} />
-              </dl>
-            </section>
-          </aside>
+          <section className="settings-section-card settings-indexer-status" aria-label={t("settings.indexer.statusTitle")}>
+            <header>
+              <div>
+                <h3>{t("settings.indexer.statusTitle")}</h3>
+                <p>{t("settings.indexer.statusDescription")}</p>
+              </div>
+              <Database aria-hidden="true" size={17} />
+            </header>
+            <dl className="settings-summary-list settings-indexer-status-list">
+              <StatusRow label={t("settings.indexer.service")} value={status ? t(`settings.indexer.states.${status.service.status}`) : t("common.states.unavailable")} />
+              <StatusRow label={t("settings.indexer.watcher")} value={status ? t(`settings.indexer.states.${status.watcher.status}`) : t("common.states.unavailable")} />
+              <StatusRow label={t("settings.indexer.queue")} value={status ? t("settings.indexer.queueSummary", { queued: status.queue.queued, running: status.queue.running, failed: status.queue.failed }) : t("common.states.unavailable")} />
+              <StatusRow label={t("settings.indexer.rebuild")} value={status ? t("settings.indexer.rebuildSummary", { copied: status.rebuild.copied, total: status.rebuild.total }) : t("common.states.unavailable")} />
+            </dl>
+          </section>
         </div>
       </div>
 
       <footer className="settings-actions">
-        <span>{saved ? t("settings.indexer.saved") : settings ? t("settings.indexer.ready") : t("settings.indexer.notLoaded")}</span>
+        <span role="status">
+          {saving
+            ? t("common.actions.saving")
+            : saved
+              ? t("settings.indexer.saved")
+              : !loading && !settings
+                ? t("settings.indexer.notLoaded")
+                : null}
+        </span>
         <div>
           <button className="secondary-button" type="button" onClick={onClose} disabled={saving}>{t("common.actions.cancel")}</button>
           <button className="primary-button" type="submit" disabled={disabled} aria-busy={saving || undefined}>

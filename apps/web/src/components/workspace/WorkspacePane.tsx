@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
   ArrowUp,
+  Activity,
   ArchiveRestore,
   Check,
   ChevronDown,
@@ -65,6 +66,7 @@ import type { CodeFontSettings } from "../../lib/editor-settings.js";
 import type { ResolvedTheme } from "../../lib/theme-settings.js";
 import { StorageFilePickerDialog } from "./StorageFilePickerDialog.js";
 import { FilePreviewDialog } from "./FilePreviewDialog.js";
+import { MonitoringPanel } from "./MonitoringPanel.js";
 
 const EPOCH_DATE = new Date(0).toISOString();
 
@@ -92,6 +94,12 @@ const WORKSPACE_PANELS = [
     labelKey: "workspace.panels.downloads",
     shortLabelKey: "workspace.panels.downloadsShort",
     Icon: Download
+  },
+  {
+    id: "monitoring",
+    labelKey: "workspace.panels.monitoring",
+    shortLabelKey: "workspace.panels.monitoringShort",
+    Icon: Activity
   },
   {
     id: "docker",
@@ -1727,6 +1735,8 @@ export function WorkspacePane({
               onNotifySuccess={onNotifySuccess}
               onNotifyWarning={onNotifyWarning}
             />
+          ) : activePanel === "monitoring" ? (
+            <MonitoringPanel locale={locale} />
           ) : activePanel === "terminal" || !workspaceVisible ? null : (
             <WorkspaceManagementPanel
               panel={activePanel}

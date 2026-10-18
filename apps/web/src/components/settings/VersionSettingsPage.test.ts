@@ -34,6 +34,8 @@ describe("VersionSettingsPage", () => {
     expect(html).toContain("Release");
     expect(html).toContain("Clean");
     expect(html).toContain('aria-label="Copy full commit SHA"');
+    expect(html).not.toContain("0123456789ab</dd>");
+    expect(html).not.toContain("Short SHA");
   });
 
   it("renders an isolated unavailable state when metadata loading fails", () => {

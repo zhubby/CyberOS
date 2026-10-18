@@ -19,3 +19,11 @@ export function openZosDb(databasePath: string): ZosDatabase {
   runMigrations(db);
   return db;
 }
+
+export function openZosDbReadOnly(databasePath: string): ZosDatabase {
+  const db = new Database(databasePath, { readonly: true, fileMustExist: true });
+  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+  db.pragma("foreign_keys = ON");
+  db.pragma("query_only = ON");
+  return db;
+}

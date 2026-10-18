@@ -1,0 +1,136 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import Fastify from "fastify";
+import { MetricsWriter, MonitoringReader } from "@zos/monitoring";
+import { DEFAULT_MONITORING_CONFIG } from "@zos/shared";
+import { afterEach, describe, expect, it } from "vitest";
+import { registerErrorHandler } from "../errors.js";
+import type { ApiRouteContext } from "../context.js";
+import { registerMonitoringRoutes } from "./monitoring.js";
+
+let tempDir: string | null = null;
+
+afterEach(async () => {
+  if (tempDir) await rm(tempDir, { recursive: true, force: true });
+  tempDir = null;
+});
+
+describe("monitoring routes", () => {
+  it("returns successful empty states while disabled or starting", async () => {
+    const databasePath = await tempDatabase();
+    const disabled = await buildRoutes(new MonitoringReader(databasePath, {
+      ...DEFAULT_MONITORING_CONFIG,
+      enabled: false
+    }));
+    expect((await disabled.inject({ method: "GET", url: "/api/monitoring/overview" })).json())
+      .toMatchObject({ status: "disabled", enabled: false, latest: [] });
+    expect((await disabled.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: validQuery()
+    })).json()).toMatchObject({ series: [] });
+    await disabled.close();
+
+    const starting = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
+    expect((await starting.inject({ method: "GET", url: "/api/monitoring/overview" })).json())
+      .toMatchObject({ status: "starting", enabled: true, latest: [] });
+    await starting.close();
+  });
+
+  it("serves the fixed catalog and bounded historical queries", async () => {
+    const databasePath = await tempDatabase();
+    const writer = new MetricsWriter(databasePath, { ...DEFAULT_MONITORING_CONFIG });
+    const timestampMs = Date.parse("2026-01-01T00:00:10.000Z");
+    writer.writeSamples([{ metric: "zos_host_load1", value: 0.5, timestampMs }]);
+    writer.recordCollectorStatus({ collector: "host", state: "ready", attemptedAtMs: timestampMs, durationMs: 2 });
+    writer.close();
+
+    const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
+    const catalog = (await server.inject({ method: "GET", url: "/api/monitoring/catalog" })).json();
+    expect(catalog.metrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "zos_host_load1", kind: "gauge", unit: "load" })
+    ]));
+    expect(catalog.series).toEqual([
+      expect.objectContaining({ metric: "zos_host_load1", labels: {} })
+    ]);
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: validQuery()
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().series[0]).toMatchObject({
+      metric: "zos_host_load1",
+      transform: "value",
+      points: expect.any(Array)
+    });
+    expect(response.json().series[0].points.length).toBeLessThanOrEqual(720);
+    await server.close();
+  });
+
+  it("rejects unsafe selectors and oversized requests", async () => {
+    const databasePath = await tempDatabase();
+    const writer = new MetricsWriter(databasePath, { ...DEFAULT_MONITORING_CONFIG });
+    writer.close();
+    const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
+
+    const label = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: { ...validQuery(), selectors: [{ metric: "zos_host_load1", labels: { path: "/secret" } }] }
+    });
+    expect(label.statusCode).toBe(400);
+    expect(label.body).not.toContain("/secret");
+
+    const selectors = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: { ...validQuery(), selectors: Array.from({ length: 13 }, () => ({ metric: "zos_host_load1" })) }
+    });
+    expect(selectors.statusCode).toBe(400);
+
+    const points = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: { ...validQuery(), maxPoints: 721 }
+    });
+    expect(points.statusCode).toBe(400);
+    await server.close();
+  });
+
+  it("returns a path-free 503 when the metrics database is corrupt", async () => {
+    const databasePath = await tempDatabase();
+    await writeFile(databasePath, "not sqlite");
+    const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
+
+    const response = await server.inject({ method: "GET", url: "/api/monitoring/overview" });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ error: "Monitoring data is unavailable" });
+    expect(response.body).not.toContain(databasePath);
+    await server.close();
+  });
+});
+
+async function buildRoutes(monitoring: MonitoringReader) {
+  const server = Fastify({ logger: false });
+  registerErrorHandler(server);
+  registerMonitoringRoutes(server, { monitoring } as ApiRouteContext);
+  server.addHook("onClose", async () => monitoring.close());
+  return server;
+}
+
+async function tempDatabase(): Promise<string> {
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-monitoring-routes-"));
+  return path.join(tempDir, "metrics.sqlite");
+}
+
+function validQuery() {
+  return {
+    start: "2026-01-01T00:00:00.000Z",
+    end: "2026-01-01T01:00:00.000Z",
+    maxPoints: 720,
+    selectors: [{ metric: "zos_host_load1" }]
+  };
+}

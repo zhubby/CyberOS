@@ -18,6 +18,7 @@
       "@zos/agent": ["packages/agent/src/index.ts"],
       "@zos/db": ["packages/db/src/index.ts"],
       "@zos/nas-tools": ["packages/nas-tools/src/index.ts"],
+      "@zos/monitoring": ["packages/monitoring/src/index.ts"],
       "@zos/shared": ["packages/shared/src/index.ts"],
       "@zos/shared/docker-images": ["packages/shared/src/docker-images.ts"],
       "@zos/shared/photostaff-config": ["packages/shared/src/photostaff-config.ts"]

@@ -30,6 +30,7 @@
 .workspace-stage[data-panel="docker"],
 .workspace-stage[data-panel="virtualMachines"],
 .workspace-stage[data-panel="network"],
+.workspace-stage[data-panel="monitoring"],
 .workspace-stage[data-panel="storage"],
 .workspace-stage[data-panel="shares"] {
   grid-template-rows: minmax(0, 1fr);
@@ -2314,11 +2315,11 @@
 .management-header {
   display: grid;
   grid-template-areas: "icon copy actions";
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  min-height: 70px;
-  padding: 14px 16px;
+  gap: 14px;
+  min-height: 78px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--header-border);
   background: var(--channel-bg);
 }
@@ -2327,8 +2328,8 @@
   grid-area: icon;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 6px;
   color: var(--accent-soft-text);
   background: var(--accent-soft-bg);
@@ -2337,7 +2338,7 @@
 .management-title-copy {
   grid-area: copy;
   display: grid;
-  gap: 3px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -2349,8 +2350,10 @@
 }
 
 .management-title-copy h2 {
+  font-family: var(--font-ui);
   font-size: 20px;
-  line-height: 1.15;
+  font-weight: 650;
+  line-height: 24px;
 }
 
 .management-title-copy p,
@@ -2364,6 +2367,7 @@
 .management-title-copy p {
   max-width: 720px;
   font-size: 12.5px;
+  line-height: 18px;
 }
 
 .management-actions {
@@ -3258,6 +3262,354 @@
 
 .management-dashboard-static .management-widget-content {
   overflow: visible;
+}
+
+.monitoring-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.monitoring-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--footer-bg);
+}
+
+.monitoring-range {
+  display: inline-grid;
+  grid-template-columns: repeat(6, minmax(42px, 1fr));
+  padding: 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.monitoring-range button {
+  min-width: 42px;
+  height: 27px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.monitoring-range button:hover,
+.monitoring-range button:focus-visible {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.monitoring-range button.is-active {
+  color: var(--accent-contrast);
+  background: var(--accent);
+}
+
+.monitoring-live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.monitoring-live-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-2);
+}
+
+.monitoring-live-status[data-state="ready"] i {
+  background: var(--success-text);
+}
+
+.monitoring-live-status[data-state="warning"] i {
+  background: var(--warning-text);
+}
+
+.monitoring-live-status[data-state="offline"] i {
+  background: var(--danger-text);
+}
+
+.monitoring-body {
+  min-height: 0;
+}
+
+.monitoring-notice {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--warning-border);
+  border-radius: 5px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 11.5px;
+}
+
+.monitoring-notice[data-state="unavailable"] {
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+  background: var(--danger-bg-soft);
+}
+
+.monitoring-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  min-height: 0;
+  padding: 28px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.monitoring-state svg {
+  color: var(--accent-soft-text);
+}
+
+.monitoring-state[data-state="offline"] svg {
+  color: var(--danger-text);
+}
+
+.monitoring-state strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.monitoring-state p {
+  max-width: 520px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.monitoring-chart-section,
+.monitoring-resource-section,
+.monitoring-services-section {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 100%;
+}
+
+.monitoring-chart {
+  height: 190px;
+  min-height: 150px;
+  min-width: 0;
+  padding: 4px 8px 0;
+}
+
+.monitoring-chart-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  height: 100%;
+  color: var(--muted-2);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.monitoring-chart-empty svg {
+  color: var(--accent-soft-text);
+}
+
+.monitoring-chart-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  min-height: 28px;
+  padding: 2px 12px 9px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.monitoring-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.monitoring-chart-legend i {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 2px;
+  border-radius: 2px;
+}
+
+.monitoring-capacity-row {
+  display: grid;
+  grid-template-columns: minmax(130px, .9fr) minmax(100px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.monitoring-capacity-row:last-child {
+  border-bottom: 0;
+}
+
+.monitoring-capacity-row > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.monitoring-capacity-row strong,
+.monitoring-capacity-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitoring-capacity-row strong {
+  color: var(--text);
+  font-size: 11.5px;
+}
+
+.monitoring-capacity-row span,
+.monitoring-capacity-row small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.monitoring-capacity-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-strong);
+}
+
+.monitoring-capacity-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-soft-text);
+}
+
+.monitoring-service-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  min-height: 0;
+}
+
+.monitoring-service-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 37px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.monitoring-service-row:nth-child(odd) {
+  border-right: 1px solid var(--line-soft);
+}
+
+.monitoring-service-row svg {
+  color: var(--muted-2);
+}
+
+.monitoring-service-row > span {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitoring-service-row > strong {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.monitoring-service-row > strong[data-state="ready"] {
+  color: var(--success-text);
+}
+
+.monitoring-service-row > strong[data-state="offline"] {
+  color: var(--danger-text);
+}
+
+.monitoring-service-row > small {
+  grid-column: 2 / -1;
+  color: var(--muted-2);
+  font-size: 9.5px;
+}
+
+.monitoring-inline-empty {
+  display: grid;
+  grid-column: 1 / -1;
+  min-height: 90px;
+  place-items: center;
+  color: var(--muted-2);
+  font-size: 11.5px;
+}
+
+@container workspace-stage (max-width: 700px) {
+  .monitoring-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .monitoring-range {
+    width: 100%;
+  }
+
+  .monitoring-live-status {
+    padding-left: 3px;
+  }
+
+  .monitoring-service-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .monitoring-service-row:nth-child(odd) {
+    border-right: 0;
+  }
+}
+
+@container workspace-stage (max-width: 420px) {
+  .monitoring-range {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .monitoring-range button {
+    min-width: 0;
+  }
+
+  .monitoring-capacity-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .monitoring-capacity-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

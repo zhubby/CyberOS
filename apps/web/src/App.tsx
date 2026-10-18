@@ -76,8 +76,6 @@ import {
   type PhotoLibrarySettings,
   type PhotoLibraryStatus,
   type PhotoProcessingSettings,
-  type PhotoWorkerHealth,
-  type PiToolPolicySettings,
   type Session,
   type SessionSummary,
   type SystemInfo,
@@ -239,7 +237,6 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("model-providers");
   const [modelSettings, setModelSettings] = useState<ModelProviderSettings | null>(null);
-  const [toolPolicySettings, setToolPolicySettings] = useState<PiToolPolicySettings | null>(null);
   const [dockerSettings, setDockerSettings] = useState<DockerSettings | null>(null);
   const [downloadSettings, setDownloadSettings] = useState<DownloadSettings | null>(null);
   const [indexerSettings, setIndexerSettings] = useState<IndexerSettings | null>(null);
@@ -247,9 +244,8 @@ export function App() {
   const [photoSettings, setPhotoSettings] = useState<PhotoLibrarySettings | null>(null);
   const [photoStatus, setPhotoStatus] = useState<PhotoLibraryStatus | null>(null);
   const [photoProcessingSettings, setPhotoProcessingSettings] = useState<PhotoProcessingSettings | null>(null);
-  const [photoWorkerHealth, setPhotoWorkerHealth] = useState<PhotoWorkerHealth | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
-  const [systemInfoError, setSystemInfoError] = useState<string | null>(null);
+  const [, setSystemInfoError] = useState<string | null>(null);
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [buildInfoError, setBuildInfoError] = useState<string | null>(null);
   const [modelSettingsForm, setModelSettingsForm] = useState<ModelProviderFormState>(() =>
@@ -906,7 +902,6 @@ export function App() {
       }
 
       if (toolPolicyResult.status === "fulfilled") {
-        setToolPolicySettings(toolPolicyResult.value);
         setToolPolicyForm(toolPolicyResult.value);
       } else {
         errors.push(toErrorMessage(toolPolicyResult.reason));
@@ -956,10 +951,8 @@ export function App() {
 
       if (photoStatusResult.status === "fulfilled") {
         setPhotoStatus(photoStatusResult.value.status);
-        setPhotoWorkerHealth(photoStatusResult.value.workerHealth);
       } else {
         setPhotoStatus(null);
-        setPhotoWorkerHealth(null);
         errors.push(toErrorMessage(photoStatusResult.reason));
       }
 
@@ -1027,7 +1020,6 @@ export function App() {
         })
       ]);
       setModelSettings(settings);
-      setToolPolicySettings(toolPolicy);
       setDockerSettings(nextDockerSettings);
       setModelSettingsForm(modelSettingsToForm(settings));
       setToolPolicyForm(toolPolicy);
@@ -2562,23 +2554,15 @@ export function App() {
           photoSettings={photoSettings}
           photoStatus={photoStatus}
           photoProcessingSettings={photoProcessingSettings}
-          photoWorkerHealth={photoWorkerHealth}
           dockerForm={dockerSettingsForm}
           systemInfo={systemInfo}
-          systemInfoError={systemInfoError}
           buildInfo={buildInfo}
           buildInfoError={buildInfoError}
-          pendingApprovals={approvals}
-          operations={operations}
-          operationsReady={operationsReady}
-          toolPolicySettings={toolPolicySettings}
           toolPolicyForm={toolPolicyForm}
           languagePreference={languagePreference}
           themePreference={themePreference}
-          resolvedTheme={resolvedTheme}
           previewFileSizeLimitBytes={previewFileSizeLimitBytes}
           codeFontSettings={codeFontSettings}
-          splitWidth={splitWidth}
           resolvedLocale={resolvedLocale}
           onClose={() => setSettingsOpen(false)}
           onFormChange={setModelSettingsForm}

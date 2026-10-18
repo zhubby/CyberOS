@@ -16,8 +16,20 @@ import type {
   VodPlayerConfig,
   ZosConfig,
   TerminalConfig,
+  MonitoringConfig,
   VmConfig
 } from "./types.js";
+
+export const DEFAULT_MONITORING_CONFIG: Readonly<MonitoringConfig> = Object.freeze({
+  enabled: true,
+  fastSampleIntervalMs: 10_000,
+  standardSampleIntervalMs: 30_000,
+  temperatureSampleIntervalMs: 5 * 60_000,
+  rawRetentionMs: 48 * 60 * 60_000,
+  minuteRetentionMs: 30 * 24 * 60 * 60_000,
+  hourRetentionMs: 365 * 24 * 60 * 60_000,
+  maxDatabaseBytes: 512 * 1024 * 1024
+});
 
 interface TomlConfig {
   environment?: "development" | "production";
@@ -157,6 +169,16 @@ interface TomlConfig {
     consecutive_failure_threshold?: number;
     backup_stale_ms?: number;
   };
+  monitoring?: {
+    enabled?: boolean;
+    fast_sample_interval_ms?: number;
+    standard_sample_interval_ms?: number;
+    temperature_sample_interval_ms?: number;
+    raw_retention_ms?: number;
+    minute_retention_ms?: number;
+    hour_retention_ms?: number;
+    max_database_bytes?: number;
+  };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): ZosConfig {
@@ -175,6 +197,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
   const nasRoots = loadNasRoots(env, fileConfig, workspaceRoot, environment, paths);
   const backup = loadBackupConfig(env, fileConfig, workspaceRoot, dataDir, environment);
   const health = loadHealthConfig(env, fileConfig);
+  const monitoring = loadMonitoringConfig(env, fileConfig);
   const apiHost = env.ZOS_API_HOST ?? fileConfig.api?.host ?? "127.0.0.1";
   const vm = loadVmConfig(env, fileConfig, workspaceRoot, paths);
   const vodPlayer = loadVodPlayerConfig(env, fileConfig, paths);
@@ -192,6 +215,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
     backupRoot: paths.backupRoot,
     dataDir,
     databasePath: paths.databasePath,
+    metricsDatabasePath: paths.metricsDatabasePath,
     api: {
       host: apiHost,
       port: toPort(env.ZOS_API_PORT, fileConfig.api?.port ?? 3010),
@@ -233,8 +257,111 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
     },
     nasRoots,
     backup,
-    health
+    health,
+    monitoring
   };
+}
+
+function loadMonitoringConfig(
+  env: NodeJS.ProcessEnv,
+  fileConfig: TomlConfig
+): MonitoringConfig {
+  const source = fileConfig.monitoring;
+  const config = {
+    enabled: monitoringBoolean(env.ZOS_MONITORING_ENABLED ?? source?.enabled, true, "enabled"),
+    fastSampleIntervalMs: monitoringInteger(
+      env.ZOS_MONITORING_FAST_SAMPLE_INTERVAL_MS ?? source?.fast_sample_interval_ms,
+      DEFAULT_MONITORING_CONFIG.fastSampleIntervalMs,
+      "fast_sample_interval_ms"
+    ),
+    standardSampleIntervalMs: monitoringInteger(
+      env.ZOS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS ?? source?.standard_sample_interval_ms,
+      DEFAULT_MONITORING_CONFIG.standardSampleIntervalMs,
+      "standard_sample_interval_ms"
+    ),
+    temperatureSampleIntervalMs: monitoringInteger(
+      env.ZOS_MONITORING_TEMPERATURE_SAMPLE_INTERVAL_MS ?? source?.temperature_sample_interval_ms,
+      DEFAULT_MONITORING_CONFIG.temperatureSampleIntervalMs,
+      "temperature_sample_interval_ms"
+    ),
+    rawRetentionMs: monitoringInteger(
+      env.ZOS_MONITORING_RAW_RETENTION_MS ?? source?.raw_retention_ms,
+      DEFAULT_MONITORING_CONFIG.rawRetentionMs,
+      "raw_retention_ms"
+    ),
+    minuteRetentionMs: monitoringInteger(
+      env.ZOS_MONITORING_MINUTE_RETENTION_MS ?? source?.minute_retention_ms,
+      DEFAULT_MONITORING_CONFIG.minuteRetentionMs,
+      "minute_retention_ms"
+    ),
+    hourRetentionMs: monitoringInteger(
+      env.ZOS_MONITORING_HOUR_RETENTION_MS ?? source?.hour_retention_ms,
+      DEFAULT_MONITORING_CONFIG.hourRetentionMs,
+      "hour_retention_ms"
+    ),
+    maxDatabaseBytes: monitoringInteger(
+      env.ZOS_MONITORING_MAX_DATABASE_BYTES ?? source?.max_database_bytes,
+      DEFAULT_MONITORING_CONFIG.maxDatabaseBytes,
+      "max_database_bytes"
+    )
+  };
+  validateMonitoringConfig(config);
+  return config;
+}
+
+function monitoringBoolean(
+  value: string | boolean | undefined,
+  fallback: boolean,
+  name: string
+): boolean {
+  if (value === undefined) return fallback;
+  if (typeof value === "boolean") return value;
+  if (value === "1" || value.toLowerCase() === "true") return true;
+  if (value === "0" || value.toLowerCase() === "false") return false;
+  throw new Error(`Monitoring ${name} must be 0 or 1`);
+}
+
+function monitoringInteger(
+  value: string | number | undefined,
+  fallback: number,
+  name: string
+): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`Monitoring ${name} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function validateMonitoringConfig(config: MonitoringConfig): void {
+  if (config.fastSampleIntervalMs < 1_000 || config.fastSampleIntervalMs > 5 * 60_000) {
+    throw new Error("Monitoring fast_sample_interval_ms must be between 1000 and 300000");
+  }
+  if (
+    config.standardSampleIntervalMs < config.fastSampleIntervalMs
+    || config.standardSampleIntervalMs > 15 * 60_000
+  ) {
+    throw new Error("Monitoring standard_sample_interval_ms must be at least the fast interval and at most 900000");
+  }
+  if (
+    config.temperatureSampleIntervalMs < config.standardSampleIntervalMs
+    || config.temperatureSampleIntervalMs > 60 * 60_000
+  ) {
+    throw new Error("Monitoring temperature_sample_interval_ms must be at least the standard interval and at most 3600000");
+  }
+  if (config.rawRetentionMs < 60 * 60_000) {
+    throw new Error("Monitoring raw_retention_ms must be at least one hour");
+  }
+  if (config.minuteRetentionMs < config.rawRetentionMs) {
+    throw new Error("Monitoring minute_retention_ms must be at least raw_retention_ms");
+  }
+  if (config.hourRetentionMs < config.minuteRetentionMs) {
+    throw new Error("Monitoring hour_retention_ms must be at least minute_retention_ms");
+  }
+  if (config.maxDatabaseBytes < 64 * 1024 * 1024 || config.maxDatabaseBytes > 4 * 1024 * 1024 * 1024) {
+    throw new Error("Monitoring max_database_bytes must be between 67108864 and 4294967296");
+  }
 }
 
 function loadPhotostaffBaseMapUrl(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string {

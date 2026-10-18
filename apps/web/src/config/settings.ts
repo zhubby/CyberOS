@@ -6,14 +6,11 @@ import type {
   IndexerSettings,
   ModelProviderSettings,
   ModelProviderName,
-  PhotoLibrarySettings,
   PhotoLibraryStatus,
   PiDangerousToolPolicyMode,
   PiToolPolicyMode,
   PiToolPolicySettings
 } from "../api.js";
-import { formatDate } from "../i18n/format.js";
-import type { SupportedLocale } from "../i18n/locale.js";
 
 export type SettingsSectionId =
   | "overview"
@@ -26,7 +23,6 @@ export type SettingsSectionId =
   | "operations"
   | "photos"
   | "downloads"
-  | "security"
   | "appearance"
   | "advanced";
 
@@ -104,10 +100,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "workspace"
   },
   {
-    id: "security",
-    group: "administration"
-  },
-  {
     id: "appearance",
     group: "zos"
   },
@@ -128,7 +120,6 @@ const SECTION_TITLE_KEYS = {
   operations: "settings.sections.operations.title",
   photos: "settings.sections.photos.title",
   downloads: "settings.sections.downloads.title",
-  security: "settings.sections.security.title",
   appearance: "settings.sections.appearance.title",
   advanced: "settings.sections.advanced.title"
 } as const satisfies Record<SettingsSectionId, string>;
@@ -144,7 +135,6 @@ const SECTION_DESCRIPTION_KEYS = {
   operations: "settings.sections.operations.description",
   photos: "settings.sections.photos.description",
   downloads: "settings.sections.downloads.description",
-  security: "settings.sections.security.description",
   appearance: "settings.sections.appearance.description",
   advanced: "settings.sections.advanced.description"
 } as const satisfies Record<SettingsSectionId, string>;
@@ -189,26 +179,6 @@ export function settingsSectionDescription(section: SettingsSection, t: Translat
   return t(SECTION_DESCRIPTION_KEYS[section.id]);
 }
 
-export function settingsStatus(settings: ModelProviderSettings | null, t: Translate): string {
-  if (!settings) {
-    return t("settings.modelProvider.notLoaded");
-  }
-  return settings.apiKeyConfigured
-    ? t("settings.modelProvider.apiKeyConfigured")
-    : t("settings.modelProvider.noApiKey");
-}
-
-export function settingsUpdatedAtLabel(
-  settings: { updatedAt: string } | null,
-  locale: SupportedLocale,
-  t: Translate
-): string {
-  if (!settings || settings.updatedAt === new Date(0).toISOString()) {
-    return t("settings.modelProvider.notSaved");
-  }
-  return formatDate(settings.updatedAt, locale);
-}
-
 export function settingsSectionState(
   section: SettingsSection,
   settings: ModelProviderSettings | null,
@@ -248,78 +218,6 @@ export function settingsSectionState(
     return photoStatus?.state === "ready" ? "ready" : "missing";
   }
   return "ready";
-}
-
-export function settingsSectionLabel(
-  section: SettingsSection,
-  settings: ModelProviderSettings | null,
-  loading: boolean,
-  t: Translate,
-  dockerSettings: DockerSettings | null,
-  buildInfo: BuildInfo | null = null,
-  downloadSettings: DownloadSettings | null = null,
-  photoSettings: PhotoLibrarySettings | null = null,
-  photoStatus: PhotoLibraryStatus | null = null,
-  indexerSettings: IndexerSettings | null = null
-): string {
-  if (
-    loading &&
-    (section.id === "model-providers" ||
-      section.id === "docker" ||
-      section.id === "version" ||
-      section.id === "downloads" ||
-      section.id === "indexer" ||
-      section.id === "photos")
-  ) {
-    return t("common.states.loading");
-  }
-  if (section.id === "version") {
-    if (!buildInfo) {
-      return t("common.states.unavailable");
-    }
-    return buildInfo.version === "unknown" ? t("common.states.unknown") : `v${buildInfo.version}`;
-  }
-  if (section.id === "docker") {
-    if (!dockerSettings) {
-      return t("settings.docker.notLoaded");
-    }
-    return dockerSettings.enabled ? t("settings.docker.enabled") : t("settings.docker.disabled");
-  }
-  if (section.id === "downloads") {
-    return downloadSettings
-      ? t("settings.downloads.connectionCount", { count: downloadSettings.concurrency })
-      : t("settings.downloads.notLoaded");
-  }
-  if (section.id === "indexer") {
-    return indexerSettings
-      ? t("settings.indexer.concurrencySummary", {
-          scan: indexerSettings.scanConcurrency,
-          extract: indexerSettings.extractionConcurrency
-        })
-      : t("settings.indexer.notLoaded");
-  }
-  if (section.id === "photos") {
-    if (!photoStatus) {
-      return photoSettings ? t("common.states.configured") : t("common.states.unavailable");
-    }
-    return t(`settings.photos.states.${photoStatus.state}`);
-  }
-  const state = settingsSectionState(
-    section,
-    settings,
-    dockerSettings,
-    buildInfo,
-    downloadSettings,
-    photoStatus,
-    indexerSettings
-  );
-  if (state === "ready") {
-    return t("common.states.configured");
-  }
-  if (state === "missing") {
-    return t("common.states.needsKey");
-  }
-  return t("common.states.loading");
 }
 
 export function providerLabel(providerName: ModelProviderName, t: Translate): string {

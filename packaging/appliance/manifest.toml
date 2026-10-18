@@ -12,6 +12,7 @@ package = "zos.deb"
 [services]
 units = [
   "zos-api.service",
+  "zos-monitor.service",
   "zos-termux.service",
   "zos-vod-player.service",
   "zos-hostd.service",

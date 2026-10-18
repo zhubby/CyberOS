@@ -4,14 +4,16 @@ description: SQLite WAL、表域和 migration policy。
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/db/src/schema.ts, packages/db/src/connection.ts, packages/db/src/migrations/core.ts, packages/db/src/migrations/production.ts]
+sourceOfTruth: [packages/db/src/schema.ts, packages/db/src/connection.ts, packages/db/src/migrations/core.ts, packages/db/src/migrations/production.ts, packages/monitoring/src/schema.ts, packages/monitoring/src/store.ts]
 sidebar:
   order: 5
 ---
 
-SQLite 位于 data directory，使用 WAL、foreign keys 和 busy timeout。迁移按递增 ID 执行并写入 `schema_migrations`；新增持久化状态必须同时更新 migration、repository、shared type 和测试。
+主 SQLite 位于 data directory，使用 WAL、foreign keys 和 busy timeout。迁移按递增 ID 执行并写入 `schema_migrations`；新增业务持久化状态必须同时更新 migration、repository、shared type 和测试。
 
 FTS5 正文索引、照片资源与处理任务、index run history、backup runs、health alerts 和 execution locks 都属于同一数据库的运维状态，不应另起 Redis 或外部队列。
+
+高频监控指标是明确例外：`${ZOS_ROOT}/state/metrics.sqlite` 使用独立 migration 和 WAL，由 `zos-monitor` 独占写入，API/Health 只读。其固定表为 `metric_series`、`metric_samples_raw`、`metric_rollups_1m`、`metric_rollups_1h`、`collector_status` 与内部 metadata。该库是可重建缓存；损坏恢复只隔离带时间戳的指标库并创建新库，不得删除、迁移或修复 `zos.sqlite`。旧版本回滚可以忽略但应保留 `metrics.sqlite`，避免破坏再次升级后的历史数据。
 
 Photos 图库配置保存在内部键 `system_settings.photostaff_library_settings`；`photostaff` 仅作为 Rust 服务、数据库表和数据目录标识。`photostaff_assets` 保持 root-relative 路径、hash、时间线、尺寸、source identity 和衍生图契约。`photostaff_asset_metadata` 保存规范字段、schema version、解析状态、警告和清洗后的来源分组 JSON；`photostaff_metadata_values` 按来源限定路径和类型保存标量，数组逐值索引；`photostaff_keywords`、`photostaff_metadata_fts` 与 `photostaff_geo_index` 分别承担关键词、FTS5 和 GPS RTree 查询。MakerNote、缩略图及二进制负载不进入数据库，每个资源受叶子数、单值、JSON 大小和深度限制。
 

@@ -4,7 +4,7 @@ description: 服务身份、周期和关键 hardening 配置。
 type: reference
 status: current
 audience: [operator]
-sourceOfTruth: [packaging/systemd/zos-api.service, packaging/systemd/zos-worker@.service, packaging/systemd/zos-indexer.service, packaging/systemd/zos-health.service, packaging/systemd/zos-health.timer, packaging/systemd/zos-maintenance.service, packaging/systemd/zos-maintenance.timer]
+sourceOfTruth: [packaging/systemd/zos-api.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-worker@.service, packaging/systemd/zos-indexer.service, packaging/systemd/zos-health.service, packaging/systemd/zos-health.timer, packaging/systemd/zos-maintenance.service, packaging/systemd/zos-maintenance.timer]
 sidebar:
   order: 3
 ---
@@ -13,13 +13,15 @@ sidebar:
 
 hostd 在 `local-fs.target`、tmpfiles 和 `NetworkManager.service` 之后启动，并排在 `network-online.target` 之前，以便先恢复未完成的 Ethernet checkpoint 事务。它继续使用既有 `/etc` 和 `/zos/state/hostd/network-manager` 写边界；API 不获得 root、capability 或 NetworkManager keyfile 写权限。
 
+`zos-monitor.service` 在 API 完成主库 migration 后启动，以 `zos` 身份运行，只写 `/zos/state` 并只读 NAS。unit 仅允许 `AF_UNIX`、清空 capabilities、限制 `MemoryMax=256M`，并使用较低 CPU/IO weight。它是指标库唯一写入者；启动失败只令监控与 Health 降级，不应拉停 API、文件、索引或备份服务。
+
 Rust Indexer 是 `Type=notify` 常驻服务，带 watchdog、失败重启、1 GiB cgroup 内存上限和只读 NAS 映射；内部每 30 分钟校准。systemd 是唯一调度层：health 每 15 分钟运行并带最多 2 分钟随机延迟，maintenance 每日 04:30 运行并带最多 30 分钟随机延迟，backup daily/weekly 分别按日历运行。只有这些 oneshot 任务完成后显示 `inactive (dead)` 才是正常状态。
 
 查看全部运行状态：
 
 ```bash
 systemctl --no-pager --type=service --type=timer 'zos-*'
-journalctl -u zos-api.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -n 100 --no-pager
+journalctl -u zos-api.service -u zos-monitor.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -n 100 --no-pager
 journalctl -u zos-indexer.service -u zos-health.service -n 100 --no-pager
 ```
 

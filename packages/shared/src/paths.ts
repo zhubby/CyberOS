@@ -15,6 +15,7 @@ export interface ZosPaths {
   deployRoot: string;
   systemBackupsDir: string;
   databasePath: string;
+  metricsDatabasePath: string;
   defaultDataRoot: string;
   hostdStateDir: string;
   networkManagerStateDir: string;
@@ -50,6 +51,7 @@ export function resolveZosPaths(rootDir: string): ZosPaths {
     deployRoot: path.join(root, "deploy"),
     systemBackupsDir: path.join(root, "system-backups"),
     databasePath: path.join(stateDir, "zos.sqlite"),
+    metricsDatabasePath: path.join(stateDir, "metrics.sqlite"),
     defaultDataRoot: path.join(dataRoot, "primary"),
     hostdStateDir,
     networkManagerStateDir: path.join(hostdStateDir, "network-manager"),

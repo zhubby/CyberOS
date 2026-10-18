@@ -19,6 +19,10 @@ describe("workspace panel settings helpers", () => {
     }
   });
 
+  it("exposes monitoring as a durable top-level panel", () => {
+    expect(WORKSPACE_PANEL_IDS).toContain("monitoring");
+  });
+
   it("falls back to files for missing, stale, and invalid values", () => {
     const storage = createMemoryStorage();
 

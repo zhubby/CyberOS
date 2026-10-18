@@ -13,7 +13,9 @@ import {
   upsertRootReadiness,
   type ZosDatabase
 } from "@zos/db";
+import { readMonitoringHealth } from "@zos/monitoring";
 import {
+  DEFAULT_MONITORING_CONFIG,
   createVodPlayerRuntime,
   type RootReadiness,
   type ZosConfig,
@@ -39,7 +41,8 @@ export const HEALTH_OWNED_ALERT_CODES = [
   "backup_stale",
   "repo_check_failed",
   "ops_health_unhealthy",
-  "ops_maintenance_unhealthy"
+  "ops_maintenance_unhealthy",
+  "monitoring_unavailable"
 ] as const;
 
 const HEALTH_OWNED_ALERT_SET = new Set<string>(HEALTH_OWNED_ALERT_CODES);
@@ -244,6 +247,19 @@ export async function evaluateSystemHealth(
     });
   }
 
+  const monitoring = readMonitoringHealth(
+    input.config.metricsDatabasePath ?? `${input.config.dataDir}/metrics.sqlite`,
+    input.config.monitoring ?? DEFAULT_MONITORING_CONFIG,
+    now
+  );
+  if (monitoring.status === "unavailable") {
+    addIssue({
+      code: "monitoring_unavailable",
+      severity: "warning",
+      message: "Monitoring has not produced a recent sample"
+    });
+  }
+
   return {
     status: issues.some((issue) => issue.severity === "critical")
       ? "failed"
@@ -259,7 +275,8 @@ export async function evaluateSystemHealth(
     indexer,
     photostaff,
     vodPlayer,
-    operations
+    operations,
+    monitoring
   };
 }
 

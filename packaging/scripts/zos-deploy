@@ -14,7 +14,8 @@ STATE_PATH="$BASE_DIR/current-release.json"
 LOCK_PATH=/run/lock/zos-deploy.lock
 
 TIMERS='zos-maintenance.timer zos-health.timer zos-backup-daily.timer zos-backup-weekly.timer'
-RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'
+CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'
+RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service"
 SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'
 WRITERS="zos-indexer.service zos-maintenance.service zos-health.service zos-backup-daily.service zos-backup-weekly.service $RUNTIME_SERVICES zos-vod-player.service"
 
@@ -204,6 +205,37 @@ NODE
   return 1
 }
 
+report_monitoring_status() {
+  status_path="$work_dir/monitoring-overview.json"
+  attempts=1
+  while [ "$attempts" -le 15 ]; do
+    if curl --fail --silent --show-error --max-time 10 \
+      http://127.0.0.1:3010/api/monitoring/overview > "$status_path" && \
+      node --input-type=module - "$status_path" <<'NODE'
+import fs from "node:fs";
+
+const overview = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+process.exit(["ready", "degraded", "disabled"].includes(overview?.status) ? 0 : 1);
+NODE
+    then
+      monitoring_status=$(node --input-type=module - "$status_path" <<'NODE'
+import fs from "node:fs";
+
+const overview = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+process.stdout.write(overview.status);
+NODE
+      )
+      log "monitoring status: $monitoring_status"
+      return 0
+    fi
+    sleep 2
+    attempts=$((attempts + 1))
+  done
+  [ ! -s "$status_path" ] || cat "$status_path" >&2
+  log "warning: monitoring is degraded; core runtime verification will continue" >&2
+  return 0
+}
+
 start_service_stably() {
   unit=$1
   stabilization_seconds=${2:-5}
@@ -237,7 +269,12 @@ activate_runtime() {
   start_service_stably zos-api.service
   wait_for_url http://127.0.0.1:3010/health || die "API startup recovery failed"
 
-  log "refreshing health before background database writers start"
+  log "starting monitoring after API database recovery"
+  if ! systemctl start zos-monitor.service || ! systemctl is-active --quiet zos-monitor.service; then
+    log "warning: monitoring service failed to start; core runtime activation will continue" >&2
+  fi
+
+  log "refreshing health after monitoring startup"
   systemctl start zos-health.service
 
   log "starting background database writers sequentially"
@@ -253,7 +290,7 @@ activate_runtime() {
 
 verify_runtime() {
   log "checking ZOS services"
-  for unit in zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-hostd.service zos-termux.service; do
+  for unit in $CORE_RUNTIME_SERVICES; do
     systemctl is-enabled --quiet "$unit" || die "service is not enabled: $unit"
     systemctl is-active --quiet "$unit" || die "service is not active: $unit"
   done
@@ -274,12 +311,13 @@ verify_runtime() {
   wait_for_url http://127.0.0.1:3010/api/roots/readiness || die "root readiness check failed"
   wait_for_url http://127.0.0.1:3010/api/system/health || die "system health endpoint failed"
   wait_for_url http://127.0.0.1:3010/api/system/build-info || die "build-info endpoint failed"
+  report_monitoring_status
   wait_for_indexer_ready || die "indexer readiness check failed"
   wait_for_health_operation_ready || die "health operation is not ready"
 
   runtime_before=$(runtime_fingerprint)
   sleep 30
-  for unit in zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-hostd.service zos-termux.service; do
+  for unit in $CORE_RUNTIME_SERVICES; do
     systemctl is-active --quiet "$unit" || die "service did not remain active: $unit"
   done
   wait_for_url http://127.0.0.1:3010/health || die "API liveness check failed after stabilization"
@@ -291,7 +329,7 @@ verify_runtime() {
     die "one or more services restarted during stabilization"
   fi
 
-  failed_units=$(systemctl --failed --no-legend --plain | awk '$1 ~ /^zos-/ { print }' || true)
+  failed_units=$(systemctl --failed --no-legend --plain | awk '$1 ~ /^zos-/ && $1 != "zos-monitor.service" { print }' || true)
   if [ -n "$failed_units" ]; then
     printf '%s\n' "$failed_units" >&2
     die "systemd has failed units"
@@ -353,7 +391,7 @@ NODE
 }
 
 runtime_fingerprint() {
-  for unit in zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-hostd.service zos-termux.service; do
+  for unit in $CORE_RUNTIME_SERVICES; do
     main_pid=$(systemctl show --property=MainPID --value "$unit")
     restart_count=$(systemctl show --property=NRestarts --value "$unit")
     printf '%s:%s:%s\n' "$unit" "$main_pid" "$restart_count"
@@ -394,7 +432,7 @@ capture_runtime_diagnostics() {
   target_diagnostics_path=$1
   systemctl status $RUNTIME_SERVICES $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
   systemctl --failed --no-legend --plain > "$target_diagnostics_path/failed-units.txt" 2>&1 || true
-  journalctl -u zos-api.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-termux.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
+  journalctl -u zos-api.service -u zos-monitor.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-termux.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
 
   log "service status at failure:" >&2
   cat "$target_diagnostics_path/services-status.txt" >&2

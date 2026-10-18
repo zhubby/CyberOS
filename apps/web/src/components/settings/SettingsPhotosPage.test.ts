@@ -1,7 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it } from "vitest";
-import { PHOTOSTAFF_SUPPORTED_EXTENSIONS } from "@zos/shared/photostaff-config";
 import { i18n, initI18n } from "../../i18n/index.js";
 import { SettingsPhotosPage } from "./SettingsModal.js";
 
@@ -11,7 +10,7 @@ beforeAll(async () => {
 });
 
 describe("SettingsPhotosPage", () => {
-  it("renders the photo library, scan status, and server runtime configuration", () => {
+  it("renders the library location and editable processing, retry, and resource controls", () => {
     const html = renderToStaticMarkup(createElement(SettingsPhotosPage, {
       settings: {
         rootId: "nas",
@@ -34,37 +33,20 @@ describe("SettingsPhotosPage", () => {
         updatedAt: "2026-09-24T06:10:00.000Z"
       },
       processingSettings: processingSettings(),
-      workerHealth: {
-        status: "ready",
-        freshWorkers: 1,
-        lastHeartbeatAt: "2026-09-24T06:10:00.000Z",
-        activeJobs: 0,
-        queuedJobs: 0,
-        retryingJobs: 0
-      },
-      runtime: {
-        dataDir: "/zos/state/photostaff",
-        maxFileSizeBytes: 512 * 1024 * 1024,
-        thumbnailSizePx: 512,
-        previewMaxEdgePx: 2048,
-        supportedExtensions: [...PHOTOSTAFF_SUPPORTED_EXTENSIONS]
-      },
       loading: false,
-      locale: "en",
       onSettingsChange: async () => undefined,
       onClose: () => undefined
     }));
 
     expect(html).toContain("Pictures/Library");
-    expect(html).toContain("pool-a");
-    expect(html).toContain("/zos/state/photostaff");
-    expect(html).toContain("512.0 MB");
-    expect(html).toContain("2,048 px max edge");
-    expect(html).toContain(PHOTOSTAFF_SUPPORTED_EXTENSIONS.map((extension) => extension.slice(1).toUpperCase()).join(", "));
-    expect(html).toContain(">42<");
-    expect(html).toContain(">1<");
-    expect(html).toContain("Worker ready");
     expect(html).toContain("Processing concurrency");
+    expect(html).toContain("Retry Policy");
+    expect(html).toContain("Resource Limits");
+    expect(html).toContain("Maximum intermediate bytes");
+    expect(html).not.toContain("pool-a");
+    expect(html).not.toContain("Worker Health");
+    expect(html).not.toContain("Runtime Capabilities");
+    expect(html).not.toContain("Supported formats");
   });
 
   it("shows an explicit unconfigured state without inventing library paths", () => {
@@ -85,10 +67,7 @@ describe("SettingsPhotosPage", () => {
         updatedAt: null
       },
       processingSettings: null,
-      workerHealth: null,
-      runtime: null,
       loading: false,
-      locale: "en",
       onSettingsChange: async () => undefined,
       onClose: () => undefined
     }));
@@ -108,10 +87,7 @@ describe("SettingsPhotosPage", () => {
       },
       status: null,
       processingSettings: null,
-      workerHealth: null,
-      runtime: null,
       loading: false,
-      locale: "en",
       onSettingsChange: async () => undefined,
       onClose: () => undefined
     }));

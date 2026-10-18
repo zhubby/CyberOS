@@ -24,7 +24,7 @@ function memoryStorage() {
 
 describe("management dashboard layouts", () => {
   it("packs every dashboard widget inside each breakpoint without overlap", () => {
-    for (const dashboardId of ["docker", "virtualMachines", "network", "storage", "shares"] as const) {
+    for (const dashboardId of ["docker", "virtualMachines", "network", "storage", "shares", "monitoring"] as const) {
       const layouts = defaultManagementDashboardLayouts(dashboardId);
       const expectedIds = managementDashboardWidgetDefinitions(dashboardId).map((widget) => widget.id).sort();
 

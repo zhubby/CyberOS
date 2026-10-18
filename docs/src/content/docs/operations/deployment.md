@@ -4,12 +4,12 @@ description: 原生 Debian 包、systemd 服务、Nginx 和 appliance 构建。
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [packaging/debian/rules, packaging/debian/install, packaging/scripts/zos-deploy, packaging/systemd/zos-api.service, packaging/appliance/manifest.toml]
+sourceOfTruth: [packaging/debian/rules, packaging/debian/install, packaging/scripts/zos-deploy, packaging/systemd/zos-api.service, packaging/systemd/zos-monitor.service, packaging/appliance/manifest.toml]
 sidebar:
   order: 1
 ---
 
-生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 ZOS 自身放入 Docker。API、worker、downloader、indexer、hostd、termux 是常驻服务；maintenance、health、backup 由 oneshot service 和 timer 驱动。
+生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 ZOS 自身放入 Docker。API、monitor、worker、downloader、indexer、hostd、termux 是常驻服务；maintenance、health、backup 由 oneshot service 和 timer 驱动。
 
 Nginx 只反向代理到 loopback API。程序文件位于 `/usr/lib/zos`，持久数据统一位于 `/zos`，运行时 socket 位于 `/run/zos`。API 静态提供 React Web 与 `/docs/` 文档站。
 
@@ -63,7 +63,7 @@ sudo ZOS_ENABLE_NGINX=1 \
 核心服务会被 `enable --now`：
 
 ```bash
-sudo systemctl status zos-api.service zos-worker@1.service zos-downloader.service zos-indexer.service
+sudo systemctl status zos-api.service zos-monitor.service zos-worker@1.service zos-downloader.service zos-indexer.service
 sudo systemctl status zos-hostd.service zos-termux.service
 ```
 
@@ -85,9 +85,10 @@ curl -I http://<host>/
 curl -I http://<host>/docs/
 curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
+curl -fsS http://127.0.0.1:3010/api/monitoring/overview
 ```
 
-验收至少包含：Web 首页、`/docs/`、root readiness、文件浏览、终端身份、一次索引和一次 health run。`/health` 返回成功只表示 API liveness，不表示 NAS 已挂载或备份可用。
+验收至少包含：Web 首页、`/docs/`、root readiness、文件浏览、终端身份、一次索引、一次 health run，以及监控在启动 30 秒内从 `starting` 进入 `ready` 或明确的 `degraded`。`/health` 返回成功只表示 API liveness，不表示 NAS、监控、索引或 backup 已就绪。
 
 ## 安装与重装
 
@@ -97,7 +98,7 @@ ZOS 1.0 不提供旧产品配置、数据库、服务或浏览器状态的原地
 sudo systemctl stop zos-maintenance.timer zos-health.timer \
   zos-backup-daily.timer zos-backup-weekly.timer
 sudo systemctl stop zos-downloader.service zos-worker@1.service \
-  zos-indexer.service zos-vod-player.service zos-api.service zos-termux.service \
+  zos-indexer.service zos-monitor.service zos-vod-player.service zos-api.service zos-termux.service \
   zos-hostd.service
 sudo dpkg -i .zos/zos_<version>_<arch>.deb
 sudo systemctl daemon-reload
@@ -119,13 +120,13 @@ sudo /usr/lib/zos/scripts/zos-nas-acl.sh --apply --pool /zos/data/pool1
 
 ```bash
 sudo systemctl start zos-hostd.service zos-termux.service \
-  zos-api.service zos-worker@1.service zos-downloader.service zos-indexer.service \
+  zos-api.service zos-monitor.service zos-worker@1.service zos-downloader.service zos-indexer.service \
   zos-vod-player.service
 sudo systemctl --failed
 sudo journalctl -u zos-hostd.service -u zos-termux.service -n 100 --no-pager
 ```
 
-确认新安装通过验收后再重新启用 timers。ZOS 数据库迁移没有通用反向迁移；后续 ZOS 版本如改变 schema，回滚时必须同时恢复与旧包匹配的 `/zos/state` 备份。
+确认新安装通过验收后再重新启用 timers。ZOS 主数据库迁移没有通用反向迁移；后续 ZOS 版本如改变 schema，回滚时必须同时恢复与旧包匹配的主库/state 备份。旧版本不认识 `metrics.sqlite` 时应忽略并保留它；指标库可重建，不参与主库反向迁移。
 
 ## GitHub Actions 与 Tailscale 自动升级
 

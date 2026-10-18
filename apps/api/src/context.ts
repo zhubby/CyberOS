@@ -1,4 +1,5 @@
 import type { ZosDatabase } from "@zos/db";
+import type { MonitoringReader } from "@zos/monitoring";
 import type { PublicBuildInfo, ZosConfig } from "@zos/shared";
 import type { DockerComposeRuntime } from "./lib/docker-compose.js";
 import type { DockerEngineRuntime } from "./lib/docker-client.js";
@@ -17,6 +18,7 @@ import type { FileBatchRuntime } from "./lib/file-batch-runner.js";
 export interface ApiRouteContext {
   config: ZosConfig;
   db: ZosDatabase;
+  monitoring: MonitoringReader;
   buildInfo?: PublicBuildInfo;
   docker?: {
     engine?: DockerEngineRuntime;
@@ -36,4 +38,6 @@ export interface ApiRouteContext {
   fileBatches?: FileBatchRuntime;
 }
 
-export type ServerDependencies = ApiRouteContext;
+export type ServerDependencies = Omit<ApiRouteContext, "monitoring"> & {
+  monitoring?: MonitoringReader;
+};

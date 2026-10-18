@@ -320,16 +320,22 @@ if command -v systemctl >/dev/null 2>&1; then
     done
     ensure_vm_network
   fi
-  systemctl enable --now \
+  systemctl enable \
     zos-hostd.service \
     zos-termux.service \
     zos-api.service \
+    zos-monitor.service \
     zos-worker@1.service \
     zos-photostaff.service \
     zos-downloader.service \
     zos-indexer.service
-  systemctl restart zos-hostd.service zos-termux.service \
-    zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service
+  systemctl restart zos-hostd.service zos-termux.service zos-api.service
+  if ! systemctl restart zos-monitor.service; then
+    log "warning: monitoring service failed to start; core services remain available"
+  fi
+  systemctl start zos-health.service || \
+    log "warning: initial health evaluation failed; the health timer will retry"
+  systemctl restart zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service
   if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
     systemctl enable --now zos-vod-player.service
   fi

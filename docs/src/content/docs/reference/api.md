@@ -4,14 +4,22 @@ description: API 传输面、端点分组和稳定契约。
 type: reference
 status: current
 audience: [developer]
-sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photos.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/shares.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
+sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photos.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/shares.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/routes/monitoring.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
 sidebar:
   order: 2
 ---
 
-REST 路由按 roots、files/search、photos、sessions/jobs/events、approvals/operations、indexer/readiness/health、backup、settings、system、storage、shares、Docker、VM 和 terminal 分组。
+REST 路由按 roots、files/search、photos、sessions/jobs/events、approvals/operations、indexer/readiness/health、monitoring、backup、settings、system、storage、shares、Docker、VM 和 terminal 分组。
 
 Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM console 使用 WebSocket。写操作的 approval 要求以 route 实现和 `packages/shared/src/types.ts` 为准；本页不复制易漂移的完整 JSON schema。
+
+## Monitoring
+
+- `GET /api/monitoring/overview` 返回 `disabled | starting | ready | degraded | unavailable`、最新核心值、collector 状态，以及 raw/1m/1h 保留期、数据库大小和是否暂停写入。
+- `GET /api/monitoring/catalog` 返回固定指标定义、类型、base unit、允许标签及当前已存在序列。客户端不能提交任意指标名或标签。
+- `POST /api/monitoring/query` 接收 ISO `start/end`、最多 12 个 `selectors` 和 `maxPoints`（2–720）。selector 包含 `metric`、可选的允许标签和 `value | rate`；`rate` 只适用于 counter。响应按序列给出实际 `raw | 1m | 1h` resolution、step 和有序点，缺口值为 `null`。
+
+查询范围最多 366 天。无数据或监控关闭返回成功空结果；非法范围、指标、标签、转换或上限返回 `400`；指标库不可读时返回不包含路径或 SQLite 内部信息的 `503`。现有 `/api/system/network/traffic` 契约保持不变。
 
 ## Photos
 

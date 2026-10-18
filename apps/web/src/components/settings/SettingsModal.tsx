@@ -5,8 +5,6 @@ import {
   Activity,
   Bot,
   Check,
-  Clock3,
-  Cpu,
   Database,
   Download,
   Folder,
@@ -16,7 +14,6 @@ import {
   KeyRound,
   Lock,
   MemoryStick,
-  Network,
   Package,
   Search,
   Server,
@@ -28,21 +25,15 @@ import type {
   BuildInfo,
   DockerSettings,
   DownloadSettings,
-  FileOperation,
   IndexerOverview,
   IndexerSettings,
   NasRoot,
-  PendingApproval,
   ModelProviderSettings,
-  PiToolPolicySettings,
   PhotoLibrarySettings,
   PhotoLibraryStatus,
   PhotoProcessingSettings,
-  PhotoWorkerHealth,
-  SystemInfo,
-  SystemInfoStorageVolume
+  SystemInfo
 } from "../../api.js";
-import { MAX_EDIT_TEXT_BYTES } from "../../api.js";
 import {
   DANGEROUS_TOOL_POLICY_OPTIONS,
   READ_ONLY_TOOL_POLICY_OPTIONS,
@@ -50,15 +41,11 @@ import {
   providerLabel,
   settingsGroupLabel,
   settingsSectionDescription,
-  settingsSectionLabel,
   settingsSectionState,
   settingsSectionTitle,
-  settingsStatus,
-  settingsUpdatedAtLabel,
   type DockerSettingsFormState,
   type ModelProviderFormState,
   type SettingsSectionId,
-  type SettingsState,
   type ToolPolicyFormState
 } from "../../config/settings.js";
 import { formatBytes, formatDate, formatLocaleNumber } from "../../i18n/format.js";
@@ -74,7 +61,7 @@ import {
   previewFileSizeLimitBytesToMiB,
   previewFileSizeLimitMiBToBytes
 } from "../../lib/preview-settings.js";
-import type { ResolvedTheme, ThemePreference } from "../../lib/theme-settings.js";
+import type { ThemePreference } from "../../lib/theme-settings.js";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { VersionSettingsPage } from "./VersionSettingsPage.js";
 import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
@@ -94,23 +81,15 @@ interface SettingsModalProps {
   photoSettings: PhotoLibrarySettings | null;
   photoStatus: PhotoLibraryStatus | null;
   photoProcessingSettings: PhotoProcessingSettings | null;
-  photoWorkerHealth: PhotoWorkerHealth | null;
   settings: ModelProviderSettings | null;
   systemInfo: SystemInfo | null;
-  systemInfoError: string | null;
   buildInfo: BuildInfo | null;
   buildInfoError: string | null;
-  pendingApprovals: PendingApproval[];
-  operations: FileOperation[];
-  operationsReady: boolean;
-  toolPolicySettings: PiToolPolicySettings | null;
   toolPolicyForm: ToolPolicyFormState;
   languagePreference: LanguagePreference;
   themePreference: ThemePreference;
-  resolvedTheme: ResolvedTheme;
   previewFileSizeLimitBytes: number;
   codeFontSettings: CodeFontSettings;
-  splitWidth: number;
   resolvedLocale: SupportedLocale;
   onClose: () => void;
   onFormChange: (form: ModelProviderFormState) => void;
@@ -137,7 +116,6 @@ interface SettingsModalProps {
 const PROVIDER_OPTIONS = ["openai", "anthropic"] as const;
 const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"] as const;
 const DANGEROUS_TOOLS = ["bash", "edit", "write"] as const;
-const DEFAULT_TEXT_PREVIEW_BYTES = 64 * 1024;
 type Translate = (key: string, options?: Record<string, unknown>) => unknown;
 
 export function SettingsModal({
@@ -154,23 +132,15 @@ export function SettingsModal({
   photoSettings,
   photoStatus,
   photoProcessingSettings,
-  photoWorkerHealth,
   settings,
   systemInfo,
-  systemInfoError,
   buildInfo,
   buildInfoError,
-  pendingApprovals,
-  operations,
-  operationsReady,
-  toolPolicySettings,
   toolPolicyForm,
   languagePreference,
   themePreference,
-  resolvedTheme,
   previewFileSizeLimitBytes,
   codeFontSettings,
-  splitWidth,
   resolvedLocale,
   onClose,
   onFormChange,
@@ -205,15 +175,6 @@ export function SettingsModal({
       )
     : SETTINGS_SECTIONS;
   const groups = [...new Set(visibleSections.map((section) => section.group))];
-  const currentState = settingsSectionState(
-    currentSection,
-    settings,
-    dockerSettings,
-    buildInfo,
-    downloadSettings,
-    photoStatus,
-    indexerSettings
-  );
   const providerOptions = PROVIDER_OPTIONS.map((provider) => ({
     value: provider,
     label: providerLabel(provider, t)
@@ -316,10 +277,7 @@ export function SettingsModal({
                     onClick={() => onSectionChange(section.id)}
                   >
                     {settingsSectionIcon(section.id)}
-                    <span>
-                      <strong>{settingsSectionTitle(section, t)}</strong>
-                      <small>{settingsSectionLabel(section, settings, loading, t, dockerSettings, buildInfo, downloadSettings, photoSettings, photoStatus, indexerSettings)}</small>
-                    </span>
+                    <strong>{settingsSectionTitle(section, t)}</strong>
                   </button>
                 ))}
               </section>
@@ -338,43 +296,27 @@ export function SettingsModal({
         <section className="settings-content">
           <header className="settings-content-header">
             <div>
-              <span className="eyebrow">{settingsGroupLabel(currentSection.group, t)}</span>
               <h2 id="settings-title">{settingsSectionTitle(currentSection, t)}</h2>
               <p>{settingsSectionDescription(currentSection, t)}</p>
-              <div className="settings-header-meta" aria-label={t("settings.status")}>
-                <span data-state={currentState}>
-                  {settingsStateIcon(currentState)}
-                  {settingsSectionLabel(currentSection, settings, loading, t, dockerSettings, buildInfo, downloadSettings, photoSettings, photoStatus, indexerSettings)}
-                </span>
-                {activeSection === "version" ? (
-                  <span>
-                    <ShieldCheck aria-hidden="true" size={13} />
-                    {t("settings.version.readOnly")}
-                  </span>
-                ) : (
-                  <span>
-                    <Lock aria-hidden="true" size={13} />
-                    {t("settings.secretsMasked")}
-                  </span>
-                )}
-              </div>
             </div>
-            <button type="button" onClick={onClose} title={t("common.actions.closeSettings")}>
+            <button
+              type="button"
+              onClick={onClose}
+              title={t("common.actions.closeSettings")}
+              aria-label={t("common.actions.closeSettings")}
+            >
               <X aria-hidden="true" size={18} />
             </button>
           </header>
 
           {activeSection === "overview" ? (
             <SettingsOverview
-              loading={loading}
               settings={settings}
               dockerSettings={dockerSettings}
               systemInfo={systemInfo}
-              systemInfoError={systemInfoError}
-              buildInfo={buildInfo}
               downloadSettings={downloadSettings}
-              photoSettings={photoSettings}
               photoStatus={photoStatus}
+              indexerSettings={indexerSettings}
               locale={resolvedLocale}
               onSectionChange={onSectionChange}
             />
@@ -384,153 +326,116 @@ export function SettingsModal({
             <form className="settings-form" onSubmit={onSubmit}>
               <div className="settings-content-body">
                 <div className="settings-page-grid settings-provider-grid">
-                  <div className="settings-main-stack">
-                    <section className="settings-section-card">
-                      <header>
-                        <div>
-                          <h3>{t("settings.modelProvider.profileTitle")}</h3>
-                          <p>{t("settings.modelProvider.profileDescription")}</p>
-                        </div>
-                        <span data-state={settings?.apiKeyConfigured ? "ready" : "missing"}>
-                          {settings?.apiKeyConfigured ? t("common.states.configured") : t("common.states.needsKey")}
-                        </span>
-                      </header>
-
-                      <fieldset className="settings-field-grid" disabled={loading || saving}>
-                        <div className="settings-preference-field">
-                          <span>{t("settings.modelProvider.provider")}</span>
-                          <CustomSelect
-                            id="model-provider"
-                            value={form.providerName}
-                            options={providerOptions}
-                            onChange={(providerName) =>
-                              onFormChange({
-                                ...form,
-                                providerName
-                              })
-                            }
-                            ariaLabel={t("settings.modelProvider.provider")}
-                          />
-                        </div>
-
-                        <label className="settings-field-wide">
-                          <span>{t("settings.modelProvider.baseUrl")}</span>
-                          <input
-                            value={form.baseUrl}
-                            onChange={(event) =>
-                              onFormChange({
-                                ...form,
-                                baseUrl: event.target.value
-                              })
-                            }
-                            placeholder="https://api.example.com/v1"
-                          />
-                        </label>
-
-                        <label className="settings-field-wide">
-                          <span>{t("settings.modelProvider.model")}</span>
-                          <input
-                            value={form.model}
-                            onChange={(event) =>
-                              onFormChange({
-                                ...form,
-                                model: event.target.value
-                              })
-                            }
-                            placeholder="provider/model-name"
-                          />
-                        </label>
-                      </fieldset>
-                    </section>
-
-                    <section className="settings-section-card">
-                      <header>
-                        <div>
-                          <h3>{t("settings.modelProvider.credentialsTitle")}</h3>
-                          <p>{t("settings.modelProvider.credentialsDescription")}</p>
-                        </div>
-                        <span data-state={settings?.apiKeyConfigured ? "ready" : "missing"}>
-                          {settingsStatus(settings, t)}
-                        </span>
-                      </header>
-
-                      <fieldset className="settings-field-grid settings-field-grid-single" disabled={loading || saving}>
-                        <label className="settings-field-wide">
-                          <span>{t("settings.modelProvider.apiKey")}</span>
-                          <input
-                            type="password"
-                            value={form.apiKey}
-                            onChange={(event) =>
-                              onFormChange({
-                                ...form,
-                                apiKey: event.target.value,
-                                clearApiKey: false
-                              })
-                            }
-                            placeholder={
-                              settings?.apiKeyConfigured
-                                ? t("settings.modelProvider.configuredPlaceholder")
-                                : t("settings.modelProvider.notConfiguredPlaceholder")
-                            }
-                          />
-                        </label>
-
-                        <label className="settings-check settings-field-wide">
-                          <input
-                            type="checkbox"
-                            checked={form.clearApiKey}
-                            onChange={(event) =>
-                              onFormChange({
-                                ...form,
-                                apiKey: event.target.checked ? "" : form.apiKey,
-                                clearApiKey: event.target.checked
-                              })
-                            }
-                          />
-                          <span>{t("settings.modelProvider.clearApiKey")}</span>
-                        </label>
-                      </fieldset>
-
-                      <div className="settings-secret-note">
-                        <Lock aria-hidden="true" size={15} />
-                        <span>{t("settings.modelProvider.apiKeyNote")}</span>
+                  <section className="settings-section-card">
+                    <header>
+                      <div>
+                        <h3>{t("settings.modelProvider.profileTitle")}</h3>
+                        <p>{t("settings.modelProvider.profileDescription")}</p>
                       </div>
-                    </section>
-                  </div>
+                    </header>
 
-                  <aside className="settings-side-stack" aria-label={t("settings.providerSummary")}>
-                    <section className="settings-section-card settings-route-card">
-                      <header>
-                        <div>
-                          <h3>{t("settings.modelProvider.activeRoute")}</h3>
-                          <p>{t("settings.modelProvider.activeRouteDescription")}</p>
-                        </div>
-                      </header>
-                      <dl className="settings-summary-list">
-                        <div>
-                          <dt>{t("settings.modelProvider.provider")}</dt>
-                          <dd>{providerLabel(form.providerName, t)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("settings.modelProvider.endpoint")}</dt>
-                          <dd>{form.baseUrl || t("settings.modelProvider.defaultEndpoint")}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("settings.modelProvider.model")}</dt>
-                          <dd>{form.model || t("settings.modelProvider.notSet")}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("settings.modelProvider.updated")}</dt>
-                          <dd>{settingsUpdatedAtLabel(settings, resolvedLocale, t)}</dd>
-                        </div>
-                      </dl>
-                    </section>
-                  </aside>
+                    <fieldset className="settings-field-grid" disabled={loading || saving}>
+                      <div className="settings-preference-field">
+                        <span>{t("settings.modelProvider.provider")}</span>
+                        <CustomSelect
+                          id="model-provider"
+                          value={form.providerName}
+                          options={providerOptions}
+                          onChange={(providerName) =>
+                            onFormChange({
+                              ...form,
+                              providerName
+                            })
+                          }
+                          ariaLabel={t("settings.modelProvider.provider")}
+                        />
+                      </div>
+
+                      <label className="settings-field-wide">
+                        <span>{t("settings.modelProvider.baseUrl")}</span>
+                        <input
+                          value={form.baseUrl}
+                          onChange={(event) =>
+                            onFormChange({
+                              ...form,
+                              baseUrl: event.target.value
+                            })
+                          }
+                          placeholder="https://api.example.com/v1"
+                        />
+                      </label>
+
+                      <label className="settings-field-wide">
+                        <span>{t("settings.modelProvider.model")}</span>
+                        <input
+                          value={form.model}
+                          onChange={(event) =>
+                            onFormChange({
+                              ...form,
+                              model: event.target.value
+                            })
+                          }
+                          placeholder="provider/model-name"
+                        />
+                      </label>
+                    </fieldset>
+                  </section>
+
+                  <section className="settings-section-card">
+                    <header>
+                      <div>
+                        <h3>{t("settings.modelProvider.credentialsTitle")}</h3>
+                        <p>{t("settings.modelProvider.credentialsDescription")}</p>
+                      </div>
+                    </header>
+
+                    <fieldset className="settings-field-grid settings-field-grid-single" disabled={loading || saving}>
+                      <label className="settings-field-wide">
+                        <span>{t("settings.modelProvider.apiKey")}</span>
+                        <input
+                          type="password"
+                          value={form.apiKey}
+                          onChange={(event) =>
+                            onFormChange({
+                              ...form,
+                              apiKey: event.target.value,
+                              clearApiKey: false
+                            })
+                          }
+                          placeholder={
+                            settings?.apiKeyConfigured
+                              ? t("settings.modelProvider.configuredPlaceholder")
+                              : t("settings.modelProvider.notConfiguredPlaceholder")
+                          }
+                        />
+                      </label>
+
+                      <label className="settings-check settings-field-wide">
+                        <input
+                          type="checkbox"
+                          checked={form.clearApiKey}
+                          onChange={(event) =>
+                            onFormChange({
+                              ...form,
+                              apiKey: event.target.checked ? "" : form.apiKey,
+                              clearApiKey: event.target.checked
+                            })
+                          }
+                        />
+                        <span>{t("settings.modelProvider.clearApiKey")}</span>
+                      </label>
+                    </fieldset>
+
+                    <div className="settings-secret-note">
+                      <Lock aria-hidden="true" size={15} />
+                      <span>{t("settings.modelProvider.apiKeyNote")}</span>
+                    </div>
+                  </section>
                 </div>
               </div>
 
               <footer className="settings-actions">
-                <span>{loading ? t("settings.modelProvider.loadingSettings") : settingsStatus(settings, t)}</span>
+                <span role="status">{saving ? t("common.actions.saving") : null}</span>
                 <div>
                   <button className="secondary-button" type="button" onClick={onClose}>
                     {t("common.actions.cancel")}
@@ -556,9 +461,6 @@ export function SettingsModal({
             <SettingsAppearancePage
               languagePreference={languagePreference}
               themePreference={themePreference}
-              resolvedTheme={resolvedTheme}
-              resolvedLocale={resolvedLocale}
-              splitWidth={splitWidth}
               onLanguagePreferenceChange={onLanguagePreferenceChange}
               onThemePreferenceChange={onThemePreferenceChange}
             />
@@ -567,10 +469,8 @@ export function SettingsModal({
           {activeSection === "agents" ? (
             <SettingsToolPolicyPage
               form={toolPolicyForm}
-              settings={toolPolicySettings}
               loading={loading}
               saving={saving}
-              locale={resolvedLocale}
               onChange={onToolPolicyFormChange}
               onSubmit={onSubmit}
               onClose={onClose}
@@ -580,10 +480,8 @@ export function SettingsModal({
           {activeSection === "docker" ? (
             <SettingsDockerPage
               form={dockerForm}
-              settings={dockerSettings}
               loading={loading}
               saving={saving}
-              locale={resolvedLocale}
               onChange={onDockerFormChange}
               onSubmit={onSubmit}
               onClose={onClose}
@@ -604,7 +502,6 @@ export function SettingsModal({
             <SettingsDownloadsPage
               settings={downloadSettings}
               loading={loading}
-              locale={resolvedLocale}
               onSettingsChange={onDownloadSettingsChange}
               onClose={onClose}
             />
@@ -616,7 +513,6 @@ export function SettingsModal({
               status={indexerStatus}
               roots={roots}
               loading={loading}
-              locale={resolvedLocale}
               onSettingsChange={onIndexerSettingsChange}
               onReindex={onIndexerReindex}
               onClose={onClose}
@@ -632,25 +528,9 @@ export function SettingsModal({
               settings={photoSettings}
               status={photoStatus}
               processingSettings={photoProcessingSettings}
-              workerHealth={photoWorkerHealth}
-              runtime={systemInfo?.zos.photostaff ?? null}
               loading={loading}
-              locale={resolvedLocale}
               onSettingsChange={onPhotoProcessingSettingsChange}
               onClose={onClose}
-            />
-          ) : null}
-
-          {activeSection === "security" ? (
-            <SettingsSecurityPage
-              settings={settings}
-              systemInfo={systemInfo}
-              loading={loading}
-              toolPolicyForm={toolPolicyForm}
-              pendingApprovals={pendingApprovals}
-              operations={operations}
-              operationsReady={operationsReady}
-              locale={resolvedLocale}
             />
           ) : null}
 
@@ -668,153 +548,117 @@ export function SettingsModal({
 }
 
 function SettingsOverview({
-  loading,
   settings,
   dockerSettings,
   systemInfo,
-  systemInfoError,
-  buildInfo,
   downloadSettings,
-  photoSettings,
   photoStatus,
+  indexerSettings,
   locale,
   onSectionChange
 }: {
-  loading: boolean;
   settings: ModelProviderSettings | null;
   dockerSettings: DockerSettings | null;
   systemInfo: SystemInfo | null;
-  systemInfoError: string | null;
-  buildInfo: BuildInfo | null;
   downloadSettings: DownloadSettings | null;
-  photoSettings: PhotoLibrarySettings | null;
   photoStatus: PhotoLibraryStatus | null;
+  indexerSettings: IndexerSettings | null;
   locale: SupportedLocale;
   onSectionChange: (section: SettingsSectionId) => void;
 }) {
   const { t } = useTranslation();
-  const systemStatus = systemInfo
-    ? t("settings.system.collectedAt", { time: formatDate(systemInfo.collectedAt, locale) })
-    : loading
-      ? t("common.states.loading")
-      : t("common.states.unavailable");
-  const metricItems = systemInfo
-    ? [
-        {
-          value: formatLocaleNumber(systemInfo.hardware.cpuThreads, locale),
-          label: t("settings.system.metrics.logicalCpus")
-        },
-        {
-          value: formatBytes(systemInfo.hardware.memory.totalBytes, locale),
-          label: t("settings.system.metrics.memory")
-        },
-        {
-          value: formatDuration(systemInfo.operatingSystem.uptimeSeconds, locale, t),
-          label: t("settings.system.metrics.uptime")
-        },
-        {
-          value: formatLocaleNumber(systemInfo.zos.nasRoots.length, locale),
-          label: t("settings.system.metrics.nasRoots")
-        }
-      ]
-    : [
-        {
-          value: formatLocaleNumber(SETTINGS_SECTIONS.length, locale),
-          label: t("settings.overview.sections")
-        },
-        {
-          value: formatLocaleNumber(
-            SETTINGS_SECTIONS.filter((section) => settingsSectionState(section, settings, dockerSettings, buildInfo, downloadSettings, photoStatus) === "ready")
-              .length,
-            locale
-          ),
-          label: t("settings.overview.configured")
-        },
-        {
-          value: formatLocaleNumber(
-            SETTINGS_SECTIONS.filter((section) => settingsSectionState(section, settings, dockerSettings, buildInfo, downloadSettings, photoStatus) === "missing")
-              .length,
-            locale
-          ),
-          label: t("settings.overview.needsAttention")
-        }
-      ];
+  const attentionIds = new Set<SettingsSectionId>([
+    "model-providers",
+    "docker",
+    "downloads",
+    "indexer",
+    "photos"
+  ]);
+  const sectionState = (section: (typeof SETTINGS_SECTIONS)[number]) =>
+    settingsSectionState(
+      section,
+      settings,
+      dockerSettings,
+      null,
+      downloadSettings,
+      photoStatus,
+      indexerSettings
+    );
+  const attentionSections = SETTINGS_SECTIONS.filter(
+    (section) => attentionIds.has(section.id) && sectionState(section) !== "ready"
+  );
+  const metricItems = [
+    {
+      value: systemInfo?.identity.hostname ?? String(t("common.dash")),
+      label: t("settings.system.labels.hostname")
+    },
+    {
+      value: systemInfo
+        ? `${systemInfo.operatingSystem.type} ${systemInfo.operatingSystem.release}`
+        : String(t("common.dash")),
+      label: t("settings.system.labels.os")
+    },
+    {
+      value: systemInfo
+        ? formatDuration(systemInfo.operatingSystem.uptimeSeconds, locale, t)
+        : String(t("common.dash")),
+      label: t("settings.system.metrics.uptime")
+    },
+    {
+      value: systemInfo
+        ? formatLocaleNumber(systemInfo.zos.nasRoots.length, locale)
+        : String(t("common.dash")),
+      label: t("settings.system.metrics.nasRoots")
+    }
+  ];
 
   return (
     <div className="settings-content-body settings-overview">
-      <div className="settings-overview-grid">
-        <section className="settings-section-card settings-identity-card">
-          <header>
-            <div>
-              <h3>{t("settings.overview.systemProfile")}</h3>
-              <p>{t("settings.overview.systemProfileDescription")}</p>
-            </div>
-            <span data-state={systemInfo ? "ready" : systemInfoError ? "missing" : "loading"}>{systemStatus}</span>
-          </header>
-          <div className="settings-metric-grid settings-system-metric-grid">
-            {metricItems.map((item) => (
-              <article key={item.label}>
-                <strong>{item.value}</strong>
-                <span>{item.label}</span>
-              </article>
-            ))}
+      <section className="settings-section-card settings-identity-card">
+        <header>
+          <div>
+            <h3>{t("settings.overview.systemProfile")}</h3>
+            <p>{t("settings.overview.systemProfileDescription")}</p>
           </div>
-        </section>
-
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.overview.modelProvider")}</h3>
-              <p>{t("settings.overview.modelProviderDescription")}</p>
-            </div>
-            <span data-state={settings?.apiKeyConfigured ? "ready" : "missing"}>
-              {loading ? t("common.states.loading") : settingsStatus(settings, t)}
-            </span>
-          </header>
-          <dl className="settings-summary-list">
-            <div>
-              <dt>{t("settings.modelProvider.provider")}</dt>
-              <dd>{settings ? providerLabel(settings.providerName, t) : t("settings.modelProvider.notLoaded")}</dd>
-            </div>
-            <div>
-              <dt>{t("settings.modelProvider.endpoint")}</dt>
-              <dd>{settings?.baseUrl || t("settings.modelProvider.defaultEndpoint")}</dd>
-            </div>
-            <div>
-              <dt>{t("settings.modelProvider.model")}</dt>
-              <dd>{settings?.model || t("settings.modelProvider.notSet")}</dd>
-            </div>
-            <div>
-              <dt>{t("settings.modelProvider.updated")}</dt>
-              <dd>{settingsUpdatedAtLabel(settings, locale, t)}</dd>
-            </div>
-          </dl>
-        </section>
-      </div>
-
-      {systemInfo ? <SettingsSystemDetails systemInfo={systemInfo} locale={locale} /> : null}
+        </header>
+        <div className="settings-metric-grid settings-system-metric-grid">
+          {metricItems.map((item) => (
+            <article key={String(item.label)}>
+              <strong>{item.value}</strong>
+              <span>{item.label}</span>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="settings-section-card">
         <header>
           <div>
-            <h3>{t("settings.overview.settingsMap")}</h3>
-            <p>{t("settings.overview.settingsMapDescription")}</p>
+            <h3>{t("settings.overview.attentionTitle")}</h3>
+            <p>{t("settings.overview.attentionDescription")}</p>
           </div>
         </header>
-        <div className="settings-area-list">
-          {SETTINGS_SECTIONS.filter((section) => section.id !== "overview").map((section) => (
-            <button key={section.id} type="button" onClick={() => onSectionChange(section.id)}>
-              {settingsSectionIcon(section.id)}
-              <span>
-                <strong>{settingsSectionTitle(section, t)}</strong>
-                <small>{settingsSectionDescription(section, t)}</small>
-              </span>
-              <em data-state={settingsSectionState(section, settings, dockerSettings, buildInfo, downloadSettings, photoStatus)}>
-                {settingsSectionLabel(section, settings, loading, t, dockerSettings, buildInfo, downloadSettings, photoSettings, photoStatus)}
-              </em>
-            </button>
-          ))}
-        </div>
+        {attentionSections.length > 0 ? (
+          <div className="settings-area-list">
+            {attentionSections.map((section) => {
+              const state = sectionState(section);
+              return (
+                <button key={section.id} type="button" onClick={() => onSectionChange(section.id)}>
+                  {settingsSectionIcon(section.id)}
+                  <span>
+                    <strong>{settingsSectionTitle(section, t)}</strong>
+                    <small>{settingsSectionDescription(section, t)}</small>
+                  </span>
+                  <em data-state={state}>
+                    {state === "loading" ? t("common.states.loading") : t("settings.overview.needsAttention")}
+                  </em>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="settings-empty-note">{t("settings.overview.allReady")}</p>
+        )}
       </section>
     </div>
   );
@@ -825,339 +669,6 @@ interface SettingsInfoRow {
   value: string;
   detail?: string;
   mono?: boolean;
-}
-
-interface SettingsConfigRowItem {
-  label: string;
-  detail: string;
-  value: string;
-  state?: SettingsState;
-}
-
-function SettingsSystemDetails({
-  systemInfo,
-  locale
-}: {
-  systemInfo: SystemInfo;
-  locale: SupportedLocale;
-}) {
-  const { t } = useTranslation();
-  const memory = systemInfo.hardware.memory;
-  const runtimeMemory = systemInfo.runtime.memory;
-  const osRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.system.labels.hostname"),
-      value: systemInfo.identity.hostname
-    },
-    {
-      label: t("settings.system.labels.admin"),
-      value: systemInfo.identity.adminDisplayName
-    },
-    {
-      label: t("settings.system.labels.timezone"),
-      value: systemInfo.identity.timezone
-    },
-    {
-      label: t("settings.system.labels.os"),
-      value: `${systemInfo.operatingSystem.type} ${systemInfo.operatingSystem.release}`,
-      detail: systemInfo.operatingSystem.version
-    },
-    {
-      label: t("settings.system.labels.platform"),
-      value: `${systemInfo.operatingSystem.platform} / ${systemInfo.operatingSystem.arch}`
-    },
-    {
-      label: t("settings.system.labels.machine"),
-      value: systemInfo.operatingSystem.machine
-    },
-    {
-      label: t("settings.system.labels.endianness"),
-      value: systemInfo.operatingSystem.endianness
-    },
-    {
-      label: t("settings.system.labels.systemUptime"),
-      value: formatDuration(systemInfo.operatingSystem.uptimeSeconds, locale, t)
-    },
-    {
-      label: t("settings.system.labels.loadAverage"),
-      value: formatLoadAverage(systemInfo.operatingSystem.loadAverage, locale)
-    }
-  ];
-  const hardwareRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.system.labels.cpuModel"),
-      value: systemInfo.hardware.cpuModel ?? t("common.dash")
-    },
-    {
-      label: t("settings.system.labels.cpuThreads"),
-      value: formatLocaleNumber(systemInfo.hardware.cpuThreads, locale)
-    },
-    {
-      label: t("settings.system.labels.availableParallelism"),
-      value: formatLocaleNumber(systemInfo.operatingSystem.availableParallelism, locale)
-    },
-    {
-      label: t("settings.system.labels.cpuSpeed"),
-      value: systemInfo.hardware.cpuSpeedMHz
-        ? t("settings.system.values.megahertz", {
-            value: formatLocaleNumber(systemInfo.hardware.cpuSpeedMHz, locale)
-          })
-        : t("common.dash")
-    },
-    {
-      label: t("settings.system.labels.totalMemory"),
-      value: formatBytes(memory.totalBytes, locale)
-    },
-    {
-      label: t("settings.system.labels.usedMemory"),
-      value: `${formatBytes(memory.usedBytes, locale)} (${formatPercent(memory.usedPercent, locale)})`
-    },
-    {
-      label: t("settings.system.labels.freeMemory"),
-      value: formatBytes(memory.freeBytes, locale)
-    }
-  ];
-  const runtimeRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.system.labels.nodeVersion"),
-      value: systemInfo.runtime.nodeVersion
-    },
-    {
-      label: t("settings.system.labels.processUptime"),
-      value: formatDuration(systemInfo.runtime.uptimeSeconds, locale, t)
-    },
-    {
-      label: t("settings.system.labels.pid"),
-      value: formatLocaleNumber(systemInfo.runtime.pid, locale)
-    },
-    {
-      label: t("settings.system.labels.cwd"),
-      value: systemInfo.runtime.cwd,
-      mono: true
-    },
-    {
-      label: t("settings.system.labels.execPath"),
-      value: systemInfo.runtime.execPath,
-      mono: true
-    },
-    {
-      label: t("settings.system.labels.rss"),
-      value: formatBytes(runtimeMemory.rssBytes, locale)
-    },
-    {
-      label: t("settings.system.labels.heapUsed"),
-      value: `${formatBytes(runtimeMemory.heapUsedBytes, locale)} / ${formatBytes(runtimeMemory.heapTotalBytes, locale)}`
-    },
-    {
-      label: t("settings.system.labels.externalMemory"),
-      value: formatBytes(runtimeMemory.externalBytes, locale)
-    },
-    {
-      label: t("settings.system.labels.arrayBuffers"),
-      value: formatBytes(runtimeMemory.arrayBuffersBytes, locale)
-    }
-  ];
-  const zosRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.system.labels.dataDir"),
-      value: systemInfo.zos.dataDir,
-      mono: true
-    },
-    {
-      label: t("settings.system.labels.databasePath"),
-      value: systemInfo.zos.databasePath,
-      mono: true
-    },
-    {
-      label: t("settings.system.labels.apiBind"),
-      value: `${systemInfo.zos.apiHost}:${systemInfo.zos.apiPort}`
-    },
-    {
-      label: t("settings.system.labels.allowedOrigins"),
-      value: formatLocaleNumber(systemInfo.zos.allowedOriginCount, locale)
-    },
-    {
-      label: t("settings.system.labels.workerPoll"),
-      value: t("settings.system.values.milliseconds", {
-        value: formatLocaleNumber(systemInfo.zos.workerPollMs, locale)
-      })
-    },
-    {
-      label: t("settings.system.labels.authMode"),
-      value: systemInfo.identity.authMode
-    },
-    {
-      label: t("settings.system.labels.modelMode"),
-      value: systemInfo.zos.modelProvider
-    },
-    {
-      label: t("settings.system.labels.localEndpoint"),
-      value: systemInfo.zos.localEndpointConfigured ? t("settings.system.values.configured") : t("settings.system.values.notConfigured")
-    }
-  ];
-
-  return (
-    <div className="settings-system-grid">
-      <SettingsInfoCard
-        icon={<Server aria-hidden="true" size={17} />}
-        title={t("settings.system.cards.operatingSystem")}
-        description={t("settings.system.cards.operatingSystemDescription")}
-        rows={osRows}
-      />
-
-      <SettingsInfoCard
-        icon={<Cpu aria-hidden="true" size={17} />}
-        title={t("settings.system.cards.hardware")}
-        description={t("settings.system.cards.hardwareDescription")}
-        rows={hardwareRows}
-      >
-        <SettingsUsageBar
-          label={t("settings.system.labels.memoryPressure")}
-          value={memory.usedPercent}
-          locale={locale}
-        />
-      </SettingsInfoCard>
-
-      <section className="settings-section-card settings-system-wide">
-        <header>
-          <div className="settings-system-card-heading">
-            <Cpu aria-hidden="true" size={17} />
-            <div>
-              <h3>{t("settings.system.cards.cpuDetails")}</h3>
-              <p>{t("settings.system.cards.cpuDetailsDescription")}</p>
-            </div>
-          </div>
-        </header>
-        <div className="settings-system-table-wrap">
-          <table className="settings-system-table">
-            <thead>
-              <tr>
-                <th>{t("settings.system.table.thread")}</th>
-                <th>{t("settings.system.table.model")}</th>
-                <th>{t("settings.system.table.speed")}</th>
-                <th>{t("settings.system.table.user")}</th>
-                <th>{t("settings.system.table.system")}</th>
-                <th>{t("settings.system.table.idle")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {systemInfo.hardware.cpus.map((cpu, index) => (
-                <tr key={`${cpu.model}-${index}`}>
-                  <td>{formatLocaleNumber(index + 1, locale)}</td>
-                  <td title={cpu.model}>{cpu.model}</td>
-                  <td>
-                    {t("settings.system.values.megahertz", {
-                      value: formatLocaleNumber(cpu.speedMHz, locale)
-                    })}
-                  </td>
-                  <td>{formatDuration(Math.round(cpu.times.userMs / 1000), locale, t)}</td>
-                  <td>{formatDuration(Math.round(cpu.times.systemMs / 1000), locale, t)}</td>
-                  <td>{formatDuration(Math.round(cpu.times.idleMs / 1000), locale, t)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="settings-section-card settings-system-wide">
-        <header>
-          <div className="settings-system-card-heading">
-            <Database aria-hidden="true" size={17} />
-            <div>
-              <h3>{t("settings.system.cards.storage")}</h3>
-              <p>{t("settings.system.cards.storageDescription")}</p>
-            </div>
-          </div>
-        </header>
-        <div className="settings-storage-list">
-          {systemInfo.storage.volumes.map((volume) => (
-            <SettingsStorageRow key={volume.id} volume={volume} locale={locale} />
-          ))}
-        </div>
-      </section>
-
-      <section className="settings-section-card settings-system-wide">
-        <header>
-          <div className="settings-system-card-heading">
-            <Network aria-hidden="true" size={17} />
-            <div>
-              <h3>{t("settings.system.cards.network")}</h3>
-              <p>{t("settings.system.cards.networkDescription")}</p>
-            </div>
-          </div>
-          <span data-state="ready">
-            {formatLocaleNumber(systemInfo.network.interfaces.length, locale)}
-          </span>
-        </header>
-        <div className="settings-system-table-wrap">
-          <table className="settings-system-table settings-network-table">
-            <thead>
-              <tr>
-                <th>{t("settings.system.table.interface")}</th>
-                <th>{t("settings.system.table.family")}</th>
-                <th>{t("settings.system.table.address")}</th>
-                <th>{t("settings.system.table.cidr")}</th>
-                <th>{t("settings.system.table.mac")}</th>
-                <th>{t("settings.system.table.scope")}</th>
-                <th>{t("settings.system.table.type")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {systemInfo.network.interfaces.map((networkInterface, index) => (
-                <tr key={`${networkInterface.name}-${networkInterface.address}-${index}`}>
-                  <td>{networkInterface.name}</td>
-                  <td>{networkInterface.family}</td>
-                  <td className="is-mono">{networkInterface.address}</td>
-                  <td className="is-mono">{networkInterface.cidr ?? t("common.dash")}</td>
-                  <td className="is-mono">{networkInterface.mac}</td>
-                  <td>{networkInterface.scopeId ?? t("common.dash")}</td>
-                  <td>
-                    {networkInterface.internal
-                      ? t("settings.system.values.internal")
-                      : t("settings.system.values.external")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <SettingsInfoCard
-        icon={<MemoryStick aria-hidden="true" size={17} />}
-        title={t("settings.system.cards.runtime")}
-        description={t("settings.system.cards.runtimeDescription")}
-        rows={runtimeRows}
-      >
-        <div className="settings-system-chip-grid" aria-label={t("settings.system.labels.runtimeVersions")}>
-          {Object.entries(systemInfo.runtime.versions).map(([name, value]) => (
-            <span key={name}>
-              <strong>{name}</strong>
-              <em>{value}</em>
-            </span>
-          ))}
-        </div>
-      </SettingsInfoCard>
-
-      <SettingsInfoCard
-        icon={<HardDrive aria-hidden="true" size={17} />}
-        title={t("settings.system.cards.zos")}
-        description={t("settings.system.cards.zosDescription")}
-        rows={zosRows}
-      >
-        <div className="settings-root-list" aria-label={t("settings.system.labels.nasRoots")}>
-          {systemInfo.zos.nasRoots.map((root) => (
-            <div key={root.id}>
-              <strong>{root.name}</strong>
-              <span>{root.id}</span>
-              <small title={root.path}>{root.path}</small>
-            </div>
-          ))}
-        </div>
-      </SettingsInfoCard>
-    </div>
-  );
 }
 
 function SettingsInfoCard({
@@ -1206,94 +717,14 @@ function SettingsInfoList({ rows }: { rows: SettingsInfoRow[] }) {
   );
 }
 
-function SettingsUsageBar({
-  label,
-  value,
-  locale
-}: {
-  label: string;
-  value: number;
-  locale: SupportedLocale;
-}) {
-  const percent = clampPercent(value) * 100;
-
-  return (
-    <div className="settings-usage-bar">
-      <span>
-        <strong>{label}</strong>
-        <em>{formatPercent(value, locale)}</em>
-      </span>
-      <div>
-        <i style={{ width: `${percent}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function SettingsStorageRow({
-  volume,
-  locale
-}: {
-  volume: SystemInfoStorageVolume;
-  locale: SupportedLocale;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="settings-storage-row">
-      <div>
-        <strong>{storageVolumeLabel(volume, t)}</strong>
-        <small title={volume.path}>{volume.path}</small>
-      </div>
-      {volume.status === "ready" && volume.usedPercent !== null ? (
-        <SettingsUsageBar
-          label={t("settings.system.labels.storageUsed")}
-          value={volume.usedPercent}
-          locale={locale}
-        />
-      ) : (
-        <em data-state="missing">{t("common.states.unavailable")}</em>
-      )}
-      <dl>
-        <div>
-          <dt>{t("settings.system.labels.total")}</dt>
-          <dd>{formatNullableBytes(volume.totalBytes, locale, t)}</dd>
-        </div>
-        <div>
-          <dt>{t("settings.system.labels.available")}</dt>
-          <dd>{formatNullableBytes(volume.availableBytes, locale, t)}</dd>
-        </div>
-        <div>
-          <dt>{t("settings.system.labels.free")}</dt>
-          <dd>{formatNullableBytes(volume.freeBytes, locale, t)}</dd>
-        </div>
-        <div>
-          <dt>{t("settings.system.labels.blockSize")}</dt>
-          <dd>{formatNullableBytes(volume.blockSizeBytes, locale, t)}</dd>
-        </div>
-        <div>
-          <dt>{t("settings.system.labels.rootId")}</dt>
-          <dd>{volume.rootId ?? t("common.dash")}</dd>
-        </div>
-      </dl>
-    </div>
-  );
-}
-
 function SettingsAppearancePage({
   languagePreference,
   themePreference,
-  resolvedTheme,
-  resolvedLocale,
-  splitWidth,
   onLanguagePreferenceChange,
   onThemePreferenceChange
 }: {
   languagePreference: LanguagePreference;
   themePreference: ThemePreference;
-  resolvedTheme: ResolvedTheme;
-  resolvedLocale: SupportedLocale;
-  splitWidth: number;
   onLanguagePreferenceChange: (preference: LanguagePreference) => void;
   onThemePreferenceChange: (preference: ThemePreference) => void;
 }) {
@@ -1312,26 +743,6 @@ function SettingsAppearancePage({
     themeOptions.find((option) => option.value === themePreference)?.label ?? themePreference;
   const selectedLanguageLabel =
     languageOptions.find((option) => option.value === languagePreference)?.label ?? languagePreference;
-  const activeThemeLabel = themeResolvedLabel(resolvedTheme, t);
-  const interfaceRows: SettingsConfigRowItem[] = [
-    {
-      label: t("settings.appearance.density"),
-      detail: t("settings.appearance.densityDetail"),
-      value: t("settings.appearance.compactDensity")
-    },
-    {
-      label: t("settings.appearance.splitWidth"),
-      detail: t("settings.appearance.splitWidthDetail"),
-      value: t("settings.appearance.pixelValue", {
-        value: formatLocaleNumber(splitWidth, resolvedLocale)
-      })
-    },
-    {
-      label: t("settings.appearance.mobileTabs"),
-      detail: t("settings.appearance.mobileTabsDetail"),
-      value: t("settings.appearance.enabled")
-    }
-  ];
 
   return (
     <div className="settings-content-body">
@@ -1342,11 +753,6 @@ function SettingsAppearancePage({
               <h3>{t("settings.appearance.themeTitle")}</h3>
               <p>{t("settings.appearance.themeDescription")}</p>
             </div>
-            <span data-state="ready">
-              {t("settings.appearance.activeTheme", {
-                theme: activeThemeLabel
-              })}
-            </span>
           </header>
           <div className="settings-preference-field">
             <span>{t("settings.appearance.themeField")}</span>
@@ -1367,7 +773,6 @@ function SettingsAppearancePage({
               <h3>{t("settings.appearance.languageTitle")}</h3>
               <p>{t("settings.appearance.languageDescription")}</p>
             </div>
-            <span data-state="ready">{languageLocaleLabel(resolvedLocale, t)}</span>
           </header>
           <div className="settings-preference-field">
             <span>{t("settings.appearance.languageField")}</span>
@@ -1382,16 +787,6 @@ function SettingsAppearancePage({
           </div>
         </section>
 
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.appearance.interfaceTitle")}</h3>
-              <p>{t("settings.appearance.interfaceDescription")}</p>
-            </div>
-            <span data-state="ready">{t("common.states.configured")}</span>
-          </header>
-          <SettingsConfigRows items={interfaceRows} />
-        </section>
       </div>
     </div>
   );
@@ -1420,34 +815,6 @@ function SettingsFilesPage({
   }));
   const selectedFontLabel =
     codeFontOptions.find((option) => option.value === codeFontSettings.familyId)?.label ?? codeFontSettings.familyId;
-  const previewRows: SettingsConfigRowItem[] = [
-    {
-      label: t("settings.files.textPreviewWindow"),
-      detail: t("settings.files.textPreviewWindowDetail"),
-      value: formatBytes(DEFAULT_TEXT_PREVIEW_BYTES, locale)
-    },
-    {
-      label: t("settings.files.editLimit"),
-      detail: t("settings.files.editLimitDetail"),
-      value: formatBytes(MAX_EDIT_TEXT_BYTES, locale)
-    },
-    {
-      label: t("settings.files.previewKinds"),
-      detail: t("settings.files.previewKindsDetail"),
-      value: t("settings.files.previewKindsValue")
-    },
-    {
-      label: t("settings.files.mediaStreaming"),
-      detail: t("settings.files.mediaStreamingDetail"),
-      value: t("settings.files.rangeEnabled")
-    },
-    {
-      label: t("settings.files.sizePolicy"),
-      detail: t("settings.files.sizePolicyDetail"),
-      value: t("settings.files.metadataOnly")
-    }
-  ];
-
   useEffect(() => {
     setDraftLimitMiB(String(previewFileSizeLimitMiB));
   }, [previewFileSizeLimitMiB]);
@@ -1491,7 +858,6 @@ function SettingsFilesPage({
               <h3>{t("settings.files.editorTitle")}</h3>
               <p>{t("settings.files.editorDescription")}</p>
             </div>
-            <span data-state="ready">{`${codeFontSettings.fontSizePx}px`}</span>
           </header>
           <div className="settings-editor-font-grid">
             <div className="settings-preference-field">
@@ -1540,7 +906,6 @@ function SettingsFilesPage({
               <h3>{t("settings.files.previewTitle")}</h3>
               <p>{t("settings.files.previewDescription")}</p>
             </div>
-            <span data-state="ready">{formatBytes(previewFileSizeLimitBytes, locale)}</span>
           </header>
           <label className="settings-preference-field settings-size-field">
             <span>{t("settings.files.previewFileSizeLimit")}</span>
@@ -1565,16 +930,6 @@ function SettingsFilesPage({
           </label>
         </section>
 
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.files.capabilitiesTitle")}</h3>
-              <p>{t("settings.files.capabilitiesDescription")}</p>
-            </div>
-            <span data-state="ready">{t("common.states.ready")}</span>
-          </header>
-          <SettingsConfigRows items={previewRows} />
-        </section>
       </div>
     </div>
   );
@@ -1584,20 +939,14 @@ export function SettingsPhotosPage({
   settings,
   status,
   processingSettings,
-  workerHealth,
-  runtime,
   loading,
-  locale,
   onSettingsChange,
   onClose
 }: {
   settings: PhotoLibrarySettings | null;
   status: PhotoLibraryStatus | null;
   processingSettings: PhotoProcessingSettings | null;
-  workerHealth: PhotoWorkerHealth | null;
-  runtime: SystemInfo["zos"]["photostaff"] | null;
   loading: boolean;
-  locale: SupportedLocale;
   onSettingsChange: (patch: Partial<PhotoSettingsDraft>) => Promise<void>;
   onClose: () => void;
 }) {
@@ -1611,117 +960,13 @@ export function SettingsPhotosPage({
     setSaved(false);
   }, [processingSettings]);
 
-  const state: SettingsState = loading && !status
-    ? "loading"
-    : status?.state === "ready"
-      ? "ready"
-      : status && isPhotoActiveState(status.state)
-        ? "loading"
-        : "missing";
   const stateLabel = String(loading && !status
     ? t("common.states.loading")
     : status
       ? t(`settings.photos.states.${status.state}`)
       : t("common.states.unavailable"));
-  const unavailable = String(t("common.states.unavailable"));
-  const libraryRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.photos.libraryPath"),
-      value: settings?.path ?? t("settings.photos.notConfigured"),
-      mono: Boolean(settings)
-    },
-    {
-      label: t("settings.photos.rootId"),
-      value: settings?.rootId ?? unavailable
-    },
-    {
-      label: t("settings.photos.storagePoolId"),
-      value: settings?.storagePoolId ?? unavailable
-    },
-    {
-      label: t("settings.photos.libraryUpdatedAt"),
-      value: settings ? formatDate(settings.updatedAt, locale) : unavailable
-    }
-  ];
-  const scanRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.photos.scanState"),
-      value: stateLabel,
-      ...(status?.error ? { detail: status.error } : {})
-    },
-    {
-      label: t("settings.photos.phase"),
-      value: status?.phase ? String(t(`settings.photos.phases.${status.phase}`)) : t("common.dash")
-    },
-    {
-      label: t("settings.photos.currentPath"),
-      value: status?.currentPath ?? t("common.dash"),
-      mono: Boolean(status?.currentPath)
-    },
-    {
-      label: t("settings.photos.statusUpdatedAt"),
-      value: status?.updatedAt ? formatDate(status.updatedAt, locale) : t("common.dash")
-    },
-    {
-      label: t("settings.photos.retryCount"),
-      value: status ? formatLocaleNumber(status.retryCount, locale) : t("common.dash"),
-      ...(status?.nextRetryAt ? { detail: t("settings.photos.nextRetryAt", { value: formatDate(status.nextRetryAt, locale) }) } : {})
-    },
-    {
-      label: t("settings.photos.errorCode"),
-      value: status?.errorCode ?? t("common.dash"),
-      mono: Boolean(status?.errorCode)
-    }
-  ];
-  const workerRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.photos.workerState"),
-      value: workerHealth ? String(t(`settings.photos.workerStates.${workerHealth.status}`)) : unavailable
-    },
-    {
-      label: t("settings.photos.lastHeartbeat"),
-      value: workerHealth?.lastHeartbeatAt ? formatDate(workerHealth.lastHeartbeatAt, locale) : t("common.dash")
-    },
-    {
-      label: t("settings.photos.activeJobs"),
-      value: workerHealth ? formatLocaleNumber(workerHealth.activeJobs, locale) : t("common.dash")
-    },
-    {
-      label: t("settings.photos.pendingJobs"),
-      value: workerHealth
-        ? `${formatLocaleNumber(workerHealth.queuedJobs, locale)} / ${formatLocaleNumber(workerHealth.retryingJobs, locale)}`
-        : t("common.dash")
-    }
-  ];
-  const runtimeRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.photos.dataDir"),
-      value: runtime?.dataDir ?? unavailable,
-      mono: Boolean(runtime)
-    },
-    {
-      label: t("settings.photos.maxFileSize"),
-      value: runtime ? formatBytes(runtime.maxFileSizeBytes, locale) : unavailable
-    },
-    {
-      label: t("settings.photos.thumbnailSize"),
-      value: runtime
-        ? t("settings.photos.squarePixels", { value: formatLocaleNumber(runtime.thumbnailSizePx, locale) })
-        : unavailable
-    },
-    {
-      label: t("settings.photos.previewSize"),
-      value: runtime
-        ? t("settings.photos.maxEdgePixels", { value: formatLocaleNumber(runtime.previewMaxEdgePx, locale) })
-        : unavailable
-    },
-    {
-      label: t("settings.photos.supportedFormats"),
-      value: runtime
-        ? runtime.supportedExtensions.map((extension) => extension.slice(1).toUpperCase()).join(", ")
-        : unavailable
-    }
-  ];
+  const hasStatusProblem = !settings || Boolean(status?.error) ||
+    status?.state === "degraded" || status?.state === "offline" || status?.state === "unconfigured";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1740,98 +985,85 @@ export function SettingsPhotosPage({
     <form className="settings-form" onSubmit={(event) => void submit(event)}>
       <div className="settings-content-body">
         <div className="settings-page-grid">
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.photos.libraryTitle")}</h3>
-              <p>{t("settings.photos.libraryDescription")}</p>
-            </div>
-            <span data-state={settings ? "ready" : state}>{settings ? t("common.states.configured") : stateLabel}</span>
-          </header>
-          <SettingsInfoList rows={libraryRows} />
-        </section>
+          <section className="settings-section-card">
+            <header>
+              <div>
+                <h3>{t("settings.photos.libraryTitle")}</h3>
+                <p>{t("settings.photos.libraryDescription")}</p>
+              </div>
+            </header>
+            <dl className="settings-summary-list settings-photo-context">
+              <div>
+                <dt>{t("settings.photos.libraryPath")}</dt>
+                <dd className={settings ? "is-mono" : undefined}>
+                  {settings?.path ?? t("settings.photos.notConfigured")}
+                </dd>
+              </div>
+            </dl>
+            {hasStatusProblem ? (
+              <p className="settings-inline-alert" role="alert">
+                <AlertTriangle aria-hidden="true" size={15} />
+                <span>{status?.error ?? stateLabel}</span>
+              </p>
+            ) : null}
+          </section>
 
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.photos.scanTitle")}</h3>
-              <p>{t("settings.photos.scanDescription")}</p>
-            </div>
-            <span data-state={state}>{stateLabel}</span>
-          </header>
-          <div className="settings-metric-grid settings-system-metric-grid">
-            {[
-              { label: t("settings.photos.assets"), value: status?.total },
-              { label: t("settings.photos.scanned"), value: status?.scanned },
-              { label: t("settings.photos.processed"), value: status?.processed },
-              { label: t("settings.photos.failed"), value: status?.failed }
-            ].map((metric) => (
-              <article key={metric.label}>
-                <strong>
-                  {metric.value === undefined ? t("common.dash") : formatLocaleNumber(metric.value, locale)}
-                </strong>
-                <span>{metric.label}</span>
-              </article>
-            ))}
-          </div>
-          <SettingsInfoList rows={scanRows} />
-        </section>
+          <section className="settings-section-card">
+            <header>
+              <div>
+                <h3>{t("settings.photos.processingTitle")}</h3>
+                <p>{t("settings.photos.processingDescription")}</p>
+              </div>
+            </header>
+            <fieldset className="settings-field-grid settings-download-fields" disabled={loading || saving || !processingSettings}>
+              <DownloadNumberField label={t("settings.photos.processingConcurrency")} value={draft.processingConcurrency} min={1} max={4} onChange={(value) => setDraft((current) => ({ ...current, processingConcurrency: value ?? 1 }))} />
+              <DownloadNumberField label={t("settings.photos.scanIntervalMs")} value={draft.scanIntervalMs} min={60_000} max={86_400_000} step={60_000} onChange={(value) => setDraft((current) => ({ ...current, scanIntervalMs: value ?? 60_000 }))} />
+              <DownloadNumberField label={t("settings.photos.commandTimeoutMs")} value={draft.commandTimeoutMs} min={5_000} max={900_000} step={1_000} onChange={(value) => setDraft((current) => ({ ...current, commandTimeoutMs: value ?? 5_000 }))} />
+            </fieldset>
+          </section>
 
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.photos.workerTitle")}</h3>
-              <p>{t("settings.photos.workerDescription")}</p>
-            </div>
-            <span data-state={workerHealth?.status === "ready" ? "ready" : workerHealth?.status === "stale" ? "loading" : "missing"}>
-              {workerHealth ? t(`settings.photos.workerStates.${workerHealth.status}`) : unavailable}
-            </span>
-          </header>
-          <SettingsInfoList rows={workerRows} />
-        </section>
+          <section className="settings-section-card">
+            <header>
+              <div>
+                <h3>{t("settings.photos.retryPolicyTitle")}</h3>
+                <p>{t("settings.photos.retryPolicyDescription")}</p>
+              </div>
+            </header>
+            <fieldset className="settings-field-grid settings-download-fields" disabled={loading || saving || !processingSettings}>
+              <DownloadNumberField label={t("settings.photos.maxAutoRetries")} value={draft.maxAutoRetries} min={0} max={20} onChange={(value) => setDraft((current) => ({ ...current, maxAutoRetries: value ?? 0 }))} />
+              <DownloadNumberField label={t("settings.photos.retryBaseDelayMs")} value={draft.retryBaseDelayMs} min={500} max={1_800_000} step={500} onChange={(value) => setDraft((current) => ({ ...current, retryBaseDelayMs: value ?? 500 }))} />
+              <DownloadNumberField label={t("settings.photos.retryMaxDelayMs")} value={draft.retryMaxDelayMs} min={draft.retryBaseDelayMs} max={1_800_000} step={1_000} onChange={(value) => setDraft((current) => ({ ...current, retryMaxDelayMs: value ?? current.retryBaseDelayMs }))} />
+            </fieldset>
+          </section>
 
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.photos.processingTitle")}</h3>
-              <p>{t("settings.photos.processingDescription")}</p>
-            </div>
-            <span data-state={processingSettings ? "ready" : loading ? "loading" : "missing"}>
-              {processingSettings ? t("common.states.configured") : loading ? t("common.states.loading") : unavailable}
-            </span>
-          </header>
-          <fieldset className="settings-field-grid settings-download-fields" disabled={loading || saving || !processingSettings}>
-            <DownloadNumberField label={t("settings.photos.processingConcurrency")} value={draft.processingConcurrency} min={1} max={4} onChange={(value) => setDraft((current) => ({ ...current, processingConcurrency: value ?? 1 }))} />
-            <DownloadNumberField label={t("settings.photos.scanIntervalMs")} value={draft.scanIntervalMs} min={60_000} max={86_400_000} step={60_000} onChange={(value) => setDraft((current) => ({ ...current, scanIntervalMs: value ?? 60_000 }))} />
-            <DownloadNumberField label={t("settings.photos.maxAutoRetries")} value={draft.maxAutoRetries} min={0} max={20} onChange={(value) => setDraft((current) => ({ ...current, maxAutoRetries: value ?? 0 }))} />
-            <DownloadNumberField label={t("settings.photos.retryBaseDelayMs")} value={draft.retryBaseDelayMs} min={500} max={1_800_000} step={500} onChange={(value) => setDraft((current) => ({ ...current, retryBaseDelayMs: value ?? 500 }))} />
-            <DownloadNumberField label={t("settings.photos.retryMaxDelayMs")} value={draft.retryMaxDelayMs} min={draft.retryBaseDelayMs} max={1_800_000} step={1_000} onChange={(value) => setDraft((current) => ({ ...current, retryMaxDelayMs: value ?? current.retryBaseDelayMs }))} />
-            <DownloadNumberField label={t("settings.photos.commandTimeoutMs")} value={draft.commandTimeoutMs} min={5_000} max={900_000} step={1_000} onChange={(value) => setDraft((current) => ({ ...current, commandTimeoutMs: value ?? 5_000 }))} />
-            <DownloadNumberField label={t("settings.photos.maxFileSizeBytes")} value={draft.maxFileSizeBytes} min={1024 ** 2} max={1024 ** 4} step={1024 ** 2} onChange={(value) => setDraft((current) => ({ ...current, maxFileSizeBytes: value ?? 1024 ** 2 }))} />
-            <DownloadNumberField label={t("settings.photos.maxXmpSizeBytes")} value={draft.maxXmpSizeBytes} min={1024} max={64 * 1024 ** 2} step={1024} onChange={(value) => setDraft((current) => ({ ...current, maxXmpSizeBytes: value ?? 1024 }))} />
-            <DownloadNumberField label={t("settings.photos.maxIntermediateBytes")} value={draft.maxIntermediateBytes} min={64 * 1024 ** 2} max={8 * 1024 ** 3} step={1024 ** 2} onChange={(value) => setDraft((current) => ({ ...current, maxIntermediateBytes: value ?? 64 * 1024 ** 2 }))} />
-            <DownloadNumberField label={t("settings.photos.minFreeSpaceBytes")} value={draft.minFreeSpaceBytes} min={0} max={1024 ** 4} step={1024 ** 2} onChange={(value) => setDraft((current) => ({ ...current, minFreeSpaceBytes: value ?? 0 }))} />
-            <DownloadNumberField label={t("settings.photos.maxDecodedPixels")} value={draft.maxDecodedPixels} min={1_000_000} max={268_402_689} step={1_000_000} onChange={(value) => setDraft((current) => ({ ...current, maxDecodedPixels: value ?? 1_000_000 }))} />
-          </fieldset>
-        </section>
-
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.photos.runtimeTitle")}</h3>
-              <p>{t("settings.photos.runtimeDescription")}</p>
-            </div>
-            <span data-state={runtime ? "ready" : loading ? "loading" : "missing"}>
-              {runtime ? t("settings.photos.readOnly") : loading ? t("common.states.loading") : unavailable}
-            </span>
-          </header>
-          <SettingsInfoList rows={runtimeRows} />
-        </section>
+          <section className="settings-section-card">
+            <header>
+              <div>
+                <h3>{t("settings.photos.resourceLimitsTitle")}</h3>
+                <p>{t("settings.photos.resourceLimitsDescription")}</p>
+              </div>
+            </header>
+            <fieldset className="settings-field-grid settings-download-fields" disabled={loading || saving || !processingSettings}>
+              <DownloadNumberField label={t("settings.photos.maxFileSizeBytes")} value={draft.maxFileSizeBytes} min={1024 ** 2} max={1024 ** 4} step={1024 ** 2} onChange={(value) => setDraft((current) => ({ ...current, maxFileSizeBytes: value ?? 1024 ** 2 }))} />
+              <DownloadNumberField label={t("settings.photos.maxXmpSizeBytes")} value={draft.maxXmpSizeBytes} min={1024} max={64 * 1024 ** 2} step={1024} onChange={(value) => setDraft((current) => ({ ...current, maxXmpSizeBytes: value ?? 1024 }))} />
+              <DownloadNumberField label={t("settings.photos.maxIntermediateBytes")} value={draft.maxIntermediateBytes} min={64 * 1024 ** 2} max={8 * 1024 ** 3} step={1024 ** 2} onChange={(value) => setDraft((current) => ({ ...current, maxIntermediateBytes: value ?? 64 * 1024 ** 2 }))} />
+              <DownloadNumberField label={t("settings.photos.minFreeSpaceBytes")} value={draft.minFreeSpaceBytes} min={0} max={1024 ** 4} step={1024 ** 2} onChange={(value) => setDraft((current) => ({ ...current, minFreeSpaceBytes: value ?? 0 }))} />
+              <DownloadNumberField label={t("settings.photos.maxDecodedPixels")} value={draft.maxDecodedPixels} min={1_000_000} max={268_402_689} step={1_000_000} onChange={(value) => setDraft((current) => ({ ...current, maxDecodedPixels: value ?? 1_000_000 }))} />
+            </fieldset>
+          </section>
         </div>
       </div>
 
       <footer className="settings-actions">
-        <span>{saved ? t("settings.photos.saved") : processingSettings ? t("settings.photos.ready") : t("common.states.unavailable")}</span>
+        <span role="status">
+          {saving
+            ? t("common.actions.saving")
+            : saved
+              ? t("settings.photos.saved")
+              : !loading && !processingSettings
+                ? t("common.states.unavailable")
+                : null}
+        </span>
         <div>
           <button className="secondary-button" type="button" onClick={onClose} disabled={saving}>{t("common.actions.cancel")}</button>
           <button className="primary-button" type="submit" disabled={loading || saving || !processingSettings} aria-busy={saving || undefined}>
@@ -1865,22 +1097,16 @@ function photoSettingsDraft(settings: PhotoProcessingSettings | null): PhotoSett
   };
 }
 
-function isPhotoActiveState(state: PhotoLibraryStatus["state"]): boolean {
-  return state === "queued" || state === "discovering" || state === "processing" || state === "retrying";
-}
-
 type DownloadSettingsDraft = Omit<DownloadSettings, "updatedAt">;
 
 export function SettingsDownloadsPage({
   settings,
   loading,
-  locale,
   onSettingsChange,
   onClose
 }: {
   settings: DownloadSettings | null;
   loading: boolean;
-  locale: SupportedLocale;
   onSettingsChange: (patch: Partial<DownloadSettingsDraft>) => Promise<void>;
   onClose: () => void;
 }) {
@@ -1893,13 +1119,6 @@ export function SettingsDownloadsPage({
     setDraft(downloadSettingsDraft(settings));
     setSaved(false);
   }, [settings]);
-
-  const statusState: SettingsState = loading && !settings ? "loading" : settings ? "ready" : "missing";
-  const statusLabel = loading && !settings
-    ? t("common.states.loading")
-    : settings
-      ? t("settings.downloads.connectionCount", { count: settings.concurrency })
-      : t("settings.downloads.notLoaded");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1918,14 +1137,12 @@ export function SettingsDownloadsPage({
     <form className="settings-form" onSubmit={(event) => void submit(event)}>
       <div className="settings-content-body">
         <div className="settings-page-grid settings-downloads-grid">
-          <div className="settings-main-stack">
             <section className="settings-section-card">
               <header>
                 <div>
                   <h3>{t("settings.downloads.concurrencyTitle")}</h3>
                   <p>{t("settings.downloads.concurrencyDescription")}</p>
                 </div>
-                <span data-state={statusState}>{statusLabel}</span>
               </header>
 
               <fieldset className="settings-download-control" disabled={loading || saving}>
@@ -2014,50 +1231,18 @@ export function SettingsDownloadsPage({
                 <DownloadNumberField label={t("settings.downloads.maxFileSizeBytes")} help={t("settings.downloads.maxFileSizeHelp")} value={draft.maxFileSizeBytes} min={1} max={Number.MAX_SAFE_INTEGER} step={1024 * 1024} nullable onChange={(value) => setDraft((current) => ({ ...current, maxFileSizeBytes: value }))} />
               </fieldset>
             </section>
-          </div>
-
-          <aside className="settings-side-stack" aria-label={t("settings.downloads.summaryTitle")}>
-            <section className="settings-section-card settings-route-card">
-              <header>
-                <div>
-                  <h3>{t("settings.downloads.summaryTitle")}</h3>
-                  <p>{t("settings.downloads.summaryDescription")}</p>
-                </div>
-              </header>
-              <dl className="settings-summary-list">
-                <div>
-                  <dt>{t("settings.downloads.concurrencyField")}</dt>
-                  <dd>{settings ? t("settings.downloads.connectionCount", { count: settings.concurrency }) : t("settings.downloads.notLoaded")}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.downloads.parallelRequests")}</dt>
-                  <dd>{settings?.parallelRequestsPerTask ?? t("settings.downloads.notLoaded")}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.downloads.segmentedMinBytes")}</dt>
-                  <dd>{settings ? formatBytes(settings.segmentedDownloadMinBytes, locale) : t("settings.downloads.notLoaded")}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.downloads.maxAutoRetries")}</dt>
-                  <dd>{settings?.maxAutoRetries ?? t("settings.downloads.notLoaded")}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.modelProvider.updated")}</dt>
-                  <dd>{settingsUpdatedAtLabel(settings, locale, t)}</dd>
-                </div>
-              </dl>
-            </section>
-          </aside>
         </div>
       </div>
 
       <footer className="settings-actions">
-        <span>
-          {saved
-            ? t("settings.downloads.saved")
-            : settings
-              ? t("settings.downloads.ready")
-              : t("settings.downloads.notLoaded")}
+        <span role="status">
+          {saving
+            ? t("settings.downloads.saving")
+            : saved
+              ? t("settings.downloads.saved")
+              : !loading && !settings
+                ? t("settings.downloads.notLoaded")
+                : null}
         </span>
         <div>
           <button className="secondary-button" type="button" onClick={onClose} disabled={saving}>
@@ -2134,19 +1319,15 @@ function DownloadNumberField({
 
 function SettingsToolPolicyPage({
   form,
-  settings,
   loading,
   saving,
-  locale,
   onChange,
   onSubmit,
   onClose
 }: {
   form: ToolPolicyFormState;
-  settings: PiToolPolicySettings | null;
   loading: boolean;
   saving: boolean;
-  locale: SupportedLocale;
   onChange: (form: ToolPolicyFormState) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
@@ -2171,7 +1352,6 @@ function SettingsToolPolicyPage({
                 <h3>{t("settings.toolPolicy.readOnlyTitle")}</h3>
                 <p>{t("settings.toolPolicy.readOnlyDescription")}</p>
               </div>
-              <span data-state="ready">{t("common.states.configured")}</span>
             </header>
             <div className="settings-tool-policy-list">
               {READ_ONLY_TOOLS.map((tool) => (
@@ -2204,7 +1384,6 @@ function SettingsToolPolicyPage({
                 <h3>{t("settings.toolPolicy.dangerousTitle")}</h3>
                 <p>{t("settings.toolPolicy.dangerousDescription")}</p>
               </div>
-              <span data-state="missing">{t("settings.toolPolicy.askOnly")}</span>
             </header>
             <div className="settings-tool-policy-list">
               {DANGEROUS_TOOLS.map((tool) => (
@@ -2231,33 +1410,11 @@ function SettingsToolPolicyPage({
             </div>
           </section>
 
-          <section className="settings-section-card">
-            <header>
-              <div>
-                <h3>{t("settings.toolPolicy.auditTitle")}</h3>
-                <p>{t("settings.toolPolicy.auditDescription")}</p>
-              </div>
-            </header>
-            <dl className="settings-summary-list">
-              <div>
-                <dt>{t("settings.toolPolicy.pendingMode")}</dt>
-                <dd>{t("settings.toolPolicy.workerWaits")}</dd>
-              </div>
-              <div>
-                <dt>{t("settings.modelProvider.updated")}</dt>
-                <dd>{settings ? formatDate(settings.updatedAt, locale) : t("settings.modelProvider.notSaved")}</dd>
-              </div>
-            </dl>
-          </section>
         </div>
       </div>
 
       <footer className="settings-actions">
-        <span>
-          {settings
-            ? t("settings.toolPolicy.saved")
-            : t("settings.toolPolicy.defaultsActive")}
-        </span>
+        <span role="status">{saving ? t("common.actions.saving") : null}</span>
         <div>
           <button className="secondary-button" type="button" onClick={onClose}>
             {t("common.actions.cancel")}
@@ -2273,46 +1430,31 @@ function SettingsToolPolicyPage({
 
 function SettingsDockerPage({
   form,
-  settings,
   loading,
   saving,
-  locale,
   onChange,
   onSubmit,
   onClose
 }: {
   form: DockerSettingsFormState;
-  settings: DockerSettings | null;
   loading: boolean;
   saving: boolean;
-  locale: SupportedLocale;
   onChange: (form: DockerSettingsFormState) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const shellCount = splitDockerShells(form.consoleShells).length;
-  const statusState = loading && !settings ? "loading" : settings ? "ready" : "missing";
-  const statusLabel = loading && !settings
-    ? t("common.states.loading")
-    : !settings
-      ? t("settings.docker.notLoaded")
-      : form.enabled
-        ? t("settings.docker.enabled")
-        : t("settings.docker.disabled");
 
   return (
     <form className="settings-form" onSubmit={onSubmit}>
       <div className="settings-content-body">
         <div className="settings-page-grid settings-docker-grid">
-          <div className="settings-main-stack">
             <section className="settings-section-card">
               <header>
                 <div>
                   <h3>{t("settings.docker.runtimeTitle")}</h3>
                   <p>{t("settings.docker.runtimeDescription")}</p>
                 </div>
-                <span data-state={statusState}>{statusLabel}</span>
               </header>
 
               <fieldset className="settings-field-grid settings-docker-runtime-grid" disabled={loading || saving}>
@@ -2398,54 +1540,11 @@ function SettingsDockerPage({
                 <span>{t("settings.docker.socketNote")}</span>
               </div>
             </section>
-
-          </div>
-
-          <aside className="settings-side-stack" aria-label={t("settings.docker.summaryTitle")}>
-            <section className="settings-section-card settings-route-card">
-              <header>
-                <div>
-                  <h3>{t("settings.docker.summaryTitle")}</h3>
-                  <p>{t("settings.docker.summaryDescription")}</p>
-                </div>
-              </header>
-              <dl className="settings-summary-list">
-                <div>
-                  <dt>{t("settings.docker.enabledField")}</dt>
-                  <dd>{settings ? (settings.enabled ? t("settings.docker.enabled") : t("settings.docker.disabled")) : t("settings.docker.notLoaded")}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.docker.socketPath")}</dt>
-                  <dd className="is-mono">{form.socketPath || t("common.dash")}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.docker.composeCommand")}</dt>
-                  <dd className="is-mono">{form.composeCommand || t("common.dash")}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.docker.managedAppsPath")}</dt>
-                  <dd className="is-mono">/zos/apps</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.docker.operationTimeout")}</dt>
-                  <dd>{form.operationTimeoutMs || t("common.dash")}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.docker.consoleShellsCount")}</dt>
-                  <dd>{formatLocaleNumber(shellCount, locale)}</dd>
-                </div>
-                <div>
-                  <dt>{t("settings.modelProvider.updated")}</dt>
-                  <dd>{settingsUpdatedAtLabel(settings, locale, t)}</dd>
-                </div>
-              </dl>
-            </section>
-          </aside>
         </div>
       </div>
 
       <footer className="settings-actions">
-        <span>{statusLabel}</span>
+        <span role="status">{saving ? t("common.actions.saving") : null}</span>
         <div>
           <button className="secondary-button" type="button" onClick={onClose}>
             {t("common.actions.cancel")}
@@ -2459,155 +1558,6 @@ function SettingsDockerPage({
   );
 }
 
-function SettingsSecurityPage({
-  settings,
-  systemInfo,
-  loading,
-  toolPolicyForm,
-  pendingApprovals,
-  operations,
-  operationsReady,
-  locale
-}: {
-  settings: ModelProviderSettings | null;
-  systemInfo: SystemInfo | null;
-  loading: boolean;
-  toolPolicyForm: ToolPolicyFormState;
-  pendingApprovals: PendingApproval[];
-  operations: FileOperation[];
-  operationsReady: boolean;
-  locale: SupportedLocale;
-}) {
-  const { t } = useTranslation();
-  const systemState: SettingsState = systemInfo ? "ready" : loading ? "loading" : "missing";
-  const systemValue = systemInfo ? null : loading ? t("common.states.loading") : t("common.states.unavailable");
-  const lastOperation = operations[0] ?? null;
-  const dangerousPolicySummary = DANGEROUS_TOOLS.map(
-    (tool) => `${tool}: ${toolPolicyModeLabel(toolPolicyForm[tool], t)}`
-  ).join(" / ");
-  const secretRows: SettingsConfigRowItem[] = [
-    {
-      label: t("settings.security.apiKeyResponse"),
-      detail: t("settings.security.apiKeyResponseDetail"),
-      value: settings?.apiKeyConfigured
-        ? t("settings.security.maskedBoolean")
-        : t("settings.security.keyNotConfigured"),
-      state: settings?.apiKeyConfigured ? "ready" : "missing"
-    },
-    {
-      label: t("settings.security.clearKey"),
-      detail: t("settings.security.clearKeyDetail"),
-      value: t("common.states.configured")
-    },
-    {
-      label: t("settings.security.publicSettings"),
-      detail: t("settings.security.publicSettingsDetail"),
-      value: t("settings.security.publicOnly")
-    }
-  ];
-  const accessRows: SettingsConfigRowItem[] = [
-    {
-      label: t("settings.security.authMode"),
-      detail: t("settings.security.authModeDetail"),
-      value: systemInfo?.identity.authMode ?? systemValue ?? t("common.states.unavailable"),
-      state: systemState
-    },
-    {
-      label: t("settings.security.allowedOrigins"),
-      detail: t("settings.security.allowedOriginsDetail"),
-      value: systemInfo
-        ? formatLocaleNumber(systemInfo.zos.allowedOriginCount, locale)
-        : systemValue ?? t("common.states.unavailable"),
-      state: systemState
-    },
-    {
-      label: t("settings.security.nasRoots"),
-      detail: t("settings.security.nasRootsDetail"),
-      value: systemInfo
-        ? formatLocaleNumber(systemInfo.zos.nasRoots.length, locale)
-        : systemValue ?? t("common.states.unavailable"),
-      state: systemState
-    },
-    {
-      label: t("settings.security.pathSafety"),
-      detail: t("settings.security.pathSafetyDetail"),
-      value: t("settings.security.contained")
-    }
-  ];
-  const approvalRows: SettingsConfigRowItem[] = [
-    {
-      label: t("settings.security.dangerousTools"),
-      detail: t("settings.security.dangerousToolsDetail"),
-      value: dangerousPolicySummary
-    },
-    {
-      label: t("settings.security.pendingApprovals"),
-      detail: t("settings.security.pendingApprovalsDetail"),
-      value: formatLocaleNumber(pendingApprovals.length, locale),
-      state: pendingApprovals.length > 0 ? "missing" : "ready"
-    },
-    {
-      label: t("settings.security.operationAudit"),
-      detail: t("settings.security.operationAuditDetail"),
-      value: operationsReady
-        ? t("settings.security.operationCount", {
-            count: operations.length
-          })
-        : t("common.states.loading"),
-      state: operationsReady ? "ready" : "loading"
-    },
-    {
-      label: t("settings.security.latestOperation"),
-      detail: t("settings.security.latestOperationDetail"),
-      value: lastOperation
-        ? `${lastOperation.operation} / ${formatDate(lastOperation.createdAt, locale)}`
-        : t("settings.security.noOperations"),
-      state: operationsReady ? "ready" : "loading"
-    }
-  ];
-
-  return (
-    <div className="settings-content-body">
-      <div className="settings-page-grid">
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.security.secretsTitle")}</h3>
-              <p>{t("settings.security.secretsDescription")}</p>
-            </div>
-            <span data-state={settings?.apiKeyConfigured ? "ready" : "missing"}>{settingsStatus(settings, t)}</span>
-          </header>
-          <SettingsConfigRows items={secretRows} />
-        </section>
-
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.security.accessTitle")}</h3>
-              <p>{t("settings.security.accessDescription")}</p>
-            </div>
-            <span data-state={systemState}>{systemInfo?.identity.authMode ?? systemValue}</span>
-          </header>
-          <SettingsConfigRows items={accessRows} />
-        </section>
-
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.security.approvalTitle")}</h3>
-              <p>{t("settings.security.approvalDescription")}</p>
-            </div>
-            <span data-state={pendingApprovals.length > 0 ? "missing" : "ready"}>
-              {formatLocaleNumber(pendingApprovals.length, locale)}
-            </span>
-          </header>
-          <SettingsConfigRows items={approvalRows} />
-        </section>
-      </div>
-    </div>
-  );
-}
-
 function SettingsAdvancedPage({
   systemInfo,
   loading,
@@ -2618,7 +1568,6 @@ function SettingsAdvancedPage({
   locale: SupportedLocale;
 }) {
   const { t } = useTranslation();
-  const statusState: SettingsState = systemInfo ? "ready" : loading ? "loading" : "missing";
   const statusLabel = systemInfo
     ? t("settings.system.collectedAt", { time: formatDate(systemInfo.collectedAt, locale) })
     : loading
@@ -2635,8 +1584,8 @@ function SettingsAdvancedPage({
                 <h3>{t("settings.advanced.runtimeTitle")}</h3>
                 <p>{t("settings.advanced.runtimeDescription")}</p>
               </div>
-              <span data-state={statusState}>{statusLabel}</span>
             </header>
+            <p className="settings-inline-alert" role="status">{statusLabel}</p>
           </section>
         </div>
       </div>
@@ -2738,16 +1687,7 @@ function SettingsAdvancedPage({
           title={t("settings.advanced.processTitle")}
           description={t("settings.advanced.processDescription")}
           rows={processRows}
-        >
-          <div className="settings-system-chip-grid" aria-label={t("settings.system.labels.runtimeVersions")}>
-            {Object.entries(systemInfo.runtime.versions).map(([name, value]) => (
-              <span key={name}>
-                <strong>{name}</strong>
-                <em>{value}</em>
-              </span>
-            ))}
-          </div>
-        </SettingsInfoCard>
+        />
 
         <SettingsInfoCard
           icon={<HardDrive aria-hidden="true" size={17} />}
@@ -2768,40 +1708,6 @@ function SettingsAdvancedPage({
       </div>
     </div>
   );
-}
-
-function SettingsConfigRows({ items }: { items: SettingsConfigRowItem[] }) {
-  return (
-    <div className="settings-config-list">
-      {items.map((item, index) => (
-        <div key={`${item.label}-${index}`} className="settings-config-row">
-          <span>
-            <strong>{item.label}</strong>
-            <small>{item.detail}</small>
-          </span>
-          <em data-state={item.state ?? "ready"}>{item.value}</em>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function storageVolumeLabel(
-  volume: SystemInfoStorageVolume,
-  t: Translate
-): string {
-  if (volume.kind === "nas-root") {
-    return volume.label;
-  }
-  return String(t(`settings.system.storageKinds.${volume.kind}`));
-}
-
-function formatNullableBytes(
-  value: number | null,
-  locale: SupportedLocale,
-  t: Translate
-): string {
-  return value === null ? String(t("common.dash")) : formatBytes(value, locale);
 }
 
 function formatDuration(
@@ -2838,30 +1744,6 @@ function formatDuration(
   }));
 }
 
-function formatLoadAverage(values: number[], locale: SupportedLocale): string {
-  return values
-    .map((value) =>
-      formatLocaleNumber(value, locale, {
-        maximumFractionDigits: 2
-      })
-    )
-    .join(" / ");
-}
-
-function formatPercent(value: number, locale: SupportedLocale): string {
-  return new Intl.NumberFormat(locale, {
-    style: "percent",
-    maximumFractionDigits: 1
-  }).format(clampPercent(value));
-}
-
-function clampPercent(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.min(Math.max(value, 0), 1);
-}
-
 function settingsSectionIcon(section: SettingsSectionId) {
   switch (section) {
     case "overview":
@@ -2884,31 +1766,11 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Images aria-hidden="true" size={16} />;
     case "downloads":
       return <Download aria-hidden="true" size={16} />;
-    case "security":
-      return <Lock aria-hidden="true" size={16} />;
     case "appearance":
       return <ImageIcon aria-hidden="true" size={16} />;
     case "advanced":
       return <Wrench aria-hidden="true" size={16} />;
   }
-}
-
-function settingsStateIcon(state: SettingsState) {
-  if (state === "ready") {
-    return <Check aria-hidden="true" size={13} />;
-  }
-  if (state === "missing") {
-    return <AlertTriangle aria-hidden="true" size={13} />;
-  }
-  return <Clock3 aria-hidden="true" size={13} />;
-}
-
-function languageLocaleLabel(locale: SupportedLocale, t: Translate): string {
-  return String(locale === "zh-CN" ? t("common.language.chineseSimplified") : t("common.language.english"));
-}
-
-function themeResolvedLabel(theme: ResolvedTheme, t: Translate): string {
-  return String(theme === "light" ? t("settings.appearance.lightTheme") : t("settings.appearance.darkTheme"));
 }
 
 function toolPolicyModeLabel(mode: string, t: Translate): string {
@@ -2919,11 +1781,4 @@ function toolPolicyModeLabel(mode: string, t: Translate): string {
     return String(t("settings.toolPolicy.modes.ask"));
   }
   return String(t("settings.toolPolicy.modes.disabled"));
-}
-
-function splitDockerShells(value: string): string[] {
-  return value
-    .split(/[\n,]/gu)
-    .map((shell) => shell.trim())
-    .filter(Boolean);
 }

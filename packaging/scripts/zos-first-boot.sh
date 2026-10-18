@@ -119,6 +119,16 @@ allowed_origins = []
 [worker]
 poll_ms = 750
 
+[monitoring]
+enabled = true
+fast_sample_interval_ms = 10000
+standard_sample_interval_ms = 30000
+temperature_sample_interval_ms = 300000
+raw_retention_ms = 172800000
+minute_retention_ms = 2592000000
+hour_retention_ms = 31536000000
+max_database_bytes = 536870912
+
 [admin]
 display_name = "$ADMIN_DISPLAY_NAME"
 auth_mode = "local-only"

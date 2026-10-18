@@ -5,6 +5,7 @@ export const WORKSPACE_PANEL_IDS = [
   "photos",
   "terminal",
   "downloads",
+  "monitoring",
   "docker",
   "virtualMachines",
   "network",

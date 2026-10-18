@@ -1,6 +1,6 @@
 import { moveElement, verticalCompactor, type Layout, type LayoutItem } from "react-grid-layout";
 
-export type ManagementDashboardId = "docker" | "virtualMachines" | "network" | "storage" | "shares";
+export type ManagementDashboardId = "docker" | "virtualMachines" | "network" | "storage" | "shares" | "monitoring";
 export type ManagementDashboardBreakpoint = "desktop" | "tablet";
 export type ManagementDashboardWidgetSize = "overview" | "metric" | "wide" | "half" | "narrow" | "large";
 
@@ -30,6 +30,20 @@ export const MANAGEMENT_DASHBOARD_LAYOUT_VERSION = 1;
 const STORAGE_KEY_PREFIX = `zos:management-dashboard-layout:v${MANAGEMENT_DASHBOARD_LAYOUT_VERSION}`;
 
 const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly ManagementDashboardWidgetDefinition[]> = {
+  monitoring: [
+    { id: "overview", size: "overview" },
+    { id: "metric-cpu", size: "metric" },
+    { id: "metric-memory", size: "metric" },
+    { id: "metric-network", size: "metric" },
+    { id: "metric-storage", size: "metric" },
+    { id: "cpu", size: "half" },
+    { id: "memory", size: "half" },
+    { id: "network", size: "half" },
+    { id: "disk", size: "half" },
+    { id: "capacity", size: "half" },
+    { id: "temperature", size: "half" },
+    { id: "services", size: "wide" }
+  ],
   docker: [
     { id: "overview", size: "overview" },
     { id: "metric-containers", size: "metric" },

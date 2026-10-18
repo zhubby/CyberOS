@@ -4,7 +4,7 @@ description: API、静态资源、terminal、timer、indexer、backup 和 SQLite
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
+sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/routes/monitoring.ts, packages/monitoring/src/store.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
 sidebar:
   order: 4
 ---
@@ -12,6 +12,22 @@ sidebar:
 优先查看对应 service 的 journald，再检查 `/health`、`/api/system/health`、`/api/indexer/status`、`/api/roots/readiness` 和 `/api/backup/status`。`/health` 只代表 API liveness，不代表 NAS、索引或 backup 已就绪。
 
 `SQLITE_BUSY` 通常表示 oneshot 任务并发；应停止相关 timers，确认任务退出后串行运行。静态页面停在 Loading 时，先确认 API 提供当前 Web asset，且不存在的 `/assets/*` 没有被 SPA fallback 返回。
+
+## 监控无数据或降级
+
+先区分配置关闭、刚启动、collector 局部失败和指标库不可读：
+
+```bash
+sudo systemctl status zos-monitor.service --no-pager
+sudo journalctl -u zos-monitor.service -u zos-api.service -n 100 --no-pager
+curl -fsS http://127.0.0.1:3010/api/monitoring/overview
+sudo -u zos sqlite3 /zos/state/metrics.sqlite 'PRAGMA quick_check;'
+sudo systemctl show zos-monitor.service -p MemoryCurrent -p CPUUsageNSec -p NRestarts
+```
+
+`disabled` 只表示 `[monitoring].enabled = false`；`starting` 在首次样本前正常，但不应超过 30 秒；`degraded` 表示 collector 失败或容量保护暂停写入；`unavailable` 表示 API 无法安全读取指标库。温度 collector 的 `unsupported` 在没有 thermal sensor 的主机上是正常状态。先检查 `/proc`、`/sys`、NAS mount、systemd D-Bus 和 `/zos/state` 权限，不要扩大 service capabilities。
+
+容量到达配置上限时 monitor 依次裁剪 raw、1m、1h；仍无法降到限制内才暂停写入。先确认磁盘和 WAL/checkpoint 状态，再调整 64 MiB–4 GiB 范围内的 `max_database_bytes` 或缩短保留期。指标库可重建，但主库不可替代：如自动隔离失败，只能在停止 `zos-monitor.service` 后移动精确的 `metrics.sqlite` 及其 WAL/SHM 文件再启动服务，绝不能移动、删除或修复 `/zos/state/zos.sqlite`。
 
 ## 媒体扫描与解码
 

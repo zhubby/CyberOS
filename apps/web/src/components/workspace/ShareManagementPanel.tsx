@@ -402,7 +402,7 @@ export function ShareManagementPanel({
                 <dd>
                   {form.account.passwordConfigured || form.account.password
                     ? t("common.states.configured")
-                    : t("settings.security.keyNotConfigured")}
+                    : t("settings.modelProvider.notConfiguredPlaceholder")}
                 </dd>
               </div>
               <div>

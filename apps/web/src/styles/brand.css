@@ -161,14 +161,12 @@ textarea {
 }
 
 .chat-header,
-.workspace-header,
-.management-header {
+.workspace-header {
   border-bottom-color: var(--header-border);
   background: var(--channel-bg);
 }
 
 .chat-header h2,
-.management-title-copy h2,
 .settings-content-header h2,
 .notification-drawer-header h2 {
   font-size: 21px;
@@ -447,7 +445,6 @@ textarea {
 
 .settings-nav button,
 .settings-section-card,
-.settings-config-row,
 .settings-policy-row,
 .settings-area-list button {
   border-radius: 7px;
@@ -461,11 +458,7 @@ textarea {
 
 .settings-section-card,
 .settings-metric-grid article,
-.settings-storage-row,
-.settings-system-table-wrap,
-.settings-system-chip-grid span,
 .settings-root-list div,
-.settings-config-row,
 .settings-policy-row {
   border-color: var(--line-soft);
   background: var(--subtle-bg);
@@ -530,7 +523,6 @@ textarea {
   box-shadow: var(--shadow);
 }
 
-.management-title-icon,
 .workspace-empty-state > svg {
   color: var(--accent-soft-text);
   background: var(--accent-soft-bg);
@@ -543,29 +535,6 @@ textarea {
 .management-emblem {
   border-color: var(--approval-border-hover);
   background: var(--accent-soft-bg);
-}
-
-.management-header {
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  gap: 14px;
-  min-height: 78px;
-  padding: 16px 20px;
-}
-
-.management-title-icon {
-  width: 36px;
-  height: 36px;
-  color: var(--text);
-  background: transparent;
-}
-
-.management-title-copy {
-  gap: 5px;
-}
-
-.management-title-copy p {
-  font-size: 12.5px;
-  line-height: 1.5;
 }
 
 .management-body {
@@ -609,8 +578,7 @@ textarea {
 }
 
 .settings-page-grid,
-.settings-overview-grid,
-.settings-system-grid {
+.settings-overview {
   gap: 0;
 }
 
@@ -624,14 +592,12 @@ textarea {
 }
 
 .settings-page-grid > .settings-section-card:first-child,
-.settings-overview-grid > .settings-section-card:first-child,
-.settings-system-grid > .settings-section-card:first-child {
+.settings-overview > .settings-section-card:first-child {
   padding-top: 0;
 }
 
 .settings-page-grid > .settings-section-card:last-child,
-.settings-overview-grid > .settings-section-card:last-child,
-.settings-system-grid > .settings-section-card:last-child {
+.settings-overview > .settings-section-card:last-child {
   border-bottom: 0;
 }
 
@@ -665,15 +631,6 @@ textarea {
 
   .settings-section-card {
     padding: 16px 0;
-  }
-}
-
-@container workspace-stage (max-width: 620px) {
-  .management-header {
-    grid-template-columns: 36px minmax(0, 1fr);
-    gap: 10px 12px;
-    min-height: auto;
-    padding: 14px 16px;
   }
 }
 

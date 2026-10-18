@@ -1,0 +1,15 @@
+{
+  "name": "@zos/monitor",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "cd ../.. && tsup apps/monitor/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir apps/monitor/dist"
+  },
+  "dependencies": {
+    "@zos/monitoring": "1.1.0",
+    "@zos/shared": "1.1.0"
+  }
+}

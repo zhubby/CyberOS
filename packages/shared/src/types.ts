@@ -1,4 +1,5 @@
 import type { PhotostaffMediaKind } from "./photostaff-config.js";
+import type { MonitoringHealthStatus } from "./monitoring.js";
 import type { VodPlayerErrorCode, VodPlayerState } from "./vod-player-protocol.js";
 import type { ZosPaths } from "./paths.js";
 
@@ -869,6 +870,7 @@ export interface SystemHealthSummary {
   photostaff: PhotostaffWorkerHealth;
   vodPlayer: VodPlayerHealth;
   operations: Record<OpsTask, OpsTaskOverview>;
+  monitoring?: MonitoringHealthStatus;
 }
 
 export interface VodPlayerHealth {
@@ -1041,6 +1043,7 @@ export interface ZosConfig {
   backupRoot?: string;
   dataDir: string;
   databasePath: string;
+  metricsDatabasePath?: string;
   api: {
     host: string;
     port: number;
@@ -1076,6 +1079,18 @@ export interface ZosConfig {
     consecutiveFailureThreshold: number;
     backupStaleMs: number;
   };
+  monitoring?: MonitoringConfig;
+}
+
+export interface MonitoringConfig {
+  enabled: boolean;
+  fastSampleIntervalMs: number;
+  standardSampleIntervalMs: number;
+  temperatureSampleIntervalMs: number;
+  rawRetentionMs: number;
+  minuteRetentionMs: number;
+  hourRetentionMs: number;
+  maxDatabaseBytes: number;
 }
 
 export interface VmConfig {

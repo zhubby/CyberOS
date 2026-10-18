@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run build:metadata && concurrently -n api,worker,photostaff,downloader,vod-player,web -c blue,green,yellow,cyan,white,magenta \"npm run dev -w @zos/api\" \"npm run dev -w @zos/worker\" \"cargo run -p zos-photostaff\" \"cargo run -p zos-downloader\" \"cargo run -p zos-vod-player\" \"npm run dev -w @zos/web\"",
+    "dev": "npm run build:metadata && concurrently -n api,worker,monitor,photostaff,downloader,vod-player,web -c blue,green,gray,yellow,cyan,white,magenta \"npm run dev -w @zos/api\" \"npm run dev -w @zos/worker\" \"npm run dev -w @zos/monitor\" \"cargo run -p zos-photostaff\" \"cargo run -p zos-downloader\" \"cargo run -p zos-vod-player\" \"npm run dev -w @zos/web\"",
     "index": "cargo run -p zos-indexer -- --once",
     "backup": "npm run dev -w @zos/backup",
     "health": "npm run dev -w @zos/ops -- health",

@@ -33,7 +33,6 @@ describe("SettingsIndexerPage", () => {
       },
       roots: [{ id: "nas", name: "Primary NAS", path: "/zos/data/primary", homePath: null }],
       loading: false,
-      locale: "en",
       onSettingsChange: vi.fn(),
       onReindex: vi.fn(),
       onClose: vi.fn()
@@ -47,5 +46,6 @@ describe("SettingsIndexerPage", () => {
     expect(html).toContain("Rebuild");
     expect(html).toContain("2 queued · 1 running · 0 failed");
     expect(html).toContain("75 / 100 copied");
+    expect(html).not.toContain("2026-10-12");
   });
 });

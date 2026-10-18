@@ -114,7 +114,11 @@ import type {
   PhotoQueryRequest as SharedPhotoQueryRequest,
   PhotoTimelinePage as SharedPhotoTimelinePage,
   TerminalTab as SharedTerminalTab,
-  TerminalTabState as SharedTerminalTabState
+  TerminalTabState as SharedTerminalTabState,
+  MonitoringCatalogResponse as SharedMonitoringCatalogResponse,
+  MonitoringOverviewResponse as SharedMonitoringOverviewResponse,
+  MonitoringQueryRequest as SharedMonitoringQueryRequest,
+  MonitoringQueryResponse as SharedMonitoringQueryResponse
 } from "@zos/shared";
 
 export interface NasRoot {
@@ -172,6 +176,10 @@ export interface BackupStatus {
 
 export interface ReadinessResponse { roots: RootReadiness[]; }
 export type SystemHealth = SystemHealthSummary;
+export type MonitoringCatalog = SharedMonitoringCatalogResponse;
+export type MonitoringOverview = SharedMonitoringOverviewResponse;
+export type MonitoringQueryRequest = SharedMonitoringQueryRequest;
+export type MonitoringQueryResponse = SharedMonitoringQueryResponse;
 export type OpsRun = SharedOpsRunRecord;
 export type OpsTask = SharedOpsTask;
 export type OpsTaskOverview = SharedOpsTaskOverview;
@@ -566,6 +574,24 @@ export async function getSystemNetworkTraffic(): Promise<NetworkTrafficSummary> 
   await ensureOk(response);
   const body = (await response.json()) as { traffic: NetworkTrafficSummary };
   return body.traffic;
+}
+
+export async function getMonitoringOverview(): Promise<MonitoringOverview> {
+  const response = await fetch("/api/monitoring/overview");
+  await ensureOk(response);
+  return (await response.json()) as MonitoringOverview;
+}
+
+export async function getMonitoringCatalog(): Promise<MonitoringCatalog> {
+  const response = await fetch("/api/monitoring/catalog");
+  await ensureOk(response);
+  return (await response.json()) as MonitoringCatalog;
+}
+
+export async function queryMonitoringMetrics(input: MonitoringQueryRequest): Promise<MonitoringQueryResponse> {
+  const response = await fetch("/api/monitoring/query", jsonRequest("POST", input));
+  await ensureOk(response);
+  return (await response.json()) as MonitoringQueryResponse;
 }
 
 export async function getSystemEthernet(): Promise<EthernetStatus> {

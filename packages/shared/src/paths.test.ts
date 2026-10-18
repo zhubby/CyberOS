@@ -17,6 +17,7 @@ describe("ZOS paths", () => {
       deployRoot: "/zos/deploy",
       systemBackupsDir: "/zos/system-backups",
       databasePath: "/zos/state/zos.sqlite",
+      metricsDatabasePath: "/zos/state/metrics.sqlite",
       defaultDataRoot: "/zos/data/primary",
       hostdStateDir: "/zos/state/hostd",
       networkManagerStateDir: "/zos/state/hostd/network-manager",

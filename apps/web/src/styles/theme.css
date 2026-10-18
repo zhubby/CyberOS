@@ -37,35 +37,25 @@
   border-top-color: var(--subtle-border-inverse);
 }
 
-:root[data-theme="light"] .settings-header-meta span[data-state="ready"],
-:root[data-theme="light"] .settings-section-card header > span[data-state="ready"],
 :root[data-theme="light"] .settings-area-list em[data-state="ready"],
-:root[data-theme="light"] .settings-config-row em[data-state="ready"],
 :root[data-theme="light"] .agent-status,
 :root[data-theme="light"] .risk-pill[data-risk="low"] {
   color: var(--success-text);
   background: var(--success-bg);
 }
 
-:root[data-theme="light"] .settings-header-meta span[data-state="missing"],
-:root[data-theme="light"] .settings-section-card header > span[data-state="missing"],
 :root[data-theme="light"] .settings-area-list em[data-state="missing"],
-:root[data-theme="light"] .settings-config-row em[data-state="missing"],
 :root[data-theme="light"] .agent-status[data-state="loading"],
 :root[data-theme="light"] .agent-status[data-state="searching"],
 :root[data-theme="light"] .agent-status[data-state="queued"],
 :root[data-theme="light"] .agent-status[data-state="agent-running"],
 :root[data-theme="light"] .agent-status[data-state="reconnecting"],
-:root[data-theme="light"] .risk-pill[data-risk="medium"],
-:root[data-theme="light"] .settings-storage-row > em {
+:root[data-theme="light"] .risk-pill[data-risk="medium"] {
   color: var(--warning-text);
   background: var(--warning-bg);
 }
 
-:root[data-theme="light"] .settings-header-meta span[data-state="loading"],
-:root[data-theme="light"] .settings-section-card header > span[data-state="loading"],
-:root[data-theme="light"] .settings-area-list em[data-state="loading"],
-:root[data-theme="light"] .settings-config-row em[data-state="loading"] {
+:root[data-theme="light"] .settings-area-list em[data-state="loading"] {
   color: var(--neutral-status-text);
   background: var(--neutral-status-bg);
 }
@@ -146,12 +136,8 @@
 
 :root[data-theme="light"] .settings-secret-note,
 :root[data-theme="light"] .settings-metric-grid article,
-:root[data-theme="light"] .settings-storage-row,
-:root[data-theme="light"] .settings-system-table-wrap,
-:root[data-theme="light"] .settings-system-chip-grid span,
 :root[data-theme="light"] .settings-root-list div,
 :root[data-theme="light"] .settings-area-list button,
-:root[data-theme="light"] .settings-config-row,
 :root[data-theme="light"] .settings-policy-row,
 :root[data-theme="light"] .approval-card-details div {
   border-color: var(--line-soft);
@@ -160,15 +146,6 @@
 
 :root[data-theme="light"] .settings-actions {
   background: var(--footer-bg);
-}
-
-:root[data-theme="light"] .settings-system-table th,
-:root[data-theme="light"] .settings-system-table td {
-  border-bottom-color: var(--subtle-border-inverse);
-}
-
-:root[data-theme="light"] .settings-usage-bar > div {
-  background: var(--surface-strong);
 }
 
 :root[data-theme="light"] .file-row {

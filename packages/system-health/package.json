@@ -8,6 +8,7 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@zos/db": "1.1.0",
+    "@zos/monitoring": "1.1.0",
     "@zos/nas-tools": "1.1.0",
     "@zos/shared": "1.1.0"
   }

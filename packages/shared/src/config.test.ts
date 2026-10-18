@@ -54,11 +54,22 @@ describe("loadConfig", () => {
       stateDir: path.join(rootDir, "state"),
       dataDir: path.join(rootDir, "state"),
       databasePath: path.join(rootDir, "state", "zos.sqlite"),
+      metricsDatabasePath: path.join(rootDir, "state", "metrics.sqlite"),
       dataRoot: path.join(rootDir, "data"),
       appsRoot: path.join(rootDir, "apps"),
       isoRoot: path.join(rootDir, "iso"),
       vmRoot: path.join(rootDir, "vm"),
       backupRoot: path.join(rootDir, "data", "backup")
+    });
+    expect(config.monitoring).toEqual({
+      enabled: true,
+      fastSampleIntervalMs: 10_000,
+      standardSampleIntervalMs: 30_000,
+      temperatureSampleIntervalMs: 300_000,
+      rawRetentionMs: 172_800_000,
+      minuteRetentionMs: 2_592_000_000,
+      hourRetentionMs: 31_536_000_000,
+      maxDatabaseBytes: 536_870_912
     });
     expect(config.nasRoots).toEqual([
       {
@@ -287,12 +298,57 @@ describe("loadConfig", () => {
       rootDir: "/zos",
       stateDir: "/zos/state",
       databasePath: "/zos/state/zos.sqlite",
+      metricsDatabasePath: "/zos/state/metrics.sqlite",
       dataRoot: "/zos/data",
       appsRoot: "/zos/apps",
       isoRoot: "/zos/iso",
       vmRoot: "/zos/vm",
       backupRoot: "/zos/data/backup"
     });
+  });
+
+  it("loads and validates monitoring settings", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-monitoring-"));
+    const configPath = path.join(tempDir, "config.toml");
+    await writeFile(configPath, `
+      [monitoring]
+      enabled = false
+      fast_sample_interval_ms = 5000
+      standard_sample_interval_ms = 15000
+      temperature_sample_interval_ms = 60000
+      raw_retention_ms = 7200000
+      minute_retention_ms = 10800000
+      hour_retention_ms = 14400000
+      max_database_bytes = 67108864
+    `);
+
+    expect(loadConfig({
+      ZOS_CONFIG: configPath,
+      ZOS_MONITORING_ENABLED: "1",
+      ZOS_MONITORING_FAST_SAMPLE_INTERVAL_MS: "6000"
+    } as NodeJS.ProcessEnv, tempDir).monitoring).toEqual({
+      enabled: true,
+      fastSampleIntervalMs: 6000,
+      standardSampleIntervalMs: 15000,
+      temperatureSampleIntervalMs: 60000,
+      rawRetentionMs: 7200000,
+      minuteRetentionMs: 10800000,
+      hourRetentionMs: 14400000,
+      maxDatabaseBytes: 67108864
+    });
+
+    expect(() => loadConfig({
+      ZOS_CONFIG: configPath,
+      ZOS_MONITORING_MAX_DATABASE_BYTES: "1048576"
+    } as NodeJS.ProcessEnv, tempDir!)).toThrow("max_database_bytes");
+    expect(() => loadConfig({
+      ZOS_CONFIG: configPath,
+      ZOS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS: "1000"
+    } as NodeJS.ProcessEnv, tempDir!)).toThrow("standard_sample_interval_ms");
+    expect(() => loadConfig({
+      ZOS_CONFIG: configPath,
+      ZOS_MONITORING_MINUTE_RETENTION_MS: "3600000"
+    } as NodeJS.ProcessEnv, tempDir!)).toThrow("minute_retention_ms");
   });
 
   it("rejects noncanonical production root and config paths", () => {

@@ -20,6 +20,15 @@ interface WidgetSkeletonSpec {
 }
 
 const MANAGEMENT_WIDGET_SKELETONS = {
+  monitoring: {
+    cpu: { kind: "chart" },
+    memory: { kind: "chart" },
+    network: { kind: "chart" },
+    disk: { kind: "chart" },
+    capacity: { kind: "resources" },
+    temperature: { kind: "chart" },
+    services: { kind: "list", rows: 5 }
+  },
   docker: {
     containers: { kind: "table", columns: 6, rows: 4 },
     images: { kind: "table", columns: 4, rows: 4 },

@@ -1,8 +1,11 @@
 import cors from "@fastify/cors";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
+import path from "node:path";
 import { getDockerSettings } from "@zos/db";
+import { MonitoringReader } from "@zos/monitoring";
 import type { ServerDependencies } from "./context.js";
+import { DEFAULT_MONITORING_CONFIG } from "@zos/shared";
 import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
 import { effectiveDockerConfig } from "./lib/settings.js";
@@ -11,7 +14,7 @@ import { FileBatchRunner } from "./lib/file-batch-runner.js";
 
 export type { ServerDependencies } from "./context.js";
 
-export async function buildServer({ buildInfo, config, db, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photostaffMap }: ServerDependencies): Promise<FastifyInstance> {
+export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photostaffMap }: ServerDependencies): Promise<FastifyInstance> {
   if (!isLoopbackHost(config.api.host)) {
     throw new Error("ZOS API must bind to a loopback host");
   }
@@ -36,10 +39,15 @@ export async function buildServer({ buildInfo, config, db, docker, vm, shares, s
   );
   const dockerRuntime = { ...docker, compose };
   const fileBatches = new FileBatchRunner({ config, db, ...(system ? { system } : {}), log: server.log });
+  const monitoring = monitoringDependency ?? new MonitoringReader(
+    config.metricsDatabasePath ?? path.join(config.dataDir, "metrics.sqlite"),
+    config.monitoring ?? DEFAULT_MONITORING_CONFIG
+  );
   registerApiRoutes(server, {
     ...(buildInfo ? { buildInfo } : {}),
     config,
     db,
+    monitoring,
     docker: dockerRuntime,
     ...(vm ? { vm } : {}),
     ...(shares ? { shares } : {}),
@@ -60,6 +68,7 @@ export async function buildServer({ buildInfo, config, db, docker, vm, shares, s
 
   server.addHook("onClose", async () => {
     await fileBatches.stop();
+    monitoring.close();
   });
 
   return server;

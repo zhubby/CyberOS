@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { TFunction } from "i18next";
 import {
+  SETTINGS_SECTIONS,
   dockerSettingsToForm,
   modelSettingsToForm,
-  settingsSectionLabel,
   settingsSectionState,
   type SettingsSection
 } from "./settings.js";
@@ -63,24 +62,14 @@ describe("settings helpers", () => {
       source: "release" as const,
       dirty: false
     };
-    const t = ((key: string) => key) as TFunction<"translation">;
-
     expect(settingsSectionState(section, null, null, buildInfo)).toBe("ready");
-    expect(settingsSectionLabel(section, null, false, t, null, buildInfo)).toBe("v0.2.0");
     expect(settingsSectionState(section, null, null, null)).toBe("missing");
-    expect(settingsSectionLabel(section, null, false, t, null, null)).toBe("common.states.unavailable");
   });
 
   it("reflects photo library scan state in the settings navigation", () => {
     const section: SettingsSection = {
       id: "photos",
       group: "workspace"
-    };
-    const photoSettings = {
-      rootId: "nas",
-      storagePoolId: "pool-a",
-      path: "Photo",
-      updatedAt: "2026-09-24T00:00:00.000Z"
     };
     const photoStatus = {
       state: "processing" as const,
@@ -96,15 +85,14 @@ describe("settings helpers", () => {
       nextRetryAt: null,
       updatedAt: "2026-09-24T00:01:00.000Z"
     };
-    const t = ((key: string) => key) as TFunction<"translation">;
-
     expect(settingsSectionState(section, null, null, null, null, photoStatus)).toBe("loading");
-    expect(settingsSectionLabel(section, null, false, t, null, null, null, photoSettings, photoStatus)).toBe(
-      "settings.photos.states.processing"
-    );
     expect(settingsSectionState(section, null, null, null, null, {
       ...photoStatus,
       state: "unconfigured"
     })).toBe("missing");
+  });
+
+  it("does not expose the deleted security section", () => {
+    expect(SETTINGS_SECTIONS.map((section) => section.id)).not.toContain("security");
   });
 });

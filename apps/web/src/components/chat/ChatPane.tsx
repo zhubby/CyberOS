@@ -862,7 +862,7 @@ function approvalCard(approval: PendingApproval, t: Translate): ApprovalCard {
           label: t("chat.approvalCards.account"),
           value: shareOperation.settings.account.passwordConfigured
             ? shareOperation.settings.account.username
-            : t("settings.security.keyNotConfigured")
+            : t("settings.modelProvider.notConfiguredPlaceholder")
         }
       ]
     };

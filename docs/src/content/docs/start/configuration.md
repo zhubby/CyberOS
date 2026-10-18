@@ -9,7 +9,7 @@ sidebar:
   order: 3
 ---
 
-生产根目录固定为 `/zos`，配置固定为 `/zos/config/config.toml`；开发环境可以通过 `ZOS_ROOT` 和 `ZOS_CONFIG` 指向隔离目录。环境变量优先于 TOML；解析后会规范化路径、端口、超时、NAS roots、备份、Docker、VM、terminal 和 health 设置。
+生产根目录固定为 `/zos`，配置固定为 `/zos/config/config.toml`；开发环境可以通过 `ZOS_ROOT` 和 `ZOS_CONFIG` 指向隔离目录。环境变量优先于 TOML；解析后会规范化路径、端口、超时、NAS roots、备份、Docker、VM、terminal、monitoring 和 health 设置。
 
 最重要的约束是：API 只能绑定 loopback；生产 NAS root 默认要求 mount readiness；Docker 默认关闭；备份仓库必须显式初始化；provider secret 只返回“是否已配置”。完整字段和环境变量应以 `packages/shared/src/config.ts` 为准。
 
@@ -27,6 +27,24 @@ ZOS_DOCKER_ENABLED=0
 ZOS_VM_ENABLED=0
 ZOS_BACKUP_ENABLED=0
 ```
+
+## Monitoring
+
+监控默认开启，指标库路径由 `ZOS_ROOT` 推导为 `${ZOS_ROOT}/state/metrics.sqlite`。生产默认值为：fast 10 秒、standard 30 秒、温度 5 分钟；raw 保留 48 小时、1m 保留 30 天、1h 保留 1 年；容量上限 512 MiB。
+
+```toml
+[monitoring]
+enabled = true
+fast_sample_interval_ms = 10000
+standard_sample_interval_ms = 30000
+temperature_sample_interval_ms = 300000
+raw_retention_ms = 172800000
+minute_retention_ms = 2592000000
+hour_retention_ms = 31536000000
+max_database_bytes = 536870912
+```
+
+同名 `ZOS_MONITORING_*` 环境变量优先于 TOML；容量只允许 64 MiB–4 GiB，采样和保留值必须满足配置校验。设置 `enabled = false` 后 monitor service 保持 active/idle，API 和页面显示 Disabled，Health 不生成 `monitoring_unavailable`。修改监控配置后重启 `zos-monitor.service` 和 `zos-api.service`。
 
 `ZOS_NAS_ROOTS` 和 `ZOS_VM_ISO_ROOTS` 支持逗号分隔的多个路径；带冒号的 root 使用 `id:name:path` 格式。生产 NAS root 必须是 `/zos/data` 的直接子目录，且不能使用保留的 `/zos/data/backup`；backup repository、staging 和 NAS root 不能互相覆盖。
 

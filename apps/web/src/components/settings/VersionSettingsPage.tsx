@@ -43,8 +43,8 @@ export function VersionSettingsPage({ buildInfo, error, loading, locale }: Versi
                 <p>{t("settings.version.metadataUnavailable")}</p>
               </div>
             </div>
-            <span data-state={loading ? "loading" : "missing"}>{status}</span>
           </header>
+          <p className="settings-inline-alert" role="status">{status}</p>
           {error ? <p className="settings-version-error">{error}</p> : null}
         </section>
       </div>
@@ -76,9 +76,6 @@ export function VersionSettingsPage({ buildInfo, error, loading, locale }: Versi
               <p>{t("settings.version.buildIdentityDescription")}</p>
             </div>
           </div>
-          <span data-state={buildInfo.version === "unknown" ? "missing" : "ready"}>
-            {buildInfo.version === "unknown" ? unknown : `v${buildInfo.version}`}
-          </span>
         </header>
 
         <div className="settings-version-release">
@@ -105,10 +102,6 @@ export function VersionSettingsPage({ buildInfo, error, loading, locale }: Versi
             ) : null}
           </div>
           <div>
-            <dt><GitCommitHorizontal aria-hidden="true" size={15} />{t("settings.version.shortCommit")}</dt>
-            <dd className="is-mono">{buildInfo.commitShortSha ?? unknown}</dd>
-          </div>
-          <div>
             <dt><Tag aria-hidden="true" size={15} />{t("settings.version.tag")}</dt>
             <dd className="is-mono">{buildInfo.tag ?? unknown}</dd>
           </div>
@@ -119,10 +112,6 @@ export function VersionSettingsPage({ buildInfo, error, loading, locale }: Versi
           <div>
             <dt>{t("settings.version.builtAt")}</dt>
             <dd>{buildInfo.builtAt ? formatDate(buildInfo.builtAt, locale) : unknown}</dd>
-          </div>
-          <div>
-            <dt>{t("settings.version.source")}</dt>
-            <dd>{sourceLabel}</dd>
           </div>
           <div>
             <dt>{t("settings.version.workingTree")}</dt>
