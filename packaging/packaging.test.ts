@@ -446,6 +446,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("[ -x /usr/local/bin/node ]");
     expect(deployWorkflow).toContain("CM5 runtime requires Node.js 22");
     expect(deployWorkflow).toContain("zos-indexer.service");
+    expect(deployWorkflow.match(/zos-monitor\.service/gu)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(deployWorkflow).toContain("/api/monitoring/overview");
+    expect(deployWorkflow).toContain("monitoring did not produce a usable sample");
     expect(deployWorkflow).toContain("/api/indexer/status");
     expect(deployWorkflow).toContain("payload?.queue?.stalled === false");
     expect(deployWorkflow).toContain("wait_for_indexer_ready()");
@@ -659,6 +662,12 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("Dpkg::Options::=--force-confold");
     expect(deploy).not.toContain('dpkg -i "$work_dir/package.deb"');
     expect(deploy).toContain("systemctl daemon-reload");
+    expect(deploy).toContain('--activate-runtime "$work_dir" "$state_dir"');
+    expect(deploy).toContain('flock -n 9 || die "internal runtime activation requires the parent deployment lock"');
+    expect(deploy).toContain("activating runtime with the newly installed deployment helper");
+    expect(deploy.indexOf('"$work_dir/package.deb"')).toBeLessThan(
+      deploy.lastIndexOf('/usr/lib/zos/scripts/zos-deploy --activate-runtime "$work_dir" "$state_dir"')
+    );
     expect(deploy).toContain("restore_unit_state \"$unit\" \"$state_dir\"");
     expect(deploy).toContain("activate_runtime");
     expect(deploy).not.toContain("systemctl restart $RUNTIME_SERVICES");
@@ -677,7 +686,7 @@ describe("native packaging artifacts", () => {
       'restore_unit_state zos-vod-player.service "$state_dir"',
       "start_service_stably zos-api.service",
       "wait_for_url http://127.0.0.1:3010/health",
-      "systemctl start zos-monitor.service",
+      "start_service_stably zos-monitor.service",
       "systemctl start zos-health.service",
       "start_service_stably zos-worker@1.service",
       "start_service_stably zos-photostaff.service",
@@ -694,8 +703,8 @@ describe("native packaging artifacts", () => {
     }
     expect(deploy).toContain('activate_runtime "$state_dir"');
     expect(deploy).toContain("/api/monitoring/overview");
-    expect(deploy).toContain("monitoring is degraded; core runtime verification will continue");
-    expect(deploy).toContain('$1 != "zos-monitor.service"');
+    expect(deploy).toContain("monitoring did not produce a usable sample");
+    expect(deploy).toContain('for unit in $RUNTIME_SERVICES; do');
     expect(deploy).toContain('systemctl is-active --quiet "$unit" || die "timer is not active: $unit"');
     expect(deploy).toContain("NextElapseUSecMonotonic");
     expect(deploy).toContain('health?.operations?.health?.status === "ready"');
@@ -719,14 +728,12 @@ describe("native packaging artifacts", () => {
       deploy.indexOf('log "recovered $manifest_tag successfully"')
     );
     expect(sameVersionRecovery.indexOf("zos-migrate-sigmaos.sh apply")).toBeGreaterThanOrEqual(0);
-    expect(sameVersionRecovery.indexOf('activate_runtime "$state_dir"')).toBeGreaterThan(
+    expect(sameVersionRecovery.indexOf('/usr/lib/zos/scripts/zos-deploy --activate-runtime "$work_dir" "$state_dir"')).toBeGreaterThan(
       sameVersionRecovery.indexOf("zos-migrate-sigmaos.sh apply")
     );
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"');
     expect(deploy).toContain('record_release "$manifest_tag" "$manifest_version" "$manifest_commit_sha"\n    cleanup_deployment_artifacts');
-    expect(deploy).toContain(
-      "awk '$1 ~ /^zos-/ && $1 != \"zos-monitor.service\" { print }'"
-    );
+    expect(deploy).toContain("awk '$1 ~ /^zos-/ { print }'");
     expect(deploy).toContain('failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"');
     expect(deploy).toContain('capture_runtime_diagnostics "$failure_dir"');
     expect(deploy).toContain("SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'");

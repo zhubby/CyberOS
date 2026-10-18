@@ -215,7 +215,11 @@ report_monitoring_status() {
 import fs from "node:fs";
 
 const overview = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-process.exit(["ready", "degraded", "disabled"].includes(overview?.status) ? 0 : 1);
+const usable = ["ready", "degraded"].includes(overview?.status) &&
+  overview.enabled === true &&
+  Array.isArray(overview.latest) && overview.latest.length > 0 &&
+  Number.isFinite(overview?.retention?.databaseBytes) && overview.retention.databaseBytes > 0;
+process.exit(usable ? 0 : 1);
 NODE
     then
       monitoring_status=$(node --input-type=module - "$status_path" <<'NODE'
@@ -232,8 +236,8 @@ NODE
     attempts=$((attempts + 1))
   done
   [ ! -s "$status_path" ] || cat "$status_path" >&2
-  log "warning: monitoring is degraded; core runtime verification will continue" >&2
-  return 0
+  log "monitoring did not become ready" >&2
+  return 1
 }
 
 start_service_stably() {
@@ -270,9 +274,7 @@ activate_runtime() {
   wait_for_url http://127.0.0.1:3010/health || die "API startup recovery failed"
 
   log "starting monitoring after API database recovery"
-  if ! systemctl start zos-monitor.service || ! systemctl is-active --quiet zos-monitor.service; then
-    log "warning: monitoring service failed to start; core runtime activation will continue" >&2
-  fi
+  start_service_stably zos-monitor.service
 
   log "refreshing health after monitoring startup"
   systemctl start zos-health.service
@@ -290,7 +292,7 @@ activate_runtime() {
 
 verify_runtime() {
   log "checking ZOS services"
-  for unit in $CORE_RUNTIME_SERVICES; do
+  for unit in $RUNTIME_SERVICES; do
     systemctl is-enabled --quiet "$unit" || die "service is not enabled: $unit"
     systemctl is-active --quiet "$unit" || die "service is not active: $unit"
   done
@@ -311,13 +313,13 @@ verify_runtime() {
   wait_for_url http://127.0.0.1:3010/api/roots/readiness || die "root readiness check failed"
   wait_for_url http://127.0.0.1:3010/api/system/health || die "system health endpoint failed"
   wait_for_url http://127.0.0.1:3010/api/system/build-info || die "build-info endpoint failed"
-  report_monitoring_status
+  report_monitoring_status || die "monitoring did not produce a usable sample"
   wait_for_indexer_ready || die "indexer readiness check failed"
   wait_for_health_operation_ready || die "health operation is not ready"
 
   runtime_before=$(runtime_fingerprint)
   sleep 30
-  for unit in $CORE_RUNTIME_SERVICES; do
+  for unit in $RUNTIME_SERVICES; do
     systemctl is-active --quiet "$unit" || die "service did not remain active: $unit"
   done
   wait_for_url http://127.0.0.1:3010/health || die "API liveness check failed after stabilization"
@@ -329,7 +331,7 @@ verify_runtime() {
     die "one or more services restarted during stabilization"
   fi
 
-  failed_units=$(systemctl --failed --no-legend --plain | awk '$1 ~ /^zos-/ && $1 != "zos-monitor.service" { print }' || true)
+  failed_units=$(systemctl --failed --no-legend --plain | awk '$1 ~ /^zos-/ { print }' || true)
   if [ -n "$failed_units" ]; then
     printf '%s\n' "$failed_units" >&2
     die "systemd has failed units"
@@ -391,7 +393,7 @@ NODE
 }
 
 runtime_fingerprint() {
-  for unit in $CORE_RUNTIME_SERVICES; do
+  for unit in $RUNTIME_SERVICES; do
     main_pid=$(systemctl show --property=MainPID --value "$unit")
     restart_count=$(systemctl show --property=NRestarts --value "$unit")
     printf '%s:%s:%s\n' "$unit" "$main_pid" "$restart_count"
@@ -502,6 +504,29 @@ trap capture_failure EXIT HUP INT TERM
 [ "$(id -u)" -eq 0 ] || die "must run as root"
 
 case "${1:-}" in
+  --activate-runtime)
+    [ "$#" -eq 3 ] || die "internal runtime activation requires a work directory and state directory"
+    command -v flock >/dev/null 2>&1 || die "flock is required"
+    flock -n 9 || die "internal runtime activation requires the parent deployment lock"
+    activation_work_dir=$(realpath -m -- "$2")
+    activation_state_dir=$(realpath -m -- "$3")
+    case "$activation_work_dir" in
+      "$BASE_DIR"/work.*) ;;
+      *) die "internal runtime activation work directory is invalid" ;;
+    esac
+    [ "$activation_state_dir" = "$activation_work_dir/systemd-state" ] || \
+      die "internal runtime activation state directory is invalid"
+    [ -d "$activation_work_dir" ] && [ ! -L "$activation_work_dir" ] || \
+      die "internal runtime activation work directory is unavailable"
+    [ -d "$activation_state_dir" ] && [ ! -L "$activation_state_dir" ] || \
+      die "internal runtime activation state directory is unavailable"
+    work_dir=$activation_work_dir
+    state_dir=$activation_state_dir
+    activate_runtime "$state_dir"
+    verify_runtime
+    success=1
+    exit 0
+    ;;
   --migration-status)
     exec /usr/lib/zos/scripts/zos-migrate-sigmaos.sh status
     ;;
@@ -606,8 +631,7 @@ if [ "$installed_status" = "install ok installed" ]; then
     fi
     log "version $manifest_version is already installed; recovering runtime and release state"
     /usr/lib/zos/scripts/zos-migrate-sigmaos.sh apply
-    activate_runtime "$state_dir"
-    verify_runtime
+    /usr/lib/zos/scripts/zos-deploy --activate-runtime "$work_dir" "$state_dir"
     refresh_share_configuration
     verify_build_info "$manifest_version" "$manifest_commit_sha"
     /usr/lib/zos/scripts/zos-migrate-sigmaos.sh commit
@@ -677,8 +701,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-remove \
   "$work_dir/package.deb"
 systemctl daemon-reload
 
-activate_runtime "$state_dir"
-verify_runtime
+log "activating runtime with the newly installed deployment helper"
+/usr/lib/zos/scripts/zos-deploy --activate-runtime "$work_dir" "$state_dir"
 refresh_share_configuration
 verify_build_info "$manifest_version" "$manifest_commit_sha"
 /usr/lib/zos/scripts/zos-migrate-sigmaos.sh commit

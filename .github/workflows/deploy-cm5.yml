@@ -740,6 +740,7 @@ jobs:
           runtime_fingerprint() {
             for unit in \
               zos-api.service \
+              zos-monitor.service \
               zos-worker@1.service \
               zos-photostaff.service \
               zos-downloader.service \
@@ -778,6 +779,7 @@ jobs:
 
           for unit in \
             zos-api.service \
+            zos-monitor.service \
             zos-worker@1.service \
             zos-photostaff.service \
             zos-downloader.service \
@@ -806,6 +808,7 @@ jobs:
           sleep 30
           for unit in \
             zos-api.service \
+            zos-monitor.service \
             zos-worker@1.service \
             zos-photostaff.service \
             zos-downloader.service \
@@ -832,6 +835,7 @@ jobs:
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/roots/readiness > "$check_dir/readiness.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/health > "$check_dir/system-health.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/monitoring/overview > "$check_dir/monitoring-overview.json"
           wait_for_indexer_ready
 
           database_check="$(sudo -n /usr/local/sbin/zos-deploy --database-check)"
@@ -859,6 +863,15 @@ jobs:
           const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
           if (payload?.operations?.health?.status !== "ready") {
             throw new Error(`health operation is not ready: ${JSON.stringify(payload?.operations?.health)}`);
+          }
+          NODE
+          node - "$check_dir/monitoring-overview.json" <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (!["ready", "degraded"].includes(payload?.status) || payload.enabled !== true ||
+              !Array.isArray(payload.latest) || payload.latest.length === 0 ||
+              !Number.isFinite(payload?.retention?.databaseBytes) || payload.retention.databaseBytes <= 0) {
+            throw new Error(`monitoring did not produce a usable sample: ${JSON.stringify(payload)}`);
           }
           NODE
           REMOTE
