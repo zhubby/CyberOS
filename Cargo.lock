@@ -2476,7 +2476,7 @@ dependencies = [
 
 [[package]]
 name = "zos-downloader"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "futures-util",
  "httpdate",
@@ -2502,7 +2502,7 @@ dependencies = [
 
 [[package]]
 name = "zos-hostd"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "async-trait",
  "nix",
@@ -2522,7 +2522,7 @@ dependencies = [
 
 [[package]]
 name = "zos-indexer"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "futures-util",
  "nix",
@@ -2548,7 +2548,7 @@ dependencies = [
 
 [[package]]
 name = "zos-monitor"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "async-trait",
  "jiff",
@@ -2571,7 +2571,7 @@ dependencies = [
 
 [[package]]
 name = "zos-photostaff"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "futures-util",
  "nix",
@@ -2594,7 +2594,7 @@ dependencies = [
 
 [[package]]
 name = "zos-termux"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "base64 0.22.1",
  "nix",
@@ -2612,7 +2612,7 @@ dependencies = [
 
 [[package]]
 name = "zos-vod-player"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "nix",
  "sd-notify",
