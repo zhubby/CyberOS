@@ -4,7 +4,7 @@ description: API、静态资源、terminal、timer、indexer、backup 和 SQLite
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/routes/monitoring.ts, packages/monitoring/src/store.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
+sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/monitor/src/adapters/metrics_sqlite.rs, apps/monitor/src/adapters/alert_sqlite.rs, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
 sidebar:
   order: 4
 ---
@@ -28,6 +28,20 @@ sudo systemctl show zos-monitor.service -p MemoryCurrent -p CPUUsageNSec -p NRes
 `disabled` 只表示 `[monitoring].enabled = false`；`starting` 在首次样本前正常，但不应超过 30 秒；`degraded` 表示 collector 失败或容量保护暂停写入；`unavailable` 表示 API 无法安全读取指标库。温度 collector 的 `unsupported` 在没有 thermal sensor 的主机上是正常状态。先检查 `/proc`、`/sys`、NAS mount、systemd D-Bus 和 `/zos/state` 权限，不要扩大 service capabilities。
 
 容量到达配置上限时 monitor 依次裁剪 raw、1m、1h；仍无法降到限制内才暂停写入。先确认磁盘和 WAL/checkpoint 状态，再调整 64 MiB–4 GiB 范围内的 `max_database_bytes` 或缩短保留期。指标库可重建，但主库不可替代：如自动隔离失败，只能在停止 `zos-monitor.service` 后移动精确的 `metrics.sqlite` 及其 WAL/SHM 文件再启动服务，绝不能移动、删除或修复 `/zos/state/zos.sqlite`。
+
+## 告警未求值或邮件未发送
+
+先检查 alerter、告警 summary 和主库 outbox，不要从 API 进程直接重发邮件：
+
+```bash
+sudo systemctl status zos-alerter.service --no-pager
+sudo journalctl -u zos-alerter.service -u zos-monitor.service -n 100 --no-pager
+curl -fsS http://127.0.0.1:3010/api/monitoring/alerts/summary
+sudo -u zos sqlite3 /zos/state/zos.sqlite \
+  'select status,count(*) from monitoring_alert_deliveries group by status;'
+```
+
+`starting` 通常表示 alerter 正等待 API migration；`degraded` 应结合 pending delivery 数量和日志检查。acknowledged、有效静默、禁用规则和已恢复 incident 都会取消后续升级。`none` 模式如果解析出任一公网或 unspecified 地址会被拒绝；`starttls`/`tls` 证书失败不会降级为明文。修复 SMTP 或 DNS 后保留 outbox，让既有重试调度继续处理，避免手工复制 delivery。
 
 ## 媒体扫描与解码
 

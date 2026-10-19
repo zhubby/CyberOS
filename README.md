@@ -67,7 +67,7 @@ The following surfaces are intentionally limited today:
 ### Native appliance services
 
 - Debian package definitions for `amd64` and `arm64` release artifacts.
-- Hardened `systemd` units for the API, monitor, worker, indexer, one-shot operations, and `zos-hostd`.
+- Hardened `systemd` units for the API, Rust monitor/alerter, worker, indexer, one-shot operations, and `zos-hostd`.
 - Timers for daily/weekly restic backups, health evaluation every 15 minutes, and maintenance at 04:30; the resident indexer reconciles internally every 30 minutes.
 - A Debian Bookworm rootfs scaffold built with `mmdebstrap` and `systemd-nspawn`.
 
@@ -85,6 +85,7 @@ flowchart LR
   Indexer["Filesystem indexer"]
   Ops["Ops health / maintenance"]
   Monitor["Host and ZOS monitor"]
+  Alerter["Alert evaluator and mail outbox"]
   Tools["Path-safe NAS tools"]
   Roots[("Configured NAS roots")]
   Host["Linux, PTY, Docker socket"]
@@ -108,6 +109,8 @@ flowchart LR
   Monitor --> Metrics
   Monitor --> DB
   Monitor --> Host
+  Alerter --> Metrics
+  Alerter <--> DB
   API --> Host
   API -->|Termux Protocol v1 over Unix socket| Termux[termux daemon]
   Termux -->|PTY as zos user| Host
@@ -125,12 +128,12 @@ The main runtime components are:
 | `apps/photostaff` | Rust media worker with resumable scans, metadata extraction, and journaled image derivatives. |
 | `apps/indexer` | Walks NAS roots, hashes files, extracts bounded text, and maintains the FTS index. |
 | `apps/ops` | Runs one-shot health evaluation and safe maintenance with persisted lifecycle history. |
-| `apps/monitor` | Collects fixed low-cardinality host and ZOS metrics into an isolated, rebuildable SQLite store. |
+| `apps/monitor` | Rust monitor and alerter binaries: metrics collection/retention plus incident evaluation and mail delivery. |
 | `apps/hostd` | Rust host integration daemon for approved shares, storage, Docker daemon, and NetworkManager changes. |
 | `apps/termux` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `zos` account. |
 | `packages/agent` | Pi SDK integration, NAS-scoped tools, session persistence, and tool policy enforcement. |
 | `packages/db` | SQLite connection, migrations, repositories, job queue, approvals, operations, and FTS queries. |
-| `packages/monitoring` | Fixed metric catalog, collectors, rollups, retention, capacity protection, and read-only queries. |
+| `packages/monitoring` | Language-neutral metric contracts plus TypeScript read-only metrics queries. |
 | `packages/nas-tools` | Root-relative path validation, symlink escape protection, file reads, metadata, and mutations. |
 | `packages/shared` | Configuration loading and shared domain/API types. |
 
@@ -271,7 +274,7 @@ Environment variables override the corresponding TOML values. The most useful de
 
 ### P0 operations
 
-Production mode requires loopback API binding, the exact root `/zos`, and mounted NAS roots as direct children of `/zos/data`. The indexer records progress, failures and readiness in the main SQLite database. The monitor writes host and ZOS time series only to `/zos/state/metrics.sqlite`; inspect the system with `/api/indexer/status`, `/api/roots/readiness`, `/api/system/health` and `/api/monitoring/overview`.
+Production mode requires loopback API binding, the exact root `/zos`, and mounted NAS roots as direct children of `/zos/data`. The indexer records progress, failures and readiness in the main SQLite database. The monitor writes host and ZOS time series only to `/zos/state/metrics.sqlite`; the alerter reads those metrics and stores configuration, incidents, and its mail outbox in `zos.sqlite`. Inspect the system with `/api/indexer/status`, `/api/roots/readiness`, `/api/system/health`, `/api/monitoring/overview`, and `/api/monitoring/alerts/summary`.
 
 Local restic backup is opt-in. Configure a repository and protected password file, run `backup validate`, then explicitly run `backup init`. Daily and weekly timers never initialize repositories implicitly. Restore always writes to isolated staging and never promotes over an active NAS root.
 
@@ -325,7 +328,7 @@ For an `arm64` CM5 (or an `amd64` Debian host), run the host installer from a ch
 sudo ZOS_NAS_ROOT_PATH=/zos/data/primary packaging/scripts/install.sh
 ```
 
-The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the ZOS API, monitor, worker, hostd, termux, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
+The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the ZOS API, monitor, alerter, worker, hostd, termux, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
 
 The mirror defaults can be overridden for a private mirror or restored to another mirror with `ZOS_APT_MIRROR`, `ZOS_APT_SECURITY_MIRROR`, `ZOS_RPI_MIRROR`, `ZOS_NODE_MIRROR`, `ZOS_NODE_VERSION`, and `ZOS_NPM_REGISTRY`. The installer only rewrites known Debian/Raspberry Pi URIs, saves original source files under `/zos/system-backups/apt`, preserves `signed-by`, suites, components, and unrelated sources, and disables any NodeSource entry after switching to the domestic Node.js binary distribution. To restore an original source, copy its backup from `/zos/system-backups/apt` back to `/etc/apt/sources.list.d` (or uncomment the marked NodeSource line) before running the installer again with an explicit `ZOS_NODE_MIRROR`.
 

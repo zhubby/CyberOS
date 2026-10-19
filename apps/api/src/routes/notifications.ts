@@ -4,11 +4,17 @@ import {
   expireStaleVmConsoleOperations,
   listOperationNotifications,
   markAllOperationNotificationsRead,
-  markOperationNotificationRead
+  markOperationNotificationRead,
+  getMonitoringAlertSummary
 } from "@zos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerNotificationRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {
+  server.get("/api/notifications/summary", async () => {
+    const operations = countUnreadOperationNotifications(db);
+    const alerts = getMonitoringAlertSummary(db).unreadCount;
+    return { unreadCount: operations + alerts, operations, alerts };
+  });
   server.get<{
     Querystring: { limit?: string };
   }>("/api/notifications", async (request, reply) => {

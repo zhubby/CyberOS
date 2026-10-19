@@ -1,10 +1,19 @@
 import type { FastifyInstance } from "fastify";
+import { getMonitoringAlertSummary } from "@zos/db";
 import { MonitoringValidationError } from "@zos/monitoring";
 import type { MonitoringQueryRequest } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerMonitoringRoutes(server: FastifyInstance, context: ApiRouteContext): void {
-  server.get("/api/monitoring/overview", async () => context.monitoring.overview());
+  server.get("/api/monitoring/overview", async () => ({
+    ...context.monitoring.overview(),
+    alerts: context.db ? getMonitoringAlertSummary(context.db) : {
+      unreadCount: 0,
+      firingCount: 0,
+      alerterStatus: "starting" as const,
+      pendingDeliveries: 0
+    }
+  }));
   server.get("/api/monitoring/catalog", async () => context.monitoring.catalog());
   server.post<{ Body: MonitoringQueryRequest }>("/api/monitoring/query", async (request, reply) => {
     try {

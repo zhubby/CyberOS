@@ -61,6 +61,18 @@ export const en = {
       loading: "Loading notifications",
       emptyTitle: "No operation notifications",
       emptyBody: "File and system operations will appear here.",
+      tabs: {
+        label: "Notification type",
+        operations: "Operations",
+        alerts: "Alerts"
+      },
+      alerts: {
+        emptyTitle: "No alert incidents",
+        emptyBody: "Monitoring and health incidents will appear here.",
+        acknowledge: "Acknowledge",
+        statuses: { firing: "Firing", resolved: "Resolved" },
+        severity: { warning: "Warning", critical: "Critical" }
+      },
       itemTitle: "{{kind}} · {{status}}",
       kinds: {
         file: "Files",
@@ -549,6 +561,37 @@ export const en = {
       description: "Host resources, storage, service state, and ZOS workload history.",
       actions: "Monitoring actions",
       noData: "No samples in this range",
+      tabs: { label: "Monitoring views", overview: "Overview", rules: "Rules", incidents: "Incidents" },
+      alerts: {
+        unread: "{{count}} unread incidents",
+        enabled: "Enabled",
+        disabled: "Disabled",
+        builtin: "Built in",
+        noPolicy: "No email escalation",
+        revisionConflict: "This rule changed elsewhere. Latest values were reloaded; review and try again.",
+        severity: { warning: "Warning", critical: "Critical" },
+        fields: {
+          rule: "Rule", condition: "Condition", severity: "Severity", delivery: "State", actions: "Actions",
+          name: "Name", metric: "Metric", selector: "Label selector (JSON)", transform: "Transform",
+          aggregation: "Aggregation", window: "Window", comparator: "Comparator",
+          triggerThreshold: "Trigger threshold", recoveryThreshold: "Recovery threshold",
+          triggerDuration: "Trigger duration (seconds)", recoveryDuration: "Recovery duration (seconds)",
+          noData: "No-data policy", policy: "Escalation policy"
+        },
+        rules: {
+          title: "Alert rules", description: "Evaluate controlled metrics into independent series incidents.",
+          add: "Add rule", empty: "No alert rules configured.", selectorError: "Selector must be a JSON object.",
+          evaluationError: "Evaluation error",
+          confirmDelete: "Delete this alert rule? Any firing incident will be closed as deleted."
+        },
+        editor: { title: "Rule editor", description: "Thresholds use hysteresis; counter metrics are evaluated as reset-aware rates." },
+        incidents: {
+          title: "Alert incidents", description: "{{firing}} firing · {{unread}} unread", filterLabel: "Incident status",
+          empty: "No incidents match this filter.", markRead: "Mark as read", acknowledge: "Acknowledge",
+          silence: "Silence this instance for one hour", silenceReason: "Silenced from incident view",
+          filters: { all: "All", firing: "Firing", resolved: "Resolved" }
+        }
+      },
       range: { label: "Time range", "1h": "1h", "6h": "6h", "24h": "24h", "7d": "7d", "30d": "30d", "1y": "1y" },
       states: {
         disabled: "Disabled",
@@ -1958,6 +2001,10 @@ export const en = {
         title: "Operations",
         description: "Health checks, maintenance status, and run history."
       },
+      alerts: {
+        title: "Alerts",
+        description: "Email delivery, contacts, on-call rotation, and escalation policies."
+      },
       photos: {
         title: "Photos",
         description: "Photo library location, indexing state, and processing limits."
@@ -1974,6 +2021,44 @@ export const en = {
         title: "Advanced",
         description: "Runtime paths, process details, and service configuration."
       }
+    },
+    alerts: {
+      saved: "Alert settings saved.",
+      add: "Add",
+      empty: "No entries configured.",
+      enabled: "Enabled",
+      disabled: "Disabled",
+      confirmDelete: "Delete this alerting resource?",
+      revisionConflict: "This resource changed elsewhere. Latest values were reloaded; review and try again.",
+      memberCount: "{{count}} members",
+      delivery: { succeeded: "Test email delivered.", failed: "Test email failed.", cancelled: "Test email cancelled.", pending: "Test email remains queued." },
+      smtp: {
+        title: "Email delivery", description: "SMTP credentials remain server-side and are never returned by the API.",
+        enabled: "Enable SMTP delivery", host: "Host", port: "Port", security: "Security", username: "Username",
+        password: "Password", passwordConfigured: "Credential configured", from: "From address",
+        testRecipient: "Test recipient", sendTest: "Send test"
+      },
+      contacts: { title: "Contacts", description: "People who may receive alert deliveries.", name: "Name", email: "Email" },
+      groups: { title: "Contact groups", description: "Resolve group membership when an escalation stage becomes due.", name: "Group name" },
+      oncall: {
+        title: "On-call schedules", description: "Weekly rotation in an IANA timezone, with temporary overrides.",
+        name: "Schedule name", timezone: "IANA timezone", schedule: "Schedule", contact: "Contact",
+        weekday: "Handoff weekday", handoffTime: "Handoff time", anchorDate: "Anchor date",
+        startsAt: "Override starts", endsAt: "Override ends", reason: "Reason",
+        addOverride: "Add override", overrideUntil: "Override until {{value}}",
+        weekdays: { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" }
+      },
+      policies: {
+        title: "Escalation policies", description: "Stages are resolved against current contacts, groups, or on-call ownership.",
+        name: "Policy name", delay: "Delay from firing (seconds)", target: "Recipient target", stageCount: "{{count}} stages",
+        stage: "Stage {{count}}", addStage: "Add stage", removeStage: "Remove stage",
+        repeatInterval: "Repeat interval (seconds)", repeatCount: "Repeat count"
+      },
+      routing: {
+        title: "Health routing", description: "In-app Health incidents always remain visible; email policies are optional.",
+        warning: "Warning policy", critical: "Critical policy"
+      },
+      silences: { title: "Active and recent silences", description: "Silences keep state evaluation running while suppressing delivery." }
     },
     version: {
       buildIdentity: "Build identity",
@@ -2439,6 +2524,18 @@ export const zhCN = {
       loading: "正在加载通知",
       emptyTitle: "暂无操作通知",
       emptyBody: "文件和系统操作会显示在这里。",
+      tabs: {
+        label: "通知类型",
+        operations: "操作",
+        alerts: "告警"
+      },
+      alerts: {
+        emptyTitle: "暂无告警事件",
+        emptyBody: "监控和健康事件会显示在这里。",
+        acknowledge: "确认",
+        statuses: { firing: "告警中", resolved: "已恢复" },
+        severity: { warning: "警告", critical: "严重" }
+      },
       itemTitle: "{{kind}} · {{status}}",
       kinds: {
         file: "文件",
@@ -2927,6 +3024,37 @@ export const zhCN = {
       description: "查看主机资源、存储、服务状态和 ZOS 工作负载历史。",
       actions: "监控操作",
       noData: "此时间范围内没有样本",
+      tabs: { label: "监控视图", overview: "概览", rules: "规则", incidents: "事件" },
+      alerts: {
+        unread: "{{count}} 个未读事件",
+        enabled: "已启用",
+        disabled: "已停用",
+        builtin: "内建",
+        noPolicy: "不发送升级邮件",
+        revisionConflict: "该规则已被其他操作修改。已重新加载最新值，请确认后重试。",
+        severity: { warning: "警告", critical: "严重" },
+        fields: {
+          rule: "规则", condition: "条件", severity: "级别", delivery: "状态", actions: "操作",
+          name: "名称", metric: "指标", selector: "标签 selector（JSON）", transform: "转换",
+          aggregation: "聚合", window: "窗口", comparator: "比较符",
+          triggerThreshold: "触发阈值", recoveryThreshold: "恢复阈值",
+          triggerDuration: "触发持续时间（秒）", recoveryDuration: "恢复持续时间（秒）",
+          noData: "无数据策略", policy: "升级策略"
+        },
+        rules: {
+          title: "告警规则", description: "对受控指标求值，并为每条完整序列生成独立事件。",
+          add: "添加规则", empty: "尚未配置告警规则。", selectorError: "Selector 必须是 JSON 对象。",
+          evaluationError: "评估错误",
+          confirmDelete: "确认删除此告警规则？正在触发的事件会以 deleted 原因关闭。"
+        },
+        editor: { title: "规则编辑器", description: "阈值使用迟滞；counter 指标按可识别重置的速率求值。" },
+        incidents: {
+          title: "告警事件", description: "{{firing}} 个触发中 · {{unread}} 个未读", filterLabel: "事件状态",
+          empty: "没有符合筛选条件的事件。", markRead: "标为已读", acknowledge: "确认",
+          silence: "静默此实例一小时", silenceReason: "从事件视图创建的静默",
+          filters: { all: "全部", firing: "触发中", resolved: "已恢复" }
+        }
+      },
       range: { label: "时间范围", "1h": "1 小时", "6h": "6 小时", "24h": "24 小时", "7d": "7 天", "30d": "30 天", "1y": "1 年" },
       states: {
         disabled: "已停用",
@@ -4336,6 +4464,10 @@ export const zhCN = {
         title: "运维",
         description: "健康检查、维护状态和运行历史。"
       },
+      alerts: {
+        title: "告警",
+        description: "管理邮件投递、联系人、值班轮换和升级策略。"
+      },
       photos: {
         title: "相册",
         description: "照片库位置、索引状态和处理限制。"
@@ -4352,6 +4484,44 @@ export const zhCN = {
         title: "高级",
         description: "运行时路径、进程详情和服务配置。"
       }
+    },
+    alerts: {
+      saved: "告警设置已保存。",
+      add: "添加",
+      empty: "尚未配置条目。",
+      enabled: "已启用",
+      disabled: "已停用",
+      confirmDelete: "确认删除此告警资源？",
+      revisionConflict: "该资源已被其他操作修改。已重新加载最新值，请确认后重试。",
+      memberCount: "{{count}} 个成员",
+      delivery: { succeeded: "测试邮件已送达。", failed: "测试邮件发送失败。", cancelled: "测试邮件已取消。", pending: "测试邮件仍在队列中。" },
+      smtp: {
+        title: "邮件投递", description: "SMTP 凭据只保存在服务端，API 不会返回密码。",
+        enabled: "启用 SMTP 投递", host: "主机", port: "端口", security: "安全模式", username: "用户名",
+        password: "密码", passwordConfigured: "凭据已配置", from: "发件地址",
+        testRecipient: "测试收件人", sendTest: "发送测试"
+      },
+      contacts: { title: "联系人", description: "可接收告警邮件的人员。", name: "名称", email: "邮箱" },
+      groups: { title: "联系人组", description: "升级阶段到期时解析当前组成员。", name: "组名称" },
+      oncall: {
+        title: "值班计划", description: "按 IANA 时区每周轮换，并支持临时 override。",
+        name: "计划名称", timezone: "IANA 时区", schedule: "值班计划", contact: "联系人",
+        weekday: "交接星期", handoffTime: "交接时间", anchorDate: "锚点日期",
+        startsAt: "Override 开始", endsAt: "Override 结束", reason: "原因",
+        addOverride: "添加 override", overrideUntil: "Override 至 {{value}}",
+        weekdays: { monday: "星期一", tuesday: "星期二", wednesday: "星期三", thursday: "星期四", friday: "星期五", saturday: "星期六", sunday: "星期日" }
+      },
+      policies: {
+        title: "升级策略", description: "阶段到期时解析当前联系人、组或值班人。",
+        name: "策略名称", delay: "相对触发延迟（秒）", target: "收件目标", stageCount: "{{count}} 个阶段",
+        stage: "阶段 {{count}}", addStage: "添加阶段", removeStage: "移除阶段",
+        repeatInterval: "重复间隔（秒）", repeatCount: "重复次数"
+      },
+      routing: {
+        title: "健康告警路由", description: "Health 事件始终在站内可见，邮件策略可选。",
+        warning: "警告策略", critical: "严重策略"
+      },
+      silences: { title: "当前与近期静默", description: "静默期间继续求值状态，但不发送邮件。" }
     },
     version: {
       buildIdentity: "构建身份",

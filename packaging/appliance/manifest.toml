@@ -1,5 +1,5 @@
 name = "zos-appliance"
-version = "1.2.1"
+version = "1.3.0"
 base_suite = "bookworm"
 target_arch = "arm64"
 
@@ -13,6 +13,7 @@ package = "zos.deb"
 units = [
   "zos-api.service",
   "zos-monitor.service",
+  "zos-alerter.service",
   "zos-termux.service",
   "zos-vod-player.service",
   "zos-hostd.service",

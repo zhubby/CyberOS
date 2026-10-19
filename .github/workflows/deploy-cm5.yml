@@ -741,6 +741,7 @@ jobs:
             for unit in \
               zos-api.service \
               zos-monitor.service \
+              zos-alerter.service \
               zos-worker@1.service \
               zos-photostaff.service \
               zos-downloader.service \
@@ -780,6 +781,7 @@ jobs:
           for unit in \
             zos-api.service \
             zos-monitor.service \
+            zos-alerter.service \
             zos-worker@1.service \
             zos-photostaff.service \
             zos-downloader.service \
@@ -809,6 +811,7 @@ jobs:
           for unit in \
             zos-api.service \
             zos-monitor.service \
+            zos-alerter.service \
             zos-worker@1.service \
             zos-photostaff.service \
             zos-downloader.service \

@@ -14,7 +14,7 @@ import {
   upsertRootReadiness,
   type ZosDatabase
 } from "@zos/db";
-import { MetricsWriter } from "@zos/monitoring";
+import { MetricsWriter } from "@zos/monitoring/test-utils";
 import { DEFAULT_MONITORING_CONFIG, type ZosConfig } from "@zos/shared";
 import { evaluateSystemHealth, runScheduledHealthEvaluation } from "./index.js";
 

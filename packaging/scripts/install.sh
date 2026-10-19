@@ -325,6 +325,7 @@ if command -v systemctl >/dev/null 2>&1; then
     zos-termux.service \
     zos-api.service \
     zos-monitor.service \
+    zos-alerter.service \
     zos-worker@1.service \
     zos-photostaff.service \
     zos-downloader.service \
@@ -332,6 +333,9 @@ if command -v systemctl >/dev/null 2>&1; then
   systemctl restart zos-hostd.service zos-termux.service zos-api.service
   if ! systemctl restart zos-monitor.service; then
     log "warning: monitoring service failed to start; core services remain available"
+  fi
+  if ! systemctl restart zos-alerter.service; then
+    log "warning: alerting service failed to start; core services remain available"
   fi
   systemctl start zos-health.service || \
     log "warning: initial health evaluation failed; the health timer will retry"

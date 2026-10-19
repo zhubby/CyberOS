@@ -14,6 +14,7 @@ describe("native packaging artifacts", () => {
     const serviceNames = [
       "zos-api.service",
       "zos-monitor.service",
+      "zos-alerter.service",
       "zos-worker@.service",
       "zos-indexer.service",
       "zos-maintenance.service",
@@ -30,8 +31,8 @@ describe("native packaging artifacts", () => {
       expect(unit).toContain("CapabilityBoundingSet=");
       expect(unit).toContain("ReadWritePaths=/zos/state");
       expect(unit).toContain("Environment=ZOS_ROOT=/zos");
-      if (serviceName === "zos-indexer.service") {
-        expect(unit).toContain("ExecStart=/usr/lib/zos/bin/zos-indexer");
+      if (["zos-monitor.service", "zos-alerter.service", "zos-indexer.service"].includes(serviceName)) {
+        expect(unit).toContain("ExecStart=/usr/lib/zos/bin/zos-");
       } else {
         expect(unit).toContain("ExecStart=/usr/local/bin/node");
         expect(unit).not.toContain("ExecStart=/usr/bin/node");
@@ -44,13 +45,22 @@ describe("native packaging artifacts", () => {
     );
     const monitorUnit = await readPackagingFile("systemd", "zos-monitor.service");
     expect(monitorUnit).toContain("After=local-fs.target zos-api.service");
-    expect(monitorUnit).toContain("ExecStart=/usr/local/bin/node /usr/lib/zos/apps/monitor/dist/index.js");
+    expect(monitorUnit).toContain("Type=notify");
+    expect(monitorUnit).toContain("ExecStart=/usr/lib/zos/bin/zos-monitor");
     expect(monitorUnit).toContain("ReadOnlyPaths=-/zos/data");
     expect(monitorUnit).toContain("ReadWritePaths=/zos/state");
     expect(monitorUnit).toContain("RestrictAddressFamilies=AF_UNIX");
     expect(monitorUnit).toContain("MemoryMax=256M");
     expect(monitorUnit).toContain("CPUWeight=20");
     expect(monitorUnit).toContain("IOWeight=20");
+    const alerterUnit = await readPackagingFile("systemd", "zos-alerter.service");
+    expect(alerterUnit).toContain("After=network-online.target local-fs.target zos-api.service zos-monitor.service");
+    expect(alerterUnit).toContain("Wants=network-online.target zos-api.service zos-monitor.service");
+    expect(alerterUnit).not.toContain("Requires=zos-monitor.service");
+    expect(alerterUnit).toContain("Type=notify");
+    expect(alerterUnit).toContain("ExecStart=/usr/lib/zos/bin/zos-alerter");
+    expect(alerterUnit).toContain("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6");
+    expect(alerterUnit).toContain("MemoryMax=256M");
     await expect(readPackagingFile("systemd", "zos-downloader.service")).resolves.toContain(
       "RequiresMountsFor=/zos/data"
     );
@@ -147,7 +157,9 @@ describe("native packaging artifacts", () => {
     const tmpfiles = await readPackagingFile("tmpfiles.d", "zos.conf");
 
     expect(install).toContain("usr/lib/zos/apps/api/dist/");
-    expect(install).toContain("usr/lib/zos/apps/monitor/dist/");
+    expect(install).toContain("target/release/zos-monitor usr/lib/zos/bin/");
+    expect(install).toContain("target/release/zos-alerter usr/lib/zos/bin/");
+    expect(install).not.toContain("apps/monitor/dist/");
     expect(install).toContain("target/release/zos-hostd usr/lib/zos/bin/");
     expect(install).toContain("target/release/zos-termux usr/lib/zos/bin/");
     expect(install).not.toContain("apps/terminal-helper");
@@ -280,6 +292,7 @@ describe("native packaging artifacts", () => {
     expect(manifest).toContain("git");
     expect(manifest).toContain("zos-hostd.service");
     expect(manifest).toContain("zos-monitor.service");
+    expect(manifest).toContain("zos-alerter.service");
     expect(manifest).not.toContain("zos-share-helper.service");
     expect(manifest).toContain("zos-termux.service");
     expect(manifest).not.toContain("zos-terminal-helper.service");
@@ -321,6 +334,7 @@ describe("native packaging artifacts", () => {
     expect(buildImage).toContain("zos-backup-weekly.timer");
     expect(buildImage).toContain("zos-health.timer");
     expect(buildImage).toContain("zos-monitor.service");
+    expect(buildImage).toContain("zos-alerter.service");
     expect(buildImage).not.toContain("zos-scheduler");
     expect(buildImage).toContain("zos-nginx.sh");
     expect(buildImage).toContain("ZOS_NODE_MIRROR");
@@ -410,6 +424,7 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("systemctl restart nginx");
     expect(installer).toContain("systemctl enable --now");
     expect(installer).toContain("systemctl restart zos-monitor.service");
+    expect(installer).toContain("systemctl restart zos-alerter.service");
     expect(installer).toContain("systemctl start zos-health.service");
     expect(buildDeb).toContain("registry.npmmirror.com");
     expect(buildDeb).toContain("ZOS_BUILD_COMMIT_SHA");
@@ -447,6 +462,7 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("CM5 runtime requires Node.js 22");
     expect(deployWorkflow).toContain("zos-indexer.service");
     expect(deployWorkflow.match(/zos-monitor\.service/gu)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(deployWorkflow.match(/zos-alerter\.service/gu)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(deployWorkflow).toContain("/api/monitoring/overview");
     expect(deployWorkflow).toContain("monitoring did not produce a usable sample");
     expect(deployWorkflow).toContain("/api/indexer/status");
@@ -673,7 +689,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).not.toContain("systemctl restart $RUNTIME_SERVICES");
     expect(deploy).not.toContain("systemctl enable --now $TIMERS");
     expect(deploy).toContain("systemctl start zos-health.service");
-    expect(deploy).toContain('RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service"');
+    expect(deploy).toContain('RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service zos-alerter.service"');
     const activateRuntime = deploy.slice(
       deploy.indexOf("activate_runtime() {"),
       deploy.indexOf("\nverify_runtime() {")
@@ -687,6 +703,7 @@ describe("native packaging artifacts", () => {
       "start_service_stably zos-api.service",
       "wait_for_url http://127.0.0.1:3010/health",
       "start_service_stably zos-monitor.service",
+      "start_service_stably zos-alerter.service",
       "systemctl start zos-health.service",
       "start_service_stably zos-worker@1.service",
       "start_service_stably zos-photostaff.service",

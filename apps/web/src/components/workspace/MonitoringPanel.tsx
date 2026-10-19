@@ -34,6 +34,7 @@ import {
   useManagementDashboard
 } from "./ManagementDashboard.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
+import { MonitoringAlertsView } from "./MonitoringAlertsView.js";
 
 const RANGE_OPTIONS = [
   { id: "1h", durationMs: 60 * 60_000, refreshMs: 10_000 },
@@ -78,6 +79,7 @@ export function MonitoringPanel({ locale }: { locale: SupportedLocale }) {
   const { t } = useTranslation();
   const dashboard = useManagementDashboard("monitoring");
   const [range, setRange] = useState<MonitoringRange>("1h");
+  const [view, setView] = useState<"overview" | "rules" | "incidents">("overview");
   const [overview, setOverview] = useState<MonitoringOverview | null>(null);
   const [query, setQuery] = useState<MonitoringQueryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -230,7 +232,27 @@ export function MonitoringPanel({ locale }: { locale: SupportedLocale }) {
         </PanelHeaderActions>}
       />
 
-      <div className="monitoring-toolbar">
+      <nav className="monitoring-view-tabs" role="tablist" aria-label={t("workspace.monitoring.tabs.label")}>
+        {(["overview", "rules", "incidents"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={view === tab}
+            className={view === tab ? "is-active" : ""}
+            onClick={() => setView(tab)}
+          >
+            {t(`workspace.monitoring.tabs.${tab}`)}
+            {tab === "incidents" && overview?.alerts?.unreadCount ? (
+              <span aria-label={t("workspace.monitoring.alerts.unread", { count: overview.alerts.unreadCount })}>
+                {overview.alerts.unreadCount > 99 ? "99+" : overview.alerts.unreadCount}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </nav>
+
+      {view === "overview" ? <><div className="monitoring-toolbar">
         <div className="monitoring-range" role="group" aria-label={t("workspace.monitoring.range.label")}>
           {RANGE_OPTIONS.map((option) => (
             <button
@@ -263,7 +285,7 @@ export function MonitoringPanel({ locale }: { locale: SupportedLocale }) {
           ) : null}
           <ManagementDashboardGrid dashboard={dashboard} items={dashboardItems} loading={initial} />
         </div>
-      )}
+      )}</> : <MonitoringAlertsView view={view} locale={locale} />}
     </section>
   );
 }

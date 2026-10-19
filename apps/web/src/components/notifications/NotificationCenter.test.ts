@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { OperationNotification } from "../../api.js";
+import type { MonitoringAlertIncident, OperationNotification } from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
 import { NotificationCenter } from "./NotificationCenter.js";
 
@@ -24,6 +24,16 @@ function notification(
   };
 }
 
+function incident(): MonitoringAlertIncident {
+  return {
+    id: "incident-1", source: "metric", ruleId: "rule-1", healthAlertId: null,
+    seriesKey: "host", labels: {}, status: "firing", severity: "critical",
+    title: "CPU saturation", currentValue: 0.98, firingAt: "2026-09-18T00:00:00.000Z",
+    resolvedAt: null, closeReason: null, acknowledgedAt: null, readAt: null,
+    createdAt: "2026-09-18T00:00:00.000Z", updatedAt: "2026-09-18T00:01:00.000Z"
+  };
+}
+
 describe("NotificationCenter", () => {
   it("renders unread state, operation statuses, and drawer controls", async () => {
     await initI18n();
@@ -39,11 +49,17 @@ describe("NotificationCenter", () => {
       open: true,
       loading: false,
       notifications,
+      alertIncidents: [incident()],
       unreadCount: 105,
+      operationUnreadCount: 104,
+      alertUnreadCount: 1,
       locale: "en",
       onClose: () => undefined,
       onRead: () => undefined,
-      onReadAll: () => undefined
+      onReadAll: () => undefined,
+      onReadAlert: () => undefined,
+      onReadAllAlerts: () => undefined,
+      onAcknowledgeAlert: () => undefined
     }));
 
     expect(html).toContain('role="dialog"');
@@ -57,6 +73,7 @@ describe("NotificationCenter", () => {
     expect(html).toContain('data-unread="false"');
     expect(html).toContain("Operation failed");
     expect(html).toContain("105");
+    expect(html).toContain("Alerts");
   });
 
   it("renders loading and empty states without overflowing content wrappers", async () => {
@@ -66,11 +83,17 @@ describe("NotificationCenter", () => {
       open: true,
       loading,
       notifications: [],
+      alertIncidents: [],
       unreadCount: 0,
+      operationUnreadCount: 0,
+      alertUnreadCount: 0,
       locale: "zh-CN",
       onClose: () => undefined,
       onRead: () => undefined,
-      onReadAll: () => undefined
+      onReadAll: () => undefined,
+      onReadAlert: () => undefined,
+      onReadAllAlerts: () => undefined,
+      onAcknowledgeAlert: () => undefined
     }));
 
     expect(render(true)).toContain("正在加载通知");

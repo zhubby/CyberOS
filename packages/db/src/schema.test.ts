@@ -95,14 +95,110 @@ describe("SQLite schema migrations", () => {
       "024_rust_indexer",
       "025_ops_runs",
       "026_file_batches",
-      "027_agent_transcript_sequence"
+      "027_agent_transcript_sequence",
+      "028_monitoring_alerts",
+      "029_monitoring_silence_cancellation",
+      "030_monitoring_rule_evaluation_status",
+      "031_monitoring_unsilenced_event"
     ]);
+  });
+
+  it("installs monitoring alert configuration, incident, and outbox tables", () => {
+    const database = openZosDb(path.join(tempDir, "monitoring-alerts.sqlite"));
+    try {
+      const tables = database.prepare(`
+        SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'monitoring_%'
+      `).pluck().all();
+      expect(tables).toEqual(expect.arrayContaining([
+        "monitoring_alert_rules",
+        "monitoring_alert_instances",
+        "monitoring_alert_incidents",
+        "monitoring_alert_silences",
+        "monitoring_alert_contacts",
+        "monitoring_alert_contact_groups",
+        "monitoring_oncall_schedules",
+        "monitoring_escalation_policies",
+        "monitoring_alert_deliveries",
+        "monitoring_alert_delivery_attempts",
+        "monitoring_alerter_state"
+      ]));
+      expect(database.prepare("PRAGMA table_info(monitoring_alert_silences)").all())
+        .toEqual(expect.arrayContaining([expect.objectContaining({ name: "cancelled_at" })]));
+      expect(database.prepare("PRAGMA table_info(monitoring_alert_rules)").all())
+        .toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: "evaluation_error" }),
+          expect.objectContaining({ name: "last_evaluated_at" })
+        ]));
+      const incidentId = "incident-unsilenced-schema";
+      const now = new Date().toISOString();
+      database.prepare(`
+        INSERT INTO monitoring_alert_incidents(
+          id, source, series_key, status, severity, title, firing_at,
+          rule_snapshot_json, created_at, updated_at
+        ) VALUES (?, 'system', 'schema-check', 'firing', 'warning', 'Schema check', ?, '{}', ?, ?)
+      `).run(incidentId, now, now, now);
+      expect(() => database.prepare(`
+        INSERT INTO monitoring_alert_incident_events(incident_id, type, created_at)
+        VALUES (?, 'unsilenced', ?)
+      `).run(incidentId, now)).not.toThrow();
+      expect(database.pragma("foreign_key_check")).toEqual([]);
+      expect(database.prepare(
+        "SELECT json_extract(value_json, '$.security') FROM system_settings WHERE key = 'monitoring_smtp'"
+      ).pluck().get()).toBe("starttls");
+    } finally {
+      database.close();
+    }
+  });
+
+  it("upgrades the incident event constraint without losing alert history", () => {
+    const databasePath = path.join(tempDir, "monitoring-events-upgrade.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE schema_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+      CREATE TABLE monitoring_alert_incidents (
+        id TEXT PRIMARY KEY
+      );
+      CREATE TABLE monitoring_alert_incident_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        incident_id TEXT NOT NULL REFERENCES monitoring_alert_incidents(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('fired', 'acknowledged', 'read', 'recovered', 'rule_changed', 'disabled', 'deleted', 'silenced', 'delivery_succeeded', 'delivery_failed')),
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_monitoring_alert_incident_events_incident
+        ON monitoring_alert_incident_events(incident_id, created_at, id);
+      INSERT INTO monitoring_alert_incidents(id) VALUES ('incident-legacy');
+      INSERT INTO monitoring_alert_incident_events(incident_id, type, created_at)
+      VALUES ('incident-legacy', 'fired', '2026-03-10T00:00:00.000Z');
+    `);
+    const insertMigration = legacy.prepare(
+      "INSERT INTO schema_migrations(id, applied_at) VALUES (?, '2026-03-10T00:00:00.000Z')"
+    );
+    for (const migration of migrations.slice(0, -1)) insertMigration.run(migration.id);
+    legacy.close();
+
+    const upgraded = openZosDb(databasePath);
+    try {
+      expect(upgraded.prepare(`
+        SELECT type FROM monitoring_alert_incident_events WHERE incident_id = 'incident-legacy'
+      `).pluck().all()).toEqual(["fired"]);
+      expect(() => upgraded.prepare(`
+        INSERT INTO monitoring_alert_incident_events(incident_id, type, created_at)
+        VALUES ('incident-legacy', 'unsilenced', '2026-03-10T00:01:00.000Z')
+      `).run()).not.toThrow();
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      upgraded.close();
+    }
   });
 
   it("backfills a deterministic transcript sequence from legacy timestamps", () => {
     const databasePath = path.join(tempDir, "legacy-transcript.sqlite");
     const initial = openZosDb(databasePath);
-    const transcriptMigration = migrations.at(-1);
+    const transcriptMigration = migrations.find((migration) => migration.id === "027_agent_transcript_sequence");
     expect(transcriptMigration?.id).toBe("027_agent_transcript_sequence");
     try {
       ensureNasRoots(initial, [{ id: "local", name: "Local", path: tempDir }]);

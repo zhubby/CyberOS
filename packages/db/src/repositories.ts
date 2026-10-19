@@ -13,6 +13,7 @@ export * from "./repositories/index-search.js";
 export * from "./repositories/indexed-file-maintenance.js";
 export * from "./repositories/indexed-files.js";
 export * from "./repositories/jobs.js";
+export * from "./repositories/monitoring-alerts.js";
 export * from "./repositories/nas-roots.js";
 export * from "./repositories/operation-notifications.js";
 export * from "./repositories/photostaff.js";

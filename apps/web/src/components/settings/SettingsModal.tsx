@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Activity,
   Bot,
+  BellRing,
   Check,
   Database,
   Download,
@@ -66,6 +67,7 @@ import { CustomSelect } from "../common/CustomSelect.js";
 import { VersionSettingsPage } from "./VersionSettingsPage.js";
 import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
 import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
+import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
 
 interface SettingsModalProps {
   activeSection: SettingsSectionId;
@@ -521,6 +523,10 @@ export function SettingsModal({
 
           {activeSection === "operations" ? (
             <SettingsOperationsPage locale={resolvedLocale} onClose={onClose} />
+          ) : null}
+
+          {activeSection === "alerts" ? (
+            <SettingsAlertsPage locale={resolvedLocale} />
           ) : null}
 
           {activeSection === "photos" ? (
@@ -1762,6 +1768,8 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Database aria-hidden="true" size={16} />;
     case "operations":
       return <Activity aria-hidden="true" size={16} />;
+    case "alerts":
+      return <BellRing aria-hidden="true" size={16} />;
     case "photos":
       return <Images aria-hidden="true" size={16} />;
     case "downloads":

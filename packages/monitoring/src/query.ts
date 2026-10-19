@@ -10,7 +10,7 @@ import type {
   MonitoringTransform
 } from "@zos/shared";
 import { getMetricDefinition } from "./catalog.js";
-import { listMetricSeries, parseLabels } from "./store.js";
+import { listMetricSeries, parseLabels } from "./database.js";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;

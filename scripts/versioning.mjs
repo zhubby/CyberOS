@@ -7,6 +7,7 @@ const PRODUCT_CARGO_PACKAGES = [
   { manifestPath: "apps/downloader/Cargo.toml", packageName: "zos-downloader" },
   { manifestPath: "apps/hostd/Cargo.toml", packageName: "zos-hostd" },
   { manifestPath: "apps/indexer/Cargo.toml", packageName: "zos-indexer" },
+  { manifestPath: "apps/monitor/Cargo.toml", packageName: "zos-monitor" },
   { manifestPath: "apps/photostaff/Cargo.toml", packageName: "zos-photostaff" },
   { manifestPath: "apps/termux/Cargo.toml", packageName: "zos-termux" },
   { manifestPath: "apps/vod-player/Cargo.toml", packageName: "zos-vod-player" }

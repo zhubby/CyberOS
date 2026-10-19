@@ -169,6 +169,33 @@ afterEach(async () => {
 });
 
 describe("API server", () => {
+  it("rate-limits repeated database requests", async () => {
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const first = await server.inject({
+      method: "GET",
+      url: "/api/monitoring/alerts/summary"
+    });
+
+    expect(first.statusCode).toBe(200);
+    const limit = Number(first.headers["x-ratelimit-limit"]);
+    expect(limit).toBeGreaterThan(0);
+
+    for (let request = 1; request < limit; request += 1) {
+      const response = await server.inject({
+        method: "GET",
+        url: "/api/monitoring/alerts/summary"
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const blocked = await server.inject({
+      method: "GET",
+      url: "/api/monitoring/alerts/summary"
+    });
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.headers["retry-after"]).toBeDefined();
+  });
+
   it("reports indexer status for configured roots", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const neverRun = await server.inject({

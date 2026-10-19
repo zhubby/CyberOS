@@ -118,7 +118,27 @@ import type {
   MonitoringCatalogResponse as SharedMonitoringCatalogResponse,
   MonitoringOverviewResponse as SharedMonitoringOverviewResponse,
   MonitoringQueryRequest as SharedMonitoringQueryRequest,
-  MonitoringQueryResponse as SharedMonitoringQueryResponse
+  MonitoringQueryResponse as SharedMonitoringQueryResponse,
+  MonitoringAlertRule as SharedMonitoringAlertRule,
+  MonitoringAlertRuleInput as SharedMonitoringAlertRuleInput,
+  MonitoringAlertIncident as SharedMonitoringAlertIncident,
+  MonitoringAlertIncidentEvent as SharedMonitoringAlertIncidentEvent,
+  MonitoringAlertSilence as SharedMonitoringAlertSilence,
+  MonitoringAlertSilenceInput as SharedMonitoringAlertSilenceInput,
+  MonitoringAlertContact as SharedMonitoringAlertContact,
+  MonitoringAlertContactInput as SharedMonitoringAlertContactInput,
+  MonitoringAlertContactGroup as SharedMonitoringAlertContactGroup,
+  MonitoringAlertContactGroupInput as SharedMonitoringAlertContactGroupInput,
+  MonitoringOncallSchedule as SharedMonitoringOncallSchedule,
+  MonitoringOncallScheduleInput as SharedMonitoringOncallScheduleInput,
+  MonitoringOncallOverride as SharedMonitoringOncallOverride,
+  MonitoringEscalationPolicy as SharedMonitoringEscalationPolicy,
+  MonitoringEscalationPolicyInput as SharedMonitoringEscalationPolicyInput,
+  MonitoringSmtpSettings as SharedMonitoringSmtpSettings,
+  MonitoringSmtpSettingsInput as SharedMonitoringSmtpSettingsInput,
+  MonitoringHealthRouting as SharedMonitoringHealthRouting,
+  MonitoringAlertDelivery as SharedMonitoringAlertDelivery,
+  MonitoringAlertSummary as SharedMonitoringAlertSummary
 } from "@zos/shared";
 
 export interface NasRoot {
@@ -180,6 +200,26 @@ export type MonitoringCatalog = SharedMonitoringCatalogResponse;
 export type MonitoringOverview = SharedMonitoringOverviewResponse;
 export type MonitoringQueryRequest = SharedMonitoringQueryRequest;
 export type MonitoringQueryResponse = SharedMonitoringQueryResponse;
+export type MonitoringAlertRule = SharedMonitoringAlertRule;
+export type MonitoringAlertRuleInput = SharedMonitoringAlertRuleInput;
+export type MonitoringAlertIncident = SharedMonitoringAlertIncident;
+export type MonitoringAlertIncidentEvent = SharedMonitoringAlertIncidentEvent;
+export type MonitoringAlertSilence = SharedMonitoringAlertSilence;
+export type MonitoringAlertSilenceInput = SharedMonitoringAlertSilenceInput;
+export type MonitoringAlertContact = SharedMonitoringAlertContact;
+export type MonitoringAlertContactInput = SharedMonitoringAlertContactInput;
+export type MonitoringAlertContactGroup = SharedMonitoringAlertContactGroup;
+export type MonitoringAlertContactGroupInput = SharedMonitoringAlertContactGroupInput;
+export type MonitoringOncallSchedule = SharedMonitoringOncallSchedule;
+export type MonitoringOncallScheduleInput = SharedMonitoringOncallScheduleInput;
+export type MonitoringOncallOverride = SharedMonitoringOncallOverride;
+export type MonitoringEscalationPolicy = SharedMonitoringEscalationPolicy;
+export type MonitoringEscalationPolicyInput = SharedMonitoringEscalationPolicyInput;
+export type MonitoringSmtpSettings = SharedMonitoringSmtpSettings;
+export type MonitoringSmtpSettingsInput = SharedMonitoringSmtpSettingsInput;
+export type MonitoringHealthRouting = SharedMonitoringHealthRouting;
+export type MonitoringAlertDelivery = SharedMonitoringAlertDelivery;
+export type MonitoringAlertSummary = SharedMonitoringAlertSummary;
 export type OpsRun = SharedOpsRunRecord;
 export type OpsTask = SharedOpsTask;
 export type OpsTaskOverview = SharedOpsTaskOverview;
@@ -328,6 +368,12 @@ export type FileBatch = SharedFileBatch;
 export interface NotificationListResult {
   notifications: OperationNotification[];
   unreadCount: number;
+}
+
+export interface NotificationSummary {
+  unreadCount: number;
+  operations: number;
+  alerts: number;
 }
 
 export type FilePreviewKind =
@@ -592,6 +638,218 @@ export async function queryMonitoringMetrics(input: MonitoringQueryRequest): Pro
   const response = await fetch("/api/monitoring/query", jsonRequest("POST", input));
   await ensureOk(response);
   return (await response.json()) as MonitoringQueryResponse;
+}
+
+export async function getMonitoringAlertSummary(): Promise<MonitoringAlertSummary> {
+  return fetchJson<{ summary: MonitoringAlertSummary }>("/api/monitoring/alerts/summary").then((body) => body.summary);
+}
+
+export async function getMonitoringAlertRules(): Promise<MonitoringAlertRule[]> {
+  return fetchJson<{ rules: MonitoringAlertRule[] }>("/api/monitoring/alerts/rules").then((body) => body.rules);
+}
+
+export async function createMonitoringAlertRule(input: MonitoringAlertRuleInput): Promise<MonitoringAlertRule> {
+  return fetchJson<{ rule: MonitoringAlertRule }>("/api/monitoring/alerts/rules", jsonRequest("POST", input))
+    .then((body) => body.rule);
+}
+
+export async function updateMonitoringAlertRule(rule: MonitoringAlertRule): Promise<MonitoringAlertRule> {
+  const { id, revision, builtin: _builtin, deletedAt: _deletedAt, createdAt: _createdAt,
+    updatedAt: _updatedAt, evaluationError: _evaluationError,
+    lastEvaluatedAt: _lastEvaluatedAt, ...input } = rule;
+  return fetchJson<{ rule: MonitoringAlertRule }>(
+    `/api/monitoring/alerts/rules/${encodeURIComponent(id)}`,
+    jsonRequest("PATCH", { expectedRevision: revision, rule: input })
+  ).then((body) => body.rule);
+}
+
+export async function deleteMonitoringAlertRule(id: string, revision: number): Promise<void> {
+  await fetchEmpty(`/api/monitoring/alerts/rules/${encodeURIComponent(id)}?expectedRevision=${revision}`, { method: "DELETE" });
+}
+
+export async function getMonitoringAlertIncidents(status?: "firing" | "resolved"): Promise<MonitoringAlertIncident[]> {
+  const query = status ? `?status=${status}&limit=200` : "?limit=200";
+  return fetchJson<{ incidents: MonitoringAlertIncident[] }>(`/api/monitoring/alerts/incidents${query}`)
+    .then((body) => body.incidents);
+}
+
+export async function readMonitoringAlertIncident(id: string): Promise<MonitoringAlertIncident> {
+  return alertIncidentAction(id, "read");
+}
+
+export async function readAllMonitoringAlertIncidents(): Promise<number> {
+  return fetchJson<{ updated: number }>("/api/monitoring/alerts/incidents/read-all", { method: "POST" })
+    .then((body) => body.updated);
+}
+
+export async function acknowledgeMonitoringAlertIncident(id: string): Promise<MonitoringAlertIncident> {
+  return alertIncidentAction(id, "acknowledge");
+}
+
+async function alertIncidentAction(id: string, action: "read" | "acknowledge") {
+  return fetchJson<{ incident: MonitoringAlertIncident }>(
+    `/api/monitoring/alerts/incidents/${encodeURIComponent(id)}/${action}`,
+    { method: "POST" }
+  ).then((body) => body.incident);
+}
+
+export async function getMonitoringAlertSilences(): Promise<MonitoringAlertSilence[]> {
+  return fetchJson<{ silences: MonitoringAlertSilence[] }>("/api/monitoring/alerts/silences")
+    .then((body) => body.silences);
+}
+
+export async function createMonitoringAlertSilence(input: MonitoringAlertSilenceInput): Promise<MonitoringAlertSilence> {
+  return fetchJson<{ silence: MonitoringAlertSilence }>("/api/monitoring/alerts/silences", jsonRequest("POST", input))
+    .then((body) => body.silence);
+}
+
+export async function deleteMonitoringAlertSilence(id: string, revision: number): Promise<void> {
+  await fetchEmpty(`/api/monitoring/alerts/silences/${encodeURIComponent(id)}?expectedRevision=${revision}`, { method: "DELETE" });
+}
+
+export async function getMonitoringAlertContacts(): Promise<MonitoringAlertContact[]> {
+  return fetchJson<{ contacts: MonitoringAlertContact[] }>("/api/monitoring/alerts/contacts").then((body) => body.contacts);
+}
+
+export async function createMonitoringAlertContact(input: MonitoringAlertContactInput): Promise<MonitoringAlertContact> {
+  return fetchJson<{ contact: MonitoringAlertContact }>("/api/monitoring/alerts/contacts", jsonRequest("POST", input))
+    .then((body) => body.contact);
+}
+
+export async function updateMonitoringAlertContact(contact: MonitoringAlertContact): Promise<MonitoringAlertContact> {
+  return fetchJson<{ contact: MonitoringAlertContact }>(
+    `/api/monitoring/alerts/contacts/${encodeURIComponent(contact.id)}`,
+    jsonRequest("PATCH", {
+      expectedRevision: contact.revision,
+      contact: { name: contact.name, email: contact.email, enabled: contact.enabled }
+    })
+  ).then((body) => body.contact);
+}
+
+export async function deleteMonitoringAlertContact(id: string, revision: number): Promise<void> {
+  await fetchEmpty(`/api/monitoring/alerts/contacts/${encodeURIComponent(id)}?expectedRevision=${revision}`, { method: "DELETE" });
+}
+
+export async function getMonitoringAlertGroups(): Promise<MonitoringAlertContactGroup[]> {
+  return fetchJson<{ groups: MonitoringAlertContactGroup[] }>("/api/monitoring/alerts/groups").then((body) => body.groups);
+}
+
+export async function saveMonitoringAlertGroup(
+  group: MonitoringAlertContactGroupInput & { id?: string; revision?: number }
+): Promise<MonitoringAlertContactGroup> {
+  const url = group.id ? `/api/monitoring/alerts/groups/${encodeURIComponent(group.id)}` : "/api/monitoring/alerts/groups";
+  const init = group.id
+    ? jsonRequest("PATCH", { expectedRevision: group.revision, group: { name: group.name, contactIds: group.contactIds } })
+    : jsonRequest("POST", { name: group.name, contactIds: group.contactIds });
+  return fetchJson<{ group: MonitoringAlertContactGroup }>(url, init).then((body) => body.group);
+}
+
+export async function deleteMonitoringAlertGroup(id: string, revision: number): Promise<void> {
+  await fetchEmpty(`/api/monitoring/alerts/groups/${encodeURIComponent(id)}?expectedRevision=${revision}`, { method: "DELETE" });
+}
+
+export async function getMonitoringOncallSchedules(): Promise<MonitoringOncallSchedule[]> {
+  return fetchJson<{ schedules: MonitoringOncallSchedule[] }>("/api/monitoring/alerts/schedules")
+    .then((body) => body.schedules);
+}
+
+export async function saveMonitoringOncallSchedule(
+  schedule: MonitoringOncallScheduleInput & { id?: string; revision?: number }
+): Promise<MonitoringOncallSchedule> {
+  const url = schedule.id ? `/api/monitoring/alerts/schedules/${encodeURIComponent(schedule.id)}` : "/api/monitoring/alerts/schedules";
+  const payload = {
+    name: schedule.name,
+    timezone: schedule.timezone,
+    handoffWeekday: schedule.handoffWeekday,
+    handoffTime: schedule.handoffTime,
+    anchorDate: schedule.anchorDate,
+    contactIds: schedule.contactIds
+  };
+  const init = schedule.id
+    ? jsonRequest("PATCH", { expectedRevision: schedule.revision, schedule: payload })
+    : jsonRequest("POST", payload);
+  return fetchJson<{ schedule: MonitoringOncallSchedule }>(url, init).then((body) => body.schedule);
+}
+
+export async function deleteMonitoringOncallSchedule(id: string, revision: number): Promise<void> {
+  await fetchEmpty(`/api/monitoring/alerts/schedules/${encodeURIComponent(id)}?expectedRevision=${revision}`, { method: "DELETE" });
+}
+
+export async function createMonitoringOncallOverride(
+  scheduleId: string,
+  input: Omit<MonitoringOncallOverride, "id" | "scheduleId" | "revision" | "createdAt" | "updatedAt">
+): Promise<MonitoringOncallOverride> {
+  return fetchJson<{ override: MonitoringOncallOverride }>(
+    `/api/monitoring/alerts/schedules/${encodeURIComponent(scheduleId)}/overrides`,
+    jsonRequest("POST", input)
+  ).then((body) => body.override);
+}
+
+export async function deleteMonitoringOncallOverride(id: string, revision: number): Promise<void> {
+  await fetchEmpty(`/api/monitoring/alerts/overrides/${encodeURIComponent(id)}?expectedRevision=${revision}`, { method: "DELETE" });
+}
+
+export async function getMonitoringEscalationPolicies(): Promise<MonitoringEscalationPolicy[]> {
+  return fetchJson<{ policies: MonitoringEscalationPolicy[] }>("/api/monitoring/alerts/policies")
+    .then((body) => body.policies);
+}
+
+export async function saveMonitoringEscalationPolicy(
+  policy: MonitoringEscalationPolicyInput & { id?: string; revision?: number }
+): Promise<MonitoringEscalationPolicy> {
+  const url = policy.id ? `/api/monitoring/alerts/policies/${encodeURIComponent(policy.id)}` : "/api/monitoring/alerts/policies";
+  const payload = { name: policy.name, enabled: policy.enabled, stages: policy.stages };
+  const init = policy.id
+    ? jsonRequest("PATCH", { expectedRevision: policy.revision, policy: payload })
+    : jsonRequest("POST", payload);
+  return fetchJson<{ policy: MonitoringEscalationPolicy }>(url, init).then((body) => body.policy);
+}
+
+export async function deleteMonitoringEscalationPolicy(id: string, revision: number): Promise<void> {
+  await fetchEmpty(`/api/monitoring/alerts/policies/${encodeURIComponent(id)}?expectedRevision=${revision}`, { method: "DELETE" });
+}
+
+export async function getMonitoringSmtpSettings(): Promise<MonitoringSmtpSettings> {
+  return fetchJson<{ smtp: MonitoringSmtpSettings }>("/api/monitoring/alerts/smtp").then((body) => body.smtp);
+}
+
+export async function saveMonitoringSmtpSettings(
+  expectedRevision: number,
+  smtp: MonitoringSmtpSettingsInput
+): Promise<MonitoringSmtpSettings> {
+  return fetchJson<{ smtp: MonitoringSmtpSettings }>(
+    "/api/monitoring/alerts/smtp",
+    jsonRequest("PATCH", { expectedRevision, smtp })
+  ).then((body) => body.smtp);
+}
+
+export async function testMonitoringEmail(recipient: string): Promise<string> {
+  return fetchJson<{ deliveryId: string }>(
+    "/api/monitoring/alerts/test-email",
+    jsonRequest("POST", { recipient })
+  ).then((body) => body.deliveryId);
+}
+
+export async function getMonitoringAlertDelivery(id: string): Promise<MonitoringAlertDelivery> {
+  return fetchJson<{ delivery: MonitoringAlertDelivery }>(`/api/monitoring/alerts/deliveries/${encodeURIComponent(id)}`)
+    .then((body) => body.delivery);
+}
+
+export async function getMonitoringHealthRouting(): Promise<MonitoringHealthRouting> {
+  return fetchJson<{ routing: MonitoringHealthRouting }>("/api/monitoring/alerts/health-routing")
+    .then((body) => body.routing);
+}
+
+export async function saveMonitoringHealthRouting(
+  routing: MonitoringHealthRouting
+): Promise<MonitoringHealthRouting> {
+  return fetchJson<{ routing: MonitoringHealthRouting }>(
+    "/api/monitoring/alerts/health-routing",
+    jsonRequest("PATCH", {
+      expectedRevision: routing.revision,
+      routing: { warningPolicyId: routing.warningPolicyId, criticalPolicyId: routing.criticalPolicyId }
+    })
+  ).then((body) => body.routing);
 }
 
 export async function getSystemEthernet(): Promise<EthernetStatus> {
@@ -1880,6 +2138,10 @@ export async function getNotifications(limit = 100): Promise<NotificationListRes
   return (await response.json()) as NotificationListResult;
 }
 
+export async function getNotificationsSummary(): Promise<NotificationSummary> {
+  return fetchJson<NotificationSummary>("/api/notifications/summary");
+}
+
 export async function markNotificationRead(id: string): Promise<{
   notification: OperationNotification;
   unreadCount: number;
@@ -2003,6 +2265,17 @@ async function ensureOk(response: Response): Promise<void> {
     ...(code ? { code } : {})
   });
   throw error;
+}
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  await ensureOk(response);
+  return (await response.json()) as T;
+}
+
+async function fetchEmpty(url: string, init?: RequestInit): Promise<void> {
+  const response = await fetch(url, init);
+  await ensureOk(response);
 }
 
 function readXhrError(xhr: XMLHttpRequest): Error {

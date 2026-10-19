@@ -15,7 +15,7 @@ LOCK_PATH=/run/lock/zos-deploy.lock
 
 TIMERS='zos-maintenance.timer zos-health.timer zos-backup-daily.timer zos-backup-weekly.timer'
 CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'
-RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service"
+RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service zos-alerter.service"
 SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'
 WRITERS="zos-indexer.service zos-maintenance.service zos-health.service zos-backup-daily.service zos-backup-weekly.service $RUNTIME_SERVICES zos-vod-player.service"
 
@@ -276,6 +276,9 @@ activate_runtime() {
   log "starting monitoring after API database recovery"
   start_service_stably zos-monitor.service
 
+  log "starting alert evaluation after API database recovery"
+  start_service_stably zos-alerter.service
+
   log "refreshing health after monitoring startup"
   systemctl start zos-health.service
 
@@ -434,7 +437,7 @@ capture_runtime_diagnostics() {
   target_diagnostics_path=$1
   systemctl status $RUNTIME_SERVICES $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
   systemctl --failed --no-legend --plain > "$target_diagnostics_path/failed-units.txt" 2>&1 || true
-  journalctl -u zos-api.service -u zos-monitor.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-termux.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
+  journalctl -u zos-api.service -u zos-monitor.service -u zos-alerter.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-termux.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
 
   log "service status at failure:" >&2
   cat "$target_diagnostics_path/services-status.txt" >&2

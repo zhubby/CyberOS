@@ -1329,5 +1329,321 @@ export const productionMigrations: Migration[] = [
         source_rank,
         source_id;
     `
+  },
+  {
+    id: "028_monitoring_alerts",
+    sql: `
+      CREATE TABLE monitoring_alert_contacts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 80),
+        email TEXT NOT NULL CHECK (length(trim(email)) BETWEEN 3 AND 254),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE monitoring_alert_contact_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 80),
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE monitoring_alert_group_members (
+        group_id TEXT NOT NULL REFERENCES monitoring_alert_contact_groups(id) ON DELETE CASCADE,
+        contact_id TEXT NOT NULL REFERENCES monitoring_alert_contacts(id) ON DELETE CASCADE,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        PRIMARY KEY (group_id, contact_id),
+        UNIQUE (group_id, ordinal)
+      ) WITHOUT ROWID;
+
+      CREATE TABLE monitoring_oncall_schedules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 80),
+        timezone TEXT NOT NULL CHECK (length(trim(timezone)) BETWEEN 1 AND 80),
+        handoff_weekday INTEGER NOT NULL CHECK (handoff_weekday BETWEEN 1 AND 7),
+        handoff_time TEXT NOT NULL CHECK (handoff_time GLOB '[0-2][0-9]:[0-5][0-9]'),
+        anchor_date TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE monitoring_oncall_members (
+        schedule_id TEXT NOT NULL REFERENCES monitoring_oncall_schedules(id) ON DELETE CASCADE,
+        contact_id TEXT NOT NULL REFERENCES monitoring_alert_contacts(id) ON DELETE RESTRICT,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        PRIMARY KEY (schedule_id, contact_id),
+        UNIQUE (schedule_id, ordinal)
+      ) WITHOUT ROWID;
+
+      CREATE TABLE monitoring_oncall_overrides (
+        id TEXT PRIMARY KEY,
+        schedule_id TEXT NOT NULL REFERENCES monitoring_oncall_schedules(id) ON DELETE CASCADE,
+        contact_id TEXT NOT NULL REFERENCES monitoring_alert_contacts(id) ON DELETE RESTRICT,
+        starts_at TEXT NOT NULL,
+        ends_at TEXT NOT NULL,
+        reason TEXT NOT NULL CHECK (length(trim(reason)) BETWEEN 1 AND 240),
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK (ends_at > starts_at)
+      );
+
+      CREATE INDEX idx_monitoring_oncall_overrides_window
+        ON monitoring_oncall_overrides(schedule_id, starts_at, ends_at);
+
+      CREATE TABLE monitoring_escalation_policies (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 80),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE monitoring_escalation_stages (
+        id TEXT PRIMARY KEY,
+        policy_id TEXT NOT NULL REFERENCES monitoring_escalation_policies(id) ON DELETE CASCADE,
+        ordinal INTEGER NOT NULL CHECK (ordinal BETWEEN 0 AND 4),
+        delay_seconds INTEGER NOT NULL CHECK (delay_seconds BETWEEN 0 AND 604800),
+        repeat_interval_seconds INTEGER CHECK (
+          repeat_interval_seconds IS NULL OR repeat_interval_seconds BETWEEN 300 AND 604800
+        ),
+        repeat_count INTEGER NOT NULL DEFAULT 0 CHECK (repeat_count BETWEEN 0 AND 10),
+        UNIQUE (policy_id, ordinal)
+      );
+
+      CREATE TABLE monitoring_escalation_targets (
+        stage_id TEXT NOT NULL REFERENCES monitoring_escalation_stages(id) ON DELETE CASCADE,
+        target_type TEXT NOT NULL CHECK (target_type IN ('contact', 'group', 'oncall')),
+        target_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        PRIMARY KEY (stage_id, target_type, target_id),
+        UNIQUE (stage_id, ordinal)
+      ) WITHOUT ROWID;
+
+      CREATE TABLE monitoring_alert_rules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+        builtin INTEGER NOT NULL DEFAULT 0 CHECK (builtin IN (0, 1)),
+        metric TEXT NOT NULL CHECK (length(metric) BETWEEN 1 AND 120),
+        selector_json TEXT NOT NULL DEFAULT '{}',
+        transform TEXT NOT NULL CHECK (transform IN ('value', 'rate')),
+        aggregation TEXT NOT NULL CHECK (aggregation IN ('last', 'avg', 'min', 'max')),
+        window_seconds INTEGER NOT NULL CHECK (window_seconds IN (60, 300, 900, 1800, 3600)),
+        comparator TEXT NOT NULL CHECK (comparator IN ('>', '>=', '<', '<=')),
+        trigger_threshold REAL NOT NULL,
+        recovery_threshold REAL NOT NULL,
+        trigger_duration_seconds INTEGER NOT NULL CHECK (trigger_duration_seconds BETWEEN 0 AND 86400),
+        recovery_duration_seconds INTEGER NOT NULL CHECK (recovery_duration_seconds BETWEEN 0 AND 86400),
+        severity TEXT NOT NULL CHECK (severity IN ('warning', 'critical')),
+        no_data_policy TEXT NOT NULL DEFAULT 'ignore' CHECK (no_data_policy IN ('ignore', 'firing')),
+        escalation_policy_id TEXT REFERENCES monitoring_escalation_policies(id) ON DELETE SET NULL,
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        deleted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_monitoring_alert_rules_enabled
+        ON monitoring_alert_rules(enabled, deleted_at, metric);
+
+      INSERT INTO monitoring_alert_rules(
+        id, name, enabled, builtin, metric, selector_json, transform, aggregation,
+        window_seconds, comparator, trigger_threshold, recovery_threshold,
+        trigger_duration_seconds, recovery_duration_seconds, severity, no_data_policy,
+        revision, created_at, updated_at
+      ) VALUES
+        ('builtin-high-cpu', 'High CPU usage', 0, 1, 'zos_host_cpu_usage_ratio', '{}',
+          'value', 'avg', 300, '>', 0.90, 0.80, 300, 300, 'warning', 'ignore', 1,
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ('builtin-filesystem-capacity', 'Filesystem capacity high', 0, 1, 'zos_host_filesystem_used_ratio', '{}',
+          'value', 'max', 300, '>', 0.90, 0.85, 300, 300, 'warning', 'ignore', 1,
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ('builtin-api-service', 'ZOS API service unavailable', 0, 1, 'zos_systemd_unit_active', '{"unit":"zos-api.service"}',
+          'value', 'last', 60, '<', 0.50, 1.00, 60, 60, 'critical', 'firing', 1,
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ('builtin-monitor-stale', 'Monitoring samples are stale', 1, 1, 'zos_monitor_last_sample_timestamp_seconds', '{}',
+          'value', 'last', 60, '>', 30.00, 15.00, 30, 30, 'critical', 'firing', 1,
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+      CREATE TABLE monitoring_alert_incidents (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL CHECK (source IN ('metric', 'health', 'system')),
+        rule_id TEXT REFERENCES monitoring_alert_rules(id) ON DELETE SET NULL,
+        health_alert_id TEXT REFERENCES health_alerts(id) ON DELETE SET NULL,
+        series_key TEXT NOT NULL,
+        labels_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL CHECK (status IN ('firing', 'resolved')),
+        severity TEXT NOT NULL CHECK (severity IN ('warning', 'critical')),
+        title TEXT NOT NULL,
+        current_value REAL,
+        firing_at TEXT NOT NULL,
+        resolved_at TEXT,
+        close_reason TEXT CHECK (close_reason IS NULL OR close_reason IN ('recovered', 'rule_changed', 'disabled', 'deleted', 'health_resolved')),
+        acknowledged_at TEXT,
+        read_at TEXT,
+        rule_snapshot_json TEXT NOT NULL,
+        policy_snapshot_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((status = 'firing' AND resolved_at IS NULL) OR (status = 'resolved' AND resolved_at IS NOT NULL))
+      );
+
+      CREATE UNIQUE INDEX idx_monitoring_alert_incidents_active
+        ON monitoring_alert_incidents(source, COALESCE(rule_id, health_alert_id, ''), series_key)
+        WHERE status = 'firing';
+      CREATE INDEX idx_monitoring_alert_incidents_feed
+        ON monitoring_alert_incidents(status, firing_at DESC);
+      CREATE INDEX idx_monitoring_alert_incidents_unread
+        ON monitoring_alert_incidents(read_at, firing_at DESC);
+
+      CREATE TABLE monitoring_alert_instances (
+        rule_id TEXT NOT NULL REFERENCES monitoring_alert_rules(id) ON DELETE CASCADE,
+        series_key TEXT NOT NULL,
+        labels_json TEXT NOT NULL DEFAULT '{}',
+        state TEXT NOT NULL CHECK (state IN ('normal', 'pending', 'firing', 'recovering', 'resolved')),
+        state_since TEXT NOT NULL,
+        last_evaluated_at TEXT NOT NULL,
+        last_value REAL,
+        incident_id TEXT REFERENCES monitoring_alert_incidents(id) ON DELETE SET NULL,
+        error TEXT,
+        PRIMARY KEY (rule_id, series_key)
+      ) WITHOUT ROWID;
+
+      CREATE TABLE monitoring_alert_incident_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        incident_id TEXT NOT NULL REFERENCES monitoring_alert_incidents(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('fired', 'acknowledged', 'read', 'recovered', 'rule_changed', 'disabled', 'deleted', 'silenced', 'delivery_succeeded', 'delivery_failed')),
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_monitoring_alert_incident_events_incident
+        ON monitoring_alert_incident_events(incident_id, created_at, id);
+
+      CREATE TABLE monitoring_alert_silences (
+        id TEXT PRIMARY KEY,
+        rule_id TEXT NOT NULL REFERENCES monitoring_alert_rules(id) ON DELETE CASCADE,
+        series_key TEXT,
+        starts_at TEXT NOT NULL,
+        ends_at TEXT NOT NULL,
+        reason TEXT NOT NULL CHECK (length(trim(reason)) BETWEEN 1 AND 240),
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK (ends_at > starts_at)
+      );
+
+      CREATE INDEX idx_monitoring_alert_silences_active
+        ON monitoring_alert_silences(rule_id, series_key, starts_at, ends_at);
+
+      CREATE TABLE monitoring_alert_deliveries (
+        id TEXT PRIMARY KEY,
+        incident_id TEXT REFERENCES monitoring_alert_incidents(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('firing', 'reminder', 'resolved', 'test')),
+        stage_ordinal INTEGER,
+        repeat_ordinal INTEGER,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        message_id TEXT NOT NULL UNIQUE,
+        recipients_json TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        body_text TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'sending', 'retrying', 'succeeded', 'failed', 'cancelled')),
+        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count BETWEEN 0 AND 12),
+        due_at TEXT NOT NULL,
+        sent_at TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_monitoring_alert_deliveries_claim
+        ON monitoring_alert_deliveries(status, due_at, created_at);
+      CREATE INDEX idx_monitoring_alert_deliveries_incident
+        ON monitoring_alert_deliveries(incident_id, status, created_at);
+
+      CREATE TABLE monitoring_alert_delivery_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        delivery_id TEXT NOT NULL REFERENCES monitoring_alert_deliveries(id) ON DELETE CASCADE,
+        attempt INTEGER NOT NULL CHECK (attempt BETWEEN 1 AND 12),
+        status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed')),
+        error TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT NOT NULL,
+        UNIQUE (delivery_id, attempt)
+      );
+
+      CREATE INDEX idx_monitoring_alert_delivery_attempts_finished
+        ON monitoring_alert_delivery_attempts(finished_at);
+
+      CREATE TABLE monitoring_alerter_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        status TEXT NOT NULL CHECK (status IN ('starting', 'ready', 'degraded')),
+        last_evaluation_at TEXT,
+        last_delivery_at TEXT,
+        pending_deliveries INTEGER NOT NULL DEFAULT 0 CHECK (pending_deliveries >= 0),
+        health_initialized INTEGER NOT NULL DEFAULT 0 CHECK (health_initialized IN (0, 1)),
+        error TEXT,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT INTO monitoring_alerter_state(id, status, pending_deliveries, updated_at)
+      VALUES (1, 'starting', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+      INSERT OR IGNORE INTO system_settings(key, value_json, updated_at)
+      VALUES (
+        'monitoring_smtp',
+        '{"host":"","port":587,"security":"starttls","username":"","password":"","from":"","enabled":false}',
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      );
+      INSERT OR IGNORE INTO system_settings(key, value_json, updated_at)
+      VALUES (
+        'monitoring_health_routing',
+        '{"warningPolicyId":null,"criticalPolicyId":null}',
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      );
+    `
+  },
+  {
+    id: "029_monitoring_silence_cancellation",
+    sql: `
+      ALTER TABLE monitoring_alert_silences ADD COLUMN cancelled_at TEXT;
+      CREATE INDEX idx_monitoring_alert_silences_effective
+        ON monitoring_alert_silences(cancelled_at, rule_id, series_key, starts_at, ends_at);
+    `
+  },
+  {
+    id: "030_monitoring_rule_evaluation_status",
+    sql: `
+      ALTER TABLE monitoring_alert_rules ADD COLUMN evaluation_error TEXT;
+      ALTER TABLE monitoring_alert_rules ADD COLUMN last_evaluated_at TEXT;
+    `
+  },
+  {
+    id: "031_monitoring_unsilenced_event",
+    sql: `
+      CREATE TABLE monitoring_alert_incident_events_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        incident_id TEXT NOT NULL REFERENCES monitoring_alert_incidents(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('fired', 'acknowledged', 'read', 'recovered', 'rule_changed', 'disabled', 'deleted', 'silenced', 'unsilenced', 'delivery_succeeded', 'delivery_failed')),
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+
+      INSERT INTO monitoring_alert_incident_events_v2(id, incident_id, type, details_json, created_at)
+      SELECT id, incident_id, type, details_json, created_at
+      FROM monitoring_alert_incident_events;
+
+      DROP TABLE monitoring_alert_incident_events;
+      ALTER TABLE monitoring_alert_incident_events_v2 RENAME TO monitoring_alert_incident_events;
+
+      CREATE INDEX idx_monitoring_alert_incident_events_incident
+        ON monitoring_alert_incident_events(incident_id, created_at, id);
+    `
   }
 ];
