@@ -382,99 +382,101 @@ export function LocalTerminalPanel({
         </PanelHeaderActions>}
       />
 
-      <div className="workspace-terminal-header">
-        {initialLoading ? (
-          <div className="workspace-terminal-tabs-skeleton" aria-hidden="true">
-            <SkeletonBlock className="workspace-terminal-tab-skeleton" />
-            <SkeletonBlock className="workspace-terminal-tab-skeleton is-short" />
-            <SkeletonBlock className="workspace-terminal-new-tab-skeleton" />
-          </div>
-        ) : tabState ? (
-          <TerminalTabBar
-            tabs={tabs}
-            activeTabId={tabState.activeTabId}
-            maxSessions={tabState.maxSessions}
-            createDisabled={Boolean(pendingAction) || atLocalLimit}
-            onSelect={(tabId) => void selectTab(tabId)}
-            onCreate={() => void createTab()}
-            onRename={openRenameDialog}
-          />
-        ) : (
-          <div className="workspace-terminal-tabs-placeholder" aria-hidden="true" />
-        )}
-      </div>
+      <div className="workspace-terminal-frame">
+        <div className="workspace-terminal-header">
+          {initialLoading ? (
+            <div className="workspace-terminal-tabs-skeleton" aria-hidden="true">
+              <SkeletonBlock className="workspace-terminal-tab-skeleton" />
+              <SkeletonBlock className="workspace-terminal-tab-skeleton is-short" />
+              <SkeletonBlock className="workspace-terminal-new-tab-skeleton" />
+            </div>
+          ) : tabState ? (
+            <TerminalTabBar
+              tabs={tabs}
+              activeTabId={tabState.activeTabId}
+              maxSessions={tabState.maxSessions}
+              createDisabled={Boolean(pendingAction) || atLocalLimit}
+              onSelect={(tabId) => void selectTab(tabId)}
+              onCreate={() => void createTab()}
+              onRename={openRenameDialog}
+            />
+          ) : (
+            <div className="workspace-terminal-tabs-placeholder" aria-hidden="true" />
+          )}
+        </div>
 
-      <div className="workspace-terminal-stage">
-        {initialLoading ? <span className="visually-hidden" role="status">{t("common.states.loading")}</span> : null}
-        {!rootId ? (
-          <TerminalEmptyState title={t("workspace.terminal.noRoot")} />
-        ) : initialLoading ? (
-          <div className="workspace-terminal-skeleton" aria-hidden="true">
-            <SkeletonBlock width="38%" />
-            <SkeletonBlock width="64%" />
-            <SkeletonBlock width="52%" />
-          </div>
-        ) : currentLoadError && !tabState ? (
-          <TerminalEmptyState
-            title={t("workspace.terminal.loadFailed")}
-            detail={currentLoadError}
-            actionLabel={t("workspace.terminal.retry")}
-            onAction={() => void refreshTabs(rootId, true)}
-          />
-        ) : tabState && tabs.length === 0 ? (
-          <TerminalEmptyState
-            title={t("workspace.terminal.emptyTitle")}
-            detail={t("workspace.terminal.emptyBody")}
-            actionLabel={t("workspace.terminal.newTab")}
-            onAction={() => void createTab()}
-            disabled={Boolean(pendingAction)}
-          />
-        ) : null}
+        <div className="workspace-terminal-stage">
+          {initialLoading ? <span className="visually-hidden" role="status">{t("common.states.loading")}</span> : null}
+          {!rootId ? (
+            <TerminalEmptyState title={t("workspace.terminal.noRoot")} />
+          ) : initialLoading ? (
+            <div className="workspace-terminal-skeleton" aria-hidden="true">
+              <SkeletonBlock width="38%" />
+              <SkeletonBlock width="64%" />
+              <SkeletonBlock width="52%" />
+            </div>
+          ) : currentLoadError && !tabState ? (
+            <TerminalEmptyState
+              title={t("workspace.terminal.loadFailed")}
+              detail={currentLoadError}
+              actionLabel={t("workspace.terminal.retry")}
+              onAction={() => void refreshTabs(rootId, true)}
+            />
+          ) : tabState && tabs.length === 0 ? (
+            <TerminalEmptyState
+              title={t("workspace.terminal.emptyTitle")}
+              detail={t("workspace.terminal.emptyBody")}
+              actionLabel={t("workspace.terminal.newTab")}
+              onAction={() => void createTab()}
+              disabled={Boolean(pendingAction)}
+            />
+          ) : null}
 
-        {visibleTabs.map((tab) => (
-          <TerminalSessionView
-            key={tab.id}
-            tab={tab}
-            rootId={tab.rootId}
-            label={terminalTabLabel(tab, t)}
-            active={active && tab.id === tabState?.activeTabId}
-            codeFontSettings={codeFontSettings}
-            resolvedTheme={resolvedTheme}
-            connectionVersion={connectionVersions[tab.id] ?? 0}
-            connectionError={String(t("workspace.terminal.connectionError"))}
-            disconnectedError={String(t("workspace.terminal.disconnectedError"))}
-            onStateChange={updateViewState}
-          />
-        ))}
+          {visibleTabs.map((tab) => (
+            <TerminalSessionView
+              key={tab.id}
+              tab={tab}
+              rootId={tab.rootId}
+              label={terminalTabLabel(tab, t)}
+              active={active && tab.id === tabState?.activeTabId}
+              codeFontSettings={codeFontSettings}
+              resolvedTheme={resolvedTheme}
+              connectionVersion={connectionVersions[tab.id] ?? 0}
+              connectionError={String(t("workspace.terminal.connectionError"))}
+              disconnectedError={String(t("workspace.terminal.disconnectedError"))}
+              onStateChange={updateViewState}
+            />
+          ))}
 
-        {activeTab && activeViewState?.status === "takenOver" ? (
-          <div className="workspace-terminal-notice" role="status">
-            <strong>{t("workspace.terminal.takenOverTitle")}</strong>
-            <span>{t("workspace.terminal.takenOverBody")}</span>
-            <button type="button" className="secondary-button" onClick={() => reconnect(activeTab.id)}>
-              <RefreshCw aria-hidden="true" size={14} />
-              <span>{t("workspace.terminal.takeOver")}</span>
-            </button>
-          </div>
-        ) : activeTab && activeViewState?.status === "exited" ? (
-          <div className="workspace-terminal-notice" role="status">
-            <strong>{t("workspace.terminal.exitedTitle")}</strong>
-            <span>{t("workspace.terminal.exitedBody")}</span>
-            <button type="button" className="secondary-button" onClick={() => void restartTab(activeTab.id)} disabled={Boolean(pendingAction)}>
-              <RefreshCw aria-hidden="true" size={14} />
-              <span>{t("workspace.terminal.restart")}</span>
-            </button>
-          </div>
-        ) : null}
+          {activeTab && activeViewState?.status === "takenOver" ? (
+            <div className="workspace-terminal-notice" role="status">
+              <strong>{t("workspace.terminal.takenOverTitle")}</strong>
+              <span>{t("workspace.terminal.takenOverBody")}</span>
+              <button type="button" className="secondary-button" onClick={() => reconnect(activeTab.id)}>
+                <RefreshCw aria-hidden="true" size={14} />
+                <span>{t("workspace.terminal.takeOver")}</span>
+              </button>
+            </div>
+          ) : activeTab && activeViewState?.status === "exited" ? (
+            <div className="workspace-terminal-notice" role="status">
+              <strong>{t("workspace.terminal.exitedTitle")}</strong>
+              <span>{t("workspace.terminal.exitedBody")}</span>
+              <button type="button" className="secondary-button" onClick={() => void restartTab(activeTab.id)} disabled={Boolean(pendingAction)}>
+                <RefreshCw aria-hidden="true" size={14} />
+                <span>{t("workspace.terminal.restart")}</span>
+              </button>
+            </div>
+          ) : null}
 
-        {actionError ? (
-          <div className="workspace-terminal-error" role="alert">
-            <span>{actionError}</span>
-            <button type="button" onClick={() => setActionError(null)} aria-label={t("common.actions.close")}>
-              <X aria-hidden="true" size={14} />
-            </button>
-          </div>
-        ) : null}
+          {actionError ? (
+            <div className="workspace-terminal-error" role="alert">
+              <span>{actionError}</span>
+              <button type="button" onClick={() => setActionError(null)} aria-label={t("common.actions.close")}>
+                <X aria-hidden="true" size={14} />
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {renameCandidate ? (

@@ -56,6 +56,7 @@ describe("LocalTerminalPanel", () => {
     }));
 
     expect(html).toContain('class="management-header workspace-terminal-overview"');
+    expect(html).toContain('class="workspace-terminal-frame"');
     expect(html).toContain("<h2>Terminal</h2>");
     expect(html).toContain("Direct shell access to the selected NAS root.");
     expect(html).toContain('aria-label="Terminal actions"');
