@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import path from "node:path";
@@ -29,6 +30,11 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
       origin: config.api.allowedOrigins
     });
   }
+
+  await server.register(rateLimit, {
+    max: 240,
+    timeWindow: "1 minute"
+  });
 
   registerErrorHandler(server);
   await server.register(fastifyWebsocket);
