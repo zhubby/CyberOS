@@ -5,6 +5,7 @@ const INTERNAL_PACKAGE_PREFIX = "@zos/";
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 const PRODUCT_CARGO_PACKAGES = [
   { manifestPath: "apps/downloader/Cargo.toml", packageName: "zos-downloader" },
+  { manifestPath: "apps/host-accessd/Cargo.toml", packageName: "zos-host-accessd" },
   { manifestPath: "apps/hostd/Cargo.toml", packageName: "zos-hostd" },
   { manifestPath: "apps/indexer/Cargo.toml", packageName: "zos-indexer" },
   { manifestPath: "apps/monitor/Cargo.toml", packageName: "zos-monitor" },

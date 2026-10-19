@@ -105,6 +105,7 @@ describe("release versioning", () => {
 
 const PRODUCT_CARGO_PACKAGES = [
   ["apps/downloader/Cargo.toml", "zos-downloader"],
+  ["apps/host-accessd/Cargo.toml", "zos-host-accessd"],
   ["apps/hostd/Cargo.toml", "zos-hostd"],
   ["apps/indexer/Cargo.toml", "zos-indexer"],
   ["apps/monitor/Cargo.toml", "zos-monitor"],
@@ -117,6 +118,7 @@ async function writeFixture(root) {
   await Promise.all([
     mkdir(path.join(root, "apps/api"), { recursive: true }),
     mkdir(path.join(root, "apps/downloader"), { recursive: true }),
+    mkdir(path.join(root, "apps/host-accessd"), { recursive: true }),
     mkdir(path.join(root, "apps/hostd"), { recursive: true }),
     mkdir(path.join(root, "apps/indexer"), { recursive: true }),
     mkdir(path.join(root, "apps/monitor"), { recursive: true }),
