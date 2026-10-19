@@ -204,6 +204,7 @@ describe("native packaging artifacts", () => {
     expect(hostAccessUnit).toContain("User=zos");
     expect(hostAccessUnit).toContain("SupplementaryGroups=docker");
     expect(hostAccessUnit).toContain("ZOS_HOST_ACCESS_DOCKER_COMPATIBLE=0");
+    expect(hostAccessUnit).toContain("RuntimeDirectoryPreserve=restart");
     expect(hostAccessUnit).toContain("NoNewPrivileges=yes");
     expect(install).toContain("packaging/scripts/zos-nginx.sh usr/lib/zos/scripts/");
     expect(install).toContain("packaging/scripts/zos-configure-locale.sh usr/lib/zos/scripts/");

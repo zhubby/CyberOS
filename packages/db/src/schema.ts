@@ -34,6 +34,7 @@ export function runMigrations(db: Database.Database): void {
     // was waiting for the write lock. Re-check under the transaction lock so
     // concurrent startups never replay ALTER TABLE statements.
     if (hasMigration.get(migration.id)) return;
+    migration.prepare?.(db);
     db.exec(migration.sql);
     insertMigration.run(migration.id, new Date().toISOString());
   });

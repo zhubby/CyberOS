@@ -35,15 +35,15 @@ Host Access 为 Compose App 和单容器提供同一套宿主观测授权。它�
 
 ## 审批与状态
 
-没有 Host Access 的旧请求保持即时创建行为。有 Host Access 的单容器请求先拉取镜像并解析不可变 image ID，再建立 15 分钟私有 draft 和审批；环境值、宿主来源和审批指纹不进入公开 proposal。批准时重新检查镜像、策略、NAS 身份、目标和完整指纹。漂移返回 `409`，依赖或代理不可用返回 `503`。
+没有 Host Access 的旧请求保持即时创建行为。有 Host Access 的单容器请求先拉取镜像并解析不可变 image ID，再建立 15 分钟私有 draft 和审批；环境值、宿主来源和审批指纹不进入公开 proposal。批准时重新检查镜像、策略、NAS 身份、目标和完整指纹。Compose 的最后一个受管 override 会把获授权 service 的 `image` 固定为已审批的 image ID，避免校验后仍从可变标签启动。漂移返回 `409`，依赖或代理不可用返回 `503`。
 
-Compose 沿用 `revision`、`deployedRevision` 和 `needsDeploy`。授权变化只能执行全项目 `up --force-recreate`，不能只应用一个 service。界面只显示“待应用”“已生效”“需修复”；展开详情和 coverage report 才显示 service 差异、降级原因与永久不支持项。单容器授权不可原地修改，撤销需删除并重新创建容器。
+Compose 沿用 `revision`、`deployedRevision` 和 `needsDeploy`。授权变化只能执行全项目 `up --force-recreate`，不能只应用一个 service。界面只显示“待应用”“已生效”“需修复”；运行态会 inspect Compose 容器并核对策略版本、授权摘要、完整指纹、实际 image ID 和代理 socket。旧运行态仍完整匹配时显示“待应用”，部分重建、标签漂移或依赖不确定时显示“需修复”。展开详情和 coverage report 才显示 service 差异、降级原因与永久不支持项。单容器授权不可原地修改，撤销需删除并重新创建容器。
 
-API 启动时会清理过期 draft，并从运行中、由 ZOS 管理且策略版本匹配的容器标签恢复代理 grant 目录。标签缺少 fingerprint、策略过期或不是 `io.zos.managed=true` 时不会触发恢复。
+API 启动时会清理过期 draft，运行期间也会每分钟清理一次，并从运行中、由 ZOS 管理且策略版本匹配的容器标签恢复代理 grant 目录。标签缺少 fingerprint、策略过期或不是 `io.zos.managed=true` 时不会触发恢复。
 
 ## 代理启用与验收
 
-`zos-host-accessd.service` 以非 root `zos` 用户运行，只加入 `docker` 组，通过 Unix peer credential 接受 API 控制请求。容器挂载授权目录而不是原始 Docker socket inode；daemon 重启后可以在原目录重建代理 socket。代理只允许 `_ping`、version/info、容器与网络 list/inspect，重建响应 JSON 并删除环境、命令、敏感 labels 和宿主 mount source，同时限制方法、查询参数、并发、响应大小与超时。
+`zos-host-accessd.service` 以非 root `zos` 用户运行，只加入 `docker` 组，通过 Unix peer credential 接受 API 控制请求。容器挂载授权目录而不是原始 Docker socket inode；systemd 在服务 restart 期间保留该目录，daemon 启动时只扫描两层哈希授权目录并重建其中已有的代理 socket。代理只允许 `_ping`、version/info、容器与网络 list/inspect，重建响应 JSON 并删除环境、命令、敏感 labels 和宿主 mount source，同时限制方法、查询参数、并发、响应大小与超时。
 
 包内 unit 默认设置 `ZOS_HOST_ACCESS_DOCKER_COMPATIBLE=0`。只有在目标机上用真实采集器通过 allow/deny、字段脱敏、重连和负载测试后，才能用 systemd drop-in 设置为 `1` 并重启服务：
 

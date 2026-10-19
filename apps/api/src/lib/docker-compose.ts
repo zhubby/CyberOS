@@ -49,6 +49,7 @@ import {
   redactDockerRegistrySecrets
 } from "./docker-registry.js";
 import {
+  DOCKER_HOST_ACCESS_LABEL_PREFIX,
   DOCKER_HOST_ACCESS_OVERRIDE_FILE,
   DockerHostAccessPolicy,
   DockerHostAccessValidationError,
@@ -71,7 +72,11 @@ const MAX_ENVIRONMENT_BYTES = 256 * 1024;
 const MAX_ENVIRONMENT_ENTRIES = 256;
 
 export class DockerComposeValidationError extends Error {
-  constructor(message: string, readonly issues: DockerHostAccessValidationIssue[] = []) {
+  constructor(
+    message: string,
+    readonly issues: DockerHostAccessValidationIssue[] = [],
+    readonly statusCode: 400 | 503 = 400
+  ) {
     super(message);
     this.name = "DockerComposeValidationError";
   }
@@ -140,7 +145,9 @@ export class DockerComposeService implements DockerComposeRuntime {
   ) {}
 
   async listProjects(containers: DockerContainerSummary[] | null): Promise<DockerComposeAppSummary[]> {
-    return listDockerComposeAppSummaries(this.db).map((app) => publicSummary(app, containers, this.appsRoot));
+    return listDockerComposeAppSummaries(this.db).map((app) => (
+      publicSummary(app, containers, this.appsRoot, this.hostAccessPolicy)
+    ));
   }
 
   async getProject(
@@ -148,7 +155,7 @@ export class DockerComposeService implements DockerComposeRuntime {
     containers: DockerContainerSummary[] | null = null
   ): Promise<DockerComposeAppSummary | null> {
     const app = getDockerComposeAppSummary(this.db, projectId);
-    return app ? publicSummary(app, containers, this.appsRoot) : null;
+    return app ? publicSummary(app, containers, this.appsRoot, this.hostAccessPolicy) : null;
   }
 
   async getApp(
@@ -896,7 +903,7 @@ async function materializeApp(
   }
   await atomicWrite(
     path.join(appDirectory, DOCKER_HOST_ACCESS_OVERRIDE_FILE),
-    renderHostAccessOverride(manifests),
+    renderHostAccessOverride(manifests, imageDigests),
     0o640
   );
 }
@@ -943,20 +950,15 @@ async function atomicWrite(filePath: string, content: string, mode: number): Pro
 function publicSummary(
   app: DockerComposeAppSummaryRecord,
   containers: DockerContainerSummary[] | null,
-  appsRoot: string
+  appsRoot: string,
+  hostAccessPolicy: DockerHostAccessPolicy
 ): DockerComposeAppSummary {
   const projectContainers = containers?.filter((container) => container.composeProject === app.projectKey) ?? null;
   const runningCount = projectContainers?.filter((container) => container.state === "running").length ?? null;
   const needsDeploy = app.deployedRevision !== app.revision;
-  const hostAccessServices = new Set([...app.hostAccess, ...app.deployedHostAccess].map((entry) => entry.service));
-  const runtimeServices = new Set(projectContainers?.map((container) => container.composeService).filter((service): service is string => Boolean(service)) ?? []);
   const hostAccessState = !app.hostAccess.length && !app.deployedHostAccess.length
     ? undefined
-    : needsDeploy
-      ? "pending_apply" as const
-      : projectContainers && [...hostAccessServices].every((service) => runtimeServices.has(service))
-        ? "active" as const
-        : "needs_repair" as const;
+    : composeHostAccessState(app, projectContainers, hostAccessPolicy);
   return {
     id: app.id,
     name: app.name,
@@ -977,13 +979,87 @@ function publicSummary(
   };
 }
 
+function composeHostAccessState(
+  app: DockerComposeAppSummaryRecord,
+  projectContainers: DockerContainerSummary[] | null,
+  policy: DockerHostAccessPolicy
+): NonNullable<DockerComposeAppSummary["hostAccessState"]> {
+  const needsDeploy = app.deployedRevision !== app.revision;
+  if (!projectContainers) return needsDeploy ? "pending_apply" : "needs_repair";
+  if (needsDeploy) {
+    const deployedMatches = runtimeMatchesHostAccess(
+      app,
+      projectContainers,
+      app.deployedHostAccess,
+      app.deployedRevision,
+      policy
+    );
+    return deployedMatches ? "pending_apply" : "needs_repair";
+  }
+  return runtimeMatchesHostAccess(app, projectContainers, app.hostAccess, app.revision, policy)
+    ? "active"
+    : "needs_repair";
+}
+
+function runtimeMatchesHostAccess(
+  app: DockerComposeAppSummaryRecord,
+  projectContainers: DockerContainerSummary[],
+  hostAccess: DockerComposeAppSummaryRecord["hostAccess"],
+  revision: string | null,
+  policy: DockerHostAccessPolicy
+): boolean {
+  const runtimeContainers = projectContainers as Array<DockerContainerSummary & { labels?: Record<string, string> }>;
+  const hasManagedLabels = (container: (typeof runtimeContainers)[number]) => (
+    Object.keys(container.labels ?? {}).some((key) => key.startsWith(DOCKER_HOST_ACCESS_LABEL_PREFIX))
+  );
+  if (!hostAccess.length) return runtimeContainers.every((container) => !hasManagedLabels(container));
+  if (!revision) return false;
+
+  const imageDigests: Record<string, string> = {};
+  for (const entry of hostAccess) {
+    const containers = runtimeContainers.filter((container) => container.composeService === entry.service);
+    const digests = new Set(containers.map((container) => container.imageId).filter((value): value is string => Boolean(value)));
+    if (!containers.length || digests.size !== 1 || containers.some((container) => !container.labels)) return false;
+    imageDigests[entry.service] = [...digests][0]!;
+  }
+
+  let manifests: DockerHostAccessManifest[];
+  try {
+    manifests = policy.resolveCompose({
+      hostAccess,
+      services: [...new Set([...app.services, ...hostAccess.map((entry) => entry.service)])],
+      projectKey: app.projectKey,
+      revision,
+      imageDigests
+    }).manifests;
+  } catch {
+    return false;
+  }
+  const expected = new Map(manifests.map((manifest) => [manifest.service!, manifest]));
+  for (const [service, manifest] of expected) {
+    if (!policy.runtimeDependenciesAvailable(manifest, app.projectKey)) return false;
+    const containers = runtimeContainers.filter((container) => container.composeService === service);
+    if (!containers.every((container) => Object.entries(manifest.labels).every(
+      ([key, value]) => container.labels?.[key] === value
+    ))) return false;
+  }
+  return runtimeContainers.every((container) => {
+    if (!hasManagedLabels(container)) return true;
+    const manifest = container.composeService ? expected.get(container.composeService) : undefined;
+    if (!manifest) return false;
+    return Object.entries(manifest.labels).every(
+      ([key, value]) => container.labels?.[key] === value
+    );
+  });
+}
+
 function publicDetail(
   app: DockerComposeAppRecord,
   containers: DockerContainerSummary[] | null,
   appsRoot: string,
   hostAccessPolicy: DockerHostAccessPolicy
 ): DockerComposeAppDetail {
-  const summary = publicSummary(app, containers, appsRoot);
+  const summary = publicSummary(app, containers, appsRoot, hostAccessPolicy);
   const grants = app.hostAccess.flatMap((entry) => entry.grants);
   return {
     ...summary,
@@ -1048,20 +1124,28 @@ function serviceMountTargets(services: Record<string, unknown>): Record<string, 
   }));
 }
 
-function renderHostAccessOverride(manifests: DockerHostAccessManifest[]): string {
-  const services = Object.fromEntries(manifests.map((manifest) => [manifest.service!, {
-    volumes: manifest.mounts.map((mount) => ({
-      type: "bind",
-      source: mount.source,
-      target: mount.target,
-      read_only: true,
-      bind: { create_host_path: false }
-    })),
-    environment: manifest.environment,
-    cap_drop: manifest.capDrop,
-    security_opt: manifest.securityOpt,
-    labels: manifest.labels
-  }]));
+function renderHostAccessOverride(
+  manifests: DockerHostAccessManifest[],
+  imageDigests: Array<{ service?: string; digest: string }> = []
+): string {
+  const digests = new Map(imageDigests.flatMap((entry) => entry.service ? [[entry.service, entry.digest]] : []));
+  const services = Object.fromEntries(manifests.map((manifest) => {
+    const image = digests.get(manifest.service!);
+    return [manifest.service!, {
+      ...(image ? { image } : {}),
+      volumes: manifest.mounts.map((mount) => ({
+        type: "bind",
+        source: mount.source,
+        target: mount.target,
+        read_only: true,
+        bind: { create_host_path: false }
+      })),
+      environment: manifest.environment,
+      cap_drop: manifest.capDrop,
+      security_opt: manifest.securityOpt,
+      labels: manifest.labels
+    }];
+  }));
   return stringify({ services }, { lineWidth: 0 });
 }
 
@@ -1105,7 +1189,10 @@ function validateFinalHostAccessConfig(output: string, manifests: DockerHostAcce
 
 function hostAccessComposeError(error: unknown): DockerComposeValidationError {
   if (error instanceof DockerHostAccessValidationError) {
-    return new DockerComposeValidationError(error.message, error.issues);
+    const unavailable = error.issues.some((issue) => (
+      issue.code === "capability_unavailable" || issue.code === "root_unavailable"
+    ));
+    return new DockerComposeValidationError(error.message, error.issues, unavailable ? 503 : 400);
   }
   if (error instanceof DockerComposeValidationError) return error;
   return new DockerComposeValidationError("Docker Host Access configuration could not be resolved");

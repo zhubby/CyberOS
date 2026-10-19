@@ -348,6 +348,29 @@ export class DockerHostAccessPolicy {
     };
   }
 
+  runtimeDependenciesAvailable(manifest: DockerHostAccessManifest, scopeId: string): boolean {
+    const directory = path.join(
+      this.runtimeRoot,
+      "grants",
+      safeSegment(scopeId),
+      safeSegment(manifest.service ?? "container")
+    );
+    return manifest.grants.every((grant) => {
+      const socket = grant.capability === "docker_metadata"
+        ? "docker.sock"
+        : grant.capability === "systemd_status"
+          ? "systemd.sock"
+          : null;
+      if (!socket) return true;
+      try {
+        const metadata = lstatSync(path.join(directory, socket));
+        return metadata.isSocket() && !metadata.isSymbolicLink();
+      } catch {
+        return false;
+      }
+    });
+  }
+
   private normalizeGrants(
     value: unknown,
     catalog: DockerHostAccessCatalog,

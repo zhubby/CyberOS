@@ -2,6 +2,7 @@ import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile }
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parse } from "yaml";
 import {
   createDockerComposeApp,
   createDockerOperationApproval,
@@ -12,11 +13,12 @@ import {
   listDockerComposeApps,
   linkDockerComposeHostAccessDraft,
   openZosDb,
+  updateDockerComposeApp,
   upsertRootReadiness,
   type DockerRegistryCredentialRecord,
   type ZosDatabase
 } from "@zos/db";
-import type { DockerConfig } from "@zos/shared";
+import type { DockerConfig, DockerContainerDetails } from "@zos/shared";
 import { DockerComposeService } from "./docker-compose.js";
 import type { DockerEngineRuntime } from "./docker-client.js";
 import { DockerHostAccessPolicy } from "./docker-host-access.js";
@@ -313,9 +315,62 @@ describe("DockerComposeService", () => {
       "-d",
       "--force-recreate"
     ]));
+    const appliedOverride = parse(
+      await readFile(path.join(appsRoot, "collector", "zos-host-access.override.yaml"), "utf8")
+    ) as { services: { collector: { image: string; labels: Record<string, string> } } };
+    expect(appliedOverride.services.collector.image).toBe("sha256:collector");
     expect(getDockerComposeApp(db, created.id)?.deployedHostAccess).toEqual([
       expect.objectContaining({ service: "collector" })
     ]);
+
+    const runtimeContainer: DockerContainerDetails = {
+      id: "container-1",
+      shortId: "container-1",
+      name: "collector-1",
+      image: "collector:latest",
+      imageId: "sha256:collector",
+      state: "running",
+      status: "running",
+      ports: [],
+      composeProject: "collector",
+      composeService: "collector",
+      cpuPercent: null,
+      memoryUsageBytes: null,
+      memoryLimitBytes: null,
+      memoryPercent: null,
+      createdAt: null,
+      command: null,
+      entrypoint: [],
+      environment: [],
+      mounts: [],
+      networks: [],
+      restartPolicy: null,
+      hostname: null,
+      workingDir: null,
+      labels: appliedOverride.services.collector.labels
+    };
+    expect(await service.getApp(created.id, [runtimeContainer])).toMatchObject({ hostAccessState: "active" });
+
+    const deployed = getDockerComposeApp(db, created.id)!;
+    const updated = updateDockerComposeApp(db, created.id, deployed.revision, {
+      name: deployed.name,
+      composeContent: deployed.composeContent,
+      environment: [],
+      services: deployed.services,
+      warnings: deployed.warnings,
+      risk: deployed.risk,
+      hostAccess: deployed.hostAccess
+    });
+    expect(await service.getApp(created.id, [runtimeContainer])).toMatchObject({ hostAccessState: "pending_apply" });
+    const driftedContainer: DockerContainerDetails = {
+      ...runtimeContainer,
+      labels: {
+        ...runtimeContainer.labels,
+        "io.zos.host-access.fingerprint": "drifted"
+      }
+    };
+    expect(await service.getApp(created.id, [driftedContainer])).toMatchObject({ hostAccessState: "needs_repair" });
+    expect(updated?.revision).not.toBe(deployed.revision);
   });
 
   it("rejects conflicting raw Compose privileges for a granted service", async () => {
@@ -333,6 +388,21 @@ describe("DockerComposeService", () => {
     })).rejects.toMatchObject({
       issues: [expect.objectContaining({ code: "conflicting_compose_field", field: "privileged" })]
     });
+  });
+
+  it("classifies unavailable Host Access dependencies as service unavailable", async () => {
+    const service = new DockerComposeService(
+      dockerConfig(),
+      db,
+      appsRoot,
+      new DockerHostAccessPolicy(db, { platform: "darwin" })
+    );
+    await expect(service.validateApp({
+      projectKey: "unavailable-access",
+      composeContent: "services:\n  collector:\n    image: alpine\n",
+      environment: [],
+      hostAccess: [{ service: "collector", grants: [{ capability: "host_processes" }] }]
+    })).rejects.toMatchObject({ statusCode: 503 });
   });
 
   it("restores the database revision when publishing an update fails", async () => {

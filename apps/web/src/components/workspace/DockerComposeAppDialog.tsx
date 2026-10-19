@@ -255,6 +255,7 @@ export function DockerComposeAppDialog({
     ? hostAccessService
     : hostAccessServices[0] ?? "";
   const activeHostAccessGrants = form.hostAccess.find((entry) => entry.service === activeHostAccessService)?.grants ?? [];
+  const hostAccessCoverage = validationResult?.hostAccessCoverage ?? detail?.hostAccessCoverage;
   const hasContainers = (detail?.containerCount ?? app?.containerCount ?? 0) > 0;
   const disableSave = Boolean(formError) || busy || composeUnavailable || conflicted;
   const disableSubmit = disableSave || hostAccessBlocked;
@@ -421,6 +422,7 @@ export function DockerComposeAppDialog({
                   {activeHostAccessService ? (
                     <HostAccessPicker
                       grants={activeHostAccessGrants}
+                      {...(hostAccessCoverage ? { coverage: hostAccessCoverage } : {})}
                       onChange={(grants) => updateForm("hostAccess", [
                         ...form.hostAccess.filter((entry) => entry.service !== activeHostAccessService),
                         ...(grants.length ? [{ service: activeHostAccessService, grants }] : [])

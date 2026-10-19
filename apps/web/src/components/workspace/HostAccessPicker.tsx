@@ -5,6 +5,8 @@ import type {
   DockerHostAccessCapability,
   DockerHostAccessCapabilityId,
   DockerHostAccessCoverageId,
+  DockerHostAccessCoverageItem,
+  DockerHostAccessCoverageReport,
   DockerHostAccessGrant
 } from "@zos/shared";
 import { getDockerHostAccessCatalog, type DockerHostAccessCatalog } from "../../api.js";
@@ -13,6 +15,7 @@ interface HostAccessPickerProps {
   grants: DockerHostAccessGrant[];
   onChange: (grants: DockerHostAccessGrant[]) => void;
   onBlockingChange?: (blocked: boolean) => void;
+  coverage?: DockerHostAccessCoverageReport;
   disabled?: boolean;
 }
 
@@ -37,6 +40,7 @@ export function HostAccessPicker({
   grants,
   onChange,
   onBlockingChange,
+  coverage,
   disabled = false
 }: HostAccessPickerProps) {
   const { t } = useTranslation();
@@ -62,21 +66,12 @@ export function HostAccessPicker({
   }, []);
 
   const selectedCapabilities = useMemo(() => new Set(grants.map((grant) => grant.capability)), [grants]);
-  const degradedSelected = useMemo(() => grants.some((grant) => (
-    catalog?.capabilities.find((capability) => capability.id === grant.capability)?.availability.status === "degraded"
-  )), [catalog, grants]);
-  const unavailableSelected = useMemo(() => grants.some((grant) => {
-    const capability = catalog?.capabilities.find((entry) => entry.id === grant.capability);
-    if (capability?.availability.status === "unavailable") return true;
-    return grant.capability === "nas_capacity" &&
-      catalog?.nasRoots.find((root) => root.rootId === grant.rootId)?.availability.status === "unavailable";
-  }), [catalog, grants]);
-  const invalidTargetSelected = useMemo(() => grants.some((grant) => (
-    grant.target !== undefined && !validContainerTarget(grant.target)
-  )), [grants]);
-  const blocked = grants.length > 0 && Boolean(
-    !catalog || loadError || unavailableSelected || invalidTargetSelected || (degradedSelected && !degradedAcknowledged)
+  const degradedSelected = useMemo(() => hasDegradedGrant(grants, catalog), [catalog, grants]);
+  const coverageItems = useMemo(
+    () => coverage?.items ?? pickerCoverage(grants, catalog),
+    [catalog, coverage, grants]
   );
+  const blocked = hostAccessPickerBlocked({ grants, catalog, loadError, degradedAcknowledged });
 
   useEffect(() => {
     onBlockingChange?.(blocked);
@@ -113,9 +108,10 @@ export function HostAccessPicker({
         const root = grant.capability === "nas_capacity" ? ` (${grant.rootId})` : "";
         return `${t("workspace.management.docker.hostAccess.states.requested")}: ${t(`workspace.management.docker.hostAccess.capabilities.${grant.capability}`)}${root}`;
       }),
-      ...PERMANENTLY_UNSUPPORTED.map((coverage) => (
-        `${t("workspace.management.docker.hostAccess.states.unsupported")}: ${t(`workspace.management.docker.hostAccess.coverage.${coverage}`)}`
-      ))
+      ...coverageItems.map((item) => {
+        const reasons = item.reasonCodes.map((reason) => t(`workspace.management.docker.hostAccess.reasons.${reason}`));
+        return `${t(`workspace.management.docker.hostAccess.states.${item.state}`)}: ${t(`workspace.management.docker.hostAccess.coverage.${item.coverage}`)}${reasons.length ? ` (${reasons.join("; ")})` : ""}`;
+      })
     ];
     await navigator.clipboard.writeText(lines.join("\n"));
     setCopied(true);
@@ -206,11 +202,8 @@ export function HostAccessPicker({
       ) : null}
 
       <div className="host-access-coverage" aria-label={t("workspace.management.docker.hostAccess.coverageTitle")}>
-        {catalog ? selectedCoverage(grants, catalog).map((coverage) => (
-          <span key={coverage} data-state="requested">{t(`workspace.management.docker.hostAccess.coverage.${coverage}`)}</span>
-        )) : null}
-        {PERMANENTLY_UNSUPPORTED.map((coverage) => (
-          <span key={coverage} data-state="unsupported">{t(`workspace.management.docker.hostAccess.coverage.${coverage}`)}</span>
+        {coverageItems.map((item) => (
+          <span key={item.coverage} data-state={item.state}>{t(`workspace.management.docker.hostAccess.coverage.${item.coverage}`)}</span>
         ))}
       </div>
       <span className="visually-hidden" role="status" aria-live="polite">
@@ -275,9 +268,40 @@ function CapabilityRow({
   );
 }
 
-function selectedCoverage(grants: DockerHostAccessGrant[], catalog: DockerHostAccessCatalog): DockerHostAccessCoverageId[] {
+function pickerCoverage(
+  grants: DockerHostAccessGrant[],
+  catalog: DockerHostAccessCatalog | null
+): DockerHostAccessCoverageItem[] {
   const selected = new Set(grants.map((grant) => grant.capability));
-  return [...new Set(catalog.capabilities.filter((capability) => selected.has(capability.id)).flatMap((capability) => capability.coverage))].sort();
+  const coverage = new Map<DockerHostAccessCoverageId, DockerHostAccessCapability[]>();
+  for (const capability of catalog?.capabilities ?? []) {
+    if (!selected.has(capability.id)) continue;
+    for (const item of capability.coverage) {
+      coverage.set(item, [...(coverage.get(item) ?? []), capability]);
+    }
+  }
+  const items: DockerHostAccessCoverageItem[] = [...coverage.entries()].map(([item, capabilities]) => {
+    const rootAvailability = grants
+      .filter((grant) => grant.capability === "nas_capacity")
+      .map((grant) => catalog?.nasRoots.find((root) => root.rootId === grant.rootId)?.availability)
+      .filter((availability) => availability !== undefined);
+    const availability = [
+      ...capabilities.map((capability) => capability.availability),
+      ...(item === "nas_capacity" ? rootAvailability : [])
+    ];
+    const unavailable = availability.find((entry) => entry.status === "unavailable");
+    const degraded = availability.find((entry) => entry.status === "degraded");
+    return {
+      coverage: item,
+      state: unavailable ? "unavailable" : degraded ? "degraded" : "requested",
+      capabilities: capabilities.map((capability) => capability.id).sort(),
+      reasonCodes: unavailable?.reasonCodes ?? degraded?.reasonCodes ?? []
+    };
+  });
+  for (const item of PERMANENTLY_UNSUPPORTED) {
+    items.push({ coverage: item, state: "unsupported", capabilities: [], reasonCodes: [] });
+  }
+  return items.sort((left, right) => left.coverage.localeCompare(right.coverage));
 }
 
 function grantIdentity(grant: DockerHostAccessGrant): string {
@@ -288,7 +312,42 @@ function compareGrants(left: DockerHostAccessGrant, right: DockerHostAccessGrant
   return grantIdentity(left).localeCompare(grantIdentity(right));
 }
 
-function validContainerTarget(value: string): boolean {
+export function hostAccessPickerBlocked({
+  grants,
+  catalog,
+  loadError,
+  degradedAcknowledged
+}: {
+  grants: DockerHostAccessGrant[];
+  catalog: DockerHostAccessCatalog | null;
+  loadError: boolean;
+  degradedAcknowledged: boolean;
+}): boolean {
+  if (!grants.length) return false;
+  if (!catalog || loadError) return true;
+  for (const grant of grants) {
+    if (grant.target !== undefined && !validContainerTarget(grant.target)) return true;
+    const capability = catalog.capabilities.find((entry) => entry.id === grant.capability);
+    if (!capability || capability.availability.status === "unavailable") return true;
+    if (grant.capability === "nas_capacity") {
+      const root = catalog.nasRoots.find((entry) => entry.rootId === grant.rootId);
+      if (!root || root.availability.status === "unavailable") return true;
+    }
+  }
+  return hasDegradedGrant(grants, catalog) && !degradedAcknowledged;
+}
+
+function hasDegradedGrant(grants: DockerHostAccessGrant[], catalog: DockerHostAccessCatalog | null): boolean {
+  if (!catalog) return false;
+  return grants.some((grant) => {
+    const capability = catalog.capabilities.find((entry) => entry.id === grant.capability);
+    if (capability?.availability.status === "degraded") return true;
+    return grant.capability === "nas_capacity" &&
+      catalog.nasRoots.find((root) => root.rootId === grant.rootId)?.availability.status === "degraded";
+  });
+}
+
+export function validContainerTarget(value: string): boolean {
   if (!value.startsWith("/") || value.includes("\0") || value === "/" || value.endsWith("/")) return false;
   return value.split("/").slice(1).every((segment) => Boolean(segment) && segment !== "." && segment !== "..");
 }

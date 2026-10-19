@@ -1651,8 +1651,67 @@ export const productionMigrations: Migration[] = [
     sql: `
       ALTER TABLE docker_apps
         ADD COLUMN host_access_json TEXT NOT NULL DEFAULT '[]';
-      ALTER TABLE docker_apps
-        ADD COLUMN deployed_host_access_json TEXT NOT NULL DEFAULT '[]';
+
+      CREATE TABLE docker_create_drafts (
+        id TEXT PRIMARY KEY,
+        revision TEXT NOT NULL,
+        input_json TEXT NOT NULL,
+        policy_version TEXT NOT NULL,
+        grant_summary_json TEXT NOT NULL DEFAULT '[]',
+        fingerprint TEXT NOT NULL,
+        image_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_docker_create_drafts_expires_at
+        ON docker_create_drafts(expires_at);
+    `
+  },
+  {
+    id: "033_docker_host_access_draft_links",
+    disableForeignKeys: true,
+    prepare: (db) => {
+      const columns = db.pragma("table_info(docker_apps)") as Array<{ name: string }>;
+      if (!columns.some((column) => column.name === "deployed_host_access_json")) {
+        db.exec("ALTER TABLE docker_apps ADD COLUMN deployed_host_access_json TEXT NOT NULL DEFAULT '[]'");
+      }
+    },
+    sql: `
+      UPDATE jobs
+      SET status = 'failed',
+          error = 'Docker Host Access draft invalidated by upgrade',
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE status = 'waiting_approval'
+        AND id IN (
+          SELECT job_id
+          FROM pending_approvals
+          WHERE kind = 'docker_operation'
+            AND status IN ('pending', 'approved')
+            AND json_type(proposal_json, '$[0].hostAccess') IS NOT NULL
+        );
+
+      UPDATE docker_operations
+      SET status = 'failed',
+          metadata_json = json_set(metadata_json, '$.invalidatedByUpgrade', 1),
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE status IN ('proposed', 'approved')
+        AND approval_id IN (
+          SELECT id
+          FROM pending_approvals
+          WHERE kind = 'docker_operation'
+            AND status IN ('pending', 'approved')
+            AND json_type(proposal_json, '$[0].hostAccess') IS NOT NULL
+        );
+
+      UPDATE pending_approvals
+      SET status = 'failed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE kind = 'docker_operation'
+        AND status IN ('pending', 'approved')
+        AND json_type(proposal_json, '$[0].hostAccess') IS NOT NULL;
+
+      DROP TABLE IF EXISTS docker_compose_host_access_drafts;
+      DROP TABLE docker_create_drafts;
 
       CREATE TABLE docker_create_drafts (
         id TEXT PRIMARY KEY,

@@ -73,6 +73,11 @@ async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let listener = UnixListener::bind(&control_path)?;
     fs::set_permissions(&control_path, std::fs::Permissions::from_mode(0o660)).await?;
     let active = Arc::new(Mutex::new(HashSet::<PathBuf>::new()));
+    if config.docker_compatible {
+        for directory in existing_docker_proxy_directories(&config.runtime_root).await? {
+            ensure_docker_proxy(&config, Arc::clone(&active), directory).await?;
+        }
+    }
     let mut tasks = JoinSet::new();
     tracing::info!(socket = %control_path.display(), "host access control listening");
 
@@ -231,22 +236,7 @@ async fn handle_control(
             .join("grants")
             .join(hash_segment(&request.scope_id))
             .join(hash_segment(&request.service));
-        fs::create_dir_all(&directory).await?;
-        fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).await?;
-        let socket_path = directory.join("docker.sock");
-        let mut guard = active.lock().await;
-        if !guard.contains(&socket_path) {
-            remove_stale_socket(&socket_path).await?;
-            let listener = UnixListener::bind(&socket_path)?;
-            fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o666)).await?;
-            guard.insert(socket_path.clone());
-            let upstream = config.docker_socket.clone();
-            tokio::spawn(async move {
-                if let Err(error) = proxy::serve(listener, upstream).await {
-                    tracing::error!(message = %error, socket = %socket_path.display(), "docker metadata proxy stopped");
-                }
-            });
-        }
+        ensure_docker_proxy(&config, active, directory).await?;
     }
     write_response(
         &mut stream,
@@ -257,6 +247,64 @@ async fn handle_control(
         },
     )
     .await
+}
+
+async fn ensure_docker_proxy(
+    config: &Config,
+    active: Arc<Mutex<HashSet<PathBuf>>>,
+    directory: PathBuf,
+) -> std::io::Result<()> {
+    fs::create_dir_all(&directory).await?;
+    fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).await?;
+    let socket_path = directory.join("docker.sock");
+    let mut guard = active.lock().await;
+    if guard.contains(&socket_path) {
+        return Ok(());
+    }
+    remove_stale_socket(&socket_path).await?;
+    let listener = UnixListener::bind(&socket_path)?;
+    fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o666)).await?;
+    guard.insert(socket_path.clone());
+    drop(guard);
+    let upstream = config.docker_socket.clone();
+    tokio::spawn(async move {
+        if let Err(error) = proxy::serve(listener, upstream).await {
+            tracing::error!(message = %error, socket = %socket_path.display(), "docker metadata proxy stopped");
+        }
+    });
+    Ok(())
+}
+
+async fn existing_docker_proxy_directories(runtime_root: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut directories = Vec::new();
+    let mut scopes = fs::read_dir(runtime_root.join("grants")).await?;
+    while let Some(scope) = scopes.next_entry().await? {
+        if !valid_hash_segment(&scope.file_name().to_string_lossy()) {
+            continue;
+        }
+        let scope_metadata = fs::symlink_metadata(scope.path()).await?;
+        if !scope_metadata.is_dir() || scope_metadata.file_type().is_symlink() {
+            continue;
+        }
+        let mut services = fs::read_dir(scope.path()).await?;
+        while let Some(service) = services.next_entry().await? {
+            if !valid_hash_segment(&service.file_name().to_string_lossy()) {
+                continue;
+            }
+            let service_metadata = fs::symlink_metadata(service.path()).await?;
+            if !service_metadata.is_dir() || service_metadata.file_type().is_symlink() {
+                continue;
+            }
+            let socket = service.path().join("docker.sock");
+            if fs::symlink_metadata(&socket)
+                .await
+                .is_ok_and(|metadata| metadata.file_type().is_socket())
+            {
+                directories.push(service.path());
+            }
+        }
+    }
+    Ok(directories)
 }
 
 async fn write_response(
@@ -298,6 +346,10 @@ fn valid_name(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn valid_hash_segment(value: &str) -> bool {
+    value.len() == 32 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn hash_segment(value: &str) -> String {
@@ -342,5 +394,44 @@ mod tests {
         assert_eq!(hash_segment("same"), hash_segment("same"));
         assert_ne!(hash_segment("one"), hash_segment("two"));
         assert_eq!(hash_segment("scope").len(), 32);
+    }
+
+    #[tokio::test]
+    async fn restores_only_preserved_hashed_proxy_directories() {
+        let temp = tempfile::Builder::new()
+            .prefix("z")
+            .rand_bytes(4)
+            .tempdir_in("/tmp")
+            .unwrap();
+        let runtime_root = temp.path().to_path_buf();
+        let directory = runtime_root
+            .join("grants")
+            .join(hash_segment("scope"))
+            .join(hash_segment("service"));
+        fs::create_dir_all(&directory).await.unwrap();
+        let socket = directory.join("docker.sock");
+        drop(UnixListener::bind(&socket).unwrap());
+        fs::create_dir_all(runtime_root.join("grants/not-a-hash/service"))
+            .await
+            .unwrap();
+
+        let discovered = existing_docker_proxy_directories(&runtime_root)
+            .await
+            .unwrap();
+        assert_eq!(discovered, vec![directory.clone()]);
+
+        let config = Config {
+            runtime_root,
+            docker_socket: temp.path().join("docker.sock"),
+            allowed_uids: vec![],
+            docker_compatible: true,
+        };
+        let active = Arc::new(Mutex::new(HashSet::new()));
+        ensure_docker_proxy(&config, Arc::clone(&active), directory)
+            .await
+            .unwrap();
+        let connection = UnixStream::connect(socket).await;
+        assert!(connection.is_ok());
+        assert_eq!(active.lock().await.len(), 1);
     }
 }

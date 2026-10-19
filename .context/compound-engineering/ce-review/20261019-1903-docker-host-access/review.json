@@ -1,0 +1,57 @@
+{
+  "runId": "20261019-1903-docker-host-access",
+  "mode": "autofix",
+  "base": "442bc0e",
+  "head": "working-tree",
+  "intent": "Add approval-gated policy-resolved Docker Host Access while keeping unverified proxies unavailable.",
+  "scope": {
+    "files": 69,
+    "insertions": 6263,
+    "deletions": 146,
+    "untrackedExcluded": [
+      "apps/web/src/components/workspace/HostAccessPicker.test.ts"
+    ]
+  },
+  "findings": [],
+  "appliedFixes": [
+    "transactional approval and draft linking",
+    "pre-release migration compatibility",
+    "immutable Compose image pinning and fingerprint revalidation",
+    "runtime label, image, fingerprint, and socket inspection",
+    "400/409/503 error contract alignment",
+    "periodic transactional draft expiration",
+    "proxy socket restart recovery",
+    "nested Docker response allowlisting and filter-oracle rejection",
+    "full-project repair enforcement",
+    "descriptor-safe NAS capacity anchor handling",
+    "picker blocking and complete coverage report states"
+  ],
+  "residualActionableWork": [],
+  "advisories": [
+    {
+      "owner": "release",
+      "summary": "Docker metadata stays unavailable until real collector compatibility validation passes."
+    },
+    {
+      "owner": "release",
+      "summary": "systemd_status stays unavailable until a read-only facade is implemented and validated."
+    },
+    {
+      "owner": "human",
+      "summary": "No first-class agent tool exposes Host Access grant selection or coverage reporting."
+    },
+    {
+      "owner": "release",
+      "summary": "Netdata and node-exporter validation on 192.168.11.91 was not authorized or performed."
+    }
+  ],
+  "verification": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "tests": "passed: 992 vitest, 5 skipped, Rust workspace and docs tests passed",
+    "build": "passed",
+    "cargoClippy": "passed with only the existing ts-rs serde-attribute warning",
+    "diffCheck": "passed"
+  },
+  "verdict": "ready_to_merge"
+}

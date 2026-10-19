@@ -2496,6 +2496,45 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("publishes the Host Access catalog and returns 503 for unavailable Compose grants", async () => {
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      hostAccess: {
+        policy: new DockerHostAccessPolicy(db, { platform: "darwin", daemonAvailable: false })
+      }
+    });
+    const catalog = await server.inject({ method: "GET", url: "/api/docker/host-access" });
+    expect(catalog.statusCode).toBe(200);
+    expect(catalog.json()).toMatchObject({
+      hostAccess: {
+        policyVersion: expect.stringMatching(/^2026-/u),
+        capabilities: expect.arrayContaining([
+          expect.objectContaining({
+            id: "host_processes",
+            availability: { status: "unavailable", reasonCodes: ["not_linux"] }
+          })
+        ])
+      }
+    });
+
+    const validation = await server.inject({
+      method: "POST",
+      url: "/api/docker/apps/validate",
+      payload: {
+        projectKey: "observer",
+        composeContent: "services:\n  collector:\n    image: alpine\n",
+        environment: [],
+        hostAccess: [{ service: "collector", grants: [{ capability: "host_processes" }] }]
+      }
+    });
+    expect(validation.statusCode).toBe(503);
+    expect(validation.json()).toMatchObject({
+      issues: [expect.objectContaining({ code: "capability_unavailable", service: "collector" })]
+    });
+    await server.close();
+  });
+
   it("reads and updates Docker daemon configuration through the privileged runtime", async () => {
     const daemon = new FakeDockerDaemon();
     const server = await buildServer({ config: testConfig(tempDir), db, docker: { daemon } });
@@ -3351,6 +3390,52 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("rolls back the complete Host Access approval record when persistence fails", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const engine = new FakeDockerEngine();
+    db.exec(`
+      CREATE TRIGGER fail_host_access_approval_event
+      BEFORE INSERT ON agent_events
+      WHEN NEW.type = 'approval.pending'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced Host Access persistence failure');
+      END
+    `);
+    const server = await buildServer({
+      config: dockerEnabledConfig(tempDir),
+      db,
+      docker: { engine, compose: new FakeDockerCompose() },
+      hostAccess: { policy: new DockerHostAccessPolicy(db, { platform: "linux" }) }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/docker/proposals",
+      payload: {
+        sessionId: session.id,
+        action: "create",
+        targetType: "container",
+        name: "failed-observer",
+        image: "collector:latest",
+        hostAccess: [{ capability: "host_processes" }]
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    for (const table of [
+      "docker_create_drafts",
+      "docker_operations",
+      "pending_approvals",
+      "operation_notifications",
+      "jobs",
+      "agent_messages"
+    ]) {
+      const row = db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
+      expect(row.count, table).toBe(0);
+    }
+    await server.close();
+  });
+
   it("creates Docker volumes and networks directly with applied operation records", async () => {
     const session = createSession(db, { rootId: "local" });
     const engine = new FakeDockerEngine();
@@ -3612,6 +3697,52 @@ describe("API server", () => {
     expect(unknownService.json()).toEqual({ error: "Compose service is not part of the configured project" });
     expect(optionLikeService.statusCode).toBe(400);
     expect(optionLikeService.json()).toEqual({ error: "Compose service name is not allowed" });
+    await server.close();
+  });
+
+  it("requires a full-project apply when Compose Host Access needs repair", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const server = await buildServer({
+      config: dockerEnabledConfig(tempDir),
+      db,
+      docker: {
+        engine: new FakeDockerEngine(),
+        compose: new FakeDockerCompose([{
+          id: "compose-root:compose.yml",
+          name: "media",
+          projectKey: "media",
+          managedPath: "/zos/apps/media",
+          services: ["jellyfin"],
+          warnings: [],
+          risk: "high",
+          revision: "revision-1",
+          deployedRevision: "revision-1",
+          needsDeploy: false,
+          hostAccessState: "needs_repair",
+          containerCount: 1,
+          runningCount: 1,
+          status: "running",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z"
+        }])
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/docker/proposals",
+      payload: {
+        sessionId: session.id,
+        action: "compose_up",
+        composeProjectId: "compose-root:compose.yml",
+        service: "jellyfin"
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Host Access changes or repairs require applying the entire Compose project"
+    });
     await server.close();
   });
 

@@ -41,8 +41,11 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
 
   registerErrorHandler(server);
   await server.register(fastifyWebsocket);
-  deleteExpiredDockerCreateDrafts(db);
-  deleteExpiredDockerComposeHostAccessDrafts(db);
+  const expireHostAccessDrafts = () => {
+    deleteExpiredDockerCreateDrafts(db);
+    deleteExpiredDockerComposeHostAccessDrafts(db);
+  };
+  expireHostAccessDrafts();
   const hostAccessRuntime = hostAccess ?? {
     policy: new DockerHostAccessPolicy(db),
     control: new DockerHostAccessControlClient()
@@ -76,6 +79,14 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     fileBatches,
     hostAccess: hostAccessRuntime
   });
+  const hostAccessDraftCleanup = setInterval(() => {
+    try {
+      expireHostAccessDrafts();
+    } catch (error) {
+      server.log.error({ err: error }, "Failed to expire Docker Host Access drafts");
+    }
+  }, 60_000);
+  hostAccessDraftCleanup.unref();
 
   server.addHook("onReady", async () => {
     fileBatches.start();
@@ -109,6 +120,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   });
 
   server.addHook("onClose", async () => {
+    clearInterval(hostAccessDraftCleanup);
     await fileBatches.stop();
     monitoring.close();
   });

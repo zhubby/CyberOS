@@ -100,8 +100,126 @@ describe("SQLite schema migrations", () => {
       "029_monitoring_silence_cancellation",
       "030_monitoring_rule_evaluation_status",
       "031_monitoring_unsilenced_event",
-      "032_docker_host_access"
+      "032_docker_host_access",
+      "033_docker_host_access_draft_links"
     ]);
+  });
+
+  it("repairs pre-release Host Access draft tables without orphaning approvals", () => {
+    const databasePath = path.join(tempDir, "legacy-host-access-drafts.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE schema_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+      CREATE TABLE agent_sessions (id TEXT PRIMARY KEY);
+      CREATE TABLE agent_messages (id TEXT PRIMARY KEY);
+      CREATE TABLE jobs (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        error TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE pending_approvals (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        proposal_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE docker_operations (
+        id TEXT PRIMARY KEY,
+        approval_id TEXT,
+        status TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE docker_apps (
+        id TEXT PRIMARY KEY,
+        host_access_json TEXT NOT NULL DEFAULT '[]'
+      );
+      CREATE TABLE docker_create_drafts (
+        id TEXT PRIMARY KEY,
+        revision TEXT NOT NULL,
+        input_json TEXT NOT NULL,
+        policy_version TEXT NOT NULL,
+        grant_summary_json TEXT NOT NULL DEFAULT '[]',
+        fingerprint TEXT NOT NULL,
+        image_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_docker_create_drafts_expires_at ON docker_create_drafts(expires_at);
+
+      INSERT INTO jobs(id, status, error, updated_at)
+      VALUES ('job-1', 'waiting_approval', NULL, '2026-01-01T00:00:00.000Z');
+      INSERT INTO pending_approvals(id, job_id, kind, status, proposal_json, updated_at)
+      VALUES (
+        'approval-1',
+        'job-1',
+        'docker_operation',
+        'pending',
+        '[{"action":"create","hostAccess":{"policyVersion":"legacy"}}]',
+        '2026-01-01T00:00:00.000Z'
+      );
+      INSERT INTO docker_operations(id, approval_id, status, metadata_json, updated_at)
+      VALUES ('operation-1', 'approval-1', 'proposed', '{}', '2026-01-01T00:00:00.000Z');
+      INSERT INTO docker_create_drafts(
+        id, revision, input_json, policy_version, grant_summary_json,
+        fingerprint, image_digest, created_at, expires_at
+      ) VALUES (
+        'draft-1', 'revision-1', '{}', 'legacy', '[]', 'fingerprint',
+        'sha256:legacy', '2026-01-01T00:00:00.000Z', '2026-01-01T00:15:00.000Z'
+      );
+    `);
+    const insertMigration = legacy.prepare(
+      "INSERT INTO schema_migrations(id, applied_at) VALUES (?, '2026-01-01T00:00:00.000Z')"
+    );
+    for (const migration of migrations.filter((migration) => migration.id !== "033_docker_host_access_draft_links")) {
+      insertMigration.run(migration.id);
+    }
+    legacy.close();
+
+    const upgraded = openZosDb(databasePath);
+    try {
+      expect(upgraded.prepare("SELECT status FROM pending_approvals WHERE id = 'approval-1'").pluck().get()).toBe("failed");
+      expect(upgraded.prepare("SELECT status FROM docker_operations WHERE id = 'operation-1'").pluck().get()).toBe("failed");
+      expect(upgraded.prepare("SELECT status FROM jobs WHERE id = 'job-1'").pluck().get()).toBe("failed");
+      expect(upgraded.prepare("SELECT COUNT(*) FROM docker_create_drafts").pluck().get()).toBe(0);
+      expect(upgraded.pragma("table_info(docker_create_drafts)")).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "approval_id" }),
+        expect.objectContaining({ name: "operation_id" }),
+        expect.objectContaining({ name: "job_id" })
+      ]));
+      expect(upgraded.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'docker_compose_host_access_drafts'"
+      ).pluck().get()).toBe("docker_compose_host_access_drafts");
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it("upgrades the complete pre-release Host Access schema without adding the deployed column twice", () => {
+    const databasePath = path.join(tempDir, "complete-host-access-drafts.sqlite");
+    const database = openZosDb(databasePath);
+    database.prepare("DELETE FROM schema_migrations WHERE id = '033_docker_host_access_draft_links'").run();
+    database.close();
+
+    const upgraded = openZosDb(databasePath);
+    try {
+      const deployedColumns = (upgraded.pragma("table_info(docker_apps)") as Array<{ name: string }>)
+        .filter((column) => column.name === "deployed_host_access_json");
+      expect(deployedColumns).toHaveLength(1);
+      expect(upgraded.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'docker_compose_host_access_drafts'"
+      ).pluck().get()).toBe("docker_compose_host_access_drafts");
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      upgraded.close();
+    }
   });
 
   it("installs monitoring alert configuration, incident, and outbox tables", () => {

@@ -523,30 +523,33 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
           });
           const proposal: DockerOperationProposal = bound.proposal;
           try {
-            const { message, job } = createActionMessageAndJob(db, {
-              sessionId: session.id,
-              content: proposal.summary,
-              kind: "docker",
-              status: "waiting_approval"
-            });
-            const { approval, operation } = createDockerOperationApproval(db, { jobId: job.id, proposal });
-            if (!linkDockerCreateDraft(db, draft.id, draft.revision, {
-              approvalId: approval.id,
-              operationId: operation.id,
-              jobId: job.id
-            })) {
-              throw new DockerCreateValidationError("Docker Host Access draft changed before approval", 409);
-            }
-            appendEvent(db, {
-              sessionId: session.id,
-              jobId: job.id,
-              type: "approval.pending",
-              payload: {
+            const { message, job, approval, operation } = db.transaction(() => {
+              const { message, job } = createActionMessageAndJob(db, {
+                sessionId: session.id,
+                content: proposal.summary,
+                kind: "docker",
+                status: "waiting_approval"
+              });
+              const { approval, operation } = createDockerOperationApproval(db, { jobId: job.id, proposal });
+              if (!linkDockerCreateDraft(db, draft.id, draft.revision, {
                 approvalId: approval.id,
-                proposal: approval.proposal,
-                summary: `Created Docker approval ${approval.id}: ${proposal.summary}. No Docker action was run.`
+                operationId: operation.id,
+                jobId: job.id
+              })) {
+                throw new DockerCreateValidationError("Docker Host Access draft changed before approval", 409);
               }
-            });
+              appendEvent(db, {
+                sessionId: session.id,
+                jobId: job.id,
+                type: "approval.pending",
+                payload: {
+                  approvalId: approval.id,
+                  proposal: approval.proposal,
+                  summary: `Created Docker approval ${approval.id}: ${proposal.summary}. No Docker action was run.`
+                }
+              });
+              return { message, job, approval, operation };
+            }).immediate();
             reply.status(202).send({ message, job, approval, operation });
             return;
           } catch (error) {
@@ -664,35 +667,38 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
       const builtProposal = await buildDockerProposal(request.body ?? {}, { ...context, config: nextConfig });
       const { internalHostAccessDraft, ...proposal } = builtProposal;
       try {
-        const { message, job } = createActionMessageAndJob(db, {
-          sessionId: session.id,
-          content: proposal.summary,
-          kind: "docker",
-          status: "waiting_approval"
-        });
-        const { approval, operation } = createDockerOperationApproval(db, {
-          jobId: job.id,
-          proposal
-        });
-        if (internalHostAccessDraft) {
-          if (!linkDockerComposeHostAccessDraft(db, internalHostAccessDraft.id, internalHostAccessDraft.revision, {
-            approvalId: approval.id,
-            operationId: operation.id,
-            jobId: job.id
-          })) {
-            throw new DockerCreateValidationError("Compose Host Access draft changed before approval", 409);
+        const { message, job, approval, operation } = db.transaction(() => {
+          const { message, job } = createActionMessageAndJob(db, {
+            sessionId: session.id,
+            content: proposal.summary,
+            kind: "docker",
+            status: "waiting_approval"
+          });
+          const { approval, operation } = createDockerOperationApproval(db, {
+            jobId: job.id,
+            proposal
+          });
+          if (internalHostAccessDraft) {
+            if (!linkDockerComposeHostAccessDraft(db, internalHostAccessDraft.id, internalHostAccessDraft.revision, {
+              approvalId: approval.id,
+              operationId: operation.id,
+              jobId: job.id
+            })) {
+              throw new DockerCreateValidationError("Compose Host Access draft changed before approval", 409);
+            }
           }
-        }
-        appendEvent(db, {
-          sessionId: session.id,
-          jobId: job.id,
-          type: "approval.pending",
-          payload: {
-            approvalId: approval.id,
-            proposal: approval.proposal,
-            summary: `Created Docker approval ${approval.id}: ${proposal.summary}. No Docker action was run.`
-          }
-        });
+          appendEvent(db, {
+            sessionId: session.id,
+            jobId: job.id,
+            type: "approval.pending",
+            payload: {
+              approvalId: approval.id,
+              proposal: approval.proposal,
+              summary: `Created Docker approval ${approval.id}: ${proposal.summary}. No Docker action was run.`
+            }
+          });
+          return { message, job, approval, operation };
+        }).immediate();
 
         reply.status(202).send({
           message,
@@ -860,8 +866,8 @@ async function buildDockerProposal(
       throw new Error("Compose project is not configured");
     }
     const service = validatedComposeService(project.services, action, body.service);
-    if (service && project.hostAccessState === "pending_apply") {
-      throw new DockerComposeValidationError("Host Access changes require applying the entire Compose project");
+    if (service && project.hostAccessState && project.hostAccessState !== "active") {
+      throw new DockerComposeValidationError("Host Access changes or repairs require applying the entire Compose project");
     }
     const hostAccessApproval = action === "compose_up" && project.hostAccessState
       ? await prepareComposeHostAccessApproval(context, project.id)
@@ -909,7 +915,7 @@ async function prepareComposeHostAccessApproval(
 
 function sendDockerComposeAppError(reply: FastifyReply, error: unknown): void {
   if (error instanceof DockerComposeValidationError) {
-    reply.status(400).send({ error: error.message, ...(error.issues.length ? { issues: error.issues } : {}) });
+    reply.status(error.statusCode).send({ error: error.message, ...(error.issues.length ? { issues: error.issues } : {}) });
     return;
   }
   if (error instanceof DockerComposeAppConflictError || error instanceof DockerComposeAppProjectKeyConflictError) {
@@ -941,7 +947,17 @@ async function composeAppContainers(
 ): Promise<DockerContainerSummary[] | null> {
   if (!config.enabled) return null;
   try {
-    return await dockerEngine(config, docker).listContainers();
+    const engine = dockerEngine(config, docker);
+    const containers = await engine.listContainers();
+    if (!engine.getContainerDetails) return containers;
+    return Promise.all(containers.map(async (container) => {
+      if (!container.composeProject) return container;
+      try {
+        return await engine.getContainerDetails!(container.id, container);
+      } catch {
+        return container;
+      }
+    }));
   } catch {
     return null;
   }

@@ -1813,6 +1813,9 @@ export function DockerContainerDetailsDialog({
     : `${formatBytes(container.memoryUsageBytes, locale)} / ${container.memoryLimitBytes ? formatBytes(container.memoryLimitBytes, locale) : t("common.dash")}`;
   const hostAccessGrants = state.details?.labels["io.zos.host-access.grants"]?.split(",").filter(Boolean) ?? [];
   const hostAccessCoverage = containerHostAccessCoverage(hostAccessGrants);
+  const hostAccessCoverageReport = hostAccessCoverage.map((item) => (
+    `${String(translate(`workspace.management.docker.hostAccess.states.${item.state}`))}: ${String(translate(`workspace.management.docker.hostAccess.coverage.${item.coverage}`))}`
+  ));
 
   function confirmAction(action: "start" | "stop" | "restart" | "remove") {
     if (action === "remove" && !window.confirm(String(t("workspace.management.docker.removeConfirm", { name: container.name })))) {
@@ -1921,7 +1924,7 @@ export function DockerContainerDetailsDialog({
                 <button
                   type="button"
                   className="management-icon-action"
-                  onClick={() => void navigator.clipboard.writeText(hostAccessCoverage.join("\n")).then(() => {
+                  onClick={() => void navigator.clipboard.writeText(hostAccessCoverageReport.join("\n")).then(() => {
                     setHostAccessCopied(true);
                     window.setTimeout(() => setHostAccessCopied(false), 2_000);
                   })}
@@ -1932,9 +1935,9 @@ export function DockerContainerDetailsDialog({
                 </button>
               </div>
               <div className="host-access-coverage">
-                {hostAccessCoverage.map((coverage) => (
-                  <span key={coverage} data-state={coverage.startsWith("unsupported:") ? "unsupported" : "requested"}>
-                    {String(translate(`workspace.management.docker.hostAccess.coverage.${coverage.replace(/^unsupported:/u, "")}`))}
+                {hostAccessCoverage.map((item) => (
+                  <span key={item.coverage} data-state={item.state}>
+                    {String(translate(`workspace.management.docker.hostAccess.coverage.${item.coverage}`))}
                   </span>
                 ))}
               </div>
@@ -2563,7 +2566,9 @@ function composeStatusLabel(project: DockerComposeProject, t: Translate): string
   return String(t("workspace.management.states.running"));
 }
 
-function containerHostAccessCoverage(grants: string[]): string[] {
+function containerHostAccessCoverage(
+  grants: string[]
+): Array<{ coverage: string; state: "runtime" | "unsupported" }> {
   const mapping: Record<string, string[]> = {
     host_os_identity: ["host_identity", "host_time"],
     host_processes: ["host_processes", "host_cpu", "host_memory", "physical_network"],
@@ -2575,11 +2580,11 @@ function containerHostAccessCoverage(grants: string[]): string[] {
   };
   const configured = grants.flatMap((grant) => mapping[grant.split(":", 1)[0] ?? ""] ?? []);
   return [
-    ...new Set(configured),
-    "unsupported:journald",
-    "unsupported:smart_nvme",
-    "unsupported:rootfs_capacity",
-    "unsupported:low_level_kernel"
+    ...[...new Set(configured)].map((coverage) => ({ coverage, state: "runtime" as const })),
+    ...["journald", "smart_nvme", "rootfs_capacity", "low_level_kernel"].map((coverage) => ({
+      coverage,
+      state: "unsupported" as const
+    }))
   ];
 }
 

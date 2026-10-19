@@ -9,7 +9,7 @@ rust-version = "1.95"
 
 [workspace.dependencies]
 async-trait = "0.1.89"
-nix = { version = "0.30.1", features = ["fs", "process", "signal", "socket", "term", "user"] }
+nix = { version = "0.30.1", features = ["dir", "fs", "process", "signal", "socket", "term", "user"] }
 notify = "8.2.0"
 quick-xml = "0.38.4"
 base64 = "0.22.1"

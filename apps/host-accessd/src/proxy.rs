@@ -110,14 +110,11 @@ fn authorize_request(request: &[u8]) -> Option<(&str, &str, Route)> {
         "/info" if method == "GET" && query.is_empty() => Some((method, target, Route::Info)),
         "/containers/json"
             if method == "GET"
-                && valid_query(
-                    query,
-                    &["all", "size", "limit", "since", "before", "filters"],
-                ) =>
+                && valid_query(query, &["all", "size", "limit", "since", "before"]) =>
         {
             Some((method, target, Route::Containers))
         }
-        "/networks" if method == "GET" && valid_query(query, &["filters"]) => {
+        "/networks" if method == "GET" && query.is_empty() => {
             Some((method, target, Route::Networks))
         }
         _ if method == "GET" && query.is_empty() && container_inspect_path(path) => {
@@ -404,9 +401,21 @@ fn sanitize_container_summary(value: Value) -> Value {
     let mut result = pick_map(
         &value,
         &[
-            "Id", "Names", "Image", "ImageID", "Created", "State", "Status", "Ports",
+            "Id", "Names", "Image", "ImageID", "Created", "State", "Status",
         ],
     );
+    if let Some(ports) = value.get("Ports").and_then(Value::as_array) {
+        result.insert(
+            "Ports".into(),
+            Value::Array(
+                ports
+                    .iter()
+                    .cloned()
+                    .map(|port| pick(port, &["IP", "PrivatePort", "PublicPort", "Type"]))
+                    .collect(),
+            ),
+        );
+    }
     if let Some(labels) = value.get("Labels") {
         result.insert("Labels".into(), safe_labels(labels));
     }
@@ -446,13 +455,14 @@ fn sanitize_container_inspect(value: Value) -> Value {
         result.insert("Config".into(), Value::Object(safe));
     }
     if let Some(host) = value.get("HostConfig") {
-        result.insert(
-            "HostConfig".into(),
-            pick(
-                host.clone(),
-                &["NetworkMode", "RestartPolicy", "ReadonlyRootfs"],
-            ),
-        );
+        let mut safe = pick_map(host, &["NetworkMode", "ReadonlyRootfs"]);
+        if let Some(restart) = host.get("RestartPolicy") {
+            safe.insert(
+                "RestartPolicy".into(),
+                pick(restart.clone(), &["Name", "MaximumRetryCount"]),
+            );
+        }
+        result.insert("HostConfig".into(), Value::Object(safe));
     }
     if let Some(network) = value.get("NetworkSettings") {
         result.insert("NetworkSettings".into(), sanitize_network_settings(network));
@@ -485,9 +495,11 @@ fn sanitize_network(value: Value) -> Value {
             "Internal",
             "Attachable",
             "Ingress",
-            "IPAM",
         ],
     );
+    if let Some(ipam) = value.get("IPAM") {
+        result.insert("IPAM".into(), sanitize_ipam(ipam));
+    }
     if let Some(labels) = value.get("Labels") {
         result.insert("Labels".into(), safe_labels(labels));
     }
@@ -526,8 +538,6 @@ fn sanitize_network_settings(value: &Value) -> Value {
             "Bridge",
             "SandboxID",
             "HairpinMode",
-            "Ports",
-            "SandboxKey",
             "EndpointID",
             "Gateway",
             "IPAddress",
@@ -538,6 +548,31 @@ fn sanitize_network_settings(value: &Value) -> Value {
             "MacAddress",
         ],
     );
+    if let Some(ports) = value.get("Ports").and_then(Value::as_object) {
+        result.insert(
+            "Ports".into(),
+            Value::Object(
+                ports
+                    .iter()
+                    .map(|(port, bindings)| {
+                        let safe = bindings
+                            .as_array()
+                            .map(|items| {
+                                Value::Array(
+                                    items
+                                        .iter()
+                                        .cloned()
+                                        .map(|binding| pick(binding, &["HostIp", "HostPort"]))
+                                        .collect(),
+                                )
+                            })
+                            .unwrap_or(Value::Null);
+                        (port.clone(), safe)
+                    })
+                    .collect(),
+            ),
+        );
+    }
     if let Some(networks) = value.get("Networks").and_then(Value::as_object) {
         result.insert(
             "Networks".into(),
@@ -561,6 +596,28 @@ fn sanitize_network_settings(value: &Value) -> Value {
                                     "MacAddress",
                                 ],
                             ),
+                        )
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    Value::Object(result)
+}
+
+fn sanitize_ipam(value: &Value) -> Value {
+    let mut result = pick_map(value, &["Driver"]);
+    if let Some(config) = value.get("Config").and_then(Value::as_array) {
+        result.insert(
+            "Config".into(),
+            Value::Array(
+                config
+                    .iter()
+                    .cloned()
+                    .map(|entry| {
+                        pick(
+                            entry,
+                            &["Subnet", "IPRange", "Gateway", "AuxiliaryAddresses"],
                         )
                     })
                     .collect(),
@@ -640,6 +697,14 @@ mod tests {
                 .is_none()
         );
         assert!(
+            authorize_request(b"GET /containers/json?filters=%7B%22label%22%3A%5B%22secret%3Dguess%22%5D%7D HTTP/1.1\r\nHost: docker\r\n\r\n")
+                .is_none()
+        );
+        assert!(
+            authorize_request(b"GET /networks?filters=%7B%7D HTTP/1.1\r\nHost: docker\r\n\r\n")
+                .is_none()
+        );
+        assert!(
             authorize_request(b"GET /containers/%2e%2e/json HTTP/1.1\r\nHost: docker\r\n\r\n")
                 .is_none()
         );
@@ -665,6 +730,24 @@ mod tests {
                     "secret.label": "secret"
                 }
             },
+            "HostConfig": {
+                "NetworkMode": "bridge",
+                "RestartPolicy": {
+                    "Name": "unless-stopped",
+                    "MaximumRetryCount": 3,
+                    "Secret": "restart-policy-secret"
+                }
+            },
+            "NetworkSettings": {
+                "SandboxKey": "/var/run/docker/netns/secret",
+                "Ports": {
+                    "19999/tcp": [{
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "19999",
+                        "Secret": "port-binding-secret"
+                    }]
+                }
+            },
             "Mounts": [{ "Type": "bind", "Source": "/secret/host", "Destination": "/data", "RW": false }]
         });
         let safe = sanitize_container_inspect(value);
@@ -675,6 +758,31 @@ mod tests {
         assert!(!encoded.contains("secret.label"));
         assert!(!encoded.contains("/secret/host"));
         assert!(!encoded.contains("/bin/secret"));
+        assert!(!encoded.contains("restart-policy-secret"));
+        assert!(!encoded.contains("/var/run/docker/netns/secret"));
+        assert!(!encoded.contains("port-binding-secret"));
+        assert!(encoded.contains("unless-stopped"));
+        assert!(encoded.contains("19999"));
+    }
+
+    #[test]
+    fn filters_nested_network_ipam_fields() {
+        let safe = sanitize_network(serde_json::json!({
+            "Name": "monitoring",
+            "IPAM": {
+                "Driver": "default",
+                "Secret": "ipam-secret",
+                "Config": [{
+                    "Subnet": "172.30.0.0/16",
+                    "Gateway": "172.30.0.1",
+                    "Secret": "ipam-config-secret"
+                }]
+            }
+        }));
+        let encoded = serde_json::to_string(&safe).unwrap();
+        assert!(encoded.contains("172.30.0.0/16"));
+        assert!(!encoded.contains("ipam-secret"));
+        assert!(!encoded.contains("ipam-config-secret"));
     }
 
     #[test]

@@ -12,6 +12,7 @@ Group=zos
 SupplementaryGroups=docker
 RuntimeDirectory=zos/host-access
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=restart
 Environment=ZOS_HOST_ACCESS_RUNTIME_ROOT=/run/zos/host-access
 Environment=ZOS_DOCKER_SOCKET=/var/run/docker.sock
 # Enable only after the deployed collector compatibility suite passes.

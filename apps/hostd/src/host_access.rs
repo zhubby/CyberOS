@@ -1,5 +1,6 @@
+use std::fs::OpenOptions;
 use std::os::unix::ffi::OsStringExt;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use tokio::fs;
@@ -52,33 +53,52 @@ async fn reconcile_capacity_anchor(
     }
 
     let anchor = root.path.join(CAPACITY_ANCHOR_NAME);
-    match fs::symlink_metadata(&anchor).await {
-        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
-            ensure_empty(&anchor).await?;
-        }
-        Ok(_) => {
-            return Err(HostdError::validation(format!(
-                "NAS capacity anchor for {} is not a directory",
-                root.id
-            )));
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::create_dir(&anchor).await?;
-        }
-        Err(error) => return Err(error.into()),
-    }
-    fs::set_permissions(&anchor, std::fs::Permissions::from_mode(0o555)).await?;
+    secure_capacity_anchor(anchor).await?;
     Ok(())
 }
 
-async fn ensure_empty(path: &Path) -> Result<(), HostdError> {
-    let mut entries = fs::read_dir(path).await?;
-    if entries.next_entry().await?.is_some() {
+async fn secure_capacity_anchor(path: PathBuf) -> Result<(), HostdError> {
+    tokio::task::spawn_blocking(move || secure_capacity_anchor_sync(&path))
+        .await
+        .map_err(|error| {
+            HostdError::new(500, crate::error::ErrorCode::Internal, error.to_string())
+        })?
+}
+
+fn secure_capacity_anchor_sync(path: &Path) -> Result<(), HostdError> {
+    match std::fs::create_dir(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error.into()),
+    }
+    let directory = OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_DIRECTORY | nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC)
+        .open(path)
+        .map_err(|_| {
+            HostdError::validation("NAS capacity anchor is not a symlink-free directory")
+        })?;
+    if directory.metadata()?.uid() != nix::unistd::Uid::effective().as_raw() {
         return Err(HostdError::validation(
-            "NAS capacity anchor must remain empty",
+            "NAS capacity anchor is not owned by hostd",
         ));
     }
+    let mut entries =
+        nix::dir::Dir::from_fd(directory.try_clone()?.into()).map_err(nix_io_error)?;
+    for entry in entries.iter() {
+        let entry = entry.map_err(nix_io_error)?;
+        if !matches!(entry.file_name().to_bytes(), b"." | b"..") {
+            return Err(HostdError::validation(
+                "NAS capacity anchor must remain empty",
+            ));
+        }
+    }
+    directory.set_permissions(std::fs::Permissions::from_mode(0o555))?;
     Ok(())
+}
+
+fn nix_io_error(error: nix::errno::Errno) -> std::io::Error {
+    std::io::Error::from_raw_os_error(error as i32)
 }
 
 fn has_non_root_mount(root: &Path, mountinfo: &str) -> bool {
@@ -151,5 +171,30 @@ mod tests {
         std::fs::set_permissions(&anchor, std::fs::Permissions::from_mode(0o755)).unwrap();
         std::fs::write(anchor.join("unexpected"), b"data").unwrap();
         assert!(reconcile_capacity_anchor(&root, &mountinfo).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn refuses_symlink_anchors_without_changing_the_target() {
+        let temp = TempDir::new().unwrap();
+        let root_path = temp.path().join("root");
+        let target = temp.path().join("target");
+        std::fs::create_dir(&root_path).unwrap();
+        std::fs::create_dir(&target).unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::os::unix::fs::symlink(&target, root_path.join(CAPACITY_ANCHOR_NAME)).unwrap();
+        let root = ConfiguredNasRoot {
+            id: "primary".to_owned(),
+            path: std::fs::canonicalize(&root_path).unwrap(),
+        };
+        let mountinfo = format!(
+            "23 22 8:2 / {} rw - ext4 /dev/sda1 rw\n",
+            root.path.display()
+        );
+
+        assert!(reconcile_capacity_anchor(&root, &mountinfo).await.is_err());
+        assert_eq!(
+            std::fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
     }
 }

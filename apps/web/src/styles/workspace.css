@@ -10830,6 +10830,22 @@
   color: var(--text);
 }
 
+.host-access-coverage span[data-state="configured"],
+.host-access-coverage span[data-state="runtime"] {
+  border-color: var(--green);
+  color: var(--text);
+}
+
+.host-access-coverage span[data-state="degraded"] {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.host-access-coverage span[data-state="unavailable"] {
+  border-color: var(--red);
+  color: var(--red);
+}
+
 .host-access-coverage span[data-state="unsupported"] {
   text-decoration: line-through;
 }
