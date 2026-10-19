@@ -2,6 +2,8 @@ export * from "./repositories/approvals.js";
 export * from "./repositories/approval-status.js";
 export * from "./repositories/docker-console-authorizations.js";
 export * from "./repositories/docker-compose-apps.js";
+export * from "./repositories/docker-compose-host-access-drafts.js";
+export * from "./repositories/docker-create-drafts.js";
 export * from "./repositories/docker-operations.js";
 export * from "./repositories/docker-registry-credentials.js";
 export * from "./repositories/downloads.js";

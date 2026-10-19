@@ -1,7 +1,8 @@
 import type {
   DockerComposeAppDetail,
   DockerComposeEnvironmentCreateInput,
-  DockerComposeEnvironmentUpdateInput
+  DockerComposeEnvironmentUpdateInput,
+  DockerComposeServiceHostAccess
 } from "@zos/shared";
 
 export interface DockerComposeEnvironmentFormRow {
@@ -17,6 +18,7 @@ export interface DockerComposeAppForm {
   projectKey: string;
   composeContent: string;
   environment: DockerComposeEnvironmentFormRow[];
+  hostAccess: DockerComposeServiceHostAccess[];
 }
 
 const PROJECT_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}$/u;
@@ -28,7 +30,8 @@ export function initialDockerComposeAppForm(): DockerComposeAppForm {
     name: "",
     projectKey: "",
     composeContent: "services:\n  app:\n    image: \n",
-    environment: []
+    environment: [],
+    hostAccess: []
   };
 }
 
@@ -43,7 +46,8 @@ export function dockerComposeAppForm(detail: DockerComposeAppDetail): DockerComp
       valueConfigured: entry.valueConfigured,
       originalKey: entry.key,
       valueChanged: false
-    }))
+    })),
+    hostAccess: (detail.hostAccess ?? []).map((entry) => ({ service: entry.service, grants: entry.grants.map((grant) => ({ ...grant })) }))
   };
 }
 

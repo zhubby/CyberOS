@@ -4,9 +4,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDockerComposeApp,
+  createDockerOperationApproval,
+  createActionMessageAndJob,
+  createSession,
   ensureNasRoots,
   getDockerComposeApp,
   listDockerComposeApps,
+  linkDockerComposeHostAccessDraft,
   openZosDb,
   upsertRootReadiness,
   type DockerRegistryCredentialRecord,
@@ -14,6 +18,8 @@ import {
 } from "@zos/db";
 import type { DockerConfig } from "@zos/shared";
 import { DockerComposeService } from "./docker-compose.js";
+import type { DockerEngineRuntime } from "./docker-client.js";
+import { DockerHostAccessPolicy } from "./docker-host-access.js";
 
 let tempDir: string;
 let appsRoot: string;
@@ -234,6 +240,101 @@ describe("DockerComposeService", () => {
     expect(updated?.needsDeploy).toBe(true);
   });
 
+  it("materializes Host Access last and forces a full project recreation", async () => {
+    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "host-access");
+    const policy = new DockerHostAccessPolicy(db, { platform: "linux" });
+    vi.stubEnv("ZOS_TEST_HOST_ACCESS_LABELS", JSON.stringify(policy.resolveCompose({
+      hostAccess: [{
+        service: "collector",
+        grants: [{ capability: "host_processes" }, { capability: "host_sys" }]
+      }],
+      services: ["collector"],
+      projectKey: "collector",
+      revision: "create"
+    }).manifests[0]?.labels ?? {}));
+    const service = new DockerComposeService(dockerConfig(), db, appsRoot, policy);
+    const created = await service.createApp({
+      name: "Collector",
+      projectKey: "collector",
+      composeContent: "services:\n  collector:\n    image: collector:latest\n",
+      environment: [],
+      hostAccess: [{
+        service: "collector",
+        grants: [{ capability: "host_processes" }, { capability: "host_sys" }]
+      }]
+    });
+
+    expect(created).toMatchObject({
+      risk: "high",
+      hostAccessState: "pending_apply",
+      hostAccess: [{ service: "collector" }]
+    });
+    const override = await readFile(path.join(appsRoot, "collector", "zos-host-access.override.yaml"), "utf8");
+    expect(override).toContain("/proc");
+    expect(override).toContain("/host/proc");
+    expect(override).toContain("cap_drop");
+    expect(override).toContain("no-new-privileges:true");
+
+    const engine = {
+      pullImage: vi.fn(async () => undefined),
+      resolveImageId: vi.fn(async () => "sha256:collector")
+    } as unknown as DockerEngineRuntime;
+    const approval = await service.prepareHostAccessApproval(created.id, engine);
+    const proposal = {
+      action: "compose_up",
+      targetType: "compose_project",
+      composeProjectId: created.id,
+      composeRevision: created.revision,
+      hostAccess: approval.hostAccess,
+      risk: "high",
+      summary: "Deploy Collector"
+    } as const;
+    const session = createSession(db, { rootId: "nas" });
+    const { job } = createActionMessageAndJob(db, {
+      sessionId: session.id,
+      content: proposal.summary,
+      kind: "docker",
+      status: "waiting_approval"
+    });
+    const linked = createDockerOperationApproval(db, { jobId: job.id, proposal });
+    expect(linkDockerComposeHostAccessDraft(db, approval.draftId, approval.draftRevision, {
+      approvalId: linked.approval.id,
+      operationId: linked.operation.id,
+      jobId: job.id
+    })).toBe(true);
+    const result = await service.runProjectAction(proposal, [], engine, linked.approval.id);
+    const output = JSON.parse(result.output.trim()) as { args: string[] };
+    expect(output.args).toEqual(expect.arrayContaining([
+      "-f",
+      "compose.yaml",
+      "-f",
+      "zos-host-access.override.yaml",
+      "up",
+      "-d",
+      "--force-recreate"
+    ]));
+    expect(getDockerComposeApp(db, created.id)?.deployedHostAccess).toEqual([
+      expect.objectContaining({ service: "collector" })
+    ]);
+  });
+
+  it("rejects conflicting raw Compose privileges for a granted service", async () => {
+    const service = new DockerComposeService(
+      dockerConfig(),
+      db,
+      appsRoot,
+      new DockerHostAccessPolicy(db, { platform: "linux" })
+    );
+    await expect(service.validateApp({
+      projectKey: "unsafe-access",
+      composeContent: "services:\n  collector:\n    image: alpine\n    privileged: true\n",
+      environment: [],
+      hostAccess: [{ service: "collector", grants: [{ capability: "host_processes" }] }]
+    })).rejects.toMatchObject({
+      issues: [expect.objectContaining({ code: "conflicting_compose_field", field: "privileged" })]
+    });
+  });
+
   it("restores the database revision when publishing an update fails", async () => {
     const service = composeService();
     const created = await service.createApp({
@@ -426,6 +527,22 @@ if (args.includes("config")) {
       source: path.join(${JSON.stringify(nasRoot)}, "data"),
       target: "/data"
     }] } } }));
+    process.exit(0);
+  }
+  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "host-access") {
+    const final = args.filter((arg) => arg === "-f").length > 1;
+    console.log(JSON.stringify({ services: { collector: {
+      image: "collector:latest",
+      ...(final ? {
+        cap_drop: ["ALL"],
+        security_opt: ["no-new-privileges:true"],
+        labels: JSON.parse(process.env.ZOS_TEST_HOST_ACCESS_LABELS || "{}"),
+        volumes: [
+          { type: "bind", source: "/proc", target: "/host/proc", read_only: true },
+          { type: "bind", source: "/sys", target: "/host/sys", read_only: true }
+        ]
+      } : {})
+    } } }));
     process.exit(0);
   }
   console.log(JSON.stringify({ services: { app: { image: "alpine" } } }));

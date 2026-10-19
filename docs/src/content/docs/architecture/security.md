@@ -4,7 +4,7 @@ description: ZOS 的 loopback、NAS root、审批和宿主机权限边界。
 type: explanation
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/api/src/server.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/docker-compose.ts, packages/db/src/repositories/docker-registry-credentials.ts, packages/db/src/repositories/docker-compose-apps.ts, packages/nas-tools/src/path-safety.ts, apps/hostd/src/server.rs, apps/hostd/src/network_manager/ethernet.rs, apps/termux/src/server.rs, apps/termux/src/pty.rs]
+sourceOfTruth: [apps/api/src/server.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/docker-compose.ts, apps/api/src/lib/docker-host-access.ts, apps/host-accessd/src/proxy.rs, packages/db/src/repositories/docker-registry-credentials.ts, packages/db/src/repositories/docker-compose-apps.ts, packages/nas-tools/src/path-safety.ts, apps/hostd/src/server.rs, apps/hostd/src/network_manager/ethernet.rs, apps/termux/src/server.rs, apps/termux/src/pty.rs]
 sidebar:
   order: 3
 ---
@@ -14,6 +14,8 @@ v1 假设可信的单用户设备，没有多用户认证边界。API 强制绑�
 所有 NAS 路径都相对于已配置 root 解析，拒绝 traversal、绝对路径和不安全的符号链接逃逸。Pi 的 `read/ls/find/grep` 使用受限 wrapper；`bash/edit/write` 需要 approval。trash 是可恢复隔离区，v1 不永久删除。
 
 Docker socket 近似 root 权限。Rust `hostd` 通过受限 root Unix socket 执行 allowlist 配置与命令；Rust `termux` 验证 Unix peer UID，并以固定的非 root `zos` 用户运行 native PTY。systemd 使用 `ProtectSystem=strict`、`NoNewPrivileges` 和最小 capability 集合。
+
+Docker Host Access 不把原始 Docker socket、system D-Bus、宿主根目录或设备节点交给容器。固定只读宿主来源由策略解析器物化；Docker metadata 经过非 root `zos-host-accessd` 的方法与字段白名单代理，兼容标记默认关闭。Host Access service 强制 drop all capabilities 与 no-new-privileges，并拒绝 privileged、host namespace、device、capability 和 security option 冲突。完整授权指纹、环境值与宿主路径只保存在权限受限的服务端状态，公开审批只返回能力、风险和 image digest 摘要。完整边界见 [Docker 宿主观测授权](/docs/reference/docker-host-access/)。
 
 Ethernet 管理只允许按探测到的永久 MAC 写入固定 `zos-ethernet-<mac>.nmconnection`，D-Bus 调用固定为 NetworkManager checkpoint 的 create/destroy/rollback，调用方不能传入任意 service、对象、方法、unit 或文件路径。期望配置、备份和事务清单位于 root-only NetworkManager StateDirectory；API 只能经 hostd 协议提交结构化配置，不获得 `/etc/NetworkManager` 写权限。该保护仍不能阻止拥有 SSH root 权限的管理员直接修改网络。
 

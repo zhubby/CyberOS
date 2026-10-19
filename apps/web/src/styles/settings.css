@@ -90,6 +90,7 @@
   padding: 8px 8px 5px;
   color: var(--muted-2);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -200,6 +201,7 @@
   background: var(--surface);
   font-size: 11.5px;
   font-style: normal;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -310,6 +312,7 @@
   gap: 6px;
   color: var(--muted);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -390,6 +393,7 @@
   background: var(--neutral-status-bg);
   font-size: 10.5px;
   font-style: normal;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -481,6 +485,7 @@
   color: var(--muted);
   background: transparent;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   cursor: pointer;
 }
@@ -716,6 +721,7 @@
 .settings-download-visual span {
   color: var(--muted-2);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -744,6 +750,7 @@
 .settings-version-release small {
   color: var(--muted-2);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -795,6 +802,7 @@
   gap: 7px;
   color: var(--muted-2);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -858,6 +866,7 @@
 .settings-form label > span {
   color: var(--muted);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -915,6 +924,7 @@
 .settings-preference-field > span {
   color: var(--muted);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -950,6 +960,7 @@
   padding: 0 10px;
   color: var(--muted-2);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -1110,6 +1121,7 @@
   margin-top: 6px;
   color: var(--muted-2);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1136,6 +1148,7 @@
 .settings-summary-list dt {
   color: var(--muted-2);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1265,6 +1278,7 @@
 .settings-root-list span {
   color: var(--muted-2);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 

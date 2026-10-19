@@ -1,4 +1,4 @@
-import type { DockerCreateInput } from "@zos/shared";
+import type { DockerCreateInput, DockerHostAccessGrant } from "@zos/shared";
 
 export type DockerCreateKind = "container" | "volume" | "network";
 
@@ -32,6 +32,7 @@ export type DockerCreateForm = {
   readonlyRootfs: boolean;
   privileged: boolean;
   privilegedAcknowledged: boolean;
+  hostAccess: DockerHostAccessGrant[];
   mounts: Array<{ type: "volume" | "bind" | "tmpfs"; source: string; rootId: string; target: string; readOnly: boolean; noCopy: boolean; sizeBytes: string; mode: string }>;
   networkMode: "bridge" | "host" | "none" | "custom";
   networkName: string;
@@ -61,7 +62,7 @@ export function initialDockerCreateForm(kind: DockerCreateKind = "container"): D
     kind, name: "", image: "", platform: "", pullPolicy: "missing", start: true, hostname: "", user: "", workingDir: "",
     entrypoint: "", command: "", environment: [], labels: [], tty: false, openStdin: false, init: false, stopSignal: "",
     stopTimeoutSeconds: "10", cpuLimit: "", cpuShares: "", cpusetCpus: "", memoryLimitBytes: "", memoryReservationBytes: "",
-    memorySwapBytes: "", pidsLimit: "", shmSizeBytes: "", readonlyRootfs: false, privileged: false, privilegedAcknowledged: false,
+    memorySwapBytes: "", pidsLimit: "", shmSizeBytes: "", readonlyRootfs: false, privileged: false, privilegedAcknowledged: false, hostAccess: [],
     mounts: [], networkMode: "bridge", networkName: "", networkAliases: "", ipv4Address: "", ipv6Address: "", macAddress: "",
     ports: [], publishAllPorts: false, dns: "", dnsSearch: "", extraHosts: [], restartPolicy: "no", restartMaxRetries: "",
     autoRemove: false, driver: "bridge", parent: "", driverMode: "bridge", internal: false, enableIpv4: true, enableIpv6: false,
@@ -116,6 +117,7 @@ export function validateDockerCreateStep(step: number, form: DockerCreateForm): 
   if (step >= 5 && form.ports.some((port) => port.hostIp.trim() && !port.hostPort.trim())) return "Host IP requires a host port";
   if (step >= 5 && form.extraHosts.some((entry) => !entry.hostname.trim() || !entry.address.trim())) return "Extra hosts require both a hostname and address";
   if (step >= 6 && form.privileged && !form.privilegedAcknowledged) return "Acknowledge privileged mode to continue";
+  if (step >= 6 && form.hostAccess.length && (form.privileged || form.networkMode === "host")) return "Host Access conflicts with privileged or host network mode";
   return null;
 }
 
@@ -151,6 +153,7 @@ export function dockerCreateInput(form: DockerCreateForm): DockerCreateInput {
     ...(numberOrUndefined(form.memoryReservationBytes) !== undefined ? { memoryReservationBytes: numberOrUndefined(form.memoryReservationBytes) } : {}), ...(numberOrUndefined(form.memorySwapBytes) !== undefined ? { memorySwapBytes: numberOrUndefined(form.memorySwapBytes) } : {}),
     ...(numberOrUndefined(form.pidsLimit) !== undefined ? { pidsLimit: numberOrUndefined(form.pidsLimit) } : {}), ...(numberOrUndefined(form.shmSizeBytes) !== undefined ? { shmSizeBytes: numberOrUndefined(form.shmSizeBytes) } : {}),
     readonlyRootfs: form.readonlyRootfs, privileged: form.privileged, privilegedAcknowledged: form.privilegedAcknowledged, ...(mounts.length ? { mounts } : {}),
+    ...(form.hostAccess.length ? { hostAccess: form.hostAccess } : {}),
     network: { mode: form.networkMode, ...(customNetwork ? { networkName: form.networkName.trim(), ...(form.networkAliases.trim() ? { aliases: form.networkAliases.split(",").map((value) => value.trim()).filter(Boolean) } : {}), ...(form.ipv4Address.trim() ? { ipv4Address: form.ipv4Address.trim() } : {}), ...(form.ipv6Address.trim() ? { ipv6Address: form.ipv6Address.trim() } : {}), ...(form.macAddress.trim() ? { macAddress: form.macAddress.trim() } : {}) } : {}) },
     ...(form.ports.length ? { ports: form.ports.filter((port) => port.containerPort.trim()).map((port) => ({ containerPort: Number(port.containerPort), protocol: port.protocol, ...(port.hostIp.trim() ? { hostIp: port.hostIp.trim() } : {}), ...(port.hostPort.trim() ? { hostPort: Number(port.hostPort) } : {}) })) } : {}),
     publishAllPorts: form.publishAllPorts, ...(form.dns.trim() ? { dns: form.dns.split(",").map((value) => value.trim()).filter(Boolean) } : {}), ...(form.dnsSearch.trim() ? { dnsSearch: form.dnsSearch.split(",").map((value) => value.trim()).filter(Boolean) } : {}),

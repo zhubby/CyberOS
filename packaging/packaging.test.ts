@@ -161,6 +161,7 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("target/release/zos-alerter usr/lib/zos/bin/");
     expect(install).not.toContain("apps/monitor/dist/");
     expect(install).toContain("target/release/zos-hostd usr/lib/zos/bin/");
+    expect(install).toContain("target/release/zos-host-accessd usr/lib/zos/bin/");
     expect(install).toContain("target/release/zos-termux usr/lib/zos/bin/");
     expect(install).not.toContain("apps/terminal-helper");
     expect(install).toContain("usr/lib/zos/apps/worker/dist/");
@@ -199,6 +200,11 @@ describe("native packaging artifacts", () => {
     await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
       "ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps"
     );
+    const hostAccessUnit = await readPackagingFile("systemd", "zos-host-accessd.service");
+    expect(hostAccessUnit).toContain("User=zos");
+    expect(hostAccessUnit).toContain("SupplementaryGroups=docker");
+    expect(hostAccessUnit).toContain("ZOS_HOST_ACCESS_DOCKER_COMPATIBLE=0");
+    expect(hostAccessUnit).toContain("NoNewPrivileges=yes");
     expect(install).toContain("packaging/scripts/zos-nginx.sh usr/lib/zos/scripts/");
     expect(install).toContain("packaging/scripts/zos-configure-locale.sh usr/lib/zos/scripts/");
     expect(install).toContain("packaging/scripts/zos-refresh-termux.sh usr/lib/zos/scripts/");
@@ -754,7 +760,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain('failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"');
     expect(deploy).toContain('capture_runtime_diagnostics "$failure_dir"');
     expect(deploy).toContain("SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'");
-    expect(deploy).toContain("systemctl status $RUNTIME_SERVICES $SHARE_SERVICES");
+    expect(deploy).toContain("systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES $SHARE_SERVICES");
     expect(deploy).toContain("-u vsftpd.service -u nfs-server.service -u minidlna.service");
     expect(deploy).toContain('cat "$target_diagnostics_path/services-status.txt" >&2');
     expect(deploy).toContain('cat "$target_diagnostics_path/services-journal.txt" >&2');

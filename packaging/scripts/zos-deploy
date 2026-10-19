@@ -17,7 +17,8 @@ TIMERS='zos-maintenance.timer zos-health.timer zos-backup-daily.timer zos-backup
 CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'
 RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service zos-alerter.service"
 SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'
-WRITERS="zos-indexer.service zos-maintenance.service zos-health.service zos-backup-daily.service zos-backup-weekly.service $RUNTIME_SERVICES zos-vod-player.service"
+OPTIONAL_RUNTIME_SERVICES='zos-host-accessd.service'
+WRITERS="zos-indexer.service zos-maintenance.service zos-health.service zos-backup-daily.service zos-backup-weekly.service $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES zos-vod-player.service"
 
 success=0
 work_dir=
@@ -267,6 +268,12 @@ activate_runtime() {
   log "starting ZOS runtime prerequisites"
   start_service_stably zos-hostd.service 1
   start_service_stably zos-termux.service 1
+  if [ -f "$state_dir/zos-host-accessd.service.enabled" ] || systemctl is-enabled --quiet docker.service 2>/dev/null; then
+    systemctl enable zos-host-accessd.service
+    start_service_stably zos-host-accessd.service 1
+  else
+    systemctl disable zos-host-accessd.service >/dev/null 2>&1 || true
+  fi
   restore_unit_state zos-vod-player.service "$state_dir"
 
   log "starting the API and waiting for startup recovery"
@@ -435,9 +442,9 @@ EOF
 
 capture_runtime_diagnostics() {
   target_diagnostics_path=$1
-  systemctl status $RUNTIME_SERVICES $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
+  systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
   systemctl --failed --no-legend --plain > "$target_diagnostics_path/failed-units.txt" 2>&1 || true
-  journalctl -u zos-api.service -u zos-monitor.service -u zos-alerter.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-termux.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
+  journalctl -u zos-api.service -u zos-monitor.service -u zos-alerter.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-host-accessd.service -u zos-termux.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
 
   log "service status at failure:" >&2
   cat "$target_diagnostics_path/services-status.txt" >&2

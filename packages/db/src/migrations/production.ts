@@ -1645,5 +1645,50 @@ export const productionMigrations: Migration[] = [
       CREATE INDEX idx_monitoring_alert_incident_events_incident
         ON monitoring_alert_incident_events(incident_id, created_at, id);
     `
+  },
+  {
+    id: "032_docker_host_access",
+    sql: `
+      ALTER TABLE docker_apps
+        ADD COLUMN host_access_json TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE docker_apps
+        ADD COLUMN deployed_host_access_json TEXT NOT NULL DEFAULT '[]';
+
+      CREATE TABLE docker_create_drafts (
+        id TEXT PRIMARY KEY,
+        revision TEXT NOT NULL,
+        approval_id TEXT UNIQUE REFERENCES pending_approvals(id) ON DELETE SET NULL,
+        operation_id TEXT UNIQUE REFERENCES docker_operations(id) ON DELETE SET NULL,
+        job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+        input_json TEXT NOT NULL,
+        policy_version TEXT NOT NULL,
+        grant_summary_json TEXT NOT NULL DEFAULT '[]',
+        fingerprint TEXT NOT NULL,
+        image_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_docker_create_drafts_expires_at
+        ON docker_create_drafts(expires_at);
+
+      CREATE TABLE docker_compose_host_access_drafts (
+        id TEXT PRIMARY KEY,
+        revision TEXT NOT NULL,
+        project_id TEXT NOT NULL REFERENCES docker_apps(id) ON DELETE CASCADE,
+        compose_revision TEXT NOT NULL,
+        approval_id TEXT UNIQUE REFERENCES pending_approvals(id) ON DELETE SET NULL,
+        operation_id TEXT UNIQUE REFERENCES docker_operations(id) ON DELETE SET NULL,
+        job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+        policy_version TEXT NOT NULL,
+        image_digests_json TEXT NOT NULL DEFAULT '[]',
+        fingerprints_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_docker_compose_host_access_drafts_expires_at
+        ON docker_compose_host_access_drafts(expires_at);
+    `
   }
 ];

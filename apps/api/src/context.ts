@@ -14,6 +14,7 @@ import type { VodPlayerRuntime } from "./lib/vod-player.js";
 import type { VmRuntimeDependencies } from "./lib/vm-service.js";
 import type { PhotostaffMapArchiveRuntime } from "./lib/photostaff-map.js";
 import type { FileBatchRuntime } from "./lib/file-batch-runner.js";
+import type { DockerHostAccessRuntime } from "./lib/docker-host-access.js";
 
 export interface ApiRouteContext {
   config: ZosConfig;
@@ -36,6 +37,7 @@ export interface ApiRouteContext {
   vodPlayer?: VodPlayerRuntime;
   photostaffMap?: PhotostaffMapArchiveRuntime;
   fileBatches?: FileBatchRuntime;
+  hostAccess?: DockerHostAccessRuntime;
 }
 
 export type ServerDependencies = Omit<ApiRouteContext, "monitoring"> & {

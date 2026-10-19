@@ -103,6 +103,7 @@
 
 .custom-select-option.is-selected {
   color: var(--text);
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 

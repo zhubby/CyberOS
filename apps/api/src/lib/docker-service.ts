@@ -142,7 +142,7 @@ export async function applyDockerOperation(
     case "compose_down":
     case "compose_pull":
     case "compose_restart": {
-      const result = await compose.runProjectAction(proposal, registryCredentials);
+      const result = await compose.runProjectAction(proposal, registryCredentials, engine, operation.approvalId);
       return {
         action: proposal.action,
         composeProjectId: proposal.composeProjectId,

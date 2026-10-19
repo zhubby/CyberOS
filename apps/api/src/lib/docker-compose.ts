@@ -5,9 +5,12 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import {
   createDockerComposeApp,
+  createDockerComposeHostAccessDraft,
+  deleteDockerComposeHostAccessDraft,
   deleteDockerComposeApp,
   DockerComposeAppConflictError,
   getDockerComposeApp,
+  getDockerComposeHostAccessDraftByApproval,
   getDockerComposeAppSummary,
   getRootReadiness,
   listDockerComposeApps,
@@ -17,6 +20,7 @@ import {
   restoreDockerComposeApp,
   updateDockerComposeApp,
   type DockerComposeAppEnvironmentRecord,
+  type DockerComposeHostAccessDraftRecord,
   type DockerComposeAppRecord,
   type DockerComposeAppSummaryRecord,
   type DockerRegistryCredentialRecord,
@@ -32,11 +36,26 @@ import type {
   DockerComposeAppValidationResult,
   DockerConfig,
   DockerContainerSummary,
+  DockerHostAccessValidationIssue,
   DockerOperationProposal
 } from "@zos/shared";
+import type { DockerEngineRuntime } from "./docker-client.js";
 import { isPathInside } from "@zos/nas-tools";
-import { parseDocument } from "yaml";
-import { dockerConfigAuths, redactDockerRegistrySecrets } from "./docker-registry.js";
+import { parseDocument, stringify } from "yaml";
+import {
+  dockerConfigAuths,
+  dockerRegistryAuthHeader,
+  findDockerRegistryCredential,
+  redactDockerRegistrySecrets
+} from "./docker-registry.js";
+import {
+  DOCKER_HOST_ACCESS_OVERRIDE_FILE,
+  DockerHostAccessPolicy,
+  DockerHostAccessValidationError,
+  coverageReport,
+  type DockerHostAccessControlRuntime,
+  type DockerHostAccessManifest
+} from "./docker-host-access.js";
 
 export const DOCKER_APPS_ROOT = "/zos/apps";
 
@@ -52,7 +71,7 @@ const MAX_ENVIRONMENT_BYTES = 256 * 1024;
 const MAX_ENVIRONMENT_ENTRIES = 256;
 
 export class DockerComposeValidationError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly issues: DockerHostAccessValidationIssue[] = []) {
     super(message);
     this.name = "DockerComposeValidationError";
   }
@@ -72,6 +91,13 @@ export class DockerComposeMaterializationError extends Error {
   }
 }
 
+export class DockerComposeHostAccessApprovalError extends Error {
+  constructor(message: string, readonly statusCode: 409 | 503) {
+    super(message);
+    this.name = "DockerComposeHostAccessApprovalError";
+  }
+}
+
 export interface DockerComposeRuntime {
   listProjects(containers: DockerContainerSummary[] | null): Promise<DockerComposeAppSummary[]>;
   getProject(projectId: string, containers?: DockerContainerSummary[] | null): Promise<DockerComposeAppSummary | null>;
@@ -85,9 +111,20 @@ export interface DockerComposeRuntime {
     isProjectInUse?: (projectKey: string) => Promise<boolean>
   ): Promise<"deleted" | "not_found" | "conflict" | "in_use">;
   reconcileAll(): Promise<void>;
+  prepareHostAccessApproval?(
+    projectId: string,
+    engine: DockerEngineRuntime,
+    registryCredentials?: DockerRegistryCredentialRecord[]
+  ): Promise<{
+    draftId: string;
+    draftRevision: string;
+    hostAccess: NonNullable<DockerOperationProposal["hostAccess"]>;
+  }>;
   runProjectAction(
     proposal: DockerOperationProposal,
-    registryCredentials?: DockerRegistryCredentialRecord[]
+    registryCredentials?: DockerRegistryCredentialRecord[],
+    engine?: DockerEngineRuntime,
+    approvalId?: string | null
   ): Promise<{ output: string }>;
 }
 
@@ -97,7 +134,9 @@ export class DockerComposeService implements DockerComposeRuntime {
   constructor(
     private readonly configSource: DockerConfig | (() => DockerConfig),
     private readonly db: ZosDatabase,
-    private readonly appsRoot = DOCKER_APPS_ROOT
+    private readonly appsRoot = DOCKER_APPS_ROOT,
+    private readonly hostAccessPolicy = new DockerHostAccessPolicy(db),
+    private readonly hostAccessControl?: DockerHostAccessControlRuntime
   ) {}
 
   async listProjects(containers: DockerContainerSummary[] | null): Promise<DockerComposeAppSummary[]> {
@@ -117,7 +156,7 @@ export class DockerComposeService implements DockerComposeRuntime {
     containers: DockerContainerSummary[] | null = null
   ): Promise<DockerComposeAppDetail | null> {
     const app = getDockerComposeApp(this.db, projectId);
-    return app ? publicDetail(app, containers, this.appsRoot) : null;
+    return app ? publicDetail(app, containers, this.appsRoot, this.hostAccessPolicy) : null;
   }
 
   async validateApp(input: DockerComposeAppValidateInput): Promise<DockerComposeAppValidationResult> {
@@ -135,32 +174,41 @@ export class DockerComposeService implements DockerComposeRuntime {
         name: current.name,
         composeContent: input.composeContent,
         environment: input.environment,
-        expectedRevision: current.revision
+        expectedRevision: current.revision,
+        ...(input.hostAccess !== undefined ? { hostAccess: input.hostAccess } : {})
       }, current);
       return validateComposeDefinition(this.currentConfig(), this.db, {
         projectKey: current.projectKey,
         composeContent: normalized.composeContent,
-        environment: normalized.resolvedEnvironment
-      }, this.appsRoot);
+        environment: normalized.resolvedEnvironment,
+        hostAccess: normalized.hostAccess,
+        revision: current.revision
+      }, this.appsRoot, this.hostAccessPolicy);
     }
     const normalized = normalizeCreateInput({ ...input, name: "Validation" } as DockerComposeAppCreateInput);
-    return validateComposeDefinition(this.currentConfig(), this.db, normalized, this.appsRoot);
+    return validateComposeDefinition(this.currentConfig(), this.db, { ...normalized, revision: "validation" }, this.appsRoot, this.hostAccessPolicy);
   }
 
   async createApp(input: DockerComposeAppCreateInput): Promise<DockerComposeAppDetail> {
     return this.serialized(async () => {
       requireRequestObject(input);
       const normalized = normalizeCreateInput(input);
-      const validation = await validateComposeDefinition(this.currentConfig(), this.db, normalized, this.appsRoot);
+      const validation = await validateComposeDefinition(
+        this.currentConfig(),
+        this.db,
+        { ...normalized, revision: "create" },
+        this.appsRoot,
+        this.hostAccessPolicy
+      );
       const app = createDockerComposeApp(this.db, { ...normalized, ...validation });
       try {
-        await materializeApp(app, this.appsRoot);
+        await materializeApp(app, this.appsRoot, this.hostAccessPolicy);
       } catch (error) {
         deleteDockerComposeApp(this.db, app.id, app.revision);
         await removeMaterializedApp(app, this.appsRoot).catch(() => undefined);
         throw materializationError(error);
       }
-      return publicDetail(app, null, this.appsRoot);
+      return publicDetail(app, null, this.appsRoot, this.hostAccessPolicy);
     });
   }
 
@@ -173,8 +221,10 @@ export class DockerComposeService implements DockerComposeRuntime {
       const validation = await validateComposeDefinition(this.currentConfig(), this.db, {
         projectKey: current.projectKey,
         composeContent: normalized.composeContent,
-        environment: normalized.resolvedEnvironment
-      }, this.appsRoot);
+        environment: normalized.resolvedEnvironment,
+        hostAccess: normalized.hostAccess,
+        revision: current.revision
+      }, this.appsRoot, this.hostAccessPolicy);
       const updated = updateDockerComposeApp(this.db, projectId, input.expectedRevision, {
         name: normalized.name,
         composeContent: normalized.composeContent,
@@ -183,11 +233,11 @@ export class DockerComposeService implements DockerComposeRuntime {
       });
       if (!updated) return null;
       try {
-        await materializeApp(updated, this.appsRoot);
+        await materializeApp(updated, this.appsRoot, this.hostAccessPolicy);
       } catch (error) {
         try {
           restoreDockerComposeApp(this.db, updated.revision, current);
-          await materializeApp(current, this.appsRoot);
+          await materializeApp(current, this.appsRoot, this.hostAccessPolicy);
         } catch (rollbackError) {
           throw new DockerComposeMaterializationError(
             `${materializationError(error).message}; rollback failed: ${materializationError(rollbackError).message}`
@@ -195,7 +245,7 @@ export class DockerComposeService implements DockerComposeRuntime {
         }
         throw materializationError(error);
       }
-      return publicDetail(updated, null, this.appsRoot);
+      return publicDetail(updated, null, this.appsRoot, this.hostAccessPolicy);
     });
   }
 
@@ -221,7 +271,7 @@ export class DockerComposeService implements DockerComposeRuntime {
         result = deleteDockerComposeApp(this.db, projectId, input.expectedRevision);
       } catch (error) {
         try {
-          await materializeApp(app, this.appsRoot);
+          await materializeApp(app, this.appsRoot, this.hostAccessPolicy);
         } catch (rollbackError) {
           throw new DockerComposeMaterializationError(
             `Database deletion failed; runtime copy recovery failed: ${materializationError(rollbackError).message}`
@@ -231,7 +281,7 @@ export class DockerComposeService implements DockerComposeRuntime {
       }
       if (result !== "deleted") {
         try {
-          await materializeApp(app, this.appsRoot);
+          await materializeApp(app, this.appsRoot, this.hostAccessPolicy);
         } catch (error) {
           throw materializationError(error);
         }
@@ -245,7 +295,14 @@ export class DockerComposeService implements DockerComposeRuntime {
       const failures: string[] = [];
       for (const app of listDockerComposeApps(this.db)) {
         try {
-          await materializeApp(app, this.appsRoot);
+          await materializeApp(app, this.appsRoot, this.hostAccessPolicy);
+          const manifests = this.hostAccessPolicy.resolveCompose({
+            hostAccess: app.hostAccess,
+            services: app.services,
+            projectKey: app.projectKey,
+            revision: app.revision
+          }).manifests;
+          await this.reconcileHostAccessControls(app, manifests);
         } catch (error) {
           failures.push(`${app.projectKey}: ${materializationError(error).message}`);
         }
@@ -258,9 +315,79 @@ export class DockerComposeService implements DockerComposeRuntime {
     });
   }
 
+  async prepareHostAccessApproval(
+    projectId: string,
+    engine: DockerEngineRuntime,
+    registryCredentials: DockerRegistryCredentialRecord[] = []
+  ): Promise<{
+    draftId: string;
+    draftRevision: string;
+    hostAccess: NonNullable<DockerOperationProposal["hostAccess"]>;
+  }> {
+    return this.serialized(async () => {
+      const app = getDockerComposeApp(this.db, projectId);
+      if (!app) throw new DockerComposeValidationError("Compose App is no longer available");
+      if (!engine.resolveImageId) {
+        throw new DockerComposeHostAccessApprovalError("Docker image identity resolution is unavailable", 503);
+      }
+      await materializeApp(app, this.appsRoot, this.hostAccessPolicy);
+      const serviceImages = await resolveComposeServiceImages(this.currentConfig(), app, this.appsRoot);
+      const imageDigests: Array<{ service: string; digest: string }> = [];
+      for (const service of app.hostAccess.map((entry) => entry.service).sort()) {
+        const image = serviceImages.get(service);
+        if (!image) {
+          throw new DockerComposeValidationError(`Host Access service ${service} has no resolved image`);
+        }
+        const credential = findDockerRegistryCredential(registryCredentials, image);
+        await engine.pullImage({
+          image,
+          ...(credential ? { registryAuth: dockerRegistryAuthHeader(credential) } : {})
+        });
+        imageDigests.push({ service, digest: await engine.resolveImageId(image) });
+      }
+      const manifests = this.hostAccessPolicy.resolveCompose({
+        hostAccess: app.hostAccess,
+        services: app.services,
+        projectKey: app.projectKey,
+        revision: app.revision,
+        imageDigests: Object.fromEntries(imageDigests.map((entry) => [entry.service, entry.digest]))
+      }).manifests;
+      const draft = createDockerComposeHostAccessDraft(this.db, {
+        projectId: app.id,
+        composeRevision: app.revision,
+        policyVersion: this.hostAccessPolicy.catalog().policyVersion,
+        imageDigests,
+        fingerprints: manifests.map((manifest) => ({
+          service: manifest.service!,
+          fingerprint: manifest.fingerprint
+        })),
+        expiresAt: new Date(Date.now() + 15 * 60_000)
+      });
+      const catalog = new Map(this.hostAccessPolicy.catalog().capabilities.map((capability) => [capability.id, capability]));
+      return {
+        draftId: draft.id,
+        draftRevision: draft.revision,
+        hostAccess: {
+          policyVersion: draft.policyVersion,
+          added: grantDifference(app.hostAccess, app.deployedHostAccess).map((grant) => ({
+            ...grant,
+            risk: catalog.get(grant.capability)!.risk
+          })),
+          removed: grantDifference(app.deployedHostAccess, app.hostAccess).map((grant) => ({
+            ...grant,
+            risk: catalog.get(grant.capability)!.risk
+          })),
+          imageDigests
+        }
+      };
+    });
+  }
+
   async runProjectAction(
     proposal: DockerOperationProposal,
-    registryCredentials: DockerRegistryCredentialRecord[] = []
+    registryCredentials: DockerRegistryCredentialRecord[] = [],
+    engine?: DockerEngineRuntime,
+    approvalId?: string | null
   ): Promise<{ output: string }> {
     return this.serialized(async () => {
       if (!proposal.composeProjectId || !proposal.composeRevision) {
@@ -271,7 +398,17 @@ export class DockerComposeService implements DockerComposeRuntime {
       if (app.revision !== proposal.composeRevision) {
         throw new DockerComposeAppConflictError("Compose App changed after approval was requested");
       }
-      await materializeApp(app, this.appsRoot);
+      if (app.hostAccess.length && proposal.service && app.deployedRevision !== app.revision) {
+        throw new DockerComposeValidationError("Host Access changes require applying the entire Compose project");
+      }
+      const hasHostAccessApproval = Boolean(proposal.hostAccess);
+      const hostAccessDraft = hasHostAccessApproval && approvalId
+        ? getDockerComposeHostAccessDraftByApproval(this.db, approvalId)
+        : null;
+      if (hasHostAccessApproval) {
+        await this.validateHostAccessApproval(app, proposal, engine, hostAccessDraft);
+      }
+      await materializeApp(app, this.appsRoot, this.hostAccessPolicy, proposal.hostAccess?.imageDigests);
       const appDirectory = managedAppPath(this.appsRoot, app.projectKey);
       const dockerConfigDirectory = composeNeedsRegistryAuth(proposal)
         ? await createDockerConfig(registryCredentials)
@@ -280,7 +417,7 @@ export class DockerComposeService implements DockerComposeRuntime {
         const config = this.currentConfig();
         const output = await runCommand(
           config.composeCommand,
-          composeCommandArgs(app, composeActionArgs(proposal)),
+          composeCommandArgs(app, composeActionArgs(proposal, app.hostAccess.length > 0 || hasHostAccessApproval)),
           appDirectory,
           config.operationTimeoutMs,
           composeProcessEnvironment(config, app.environment, dockerConfigDirectory)
@@ -293,8 +430,71 @@ export class DockerComposeService implements DockerComposeRuntime {
         throw new Error(redactComposeSecrets(error, app.environment, registryCredentials));
       } finally {
         if (dockerConfigDirectory) await rm(dockerConfigDirectory, { recursive: true, force: true });
+        if (hostAccessDraft) deleteDockerComposeHostAccessDraft(this.db, hostAccessDraft.id);
       }
     });
+  }
+
+  private async validateHostAccessApproval(
+    app: DockerComposeAppRecord,
+    proposal: DockerOperationProposal,
+    engine: DockerEngineRuntime | undefined,
+    draft: DockerComposeHostAccessDraftRecord | null
+  ): Promise<void> {
+    if (!draft || !proposal.hostAccess || !engine?.resolveImageId) {
+      throw new DockerComposeHostAccessApprovalError("Compose Host Access approval is incomplete", 409);
+    }
+    if (
+      draft.projectId !== app.id ||
+      draft.composeRevision !== app.revision ||
+      Date.parse(draft.expiresAt) <= Date.now()
+    ) {
+      throw new DockerComposeHostAccessApprovalError("Compose Host Access approval expired or changed", 409);
+    }
+    const serviceImages = await resolveComposeServiceImages(this.currentConfig(), app, this.appsRoot);
+    for (const expected of draft.imageDigests) {
+      const image = serviceImages.get(expected.service);
+      if (!image || await engine.resolveImageId(image) !== expected.digest) {
+        throw new DockerComposeHostAccessApprovalError("Compose image changed after approval was requested", 409);
+      }
+    }
+    let manifests: DockerHostAccessManifest[];
+    try {
+      manifests = this.hostAccessPolicy.resolveCompose({
+        hostAccess: app.hostAccess,
+        services: app.services,
+        projectKey: app.projectKey,
+        revision: app.revision,
+        imageDigests: Object.fromEntries(draft.imageDigests.map((entry) => [entry.service, entry.digest]))
+      }).manifests;
+    } catch (error) {
+      throw new DockerComposeHostAccessApprovalError(hostAccessComposeError(error).message, 503);
+    }
+    const fingerprints = manifests.map((manifest) => ({ service: manifest.service!, fingerprint: manifest.fingerprint }));
+    if (JSON.stringify(fingerprints) !== JSON.stringify(draft.fingerprints)) {
+      throw new DockerComposeHostAccessApprovalError("Compose Host Access resources changed after approval was requested", 409);
+    }
+    await this.reconcileHostAccessControls(app, manifests);
+  }
+
+  private async reconcileHostAccessControls(
+    app: DockerComposeAppRecord,
+    manifests: DockerHostAccessManifest[]
+  ): Promise<void> {
+    for (const manifest of manifests) {
+      const capabilities = manifest.grants
+        .map((grant) => grant.capability)
+        .filter((capability) => capability === "docker_metadata" || capability === "systemd_status");
+      if (!capabilities.length) continue;
+      if (!this.hostAccessControl) {
+        throw new DockerComposeHostAccessApprovalError("Docker Host Access proxy is unavailable", 503);
+      }
+      await this.hostAccessControl.reconcile({
+        scopeId: app.projectKey,
+        ...(manifest.service ? { service: manifest.service } : {}),
+        capabilities
+      });
+    }
   }
 
   private async serialized<T>(operation: () => Promise<T>): Promise<T> {
@@ -325,7 +525,8 @@ function normalizeCreateInput(input: DockerComposeAppCreateInput) {
     name,
     projectKey,
     composeContent: composeContent.endsWith("\n") ? composeContent : `${composeContent}\n`,
-    environment: normalizeEnvironment(input.environment, true) as DockerComposeAppEnvironmentRecord[]
+    environment: normalizeEnvironment(input.environment, true) as DockerComposeAppEnvironmentRecord[],
+    hostAccess: input.hostAccess ?? []
   };
 }
 
@@ -345,7 +546,8 @@ function normalizeUpdateInput(input: DockerComposeAppUpdateInput, current: Docke
     name,
     composeContent: composeContent.endsWith("\n") ? composeContent : `${composeContent}\n`,
     environment,
-    resolvedEnvironment
+    resolvedEnvironment,
+    hostAccess: input.hostAccess ?? current.hostAccess
   };
 }
 
@@ -385,8 +587,15 @@ function normalizeEnvironment(
 async function validateComposeDefinition(
   config: DockerConfig,
   db: ZosDatabase,
-  input: { projectKey: string; composeContent: string; environment: DockerComposeAppEnvironmentRecord[] },
-  appsRoot: string
+  input: {
+    projectKey: string;
+    composeContent: string;
+    environment: DockerComposeAppEnvironmentRecord[];
+    hostAccess: unknown;
+    revision: string;
+  },
+  appsRoot: string,
+  hostAccessPolicy: DockerHostAccessPolicy
 ): Promise<DockerComposeAppValidationResult> {
   let root: Record<string, unknown>;
   try {
@@ -428,6 +637,20 @@ async function validateComposeDefinition(
     await validateServiceVolumes(db, serviceName, service.volumes, appsRoot, warnings);
     collectServiceRisk(serviceName, service, warnings);
   }
+  const serviceNames = Object.keys(services);
+  let rawHostAccess;
+  try {
+    rawHostAccess = hostAccessPolicy.resolveCompose({
+      hostAccess: input.hostAccess,
+      services: serviceNames,
+      projectKey: input.projectKey,
+      revision: input.revision,
+      serviceDefinitions: serviceDefinitions(services),
+      existingMountTargets: serviceMountTargets(services)
+    });
+  } catch (error) {
+    throw hostAccessComposeError(error);
+  }
 
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-compose-validate-"));
   try {
@@ -437,7 +660,7 @@ async function validateComposeDefinition(
     try {
       output = await runCommand(
         config.composeCommand,
-        composeCommandArgs({ projectKey: input.projectKey }, ["config", "--format", "json"]),
+        composeCommandArgs({ projectKey: input.projectKey }, ["config", "--format", "json"], false),
         tempDirectory,
         config.operationTimeoutMs,
         composeProcessEnvironment(config, input.environment),
@@ -465,10 +688,51 @@ async function validateComposeDefinition(
     }
     const validatedServices = Object.keys(resolvedServices);
     if (!validatedServices.length) throw new DockerComposeValidationError("Compose validation returned no services");
+    let resolvedHostAccess;
+    try {
+      resolvedHostAccess = hostAccessPolicy.resolveCompose({
+        hostAccess: rawHostAccess.hostAccess,
+        services: validatedServices,
+        projectKey: input.projectKey,
+        revision: input.revision,
+        serviceDefinitions: serviceDefinitions(resolvedServices),
+        existingMountTargets: serviceMountTargets(resolvedServices)
+      });
+    } catch (error) {
+      throw hostAccessComposeError(error);
+    }
+    if (resolvedHostAccess.manifests.length) {
+      await writeFile(
+        path.join(tempDirectory, DOCKER_HOST_ACCESS_OVERRIDE_FILE),
+        renderHostAccessOverride(resolvedHostAccess.manifests),
+        { mode: 0o600 }
+      );
+      let finalOutput: string;
+      try {
+        finalOutput = await runCommand(
+          config.composeCommand,
+          composeCommandArgs({ projectKey: input.projectKey }, ["config", "--format", "json"], true),
+          tempDirectory,
+          config.operationTimeoutMs,
+          composeProcessEnvironment(config, input.environment),
+          { maxOutputBytes: MAX_COMPOSE_BYTES * 4, stdoutOnlyOnSuccess: true }
+        );
+      } catch (error) {
+        throw new DockerComposeValidationError(
+          redactEnvironmentSecrets(error, input.environment) || "Docker Compose Host Access validation failed"
+        );
+      }
+      validateFinalHostAccessConfig(finalOutput, resolvedHostAccess.manifests);
+    }
+    const hostAccessRisk = resolvedHostAccess.manifests.some((manifest) => manifest.grants.some((grant) =>
+      hostAccessPolicy.catalog().capabilities.find((capability) => capability.id === grant.capability)?.risk === "high"));
     return {
       services: Array.from(new Set(validatedServices)).sort(),
       warnings: Array.from(warnings),
-      risk: warnings.size ? "high" : "medium"
+      risk: warnings.size || hostAccessRisk ? "high" : "medium",
+      hostAccess: resolvedHostAccess.hostAccess,
+      hostAccessCoverage: resolvedHostAccess.coverage,
+      issues: resolvedHostAccess.issues
     };
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
@@ -524,6 +788,60 @@ async function validateServiceVolumes(
   }
 }
 
+async function resolveComposeServiceImages(
+  config: DockerConfig,
+  app: DockerComposeAppRecord,
+  appsRoot: string
+): Promise<Map<string, string>> {
+  const output = await runCommand(
+    config.composeCommand,
+    composeCommandArgs(app, ["config", "--format", "json"], false),
+    managedAppPath(appsRoot, app.projectKey),
+    config.operationTimeoutMs,
+    composeProcessEnvironment(config, app.environment),
+    { maxOutputBytes: MAX_COMPOSE_BYTES * 4, stdoutOnlyOnSuccess: true }
+  );
+  let root: Record<string, unknown>;
+  try {
+    root = objectValue(JSON.parse(output) as unknown, "Resolved Compose document");
+  } catch (error) {
+    if (error instanceof DockerComposeValidationError) throw error;
+    throw new DockerComposeValidationError("Docker Compose returned invalid image metadata");
+  }
+  const services = objectValue(root.services, "Resolved Compose services");
+  return new Map(Object.entries(services).flatMap(([service, value]) => {
+    const image = objectValue(value, `Resolved service ${service}`).image;
+    return typeof image === "string" && image.trim() ? [[service, image]] : [];
+  }));
+}
+
+function grantDifference(
+  left: DockerComposeAppRecord["hostAccess"],
+  right: DockerComposeAppRecord["hostAccess"]
+): Array<Omit<NonNullable<DockerOperationProposal["hostAccess"]>["added"][number], "risk">> {
+  const rightKeys = new Set(right.flatMap((entry) => entry.grants.map((grant) => grantKey(entry.service, grant))));
+  return left.flatMap((entry) => entry.grants.flatMap((grant) => {
+    if (rightKeys.has(grantKey(entry.service, grant))) return [];
+    return [{
+      service: entry.service,
+      capability: grant.capability,
+      ...(grant.capability === "nas_capacity" ? { rootId: grant.rootId } : {})
+    }];
+  })).sort((a, b) => `${a.service}:${a.capability}:${a.rootId ?? ""}`.localeCompare(`${b.service}:${b.capability}:${b.rootId ?? ""}`));
+}
+
+function grantKey(
+  service: string,
+  grant: DockerComposeAppRecord["hostAccess"][number]["grants"][number]
+): string {
+  return JSON.stringify([
+    service,
+    grant.capability,
+    grant.capability === "nas_capacity" ? grant.rootId : null,
+    grant.target ?? null
+  ]);
+}
+
 async function resolvePotentialPath(candidatePath: string): Promise<string> {
   let existingPath = path.resolve(candidatePath);
   const missingSegments: string[] = [];
@@ -540,7 +858,12 @@ async function resolvePotentialPath(candidatePath: string): Promise<string> {
   }
 }
 
-async function materializeApp(app: DockerComposeAppRecord, appsRoot: string): Promise<void> {
+async function materializeApp(
+  app: DockerComposeAppRecord,
+  appsRoot: string,
+  hostAccessPolicy: DockerHostAccessPolicy,
+  imageDigests: Array<{ service?: string; digest: string }> = []
+): Promise<void> {
   await ensureManagedRoot(appsRoot);
   const appDirectory = managedAppPath(appsRoot, app.projectKey);
   const existing = await lstat(appDirectory).catch(() => null);
@@ -559,6 +882,23 @@ async function materializeApp(app: DockerComposeAppRecord, appsRoot: string): Pr
   );
   await atomicWrite(path.join(appDirectory, MANAGED_COMPOSE_FILE), app.composeContent, 0o640);
   await atomicWrite(path.join(appDirectory, MANAGED_ENV_FILE), renderEnvironment(app.environment), 0o600);
+  let manifests: DockerHostAccessManifest[] = [];
+  try {
+    manifests = hostAccessPolicy.resolveCompose({
+      hostAccess: app.hostAccess,
+      services: app.services,
+      projectKey: app.projectKey,
+      revision: app.revision,
+      imageDigests: Object.fromEntries(imageDigests.flatMap((entry) => entry.service ? [[entry.service, entry.digest]] : []))
+    }).manifests;
+  } catch (error) {
+    throw new DockerComposeMaterializationError(hostAccessComposeError(error).message);
+  }
+  await atomicWrite(
+    path.join(appDirectory, DOCKER_HOST_ACCESS_OVERRIDE_FILE),
+    renderHostAccessOverride(manifests),
+    0o640
+  );
 }
 
 async function removeMaterializedApp(app: DockerComposeAppRecord, appsRoot: string): Promise<void> {
@@ -607,6 +947,16 @@ function publicSummary(
 ): DockerComposeAppSummary {
   const projectContainers = containers?.filter((container) => container.composeProject === app.projectKey) ?? null;
   const runningCount = projectContainers?.filter((container) => container.state === "running").length ?? null;
+  const needsDeploy = app.deployedRevision !== app.revision;
+  const hostAccessServices = new Set([...app.hostAccess, ...app.deployedHostAccess].map((entry) => entry.service));
+  const runtimeServices = new Set(projectContainers?.map((container) => container.composeService).filter((service): service is string => Boolean(service)) ?? []);
+  const hostAccessState = !app.hostAccess.length && !app.deployedHostAccess.length
+    ? undefined
+    : needsDeploy
+      ? "pending_apply" as const
+      : projectContainers && [...hostAccessServices].every((service) => runtimeServices.has(service))
+        ? "active" as const
+        : "needs_repair" as const;
   return {
     id: app.id,
     name: app.name,
@@ -617,10 +967,11 @@ function publicSummary(
     risk: app.risk,
     revision: app.revision,
     deployedRevision: app.deployedRevision,
-    needsDeploy: app.deployedRevision !== app.revision,
+    needsDeploy,
     containerCount: projectContainers?.length ?? null,
     runningCount,
     status: projectStatus(projectContainers, app.deployedRevision !== null),
+    ...(hostAccessState ? { hostAccessState } : {}),
     createdAt: app.createdAt,
     updatedAt: app.updatedAt
   };
@@ -629,12 +980,17 @@ function publicSummary(
 function publicDetail(
   app: DockerComposeAppRecord,
   containers: DockerContainerSummary[] | null,
-  appsRoot: string
+  appsRoot: string,
+  hostAccessPolicy: DockerHostAccessPolicy
 ): DockerComposeAppDetail {
+  const summary = publicSummary(app, containers, appsRoot);
+  const grants = app.hostAccess.flatMap((entry) => entry.grants);
   return {
-    ...publicSummary(app, containers, appsRoot),
+    ...summary,
     composeContent: app.composeContent,
-    environment: app.environment.map((entry) => ({ key: entry.key, valueConfigured: true }))
+    environment: app.environment.map((entry) => ({ key: entry.key, valueConfigured: true })),
+    hostAccess: app.hostAccess,
+    hostAccessCoverage: coverageReport(grants, hostAccessPolicy.catalog(), summary.hostAccessState === "active")
   };
 }
 
@@ -648,10 +1004,10 @@ function projectStatus(
   return running > 0 ? "partial" : "stopped";
 }
 
-function composeActionArgs(proposal: DockerOperationProposal): string[] {
+function composeActionArgs(proposal: DockerOperationProposal, hasHostAccess = false): string[] {
   const service = proposal.service ? [proposal.service] : [];
   switch (proposal.action) {
-    case "compose_up": return ["up", "-d", ...service];
+    case "compose_up": return ["up", "-d", ...(hasHostAccess ? ["--force-recreate"] : []), ...service];
     case "compose_down": return ["down"];
     case "compose_pull": return ["pull", ...service];
     case "compose_restart": return ["restart", ...service];
@@ -659,12 +1015,100 @@ function composeActionArgs(proposal: DockerOperationProposal): string[] {
   }
 }
 
-function composeCommandArgs(app: { projectKey: string }, action: string[]): string[] {
-  return ["compose", "-p", app.projectKey, "--env-file", MANAGED_ENV_FILE, "-f", MANAGED_COMPOSE_FILE, ...action];
+function composeCommandArgs(app: { projectKey: string }, action: string[], includeHostAccess = true): string[] {
+  return [
+    "compose", "-p", app.projectKey, "--env-file", MANAGED_ENV_FILE,
+    "-f", MANAGED_COMPOSE_FILE,
+    ...(includeHostAccess ? ["-f", DOCKER_HOST_ACCESS_OVERRIDE_FILE] : []),
+    ...action
+  ];
 }
 
 function composeNeedsRegistryAuth(proposal: DockerOperationProposal): boolean {
   return proposal.action === "compose_pull" || proposal.action === "compose_up";
+}
+
+function serviceDefinitions(services: Record<string, unknown>): Record<string, Record<string, unknown>> {
+  return Object.fromEntries(Object.entries(services).map(([name, value]) => [name, objectValue(value, `Service ${name}`)]));
+}
+
+function serviceMountTargets(services: Record<string, unknown>): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(services).map(([name, value]) => {
+    const service = objectValue(value, `Service ${name}`);
+    if (!Array.isArray(service.volumes)) return [name, []];
+    return [name, service.volumes.flatMap((volume) => {
+      if (typeof volume === "string") {
+        const segments = volume.split(":");
+        return segments.length >= 2 && segments[1]?.startsWith("/") ? [segments[1]] : [];
+      }
+      if (!volume || typeof volume !== "object" || Array.isArray(volume)) return [];
+      const target = (volume as Record<string, unknown>).target;
+      return typeof target === "string" && target.startsWith("/") ? [path.posix.normalize(target)] : [];
+    })];
+  }));
+}
+
+function renderHostAccessOverride(manifests: DockerHostAccessManifest[]): string {
+  const services = Object.fromEntries(manifests.map((manifest) => [manifest.service!, {
+    volumes: manifest.mounts.map((mount) => ({
+      type: "bind",
+      source: mount.source,
+      target: mount.target,
+      read_only: true,
+      bind: { create_host_path: false }
+    })),
+    environment: manifest.environment,
+    cap_drop: manifest.capDrop,
+    security_opt: manifest.securityOpt,
+    labels: manifest.labels
+  }]));
+  return stringify({ services }, { lineWidth: 0 });
+}
+
+function validateFinalHostAccessConfig(output: string, manifests: DockerHostAccessManifest[]): void {
+  let root: Record<string, unknown>;
+  try {
+    root = objectValue(JSON.parse(output) as unknown, "Final Compose document");
+  } catch (error) {
+    if (error instanceof DockerComposeValidationError) throw error;
+    throw new DockerComposeValidationError("Docker Compose returned an invalid final Host Access result");
+  }
+  const services = objectValue(root.services, "Final Compose services");
+  for (const manifest of manifests) {
+    const service = objectValue(services[manifest.service!], `Final service ${manifest.service}`);
+    const capDrop = Array.isArray(service.cap_drop) ? service.cap_drop : [];
+    const securityOpt = Array.isArray(service.security_opt) ? service.security_opt : [];
+    if (!capDrop.includes("ALL") || !securityOpt.includes("no-new-privileges:true")) {
+      throw new DockerComposeValidationError(`Final service ${manifest.service} does not preserve the Host Access security policy`);
+    }
+    const finalMounts = Array.isArray(service.volumes) ? service.volumes : [];
+    if (manifest.mounts.some((mount) => !finalMounts.some((candidate) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return false;
+      const volume = candidate as Record<string, unknown>;
+      return volume.type === "bind" &&
+        volume.source === mount.source &&
+        volume.target === mount.target &&
+        volume.read_only === true;
+    }))) {
+      throw new DockerComposeValidationError(`Final service ${manifest.service} does not preserve managed Host Access mounts`);
+    }
+    const environment = objectValue(service.environment ?? {}, `Final service ${manifest.service} environment`);
+    const labels = objectValue(service.labels ?? {}, `Final service ${manifest.service} labels`);
+    if (
+      Object.entries(manifest.environment).some(([key, value]) => environment[key] !== value) ||
+      Object.entries(manifest.labels).some(([key, value]) => labels[key] !== value)
+    ) {
+      throw new DockerComposeValidationError(`Final service ${manifest.service} does not preserve managed Host Access metadata`);
+    }
+  }
+}
+
+function hostAccessComposeError(error: unknown): DockerComposeValidationError {
+  if (error instanceof DockerHostAccessValidationError) {
+    return new DockerComposeValidationError(error.message, error.issues);
+  }
+  if (error instanceof DockerComposeValidationError) return error;
+  return new DockerComposeValidationError("Docker Host Access configuration could not be resolved");
 }
 
 function renderEnvironment(environment: DockerComposeAppEnvironmentRecord[]): string {

@@ -20,6 +20,12 @@ import type {
   DockerEngineRuntime
 } from "./docker-client.js";
 import { collectSystemNetwork } from "./system-management.js";
+import {
+  DockerHostAccessPolicy,
+  DockerHostAccessValidationError,
+  hostAccessRisk,
+  type DockerHostAccessManifest
+} from "./docker-host-access.js";
 
 const MAX_STRING = 4_096;
 const MAX_ITEMS = 128;
@@ -34,7 +40,7 @@ const CONTAINER_KEYS = [
   "stopTimeoutSeconds", "cpuLimit", "cpuShares", "cpusetCpus", "memoryLimitBytes", "memoryReservationBytes",
   "memorySwapBytes", "pidsLimit", "shmSizeBytes", "readonlyRootfs", "privileged", "privilegedAcknowledged",
   "mounts", "network", "ports", "publishAllPorts", "dns", "dnsSearch", "extraHosts", "restartPolicy",
-  "restartMaxRetries", "autoRemove"
+  "restartMaxRetries", "autoRemove", "hostAccess"
 ] as const;
 const VOLUME_KEYS = ["sessionId", "action", "targetType", "name", "labels"] as const;
 const NETWORK_KEYS = [
@@ -56,13 +62,14 @@ export class DockerCreateExecutionError extends Error {
   }
 }
 
-type PreparedDockerCreate =
+export type PreparedDockerCreate =
   | {
       kind: "container";
       input: DockerContainerCreateInput;
       engineInput: Omit<EngineContainerInput, "labels"> & { labels: Record<string, string> };
       proposal: DockerOperationProposal;
       audit: Record<string, unknown>;
+      hostAccessManifest?: DockerHostAccessManifest;
     }
   | {
       kind: "volume";
@@ -197,6 +204,60 @@ export async function executeDockerCreate(
       error: message
     };
   }
+}
+
+export function bindPreparedDockerCreateHostAccess(
+  prepared: PreparedDockerCreate,
+  policy: DockerHostAccessPolicy,
+  revision: string,
+  imageDigest: string
+): PreparedDockerCreate {
+  if (prepared.kind !== "container" || !prepared.input.hostAccess?.length) return prepared;
+  let manifest: DockerHostAccessManifest;
+  try {
+    manifest = policy.resolve({
+      grants: prepared.input.hostAccess,
+      scopeId: prepared.input.name,
+      revision,
+      imageDigest,
+      existingMountTargets: prepared.input.mounts?.map((mount) => mount.target) ?? []
+    });
+  } catch (error) {
+    throw dockerHostAccessCreateError(error);
+  }
+  const managedMounts: NonNullable<EngineContainerInput["mounts"]> = manifest.mounts.map((mount) => ({
+    type: "bind",
+    source: mount.source,
+    target: mount.target,
+    readOnly: true
+  }));
+  const engineInput = {
+    ...prepared.engineInput,
+    environment: { ...(prepared.engineInput.environment ?? {}), ...manifest.environment },
+    labels: { ...prepared.engineInput.labels, ...manifest.labels },
+    mounts: [...(prepared.engineInput.mounts ?? []), ...managedMounts],
+    capDrop: manifest.capDrop,
+    securityOpt: manifest.securityOpt
+  };
+  return {
+    ...prepared,
+    engineInput,
+    hostAccessManifest: manifest,
+    proposal: {
+      ...prepared.proposal,
+      risk: "high",
+      hostAccess: {
+        policyVersion: manifest.coverage.policyVersion,
+        added: manifest.grants.map((grant) => ({
+          capability: grant.capability,
+          ...(grant.capability === "nas_capacity" ? { rootId: grant.rootId } : {}),
+          risk: hostAccessRisk(grant.capability)
+        })),
+        removed: [],
+        imageDigests: [{ digest: imageDigest }]
+      }
+    }
+  };
 }
 
 async function pullPhase<T>(action: () => Promise<T>): Promise<T> {
@@ -335,6 +396,30 @@ async function prepareContainer(
   if (pidsLimit !== undefined) {
     requireApiVersion(summary, "1.23", "PID limit");
   }
+  const hostAccessPolicy = context.hostAccess?.policy ?? new DockerHostAccessPolicy(context.db);
+  let hostAccessManifest: DockerHostAccessManifest | undefined;
+  if (source.hostAccess !== undefined) {
+    try {
+      hostAccessManifest = hostAccessPolicy.resolve({
+        grants: source.hostAccess,
+        scopeId: name,
+        revision: "validation",
+        imageDigest: "unresolved",
+        existingMountTargets: mounts.input.map((mount) => mount.target),
+        serviceDefinition: {
+          privileged,
+          network_mode: network.mode
+        }
+      });
+    } catch (error) {
+      throw dockerHostAccessCreateError(error);
+    }
+    for (const key of Object.keys(hostAccessManifest.environment)) {
+      if (key in environment) {
+        throw new DockerCreateValidationError(`Environment variable ${key} is managed by Docker Host Access`);
+      }
+    }
+  }
 
   const input: DockerContainerCreateInput = {
     name,
@@ -374,7 +459,8 @@ async function prepareContainer(
     ...(extraHosts.input.length ? { extraHosts: extraHosts.input } : {}),
     restartPolicy,
     ...(restartMaxRetries !== undefined ? { restartMaxRetries } : {}),
-    autoRemove
+    autoRemove,
+    ...(hostAccessManifest?.grants.length ? { hostAccess: hostAccessManifest.grants } : {})
   };
 
   const engineInput: Extract<PreparedDockerCreate, { kind: "container" }>["engineInput"] = {
@@ -428,7 +514,7 @@ async function prepareContainer(
       action: "create",
       targetType: "container",
       containerName: name,
-      risk: privileged ? "high" : "medium",
+      risk: privileged || Boolean(hostAccessManifest?.grants.length) ? "high" : "medium",
       summary: `Create Docker container ${name} from ${image}`
     },
     audit: {
@@ -442,9 +528,19 @@ async function prepareContainer(
       commandArguments: command.length,
       mountTypes: mounts.input.map((mount) => mount.type),
       portCount: ports.length,
-      networkMode: network.mode
-    }
+      networkMode: network.mode,
+      hostAccessCapabilities: hostAccessManifest?.grants.map((grant) => grant.capability) ?? []
+    },
+    ...(hostAccessManifest?.grants.length ? { hostAccessManifest } : {})
   };
+}
+
+function dockerHostAccessCreateError(error: unknown): DockerCreateValidationError {
+  if (!(error instanceof DockerHostAccessValidationError)) {
+    return new DockerCreateValidationError("Docker Host Access configuration could not be resolved");
+  }
+  const unavailable = error.issues.some((issue) => issue.code === "capability_unavailable" || issue.code === "root_unavailable");
+  return new DockerCreateValidationError(error.message, unavailable ? 503 : 400);
 }
 
 function prepareVolume(

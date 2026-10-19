@@ -2156,6 +2156,133 @@ export interface DockerVolumeDetails extends DockerVolumeSummary {
 
 export type DockerComposeAppRisk = "medium" | "high";
 
+export type DockerHostAccessCapabilityId =
+  | "host_os_identity"
+  | "host_processes"
+  | "host_sys"
+  | "nas_capacity"
+  | "account_map"
+  | "docker_metadata"
+  | "systemd_status";
+
+export type DockerHostAccessRisk = "low" | "medium" | "high";
+export type DockerHostAccessAvailabilityStatus = "available" | "degraded" | "unavailable";
+export type DockerHostAccessReasonCode =
+  | "host_access_daemon_unavailable"
+  | "docker_proxy_unverified"
+  | "systemd_proxy_unverified"
+  | "not_linux"
+  | "rootless_docker"
+  | "user_namespace_enabled"
+  | "no_ready_nas_root"
+  | "nas_root_not_ready"
+  | "resource_identity_changed"
+  | "runtime_dependency_unavailable";
+
+export type DockerHostAccessCoverageId =
+  | "host_identity"
+  | "host_time"
+  | "host_processes"
+  | "host_cpu"
+  | "host_memory"
+  | "physical_network"
+  | "cgroup"
+  | "nas_capacity"
+  | "account_map"
+  | "docker_containers"
+  | "docker_networks"
+  | "systemd_units"
+  | "journald"
+  | "smart_nvme"
+  | "rootfs_capacity"
+  | "low_level_kernel";
+
+export interface DockerHostAccessAvailability {
+  status: DockerHostAccessAvailabilityStatus;
+  reasonCodes: DockerHostAccessReasonCode[];
+}
+
+export interface DockerHostAccessCapability {
+  id: DockerHostAccessCapabilityId;
+  risk: DockerHostAccessRisk;
+  transport: "bind" | "docker_proxy" | "systemd_proxy";
+  defaultTarget: string | null;
+  provides: string[];
+  requires: DockerHostAccessCapabilityId[];
+  recommends: DockerHostAccessCapabilityId[];
+  coverage: DockerHostAccessCoverageId[];
+  availability: DockerHostAccessAvailability;
+}
+
+export type DockerHostAccessGrant =
+  | {
+      capability: "nas_capacity";
+      rootId: string;
+      target?: string;
+    }
+  | {
+      capability: Exclude<DockerHostAccessCapabilityId, "nas_capacity">;
+      target?: string;
+    };
+
+export interface DockerComposeServiceHostAccess {
+  service: string;
+  grants: DockerHostAccessGrant[];
+}
+
+export interface DockerHostAccessNasRoot {
+  rootId: string;
+  name: string;
+  availability: DockerHostAccessAvailability;
+}
+
+export interface DockerHostAccessCatalog {
+  policyVersion: string;
+  capabilities: DockerHostAccessCapability[];
+  nasRoots: DockerHostAccessNasRoot[];
+}
+
+export type DockerHostAccessCoverageState =
+  | "requested"
+  | "configured"
+  | "runtime"
+  | "degraded"
+  | "unavailable"
+  | "unsupported";
+
+export interface DockerHostAccessCoverageItem {
+  coverage: DockerHostAccessCoverageId;
+  state: DockerHostAccessCoverageState;
+  capabilities: DockerHostAccessCapabilityId[];
+  reasonCodes: DockerHostAccessReasonCode[];
+}
+
+export interface DockerHostAccessCoverageReport {
+  policyVersion: string;
+  items: DockerHostAccessCoverageItem[];
+}
+
+export interface DockerHostAccessValidationIssue {
+  code:
+    | "invalid_target"
+    | "duplicate_target"
+    | "unknown_service"
+    | "duplicate_capability"
+    | "missing_root"
+    | "root_unavailable"
+    | "capability_unavailable"
+    | "conflicting_compose_field"
+    | "managed_mount_conflict"
+    | "missing_dependency";
+  severity: "error" | "warning";
+  service?: string;
+  capability?: DockerHostAccessCapabilityId;
+  field?: string;
+  reasonCodes?: DockerHostAccessReasonCode[];
+}
+
+export type DockerHostAccessRuntimeState = "pending_apply" | "active" | "needs_repair";
+
 export interface DockerComposeEnvironmentSummary {
   key: string;
   valueConfigured: boolean;
@@ -2185,6 +2312,7 @@ export interface DockerComposeAppSummary {
   containerCount: number | null;
   runningCount: number | null;
   status: "configured" | "running" | "partial" | "stopped";
+  hostAccessState?: DockerHostAccessRuntimeState;
   createdAt: string;
   updatedAt: string;
 }
@@ -2194,6 +2322,8 @@ export type DockerComposeProjectSummary = DockerComposeAppSummary;
 export interface DockerComposeAppDetail extends DockerComposeAppSummary {
   composeContent: string;
   environment: DockerComposeEnvironmentSummary[];
+  hostAccess?: DockerComposeServiceHostAccess[];
+  hostAccessCoverage?: DockerHostAccessCoverageReport;
 }
 
 export interface DockerComposeAppValidateInput {
@@ -2202,12 +2332,16 @@ export interface DockerComposeAppValidateInput {
   projectKey: string;
   composeContent: string;
   environment: DockerComposeEnvironmentUpdateInput[];
+  hostAccess?: DockerComposeServiceHostAccess[];
 }
 
 export interface DockerComposeAppValidationResult {
   services: string[];
   warnings: string[];
   risk: DockerComposeAppRisk;
+  hostAccess?: DockerComposeServiceHostAccess[];
+  hostAccessCoverage?: DockerHostAccessCoverageReport;
+  issues?: DockerHostAccessValidationIssue[];
 }
 
 export interface DockerComposeAppCreateInput {
@@ -2215,6 +2349,7 @@ export interface DockerComposeAppCreateInput {
   projectKey: string;
   composeContent: string;
   environment: DockerComposeEnvironmentCreateInput[];
+  hostAccess?: DockerComposeServiceHostAccess[];
 }
 
 export interface DockerComposeAppUpdateInput {
@@ -2222,6 +2357,7 @@ export interface DockerComposeAppUpdateInput {
   composeContent: string;
   environment: DockerComposeEnvironmentUpdateInput[];
   expectedRevision: string;
+  hostAccess?: DockerComposeServiceHostAccess[];
 }
 
 export interface DockerComposeAppDeleteInput {
@@ -2343,6 +2479,7 @@ export interface DockerContainerCreateInput {
   restartPolicy?: DockerRestartPolicy;
   restartMaxRetries?: number;
   autoRemove?: boolean;
+  hostAccess?: DockerHostAccessGrant[];
 }
 
 export interface DockerVolumeCreateInput {
@@ -2413,6 +2550,22 @@ export interface DockerOperationProposal {
   shell?: string;
   risk: "low" | "medium" | "high";
   summary: string;
+  hostAccess?: {
+    policyVersion: string;
+    added: Array<{
+      service?: string;
+      capability: DockerHostAccessCapabilityId;
+      rootId?: string;
+      risk: DockerHostAccessRisk;
+    }>;
+    removed: Array<{
+      service?: string;
+      capability: DockerHostAccessCapabilityId;
+      rootId?: string;
+      risk: DockerHostAccessRisk;
+    }>;
+    imageDigests: Array<{ service?: string; digest: string }>;
+  };
 }
 
 export interface DockerOperationRecord {

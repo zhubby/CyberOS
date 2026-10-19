@@ -9,7 +9,9 @@ import {
   CircleCheck,
   ChevronLeft,
   ChevronRight,
+  Check,
   Container,
+  Copy,
   Cpu,
   Database,
   FolderOpen,
@@ -1146,6 +1148,10 @@ function DockerManagementPanel({
   const [consoleSession, setConsoleSession] = useState<DockerConsoleSession | null>(null);
   const containers = sortDockerContainers(summary?.containers ?? []);
   const composeProjects = summary?.composeProjects ?? [];
+  const pendingContainerCreates = dockerOperations.filter((operation) => (
+    operation.action === "create" && operation.targetType === "container" &&
+    (operation.status === "proposed" || operation.status === "approved")
+  ));
   const dockerEnabled = Boolean(summary?.enabled);
   const canUseDocker = dockerEnabled && summary?.engine.status === "ready" && !error;
   const currentDetailsContainer = detailsState
@@ -1511,7 +1517,7 @@ function DockerManagementPanel({
             description={t("workspace.management.docker.containersDescription")}
             action={renderCreateAction("container")}
           />
-          {containers.length ? (
+          {containers.length || pendingContainerCreates.length ? (
             <div className="management-table-wrap">
               <table className="management-table management-table-docker">
                 <thead>
@@ -1525,6 +1531,16 @@ function DockerManagementPanel({
                   </tr>
                 </thead>
                 <tbody>
+                  {pendingContainerCreates.map((operation) => (
+                    <tr key={`pending:${operation.id}`} aria-busy="true">
+                      <td title={operation.targetId}>{operation.targetId}</td>
+                      <td><span className="management-row-status" data-state="warning">{t("workspace.management.docker.hostAccessPendingApproval")}</span></td>
+                      <td>{t("common.dash")}</td>
+                      <td>{t("common.dash")}</td>
+                      <td>{t("common.dash")}</td>
+                      <td>{t("common.dash")}</td>
+                    </tr>
+                  ))}
                   {containers.map((container) => (
                     <tr key={container.id}>
                       <td title={container.name}>
@@ -1682,7 +1698,9 @@ function DockerManagementPanel({
       ) : null}
       {createKind && sessionId && summary ? <DockerCreateDialogs kind={createKind} sessionId={sessionId} summary={summary} roots={roots} onClose={() => setCreateKind(null)} onError={(message) => onNotifyError(message)} onComplete={async (result) => {
         setCreateKind(null);
-        if (result.partialSuccess) {
+        if (result.pendingApproval) {
+          onNotifyWarning(t("workspace.management.docker.hostAccessPendingApproval"));
+        } else if (result.partialSuccess) {
           onNotifyWarning(result.error ?? t("workspace.management.docker.create.partialStartFailure"));
         } else {
           onNotifySuccess(t("workspace.management.docker.actionCompleted"));
@@ -1780,6 +1798,8 @@ export function DockerContainerDetailsDialog({
   onConsole: () => void;
 }) {
   const { t } = useTranslation();
+  const translate = t as (key: string) => unknown;
+  const [hostAccessCopied, setHostAccessCopied] = useState(false);
   const container = state.details
     ? { ...state.details, ...state.container }
     : state.container;
@@ -1791,6 +1811,8 @@ export function DockerContainerDetailsDialog({
   const memory = container.memoryUsageBytes === null
     ? t("common.dash")
     : `${formatBytes(container.memoryUsageBytes, locale)} / ${container.memoryLimitBytes ? formatBytes(container.memoryLimitBytes, locale) : t("common.dash")}`;
+  const hostAccessGrants = state.details?.labels["io.zos.host-access.grants"]?.split(",").filter(Boolean) ?? [];
+  const hostAccessCoverage = containerHostAccessCoverage(hostAccessGrants);
 
   function confirmAction(action: "start" | "stop" | "restart" | "remove") {
     if (action === "remove" && !window.confirm(String(t("workspace.management.docker.removeConfirm", { name: container.name })))) {
@@ -1888,6 +1910,37 @@ export function DockerContainerDetailsDialog({
               </div>
             </section>
           </div>
+
+          {hostAccessGrants.length ? (
+            <section className="docker-container-detail-section host-access-runtime-detail">
+              <div className="docker-container-detail-section-heading">
+                <div>
+                  <span className="eyebrow">{t("workspace.management.docker.hostAccess.states.runtime")}</span>
+                  <h3>{t("workspace.management.docker.hostAccess.title")}</h3>
+                </div>
+                <button
+                  type="button"
+                  className="management-icon-action"
+                  onClick={() => void navigator.clipboard.writeText(hostAccessCoverage.join("\n")).then(() => {
+                    setHostAccessCopied(true);
+                    window.setTimeout(() => setHostAccessCopied(false), 2_000);
+                  })}
+                  aria-label={t("workspace.management.docker.hostAccess.copyReport")}
+                  title={t("workspace.management.docker.hostAccess.copyReport")}
+                >
+                  {hostAccessCopied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
+                </button>
+              </div>
+              <div className="host-access-coverage">
+                {hostAccessCoverage.map((coverage) => (
+                  <span key={coverage} data-state={coverage.startsWith("unsupported:") ? "unsupported" : "requested"}>
+                    {String(translate(`workspace.management.docker.hostAccess.coverage.${coverage.replace(/^unsupported:/u, "")}`))}
+                  </span>
+                ))}
+              </div>
+              <p>{t("workspace.management.docker.hostAccess.recreateToChange")}</p>
+            </section>
+          ) : null}
 
           {state.details?.mounts.length ? (
             <section className="docker-container-detail-section">
@@ -2473,6 +2526,9 @@ function containerTone(container: DockerContainer): StatusTone {
 }
 
 function composeTone(project: DockerComposeProject): StatusTone {
+  if (project.hostAccessState === "needs_repair") return "offline";
+  if (project.hostAccessState === "pending_apply") return "warning";
+  if (project.hostAccessState === "active") return "ready";
   if (project.needsDeploy) {
     return "warning";
   }
@@ -2489,6 +2545,9 @@ function composeTone(project: DockerComposeProject): StatusTone {
 }
 
 function composeStatusLabel(project: DockerComposeProject, t: Translate): string {
+  if (project.hostAccessState === "pending_apply") return String(t("workspace.management.docker.apps.hostAccessPending"));
+  if (project.hostAccessState === "active") return String(t("workspace.management.docker.apps.hostAccessActive"));
+  if (project.hostAccessState === "needs_repair") return String(t("workspace.management.docker.apps.hostAccessRepair"));
   if (project.needsDeploy) {
     return String(t("workspace.management.docker.apps.needsDeploy"));
   }
@@ -2502,6 +2561,26 @@ function composeStatusLabel(project: DockerComposeProject, t: Translate): string
     return String(t("workspace.management.states.stopped"));
   }
   return String(t("workspace.management.states.running"));
+}
+
+function containerHostAccessCoverage(grants: string[]): string[] {
+  const mapping: Record<string, string[]> = {
+    host_os_identity: ["host_identity", "host_time"],
+    host_processes: ["host_processes", "host_cpu", "host_memory", "physical_network"],
+    host_sys: ["cgroup", "physical_network"],
+    nas_capacity: ["nas_capacity"],
+    account_map: ["account_map"],
+    docker_metadata: ["docker_containers", "docker_networks"],
+    systemd_status: ["systemd_units"]
+  };
+  const configured = grants.flatMap((grant) => mapping[grant.split(":", 1)[0] ?? ""] ?? []);
+  return [
+    ...new Set(configured),
+    "unsupported:journald",
+    "unsupported:smart_nvme",
+    "unsupported:rootfs_capacity",
+    "unsupported:low_level_kernel"
+  ];
 }
 
 function formatContainerMemory(container: DockerContainer, locale: SupportedLocale): string {

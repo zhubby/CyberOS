@@ -110,6 +110,7 @@
   border-bottom: 1px solid var(--line-soft);
   color: var(--muted-2);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
 }
 

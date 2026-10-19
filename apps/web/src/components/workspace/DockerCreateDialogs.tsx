@@ -5,6 +5,7 @@ import type { DockerSummary } from "../../api.js";
 import type { DockerResourceCapabilities } from "@zos/shared";
 import { DOCKER_RESOURCE_FIELDS, getDockerResourceCapability, getUnsupportedDockerResource } from "@zos/shared/docker-resources";
 import { DockerResourceStatus } from "./DockerResourceStatus.js";
+import { HostAccessPicker } from "./HostAccessPicker.js";
 import { getSystemNetwork, proposeDockerOperation, type NasRoot } from "../../api.js";
 import { initialDockerCreateForm, dockerCreateInput, validateDockerCreateStep, type DockerCreateForm, type DockerCreateKind } from "../../lib/docker-create-form.js";
 
@@ -14,7 +15,7 @@ type Props = {
   summary: DockerSummary;
   roots: NasRoot[];
   onClose: () => void;
-  onComplete: (result: { partialSuccess: boolean; error?: string }) => void | Promise<void>;
+  onComplete: (result: { partialSuccess: boolean; pendingApproval?: boolean; error?: string }) => void | Promise<void>;
   onError: (message: string) => void;
 };
 
@@ -34,6 +35,7 @@ export function DockerCreateDialogs({ kind, sessionId, summary, roots, onClose, 
   const [error, setError] = useState<string | null>(null);
   const [validationVisible, setValidationVisible] = useState(false);
   const [interfaces, setInterfaces] = useState<string[]>([]);
+  const [hostAccessBlocked, setHostAccessBlocked] = useState(false);
   const title = createT(`titles.${kind}`);
   const description = createT(`descriptions.${kind}`);
   const runtimeStatus = summary.engine.status;
@@ -58,7 +60,7 @@ export function DockerCreateDialogs({ kind, sessionId, summary, roots, onClose, 
     setError(null);
     setValidationVisible(false);
   };
-  const canSubmit = Boolean(summary.enabled && summary.engine.status === "ready" && !submitting && !validateStep(6));
+  const canSubmit = Boolean(summary.enabled && summary.engine.status === "ready" && !submitting && !hostAccessBlocked && !validateStep(6));
   const validation = validateStep(step);
 
   function validateStep(nextStep: number): string | null {
@@ -87,6 +89,8 @@ export function DockerCreateDialogs({ kind, sessionId, summary, roots, onClose, 
       const response = await proposeDockerOperation({ sessionId, action: "create", ...dockerCreateInput(form) });
       if (response.result?.partialSuccess) {
         await onComplete(response.result.error ? { partialSuccess: true, error: response.result.error } : { partialSuccess: true });
+      } else if (response.approval) {
+        await onComplete({ partialSuccess: false, pendingApproval: true });
       } else {
         await onComplete({ partialSuccess: false });
       }
@@ -130,7 +134,7 @@ export function DockerCreateDialogs({ kind, sessionId, summary, roots, onClose, 
           {kind === "container" && step === 3 ? <ContainerResources form={form} update={update} capabilities={summary.engine.resourceCapabilities} /> : null}
           {kind === "container" && step === 4 ? <ContainerStorage form={form} update={update} roots={roots} summary={summary} onAdd={addRow} submitting={submitting} /> : null}
           {kind === "container" && step === 5 ? <ContainerNetwork form={form} update={update} summary={summary} onAdd={addRow} submitting={submitting} /> : null}
-          {kind === "container" && step === 6 ? <ContainerReview form={form} /> : null}
+          {kind === "container" && step === 6 ? <ContainerReview form={form} update={update} submitting={submitting} onBlockingChange={setHostAccessBlocked} /> : null}
           {error || ((validationVisible || step === 6) && validation) ? <p className="vm-create-error" role="alert"><CircleAlert size={14} />{error ?? validation}</p> : null}
         </div>
         <footer className="vm-create-dialog-footer"><span>{kind === "container" ? `${step} / 6` : createT("actions.directCreate")} · {form.name || createT("actions.unnamed")}</span><div><button type="button" onClick={onClose} disabled={submitting}>{createT("actions.cancel")}</button>{kind === "container" && step > 1 ? <button type="button" onClick={() => goToStep(step - 1)} disabled={submitting}>{createT("actions.back")}</button> : null}{kind === "container" && step < 6 ? <button type="button" className="vm-create-submit" onClick={advance} disabled={submitting}>{createT("actions.next")}</button> : <button type="submit" className="vm-create-submit" disabled={!canSubmit} aria-busy={submitting || undefined}>{submitting ? <><LoaderCircle className="spin" size={14} />{createT("actions.creating")}</> : createT("actions.createNow")}</button>}</div></footer>
@@ -220,9 +224,14 @@ function ContainerNetwork({ form, update, summary, onAdd, submitting }: { form: 
   return <section className="vm-create-section vm-create-stage"><Heading number="05" title={t("stages.network")} detail={t("network.detail")} /><div className="vm-create-field-grid"><Field label={t("network.mode")}><select value={form.networkMode} onChange={(event) => changeNetworkMode(event.target.value as DockerCreateForm["networkMode"])} disabled={submitting}><option value="bridge">bridge</option><option value="host">host</option><option value="none">none</option><option value="custom">{t("network.existingNetwork")}</option></select></Field>{form.networkMode === "custom" ? <><Field label={t("stages.network")}><select value={form.networkName} onChange={(event) => update("networkName", event.target.value)} disabled={submitting}><option value="">{t("network.selectNetwork")}</option>{summary.networks.map((network) => <option key={network.name} value={network.name}>{network.name}</option>)}</select></Field><Field label={t("network.aliases")}><input value={form.networkAliases} onChange={(event) => update("networkAliases", event.target.value)} placeholder="app,web" disabled={submitting} /></Field><Field label={t("network.staticIpv4")}><input value={form.ipv4Address} onChange={(event) => update("ipv4Address", event.target.value)} disabled={submitting} /></Field><Field label={t("network.staticIpv6")}><input value={form.ipv6Address} onChange={(event) => update("ipv6Address", event.target.value)} disabled={submitting} /></Field><Field label={t("network.endpointMac")}><input value={form.macAddress} onChange={(event) => update("macAddress", event.target.value)} disabled={submitting} /></Field></> : null}<Field label={t("network.dns")}><input value={form.dns} onChange={(event) => update("dns", event.target.value)} placeholder="1.1.1.1,8.8.8.8" disabled={submitting} /></Field><Field label={t("network.dnsSearch")}><input value={form.dnsSearch} onChange={(event) => update("dnsSearch", event.target.value)} disabled={submitting} /></Field></div><div className="docker-create-table docker-create-port-table"><div className="docker-create-column-head docker-create-port-grid"><span>{t("network.containerPort")}</span><span>{t("network.protocol")}</span><span>{t("network.hostIp")}</span><span>{t("network.hostPort")}</span><span /></div>{form.ports.length ? form.ports.map((port, index) => <div className="docker-create-row docker-create-port-row docker-create-port-grid" key={index}><input type="number" min="1" max="65535" aria-label={t("network.containerPort")} value={port.containerPort} placeholder={t("network.containerPort")} onChange={(event) => setPort(index, { containerPort: event.target.value })} disabled={submitting} /><select aria-label={t("network.protocol")} value={port.protocol} onChange={(event) => setPort(index, { protocol: event.target.value as typeof port.protocol })} disabled={submitting}><option value="tcp">tcp</option><option value="udp">udp</option><option value="sctp">sctp</option></select><input aria-label={t("network.hostIp")} value={port.hostIp} placeholder={t("network.hostIp")} onChange={(event) => setPort(index, { hostIp: event.target.value })} disabled={submitting} /><input type="number" min="1" max="65535" aria-label={t("network.hostPort")} value={port.hostPort} placeholder={t("network.hostPort")} onChange={(event) => setPort(index, { hostPort: event.target.value })} disabled={submitting} /><RowButton onClick={() => update("ports", form.ports.filter((_, itemIndex) => itemIndex !== index))} disabled={submitting} /></div>) : <p className="docker-create-empty">{t("network.noPorts")}</p>}</div><AddButton onClick={() => onAdd("ports")} label={t("network.addPort")} disabled={submitting || form.networkMode === "host" || form.networkMode === "none"} /><DynamicHosts rows={form.extraHosts} onChange={(rows) => update("extraHosts", rows)} onAdd={() => onAdd("extraHosts")} disabled={submitting} /><div className="vm-create-toggle-grid"><Toggle label={t("network.publishAll")} checked={form.publishAllPorts} onChange={(value) => update("publishAllPorts", value)} disabled={submitting || form.networkMode === "host" || form.networkMode === "none"} /></div></section>;
 }
 
-function ContainerReview({ form }: { form: DockerCreateForm }) {
+function ContainerReview({ form, update, submitting, onBlockingChange }: {
+  form: DockerCreateForm;
+  update: <K extends keyof DockerCreateForm>(key: K, value: DockerCreateForm[K]) => void;
+  submitting: boolean;
+  onBlockingChange: (blocked: boolean) => void;
+}) {
   const t = useCreateText();
-  return <section className="vm-create-section vm-create-stage"><Heading number="06" title={t("stages.review")} detail={t("review.detail")} /><div className="vm-create-summary"><div><span>{t("basics.name")}</span><strong>{form.name || "-"}</strong></div><div><span>{t("review.image")}</span><strong>{form.image || "-"}</strong></div><div><span>{t("review.network")}</span><strong>{form.networkMode}{form.networkName ? ` · ${form.networkName}` : ""}</strong></div><div><span>{t("review.mountsPorts")}</span><strong>{form.mounts.length} / {form.ports.length}</strong></div><div><span>{t("review.start")}</span><strong>{form.start ? t("review.yes") : t("review.no")}</strong></div><div><span>{t("review.restart")}</span><strong>{form.restartPolicy}</strong></div></div><div className="vm-create-review"><Info size={16} /><div><strong>{t("review.immediate")}</strong><p>{t("review.failureDetail")}</p></div></div></section>;
+  return <section className="vm-create-section vm-create-stage"><Heading number="06" title={t("stages.review")} detail={t("review.detail")} /><div className="vm-create-summary"><div><span>{t("basics.name")}</span><strong>{form.name || "-"}</strong></div><div><span>{t("review.image")}</span><strong>{form.image || "-"}</strong></div><div><span>{t("review.network")}</span><strong>{form.networkMode}{form.networkName ? ` · ${form.networkName}` : ""}</strong></div><div><span>{t("review.mountsPorts")}</span><strong>{form.mounts.length} / {form.ports.length}</strong></div><div><span>{t("review.start")}</span><strong>{form.start ? t("review.yes") : t("review.no")}</strong></div><div><span>{t("review.restart")}</span><strong>{form.restartPolicy}</strong></div></div><HostAccessPicker grants={form.hostAccess} onChange={(grants) => update("hostAccess", grants)} onBlockingChange={onBlockingChange} disabled={submitting} /><div className="vm-create-review"><Info size={16} /><div><strong>{form.hostAccess.length ? t("review.approval") : t("review.immediate")}</strong><p>{form.hostAccess.length ? t("review.approvalDetail") : t("review.failureDetail")}</p></div></div></section>;
 }
 function VolumeStage({ form, update, submitting }: { form: DockerCreateForm; update: <K extends keyof DockerCreateForm>(key: K, value: DockerCreateForm[K]) => void; submitting: boolean }) {
   const t = useCreateText();

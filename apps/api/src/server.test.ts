@@ -86,6 +86,7 @@ import type {
 import { DockerComposeService, type DockerComposeRuntime } from "./lib/docker-compose.js";
 import { DockerRequestError, type DockerEngineRuntime, type DockerExecStream } from "./lib/docker-client.js";
 import { DockerDaemonRequestError, type DockerDaemonRuntime } from "./lib/docker-daemon.js";
+import { DockerHostAccessPolicy } from "./lib/docker-host-access.js";
 import type { NetworkManagerRuntime } from "./lib/network-manager.js";
 import { EthernetManagerRequestError, type EthernetManagerRuntime } from "./lib/ethernet-manager.js";
 import { SystemPowerRequestError, type SystemPowerRuntime } from "./lib/power-management.js";
@@ -3301,6 +3302,51 @@ describe("API server", () => {
     expect(response.json()).toMatchObject({ approval: null, result: { kind: "container", created: true, started: false } });
     const operation = response.json().operation;
     expect(JSON.stringify(operation.metadata)).not.toContain("hidden");
+    expect(engine.calls).toContain("create-container");
+    await server.close();
+  });
+
+  it("keeps Host Access container input private until approval and revalidates the image", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const engine = new FakeDockerEngine();
+    const server = await buildServer({
+      config: dockerEnabledConfig(tempDir),
+      db,
+      docker: { engine, compose: new FakeDockerCompose() },
+      hostAccess: { policy: new DockerHostAccessPolicy(db, { platform: "linux" }) }
+    });
+    const proposed = await server.inject({
+      method: "POST",
+      url: "/api/docker/proposals",
+      payload: {
+        sessionId: session.id,
+        action: "create",
+        targetType: "container",
+        name: "host-observer",
+        image: "collector:latest",
+        start: false,
+        environment: { SECRET_TOKEN: "private-value" },
+        hostAccess: [{ capability: "host_processes" }]
+      }
+    });
+    expect(proposed.statusCode).toBe(202);
+    expect(engine.calls).toEqual(expect.arrayContaining(["pull", "resolve-image"]));
+    expect(engine.calls).not.toContain("create-container");
+    expect(proposed.json()).toMatchObject({
+      approval: { status: "pending" },
+      operation: { status: "proposed" }
+    });
+    expect(JSON.stringify(proposed.json())).not.toContain("private-value");
+    expect(JSON.stringify(proposed.json())).not.toContain("/proc");
+    expect(JSON.stringify(proposed.json())).not.toContain("fingerprint");
+    expect(JSON.stringify(proposed.json())).not.toContain("hostAccessDraft");
+
+    const approved = await server.inject({
+      method: "POST",
+      url: `/api/approvals/${proposed.json().approval.id}/approve`
+    });
+    expect(approved.statusCode).toBe(202);
+    expect(engine.calls.filter((call) => call === "resolve-image")).toHaveLength(2);
     expect(engine.calls).toContain("create-container");
     await server.close();
   });
@@ -6562,6 +6608,11 @@ class FakeDockerEngine implements DockerEngineRuntime {
   async imageExists(): Promise<boolean> {
     this.calls.push("image-exists");
     return true;
+  }
+
+  async resolveImageId(): Promise<string> {
+    this.calls.push("resolve-image");
+    return "sha256:image-1";
   }
 
   async pullImage(input: { image: string; registryAuth?: string }): Promise<void> {

@@ -99,7 +99,8 @@ describe("SQLite schema migrations", () => {
       "028_monitoring_alerts",
       "029_monitoring_silence_cancellation",
       "030_monitoring_rule_evaluation_status",
-      "031_monitoring_unsilenced_event"
+      "031_monitoring_unsilenced_event",
+      "032_docker_host_access"
     ]);
   });
 
@@ -177,7 +178,9 @@ describe("SQLite schema migrations", () => {
     const insertMigration = legacy.prepare(
       "INSERT INTO schema_migrations(id, applied_at) VALUES (?, '2026-03-10T00:00:00.000Z')"
     );
-    for (const migration of migrations.slice(0, -1)) insertMigration.run(migration.id);
+    for (const migration of migrations.filter((migration) => migration.id !== "031_monitoring_unsilenced_event")) {
+      insertMigration.run(migration.id);
+    }
     legacy.close();
 
     const upgraded = openZosDb(databasePath);

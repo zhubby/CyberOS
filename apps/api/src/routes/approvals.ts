@@ -2,11 +2,15 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
   appendEvent,
+  deleteDockerComposeHostAccessDraft,
+  deleteDockerCreateDraft,
   createTrashEntry,
   enqueuePhotostaffJob,
   getDockerSettings,
   getApproval,
   getDockerOperationByApproval,
+  getDockerComposeHostAccessDraftByApproval,
+  getDockerCreateDraftByApproval,
   getShareOperationByApproval,
   getShareSettings,
   getStorageOperationByApproval,
@@ -26,6 +30,7 @@ import {
 } from "@zos/db";
 import { applyFileMutation } from "@zos/nas-tools";
 import type {
+  DockerOperationRecord,
   DockerOperationProposal,
   FileOperationProposal,
   PendingApprovalRecord,
@@ -36,7 +41,15 @@ import type {
 import type { ApiRouteContext } from "../context.js";
 import { effectiveDockerConfig } from "../lib/settings.js";
 import { redactDockerRegistrySecrets } from "../lib/docker-registry.js";
-import { applyDockerOperation } from "../lib/docker-service.js";
+import { applyDockerOperation, collectDockerSummary, dockerEngine } from "../lib/docker-service.js";
+import {
+  bindPreparedDockerCreateHostAccess,
+  DockerCreateValidationError,
+  executeDockerCreate,
+  prepareDockerCreate
+} from "../lib/docker-create.js";
+import { DockerHostAccessPolicy } from "../lib/docker-host-access.js";
+import { dockerRegistryAuthHeader, findDockerRegistryCredential } from "../lib/docker-registry.js";
 import {
   applyShareOperation,
   safeShareMessage,
@@ -103,13 +116,15 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
 
       const registryCredentials = listDockerRegistryCredentials(db);
       try {
-        const metadata = await applyDockerOperation(
-          currentConfig(),
-          operation,
-          proposal,
-          context.docker,
-          registryCredentials
-        );
+        const metadata = proposal.action === "create" && proposal.hostAccess
+          ? await applyApprovedDockerHostAccessCreate(context, operation, registryCredentials)
+          : await applyDockerOperation(
+              currentConfig(),
+              operation,
+              proposal,
+              context.docker,
+              registryCredentials
+            );
         const applied = updateDockerOperationStatus(db, operation.id, "applied", {
           ...metadata,
           appliedAt: new Date().toISOString()
@@ -133,6 +148,7 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
         });
         return;
       } catch (error) {
+        deleteDockerHostAccessDraftForApproval(db, approval.id);
         const message = redactDockerRegistrySecrets(error, registryCredentials);
         updateDockerOperationStatus(db, operation.id, "failed", {
           error: message,
@@ -146,7 +162,7 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
           type: "job.failed",
           payload: { error: message }
         });
-        reply.status(400).send({ error: message });
+        reply.status(getErrorStatusCode(error, 400)).send({ error: message });
         return;
       }
     }
@@ -443,6 +459,7 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
         return;
       }
       const operation = getDockerOperationByApproval(db, approval.id);
+      deleteDockerHostAccessDraftForApproval(db, approval.id);
       if (operation) {
         updateDockerOperationStatus(db, operation.id, "failed", {
           rejected: true,
@@ -561,6 +578,103 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
       status: "rejected"
     });
   });
+}
+
+async function applyApprovedDockerHostAccessCreate(
+  context: ApiRouteContext,
+  operation: DockerOperationRecord,
+  registryCredentials: ReturnType<typeof listDockerRegistryCredentials>
+): Promise<Record<string, unknown>> {
+  if (!operation.approvalId) {
+    throw new DockerCreateValidationError("Docker Host Access approval is missing its private draft", 409);
+  }
+  const draft = getDockerCreateDraftByApproval(context.db, operation.approvalId);
+  if (!draft || Date.parse(draft.expiresAt) <= Date.now()) {
+    if (draft) deleteDockerCreateDraft(context.db, draft.id);
+    throw new DockerCreateValidationError("Docker Host Access approval expired or changed", 409);
+  }
+  try {
+    const config = effectiveDockerConfig(context.config, getDockerSettings(context.db));
+    const summary = await collectDockerSummary(config, context.docker);
+    if (summary.engine.status !== "ready") {
+      throw new DockerCreateValidationError(summary.engine.error ?? "Docker engine is not ready", 503);
+    }
+    const engine = dockerEngine(config.docker, context.docker);
+    if (!engine.resolveImageId) {
+      throw new DockerCreateValidationError("Docker image identity resolution is unavailable", 503);
+    }
+    const imageDigest = await engine.resolveImageId(draft.input.image);
+    if (imageDigest !== draft.imageDigest) {
+      throw new DockerCreateValidationError("Docker image changed after approval was requested", 409);
+    }
+    const prepared = await prepareDockerCreate(
+      { action: "create", targetType: "container", ...draft.input },
+      context,
+      summary
+    );
+    const bound = bindPreparedDockerCreateHostAccess(
+      prepared,
+      context.hostAccess?.policy ?? new DockerHostAccessPolicy(context.db),
+      draft.revision,
+      imageDigest
+    );
+    if (bound.kind !== "container" || bound.hostAccessManifest?.fingerprint !== draft.fingerprint) {
+      throw new DockerCreateValidationError("Docker Host Access resources changed after approval was requested", 409);
+    }
+    const proxyCapabilities = bound.hostAccessManifest.grants
+      .map((grant) => grant.capability)
+      .filter((capability) => capability === "docker_metadata" || capability === "systemd_status");
+    if (proxyCapabilities.length) {
+      if (!context.hostAccess?.control) {
+        throw new DockerCreateValidationError("Docker Host Access proxy is unavailable", 503);
+      }
+      await context.hostAccess.control.reconcile({
+        scopeId: draft.input.name,
+        capabilities: proxyCapabilities
+      });
+    }
+    const executable = {
+      ...bound,
+      input: { ...bound.input, pullPolicy: "never" as const },
+      engineInput: { ...bound.engineInput, image: imageDigest }
+    };
+    const result = await executeDockerCreate(
+      executable,
+      engine,
+      operation.id,
+      () => {
+        const credential = findDockerRegistryCredential(registryCredentials, draft.input.image);
+        return credential ? dockerRegistryAuthHeader(credential) : undefined;
+      }
+    );
+    if (result.partialSuccess) {
+      throw new DockerCreateValidationError("Docker container was created but could not be started", 502);
+    }
+    return {
+      action: "create",
+      targetType: "container",
+      result: dockerCreateApprovalResult(result),
+      hostAccessPolicyVersion: draft.policyVersion,
+      hostAccessCapabilities: draft.grants.map((grant) => grant.capability)
+    };
+  } finally {
+    deleteDockerCreateDraft(context.db, draft.id);
+  }
+}
+
+function deleteDockerHostAccessDraftForApproval(
+  db: Parameters<typeof getDockerCreateDraftByApproval>[0],
+  approvalId: string
+): void {
+  const composeDraft = getDockerComposeHostAccessDraftByApproval(db, approvalId);
+  if (composeDraft) deleteDockerComposeHostAccessDraft(db, composeDraft.id);
+  const createDraft = getDockerCreateDraftByApproval(db, approvalId);
+  if (createDraft) deleteDockerCreateDraft(db, createDraft.id);
+}
+
+function dockerCreateApprovalResult(result: Awaited<ReturnType<typeof executeDockerCreate>>): Record<string, unknown> {
+  const { error: _error, ...safe } = result;
+  return safe;
 }
 
 function isPathWithin(parentPath: string, candidatePath: string): boolean {

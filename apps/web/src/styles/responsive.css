@@ -294,6 +294,15 @@
 }
 
 @media (max-width: 620px) {
+  .host-access-capability-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .docker-compose-host-access > label,
+  .host-access-target {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .settings-operations-task-main dl {
     grid-template-columns: 1fr;
   }
@@ -640,6 +649,7 @@
     border-radius: 5px;
     color: var(--muted);
     background: var(--surface);
+    font-family: var(--font-emphasis);
     font-weight: 800;
   }
 

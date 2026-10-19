@@ -70,6 +70,7 @@ impl HostdServer {
             tracing::error!(code = ?error.code, message = %error.message, "could not recover unfinished Ethernet transaction");
             return Err(error);
         }
+        crate::host_access::reconcile_capacity_anchors(&self.state.nas_roots).await;
         let listener = bind_socket(&self.config.socket_path, &self.config.socket_group).await?;
         tracing::info!(socket = %self.config.socket_path.display(), "hostd listening");
         let allowed_uids = Arc::new(self.config.allowed_uids);
@@ -77,6 +78,9 @@ impl HostdServer {
         let mut network_recovery = interval(Duration::from_secs(1));
         network_recovery.set_missed_tick_behavior(MissedTickBehavior::Skip);
         network_recovery.tick().await;
+        let mut host_access_reconciliation = interval(Duration::from_secs(30));
+        host_access_reconciliation.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        host_access_reconciliation.tick().await;
         loop {
             tokio::select! {
                 result = listener.accept(), if connections.len() < MAX_CONNECTIONS => {
@@ -99,6 +103,9 @@ impl HostdServer {
                     if let Err(error) = crate::network_manager::recover_expired_transaction(self.state.runner.as_ref()).await {
                         tracing::error!(code = ?error.code, message = %error.message, "could not recover expired Ethernet transaction");
                     }
+                }
+                _ = host_access_reconciliation.tick() => {
+                    crate::host_access::reconcile_capacity_anchors(&self.state.nas_roots).await;
                 }
                 result = shutdown_signal() => {
                     result?;

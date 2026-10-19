@@ -1,13 +1,17 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { randomUUID } from "node:crypto";
 import {
   appendEvent,
   createDockerRegistryCredential,
   createDockerConsoleAuthorization,
   createDockerOperationApproval,
   createDockerOperationRecord,
+  createDockerCreateDraft,
   createActionMessageAndJob,
   consumeDockerConsoleAuthorization,
   deleteDockerRegistryCredential,
+  deleteDockerComposeHostAccessDraft,
+  deleteDockerCreateDraft,
   DockerComposeAppConflictError,
   DockerComposeAppProjectKeyConflictError,
   DockerRegistryCredentialConflictError,
@@ -18,6 +22,8 @@ import {
   getSession,
   listDockerRegistryCredentials,
   listDockerOperations,
+  linkDockerCreateDraft,
+  linkDockerComposeHostAccessDraft,
   markDockerConsoleAuthorizationFailed,
   updateDockerRegistryCredential,
   updateApprovalStatus,
@@ -49,6 +55,7 @@ import { effectiveDockerConfig } from "../lib/settings.js";
 import {
   DockerCreateExecutionError,
   DockerCreateValidationError,
+  bindPreparedDockerCreateHostAccess,
   executeDockerCreate,
   prepareDockerCreate
 } from "../lib/docker-create.js";
@@ -64,6 +71,7 @@ import {
   DockerComposeUnavailableError,
   DockerComposeValidationError
 } from "../lib/docker-compose.js";
+import { DockerHostAccessPolicy } from "../lib/docker-host-access.js";
 import {
   dockerRegistryAuthHeader,
   DockerRegistryValidationError,
@@ -87,6 +95,9 @@ type DockerActionProposalBody = {
 };
 
 type DockerProposalBody = DockerActionProposalBody | ({ sessionId?: string; action: "create" } & DockerCreateInput);
+type BuiltDockerProposal = DockerOperationProposal & {
+  internalHostAccessDraft?: { id: string; revision: string };
+};
 
 const MAX_DOCKER_CREATE_BODY_BYTES = 256 * 1024;
 const MAX_DOCKER_DAEMON_BODY_BYTES = 256 * 1024 + 4096;
@@ -100,9 +111,14 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
   const currentConfig = () => effectiveDockerConfig(config, getDockerSettings(db));
   const daemon = docker?.daemon ?? new SystemDockerDaemonRuntime({ hostdSocketPath: config.hostd.socketPath });
   const compose = dockerCompose(currentConfig().docker, docker);
+  const hostAccessPolicy = context.hostAccess?.policy ?? new DockerHostAccessPolicy(db);
 
   server.get("/api/docker/summary", async () => ({
     summary: await collectDockerSummary(currentConfig(), docker)
+  }));
+
+  server.get("/api/docker/host-access", async () => ({
+    hostAccess: hostAccessPolicy.catalog()
   }));
 
   server.get("/api/docker/apps", async () => ({
@@ -464,6 +480,80 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
           throw new DockerCreateValidationError(summary.engine.error ?? "Docker engine is not ready", 503);
         }
         const prepared = await prepareDockerCreate(request.body, { ...context, config: nextConfig }, summary);
+        if (prepared.kind === "container" && prepared.input.hostAccess?.length) {
+          const engine = dockerEngine(nextConfig.docker, docker);
+          if (!engine.resolveImageId) {
+            throw new DockerCreateValidationError("Docker image identity resolution is unavailable", 503);
+          }
+          const registryCredentials = listDockerRegistryCredentials(db);
+          const registryCredential = findDockerRegistryCredential(registryCredentials, prepared.engineInput.image);
+          await engine.pullImage({
+            image: prepared.engineInput.image,
+            ...(registryCredential ? { registryAuth: dockerRegistryAuthHeader(registryCredential) } : {})
+          });
+          const imageDigest = await engine.resolveImageId(prepared.engineInput.image);
+          const draftId = randomUUID();
+          const draftRevision = randomUUID();
+          const bound = bindPreparedDockerCreateHostAccess(
+            prepared,
+            context.hostAccess?.policy ?? hostAccessPolicy,
+            draftRevision,
+            imageDigest
+          );
+          if (bound.kind !== "container") {
+            throw new DockerCreateValidationError("Docker Host Access requires a container draft");
+          }
+          const manifest = bound.hostAccessManifest;
+          if (!manifest || !bound.proposal.hostAccess) {
+            throw new DockerCreateValidationError("Docker Host Access manifest is unavailable", 503);
+          }
+          const draft = createDockerCreateDraft(db, {
+            id: draftId,
+            revision: draftRevision,
+            input: bound.input,
+            policyVersion: bound.proposal.hostAccess.policyVersion,
+            grants: bound.proposal.hostAccess.added.map(({ capability, rootId, risk }) => ({
+              capability,
+              ...(rootId ? { rootId } : {}),
+              risk
+            })),
+            fingerprint: manifest.fingerprint,
+            imageDigest,
+            expiresAt: new Date(Date.now() + 15 * 60_000)
+          });
+          const proposal: DockerOperationProposal = bound.proposal;
+          try {
+            const { message, job } = createActionMessageAndJob(db, {
+              sessionId: session.id,
+              content: proposal.summary,
+              kind: "docker",
+              status: "waiting_approval"
+            });
+            const { approval, operation } = createDockerOperationApproval(db, { jobId: job.id, proposal });
+            if (!linkDockerCreateDraft(db, draft.id, draft.revision, {
+              approvalId: approval.id,
+              operationId: operation.id,
+              jobId: job.id
+            })) {
+              throw new DockerCreateValidationError("Docker Host Access draft changed before approval", 409);
+            }
+            appendEvent(db, {
+              sessionId: session.id,
+              jobId: job.id,
+              type: "approval.pending",
+              payload: {
+                approvalId: approval.id,
+                proposal: approval.proposal,
+                summary: `Created Docker approval ${approval.id}: ${proposal.summary}. No Docker action was run.`
+              }
+            });
+            reply.status(202).send({ message, job, approval, operation });
+            return;
+          } catch (error) {
+            deleteDockerCreateDraft(db, draft.id);
+            throw error;
+          }
+        }
         const { message, job } = createActionMessageAndJob(db, {
           sessionId: session.id,
           content: prepared.proposal.summary,
@@ -571,34 +661,51 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
         return;
       }
 
-      const proposal = await buildDockerProposal(request.body ?? {}, { ...context, config: nextConfig });
-      const { message, job } = createActionMessageAndJob(db, {
-        sessionId: session.id,
-        content: proposal.summary,
-        kind: "docker",
-        status: "waiting_approval"
-      });
-      const { approval, operation } = createDockerOperationApproval(db, {
-        jobId: job.id,
-        proposal
-      });
-      appendEvent(db, {
-        sessionId: session.id,
-        jobId: job.id,
-        type: "approval.pending",
-        payload: {
-          approvalId: approval.id,
-          proposal: approval.proposal,
-          summary: `Created Docker approval ${approval.id}: ${proposal.summary}. No Docker action was run.`
+      const builtProposal = await buildDockerProposal(request.body ?? {}, { ...context, config: nextConfig });
+      const { internalHostAccessDraft, ...proposal } = builtProposal;
+      try {
+        const { message, job } = createActionMessageAndJob(db, {
+          sessionId: session.id,
+          content: proposal.summary,
+          kind: "docker",
+          status: "waiting_approval"
+        });
+        const { approval, operation } = createDockerOperationApproval(db, {
+          jobId: job.id,
+          proposal
+        });
+        if (internalHostAccessDraft) {
+          if (!linkDockerComposeHostAccessDraft(db, internalHostAccessDraft.id, internalHostAccessDraft.revision, {
+            approvalId: approval.id,
+            operationId: operation.id,
+            jobId: job.id
+          })) {
+            throw new DockerCreateValidationError("Compose Host Access draft changed before approval", 409);
+          }
         }
-      });
+        appendEvent(db, {
+          sessionId: session.id,
+          jobId: job.id,
+          type: "approval.pending",
+          payload: {
+            approvalId: approval.id,
+            proposal: approval.proposal,
+            summary: `Created Docker approval ${approval.id}: ${proposal.summary}. No Docker action was run.`
+          }
+        });
 
-      reply.status(202).send({
-        message,
-        job,
-        approval,
-        operation
-      });
+        reply.status(202).send({
+          message,
+          job,
+          approval,
+          operation
+        });
+      } catch (error) {
+        if (internalHostAccessDraft) {
+          deleteDockerComposeHostAccessDraft(db, internalHostAccessDraft.id);
+        }
+        throw error;
+      }
     } catch (error) {
       reply.status(dockerCreateErrorStatus(error)).send({ error: safeDockerMessage(error) });
     }
@@ -715,8 +822,9 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
 
 async function buildDockerProposal(
   body: DockerActionProposalBody,
-  { config, docker }: ApiRouteContext
-): Promise<DockerOperationProposal> {
+  context: ApiRouteContext
+): Promise<BuiltDockerProposal> {
+  const { config, docker } = context;
   const action = body.action;
   if (!action) {
     throw new Error("Docker action is required");
@@ -752,6 +860,12 @@ async function buildDockerProposal(
       throw new Error("Compose project is not configured");
     }
     const service = validatedComposeService(project.services, action, body.service);
+    if (service && project.hostAccessState === "pending_apply") {
+      throw new DockerComposeValidationError("Host Access changes require applying the entire Compose project");
+    }
+    const hostAccessApproval = action === "compose_up" && project.hostAccessState
+      ? await prepareComposeHostAccessApproval(context, project.id)
+      : null;
     return {
       action,
       targetType: "compose_project",
@@ -759,6 +873,13 @@ async function buildDockerProposal(
       composeProjectName: project.name,
       composeRevision: project.revision,
       ...(service ? { service } : {}),
+      ...(hostAccessApproval ? {
+        hostAccess: hostAccessApproval.hostAccess,
+        internalHostAccessDraft: {
+          id: hostAccessApproval.draftId,
+          revision: hostAccessApproval.draftRevision
+        }
+      } : {}),
       risk: action === "compose_down" || project.risk === "high" ? "high" : "medium",
       summary: `${actionLabel(action)} Docker Compose project ${project.name}${service ? ` service ${service}` : ""}`
     };
@@ -767,9 +888,28 @@ async function buildDockerProposal(
   throw new Error("Unsupported Docker action");
 }
 
+async function prepareComposeHostAccessApproval(
+  context: ApiRouteContext,
+  projectId: string
+): Promise<{
+  draftId: string;
+  draftRevision: string;
+  hostAccess: NonNullable<DockerOperationProposal["hostAccess"]>;
+}> {
+  const compose = dockerCompose(context.config.docker, context.docker);
+  if (!compose.prepareHostAccessApproval) {
+    throw new DockerCreateValidationError("Compose Host Access approval is unavailable", 503);
+  }
+  return compose.prepareHostAccessApproval(
+    projectId,
+    dockerEngine(context.config.docker, context.docker),
+    listDockerRegistryCredentials(context.db)
+  );
+}
+
 function sendDockerComposeAppError(reply: FastifyReply, error: unknown): void {
   if (error instanceof DockerComposeValidationError) {
-    reply.status(400).send({ error: error.message });
+    reply.status(400).send({ error: error.message, ...(error.issues.length ? { issues: error.issues } : {}) });
     return;
   }
   if (error instanceof DockerComposeAppConflictError || error instanceof DockerComposeAppProjectKeyConflictError) {
@@ -831,6 +971,10 @@ function dockerCreateErrorStatus(error: unknown): number {
   if (error instanceof DockerCreateExecutionError) {
     return 502;
   }
+  const statusCode = error instanceof Error && "statusCode" in error
+    ? (error as { statusCode?: unknown }).statusCode
+    : null;
+  if (statusCode === 409 || statusCode === 503) return statusCode;
   return 400;
 }
 

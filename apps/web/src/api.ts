@@ -9,6 +9,7 @@ import type {
   DockerImageRemoveInput,
   DockerImageRemoveResult,
   DockerImageSummary as SharedDockerImageSummary,
+  DockerHostAccessCatalog as SharedDockerHostAccessCatalog,
   DockerComposeAppCreateInput,
   DockerComposeAppDeleteInput,
   DockerComposeAppDetail as SharedDockerComposeAppDetail,
@@ -468,6 +469,7 @@ export type DockerVolumeDetails = SharedDockerVolumeDetails;
 export type DockerComposeProject = DockerSummary["composeProjects"][number];
 export type DockerComposeApp = SharedDockerComposeAppSummary;
 export type DockerComposeAppDetail = SharedDockerComposeAppDetail;
+export type DockerHostAccessCatalog = SharedDockerHostAccessCatalog;
 export type DockerOperation = DockerOperationRecord;
 export type ShareOperation = ShareOperationRecord;
 export type VodPlayerStatus = SharedVodPlayerStatus;
@@ -1173,6 +1175,13 @@ export async function getDockerComposeApps(): Promise<DockerComposeApp[]> {
   await ensureOk(response);
   const body = (await response.json()) as { apps: DockerComposeApp[] };
   return body.apps;
+}
+
+export async function getDockerHostAccessCatalog(): Promise<DockerHostAccessCatalog> {
+  const response = await fetch("/api/docker/host-access");
+  await ensureOk(response);
+  const body = (await response.json()) as { hostAccess: DockerHostAccessCatalog };
+  return body.hostAccess;
 }
 
 export async function getDockerComposeApp(appId: string): Promise<DockerComposeAppDetail> {

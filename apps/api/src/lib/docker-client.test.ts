@@ -449,6 +449,16 @@ describe("DockerSocketClient", () => {
     });
   });
 
+  it("detects rootless and user-namespace Docker security modes", async () => {
+    resourceInfo.SecurityOptions = ["name=seccomp,profile=builtin", "name=rootless", "name=userns"];
+    const client = new DockerSocketClient({ socketPath, timeoutMs: 1000 });
+
+    await expect(client.getInfo()).resolves.toMatchObject({
+      rootless: true,
+      userNamespace: true
+    });
+  });
+
   it("maps complete normalized container input to the Engine create payload", async () => {
     const client = new DockerSocketClient({ socketPath, timeoutMs: 1000 });
 

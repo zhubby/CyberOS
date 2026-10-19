@@ -2,6 +2,7 @@ apps/api/dist/* usr/lib/zos/apps/api/dist/
 target/release/zos-monitor usr/lib/zos/bin/
 target/release/zos-alerter usr/lib/zos/bin/
 target/release/zos-hostd usr/lib/zos/bin/
+target/release/zos-host-accessd usr/lib/zos/bin/
 target/release/zos-termux usr/lib/zos/bin/
 apps/worker/dist/* usr/lib/zos/apps/worker/dist/
 target/release/zos-photostaff usr/lib/zos/bin/

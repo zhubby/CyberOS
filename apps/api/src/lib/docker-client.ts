@@ -23,6 +23,8 @@ export interface DockerEngineInfo {
   architecture: string | null;
   dockerRootDir: string | null;
   resourceCapabilities?: DockerResourceCapabilities;
+  rootless?: boolean;
+  userNamespace?: boolean;
 }
 
 export interface DockerEngineCounts {
@@ -102,6 +104,8 @@ export interface DockerCreateContainerInput {
   shmSize?: number;
   readOnlyRootfs?: boolean;
   privileged?: boolean;
+  capDrop?: string[];
+  securityOpt?: string[];
   mounts?: DockerContainerMount[];
   networkMode?: string;
   networkName?: string;
@@ -171,6 +175,7 @@ export interface DockerEngineRuntime {
   listContainers(): Promise<DockerContainerSummary[]>;
   listImages(): Promise<DockerImageSummary[]>;
   imageExists(image: string): Promise<boolean>;
+  resolveImageId?(image: string): Promise<string>;
   pullImage(input: DockerPullImageInput): Promise<void>;
   removeImage(image: string): Promise<DockerImageRemoveResult>;
   createContainer(input: DockerCreateContainerInput): Promise<DockerCreateContainerResult>;
@@ -215,6 +220,7 @@ type DockerInfoResponse = {
   CPUShares?: boolean;
   CPUSet?: boolean;
   PidsLimit?: boolean;
+  SecurityOptions?: string[];
 };
 
 type DockerNetworkRow = {
@@ -410,6 +416,8 @@ export class DockerSocketClient implements DockerEngineRuntime {
       operatingSystem: info.OperatingSystem ?? null,
       architecture: info.Architecture ?? version.Arch ?? null,
       dockerRootDir: info.DockerRootDir ?? null,
+      rootless: info.SecurityOptions?.some((option) => option === "name=rootless" || option.startsWith("name=rootless,")) ?? false,
+      userNamespace: info.SecurityOptions?.some((option) => option === "name=userns" || option.startsWith("name=userns,")) ?? false,
       resourceCapabilities: {
         memoryLimit: capabilityFlag(info.MemoryLimit),
         swapLimit: capabilityFlag(info.SwapLimit),
@@ -495,6 +503,14 @@ export class DockerSocketClient implements DockerEngineRuntime {
       }
       throw error;
     }
+  }
+
+  async resolveImageId(image: string): Promise<string> {
+    const inspected = await this.requestJson<{ Id?: string }>("GET", `/images/${encodeURIComponent(image)}/json`);
+    if (!inspected.Id?.startsWith("sha256:")) {
+      throw new DockerRequestError("Docker returned invalid image identity", 502);
+    }
+    return inspected.Id;
   }
 
   async pullImage(input: DockerPullImageInput): Promise<void> {
@@ -993,6 +1009,8 @@ function containerCreatePayload(input: DockerCreateContainerInput): Record<strin
       ...(input.shmSize !== undefined ? { ShmSize: input.shmSize } : {}),
       ...(input.readOnlyRootfs !== undefined ? { ReadonlyRootfs: input.readOnlyRootfs } : {}),
       ...(input.privileged !== undefined ? { Privileged: input.privileged } : {}),
+      ...(input.capDrop !== undefined ? { CapDrop: input.capDrop } : {}),
+      ...(input.securityOpt !== undefined ? { SecurityOpt: input.securityOpt } : {}),
       ...(input.mounts !== undefined ? { Mounts: input.mounts.map(mapContainerMount) } : {}),
       ...(networkMode !== undefined ? { NetworkMode: networkMode } : {}),
       ...(Object.keys(portBindings).length ? { PortBindings: portBindings } : {}),

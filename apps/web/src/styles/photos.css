@@ -81,6 +81,7 @@
   color: var(--muted);
   background: transparent;
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -99,6 +100,7 @@
   gap: 5px;
   color: var(--muted-2);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -135,6 +137,7 @@
   min-width: 108px;
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -263,6 +266,7 @@
   justify-content: space-between;
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -401,6 +405,7 @@
   color: white;
   background: var(--accent);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -505,6 +510,7 @@
   padding-right: 3px;
   color: var(--text);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -521,6 +527,7 @@
   color: var(--muted);
   background: var(--surface);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -644,6 +651,7 @@
   border: 1px solid var(--line-soft);
   border-radius: 5px;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -677,6 +685,7 @@
 .photo-day > header span {
   color: var(--muted-2);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -737,6 +746,7 @@
   color: var(--text);
   background: var(--modal-bg);
   font-size: 9px;
+  font-family: var(--font-emphasis);
   font-weight: 900;
   letter-spacing: 0;
 }
@@ -764,6 +774,7 @@
   color: var(--text);
   background: var(--modal-bg);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
   text-align: left;
   text-overflow: ellipsis;
@@ -817,6 +828,7 @@
   border: 1px solid var(--line-soft);
   border-radius: 5px;
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -888,6 +900,7 @@
   color: var(--muted);
   background: var(--surface);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -955,6 +968,7 @@
 .photo-lightbox-meta dt {
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -980,6 +994,7 @@
   color: var(--text);
   background: var(--surface);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-decoration: none;
 }

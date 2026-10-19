@@ -37,8 +37,17 @@ textarea {
   letter-spacing: 0;
 }
 
+:where(strong, b) {
+  font-family: var(--font-emphasis);
+}
+
+:where(code, pre, kbd, samp) :where(strong, b),
+:where(code, pre, kbd, samp):is(strong, b) {
+  font-family: inherit;
+}
+
 .settings-nav h3 {
-  font-family: var(--font-ui);
+  font-family: var(--font-emphasis);
 }
 
 .empty-state strong,

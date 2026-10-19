@@ -1570,7 +1570,7 @@ function NetworkReadinessChart({ gauges, t }: { gauges: Gauge[]; t: Translate })
             axisLine={false}
             tickLine={false}
             tickMargin={10}
-            tick={{ fill: "var(--text)", fontSize: 11, fontWeight: 800 }}
+            tick={{ fill: "var(--text)", fontFamily: "var(--font-emphasis)", fontSize: 11, fontWeight: 800 }}
             width={112}
           />
           <Bar

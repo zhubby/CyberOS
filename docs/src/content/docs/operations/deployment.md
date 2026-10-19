@@ -4,12 +4,14 @@ description: 原生 Debian 包、systemd 服务、Nginx 和 appliance 构建。
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [packaging/debian/rules, packaging/debian/install, packaging/scripts/zos-deploy, packaging/systemd/zos-api.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/appliance/manifest.toml]
+sourceOfTruth: [packaging/debian/rules, packaging/debian/install, packaging/scripts/zos-deploy, packaging/systemd/zos-api.service, packaging/systemd/zos-host-accessd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/appliance/manifest.toml]
 sidebar:
   order: 1
 ---
 
-生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 ZOS 自身放入 Docker。API、monitor、alerter、worker、downloader、indexer、hostd、termux 是常驻服务；maintenance、health、backup 由 oneshot service 和 timer 驱动。
+生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 ZOS 自身放入 Docker。API、monitor、alerter、worker、downloader、indexer、hostd、termux 是常驻服务；启用 Docker 时还会启动非 root `zos-host-accessd`。maintenance、health、backup 由 oneshot service 和 timer 驱动。
+
+`zos-host-accessd` 的 Docker collector 兼容标记默认关闭。部署 helper 会保留并诊断这个可选服务，但不会把未验证代理标为可用。目标机完成真实 Netdata/node-exporter 兼容测试后，才可通过 systemd drop-in 设置 `ZOS_HOST_ACCESS_DOCKER_COMPATIBLE=1`；步骤、验收项和回退边界见 [Docker 宿主观测授权](/docs/reference/docker-host-access/)。
 
 Nginx 只反向代理到 loopback API。程序文件位于 `/usr/lib/zos`，持久数据统一位于 `/zos`，运行时 socket 位于 `/run/zos`。API 静态提供 React Web 与 `/docs/` 文档站。
 

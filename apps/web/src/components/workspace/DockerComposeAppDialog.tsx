@@ -29,6 +29,7 @@ import {
   initialDockerComposeAppForm,
   type DockerComposeAppForm
 } from "../../lib/docker-compose-apps.js";
+import { HostAccessPicker } from "./HostAccessPicker.js";
 
 interface DockerComposeAppDialogProps {
   app: DockerComposeApp | null;
@@ -68,6 +69,8 @@ export function DockerComposeAppDialog({
   const [conflicted, setConflicted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [hostAccessService, setHostAccessService] = useState("");
+  const [hostAccessBlocked, setHostAccessBlocked] = useState(false);
   const dialogRef = useRef<HTMLElement | null>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const formError = useMemo(() => dockerComposeAppFormError(form), [form]);
@@ -148,7 +151,8 @@ export function DockerComposeAppDialog({
         composeContent: form.composeContent,
         environment: detail
           ? dockerComposeUpdateEnvironment(form.environment)
-          : dockerComposeCreateEnvironment(form.environment)
+          : dockerComposeCreateEnvironment(form.environment),
+        hostAccess: form.hostAccess
       });
       setValidation(result);
       setNotice(String(t("workspace.management.docker.apps.validationSucceeded")));
@@ -170,13 +174,15 @@ export function DockerComposeAppDialog({
             name: form.name.trim(),
             composeContent: form.composeContent,
             environment: dockerComposeUpdateEnvironment(form.environment),
+            hostAccess: form.hostAccess,
             expectedRevision: detail.revision
           })
         : await createDockerComposeApp({
             name: form.name.trim(),
             projectKey: form.projectKey.trim(),
             composeContent: form.composeContent,
-            environment: dockerComposeCreateEnvironment(form.environment)
+            environment: dockerComposeCreateEnvironment(form.environment),
+            hostAccess: form.hostAccess
           });
       setDetail(saved);
       setForm(dockerComposeAppForm(saved));
@@ -244,8 +250,14 @@ export function DockerComposeAppDialog({
   }
 
   const validationResult = validation ?? (!dirty ? detail : null);
+  const hostAccessServices = validationResult?.services ?? detail?.services ?? [];
+  const activeHostAccessService = hostAccessServices.includes(hostAccessService)
+    ? hostAccessService
+    : hostAccessServices[0] ?? "";
+  const activeHostAccessGrants = form.hostAccess.find((entry) => entry.service === activeHostAccessService)?.grants ?? [];
   const hasContainers = (detail?.containerCount ?? app?.containerCount ?? 0) > 0;
   const disableSave = Boolean(formError) || busy || composeUnavailable || conflicted;
+  const disableSubmit = disableSave || hostAccessBlocked;
   const loadFailed = Boolean(app && !detail && !loading);
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
@@ -395,6 +407,32 @@ export function DockerComposeAppDialog({
                   ) : <p className="docker-compose-environment-empty">{t("workspace.management.docker.apps.noEnvironment")}</p>}
                 </section>
 
+                <section className="docker-compose-host-access">
+                  <label>
+                    <span>{t("workspace.management.docker.hostAccess.service")}</span>
+                    <select
+                      value={activeHostAccessService}
+                      onChange={(event) => setHostAccessService(event.target.value)}
+                      disabled={busy || !hostAccessServices.length}
+                    >
+                      {hostAccessServices.map((service) => <option key={service} value={service}>{service}</option>)}
+                    </select>
+                  </label>
+                  {activeHostAccessService ? (
+                    <HostAccessPicker
+                      grants={activeHostAccessGrants}
+                      onChange={(grants) => updateForm("hostAccess", [
+                        ...form.hostAccess.filter((entry) => entry.service !== activeHostAccessService),
+                        ...(grants.length ? [{ service: activeHostAccessService, grants }] : [])
+                      ].sort((left, right) => left.service.localeCompare(right.service)))}
+                      onBlockingChange={setHostAccessBlocked}
+                      disabled={busy}
+                    />
+                  ) : (
+                    <p className="docker-compose-environment-empty">{t("workspace.management.docker.hostAccess.validateServices")}</p>
+                  )}
+                </section>
+
                 {validationResult ? (
                   <div className="docker-compose-validation" data-risk={validationResult.risk}>
                     <Check aria-hidden="true" size={16} />
@@ -446,11 +484,11 @@ export function DockerComposeAppDialog({
                   {validating ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Check aria-hidden="true" size={15} />}
                   <span>{t("workspace.management.docker.apps.validate")}</span>
                 </button>
-                <button type="button" onClick={() => void save("save")} disabled={disableSave}>
+                <button type="button" onClick={() => void save("save")} disabled={disableSubmit}>
                   {submitAction === "save" ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Save aria-hidden="true" size={15} />}
                   <span>{t("workspace.management.docker.apps.save")}</span>
                 </button>
-                <button type="button" className="is-primary" onClick={() => void save("deploy")} disabled={disableSave || !canDeploy}>
+                <button type="button" className="is-primary" onClick={() => void save("deploy")} disabled={disableSubmit || !canDeploy}>
                   {submitAction === "deploy" ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Rocket aria-hidden="true" size={15} />}
                   <span>{t("workspace.management.docker.apps.saveDeploy")}</span>
                 </button>

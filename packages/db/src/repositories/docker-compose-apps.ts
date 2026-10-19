@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DockerComposeAppRisk } from "@zos/shared";
+import type { DockerComposeAppRisk, DockerComposeServiceHostAccess } from "@zos/shared";
 import type { ZosDatabase } from "../connection.js";
 
 export interface DockerComposeAppEnvironmentRecord {
@@ -13,6 +13,8 @@ export interface DockerComposeAppRecord {
   projectKey: string;
   composeContent: string;
   environment: DockerComposeAppEnvironmentRecord[];
+  hostAccess: DockerComposeServiceHostAccess[];
+  deployedHostAccess: DockerComposeServiceHostAccess[];
   services: string[];
   warnings: string[];
   risk: DockerComposeAppRisk;
@@ -29,6 +31,7 @@ export interface DockerComposeAppWriteInput {
   projectKey: string;
   composeContent: string;
   environment: DockerComposeAppEnvironmentRecord[];
+  hostAccess?: DockerComposeServiceHostAccess[];
   services: string[];
   warnings: string[];
   risk: DockerComposeAppRisk;
@@ -50,7 +53,7 @@ export class DockerComposeAppProjectKeyConflictError extends Error {
 
 export function listDockerComposeApps(db: ZosDatabase): DockerComposeAppRecord[] {
   const rows = db.prepare(`
-    SELECT id, name, project_key, compose_content, services_json, warnings_json, risk,
+    SELECT id, name, project_key, compose_content, services_json, warnings_json, risk, host_access_json, deployed_host_access_json,
            revision, deployed_revision, created_at, updated_at
     FROM docker_apps
     ORDER BY name COLLATE NOCASE, project_key COLLATE NOCASE
@@ -61,7 +64,7 @@ export function listDockerComposeApps(db: ZosDatabase): DockerComposeAppRecord[]
 
 export function listDockerComposeAppSummaries(db: ZosDatabase): DockerComposeAppSummaryRecord[] {
   return (db.prepare(`
-    SELECT id, name, project_key, services_json, warnings_json, risk,
+    SELECT id, name, project_key, services_json, warnings_json, risk, host_access_json, deployed_host_access_json,
            revision, deployed_revision, created_at, updated_at
     FROM docker_apps
     ORDER BY name COLLATE NOCASE, project_key COLLATE NOCASE
@@ -70,7 +73,7 @@ export function listDockerComposeAppSummaries(db: ZosDatabase): DockerComposeApp
 
 export function getDockerComposeApp(db: ZosDatabase, id: string): DockerComposeAppRecord | null {
   const row = db.prepare(`
-    SELECT id, name, project_key, compose_content, services_json, warnings_json, risk,
+    SELECT id, name, project_key, compose_content, services_json, warnings_json, risk, host_access_json, deployed_host_access_json,
            revision, deployed_revision, created_at, updated_at
     FROM docker_apps
     WHERE id = ?
@@ -83,7 +86,7 @@ export function getDockerComposeAppSummary(
   id: string
 ): DockerComposeAppSummaryRecord | null {
   const row = db.prepare(`
-    SELECT id, name, project_key, services_json, warnings_json, risk,
+    SELECT id, name, project_key, services_json, warnings_json, risk, host_access_json, deployed_host_access_json,
            revision, deployed_revision, created_at, updated_at
     FROM docker_apps
     WHERE id = ?
@@ -102,9 +105,9 @@ export function createDockerComposeApp(
     try {
       db.prepare(`
         INSERT INTO docker_apps (
-          id, name, project_key, compose_content, services_json, warnings_json, risk,
-          revision, deployed_revision, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+          id, name, project_key, compose_content, services_json, warnings_json, risk, host_access_json,
+          deployed_host_access_json, revision, deployed_revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, NULL, ?, ?)
       `).run(
         id,
         input.name,
@@ -113,6 +116,7 @@ export function createDockerComposeApp(
         JSON.stringify(input.services),
         JSON.stringify(input.warnings),
         input.risk,
+        JSON.stringify(input.hostAccess ?? []),
         revision,
         now,
         now
@@ -151,7 +155,7 @@ export function updateDockerComposeApp(
     const revision = randomUUID();
     const result = db.prepare(`
       UPDATE docker_apps
-      SET name = ?, compose_content = ?, services_json = ?, warnings_json = ?, risk = ?,
+      SET name = ?, compose_content = ?, services_json = ?, warnings_json = ?, risk = ?, host_access_json = ?,
           revision = ?, updated_at = ?
       WHERE id = ? AND revision = ?
     `).run(
@@ -160,6 +164,7 @@ export function updateDockerComposeApp(
       JSON.stringify(input.services),
       JSON.stringify(input.warnings),
       input.risk,
+      JSON.stringify(input.hostAccess ?? []),
       revision,
       now,
       id,
@@ -179,7 +184,7 @@ export function markDockerComposeAppDeployed(
   const updatedAt = new Date().toISOString();
   const result = db.prepare(`
     UPDATE docker_apps
-    SET deployed_revision = ?, updated_at = ?
+    SET deployed_revision = ?, deployed_host_access_json = host_access_json, updated_at = ?
     WHERE id = ? AND revision = ?
   `).run(revision, updatedAt, id, revision);
   return result.changes === 1 ? getDockerComposeApp(db, id) : null;
@@ -193,8 +198,8 @@ export function restoreDockerComposeApp(
   return db.transaction(() => {
     const result = db.prepare(`
       UPDATE docker_apps
-      SET name = ?, compose_content = ?, services_json = ?, warnings_json = ?, risk = ?,
-          revision = ?, deployed_revision = ?, updated_at = ?
+      SET name = ?, compose_content = ?, services_json = ?, warnings_json = ?, risk = ?, host_access_json = ?,
+          deployed_host_access_json = ?, revision = ?, deployed_revision = ?, updated_at = ?
       WHERE id = ? AND revision = ?
     `).run(
       app.name,
@@ -202,6 +207,8 @@ export function restoreDockerComposeApp(
       JSON.stringify(app.services),
       JSON.stringify(app.warnings),
       app.risk,
+      JSON.stringify(app.hostAccess),
+      JSON.stringify(app.deployedHostAccess),
       app.revision,
       app.deployedRevision,
       app.updatedAt,
@@ -234,6 +241,8 @@ interface DockerComposeAppRow {
   services_json: string;
   warnings_json: string;
   risk: DockerComposeAppRisk;
+  host_access_json: string;
+  deployed_host_access_json: string;
   revision: string;
   deployed_revision: string | null;
   created_at: string;
@@ -296,6 +305,8 @@ function mapAppSummary(row: DockerComposeAppSummaryRow): DockerComposeAppSummary
     services: parseStringArray(row.services_json),
     warnings: parseStringArray(row.warnings_json),
     risk: row.risk,
+    hostAccess: parseHostAccess(row.host_access_json),
+    deployedHostAccess: parseHostAccess(row.deployed_host_access_json),
     revision: row.revision,
     deployedRevision: row.deployed_revision,
     createdAt: row.created_at,
@@ -307,6 +318,15 @@ function parseStringArray(value: string): string[] {
   try {
     const parsed = JSON.parse(value) as unknown;
     return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseHostAccess(value: string): DockerComposeServiceHostAccess[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed as DockerComposeServiceHostAccess[] : [];
   } catch {
     return [];
   }

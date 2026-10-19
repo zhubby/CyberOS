@@ -17,6 +17,7 @@ units = [
   "zos-termux.service",
   "zos-vod-player.service",
   "zos-hostd.service",
+  "zos-host-accessd.service",
   "zos-worker@1.service",
   "zos-photostaff.service",
   "zos-downloader.service",

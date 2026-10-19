@@ -118,6 +118,7 @@
 .root-control label {
   color: var(--muted-2);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -327,6 +328,7 @@
 .panel-heading dt {
   color: var(--muted-2);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -335,6 +337,7 @@
   margin: 2px 0 0;
   color: var(--text);
   font-size: 15px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   min-width: 0;
   overflow: hidden;
@@ -449,6 +452,7 @@
   color: var(--muted-2);
   background: var(--row-head-bg);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -532,6 +536,7 @@
 
 .file-type-label {
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -689,6 +694,7 @@
   color: var(--muted-2);
   background: rgb(255 255 255 / 4%);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 900;
   line-height: 1;
   overflow: visible;
@@ -899,6 +905,7 @@
 
 .file-transfer-route strong {
   color: var(--text);
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -928,6 +935,7 @@
 }
 
 .file-action-field span {
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1148,6 +1156,7 @@
 .download-header-stat span {
   color: var(--muted-2);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1209,6 +1218,7 @@
   color: var(--muted);
   background: transparent;
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -1402,6 +1412,7 @@
   color: var(--download-status-text);
   background: var(--download-status-bg);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
   transition:
@@ -1499,6 +1510,7 @@
   color: var(--text);
   background: var(--subtle-bg);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -1581,10 +1593,10 @@
 }
 
 .system-ethernet-facts > div { min-width: 0; }
-.system-ethernet-facts dt { color: var(--muted-2); font-size: 9.5px; font-weight: 800; text-transform: uppercase; }
+.system-ethernet-facts dt { color: var(--muted-2); font-size: 9.5px; font-family: var(--font-emphasis); font-weight: 800; text-transform: uppercase; }
 .system-ethernet-facts dd { margin: 4px 0 0; overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .system-ethernet-device-actions { justify-content: flex-end; min-width: 38px; gap: 7px; }
-.system-ethernet-device-actions > span { color: var(--warning-text); font-size: 10px; font-weight: 800; }
+.system-ethernet-device-actions > span { color: var(--warning-text); font-size: 10px; font-family: var(--font-emphasis); font-weight: 800; }
 .system-ethernet-modal-backdrop { z-index: 74; }
 
 .system-ethernet-dialog,
@@ -1632,7 +1644,7 @@
   padding: 18px;
 }
 
-.system-ethernet-toggle { display: inline-flex; align-items: center; width: fit-content; gap: 8px; color: var(--text); font-size: 12px; font-weight: 700; }
+.system-ethernet-toggle { display: inline-flex; align-items: center; width: fit-content; gap: 8px; color: var(--text); font-size: 12px; font-family: var(--font-emphasis); font-weight: 700; }
 .system-ethernet-family { min-width: 0; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 5px; }
 .system-ethernet-family legend { padding: 0 6px; color: var(--accent-soft-text); font-family: var(--code-font-family); font-size: 10px; font-weight: 800; }
 .system-ethernet-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -1643,6 +1655,7 @@
   gap: 6px;
   color: var(--muted);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
 }
 
@@ -1961,6 +1974,7 @@
   color: var(--muted);
   background: var(--subtle-bg);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -2058,6 +2072,7 @@
   color: var(--muted);
   background: transparent;
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
   text-align: left;
   cursor: pointer;
@@ -2407,6 +2422,7 @@
   color: var(--muted);
   background: var(--surface);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -2569,6 +2585,7 @@
   background: var(--neutral-status-bg);
   font-size: 11px;
   font-style: normal;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -2719,6 +2736,7 @@
   margin-right: 2px;
   color: var(--muted);
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -2806,6 +2824,7 @@
   margin-bottom: 6px;
   color: var(--muted);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -2970,6 +2989,7 @@
   padding: 5px 8px 7px;
   color: var(--muted-2);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -3301,6 +3321,7 @@
   color: var(--muted);
   background: transparent;
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -3323,6 +3344,7 @@
   min-width: 0;
   color: var(--muted);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 750;
   white-space: nowrap;
 }
@@ -3706,6 +3728,7 @@
 .management-fact-list dt {
   color: var(--muted-2);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -3715,6 +3738,7 @@
   overflow: hidden;
   color: var(--text);
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3766,6 +3790,7 @@
 .management-metric span {
   color: var(--muted-2);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -4636,6 +4661,7 @@
   background: transparent;
   cursor: pointer;
   font: inherit;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-align: left;
   text-overflow: ellipsis;
@@ -4663,12 +4689,14 @@
   color: var(--muted-2);
   background: var(--row-head-bg);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .management-table td:first-child {
   color: var(--text);
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -4770,6 +4798,7 @@
 .network-interface-detail-facts span {
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -4890,6 +4919,7 @@
   color: var(--accent-soft-text);
   background: var(--accent-soft-bg);
   font-size: 9px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -5034,6 +5064,7 @@
 .storage-disk-capacity-center span {
   color: var(--muted-2);
   font-size: 9px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -5080,6 +5111,7 @@
 .storage-disk-capacity-summary dt {
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -5088,6 +5120,7 @@
   overflow: hidden;
   color: var(--text);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5182,6 +5215,7 @@
 .storage-disk-detail-facts span {
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -5239,6 +5273,7 @@
   color: var(--muted-2);
   background: var(--row-head-bg);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -5313,6 +5348,7 @@
 .storage-pool-details-facts span {
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -5440,6 +5476,7 @@
   background: var(--surface);
   font: inherit;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -5460,6 +5497,7 @@
 .storage-pool-delete-confirmation label > span {
   color: var(--muted);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -5500,6 +5538,7 @@
 .storage-disk-selection h3 {
   color: var(--muted);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -5601,6 +5640,7 @@
   color: var(--muted-2);
   font-size: 10.5px;
   font-style: normal;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -5611,6 +5651,7 @@
   margin: 0;
   color: var(--warning-text);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
   line-height: 1.45;
 }
@@ -5631,6 +5672,7 @@
   color: var(--muted);
   background: var(--subtle-bg);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
   line-height: 1.4;
 }
@@ -5745,6 +5787,7 @@
   background: var(--surface);
   font: inherit;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -5801,6 +5844,7 @@
   color: var(--text);
   background: transparent;
   font: inherit;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-align: left;
   text-overflow: ellipsis;
@@ -5882,6 +5926,7 @@
   gap: 6px;
   color: var(--muted);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -6027,6 +6072,7 @@
   background: transparent;
   font: inherit;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-align: left;
 }
@@ -6088,6 +6134,7 @@
   margin: 0;
   color: var(--text);
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -6177,6 +6224,7 @@
   cursor: pointer;
   font: inherit;
   font-size: 12.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-align: left;
   text-overflow: ellipsis;
@@ -6245,6 +6293,7 @@
 .management-workload small {
   justify-self: end;
   color: var(--muted-2);
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -6257,6 +6306,7 @@
 .management-table-empty-state {
   align-self: stretch;
   color: var(--text);
+  font-family: var(--font-emphasis);
   font-weight: 800;
   line-height: 1.4;
 }
@@ -6461,12 +6511,14 @@
 .system-wifi-device-details dt {
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .system-wifi-device-details dd {
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
 }
 
@@ -6615,6 +6667,7 @@
 .system-wifi-form-fact > span {
   color: var(--muted);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -6768,6 +6821,7 @@
 .management-resource-row span {
   color: var(--text);
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -6775,6 +6829,7 @@
   color: var(--muted);
   font-size: 11.5px;
   font-style: normal;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -6822,6 +6877,7 @@
 .network-traffic-interface-select > span {
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -6836,6 +6892,7 @@
   background: var(--surface);
   font: inherit;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
 }
 
@@ -6882,6 +6939,7 @@
   overflow: hidden;
   color: var(--muted);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -6964,6 +7022,7 @@
 
 .network-readiness-value {
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -7115,6 +7174,7 @@
   color: var(--muted-2);
   font-size: 11px;
   font-style: normal;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -7168,6 +7228,7 @@
 .storage-pool-usage-center span {
   color: var(--muted-2);
   font-size: 9px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -7372,6 +7433,7 @@
 .share-account-dialog-field > span {
   color: var(--muted-2);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -7409,6 +7471,7 @@
   color: var(--muted);
   background: var(--surface);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -7478,6 +7541,7 @@
 .share-media-type-group > span {
   color: var(--muted);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -7492,6 +7556,7 @@
   min-width: 0;
   color: var(--muted);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -7511,6 +7576,7 @@
   min-height: 36px;
   color: var(--text);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   cursor: pointer;
   user-select: none;
@@ -7689,6 +7755,7 @@
   margin-top: 2px;
   color: var(--muted-2);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -7743,6 +7810,7 @@
   min-width: 0;
   color: var(--text);
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -7889,6 +7957,7 @@
 .docker-daemon-editor-field > span {
   color: var(--muted);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -8011,6 +8080,7 @@
   color: var(--muted);
   background: var(--surface);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -8220,6 +8290,7 @@
   display: block;
   color: var(--muted);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 750;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -8276,6 +8347,7 @@
   overflow: hidden;
   color: var(--text);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8360,6 +8432,7 @@
   color: var(--danger-text);
   background: var(--danger-bg-soft);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
 }
 
@@ -8522,6 +8595,7 @@
   background: var(--surface);
   font: inherit;
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -8690,6 +8764,7 @@
   color: var(--danger-text);
   background: var(--danger-bg-soft);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
   line-height: 1.45;
 }
@@ -8722,6 +8797,7 @@
   background: var(--surface);
   font: inherit;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -8995,6 +9071,7 @@
   min-width: 0;
   overflow: hidden;
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9032,6 +9109,7 @@
 .vm-create-section-heading h4 {
   color: var(--text);
   font-size: 13px;
+  font-family: var(--font-emphasis);
   font-weight: 650;
 }
 
@@ -9115,6 +9193,7 @@
   margin-bottom: 10px;
   color: var(--text);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 650;
 }
 
@@ -9153,6 +9232,7 @@
 .vm-create-toggle strong {
   color: var(--text);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 650;
 }
 
@@ -9281,6 +9361,7 @@
 .vm-create-segmented strong {
   color: var(--text);
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 650;
 }
 
@@ -9430,6 +9511,7 @@
   gap: 5px;
   color: var(--muted-2);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 650;
 }
 
@@ -9544,6 +9626,7 @@
   min-width: 0;
   overflow: hidden;
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9665,6 +9748,7 @@
 .storage-file-picker-pools-heading > span {
   color: var(--text);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -9746,6 +9830,7 @@
   border-radius: 3px;
   color: var(--muted-2);
   font-size: 9px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -9801,6 +9886,7 @@
 .storage-file-picker-location > span {
   color: var(--muted-2);
   font-size: 9.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -9823,6 +9909,7 @@
   color: var(--muted);
   background: var(--surface);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -9917,6 +10004,7 @@
   background: var(--surface);
   font: inherit;
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -10039,6 +10127,7 @@
   color: var(--text);
   background: transparent;
   font: inherit;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-align: left;
 }
@@ -10173,6 +10262,7 @@
 .docker-registry-field > span {
   color: var(--muted-2);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -10182,6 +10272,7 @@
   overflow-wrap: anywhere;
   color: var(--text);
   font-size: 12px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
 }
 
@@ -10274,6 +10365,7 @@
   color: var(--muted);
   background: var(--surface);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -10443,6 +10535,7 @@
   color: var(--success-text);
   font-size: 10.5px;
   font-style: normal;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -10489,6 +10582,7 @@
     color: var(--muted-2);
     content: attr(data-label);
     font-size: 9.5px;
+    font-family: var(--font-emphasis);
     font-weight: 800;
     text-align: left;
     text-transform: uppercase;
@@ -10558,6 +10652,188 @@
   border-top: 3px solid var(--accent);
 }
 
+.docker-compose-host-access {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.docker-compose-host-access > label {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.docker-compose-host-access > label select {
+  min-width: 0;
+}
+
+.host-access-picker {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.host-access-picker-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.host-access-picker-heading h3,
+.host-access-picker-heading p,
+.host-access-capability p {
+  margin: 0;
+}
+
+.host-access-picker-heading h3 {
+  font-size: 14px;
+}
+
+.host-access-picker-heading p,
+.host-access-capability p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.host-access-picker fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.host-access-picker legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 0;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-emphasis);
+  font-weight: 650;
+}
+
+.host-access-capability-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+
+.host-access-capability {
+  min-width: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.host-access-capability > label:first-child {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.host-access-capability > label:first-child input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.host-access-capability > label:first-child span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.host-access-capability strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.host-access-capability small {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+.host-access-capability[data-availability="degraded"] small,
+.host-access-capability[data-availability="degraded"] > p {
+  color: var(--yellow);
+}
+
+.host-access-capability:has(input:disabled) {
+  opacity: 0.68;
+}
+
+.host-access-target {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.host-access-target input {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.host-access-picker-status,
+.host-access-picker-error,
+.host-access-degraded-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.host-access-picker-error {
+  color: var(--red);
+}
+
+.host-access-degraded-confirmation {
+  align-items: flex-start;
+  color: var(--yellow);
+}
+
+.host-access-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.host-access-coverage span {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.host-access-coverage span[data-state="requested"] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.host-access-coverage span[data-state="unsupported"] {
+  text-decoration: line-through;
+}
+
 .docker-compose-app-heading {
   display: flex;
   align-items: center;
@@ -10622,6 +10898,7 @@
 .docker-compose-editor-field > span {
   color: var(--muted-2);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -10731,6 +11008,7 @@
   background: var(--surface);
   font: inherit;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -10754,6 +11032,7 @@
   gap: 4px;
   color: var(--success-text);
   font-size: 10.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -10870,6 +11149,7 @@
 .docker-compose-delete-confirmation dt {
   color: var(--muted-2);
   font-size: 10px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }

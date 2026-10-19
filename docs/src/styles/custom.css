@@ -7,6 +7,7 @@
 :root {
   --zos-font-ui: "Inter Variable", "Noto Sans SC Variable", "Noto Sans SC", system-ui, sans-serif;
   --zos-font-display: "Newsreader Variable", "Noto Serif SC Variable", "Noto Serif SC", Georgia, serif;
+  --zos-font-emphasis: var(--zos-font-display);
   --zos-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --sl-font: var(--zos-font-ui);
   --sl-font-mono: var(--zos-font-mono);
@@ -76,6 +77,15 @@ textarea {
   font-family: var(--zos-font-display);
   font-weight: 580;
   letter-spacing: 0;
+}
+
+:where(strong, b) {
+  font-family: var(--zos-font-emphasis);
+}
+
+:where(code, pre, kbd, samp) :where(strong, b),
+:where(code, pre, kbd, samp):is(strong, b) {
+  font-family: inherit;
 }
 
 h1 {

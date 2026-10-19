@@ -25,6 +25,7 @@
   min-width: 0;
   color: var(--muted);
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -63,6 +64,7 @@
   color: var(--muted);
   background: transparent;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   cursor: pointer;
 }
@@ -213,6 +215,7 @@
   color: var(--text);
   background: #242735;
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -224,6 +227,7 @@
   color: var(--muted-2);
   background: #181a22;
   font-size: 11.5px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
@@ -334,6 +338,7 @@
   color: var(--muted);
   background: rgb(10 12 18 / 78%);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   pointer-events: none;
   transform: translateX(-50%);
@@ -389,6 +394,7 @@
   flex: 0 0 auto;
   color: var(--muted);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -514,6 +520,7 @@
   color: var(--muted);
   background: rgb(10 12 18 / 82%);
   font-size: 11px;
+  font-family: var(--font-emphasis);
   font-weight: 800;
   pointer-events: none;
   transform: translateX(-50%);

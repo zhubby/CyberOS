@@ -311,6 +311,7 @@ if command -v systemctl >/dev/null 2>&1; then
   ZOS_VOD_PLAYER_USER="$VOD_PLAYER_USER" /usr/lib/zos/scripts/zos-refresh-vod-player.sh
   if [ "$DOCKER_ENABLED" = "1" ]; then
     systemctl enable --now docker.service
+    systemctl enable zos-host-accessd.service
   fi
   if [ "$VM_ENABLED" = "1" ]; then
     for vm_unit in libvirtd.service virtqemud.socket; do
@@ -330,7 +331,11 @@ if command -v systemctl >/dev/null 2>&1; then
     zos-photostaff.service \
     zos-downloader.service \
     zos-indexer.service
-  systemctl restart zos-hostd.service zos-termux.service zos-api.service
+  systemctl restart zos-hostd.service zos-termux.service
+  if [ "$DOCKER_ENABLED" = "1" ]; then
+    systemctl restart zos-host-accessd.service
+  fi
+  systemctl restart zos-api.service
   if ! systemctl restart zos-monitor.service; then
     log "warning: monitoring service failed to start; core services remain available"
   fi

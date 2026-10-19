@@ -1069,6 +1069,55 @@ export const en = {
           confirmRegistryDeleteTitle: "Delete this Registry credential?",
           confirmRegistryDeleteDescription: "The saved credential for {{name}} will be removed immediately. Future pulls use anonymous access unless another matching credential is added."
         },
+        hostAccess: {
+          title: "Host Access",
+          description: "Grant fixed, read-only host observation capabilities. Selected grants require approval.",
+          service: "Target service",
+          validateServices: "Validate the Compose definition before selecting a target service.",
+          loading: "Loading Host Access policy...",
+          loadError: "Host Access policy is unavailable. Saving grants is blocked.",
+          target: "Container target",
+          invalidTarget: "Use a normalized absolute container path.",
+          copyReport: "Copy coverage report",
+          copied: "Coverage report copied.",
+          recreateToChange: "Host Access is immutable for this container. Remove and recreate the container to change or revoke it.",
+          coverageTitle: "Observation coverage",
+          confirmDegraded: "I understand that this capability is degraded in the current runtime.",
+          reportPolicy: "Policy",
+          groups: { system: "Host system", storage: "Storage capacity", metadata: "Service metadata" },
+          risk: { low: "Low risk", medium: "Medium risk", high: "High risk" },
+          states: { requested: "Requested", configured: "Configured", runtime: "Active", degraded: "Degraded", unavailable: "Unavailable", unsupported: "Unsupported" },
+          capabilities: {
+            host_os_identity: "OS identity and time",
+            host_processes: "Processes, CPU, memory, and interfaces",
+            host_sys: "sysfs and cgroups",
+            nas_capacity: "NAS capacity anchor",
+            account_map: "Account name map",
+            docker_metadata: "Filtered Docker metadata",
+            systemd_status: "Filtered systemd unit status"
+          },
+          reasons: {
+            host_access_daemon_unavailable: "Host Access daemon is unavailable",
+            docker_proxy_unverified: "Docker collector compatibility has not been verified",
+            systemd_proxy_unverified: "systemd collector compatibility has not been verified",
+            not_linux: "The host is not Linux",
+            rootless_docker: "Rootless Docker cannot provide this host view",
+            user_namespace_enabled: "User namespaces may hide or remap host data",
+            no_ready_nas_root: "No ready NAS root is available",
+            nas_root_not_ready: "This NAS root is not ready",
+            resource_identity_changed: "The host resource identity changed",
+            runtime_dependency_unavailable: "The required host anchor or runtime dependency is unavailable"
+          },
+          provides: {
+            host: { os: { identity: "OS identity" }, timezone: "Host time", machine: { identity: "Machine identity" }, processes: "Processes", cpu: "CPU", memory: "Memory", network: { physical: "Physical interfaces" }, sysfs: "sysfs", cgroup: "cgroups", accounts: { map: "Account names" } },
+            storage: { nas: { capacity: "NAS capacity" } },
+            containers: { inventory: "Container inventory", networks: "Container networks" },
+            services: { systemd: { units: "systemd units" } }
+          },
+          coverage: {
+            host_identity: "Host identity", host_time: "Host time", host_processes: "Processes", host_cpu: "CPU", host_memory: "Memory", physical_network: "Physical network", cgroup: "cgroups", nas_capacity: "NAS capacity", account_map: "Account map", docker_containers: "Docker containers", docker_networks: "Docker networks", systemd_units: "systemd units", journald: "journald logs", smart_nvme: "SMART / NVMe", rootfs_capacity: "Host rootfs capacity", low_level_kernel: "Low-level kernel metrics"
+          }
+        },
         apps: {
           eyebrow: "Managed Compose App",
           createAction: "Create Compose App",
@@ -1101,6 +1150,9 @@ export const en = {
           savedDeployFailed: "The App was saved, but an approval request could not be created.",
           deleted: "Compose App deleted. Images, volumes, networks, and NAS data were retained.",
           needsDeploy: "Needs deploy",
+          hostAccessPending: "Pending apply",
+          hostAccessActive: "Active",
+          hostAccessRepair: "Needs repair",
           composeUnavailable: "Docker Compose CLI is unavailable. Validation and saving are disabled.",
           conflict: "This App changed in another request. Your input is preserved; reload the latest revision before editing again.",
           reload: "Reload latest",
@@ -1121,6 +1173,7 @@ export const en = {
           }
         },
         composeTitle: "Compose projects",
+        hostAccessPendingApproval: "Waiting for Host Access approval",
         composeDescription: "System-managed Apps stored in ZOS and deployed through approval-gated actions.",
         resourcesTitle: "Runtime pressure",
         resourcesDescription: "Aggregated CPU, memory, network, and volume signals from the Docker runtime.",
@@ -1208,7 +1261,7 @@ export const en = {
           resources: { detail: "CPU, memory, process, restart, and filesystem limits.", cpuLimit: "CPU limit", cpuShares: "CPU shares", cpuset: "CPU set", memoryLimit: "Memory limit (bytes)", memoryReservation: "Memory reservation (bytes)", memorySwap: "Memory swap (bytes)", pidsLimit: "PID limit", shmSize: "Shared memory (bytes)", restartPolicy: "Restart policy", restartRetries: "Restart retries", readOnlyRootfs: "Read-only root filesystem", autoRemove: "Auto-remove after exit", privileged: "Privileged mode", privilegedAck: "I understand the risk" },
           storage: { detail: "Named volumes, NAS-safe binds, and tmpfs mounts.", volume: "Volume", bind: "NAS bind", tmpfs: "tmpfs", type: "Type", source: "Source", nasRoot: "NAS root", target: "Container target", options: "Options", selectVolume: "Select volume", addMount: "Add mount", noMounts: "No mounts configured.", relativePath: "relative path", sizeBytes: "size bytes", tmpfsMode: "mode e.g. 1777", containerPath: "/container/path", noCopy: "No copy", readOnly: "RO" },
           network: { detail: "One network endpoint, ports, DNS, and extra hosts.", mode: "Mode", existingNetwork: "Existing network", selectNetwork: "Select network", aliases: "Aliases", staticIpv4: "Static IPv4", staticIpv6: "Static IPv6", endpointMac: "Endpoint MAC", dns: "DNS", dnsSearch: "DNS search", addPort: "Add port", noPorts: "No published ports.", protocol: "Protocol", containerPort: "container", hostIp: "host IP (optional)", hostPort: "host port (optional)", extraHosts: "Extra hosts", extraHostsDetail: "Add host-to-address entries for the container.", noExtraHosts: "No extra hosts.", publishAll: "Publish all exposed ports", hostname: "hostname", hostAddress: "IP or host-gateway" },
-          review: { detail: "Final checks and direct execution.", image: "Image", network: "Network", mountsPorts: "Mounts / ports", start: "Start", yes: "yes", no: "no", restart: "Restart", immediate: "Creation runs immediately", failureDetail: "Failures keep the form. If start fails after container creation, the container is kept and marked as partial success." },
+          review: { detail: "Final checks and direct execution.", image: "Image", network: "Network", mountsPorts: "Mounts / ports", start: "Start", yes: "yes", no: "no", restart: "Restart", immediate: "Creation runs immediately", approval: "Creation waits for approval", approvalDetail: "The image is pulled and pinned before a 15-minute private approval draft is created.", failureDetail: "Failures keep the form. If start fails after container creation, the container is kept and marked as partial success." },
           volume: { detail: "Named local volumes stay managed by Docker.", nameHint: "Use letters, numbers, dots, dashes, and underscores.", driver: "Driver", driverHint: "Docker manages this volume with the local driver.", noticeTitle: "Docker-managed persistent storage", noticeDetail: "The volume is created immediately and can be attached to containers from the storage stage.", labelsTitle: "Labels", labelsDetail: "Optional metadata is stored with the volume." },
           networkCreate: { detail: "Driver, address families, IPAM, and labels are validated before Docker is called.", name: "Name", driver: "Driver", parent: "Parent interface", selectInterface: "Select interface", mode: "Mode", internal: "Internal", enableIpv4: "Enable IPv4", enableIpv6: "Enable IPv6", ipam: "IPAM configuration", ipamDetail: "Optional subnets control address allocation on this network.", noIpam: "No IPAM ranges configured.", addSubnet: "Add subnet", subnet: "subnet CIDR", ipRange: "IP range CIDR", gateway: "gateway", auxAddresses: "name=address, ..." },
           common: { key: "key", value: "value", noRows: "No entries yet. Add one when this resource needs metadata." }
@@ -3532,6 +3585,55 @@ export const zhCN = {
           confirmRegistryDeleteTitle: "删除这个 Registry 凭证？",
           confirmRegistryDeleteDescription: "{{name}} 的已保存凭证会立即删除。除非重新添加匹配凭证，后续拉取将使用匿名访问。"
         },
+        hostAccess: {
+          title: "宿主访问",
+          description: "授予固定且只读的宿主观测能力；所选授权必须经过审批。",
+          service: "目标服务",
+          validateServices: "请先验证 Compose 定义，再选择目标服务。",
+          loading: "正在加载宿主访问策略...",
+          loadError: "宿主访问策略不可用，当前不能保存授权。",
+          target: "容器内目标路径",
+          invalidTarget: "请输入规范化的容器内绝对路径。",
+          copyReport: "复制覆盖报告",
+          copied: "覆盖报告已复制。",
+          recreateToChange: "此容器的宿主访问不可原地修改；如需变更或撤销，请删除并重新创建容器。",
+          coverageTitle: "观测覆盖",
+          confirmDegraded: "我了解此能力在当前运行环境中处于降级状态。",
+          reportPolicy: "策略",
+          groups: { system: "宿主系统", storage: "存储容量", metadata: "服务元数据" },
+          risk: { low: "低风险", medium: "中风险", high: "高风险" },
+          states: { requested: "已请求", configured: "已配置", runtime: "已生效", degraded: "已降级", unavailable: "不可用", unsupported: "不支持" },
+          capabilities: {
+            host_os_identity: "系统身份与时间",
+            host_processes: "进程、CPU、内存与网卡",
+            host_sys: "sysfs 与 cgroup",
+            nas_capacity: "NAS 容量锚点",
+            account_map: "账户名称映射",
+            docker_metadata: "脱敏 Docker 元数据",
+            systemd_status: "受限 systemd 单元状态"
+          },
+          reasons: {
+            host_access_daemon_unavailable: "宿主访问守护进程不可用",
+            docker_proxy_unverified: "尚未通过 Docker 采集器兼容测试",
+            systemd_proxy_unverified: "尚未通过 systemd 采集器兼容测试",
+            not_linux: "宿主机不是 Linux",
+            rootless_docker: "Rootless Docker 无法提供此宿主视图",
+            user_namespace_enabled: "用户命名空间可能隐藏或重映射宿主数据",
+            no_ready_nas_root: "没有就绪的 NAS root",
+            nas_root_not_ready: "此 NAS root 尚未就绪",
+            resource_identity_changed: "宿主资源身份已经变化",
+            runtime_dependency_unavailable: "所需容量锚点或运行时依赖不可用"
+          },
+          provides: {
+            host: { os: { identity: "系统身份" }, timezone: "宿主时间", machine: { identity: "机器身份" }, processes: "进程", cpu: "CPU", memory: "内存", network: { physical: "物理网卡" }, sysfs: "sysfs", cgroup: "cgroup", accounts: { map: "账户名称" } },
+            storage: { nas: { capacity: "NAS 容量" } },
+            containers: { inventory: "容器清单", networks: "容器网络" },
+            services: { systemd: { units: "systemd 单元" } }
+          },
+          coverage: {
+            host_identity: "宿主身份", host_time: "宿主时间", host_processes: "进程", host_cpu: "CPU", host_memory: "内存", physical_network: "物理网络", cgroup: "cgroup", nas_capacity: "NAS 容量", account_map: "账户映射", docker_containers: "Docker 容器", docker_networks: "Docker 网络", systemd_units: "systemd 单元", journald: "journald 日志", smart_nvme: "SMART / NVMe", rootfs_capacity: "宿主根文件系统容量", low_level_kernel: "底层内核指标"
+          }
+        },
         apps: {
           eyebrow: "托管 Compose App",
           createAction: "创建 Compose App",
@@ -3564,6 +3666,9 @@ export const zhCN = {
           savedDeployFailed: "App 已保存，但未能创建部署审批请求。",
           deleted: "Compose App 已删除；镜像、卷、网络和 NAS 数据均已保留。",
           needsDeploy: "需要部署",
+          hostAccessPending: "待应用",
+          hostAccessActive: "已生效",
+          hostAccessRepair: "需修复",
           composeUnavailable: "Docker Compose CLI 不可用，校验和保存已禁用。",
           conflict: "此 App 已被其他请求修改。当前输入会保留；请重新加载最新 revision 后再编辑。",
           reload: "重新加载最新版本",
@@ -3584,6 +3689,7 @@ export const zhCN = {
           }
         },
         composeTitle: "Compose 项目",
+        hostAccessPendingApproval: "等待宿主访问审批",
         composeDescription: "由 ZOS 统一保存和发布的 App，部署操作继续经过审批。",
         resourcesTitle: "运行时压力",
         resourcesDescription: "汇总 Docker 运行时的 CPU、内存、网络和卷信号。",
@@ -3671,7 +3777,7 @@ export const zhCN = {
           resources: { detail: "CPU、内存、进程、重启和文件系统限制。", cpuLimit: "CPU 限制", cpuShares: "CPU 权重", cpuset: "CPU 集", memoryLimit: "内存限制（字节）", memoryReservation: "内存预留（字节）", memorySwap: "内存交换（字节）", pidsLimit: "PID 限制", shmSize: "共享内存（字节）", restartPolicy: "重启策略", restartRetries: "重启次数", readOnlyRootfs: "只读根文件系统", autoRemove: "退出后自动移除", privileged: "特权模式", privilegedAck: "我了解此风险" },
           storage: { detail: "命名卷、NAS 安全绑定和 tmpfs 挂载。", volume: "卷", bind: "NAS 绑定", tmpfs: "tmpfs", type: "类型", source: "来源", nasRoot: "NAS root", target: "容器目标", options: "选项", selectVolume: "选择卷", addMount: "添加挂载", noMounts: "尚未配置挂载。", relativePath: "相对路径", sizeBytes: "大小（字节）", tmpfsMode: "模式，例如 1777", containerPath: "/容器路径", noCopy: "不复制", readOnly: "只读" },
           network: { detail: "网络端点、端口、DNS 和额外主机。", mode: "模式", existingNetwork: "现有网络", selectNetwork: "选择网络", aliases: "别名", staticIpv4: "静态 IPv4", staticIpv6: "静态 IPv6", endpointMac: "端点 MAC", dns: "DNS", dnsSearch: "DNS 搜索域", addPort: "添加端口", noPorts: "尚未发布端口。", protocol: "协议", containerPort: "容器端口", hostIp: "宿主 IP（可选）", hostPort: "宿主端口（可选）", extraHosts: "额外主机", extraHostsDetail: "为容器添加主机到地址的映射。", noExtraHosts: "没有额外主机。", publishAll: "发布所有暴露端口", hostname: "主机名", hostAddress: "IP 或 host-gateway" },
-          review: { detail: "最后检查并直接执行。", image: "镜像", network: "网络", mountsPorts: "挂载 / 端口", start: "启动", yes: "是", no: "否", restart: "重启", immediate: "创建会立即执行", failureDetail: "失败时会保留表单。如果容器已创建但启动失败，容器会保留并标记为部分成功。" },
+          review: { detail: "最后检查并直接执行。", image: "镜像", network: "网络", mountsPorts: "挂载 / 端口", start: "启动", yes: "是", no: "否", restart: "重启", immediate: "创建会立即执行", approval: "创建将等待审批", approvalDetail: "系统会先拉取并固定镜像，再创建一个有效期 15 分钟的私有审批草稿。", failureDetail: "失败时会保留表单。如果容器已创建但启动失败，容器会保留并标记为部分成功。" },
           volume: { detail: "命名本地卷由 Docker 管理。", nameHint: "使用字母、数字、点、短横线和下划线。", driver: "驱动", driverHint: "Docker 使用 local 驱动管理此卷。", noticeTitle: "Docker 管理的持久化存储", noticeDetail: "卷会立即创建，并可在容器的存储阶段挂载。", labelsTitle: "标签", labelsDetail: "可选的元数据会随卷一起保存。" },
           networkCreate: { detail: "调用 Docker 前会校验驱动、地址族、IPAM 和标签。", name: "名称", driver: "驱动", parent: "父接口", selectInterface: "选择接口", mode: "模式", internal: "内部网络", enableIpv4: "启用 IPv4", enableIpv6: "启用 IPv6", ipam: "IPAM 配置", ipamDetail: "可选子网用于控制此网络的地址分配。", noIpam: "尚未配置 IPAM 范围。", addSubnet: "添加子网", subnet: "子网 CIDR", ipRange: "IP 范围 CIDR", gateway: "网关", auxAddresses: "名称=地址，..." },
           common: { key: "键", value: "值", noRows: "暂时没有条目，需要元数据时可以添加。" }

@@ -103,6 +103,9 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 
 ## Docker daemon
 
+- `GET /api/docker/host-access` 返回固定 Host Access 策略版本、能力目录、coverage、运行环境 availability 和可选 NAS roots，不返回受管宿主路径或审批指纹。非法目标与冲突返回 `400`，revision/image/resource 漂移返回 `409`，受限代理或宿主依赖不可用返回 `503`。
+- Compose validate/create/update 与单容器 create 可选接收 `hostAccess`；省略字段保持旧行为。包含授权的单容器改为私有 15 分钟 draft 加审批，公开 Docker proposal 只包含新增/移除授权、风险和 image digest。
+
 - `GET /api/docker/daemon/config` 返回固定路径、正文、内容 revision、文件是否存在和是否等待重启。
 - `PUT /api/docker/daemon/config` 接收 `content`、`expectedRevision`、`restart` 和 `confirmed`。正文最多 256 KiB；revision 冲突返回 `409`，JSON 或 dockerd 校验失败返回 `400`，hostd 不可用返回 `503`，重启或回滚异常返回 `502` 并携带回滚结果。
 - `GET /api/docker/daemon/events` 是独立 SSE stream。连接后立即发送 `docker.daemon.status`，服务端每秒采样 `docker.service`、仅在状态变化时推送，并每 15 秒发送 heartbeat。客户端重连提示为 2 秒。
