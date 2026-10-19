@@ -520,7 +520,7 @@
   grid-row: 2;
   min-height: 0;
   overflow: auto;
-  padding: 12px 18px 18px;
+  padding: 12px 0 18px 18px;
 }
 
 .transcript-skeleton {
