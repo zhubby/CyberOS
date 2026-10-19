@@ -86,8 +86,10 @@
   max-width: 100%;
   overflow: hidden;
   color: inherit;
+  font-family: var(--font-display);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 580;
+  letter-spacing: 0;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2360,10 +2362,11 @@
 }
 
 .management-title-copy h2 {
-  font-family: var(--font-ui);
-  font-size: 20px;
-  font-weight: 650;
-  line-height: 24px;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 580;
+  letter-spacing: 0;
+  line-height: 1.12;
 }
 
 .management-title-copy p,
@@ -3058,8 +3061,10 @@
 .files-content-breadcrumbs button {
   height: 32px;
   color: var(--text);
+  font-family: var(--font-display);
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 580;
+  letter-spacing: 0;
 }
 
 .files-content-breadcrumbs button:hover {
