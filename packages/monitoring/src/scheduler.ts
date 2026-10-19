@@ -85,7 +85,13 @@ export class MonitorScheduler {
     try {
       const result = await task.collector.collect(timestampMs);
       const durationMs = Math.max(0, this.clock.monotonicNow() - started);
-      this.writer.writeSamples(result.samples);
+      const written = this.writer.writeSamples(result.samples);
+      if (written !== result.samples.length) {
+        const reason = this.writer.isWritePaused()
+          ? "Monitoring sample writes are paused because the database is over capacity"
+          : `Monitoring series limit rejected ${result.samples.length - written} samples`;
+        throw new Error(reason);
+      }
       task.failures = 0;
       this.writer.recordCollectorStatus({
         collector: task.collector.id,
@@ -97,6 +103,7 @@ export class MonitorScheduler {
     } catch (error) {
       const durationMs = Math.max(0, this.clock.monotonicNow() - started);
       task.failures += 1;
+      console.error(`Monitoring collector ${task.collector.id} failed`, error);
       this.writer.recordCollectorStatus({
         collector: task.collector.id,
         state: "error",

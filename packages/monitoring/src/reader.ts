@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { statSync } from "node:fs";
 import type {
   MonitoringCatalogResponse,
   MonitoringConfig,
@@ -35,6 +36,7 @@ export class MonitoringUnavailableError extends Error {
 
 export class MonitoringReader {
   private db: Database.Database | null = null;
+  private databaseIdentity: { device: number; inode: number } | null = null;
 
   constructor(
     private readonly databasePath: string,
@@ -44,6 +46,7 @@ export class MonitoringReader {
   close(): void {
     this.db?.close();
     this.db = null;
+    this.databaseIdentity = null;
   }
 
   catalog(): MonitoringCatalogResponse {
@@ -69,11 +72,12 @@ export class MonitoringReader {
           ? [value.value * 1_000]
           : [])
       );
-      const status = !Number.isFinite(lastSuccessMs)
+      const degraded = writesPaused || collectors.some((collector) => collector.state === "error");
+      const status = !Number.isFinite(lastSuccessMs) && !degraded
         ? "starting"
-        : now.getTime() - lastSuccessMs > STALE_AFTER_MS
+        : Number.isFinite(lastSuccessMs) && now.getTime() - lastSuccessMs > STALE_AFTER_MS
           ? "unavailable"
-          : writesPaused || collectors.some((collector) => collector.state === "error")
+          : degraded
             ? "degraded"
             : "ready";
       return {
@@ -121,11 +125,29 @@ export class MonitoringReader {
   }
 
   private tryDatabase(): Database.Database | null {
-    if (this.db) return this.db;
+    if (this.db && this.databaseIdentity) {
+      try {
+        if (sameDatabase(this.databaseIdentity, databaseIdentity(this.databasePath))) return this.db;
+      } catch {
+        // Reopen below so a transient replacement is handled as a not-ready database.
+      }
+    }
+    this.close();
+    let candidate: Database.Database | null = null;
     try {
-      this.db = openMetricsReader(this.databasePath);
+      const beforeOpen = databaseIdentity(this.databasePath);
+      candidate = openMetricsReader(this.databasePath);
+      const afterOpen = databaseIdentity(this.databasePath);
+      if (!sameDatabase(beforeOpen, afterOpen)) {
+        candidate.close();
+        return null;
+      }
+      this.db = candidate;
+      candidate = null;
+      this.databaseIdentity = afterOpen;
       return this.db;
     } catch (error) {
+      candidate?.close();
       if (isNotReadyError(error)) return null;
       throw new MonitoringUnavailableError();
     }
@@ -189,4 +211,16 @@ function isNotReadyError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException).code;
   const message = error instanceof Error ? error.message : String(error);
   return code === "SQLITE_CANTOPEN" || code === "ENOENT" || /no such table/iu.test(message);
+}
+
+function databaseIdentity(databasePath: string): { device: number; inode: number } {
+  const stat = statSync(databasePath);
+  return { device: stat.dev, inode: stat.ino };
+}
+
+function sameDatabase(
+  left: { device: number; inode: number },
+  right: { device: number; inode: number }
+): boolean {
+  return left.device === right.device && left.inode === right.inode;
 }

@@ -1,6 +1,26 @@
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 1;
+export const MONITORING_SCHEMA_VERSION = 3;
+
+export class UnsupportedMonitoringSchemaVersionError extends Error {
+  constructor(version: number) {
+    super(`Monitoring schema version ${version} is newer than supported version ${MONITORING_SCHEMA_VERSION}`);
+  }
+}
+
+export function assertSupportedMonitoringSchemaVersion(db: Database.Database): number {
+  const exists = db.prepare(`
+    SELECT 1 FROM sqlite_master
+    WHERE type = 'table' AND name = 'monitoring_schema_migrations'
+  `).pluck().get();
+  if (!exists) return 0;
+  const row = db.prepare("SELECT COALESCE(MAX(version), 0) AS version FROM monitoring_schema_migrations")
+    .get() as { version: number };
+  if (row.version > MONITORING_SCHEMA_VERSION) {
+    throw new UnsupportedMonitoringSchemaVersionError(row.version);
+  }
+  return row.version;
+}
 
 export function runMonitoringMigrations(db: Database.Database): void {
   db.exec(`
@@ -9,12 +29,11 @@ export function runMonitoringMigrations(db: Database.Database): void {
       applied_at TEXT NOT NULL
     ) STRICT;
   `);
-  const version = db.prepare("SELECT COALESCE(MAX(version), 0) AS version FROM monitoring_schema_migrations")
-    .get() as { version: number };
-  if (version.version >= SCHEMA_VERSION) return;
+  let version = assertSupportedMonitoringSchemaVersion(db);
 
-  db.transaction(() => {
-    db.exec(`
+  if (version < 1) {
+    db.transaction(() => {
+      db.exec(`
       CREATE TABLE metric_series (
         id INTEGER PRIMARY KEY,
         metric_name TEXT NOT NULL,
@@ -77,8 +96,35 @@ export function runMonitoringMigrations(db: Database.Database): void {
       CREATE INDEX metric_samples_raw_timestamp_idx ON metric_samples_raw(timestamp_ms);
       CREATE INDEX metric_rollups_1m_bucket_idx ON metric_rollups_1m(bucket_ms);
       CREATE INDEX metric_rollups_1h_bucket_idx ON metric_rollups_1h(bucket_ms);
-    `);
-    db.prepare("INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, ?)")
-      .run(SCHEMA_VERSION, new Date().toISOString());
-  })();
+      `);
+      recordMigration(db, 1);
+    })();
+    version = 1;
+  }
+
+  if (version < 2) {
+    db.transaction(() => {
+      db.exec(`
+        ALTER TABLE metric_rollups_1m ADD COLUMN increase_value REAL;
+        ALTER TABLE metric_rollups_1h ADD COLUMN increase_value REAL;
+      `);
+      recordMigration(db, 2);
+    })();
+    version = 2;
+  }
+
+  if (version < 3) {
+    db.transaction(() => {
+      db.exec(`
+        ALTER TABLE metric_rollups_1m ADD COLUMN boundary_increase_value REAL;
+        ALTER TABLE metric_rollups_1h ADD COLUMN boundary_increase_value REAL;
+      `);
+      recordMigration(db, 3);
+    })();
+  }
+}
+
+function recordMigration(db: Database.Database, version: number): void {
+  db.prepare("INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, ?)")
+    .run(version, new Date().toISOString());
 }

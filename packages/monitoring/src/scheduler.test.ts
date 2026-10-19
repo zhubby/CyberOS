@@ -4,8 +4,9 @@ import path from "node:path";
 import type { MonitoringConfig } from "@zos/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MonitorCollector } from "./collectors.js";
+import { MonitoringReader } from "./reader.js";
 import { MonitorScheduler, type SchedulerClock } from "./scheduler.js";
-import { MetricsWriter } from "./store.js";
+import { MAX_MONITORING_SERIES_PER_METRIC, MetricsWriter } from "./store.js";
 
 const config: MonitoringConfig = {
   enabled: true,
@@ -69,7 +70,7 @@ describe("MonitorScheduler", () => {
     await scheduler.stop();
     const rows = writer.db.prepare("SELECT collector_id, state, error FROM collector_status ORDER BY collector_id").all();
     expect(rows).toEqual([
-      { collector_id: "broken", state: "error", error: "permission denied: /secret/path" },
+      { collector_id: "broken", state: "error", error: "Collector permission denied" },
       { collector_id: "healthy", state: "ready", error: null }
     ]);
     writer.close();
@@ -90,6 +91,44 @@ describe("MonitorScheduler", () => {
       JOIN metric_series series ON series.id = samples.series_id
       WHERE series.metric_name = 'zos_monitor_last_sample_timestamp_seconds'
     `).pluck().get()).toBe(0);
+    writer.close();
+  });
+
+  it("reports rejected samples as degraded instead of collector success", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-scheduler-"));
+    const databasePath = path.join(tempDir, "metrics.sqlite");
+    const writer = new MetricsWriter(databasePath, config);
+    writer.writeSamples(Array.from({ length: MAX_MONITORING_SERIES_PER_METRIC }, (_, index) => ({
+      metric: "zos_queue_depth",
+      labels: { queue: `queue-${index}` },
+      timestampMs: 1,
+      value: index
+    })));
+    const scheduler = new MonitorScheduler([{
+      id: "queues",
+      intervalMs: 10_000,
+      async collect(timestampMs) {
+        return {
+          samples: [{ metric: "zos_queue_depth", labels: { queue: "overflow" }, timestampMs, value: 1 }]
+        };
+      }
+    }], writer, new FakeClock());
+
+    scheduler.runDue();
+    await scheduler.stop();
+
+    expect(writer.db.prepare("SELECT state, consecutive_failures, error FROM collector_status WHERE collector_id = 'queues'").get())
+      .toEqual({
+        state: "error",
+        consecutive_failures: 1,
+        error: "Monitoring series limit rejected 1 samples"
+      });
+    const reader = new MonitoringReader(databasePath, config);
+    expect(reader.overview(new Date(1_000)).status).toBe("degraded");
+    expect(reader.overview(new Date(1_000)).latest).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metric: "zos_monitor_collector_up", labels: { collector: "queues" }, value: 0 })
+    ]));
+    reader.close();
     writer.close();
   });
 });

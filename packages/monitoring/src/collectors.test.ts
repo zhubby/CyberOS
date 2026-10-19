@@ -24,7 +24,15 @@ describe("monitor collectors", () => {
       "/proc/loadavg": "0.10 0.20 0.30 1/100 1\n",
       "/proc/meminfo": "MemTotal: 1000 kB\nMemAvailable: 400 kB\nSwapTotal: 200 kB\nSwapFree: 50 kB\n",
       "/proc/diskstats": "8 0 sda 1 0 2 0 3 0 4 0 0 0 0\n7 0 loop0 1 0 9 0 1 0 9 0 0 0 0\n",
-      "/proc/net/dev": "Inter-| Receive | Transmit\n eth0: 100 0 0 0 0 0 0 0 200 0 0 0 0 0 0 0\n lo: 50 0 0 0 0 0 0 0 50 0 0 0 0 0 0 0\n"
+      "/proc/net/dev": [
+        "Inter-| Receive | Transmit",
+        " eth0: 100 0 0 0 0 0 0 0 200 0 0 0 0 0 0 0",
+        " enp1s0: 101 0 0 0 0 0 0 0 201 0 0 0 0 0 0 0",
+        ...["veth1234", "cali1234", "flannel.1", "cni0", "docker0", "br-0123456789ab", "virbr0", "vnet0", "tap0", "tun0"]
+          .map((name) => ` ${name}: 300 0 0 0 0 0 0 0 400 0 0 0 0 0 0 0`),
+        " lo: 50 0 0 0 0 0 0 0 50 0 0 0 0 0 0 0",
+        ""
+      ].join("\n")
     };
     const collector = createFastHostCollector(10_000, {
       async readText(file) {
@@ -40,6 +48,8 @@ describe("monitor collectors", () => {
       expect.objectContaining({ metric: "zos_host_disk_read_bytes_total", value: 1024, labels: { device: "sda" } }),
       expect.objectContaining({ metric: "zos_host_network_transmit_bytes_total", value: 200, labels: { interface: "eth0" } })
     ]));
+    expect(first.samples.filter((item) => item.metric.startsWith("zos_host_network"))
+      .map((item) => item.labels?.interface)).toEqual(["eth0", "eth0", "enp1s0", "enp1s0"]);
 
     stat = "cpu 150 0 150 900 0 0 0 0\n";
     const second = await collector.collect(11_000);

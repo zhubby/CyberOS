@@ -323,7 +323,11 @@ function networkSamples(value: string, timestampMs: number): MetricSample[] {
     const match = /^\s*([^:]+):\s*(.+)$/u.exec(line);
     if (!match) return [];
     const interfaceName = match[1]!.trim();
-    if (interfaceName === "lo" || !/^[a-zA-Z0-9_.-]+$/u.test(interfaceName)) return [];
+    if (
+      interfaceName === "lo"
+      || !/^[a-zA-Z0-9_.-]+$/u.test(interfaceName)
+      || isTransientNetworkInterface(interfaceName)
+    ) return [];
     const fields = match[2]!.trim().split(/\s+/u).map(Number);
     const received = fields[0];
     const transmitted = fields[8];
@@ -333,6 +337,11 @@ function networkSamples(value: string, timestampMs: number): MetricSample[] {
       sample("zos_host_network_transmit_bytes_total", timestampMs, transmitted!, { interface: interfaceName })
     ];
   });
+}
+
+function isTransientNetworkInterface(interfaceName: string): boolean {
+  return /^(?:veth|cali|flannel|cni|docker\d*$|br-[0-9a-f]{12}$|virbr\d*$|vnet\d+$|tap\d+$|tun\d+$)/u
+    .test(interfaceName);
 }
 
 function parseCpu(value: string): { idle: number; total: number } {

@@ -73,6 +73,17 @@ describe("monitoring routes", () => {
   it("rejects unsafe selectors and oversized requests", async () => {
     const databasePath = await tempDatabase();
     const writer = new MetricsWriter(databasePath, { ...DEFAULT_MONITORING_CONFIG });
+    writer.writeSamples(Array.from({ length: 64 }, (_, index) => ({
+      metric: "zos_queue_depth",
+      labels: { queue: `queue-${index}` },
+      timestampMs: Date.parse("2026-01-01T00:00:00.000Z"),
+      value: index
+    })));
+    writer.writeSamples([{
+      metric: "zos_host_load1",
+      timestampMs: Date.parse("2026-01-01T00:00:00.000Z"),
+      value: 1
+    }]);
     writer.close();
     const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
 
@@ -83,6 +94,20 @@ describe("monitoring routes", () => {
     });
     expect(label.statusCode).toBe(400);
     expect(label.body).not.toContain("/secret");
+
+    const nullSelector = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: { ...validQuery(), selectors: [null] }
+    });
+    expect(nullSelector.statusCode).toBe(400);
+
+    const nonObjectLabels = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: { ...validQuery(), selectors: [{ metric: "zos_queue_depth", labels: 42 }] }
+    });
+    expect(nonObjectLabels.statusCode).toBe(400);
 
     const selectors = await server.inject({
       method: "POST",
@@ -97,6 +122,50 @@ describe("monitoring routes", () => {
       payload: { ...validQuery(), maxPoints: 721 }
     });
     expect(points.statusCode).toBe(400);
+
+    for (const start of ["0", "2026/01/01", "2026-02-30T00:00:00.000Z", "2026-01-01T00:00:00"]) {
+      const timestamp = await server.inject({
+        method: "POST",
+        url: "/api/monitoring/query",
+        payload: { ...validQuery(), start }
+      });
+      expect(timestamp.statusCode).toBe(400);
+    }
+
+    const expanded = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: {
+        ...validQuery(),
+        selectors: Array.from({ length: 12 }, () => ({ metric: "zos_queue_depth" }))
+      }
+    });
+    expect(expanded.statusCode).toBe(400);
+    expect(expanded.json().error).toMatch(/point budget/iu);
+
+    const exactlyAtSeriesLimit = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: {
+        ...validQuery(),
+        maxPoints: 2,
+        selectors: [{ metric: "zos_queue_depth" }]
+      }
+    });
+    expect(exactlyAtSeriesLimit.statusCode).toBe(200);
+    expect(exactlyAtSeriesLimit.json().series).toHaveLength(64);
+
+    const tooManySeries = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: {
+        ...validQuery(),
+        maxPoints: 2,
+        selectors: [{ metric: "zos_queue_depth" }, { metric: "zos_host_load1" }]
+      }
+    });
+    expect(tooManySeries.statusCode).toBe(400);
+    expect(tooManySeries.json().error).toMatch(/more than 64 series/iu);
     await server.close();
   });
 
@@ -109,6 +178,26 @@ describe("monitoring routes", () => {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ error: "Monitoring data is unavailable" });
     expect(response.body).not.toContain(databasePath);
+    await server.close();
+  });
+
+  it("does not expose collector paths in the overview", async () => {
+    const databasePath = await tempDatabase();
+    const writer = new MetricsWriter(databasePath, { ...DEFAULT_MONITORING_CONFIG });
+    writer.recordCollectorStatus({
+      collector: "host",
+      state: "error",
+      attemptedAtMs: Date.parse("2026-01-01T00:00:00.000Z"),
+      durationMs: 1,
+      error: "permission denied: /secret/host/path"
+    });
+    writer.close();
+    const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
+
+    const response = await server.inject({ method: "GET", url: "/api/monitoring/overview" });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toContain("/secret/host/path");
+    expect(response.json().collectors[0].error).toBe("Collector permission denied");
     await server.close();
   });
 });
