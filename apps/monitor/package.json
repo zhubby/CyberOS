@@ -2,14 +2,7 @@
   "name": "@zos/monitor",
   "version": "1.2.1",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
-    "build": "cd ../.. && tsup apps/monitor/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir apps/monitor/dist"
-  },
-  "dependencies": {
-    "@zos/monitoring": "1.2.1",
-    "@zos/shared": "1.2.1"
+    "dev": "concurrently -n monitor,alerter -c gray,yellow \"cargo run -p zos-monitor --bin zos-monitor\" \"cargo run -p zos-monitor --bin zos-alerter\""
   }
 }

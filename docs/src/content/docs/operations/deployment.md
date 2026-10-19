@@ -4,12 +4,12 @@ description: 原生 Debian 包、systemd 服务、Nginx 和 appliance 构建。
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [packaging/debian/rules, packaging/debian/install, packaging/scripts/zos-deploy, packaging/systemd/zos-api.service, packaging/systemd/zos-monitor.service, packaging/appliance/manifest.toml]
+sourceOfTruth: [packaging/debian/rules, packaging/debian/install, packaging/scripts/zos-deploy, packaging/systemd/zos-api.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/appliance/manifest.toml]
 sidebar:
   order: 1
 ---
 
-生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 ZOS 自身放入 Docker。API、monitor、worker、downloader、indexer、hostd、termux 是常驻服务；maintenance、health、backup 由 oneshot service 和 timer 驱动。
+生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 ZOS 自身放入 Docker。API、monitor、alerter、worker、downloader、indexer、hostd、termux 是常驻服务；maintenance、health、backup 由 oneshot service 和 timer 驱动。
 
 Nginx 只反向代理到 loopback API。程序文件位于 `/usr/lib/zos`，持久数据统一位于 `/zos`，运行时 socket 位于 `/run/zos`。API 静态提供 React Web 与 `/docs/` 文档站。
 
@@ -63,7 +63,7 @@ sudo ZOS_ENABLE_NGINX=1 \
 核心服务会被 `enable --now`：
 
 ```bash
-sudo systemctl status zos-api.service zos-monitor.service zos-worker@1.service zos-downloader.service zos-indexer.service
+sudo systemctl status zos-api.service zos-monitor.service zos-alerter.service zos-worker@1.service zos-downloader.service zos-indexer.service
 sudo systemctl status zos-hostd.service zos-termux.service
 ```
 
@@ -98,7 +98,7 @@ ZOS 1.0 不提供旧产品配置、数据库、服务或浏览器状态的原地
 sudo systemctl stop zos-maintenance.timer zos-health.timer \
   zos-backup-daily.timer zos-backup-weekly.timer
 sudo systemctl stop zos-downloader.service zos-worker@1.service \
-  zos-indexer.service zos-monitor.service zos-vod-player.service zos-api.service zos-termux.service \
+  zos-indexer.service zos-alerter.service zos-monitor.service zos-vod-player.service zos-api.service zos-termux.service \
   zos-hostd.service
 sudo dpkg -i .zos/zos_<version>_<arch>.deb
 sudo systemctl daemon-reload
@@ -120,7 +120,7 @@ sudo /usr/lib/zos/scripts/zos-nas-acl.sh --apply --pool /zos/data/pool1
 
 ```bash
 sudo systemctl start zos-hostd.service zos-termux.service \
-  zos-api.service zos-monitor.service zos-worker@1.service zos-downloader.service zos-indexer.service \
+  zos-api.service zos-monitor.service zos-alerter.service zos-worker@1.service zos-downloader.service zos-indexer.service \
   zos-vod-player.service
 sudo systemctl --failed
 sudo journalctl -u zos-hostd.service -u zos-termux.service -n 100 --no-pager

@@ -102,7 +102,7 @@ sudo -n stat -c '%U:%G %a %n' /usr/local/sbin/zos-deploy /zos/deploy/incoming
 升级前停止 monitor、indexer 常驻写入者以及 maintenance、health、daily/weekly backup timers，并备份：
 
 ```bash
-sudo systemctl stop zos-monitor.service zos-indexer.service zos-maintenance.timer zos-health.timer \
+sudo systemctl stop zos-alerter.service zos-monitor.service zos-indexer.service zos-maintenance.timer zos-health.timer \
   zos-backup-daily.timer zos-backup-weekly.timer
 ```
 
@@ -116,7 +116,7 @@ sudo tar -C /zos -czf /zos/data/backup/zos-upgrade/state-before-upgrade.tgz stat
 
 示例目录必须未被之前升级占用，避免覆盖恢复材料。配置/state 包可能包含未加密秘密，限制权限并转存到加密备份仓库。它不包含默认 Docker volume 数据，容器工作负载需另行备份。
 
-安装新包后先启动 API，再启动 `zos-monitor.service` 并检查 `/api/monitoring/overview`，之后启动 worker、hostd、termux 和 `zos-indexer.service`。确认监控与 Indexer heartbeat 后再串行运行 `zos-health.service`、`zos-maintenance.service`，最后重新启用 timers。保留旧 `.deb` 与状态备份，直到浏览器、API、终端身份、root readiness、监控、索引和备份结果全部通过验收。
+安装新包后先启动 API 完成 migration，再依次启动 `zos-monitor.service`、`zos-alerter.service` 并检查 `/api/monitoring/overview` 与 `/api/monitoring/alerts/summary`，之后启动 worker、hostd、termux 和 `zos-indexer.service`。确认监控、告警求值与 Indexer heartbeat 后再串行运行 `zos-health.service`、`zos-maintenance.service`，最后重新启用 timers。回滚旧包时先停止 alerter；新增主库表和派生 series 保留但会被旧版本忽略。保留旧 `.deb` 与状态备份，直到浏览器、API、终端身份、root readiness、监控、索引和备份结果全部通过验收。
 
 降级不会自动回滚主数据库 migration。若新版本已执行 schema migration，使用与旧包匹配的 `zos.sqlite`/state 备份恢复，再安装旧包；不要在没有备份的情况下直接覆盖生产数据库。`metrics.sqlite` 是独立可重建数据，旧版本可忽略但应保留，等待再次升级复用。
 

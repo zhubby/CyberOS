@@ -44,7 +44,9 @@ hour_retention_ms = 31536000000
 max_database_bytes = 536870912
 ```
 
-同名 `ZOS_MONITORING_*` 环境变量优先于 TOML；容量只允许 64 MiB–4 GiB，采样和保留值必须满足配置校验。设置 `enabled = false` 后 monitor service 保持 active/idle，API 和页面显示 Disabled，Health 不生成 `monitoring_unavailable`。修改监控配置后重启 `zos-monitor.service` 和 `zos-api.service`。
+同名 `ZOS_MONITORING_*` 环境变量优先于 TOML；容量只允许 64 MiB–4 GiB，采样和保留值必须满足配置校验。设置 `enabled = false` 后 monitor service 保持 active/idle，API 和页面显示 Disabled，Health 不生成 `monitoring_unavailable`，alerter 也不会求值 metric rules。修改监控配置后重启 `zos-api.service`、`zos-monitor.service` 和 `zos-alerter.service`。
+
+SMTP 与 Health severity 路由通过 Settings > Alerts 或 `/api/monitoring/alerts/*` 管理并保存在主库，不写入 TOML。API 不返回 SMTP 密码；清空、轮换凭据和测试投递都应通过告警设置接口完成。
 
 `ZOS_NAS_ROOTS` 和 `ZOS_VM_ISO_ROOTS` 支持逗号分隔的多个路径；带冒号的 root 使用 `id:name:path` 格式。生产 NAS root 必须是 `/zos/data` 的直接子目录，且不能使用保留的 `/zos/data/backup`；backup repository、staging 和 NAS root 不能互相覆盖。
 

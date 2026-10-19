@@ -8,7 +8,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "packages/**/*.test.ts",
-      "apps/**/*.test.ts",
+      "apps/**/*.test.{ts,tsx}",
       "packaging/**/*.test.ts",
       "packaging/**/*.test.mjs",
       "scripts/**/*.test.mjs"
@@ -20,6 +20,7 @@ export default defineConfig({
       "@zos/agent": new URL("packages/agent/src/index.ts", `file://${root}`).pathname,
       "@zos/db": new URL("packages/db/src/index.ts", `file://${root}`).pathname,
       "@zos/nas-tools": new URL("packages/nas-tools/src/index.ts", `file://${root}`).pathname,
+      "@zos/monitoring/test-utils": new URL("packages/monitoring/src/test-utils.ts", `file://${root}`).pathname,
       "@zos/monitoring": new URL("packages/monitoring/src/index.ts", `file://${root}`).pathname,
       "@zos/shared/docker-images": new URL("packages/shared/src/docker-images.ts", `file://${root}`).pathname,
       "@zos/shared/docker-resources": new URL("packages/shared/src/docker-resources.ts", `file://${root}`).pathname,

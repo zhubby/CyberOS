@@ -31,7 +31,9 @@ import {
   getTextPreview,
   getTranscript,
   getModelProviderSettings,
+  getMonitoringAlertIncidents,
   getNotifications,
+  getNotificationsSummary,
   getPiToolPolicySettings,
   getPhotoLibrarySettings,
   getPhotoProcessingSettings,
@@ -40,6 +42,9 @@ import {
   requestSystemPower,
   markAllNotificationsRead,
   markNotificationRead,
+  acknowledgeMonitoringAlertIncident,
+  readAllMonitoringAlertIncidents,
+  readMonitoringAlertIncident,
   rollbackOperation,
   requestReindex,
   saveDockerSettings,
@@ -70,6 +75,7 @@ import {
   type SaveEditableTextResult,
   type FileListing,
   type ModelProviderSettings,
+  type MonitoringAlertIncident,
   type NasRoot,
   type OperationNotification,
   type PendingApproval,
@@ -226,7 +232,10 @@ export function App() {
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [warningNotice, setWarningNotice] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<OperationNotification[]>([]);
-  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [alertIncidents, setAlertIncidents] = useState<MonitoringAlertIncident[]>([]);
+  const [operationUnreadCount, setOperationUnreadCount] = useState(0);
+  const [alertUnreadCount, setAlertUnreadCount] = useState(0);
+  const notificationUnreadCount = operationUnreadCount + alertUnreadCount;
   const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
   const closeNotificationCenter = useCallback(() => setNotificationCenterOpen(false), []);
@@ -825,9 +834,15 @@ export function App() {
 
   async function refreshNotifications(showError = false) {
     try {
-      const result = await getNotifications();
+      const [result, incidents, summary] = await Promise.all([
+        getNotifications(),
+        getMonitoringAlertIncidents(),
+        getNotificationsSummary()
+      ]);
       setNotifications(result.notifications);
-      setNotificationUnreadCount(result.unreadCount);
+      setAlertIncidents(incidents);
+      setOperationUnreadCount(summary.operations);
+      setAlertUnreadCount(summary.alerts);
     } catch (nextError) {
       if (showError) setError(toErrorMessage(nextError));
     } finally {
@@ -839,9 +854,40 @@ export function App() {
     try {
       const result = await markNotificationRead(id);
       setNotifications((current) => current.map((item) => item.id === id ? result.notification : item));
-      setNotificationUnreadCount(result.unreadCount);
+      setOperationUnreadCount(result.unreadCount);
     } catch (nextError) {
       setError(toErrorMessage(nextError));
+    }
+  }
+
+  async function readAlertIncident(id: string) {
+    try {
+      const incident = await readMonitoringAlertIncident(id);
+      setAlertIncidents((current) => current.map((item) => item.id === id ? incident : item));
+      const summary = await getNotificationsSummary();
+      setOperationUnreadCount(summary.operations);
+      setAlertUnreadCount(summary.alerts);
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+    }
+  }
+
+  async function acknowledgeAlertIncident(id: string) {
+    try {
+      const incident = await acknowledgeMonitoringAlertIncident(id);
+      setAlertIncidents((current) => current.map((item) => item.id === id ? incident : item));
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+    }
+  }
+
+  async function readAllAlertIncidents() {
+    try {
+      await readAllMonitoringAlertIncidents();
+      await refreshNotifications(true);
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+      void refreshNotifications();
     }
   }
 
@@ -1645,7 +1691,7 @@ export function App() {
       setDockerOperations(nextDockerOperations);
       setVmOperations(nextVmOperations);
       setNotifications(nextNotifications.notifications);
-      setNotificationUnreadCount(nextNotifications.unreadCount);
+      setOperationUnreadCount(nextNotifications.unreadCount);
       setNotificationsLoading(false);
       setOperationsReady(true);
     } catch (nextError) {
@@ -2520,11 +2566,17 @@ export function App() {
         open={notificationCenterOpen}
         loading={notificationsLoading}
         notifications={notifications}
+        alertIncidents={alertIncidents}
         unreadCount={notificationUnreadCount}
+        operationUnreadCount={operationUnreadCount}
+        alertUnreadCount={alertUnreadCount}
         locale={resolvedLocale}
         onClose={closeNotificationCenter}
         onRead={(id) => void readNotification(id)}
         onReadAll={() => void readAllNotifications()}
+        onReadAlert={(id) => void readAlertIncident(id)}
+        onReadAllAlerts={() => void readAllAlertIncidents()}
+        onAcknowledgeAlert={(id) => void acknowledgeAlertIncident(id)}
       />
 
       {editorMeta ? (

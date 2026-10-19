@@ -219,7 +219,7 @@ gh run watch <run-id> --exit-status
 sudo systemctl --failed
 sudo systemctl is-active \
   zos-api.service zos-worker@1.service \
-  zos-monitor.service zos-downloader.service zos-hostd.service \
+  zos-monitor.service zos-alerter.service zos-downloader.service zos-hostd.service \
   zos-termux.service zos-maintenance.timer \
   zos-health.timer zos-backup-daily.timer \
   zos-backup-weekly.timer
@@ -228,6 +228,7 @@ curl -fsS http://127.0.0.1:3010/health
 curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
 curl -fsS http://127.0.0.1:3010/api/monitoring/overview
+curl -fsS http://127.0.0.1:3010/api/monitoring/alerts/summary
 curl -fsS http://127.0.0.1:3010/api/system/build-info
 sudo cat /zos/deploy/current-release.json
 ```

@@ -4,7 +4,7 @@ description: API 传输面、端点分组和稳定契约。
 type: reference
 status: current
 audience: [developer]
-sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photos.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/shares.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/routes/monitoring.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
+sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photos.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/shares.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/api/src/routes/notifications.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
 sidebar:
   order: 2
 ---
@@ -20,6 +20,16 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 - `POST /api/monitoring/query` 接收 ISO `start/end`、最多 12 个 `selectors` 和 `maxPoints`（2–720）。selector 包含 `metric`、可选的允许标签和 `value | rate`；`rate` 只适用于 counter。响应按序列给出实际 `raw | 1m | 1h` resolution、step 和有序点，缺口值为 `null`。
 
 查询范围最多 366 天。无数据或监控关闭返回成功空结果；非法范围、指标、标签、转换或上限返回 `400`；指标库不可读时返回不包含路径或 SQLite 内部信息的 `503`。现有 `/api/system/network/traffic` 契约保持不变。
+
+## Monitoring alerts
+
+- `/api/monitoring/alerts/rules`、`contacts`、`groups`、`schedules`、`policies` 和 `silences` 提供受控告警配置 CRUD；更新和删除必须携带整数 `expectedRevision`，过期 revision 返回 `409`。组成员、值班成员和策略阶段按聚合根在一个事务中替换。规则响应通过 `evaluationError` 和 `lastEvaluatedAt` 暴露最近一次求值状态。
+- `/api/monitoring/alerts/incidents` 提供 firing/resolved 事件及独立的 `read`、`read-all`、`acknowledge` 动作。acknowledge 取消未发送和后续升级邮件，但不会把 firing 改为 resolved。
+- `/api/monitoring/alerts/smtp` 只返回 `credentialConfigured`，不返回密码。`POST .../test-email` 通过同一 outbox 返回 `202 + deliveryId`；客户端用 delivery endpoint 查询异步结果。
+- `/api/monitoring/alerts/health-routing` 把 warning/critical Health incident 绑定到可选升级策略；站内 incident 不依赖邮件路由。
+- `GET /api/notifications/summary` 返回 Operations 与 Alerts 的独立和合并未读数。现有 `/api/notifications` 列表及 read 合同不变。
+
+规则只接受 catalog 中的 metric/labels、固定窗口 `1m/5m/15m/30m/1h`、`value | rate`、`last | avg | min | max` 和 `> >= < <=`。输入错误返回 `400`，资源不存在返回 `404`，revision 冲突返回 `409`。SMTP 测试 API 不直接建立第二条邮件发送路径。
 
 ## Photos
 

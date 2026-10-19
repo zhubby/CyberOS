@@ -21,7 +21,7 @@ import {
   metricsDatabaseBytes,
   monitoringWritesPaused,
   openMetricsReader
-} from "./store.js";
+} from "./database.js";
 
 const STALE_AFTER_MS = 30_000;
 

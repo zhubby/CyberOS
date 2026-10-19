@@ -3,7 +3,8 @@
   "version": "1.2.1",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./test-utils": "./src/test-utils.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

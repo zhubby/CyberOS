@@ -21,6 +21,7 @@ export type SettingsSectionId =
   | "files"
   | "indexer"
   | "operations"
+  | "alerts"
   | "photos"
   | "downloads"
   | "appearance"
@@ -84,6 +85,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "administration"
   },
   {
+    id: "alerts",
+    group: "administration"
+  },
+  {
     id: "files",
     group: "workspace"
   },
@@ -118,6 +123,7 @@ const SECTION_TITLE_KEYS = {
   files: "settings.sections.files.title",
   indexer: "settings.sections.indexer.title",
   operations: "settings.sections.operations.title",
+  alerts: "settings.sections.alerts.title",
   photos: "settings.sections.photos.title",
   downloads: "settings.sections.downloads.title",
   appearance: "settings.sections.appearance.title",
@@ -133,6 +139,7 @@ const SECTION_DESCRIPTION_KEYS = {
   files: "settings.sections.files.description",
   indexer: "settings.sections.indexer.description",
   operations: "settings.sections.operations.description",
+  alerts: "settings.sections.alerts.description",
   photos: "settings.sections.photos.description",
   downloads: "settings.sections.downloads.description",
   appearance: "settings.sections.appearance.description",

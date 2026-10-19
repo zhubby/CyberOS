@@ -5,13 +5,13 @@ After=local-fs.target zos-api.service
 Wants=zos-api.service
 
 [Service]
-Type=simple
+Type=notify
 User=zos
 Group=zos
 Environment=ZOS_ROOT=/zos
 Environment=ZOS_CONFIG=/zos/config/config.toml
 WorkingDirectory=/zos/state
-ExecStart=/usr/local/bin/node /usr/lib/zos/apps/monitor/dist/index.js
+ExecStart=/usr/lib/zos/bin/zos-monitor
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s

@@ -107,6 +107,7 @@ const PRODUCT_CARGO_PACKAGES = [
   ["apps/downloader/Cargo.toml", "zos-downloader"],
   ["apps/hostd/Cargo.toml", "zos-hostd"],
   ["apps/indexer/Cargo.toml", "zos-indexer"],
+  ["apps/monitor/Cargo.toml", "zos-monitor"],
   ["apps/photostaff/Cargo.toml", "zos-photostaff"],
   ["apps/termux/Cargo.toml", "zos-termux"],
   ["apps/vod-player/Cargo.toml", "zos-vod-player"]
@@ -118,6 +119,7 @@ async function writeFixture(root) {
     mkdir(path.join(root, "apps/downloader"), { recursive: true }),
     mkdir(path.join(root, "apps/hostd"), { recursive: true }),
     mkdir(path.join(root, "apps/indexer"), { recursive: true }),
+    mkdir(path.join(root, "apps/monitor"), { recursive: true }),
     mkdir(path.join(root, "apps/photostaff"), { recursive: true }),
     mkdir(path.join(root, "apps/termux"), { recursive: true }),
     mkdir(path.join(root, "apps/vod-player"), { recursive: true }),

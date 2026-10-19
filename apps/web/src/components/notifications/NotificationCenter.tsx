@@ -13,9 +13,10 @@ import {
   LoaderCircle,
   MonitorCog,
   Share2,
+  ShieldAlert,
   X
 } from "lucide-react";
-import type { OperationNotification } from "../../api.js";
+import type { MonitoringAlertIncident, OperationNotification } from "../../api.js";
 import { formatDate, formatRelativeTime, formatTime } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 
@@ -25,26 +26,40 @@ export function NotificationCenter({
   open,
   loading,
   notifications,
+  alertIncidents,
   unreadCount,
+  operationUnreadCount,
+  alertUnreadCount,
   locale,
   onClose,
   onRead,
-  onReadAll
+  onReadAll,
+  onReadAlert,
+  onReadAllAlerts,
+  onAcknowledgeAlert
 }: {
   open: boolean;
   loading: boolean;
   notifications: OperationNotification[];
+  alertIncidents: MonitoringAlertIncident[];
   unreadCount: number;
+  operationUnreadCount: number;
+  alertUnreadCount: number;
   locale: SupportedLocale;
   onClose: () => void;
   onRead: (id: string) => void;
   onReadAll: () => void;
+  onReadAlert: (id: string) => void;
+  onReadAllAlerts: () => void;
+  onAcknowledgeAlert: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const translate = t as Translate;
   const drawerRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [activeTab, setActiveTab] = useState<"operations" | "alerts">("operations");
+  const activeUnreadCount = activeTab === "operations" ? operationUnreadCount : alertUnreadCount;
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -110,8 +125,8 @@ export function NotificationCenter({
           <div className="notification-drawer-actions">
             <button
               type="button"
-              onClick={onReadAll}
-              disabled={unreadCount === 0}
+              onClick={activeTab === "operations" ? onReadAll : onReadAllAlerts}
+              disabled={activeUnreadCount === 0}
               title={t("notifications.center.markAllRead")}
               aria-label={t("notifications.center.markAllRead")}
             >
@@ -134,7 +149,51 @@ export function NotificationCenter({
           <span>{t("notifications.center.unreadCount", { count: unreadCount })}</span>
         </div>
 
-        <div className="notification-list">
+        <div className="notification-tabs" role="tablist" aria-label={t("notifications.center.tabs.label")}>
+          <button type="button" role="tab" aria-selected={activeTab === "operations"} onClick={() => setActiveTab("operations")}>
+            {t("notifications.center.tabs.operations")}<span>{operationUnreadCount}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={activeTab === "alerts"} onClick={() => setActiveTab("alerts")}>
+            {t("notifications.center.tabs.alerts")}<span>{alertUnreadCount}</span>
+          </button>
+        </div>
+
+        <div className="notification-list" role="tabpanel">
+          {activeTab === "operations" ? (
+            <OperationsList
+              loading={loading}
+              notifications={notifications}
+              locale={locale}
+              now={now}
+              onRead={onRead}
+              t={translate}
+            />
+          ) : (
+            <AlertsList
+              loading={loading}
+              incidents={alertIncidents}
+              locale={locale}
+              now={now}
+              onRead={onReadAlert}
+              onAcknowledge={onAcknowledgeAlert}
+              t={translate}
+            />
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function OperationsList({ loading, notifications, locale, now, onRead, t }: {
+  loading: boolean;
+  notifications: OperationNotification[];
+  locale: SupportedLocale;
+  now: number;
+  onRead: (id: string) => void;
+  t: Translate;
+}) {
+  return <>
           {loading && notifications.length === 0 ? (
             <div className="notification-empty" role="status">
               <LoaderCircle className="notification-spinner" aria-hidden="true" size={20} />
@@ -160,7 +219,7 @@ export function NotificationCenter({
                   data-status={notification.status}
                   data-unread={notification.readAt === null ? "true" : "false"}
                   onClick={() => onRead(notification.id)}
-                  aria-label={`${notificationTitle(notification, translate)}. ${notification.summary}`}
+                  aria-label={`${notificationTitle(notification, t)}. ${notification.summary}`}
                 >
                   <span className="notification-status-icon" aria-hidden="true">
                     <StatusIcon size={17} />
@@ -168,7 +227,7 @@ export function NotificationCenter({
                   <span className="notification-item-content">
                     <span className="notification-item-title">
                       <KindIcon aria-hidden="true" size={14} />
-                      <strong>{notificationTitle(notification, translate)}</strong>
+                      <strong>{notificationTitle(notification, t)}</strong>
                     </span>
                     <span className="notification-item-summary">{notification.summary}</span>
                     {notification.error ? <span className="notification-item-error">{notification.error}</span> : null}
@@ -179,10 +238,41 @@ export function NotificationCenter({
               );
             })
           )}
-        </div>
-      </aside>
-    </div>
-  );
+  </>;
+}
+
+function AlertsList({ loading, incidents, locale, now, onRead, onAcknowledge, t }: {
+  loading: boolean;
+  incidents: MonitoringAlertIncident[];
+  locale: SupportedLocale;
+  now: number;
+  onRead: (id: string) => void;
+  onAcknowledge: (id: string) => void;
+  t: Translate;
+}) {
+  if (loading && incidents.length === 0) {
+    return <div className="notification-empty" role="status"><LoaderCircle className="notification-spinner" aria-hidden="true" size={20} /><span>{t("notifications.center.loading")}</span></div>;
+  }
+  if (incidents.length === 0) {
+    return <div className="notification-empty"><ShieldAlert aria-hidden="true" size={20} /><strong>{t("notifications.center.alerts.emptyTitle")}</strong><span>{t("notifications.center.alerts.emptyBody")}</span></div>;
+  }
+  return <>{incidents.map((incident) => {
+    const timestamp = incident.resolvedAt ?? incident.firingAt;
+    const relativeTime = formatRelativeTime(timestamp, locale, now);
+    const absoluteTime = `${formatDate(timestamp, locale)} ${formatTime(timestamp, locale)}`;
+    return <article key={incident.id} className="notification-item notification-alert-item" data-status={incident.status} data-severity={incident.severity} data-unread={incident.readAt === null ? "true" : "false"}>
+      <span className="notification-status-icon" aria-hidden="true"><ShieldAlert size={17} /></span>
+      <button type="button" className="notification-alert-content" onClick={() => onRead(incident.id)} aria-label={`${incident.title}. ${t(`notifications.center.alerts.statuses.${incident.status}`)}`}>
+        <span className="notification-item-title"><strong>{incident.title}</strong></span>
+        <span className="notification-item-summary">{t(`notifications.center.alerts.statuses.${incident.status}`)} · {t(`notifications.center.alerts.severity.${incident.severity}`)}</span>
+        <time dateTime={timestamp} title={absoluteTime}>{relativeTime}</time>
+      </button>
+      <span className="notification-alert-actions">
+        {incident.status === "firing" && incident.acknowledgedAt === null ? <button type="button" onClick={() => onAcknowledge(incident.id)}>{t("notifications.center.alerts.acknowledge")}</button> : null}
+        {incident.readAt === null ? <span className="notification-unread-dot" aria-hidden="true" /> : null}
+      </span>
+    </article>;
+  })}</>;
 }
 
 export function notificationTitle(notification: OperationNotification, t: Translate): string {

@@ -9,7 +9,8 @@ export interface MonitoringMetricDefinition {
   description: string;
   kind: MonitoringMetricKind;
   unit: string;
-  labelKeys: string[];
+  labelKeys: readonly string[];
+  cadence?: "fast" | "standard" | "temperature";
 }
 
 export interface MonitoringSeriesDescriptor {
@@ -54,6 +55,7 @@ export interface MonitoringOverviewResponse {
     databaseBytes: number;
     writesPaused: boolean;
   };
+  alerts?: MonitoringAlertSummary;
 }
 
 export interface MonitoringQuerySelector {
@@ -93,3 +95,4 @@ export interface MonitoringHealthStatus {
   status: MonitoringState;
   lastSampleAt: string | null;
 }
+import type { MonitoringAlertSummary } from "./monitoring-alerts.js";

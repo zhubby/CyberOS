@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/downloader", "apps/hostd", "apps/indexer", "apps/photostaff", "apps/termux", "apps/vod-player"]
+members = ["apps/downloader", "apps/hostd", "apps/indexer", "apps/monitor", "apps/photostaff", "apps/termux", "apps/vod-player"]
 resolver = "2"
 
 [workspace.package]
@@ -30,6 +30,8 @@ zip = { version = "7.0.0", default-features = false, features = ["deflate"] }
 sd-notify = "0.5.0"
 futures-util = "0.3.31"
 httpdate = "1.0.3"
+jiff = { version = "0.2.38", default-features = false, features = ["std", "serde", "tzdb-bundle-always"] }
+lettre = { version = "0.11.23", default-features = false, features = ["builder", "hostname", "ring", "rustls-platform-verifier", "smtp-transport", "tokio1-rustls"] }
 rand = "0.9.2"
 reqwest = { version = "0.13.5", default-features = false, features = ["http2", "rustls-no-provider", "stream"] }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
