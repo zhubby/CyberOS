@@ -94,7 +94,7 @@ export function MonitoringPanel({ locale }: { locale: SupportedLocale }) {
     const end = new Date();
     const start = new Date(end.getTime() - rangeConfig.durationMs);
     try {
-      const [nextOverview, nextQuery] = await Promise.all([
+      const [overviewResult, queryResult] = await Promise.allSettled([
         getMonitoringOverview(),
         queryMonitoringMetrics({
           start: start.toISOString(),
@@ -104,12 +104,14 @@ export function MonitoringPanel({ locale }: { locale: SupportedLocale }) {
         })
       ]);
       if (currentRequest !== requestId.current) return;
-      setOverview(nextOverview);
-      setQuery(nextQuery);
-      setError(null);
-    } catch (nextError) {
-      if (currentRequest !== requestId.current) return;
-      setError(nextError instanceof Error ? nextError.message : String(nextError));
+      if (overviewResult.status === "fulfilled") setOverview(overviewResult.value);
+      if (queryResult.status === "fulfilled") setQuery(queryResult.value);
+      const nextError = overviewResult.status === "rejected"
+        ? overviewResult.reason
+        : queryResult.status === "rejected"
+          ? queryResult.reason
+          : null;
+      setError(nextError === null ? null : nextError instanceof Error ? nextError.message : String(nextError));
     } finally {
       if (currentRequest === requestId.current) {
         setLoading(false);

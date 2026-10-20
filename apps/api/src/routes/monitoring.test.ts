@@ -71,7 +71,7 @@ describe("monitoring routes", () => {
     await server.close();
   });
 
-  it("rejects unsafe selectors and oversized requests", async () => {
+  it("rejects unsafe selectors and bounds oversized requests", async () => {
     const databasePath = await tempDatabase();
     const writer = new MetricsWriter(databasePath, { ...DEFAULT_MONITORING_CONFIG });
     writer.writeSamples(Array.from({ length: 64 }, (_, index) => ({
@@ -133,16 +133,20 @@ describe("monitoring routes", () => {
       expect(timestamp.statusCode).toBe(400);
     }
 
-    const expanded = await server.inject({
+    const budgeted = await server.inject({
       method: "POST",
       url: "/api/monitoring/query",
       payload: {
         ...validQuery(),
-        selectors: Array.from({ length: 12 }, () => ({ metric: "zos_queue_depth" }))
+        selectors: [{ metric: "zos_queue_depth" }]
       }
     });
-    expect(expanded.statusCode).toBe(400);
-    expect(expanded.json().error).toMatch(/point budget/iu);
+    expect(budgeted.statusCode).toBe(200);
+    expect(budgeted.json().series).toHaveLength(64);
+    expect(budgeted.json().series.reduce(
+      (total: number, series: { stepMs: number }) => total + Math.ceil(60 * 60_000 / series.stepMs),
+      0
+    )).toBeLessThanOrEqual(24_000);
 
     const exactlyAtSeriesLimit = await server.inject({
       method: "POST",

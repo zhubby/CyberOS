@@ -48,8 +48,6 @@ export function queryMetrics(
 ): MonitoringQueryResponse {
   const normalized = validateMonitoringQuery(request);
   const rangeMs = normalized.endMs - normalized.startMs;
-  const targetStepMs = Math.ceil(rangeMs / normalized.maxPoints);
-  const preferredResolution = chooseResolution(targetStepMs, rangeMs, config);
   const descriptors = listMetricSeries(db);
   const requests: Array<Pick<QueryPlan, "descriptor" | "transform">> = [];
   let returnedSeries = 0;
@@ -67,14 +65,16 @@ export function queryMetrics(
     if (returnedSeries > MAX_RETURNED_SERIES) {
       throw new MonitoringValidationError(`Query expands to more than ${MAX_RETURNED_SERIES} series`);
     }
-    if (returnedSeries * normalized.maxPoints > MAX_TOTAL_POINTS) {
-      throw new MonitoringValidationError(`Query exceeds the ${MAX_TOTAL_POINTS} point budget`);
-    }
     for (const descriptor of matches) {
       requests.push({ descriptor, transform: selector.transform });
     }
   }
 
+  const effectiveMaxPoints = returnedSeries === 0
+    ? normalized.maxPoints
+    : Math.min(normalized.maxPoints, Math.floor(MAX_TOTAL_POINTS / returnedSeries));
+  const targetStepMs = Math.ceil(rangeMs / effectiveMaxPoints);
+  const preferredResolution = chooseResolution(targetStepMs, rangeMs, config);
   const seriesIds = [...new Set(requests.map(({ descriptor }) => descriptor.id))];
   const resolutions = selectResolutions(
     db,
