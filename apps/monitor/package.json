@@ -1,6 +1,6 @@
 {
   "name": "@zos/monitor",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "scripts": {
     "dev": "cargo run -p zos-monitor --bin zos-monitor"

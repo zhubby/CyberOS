@@ -1,3 +1,9 @@
+zos (1.4.1) unstable; urgency=medium
+
+  * Fix portable Bluetooth storage capacity checks across Linux and macOS.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 20 Oct 2026 13:20:14 +0000
+
 zos (1.4.0) unstable; urgency=medium
 
   * Add MCP capability execution, device and Bluetooth management, a TV media library, and independent Rust monitoring and alerting services.

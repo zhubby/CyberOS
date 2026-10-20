@@ -1,6 +1,6 @@
 {
   "name": "@zos/monitoring",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -11,8 +11,8 @@
     "build": "cd ../.. && tsup packages/monitoring/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir packages/monitoring/dist"
   },
   "dependencies": {
-    "@zos/db": "1.4.0",
-    "@zos/shared": "1.4.0",
+    "@zos/db": "1.4.1",
+    "@zos/shared": "1.4.1",
     "better-sqlite3": "^12.2.0"
   }
 }
