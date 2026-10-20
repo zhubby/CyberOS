@@ -1,12 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import {
-  appendEvent,
-  createShareOperationApproval,
-  createActionMessageAndJob,
-  getSession,
+  createShareOperationRecord,
   getShareSettings,
   listNasRoots,
-  saveShareSettings
+  saveShareSettings,
+  updateShareOperationStatus
 } from "@zos/db";
 import type { ShareOperationProposal } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
@@ -92,16 +90,9 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
 
   server.post<{
     Body: {
-      sessionId?: string;
       settings?: ShareSettingsInput;
     };
-  }>("/api/shares/proposals", async (request, reply) => {
-    const session = getSession(db, request.body?.sessionId ?? "");
-    if (!session) {
-      reply.status(404).send({ error: "Session not found" });
-      return;
-    }
-
+  }>("/api/shares/settings", async (request, reply) => {
     const existing = getShareSettings(db) ?? defaultShareSettings(config);
     const roots = listNasRoots(db);
     try {
@@ -113,34 +104,31 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
         summary: shareProposalSummary(settings),
         settings: publicSettings
       };
-      const { message, job } = createActionMessageAndJob(db, {
-        sessionId: session.id,
-        content: proposal.summary,
-        kind: "share",
-        status: "waiting_approval"
-      });
-      const { approval, operation } = createShareOperationApproval(db, {
-        jobId: job.id,
+      const operation = createShareOperationRecord(db, {
         proposal,
         settings
       });
-      appendEvent(db, {
-        sessionId: session.id,
-        jobId: job.id,
-        type: "approval.pending",
-        payload: {
-          approvalId: approval.id,
-          proposal: approval.proposal,
-          summary: `Created share approval ${approval.id}: ${proposal.summary}. No share service was changed.`
-        }
-      });
-
-      reply.status(202).send({
-        message,
-        job,
-        approval,
-        operation: toPublicShareOperation(operation)
-      });
+      try {
+        const applied = await applyShareSettings(config, settings, roots, context.shares);
+        const { updatedAt: _normalizedAt, ...settingsToSave } = settings;
+        const saved = saveShareSettings(db, settingsToSave);
+        const completed = updateShareOperationStatus(db, operation.id, "applied", {
+          ...applied,
+          settingsUpdatedAt: saved.updatedAt,
+          appliedAt: new Date().toISOString()
+        });
+        reply.status(200).send({
+          settings: toPublicShareSettings(saved),
+          operation: completed ? toPublicShareOperation(completed) : null
+        });
+      } catch (error) {
+        const message = safeShareMessage(error);
+        updateShareOperationStatus(db, operation.id, "failed", {
+          error: message,
+          failedAt: new Date().toISOString()
+        });
+        throw error;
+      }
     } catch (error) {
       reply.status(400).send({ error: safeShareMessage(error) });
     }

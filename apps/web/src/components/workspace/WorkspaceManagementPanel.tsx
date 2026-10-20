@@ -55,8 +55,7 @@ import {
   getDockerSummary,
   getDockerVolumeDetails,
   executeDockerContainerAction,
-  proposeDockerOperation,
-  type DockerOperationProposal,
+  runDockerOperation,
   type DockerConsoleSession,
   type DockerComposeProject,
   type DockerContainer,
@@ -68,8 +67,7 @@ import {
   type DockerLifecycleProposalInput,
   type DockerDaemonStatus,
   type NasRoot,
-  type PendingApproval
-  , type VmSummary
+  type VmSummary
 } from "../../api.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -307,8 +305,6 @@ export function WorkspaceManagementPanel({
   roots,
   storagePools,
   selectedStoragePoolId,
-  sessionId,
-  pendingApprovals,
   dockerOperations,
   vmOperations,
   locale,
@@ -322,8 +318,6 @@ export function WorkspaceManagementPanel({
   roots: NasRoot[];
   storagePools: StorageFilePickerPool[];
   selectedStoragePoolId: string;
-  sessionId: string | null;
-  pendingApprovals: PendingApproval[];
   dockerOperations: DockerOperation[];
   vmOperations: VmOperation[];
   locale: SupportedLocale;
@@ -337,8 +331,6 @@ export function WorkspaceManagementPanel({
     return (
       <DockerManagementPanel
         roots={roots}
-        sessionId={sessionId}
-        pendingApprovals={pendingApprovals}
         dockerOperations={dockerOperations}
         locale={locale}
         onWorkQueuesChanged={onWorkQueuesChanged}
@@ -352,12 +344,10 @@ export function WorkspaceManagementPanel({
     return (
       <ShareManagementPanel
         roots={roots}
-        sessionId={sessionId}
-        pendingApprovals={pendingApprovals}
         locale={locale}
         onWorkQueuesChanged={onWorkQueuesChanged}
         onNotifyError={onNotifyError}
-        onNotifyWarning={onNotifyWarning}
+        onNotifySuccess={onNotifySuccess}
       />
     );
   }
@@ -375,7 +365,6 @@ export function WorkspaceManagementPanel({
     return (
       <SystemStorageManagementPanel
         locale={locale}
-        sessionId={sessionId}
         onWorkQueuesChanged={onWorkQueuesChanged}
         onNotifyError={onNotifyError}
         onNotifySuccess={onNotifySuccess}
@@ -387,7 +376,6 @@ export function WorkspaceManagementPanel({
       <VirtualMachineManagementPanel
         storagePools={storagePools}
         selectedStoragePoolId={selectedStoragePoolId}
-        sessionId={sessionId}
         vmOperations={vmOperations}
         locale={locale}
         onWorkQueuesChanged={onWorkQueuesChanged}
@@ -505,7 +493,6 @@ export function WorkspaceManagementPanel({
 function VirtualMachineManagementPanel({
   storagePools,
   selectedStoragePoolId,
-  sessionId,
   vmOperations,
   locale,
   onWorkQueuesChanged,
@@ -514,7 +501,6 @@ function VirtualMachineManagementPanel({
 }: {
   storagePools: StorageFilePickerPool[];
   selectedStoragePoolId: string;
-  sessionId: string | null;
   vmOperations: VmOperation[];
   locale: SupportedLocale;
   onWorkQueuesChanged: () => void | Promise<void>;
@@ -553,10 +539,9 @@ function VirtualMachineManagementPanel({
   }, [vmOperations[0]?.updatedAt]);
 
   async function request(action: Parameters<typeof executeVmOperation>[0]["action"], domainName: string, extra: Partial<Parameters<typeof executeVmOperation>[0]> = {}): Promise<VmActionResult | null> {
-    if (!sessionId) { onNotifyError(t("workspace.management.virtualMachines.noSession")); return null; }
     setPendingAction(`${action}:${domainName}`);
     try {
-      const result = await executeVmOperation({ sessionId, action, domainName, ...extra });
+      const result = await executeVmOperation({ action, domainName, ...extra });
       onNotifySuccess(t(action === "create" ? "workspace.management.virtualMachines.created" : "workspace.management.virtualMachines.actionCompleted"));
       await Promise.all([onWorkQueuesChanged(), refresh()]);
       return result;
@@ -1099,8 +1084,6 @@ export function VmInstanceActions({
 
 function DockerManagementPanel({
   roots,
-  sessionId,
-  pendingApprovals,
   dockerOperations,
   locale,
   onWorkQueuesChanged,
@@ -1109,8 +1092,6 @@ function DockerManagementPanel({
   onNotifyWarning
 }: {
   roots: NasRoot[];
-  sessionId: string | null;
-  pendingApprovals: PendingApproval[];
   dockerOperations: DockerOperation[];
   locale: SupportedLocale;
   onWorkQueuesChanged: () => void | Promise<void>;
@@ -1386,22 +1367,13 @@ function DockerManagementPanel({
 
   async function requestDockerProposal(
     actionId: string,
-    input: Omit<DockerLifecycleProposalInput, "sessionId">
-  ): Promise<Awaited<ReturnType<typeof proposeDockerOperation>> | null> {
-    if (!sessionId) {
-      const message = t("workspace.management.docker.errors.noSession");
-      setError(message);
-      onNotifyError(message);
-      return null;
-    }
+    input: DockerLifecycleProposalInput
+  ): Promise<Awaited<ReturnType<typeof runDockerOperation>> | null> {
     setPendingAction(actionId);
     setError(null);
     try {
-      const result = await proposeDockerOperation({
-        ...input,
-        sessionId
-      });
-      onNotifyWarning(t("workspace.management.docker.proposalCreated"));
+      const result = await runDockerOperation(input);
+      onNotifySuccess(t("workspace.management.docker.actionCompleted"));
       await onWorkQueuesChanged();
       return result;
     } catch (nextError) {
@@ -1421,7 +1393,7 @@ function DockerManagementPanel({
         label={label}
         type="button"
         onClick={() => setCreateKind(kind)}
-        disabled={!canUseDocker || Boolean(pendingAction) || !sessionId}
+        disabled={!canUseDocker || Boolean(pendingAction)}
       >
         <Plus aria-hidden="true" size={17} />
       </PanelHeaderAction>
@@ -1537,7 +1509,7 @@ function DockerManagementPanel({
                   {pendingContainerCreates.map((operation) => (
                     <tr key={`pending:${operation.id}`} aria-busy="true">
                       <td title={operation.targetId}>{operation.targetId}</td>
-                      <td><span className="management-row-status" data-state="warning">{t("workspace.management.docker.hostAccessPendingApproval")}</span></td>
+                      <td><span className="management-row-status" data-state="warning">{t("workspace.management.docker.containerCreating")}</span></td>
                       <td>{t("common.dash")}</td>
                       <td>{t("common.dash")}</td>
                       <td>{t("common.dash")}</td>
@@ -1691,7 +1663,7 @@ function DockerManagementPanel({
         <DockerComposeAppDialog
           app={composeDialog.app}
           engineReady={canUseDocker}
-          canDeploy={canUseDocker && Boolean(sessionId) && !pendingAction}
+          canDeploy={canUseDocker && !pendingAction}
           deleteInitially={composeDialog.deleteInitially}
           onClose={() => setComposeDialog(null)}
           onRefresh={refreshSummary}
@@ -1699,11 +1671,9 @@ function DockerManagementPanel({
           onNotifySuccess={(message) => onNotifySuccess(message)}
         />
       ) : null}
-      {createKind && sessionId && summary ? <DockerCreateDialogs kind={createKind} sessionId={sessionId} summary={summary} roots={roots} onClose={() => setCreateKind(null)} onError={(message) => onNotifyError(message)} onComplete={async (result) => {
+      {createKind && summary ? <DockerCreateDialogs kind={createKind} summary={summary} roots={roots} onClose={() => setCreateKind(null)} onError={(message) => onNotifyError(message)} onComplete={async (result) => {
         setCreateKind(null);
-        if (result.pendingApproval) {
-          onNotifyWarning(t("workspace.management.docker.hostAccessPendingApproval"));
-        } else if (result.partialSuccess) {
+        if (result.partialSuccess) {
           onNotifyWarning(result.error ?? t("workspace.management.docker.create.partialStartFailure"));
         } else {
           onNotifySuccess(t("workspace.management.docker.actionCompleted"));
@@ -1729,12 +1699,11 @@ function DockerManagementPanel({
     Icon: LucideIcon,
     label: string
   ) {
-    const pendingApproval = pendingDockerApprovalForTarget(pendingApprovals, project.id);
     return (
       <ActionIconButton
-        label={pendingApproval ? t("workspace.management.actions.pendingApproval") : label}
-        disabled={!canUseDocker || Boolean(pendingAction) || Boolean(pendingApproval)}
-        pending={pendingAction === `${action}:${project.id}` || Boolean(pendingApproval)}
+        label={label}
+        disabled={!canUseDocker || Boolean(pendingAction)}
+        pending={pendingAction === `${action}:${project.id}`}
         Icon={Icon}
         danger={action === "compose_down"}
         onClick={() => requestComposeAction(project, action)}
@@ -2485,26 +2454,6 @@ function dockerComposeEmptyState(enabled: boolean, loading: boolean, t: Translat
     return String(t("workspace.management.docker.disabledEmpty"));
   }
   return String(t("workspace.management.docker.noComposeProjects"));
-}
-
-function pendingDockerApprovalForTarget(approvals: PendingApproval[], targetId: string): PendingApproval | null {
-  return (
-    approvals.find((approval) => {
-      if (approval.kind !== "docker_operation") {
-        return false;
-      }
-      return approval.proposal.some((proposal) => {
-        if (!isDockerOperationProposal(proposal)) {
-          return false;
-        }
-        return proposal.containerId === targetId || proposal.composeProjectId === targetId;
-      });
-    }) ?? null
-  );
-}
-
-function isDockerOperationProposal(proposal: PendingApproval["proposal"][number]): proposal is DockerOperationProposal {
-  return "targetType" in proposal;
 }
 
 function approvedConsoleOperation(container: DockerContainer, operations: DockerOperation[]): DockerOperation | null {

@@ -19,7 +19,9 @@ describe("capability contracts", () => {
     expect(all.map((item) => item.id)).toEqual(all.map((item) => item.id).toSorted());
     expect(registry.listForScopes(new Set(["zos:files:read"])).map((item) => item.id)).toEqual([
       "zos.files.archive-inspect",
+      "zos.files.find",
       "zos.files.git",
+      "zos.files.grep",
       "zos.files.list",
       "zos.files.read",
       "zos.files.resource-link",
@@ -30,7 +32,7 @@ describe("capability contracts", () => {
 
   it("rejects mutation descriptors without approval", () => {
     const registry = new CapabilityRegistry();
-    const descriptor = createCatalogDescriptors().find((item) => item.id === "zos.files.mutate-propose");
+    const descriptor = createCatalogDescriptors().find((item) => item.id === "zos.files.mutate");
     expect(descriptor).toBeDefined();
     expect(() => registry.register({ ...descriptor!, approval: "none" })).toThrow("must require first-party approval");
   });

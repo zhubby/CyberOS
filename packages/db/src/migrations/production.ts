@@ -1901,5 +1901,133 @@ export const productionMigrations: Migration[] = [
         error TEXT
       );
     `
+  },
+  {
+    id: "037_agent_only_capability_approvals",
+    sql: `
+      CREATE TABLE capability_run_payloads (
+        run_id TEXT PRIMARY KEY REFERENCES capability_runs(id) ON DELETE CASCADE,
+        payload_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      UPDATE jobs
+      SET status = 'failed',
+          error = 'Legacy approval expired after the Agent approval upgrade; retry the request',
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE status = 'waiting_approval'
+        AND id IN (
+          SELECT job_id FROM pending_approvals
+          WHERE status IN ('pending', 'approved')
+        );
+
+      UPDATE pending_approvals
+      SET status = 'expired',
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE status IN ('pending', 'approved');
+    `
+  },
+  {
+    id: "038_panel_operations_without_agent_jobs",
+    disableForeignKeys: true,
+    sql: `
+      PRAGMA legacy_alter_table = ON;
+
+      ALTER TABLE operation_notifications RENAME TO operation_notifications_old;
+      CREATE TABLE operation_notifications (
+        id TEXT PRIMARY KEY,
+        job_id TEXT UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
+        session_id TEXT REFERENCES agent_sessions(id) ON DELETE CASCADE,
+        operation_id TEXT UNIQUE,
+        kind TEXT NOT NULL CHECK (kind IN ('file', 'docker', 'vm', 'storage', 'share')),
+        status TEXT NOT NULL CHECK (status IN ('pending_approval', 'running', 'succeeded', 'failed', 'rejected', 'cancelled')),
+        summary TEXT NOT NULL,
+        error TEXT,
+        read_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK (job_id IS NOT NULL OR operation_id IS NOT NULL)
+      );
+      INSERT INTO operation_notifications (
+        id, job_id, session_id, operation_id, kind, status, summary, error, read_at, created_at, updated_at
+      )
+      SELECT id, job_id, session_id, NULL, kind, status, summary, error, read_at, created_at, updated_at
+      FROM operation_notifications_old;
+      DROP TABLE operation_notifications_old;
+      CREATE INDEX idx_operation_notifications_updated_at ON operation_notifications(updated_at DESC);
+      CREATE INDEX idx_operation_notifications_unread_updated_at ON operation_notifications(read_at, updated_at DESC);
+
+      ALTER TABLE file_batch_items RENAME TO file_batch_items_old;
+      ALTER TABLE file_batches RENAME TO file_batches_old;
+      CREATE TABLE file_batches (
+        id TEXT PRIMARY KEY,
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE RESTRICT,
+        storage_pool_id TEXT NOT NULL,
+        operation TEXT NOT NULL CHECK (operation IN ('move', 'trash')),
+        target_directory TEXT,
+        status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+        total_count INTEGER NOT NULL CHECK (total_count > 0),
+        completed_count INTEGER NOT NULL DEFAULT 0 CHECK (completed_count >= 0),
+        success_count INTEGER NOT NULL DEFAULT 0 CHECK (success_count >= 0),
+        failed_count INTEGER NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+        cancelled_count INTEGER NOT NULL DEFAULT 0 CHECK (cancelled_count >= 0),
+        current_source_path TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      INSERT INTO file_batches (
+        id, root_id, storage_pool_id, operation, target_directory, status,
+        total_count, completed_count, success_count, failed_count, cancelled_count,
+        current_source_path, error, created_at, updated_at, finished_at
+      )
+      SELECT b.id, b.root_id, b.storage_pool_id, b.operation, b.target_directory, j.status,
+        b.total_count, b.completed_count, b.success_count, b.failed_count, b.cancelled_count,
+        b.current_source_path, j.error, b.created_at, b.updated_at, b.finished_at
+      FROM file_batches_old b JOIN jobs j ON j.id = b.job_id;
+
+      CREATE TABLE file_batch_items (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL REFERENCES file_batches(id) ON DELETE CASCADE,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        source_path TEXT NOT NULL,
+        target_path TEXT,
+        trash_entry_id TEXT,
+        operation_id TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(batch_id, source_path),
+        UNIQUE(batch_id, ordinal)
+      );
+      INSERT INTO file_batch_items SELECT * FROM file_batch_items_old;
+      DROP TABLE file_batch_items_old;
+      DROP TABLE file_batches_old;
+      CREATE INDEX idx_file_batches_scope_created_at ON file_batches(root_id, storage_pool_id, created_at DESC);
+      CREATE INDEX idx_file_batches_status_created_at ON file_batches(status, created_at);
+      CREATE INDEX idx_file_batch_items_claim ON file_batch_items(status, batch_id, ordinal);
+      CREATE INDEX idx_file_batch_items_source ON file_batch_items(source_path, status);
+
+      ALTER TABLE docker_console_authorizations RENAME TO docker_console_authorizations_old;
+      CREATE TABLE docker_console_authorizations (
+        id TEXT PRIMARY KEY,
+        operation_id TEXT NOT NULL REFERENCES docker_operations(id) ON DELETE CASCADE,
+        approval_id TEXT REFERENCES pending_approvals(id) ON DELETE CASCADE,
+        container_id TEXT NOT NULL,
+        shell TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'used', 'expired', 'failed')),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      );
+      INSERT INTO docker_console_authorizations SELECT * FROM docker_console_authorizations_old;
+      DROP TABLE docker_console_authorizations_old;
+      CREATE INDEX idx_docker_console_authorizations_status_expires_at
+        ON docker_console_authorizations(status, expires_at);
+
+      PRAGMA legacy_alter_table = OFF;
+    `
   }
 ];

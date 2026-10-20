@@ -16,7 +16,7 @@ import {
   createUserMessageAndJob,
   claimNextDownloadTask,
   completeDownloadTask,
-  defaultPiToolPolicySettings,
+  defaultAgentCapabilityPolicySettings,
   defaultDownloadSettings,
   deleteDownloadTask,
   deleteSession,
@@ -27,8 +27,8 @@ import {
   getDownloadSettings,
   getDownloadTask,
   getModelProviderSettings,
+  getAgentCapabilityPolicySettings,
   getOperationNotificationByJob,
-  getPiToolPolicySettings,
   listEvents,
   listDockerOperations,
   listDockerRegistryCredentials,
@@ -43,7 +43,7 @@ import {
   pruneOperationNotifications,
   saveAgentProviderSession,
   saveDownloadSettings,
-  savePiToolPolicySettings,
+  saveAgentCapabilityPolicySettings,
   transitionDownloadTask,
   updateDownloadTaskProgress,
   deleteDockerRegistryCredential,
@@ -369,39 +369,38 @@ describe("core repositories", () => {
     });
   });
 
-  it("stores Pi tool policies and rejects auto mode for dangerous tools", () => {
-    expect(getPiToolPolicySettings(db)).toBeNull();
-    expect(defaultPiToolPolicySettings()).toMatchObject({
-      read: "auto",
-      bash: "ask"
+  it("stores capability policies with read, mutation, and shell defaults", () => {
+    expect(getAgentCapabilityPolicySettings(db)).toBeNull();
+    expect(defaultAgentCapabilityPolicySettings()).toMatchObject({
+      policies: {
+        "zos.files.read": "auto",
+        "zos.files.mutate": "approve",
+        "zos.shell.run": "confirm"
+      }
     });
 
-    const saved = savePiToolPolicySettings(db, {
-      read: "ask",
-      grep: "auto",
-      find: "auto",
-      ls: "disabled",
-      bash: "disabled",
-      edit: "ask",
-      write: "ask"
+    const saved = saveAgentCapabilityPolicySettings(db, {
+      policies: {
+        ...defaultAgentCapabilityPolicySettings().policies,
+        "zos.files.list": "confirm",
+        "zos.shell.run": "disabled"
+      }
     });
 
     expect(saved).toMatchObject({
-      read: "ask",
-      ls: "disabled",
-      bash: "disabled"
+      policies: {
+        "zos.files.list": "confirm",
+        "zos.files.read": "auto",
+        "zos.files.mutate": "approve",
+        "zos.shell.run": "disabled"
+      }
     });
-    expect(() =>
-      savePiToolPolicySettings(db, {
-        read: "auto",
-        grep: "auto",
-        find: "auto",
-        ls: "auto",
-        bash: "auto" as never,
-        edit: "ask",
-        write: "ask"
-      })
-    ).toThrow(/Dangerous tool bash/);
+    expect(() => saveAgentCapabilityPolicySettings(db, {
+      policies: {
+        ...defaultAgentCapabilityPolicySettings().policies,
+        "zos.shell.run": "invalid" as never
+      }
+    })).toThrow(/Invalid policy mode/);
   });
 
   it("stores download settings and enforces the supported concurrency range", () => {
@@ -632,22 +631,8 @@ describe("core repositories", () => {
     });
   });
 
-  it("creates direct Docker resource operations and filters them by session", () => {
-    const session = createSession(db, { rootId: "local" });
-    const otherSession = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "Create Docker resources",
-      status: "running"
-    });
-    const { job: otherJob } = createUserMessageAndJob(db, {
-      sessionId: otherSession.id,
-      content: "Create another Docker resource",
-      status: "running"
-    });
-
+  it("creates direct Docker resource operations without Agent records", () => {
     const container = createDockerOperationRecord(db, {
-      jobId: job.id,
       proposal: {
         action: "create",
         targetType: "container",
@@ -657,7 +642,6 @@ describe("core repositories", () => {
       }
     });
     const volume = createDockerOperationRecord(db, {
-      jobId: job.id,
       proposal: {
         action: "create",
         targetType: "volume",
@@ -667,7 +651,6 @@ describe("core repositories", () => {
       }
     });
     const network = createDockerOperationRecord(db, {
-      jobId: otherJob.id,
       proposal: {
         action: "create",
         targetType: "network",
@@ -679,14 +662,15 @@ describe("core repositories", () => {
 
     expect(container).toMatchObject({
       approvalId: null,
-      targetId: "media",
-      metadata: { jobId: job.id }
+      targetId: "media"
     });
     expect(volume).toMatchObject({ approvalId: null, targetId: "media-data" });
     expect(network).toMatchObject({ approvalId: null, targetId: "backend" });
-    expect(listDockerOperations(db, { sessionId: session.id }).map((item) => item.id).sort()).toEqual(
-      [container.id, volume.id].sort()
+    expect(listDockerOperations(db).map((item) => item.id).sort()).toEqual(
+      [container.id, volume.id, network.id].sort()
     );
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM pending_approvals").pluck().get()).toBe(0);
   });
 
   it("stores multiple Docker registry credentials and preserves secrets on partial updates", () => {

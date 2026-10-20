@@ -66,6 +66,29 @@ export function createShareOperationApproval(
   return { approval, operation };
 }
 
+export function createShareOperationRecord(
+  db: ZosDatabase,
+  input: { proposal: ShareOperationProposal; settings: ShareSettingsRecord }
+): ShareOperationRecord {
+  const now = new Date().toISOString();
+  const operation: ShareOperationRecord = {
+    id: randomUUID(),
+    approvalId: null,
+    action: input.proposal.action,
+    targetId: "share-settings",
+    status: "proposed",
+    metadata: { proposal: input.proposal, settings: input.settings },
+    createdAt: now,
+    updatedAt: now
+  };
+  db.prepare(`
+    INSERT INTO share_operations (
+      id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
+    ) VALUES (@id, NULL, @action, @targetId, @status, @metadataJson, @createdAt, @updatedAt)
+  `).run({ ...operation, metadataJson: JSON.stringify(operation.metadata) });
+  return operation;
+}
+
 export function getShareOperation(db: ZosDatabase, operationId: string): ShareOperationRecord | null {
   const row = db
     .prepare(`
@@ -95,19 +118,16 @@ export function getShareOperationByApproval(
 
 export function listShareOperations(
   db: ZosDatabase,
-  input: { sessionId?: string; limit?: number } = {}
+  input: { limit?: number } = {}
 ): ShareOperationRecord[] {
   const rows = db
     .prepare(`
       SELECT o.id, o.approval_id, o.action, o.target_id, o.status, o.metadata_json, o.created_at, o.updated_at
       FROM share_operations o
-      LEFT JOIN pending_approvals a ON a.id = o.approval_id
-      LEFT JOIN jobs j ON j.id = a.job_id
-      WHERE (? IS NULL OR j.session_id = ?)
       ORDER BY o.created_at DESC
       LIMIT ?
     `)
-    .all(input.sessionId ?? null, input.sessionId ?? null, input.limit ?? 100) as DbShareOperationRow[];
+    .all(input.limit ?? 100) as DbShareOperationRow[];
   return rows.map(mapShareOperation);
 }
 

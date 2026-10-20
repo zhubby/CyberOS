@@ -1,4 +1,5 @@
 import type {
+  AgentCapabilityPolicySettingsRecord,
   BluetoothSettingsRecord,
   DownloadSettingsRecord,
   DockerSettingsRecord,
@@ -25,17 +26,20 @@ import {
 import type { ZosDatabase } from "../connection.js";
 import {
   mapDockerSettings,
+  mapAgentCapabilityPolicySettings,
   mapModelProviderSettings,
   mapPiToolPolicySettings,
   normalizeModelProviderName,
+  normalizeAgentCapabilityPolicySettings,
   normalizePiToolPolicySettings
 } from "./settings-mappers.js";
 import { mapShareSettings, normalizeShareSettings } from "./share-settings-mapper.js";
-import { DEFAULT_PI_TOOL_POLICY_SETTINGS } from "./settings-constants.js";
+import { DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS, DEFAULT_PI_TOOL_POLICY_SETTINGS } from "./settings-constants.js";
 import type { DbSystemSettingRow } from "./repository-rows.js";
 
 const MODEL_PROVIDER_SETTING_KEY = "model_provider";
 const PI_TOOL_POLICY_SETTING_KEY = "pi_tool_policy";
+const AGENT_CAPABILITY_POLICY_SETTING_KEY = "agent_capability_policy";
 const DOCKER_SETTING_KEY = "docker_settings";
 const SHARE_SETTING_KEY = "share_settings";
 const DOWNLOAD_SETTING_KEY = "download_settings";
@@ -95,7 +99,10 @@ export const DEFAULT_INDEXER_SETTINGS: Omit<IndexerSettingsRecord, "updatedAt"> 
   ocrRootIds: []
 };
 
-export { DEFAULT_PI_TOOL_POLICY_SETTINGS } from "./settings-constants.js";
+export {
+  DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS,
+  DEFAULT_PI_TOOL_POLICY_SETTINGS
+} from "./settings-constants.js";
 
 export function defaultBluetoothSettings(): BluetoothSettingsRecord {
   return { ...DEFAULT_BLUETOOTH_SETTINGS, updatedAt: new Date(0).toISOString() };
@@ -213,6 +220,64 @@ export function savePiToolPolicySettings(
   `).run(PI_TOOL_POLICY_SETTING_KEY, JSON.stringify(record), updatedAt);
 
   return record;
+}
+
+export function defaultAgentCapabilityPolicySettings(): AgentCapabilityPolicySettingsRecord {
+  return {
+    policies: { ...DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS.policies },
+    updatedAt: new Date(0).toISOString()
+  };
+}
+
+export function getAgentCapabilityPolicySettings(db: ZosDatabase): AgentCapabilityPolicySettingsRecord | null {
+  const row = db.prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
+    .get(AGENT_CAPABILITY_POLICY_SETTING_KEY) as DbSystemSettingRow | undefined;
+  if (row) return mapAgentCapabilityPolicySettings(row);
+
+  const legacy = getPiToolPolicySettings(db);
+  if (!legacy) return null;
+  return {
+    policies: {
+      ...DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS.policies,
+      "zos.files.list": legacy.ls,
+      "zos.files.read": legacy.read,
+      "zos.files.grep": legacy.grep,
+      "zos.files.find": legacy.find,
+      "zos.files.edit": legacy.edit,
+      "zos.files.write": legacy.write,
+      "zos.shell.run": legacy.bash
+    },
+    updatedAt: legacy.updatedAt
+  };
+}
+
+export function saveAgentCapabilityPolicySettings(
+  db: ZosDatabase,
+  settings: Omit<AgentCapabilityPolicySettingsRecord, "updatedAt">
+): AgentCapabilityPolicySettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = normalizeAgentCapabilityPolicySettings(settings, updatedAt);
+  db.prepare(`
+    INSERT INTO system_settings (key, value_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+  `).run(AGENT_CAPABILITY_POLICY_SETTING_KEY, JSON.stringify(record), updatedAt);
+  return record;
+}
+
+export function agentCapabilityPolicyToPiToolPolicy(
+  settings: AgentCapabilityPolicySettingsRecord
+): PiToolPolicySettingsRecord {
+  return {
+    read: settings.policies["zos.files.read"],
+    grep: settings.policies["zos.files.grep"],
+    find: settings.policies["zos.files.find"],
+    ls: settings.policies["zos.files.list"],
+    bash: settings.policies["zos.shell.run"],
+    edit: settings.policies["zos.files.edit"],
+    write: settings.policies["zos.files.write"],
+    updatedAt: settings.updatedAt
+  };
 }
 
 export function getDockerSettings(db: ZosDatabase): DockerSettingsRecord | null {

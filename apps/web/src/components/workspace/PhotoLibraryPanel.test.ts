@@ -102,8 +102,6 @@ describe("photo timeline grouping", () => {
     const html = renderToStaticMarkup(createElement(PhotoLibraryPanel, {
       pools: [],
       selectedRootId: "local",
-      sessionId: null,
-      approvalRefreshKey: "",
       locale: "en",
       onWorkQueuesChanged: () => undefined,
       onNotifyError: () => undefined,
@@ -130,8 +128,6 @@ describe("photo timeline grouping", () => {
     const html = renderToStaticMarkup(createElement(PhotoLibraryPanel, {
       pools: [],
       selectedRootId: "local",
-      sessionId: null,
-      approvalRefreshKey: "",
       locale: "en",
       onWorkQueuesChanged: () => undefined,
       onNotifyError: () => undefined,

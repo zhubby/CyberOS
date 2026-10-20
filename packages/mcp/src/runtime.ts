@@ -10,14 +10,13 @@ import {
   type CapabilityResult,
   type JsonValue
 } from "@zos/capabilities";
-import { proposeFileMutation } from "@zos/capability-runtime";
 import {
   cancelOwnedCapabilityRun,
   countUnreadOperationNotifications,
   createMcpTransferToken,
   defaultDownloadSettings,
   defaultIndexerSettings,
-  defaultPiToolPolicySettings,
+  defaultAgentCapabilityPolicySettings,
   getDownloadSettings,
   getDownloadWorkerHealth,
   getIndexerSettings,
@@ -32,7 +31,7 @@ import {
   getPhotostaffMapSettings,
   getPhotostaffProcessingSettings,
   getPhotostaffWorkerHealth,
-  getPiToolPolicySettings,
+  getAgentCapabilityPolicySettings,
   getRootReadiness,
   getShareSettings,
   getTerminalTabState,
@@ -82,7 +81,6 @@ const IMPLEMENTED = new Set([
   "zos.files.read",
   "zos.files.resource-link",
   "zos.files.search",
-  "zos.files.mutate-propose",
   "zos.index.status",
   "zos.photos.query",
   "zos.photos.status",
@@ -200,15 +198,6 @@ async function executeImplemented(
       return createFileResourceLink(dependencies, context.subject.clientId, object);
     case "zos.files.search":
       return searchFiles(dependencies, object);
-    case "zos.files.mutate-propose": {
-      const idempotencyKey = optionalString(object.idempotencyKey);
-      return proposeFileMutation({
-        dependencies,
-        subject: context.subject,
-        request: object.request ?? null,
-        ...(idempotencyKey ? { idempotencyKey } : {})
-      });
-    }
     case "zos.runs.get":
       return getRun(dependencies, context.subject.clientId, object);
     case "zos.runs.list":
@@ -361,7 +350,9 @@ function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecuti
         apiKeyConfigured: Boolean(model.apiKey),
         updatedAt: model.updatedAt
       } : null,
-      piToolPolicy: jsonValue(getPiToolPolicySettings(dependencies.db) ?? defaultPiToolPolicySettings()),
+      agentCapabilityPolicy: jsonValue(
+        getAgentCapabilityPolicySettings(dependencies.db) ?? defaultAgentCapabilityPolicySettings()
+      ),
       indexer: jsonValue(getIndexerSettings(dependencies.db) ?? defaultIndexerSettings()),
       downloads: jsonValue(getDownloadSettings(dependencies.db) ?? defaultDownloadSettings()),
       shares: {

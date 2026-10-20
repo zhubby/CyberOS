@@ -7,9 +7,7 @@ import { pipeline } from "node:stream/promises";
 import { ZipArchive } from "archiver";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
-  appendEvent,
-  createActionMessageAndJob,
-  createPendingApproval,
+  createTrashEntry,
   enqueuePhotostaffJob,
   getPhotostaffAsset,
   getPhotostaffLibrarySettings,
@@ -18,7 +16,6 @@ import {
   getPhotostaffProcessingSettings,
   getPhotostaffMetadataDetail,
   getPhotostaffMetadataIndexStatus,
-  getSession,
   hasCompletedPhotostaffScan,
   listPhotostaffAssets,
   listPhotostaffMetadataFields,
@@ -32,7 +29,7 @@ import {
   savePhotostaffProcessingSettings,
   defaultPhotostaffProcessingSettings
 } from "@zos/db";
-import { isPathInside } from "@zos/nas-tools";
+import { applyFileMutation, isPathInside } from "@zos/nas-tools";
 import {
   PHOTOSTAFF_DATA_DIRECTORY_NAME,
   PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
@@ -65,7 +62,8 @@ import {
   resolveScopedExistingPath,
   resolveScopedTargetPath,
   resolveStoragePoolScope,
-  StorageScopeError
+  StorageScopeError,
+  validateStoragePoolProposal
 } from "../lib/storage-scope.js";
 
 const MAX_BATCH_SIZE = 100;
@@ -525,16 +523,11 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   );
 
   server.post<{
-    Body: { sessionId?: string; assetIds?: string[]; operation?: "move" | "trash"; targetDirectory?: string };
-  }>("/api/photos/proposals", async (request, reply) => {
+    Body: { assetIds?: string[]; operation?: "move" | "trash"; targetDirectory?: string };
+  }>("/api/photos/actions", async (request, reply) => {
     const settings = getPhotostaffLibrarySettings(db);
     if (!settings) {
       reply.status(409).send({ error: "Photo library is not configured" });
-      return;
-    }
-    const session = getSession(db, request.body?.sessionId ?? "");
-    if (!session || session.rootId !== settings.rootId) {
-      reply.status(400).send({ error: "An active session for the photo library root is required" });
       return;
     }
     const operation = request.body?.operation;
@@ -599,22 +592,45 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       }
     }
 
-    const sidecarCount = Math.max(0, proposals.length - assets.length);
-    const summary = `${operation === "trash" ? "Delete" : "Move"} ${assets.length} photo${assets.length === 1 ? "" : "s"}${sidecarCount ? ` with ${sidecarCount} XMP sidecar${sidecarCount === 1 ? "" : "s"}` : ""}`;
-    const { message, job } = createActionMessageAndJob(db, {
-      sessionId: session.id,
-      content: summary,
-      kind: "file",
-      status: "waiting_approval"
-    });
-    const approval = createPendingApproval(db, { jobId: job.id, proposal: proposals });
-    appendEvent(db, {
-      sessionId: session.id,
-      jobId: job.id,
-      type: "approval.pending",
-      payload: { approvalId: approval.id, proposal: approval.proposal, summary }
-    });
-    reply.status(202).send({ message, job, approval });
+    const scope = await resolveStoragePoolScope(db, system, settings.rootId, settings.storagePoolId);
+    const applied: ReturnType<typeof recordAppliedOperation>[] = [];
+    try {
+      for (const proposal of proposals) {
+        await validateStoragePoolProposal(scope, proposal);
+        const result = await applyFileMutation(scope.root, proposal, path.join(context.config.dataDir, "trash"));
+        if (result.proposal.operation === "trash" && result.metadata.trashEntryId && result.targetPath) {
+          createTrashEntry(db, {
+            id: String(result.metadata.trashEntryId),
+            rootId: scope.root.id,
+            originalPath: result.sourcePath ?? proposal.sourcePath ?? ".",
+            trashPath: path.join(context.config.dataDir, "trash", result.targetPath),
+            metadata: { ...result.metadata, storagePoolId: settings.storagePoolId }
+          });
+        }
+        applied.push(recordAppliedOperation(db, {
+          approvalId: null,
+          operation: result.proposal.operation,
+          sourcePath: result.sourcePath,
+          targetPath: result.targetPath,
+          status: "applied",
+          metadata: {
+            ...result.metadata,
+            rootId: settings.rootId,
+            storagePoolId: settings.storagePoolId,
+            reversible: proposal.reversible
+          }
+        }));
+      }
+    } catch (error) {
+      if (applied.length) {
+        enqueuePhotostaffJob(db, { settings, kind: "full_scan", path: settings.path });
+      }
+      const statusCode = error instanceof StorageScopeError ? error.statusCode : 400;
+      reply.status(statusCode).send({ error: error instanceof Error ? error.message : String(error), operations: applied });
+      return;
+    }
+    enqueuePhotostaffJob(db, { settings, kind: "full_scan", path: settings.path });
+    reply.send({ operations: applied });
   });
 
   server.post<{

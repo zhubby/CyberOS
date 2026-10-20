@@ -70,13 +70,8 @@ export function createDockerOperationApproval(
 
 export function createDockerOperationRecord(
   db: ZosDatabase,
-  input: { jobId: string; proposal: DockerOperationProposal }
+  input: { proposal: DockerOperationProposal }
 ): DockerOperationRecord {
-  const job = getJob(db, input.jobId);
-  if (!job) {
-    throw new Error("Job not found");
-  }
-
   const now = new Date().toISOString();
   const operation: DockerOperationRecord = {
     id: randomUUID(),
@@ -86,8 +81,7 @@ export function createDockerOperationRecord(
     targetId: dockerProposalTargetId(input.proposal),
     status: "proposed",
     metadata: {
-      proposal: input.proposal,
-      jobId: job.id
+      proposal: input.proposal
     },
     createdAt: now,
     updatedAt: now
@@ -135,19 +129,16 @@ export function getDockerOperationByApproval(
 
 export function listDockerOperations(
   db: ZosDatabase,
-  input: { sessionId?: string; limit?: number } = {}
+  input: { limit?: number } = {}
 ): DockerOperationRecord[] {
   const rows = db
     .prepare(`
       SELECT o.id, o.approval_id, o.action, o.target_type, o.target_id, o.status, o.metadata_json, o.created_at, o.updated_at
       FROM docker_operations o
-      LEFT JOIN pending_approvals a ON a.id = o.approval_id
-      LEFT JOIN jobs j ON j.id = COALESCE(a.job_id, json_extract(o.metadata_json, '$.jobId'))
-      WHERE (? IS NULL OR j.session_id = ?)
       ORDER BY o.created_at DESC
       LIMIT ?
     `)
-    .all(input.sessionId ?? null, input.sessionId ?? null, input.limit ?? 100) as DbDockerOperationRow[];
+    .all(input.limit ?? 100) as DbDockerOperationRow[];
   return rows.map(mapDockerOperation);
 }
 

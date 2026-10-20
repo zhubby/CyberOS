@@ -4,10 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   consumeVmConsoleAuthorization,
-  createSession,
   ensureNasRoots,
-  listEvents,
-  listOperationNotifications,
   openZosDb,
   type ZosDatabase
 } from "@zos/db";
@@ -53,18 +50,15 @@ describe("VM routes", () => {
   });
 
   it("issues a direct one-shot console session without an approval", async () => {
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: vmRunner(), kvmAvailable: true } });
 
     const response = await server.inject({
       method: "POST",
       url: "/api/vms/actions",
-      payload: { sessionId: session.id, action: "console", domainName: "guest" }
+      payload: { action: "console", domainName: "guest" }
     });
     expect(response.statusCode).toBe(202);
     expect(response.json()).toMatchObject({
-      approval: null,
-      job: { status: "completed" },
       operation: { action: "console", status: "applied", approvalId: null },
       consoleSession: {
         approvalId: null,
@@ -72,55 +66,33 @@ describe("VM routes", () => {
         websocketUrl: expect.stringContaining("/api/vms/console/")
       }
     });
-    expect(listOperationNotifications(db)).toMatchObject([
-      { jobId: response.json().job.id, kind: "vm", status: "succeeded" }
-    ]);
-    expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual(["job.running", "job.completed"]);
-    expect((await server.inject({ method: "GET", url: "/api/approvals" })).json().approvals).toHaveLength(0);
+    expectNoAgentSideEffects();
     const authorizationId = response.json().consoleSession.id as string;
     expect(consumeVmConsoleAuthorization(db, authorizationId)).toMatchObject({ status: "used", approvalId: null });
     expect(consumeVmConsoleAuthorization(db, authorizationId)).toBeNull();
     await server.close();
   });
 
-  it("keeps the proposals endpoint as a direct-execution compatibility alias", async () => {
-    const calls: string[][] = [];
-    const session = createSession(db, { rootId: "local", currentPath: "." });
-    const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: vmRunner(calls), kvmAvailable: true } });
-
-    const response = await server.inject({
-      method: "POST",
-      url: "/api/vms/proposals",
-      payload: { sessionId: session.id, action: "start", domainName: "guest" }
-    });
-
-    expect(response.statusCode).toBe(202);
-    expect(response.json()).toMatchObject({ approval: null, job: { status: "completed" }, operation: { status: "applied", approvalId: null } });
-    expect(calls.some((args) => args.includes("start"))).toBe(true);
-    await server.close();
-  });
-
   it("applies a lifecycle operation directly and records its history", async () => {
     const calls: string[][] = [];
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: vmRunner(calls), kvmAvailable: true } });
 
     const response = await server.inject({
       method: "POST",
       url: "/api/vms/actions",
-      payload: { sessionId: session.id, action: "start", domainName: "guest" }
+      payload: { action: "start", domainName: "guest" }
     });
 
     expect(response.statusCode).toBe(202);
-    expect(response.json()).toMatchObject({ approval: null, job: { status: "completed" }, operation: { action: "start", status: "applied", approvalId: null } });
+    expect(response.json()).toMatchObject({ operation: { action: "start", status: "applied", approvalId: null } });
     expect(calls.some((args) => args.includes("start"))).toBe(true);
-    expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual(["job.running", "job.completed"]);
-    expect((await server.inject({ method: "GET", url: "/api/approvals" })).json().approvals).toHaveLength(0);
+    expect((await server.inject({ method: "GET", url: "/api/vms/operations" })).json().operations)
+      .toEqual([expect.objectContaining({ action: "start", status: "applied", approvalId: null })]);
+    expectNoAgentSideEffects();
     await server.close();
   });
 
   it("records a failed direct lifecycle operation without creating an approval", async () => {
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const runner = vmRunner();
     const failingRunner: VmCommandRunner = {
       async run(command, args) {
@@ -133,26 +105,23 @@ describe("VM routes", () => {
     const response = await server.inject({
       method: "POST",
       url: "/api/vms/actions",
-      payload: { sessionId: session.id, action: "start", domainName: "guest" }
+      payload: { action: "start", domainName: "guest" }
     });
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toContain("start failed");
-    expect((await server.inject({ method: "GET", url: `/api/vms/operations?sessionId=${session.id}` })).json().operations)
+    expect((await server.inject({ method: "GET", url: "/api/vms/operations" })).json().operations)
       .toEqual([expect.objectContaining({ action: "start", status: "failed", approvalId: null })]);
-    expect((await server.inject({ method: "GET", url: "/api/approvals" })).json().approvals).toHaveLength(0);
-    expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual(["job.running", "job.failed"]);
+    expectNoAgentSideEffects();
     await server.close();
   });
 
   it("rejects ISO paths outside configured VM roots", async () => {
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: vmRunner(), kvmAvailable: true } });
     const response = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
+      url: "/api/vms/actions",
       payload: {
-        sessionId: session.id,
         action: "create",
         domainName: "new-vm",
         isoPath: path.join(tempDir, "outside.iso")
@@ -171,7 +140,6 @@ describe("VM routes", () => {
     const isoPath = path.join(isoDir, "installer.iso");
     await mkdir(isoDir, { recursive: true });
     await writeFile(isoPath, "iso-image");
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({
       config: testConfig(),
       db,
@@ -181,9 +149,8 @@ describe("VM routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
+      url: "/api/vms/actions",
       payload: {
-        sessionId: session.id,
         action: "create",
         domainName: "new-vm",
         isoPath: "pool/images/installer.iso",
@@ -195,11 +162,10 @@ describe("VM routes", () => {
     expect(response.statusCode, JSON.stringify(response.json())).toBe(202);
     const resolvedIsoPath = await realpath(isoPath);
     expect(response.json()).toMatchObject({
-      approval: null,
-      job: { status: "completed" },
       operation: { status: "applied", approvalId: null, metadata: { proposal: { isoPath: resolvedIsoPath, isoRootId: "local", isoStoragePoolId: TEST_STORAGE_POOL_ID, isoSourcePath: "pool/images/installer.iso" } } }
     });
     expect(calls.some((args) => args.includes("--cdrom") && args.includes(resolvedIsoPath))).toBe(true);
+    expectNoAgentSideEffects();
     await server.close();
   });
 
@@ -207,7 +173,6 @@ describe("VM routes", () => {
     const poolDir = path.join(rootDir, "pool");
     await mkdir(poolDir);
     await writeFile(path.join(poolDir, "notes.txt"), "not an image");
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({
       config: testConfig(),
       db,
@@ -217,9 +182,8 @@ describe("VM routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
+      url: "/api/vms/actions",
       payload: {
-        sessionId: session.id,
         action: "create",
         domainName: "new-vm",
         isoPath: "pool/notes.txt",
@@ -240,7 +204,6 @@ describe("VM routes", () => {
     await mkdir(poolDir);
     await writeFile(isoPath, "iso-image");
     await writeFile(outsideIsoPath, "outside-image");
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({
       config: testConfig(),
       db,
@@ -251,9 +214,8 @@ describe("VM routes", () => {
     await symlink(outsideIsoPath, isoPath);
     const response = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
+      url: "/api/vms/actions",
       payload: {
-        sessionId: session.id,
         action: "create",
         domainName: "new-vm",
         isoPath: "pool/installer.iso",
@@ -267,12 +229,11 @@ describe("VM routes", () => {
   });
 
   it("rejects option-like network names", async () => {
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: vmRunner(), kvmAvailable: true } });
     const response = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
-      payload: { sessionId: session.id, action: "start", domainName: "guest", networkName: "--network=unsafe" }
+      url: "/api/vms/actions",
+      payload: { action: "start", domainName: "guest", networkName: "--network=unsafe" }
     });
 
     expect(response.statusCode).toBe(400);
@@ -286,13 +247,11 @@ describe("VM routes", () => {
     const isoPath = path.join(isoDir, "installer.iso");
     await writeFile(isoPath, "iso-image");
     const calls: string[][] = [];
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: vmRunner(calls), kvmAvailable: true } });
     const response = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
+      url: "/api/vms/actions",
       payload: {
-        sessionId: session.id,
         action: "create",
         domainName: "custom-vm",
         isoPath,
@@ -316,14 +275,9 @@ describe("VM routes", () => {
 
     expect(response.statusCode, JSON.stringify(response.json())).toBe(202);
     expect(response.json()).toMatchObject({
-      approval: null,
-      job: { status: "completed" },
       operation: { status: "applied", approvalId: null, targetId: "custom-vm" }
     });
-    expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual(["job.running", "job.completed"]);
-    const approvals = await server.inject({ method: "GET", url: "/api/approvals" });
-    expect(approvals.json().approvals).toHaveLength(0);
-    const operations = await server.inject({ method: "GET", url: `/api/vms/operations?sessionId=${session.id}` });
+    const operations = await server.inject({ method: "GET", url: "/api/vms/operations" });
     expect(operations.json().operations).toEqual(expect.arrayContaining([
       expect.objectContaining({ status: "applied", approvalId: null, targetId: "custom-vm" })
     ]));
@@ -332,6 +286,7 @@ describe("VM routes", () => {
       "--vcpus", "4,sockets=1,cores=2,threads=2", "--cpu", "Skylake-Client",
       "--boot", "uefi,firmware.feature0.name=secure-boot,firmware.feature0.enabled=no,menu=on", "--graphics", "spice", "--video", "virtio", "--autostart"
     ]));
+    expectNoAgentSideEffects();
     await server.close();
   });
 
@@ -341,7 +296,6 @@ describe("VM routes", () => {
     const isoPath = path.join(isoDir, "installer.iso");
     await writeFile(isoPath, "iso-image");
     const calls: string[][] = [];
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({
       config: testConfig(),
       db,
@@ -350,8 +304,8 @@ describe("VM routes", () => {
 
     const created = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
-      payload: { sessionId: session.id, action: "create", domainName: "arm-guest", isoPath }
+      url: "/api/vms/actions",
+      payload: { action: "create", domainName: "arm-guest", isoPath }
     });
     expect(created.statusCode, JSON.stringify(created.json())).toBe(202);
     expect(calls.find((call) => call[0] === "virt-install")).toEqual(expect.arrayContaining([
@@ -363,19 +317,20 @@ describe("VM routes", () => {
 
     const rejected = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
-      payload: { sessionId: session.id, action: "create", domainName: "arm-bios", isoPath, firmware: "bios" }
+      url: "/api/vms/actions",
+      payload: { action: "create", domainName: "arm-bios", isoPath, firmware: "bios" }
     });
     expect(rejected.statusCode).toBe(400);
     expect(rejected.json().error).toContain("UEFI");
 
     const rejectedCpu = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
-      payload: { sessionId: session.id, action: "create", domainName: "arm-host-model", isoPath, cpuMode: "host-model" }
+      url: "/api/vms/actions",
+      payload: { action: "create", domainName: "arm-host-model", isoPath, cpuMode: "host-model" }
     });
     expect(rejectedCpu.statusCode).toBe(400);
     expect(rejectedCpu.json().error).toContain("host-passthrough");
+    expectNoAgentSideEffects();
     await server.close();
   });
 
@@ -384,7 +339,6 @@ describe("VM routes", () => {
     await mkdir(isoDir);
     const isoPath = path.join(isoDir, "installer.iso");
     await writeFile(isoPath, "iso-image");
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const runner = vmRunner();
     const failingRunner: VmCommandRunner = {
       async run(command, args) {
@@ -395,30 +349,26 @@ describe("VM routes", () => {
     const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: failingRunner, kvmAvailable: true } });
     const response = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
-      payload: { sessionId: session.id, action: "create", domainName: "failed-vm", isoPath }
+      url: "/api/vms/actions",
+      payload: { action: "create", domainName: "failed-vm", isoPath }
     });
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toContain("virt-install failed");
-    const approvals = await server.inject({ method: "GET", url: "/api/approvals" });
-    expect(approvals.json().approvals).toHaveLength(0);
-    const operations = await server.inject({ method: "GET", url: `/api/vms/operations?sessionId=${session.id}` });
+    const operations = await server.inject({ method: "GET", url: "/api/vms/operations" });
     expect(operations.json().operations).toEqual(expect.arrayContaining([
       expect.objectContaining({ status: "failed", approvalId: null, targetId: "failed-vm" })
     ]));
-    expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual(["job.running", "job.failed"]);
+    expectNoAgentSideEffects();
     await server.close();
   });
 
   it("rejects a vCPU topology that does not match vCPU", async () => {
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: vmRunner(), kvmAvailable: true } });
     const response = await server.inject({
       method: "POST",
-      url: "/api/vms/proposals",
+      url: "/api/vms/actions",
       payload: {
-        sessionId: session.id,
         action: "create",
         domainName: "bad-topology",
         isoPath: path.join(tempDir, "iso", "installer.iso"),
@@ -432,7 +382,6 @@ describe("VM routes", () => {
   });
 
   it("rejects unsupported and option-like advanced create values", async () => {
-    const session = createSession(db, { rootId: "local", currentPath: "." });
     const server = await buildServer({ config: testConfig(), db, vm: { commandRunner: vmRunner(), kvmAvailable: true } });
     const cases = [
       { domainName: "bad-firmware", options: { firmware: "efi" } },
@@ -443,9 +392,8 @@ describe("VM routes", () => {
     for (const advanced of cases) {
       const response = await server.inject({
         method: "POST",
-        url: "/api/vms/proposals",
+        url: "/api/vms/actions",
         payload: {
-          sessionId: session.id,
           action: "create",
           domainName: advanced.domainName,
           isoPath: path.join(tempDir, "iso", "installer.iso"),
@@ -455,10 +403,17 @@ describe("VM routes", () => {
       expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
     }
 
-    expect(listEvents(db, { sessionId: session.id })).toHaveLength(0);
+    expectNoAgentSideEffects();
     await server.close();
   });
 });
+
+function expectNoAgentSideEffects(): void {
+  expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+  expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
+  expect(db.prepare("SELECT COUNT(*) FROM pending_approvals").pluck().get()).toBe(0);
+  expect(db.prepare("SELECT COUNT(*) FROM operation_notifications").pluck().get()).toBe(0);
+}
 
 function testConfig(): ZosConfig {
   return {

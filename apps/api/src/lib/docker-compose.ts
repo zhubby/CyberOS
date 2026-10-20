@@ -10,7 +10,7 @@ import {
   deleteDockerComposeApp,
   DockerComposeAppConflictError,
   getDockerComposeApp,
-  getDockerComposeHostAccessDraftByApproval,
+  getDockerComposeHostAccessDraft,
   getDockerComposeAppSummary,
   getRootReadiness,
   listDockerComposeApps,
@@ -96,10 +96,10 @@ export class DockerComposeMaterializationError extends Error {
   }
 }
 
-export class DockerComposeHostAccessApprovalError extends Error {
+export class DockerComposeHostAccessDraftError extends Error {
   constructor(message: string, readonly statusCode: 409 | 503) {
     super(message);
-    this.name = "DockerComposeHostAccessApprovalError";
+    this.name = "DockerComposeHostAccessDraftError";
   }
 }
 
@@ -116,7 +116,7 @@ export interface DockerComposeRuntime {
     isProjectInUse?: (projectKey: string) => Promise<boolean>
   ): Promise<"deleted" | "not_found" | "conflict" | "in_use">;
   reconcileAll(): Promise<void>;
-  prepareHostAccessApproval?(
+  prepareHostAccessDraft?(
     projectId: string,
     engine: DockerEngineRuntime,
     registryCredentials?: DockerRegistryCredentialRecord[]
@@ -129,7 +129,7 @@ export interface DockerComposeRuntime {
     proposal: DockerOperationProposal,
     registryCredentials?: DockerRegistryCredentialRecord[],
     engine?: DockerEngineRuntime,
-    approvalId?: string | null
+    hostAccessDraftId?: string | null
   ): Promise<{ output: string }>;
 }
 
@@ -322,7 +322,7 @@ export class DockerComposeService implements DockerComposeRuntime {
     });
   }
 
-  async prepareHostAccessApproval(
+  async prepareHostAccessDraft(
     projectId: string,
     engine: DockerEngineRuntime,
     registryCredentials: DockerRegistryCredentialRecord[] = []
@@ -335,7 +335,7 @@ export class DockerComposeService implements DockerComposeRuntime {
       const app = getDockerComposeApp(this.db, projectId);
       if (!app) throw new DockerComposeValidationError("Compose App is no longer available");
       if (!engine.resolveImageId) {
-        throw new DockerComposeHostAccessApprovalError("Docker image identity resolution is unavailable", 503);
+        throw new DockerComposeHostAccessDraftError("Docker image identity resolution is unavailable", 503);
       }
       await materializeApp(app, this.appsRoot, this.hostAccessPolicy);
       const serviceImages = await resolveComposeServiceImages(this.currentConfig(), app, this.appsRoot);
@@ -394,26 +394,26 @@ export class DockerComposeService implements DockerComposeRuntime {
     proposal: DockerOperationProposal,
     registryCredentials: DockerRegistryCredentialRecord[] = [],
     engine?: DockerEngineRuntime,
-    approvalId?: string | null
+    hostAccessDraftId?: string | null
   ): Promise<{ output: string }> {
     return this.serialized(async () => {
       if (!proposal.composeProjectId || !proposal.composeRevision) {
-        throw new DockerComposeValidationError("Compose App approval is missing its revision");
+        throw new DockerComposeValidationError("Compose App operation is missing its revision");
       }
       const app = getDockerComposeApp(this.db, proposal.composeProjectId);
       if (!app) throw new DockerComposeValidationError("Compose App is no longer available");
       if (app.revision !== proposal.composeRevision) {
-        throw new DockerComposeAppConflictError("Compose App changed after approval was requested");
+        throw new DockerComposeAppConflictError("Compose App changed before the operation was executed");
       }
       if (app.hostAccess.length && proposal.service && app.deployedRevision !== app.revision) {
         throw new DockerComposeValidationError("Host Access changes require applying the entire Compose project");
       }
-      const hasHostAccessApproval = Boolean(proposal.hostAccess);
-      const hostAccessDraft = hasHostAccessApproval && approvalId
-        ? getDockerComposeHostAccessDraftByApproval(this.db, approvalId)
+      const hasHostAccessDraft = Boolean(proposal.hostAccess);
+      const hostAccessDraft = hasHostAccessDraft && hostAccessDraftId
+        ? getDockerComposeHostAccessDraft(this.db, hostAccessDraftId)
         : null;
-      if (hasHostAccessApproval) {
-        await this.validateHostAccessApproval(app, proposal, engine, hostAccessDraft);
+      if (hasHostAccessDraft) {
+        await this.validateHostAccessDraft(app, proposal, engine, hostAccessDraft);
       }
       await materializeApp(app, this.appsRoot, this.hostAccessPolicy, proposal.hostAccess?.imageDigests);
       const appDirectory = managedAppPath(this.appsRoot, app.projectKey);
@@ -424,7 +424,7 @@ export class DockerComposeService implements DockerComposeRuntime {
         const config = this.currentConfig();
         const output = await runCommand(
           config.composeCommand,
-          composeCommandArgs(app, composeActionArgs(proposal, app.hostAccess.length > 0 || hasHostAccessApproval)),
+          composeCommandArgs(app, composeActionArgs(proposal, app.hostAccess.length > 0 || hasHostAccessDraft)),
           appDirectory,
           config.operationTimeoutMs,
           composeProcessEnvironment(config, app.environment, dockerConfigDirectory)
@@ -442,27 +442,27 @@ export class DockerComposeService implements DockerComposeRuntime {
     });
   }
 
-  private async validateHostAccessApproval(
+  private async validateHostAccessDraft(
     app: DockerComposeAppRecord,
     proposal: DockerOperationProposal,
     engine: DockerEngineRuntime | undefined,
     draft: DockerComposeHostAccessDraftRecord | null
   ): Promise<void> {
     if (!draft || !proposal.hostAccess || !engine?.resolveImageId) {
-      throw new DockerComposeHostAccessApprovalError("Compose Host Access approval is incomplete", 409);
+      throw new DockerComposeHostAccessDraftError("Compose Host Access draft is incomplete", 409);
     }
     if (
       draft.projectId !== app.id ||
       draft.composeRevision !== app.revision ||
       Date.parse(draft.expiresAt) <= Date.now()
     ) {
-      throw new DockerComposeHostAccessApprovalError("Compose Host Access approval expired or changed", 409);
+      throw new DockerComposeHostAccessDraftError("Compose Host Access draft expired or changed", 409);
     }
     const serviceImages = await resolveComposeServiceImages(this.currentConfig(), app, this.appsRoot);
     for (const expected of draft.imageDigests) {
       const image = serviceImages.get(expected.service);
       if (!image || await engine.resolveImageId(image) !== expected.digest) {
-        throw new DockerComposeHostAccessApprovalError("Compose image changed after approval was requested", 409);
+        throw new DockerComposeHostAccessDraftError("Compose image changed before the operation was executed", 409);
       }
     }
     let manifests: DockerHostAccessManifest[];
@@ -475,11 +475,11 @@ export class DockerComposeService implements DockerComposeRuntime {
         imageDigests: Object.fromEntries(draft.imageDigests.map((entry) => [entry.service, entry.digest]))
       }).manifests;
     } catch (error) {
-      throw new DockerComposeHostAccessApprovalError(hostAccessComposeError(error).message, 503);
+      throw new DockerComposeHostAccessDraftError(hostAccessComposeError(error).message, 503);
     }
     const fingerprints = manifests.map((manifest) => ({ service: manifest.service!, fingerprint: manifest.fingerprint }));
     if (JSON.stringify(fingerprints) !== JSON.stringify(draft.fingerprints)) {
-      throw new DockerComposeHostAccessApprovalError("Compose Host Access resources changed after approval was requested", 409);
+      throw new DockerComposeHostAccessDraftError("Compose Host Access resources changed before the operation was executed", 409);
     }
     await this.reconcileHostAccessControls(app, manifests);
   }
@@ -494,7 +494,7 @@ export class DockerComposeService implements DockerComposeRuntime {
         .filter((capability) => capability === "docker_metadata" || capability === "systemd_status");
       if (!capabilities.length) continue;
       if (!this.hostAccessControl) {
-        throw new DockerComposeHostAccessApprovalError("Docker Host Access proxy is unavailable", 503);
+        throw new DockerComposeHostAccessDraftError("Docker Host Access proxy is unavailable", 503);
       }
       await this.hostAccessControl.reconcile({
         scopeId: app.projectKey,

@@ -6,16 +6,15 @@ import type { DockerResourceCapabilities } from "@zos/shared";
 import { DOCKER_RESOURCE_FIELDS, getDockerResourceCapability, getUnsupportedDockerResource } from "@zos/shared/docker-resources";
 import { DockerResourceStatus } from "./DockerResourceStatus.js";
 import { HostAccessPicker } from "./HostAccessPicker.js";
-import { getSystemNetwork, proposeDockerOperation, type NasRoot } from "../../api.js";
+import { getSystemNetwork, runDockerOperation, type NasRoot } from "../../api.js";
 import { initialDockerCreateForm, dockerCreateInput, validateDockerCreateStep, type DockerCreateForm, type DockerCreateKind } from "../../lib/docker-create-form.js";
 
 type Props = {
   kind: DockerCreateKind;
-  sessionId: string;
   summary: DockerSummary;
   roots: NasRoot[];
   onClose: () => void;
-  onComplete: (result: { partialSuccess: boolean; pendingApproval?: boolean; error?: string }) => void | Promise<void>;
+  onComplete: (result: { partialSuccess: boolean; error?: string }) => void | Promise<void>;
   onError: (message: string) => void;
 };
 
@@ -27,7 +26,7 @@ function useCreateText() {
   return (key: string, options?: Record<string, unknown>) => String(translate(`workspace.management.docker.create.${key}`, options));
 }
 
-export function DockerCreateDialogs({ kind, sessionId, summary, roots, onClose, onComplete, onError }: Props) {
+export function DockerCreateDialogs({ kind, summary, roots, onClose, onComplete, onError }: Props) {
   const createT = useCreateText();
   const [form, setForm] = useState<DockerCreateForm>(() => initialDockerCreateForm(kind));
   const [step, setStep] = useState(1);
@@ -86,11 +85,9 @@ export function DockerCreateDialogs({ kind, sessionId, summary, roots, onClose, 
     if (issue) { setValidationVisible(true); setError(issue); return; }
     setSubmitting(true); setError(null);
     try {
-      const response = await proposeDockerOperation({ sessionId, action: "create", ...dockerCreateInput(form) });
+      const response = await runDockerOperation({ action: "create", ...dockerCreateInput(form) });
       if (response.result?.partialSuccess) {
         await onComplete(response.result.error ? { partialSuccess: true, error: response.result.error } : { partialSuccess: true });
-      } else if (response.approval) {
-        await onComplete({ partialSuccess: false, pendingApproval: true });
       } else {
         await onComplete({ partialSuccess: false });
       }
@@ -231,7 +228,7 @@ function ContainerReview({ form, update, submitting, onBlockingChange }: {
   onBlockingChange: (blocked: boolean) => void;
 }) {
   const t = useCreateText();
-  return <section className="vm-create-section vm-create-stage"><Heading number="06" title={t("stages.review")} detail={t("review.detail")} /><div className="vm-create-summary"><div><span>{t("basics.name")}</span><strong>{form.name || "-"}</strong></div><div><span>{t("review.image")}</span><strong>{form.image || "-"}</strong></div><div><span>{t("review.network")}</span><strong>{form.networkMode}{form.networkName ? ` · ${form.networkName}` : ""}</strong></div><div><span>{t("review.mountsPorts")}</span><strong>{form.mounts.length} / {form.ports.length}</strong></div><div><span>{t("review.start")}</span><strong>{form.start ? t("review.yes") : t("review.no")}</strong></div><div><span>{t("review.restart")}</span><strong>{form.restartPolicy}</strong></div></div><HostAccessPicker grants={form.hostAccess} onChange={(grants) => update("hostAccess", grants)} onBlockingChange={onBlockingChange} disabled={submitting} /><div className="vm-create-review"><Info size={16} /><div><strong>{form.hostAccess.length ? t("review.approval") : t("review.immediate")}</strong><p>{form.hostAccess.length ? t("review.approvalDetail") : t("review.failureDetail")}</p></div></div></section>;
+  return <section className="vm-create-section vm-create-stage"><Heading number="06" title={t("stages.review")} detail={t("review.detail")} /><div className="vm-create-summary"><div><span>{t("basics.name")}</span><strong>{form.name || "-"}</strong></div><div><span>{t("review.image")}</span><strong>{form.image || "-"}</strong></div><div><span>{t("review.network")}</span><strong>{form.networkMode}{form.networkName ? ` · ${form.networkName}` : ""}</strong></div><div><span>{t("review.mountsPorts")}</span><strong>{form.mounts.length} / {form.ports.length}</strong></div><div><span>{t("review.start")}</span><strong>{form.start ? t("review.yes") : t("review.no")}</strong></div><div><span>{t("review.restart")}</span><strong>{form.restartPolicy}</strong></div></div><HostAccessPicker grants={form.hostAccess} onChange={(grants) => update("hostAccess", grants)} onBlockingChange={onBlockingChange} disabled={submitting} /><div className="vm-create-review"><Info size={16} /><div><strong>{t("review.immediate")}</strong><p>{form.hostAccess.length ? t("review.hostAccessDetail") : t("review.failureDetail")}</p></div></div></section>;
 }
 function VolumeStage({ form, update, submitting }: { form: DockerCreateForm; update: <K extends keyof DockerCreateForm>(key: K, value: DockerCreateForm[K]) => void; submitting: boolean }) {
   const t = useCreateText();

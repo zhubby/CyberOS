@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { AgentSessionRecord, NasRootRecord, PendingApprovalRecord } from "@zos/shared";
+import type { AgentSessionRecord, NasRootRecord } from "@zos/shared";
 import { runReadOnlyAgentTurn, type AgentEmitEvent } from "./read-only-agent.js";
 
 let tempDir: string;
@@ -113,46 +113,8 @@ describe("read-only agent fallback", () => {
       "agent.message",
       "agent.completed"
     ]);
-    expect(events.at(-1)?.payload.summary).toContain("proposal storage is not configured");
-  });
-
-  it("creates approval requests for explicit mutation proposals without changing files", async () => {
-    const events: AgentEmitEvent[] = [];
-    const approval: PendingApprovalRecord = {
-      id: "approval-1",
-      jobId: "job-1",
-      sessionId: session.id,
-      kind: "file_operation",
-      status: "pending",
-      proposal: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const result = await runReadOnlyAgentTurn({
-      session,
-      root,
-      message: "rename docs/plan.txt to docs/final.txt",
-      emit: (event) => {
-        events.push(event);
-      },
-      proposeChanges: async (proposal) => ({
-        ...approval,
-        proposal
-      })
-    });
-
-    expect(result.status).toBe("waiting_approval");
-    expect(events.map((event) => event.type)).toEqual([
-      "agent.started",
-      "approval.pending",
-      "agent.message"
-    ]);
-    expect(result.approval?.proposal[0]).toMatchObject({
-      operation: "rename",
-      sourcePath: "docs/plan.txt",
-      targetPath: "docs/final.txt"
-    });
+    expect(events.at(-1)?.payload.summary).toContain("cannot modify files or create approval requests");
     await expect(readFile(path.join(tempDir, "docs", "plan.txt"), "utf8")).resolves.toBe("hello");
+    await expect(readFile(path.join(tempDir, "docs", "final.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

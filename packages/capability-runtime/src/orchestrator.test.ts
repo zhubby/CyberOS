@@ -6,10 +6,13 @@ import { CapabilityError } from "@zos/capabilities";
 import {
   createCapabilityRun,
   createMcpClient,
+  createSession,
+  createUserMessageAndJob,
   decideCapabilityApproval,
   ensureNasRoots,
   getCapabilityApprovalByRun,
   getCapabilityRun,
+  linkAgentJobToCapabilityRun,
   openZosDb,
   type ZosDatabase
 } from "@zos/db";
@@ -36,12 +39,13 @@ afterEach(async () => {
 
 describe("capability mutation runtime", () => {
   it("rejects an approved proposal when the source revision changed", async () => {
-    const client = createMcpClient(db, { name: "Agent", kind: "local", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
     const proposed = await proposeFileMutation({
       dependencies: dependencies(),
       subject: subject(client.id),
       request: { operation: "move", rootId: "primary", sourcePath: "source.txt", targetPath: "target.txt" }
     });
+    linkProposalToAgentJob(proposed.runId!);
     const approval = getCapabilityApprovalByRun(db, proposed.runId!)!;
     expect(decideCapabilityApproval(db, {
       approvalId: approval.id,
@@ -59,12 +63,13 @@ describe("capability mutation runtime", () => {
   });
 
   it("rechecks client scopes immediately before execution", async () => {
-    const client = createMcpClient(db, { name: "Agent", kind: "local", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
     const proposed = await proposeFileMutation({
       dependencies: dependencies(),
       subject: subject(client.id),
       request: { operation: "mkdir", rootId: "primary", targetPath: "Archive" }
     });
+    linkProposalToAgentJob(proposed.runId!);
     const approval = getCapabilityApprovalByRun(db, proposed.runId!)!;
     expect(decideCapabilityApproval(db, {
       approvalId: approval.id,
@@ -82,7 +87,7 @@ describe("capability mutation runtime", () => {
 
   it("rejects proposals while a required NAS root is not ready", async () => {
     ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir, mountPolicy: "required" }]);
-    const client = createMcpClient(db, { name: "Agent", kind: "local", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
 
     await expect(proposeFileMutation({
       dependencies: dependencies(),
@@ -95,7 +100,7 @@ describe("capability mutation runtime", () => {
     const outside = path.join(tempDir, "outside.txt");
     await writeFile(outside, "outside", "utf8");
     await symlink(outside, path.join(rootDir, "linked.txt"));
-    const client = createMcpClient(db, { name: "Agent", kind: "local", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
 
     await expect(proposeFileMutation({
       dependencies: dependencies(),
@@ -110,7 +115,7 @@ describe("capability mutation runtime", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "local",
-      capabilityId: "zos.files.mutate-propose",
+      capabilityId: "zos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", rootId: "primary", targetPath: "NeverCreate" },
       state: "running",
@@ -124,7 +129,17 @@ describe("capability mutation runtime", () => {
 });
 
 function subject(clientId: string) {
-  return { id: clientId, clientId, kind: "local" as const, scopes: new Set(["zos:files:propose"]) };
+  return { id: clientId, clientId, kind: "pi" as const, scopes: new Set(["zos:files:propose"]) };
+}
+
+function linkProposalToAgentJob(runId: string): void {
+  const session = createSession(db, { rootId: "primary" });
+  const { job } = createUserMessageAndJob(db, {
+    sessionId: session.id,
+    content: "Run a file mutation",
+    status: "waiting_approval"
+  });
+  linkAgentJobToCapabilityRun(db, { jobId: job.id, runId });
 }
 
 function dependencies() {

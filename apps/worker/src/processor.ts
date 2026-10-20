@@ -4,15 +4,14 @@ import {
   type PhotostaffAgentToolService,
   type PiAgentRunner
 } from "@zos/agent";
+import { proposePiToolCapability } from "@zos/capability-runtime";
 import {
   appendEvent,
   claimNextCapabilityContinuation,
   claimNextJob,
-  createPendingApproval,
-  createPiToolCallApproval,
-  defaultPiToolPolicySettings,
+  agentCapabilityPolicyToPiToolPolicy,
+  defaultAgentCapabilityPolicySettings,
   getAgentProviderSession,
-  getApproval,
   getJob,
   getMessage,
   getModelProviderSettings,
@@ -20,7 +19,7 @@ import {
   getPhotostaffLibrarySettings,
   getPhotostaffMetadataDetail,
   getPhotostaffMetadataIndexStatus,
-  getPiToolPolicySettings,
+  getAgentCapabilityPolicySettings,
   getSession,
   linkAgentJobToCapabilityRun,
   queryIndexedText,
@@ -107,12 +106,6 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
               return [];
             }
           },
-          proposeChanges: async (proposal) => {
-            return createPendingApproval(db, {
-              jobId: job.id,
-              proposal
-            });
-          }
         })
       : await runPiAgentTurn({
           session,
@@ -120,7 +113,9 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
           message: turnMessage,
           dataDir: config.dataDir,
           modelSettings: getModelProviderSettings(db) ?? defaultModelProviderSettings(config),
-          toolPolicy: getPiToolPolicySettings(db) ?? defaultPiToolPolicySettings(),
+          toolPolicy: agentCapabilityPolicyToPiToolPolicy(
+            getAgentCapabilityPolicySettings(db) ?? defaultAgentCapabilityPolicySettings()
+          ),
           providerSession: getAgentProviderSession(db, session.id),
           ...(agentRunner ? { runner: agentRunner } : {}),
           emit: (event) => {
@@ -142,15 +137,12 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
               settingsSnapshot: providerSession.settingsSnapshot
             });
           },
-          createToolApproval: async (proposal) =>
-            createPiToolCallApproval(db, {
-              jobId: job.id,
-              proposal
-            }),
-          getApprovalStatus: (approvalId) => getApproval(db, approvalId)?.status ?? null,
-          markWaitingForApproval: () => {
-            updateJobStatus(db, job.id, "waiting_approval", null, ["running"]);
-          },
+          requestCapability: (request) => proposePiToolCapability({
+            dependencies: { db, config },
+            sessionId: session.id,
+            rootId: root.id,
+            request
+          }),
           onCapabilityRunPending: (runId, providerSessionId) => {
             linkAgentJobToCapabilityRun(db, { jobId: job.id, runId, providerSessionId });
             updateJobStatus(db, job.id, "waiting_approval", null, ["running"]);

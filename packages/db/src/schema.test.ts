@@ -9,6 +9,8 @@ import {
   createActionMessageAndJob,
   createDockerConsoleAuthorization,
   createDockerOperationApproval,
+  createDockerOperationRecord,
+  createPendingApproval,
   createSession,
   createUserMessageAndJob,
   createVmConsoleAuthorization,
@@ -54,6 +56,29 @@ function startMigrationProcess(databasePath: string, moduleUrl: string): Promise
       }
     });
   });
+}
+
+function applyMigrationsThrough(db: Database.Database, finalId: string): void {
+  db.exec(`
+    CREATE TABLE schema_migrations (
+      id TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    )
+  `);
+  for (const migration of migrations) {
+    const foreignKeysEnabled = Number(db.pragma("foreign_keys", { simple: true })) === 1;
+    if (migration.disableForeignKeys) db.pragma("foreign_keys = OFF");
+    try {
+      migration.prepare?.(db);
+      db.exec(migration.sql);
+      db.prepare("INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)")
+        .run(migration.id, new Date().toISOString());
+    } finally {
+      if (migration.disableForeignKeys) db.pragma(`foreign_keys = ${foreignKeysEnabled ? "ON" : "OFF"}`);
+    }
+    if (migration.id === finalId) return;
+  }
+  throw new Error(`Unknown migration ${finalId}`);
 }
 
 beforeEach(async () => {
@@ -104,8 +129,125 @@ describe("SQLite schema migrations", () => {
       "033_docker_host_access_draft_links",
       "034_mcp_capability_runs",
       "035_mcp_transfer_tokens",
-      "036_bluetooth_transfers"
+      "036_bluetooth_transfers",
+      "037_agent_only_capability_approvals",
+      "038_panel_operations_without_agent_jobs"
     ]);
+  });
+
+  it("preserves legacy history while detaching panel operations from Agent jobs", () => {
+    const databasePath = path.join(tempDir, "panel-approval-boundary.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.pragma("foreign_keys = ON");
+    applyMigrationsThrough(legacy, "036_bluetooth_transfers");
+    ensureNasRoots(legacy, [{ id: "local", name: "Local", path: tempDir }]);
+
+    const approvalSession = createSession(legacy, { rootId: "local" });
+    const approvalJob = createUserMessageAndJob(legacy, {
+      sessionId: approvalSession.id,
+      content: "Rename a file",
+      status: "waiting_approval"
+    }).job;
+    const legacyApproval = createPendingApproval(legacy, {
+      jobId: approvalJob.id,
+      proposal: [{
+        operation: "rename",
+        rootId: "local",
+        sourcePath: "before",
+        targetPath: "after",
+        risk: "medium",
+        reversible: true,
+        summary: "Rename before to after"
+      }]
+    });
+
+    const batchSession = createSession(legacy, { rootId: "local" });
+    const batchJob = createUserMessageAndJob(legacy, {
+      sessionId: batchSession.id,
+      content: "Move selected files",
+      status: "running"
+    }).job;
+    const now = new Date().toISOString();
+    legacy.prepare(`
+      INSERT INTO file_batches (
+        id, job_id, session_id, root_id, storage_pool_id, operation, target_directory,
+        total_count, completed_count, success_count, failed_count, cancelled_count,
+        current_source_path, created_at, updated_at, finished_at
+      ) VALUES ('batch-1', ?, ?, 'local', 'pool-1', 'move', 'archive', 1, 0, 0, 0, 0, NULL, ?, ?, NULL)
+    `).run(batchJob.id, batchSession.id, now, now);
+    legacy.prepare(`
+      INSERT INTO file_batch_items (
+        id, batch_id, ordinal, source_path, target_path, trash_entry_id, operation_id,
+        status, error, created_at, updated_at
+      ) VALUES ('batch-item-1', 'batch-1', 0, 'before.txt', 'archive/before.txt', NULL,
+        'batch-operation-1', 'queued', NULL, ?, ?)
+    `).run(now, now);
+
+    const consoleSession = createSession(legacy, { rootId: "local" });
+    const consoleJob = createUserMessageAndJob(legacy, {
+      sessionId: consoleSession.id,
+      content: "Open console",
+      status: "waiting_approval"
+    }).job;
+    const legacyConsole = createDockerOperationApproval(legacy, {
+      jobId: consoleJob.id,
+      proposal: {
+        action: "console",
+        targetType: "console",
+        containerId: "container-1",
+        shell: "/bin/sh",
+        risk: "high",
+        summary: "Open console"
+      }
+    });
+    legacy.prepare("UPDATE pending_approvals SET status = 'approved', updated_at = ? WHERE id = ?")
+      .run(now, legacyConsole.approval.id);
+    legacy.prepare("UPDATE docker_operations SET status = 'approved', updated_at = ? WHERE id = ?")
+      .run(now, legacyConsole.operation.id);
+    const legacyAuthorization = createDockerConsoleAuthorization(legacy, {
+      operationId: legacyConsole.operation.id,
+      approvalId: legacyConsole.approval.id,
+      containerId: "container-1",
+      shell: "/bin/sh"
+    });
+    legacy.close();
+
+    const migrated = openZosDb(databasePath);
+    try {
+      expect(getApproval(migrated, legacyApproval.id)).toMatchObject({ status: "expired" });
+      expect(getJob(migrated, approvalJob.id)).toMatchObject({
+        status: "failed",
+        error: expect.stringContaining("Legacy approval expired")
+      });
+      expect(migrated.prepare("SELECT status, error FROM file_batches WHERE id = 'batch-1'").get())
+        .toEqual({ status: "running", error: null });
+      expect((migrated.pragma("table_info('file_batches')") as Array<{ name: string }>).map((column) => column.name))
+        .not.toEqual(expect.arrayContaining(["job_id", "session_id"]));
+      expect(migrated.prepare("SELECT approval_id FROM docker_console_authorizations WHERE id = ?").get(legacyAuthorization.id))
+        .toEqual({ approval_id: legacyConsole.approval.id });
+
+      const directOperation = createDockerOperationRecord(migrated, {
+        proposal: {
+          action: "console",
+          targetType: "console",
+          containerId: "container-2",
+          shell: "/bin/sh",
+          risk: "high",
+          summary: "Open direct console"
+        }
+      });
+      updateDockerOperationStatus(migrated, directOperation.id, "approved");
+      const directAuthorization = createDockerConsoleAuthorization(migrated, {
+        operationId: directOperation.id,
+        approvalId: null,
+        containerId: "container-2",
+        shell: "/bin/sh"
+      });
+      expect(directAuthorization.approvalId).toBeNull();
+      expect(migrated.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      migrated.close();
+    }
   });
 
   it("repairs pre-release Host Access draft tables without orphaning approvals", () => {

@@ -82,8 +82,9 @@ export type DbEventRow = {
 
 export type DbOperationNotificationRow = {
   id: string;
-  job_id: string;
-  session_id: string;
+  job_id: string | null;
+  session_id: string | null;
+  operation_id: string | null;
   kind: OperationNotificationKind;
   status: OperationNotificationStatus;
   summary: string;
@@ -406,7 +407,7 @@ export type DbVmConsoleAuthorizationRow = {
 export type DbDockerConsoleAuthorizationRow = {
   id: string;
   operation_id: string;
-  approval_id: string;
+  approval_id: string | null;
   container_id: string;
   shell: string;
   status: DockerConsoleAuthorizationRecord["status"];

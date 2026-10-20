@@ -8,25 +8,28 @@ import type { ZosDatabase } from "../connection.js";
 import type { DbOperationNotificationRow } from "./repository-rows.js";
 
 const NOTIFICATION_COLUMNS = `
-  id, job_id, session_id, kind, status, summary, error, read_at, created_at, updated_at
+  id, job_id, session_id, operation_id, kind, status, summary, error, read_at, created_at, updated_at
 `;
 
 export function createOperationNotification(
   db: ZosDatabase,
   input: {
-    jobId: string;
-    sessionId: string;
+    jobId?: string | null;
+    sessionId?: string | null;
+    operationId?: string | null;
     kind: OperationNotificationKind;
     status: OperationNotificationStatus;
     summary: string;
     now?: Date;
   }
 ): OperationNotificationRecord {
+  if (!input.jobId && !input.operationId) throw new Error("Notification requires a job or domain operation");
   const timestamp = (input.now ?? new Date()).toISOString();
   const record: OperationNotificationRecord = {
     id: randomUUID(),
-    jobId: input.jobId,
-    sessionId: input.sessionId,
+    jobId: input.jobId ?? null,
+    sessionId: input.sessionId ?? null,
+    operationId: input.operationId ?? null,
     kind: input.kind,
     status: input.status,
     summary: input.summary,
@@ -38,12 +41,21 @@ export function createOperationNotification(
 
   db.prepare(`
     INSERT INTO operation_notifications (
-      id, job_id, session_id, kind, status, summary, error, read_at, created_at, updated_at
+      id, job_id, session_id, operation_id, kind, status, summary, error, read_at, created_at, updated_at
     ) VALUES (
-      @id, @jobId, @sessionId, @kind, @status, @summary, @error, @readAt, @createdAt, @updatedAt
+      @id, @jobId, @sessionId, @operationId, @kind, @status, @summary, @error, @readAt, @createdAt, @updatedAt
     )
   `).run(record);
   return record;
+}
+
+export function getOperationNotificationByOperation(
+  db: ZosDatabase,
+  operationId: string
+): OperationNotificationRecord | null {
+  const row = db.prepare(`SELECT ${NOTIFICATION_COLUMNS} FROM operation_notifications WHERE operation_id = ?`)
+    .get(operationId) as DbOperationNotificationRow | undefined;
+  return row ? mapOperationNotification(row) : null;
 }
 
 export function getOperationNotificationByJob(
@@ -126,6 +138,26 @@ export function updateOperationNotificationForJob(
   return row ? mapOperationNotification(row) : null;
 }
 
+export function updateOperationNotificationForOperation(
+  db: ZosDatabase,
+  input: {
+    operationId: string;
+    status: OperationNotificationStatus;
+    error?: string | null;
+    now?: Date;
+  }
+): OperationNotificationRecord | null {
+  const timestamp = (input.now ?? new Date()).toISOString();
+  const error = input.error ?? null;
+  const row = db.prepare(`
+    UPDATE operation_notifications
+    SET status = ?, error = ?, read_at = NULL, updated_at = ?
+    WHERE operation_id = ? AND (status <> ? OR error IS NOT ?)
+    RETURNING ${NOTIFICATION_COLUMNS}
+  `).get(input.status, error, timestamp, input.operationId, input.status, error) as DbOperationNotificationRow | undefined;
+  return row ? mapOperationNotification(row) : null;
+}
+
 export function pruneOperationNotifications(db: ZosDatabase, now = new Date()): number {
   const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   return db.prepare("DELETE FROM operation_notifications WHERE updated_at < ?").run(cutoff).changes;
@@ -136,6 +168,7 @@ function mapOperationNotification(row: DbOperationNotificationRow): OperationNot
     id: row.id,
     jobId: row.job_id,
     sessionId: row.session_id,
+    operationId: row.operation_id,
     kind: row.kind,
     status: row.status,
     summary: row.summary,

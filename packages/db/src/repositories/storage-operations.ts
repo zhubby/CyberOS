@@ -12,13 +12,8 @@ import type { DbStorageOperationRow } from "./repository-rows.js";
 
 export function createStorageOperationRecord(
   db: ZosDatabase,
-  input: { jobId: string; proposal: StorageOperationProposal }
+  input: { proposal: StorageOperationProposal }
 ): StorageOperationRecord {
-  const job = getJob(db, input.jobId);
-  if (!job) {
-    throw new Error("Job not found");
-  }
-
   const now = new Date().toISOString();
   const operation: StorageOperationRecord = {
     id: randomUUID(),
@@ -26,7 +21,7 @@ export function createStorageOperationRecord(
     action: input.proposal.action,
     targetId: input.proposal.mountpoint,
     status: "proposed",
-    metadata: { proposal: input.proposal, jobId: input.jobId },
+    metadata: { proposal: input.proposal },
     createdAt: now,
     updatedAt: now
   };
@@ -125,19 +120,16 @@ export function getStorageOperationByApproval(
 
 export function listStorageOperations(
   db: ZosDatabase,
-  input: { sessionId?: string; limit?: number } = {}
+  input: { limit?: number } = {}
 ): StorageOperationRecord[] {
   const rows = db
     .prepare(`
       SELECT o.id, o.approval_id, o.action, o.target_id, o.status, o.metadata_json, o.created_at, o.updated_at
       FROM storage_operations o
-      LEFT JOIN pending_approvals a ON a.id = o.approval_id
-      LEFT JOIN jobs j ON j.id = a.job_id
-      WHERE (? IS NULL OR j.session_id = ?)
       ORDER BY o.created_at DESC
       LIMIT ?
     `)
-    .all(input.sessionId ?? null, input.sessionId ?? null, input.limit ?? 100) as DbStorageOperationRow[];
+    .all(input.limit ?? 100) as DbStorageOperationRow[];
   return rows.map(mapStorageOperation);
 }
 

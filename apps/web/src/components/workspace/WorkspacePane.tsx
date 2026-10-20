@@ -34,7 +34,7 @@ import {
   Upload,
   type LucideIcon
 } from "lucide-react";
-import { createFileExport, getFileDownloadUrl, type DockerOperation, type FileBatch, type FileEntry, type FileListing, type FileMeta, type FileOperation, type IndexSearchCategory, type IndexSearchRequest, type IndexSearchResult, type NasRoot, type PendingApproval, type VodPlayerCommand, type VodPlayerStatus, type TextPreview, type VmOperation } from "../../api.js";
+import { createFileExport, getFileDownloadUrl, type DockerOperation, type FileBatch, type FileEntry, type FileListing, type FileMeta, type FileOperation, type IndexSearchCategory, type IndexSearchRequest, type IndexSearchResult, type NasRoot, type VodPlayerCommand, type VodPlayerStatus, type TextPreview, type VmOperation } from "../../api.js";
 import { describeFileVisual, isHiddenName } from "../../file-type-utils.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -454,8 +454,6 @@ export function WorkspacePane({
   dockerOperations,
   vmOperations,
   operationsReady,
-  sessionId,
-  pendingApprovals,
   locale,
   codeFontSettings,
   resolvedTheme,
@@ -528,8 +526,6 @@ export function WorkspacePane({
   dockerOperations: DockerOperation[];
   vmOperations: VmOperation[];
   operationsReady: boolean;
-  sessionId: string | null;
-  pendingApprovals: PendingApproval[];
   locale: SupportedLocale;
   codeFontSettings: CodeFontSettings;
   resolvedTheme: ResolvedTheme;
@@ -1263,10 +1259,10 @@ export function WorkspacePane({
                   <PanelHeaderAction
                     className="files-header-button"
                     label={t("workspace.actions.newFolder")}
-                    tooltip={sessionId ? t("workspace.actions.newFolder") : t("workspace.actions.noSession")}
+                    tooltip={t("workspace.actions.newFolder")}
                     type="button"
                     onClick={openCreateFolderDialog}
-                    disabled={!hasStoragePool || !sessionId}
+                    disabled={!hasStoragePool}
                   >
                     <FolderPlus aria-hidden="true" size={18} />
                   </PanelHeaderAction>
@@ -1728,8 +1724,6 @@ export function WorkspacePane({
             <PhotoLibraryPanel
               pools={storagePools}
               selectedRootId={selectedRootId}
-              sessionId={sessionId}
-              approvalRefreshKey={pendingApprovals.map((approval) => approval.id).join(",")}
               locale={locale}
               {...(onRequestCreateFolderAt ? { onRequestCreateFolder: onRequestCreateFolderAt } : {})}
               onWorkQueuesChanged={onWorkQueuesChanged}
@@ -1745,8 +1739,6 @@ export function WorkspacePane({
               roots={roots}
               storagePools={storagePools}
               selectedStoragePoolId={selectedStoragePoolId}
-              sessionId={sessionId}
-              pendingApprovals={pendingApprovals}
               dockerOperations={dockerOperations}
               vmOperations={vmOperations}
               locale={locale}

@@ -1,4 +1,7 @@
 import type {
+  AgentCapabilityId as SharedAgentCapabilityId,
+  AgentCapabilityPolicyMode as SharedAgentCapabilityPolicyMode,
+  PublicAgentCapabilityPolicySettings,
   BluetoothAdapterInput,
   BluetoothAudioDevice as SharedBluetoothAudioDevice,
   BluetoothDeviceInput,
@@ -275,6 +278,7 @@ export interface SessionSummary extends Session {
   updatedAt: string;
   firstMessage: string | null;
   lastMessage: string | null;
+  pendingApprovalCount: number;
 }
 
 export interface TranscriptMessage {
@@ -329,24 +333,6 @@ export type VmOperationProposal = SharedVmOperationProposal;
 export type ShareOperationProposal = SharedShareOperationProposal;
 export type StorageOperationProposal = SharedStorageOperationProposal;
 
-export type PendingApprovalProposal =
-  | FileOperationProposal
-  | PiToolCallApproval
-  | DockerOperationProposal
-  | VmOperationProposal
-  | ShareOperationProposal
-  | StorageOperationProposal;
-
-export interface PendingApproval {
-  id: string;
-  jobId: string;
-  sessionId: string;
-  kind: "file_operation" | "pi_tool_call" | "docker_operation" | "vm_operation" | "share_operation" | "storage_operation";
-  status: string;
-  proposal: PendingApprovalProposal[];
-  createdAt: string;
-}
-
 export interface CapabilityApproval {
   id: string;
   runId: string;
@@ -358,6 +344,8 @@ export interface CapabilityApproval {
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
+  sessionId: string;
+  jobId: string;
   client: {
     id: string;
     name: string;
@@ -377,7 +365,6 @@ export interface CapabilityApproval {
 }
 
 export interface ApprovalQueue {
-  approvals: PendingApproval[];
   capabilityApprovals: CapabilityApproval[];
 }
 
@@ -438,8 +425,8 @@ export type FilePreviewKind =
 
 export type ModelProviderName = SharedModelProviderName;
 export type ModelProviderKind = ModelProviderName;
-export type PiToolPolicyMode = "auto" | "ask" | "disabled";
-export type PiDangerousToolPolicyMode = "ask" | "disabled";
+export type AgentCapabilityId = SharedAgentCapabilityId;
+export type AgentCapabilityPolicyMode = SharedAgentCapabilityPolicyMode;
 
 export type ModelProviderSettings = PublicModelProviderSettings;
 
@@ -451,16 +438,7 @@ export interface ModelProviderSettingsInput {
   clearApiKey?: boolean;
 }
 
-export interface PiToolPolicySettings {
-  read: PiToolPolicyMode;
-  grep: PiToolPolicyMode;
-  find: PiToolPolicyMode;
-  ls: PiToolPolicyMode;
-  bash: PiDangerousToolPolicyMode;
-  edit: PiDangerousToolPolicyMode;
-  write: PiDangerousToolPolicyMode;
-  updatedAt: string;
-}
+export type AgentCapabilityPolicySettings = PublicAgentCapabilityPolicySettings;
 
 export type SystemInfo = PublicSystemInfo;
 export type BuildInfo = PublicBuildInfo;
@@ -558,12 +536,6 @@ export interface SaveEditableTextResult {
   operation: FileOperation;
 }
 
-export interface FileProposalResult {
-  message: AgentMessage;
-  job: Job;
-  approval: PendingApproval;
-}
-
 export interface FileMutationResult {
   operation: FileOperation;
   targetPath: string | null;
@@ -597,16 +569,12 @@ export interface ExtractFileResult {
 }
 
 export interface DockerProposalResult {
-  message: AgentMessage;
-  job: Job;
-  approval: PendingApproval | null;
   operation: DockerOperation;
   result?: DockerCreateResult;
 }
 
-export type DockerCreateProposalInput = ({ sessionId: string; action: "create" } & DockerCreateInput);
+export type DockerCreateProposalInput = ({ action: "create" } & DockerCreateInput);
 export type DockerLifecycleProposalInput = {
-  sessionId: string;
   action: Exclude<DockerOperationAction, "create">;
   targetType?: DockerOperationTargetType;
   containerId?: string;
@@ -1214,15 +1182,13 @@ export async function getVmSummary(): Promise<VmSummary> {
   return ((await response.json()) as { summary: VmSummary }).summary;
 }
 
-export async function getVmOperations(sessionId?: string | null): Promise<VmOperation[]> {
-  const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
-  const response = await fetch(`/api/vms/operations${query}`);
+export async function getVmOperations(): Promise<VmOperation[]> {
+  const response = await fetch("/api/vms/operations");
   await ensureOk(response);
   return ((await response.json()) as { operations: VmOperation[] }).operations;
 }
 
 export async function executeVmOperation(input: {
-  sessionId: string;
   action: VmAction;
   domainName?: string;
   snapshotName?: string;
@@ -1408,19 +1374,15 @@ export async function executeDockerContainerAction(
   return (await response.json()) as { action: string; containerId: string };
 }
 
-export async function getDockerOperations(sessionId?: string | null): Promise<DockerOperation[]> {
-  const params = new URLSearchParams();
-  if (sessionId) {
-    params.set("sessionId", sessionId);
-  }
-  const response = await fetch(`/api/docker/operations${params.size ? `?${params.toString()}` : ""}`);
+export async function getDockerOperations(): Promise<DockerOperation[]> {
+  const response = await fetch("/api/docker/operations");
   await ensureOk(response);
   const body = (await response.json()) as { operations: DockerOperation[] };
   return body.operations;
 }
 
-export async function proposeDockerOperation(input: DockerProposalInput): Promise<DockerProposalResult> {
-  const response = await fetch("/api/docker/proposals", {
+export async function runDockerOperation(input: DockerProposalInput): Promise<DockerProposalResult> {
+  const response = await fetch("/api/docker/actions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -1444,16 +1406,13 @@ export async function createDockerConsoleSession(operationId: string): Promise<D
   return body.consoleSession;
 }
 
-export async function proposeShareSettings(input: {
-  sessionId: string;
+export async function applyShareSettings(input: {
   settings: ShareSettingsInput;
 }): Promise<{
-  message: AgentMessage;
-  job: Job;
-  approval: PendingApproval;
+  settings: ShareSettings;
   operation: ShareOperation;
 }> {
-  const response = await fetch("/api/shares/proposals", {
+  const response = await fetch("/api/shares/settings", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -1462,50 +1421,40 @@ export async function proposeShareSettings(input: {
   });
   await ensureOk(response);
   return (await response.json()) as {
-    message: AgentMessage;
-    job: Job;
-    approval: PendingApproval;
+    settings: ShareSettings;
     operation: ShareOperation;
   };
 }
 
 export async function createStoragePool(input: {
-  sessionId: string;
   name: string;
   raidLevel: StorageRaidLevel;
   devices: string[];
   filesystem: StorageFilesystem;
   confirm: boolean;
 }): Promise<{
-  message: AgentMessage;
-  job: Job;
   operation: StorageOperation;
 }> {
-  const response = await fetch("/api/storage/proposals", {
+  const response = await fetch("/api/storage/actions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(input)
+    body: JSON.stringify({ action: "create_pool", ...input })
   });
   await ensureOk(response);
   return (await response.json()) as {
-    message: AgentMessage;
-    job: Job;
     operation: StorageOperation;
   };
 }
 
 export async function deleteStoragePool(input: {
-  sessionId: string;
   poolId: string;
   confirmation: string;
 }): Promise<{
-  message: AgentMessage;
-  job: Job;
   operation: StorageOperation;
 }> {
-  const response = await fetch("/api/storage/proposals", {
+  const response = await fetch("/api/storage/actions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -1518,8 +1467,6 @@ export async function deleteStoragePool(input: {
   });
   await ensureOk(response);
   return (await response.json()) as {
-    message: AgentMessage;
-    job: Job;
     operation: StorageOperation;
   };
 }
@@ -1552,17 +1499,17 @@ export async function saveModelProviderSettings(
   return body.settings;
 }
 
-export async function getPiToolPolicySettings(): Promise<PiToolPolicySettings> {
-  const response = await fetch("/api/settings/pi-tool-policy");
+export async function getAgentCapabilityPolicySettings(): Promise<AgentCapabilityPolicySettings> {
+  const response = await fetch("/api/settings/agent-capability-policy");
   await ensureOk(response);
-  const body = (await response.json()) as { settings: PiToolPolicySettings };
+  const body = (await response.json()) as { settings: AgentCapabilityPolicySettings };
   return body.settings;
 }
 
-export async function savePiToolPolicySettings(
-  input: Partial<PiToolPolicySettings>
-): Promise<PiToolPolicySettings> {
-  const response = await fetch("/api/settings/pi-tool-policy", {
+export async function saveAgentCapabilityPolicySettings(
+  input: Pick<AgentCapabilityPolicySettings, "policies">
+): Promise<AgentCapabilityPolicySettings> {
+  const response = await fetch("/api/settings/agent-capability-policy", {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json"
@@ -1570,7 +1517,7 @@ export async function savePiToolPolicySettings(
     body: JSON.stringify(input)
   });
   await ensureOk(response);
-  const body = (await response.json()) as { settings: PiToolPolicySettings };
+  const body = (await response.json()) as { settings: AgentCapabilityPolicySettings };
   return body.settings;
 }
 
@@ -1761,15 +1708,14 @@ export async function uploadPhoto(file: File, directory?: string): Promise<{ pat
   return (await response.json()) as { path: string; operation: FileOperation };
 }
 
-export async function proposePhotoOperation(input: {
-  sessionId: string;
+export async function applyPhotoOperation(input: {
   assetIds: string[];
   operation: "move" | "trash";
   targetDirectory?: string;
-}): Promise<FileProposalResult> {
-  const response = await fetch("/api/photos/proposals", jsonRequest("POST", input));
+}): Promise<{ operations: FileOperation[] }> {
+  const response = await fetch("/api/photos/actions", jsonRequest("POST", input));
   await ensureOk(response);
-  return (await response.json()) as FileProposalResult;
+  return (await response.json()) as { operations: FileOperation[] };
 }
 
 export async function createPhotoExport(assetIds: string[]): Promise<PhotoExportResult> {
@@ -2102,7 +2048,6 @@ export async function saveEditableText(input: {
 }
 
 export async function applyFileMutation(input: {
-  sessionId: string;
   rootId: string;
   storagePoolId: string;
   operation: "mkdir" | "rename" | "copy";
@@ -2122,7 +2067,6 @@ export async function applyFileMutation(input: {
 }
 
 export async function createFileBatch(input: {
-  sessionId: string;
   rootId: string;
   storagePoolId: string;
   operation: "move" | "trash";
@@ -2139,19 +2083,23 @@ export async function createFileBatch(input: {
 }
 
 export async function getFileBatches(input: {
-  sessionId?: string | null;
   rootId?: string | null;
   storagePoolId?: string | null;
   limit?: number;
 } = {}): Promise<FileBatch[]> {
   const params = new URLSearchParams();
-  if (input.sessionId) params.set("sessionId", input.sessionId);
   if (input.rootId) params.set("rootId", input.rootId);
   if (input.storagePoolId) params.set("storagePoolId", input.storagePoolId);
   params.set("limit", String(input.limit ?? 50));
   const response = await fetch(`/api/files/batches?${params.toString()}`);
   await ensureOk(response);
   return ((await response.json()) as { batches: FileBatch[] }).batches;
+}
+
+export async function cancelFileBatch(batchId: string): Promise<FileBatch> {
+  const response = await fetch(`/api/files/batches/${encodeURIComponent(batchId)}/cancel`, { method: "POST" });
+  await ensureOk(response);
+  return ((await response.json()) as { batch: FileBatch }).batch;
 }
 
 export async function extractFile(input: { rootId: string; storagePoolId: string; path: string }): Promise<ExtractFileResult> {
@@ -2291,21 +2239,21 @@ export async function sendVodPlayerCommand(command: VodPlayerCommand): Promise<V
   return body.status;
 }
 
-export async function getApprovals(): Promise<ApprovalQueue> {
-  const response = await fetch("/api/approvals");
+export async function getApprovals(sessionId: string): Promise<ApprovalQueue> {
+  const response = await fetch(`/api/approvals?sessionId=${encodeURIComponent(sessionId)}`);
   await ensureOk(response);
   return (await response.json()) as ApprovalQueue;
 }
 
 export async function decideCapabilityApproval(
-  approval: Pick<CapabilityApproval, "id" | "revision">,
+  approval: Pick<CapabilityApproval, "id" | "revision" | "sessionId">,
   decision: "approved" | "rejected",
   confirmed = false
 ): Promise<void> {
   const response = await fetch(`/api/capability-approvals/${encodeURIComponent(approval.id)}/decision`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ decision, expectedRevision: approval.revision, confirmed })
+    body: JSON.stringify({ sessionId: approval.sessionId, decision, expectedRevision: approval.revision, confirmed })
   });
   await ensureOk(response);
 }
@@ -2363,20 +2311,6 @@ export async function getOperations(): Promise<FileOperation[]> {
   await ensureOk(response);
   const body = (await response.json()) as { operations: FileOperation[] };
   return body.operations;
-}
-
-export async function approveRequest(approvalId: string): Promise<void> {
-  const response = await fetch(`/api/approvals/${approvalId}/approve`, {
-    method: "POST"
-  });
-  await ensureOk(response);
-}
-
-export async function rejectRequest(approvalId: string): Promise<void> {
-  const response = await fetch(`/api/approvals/${approvalId}/reject`, {
-    method: "POST"
-  });
-  await ensureOk(response);
 }
 
 export async function restoreTrashEntry(trashEntryId: string): Promise<void> {

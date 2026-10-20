@@ -63,7 +63,7 @@ describe("MCP clients and capability runs", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate-propose",
+      capabilityId: "zos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", rootId: "primary", path: "Photos" },
       idempotencyKey: "mkdir-photos"
@@ -72,7 +72,7 @@ describe("MCP clients and capability runs", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate-propose",
+      capabilityId: "zos.files.mutate",
       risk: "high",
       redactedInput: { path: "Photos", rootId: "primary", operation: "mkdir" },
       idempotencyKey: "mkdir-photos"
@@ -82,7 +82,7 @@ describe("MCP clients and capability runs", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate-propose",
+      capabilityId: "zos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", rootId: "primary", path: "Other" },
       idempotencyKey: "mkdir-photos"
@@ -90,13 +90,13 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("moves immutable proposals through first-party approval", () => {
-    const client = createMcpClient(db, { name: "LAN Agent", kind: "lan", scopes: ["zos:network:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
     const pending = createCapabilityProposal(db, {
       clientId: client.id,
       subjectId: client.id,
-      subjectKind: "lan",
-      capabilityId: "zos.network.manage-propose",
+      subjectKind: "pi",
+      capabilityId: "zos.files.mutate",
       risk: "critical",
       redactedInput: { device: "wlan0", action: "disconnect" },
       proposal: { target: "wlan0", action: "disconnect", revision: "wifi-r7" },
@@ -134,13 +134,28 @@ describe("MCP clients and capability runs", () => {
     ]);
   });
 
+  it("rejects capability approvals from external MCP subjects", () => {
+    const client = createMcpClient(db, { name: "LAN Agent", kind: "lan", scopes: ["zos:files:propose"] });
+    expect(() => createCapabilityProposal(db, {
+      clientId: client.id,
+      subjectId: client.id,
+      subjectKind: "lan" as never,
+      capabilityId: "zos.files.mutate",
+      risk: "high",
+      redactedInput: { operation: "mkdir" },
+      proposal: { target: "Archive" },
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    })).toThrow("Only the built-in Pi agent");
+    expect(listPendingCapabilityApprovals(db)).toHaveLength(0);
+  });
+
   it("expires pending approvals into a durable terminal run", () => {
     const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
     const pending = createCapabilityProposal(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate-propose",
+      capabilityId: "zos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir" },
       proposal: { target: "Archive", revision: "r1" },
@@ -165,12 +180,12 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("does not decide an approval after its run leaves the approval state", () => {
-    const client = createMcpClient(db, { name: "LAN Agent", kind: "lan", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
     const pending = createCapabilityProposal(db, {
       clientId: client.id,
       subjectId: client.id,
-      subjectKind: "lan",
-      capabilityId: "zos.files.mutate-propose",
+      subjectKind: "pi",
+      capabilityId: "zos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir" },
       proposal: { target: "Archive", revision: "r1" },
@@ -193,7 +208,7 @@ describe("MCP clients and capability runs", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "lan",
-      capabilityId: "zos.files.mutate-propose",
+      capabilityId: "zos.files.mutate",
       risk: "high",
       redactedInput: {}
     });

@@ -22,7 +22,7 @@ export function ActivityMenu({
   uploadBatches: UploadBatchState[];
   locale: SupportedLocale;
   onCancelUploadBatch: (batchId: string) => void;
-  onCancelFileBatch: (jobId: string) => void;
+  onCancelFileBatch: (batchId: string) => void;
   onRollback: (operation: FileOperation) => void;
 }) {
   const { t } = useTranslation();
@@ -295,7 +295,7 @@ export function ActivityMenu({
                         <button
                           type="button"
                           className="activity-upload-cancel"
-                          onClick={() => onCancelFileBatch(batch.jobId)}
+                          onClick={() => onCancelFileBatch(batch.id)}
                           title={t("workspace.batch.cancel")}
                           aria-label={t("workspace.batch.cancel")}
                         >

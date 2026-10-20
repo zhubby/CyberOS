@@ -1,11 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import {
-  appendEvent,
   createStorageOperationRecord,
-  createActionMessageAndJob,
-  getJob,
-  getSession,
-  updateJobStatus,
   updateStorageOperationStatus
 } from "@zos/db";
 import type { StorageOperationProposal } from "@zos/shared";
@@ -22,7 +17,6 @@ export function registerStorageRoutes(server: FastifyInstance, context: ApiRoute
 
   server.post<{
     Body: {
-      sessionId?: string;
       action?: "create_pool" | "delete_pool";
       name?: string;
       raidLevel?: string;
@@ -32,12 +26,7 @@ export function registerStorageRoutes(server: FastifyInstance, context: ApiRoute
       confirmation?: string;
       confirm?: boolean;
     };
-  }>("/api/storage/proposals", async (request, reply) => {
-    const session = getSession(db, request.body?.sessionId ?? "");
-    if (!session) {
-      reply.status(404).send({ error: "Session not found" });
-      return;
-    }
+  }>("/api/storage/actions", async (request, reply) => {
     if (request.body?.confirm !== true) {
       reply.status(400).send({ error: "Storage operation requires explicit confirmation" });
       return;
@@ -48,24 +37,8 @@ export function registerStorageRoutes(server: FastifyInstance, context: ApiRoute
       const proposal: StorageOperationProposal = request.body?.action === "delete_pool"
         ? buildStoragePoolDeleteProposal(request.body, summary)
         : buildStoragePoolProposal(request.body ?? {}, summary);
-      const { message, job } = createActionMessageAndJob(db, {
-        sessionId: session.id,
-        content: proposal.summary,
-        kind: "storage",
-        status: "running"
-      });
       const operation = createStorageOperationRecord(db, {
-        jobId: job.id,
         proposal
-      });
-      appendEvent(db, {
-        sessionId: session.id,
-        jobId: job.id,
-        type: "job.running",
-        payload: {
-          jobId: job.id,
-          storageOperation: operation
-        }
       });
 
       try {
@@ -77,37 +50,14 @@ export function registerStorageRoutes(server: FastifyInstance, context: ApiRoute
         if (!applied) {
           throw new Error("Storage operation record disappeared before completion");
         }
-        updateJobStatus(db, job.id, "completed", null, ["running"]);
-        appendEvent(db, {
-          sessionId: session.id,
-          jobId: job.id,
-          type: "job.completed",
-          payload: {
-            jobId: job.id,
-            storageOperation: applied
-          }
-        });
         reply.status(202).send({
-          message,
-          job: getJob(db, job.id) ?? job,
           operation: applied
         });
       } catch (error) {
         const message = safeStorageMessage(error);
-        const failed = updateStorageOperationStatus(db, operation.id, "failed", {
+        updateStorageOperationStatus(db, operation.id, "failed", {
           error: message,
           failedAt: new Date().toISOString()
-        });
-        updateJobStatus(db, job.id, "failed", message, ["running"]);
-        appendEvent(db, {
-          sessionId: session.id,
-          jobId: job.id,
-          type: "job.failed",
-          payload: {
-            jobId: job.id,
-            error: message,
-            storageOperation: failed
-          }
         });
         reply.status(400).send({ error: message });
       }

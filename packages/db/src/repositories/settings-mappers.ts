@@ -1,19 +1,44 @@
 import type {
+  AgentCapabilityPolicyMode,
+  AgentCapabilityPolicySettingsRecord,
   DockerSettingsRecord,
   ModelProviderName,
   ModelProviderSettingsRecord,
   PiDangerousToolPolicyMode,
+  PiToolName,
   PiToolPolicyMode,
   PiToolPolicySettingsRecord
 } from "@zos/shared";
 import { isModelProviderName } from "@zos/shared";
 import {
+  AGENT_CAPABILITY_IDS,
+  DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS,
   DANGEROUS_PI_TOOL_POLICY_MODES,
   DANGEROUS_PI_TOOLS,
   DEFAULT_PI_TOOL_POLICY_SETTINGS,
   PI_TOOL_POLICY_MODES,
   READ_ONLY_PI_TOOLS
 } from "./settings-constants.js";
+
+export function mapAgentCapabilityPolicySettings(row: DbSystemSettingRow): AgentCapabilityPolicySettingsRecord {
+  const parsed = JSON.parse(row.value_json) as Partial<AgentCapabilityPolicySettingsRecord>;
+  return normalizeAgentCapabilityPolicySettings(parsed, parsed.updatedAt ?? row.updated_at);
+}
+
+export function normalizeAgentCapabilityPolicySettings(
+  settings: Partial<AgentCapabilityPolicySettingsRecord>,
+  updatedAt: string
+): AgentCapabilityPolicySettingsRecord {
+  const policies = { ...DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS.policies };
+  for (const capabilityId of AGENT_CAPABILITY_IDS) {
+    const mode = settings.policies?.[capabilityId];
+    if (mode !== undefined) {
+      if (!isAgentCapabilityPolicyMode(mode)) throw new Error(`Invalid policy mode for ${capabilityId}`);
+      policies[capabilityId] = mode;
+    }
+  }
+  return { policies, updatedAt };
+}
 import type { DbSystemSettingRow } from "./repository-rows.js";
 
 export function mapModelProviderSettings(row: DbSystemSettingRow): ModelProviderSettingsRecord {
@@ -55,7 +80,7 @@ export function normalizePiToolPolicySettings(
   };
 
   for (const tool of READ_ONLY_PI_TOOLS) {
-    const mode = settings[tool] ?? DEFAULT_PI_TOOL_POLICY_SETTINGS[tool];
+    const mode = migrateLegacyPolicyMode(settings[tool], tool) ?? DEFAULT_PI_TOOL_POLICY_SETTINGS[tool];
     if (!isPiToolPolicyMode(mode)) {
       throw new Error(`Invalid policy mode for ${tool}`);
     }
@@ -63,7 +88,7 @@ export function normalizePiToolPolicySettings(
   }
 
   for (const tool of DANGEROUS_PI_TOOLS) {
-    const mode = settings[tool] ?? DEFAULT_PI_TOOL_POLICY_SETTINGS[tool];
+    const mode = migrateLegacyPolicyMode(settings[tool], tool) ?? DEFAULT_PI_TOOL_POLICY_SETTINGS[tool];
     if (!isDangerousPiToolPolicyMode(mode)) {
       throw new Error(`Dangerous tool ${tool} cannot use policy mode ${String(mode)}`);
     }
@@ -71,6 +96,11 @@ export function normalizePiToolPolicySettings(
   }
 
   return normalized;
+}
+
+function migrateLegacyPolicyMode(value: unknown, tool: PiToolName): unknown {
+  if (value === "ask") return tool === "bash" ? "confirm" : "approve";
+  return value;
 }
 
 function normalizeDockerShells(shells: unknown): string[] {
@@ -99,6 +129,10 @@ function normalizePositiveInteger(value: unknown): number | null {
 
 function isPiToolPolicyMode(value: unknown): value is PiToolPolicyMode {
   return typeof value === "string" && PI_TOOL_POLICY_MODES.includes(value as PiToolPolicyMode);
+}
+
+function isAgentCapabilityPolicyMode(value: unknown): value is AgentCapabilityPolicyMode {
+  return typeof value === "string" && PI_TOOL_POLICY_MODES.includes(value as AgentCapabilityPolicyMode);
 }
 
 function isDangerousPiToolPolicyMode(value: unknown): value is PiDangerousToolPolicyMode {

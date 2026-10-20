@@ -3,30 +3,25 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  cancelQueuedFileBatchItems,
+  cancelFileBatch,
   claimNextFileBatchItem,
   claimNextJob,
   createFileBatch,
-  createSession,
   ensureNasRoots,
   FileBatchConflictError,
   finishFileBatchItem,
   getFileBatch,
-  getJob,
   openZosDb,
-  updateJobStatus,
   type ZosDatabase
 } from "./index.js";
 
 let tempDir: string;
 let db: ZosDatabase;
-let sessionId: string;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-file-batches-"));
   db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
-  sessionId = createSession(db, { rootId: "local" }).id;
 });
 
 afterEach(async () => {
@@ -36,7 +31,6 @@ afterEach(async () => {
 
 function createBatch(sourcePaths = ["pool/a.txt", "pool/b.txt"]) {
   return createFileBatch(db, {
-    sessionId,
     rootId: "local",
     storagePoolId: "pool-1",
     operation: "trash",
@@ -81,8 +75,7 @@ describe("file batch repository", () => {
   it("cancels queued items after the current filesystem item", () => {
     const batch = createBatch();
     const running = claimNextFileBatchItem(db)!;
-    expect(updateJobStatus(db, batch.jobId, "cancelled", null, ["running"])).toBe(true);
-    cancelQueuedFileBatchItems(db, batch.jobId);
+    expect(cancelFileBatch(db, batch.id)?.status).toBe("cancelled");
 
     const finished = finishFileBatchItem(db, { itemId: running.item.id, status: "completed" });
     expect(finished.finalStatus).toBe("cancelled");
@@ -92,6 +85,6 @@ describe("file batch repository", () => {
       cancelledCount: 1,
       completedCount: 2
     });
-    expect(getJob(db, batch.jobId)?.status).toBe("cancelled");
+    expect(claimNextJob(db)).toBeNull();
   });
 });

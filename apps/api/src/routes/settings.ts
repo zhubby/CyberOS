@@ -1,23 +1,30 @@
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
-  DEFAULT_PI_TOOL_POLICY_SETTINGS,
+  DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS,
+  defaultAgentCapabilityPolicySettings,
   defaultIndexerSettings,
-  defaultPiToolPolicySettings,
   defaultDownloadSettings,
   getDockerSettings,
   getDownloadSettings,
   getIndexerSettings,
   getModelProviderSettings,
-  getPiToolPolicySettings,
+  getAgentCapabilityPolicySettings,
   getShareSettings,
   saveDockerSettings,
   saveDownloadSettings,
   saveIndexerSettings,
   saveModelProviderSettings,
-  savePiToolPolicySettings
+  saveAgentCapabilityPolicySettings
 } from "@zos/db";
-import type { DownloadSettingsRecord, IndexerSettingsRecord, ModelProviderName, PiToolPolicySettingsRecord } from "@zos/shared";
+import type {
+  AgentCapabilityId,
+  AgentCapabilityPolicyMode,
+  AgentCapabilityPolicySettingsRecord,
+  DownloadSettingsRecord,
+  IndexerSettingsRecord,
+  ModelProviderName
+} from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   defaultDockerSettings,
@@ -29,7 +36,7 @@ import {
   toPublicDockerSettings,
   toPublicShareSettings,
   toPublicModelProviderSettings,
-  toPublicPiToolPolicySettings
+  toPublicAgentCapabilityPolicySettings
 } from "../lib/settings.js";
 import { collectSystemInfo } from "../lib/system-info.js";
 
@@ -133,32 +140,28 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db }: 
     });
   });
 
-  server.get("/api/settings/pi-tool-policy", async () => ({
-    settings: toPublicPiToolPolicySettings(getPiToolPolicySettings(db) ?? defaultPiToolPolicySettings())
+  server.get("/api/settings/agent-capability-policy", async () => ({
+    settings: toPublicAgentCapabilityPolicySettings(
+      getAgentCapabilityPolicySettings(db) ?? defaultAgentCapabilityPolicySettings()
+    )
   }));
 
   server.patch<{
-    Body: Partial<Record<keyof typeof DEFAULT_PI_TOOL_POLICY_SETTINGS, string>>;
-  }>("/api/settings/pi-tool-policy", async (request, reply) => {
-    const existing = getPiToolPolicySettings(db) ?? defaultPiToolPolicySettings();
-    const next = {
-      ...DEFAULT_PI_TOOL_POLICY_SETTINGS,
-      ...existing,
-      ...request.body
+    Body: { policies?: Partial<Record<AgentCapabilityId, AgentCapabilityPolicyMode>> };
+  }>("/api/settings/agent-capability-policy", async (request, reply) => {
+    const existing = getAgentCapabilityPolicySettings(db) ?? defaultAgentCapabilityPolicySettings();
+    const next: Omit<AgentCapabilityPolicySettingsRecord, "updatedAt"> = {
+      policies: {
+        ...DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS.policies,
+        ...existing.policies,
+        ...request.body?.policies
+      }
     };
 
     try {
-      const settings = savePiToolPolicySettings(db, {
-        read: next.read,
-        grep: next.grep,
-        find: next.find,
-        ls: next.ls,
-        bash: next.bash,
-        edit: next.edit,
-        write: next.write
-      } as Omit<PiToolPolicySettingsRecord, "updatedAt">);
+      const settings = saveAgentCapabilityPolicySettings(db, next);
       reply.send({
-        settings: toPublicPiToolPolicySettings(settings)
+        settings: toPublicAgentCapabilityPolicySettings(settings)
       });
     } catch (error) {
       reply.status(400).send({

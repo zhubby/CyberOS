@@ -41,7 +41,7 @@ import {
   getPhotoRecord,
   getPhotoLibrarySettings,
   getPhotoStatus,
-  proposePhotoOperation,
+  applyPhotoOperation,
   queryPhotos,
   requestPhotoScan,
   uploadPhoto,
@@ -81,8 +81,6 @@ export const PHOTO_ACCEPT = PHOTOSTAFF_UPLOAD_EXTENSIONS.join(",");
 export function PhotoLibraryPanel({
   pools,
   selectedRootId,
-  sessionId,
-  approvalRefreshKey,
   locale,
   onRequestCreateFolder,
   onWorkQueuesChanged,
@@ -92,8 +90,6 @@ export function PhotoLibraryPanel({
 }: {
   pools: StorageFilePickerPool[];
   selectedRootId: string;
-  sessionId: string | null;
-  approvalRefreshKey: string;
   locale: SupportedLocale;
   onRequestCreateFolder?: (input: {
     rootId: string;
@@ -152,7 +148,7 @@ export function PhotoLibraryPanel({
   const lightboxIndex = lightboxId ? photos.findIndex((photo) => photo.id === lightboxId) : -1;
   const lightboxPhoto = lightboxIndex >= 0 ? photos[lightboxIndex] ?? null : null;
   const lightboxMediaKind = lightboxPhoto ? photoMediaKindForAsset(lightboxPhoto) : null;
-  const canPropose = Boolean(sessionId && settings?.rootId === selectedRootId);
+  const canPropose = settings?.rootId === selectedRootId;
   const statusBusy = isPhotoBusy(status?.state);
   const queryFilters = useMemo(() => readyPhotoQueryFilters(filters, metadataFields), [filters, metadataFields]);
 
@@ -212,7 +208,7 @@ export function PhotoLibraryPanel({
 
   useEffect(() => {
     void loadLibrary();
-  }, [approvalRefreshKey, loadLibrary]);
+  }, [loadLibrary]);
 
   useEffect(() => () => {
     libraryRequestRef.current += 1;
@@ -498,11 +494,10 @@ export function PhotoLibraryPanel({
   }
 
   async function proposeBatch(operation: "move" | "trash", targetDirectory?: string) {
-    if (!sessionId || !selected.length || busyAction) return;
+    if (!selected.length || busyAction) return;
     setBusyAction(operation);
     try {
-      await proposePhotoOperation({
-        sessionId,
+      await applyPhotoOperation({
         assetIds: selected.map((photo) => photo.id),
         operation,
         ...(targetDirectory ? { targetDirectory } : {})
@@ -510,8 +505,9 @@ export function PhotoLibraryPanel({
       setPicker(null);
       setDeleteOpen(false);
       setSelectedIds(new Set());
+      await loadLibrary();
       await onWorkQueuesChanged();
-      onNotifyWarning(t("workspace.photos.approvalQueued"));
+      onNotifySuccess(t("notifications.operationSucceeded"));
     } catch (error) {
       onNotifyError(errorMessage(error));
     } finally {

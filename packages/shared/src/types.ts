@@ -641,9 +641,22 @@ export type PendingApprovalKind =
 
 export type PiToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls";
 
-export type PiToolPolicyMode = "auto" | "ask" | "disabled";
+export type AgentCapabilityPolicyMode = "auto" | "approve" | "confirm" | "disabled";
 
-export type PiDangerousToolPolicyMode = Exclude<PiToolPolicyMode, "auto">;
+export type AgentCapabilityId =
+  | "zos.files.list"
+  | "zos.files.read"
+  | "zos.files.search"
+  | "zos.files.grep"
+  | "zos.files.find"
+  | "zos.files.mutate"
+  | "zos.files.edit"
+  | "zos.files.write"
+  | "zos.shell.run";
+
+export type PiToolPolicyMode = AgentCapabilityPolicyMode;
+
+export type PiDangerousToolPolicyMode = PiToolPolicyMode;
 
 export type AgentEventType =
   | "agent.started"
@@ -1913,6 +1926,13 @@ export interface PiToolPolicySettingsRecord {
   updatedAt: string;
 }
 
+export interface AgentCapabilityPolicySettingsRecord {
+  policies: Record<AgentCapabilityId, AgentCapabilityPolicyMode>;
+  updatedAt: string;
+}
+
+export type PublicAgentCapabilityPolicySettings = AgentCapabilityPolicySettingsRecord;
+
 export type PublicPiToolPolicySettings = PiToolPolicySettingsRecord;
 
 export interface AgentSessionRecord {
@@ -1963,8 +1983,6 @@ export interface FileBatchFailure {
 
 export interface FileBatchRecord {
   id: string;
-  jobId: string;
-  sessionId: string;
   rootId: string;
   storagePoolId: string;
   operation: FileBatchOperation;
@@ -1996,8 +2014,9 @@ export interface AgentEventRecord<TPayload = unknown> {
 
 export interface OperationNotificationRecord {
   id: string;
-  jobId: string;
-  sessionId: string;
+  jobId: string | null;
+  sessionId: string | null;
+  operationId: string | null;
   kind: OperationNotificationKind;
   status: OperationNotificationStatus;
   summary: string;
@@ -2970,7 +2989,7 @@ export interface StorageOperationRecord {
 export interface DockerConsoleAuthorizationRecord {
   id: string;
   operationId: string;
-  approvalId: string;
+  approvalId: string | null;
   containerId: string;
   shell: string;
   status: "active" | "used" | "expired" | "failed";

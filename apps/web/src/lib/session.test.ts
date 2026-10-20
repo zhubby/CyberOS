@@ -19,8 +19,9 @@ const baseSession: SessionSummary = {
   currentPath: ".",
   createdAt: "2026-08-21T00:00:00.000Z",
   updatedAt: "2026-08-21T00:00:00.000Z",
-  firstMessage: null,
-  lastMessage: null
+      firstMessage: null,
+      lastMessage: null,
+      pendingApprovalCount: 0
 };
 
 const fileEntry: FileEntry = {

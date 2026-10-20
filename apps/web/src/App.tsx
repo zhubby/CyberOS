@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X } from "lucide-react";
 import {
   applyFileMutation,
-  approveRequest,
   decideCapabilityApproval,
+  cancelFileBatch as cancelFileBatchRequest,
   cancelJob,
   createFileBatch,
   createSession,
@@ -37,11 +37,10 @@ import {
   getMonitoringAlertIncidents,
   getNotifications,
   getNotificationsSummary,
-  getPiToolPolicySettings,
+  getAgentCapabilityPolicySettings,
   getPhotoLibrarySettings,
   getPhotoProcessingSettings,
   getPhotoStatus,
-  rejectRequest,
   requestSystemPower,
   markAllNotificationsRead,
   markAllBluetoothTransfersRead,
@@ -54,7 +53,7 @@ import {
   requestReindex,
   saveDockerSettings,
   saveModelProviderSettings,
-  savePiToolPolicySettings,
+  saveAgentCapabilityPolicySettings,
   searchIndex,
   sendMessage,
   sendVodPlayerCommand,
@@ -83,7 +82,6 @@ import {
   type MonitoringAlertIncident,
   type NasRoot,
   type OperationNotification,
-  type PendingApproval,
   type CapabilityApproval,
   type PhotoLibrarySettings,
   type PhotoLibraryStatus,
@@ -211,10 +209,10 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [transcriptState, dispatchTranscript] = useReducer(transcriptReducer, initialTranscriptState);
   const transcript = transcriptState.messages;
-  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [capabilityApprovals, setCapabilityApprovals] = useState<CapabilityApproval[]>([]);
   const [operations, setOperations] = useState<FileOperation[]>([]);
   const [fileBatches, setFileBatches] = useState<FileBatch[]>([]);
+  const activeFileBatchIdsRef = useRef<Set<string>>(new Set());
   const [dockerOperations, setDockerOperations] = useState<DockerOperation[]>([]);
   const [vmOperations, setVmOperations] = useState<VmOperation[]>([]);
   const [operationsReady, setOperationsReady] = useState(false);
@@ -292,6 +290,7 @@ export function App() {
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const fileListingRequestId = useRef(0);
   const sessionViewRequestId = useRef(0);
+  const activeSessionIdRef = useRef(activeSessionId);
   const activeSearchQueryRef = useRef("");
   const currentPathRef = useRef(currentPath);
   const selectedRootIdRef = useRef(selectedRootId);
@@ -364,17 +363,6 @@ export function App() {
     [selectedStoragePoolId, storagePoolOptions]
   );
   const activeSessionSummary = sessions.find((item) => item.id === activeSessionId);
-  const activeApprovals = approvals.filter((approval) => {
-    if (!session || approval.sessionId !== session.id) {
-      return false;
-    }
-    return approval.proposal.every((proposal) => {
-      if (!("storagePoolId" in proposal)) {
-        return true;
-      }
-      return proposal.storagePoolId === selectedStoragePoolId;
-    });
-  });
   const visibleUploadBatches = useMemo(
     () => uploadBatches.filter((batch) => batch.storagePoolId === selectedStoragePoolId),
     [selectedStoragePoolId, uploadBatches]
@@ -476,6 +464,7 @@ export function App() {
       transcriptSessionId = nextSession.id;
       seenEvents.current.clear();
       setSessions(nextSessionList);
+      activeSessionIdRef.current = nextSession.id;
       setSession(nextSession);
       setActiveSessionId(nextSession.id);
       setComposerPath(null);
@@ -632,7 +621,7 @@ export function App() {
         setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
       }
       if (parsed.type === "approval.pending") {
-        void refreshWorkQueues();
+        void Promise.all([refreshWorkQueues(), reloadSessions()]);
       }
     };
 
@@ -671,11 +660,35 @@ export function App() {
   }, [selectedStoragePoolId, session?.id]);
 
   useEffect(() => {
+    if (!fileBatches.some((batch) => batch.status === "queued" || batch.status === "running")) {
+      return;
+    }
+    const timer = window.setTimeout(() => void refreshFileBatches(), 1_000);
+    return () => window.clearTimeout(timer);
+  }, [fileBatches]);
+
+  useEffect(() => {
+    const previousActiveIds = activeFileBatchIdsRef.current;
+    const currentActiveIds = new Set(
+      fileBatches
+        .filter((batch) => batch.status === "queued" || batch.status === "running")
+        .map((batch) => batch.id)
+    );
+    const reachedTerminalState = fileBatches.some(
+      (batch) => previousActiveIds.has(batch.id) && !currentActiveIds.has(batch.id)
+    );
+    activeFileBatchIdsRef.current = currentActiveIds;
+    if (reachedTerminalState) {
+      void Promise.all([refreshCurrentFileListing(), refreshNotifications()]);
+    }
+  }, [fileBatches]);
+
+  useEffect(() => {
     transcriptRef.current?.scrollTo({
       top: transcriptRef.current.scrollHeight,
       behavior: "smooth"
     });
-  }, [activeApprovals.length, transcript.length]);
+  }, [capabilityApprovals.length, transcript.length]);
 
   useEffect(() => {
     if (!selectedRootId || !selectedStoragePoolId || !selectedFilePath) {
@@ -966,7 +979,7 @@ export function App() {
         bluetoothResult
       ] = await Promise.allSettled([
         getModelProviderSettings(),
-        getPiToolPolicySettings(),
+        getAgentCapabilityPolicySettings(),
         getDockerSettings(),
         getDownloadSettings(),
         getIndexerSettings(),
@@ -1111,7 +1124,7 @@ export function App() {
           ...(modelSettingsForm.apiKey ? { apiKey: modelSettingsForm.apiKey } : {}),
           clearApiKey: modelSettingsForm.clearApiKey
         }),
-        savePiToolPolicySettings(toolPolicyForm),
+        saveAgentCapabilityPolicySettings({ policies: toolPolicyForm.policies }),
         saveDockerSettings({
           enabled: dockerSettingsForm.enabled,
           socketPath: dockerSettingsForm.socketPath,
@@ -1214,6 +1227,8 @@ export function App() {
       setStatus("loading");
       setError(null);
       seenEvents.current.clear();
+      activeSessionIdRef.current = nextSession.id;
+      setCapabilityApprovals([]);
       setSession(nextSession);
       setActiveSessionId(nextSession.id);
       setComposerPath(null);
@@ -1246,6 +1261,8 @@ export function App() {
     try {
       nextSession = await createSession(selectedRootId, currentPath);
       seenEvents.current.clear();
+      activeSessionIdRef.current = nextSession.id;
+      setCapabilityApprovals([]);
       setSession(nextSession);
       setActiveSessionId(nextSession.id);
       setComposerPath(null);
@@ -1274,6 +1291,8 @@ export function App() {
   async function loadSessionIntoView(nextSession: Session | SessionSummary): Promise<void> {
     const sessionRequestId = beginSessionViewRequest();
     seenEvents.current.clear();
+    activeSessionIdRef.current = nextSession.id;
+    setCapabilityApprovals([]);
     setSession(nextSession);
     setActiveSessionId(nextSession.id);
     dispatchTranscript({ type: "begin", sessionId: nextSession.id });
@@ -1741,21 +1760,20 @@ export function App() {
   }
 
   async function refreshWorkQueues() {
-    const queueSessionId = session?.id ?? null;
+    const queueSessionId = activeSessionIdRef.current || null;
     const queueStoragePoolId = selectedStoragePoolIdRef.current;
     try {
       const [nextApprovals, nextOperations, nextFileBatches, nextDockerOperations, nextVmOperations, nextNotifications] = await Promise.all([
-        getApprovals(),
+        queueSessionId ? getApprovals(queueSessionId) : Promise.resolve({ capabilityApprovals: [] }),
         getOperations(),
-        getFileBatches({ sessionId: queueSessionId, rootId: selectedRootIdRef.current, storagePoolId: queueStoragePoolId }),
-        getDockerOperations(queueSessionId),
-        getVmOperations(queueSessionId),
+        getFileBatches({ rootId: selectedRootIdRef.current, storagePoolId: queueStoragePoolId }),
+        getDockerOperations(),
+        getVmOperations(),
         getNotifications()
       ]);
-      if (queueSessionId !== (session?.id ?? null) || queueStoragePoolId !== selectedStoragePoolIdRef.current) {
+      if (queueSessionId !== (activeSessionIdRef.current || null) || queueStoragePoolId !== selectedStoragePoolIdRef.current) {
         return;
       }
-      setApprovals(nextApprovals.approvals);
       setCapabilityApprovals(nextApprovals.capabilityApprovals);
       setOperations(
         queueStoragePoolId
@@ -1772,7 +1790,7 @@ export function App() {
       setNotificationsLoading(false);
       setOperationsReady(true);
     } catch (nextError) {
-      if (queueSessionId !== (session?.id ?? null) || queueStoragePoolId !== selectedStoragePoolIdRef.current) {
+      if (queueSessionId !== (activeSessionIdRef.current || null) || queueStoragePoolId !== selectedStoragePoolIdRef.current) {
         return;
       }
       setError(toErrorMessage(nextError));
@@ -1780,65 +1798,25 @@ export function App() {
   }
 
   async function refreshFileBatches() {
-    const queueSessionId = session?.id ?? null;
     const queueRootId = selectedRootIdRef.current;
     const queueStoragePoolId = selectedStoragePoolIdRef.current;
-    if (!queueSessionId || !queueRootId || !queueStoragePoolId) {
+    if (!queueRootId || !queueStoragePoolId) {
       setFileBatches([]);
       return;
     }
     try {
       const batches = await getFileBatches({
-        sessionId: queueSessionId,
         rootId: queueRootId,
         storagePoolId: queueStoragePoolId
       });
       if (
-        queueSessionId === (session?.id ?? null)
-        && queueRootId === selectedRootIdRef.current
+        queueRootId === selectedRootIdRef.current
         && queueStoragePoolId === selectedStoragePoolIdRef.current
       ) {
         setFileBatches(batches);
       }
     } catch (nextError) {
       setError(toErrorMessage(nextError));
-    }
-  }
-
-  async function handleApprove(approvalId: string) {
-    const approval = approvals.find((item) => item.id === approvalId);
-    const requestRootId = selectedRootIdRef.current;
-    const requestStoragePoolId = selectedStoragePoolIdRef.current;
-    setStatus("applying");
-    try {
-      await approveRequest(approvalId);
-      if (
-        selectedRootIdRef.current !== requestRootId ||
-        selectedStoragePoolIdRef.current !== requestStoragePoolId
-      ) {
-        return;
-      }
-      applyApprovedSelectionChange(approval);
-      await Promise.all([refreshWorkQueues(), refreshFiles()]);
-      setSuccessNotice(t("notifications.operationSucceeded"));
-      setStatus("ready");
-    } catch (nextError) {
-      setError(toErrorMessage(nextError));
-      await refreshWorkQueues();
-      setStatus("error");
-    }
-  }
-
-  async function handleReject(approvalId: string) {
-    setStatus("rejecting");
-    try {
-      await rejectRequest(approvalId);
-      await refreshWorkQueues();
-      setWarningNotice(t("notifications.operationRejected"));
-      setStatus("ready");
-    } catch (nextError) {
-      setError(toErrorMessage(nextError));
-      setStatus("error");
     }
   }
 
@@ -1852,7 +1830,7 @@ export function App() {
     setStatus(decision === "approved" ? "applying" : "rejecting");
     try {
       await decideCapabilityApproval(approval, decision, confirmed);
-      await Promise.all([refreshWorkQueues(), refreshFiles()]);
+      await Promise.all([refreshWorkQueues(), refreshFiles(), reloadSessions()]);
       if (decision === "approved") {
         setSuccessNotice(t("notifications.operationSucceeded"));
       } else {
@@ -1861,7 +1839,7 @@ export function App() {
       setStatus("ready");
     } catch (nextError) {
       setError(toErrorMessage(nextError));
-      await refreshWorkQueues();
+      await Promise.all([refreshWorkQueues(), reloadSessions()]);
       setStatus("error");
     }
   }
@@ -1932,7 +1910,7 @@ export function App() {
   }
 
   async function requestFileRename(entry: FileEntry, targetName: string) {
-    if (!session || !selectedRootId || !selectedStoragePoolId) {
+    if (!selectedRootId || !selectedStoragePoolId) {
       throw new Error(t("workspace.actions.noSession"));
     }
 
@@ -1942,7 +1920,6 @@ export function App() {
     setError(null);
     try {
       const result = await applyFileMutation({
-        sessionId: session.id,
         rootId: requestRootId,
         storagePoolId: requestStoragePoolId,
         operation: "rename",
@@ -1986,7 +1963,7 @@ export function App() {
   }
 
   async function requestFileTransfer(entry: FileEntry, operation: "move" | "copy", targetPath: string) {
-    if (!session || !selectedRootId || !selectedStoragePool) {
+    if (!selectedRootId || !selectedStoragePool) {
       throw new Error(t("workspace.actions.noSession"));
     }
 
@@ -2005,7 +1982,6 @@ export function App() {
     setError(null);
     try {
       const result = await applyFileMutation({
-        sessionId: session.id,
         rootId: requestRootId,
         storagePoolId: requestStoragePoolId,
         operation: "copy",
@@ -2039,14 +2015,13 @@ export function App() {
     operation: "move" | "trash",
     targetDirectory?: string
   ) {
-    if (!session || !selectedRootId || !selectedStoragePoolId) {
+    if (!selectedRootId || !selectedStoragePoolId) {
       throw new Error(t("workspace.actions.noSession"));
     }
     setStatus("queued");
     setError(null);
     try {
       await createFileBatch({
-        sessionId: session.id,
         rootId: selectedRootId,
         storagePoolId: selectedStoragePoolId,
         operation,
@@ -2063,9 +2038,9 @@ export function App() {
     }
   }
 
-  async function cancelFileBatch(jobId: string) {
+  async function cancelFileBatch(batchId: string) {
     try {
-      await cancelJob(jobId);
+      await cancelFileBatchRequest(batchId);
       await refreshWorkQueues();
     } catch (nextError) {
       setError(toErrorMessage(nextError));
@@ -2118,15 +2093,10 @@ export function App() {
     parentPath: string;
     name: string;
   }) {
-    if (!session) {
-      throw new Error(t("workspace.actions.noSession"));
-    }
-
     setStatus("applying");
     setError(null);
     try {
       const result = await applyFileMutation({
-        sessionId: session.id,
         rootId: input.rootId,
         storagePoolId: input.storagePoolId,
         operation: "mkdir",
@@ -2156,7 +2126,7 @@ export function App() {
   }
 
   async function requestFolderCreate(folderName: string) {
-    if (!session || !selectedRootId || !selectedStoragePool) {
+    if (!selectedRootId || !selectedStoragePool) {
       throw new Error(t("workspace.actions.noSession"));
     }
 
@@ -2166,32 +2136,6 @@ export function App() {
         parentPath: currentPath,
         name: folderName
       });
-  }
-
-  function applyApprovedSelectionChange(approval: PendingApproval | undefined) {
-    if (!approval || !selectedFilePath) {
-      return;
-    }
-
-    for (const proposal of approval.proposal) {
-      if (!("operation" in proposal)) {
-        continue;
-      }
-      if (proposal.operation === "trash" && proposal.sourcePath && pathContains(proposal.sourcePath, selectedFilePath)) {
-        setSelectedFilePath(null);
-        setPreviewMeta(null);
-        setTextPreview(null);
-        setPreviewError(null);
-        return;
-      }
-      if (proposal.operation === "rename" && proposal.sourcePath && proposal.targetPath) {
-        const renamedSelection = renamedPath(selectedFilePath, proposal.sourcePath, proposal.targetPath);
-        if (renamedSelection) {
-          setSelectedFilePath(renamedSelection);
-          return;
-        }
-      }
-    }
   }
 
   function selectStoragePool(poolId: string) {
@@ -2211,6 +2155,8 @@ export function App() {
       beginSessionViewRequest();
       seenEvents.current.clear();
       setSessions([]);
+      activeSessionIdRef.current = "";
+      setCapabilityApprovals([]);
       setSession(null);
       setActiveSessionId("");
       dispatchTranscript({ type: "reset" });
@@ -2494,7 +2440,6 @@ export function App() {
         activeSessionId={activeSessionId}
         transcript={transcript}
         transcriptPhase={transcriptState.phase}
-        activeApprovals={activeApprovals}
         activeCapabilityApprovals={capabilityApprovals}
         message={message}
         composerPath={composerPath}
@@ -2512,10 +2457,8 @@ export function App() {
         onRequestSystemPower={handleSystemPower}
         notificationUnreadCount={notificationUnreadCount}
         onSelectSession={(nextSession) => void selectSession(nextSession)}
-        onApprove={(approvalId) => void handleApprove(approvalId)}
         onApproveCapability={(approval) => void handleCapabilityDecision(approval, "approved")}
         onRejectCapability={(approval) => void handleCapabilityDecision(approval, "rejected")}
-        onReject={(approvalId) => void handleReject(approvalId)}
         onSubmitMessage={(event) => void submitMessage(event)}
         onMessageChange={setMessage}
         onClearComposerPath={() => setComposerPath(null)}
@@ -2624,8 +2567,6 @@ export function App() {
         dockerOperations={dockerOperations}
         vmOperations={vmOperations}
         operationsReady={operationsReady}
-        sessionId={session?.id ?? null}
-        pendingApprovals={activeApprovals}
         locale={resolvedLocale}
         codeFontSettings={codeFontSettings}
         resolvedTheme={resolvedTheme}
@@ -2657,7 +2598,7 @@ export function App() {
         onRequestExtract={(meta) => requestFileExtract(meta)}
         onUploadSources={(sources) => onUploadSources(sources)}
         onCancelUploadBatch={(batchId) => onCancelUploadBatch(batchId)}
-        onCancelFileBatch={(jobId) => void cancelFileBatch(jobId)}
+        onCancelFileBatch={(batchId) => void cancelFileBatch(batchId)}
         onWorkQueuesChanged={() => {
           void refreshWorkQueues();
           void refreshStorageSummary();
@@ -2793,10 +2734,6 @@ function indexSearchResultToFileEntry(result: IndexSearchResult): FileEntry {
 
 function optionalProperty<Key extends string, Value>(key: Key, value: Value | undefined): { [Property in Key]?: Value } {
   return value === undefined ? {} : { [key]: value } as { [Property in Key]?: Value };
-}
-
-function pathContains(containerPath: string, candidatePath: string): boolean {
-  return candidatePath === containerPath || candidatePath.startsWith(`${containerPath}/`);
 }
 
 function renamedPath(candidatePath: string, sourcePath: string, targetPath: string): string | null {

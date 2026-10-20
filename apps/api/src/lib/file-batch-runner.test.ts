@@ -5,10 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   claimNextFileBatchItem,
   createFileBatch,
-  createSession,
   ensureNasRoots,
   getFileBatch,
-  listEvents,
   listFileOperations,
   listPendingApprovals,
   openZosDb,
@@ -22,7 +20,6 @@ import { FileBatchRunner, processNextFileBatchItem } from "./file-batch-runner.j
 let tempDir: string;
 let rootDir: string;
 let db: ZosDatabase;
-let sessionId: string;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-file-runner-"));
@@ -30,7 +27,6 @@ beforeEach(async () => {
   await mkdir(rootDir);
   db = openZosDb(path.join(tempDir, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
-  sessionId = createSession(db, { rootId: "local" }).id;
 });
 
 afterEach(async () => {
@@ -44,7 +40,6 @@ describe("file batch runner", () => {
     await writeFile(path.join(rootDir, "a.txt"), "a");
     await writeFile(path.join(rootDir, "b.txt"), "b");
     const batch = createFileBatch(db, {
-      sessionId,
       rootId: "local",
       storagePoolId: "pool-1",
       operation: "move",
@@ -68,7 +63,6 @@ describe("file batch runner", () => {
   it("continues after an item fails and reports the failure", async () => {
     await writeFile(path.join(rootDir, "present.txt"), "present");
     const batch = createFileBatch(db, {
-      sessionId,
       rootId: "local",
       storagePoolId: "pool-1",
       operation: "trash",
@@ -91,7 +85,6 @@ describe("file batch runner", () => {
     await mkdir(path.join(rootDir, "dest"));
     await writeFile(path.join(rootDir, "recover.txt"), "recover");
     const batch = createFileBatch(db, {
-      sessionId,
       rootId: "local",
       storagePoolId: "pool-1",
       operation: "move",
@@ -109,10 +102,9 @@ describe("file batch runner", () => {
     expect(listFileOperations(db)[0]?.metadata.recovered).toBe(true);
   });
 
-  it("publishes a running event when an item starts and a terminal event when the batch finishes", async () => {
+  it("runs independently without publishing Agent events", async () => {
     await writeFile(path.join(rootDir, "events.txt"), "events");
     const batch = createFileBatch(db, {
-      sessionId,
       rootId: "local",
       storagePoolId: "pool-1",
       operation: "trash",
@@ -128,10 +120,8 @@ describe("file batch runner", () => {
     runner.start();
     await runner.stop();
 
-    expect(listEvents(db, { sessionId }).map((event) => ({ type: event.type, payload: event.payload }))).toMatchObject([
-      { type: "job.running", payload: { fileBatchId: batch.id } },
-      { type: "job.completed", payload: { fileBatchId: batch.id } }
-    ]);
+    expect(getFileBatch(db, batch.id)?.status).toBe("completed");
+    expect(db.prepare("SELECT COUNT(*) FROM agent_events").pluck().get()).toBe(0);
   });
 });
 

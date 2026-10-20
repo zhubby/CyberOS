@@ -1,14 +1,19 @@
 import { createHash } from "node:crypto";
-import { lstat, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, lstat, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { CapabilityError, type CapabilityExecution, type CapabilitySubject, type JsonValue } from "@zos/capabilities";
 import {
   createCapabilityProposal,
   createTrashEntry,
+  deleteCapabilityRunPayload,
   expireCapabilityApprovals,
   failInterruptedCapabilityRuns,
   getCapabilityApprovalByRun,
+  getAgentCapabilityApproval,
   getCapabilityRun,
+  getCapabilityRunPayload,
   getMcpClient,
   getNasRoot,
   getRootReadiness,
@@ -18,11 +23,21 @@ import {
   type CapabilityRunRecord,
   type ZosDatabase
 } from "@zos/db";
-import { applyFileMutation, resolveSafeExistingPath, resolveSafeTargetPath } from "@zos/nas-tools";
+import {
+  applyFileMutation,
+  isPathInside,
+  listDir,
+  readText,
+  resolveSafeExistingPath,
+  resolveSafeTargetPath,
+  toRootRelative
+} from "@zos/nas-tools";
 import type { FileMutationOperation, FileOperationProposal, NasRootRecord, ZosConfig } from "@zos/shared";
 
-const FILE_MUTATION_CAPABILITY = "zos.files.mutate-propose";
+const FILE_MUTATION_CAPABILITY = "zos.files.mutate";
 const FILE_PROPOSAL_TTL_MS = 15 * 60_000;
+const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
+const execFileAsync = promisify(execFile);
 const SUPPORTED_FILE_MUTATIONS = new Set<FileMutationOperation>(["mkdir", "move", "copy", "rename", "trash"]);
 
 interface FileMutationRequest {
@@ -44,13 +59,101 @@ export interface CapabilityRuntimeDependencies {
   config: ZosConfig;
 }
 
+export type PiToolCapabilityName = "read" | "grep" | "find" | "ls" | "bash" | "edit" | "write";
+
+export interface PiToolCapabilityRequest {
+  toolCallId: string;
+  toolName: PiToolCapabilityName;
+  args: Record<string, unknown>;
+  redactedArgs: Record<string, unknown>;
+  risk: "low" | "medium" | "high" | "critical";
+  summary: string;
+  requiresConfirmation: boolean;
+}
+
+const PI_TOOL_CAPABILITIES: Record<PiToolCapabilityName, string> = {
+  read: "zos.files.read",
+  grep: "zos.files.grep",
+  find: "zos.files.find",
+  ls: "zos.files.list",
+  bash: "zos.shell.run",
+  edit: "zos.files.edit",
+  write: "zos.files.write"
+};
+
+interface StoredPiToolPayload {
+  kind: "pi_tool";
+  rootId: string;
+  toolCallId: string;
+  toolName: PiToolCapabilityName;
+  args: Record<string, JsonValue>;
+  revision: string | null;
+}
+
+export async function proposePiToolCapability(input: {
+  dependencies: CapabilityRuntimeDependencies;
+  sessionId: string;
+  rootId: string;
+  request: PiToolCapabilityRequest;
+}): Promise<CapabilityExecution> {
+  const root = requireReadyRoot(input.dependencies.db, input.rootId);
+  const revision = await validatePiToolRequest(root, input.request.toolName, input.request.args);
+  const capabilityId = PI_TOOL_CAPABILITIES[input.request.toolName];
+  const expiresAt = new Date(Date.now() + FILE_PROPOSAL_TTL_MS).toISOString();
+  const payload: StoredPiToolPayload = {
+    kind: "pi_tool",
+    rootId: root.id,
+    toolCallId: input.request.toolCallId,
+    toolName: input.request.toolName,
+    args: toJsonValue(input.request.args) as Record<string, JsonValue>,
+    revision
+  };
+  const created = createCapabilityProposal(input.dependencies.db, {
+    clientId: null,
+    subjectId: input.sessionId,
+    subjectKind: "pi",
+    capabilityId,
+    risk: input.request.risk,
+    redactedInput: toJsonValue({
+      toolCallId: input.request.toolCallId,
+      args: input.request.redactedArgs
+    }),
+    proposal: toJsonValue({
+      kind: "pi_tool",
+      toolName: input.request.toolName,
+      capabilityId,
+      summary: input.request.summary,
+      args: input.request.redactedArgs,
+      revision
+    }),
+    privatePayload: toJsonValue(payload),
+    requiresConfirmation: input.request.requiresConfirmation,
+    expiresAt
+  });
+  return {
+    data: {
+      state: created.run.state,
+      approval: {
+        id: created.approval.id,
+        status: created.approval.status,
+        revision: created.approval.revision,
+        expiresAt: created.approval.expiresAt
+      },
+      proposal: { summary: input.request.summary }
+    },
+    runId: created.run.id
+  };
+}
+
 export async function proposeFileMutation(input: {
   dependencies: CapabilityRuntimeDependencies;
   subject: CapabilitySubject;
   request: JsonValue;
   idempotencyKey?: string;
 }): Promise<CapabilityExecution> {
-  if (input.subject.kind === "system") throw new CapabilityError("FORBIDDEN", "System subjects cannot create MCP proposals");
+  if (input.subject.kind !== "pi") {
+    throw new CapabilityError("FORBIDDEN", "Only the built-in Pi agent can request mutation approval");
+  }
   const request = parseFileMutationRequest(input.request);
   const root = requireReadyRoot(input.dependencies.db, request.rootId);
   await validateFileMutation(root, request);
@@ -104,13 +207,19 @@ export async function executeApprovedCapabilityRun(
     if (!approval || approval.status !== "approved") {
       return failQueuedRun(dependencies.db, initial, "CONFLICT", "Capability run does not have an approved first-party decision");
     }
+    if (initial.subjectKind !== "pi" || !getAgentCapabilityApproval(dependencies.db, approval.id)) {
+      return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Approval is not linked to a Pi Agent conversation");
+    }
     const client = initial.clientId ? getMcpClient(dependencies.db, initial.clientId) : null;
     const now = new Date().toISOString();
-    if (!client || client.revokedAt || (client.expiresAt && client.expiresAt <= now)) {
-      return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Client credential is no longer active");
+    if (initial.clientId && (!client || client.kind !== "pi" || client.revokedAt || (client.expiresAt && client.expiresAt <= now))) {
+      return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Pi client credential is no longer active");
     }
-    if (!client.scopes.includes("zos:files:propose")) {
-      return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Client no longer has the required scope");
+    if (client && initial.capabilityId === FILE_MUTATION_CAPABILITY && !client.scopes.includes("zos:files:propose")) {
+      return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Pi client no longer has the required scope");
+    }
+    if (Object.values(PI_TOOL_CAPABILITIES).includes(initial.capabilityId)) {
+      return executeApprovedPiToolRun(dependencies, initial);
     }
     if (initial.capabilityId !== FILE_MUTATION_CAPABILITY) {
       return failQueuedRun(dependencies.db, initial, "NOT_READY", "Capability execution adapter is not installed");
@@ -159,7 +268,7 @@ export async function executeApprovedCapabilityRun(
           ...(result.metadata.trashEntryId ? { trashEntryId: String(result.metadata.trashEntryId) } : {})
         }
       });
-      return transitionCapabilityRun(dependencies.db, {
+      const completed = transitionCapabilityRun(dependencies.db, {
         runId,
         expectedRevision: running.revision,
         from: ["running"],
@@ -175,8 +284,10 @@ export async function executeApprovedCapabilityRun(
         domainOperationId: operation.id,
         cancellable: false
       })!;
+      deleteCapabilityRunPayload(dependencies.db, runId);
+      return completed;
     } catch (error) {
-      return transitionCapabilityRun(dependencies.db, {
+      const failed = transitionCapabilityRun(dependencies.db, {
         runId,
         expectedRevision: running.revision,
         from: ["running"],
@@ -185,6 +296,8 @@ export async function executeApprovedCapabilityRun(
         errorMessage: safeFailureMessage(error, dependencies),
         cancellable: false
       })!;
+      deleteCapabilityRunPayload(dependencies.db, runId);
+      return failed;
     }
   } catch (error) {
     const current = getCapabilityRun(dependencies.db, runId);
@@ -325,6 +438,350 @@ function toFileOperationProposal(request: FileMutationRequest, summary: string):
     reversible: true,
     summary
   };
+}
+
+async function executeApprovedPiToolRun(
+  dependencies: CapabilityRuntimeDependencies,
+  initial: CapabilityRunRecord
+): Promise<CapabilityRunRecord> {
+  const payload = parseStoredPiToolPayload(getCapabilityRunPayload(dependencies.db, initial.id));
+  const root = requireReadyRoot(dependencies.db, payload.rootId);
+  const currentRevision = await validatePiToolRequest(root, payload.toolName, payload.args);
+  if (payload.revision !== currentRevision) {
+    deleteCapabilityRunPayload(dependencies.db, initial.id);
+    return failQueuedRun(dependencies.db, initial, "CONFLICT", "File state changed after approval was requested");
+  }
+
+  const running = transitionCapabilityRun(dependencies.db, {
+    runId: initial.id,
+    expectedRevision: initial.revision,
+    from: ["queued"],
+    to: "running",
+    progress: { phase: "executing" },
+    cancellable: false
+  });
+  if (!running) return getCapabilityRun(dependencies.db, initial.id)!;
+
+  try {
+    const result = await executePiTool(root, payload.toolName, payload.args);
+    let operationId: string | null = null;
+    if (payload.toolName === "edit" || payload.toolName === "write") {
+      const requestedPath = requiredText(payload.args.path, "path");
+      const operation = recordAppliedOperation(dependencies.db, {
+        approvalId: null,
+        operation: "edit",
+        sourcePath: requestedPath,
+        targetPath: requestedPath,
+        status: "applied",
+        metadata: {
+          rootId: root.id,
+          capabilityRunId: initial.id,
+          toolName: payload.toolName,
+          reversible: false
+        }
+      });
+      operationId = operation.id;
+    }
+    const completed = transitionCapabilityRun(dependencies.db, {
+      runId: initial.id,
+      expectedRevision: running.revision,
+      from: ["running"],
+      to: "succeeded",
+      progress: { phase: "complete" },
+      result: toJsonValue(result),
+      ...(operationId ? { domainOperationType: "file_operation", domainOperationId: operationId } : {}),
+      cancellable: false
+    })!;
+    deleteCapabilityRunPayload(dependencies.db, initial.id);
+    return completed;
+  } catch (error) {
+    const failed = transitionCapabilityRun(dependencies.db, {
+      runId: initial.id,
+      expectedRevision: running.revision,
+      from: ["running"],
+      to: "failed",
+      errorCode: capabilityFailureCode(error),
+      errorMessage: safeFailureMessage(error, dependencies),
+      cancellable: false
+    })!;
+    deleteCapabilityRunPayload(dependencies.db, initial.id);
+    return failed;
+  }
+}
+
+function parseStoredPiToolPayload(value: JsonValue | null): StoredPiToolPayload {
+  if (!isRecord(value) || value.kind !== "pi_tool") {
+    throw new CapabilityError("INTERNAL", "Stored Agent capability payload is missing");
+  }
+  const toolName = value.toolName;
+  if (typeof toolName !== "string" || !(toolName in PI_TOOL_CAPABILITIES)) {
+    throw new CapabilityError("INTERNAL", "Stored Agent tool is invalid");
+  }
+  if (typeof value.rootId !== "string" || typeof value.toolCallId !== "string" || !isRecord(value.args)) {
+    throw new CapabilityError("INTERNAL", "Stored Agent capability payload is invalid");
+  }
+  return {
+    kind: "pi_tool",
+    rootId: value.rootId,
+    toolCallId: value.toolCallId,
+    toolName: toolName as PiToolCapabilityName,
+    args: value.args,
+    revision: typeof value.revision === "string" ? value.revision : null
+  };
+}
+
+async function validatePiToolRequest(
+  root: NasRootRecord,
+  toolName: PiToolCapabilityName,
+  args: Record<string, unknown>
+): Promise<string | null> {
+  switch (toolName) {
+    case "read":
+    case "grep":
+    case "find":
+    case "ls": {
+      await resolveSafeExistingPath(root.path, optionalText(args.path) ?? ".");
+      return null;
+    }
+    case "bash": {
+      const command = requiredText(args.command, "command");
+      if (Buffer.byteLength(command, "utf8") > 64 * 1024) throw new CapabilityError("INVALID_ARGUMENT", "command is too large");
+      return null;
+    }
+    case "edit": {
+      const edits = parseEdits(args.edits);
+      const preview = await buildEditPreview(root, requiredText(args.path, "path"), edits);
+      return createHash("sha256").update(await readFile(preview.absolutePath)).digest("base64url");
+    }
+    case "write": {
+      const target = await assertSafeWriteTarget(root, requiredText(args.path, "path"));
+      requiredText(args.content, "content", true);
+      return targetRevision(target.absolutePath);
+    }
+  }
+}
+
+async function executePiTool(
+  root: NasRootRecord,
+  toolName: PiToolCapabilityName,
+  args: Record<string, JsonValue>
+): Promise<Record<string, JsonValue>> {
+  switch (toolName) {
+    case "read": {
+      const preview = await readText(root, requiredText(args.path, "path"), MAX_TOOL_OUTPUT_BYTES);
+      const content = sliceLines(preview.content, optionalInteger(args.offset), optionalInteger(args.limit));
+      return { text: truncateText(content + (preview.truncated ? "\n\n[Output truncated]" : "")), truncated: preview.truncated };
+    }
+    case "ls": {
+      const entries = await listDir(root, optionalText(args.path) ?? ".");
+      const limit = boundedLimit(args.limit, 100, 1_000);
+      return {
+        text: entries.slice(0, limit).map((entry) => `${entry.kind.padEnd(9)} ${entry.path}`).join("\n") || "(empty)",
+        truncated: entries.length > limit
+      };
+    }
+    case "find": {
+      const limit = boundedLimit(args.limit, 100, 1_000);
+      const matches = await globNasRoot(root, optionalText(args.path) ?? ".", requiredText(args.pattern, "pattern"), limit);
+      return { text: matches.join("\n") || "No matches.", truncated: matches.length >= limit };
+    }
+    case "grep": {
+      const limit = boundedLimit(args.limit, 100, 1_000);
+      const matches = await grepNasRoot(root, {
+        pattern: requiredText(args.pattern, "pattern"),
+        path: optionalText(args.path) ?? ".",
+        ignoreCase: args.ignoreCase === true,
+        literal: args.literal === true,
+        limit
+      });
+      return { text: truncateText(matches.join("\n") || "No matches."), truncated: matches.length >= limit };
+    }
+    case "bash": {
+      const command = requiredText(args.command, "command");
+      const timeout = boundedLimit(args.timeout, 120_000, 600_000);
+      try {
+        const result = await execFileAsync("/bin/bash", ["-lc", command], {
+          cwd: root.path,
+          env: safeShellEnvironment(root.path),
+          timeout,
+          maxBuffer: MAX_TOOL_OUTPUT_BYTES
+        });
+        return { text: truncateText(`${result.stdout}${result.stderr}`) || "Command completed." };
+      } catch (error) {
+        const processError = error as Error & { stdout?: string; stderr?: string };
+        const output = truncateText(`${processError.stdout ?? ""}${processError.stderr ?? ""}`.trim());
+        throw new Error(output || "Shell command failed");
+      }
+    }
+    case "edit": {
+      const requestedPath = requiredText(args.path, "path");
+      const preview = await buildEditPreview(root, requestedPath, parseEdits(args.edits));
+      await writeFile(preview.absolutePath, preview.content, "utf8");
+      return { text: `Edited ${preview.relativePath}.` };
+    }
+    case "write": {
+      const target = await assertSafeWriteTarget(root, requiredText(args.path, "path"));
+      await mkdir(path.dirname(target.absolutePath), { recursive: true });
+      await writeFile(target.absolutePath, requiredText(args.content, "content", true), "utf8");
+      return { text: `Wrote ${target.relativePath}.` };
+    }
+  }
+}
+
+async function grepNasRoot(
+  root: NasRootRecord,
+  input: { pattern: string; path: string; ignoreCase: boolean; literal: boolean; limit: number }
+): Promise<string[]> {
+  const safe = await resolveSafeExistingPath(root.path, input.path);
+  const matcher = input.literal
+    ? (line: string) => (input.ignoreCase ? line.toLocaleLowerCase() : line)
+        .includes(input.ignoreCase ? input.pattern.toLocaleLowerCase() : input.pattern)
+    : (line: string) => new RegExp(input.pattern, input.ignoreCase ? "i" : undefined).test(line);
+  const matches: string[] = [];
+  async function visit(absolutePath: string): Promise<void> {
+    if (matches.length >= input.limit) return;
+    const entryStat = await lstat(absolutePath);
+    if (entryStat.isSymbolicLink()) return;
+    if (entryStat.isDirectory()) {
+      const entries = await readdir(absolutePath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.name === ".git" || entry.name === "node_modules") continue;
+        await visit(path.join(absolutePath, entry.name));
+        if (matches.length >= input.limit) return;
+      }
+      return;
+    }
+    if (!entryStat.isFile()) return;
+    const relativePath = toRootRelative(safe.rootRealPath, absolutePath);
+    const preview = await readText(root, relativePath, 256 * 1024);
+    preview.content.split("\n").forEach((line, index) => {
+      if (matches.length < input.limit && matcher(line)) matches.push(`${relativePath}:${index + 1}:${line}`);
+    });
+  }
+  await visit(safe.realPath);
+  return matches;
+}
+
+async function globNasRoot(root: NasRootRecord, requestedPath: string, pattern: string, limit: number): Promise<string[]> {
+  if (!pattern.trim() || pattern.includes("\0")) throw new CapabilityError("INVALID_ARGUMENT", "pattern must be a non-empty glob");
+  const safe = await resolveSafeExistingPath(root.path, requestedPath);
+  const matches: string[] = [];
+  async function visit(absolutePath: string): Promise<void> {
+    if (matches.length >= limit) return;
+    const entryStat = await lstat(absolutePath);
+    if (entryStat.isSymbolicLink()) return;
+    const relativePath = path.relative(safe.realPath, absolutePath).split(path.sep).join("/");
+    if (relativePath && (path.matchesGlob(relativePath, pattern) || (!pattern.includes("/") && path.matchesGlob(path.posix.basename(relativePath), pattern)))) {
+      matches.push(relativePath);
+    }
+    if (!entryStat.isDirectory()) return;
+    const entries = await readdir(absolutePath, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      if (entry.name === ".git" || entry.name === "node_modules") continue;
+      await visit(path.join(absolutePath, entry.name));
+      if (matches.length >= limit) return;
+    }
+  }
+  await visit(safe.realPath);
+  return matches;
+}
+
+async function buildEditPreview(
+  root: NasRootRecord,
+  requestedPath: string,
+  edits: Array<{ oldText: string; newText: string }>
+): Promise<{ absolutePath: string; relativePath: string; content: string }> {
+  const safe = await resolveSafeExistingPath(root.path, requestedPath);
+  let content = await readFile(safe.realPath, "utf8");
+  for (const edit of edits) {
+    if (!edit.oldText) throw new CapabilityError("INVALID_ARGUMENT", "edit oldText cannot be empty");
+    if (!content.includes(edit.oldText)) throw new CapabilityError("CONFLICT", `edit oldText was not found in ${safe.relativePath}`);
+    content = content.replace(edit.oldText, edit.newText);
+  }
+  return { absolutePath: safe.realPath, relativePath: safe.relativePath, content };
+}
+
+async function assertSafeWriteTarget(root: NasRootRecord, requestedPath: string): Promise<{ absolutePath: string; relativePath: string }> {
+  const target = await resolveSafeTargetPath(root.path, requestedPath);
+  let current = path.dirname(target.absolutePath);
+  while (current && current !== path.dirname(current)) {
+    try {
+      const currentRealPath = await realpath(current);
+      if (!isPathInside(target.rootRealPath, currentRealPath)) throw new CapabilityError("INVALID_ARGUMENT", "Mutation target parent escapes the NAS root");
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      current = path.dirname(current);
+    }
+  }
+  try {
+    const targetStat = await lstat(target.absolutePath);
+    if (targetStat.isSymbolicLink()) throw new CapabilityError("INVALID_ARGUMENT", "Refusing to write through a symlink");
+    if (!isPathInside(target.rootRealPath, await realpath(target.absolutePath))) {
+      throw new CapabilityError("INVALID_ARGUMENT", "Mutation target escapes the NAS root");
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return { absolutePath: target.absolutePath, relativePath: target.relativePath };
+}
+
+async function targetRevision(absolutePath: string): Promise<string> {
+  try {
+    const info = await stat(absolutePath);
+    return createHash("sha256").update(JSON.stringify({ size: info.size, mtimeMs: info.mtimeMs, ino: info.ino })).digest("base64url");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+    throw error;
+  }
+}
+
+function parseEdits(value: unknown): Array<{ oldText: string; newText: string }> {
+  if (!Array.isArray(value) || value.length === 0) throw new CapabilityError("INVALID_ARGUMENT", "edits are required");
+  return value.map((entry) => {
+    if (!entry || typeof entry !== "object") throw new CapabilityError("INVALID_ARGUMENT", "edit is invalid");
+    const record = entry as Record<string, unknown>;
+    return { oldText: requiredText(record.oldText, "oldText", true), newText: requiredText(record.newText, "newText", true) };
+  });
+}
+
+function requiredText(value: unknown, field: string, allowEmpty = false): string {
+  if (typeof value !== "string" || (!allowEmpty && !value.trim())) throw new CapabilityError("INVALID_ARGUMENT", `${field} is required`);
+  return value;
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function optionalInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) ? value : undefined;
+}
+
+function boundedLimit(value: unknown, fallback: number, maximum: number): number {
+  return Math.max(1, Math.min(optionalInteger(value) ?? fallback, maximum));
+}
+
+function sliceLines(content: string, offset?: number, limit?: number): string {
+  const lines = content.split("\n");
+  const start = offset ? Math.max(0, offset - 1) : 0;
+  return lines.slice(start, limit ? start + Math.max(0, limit) : lines.length).join("\n");
+}
+
+function truncateText(text: string): string {
+  return Buffer.byteLength(text, "utf8") <= MAX_TOOL_OUTPUT_BYTES
+    ? text
+    : `${text.slice(0, MAX_TOOL_OUTPUT_BYTES)}\n\n[Output truncated]`;
+}
+
+function safeShellEnvironment(cwd: string): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = { HOME: cwd, PATH: "/usr/local/bin:/usr/bin:/bin", TMPDIR: "/tmp" };
+  for (const name of ["LANG", "LC_ALL", "TZ"] as const) {
+    const value = process.env[name];
+    if (value && /^[A-Za-z0-9_+./:@-]{1,128}$/u.test(value)) environment[name] = value;
+  }
+  return environment;
 }
 
 function failQueuedRun(

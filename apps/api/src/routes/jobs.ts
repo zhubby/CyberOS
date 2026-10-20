@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { appendEvent, cancelQueuedFileBatchItems, getJob, updateJobStatus } from "@zos/db";
+import { appendEvent, getJob, updateJobStatus } from "@zos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerJobRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {
@@ -23,10 +23,6 @@ export function registerJobRoutes(server: FastifyInstance, { db }: ApiRouteConte
         status: job.status
       });
       return;
-    }
-
-    if (job.kind === "file_batch") {
-      cancelQueuedFileBatchItems(db, job.id);
     }
 
     appendEvent(db, {

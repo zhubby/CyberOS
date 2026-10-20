@@ -65,6 +65,7 @@
 }
 
 .session-item {
+  position: relative;
   display: inline-grid;
   place-items: center;
   width: 40px;
@@ -97,6 +98,24 @@
 
 .session-item svg {
   color: inherit;
+}
+
+.session-approval-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border: 1px solid var(--channel-bg);
+  border-radius: 7px;
+  color: var(--accent-contrast);
+  background: var(--yellow);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .agent-footer {

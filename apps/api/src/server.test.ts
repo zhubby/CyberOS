@@ -11,24 +11,19 @@ import { PHOTOSTAFF_SUPPORTED_EXTENSIONS, resolveZosPaths } from "@zos/shared";
 import {
   appendEvent,
   createActionMessageAndJob,
+  createCapabilityProposal,
   createPendingApproval,
-  createStorageOperationApproval,
-  createPiToolCallApproval,
   createDockerRegistryCredential,
   createSession,
   createUserMessageAndJob,
   ensureNasRoots,
   finishBackupRun,
   finishIndexRun,
-  getApproval,
   getDockerSettings,
-  getDockerOperationByApproval,
   getFileOperation,
   getFileBatch,
   getJob,
   getSession,
-  getShareOperationByApproval,
-  getStorageOperationByApproval,
   getShareSettings,
   getTrashEntry,
   listEvents,
@@ -38,6 +33,8 @@ import {
   listMessages,
   listPendingApprovals,
   listOperationNotifications,
+  listShareOperations,
+  linkAgentJobToCapabilityRun,
   openZosDb,
   recordIndexFailure,
   saveDockerSettings,
@@ -620,7 +617,7 @@ describe("API server", () => {
     const session = createSession(db, { rootId: "local" });
     const crossPoolProposal = await server.inject({
       method: "POST",
-      url: "/api/files/proposals",
+      url: "/api/files/mutations",
       payload: {
         sessionId: session.id,
         rootId: "local",
@@ -782,26 +779,18 @@ describe("API server", () => {
     await expect(readFile(path.join(poolDir, "rollback-upload.txt"), "utf8")).resolves.toBe("uploaded");
 
     mountpoint = poolDir;
-    const session = createSession(db, { rootId: "local" });
-    const proposal = await server.inject({
+    const applied = await server.inject({
       method: "POST",
-      url: "/api/files/proposals",
+      url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "trash",
         sourcePath: "pool/rollback.txt"
       }
     });
-    expect(proposal.statusCode).toBe(202);
-    const approvalId = proposal.json().approval.id as string;
-    const applied = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${approvalId}/approve`
-    });
-    expect(applied.statusCode).toBe(202);
-    const trashEntryId = applied.json().operations[0].metadata.trashEntryId as string;
+    expect(applied.statusCode).toBe(201);
+    const trashEntryId = applied.json().operation.metadata.trashEntryId as string;
     expect(getTrashEntry(db, trashEntryId)?.metadata.storagePoolId).toBe(TEST_STORAGE_POOL_ID);
 
     mountpoint = alternateMount;
@@ -1830,7 +1819,6 @@ describe("API server", () => {
   });
 
   it("creates storage pools directly after explicit confirmation", async () => {
-    const session = createSession(db, { rootId: "local" });
     const config = testConfig(tempDir);
     const socketPath = path.join(tempDir, "hostd.sock");
     config.hostd.socketPath = socketPath;
@@ -1857,9 +1845,8 @@ describe("API server", () => {
 
     const missingConfirmation = await server.inject({
       method: "POST",
-      url: "/api/storage/proposals",
+      url: "/api/storage/actions",
       payload: {
-        sessionId: session.id,
         name: "media",
         raidLevel: "1",
         devices: ["/dev/sda", "/dev/sdb"]
@@ -1872,9 +1859,8 @@ describe("API server", () => {
 
     const proposed = await server.inject({
       method: "POST",
-      url: "/api/storage/proposals",
+      url: "/api/storage/actions",
       payload: {
-        sessionId: session.id,
         name: "media",
         raidLevel: "1",
         devices: ["/dev/sda", "/dev/sdb"],
@@ -1883,26 +1869,21 @@ describe("API server", () => {
     });
     expect(proposed.statusCode).toBe(202);
     expect(proposed.json()).toMatchObject({
-      message: { role: "system" },
-      job: { status: "completed" },
       operation: {
         action: "create_pool",
-        status: "applied",
-        approvalId: null
+        status: "applied"
       }
     });
-    expect(proposed.json().approval).toBeUndefined();
     expect(hostdProposal).toMatchObject({ action: "create_pool", name: "media" });
     expect(listPendingApprovals(db)).toHaveLength(0);
-    expect(listOperationNotifications(db)).toMatchObject([
-      { jobId: proposed.json().job.id, kind: "storage", status: "succeeded" }
-    ]);
+    expect(listOperationNotifications(db)).toEqual([]);
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
 
     const unsafe = await server.inject({
       method: "POST",
-      url: "/api/storage/proposals",
+      url: "/api/storage/actions",
       payload: {
-        sessionId: session.id,
         name: "system",
         raidLevel: "1",
         devices: ["/dev/nvme0n1", "/dev/sda"],
@@ -1917,7 +1898,6 @@ describe("API server", () => {
   });
 
   it("requires an exact pool confirmation before deleting a storage pool", async () => {
-    const session = createSession(db, { rootId: "local" });
     const config = testConfig(tempDir);
     const socketPath = path.join(tempDir, "hostd-delete.sock");
     config.hostd.socketPath = socketPath;
@@ -1941,9 +1921,8 @@ describe("API server", () => {
 
     const missingConfirmation = await server.inject({
       method: "POST",
-      url: "/api/storage/proposals",
+      url: "/api/storage/actions",
       payload: {
-        sessionId: session.id,
         action: "delete_pool",
         poolId: "/dev/md0",
         confirmation: "storage"
@@ -1956,9 +1935,8 @@ describe("API server", () => {
 
     const missingPool = await server.inject({
       method: "POST",
-      url: "/api/storage/proposals",
+      url: "/api/storage/actions",
       payload: {
-        sessionId: session.id,
         action: "delete_pool",
         poolId: "/dev/md-missing",
         confirmation: "storage",
@@ -1970,9 +1948,8 @@ describe("API server", () => {
 
     const wrongConfirmation = await server.inject({
       method: "POST",
-      url: "/api/storage/proposals",
+      url: "/api/storage/actions",
       payload: {
-        sessionId: session.id,
         action: "delete_pool",
         poolId: "/dev/md0",
         confirmation: "wrong",
@@ -1984,9 +1961,8 @@ describe("API server", () => {
 
     const deleted = await server.inject({
       method: "POST",
-      url: "/api/storage/proposals",
+      url: "/api/storage/actions",
       payload: {
-        sessionId: session.id,
         action: "delete_pool",
         poolId: "/dev/md0",
         confirmation: "storage",
@@ -1995,11 +1971,9 @@ describe("API server", () => {
     });
     expect(deleted.statusCode).toBe(202);
     expect(deleted.json()).toMatchObject({
-      job: { status: "completed" },
       operation: {
         action: "delete_pool",
-        status: "applied",
-        approvalId: null
+        status: "applied"
       }
     });
     expect(hostdProposal).toMatchObject({
@@ -2009,64 +1983,6 @@ describe("API server", () => {
       mountpoint: "/zos/data/storage"
     });
 
-    await server.close();
-    await closeNetServer(hostdServer);
-  });
-
-  it("applies an approved storage pool through hostd", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const config = testConfig(tempDir);
-    const socketPath = path.join(tempDir, "hostd.sock");
-    config.hostd.socketPath = socketPath;
-    let hostdProposal: unknown = null;
-    const hostdServer = await createHostdTestServer(socketPath, (request) => {
-      hostdProposal = request.payload;
-      return {
-        action: "create_pool",
-        name: "media",
-        raidLevel: "1",
-        devices: ["/dev/sda", "/dev/sdb"],
-        filesystem: "ext4",
-        mountpoint: "/zos/data/media",
-        mdDevice: "/dev/md/media",
-        uuid: "11111111-2222-3333-4444-555555555555"
-      };
-    });
-
-    const proposal: StorageOperationProposal = {
-      action: "create_pool",
-      name: "media",
-      raidLevel: "1",
-      devices: ["/dev/sda", "/dev/sdb"],
-      filesystem: "ext4",
-      mountpoint: "/zos/data/media",
-      risk: "high",
-      summary: "Create RAID 1 pool media at /zos/data/media using /dev/sda, /dev/sdb. All selected disks will be erased."
-    };
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: proposal.summary,
-      status: "waiting_approval"
-    });
-    const { approval } = createStorageOperationApproval(db, {
-      jobId: job.id,
-      proposal
-    });
-    const server = await buildServer({
-      config,
-      db,
-      system: { commandRunner: availableStorageCommandRunner() }
-    });
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${approval.id}/approve`
-    });
-
-    expect(approved.statusCode).toBe(202);
-    expect(hostdProposal).toMatchObject({ action: "create_pool", name: "media" });
-    expect(getStorageOperationByApproval(db, approval.id)).toMatchObject({ status: "applied" });
-    expect(getApproval(db, approval.id)?.status).toBe("applied");
-    expect(getJob(db, job.id)?.status).toBe("completed");
     await server.close();
     await closeNetServer(hostdServer);
   });
@@ -2281,9 +2197,8 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("creates share approvals and applies them only after approval", async () => {
+  it("applies share settings directly without creating Agent records", async () => {
     await mkdir(path.join(rootDir, "media"));
-    const session = createSession(db, { rootId: "local" });
     const hostd = new FakeShareHostd();
     const server = await buildServer({
       config: testConfig(tempDir),
@@ -2295,53 +2210,31 @@ describe("API server", () => {
 
     const proposed = await server.inject({
       method: "POST",
-      url: "/api/shares/proposals",
+      url: "/api/shares/settings",
       payload: {
-        sessionId: session.id,
         settings: shareSettingsPayload("secret")
       }
     });
 
-    expect(proposed.statusCode).toBe(202);
-    expect(proposed.json().message.role).toBe("system");
-    expect(hostd.requests).toEqual([]);
-    expect(getShareSettings(db)).toBeNull();
+    expect(proposed.statusCode).toBe(200);
+    expect(hostd.requests).toHaveLength(1);
     expect(proposed.payload).not.toContain("secret");
     expect(proposed.json()).toMatchObject({
-      approval: {
-        kind: "share_operation",
-        status: "pending",
-        proposal: [
-          {
-            action: "apply_settings",
-            risk: "high",
-            settings: {
-              account: {
-                username: "zos-share",
-                passwordConfigured: true
-              }
-            }
-          }
-        ]
+      settings: {
+        account: {
+          username: "zos-share",
+          passwordConfigured: true
+        }
       },
       operation: {
         action: "apply_settings",
-        status: "proposed"
+        status: "applied"
       }
     });
-    expect(listOperationNotifications(db)).toMatchObject([
-      { jobId: proposed.json().job.id, kind: "share", status: "pending_approval" }
-    ]);
-
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-
-    expect(approved.statusCode).toBe(202);
-    expect(hostd.requests).toHaveLength(1);
     expect(hostd.requests[0]?.settings.account.password).toBe("secret");
-    expect(hostd.requests[0]?.roots).toEqual([{ id: "local", name: "Local", path: rootDir }]);
+    expect(hostd.requests[0]?.roots).toEqual([
+      expect.objectContaining({ id: "local", name: "Local", path: rootDir })
+    ]);
     expect(getShareSettings(db)).toMatchObject({
       enabled: true,
       account: {
@@ -2367,16 +2260,15 @@ describe("API server", () => {
         }
       ]
     });
-    expect(getShareOperationByApproval(db, proposed.json().approval.id)).toMatchObject({
-      action: "apply_settings",
-      status: "applied"
-    });
+    expect(listPendingApprovals(db)).toEqual([]);
+    expect(listOperationNotifications(db)).toEqual([]);
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
     await server.close();
   });
 
-  it("does not let an older share approval overwrite directly updated credentials", async () => {
+  it("lets a direct account update follow a direct share settings update", async () => {
     await mkdir(path.join(rootDir, "media"));
-    const session = createSession(db, { rootId: "local" });
     const hostd = new FakeShareHostd();
     const server = await buildServer({
       config: testConfig(tempDir),
@@ -2385,29 +2277,25 @@ describe("API server", () => {
     });
     const proposed = await server.inject({
       method: "POST",
-      url: "/api/shares/proposals",
+      url: "/api/shares/settings",
       payload: {
-        sessionId: session.id,
         settings: shareSettingsPayload("approval-secret")
       }
     });
+    expect(proposed.statusCode).toBe(200);
+    const current = getShareSettings(db);
+    expect(current).not.toBeNull();
     const accountUpdated = await server.inject({
       method: "PUT",
       url: "/api/shares/account",
       payload: {
         username: "latest-share",
         password: "latest-secret",
-        expectedUpdatedAt: new Date(0).toISOString()
+        expectedUpdatedAt: current!.updatedAt
       }
     });
 
     expect(accountUpdated.statusCode).toBe(200);
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-
-    expect(approved.statusCode).toBe(202);
     expect(hostd.requests).toHaveLength(2);
     expect(hostd.requests[1]?.settings.account).toEqual({
       username: "latest-share",
@@ -2422,7 +2310,6 @@ describe("API server", () => {
 
   it("keeps saved share settings unchanged when hostd application fails", async () => {
     await mkdir(path.join(rootDir, "media"));
-    const session = createSession(db, { rootId: "local" });
     const hostd = new FakeShareHostd();
     hostd.failApply = true;
     const server = await buildServer({
@@ -2434,30 +2321,22 @@ describe("API server", () => {
     });
     const proposed = await server.inject({
       method: "POST",
-      url: "/api/shares/proposals",
+      url: "/api/shares/settings",
       payload: {
-        sessionId: session.id,
         settings: shareSettingsPayload("secret")
       }
     });
 
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-
-    expect(approved.statusCode).toBe(400);
+    expect(proposed.statusCode).toBe(400);
     expect(getShareSettings(db)).toBeNull();
-    expect(getApproval(db, proposed.json().approval.id)?.status).toBe("failed");
-    expect(getShareOperationByApproval(db, proposed.json().approval.id)).toMatchObject({
+    expect(listShareOperations(db)).toEqual([expect.objectContaining({
       status: "failed"
-    });
+    })]);
     await server.close();
   });
 
-  it("rejects unsafe share paths and invalid CIDRs before creating approvals", async () => {
+  it("rejects unsafe share paths and invalid CIDRs before applying settings", async () => {
     await mkdir(path.join(rootDir, "media"));
-    const session = createSession(db, { rootId: "local" });
     const server = await buildServer({ config: testConfig(tempDir), db });
     const payload = shareSettingsPayload("secret");
     const share = payload.shares[0];
@@ -2467,9 +2346,8 @@ describe("API server", () => {
 
     const unsafePath = await server.inject({
       method: "POST",
-      url: "/api/shares/proposals",
+      url: "/api/shares/settings",
       payload: {
-        sessionId: session.id,
         settings: {
           ...payload,
           shares: [
@@ -2483,9 +2361,8 @@ describe("API server", () => {
     });
     const invalidCidr = await server.inject({
       method: "POST",
-      url: "/api/shares/proposals",
+      url: "/api/shares/settings",
       payload: {
-        sessionId: session.id,
         settings: {
           ...payload,
           shares: [
@@ -2954,7 +2831,7 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("pins Compose deployment approvals to the saved App revision", async () => {
+  it("deploys the current Compose App revision directly without exposing secrets", async () => {
     const composeCommand = await writeComposeTestCommand();
     const config = dockerEnabledConfig(tempDir, { composeCommand });
     const compose = new DockerComposeService(() => config.docker, db, path.join(tempDir, "apps"));
@@ -2970,35 +2847,18 @@ describe("API server", () => {
       environment: [{ key: "APP_TOKEN", value: "approval-secret" }]
     } });
     const app = created.json().app as { id: string; revision: string };
-    const session = createSession(db, { rootId: "local" });
-    const proposed = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id,
+    const deployed = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
       action: "compose_up",
       composeProjectId: app.id
     } });
-    expect(proposed.statusCode).toBe(202);
-    expect(proposed.body).not.toContain("approval-secret");
-    expect(proposed.json()).toMatchObject({ approval: { proposal: [{
-      composeProjectId: app.id,
-      composeRevision: app.revision
-    }] } });
-    expect(proposed.body).not.toContain("managedPath");
-    expect(proposed.body).not.toContain("composeContent");
-
-    const updated = await server.inject({ method: "PUT", url: `/api/docker/apps/${app.id}`, payload: {
-      name: "Managed App",
-      composeContent: "services:\n  app:\n    image: alpine:3\n",
-      environment: [{ key: "APP_TOKEN" }],
-      expectedRevision: app.revision
-    } });
-    expect(updated.statusCode).toBe(200);
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-    expect(approved.statusCode).toBe(400);
-    expect(approved.body).not.toContain("approval-secret");
-    expect(getApproval(db, proposed.json().approval.id)?.status).toBe("failed");
+    expect(deployed.statusCode).toBe(202);
+    expect(deployed.body).not.toContain("approval-secret");
+    expect(deployed.body).not.toContain("managedPath");
+    expect(deployed.body).not.toContain("composeContent");
+    expect(deployed.json()).toMatchObject({ operation: { status: "applied" } });
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
+    expect(listPendingApprovals(db)).toEqual([]);
     await server.close();
   });
 
@@ -3228,7 +3088,7 @@ describe("API server", () => {
       const session = createSession(db, { rootId: "local" });
       for (const limit of [{ memoryLimitBytes: 8_388_608 }, { memoryReservationBytes: 8_388_608 },
         { memorySwapBytes: -1 }, { cpuShares: 512 }, { cpusetCpus: "0-1" }, { pidsLimit: 128 }]) {
-        const rejected = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
+        const rejected = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
           sessionId: session.id, action: "create", targetType: "container", name: "unsupported", image: "rustfs/rustfs", ...limit
         } });
         expect(rejected.statusCode).toBe(400);
@@ -3259,7 +3119,7 @@ describe("API server", () => {
       for (const flag of [false, null]) {
         engine.resourceCapabilities = { ...engine.resourceCapabilities, cpuQuota: flag, memoryLimit: flag };
         for (const limit of [{ cpuLimit: 2 }, { memorySwapBytes: -1 }]) {
-          const rejected = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
+          const rejected = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
             sessionId: session.id, action: "create", targetType: "container", name: "limits", image: "alpine", ...limit
           } });
           expect(rejected.statusCode).toBe(400);
@@ -3268,7 +3128,7 @@ describe("API server", () => {
       expect(engine.calls).toEqual([]);
       expect(listDockerOperations(db)).toEqual([]);
       engine.resourceCapabilities = { memoryLimit: true, swapLimit: true, cpuQuota: true, cpuShares: true, cpuset: true, pidsLimit: true };
-      const accepted = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
+      const accepted = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
         sessionId: session.id, action: "create", targetType: "container", name: "limits", image: "alpine", start: false,
         cpuLimit: 2, cpuShares: 512, cpusetCpus: "0-1", memoryLimitBytes: 8_388_608,
         memoryReservationBytes: 4_194_304, memorySwapBytes: -1, pidsLimit: 128
@@ -3278,8 +3138,7 @@ describe("API server", () => {
     } finally { await server.close(); }
   });
 
-  it("creates Docker container approvals without running the action before approval", async () => {
-    const session = createSession(db, { rootId: "local" });
+  it("executes Docker actions directly without creating Agent records", async () => {
     const engine = new FakeDockerEngine();
     const server = await buildServer({
       config: dockerEnabledConfig(tempDir),
@@ -3292,49 +3151,26 @@ describe("API server", () => {
 
     const proposed = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "start",
         containerId: "container-1"
       }
     });
 
     expect(proposed.statusCode).toBe(202);
-    expect(proposed.json().message.role).toBe("system");
-    expect(engine.calls).toEqual([]);
+    expect(engine.calls).toEqual(["start:container-1"]);
     expect(proposed.json()).toMatchObject({
-      approval: {
-        kind: "docker_operation",
-        status: "pending",
-        proposal: [
-          {
-            action: "start",
-            containerId: "container-1"
-          }
-        ]
-      },
       operation: {
         action: "start",
         targetType: "container",
-        status: "proposed"
+        status: "applied"
       }
     });
-    expect(listOperationNotifications(db)).toMatchObject([
-      { jobId: proposed.json().job.id, kind: "docker", status: "pending_approval" }
-    ]);
-
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-
-    expect(approved.statusCode).toBe(202);
-    expect(engine.calls).toEqual(["start:container-1"]);
-    expect(getDockerOperationByApproval(db, proposed.json().approval.id)).toMatchObject({
-      action: "start",
-      status: "applied"
-    });
+    expect(listOperationNotifications(db)).toEqual([]);
+    expect(listPendingApprovals(db)).toEqual([]);
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
     await server.close();
   });
 
@@ -3363,14 +3199,12 @@ describe("API server", () => {
   });
 
   it("creates Docker resources directly and redacts sensitive audit values", async () => {
-    const session = createSession(db, { rootId: "local" });
     const engine = new FakeDockerEngine();
     const server = await buildServer({ config: dockerEnabledConfig(tempDir), db, docker: { engine, compose: new FakeDockerCompose() } });
     const response = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "create",
         targetType: "container",
         name: "new-container",
@@ -3381,15 +3215,17 @@ describe("API server", () => {
       }
     });
     expect(response.statusCode).toBe(202);
-    expect(response.json()).toMatchObject({ approval: null, result: { kind: "container", created: true, started: false } });
+    expect(response.json()).toMatchObject({
+      operation: { status: "applied" },
+      result: { kind: "container", created: true, started: false }
+    });
     const operation = response.json().operation;
     expect(JSON.stringify(operation.metadata)).not.toContain("hidden");
     expect(engine.calls).toContain("create-container");
     await server.close();
   });
 
-  it("keeps Host Access container input private until approval and revalidates the image", async () => {
-    const session = createSession(db, { rootId: "local" });
+  it("keeps direct Host Access container input private", async () => {
     const engine = new FakeDockerEngine();
     const server = await buildServer({
       config: dockerEnabledConfig(tempDir),
@@ -3399,9 +3235,8 @@ describe("API server", () => {
     });
     const proposed = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "create",
         targetType: "container",
         name: "host-observer",
@@ -3413,82 +3248,29 @@ describe("API server", () => {
     });
     expect(proposed.statusCode).toBe(202);
     expect(engine.calls).toEqual(expect.arrayContaining(["pull", "resolve-image"]));
-    expect(engine.calls).not.toContain("create-container");
+    expect(engine.calls).toContain("create-container");
     expect(proposed.json()).toMatchObject({
-      approval: { status: "pending" },
-      operation: { status: "proposed" }
+      operation: { status: "applied" },
+      result: { kind: "container", created: true }
     });
     expect(JSON.stringify(proposed.json())).not.toContain("private-value");
     expect(JSON.stringify(proposed.json())).not.toContain("/proc");
     expect(JSON.stringify(proposed.json())).not.toContain("fingerprint");
     expect(JSON.stringify(proposed.json())).not.toContain("hostAccessDraft");
 
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-    expect(approved.statusCode).toBe(202);
-    expect(engine.calls.filter((call) => call === "resolve-image")).toHaveLength(2);
-    expect(engine.calls).toContain("create-container");
-    await server.close();
-  });
-
-  it("rolls back the complete Host Access approval record when persistence fails", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const engine = new FakeDockerEngine();
-    db.exec(`
-      CREATE TRIGGER fail_host_access_approval_event
-      BEFORE INSERT ON agent_events
-      WHEN NEW.type = 'approval.pending'
-      BEGIN
-        SELECT RAISE(ABORT, 'forced Host Access persistence failure');
-      END
-    `);
-    const server = await buildServer({
-      config: dockerEnabledConfig(tempDir),
-      db,
-      docker: { engine, compose: new FakeDockerCompose() },
-      hostAccess: { policy: new DockerHostAccessPolicy(db, { platform: "linux" }) }
-    });
-
-    const response = await server.inject({
-      method: "POST",
-      url: "/api/docker/proposals",
-      payload: {
-        sessionId: session.id,
-        action: "create",
-        targetType: "container",
-        name: "failed-observer",
-        image: "collector:latest",
-        hostAccess: [{ capability: "host_processes" }]
-      }
-    });
-
-    expect(response.statusCode).toBe(400);
-    for (const table of [
-      "docker_create_drafts",
-      "docker_operations",
-      "pending_approvals",
-      "operation_notifications",
-      "jobs",
-      "agent_messages"
-    ]) {
-      const row = db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
-      expect(row.count, table).toBe(0);
-    }
+    expect(listPendingApprovals(db)).toEqual([]);
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     await server.close();
   });
 
   it("creates Docker volumes and networks directly with applied operation records", async () => {
-    const session = createSession(db, { rootId: "local" });
     const engine = new FakeDockerEngine();
     const server = await buildServer({ config: dockerEnabledConfig(tempDir), db, docker: { engine, compose: new FakeDockerCompose() } });
 
-    const volume = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id, action: "create", targetType: "volume", name: "archive", labels: { purpose: "backup" }
+    const volume = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
+      action: "create", targetType: "volume", name: "archive", labels: { purpose: "backup" }
     } });
-    const network = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id,
+    const network = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
       action: "create",
       targetType: "network",
       name: "services",
@@ -3500,22 +3282,21 @@ describe("API server", () => {
     } });
 
     expect(volume.statusCode).toBe(202);
-    expect(volume.json()).toMatchObject({ approval: null, operation: { status: "applied", targetType: "volume" }, result: { kind: "volume", name: "archive", created: true } });
+    expect(volume.json()).toMatchObject({ operation: { status: "applied", targetType: "volume" }, result: { kind: "volume", name: "archive", created: true } });
     expect(network.statusCode).toBe(202);
-    expect(network.json()).toMatchObject({ approval: null, operation: { status: "applied", targetType: "network" }, result: { kind: "network", name: "services", created: true } });
+    expect(network.json()).toMatchObject({ operation: { status: "applied", targetType: "network" }, result: { kind: "network", name: "services", created: true } });
     expect(engine.calls).toEqual(["create-volume:archive", "create-network"]);
     await server.close();
   });
 
   it("always pulls images without requiring an image inspect first", async () => {
-    const session = createSession(db, { rootId: "local" });
     const engine = new FakeDockerEngine();
     const server = await buildServer({ config: dockerEnabledConfig(tempDir), db, docker: { engine, compose: new FakeDockerCompose() } });
     await server.inject({ method: "POST", url: "/api/docker/registries", payload: {
       name: "Private", serverAddress: "registry.example.com", username: "builder", password: "create-secret"
     } });
-    const response = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id, action: "create", targetType: "container", name: "always-pull",
+    const response = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
+      action: "create", targetType: "container", name: "always-pull",
       image: "registry.example.com/team/nginx", pullPolicy: "always", start: false
     } });
 
@@ -3527,7 +3308,6 @@ describe("API server", () => {
   });
 
   it("reads rotated credentials after the missing-image check and before pulling", async () => {
-    const session = createSession(db, { rootId: "local" });
     const engine = new FakeDockerEngine();
     const credential = createDockerRegistryCredential(db, { name: "Private", serverAddress: "registry.example.com", username: "builder", password: "old-secret" });
     engine.imageExists = async () => {
@@ -3535,43 +3315,41 @@ describe("API server", () => {
       return false;
     };
     const server = await buildServer({ config: dockerEnabledConfig(tempDir), db, docker: { engine, compose: new FakeDockerCompose(), daemon: new FakeDockerDaemon() } });
-    const response = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: { sessionId: session.id, action: "create", targetType: "container", name: "rotated-pull", image: "registry.example.com/team/app", pullPolicy: "missing", start: false } });
+    const response = await server.inject({ method: "POST", url: "/api/docker/actions", payload: { action: "create", targetType: "container", name: "rotated-pull", image: "registry.example.com/team/app", pullPolicy: "missing", start: false } });
     expect(response.statusCode).toBe(202);
     expect(JSON.parse(Buffer.from(engine.pullInputs[0]!.registryAuth!, "base64url").toString("utf8"))).toMatchObject({ password: "rotated-secret" });
     expect(response.body).not.toContain("rotated-secret");
-    const invalid = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: { sessionId: session.id, action: "create", targetType: "container", name: "invalid-pull", image: "team//app", pullPolicy: "always" } });
+    const invalid = await server.inject({ method: "POST", url: "/api/docker/actions", payload: { action: "create", targetType: "container", name: "invalid-pull", image: "team//app", pullPolicy: "always" } });
     expect(invalid.statusCode).toBe(400);
-    expect(listDockerOperations(db, { sessionId: session.id })).toHaveLength(1);
+    expect(listDockerOperations(db)).toHaveLength(1);
     await server.close();
   });
 
   it("keeps a created container when automatic start fails", async () => {
-    const session = createSession(db, { rootId: "local" });
     const engine = new FakeDockerEngine();
     engine.failStart = true;
     const server = await buildServer({ config: dockerEnabledConfig(tempDir), db, docker: { engine, compose: new FakeDockerCompose() } });
-    const response = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id, action: "create", targetType: "container", name: "partial-container", image: "nginx"
+    const response = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
+      action: "create", targetType: "container", name: "partial-container", image: "nginx"
     } });
     expect(response.statusCode).toBe(202);
-    expect(response.json()).toMatchObject({ approval: null, result: { partialSuccess: true, started: false, id: "created-container" }, operation: { status: "failed" } });
+    expect(response.json()).toMatchObject({ result: { partialSuccess: true, started: false, id: "created-container" }, operation: { status: "failed" } });
     await server.close();
   });
 
   it("rejects duplicate Docker resource names and unknown create fields", async () => {
-    const session = createSession(db, { rootId: "local" });
     const engine = new FakeDockerEngine();
     const server = await buildServer({ config: dockerEnabledConfig(tempDir), db, docker: { engine, compose: new FakeDockerCompose() } });
-    const duplicate = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id, action: "create", targetType: "container", name: "media", image: "nginx"
+    const duplicate = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
+      action: "create", targetType: "container", name: "media", image: "nginx"
     } });
     expect(duplicate.statusCode).toBe(409);
-    const unknown = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id, action: "create", targetType: "volume", name: "other", driverOpts: {}
+    const unknown = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
+      action: "create", targetType: "volume", name: "other", driverOpts: {}
     } });
     expect(unknown.statusCode).toBe(400);
-    const invalidRestart = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id, action: "create", targetType: "container", name: "other", image: "nginx",
+    const invalidRestart = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
+      action: "create", targetType: "container", name: "other", image: "nginx",
       restartPolicy: "always", restartMaxRetries: 3
     } });
     expect(invalidRestart.statusCode).toBe(400);
@@ -3579,7 +3357,6 @@ describe("API server", () => {
   });
 
   it("rejects bind mounts that expose the configured Docker socket through a parent directory", async () => {
-    const session = createSession(db, { rootId: "local" });
     const engine = new FakeDockerEngine();
     const config = dockerEnabledConfig(tempDir, { socketPath: path.join(rootDir, "docker.sock") });
     saveDockerSettings(db, config.docker);
@@ -3588,8 +3365,7 @@ describe("API server", () => {
       db,
       docker: { engine, compose: new FakeDockerCompose() }
     });
-    const response = await server.inject({ method: "POST", url: "/api/docker/proposals", payload: {
-      sessionId: session.id,
+    const response = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
       action: "create",
       targetType: "container",
       name: "unsafe-bind",
@@ -3604,8 +3380,7 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("marks Docker approvals and jobs failed when execution fails", async () => {
-    const session = createSession(db, { rootId: "local" });
+  it("records direct Docker action failures without creating Agent records", async () => {
     const engine = new FakeDockerEngine();
     engine.failStart = true;
     const server = await buildServer({
@@ -3616,35 +3391,26 @@ describe("API server", () => {
         compose: new FakeDockerCompose()
       }
     });
-    const proposed = await server.inject({
+    const response = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "start",
         containerId: "container-1"
       }
     });
 
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-
-    expect(approved.statusCode).toBe(400);
-    expect(getApproval(db, proposed.json().approval.id)?.status).toBe("failed");
-    expect(getDockerOperationByApproval(db, proposed.json().approval.id)).toMatchObject({
+    expect(response.statusCode).toBe(400);
+    expect(listDockerOperations(db)).toEqual([expect.objectContaining({
       status: "failed"
-    });
-    expect(getJob(db, proposed.json().job.id)).toMatchObject({
-      status: "failed",
-      error: "start failed"
-    });
+    })]);
+    expect(listPendingApprovals(db)).toEqual([]);
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
     await server.close();
   });
 
-  it("rejects Compose proposals outside configured projects", async () => {
-    const session = createSession(db, { rootId: "local" });
+  it("rejects Compose actions outside configured projects", async () => {
     const server = await buildServer({
       config: dockerEnabledConfig(tempDir),
       db,
@@ -3656,9 +3422,8 @@ describe("API server", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "compose_up",
         composeProjectId: "missing"
       }
@@ -3669,43 +3434,34 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("loads current Registry credentials when an approved Compose pull executes", async () => {
-    const session = createSession(db, { rootId: "local" });
+  it("loads current Registry credentials when a direct Compose pull executes", async () => {
     const compose = new FakeDockerCompose();
     const server = await buildServer({
       config: dockerEnabledConfig(tempDir),
       db,
       docker: { engine: new FakeDockerEngine(), compose }
     });
-    const proposed = await server.inject({
+    await server.inject({ method: "POST", url: "/api/docker/registries", payload: {
+      name: "Private", serverAddress: "registry.example.com", username: "builder", password: "compose-secret"
+    } });
+    const response = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "compose_pull",
         composeProjectId: "compose-root:compose.yml"
       }
     });
-    expect(proposed.statusCode).toBe(202);
 
-    await server.inject({ method: "POST", url: "/api/docker/registries", payload: {
-      name: "Private", serverAddress: "registry.example.com", username: "builder", password: "compose-secret"
-    } });
-    const approved = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-
-    expect(approved.statusCode).toBe(202);
+    expect(response.statusCode).toBe(202);
     expect(compose.registryCredentials).toMatchObject([[
       { serverAddress: "registry.example.com", password: "compose-secret" }
     ]]);
-    expect(approved.body).not.toContain("compose-secret");
+    expect(response.body).not.toContain("compose-secret");
     await server.close();
   });
 
   it("rejects Compose service targets that are not part of the configured project", async () => {
-    const session = createSession(db, { rootId: "local" });
     const server = await buildServer({
       config: dockerEnabledConfig(tempDir),
       db,
@@ -3717,9 +3473,8 @@ describe("API server", () => {
 
     const unknownService = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "compose_restart",
         composeProjectId: "compose-root:compose.yml",
         service: "missing"
@@ -3727,9 +3482,8 @@ describe("API server", () => {
     });
     const optionLikeService = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "compose_restart",
         composeProjectId: "compose-root:compose.yml",
         service: "--profile"
@@ -3744,7 +3498,6 @@ describe("API server", () => {
   });
 
   it("requires a full-project apply when Compose Host Access needs repair", async () => {
-    const session = createSession(db, { rootId: "local" });
     const server = await buildServer({
       config: dockerEnabledConfig(tempDir),
       db,
@@ -3773,9 +3526,8 @@ describe("API server", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "compose_up",
         composeProjectId: "compose-root:compose.yml",
         service: "jellyfin"
@@ -3789,8 +3541,7 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("requires approved Docker console operations before creating console sessions", async () => {
-    const session = createSession(db, { rootId: "local" });
+  it("creates console sessions from direct Docker console actions", async () => {
     const server = await buildServer({
       config: dockerEnabledConfig(tempDir),
       db,
@@ -3801,27 +3552,15 @@ describe("API server", () => {
     });
     const proposed = await server.inject({
       method: "POST",
-      url: "/api/docker/proposals",
+      url: "/api/docker/actions",
       payload: {
-        sessionId: session.id,
         action: "console",
         containerId: "container-1",
         shell: "/bin/sh"
       }
     });
     const operationId = proposed.json().operation.id;
-    const beforeApproval = await server.inject({
-      method: "POST",
-      url: "/api/docker/console-sessions",
-      payload: {
-        operationId
-      }
-    });
-    await server.inject({
-      method: "POST",
-      url: `/api/approvals/${proposed.json().approval.id}/approve`
-    });
-    const afterApproval = await server.inject({
+    const created = await server.inject({
       method: "POST",
       url: "/api/docker/console-sessions",
       payload: {
@@ -3829,9 +3568,9 @@ describe("API server", () => {
       }
     });
 
-    expect(beforeApproval.statusCode).toBe(404);
-    expect(afterApproval.statusCode).toBe(201);
-    expect(afterApproval.json()).toMatchObject({
+    expect(proposed.statusCode).toBe(202);
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
       consoleSession: {
         operationId,
         containerId: "container-1",
@@ -3839,12 +3578,13 @@ describe("API server", () => {
         websocketUrl: expect.stringContaining("/api/docker/console/")
       }
     });
-    expect(getDockerOperationByApproval(db, proposed.json().approval.id)).toMatchObject({
+    expect(listDockerOperations(db)).toEqual([expect.objectContaining({
       status: "approved",
-      metadata: {
-        consoleSessionId: afterApproval.json().consoleSession.id
-      }
-    });
+      metadata: expect.objectContaining({
+        consoleSessionId: created.json().consoleSession.id
+      })
+    })]);
+    expect(listPendingApprovals(db)).toEqual([]);
     await server.close();
   });
 
@@ -3961,45 +3701,55 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("saves Pi tool policy settings and rejects dangerous auto mode", async () => {
+  it("saves Agent capability policies and rejects unknown modes", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const defaults = await server.inject({
       method: "GET",
-      url: "/api/settings/pi-tool-policy"
+      url: "/api/settings/agent-capability-policy"
     });
     const saved = await server.inject({
       method: "PATCH",
-      url: "/api/settings/pi-tool-policy",
+      url: "/api/settings/agent-capability-policy",
       payload: {
-        read: "ask",
-        bash: "disabled"
+        policies: {
+          "zos.files.read": "approve",
+          "zos.shell.run": "disabled"
+        }
       }
     });
     const invalid = await server.inject({
       method: "PATCH",
-      url: "/api/settings/pi-tool-policy",
+      url: "/api/settings/agent-capability-policy",
       payload: {
-        bash: "auto"
+        policies: {
+          "zos.shell.run": "unknown"
+        }
       }
     });
 
     expect(defaults.statusCode).toBe(200);
     expect(defaults.json()).toMatchObject({
       settings: {
-        read: "auto",
-        grep: "auto",
-        find: "auto",
-        ls: "auto",
-        bash: "ask",
-        edit: "ask",
-        write: "ask"
+        policies: {
+          "zos.files.list": "auto",
+          "zos.files.read": "auto",
+          "zos.files.search": "auto",
+          "zos.files.grep": "auto",
+          "zos.files.find": "auto",
+          "zos.files.mutate": "approve",
+          "zos.files.edit": "approve",
+          "zos.files.write": "approve",
+          "zos.shell.run": "confirm"
+        }
       }
     });
     expect(saved.statusCode).toBe(200);
     expect(saved.json()).toMatchObject({
       settings: {
-        read: "ask",
-        bash: "disabled"
+        policies: {
+          "zos.files.read": "approve",
+          "zos.shell.run": "disabled"
+        }
       }
     });
     expect(invalid.statusCode).toBe(400);
@@ -4088,6 +3838,101 @@ describe("API server", () => {
       }
     });
     expect(escaped.statusCode).toBe(400);
+    await server.close();
+  });
+
+  it("isolates Pi capability approvals to their source Agent session", async () => {
+    const firstSession = createSession(db, { rootId: "local" });
+    const secondSession = createSession(db, { rootId: "local" });
+    const firstJob = createUserMessageAndJob(db, {
+      sessionId: firstSession.id,
+      content: "Create the first folder",
+      status: "waiting_approval"
+    }).job;
+    const secondJob = createUserMessageAndJob(db, {
+      sessionId: secondSession.id,
+      content: "Create the second folder",
+      status: "waiting_approval"
+    }).job;
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1_000).toISOString();
+    const first = createCapabilityProposal(db, {
+      subjectId: "pi:first",
+      subjectKind: "pi",
+      capabilityId: "zos.files.mutate",
+      risk: "high",
+      redactedInput: { operation: "mkdir", targetPath: "first" },
+      proposal: { summary: "Create first", targetPath: "first" },
+      expiresAt
+    });
+    const second = createCapabilityProposal(db, {
+      subjectId: "pi:second",
+      subjectKind: "pi",
+      capabilityId: "zos.files.mutate",
+      risk: "high",
+      redactedInput: { operation: "mkdir", targetPath: "second" },
+      proposal: { summary: "Create second", targetPath: "second" },
+      expiresAt
+    });
+    const unlinked = createCapabilityProposal(db, {
+      subjectId: "pi:unlinked",
+      subjectKind: "pi",
+      capabilityId: "zos.files.mutate",
+      risk: "high",
+      redactedInput: { operation: "mkdir", targetPath: "unlinked" },
+      proposal: { summary: "Create unlinked", targetPath: "unlinked" },
+      expiresAt
+    });
+    linkAgentJobToCapabilityRun(db, { jobId: firstJob.id, runId: first.run.id });
+    linkAgentJobToCapabilityRun(db, { jobId: secondJob.id, runId: second.run.id });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    expect((await server.inject({ method: "GET", url: "/api/approvals" })).statusCode).toBe(400);
+    const firstApprovals = await server.inject({
+      method: "GET",
+      url: `/api/approvals?sessionId=${firstSession.id}`
+    });
+    const secondApprovals = await server.inject({
+      method: "GET",
+      url: `/api/approvals?sessionId=${secondSession.id}`
+    });
+    expect(firstApprovals.json().capabilityApprovals).toEqual([
+      expect.objectContaining({ id: first.approval.id, sessionId: firstSession.id })
+    ]);
+    expect(secondApprovals.json().capabilityApprovals).toEqual([
+      expect.objectContaining({ id: second.approval.id, sessionId: secondSession.id })
+    ]);
+
+    const sessions = await server.inject({ method: "GET", url: "/api/sessions?rootId=local" });
+    expect(sessions.json().sessions.find((session: { id: string }) => session.id === firstSession.id))
+      .toMatchObject({ pendingApprovalCount: 1 });
+    expect(sessions.json().sessions.find((session: { id: string }) => session.id === secondSession.id))
+      .toMatchObject({ pendingApprovalCount: 1 });
+
+    const unlinkedDecision = await server.inject({
+      method: "POST",
+      url: `/api/capability-approvals/${unlinked.approval.id}/decision`,
+      payload: { sessionId: firstSession.id, decision: "rejected", expectedRevision: unlinked.approval.revision }
+    });
+    expect(unlinkedDecision.statusCode).toBe(404);
+
+    const crossSessionDecision = await server.inject({
+      method: "POST",
+      url: `/api/capability-approvals/${first.approval.id}/decision`,
+      payload: { sessionId: secondSession.id, decision: "rejected", expectedRevision: first.approval.revision }
+    });
+    expect(crossSessionDecision.statusCode).toBe(404);
+
+    const rejected = await server.inject({
+      method: "POST",
+      url: `/api/capability-approvals/${first.approval.id}/decision`,
+      payload: { sessionId: firstSession.id, decision: "rejected", expectedRevision: first.approval.revision }
+    });
+    expect(rejected.statusCode).toBe(200);
+    const refreshed = await server.inject({ method: "GET", url: "/api/sessions?rootId=local" });
+    expect(refreshed.json().sessions.find((session: { id: string }) => session.id === firstSession.id))
+      .toMatchObject({ pendingApprovalCount: 0 });
+    expect(refreshed.json().sessions.find((session: { id: string }) => session.id === secondSession.id))
+      .toMatchObject({ pendingApprovalCount: 1 });
     await server.close();
   });
 
@@ -4629,64 +4474,13 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("creates approval-gated folder proposals without changing files", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    const response = await server.inject({
-      method: "POST",
-      url: "/api/files/proposals",
-      payload: {
-        sessionId: session.id,
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
-        operation: "mkdir",
-        targetPath: "projects"
-      }
-    });
-
-    expect(response.statusCode).toBe(202);
-    expect(response.json().message.role).toBe("system");
-    expect(response.json()).toMatchObject({
-      job: {
-        sessionId: session.id,
-        status: "waiting_approval"
-      },
-      approval: {
-        sessionId: session.id,
-        kind: "file_operation",
-        status: "pending",
-        proposal: [
-          {
-            operation: "mkdir",
-            rootId: "local",
-            storagePoolId: TEST_STORAGE_POOL_ID,
-            targetPath: "projects",
-            risk: "low",
-            reversible: true
-          }
-        ]
-      }
-    });
-    await expect(stat(path.join(rootDir, "projects"))).rejects.toThrow();
-    const approval = getApproval(db, response.json().approval.id);
-    expect(approval?.status).toBe("pending");
-    expect(getJob(db, response.json().job.id)?.status).toBe("waiting_approval");
-    expect(listOperationNotifications(db)).toMatchObject([
-      { jobId: response.json().job.id, kind: "file", status: "pending_approval" }
-    ]);
-    await server.close();
-  });
-
   it("applies file panel mutations directly without creating approvals", async () => {
-    const session = createSession(db, { rootId: "local" });
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const folder = await server.inject({
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "mkdir",
@@ -4709,7 +4503,6 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "rename",
@@ -4732,7 +4525,6 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "copy",
@@ -4753,6 +4545,8 @@ describe("API server", () => {
 
     expect(listPendingApprovals(db)).toHaveLength(0);
     expect(listOperationNotifications(db)).toHaveLength(0);
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
     expect(listFileOperations(db)).toHaveLength(3);
     await server.close();
   });
@@ -4761,7 +4555,6 @@ describe("API server", () => {
     const poolDir = path.join(rootDir, "pool");
     await mkdir(poolDir);
     await writeFile(path.join(poolDir, "inside.txt"), "inside");
-    const session = createSession(db, { rootId: "local" });
     const server = await buildServer({
       config: testConfig(tempDir),
       db,
@@ -4772,7 +4565,6 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "copy",
@@ -4790,7 +4582,6 @@ describe("API server", () => {
 
   it("keeps a successful file mutation successful when photo refresh enqueue fails", async () => {
     await mkdir(path.join(rootDir, "photos"));
-    const session = createSession(db, { rootId: "local" });
     savePhotostaffLibrarySettings(db, {
       rootId: "local",
       storagePoolId: TEST_STORAGE_POOL_ID,
@@ -4809,7 +4600,6 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "mkdir",
@@ -4830,14 +4620,12 @@ describe("API server", () => {
   });
 
   it("queues direct file batches without creating approvals", async () => {
-    const session = createSession(db, { rootId: "local" });
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
       method: "POST",
       url: "/api/files/batches",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "trash",
@@ -4852,6 +4640,8 @@ describe("API server", () => {
       totalCount: 1
     });
     expect(listPendingApprovals(db)).toHaveLength(0);
+    expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
 
     await vi.waitFor(() => {
       expect(getFileBatch(db, batchId)?.status).toBe("completed");
@@ -4862,127 +4652,6 @@ describe("API server", () => {
       operation: "trash",
       status: "applied"
     });
-    await server.close();
-  });
-
-  it("creates approval-gated rename proposals without changing files", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    const response = await server.inject({
-      method: "POST",
-      url: "/api/files/proposals",
-      payload: {
-        sessionId: session.id,
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
-        operation: "rename",
-        sourcePath: "hello.txt",
-        targetName: "renamed.txt"
-      }
-    });
-
-    expect(response.statusCode).toBe(202);
-    expect(response.json()).toMatchObject({
-      job: {
-        sessionId: session.id,
-        status: "waiting_approval"
-      },
-      approval: {
-        sessionId: session.id,
-        kind: "file_operation",
-        status: "pending",
-        proposal: [
-          {
-            operation: "rename",
-            rootId: "local",
-            sourcePath: "hello.txt",
-            targetPath: "renamed.txt"
-          }
-        ]
-      }
-    });
-    await expect(readFile(path.join(rootDir, "hello.txt"), "utf8")).resolves.toBe("hello");
-    await expect(stat(path.join(rootDir, "renamed.txt"))).rejects.toThrow();
-    const approval = getApproval(db, response.json().approval.id);
-    expect(approval?.status).toBe("pending");
-    expect(getJob(db, response.json().job.id)?.status).toBe("waiting_approval");
-    await server.close();
-  });
-
-  it("creates approval-gated trash proposals without moving files", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    const response = await server.inject({
-      method: "POST",
-      url: "/api/files/proposals",
-      payload: {
-        sessionId: session.id,
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
-        operation: "trash",
-        sourcePath: "hello.txt"
-      }
-    });
-
-    expect(response.statusCode).toBe(202);
-    expect(response.json()).toMatchObject({
-      approval: {
-        kind: "file_operation",
-        status: "pending",
-        proposal: [
-          {
-            operation: "trash",
-            rootId: "local",
-            sourcePath: "hello.txt"
-          }
-        ]
-      }
-    });
-    await expect(readFile(path.join(rootDir, "hello.txt"), "utf8")).resolves.toBe("hello");
-    await server.close();
-  });
-
-  it("creates approval-gated move and copy proposals for an existing destination folder", async () => {
-    await mkdir(path.join(rootDir, "archive"));
-    const session = createSession(db, { rootId: "local" });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    for (const operation of ["move", "copy"] as const) {
-      const response = await server.inject({
-        method: "POST",
-        url: "/api/files/proposals",
-        payload: {
-          sessionId: session.id,
-          rootId: "local",
-          storagePoolId: TEST_STORAGE_POOL_ID,
-          operation,
-          sourcePath: "hello.txt",
-          targetPath: `archive/${operation}.txt`
-        }
-      });
-
-      expect(response.statusCode).toBe(202);
-      expect(response.json()).toMatchObject({
-        approval: {
-          kind: "file_operation",
-          status: "pending",
-          proposal: [
-            {
-              operation,
-              rootId: "local",
-              sourcePath: "hello.txt",
-              targetPath: `archive/${operation}.txt`
-            }
-          ]
-        }
-      });
-    }
-
-    await expect(readFile(path.join(rootDir, "hello.txt"), "utf8")).resolves.toBe("hello");
-    await expect(stat(path.join(rootDir, "archive", "move.txt"))).rejects.toThrow();
-    await expect(stat(path.join(rootDir, "archive", "copy.txt"))).rejects.toThrow();
     await server.close();
   });
 
@@ -5015,15 +4684,13 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("does not expose extraction through the approval proposal endpoint", async () => {
-    const session = createSession(db, { rootId: "local" });
+  it("keeps extraction out of the generic mutation endpoint", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
       method: "POST",
-      url: "/api/files/proposals",
+      url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "extract",
@@ -5032,21 +4699,19 @@ describe("API server", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "Unsupported file proposal operation" });
+    expect(response.json()).toEqual({ error: "Unsupported direct file mutation operation" });
     expect(listPendingApprovals(db)).toHaveLength(0);
     await server.close();
   });
 
   it("rejects moving or copying a folder into itself", async () => {
     await mkdir(path.join(rootDir, "folder", "child"), { recursive: true });
-    const session = createSession(db, { rootId: "local" });
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
       method: "POST",
-      url: "/api/files/proposals",
+      url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "copy",
@@ -5060,15 +4725,13 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("refuses file operation proposals against the NAS root itself", async () => {
-    const session = createSession(db, { rootId: "local" });
+  it("refuses direct file mutations against the NAS root itself", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
       method: "POST",
-      url: "/api/files/proposals",
+      url: "/api/files/mutations",
       payload: {
-        sessionId: session.id,
         rootId: "local",
         storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "trash",
@@ -5791,138 +5454,21 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("applies approved file operation proposals", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "move hello.txt to moved.txt"
-    });
-    updateJobStatus(db, job.id, "waiting_approval");
-    const approval = createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [
-        {
-          operation: "move",
-          rootId: "local",
-          sourcePath: "hello.txt",
-          targetPath: "moved.txt",
-          risk: "medium",
-          reversible: true,
-          summary: "Move hello.txt to moved.txt"
-        }
-      ]
-    });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    const response = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${approval.id}/approve`
-    });
-
-    expect(response.statusCode).toBe(202);
-    await expect(readFile(path.join(rootDir, "moved.txt"), "utf8")).resolves.toBe("hello");
-    await expect(stat(path.join(rootDir, "hello.txt"))).rejects.toThrow();
-    await server.close();
-  });
-
-  it("applies an approved copy operation without removing the source", async () => {
-    await mkdir(path.join(rootDir, "archive"));
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "copy hello.txt to archive/copied.txt"
-    });
-    updateJobStatus(db, job.id, "waiting_approval");
-    const approval = createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [
-        {
-          operation: "copy",
-          rootId: "local",
-          sourcePath: "hello.txt",
-          targetPath: "archive/copied.txt",
-          risk: "medium",
-          reversible: true,
-          summary: "Copy hello.txt to archive/copied.txt"
-        }
-      ]
-    });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    const response = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${approval.id}/approve`
-    });
-
-    expect(response.statusCode).toBe(202);
-    await expect(readFile(path.join(rootDir, "hello.txt"), "utf8")).resolves.toBe("hello");
-    await expect(readFile(path.join(rootDir, "archive", "copied.txt"), "utf8")).resolves.toBe("hello");
-    await server.close();
-  });
-
-  it("applies an approved archive extraction operation", async () => {
-    await execFileAsync("zip", ["-q", path.join(rootDir, "bundle.zip"), "hello.txt"], { cwd: rootDir });
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "extract bundle.zip"
-    });
-    updateJobStatus(db, job.id, "waiting_approval");
-    const approval = createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [
-        {
-          operation: "extract",
-          rootId: "local",
-          sourcePath: "bundle.zip",
-          targetPath: "bundle",
-          risk: "medium",
-          reversible: true,
-          summary: "Extract bundle.zip to bundle"
-        }
-      ]
-    });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    const response = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${approval.id}/approve`
-    });
-
-    expect(response.statusCode).toBe(202);
-    await expect(readFile(path.join(rootDir, "bundle", "hello.txt"), "utf8")).resolves.toBe("hello");
-    await server.close();
-  });
-
   it("rolls back an applied move operation", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "move hello.txt to moved.txt"
-    });
-    updateJobStatus(db, job.id, "waiting_approval");
-    const approval = createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [
-        {
-          operation: "move",
-          rootId: "local",
-          sourcePath: "hello.txt",
-          targetPath: "moved.txt",
-          risk: "medium",
-          reversible: true,
-          summary: "Move hello.txt to moved.txt"
-        }
-      ]
-    });
     const server = await buildServer({ config: testConfig(tempDir), db });
-    await server.inject({
+    const mutation = await server.inject({
       method: "POST",
-      url: `/api/approvals/${approval.id}/approve`
+      url: "/api/files/mutations",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "move",
+        sourcePath: "hello.txt",
+        targetPath: "moved.txt"
+      }
     });
-    const applied = listFileOperations(db).find(
-      (operation) => operation.operation === "move" && operation.status === "applied"
-    );
+    expect(mutation.statusCode).toBe(201);
+    const applied = mutation.json().operation;
 
     const response = await server.inject({
       method: "POST",
@@ -5944,33 +5490,19 @@ describe("API server", () => {
   });
 
   it("rolls back an applied trash operation by restoring from ZOS trash", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "trash hello.txt"
-    });
-    updateJobStatus(db, job.id, "waiting_approval");
-    const approval = createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [
-        {
-          operation: "trash",
-          rootId: "local",
-          sourcePath: "hello.txt",
-          risk: "medium",
-          reversible: true,
-          summary: "Trash hello.txt"
-        }
-      ]
-    });
     const server = await buildServer({ config: testConfig(tempDir), db });
-    await server.inject({
+    const mutation = await server.inject({
       method: "POST",
-      url: `/api/approvals/${approval.id}/approve`
+      url: "/api/files/mutations",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "trash",
+        sourcePath: "hello.txt"
+      }
     });
-    const applied = listFileOperations(db).find(
-      (operation) => operation.operation === "trash" && operation.status === "applied"
-    );
+    expect(mutation.statusCode).toBe(201);
+    const applied = mutation.json().operation;
     await expect(stat(path.join(rootDir, "hello.txt"))).rejects.toThrow();
 
     const response = await server.inject({
@@ -5985,33 +5517,19 @@ describe("API server", () => {
   });
 
   it("restores a trash entry directly through the trash API", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "trash hello.txt"
-    });
-    updateJobStatus(db, job.id, "waiting_approval");
-    const approval = createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [
-        {
-          operation: "trash",
-          rootId: "local",
-          sourcePath: "hello.txt",
-          risk: "medium",
-          reversible: true,
-          summary: "Trash hello.txt"
-        }
-      ]
-    });
     const server = await buildServer({ config: testConfig(tempDir), db });
-    await server.inject({
+    const mutation = await server.inject({
       method: "POST",
-      url: `/api/approvals/${approval.id}/approve`
+      url: "/api/files/mutations",
+      payload: {
+        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
+        operation: "trash",
+        sourcePath: "hello.txt"
+      }
     });
-    const applied = listFileOperations(db).find(
-      (operation) => operation.operation === "trash" && operation.status === "applied"
-    );
+    expect(mutation.statusCode).toBe(201);
+    const applied = mutation.json().operation;
     const trashEntryId = applied?.metadata.trashEntryId;
     expect(typeof trashEntryId).toBe("string");
     if (typeof trashEntryId !== "string") {
@@ -6047,69 +5565,6 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("rejects proposals without changing the filesystem", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "trash hello.txt"
-    });
-    updateJobStatus(db, job.id, "waiting_approval");
-    const approval = createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [
-        {
-          operation: "trash",
-          rootId: "local",
-          sourcePath: "hello.txt",
-          risk: "medium",
-          reversible: true,
-          summary: "Trash hello.txt"
-        }
-      ]
-    });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    const response = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${approval.id}/reject`
-    });
-
-    expect(response.statusCode).toBe(202);
-    await expect(readFile(path.join(rootDir, "hello.txt"), "utf8")).resolves.toBe("hello");
-    await server.close();
-  });
-
-  it("resolves Pi tool approvals without applying file operations or completing the job", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "run ls"
-    });
-    updateJobStatus(db, job.id, "waiting_approval");
-    const approval = createPiToolCallApproval(db, {
-      jobId: job.id,
-      proposal: {
-        toolCallId: "tool-1",
-        toolName: "bash",
-        args: { command: "ls" },
-        cwd: rootDir,
-        risk: "medium",
-        summary: "Run shell command: ls"
-      }
-    });
-    const server = await buildServer({ config: testConfig(tempDir), db });
-
-    const response = await server.inject({
-      method: "POST",
-      url: `/api/approvals/${approval.id}/approve`
-    });
-
-    expect(response.statusCode).toBe(202);
-    expect(getApproval(db, approval.id)?.status).toBe("approved");
-    expect(getJob(db, job.id)?.status).toBe("waiting_approval");
-    expect(listFileOperations(db, { approvalId: approval.id })).toEqual([]);
-    await server.close();
-  });
 });
 
 class FakeSystemCommandRunner implements SystemCommandRunner {

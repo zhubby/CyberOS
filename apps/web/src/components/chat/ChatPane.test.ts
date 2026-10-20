@@ -52,7 +52,8 @@ describe("agentSessionHeaderTitle", () => {
     createdAt: "2026-09-17T10:00:00.000Z",
     updatedAt: "2026-09-17T10:00:00.000Z",
     firstMessage: null,
-    lastMessage: null
+    lastMessage: null,
+    pendingApprovalCount: 0
   };
 
   it("uses a fixed title before a session has any messages", () => {
@@ -222,7 +223,8 @@ describe("ChatPane agent rail", () => {
       createdAt: "2026-09-17T10:00:00.000Z",
       updatedAt: "2026-09-17T10:00:00.000Z",
       firstMessage: null,
-      lastMessage: null
+      lastMessage: null,
+      pendingApprovalCount: 2
     };
     const noop = () => undefined;
     const html = renderToStaticMarkup(
@@ -234,7 +236,6 @@ describe("ChatPane agent rail", () => {
         activeSessionId: session.id,
         transcript: [],
         transcriptPhase: "ready",
-        activeApprovals: [],
         activeCapabilityApprovals: [],
         message: "",
         composerPath: null,
@@ -252,9 +253,7 @@ describe("ChatPane agent rail", () => {
         onRequestSystemPower: async () => true,
         notificationUnreadCount: 3,
         onSelectSession: noop,
-        onApprove: noop,
         onApproveCapability: noop,
-        onReject: noop,
         onRejectCapability: noop,
         onSubmitMessage: noop,
         onMessageChange: noop,
@@ -268,6 +267,8 @@ describe("ChatPane agent rail", () => {
     expect(html).toContain('src="/zos-icon.svg"');
     expect(html).not.toContain("zos-banner");
     expect(html).toContain('class="session-item is-active"');
+    expect(html).toContain('class="session-approval-badge"');
+    expect(html).toContain("2 pending approvals");
     expect(html).toContain("How can I help with your NAS?");
     expect(html).toContain('class="chat-header-subtitle"');
     expect(html).toContain("Local NAS workspace");
@@ -290,7 +291,8 @@ describe("ChatPane agent rail", () => {
       createdAt: "2026-09-17T10:00:00.000Z",
       updatedAt: "2026-09-17T10:00:00.000Z",
       firstMessage: null,
-      lastMessage: null
+      lastMessage: null,
+      pendingApprovalCount: 0
     };
     const noop = () => undefined;
     const html = renderToStaticMarkup(
@@ -302,7 +304,6 @@ describe("ChatPane agent rail", () => {
         activeSessionId: session.id,
         transcript: [],
         transcriptPhase: "loading",
-        activeApprovals: [],
         activeCapabilityApprovals: [],
         message: "Draft stays editable",
         composerPath: null,
@@ -320,9 +321,7 @@ describe("ChatPane agent rail", () => {
         onRequestSystemPower: async () => true,
         notificationUnreadCount: 0,
         onSelectSession: noop,
-        onApprove: noop,
         onApproveCapability: noop,
-        onReject: noop,
         onRejectCapability: noop,
         onSubmitMessage: noop,
         onMessageChange: noop,
@@ -352,10 +351,11 @@ describe("ChatPane agent rail", () => {
         activeSessionId: "",
         transcript: [],
         transcriptPhase: "ready",
-        activeApprovals: [],
         activeCapabilityApprovals: [{
           id: "approval-1",
           runId: "run-1",
+          sessionId: "session-1",
+          jobId: "job-1",
           status: "pending",
           proposal: {
             summary: "Move reports/final.pdf to Archive/final.pdf",
@@ -367,13 +367,13 @@ describe("ChatPane agent rail", () => {
           expiresAt: "2026-09-17T10:15:00.000Z",
           createdAt: "2026-09-17T10:00:00.000Z",
           updatedAt: "2026-09-17T10:00:00.000Z",
-          client: { id: "client-1", name: "Studio Agent", kind: "lan", tokenPrefix: "zos_mcp_example" },
+          client: { id: "client-1", name: "Pi", kind: "pi", tokenPrefix: "zos_mcp_example" },
           run: {
             id: "run-1",
-            capabilityId: "zos.files.mutate-propose",
+            capabilityId: "zos.files.mutate",
             state: "waiting_approval",
             subjectId: "client-1",
-            subjectKind: "lan",
+            subjectKind: "pi",
             input: {},
             revision: 2,
             createdAt: "2026-09-17T10:00:00.000Z"
@@ -395,9 +395,7 @@ describe("ChatPane agent rail", () => {
         onRequestSystemPower: async () => true,
         notificationUnreadCount: 0,
         onSelectSession: noop,
-        onApprove: noop,
         onApproveCapability: noop,
-        onReject: noop,
         onRejectCapability: noop,
         onSubmitMessage: noop,
         onMessageChange: noop,
@@ -407,8 +405,8 @@ describe("ChatPane agent rail", () => {
       })
     );
 
-    expect(html).toContain("zos.files.mutate-propose");
-    expect(html).toContain("Studio Agent (lan)");
+    expect(html).toContain("zos.files.mutate");
+    expect(html).toContain("Pi (pi)");
     expect(html).toContain("reports/final.pdf -&gt; Archive/final.pdf");
     expect(html).toContain('data-risk="critical"');
     expect(html).toContain("Revision");

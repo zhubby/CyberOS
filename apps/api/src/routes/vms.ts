@@ -3,21 +3,11 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
-  appendEvent,
   createVmOperationRecord,
-  createActionMessageAndJob,
   createVmConsoleAuthorization,
-  expireStaleVmConsoleOperations,
-  getApproval,
-  getJob,
-  getSession,
   getProposedVmOperationForTarget,
-  getVmOperation,
-  getVmOperationByApproval,
   listVmOperations,
   consumeVmConsoleAuthorization,
-  updateJobStatus,
-  updateApprovalStatus,
   updateVmOperationStatus
 } from "@zos/db";
 import type {
@@ -38,7 +28,6 @@ import { applyVmOperation, collectVmSummary, safeVmMessage, DEFAULT_VM_CONFIG } 
 import { resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 type VmActionBody = {
-  sessionId?: string;
   action?: VmOperationAction;
   domainName?: string;
   snapshotName?: string;
@@ -85,35 +74,19 @@ export function vmConsoleSpawnSpec(libvirtUri: string, domainName: string) {
 
 export function registerVmRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   server.get("/api/vms/summary", async () => ({ summary: await collectVmSummary(context.config, context.vm) }));
-  server.get<{ Querystring: { sessionId?: string } }>("/api/vms/operations", async (request) => {
-    expireStaleVmConsoleOperations(context.db);
+  server.get("/api/vms/operations", async () => {
     return {
-      operations: listVmOperations(context.db, { ...(request.query.sessionId ? { sessionId: request.query.sessionId } : {}), limit: 100 })
+      operations: listVmOperations(context.db, { limit: 100 })
     };
   });
-  for (const url of ["/api/vms/actions", "/api/vms/proposals"]) {
-    server.post<{ Body: VmActionBody }>(url, async (request, reply) => {
-      const session = getSession(context.db, request.body?.sessionId ?? "");
-      if (!session) { reply.status(404).send({ error: "Session not found" }); return; }
+  server.post<{ Body: VmActionBody }>("/api/vms/actions", async (request, reply) => {
       try {
         const proposal = await buildVmProposal(request.body ?? {}, context);
         if (getProposedVmOperationForTarget(context.db, proposal.domainName ?? "new-vm")) {
           reply.status(409).send({ error: `A virtual machine operation is already running for ${proposal.domainName}` });
           return;
         }
-        const { message, job } = createActionMessageAndJob(context.db, {
-          sessionId: session.id,
-          content: proposal.summary,
-          kind: "vm",
-          status: "running"
-        });
-        const operation = createVmOperationRecord(context.db, { jobId: job.id, proposal });
-        appendEvent(context.db, {
-          sessionId: session.id,
-          jobId: job.id,
-          type: "job.running",
-          payload: { jobId: job.id, vmOperation: operation }
-        });
+        const operation = createVmOperationRecord(context.db, { proposal });
         try {
           const prepared = await prepareVmExecution(context, proposal);
           const metadata = await applyVmOperation(prepared.config, operation, prepared.proposal, context.vm);
@@ -130,17 +103,7 @@ export function registerVmRoutes(server: FastifyInstance, context: ApiRouteConte
             appliedAt: new Date().toISOString()
           });
           if (!applied) throw new Error("VM operation record disappeared before completion");
-          updateJobStatus(context.db, job.id, "completed", null, ["running"]);
-          appendEvent(context.db, {
-            sessionId: session.id,
-            jobId: job.id,
-            type: "job.completed",
-            payload: { jobId: job.id, vmOperation: applied }
-          });
           reply.status(202).send({
-            message,
-            job: getJob(context.db, job.id) ?? job,
-            approval: null,
             operation: applied,
             ...(authorization ? {
               consoleSession: {
@@ -151,47 +114,13 @@ export function registerVmRoutes(server: FastifyInstance, context: ApiRouteConte
           });
         } catch (error) {
           const messageText = safeVmMessage(error);
-          const failed = updateVmOperationStatus(context.db, operation.id, "failed", {
+          updateVmOperationStatus(context.db, operation.id, "failed", {
             error: messageText,
             failedAt: new Date().toISOString()
-          });
-          updateJobStatus(context.db, job.id, "failed", messageText, ["running"]);
-          appendEvent(context.db, {
-            sessionId: session.id,
-            jobId: job.id,
-            type: "job.failed",
-            payload: { jobId: job.id, error: messageText, vmOperation: failed }
           });
           reply.status(400).send({ error: messageText });
         }
       } catch (error) { reply.status(400).send({ error: safeVmMessage(error) }); }
-    });
-  }
-  server.post<{ Body: { operationId?: string } }>("/api/vms/console-sessions", async (request, reply) => {
-    const operation = getVmOperation(context.db, request.body?.operationId ?? "");
-    if (!operation || operation.action !== "console" || operation.status !== "approved" || !operation.approvalId) { reply.status(404).send({ error: "Approved VM console operation not found" }); return; }
-    const approval = getApproval(context.db, operation.approvalId);
-    const proposal = operation.metadata.proposal as VmOperationProposal | undefined;
-    if (!approval || !proposal?.domainName || !proposal.domainUuid) { reply.status(400).send({ error: "Console operation is missing VM identity metadata" }); return; }
-    try {
-      const current = (await collectVmSummary(context.config, context.vm)).instances.find((instance) => instance.name === proposal.domainName);
-      if (!current?.uuid || current.uuid !== proposal.domainUuid) {
-        const error = "VM console approval no longer matches the current virtual machine";
-        updateVmOperationStatus(context.db, operation.id, "failed", { error, failedAt: new Date().toISOString() });
-        updateApprovalStatus(context.db, approval.id, "failed", ["approved"]);
-        updateJobStatus(context.db, approval.jobId, "failed", error, ["waiting_approval"]);
-        appendEvent(context.db, { sessionId: approval.sessionId, jobId: approval.jobId, type: "job.failed", payload: { jobId: approval.jobId, approvalId: approval.id, error } });
-        reply.status(409).send({ error });
-        return;
-      }
-      const authorization = createVmConsoleAuthorization(context.db, { operationId: operation.id, approvalId: operation.approvalId, domainName: proposal.domainName });
-      const applied = updateVmOperationStatus(context.db, operation.id, "applied", { consoleSessionId: authorization.id, appliedAt: new Date().toISOString() });
-      if (!applied) throw new Error("VM console operation record disappeared before completion");
-      updateApprovalStatus(context.db, approval.id, "applied", ["approved"]);
-      updateJobStatus(context.db, approval.jobId, "completed", null, ["waiting_approval"]);
-      appendEvent(context.db, { sessionId: approval.sessionId, jobId: approval.jobId, type: "job.completed", payload: { jobId: approval.jobId, approvalId: approval.id, vmOperation: applied } });
-      reply.status(201).send({ consoleSession: { ...authorization, websocketUrl: `/api/vms/console/${authorization.id}` } });
-    } catch (error) { reply.status(400).send({ error: safeVmMessage(error) }); }
   });
   server.get<{ Params: { id: string } }>("/api/vms/console/:id", { websocket: true }, async (socket, request) => {
     const authorization = consumeVmConsoleAuthorization(context.db, request.params.id);
@@ -333,16 +262,6 @@ function normalizeMac(value: string): string {
   return normalized;
 }
 
-export async function applyApprovedVmOperation(context: ApiRouteContext, approvalId: string): Promise<unknown> {
-  const approval = getApproval(context.db, approvalId);
-  const operation = getVmOperationByApproval(context.db, approvalId);
-  const proposal = approval ? vmOperationProposal(approval) : null;
-  if (!approval || !operation || !proposal) throw new Error("VM approval is missing operation metadata");
-  const prepared = await prepareVmExecution(context, proposal);
-  const metadata = await applyVmOperation(prepared.config, operation, prepared.proposal, context.vm);
-  return updateVmOperationStatus(context.db, operation.id, "applied", { ...metadata, appliedAt: new Date().toISOString() });
-}
-
 async function prepareVmExecution(context: ApiRouteContext, proposal: VmOperationProposal) {
   let config = context.config;
   let preparedProposal = proposal;
@@ -396,10 +315,6 @@ async function resolveStorageIso(
   };
 }
 
-function vmOperationProposal(approval: { proposal: unknown[] }): VmOperationProposal | null {
-  const proposal = approval.proposal[0];
-  return proposal && typeof proposal === "object" && "action" in proposal ? proposal as VmOperationProposal : null;
-}
 function normalizeDomain(value: string | undefined): string | null { return value && /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/u.test(value.trim()) ? value.trim() : null; }
 function isInside(root: string, candidate: string) { const base = path.resolve(root); const target = path.resolve(candidate); return target === base || target.startsWith(`${base}${path.sep}`); }
 function sendSocket(socket: { send(data: string): void }, payload: Record<string, unknown>) { try { socket.send(JSON.stringify(payload)); } catch { /* socket closed */ } }

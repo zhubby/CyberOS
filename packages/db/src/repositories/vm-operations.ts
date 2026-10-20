@@ -40,15 +40,13 @@ export function createVmOperationApproval(
 
 export function createVmOperationRecord(
   db: ZosDatabase,
-  input: { jobId: string; proposal: VmOperationProposal }
+  input: { proposal: VmOperationProposal }
 ): VmOperationRecord {
-  const job = getJob(db, input.jobId);
-  if (!job) throw new Error("Job not found");
   const now = new Date().toISOString();
   const operation: VmOperationRecord = {
     id: randomUUID(), approvalId: null, action: input.proposal.action,
     targetId: input.proposal.domainName ?? "new-vm", status: "proposed",
-    metadata: { proposal: input.proposal, jobId: job.id }, createdAt: now, updatedAt: now
+    metadata: { proposal: input.proposal }, createdAt: now, updatedAt: now
   };
   db.prepare(`INSERT INTO vm_operations (id, approval_id, action, target_id, status, metadata_json, created_at, updated_at)
     VALUES (@id, NULL, @action, @targetId, @status, @metadataJson, @createdAt, @updatedAt)`).run({
@@ -117,12 +115,10 @@ export function expireStaleVmConsoleOperations(db: ZosDatabase, now = new Date()
   return expire();
 }
 
-export function listVmOperations(db: ZosDatabase, input: { sessionId?: string; limit?: number } = {}): VmOperationRecord[] {
+export function listVmOperations(db: ZosDatabase, input: { limit?: number } = {}): VmOperationRecord[] {
   const rows = db.prepare(`SELECT o.id, o.approval_id, o.action, o.target_id, o.status, o.metadata_json, o.created_at, o.updated_at
-    FROM vm_operations o LEFT JOIN pending_approvals a ON a.id = o.approval_id
-    LEFT JOIN jobs j ON j.id = COALESCE(a.job_id, json_extract(o.metadata_json, '$.jobId'))
-    WHERE (? IS NULL OR j.session_id = ?) ORDER BY o.created_at DESC LIMIT ?`)
-    .all(input.sessionId ?? null, input.sessionId ?? null, input.limit ?? 100) as DbVmOperationRow[];
+    FROM vm_operations o ORDER BY o.created_at DESC LIMIT ?`)
+    .all(input.limit ?? 100) as DbVmOperationRow[];
   return rows.map(mapVmOperation);
 }
 

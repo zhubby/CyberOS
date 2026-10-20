@@ -33,12 +33,9 @@ import {
 import type {
   AgentProviderSessionRecord,
   AgentSessionRecord,
-  ApprovalStatus,
   ModelProviderSettingsRecord,
   ModelProviderName,
   NasRootRecord,
-  PendingApprovalRecord,
-  PiToolCallApproval,
   PiToolName,
   PiToolPolicySettingsRecord,
   PhotostaffMetadataDetail,
@@ -83,9 +80,7 @@ export interface PiAgentInput {
     model: string;
     settingsSnapshot: Record<string, unknown>;
   }) => void | Promise<void>;
-  createToolApproval: (approval: PiToolCallApproval) => Promise<PendingApprovalRecord>;
-  getApprovalStatus: (approvalId: string) => Promise<ApprovalStatus | null> | ApprovalStatus | null;
-  markWaitingForApproval?: () => void | Promise<void>;
+  requestCapability: (request: PiAgentCapabilityRequest) => Promise<PiAgentCapabilityExecution>;
   onCapabilityRunPending?: (runId: string, providerSessionId: string) => void | Promise<void>;
   photostaffTools?: PhotostaffAgentToolService;
   mcp?: PiMcpRuntimeSettings;
@@ -117,12 +112,25 @@ export interface PiAgentRuntimeInput {
   emit: (event: PiAgentEmitEvent) => void | Promise<void>;
   isCancelled: () => boolean;
   saveProviderSession: PiAgentInput["saveProviderSession"];
-  createToolApproval: PiAgentInput["createToolApproval"];
-  getApprovalStatus: PiAgentInput["getApprovalStatus"];
-  markWaitingForApproval?: PiAgentInput["markWaitingForApproval"];
+  requestCapability: PiAgentInput["requestCapability"];
   onCapabilityRunPending?: PiAgentInput["onCapabilityRunPending"];
   photostaffTools?: PhotostaffAgentToolService;
   mcp?: PiMcpRuntimeSettings;
+}
+
+export interface PiAgentCapabilityRequest {
+  toolCallId: string;
+  toolName: PiToolName;
+  args: Record<string, unknown>;
+  redactedArgs: Record<string, unknown>;
+  risk: "low" | "medium" | "high" | "critical";
+  summary: string;
+  requiresConfirmation: boolean;
+}
+
+export interface PiAgentCapabilityExecution {
+  data: unknown;
+  runId?: string;
 }
 
 type TextToolResult = {
@@ -142,7 +150,6 @@ const DIRECT_MCP_TOOLS = [
   "zos.files.search",
   "zos.runs.get"
 ] as const;
-const APPROVAL_POLL_MS = 500;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 type PiProviderConfig = Parameters<ModelRuntime["registerProvider"]>[1];
 type PiProviderApi = NonNullable<PiProviderConfig["api"]>;
@@ -523,7 +530,7 @@ export function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
           toolCallId,
           toolName: "bash",
           args: { ...params },
-          risk: commandRisk(params.command),
+          risk: "critical",
           summary: `Run an approved shell command (${Buffer.byteLength(params.command, "utf8")} bytes)`,
           execute: async () => bash.execute(...executeArgs) as Promise<TextToolResult>
         });
@@ -717,43 +724,27 @@ async function withApproval(
     toolCallId: string;
     toolName: PiToolName;
     args: Record<string, unknown>;
-    risk: "low" | "medium" | "high";
+    risk: "low" | "medium" | "high" | "critical";
     summary: string;
     execute: () => Promise<TextToolResult>;
   }
 ): Promise<TextToolResult> {
-  if (input.toolPolicy[approval.toolName] === "disabled") {
+  const policy = input.toolPolicy[approval.toolName];
+  if (policy === "disabled") {
     return textResult(`ZOS policy denied ${approval.toolName}.`);
   }
+  if (policy === "auto") return approval.execute();
 
-  const request = await input.createToolApproval({
+  const execution = await input.requestCapability({
     toolCallId: approval.toolCallId,
     toolName: approval.toolName,
-    args: redactPiToolArgs(approval.toolName, approval.args),
-    cwd: ".",
+    args: approval.args,
+    redactedArgs: redactPiToolArgs(approval.toolName, approval.args),
     risk: approval.risk,
-    summary: approval.summary
+    summary: approval.summary,
+    requiresConfirmation: policy === "confirm"
   });
-  await input.markWaitingForApproval?.();
-  await input.emit({
-    type: "approval.pending",
-    payload: {
-      approvalId: request.id,
-      kind: "pi_tool_call",
-      proposal: request.proposal,
-      summary: approval.summary
-    }
-  });
-
-  const status = await waitForApprovalDecision(input, request.id);
-  if (status === "rejected") {
-    return textResult(`The user rejected ${approval.toolName}: ${approval.summary}`);
-  }
-  if (status !== "approved") {
-    return textResult(`ZOS stopped waiting for ${approval.toolName}: approval is ${status}.`);
-  }
-
-  return approval.execute();
+  return textResult(`Waiting for approval: ${approval.summary}`, execution);
 }
 
 async function withReadToolPolicy(
@@ -768,22 +759,7 @@ async function withReadToolPolicy(
 ): Promise<TextToolResult> {
   const policy = input.toolPolicy[operation.toolName];
   if (policy === "disabled") return textResult(`ZOS policy denied ${operation.toolName}.`);
-  if (policy === "auto") return operation.execute();
   return withApproval(input, { ...operation, risk: "low" });
-}
-
-async function waitForApprovalDecision(input: PiAgentRuntimeInput, approvalId: string): Promise<ApprovalStatus> {
-  while (!input.isCancelled()) {
-    const status = await input.getApprovalStatus(approvalId);
-    if (status === null) {
-      return "expired";
-    }
-    if (status !== "pending") {
-      return status;
-    }
-    await sleep(APPROVAL_POLL_MS);
-  }
-  return "expired";
 }
 
 async function mapPiEvent(
@@ -838,9 +814,10 @@ async function mapPiEvent(
 }
 
 export function capabilityPendingRunId(result: unknown): string | null {
-  let candidate = result;
-  for (let depth = 0; depth < 4; depth += 1) {
-    if (!candidate || typeof candidate !== "object") return null;
+  const candidates: unknown[] = [result];
+  for (let depth = 0; depth < 8 && candidates.length; depth += 1) {
+    const candidate = candidates.shift();
+    if (!candidate || typeof candidate !== "object") continue;
     const record = candidate as Record<string, unknown>;
     const data = record.data;
     if (
@@ -851,7 +828,7 @@ export function capabilityPendingRunId(result: unknown): string | null {
     ) {
       return record.runId;
     }
-    candidate = record.structuredContent;
+    candidates.push(record.structuredContent, record.details);
   }
   return null;
 }
@@ -1058,12 +1035,6 @@ function safeShellEnvironment(cwd: string): NodeJS.ProcessEnv {
   return environment;
 }
 
-function commandRisk(command: string): "low" | "medium" | "high" {
-  return /\b(rm|mv|cp|chmod|chown|sudo|curl|wget|ssh|scp|dd|mkfs|mount|umount)\b/.test(command)
-    ? "high"
-    : "medium";
-}
-
 export function redactPiToolArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
   const redacted = redactSensitiveValue(args) as Record<string, unknown>;
   if (toolName === "bash" && typeof args.command === "string") {
@@ -1145,8 +1116,4 @@ function truncateText(text: string): string {
     return text;
   }
   return `${text.slice(0, MAX_TOOL_OUTPUT_BYTES)}\n\n[Output truncated]`;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

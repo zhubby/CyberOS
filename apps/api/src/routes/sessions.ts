@@ -4,12 +4,14 @@ import {
   createSession,
   createUserMessageAndJob,
   deleteSession,
+  expireCapabilityApprovals,
   getNasRoot,
   getSession,
   hasActiveJobsForSession,
   listEvents,
   listMessages,
   listNasRoots,
+  listPendingAgentCapabilityApprovals,
   listSessions,
   listTranscriptItems,
   updateSessionPath
@@ -27,6 +29,15 @@ export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteC
       return;
     }
 
+    expireCapabilityApprovals(db);
+    const pendingApprovalCounts = new Map<string, number>();
+    for (const approval of listPendingAgentCapabilityApprovals(db)) {
+      pendingApprovalCounts.set(
+        approval.sessionId,
+        (pendingApprovalCounts.get(approval.sessionId) ?? 0) + 1
+      );
+    }
+
     const sessions = listSessions(db, {
       ...(request.query.rootId ? { rootId: request.query.rootId } : {}),
       limit: 50
@@ -38,7 +49,8 @@ export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteC
       return {
         ...session,
         firstMessage: messages[0]?.content ?? null,
-        lastMessage: messages.at(-1)?.content ?? null
+        lastMessage: messages.at(-1)?.content ?? null,
+        pendingApprovalCount: pendingApprovalCounts.get(session.id) ?? 0
       };
     });
 

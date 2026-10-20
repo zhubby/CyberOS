@@ -8,7 +8,7 @@ import type {
   ZosConfig
 } from "@zos/shared";
 import { isModelProviderName as sharedIsModelProviderName } from "@zos/shared";
-import { defaultPiToolPolicySettings } from "@zos/db";
+import { defaultAgentCapabilityPolicySettings } from "@zos/db";
 
 export function defaultModelProviderSettings(config: ZosConfig): ModelProviderSettingsRecord {
   return {
@@ -42,7 +42,7 @@ export function normalizeOptionalText(value: string | null | undefined): string 
   return trimmed ? trimmed : null;
 }
 
-export function toPublicPiToolPolicySettings(settings = defaultPiToolPolicySettings()) {
+export function toPublicAgentCapabilityPolicySettings(settings = defaultAgentCapabilityPolicySettings()) {
   return settings;
 }
 

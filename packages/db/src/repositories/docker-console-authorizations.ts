@@ -10,25 +10,26 @@ export function createDockerConsoleAuthorization(
   db: ZosDatabase,
   input: {
     operationId: string;
-    approvalId: string;
+    approvalId?: string | null;
     containerId: string;
     shell: string;
     ttlMs?: number;
   }
 ): DockerConsoleAuthorizationRecord {
-  const approvedOperation = db
-    .prepare(`
-      SELECT 1
-      FROM docker_operations o
-      JOIN pending_approvals a ON a.id = o.approval_id
-      WHERE o.id = ?
-        AND o.approval_id = ?
-        AND o.action = 'console'
-        AND o.status = 'approved'
-        AND a.status = 'approved'
-      LIMIT 1
-    `)
-    .get(input.operationId, input.approvalId);
+  const approvalId = input.approvalId ?? null;
+  const approvedOperation = db.prepare(`
+    SELECT 1
+    FROM docker_operations o
+    LEFT JOIN pending_approvals a ON a.id = o.approval_id
+    WHERE o.id = ?
+      AND o.action = 'console'
+      AND o.status = 'approved'
+      AND (
+        (? IS NULL AND o.approval_id IS NULL)
+        OR (o.approval_id = ? AND a.status = 'approved')
+      )
+    LIMIT 1
+  `).get(input.operationId, approvalId, approvalId);
   if (!approvedOperation) {
     throw new Error("Approved console operation not found");
   }
@@ -37,7 +38,7 @@ export function createDockerConsoleAuthorization(
   const authorization: DockerConsoleAuthorizationRecord = {
     id: randomUUID(),
     operationId: input.operationId,
-    approvalId: input.approvalId,
+    approvalId,
     containerId: input.containerId,
     shell: input.shell,
     status: "active",

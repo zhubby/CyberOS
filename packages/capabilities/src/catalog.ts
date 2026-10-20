@@ -35,7 +35,7 @@ export function createCatalogDescriptors(): CapabilityDescriptor[] {
 }
 
 function inputSchemaFor(capabilityId: string, risk: CapabilityRisk): JsonSchema {
-  if (capabilityId === "zos.files.mutate-propose") {
+  if (capabilityId === "zos.files.mutate") {
     return strictObject({
       request: strictObject({
         operation: { type: "string", enum: ["mkdir", "move", "copy", "rename", "trash"] },

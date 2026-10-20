@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, FileOperationProposal, NasRootRecord, PendingApprovalRecord } from "@zos/shared";
+import type { AgentSessionRecord, NasRootRecord } from "@zos/shared";
 import { listDir, previewFile, readText, searchFiles, statPath } from "@zos/nas-tools";
 import { readOnlySystemPrompt } from "./system-prompt.js";
 
@@ -10,8 +10,7 @@ export interface AgentEmitEvent {
     | "agent.failed"
     | "tool_call.started"
     | "tool_call.completed"
-    | "tool_call.failed"
-    | "approval.pending";
+    | "tool_call.failed";
   payload: Record<string, unknown>;
 }
 
@@ -22,7 +21,6 @@ export interface ReadOnlyAgentInput {
   emit: (event: AgentEmitEvent) => void | Promise<void>;
   isCancelled?: () => boolean;
   queryIndex?: (query: string, path: string) => Promise<IndexMatch[]>;
-  proposeChanges?: (proposal: FileOperationProposal[]) => Promise<PendingApprovalRecord>;
 }
 
 export interface IndexMatch {
@@ -33,10 +31,9 @@ export interface IndexMatch {
 }
 
 export interface AgentTurnResult {
-  status: "completed" | "failed" | "cancelled" | "waiting_approval";
+  status: "completed" | "failed" | "cancelled";
   summary?: string;
   error?: string;
-  approval?: PendingApprovalRecord;
 }
 
 export async function runReadOnlyAgentTurn(input: ReadOnlyAgentInput): Promise<AgentTurnResult> {
@@ -52,14 +49,10 @@ export async function runReadOnlyAgentTurn(input: ReadOnlyAgentInput): Promise<A
     return { status: "cancelled" };
   }
 
-  const mutationProposal = parseMutationProposal(input.message, input.root.id);
-  if (mutationProposal) {
-    return proposeChange(input, mutationProposal);
-  }
   if (isMutationRequest(input.message)) {
     return complete(
       input,
-      "I can only create approval requests for explicit Phase 2 file operations like `move source to target`, `copy source to target`, `rename source to target`, `mkdir path`, `trash path`, or `tag path as label`. No files were changed."
+      "The local fallback is read-only and cannot modify files or create approval requests. No files were changed."
     );
   }
 
@@ -74,38 +67,6 @@ export async function runReadOnlyAgentTurn(input: ReadOnlyAgentInput): Promise<A
   }
 
   return runDirectorySummary(input);
-}
-
-async function proposeChange(
-  input: ReadOnlyAgentInput,
-  proposal: FileOperationProposal
-): Promise<AgentTurnResult> {
-  if (!input.proposeChanges) {
-    return complete(input, "This build can describe approval-gated file operations, but proposal storage is not configured.");
-  }
-
-  const approval = await input.proposeChanges([proposal]);
-  const summary = `Created approval ${approval.id}: ${proposal.summary}. No files were changed.`;
-  await input.emit({
-    type: "approval.pending",
-    payload: {
-      approvalId: approval.id,
-      proposal: approval.proposal,
-      summary
-    }
-  });
-  await input.emit({
-    type: "agent.message",
-    payload: {
-      role: "assistant",
-      content: summary
-    }
-  });
-  return {
-    status: "waiting_approval",
-    summary,
-    approval
-  };
 }
 
 async function runDirectorySummary(input: ReadOnlyAgentInput): Promise<AgentTurnResult> {
@@ -418,72 +379,6 @@ function isMutationRequest(message: string): boolean {
   return /\b(move|rename|copy|delete|remove|trash|restore|archive|mkdir|tag)\b|移动|重命名|复制|删除|移除|回收|恢复|归档|新建|创建目录/iu.test(
     message
   );
-}
-
-function parseMutationProposal(message: string, rootId: string): FileOperationProposal | null {
-  const trimmed = message.trim();
-  if (!isMutationRequest(trimmed)) {
-    return null;
-  }
-
-  const mkdir = trimmed.match(/^(?:mkdir|create folder|创建目录|新建目录)\s+(.+)$/iu);
-  if (mkdir?.[1]) {
-    const targetPath = trimPath(mkdir[1]);
-    return {
-      operation: "mkdir",
-      rootId,
-      targetPath,
-      risk: "low",
-      reversible: true,
-      summary: `Create folder ${targetPath}`
-    };
-  }
-
-  const binary = trimmed.match(/^(move|copy|rename)\s+(.+?)\s+(?:to|as)\s+(.+)$/iu);
-  if (binary?.[1] && binary[2] && binary[3]) {
-    const operation = binary[1].toLocaleLowerCase() as "move" | "copy" | "rename";
-    const sourcePath = trimPath(binary[2]);
-    const targetPath = trimPath(binary[3]);
-    return {
-      operation,
-      rootId,
-      sourcePath,
-      targetPath,
-      risk: operation === "copy" ? "low" : "medium",
-      reversible: operation !== "copy",
-      summary: `${operation} ${sourcePath} to ${targetPath}`
-    };
-  }
-
-  const trash = trimmed.match(/^(?:trash|delete|remove|archive|删除|移除|归档)\s+(.+)$/iu);
-  if (trash?.[1]) {
-    const sourcePath = trimPath(trash[1]);
-    return {
-      operation: "trash",
-      rootId,
-      sourcePath,
-      risk: "medium",
-      reversible: true,
-      summary: `Move ${sourcePath} to ZOS trash`
-    };
-  }
-
-  const tag = trimmed.match(/^(?:tag)\s+(.+?)\s+(?:as|with)\s+(.+)$/iu);
-  if (tag?.[1] && tag[2]) {
-    const sourcePath = trimPath(tag[1]);
-    const tagName = trimPath(tag[2]);
-    return {
-      operation: "tag",
-      rootId,
-      sourcePath,
-      tag: tagName,
-      risk: "low",
-      reversible: true,
-      summary: `Tag ${sourcePath} as ${tagName}`
-    };
-  }
-
-  return null;
 }
 
 function trimPath(value: string): string {

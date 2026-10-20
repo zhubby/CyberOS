@@ -425,13 +425,11 @@ export function SystemNetworkManagementPanel({
 
 export function SystemStorageManagementPanel({
   locale,
-  sessionId,
   onWorkQueuesChanged,
   onNotifyError,
   onNotifySuccess
 }: {
   locale: SupportedLocale;
-  sessionId: string | null;
   onWorkQueuesChanged: () => void | Promise<void>;
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
@@ -516,7 +514,7 @@ export function SystemStorageManagementPanel({
 
   const validationIssues = validateStoragePoolForm(form, summary);
   const availableDisks = summary?.disks ?? [];
-  const canCreatePool = Boolean(summary?.capabilities.canCreatePool && sessionId);
+  const canCreatePool = Boolean(summary?.capabilities.canCreatePool);
 
   function openCreateModal() {
     setError(null);
@@ -559,7 +557,7 @@ export function SystemStorageManagementPanel({
   }
 
   function beginPoolDelete() {
-    if (!selectedPool || !summary?.capabilities.canDeletePool || !sessionId) {
+    if (!selectedPool || !summary?.capabilities.canDeletePool) {
       return;
     }
     setDeleteStep("warning");
@@ -573,7 +571,7 @@ export function SystemStorageManagementPanel({
   }
 
   async function submitPoolDelete() {
-    if (!selectedPool || !sessionId || deleteStep !== "confirm") {
+    if (!selectedPool || deleteStep !== "confirm") {
       return;
     }
     const confirmationName = storagePoolConfirmationName(selectedPool);
@@ -586,7 +584,6 @@ export function SystemStorageManagementPanel({
     onNotifyError(null);
     try {
       await deleteStoragePool({
-        sessionId,
         poolId: selectedPool.id,
         confirmation: confirmationName
       });
@@ -613,11 +610,6 @@ export function SystemStorageManagementPanel({
   async function submitStorageProposal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onNotifyError(null);
-    if (!sessionId) {
-      const message = t("workspace.management.storage.errors.noSession");
-      onNotifyError(message);
-      return;
-    }
     if (validationIssues.length > 0) {
       onNotifyError(storageValidationIssueText(validationIssues[0]!, t));
       return;
@@ -627,7 +619,6 @@ export function SystemStorageManagementPanel({
     setError(null);
     try {
       await createStoragePool({
-        sessionId,
         name: form.name.trim(),
         raidLevel: form.raidLevel,
         devices: form.devices,
@@ -847,7 +838,7 @@ export function SystemStorageManagementPanel({
                 {!summary?.capabilities.canDeletePool ? (
                   <p className="storage-pool-delete-disabled">{t("workspace.management.storage.deleteUnavailable")}</p>
                 ) : deleteStep === "idle" ? (
-                  <button type="button" className="danger-button" onClick={beginPoolDelete} disabled={!sessionId || deleting}>
+                  <button type="button" className="danger-button" onClick={beginPoolDelete} disabled={deleting}>
                     <Trash2 aria-hidden="true" size={15} />
                     <span>{t("workspace.management.storage.deletePool")}</span>
                   </button>
@@ -1064,7 +1055,7 @@ export function SystemStorageManagementPanel({
                 <button type="button" onClick={closeCreateModal} disabled={submitting}>
                   {t("common.actions.cancel")}
                 </button>
-                <button type="submit" className="is-primary" disabled={submitting || !sessionId || !confirmed} aria-busy={submitting || undefined}>
+                <button type="submit" className="is-primary" disabled={submitting || !confirmed} aria-busy={submitting || undefined}>
                   {submitting ? (
                     <LoaderCircle className="storage-pool-spinner" aria-hidden="true" size={15} />
                   ) : (

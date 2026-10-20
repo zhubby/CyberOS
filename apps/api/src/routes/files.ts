@@ -22,14 +22,12 @@ import {
   type FileEntry
 } from "@zos/nas-tools";
 import {
-  appendEvent,
-  createActionMessageAndJob,
+  cancelFileBatch,
   createFileBatch,
-  createPendingApproval,
+  createTrashEntry,
   enqueuePhotostaffJob,
   FileBatchConflictError,
   getPhotostaffLibrarySettings,
-  getSession,
   listFileBatches,
   queryIndexAdvanced,
   recordAppliedOperation
@@ -293,7 +291,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
   server.post<{
     Body: {
-      sessionId?: string;
       rootId?: string;
       storagePoolId?: string;
       operation?: "mkdir" | "rename" | "trash" | "move" | "copy";
@@ -301,114 +298,12 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       targetName?: string;
       targetPath?: string;
     };
-  }>("/api/files/proposals", async (request, reply) => {
-    const session = getSession(db, request.body?.sessionId ?? "");
-    if (!session) {
-      reply.status(404).send({ error: "Session not found" });
-      return;
-    }
-
-    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
-    const root = scope.root;
-    if (session.rootId !== root.id) {
-      reply.status(400).send({ error: "Session root does not match proposal root" });
-      return;
-    }
-
-    const operation = request.body?.operation;
-    if (
-      operation !== "mkdir" &&
-      operation !== "rename" &&
-      operation !== "trash" &&
-      operation !== "move" &&
-      operation !== "copy"
-    ) {
-      reply.status(400).send({ error: "Unsupported file proposal operation" });
-      return;
-    }
-
-    let proposal:
-      | {
-          proposal: FileOperationProposal;
-        }
-      | { statusCode: number; error: string };
-    if (operation === "mkdir") {
-      proposal = await buildMkdirProposal(root, scope, request.body?.targetPath);
-    } else {
-      const source = await getMutableSource(root, scope, request.body?.sourcePath ?? scope.mountpointPath);
-      if ("error" in source) {
-        reply.status(source.statusCode).send({ error: source.error });
-        return;
-      }
-
-      proposal =
-        operation === "rename"
-          ? await buildRenameProposal(root, scope, source.safe.relativePath, request.body?.targetName)
-          : operation === "trash"
-            ? buildTrashProposal(root, source.safe.relativePath)
-            : await buildTransferProposal(root, scope, source.safe, operation, request.body?.targetPath);
-    }
-    if ("error" in proposal) {
-      reply.status(proposal.statusCode).send({ error: proposal.error });
-      return;
-    }
-    proposal.proposal.storagePoolId = scope.pool.id;
-
-    const summary = proposal.proposal.summary;
-    const { message, job } = createActionMessageAndJob(db, {
-      sessionId: session.id,
-      content: summary,
-      kind: "file",
-      status: "waiting_approval"
-    });
-    const approval = createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [proposal.proposal]
-    });
-    appendEvent(db, {
-      sessionId: session.id,
-      jobId: job.id,
-      type: "approval.pending",
-      payload: {
-        approvalId: approval.id,
-        proposal: approval.proposal,
-        summary: `Created approval ${approval.id}: ${summary}. No files were changed.`
-      }
-    });
-
-    reply.status(202).send({
-      message,
-      job,
-      approval
-    });
-  });
-
-  server.post<{
-    Body: {
-      sessionId?: string;
-      rootId?: string;
-      storagePoolId?: string;
-      operation?: "mkdir" | "rename" | "copy";
-      sourcePath?: string;
-      targetName?: string;
-      targetPath?: string;
-    };
   }>("/api/files/mutations", async (request, reply) => {
-    const session = getSession(db, request.body?.sessionId ?? "");
-    if (!session) {
-      reply.status(404).send({ error: "Session not found" });
-      return;
-    }
-
     const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
     const root = scope.root;
-    if (session.rootId !== root.id) {
-      reply.status(400).send({ error: "Session root does not match mutation root" });
-      return;
-    }
 
     const operation = request.body?.operation;
-    if (operation !== "mkdir" && operation !== "rename" && operation !== "copy") {
+    if (operation !== "mkdir" && operation !== "rename" && operation !== "trash" && operation !== "move" && operation !== "copy") {
       reply.status(400).send({ error: "Unsupported direct file mutation operation" });
       return;
     }
@@ -426,7 +321,9 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       }
       proposal = operation === "rename"
         ? await buildRenameProposal(root, scope, source.safe.relativePath, request.body?.targetName)
-        : await buildTransferProposal(root, scope, source.safe, "copy", request.body?.targetPath);
+        : operation === "trash"
+          ? buildTrashProposal(root, source.safe.relativePath)
+          : await buildTransferProposal(root, scope, source.safe, operation, request.body?.targetPath);
     }
     if ("error" in proposal) {
       reply.status(proposal.statusCode).send({ error: proposal.error });
@@ -436,6 +333,18 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
     try {
       const result = await applyFileMutation(root, proposal.proposal, path.join(config.dataDir, "trash"));
+      if (result.proposal.operation === "trash" && result.metadata.trashEntryId && result.targetPath) {
+        createTrashEntry(db, {
+          id: String(result.metadata.trashEntryId),
+          rootId: root.id,
+          originalPath: result.sourcePath ?? proposal.proposal.sourcePath ?? ".",
+          trashPath: path.join(config.dataDir, "trash", result.targetPath),
+          metadata: {
+            ...result.metadata,
+            storagePoolId: scope.pool.id
+          }
+        });
+      }
       const applied = recordAppliedOperation(db, {
         approvalId: null,
         operation: result.proposal.operation,
@@ -480,7 +389,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
   });
 
   server.get<{
-    Querystring: { sessionId?: string; rootId?: string; storagePoolId?: string; limit?: string };
+    Querystring: { rootId?: string; storagePoolId?: string; limit?: string };
   }>("/api/files/batches", async (request, reply) => {
     const rawLimit = request.query.limit === undefined ? 50 : Number.parseInt(request.query.limit, 10);
     if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
@@ -489,7 +398,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     }
     reply.send({
       batches: listFileBatches(db, {
-        ...(request.query.sessionId ? { sessionId: request.query.sessionId } : {}),
         ...(request.query.rootId ? { rootId: request.query.rootId } : {}),
         ...(request.query.storagePoolId ? { storagePoolId: request.query.storagePoolId } : {}),
         limit: rawLimit
@@ -497,9 +405,21 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     });
   });
 
+  server.post<{ Params: { id: string } }>("/api/files/batches/:id/cancel", async (request, reply) => {
+    const batch = cancelFileBatch(db, request.params.id);
+    if (!batch) {
+      reply.status(404).send({ error: "File batch not found" });
+      return;
+    }
+    if (batch.status !== "cancelled") {
+      reply.status(409).send({ error: `File batch is already ${batch.status}`, status: batch.status });
+      return;
+    }
+    reply.status(202).send({ batch });
+  });
+
   server.post<{
     Body: {
-      sessionId?: string;
       rootId?: string;
       storagePoolId?: string;
       operation?: "move" | "trash";
@@ -507,11 +427,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       targetDirectory?: string;
     };
   }>("/api/files/batches", { bodyLimit: 1024 * 1024 }, async (request, reply) => {
-    const session = getSession(db, request.body?.sessionId ?? "");
-    if (!session) {
-      reply.status(404).send({ error: "Session not found" });
-      return;
-    }
     const operation = request.body?.operation;
     if (operation !== "move" && operation !== "trash") {
       reply.status(400).send({ error: "Unsupported file batch operation" });
@@ -529,10 +444,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     }
 
     const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
-    if (session.rootId !== scope.root.id) {
-      reply.status(400).send({ error: "Session root does not match batch root" });
-      return;
-    }
 
     let targetDirectory: string | null = null;
     if (operation === "move") {
@@ -574,7 +485,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
     try {
       const batch = createFileBatch(db, {
-        sessionId: session.id,
         rootId: scope.root.id,
         storagePoolId: scope.pool.id,
         operation,

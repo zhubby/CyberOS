@@ -14,6 +14,7 @@ function notification(
     id,
     jobId: `job-${id}`,
     sessionId: "session-1",
+    operationId: id,
     kind: id === "docker" ? "docker" : "file",
     status,
     summary: `Operation ${id}`,

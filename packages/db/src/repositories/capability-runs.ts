@@ -43,6 +43,12 @@ export interface CapabilityApprovalRecord {
   updatedAt: string;
 }
 
+export interface AgentCapabilityApprovalRecord extends CapabilityApprovalRecord {
+  run: CapabilityRunRecord;
+  sessionId: string;
+  jobId: string;
+}
+
 interface CapabilityRunRow {
   id: string;
   client_id: string | null;
@@ -150,20 +156,24 @@ export function createCapabilityRun(db: ZosDatabase, input: {
 }
 
 export function createCapabilityProposal(db: ZosDatabase, input: {
-  clientId: string;
+  clientId?: string | null;
   subjectId: string;
-  subjectKind: "pi" | "local" | "lan";
+  subjectKind: "pi";
   capabilityId: string;
   risk: Exclude<CapabilityRisk, "read">;
   redactedInput: JsonValue;
   proposal: JsonValue;
+  privatePayload?: JsonValue;
   idempotencyKey?: string | null;
   requiresConfirmation?: boolean;
   expiresAt: string;
 }): { run: CapabilityRunRecord; approval: CapabilityApprovalRecord } {
+  if (input.subjectKind !== "pi") {
+    throw new Error("Only the built-in Pi agent can create capability approvals");
+  }
   const tx = db.transaction(() => {
     const created = createCapabilityRun(db, {
-      clientId: input.clientId,
+      clientId: input.clientId ?? null,
       subjectId: input.subjectId,
       subjectKind: input.subjectKind,
       capabilityId: input.capabilityId,
@@ -195,6 +205,12 @@ export function createCapabilityProposal(db: ZosDatabase, input: {
       ) VALUES (?, ?, 'pending', ?, ?, 1, ?, ?, ?, ?)
     `).run(approval.id, approval.runId, stableJson(approval.proposal), approval.risk,
       approval.requiresConfirmation ? 1 : 0, approval.expiresAt, now, now);
+    if (input.privatePayload !== undefined) {
+      db.prepare(`
+        INSERT INTO capability_run_payloads(run_id, payload_json, created_at)
+        VALUES (?, ?, ?)
+      `).run(created.id, stableJson(input.privatePayload), now);
+    }
     db.prepare(`
       UPDATE capability_runs SET state = 'waiting_approval', updated_at = ?, revision = revision + 1
       WHERE id = ? AND state = 'queued'
@@ -296,6 +312,63 @@ export function listPendingCapabilityApprovals(db: ZosDatabase): Array<Capabilit
   });
 }
 
+export function listPendingAgentCapabilityApprovals(
+  db: ZosDatabase,
+  input: { sessionId?: string } = {}
+): AgentCapabilityApprovalRecord[] {
+  const rows = db.prepare(`
+    SELECT a.*, acr.job_id, j.session_id
+    FROM capability_approvals a
+    JOIN capability_runs r ON r.id = a.run_id AND r.subject_kind = 'pi'
+    JOIN agent_capability_runs acr ON acr.run_id = r.id
+    JOIN jobs j ON j.id = acr.job_id AND j.kind = 'agent'
+    WHERE a.status = 'pending' AND (? IS NULL OR j.session_id = ?)
+    ORDER BY a.created_at, a.id
+  `).all(input.sessionId ?? null, input.sessionId ?? null) as Array<CapabilityApprovalRow & {
+    job_id: string;
+    session_id: string;
+  }>;
+  return rows.flatMap((row) => {
+    const run = getCapabilityRun(db, row.run_id);
+    return run ? [{ ...mapApproval(row), run, jobId: row.job_id, sessionId: row.session_id }] : [];
+  });
+}
+
+export function getAgentCapabilityApproval(
+  db: ZosDatabase,
+  approvalId: string
+): AgentCapabilityApprovalRecord | null {
+  const row = db.prepare(`
+    SELECT a.*, acr.job_id, j.session_id
+    FROM capability_approvals a
+    JOIN capability_runs r ON r.id = a.run_id AND r.subject_kind = 'pi'
+    JOIN agent_capability_runs acr ON acr.run_id = r.id
+    JOIN jobs j ON j.id = acr.job_id AND j.kind = 'agent'
+    WHERE a.id = ?
+  `).get(approvalId) as (CapabilityApprovalRow & { job_id: string; session_id: string }) | undefined;
+  if (!row) return null;
+  const run = getCapabilityRun(db, row.run_id);
+  return run ? { ...mapApproval(row), run, jobId: row.job_id, sessionId: row.session_id } : null;
+}
+
+export function saveCapabilityRunPayload(db: ZosDatabase, runId: string, payload: JsonValue): void {
+  db.prepare(`
+    INSERT INTO capability_run_payloads(run_id, payload_json, created_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(run_id) DO UPDATE SET payload_json = excluded.payload_json
+  `).run(runId, stableJson(payload), new Date().toISOString());
+}
+
+export function getCapabilityRunPayload(db: ZosDatabase, runId: string): JsonValue | null {
+  const value = db.prepare("SELECT payload_json FROM capability_run_payloads WHERE run_id = ?")
+    .pluck().get(runId) as string | undefined;
+  return value ? JSON.parse(value) as JsonValue : null;
+}
+
+export function deleteCapabilityRunPayload(db: ZosDatabase, runId: string): boolean {
+  return db.prepare("DELETE FROM capability_run_payloads WHERE run_id = ?").run(runId).changes === 1;
+}
+
 export function expireCapabilityApprovals(db: ZosDatabase, now = new Date().toISOString()): number {
   const tx = db.transaction(() => {
     const rows = db.prepare(`
@@ -325,6 +398,7 @@ export function expireCapabilityApprovals(db: ZosDatabase, now = new Date().toIS
       }
       appendCapabilityRunEvent(db, row.run_id, "approval.expired", { approvalId: row.id });
       appendCapabilityRunEvent(db, row.run_id, "run.expired", { reason: "approval_expired" });
+      deleteCapabilityRunPayload(db, row.run_id);
       expired += 1;
     }
     return expired;
@@ -412,6 +486,13 @@ export function decideCapabilityApproval(db: ZosDatabase, input: {
 }
 
 export function linkAgentJobToCapabilityRun(db: ZosDatabase, input: { jobId: string; runId: string; providerSessionId?: string | null }): void {
+  const eligible = db.prepare(`
+    SELECT 1
+    FROM jobs j
+    JOIN capability_runs r ON r.id = ?
+    WHERE j.id = ? AND j.kind = 'agent' AND r.subject_kind = 'pi'
+  `).pluck().get(input.runId, input.jobId);
+  if (!eligible) throw new Error("Capability approvals can only be linked to a Pi Agent job");
   db.prepare(`
     INSERT INTO agent_capability_runs(job_id, run_id, provider_session_id, created_at)
     VALUES (?, ?, ?, ?)

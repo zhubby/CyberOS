@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
@@ -7,15 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createDownloadTask,
   createMcpClient,
-  decideCapabilityApproval,
   ensureNasRoots,
-  getCapabilityApprovalByRun,
   openZosDb,
   saveModelProviderSettings,
   transitionDownloadTask,
   type ZosDatabase
 } from "@zos/db";
-import { executeApprovedCapabilityRun } from "@zos/capability-runtime";
 import type { ZosConfig } from "@zos/shared";
 import { registerMcp } from "./server.js";
 
@@ -23,7 +20,6 @@ let tempDir: string;
 let db: ZosDatabase;
 let app: ReturnType<typeof Fastify>;
 let token: string;
-let clientId: string;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-mcp-"));
@@ -39,7 +35,6 @@ beforeEach(async () => {
     ]
   });
   token = client.token;
-  clientId = client.id;
   app = Fastify();
   registerMcp(app, { db, config: testConfig(tempDir) }, { enabled: true });
   await app.ready();
@@ -302,13 +297,13 @@ describe("MCP Streamable HTTP", () => {
     expect(response.statusCode).toBe(405);
   });
 
-  it("creates an immutable file proposal and executes it only after first-party approval", async () => {
+  it("does not expose mutation execution or create approval state for external MCP clients", async () => {
     const proposed = await postMcp({
       jsonrpc: "2.0",
       id: 4,
       method: "tools/call",
       params: {
-        name: "zos.files.mutate-propose",
+        name: "zos.files.mutate",
         arguments: {
           request: { operation: "move", rootId: "primary", sourcePath: "hello.txt", targetPath: "moved.txt" },
           idempotencyKey: "move-hello-0001"
@@ -316,23 +311,15 @@ describe("MCP Streamable HTTP", () => {
       }
     }, "2025-11-25");
     const payload = parseMcpResponse(proposed.body);
-    const structured = payload.result.structuredContent as { runId: string; data: { state: string } };
-    expect(structured.data.state).toBe("waiting_approval");
+    expect(payload.result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        data: { error: { code: "NOT_READY" } }
+      }
+    });
     await expect(readFile(path.join(tempDir, "hello.txt"), "utf8")).resolves.toBe("hello from ZOS");
-
-    const approval = getCapabilityApprovalByRun(db, structured.runId)!;
-    expect(decideCapabilityApproval(db, {
-      approvalId: approval.id,
-      expectedRevision: approval.revision,
-      decision: "approved",
-      decidedBy: "local-admin"
-    })).not.toBeNull();
-    const run = await executeApprovedCapabilityRun({ db, config: testConfig(tempDir) }, structured.runId);
-
-    expect(run).toMatchObject({ state: "succeeded", clientId, capabilityId: "zos.files.mutate-propose" });
-    await expect(readFile(path.join(tempDir, "moved.txt"), "utf8")).resolves.toBe("hello from ZOS");
-    await expect(access(path.join(tempDir, "hello.txt"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect(JSON.stringify(run.result)).not.toContain(tempDir);
+    expect(db.prepare("SELECT COUNT(*) FROM capability_runs").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
   });
 
   it("serves subject-bound file links exactly once", async () => {

@@ -6,33 +6,23 @@ import {
   Bell,
   Check,
   CircleStop,
-  Container,
-  FileCog,
   HardDrive,
   LoaderCircle,
   MessageSquare,
   MessageSquarePlus,
-  MonitorCog,
   Plus,
   Send,
   Settings,
-  Share2,
-  TerminalSquare,
   Trash2,
   X
 } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import type {
-  DockerOperationProposal,
   CapabilityApproval,
   ModelProviderSettings,
   NasRoot,
-  PendingApproval,
   SessionSummary,
-  ShareOperationProposal,
-  StorageOperationProposal,
   SystemPowerAction,
-  VmOperationProposal,
   TranscriptMessage
 } from "../../api.js";
 import type { AppStatus } from "../../config/status.js";
@@ -50,19 +40,9 @@ import { sessionTitle } from "../../lib/session.js";
 import type { TranscriptPhase } from "../../lib/transcript.js";
 import { PowerControl } from "../power/PowerControl.js";
 
-type ApprovalRisk = PendingApproval["proposal"][number]["risk"];
 type CapabilityApprovalRisk = CapabilityApproval["risk"];
-type ApprovalCardKind = "file" | "tool" | "docker" | "vm" | "share" | "storage";
 type ComposerKeyDownEvent = Pick<KeyboardEvent<HTMLTextAreaElement>, "key" | "shiftKey" | "nativeEvent">;
 type ComposerFeedbackState = "sending" | "queued" | "running" | "reconnecting";
-
-interface ApprovalCard {
-  kind: ApprovalCardKind;
-  title: string;
-  detail: string;
-  meta: string;
-  items: { label: string; value: string }[];
-}
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -143,6 +123,7 @@ function SessionList({
   ariaLabel: string;
   onSelectSession: (session: SessionSummary) => void;
 }) {
+  const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -155,7 +136,10 @@ function SessionList({
       {sessions.map((item) => {
         const title = sessionTitle(item, rootAgentTitle);
         const relativeTime = formatRelativeTime(item.updatedAt, locale, now);
-        const label = `${title} - ${relativeTime} (${formatDate(item.updatedAt, locale)})`;
+        const baseLabel = `${title} - ${relativeTime} (${formatDate(item.updatedAt, locale)})`;
+        const label = item.pendingApprovalCount > 0
+          ? `${baseLabel}; ${t("chat.pendingApprovalCount", { count: item.pendingApprovalCount })}`
+          : baseLabel;
 
         return (
           <button
@@ -168,6 +152,11 @@ function SessionList({
             aria-current={item.id === activeSessionId ? "page" : undefined}
           >
             <Bot aria-hidden="true" size={19} />
+            {item.pendingApprovalCount > 0 ? (
+              <span className="session-approval-badge" aria-hidden="true">
+                {item.pendingApprovalCount > 9 ? "9+" : item.pendingApprovalCount}
+              </span>
+            ) : null}
           </button>
         );
       })}
@@ -183,7 +172,6 @@ export function ChatPane({
   activeSessionId,
   transcript,
   transcriptPhase,
-  activeApprovals,
   activeCapabilityApprovals,
   message,
   composerPath,
@@ -201,9 +189,7 @@ export function ChatPane({
   onRequestSystemPower,
   notificationUnreadCount,
   onSelectSession,
-  onApprove,
   onApproveCapability,
-  onReject,
   onRejectCapability,
   onSubmitMessage,
   onMessageChange,
@@ -218,7 +204,6 @@ export function ChatPane({
   activeSessionId: string;
   transcript: TranscriptMessage[];
   transcriptPhase: TranscriptPhase;
-  activeApprovals: PendingApproval[];
   activeCapabilityApprovals: CapabilityApproval[];
   message: string;
   composerPath: string | null;
@@ -236,9 +221,7 @@ export function ChatPane({
   onRequestSystemPower: (action: SystemPowerAction) => Promise<boolean>;
   notificationUnreadCount: number;
   onSelectSession: (session: SessionSummary) => void;
-  onApprove: (approvalId: string) => void;
   onApproveCapability: (approval: CapabilityApproval) => void;
-  onReject: (approvalId: string) => void;
   onRejectCapability: (approval: CapabilityApproval) => void;
   onSubmitMessage: (event: FormEvent<HTMLFormElement>) => void;
   onMessageChange: (message: string) => void;
@@ -251,7 +234,7 @@ export function ChatPane({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const rootAgentTitle = t("chat.rootAgent");
-  const hasConversationContent = transcript.length > 0 || activeApprovals.length > 0 || activeCapabilityApprovals.length > 0;
+  const hasConversationContent = transcript.length > 0 || activeCapabilityApprovals.length > 0;
   const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), rootAgentTitle);
   const composerFeedback = composerFeedbackState({ activeJobId, messageSubmitting, status });
   const deleteDisabled = !activeSessionSummary || composerFeedback !== null || status === "cancelling";
@@ -282,77 +265,6 @@ export function ChatPane({
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
   }
-
-  const renderApprovalCard = (approval: PendingApproval) => {
-    const risk = approval.proposal[0]?.risk ?? "low";
-    const card = approvalCard(approval, translate);
-    const CardIcon =
-      card.kind === "tool"
-        ? TerminalSquare
-        : card.kind === "docker"
-          ? Container
-          : card.kind === "vm"
-            ? MonitorCog
-            : card.kind === "share"
-              ? Share2
-              : card.kind === "storage"
-                ? HardDrive
-                : FileCog;
-
-    return (
-      <article className="approval-card" aria-label={t("chat.pendingApprovals")}>
-        <div className="approval-card-icon" aria-hidden="true" data-kind={card.kind}>
-          <CardIcon size={18} />
-        </div>
-
-        <div className="approval-card-body">
-          <div className="approval-card-head">
-            <div>
-              <span className="approval-card-kicker">{card.meta}</span>
-              <strong>{card.title}</strong>
-            </div>
-            <span className="risk-pill" data-risk={risk}>
-              {t("chat.risk", { risk: approvalRiskLabel(risk, translate) })}
-            </span>
-          </div>
-
-          <p>{card.detail}</p>
-
-          {card.items.length ? (
-            <dl className="approval-card-details">
-              {card.items.map((item) => (
-                <div key={`${item.label}-${item.value}`}>
-                  <dt>{item.label}</dt>
-                  <dd title={item.value}>{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-        </div>
-
-        <div className="approval-actions">
-          <button
-            type="button"
-            className="approval-approve"
-            onClick={() => onApprove(approval.id)}
-            title={t("common.actions.approve")}
-          >
-            <Check aria-hidden="true" size={15} />
-            <span>{t("common.actions.approve")}</span>
-          </button>
-          <button
-            type="button"
-            className="approval-reject"
-            onClick={() => onReject(approval.id)}
-            title={t("common.actions.reject")}
-          >
-            <X aria-hidden="true" size={15} />
-            <span>{t("common.actions.reject")}</span>
-          </button>
-        </div>
-      </article>
-    );
-  };
 
   const renderCapabilityApprovalCard = (approval: CapabilityApproval) => {
     const proposal = approval.proposal;
@@ -538,20 +450,6 @@ export function ChatPane({
                       rootPath={selectedRoot?.path ?? null}
                       onOpenWorkspacePath={onOpenWorkspacePath}
                     />
-                  </div>
-                </article>
-              ))}
-              {activeApprovals.map((approval) => (
-                <article key={`approval-${approval.id}`} className="message message-assistant message-approval">
-                  <div className="avatar" aria-hidden="true">
-                    <Bot size={17} />
-                  </div>
-                  <div>
-                    <header>
-                      <strong>{t("chat.zosAgent")}</strong>
-                      <span className="message-meta">{t("chat.approvals")}</span>
-                    </header>
-                    {renderApprovalCard(approval)}
                   </div>
                 </article>
               ))}
@@ -846,7 +744,7 @@ function markdownCodeLanguage(className: string | undefined): string | null {
   return match?.[1] ?? null;
 }
 
-function approvalRiskLabel(risk: ApprovalRisk | CapabilityApprovalRisk, t: Translate): string {
+function approvalRiskLabel(risk: CapabilityApprovalRisk, t: Translate): string {
   if (risk === "critical") {
     return t("chat.risks.critical");
   }
@@ -861,287 +759,4 @@ function approvalRiskLabel(risk: ApprovalRisk | CapabilityApprovalRisk, t: Trans
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function approvalCard(approval: PendingApproval, t: Translate): ApprovalCard {
-  if (approval.kind === "pi_tool_call") {
-    const toolCall = approval.proposal.find((proposal) => "toolName" in proposal);
-    if (!toolCall || !("toolName" in toolCall)) {
-      return {
-        kind: "tool",
-        title: t("chat.approvalCards.toolTitle", { tool: "Pi" }),
-        detail: t("chat.approvalCards.toolApproval"),
-        meta: t("chat.approvalCards.toolCall"),
-        items: []
-      };
-    }
-    return {
-      kind: "tool",
-      title: t("chat.approvalCards.toolTitle", { tool: toolCall.toolName }),
-      detail: toolCall.summary,
-      meta: t("chat.approvalCards.toolCall"),
-      items: [
-        { label: t("chat.approvalCards.cwd"), value: toolCall.cwd },
-        { label: t("chat.approvalCards.args"), value: summarizeArgs(toolCall.args) || t("common.dash") }
-      ]
-    };
-  }
-
-  if (approval.kind === "docker_operation") {
-    const dockerOperation = approval.proposal.find(isDockerOperationProposal);
-    if (!dockerOperation || !("action" in dockerOperation)) {
-      return {
-        kind: "docker",
-        title: t("chat.approvalCards.dockerTitle"),
-        detail: t("chat.approvalCards.dockerApproval"),
-        meta: t("chat.approvalCards.dockerOperation"),
-        items: []
-      };
-    }
-    return {
-      kind: "docker",
-      title: dockerActionLabel(dockerOperation.action, t),
-      detail: dockerOperation.summary,
-      meta: t("chat.approvalCards.dockerOperation"),
-      items: [
-        {
-          label: t("chat.approvalCards.targetType"),
-          value: dockerTargetTypeLabel(dockerOperation.targetType, t)
-        },
-        {
-          label: t("chat.approvalCards.target"),
-          value:
-            dockerOperation.containerName ??
-            dockerOperation.composeProjectName ??
-            dockerOperation.containerId ??
-            dockerOperation.composeProjectId ??
-            t("common.dash")
-        },
-        ...(dockerOperation.shell
-          ? [{ label: t("chat.approvalCards.shell"), value: dockerOperation.shell }]
-          : []),
-        ...(dockerOperation.service
-          ? [{ label: t("chat.approvalCards.service"), value: dockerOperation.service }]
-          : [])
-      ]
-    };
-  }
-
-  if (approval.kind === "share_operation") {
-    const shareOperation = approval.proposal.find(isShareOperationProposal);
-    if (!shareOperation || !("settings" in shareOperation)) {
-      return {
-        kind: "share",
-        title: t("chat.approvalCards.shareTitle"),
-        detail: t("chat.approvalCards.shareApproval"),
-        meta: t("chat.approvalCards.shareOperation"),
-        items: []
-      };
-    }
-    const enabledProtocols = shareOperation.settings.shares.flatMap((share) =>
-      Object.entries(share.protocols)
-        .filter(([, protocol]) => protocol.enabled)
-        .map(([protocol]) => protocol.toUpperCase())
-    );
-    return {
-      kind: "share",
-      title: t("chat.approvalCards.shareTitle"),
-      detail: shareOperation.summary,
-      meta: t("chat.approvalCards.shareOperation"),
-      items: [
-        {
-          label: t("chat.approvalCards.shares"),
-          value: String(shareOperation.settings.shares.length)
-        },
-        {
-          label: t("chat.approvalCards.protocols"),
-          value: [...new Set(enabledProtocols)].join(", ") || t("common.dash")
-        },
-        {
-          label: t("chat.approvalCards.account"),
-          value: shareOperation.settings.account.passwordConfigured
-            ? shareOperation.settings.account.username
-            : t("settings.modelProvider.notConfiguredPlaceholder")
-        }
-      ]
-    };
-  }
-
-  if (approval.kind === "vm_operation") {
-    const vmOperation = approval.proposal.find(isVmOperationProposal);
-    if (!vmOperation) {
-      return {
-        kind: "vm",
-        title: t("chat.approvalCards.vmTitle"),
-        detail: t("chat.approvalCards.vmApproval"),
-        meta: t("chat.approvalCards.vmOperation"),
-        items: []
-      };
-    }
-    return {
-      kind: "vm",
-      title: vmOperationActionLabel(vmOperation.action, t),
-      detail: vmOperation.summary,
-      meta: t("chat.approvalCards.vmOperation"),
-      items: [
-        ...(vmOperation.domainName
-          ? [{ label: t("chat.approvalCards.target"), value: vmOperation.domainName }]
-          : []),
-        ...(vmOperation.snapshotName
-          ? [{ label: t("chat.approvalCards.snapshot"), value: vmOperation.snapshotName }]
-          : []),
-        ...(vmOperation.vcpu
-          ? [{ label: t("chat.approvalCards.vcpu"), value: String(vmOperation.vcpu) }]
-          : []),
-        ...(vmOperation.memoryBytes
-          ? [{ label: t("chat.approvalCards.memory"), value: `${Math.round(vmOperation.memoryBytes / 1024 ** 3)} GiB` }]
-          : []),
-        ...(vmOperation.diskSizeBytes
-          ? [{ label: t("chat.approvalCards.disk"), value: `${Math.round(vmOperation.diskSizeBytes / 1024 ** 3)} GiB` }]
-          : []),
-        ...(vmOperation.isoPath
-          ? [{ label: t("chat.approvalCards.iso"), value: vmOperation.isoPath }]
-          : []),
-        ...(vmOperation.networkName
-          ? [{ label: t("chat.approvalCards.network"), value: vmOperation.networkName }]
-          : [])
-      ]
-    };
-  }
-
-  if (approval.kind === "storage_operation") {
-    const storageOperation = approval.proposal.find(isStorageOperationProposal);
-    if (!storageOperation) {
-      return {
-        kind: "storage",
-        title: t("chat.approvalCards.storageTitle"),
-        detail: t("chat.approvalCards.storageApproval"),
-        meta: t("chat.approvalCards.storageOperation"),
-        items: []
-      };
-    }
-    return {
-      kind: "storage",
-      title: t("chat.approvalCards.storageTitle"),
-      detail: storageOperation.summary,
-      meta: t("chat.approvalCards.storageOperation"),
-      items: [
-        { label: t("chat.approvalCards.poolName"), value: storageOperation.name },
-        { label: t("chat.approvalCards.raidLevel"), value: `RAID ${storageOperation.raidLevel}` },
-        { label: t("chat.approvalCards.filesystem"), value: storageOperation.filesystem },
-        { label: t("chat.approvalCards.devices"), value: storageOperation.devices.join(", ") },
-        { label: t("chat.approvalCards.mountpoint"), value: storageOperation.mountpoint }
-      ]
-    };
-  }
-
-  const fileOperations = approval.proposal.filter((proposal) => "operation" in proposal);
-  const firstOperation = fileOperations[0];
-  const affectedPaths = Array.from(
-    new Set(
-      fileOperations
-        .flatMap((item) => ("operation" in item ? [item.sourcePath, item.targetPath, item.trashEntryId] : []))
-        .filter((path): path is string => Boolean(path))
-    )
-  );
-  return {
-    kind: "file",
-    title: fileOperations.map((item) => ("operation" in item ? item.operation : "")).join(", ") || t("chat.approvalCards.fileTitle"),
-    detail:
-      fileOperations.map((item) => ("summary" in item ? item.summary : "")).filter(Boolean).join("; ") ||
-      t("chat.approvalCards.fileApproval"),
-    meta: t("chat.approvalCards.fileOperation"),
-    items: [
-      ...(firstOperation && "rootId" in firstOperation
-        ? [{ label: t("chat.approvalCards.root"), value: firstOperation.rootId }]
-        : []),
-      ...(affectedPaths.length
-        ? [{ label: t("chat.approvalCards.paths"), value: affectedPaths.join(" -> ") }]
-        : [])
-    ]
-  };
-}
-
-function isDockerOperationProposal(proposal: PendingApproval["proposal"][number]): proposal is DockerOperationProposal {
-  return "targetType" in proposal;
-}
-
-function isVmOperationProposal(proposal: PendingApproval["proposal"][number]): proposal is VmOperationProposal {
-  return "action" in proposal && "risk" in proposal && "summary" in proposal && !("targetType" in proposal);
-}
-
-function vmOperationActionLabel(action: VmOperationProposal["action"], t: Translate): string {
-  return t(`chat.approvalCards.vmActions.${action}`);
-}
-
-function isShareOperationProposal(proposal: PendingApproval["proposal"][number]): proposal is ShareOperationProposal {
-  return "action" in proposal && proposal.action === "apply_settings" && "settings" in proposal;
-}
-
-function isStorageOperationProposal(
-  proposal: PendingApproval["proposal"][number]
-): proposal is Extract<StorageOperationProposal, { action: "create_pool" }> {
-  return "action" in proposal && proposal.action === "create_pool" && "devices" in proposal;
-}
-
-function dockerActionLabel(
-  action: string,
-  t: Translate
-): string {
-  switch (action) {
-    case "create":
-      return t("workspace.management.docker.create.actions.create");
-    case "start":
-      return t("workspace.management.actions.start");
-    case "stop":
-    case "compose_down":
-      return t("workspace.management.actions.stop");
-    case "restart":
-    case "compose_restart":
-      return t("workspace.management.actions.restart");
-    case "remove":
-      return t("workspace.management.actions.remove");
-    case "console":
-      return t("workspace.management.actions.console");
-    case "compose_up":
-      return t("workspace.management.actions.deploy");
-    case "compose_pull":
-      return t("workspace.management.actions.pull");
-    default:
-      return action;
-  }
-}
-
-function dockerTargetTypeLabel(
-  targetType: string,
-  t: Translate
-): string {
-  switch (targetType) {
-    case "container":
-      return t("chat.approvalCards.containerTarget");
-    case "compose_project":
-      return t("chat.approvalCards.composeTarget");
-    case "console":
-      return t("chat.approvalCards.consoleTarget");
-    case "volume":
-      return t("chat.approvalCards.volumeTarget");
-    case "network":
-      return t("chat.approvalCards.networkTarget");
-    default:
-      return targetType;
-  }
-}
-
-function summarizeArgs(args: Record<string, unknown>): string {
-  return Object.entries(args)
-    .slice(0, 4)
-    .map(([key, value]) => `${key}=${formatArgValue(value)}`)
-    .join(", ");
-}
-
-function formatArgValue(value: unknown): string {
-  if (typeof value === "string") {
-    return value.length > 42 ? `${value.slice(0, 39)}...` : value;
-  }
-  return JSON.stringify(value);
 }

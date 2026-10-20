@@ -21,9 +21,8 @@ import {
 import {
   getShareSettings,
   getShareSummary,
-  proposeShareSettings,
+  applyShareSettings,
   type NasRoot,
-  type PendingApproval,
   type ShareSummary
 } from "../../api.js";
 import {
@@ -64,20 +63,16 @@ const PROTOCOL_ICONS = {
 
 export function ShareManagementPanel({
   roots,
-  sessionId,
-  pendingApprovals,
   locale,
   onWorkQueuesChanged,
   onNotifyError,
-  onNotifyWarning
+  onNotifySuccess
 }: {
   roots: NasRoot[];
-  sessionId: string | null;
-  pendingApprovals: PendingApproval[];
   locale: SupportedLocale;
   onWorkQueuesChanged: () => void | Promise<void>;
   onNotifyError: (message: string | null) => void;
-  onNotifyWarning: (message: string | null) => void;
+  onNotifySuccess: (message: string | null) => void;
 }) {
   const { t } = useTranslation();
   const dashboard = useManagementDashboard("shares");
@@ -91,10 +86,8 @@ export function ShareManagementPanel({
   const [newShareError, setNewShareError] = useState<string | null>(null);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const reportedIssueSignature = useRef<string | null>(null);
-  const reportedPendingApprovalId = useRef<string | null>(null);
-  const pendingShareApproval = pendingApprovals.find((approval) => approval.kind === "share_operation") ?? null;
   const validationIssues = useMemo(() => validateShareForm(form, roots), [form, roots]);
-  const submitDisabled = loading || submitting || Boolean(pendingShareApproval) || !sessionId;
+  const submitDisabled = loading || submitting;
   const statusTone = shareStatusTone(summary, loading, error);
   const metrics = summary?.metrics ?? {
     shares: form.shares.length,
@@ -138,18 +131,6 @@ export function ShareManagementPanel({
   }, [roots]);
 
   useEffect(() => {
-    if (!pendingShareApproval) {
-      reportedPendingApprovalId.current = null;
-      return;
-    }
-    if (reportedPendingApprovalId.current === pendingShareApproval.id) {
-      return;
-    }
-    reportedPendingApprovalId.current = pendingShareApproval.id;
-    onNotifyWarning(t("workspace.management.shares.pendingApproval"));
-  }, [onNotifyWarning, pendingShareApproval, t]);
-
-  useEffect(() => {
     if (!addShareOpen) {
       return;
     }
@@ -186,12 +167,6 @@ export function ShareManagementPanel({
       confirmAddShare();
       return;
     }
-    if (!sessionId) {
-      const message = t("workspace.management.shares.errors.noSession");
-      setError(message);
-      onNotifyError(message);
-      return;
-    }
     if (validationIssues.length > 0) {
       const message = validationIssueText(validationIssues[0]!, t);
       setError(message);
@@ -202,11 +177,10 @@ export function ShareManagementPanel({
     setSubmitting(true);
     setError(null);
     try {
-      await proposeShareSettings({
-        sessionId,
+      await applyShareSettings({
         settings: shareFormToInput(form)
       });
-      onNotifyWarning(t("workspace.management.shares.proposalCreated"));
+      onNotifySuccess(t("notifications.operationSucceeded"));
       setForm((current) => ({
         ...current,
         account: {
@@ -361,7 +335,7 @@ export function ShareManagementPanel({
             {loading || refreshing ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <RefreshCw aria-hidden="true" size={17} />}
           </PanelHeaderAction>
           <PanelHeaderAction
-            label={pendingShareApproval ? t("workspace.management.actions.pendingApproval") : t("workspace.management.shares.requestApproval")}
+            label={t("common.actions.save")}
             type="submit"
             form="share-management-form"
             disabled={submitDisabled}

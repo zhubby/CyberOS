@@ -1,7 +1,6 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import {
-  appendEvent,
   claimNextFileBatchItem,
   createTrashEntry,
   finishFileBatchItem,
@@ -30,7 +29,6 @@ export interface FileBatchRuntime {
 export class FileBatchRunner implements FileBatchRuntime {
   private stopped = true;
   private active: Promise<void> | null = null;
-  private readonly lastProgressEventAt = new Map<string, number>();
 
   constructor(
     private readonly dependencies: {
@@ -63,11 +61,8 @@ export class FileBatchRunner implements FileBatchRuntime {
   private async drain(): Promise<void> {
     while (!this.stopped) {
       try {
-        const result = await processNextFileBatchItem(this.dependencies, (batch) => {
-          this.emitProgress(processedResult(batch, null));
-        });
+        const result = await processNextFileBatchItem(this.dependencies);
         if (!result) return;
-        if (result.finalStatus) this.emitProgress(result);
       } catch (error) {
         this.dependencies.log?.error({ err: error }, "File batch runner failed");
         return;
@@ -75,39 +70,10 @@ export class FileBatchRunner implements FileBatchRuntime {
     }
   }
 
-  private emitProgress(result: ProcessedFileBatchItem): void {
-    const now = Date.now();
-    const previous = this.lastProgressEventAt.get(result.batchId) ?? 0;
-    if (!result.finalStatus && now - previous < 500) return;
-    this.lastProgressEventAt.set(result.batchId, now);
-    appendEvent(this.dependencies.db, {
-      sessionId: result.sessionId,
-      jobId: result.jobId,
-      type: result.finalStatus === "completed"
-        ? "job.completed"
-        : result.finalStatus === "failed"
-          ? "job.failed"
-          : result.finalStatus === "cancelled"
-            ? "job.cancelled"
-            : "job.running",
-      payload: {
-        jobId: result.jobId,
-        fileBatchId: result.batchId,
-        rootId: result.rootId,
-        storagePoolId: result.storagePoolId,
-        completedCount: result.completedCount,
-        totalCount: result.totalCount,
-        ...(result.finalStatus ? { status: result.finalStatus } : {})
-      }
-    });
-    if (result.finalStatus) this.lastProgressEventAt.delete(result.batchId);
-  }
 }
 
 interface ProcessedFileBatchItem {
   batchId: string;
-  jobId: string;
-  sessionId: string;
   rootId: string;
   storagePoolId: string;
   completedCount: number;
@@ -290,8 +256,6 @@ function processedResult(
 ): ProcessedFileBatchItem {
   return {
     batchId: batch.id,
-    jobId: batch.jobId,
-    sessionId: batch.sessionId,
     rootId: batch.rootId,
     storagePoolId: batch.storagePoolId,
     completedCount: batch.completedCount,

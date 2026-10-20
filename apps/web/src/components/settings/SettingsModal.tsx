@@ -25,6 +25,7 @@ import {
   X
 } from "lucide-react";
 import type {
+  AgentCapabilityId,
   BuildInfo,
   DockerSettings,
   DownloadSettings,
@@ -41,8 +42,7 @@ import type {
   BluetoothStatus
 } from "../../api.js";
 import {
-  DANGEROUS_TOOL_POLICY_OPTIONS,
-  READ_ONLY_TOOL_POLICY_OPTIONS,
+  AGENT_CAPABILITY_POLICY_OPTIONS,
   SETTINGS_SECTIONS,
   providerLabel,
   settingsGroupLabel,
@@ -132,8 +132,23 @@ interface SettingsModalProps {
 }
 
 const PROVIDER_OPTIONS = ["openai", "anthropic"] as const;
-const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"] as const;
-const DANGEROUS_TOOLS = ["bash", "edit", "write"] as const;
+const READ_ONLY_CAPABILITIES: AgentCapabilityId[] = [
+  "zos.files.list", "zos.files.read", "zos.files.search", "zos.files.grep", "zos.files.find"
+];
+const MUTATING_CAPABILITIES: AgentCapabilityId[] = [
+  "zos.files.mutate", "zos.files.edit", "zos.files.write", "zos.shell.run"
+];
+const CAPABILITY_DESCRIPTION_KEY = {
+  "zos.files.list": "list",
+  "zos.files.read": "read",
+  "zos.files.search": "search",
+  "zos.files.grep": "grep",
+  "zos.files.find": "find",
+  "zos.files.mutate": "mutate",
+  "zos.files.edit": "edit",
+  "zos.files.write": "write",
+  "zos.shell.run": "shell"
+} as const satisfies Record<AgentCapabilityId, string>;
 type Translate = (key: string, options?: Record<string, unknown>) => unknown;
 
 export function SettingsModal({
@@ -1384,15 +1399,10 @@ function SettingsToolPolicyPage({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const readOnlyOptions = READ_ONLY_TOOL_POLICY_OPTIONS.map((mode) => ({
+  const policyOptions = AGENT_CAPABILITY_POLICY_OPTIONS.map((mode) => ({
     value: mode,
     label: toolPolicyModeLabel(mode, t)
   }));
-  const dangerousOptions = DANGEROUS_TOOL_POLICY_OPTIONS.map((mode) => ({
-    value: mode,
-    label: toolPolicyModeLabel(mode, t)
-  }));
-
   return (
     <form className="settings-form" onSubmit={onSubmit}>
       <div className="settings-content-body">
@@ -1405,21 +1415,21 @@ function SettingsToolPolicyPage({
               </div>
             </header>
             <div className="settings-tool-policy-list">
-              {READ_ONLY_TOOLS.map((tool) => (
-                <label key={tool} className="settings-policy-row">
+              {READ_ONLY_CAPABILITIES.map((capabilityId) => (
+                <label key={capabilityId} className="settings-policy-row">
                   <span>
-                    <strong>{tool}</strong>
-                    <small>{t(`settings.toolPolicy.tools.${tool}`)}</small>
+                    <strong>{capabilityId}</strong>
+                    <small>{t(`settings.toolPolicy.capabilities.${CAPABILITY_DESCRIPTION_KEY[capabilityId]}`)}</small>
                   </span>
                   <CustomSelect
-                    id={`tool-policy-${tool}`}
-                    value={form[tool]}
-                    options={readOnlyOptions}
-                    ariaLabel={`${tool}: ${toolPolicyModeLabel(form[tool], t)}`}
+                    id={`capability-policy-${capabilityId}`}
+                    value={form.policies[capabilityId]}
+                    options={policyOptions}
+                    ariaLabel={`${capabilityId}: ${toolPolicyModeLabel(form.policies[capabilityId], t)}`}
                     onChange={(mode) =>
                       onChange({
                         ...form,
-                        [tool]: mode
+                        policies: { ...form.policies, [capabilityId]: mode }
                       })
                     }
                     disabled={loading || saving}
@@ -1437,21 +1447,21 @@ function SettingsToolPolicyPage({
               </div>
             </header>
             <div className="settings-tool-policy-list">
-              {DANGEROUS_TOOLS.map((tool) => (
-                <label key={tool} className="settings-policy-row">
+              {MUTATING_CAPABILITIES.map((capabilityId) => (
+                <label key={capabilityId} className="settings-policy-row">
                   <span>
-                    <strong>{tool}</strong>
-                    <small>{t(`settings.toolPolicy.tools.${tool}`)}</small>
+                    <strong>{capabilityId}</strong>
+                    <small>{t(`settings.toolPolicy.capabilities.${CAPABILITY_DESCRIPTION_KEY[capabilityId]}`)}</small>
                   </span>
                   <CustomSelect
-                    id={`tool-policy-${tool}`}
-                    value={form[tool]}
-                    options={dangerousOptions}
-                    ariaLabel={`${tool}: ${toolPolicyModeLabel(form[tool], t)}`}
+                    id={`capability-policy-${capabilityId}`}
+                    value={form.policies[capabilityId]}
+                    options={policyOptions}
+                    ariaLabel={`${capabilityId}: ${toolPolicyModeLabel(form.policies[capabilityId], t)}`}
                     onChange={(mode) =>
                       onChange({
                         ...form,
-                        [tool]: mode
+                        policies: { ...form.policies, [capabilityId]: mode }
                       })
                     }
                     disabled={loading || saving}
@@ -1834,8 +1844,7 @@ function toolPolicyModeLabel(mode: string, t: Translate): string {
   if (mode === "auto") {
     return String(t("settings.toolPolicy.modes.auto"));
   }
-  if (mode === "ask") {
-    return String(t("settings.toolPolicy.modes.ask"));
-  }
+  if (mode === "approve") return String(t("settings.toolPolicy.modes.approve"));
+  if (mode === "confirm") return String(t("settings.toolPolicy.modes.confirm"));
   return String(t("settings.toolPolicy.modes.disabled"));
 }

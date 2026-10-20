@@ -5,7 +5,6 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   claimNextPhotostaffJob,
-  createSession,
   enqueuePhotostaffJob,
   ensureNasRoots,
   finishPhotostaffJob,
@@ -330,7 +329,7 @@ describe("photos API", () => {
     await app.close();
   });
 
-  it("creates one approval for batch moves and streams multi-photostaff zip exports", async () => {
+  it("moves photo batches directly and streams multi-photo zip exports", async () => {
     const { app, root } = await setup();
     await configure(app);
     const settings = getPhotostaffLibrarySettings(db!)!;
@@ -338,21 +337,6 @@ describe("photos API", () => {
     const first = await addPhotostaff(root, settings, "one.jpg", "2025-01-02T00:00:00.000Z");
     const second = await addPhotostaff(root, settings, "two.jpg", "2025-01-01T00:00:00.000Z");
     await mkdir(path.join(root, "Photostaff", "Archive"));
-    const session = createSession(db!, { rootId: "local" });
-
-    const proposal = await app.inject({
-      method: "POST",
-      url: "/api/photos/proposals",
-      payload: {
-        sessionId: session.id,
-        assetIds: [first.id, second.id],
-        operation: "move",
-        targetDirectory: path.join("Photostaff", "Archive")
-      }
-    });
-    expect(proposal.statusCode).toBe(202);
-    expect(proposal.json().approval.proposal).toHaveLength(2);
-
     const createExport = await app.inject({
       method: "POST",
       url: "/api/photos/exports",
@@ -365,11 +349,20 @@ describe("photos API", () => {
     expect(archive.headers["content-type"]).toBe("application/zip");
     expect(archive.rawPayload.subarray(0, 2).toString()).toBe("PK");
 
-    const approved = await app.inject({
+    const moved = await app.inject({
       method: "POST",
-      url: `/api/approvals/${proposal.json().approval.id}/approve`
+      url: "/api/photos/actions",
+      payload: {
+        assetIds: [first.id, second.id],
+        operation: "move",
+        targetDirectory: path.join("Photostaff", "Archive")
+      }
     });
-    expect(approved.statusCode).toBe(202);
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json().operations).toHaveLength(2);
+    expect(db!.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
+    expect(db!.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
+    expect(db!.prepare("SELECT COUNT(*) FROM pending_approvals").pluck().get()).toBe(0);
     expect(claimNextPhotostaffJob(db!, { workerId: "test", leaseMs: 30_000 })).toMatchObject({ kind: "full_scan" });
     await app.close();
   });
@@ -382,13 +375,10 @@ describe("photos API", () => {
     const first = await addPhotostaff(root, settings, path.join("A", "same.jpg"), "2025-01-02T00:00:00.000Z", Buffer.from("first"));
     const second = await addPhotostaff(root, settings, path.join("B", "same.jpg"), "2025-01-01T00:00:00.000Z", Buffer.from("second"));
     await mkdir(path.join(root, "Photostaff", "Archive"));
-    const session = createSession(db!, { rootId: "local" });
-
     const response = await app.inject({
       method: "POST",
-      url: "/api/photos/proposals",
+      url: "/api/photos/actions",
       payload: {
-        sessionId: session.id,
         assetIds: [first.id, second.id],
         operation: "move",
         targetDirectory: path.join("Photostaff", "Archive")
@@ -516,18 +506,6 @@ describe("photos API", () => {
       status: "running"
     });
 
-    const session = createSession(db!, { rootId: "local" });
-    const proposal = await app.inject({
-      method: "POST",
-      url: "/api/photos/proposals",
-      payload: { sessionId: session.id, assetIds: [first.id], operation: "trash" }
-    });
-    expect(proposal.statusCode).toBe(202);
-    expect(proposal.json().approval.proposal.map((item: { sourcePath: string }) => item.sourcePath)).toEqual([
-      path.join("Photostaff", "paired.jpg"),
-      path.join("Photostaff", "paired.jpg.xmp")
-    ]);
-
     const exportRequest = await app.inject({
       method: "POST",
       url: "/api/photos/exports",
@@ -535,6 +513,17 @@ describe("photos API", () => {
     });
     const archive = await app.inject({ method: "GET", url: exportRequest.json().url });
     expect(archive.rawPayload.includes(Buffer.from("paired.jpg.xmp"))).toBe(true);
+
+    const trashed = await app.inject({
+      method: "POST",
+      url: "/api/photos/actions",
+      payload: { assetIds: [first.id], operation: "trash" }
+    });
+    expect(trashed.statusCode).toBe(200);
+    expect(trashed.json().operations.map((item: { sourcePath: string }) => item.sourcePath)).toEqual([
+      path.join("Photostaff", "paired.jpg"),
+      path.join("Photostaff", "paired.jpg.xmp")
+    ]);
 
     savePhotostaffMapSettings(db!, {
       rootId: "local",

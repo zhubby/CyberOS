@@ -7,9 +7,8 @@ import type {
   ModelProviderSettings,
   ModelProviderName,
   PhotoLibraryStatus,
-  PiDangerousToolPolicyMode,
-  PiToolPolicyMode,
-  PiToolPolicySettings
+  AgentCapabilityPolicyMode,
+  AgentCapabilityPolicySettings
 } from "../api.js";
 
 export type SettingsSectionId =
@@ -56,10 +55,9 @@ export interface SettingsSection {
   group: SettingsGroupId;
 }
 
-export type ToolPolicyFormState = PiToolPolicySettings;
+export type ToolPolicyFormState = AgentCapabilityPolicySettings;
 
-export const READ_ONLY_TOOL_POLICY_OPTIONS: PiToolPolicyMode[] = ["auto", "ask", "disabled"];
-export const DANGEROUS_TOOL_POLICY_OPTIONS: PiDangerousToolPolicyMode[] = ["ask", "disabled"];
+export const AGENT_CAPABILITY_POLICY_OPTIONS: AgentCapabilityPolicyMode[] = ["auto", "approve", "confirm", "disabled"];
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
@@ -255,13 +253,17 @@ export function providerLabel(providerName: ModelProviderName, t: Translate): st
 
 export function defaultToolPolicyForm(): ToolPolicyFormState {
   return {
-    read: "auto",
-    grep: "auto",
-    find: "auto",
-    ls: "auto",
-    bash: "ask",
-    edit: "ask",
-    write: "ask",
+    policies: {
+      "zos.files.list": "auto",
+      "zos.files.read": "auto",
+      "zos.files.search": "auto",
+      "zos.files.grep": "auto",
+      "zos.files.find": "auto",
+      "zos.files.mutate": "approve",
+      "zos.files.edit": "approve",
+      "zos.files.write": "approve",
+      "zos.shell.run": "confirm"
+    },
     updatedAt: new Date(0).toISOString()
   };
 }

@@ -130,7 +130,7 @@ describe("worker processor", () => {
     await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
   });
 
-  it("stores mutation proposals and leaves files unchanged while waiting for approval", async () => {
+  it("keeps local fallback read-only without creating an approval", async () => {
     const session = createSession(db, { rootId: "local" });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
@@ -139,13 +139,14 @@ describe("worker processor", () => {
 
     await expect(processNextJob({ db, config: testConfig(), allowLocalFallback: true })).resolves.toBe(true);
 
-    expect(getJob(db, job.id)?.status).toBe("waiting_approval");
-    expect(listPendingApprovals(db)).toHaveLength(1);
+    expect(getJob(db, job.id)?.status).toBe("completed");
+    expect(listPendingApprovals(db)).toHaveLength(0);
     expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual([
       "job.running",
       "agent.started",
-      "approval.pending",
-      "agent.message"
+      "agent.message",
+      "agent.completed",
+      "job.completed"
     ]);
     await expect(readFile(path.join(rootDir, "alpha.txt"), "utf8")).resolves.toBe("alpha");
   });

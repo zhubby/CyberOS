@@ -5,13 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import {
   createDockerComposeApp,
-  createDockerOperationApproval,
-  createActionMessageAndJob,
-  createSession,
   ensureNasRoots,
   getDockerComposeApp,
   listDockerComposeApps,
-  linkDockerComposeHostAccessDraft,
   openZosDb,
   updateDockerComposeApp,
   upsertRootReadiness,
@@ -238,7 +234,7 @@ describe("DockerComposeService", () => {
       composeRevision: created.revision,
       risk: "medium",
       summary: "Deploy stale Media"
-    })).rejects.toThrow(/changed after approval/);
+    })).rejects.toThrow(/changed before the operation/);
     expect(updated?.needsDeploy).toBe(true);
   });
 
@@ -281,30 +277,17 @@ describe("DockerComposeService", () => {
       pullImage: vi.fn(async () => undefined),
       resolveImageId: vi.fn(async () => "sha256:collector")
     } as unknown as DockerEngineRuntime;
-    const approval = await service.prepareHostAccessApproval(created.id, engine);
+    const draft = await service.prepareHostAccessDraft(created.id, engine);
     const proposal = {
       action: "compose_up",
       targetType: "compose_project",
       composeProjectId: created.id,
       composeRevision: created.revision,
-      hostAccess: approval.hostAccess,
+      hostAccess: draft.hostAccess,
       risk: "high",
       summary: "Deploy Collector"
     } as const;
-    const session = createSession(db, { rootId: "nas" });
-    const { job } = createActionMessageAndJob(db, {
-      sessionId: session.id,
-      content: proposal.summary,
-      kind: "docker",
-      status: "waiting_approval"
-    });
-    const linked = createDockerOperationApproval(db, { jobId: job.id, proposal });
-    expect(linkDockerComposeHostAccessDraft(db, approval.draftId, approval.draftRevision, {
-      approvalId: linked.approval.id,
-      operationId: linked.operation.id,
-      jobId: job.id
-    })).toBe(true);
-    const result = await service.runProjectAction(proposal, [], engine, linked.approval.id);
+    const result = await service.runProjectAction(proposal, [], engine, draft.draftId);
     const output = JSON.parse(result.output.trim()) as { args: string[] };
     expect(output.args).toEqual(expect.arrayContaining([
       "-f",
