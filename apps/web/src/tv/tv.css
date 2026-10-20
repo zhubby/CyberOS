@@ -732,6 +732,24 @@ pinyin-ime-editor::part(candidate-row) {
   }
 }
 
+@media (max-width: 360px) {
+  .tv-brand {
+    gap: 0;
+    width: 46px;
+    min-width: 46px;
+    padding: 0 4px;
+  }
+
+  .tv-brand img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .tv-brand span {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
