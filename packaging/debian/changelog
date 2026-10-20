@@ -1,3 +1,9 @@
+zos (1.4.3) unstable; urgency=medium
+
+  * Improve startup reliability and narrow-screen TV layout
+
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 20 Oct 2026 23:58:28 +0000
+
 zos (1.4.2) unstable; urgency=medium
 
   * Keep monitoring dashboards available on hosts with many devices and network interfaces.
