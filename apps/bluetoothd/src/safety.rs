@@ -46,8 +46,9 @@ pub fn ensure_available_space(directory: &Path, required: u64) -> Result<(), Tra
         return Ok(());
     }
     let stats = statvfs(directory).map_err(|error| TransferError(error.to_string()))?;
-    let available = u64::from(stats.blocks_available()).saturating_mul(stats.fragment_size());
-    if available < required {
+    let available =
+        u128::from(stats.blocks_available()).saturating_mul(u128::from(stats.fragment_size()));
+    if available < u128::from(required) {
         return Err(TransferError(
             "Bluetooth inbox does not have enough free space".to_owned(),
         ));
