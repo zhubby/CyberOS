@@ -3,6 +3,6 @@
   "version": "1.3.2",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n monitor,alerter -c gray,yellow \"cargo run -p zos-monitor --bin zos-monitor\" \"cargo run -p zos-monitor --bin zos-alerter\""
+    "dev": "cargo run -p zos-monitor --bin zos-monitor"
   }
 }

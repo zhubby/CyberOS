@@ -5,25 +5,25 @@ use sd_notify::NotifyState;
 use tokio::time::{Instant, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
-use crate::adapters::alert_sqlite::AlertStore;
+use crate::adapters::alert_store::AlertStore;
 use crate::adapters::clock::SystemClock;
-use crate::adapters::metrics_query::MetricsQuery;
+use crate::adapters::metrics_sqlite::MetricsQuery;
 use crate::adapters::smtp::LettreMailTransport;
-use crate::application::alerter::evaluate_repository;
-use crate::domain::config::{Config, MonitoringConfig};
-use crate::error::MonitorError;
-use crate::ports::{Clock, MailTransport};
+use crate::application::evaluation::EvaluationCycle;
+use crate::domain::config::AlerterConfig;
+use crate::error::AlerterError;
+use crate::ports::{Clock, DeliveryStore, MailTransport};
 
 const EVALUATION_INTERVAL: Duration = Duration::from_secs(10);
 const DELIVERY_INTERVAL: Duration = Duration::from_secs(1);
 
 pub struct AlerterService {
-    config: Config,
+    config: AlerterConfig,
     shutdown: CancellationToken,
 }
 
 impl AlerterService {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: AlerterConfig) -> Self {
         Self {
             config,
             shutdown: CancellationToken::new(),
@@ -34,7 +34,7 @@ impl AlerterService {
         self.shutdown.clone()
     }
 
-    pub async fn run(self) -> Result<(), MonitorError> {
+    pub async fn run(self) -> Result<(), AlerterError> {
         let _ = sd_notify::notify(&[
             NotifyState::Status("Waiting for alert schema"),
             NotifyState::Ready,
@@ -51,9 +51,9 @@ impl AlerterService {
 }
 
 async fn run_evaluation_loop(
-    config: Config,
+    config: AlerterConfig,
     shutdown: CancellationToken,
-) -> Result<(), MonitorError> {
+) -> Result<(), AlerterError> {
     let mut schedule = tokio::time::interval_at(Instant::now(), EVALUATION_INTERVAL);
     schedule.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
@@ -63,16 +63,23 @@ async fn run_evaluation_loop(
             _ = schedule.tick() => {
                 let database_path = config.database_path.clone();
                 let metrics_path = config.metrics_database_path.clone();
-                let monitoring = config.monitoring.clone();
+                let monitoring_enabled = config.monitoring_enabled;
+                let sampling = config.sampling;
                 let now_ms = SystemClock.wall_time_ms();
                 let result = tokio::task::spawn_blocking(move || {
-                    evaluate_once(&database_path, &metrics_path, &monitoring, now_ms)
-                }).await.map_err(|error| MonitorError::Collector(error.to_string()))?;
+                    evaluate_once(
+                        &database_path,
+                        &metrics_path,
+                        monitoring_enabled,
+                        sampling,
+                        now_ms,
+                    )
+                }).await.map_err(|error| AlerterError::Runtime(error.to_string()))?;
                 match result {
                     Ok(()) => {
                         let _ = sd_notify::notify(&[NotifyState::Status("Evaluating alerts")]);
                     }
-                    Err(MonitorError::AlertSchemaUnavailable) => {
+                    Err(AlerterError::AlertSchemaUnavailable) => {
                         tracing::info!("alert schema is not ready; retrying");
                     }
                     Err(error) => {
@@ -88,7 +95,7 @@ async fn run_evaluation_loop(
 async fn run_delivery_loop(
     database_path: PathBuf,
     shutdown: CancellationToken,
-) -> Result<(), MonitorError> {
+) -> Result<(), AlerterError> {
     let mut schedule = tokio::time::interval_at(Instant::now(), DELIVERY_INTERVAL);
     schedule.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
@@ -109,7 +116,7 @@ async fn dispatch_one<T, C>(
     database_path: &Path,
     transport: &T,
     clock: C,
-) -> Result<(), MonitorError>
+) -> Result<(), AlerterError>
 where
     T: MailTransport,
     C: Clock,
@@ -119,16 +126,16 @@ where
     let claim_clock = clock.clone();
     let claimed = tokio::task::spawn_blocking(move || {
         let mut store = AlertStore::open(&claim_path)?;
-        let settings = store.smtp_settings()?;
+        let settings = DeliveryStore::smtp_settings(&store)?;
         let delivery = if settings.enabled {
-            store.claim_delivery(claim_clock.wall_time_ms())?
+            DeliveryStore::claim_delivery(&mut store, claim_clock.wall_time_ms())?
         } else {
             None
         };
-        Ok::<_, MonitorError>((settings, delivery))
+        Ok::<_, AlerterError>((settings, delivery))
     })
     .await
-    .map_err(|error| MonitorError::Collector(error.to_string()))??;
+    .map_err(|error| AlerterError::Runtime(error.to_string()))??;
     let (settings, Some(delivery)) = claimed else {
         return Ok(());
     };
@@ -136,24 +143,55 @@ where
     let error = result.as_ref().err().map(ToString::to_string);
     tokio::task::spawn_blocking(move || {
         let mut store = AlertStore::open(&database_path)?;
-        store.finish_delivery(
+        DeliveryStore::finish_delivery(
+            &mut store,
             &delivery,
             clock.wall_time_ms(),
-            error.as_deref().map_or(Ok(()), Err),
+            error.as_deref(),
         )
     })
     .await
-    .map_err(|error| MonitorError::Collector(error.to_string()))??;
+    .map_err(|error| AlerterError::Runtime(error.to_string()))??;
     result
 }
 
 fn evaluate_once(
     database_path: &Path,
     metrics_path: &Path,
-    monitoring: &MonitoringConfig,
+    monitoring_enabled: bool,
+    sampling: zos_monitoring_contracts::SamplingIntervals,
     now_ms: i64,
-) -> Result<(), MonitorError> {
+) -> Result<(), AlerterError> {
     let mut store = AlertStore::open(database_path)?;
-    let metrics = MetricsQuery::new(metrics_path, monitoring);
-    evaluate_repository(&mut store, &metrics, monitoring.enabled, now_ms)
+    let metrics = MetricsQuery::new(metrics_path, sampling);
+    EvaluationCycle::run(&mut store, &metrics, monitoring_enabled, now_ms)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zos_monitoring_contracts::SamplingIntervals;
+
+    #[tokio::test]
+    async fn cancellation_stops_both_runtime_loops() {
+        let directory = tempfile::tempdir().unwrap();
+        let config = AlerterConfig {
+            database_path: directory.path().join("zos.sqlite"),
+            metrics_database_path: directory.path().join("metrics.sqlite"),
+            monitoring_enabled: false,
+            sampling: SamplingIntervals::default(),
+        };
+        let service = AlerterService::new(config);
+        let shutdown = service.shutdown_token();
+        let task = tokio::spawn(service.run());
+
+        tokio::task::yield_now().await;
+        shutdown.cancel();
+
+        let result = tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("alerter runtime should stop after cancellation")
+            .expect("alerter runtime task should not panic");
+        assert!(result.is_ok());
+    }
 }

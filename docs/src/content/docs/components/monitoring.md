@@ -4,12 +4,12 @@ description: Rust 指标采集、独立时序存储、查询、告警与 Web 处
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/monitor/src/domain, apps/monitor/src/application, apps/monitor/src/adapters, packages/monitoring/contracts/metrics-catalog.json, packages/monitoring/src/query.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/web/src/components/workspace/MonitoringPanel.tsx, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service]
+sourceOfTruth: [apps/monitor/src, apps/alerter/src, crates/monitoring-contracts/src/lib.rs, packages/monitoring/contracts/metrics-catalog.json, packages/monitoring/src/query.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/web/src/components/workspace/MonitoringPanel.tsx, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service]
 sidebar:
   order: 6
 ---
 
-`apps/monitor` 是一个 Rust crate，提供 `zos-monitor` 与 `zos-alerter` 两个 binary。代码按无 I/O 的 `domain`、用例编排 `application`、边界 trait `ports`、真实 I/O `adapters` 和进程装配 `runtime` 分层；SQLite 同步操作只在 blocking worker 中执行。
+`apps/monitor` 与 `apps/alerter` 是两个互不依赖的 Rust 应用 crate，分别生成 `zos-monitor` 和 `zos-alerter`。两者都按无 I/O 的 `domain`、用例编排 `application`、边界 trait `ports`、真实 I/O `adapters` 和进程装配 `runtime` 分层；SQLite 同步操作只在 blocking worker 中执行。`crates/monitoring-contracts` 只共享固定指标 catalog、schema version 和采样周期值对象，不承载运行时、存储或告警模型。
 
 `zos-monitor.service` 是唯一指标写入者。它从 `/proc`、`/sys`、文件系统、固定 systemd unit allowlist 和只读的 ZOS 主库采集主机及应用状态；单个 collector 失败只留下数据断点并更新 collector 状态，不会停止其他采集器或核心服务。服务使用单调时钟调度且 collector 不重叠执行，同一轮样本共享时间戳。`packages/monitoring` 的生产能力只包含共享 catalog、schema version 检查和只读查询。
 

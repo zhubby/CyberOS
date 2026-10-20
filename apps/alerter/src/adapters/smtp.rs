@@ -6,7 +6,7 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
 use crate::domain::delivery::{ClaimedDelivery, SmtpSecurity, SmtpSettings};
-use crate::error::MonitorError;
+use crate::error::AlerterError;
 use crate::ports::MailTransport;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -18,7 +18,7 @@ impl MailTransport for LettreMailTransport {
         &self,
         settings: &SmtpSettings,
         delivery: &ClaimedDelivery,
-    ) -> Result<(), MonitorError> {
+    ) -> Result<(), AlerterError> {
         deliver(settings, delivery).await
     }
 }
@@ -26,15 +26,15 @@ impl MailTransport for LettreMailTransport {
 pub async fn deliver(
     settings: &SmtpSettings,
     delivery: &ClaimedDelivery,
-) -> Result<(), MonitorError> {
+) -> Result<(), AlerterError> {
     if !settings.enabled {
-        return Err(MonitorError::Smtp("SMTP delivery is disabled".to_owned()));
+        return Err(AlerterError::Smtp("SMTP delivery is disabled".to_owned()));
     }
     let addresses = resolve_destination(settings).await?;
     let from = settings
         .from
         .parse()
-        .map_err(|_| MonitorError::Smtp("SMTP sender is invalid".to_owned()))?;
+        .map_err(|_| AlerterError::Smtp("SMTP sender is invalid".to_owned()))?;
     let mut builder = Message::builder()
         .from(from)
         .subject(&delivery.subject)
@@ -43,21 +43,21 @@ pub async fn deliver(
     for recipient in &delivery.recipients {
         builder = builder.to(recipient
             .parse()
-            .map_err(|_| MonitorError::Smtp("SMTP recipient is invalid".to_owned()))?);
+            .map_err(|_| AlerterError::Smtp("SMTP recipient is invalid".to_owned()))?);
     }
     let message = builder
         .body(delivery.body.clone())
-        .map_err(|_| MonitorError::Smtp("SMTP message is invalid".to_owned()))?;
+        .map_err(|_| AlerterError::Smtp("SMTP message is invalid".to_owned()))?;
     let mut transport = match settings.security {
         SmtpSecurity::None => {
             AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(plaintext_server(&addresses))
         }
         SmtpSecurity::StartTls => {
             AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&settings.host)
-                .map_err(|_| MonitorError::Smtp("SMTP TLS configuration failed".to_owned()))?
+                .map_err(|_| AlerterError::Smtp("SMTP TLS configuration failed".to_owned()))?
         }
         SmtpSecurity::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(&settings.host)
-            .map_err(|_| MonitorError::Smtp("SMTP TLS configuration failed".to_owned()))?,
+            .map_err(|_| AlerterError::Smtp("SMTP TLS configuration failed".to_owned()))?,
     }
     .port(settings.port)
     .timeout(Some(Duration::from_secs(30)));
@@ -71,18 +71,18 @@ pub async fn deliver(
         .build()
         .send(message)
         .await
-        .map_err(|_| MonitorError::Smtp("SMTP delivery failed".to_owned()))?;
+        .map_err(|_| AlerterError::Smtp("SMTP delivery failed".to_owned()))?;
     Ok(())
 }
 
-async fn resolve_destination(settings: &SmtpSettings) -> Result<Vec<IpAddr>, MonitorError> {
+async fn resolve_destination(settings: &SmtpSettings) -> Result<Vec<IpAddr>, AlerterError> {
     let addresses: Vec<_> = tokio::net::lookup_host((settings.host.as_str(), settings.port))
         .await
-        .map_err(|_| MonitorError::Smtp("SMTP host resolution failed".to_owned()))?
+        .map_err(|_| AlerterError::Smtp("SMTP host resolution failed".to_owned()))?
         .map(|address| address.ip())
         .collect();
     if addresses.is_empty() {
-        return Err(MonitorError::Smtp(
+        return Err(AlerterError::Smtp(
             "SMTP host resolution returned no addresses".to_owned(),
         ));
     }
@@ -99,9 +99,9 @@ fn plaintext_server(addresses: &[IpAddr]) -> String {
         .unwrap_or_default()
 }
 
-fn validate_addresses(security: SmtpSecurity, addresses: &[IpAddr]) -> Result<(), MonitorError> {
+fn validate_addresses(security: SmtpSecurity, addresses: &[IpAddr]) -> Result<(), AlerterError> {
     if security == SmtpSecurity::None && !addresses.iter().all(|address| private(*address)) {
-        return Err(MonitorError::Smtp(
+        return Err(AlerterError::Smtp(
             "Plaintext SMTP requires private addresses".to_owned(),
         ));
     }

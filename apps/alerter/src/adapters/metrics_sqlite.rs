@@ -3,29 +3,23 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use zos_monitoring_contracts::{METRICS_SCHEMA_VERSION, MetricKind, SamplingIntervals, metric};
 
-use crate::adapters::catalog;
-use crate::domain::alert::{Aggregation, AlertRule, MetricTransform, SeriesValue};
-use crate::domain::config::MonitoringConfig;
-use crate::domain::metric::{MetricCadence, MetricKind};
-use crate::error::MonitorError;
-use crate::ports::MetricsReaderPort;
+use crate::domain::rule::{Aggregation, AlertRule, MetricTransform, SeriesValue};
+use crate::error::AlerterError;
+use crate::ports::MetricsReader;
 
 #[derive(Debug, Clone)]
 pub struct MetricsQuery {
     path: PathBuf,
-    fast_interval: Duration,
-    standard_interval: Duration,
-    temperature_interval: Duration,
+    sampling: SamplingIntervals,
 }
 
 impl MetricsQuery {
-    pub fn new(path: impl Into<PathBuf>, config: &MonitoringConfig) -> Self {
+    pub fn new(path: impl Into<PathBuf>, sampling: SamplingIntervals) -> Self {
         Self {
             path: path.into(),
-            fast_interval: config.fast_interval,
-            standard_interval: config.standard_interval,
-            temperature_interval: config.temperature_interval,
+            sampling,
         }
     }
 
@@ -33,7 +27,7 @@ impl MetricsQuery {
         &self,
         rule: &AlertRule,
         now_ms: i64,
-    ) -> Result<Vec<SeriesValue>, MonitorError> {
+    ) -> Result<Vec<SeriesValue>, AlerterError> {
         // Reopening per evaluation makes database replacement visible without retaining a stale inode.
         let connection = open_reader(&self.path)?;
         let mut statement = connection.prepare(
@@ -48,13 +42,9 @@ impl MetricsQuery {
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
-        let definition = catalog::metric(&rule.metric)
-            .ok_or_else(|| MonitorError::AlertRule("unknown metric".to_owned()))?;
-        let cadence = match definition.cadence {
-            MetricCadence::Fast => self.fast_interval,
-            MetricCadence::Standard => self.standard_interval,
-            MetricCadence::Temperature => self.temperature_interval,
-        };
+        let definition = metric(&rule.metric)
+            .ok_or_else(|| AlerterError::AlertRule("unknown metric".to_owned()))?;
+        let cadence = self.sampling.for_cadence(definition.cadence);
         let mut values = Vec::new();
         for (series_id, key, labels_json) in rows {
             let labels: BTreeMap<String, String> = serde_json::from_str(&labels_json)?;
@@ -87,13 +77,13 @@ impl MetricsQuery {
     }
 }
 
-impl MetricsReaderPort for MetricsQuery {
-    fn evaluate(&self, rule: &AlertRule, now_ms: i64) -> Result<Vec<SeriesValue>, MonitorError> {
+impl MetricsReader for MetricsQuery {
+    fn evaluate(&self, rule: &AlertRule, now_ms: i64) -> Result<Vec<SeriesValue>, AlerterError> {
         Self::evaluate(self, rule, now_ms)
     }
 }
 
-fn open_reader(path: &Path) -> Result<Connection, MonitorError> {
+fn open_reader(path: &Path) -> Result<Connection, AlerterError> {
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     connection.busy_timeout(Duration::from_secs(5))?;
     connection.pragma_update(None, "query_only", "ON")?;
@@ -104,8 +94,8 @@ fn open_reader(path: &Path) -> Result<Connection, MonitorError> {
             |row| row.get::<_, Option<i64>>(0),
         )?
         .unwrap_or_default();
-    if version > 3 {
-        return Err(MonitorError::FutureMetricsSchema(version));
+    if version > METRICS_SCHEMA_VERSION {
+        return Err(AlerterError::FutureMetricsSchema(version));
     }
     Ok(connection)
 }
@@ -117,7 +107,7 @@ fn evaluate_series(
     kind: MetricKind,
     now_ms: i64,
     cadence: Duration,
-) -> Result<Option<f64>, MonitorError> {
+) -> Result<Option<f64>, AlerterError> {
     let start_ms = now_ms.saturating_sub(duration_ms(rule.window));
     let latest_timestamp: Option<i64> = connection
         .query_row(
@@ -153,7 +143,7 @@ fn evaluate_series(
 
     if rule.transform == MetricTransform::Rate {
         if kind != MetricKind::Counter {
-            return Err(MonitorError::AlertRule(
+            return Err(AlerterError::AlertRule(
                 "rate transform requires a counter".to_owned(),
             ));
         }
@@ -212,10 +202,64 @@ fn duration_ms(duration: Duration) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapters::metrics_sqlite::MetricsStore;
-    use crate::domain::alert::{Comparator, NoDataPolicy, Severity};
-    use crate::domain::config::MonitoringConfig;
-    use crate::domain::metric::MetricSample;
+    use crate::domain::rule::{Comparator, NoDataPolicy, Severity};
+
+    fn write_series(
+        path: &Path,
+        metric_name: &str,
+        labels: &BTreeMap<String, String>,
+        points: &[(i64, f64)],
+    ) {
+        let mut connection = Connection::open(path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS monitoring_schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL) STRICT;",
+            )
+            .unwrap();
+        let version: i64 = connection
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM monitoring_schema_migrations",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let migrations = [
+            include_str!("../../../../packages/monitoring/contracts/migrations/001_initial.sql"),
+            include_str!(
+                "../../../../packages/monitoring/contracts/migrations/002_counter_increase.sql"
+            ),
+            include_str!(
+                "../../../../packages/monitoring/contracts/migrations/003_counter_boundary.sql"
+            ),
+        ];
+        for (index, sql) in migrations.iter().enumerate().skip(version as usize) {
+            connection.execute_batch(sql).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, 'test')",
+                    [i64::try_from(index + 1).unwrap()],
+                )
+                .unwrap();
+        }
+        let labels_json = serde_json::to_string(labels).unwrap();
+        connection
+            .execute(
+                "INSERT INTO metric_series(metric_name, labels_key, labels_json, created_at_ms) VALUES (?, ?, ?, 0)",
+                params![metric_name, labels_json, labels_json],
+            )
+            .unwrap();
+        let series_id = connection.last_insert_rowid();
+        let transaction = connection.transaction().unwrap();
+        for (timestamp_ms, value) in points {
+            transaction
+                .execute(
+                    "INSERT INTO metric_samples_raw(series_id, timestamp_ms, value) VALUES (?, ?, ?)",
+                    params![series_id, timestamp_ms, value],
+                )
+                .unwrap();
+        }
+        transaction.commit().unwrap();
+    }
 
     #[test]
     fn counter_rate_handles_resets() {
@@ -236,6 +280,29 @@ mod tests {
     }
 
     #[test]
+    fn accepts_schema_v3_and_rejects_a_future_schema() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("metrics.sqlite");
+        write_series(&path, "zos_host_load1", &BTreeMap::new(), &[(10_000, 2.5)]);
+
+        assert!(open_reader(&path).is_ok());
+
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute(
+                "INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (4, 'test')",
+                [],
+            )
+            .unwrap();
+        drop(connection);
+
+        assert!(matches!(
+            open_reader(&path),
+            Err(AlerterError::FutureMetricsSchema(4))
+        ));
+    }
+
+    #[test]
     fn alert_rate_matches_the_shared_golden_fixture() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../../../../packages/monitoring/contracts/golden/metrics-parity.json"
@@ -243,21 +310,23 @@ mod tests {
         .unwrap();
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("metrics.sqlite");
-        let mut store = MetricsStore::open(&path, MonitoringConfig::default()).unwrap();
+        let labels = BTreeMap::from([("interface".to_owned(), "eth0".to_owned())]);
+        let mut points = Vec::new();
         for sample in fixture["samples"].as_array().unwrap() {
             if sample["metric"] != "zos_host_network_receive_bytes_total" {
                 continue;
             }
-            store
-                .write_samples(&[MetricSample::new(
-                    sample["metric"].as_str().unwrap(),
-                    sample["timestampMs"].as_i64().unwrap(),
-                    sample["value"].as_f64().unwrap(),
-                )
-                .with_label("interface", "eth0")])
-                .unwrap();
+            points.push((
+                sample["timestampMs"].as_i64().unwrap(),
+                sample["value"].as_f64().unwrap(),
+            ));
         }
-        drop(store);
+        write_series(
+            &path,
+            "zos_host_network_receive_bytes_total",
+            &labels,
+            &points,
+        );
         let rule = AlertRule {
             id: "network-rate".to_owned(),
             name: "Network rate".to_owned(),
@@ -274,7 +343,7 @@ mod tests {
             severity: Severity::Warning,
             no_data: NoDataPolicy::Ignore,
         };
-        let values = MetricsQuery::new(path, &MonitoringConfig::default())
+        let values = MetricsQuery::new(path, SamplingIntervals::default())
             .evaluate(&rule, 130_000)
             .unwrap();
         let expected = fixture["expected"]["query"]["alertCounterRate"]
@@ -287,16 +356,12 @@ mod tests {
     fn stale_detection_uses_the_configured_collection_cadence() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("metrics.sqlite");
-        let config = MonitoringConfig {
-            fast_interval: Duration::from_secs(60),
-            standard_interval: Duration::from_secs(60),
-            ..MonitoringConfig::default()
+        let sampling = SamplingIntervals {
+            fast: Duration::from_secs(60),
+            standard: Duration::from_secs(60),
+            ..SamplingIntervals::default()
         };
-        let mut store = MetricsStore::open(&path, config.clone()).unwrap();
-        store
-            .write_samples(&[MetricSample::new("zos_host_load1", 10_000, 2.5)])
-            .unwrap();
-        drop(store);
+        write_series(&path, "zos_host_load1", &BTreeMap::new(), &[(10_000, 2.5)]);
         let mut rule = AlertRule {
             id: "load".to_owned(),
             name: "High load".to_owned(),
@@ -314,13 +379,13 @@ mod tests {
             no_data: NoDataPolicy::Ignore,
         };
 
-        let configured = MetricsQuery::new(&path, &config)
+        let configured = MetricsQuery::new(&path, sampling)
             .evaluate(&rule, 100_000)
             .unwrap();
         assert_eq!(configured[0].value, Some(2.5));
 
         rule.no_data = NoDataPolicy::Firing;
-        let defaults = MetricsQuery::new(&path, &MonitoringConfig::default())
+        let defaults = MetricsQuery::new(&path, SamplingIntervals::default())
             .evaluate(&rule, 100_000)
             .unwrap();
         assert_eq!(defaults[0].value, None);

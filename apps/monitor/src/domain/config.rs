@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use zos_monitoring_contracts::SamplingIntervals;
+
 const MIB: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone)]
@@ -12,9 +14,7 @@ pub struct NasRoot {
 #[derive(Debug, Clone)]
 pub struct MonitoringConfig {
     pub enabled: bool,
-    pub fast_interval: Duration,
-    pub standard_interval: Duration,
-    pub temperature_interval: Duration,
+    pub sampling: SamplingIntervals,
     pub raw_retention: Duration,
     pub minute_retention: Duration,
     pub hour_retention: Duration,
@@ -25,9 +25,7 @@ impl Default for MonitoringConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            fast_interval: Duration::from_secs(10),
-            standard_interval: Duration::from_secs(30),
-            temperature_interval: Duration::from_secs(5 * 60),
+            sampling: SamplingIntervals::default(),
             raw_retention: Duration::from_secs(48 * 60 * 60),
             minute_retention: Duration::from_secs(30 * 24 * 60 * 60),
             hour_retention: Duration::from_secs(365 * 24 * 60 * 60),
@@ -37,7 +35,7 @@ impl Default for MonitoringConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct Config {
+pub struct MonitorConfig {
     pub root_dir: PathBuf,
     pub state_dir: PathBuf,
     pub database_path: PathBuf,

@@ -4,7 +4,7 @@ description: 在开发机上运行 ZOS 的 API、worker、Web 和索引任务。
 type: tutorial
 status: current
 audience: [developer]
-sourceOfTruth: [README.md, package.json, apps/api/src/index.ts, apps/worker/src/index.ts, apps/monitor/src/bin/zos-monitor.rs, apps/monitor/src/bin/zos-alerter.rs, apps/photostaff/src/main.rs, apps/downloader/src/main.rs]
+sourceOfTruth: [README.md, package.json, apps/api/src/index.ts, apps/worker/src/index.ts, apps/monitor/src/bin/zos-monitor.rs, apps/alerter/src/main.rs, apps/photostaff/src/main.rs, apps/downloader/src/main.rs]
 sidebar:
   order: 2
 ---

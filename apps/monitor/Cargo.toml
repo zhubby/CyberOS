@@ -13,18 +13,11 @@ path = "src/lib.rs"
 name = "zos-monitor"
 path = "src/bin/zos-monitor.rs"
 
-[[bin]]
-name = "zos-alerter"
-path = "src/bin/zos-alerter.rs"
-
 [dependencies]
 async-trait.workspace = true
-jiff.workspace = true
-lettre.workspace = true
 nix.workspace = true
 rusqlite.workspace = true
 sd-notify.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 time.workspace = true
@@ -33,7 +26,8 @@ tokio-util.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-uuid.workspace = true
+zos-monitoring-contracts.workspace = true
 
 [dev-dependencies]
+serde.workspace = true
 tempfile.workspace = true

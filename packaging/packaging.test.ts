@@ -10,6 +10,30 @@ const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const execFileAsync = promisify(execFile);
 
 describe("native packaging artifacts", () => {
+  it("builds monitor and alerter as independent Rust applications", async () => {
+    const workspace = await readFile(path.join(repoRoot, "Cargo.toml"), "utf8");
+    const monitor = await readFile(path.join(repoRoot, "apps/monitor/Cargo.toml"), "utf8");
+    const alerter = await readFile(path.join(repoRoot, "apps/alerter/Cargo.toml"), "utf8");
+    const contracts = await readFile(
+      path.join(repoRoot, "crates/monitoring-contracts/Cargo.toml"),
+      "utf8"
+    );
+
+    expect(workspace).toContain('"apps/monitor"');
+    expect(workspace).toContain('"apps/alerter"');
+    expect(workspace).toContain('"crates/monitoring-contracts"');
+    expect(monitor).toContain('name = "zos-monitor"');
+    expect(monitor).not.toContain('name = "zos-alerter"');
+    expect(monitor).not.toContain("lettre.workspace");
+    expect(monitor).not.toContain("jiff.workspace");
+    expect(alerter).toContain('name = "zos-alerter"');
+    expect(alerter).toContain("lettre.workspace");
+    expect(alerter).not.toContain("zos-monitor =");
+    expect(contracts).not.toContain("tokio.workspace");
+    expect(contracts).not.toContain("rusqlite.workspace");
+    expect(contracts).toContain("publish = false");
+  });
+
   it("defines hardened systemd services and timers", async () => {
     const serviceNames = [
       "zos-api.service",

@@ -3,14 +3,15 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use toml_edit::{DocumentMut, Item};
+use zos_monitoring_contracts::SamplingIntervals;
 
-use crate::domain::config::{Config, MonitoringConfig, NasRoot};
+use crate::domain::config::{MonitorConfig, MonitoringConfig, NasRoot};
 use crate::error::MonitorError;
 
 const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
 const MIB: u64 = 1024 * 1024;
 
-impl Config {
+impl MonitorConfig {
     pub fn load() -> Result<Self, MonitorError> {
         Self::load_from(&env::vars().collect(), env::current_dir()?)
     }
@@ -73,7 +74,7 @@ fn monitoring_config(
 ) -> Result<MonitoringConfig, MonitorError> {
     let defaults = MonitoringConfig::default();
     let table = document.get("monitoring").and_then(Item::as_table);
-    let mut config = MonitoringConfig {
+    let config = MonitoringConfig {
         enabled: boolean(
             environment
                 .get("ZOS_MONITORING_ENABLED")
@@ -84,36 +85,38 @@ fn monitoring_config(
             defaults.enabled,
             "enabled",
         )?,
-        fast_interval: milliseconds(
-            environment
-                .get("ZOS_MONITORING_FAST_SAMPLE_INTERVAL_MS")
-                .map(String::as_str),
-            table
-                .and_then(|value| value.get("fast_sample_interval_ms"))
-                .and_then(Item::as_integer),
-            defaults.fast_interval,
-            "fast_sample_interval_ms",
-        )?,
-        standard_interval: milliseconds(
-            environment
-                .get("ZOS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS")
-                .map(String::as_str),
-            table
-                .and_then(|value| value.get("standard_sample_interval_ms"))
-                .and_then(Item::as_integer),
-            defaults.standard_interval,
-            "standard_sample_interval_ms",
-        )?,
-        temperature_interval: milliseconds(
-            environment
-                .get("ZOS_MONITORING_TEMPERATURE_SAMPLE_INTERVAL_MS")
-                .map(String::as_str),
-            table
-                .and_then(|value| value.get("temperature_sample_interval_ms"))
-                .and_then(Item::as_integer),
-            defaults.temperature_interval,
-            "temperature_sample_interval_ms",
-        )?,
+        sampling: SamplingIntervals {
+            fast: milliseconds(
+                environment
+                    .get("ZOS_MONITORING_FAST_SAMPLE_INTERVAL_MS")
+                    .map(String::as_str),
+                table
+                    .and_then(|value| value.get("fast_sample_interval_ms"))
+                    .and_then(Item::as_integer),
+                defaults.sampling.fast,
+                "fast_sample_interval_ms",
+            )?,
+            standard: milliseconds(
+                environment
+                    .get("ZOS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS")
+                    .map(String::as_str),
+                table
+                    .and_then(|value| value.get("standard_sample_interval_ms"))
+                    .and_then(Item::as_integer),
+                defaults.sampling.standard,
+                "standard_sample_interval_ms",
+            )?,
+            temperature: milliseconds(
+                environment
+                    .get("ZOS_MONITORING_TEMPERATURE_SAMPLE_INTERVAL_MS")
+                    .map(String::as_str),
+                table
+                    .and_then(|value| value.get("temperature_sample_interval_ms"))
+                    .and_then(Item::as_integer),
+                defaults.sampling.temperature,
+                "temperature_sample_interval_ms",
+            )?,
+        },
         raw_retention: milliseconds(
             environment
                 .get("ZOS_MONITORING_RAW_RETENTION_MS")
@@ -155,24 +158,15 @@ fn monitoring_config(
             "max_database_bytes",
         )?,
     };
-    validate_monitoring(&mut config)?;
+    validate_monitoring(&config)?;
     Ok(config)
 }
 
-fn validate_monitoring(config: &mut MonitoringConfig) -> Result<(), MonitorError> {
-    if !(Duration::from_secs(1)..=Duration::from_secs(5 * 60)).contains(&config.fast_interval) {
-        return Err(config_error("fast_sample_interval_ms"));
-    }
-    if config.standard_interval < config.fast_interval
-        || config.standard_interval > Duration::from_secs(15 * 60)
-    {
-        return Err(config_error("standard_sample_interval_ms"));
-    }
-    if config.temperature_interval < config.standard_interval
-        || config.temperature_interval > Duration::from_secs(60 * 60)
-    {
-        return Err(config_error("temperature_sample_interval_ms"));
-    }
+fn validate_monitoring(config: &MonitoringConfig) -> Result<(), MonitorError> {
+    config
+        .sampling
+        .validate()
+        .map_err(|error| config_error(error.field()))?;
     if config.raw_retention < Duration::from_secs(60 * 60) {
         return Err(config_error("raw_retention_ms"));
     }
@@ -322,8 +316,8 @@ mod tests {
             "ZOS_NAS_ROOTS".to_owned(),
             format!("dev:Development:{}", root.path().join("nas").display()),
         );
-        let config = Config::load_from(&environment, root.path().to_path_buf()).unwrap();
-        assert_eq!(config.monitoring.fast_interval, Duration::from_secs(5));
+        let config = MonitorConfig::load_from(&environment, root.path().to_path_buf()).unwrap();
+        assert_eq!(config.monitoring.sampling.fast, Duration::from_secs(5));
         assert_eq!(config.database_path, root.path().join("state/zos.sqlite"));
         assert_eq!(config.nas_roots[0].id, "dev");
     }
@@ -341,6 +335,6 @@ mod tests {
             "ZOS_MONITORING_MINUTE_RETENTION_MS".to_owned(),
             "3600000".to_owned(),
         );
-        assert!(Config::load_from(&environment, root.path().to_path_buf()).is_err());
+        assert!(MonitorConfig::load_from(&environment, root.path().to_path_buf()).is_err());
     }
 }

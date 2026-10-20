@@ -6,18 +6,18 @@ use crate::adapters::clock::SystemClock;
 use crate::adapters::collectors::default_collectors;
 use crate::adapters::metrics_sqlite::MetricsStoreHandle;
 use crate::application::monitor::{run_collector, run_maintenance};
-use crate::domain::config::Config;
+use crate::domain::config::MonitorConfig;
 use crate::error::MonitorError;
 use crate::ports::{Collector, MetricsStorePort};
 
 pub struct MonitorService {
-    config: Config,
+    config: MonitorConfig,
     collectors: Vec<Box<dyn Collector>>,
     shutdown: CancellationToken,
 }
 
 impl MonitorService {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: MonitorConfig) -> Self {
         let collectors = default_collectors(&config);
         Self {
             config,

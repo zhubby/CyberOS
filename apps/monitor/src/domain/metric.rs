@@ -1,32 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum MetricKind {
-    Gauge,
-    Counter,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum MetricCadence {
-    Fast,
-    Standard,
-    Temperature,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MetricDefinition {
-    pub name: String,
-    pub description: String,
-    pub kind: MetricKind,
-    pub unit: String,
-    pub label_keys: Vec<String>,
-    pub cadence: MetricCadence,
-}
+pub use zos_monitoring_contracts::{MetricCadence, MetricDefinition, MetricKind};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MetricSample {

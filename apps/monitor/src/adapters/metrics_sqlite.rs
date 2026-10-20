@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use tokio::sync::{mpsc, oneshot};
+use zos_monitoring_contracts::METRICS_SCHEMA_VERSION;
 
 use crate::adapters::catalog;
 use crate::domain::config::MonitoringConfig;
@@ -14,7 +15,6 @@ use crate::domain::metric::{CollectorState, MetricSample};
 use crate::error::MonitorError;
 use crate::ports::MetricsStorePort;
 
-const SCHEMA_VERSION: i64 = 3;
 const MINUTE_MS: i64 = 60_000;
 const HOUR_MS: i64 = 60 * MINUTE_MS;
 const MAX_SERIES_PER_METRIC: i64 = 64;
@@ -67,7 +67,7 @@ impl MetricsStore {
         connection.busy_timeout(Duration::from_secs(5))?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
         let version = schema_version(&connection)?;
-        if version > SCHEMA_VERSION {
+        if version > METRICS_SCHEMA_VERSION {
             return Err(MonitorError::FutureMetricsSchema(version));
         }
         ensure_incremental_vacuum(&connection)?;

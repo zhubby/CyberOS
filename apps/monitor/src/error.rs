@@ -14,16 +14,6 @@ pub enum MonitorError {
     Serialization(#[from] serde_json::Error),
     #[error("collector error: {0}")]
     Collector(String),
-    #[error("alert rule error: {0}")]
-    AlertRule(String),
-    #[error("alert schema is not available")]
-    AlertSchemaUnavailable,
-    #[error("alert instance capacity exceeded")]
-    AlertCapacity,
-    #[error("alert delivery capacity exceeded")]
-    AlertDeliveryCapacity,
-    #[error("SMTP error: {0}")]
-    Smtp(String),
     #[error("monitor worker stopped")]
     WorkerStopped,
 }
@@ -42,11 +32,6 @@ impl MonitorError {
                 "Collector dependency unavailable"
             }
             Self::Collector(_) => "Collector failed",
-            Self::AlertRule(_) => "Alert rule is invalid",
-            Self::AlertSchemaUnavailable => "Alert database schema is not ready",
-            Self::AlertCapacity => "Alert instance limit reached",
-            Self::AlertDeliveryCapacity => "Alert delivery limit reached",
-            Self::Smtp(_) => "SMTP delivery failed",
             _ => "Monitor operation failed",
         }
     }

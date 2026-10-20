@@ -104,6 +104,7 @@ describe("release versioning", () => {
 });
 
 const PRODUCT_CARGO_PACKAGES = [
+  ["apps/alerter/Cargo.toml", "zos-alerter"],
   ["apps/downloader/Cargo.toml", "zos-downloader"],
   ["apps/host-accessd/Cargo.toml", "zos-host-accessd"],
   ["apps/hostd/Cargo.toml", "zos-hostd"],
@@ -111,12 +112,14 @@ const PRODUCT_CARGO_PACKAGES = [
   ["apps/monitor/Cargo.toml", "zos-monitor"],
   ["apps/photostaff/Cargo.toml", "zos-photostaff"],
   ["apps/termux/Cargo.toml", "zos-termux"],
-  ["apps/vod-player/Cargo.toml", "zos-vod-player"]
+  ["apps/vod-player/Cargo.toml", "zos-vod-player"],
+  ["crates/monitoring-contracts/Cargo.toml", "zos-monitoring-contracts"]
 ].map(([manifestPath, packageName]) => ({ manifestPath, packageName }));
 
 async function writeFixture(root) {
   await Promise.all([
     mkdir(path.join(root, "apps/api"), { recursive: true }),
+    mkdir(path.join(root, "apps/alerter"), { recursive: true }),
     mkdir(path.join(root, "apps/downloader"), { recursive: true }),
     mkdir(path.join(root, "apps/host-accessd"), { recursive: true }),
     mkdir(path.join(root, "apps/hostd"), { recursive: true }),
@@ -125,6 +128,7 @@ async function writeFixture(root) {
     mkdir(path.join(root, "apps/photostaff"), { recursive: true }),
     mkdir(path.join(root, "apps/termux"), { recursive: true }),
     mkdir(path.join(root, "apps/vod-player"), { recursive: true }),
+    mkdir(path.join(root, "crates/monitoring-contracts"), { recursive: true }),
     mkdir(path.join(root, "packages/shared"), { recursive: true }),
     mkdir(path.join(root, "packaging/debian"), { recursive: true }),
     mkdir(path.join(root, "packaging/appliance"), { recursive: true })

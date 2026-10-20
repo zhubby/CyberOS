@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/downloader", "apps/host-accessd", "apps/hostd", "apps/indexer", "apps/monitor", "apps/photostaff", "apps/termux", "apps/vod-player"]
+members = ["apps/alerter", "apps/downloader", "apps/host-accessd", "apps/hostd", "apps/indexer", "apps/monitor", "apps/photostaff", "apps/termux", "apps/vod-player", "crates/monitoring-contracts"]
 resolver = "2"
 
 [workspace.package]
@@ -27,6 +27,7 @@ ts-rs = { version = "=12.0.1", default-features = false, features = ["serde-comp
 uuid = { version = "1.18.1", features = ["v4"] }
 unicode-normalization = "0.1.25"
 zip = { version = "7.0.0", default-features = false, features = ["deflate"] }
+zos-monitoring-contracts = { path = "crates/monitoring-contracts" }
 sd-notify = "0.5.0"
 futures-util = "0.3.31"
 httpdate = "1.0.3"

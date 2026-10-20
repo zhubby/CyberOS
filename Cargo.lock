@@ -2475,6 +2475,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "zos-alerter"
+version = "1.3.2"
+dependencies = [
+ "async-trait",
+ "jiff",
+ "lettre",
+ "rusqlite",
+ "sd-notify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tokio-util",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zos-monitoring-contracts",
+]
+
+[[package]]
 name = "zos-downloader"
 version = "1.3.2"
 dependencies = [
@@ -2566,8 +2589,6 @@ name = "zos-monitor"
 version = "1.3.2"
 dependencies = [
  "async-trait",
- "jiff",
- "lettre",
  "nix",
  "rusqlite",
  "sd-notify",
@@ -2581,7 +2602,15 @@ dependencies = [
  "toml_edit",
  "tracing",
  "tracing-subscriber",
- "uuid",
+ "zos-monitoring-contracts",
+]
+
+[[package]]
+name = "zos-monitoring-contracts"
+version = "1.3.2"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

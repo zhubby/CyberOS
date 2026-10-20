@@ -128,7 +128,9 @@ The main runtime components are:
 | `apps/photostaff` | Rust media worker with resumable scans, metadata extraction, and journaled image derivatives. |
 | `apps/indexer` | Walks NAS roots, hashes files, extracts bounded text, and maintains the FTS index. |
 | `apps/ops` | Runs one-shot health evaluation and safe maintenance with persisted lifecycle history. |
-| `apps/monitor` | Rust monitor and alerter binaries: metrics collection/retention plus incident evaluation and mail delivery. |
+| `apps/monitor` | Rust metrics collector: collection, rollups, retention, and metrics database capacity protection. |
+| `apps/alerter` | Rust alert engine: rule evaluation, incidents, escalation, health synchronization, and mail delivery. |
+| `crates/monitoring-contracts` | Shared Rust metric catalog, schema version, and sampling cadence contract. |
 | `apps/hostd` | Rust host integration daemon for approved shares, storage, Docker daemon, and NetworkManager changes. |
 | `apps/termux` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `zos` account. |
 | `packages/agent` | Pi SDK integration, NAS-scoped tools, session persistence, and tool policy enforcement. |

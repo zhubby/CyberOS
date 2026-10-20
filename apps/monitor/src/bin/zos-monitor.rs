@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use tracing_subscriber::EnvFilter;
-use zos_monitor::{Config, MonitorService};
+use zos_monitor::{MonitorConfig, MonitorService};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -21,7 +21,7 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> Result<(), zos_monitor::error::MonitorError> {
-    let service = MonitorService::new(Config::load()?);
+    let service = MonitorService::new(MonitorConfig::load()?);
     zos_monitor::runtime::signals::install(service.shutdown_token());
     service.run().await
 }

@@ -4,7 +4,7 @@ description: SQLite 表分组、迁移顺序和 WAL 并发边界。
 type: explanation
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/db/src/migrations/core.ts, packages/db/src/migrations/operations.ts, packages/db/src/migrations/indexer.ts, packages/db/src/migrations/production.ts, packages/db/src/connection.ts, packages/monitoring/contracts/migrations, apps/monitor/src/adapters/metrics_sqlite.rs, apps/monitor/src/adapters/alert_sqlite.rs]
+sourceOfTruth: [packages/db/src/migrations/core.ts, packages/db/src/migrations/operations.ts, packages/db/src/migrations/indexer.ts, packages/db/src/migrations/production.ts, packages/db/src/connection.ts, packages/monitoring/contracts/migrations, apps/monitor/src/adapters/metrics_sqlite.rs, apps/alerter/src/adapters/alert_store]
 sidebar:
   order: 4
 ---

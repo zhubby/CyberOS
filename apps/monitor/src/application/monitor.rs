@@ -94,7 +94,7 @@ mod tests {
     use super::*;
     use crate::adapters::clock::SystemClock;
     use crate::adapters::metrics_sqlite::MetricsStoreHandle;
-    use crate::domain::config::Config;
+    use crate::domain::config::MonitorConfig;
     use crate::domain::metric::Collection;
 
     struct SlowCollector {
@@ -124,7 +124,7 @@ mod tests {
     #[tokio::test]
     async fn collector_loop_never_overlaps_a_slow_collector() {
         let root = tempfile::tempdir().unwrap();
-        let config = Config::for_test(root.path());
+        let config = MonitorConfig::for_test(root.path());
         let store = MetricsStoreHandle::start(
             config.metrics_database_path.clone(),
             config.monitoring.clone(),

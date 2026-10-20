@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 use tokio::process::Command;
 
-use crate::domain::config::{Config, NasRoot};
+use crate::domain::config::{MonitorConfig, NasRoot};
 use crate::domain::metric::{Collection, CollectorState, MetricSample};
 use crate::error::MonitorError;
 use crate::ports::Collector;
@@ -32,21 +32,21 @@ pub const MONITORED_SYSTEMD_UNITS: &[&str] = &[
     "zos-backup-daily.service",
 ];
 
-pub fn default_collectors(config: &Config) -> Vec<Box<dyn Collector>> {
+pub fn default_collectors(config: &MonitorConfig) -> Vec<Box<dyn Collector>> {
     vec![
-        Box::new(HostCollector::new(config.monitoring.fast_interval)),
+        Box::new(HostCollector::new(config.monitoring.sampling.fast)),
         Box::new(FilesystemCollector::new(
-            config.monitoring.standard_interval,
+            config.monitoring.sampling.standard,
             config.state_dir.clone(),
             config.nas_roots.clone(),
         )),
-        Box::new(SystemdCollector::new(config.monitoring.standard_interval)),
+        Box::new(SystemdCollector::new(config.monitoring.sampling.standard)),
         Box::new(ZosCollector::new(
-            config.monitoring.standard_interval,
+            config.monitoring.sampling.standard,
             config.database_path.clone(),
         )),
         Box::new(TemperatureCollector::new(
-            config.monitoring.temperature_interval,
+            config.monitoring.sampling.temperature,
             PathBuf::from("/sys/class/thermal"),
         )),
     ]

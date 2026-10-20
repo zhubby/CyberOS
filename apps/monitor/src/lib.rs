@@ -5,6 +5,5 @@ pub mod error;
 pub mod ports;
 pub mod runtime;
 
-pub use domain::config::Config;
-pub use runtime::alerter::AlerterService;
+pub use domain::config::MonitorConfig;
 pub use runtime::monitor::MonitorService;

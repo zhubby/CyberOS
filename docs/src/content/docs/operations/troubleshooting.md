@@ -4,7 +4,7 @@ description: API、静态资源、terminal、timer、indexer、backup 和 SQLite
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/monitor/src/adapters/metrics_sqlite.rs, apps/monitor/src/adapters/alert_sqlite.rs, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
+sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/monitor/src/adapters/metrics_sqlite.rs, apps/alerter/src/adapters/alert_store, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
 sidebar:
   order: 4
 ---

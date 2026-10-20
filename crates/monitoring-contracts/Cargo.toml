@@ -1,0 +1,11 @@
+[package]
+name = "zos-monitoring-contracts"
+version = "1.3.2"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
