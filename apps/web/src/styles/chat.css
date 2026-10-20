@@ -412,7 +412,13 @@
 
 .chat-header-copy {
   display: grid;
-  gap: 5px;
+  grid-template-rows: 21px 13px;
+  gap: 2px;
+  height: 36px;
+}
+
+.chat-header .chat-header-copy h2 {
+  line-height: 21px;
 }
 
 .chat-header-subtitle {
@@ -425,7 +431,7 @@
   font-size: 11.5px;
   font-family: var(--font-emphasis);
   font-weight: 650;
-  line-height: 1.2;
+  line-height: 13px;
   white-space: nowrap;
 }
 

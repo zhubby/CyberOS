@@ -2345,8 +2345,8 @@
   grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
-  min-height: 78px;
-  padding: 16px 20px;
+  min-height: 64px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--header-border);
   background: var(--channel-bg);
 }
@@ -2365,8 +2365,10 @@
 .management-title-copy {
   grid-area: copy;
   display: grid;
-  gap: 5px;
+  grid-template-rows: 21px 13px;
+  gap: 2px;
   min-width: 0;
+  height: 36px;
 }
 
 .management-title-copy h2,
@@ -2377,11 +2379,14 @@
 }
 
 .management-title-copy h2 {
+  overflow: hidden;
   font-family: var(--font-display);
   font-size: 21px;
   font-weight: 580;
   letter-spacing: 0;
-  line-height: 1.12;
+  line-height: 21px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .management-title-copy p,
@@ -2394,8 +2399,11 @@
 
 .management-title-copy p {
   max-width: 720px;
+  overflow: hidden;
   font-size: 12.5px;
-  line-height: 18px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .management-actions {

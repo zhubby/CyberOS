@@ -232,12 +232,18 @@ textarea {
 }
 
 .message-markdown {
+  font-family: var(--font-ui);
   font-size: 13.5px;
   line-height: 1.58;
 }
 
+.message-markdown :where(h1, h2, h3, h4, h5, h6, strong, b),
+.markdown-preview :where(h1, h2, h3, h4, h5, h6, strong, b),
+.markdown-preview th {
+  font-family: var(--font-ui);
+}
+
 .message-markdown :where(h1, h2, h3) {
-  font-family: var(--font-display);
   font-weight: 580;
 }
 
@@ -666,6 +672,10 @@ textarea {
 .office-preview {
   color: var(--preview-text);
   background: var(--preview-bg);
+}
+
+.markdown-preview {
+  font-family: var(--font-ui);
 }
 
 .text-preview-toolbar,
