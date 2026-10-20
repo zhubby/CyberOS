@@ -26,6 +26,7 @@ import { registerPhotoRoutes } from "./photos.js";
 import { registerMonitoringRoutes } from "./monitoring.js";
 import { registerMonitoringAlertRoutes } from "./monitoring-alerts.js";
 import { registerBluetoothTransferRoutes } from "./bluetooth-transfers.js";
+import { registerMediaRoutes } from "./media.js";
 
 export function registerApiRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   registerHealthRoutes(server, context);
@@ -50,6 +51,7 @@ export function registerApiRoutes(server: FastifyInstance, context: ApiRouteCont
   registerTerminalRoutes(server, context);
   registerVmRoutes(server, context);
   registerVodPlayerRoutes(server, context);
+  registerMediaRoutes(server, context);
   registerDownloadRoutes(server, context);
   registerPhotoRoutes(server, context);
   registerMonitoringRoutes(server, context);

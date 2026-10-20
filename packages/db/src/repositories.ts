@@ -17,6 +17,7 @@ export * from "./repositories/index-search.js";
 export * from "./repositories/indexed-file-maintenance.js";
 export * from "./repositories/indexed-files.js";
 export * from "./repositories/jobs.js";
+export * from "./repositories/media-library.js";
 export * from "./repositories/mcp-clients.js";
 export * from "./repositories/mcp-transfer-tokens.js";
 export * from "./repositories/monitoring-alerts.js";

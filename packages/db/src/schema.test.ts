@@ -131,7 +131,8 @@ describe("SQLite schema migrations", () => {
       "035_mcp_transfer_tokens",
       "036_bluetooth_transfers",
       "037_agent_only_capability_approvals",
-      "038_panel_operations_without_agent_jobs"
+      "038_panel_operations_without_agent_jobs",
+      "039_media_library"
     ]);
   });
 

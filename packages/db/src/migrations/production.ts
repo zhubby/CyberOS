@@ -2029,5 +2029,159 @@ export const productionMigrations: Migration[] = [
 
       PRAGMA legacy_alter_table = OFF;
     `
+  },
+  {
+    id: "039_media_library",
+    sql: `
+      CREATE TABLE media_sources (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('movie', 'series')),
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE RESTRICT,
+        storage_pool_id TEXT NOT NULL,
+        path TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(root_id, storage_pool_id, path, kind)
+      );
+
+      CREATE TABLE media_titles (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES media_sources(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('movie', 'series')),
+        source_path TEXT NOT NULL,
+        tmdb_id INTEGER CHECK (tmdb_id IS NULL OR tmdb_id > 0),
+        title TEXT NOT NULL,
+        original_title TEXT,
+        sort_title TEXT NOT NULL,
+        overview TEXT,
+        year INTEGER CHECK (year IS NULL OR year BETWEEN 1870 AND 3000),
+        release_date TEXT,
+        runtime_minutes INTEGER CHECK (runtime_minutes IS NULL OR runtime_minutes >= 0),
+        original_language TEXT,
+        genres_json TEXT NOT NULL DEFAULT '[]',
+        metadata_source TEXT NOT NULL CHECK (metadata_source IN ('nfo', 'tmdb', 'filename')),
+        match_status TEXT NOT NULL CHECK (match_status IN ('matched', 'pending', 'unmatched', 'excluded')),
+        match_confidence REAL CHECK (match_confidence IS NULL OR (match_confidence >= 0 AND match_confidence <= 1)),
+        poster_key TEXT,
+        backdrop_key TEXT,
+        scan_generation TEXT NOT NULL,
+        added_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(source_id, source_path)
+      );
+      CREATE INDEX idx_media_titles_kind_sort ON media_titles(kind, sort_title, id);
+      CREATE INDEX idx_media_titles_match ON media_titles(match_status, updated_at DESC);
+      CREATE INDEX idx_media_titles_recent ON media_titles(added_at DESC, id DESC);
+
+      CREATE TABLE media_seasons (
+        id TEXT PRIMARY KEY,
+        title_id TEXT NOT NULL REFERENCES media_titles(id) ON DELETE CASCADE,
+        season_number INTEGER NOT NULL CHECK (season_number >= 0),
+        name TEXT,
+        overview TEXT,
+        poster_key TEXT,
+        updated_at TEXT NOT NULL,
+        UNIQUE(title_id, season_number)
+      );
+
+      CREATE TABLE media_episodes (
+        id TEXT PRIMARY KEY,
+        title_id TEXT NOT NULL REFERENCES media_titles(id) ON DELETE CASCADE,
+        season_id TEXT NOT NULL REFERENCES media_seasons(id) ON DELETE CASCADE,
+        episode_number INTEGER NOT NULL CHECK (episode_number >= 0),
+        name TEXT,
+        overview TEXT,
+        air_date TEXT,
+        runtime_minutes INTEGER CHECK (runtime_minutes IS NULL OR runtime_minutes >= 0),
+        still_key TEXT,
+        updated_at TEXT NOT NULL,
+        UNIQUE(season_id, episode_number)
+      );
+
+      CREATE TABLE media_files (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES media_sources(id) ON DELETE CASCADE,
+        title_id TEXT NOT NULL REFERENCES media_titles(id) ON DELETE CASCADE,
+        episode_id TEXT REFERENCES media_episodes(id) ON DELETE CASCADE,
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE RESTRICT,
+        storage_pool_id TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+        mtime_ms INTEGER NOT NULL CHECK (mtime_ms >= 0),
+        duration_seconds REAL CHECK (duration_seconds IS NULL OR duration_seconds >= 0),
+        container TEXT,
+        video_codec TEXT,
+        audio_codec TEXT,
+        scan_generation TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(source_id, relative_path)
+      );
+      CREATE INDEX idx_media_files_title ON media_files(title_id, relative_path);
+      CREATE INDEX idx_media_files_episode ON media_files(episode_id, relative_path);
+
+      CREATE TABLE media_artwork (
+        id TEXT PRIMARY KEY,
+        title_id TEXT NOT NULL REFERENCES media_titles(id) ON DELETE CASCADE,
+        season_id TEXT REFERENCES media_seasons(id) ON DELETE CASCADE,
+        episode_id TEXT REFERENCES media_episodes(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('poster', 'backdrop', 'still')),
+        source TEXT NOT NULL CHECK (source IN ('local', 'tmdb')),
+        source_url TEXT,
+        cache_key TEXT NOT NULL,
+        width INTEGER CHECK (width IS NULL OR width > 0),
+        height INTEGER CHECK (height IS NULL OR height > 0),
+        language TEXT,
+        is_primary INTEGER NOT NULL DEFAULT 0 CHECK (is_primary IN (0, 1)),
+        updated_at TEXT NOT NULL,
+        UNIQUE(title_id, season_id, episode_id, kind, cache_key)
+      );
+      CREATE INDEX idx_media_artwork_owner ON media_artwork(title_id, season_id, episode_id, kind, is_primary DESC);
+
+      CREATE TABLE media_progress (
+        file_id TEXT NOT NULL REFERENCES media_files(id) ON DELETE CASCADE,
+        profile_id TEXT NOT NULL DEFAULT 'local-admin',
+        position_seconds REAL NOT NULL DEFAULT 0 CHECK (position_seconds >= 0),
+        duration_seconds REAL CHECK (duration_seconds IS NULL OR duration_seconds >= 0),
+        completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(file_id, profile_id)
+      );
+      CREATE INDEX idx_media_progress_continue ON media_progress(profile_id, completed, updated_at DESC);
+
+      CREATE TABLE media_match_overrides (
+        title_id TEXT PRIMARY KEY REFERENCES media_titles(id) ON DELETE CASCADE,
+        tmdb_id INTEGER CHECK (tmdb_id IS NULL OR tmdb_id > 0),
+        excluded INTEGER NOT NULL DEFAULT 0 CHECK (excluded IN (0, 1)),
+        updated_at TEXT NOT NULL,
+        CHECK (excluded = 1 OR tmdb_id IS NOT NULL)
+      );
+
+      CREATE TABLE media_scan_runs (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES media_sources(id) ON DELETE CASCADE,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+        generation TEXT NOT NULL,
+        scanned INTEGER NOT NULL DEFAULT 0 CHECK (scanned >= 0),
+        added INTEGER NOT NULL DEFAULT 0 CHECK (added >= 0),
+        updated INTEGER NOT NULL DEFAULT 0 CHECK (updated >= 0),
+        removed INTEGER NOT NULL DEFAULT 0 CHECK (removed >= 0),
+        unmatched INTEGER NOT NULL DEFAULT 0 CHECK (unmatched >= 0),
+        current_path TEXT,
+        error TEXT,
+        worker_id TEXT,
+        lease_expires_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT
+      );
+      CREATE INDEX idx_media_scan_runs_claim ON media_scan_runs(status, created_at);
+      CREATE INDEX idx_media_scan_runs_source ON media_scan_runs(source_id, created_at DESC);
+    `
   }
 ];

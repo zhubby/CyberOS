@@ -2696,7 +2696,9 @@ dependencies = [
  "nix",
  "notify",
  "quick-xml",
+ "reqwest",
  "rusqlite",
+ "rustls",
  "sd-notify",
  "serde",
  "serde_json",
@@ -2710,6 +2712,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-normalization",
+ "url",
  "uuid",
  "zip",
 ]

@@ -8,6 +8,7 @@ pub fn create_schema(path: &Path, root_path: &Path) {
       PRAGMA journal_mode = WAL;
       CREATE TABLE schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);
       INSERT INTO schema_migrations VALUES ('024_rust_indexer', '2026-01-01T00:00:00Z');
+      INSERT INTO schema_migrations VALUES ('039_media_library', '2026-10-20T00:00:00Z');
       CREATE TABLE nas_roots (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
@@ -76,6 +77,52 @@ pub fn create_schema(path: &Path, root_path: &Path) {
         last_progress_at TEXT, failures_json TEXT NOT NULL DEFAULT '[]', kind TEXT NOT NULL DEFAULT 'full'
       );
       CREATE TABLE system_settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE media_sources (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, root_id TEXT NOT NULL,
+        storage_pool_id TEXT NOT NULL, path TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE media_titles (
+        id TEXT PRIMARY KEY, source_id TEXT NOT NULL, kind TEXT NOT NULL, source_path TEXT NOT NULL,
+        tmdb_id INTEGER, title TEXT NOT NULL, original_title TEXT, sort_title TEXT NOT NULL,
+        overview TEXT, year INTEGER, release_date TEXT, runtime_minutes INTEGER, original_language TEXT,
+        genres_json TEXT NOT NULL DEFAULT '[]', metadata_source TEXT NOT NULL, match_status TEXT NOT NULL,
+        match_confidence REAL, poster_key TEXT, backdrop_key TEXT, scan_generation TEXT NOT NULL,
+        added_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(source_id, source_path)
+      );
+      CREATE TABLE media_seasons (
+        id TEXT PRIMARY KEY, title_id TEXT NOT NULL, season_number INTEGER NOT NULL, name TEXT,
+        overview TEXT, poster_key TEXT, updated_at TEXT NOT NULL, UNIQUE(title_id, season_number)
+      );
+      CREATE TABLE media_episodes (
+        id TEXT PRIMARY KEY, title_id TEXT NOT NULL, season_id TEXT NOT NULL, episode_number INTEGER NOT NULL,
+        name TEXT, overview TEXT, air_date TEXT, runtime_minutes INTEGER, still_key TEXT,
+        updated_at TEXT NOT NULL, UNIQUE(season_id, episode_number)
+      );
+      CREATE TABLE media_files (
+        id TEXT PRIMARY KEY, source_id TEXT NOT NULL, title_id TEXT NOT NULL, episode_id TEXT,
+        root_id TEXT NOT NULL, storage_pool_id TEXT NOT NULL, relative_path TEXT NOT NULL,
+        name TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, mtime_ms INTEGER NOT NULL,
+        duration_seconds REAL, container TEXT, video_codec TEXT, audio_codec TEXT,
+        scan_generation TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        UNIQUE(source_id, relative_path)
+      );
+      CREATE TABLE media_artwork (
+        id TEXT PRIMARY KEY, title_id TEXT NOT NULL, season_id TEXT, episode_id TEXT, kind TEXT NOT NULL,
+        source TEXT NOT NULL, source_url TEXT, cache_key TEXT NOT NULL, width INTEGER, height INTEGER,
+        language TEXT, is_primary INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+        UNIQUE(title_id, season_id, episode_id, kind, cache_key)
+      );
+      CREATE TABLE media_match_overrides (
+        title_id TEXT PRIMARY KEY, tmdb_id INTEGER, excluded INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE media_scan_runs (
+        id TEXT PRIMARY KEY, source_id TEXT NOT NULL, status TEXT NOT NULL, generation TEXT NOT NULL,
+        scanned INTEGER NOT NULL DEFAULT 0, added INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0,
+        removed INTEGER NOT NULL DEFAULT 0, unmatched INTEGER NOT NULL DEFAULT 0, current_path TEXT,
+        error TEXT, worker_id TEXT, lease_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        started_at TEXT, finished_at TEXT
+      );
     "#).unwrap();
     connection.execute(
         "INSERT INTO nas_roots (id, name, path, created_at, updated_at) VALUES ('local', 'Local', ?, 'now', 'now')",

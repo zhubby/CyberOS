@@ -37,7 +37,7 @@ export async function registerWebApp(server: FastifyInstance, webDist: string, d
     lastModified: false,
     setHeaders(reply, filePath) {
       const relativePath = path.relative(webDist, filePath);
-      const cacheControl = relativePath === "index.html"
+      const cacheControl = relativePath === "index.html" || relativePath.endsWith(`${path.sep}index.html`)
         ? "no-store"
         : relativePath.startsWith(`assets${path.sep}`)
           ? "public, max-age=31536000, immutable"

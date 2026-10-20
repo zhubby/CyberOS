@@ -214,6 +214,179 @@ export interface BluetoothTransferServiceHealth {
   queuedTransfers: number;
 }
 
+export type MediaSourceKind = "movie" | "series";
+export type MediaTitleKind = MediaSourceKind;
+export type MediaMatchStatus = "matched" | "pending" | "unmatched" | "excluded";
+export type MediaMetadataSource = "nfo" | "tmdb" | "filename";
+export type MediaScanStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type MediaArtworkKind = "poster" | "backdrop" | "still";
+
+export interface MediaSourceRecord {
+  id: string;
+  name: string;
+  kind: MediaSourceKind;
+  rootId: string;
+  storagePoolId: string;
+  path: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MediaTitleSummary {
+  id: string;
+  sourceId: string;
+  kind: MediaTitleKind;
+  sourcePath: string;
+  tmdbId: number | null;
+  title: string;
+  originalTitle: string | null;
+  overview: string | null;
+  year: number | null;
+  releaseDate: string | null;
+  runtimeMinutes: number | null;
+  originalLanguage: string | null;
+  genres: string[];
+  metadataSource: MediaMetadataSource;
+  matchStatus: MediaMatchStatus;
+  matchConfidence: number | null;
+  posterKey: string | null;
+  backdropKey: string | null;
+  addedAt: string;
+  updatedAt: string;
+  progress: MediaProgressRecord | null;
+}
+
+export interface MediaSeasonRecord {
+  id: string;
+  titleId: string;
+  seasonNumber: number;
+  name: string | null;
+  overview: string | null;
+  posterKey: string | null;
+  updatedAt: string;
+}
+
+export interface MediaEpisodeRecord {
+  id: string;
+  titleId: string;
+  seasonId: string;
+  episodeNumber: number;
+  name: string | null;
+  overview: string | null;
+  airDate: string | null;
+  runtimeMinutes: number | null;
+  stillKey: string | null;
+  updatedAt: string;
+}
+
+export interface MediaFileRecord {
+  id: string;
+  sourceId: string;
+  titleId: string;
+  episodeId: string | null;
+  rootId: string;
+  storagePoolId: string;
+  relativePath: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  durationSeconds: number | null;
+  container: string | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  updatedAt: string;
+}
+
+export interface MediaArtworkRecord {
+  id: string;
+  titleId: string;
+  seasonId: string | null;
+  episodeId: string | null;
+  kind: MediaArtworkKind;
+  source: "local" | "tmdb";
+  sourceUrl: string | null;
+  cacheKey: string;
+  width: number | null;
+  height: number | null;
+  language: string | null;
+  primary: boolean;
+  updatedAt: string;
+}
+
+export interface MediaProgressRecord {
+  fileId: string;
+  profileId: string;
+  positionSeconds: number;
+  durationSeconds: number | null;
+  completed: boolean;
+  updatedAt: string;
+}
+
+export interface MediaTitleDetail extends MediaTitleSummary {
+  seasons: Array<MediaSeasonRecord & { episodes: Array<MediaEpisodeRecord & { files: MediaFileRecord[] }> }>;
+  files: MediaFileRecord[];
+  artwork: MediaArtworkRecord[];
+}
+
+export interface MediaScanRunRecord {
+  id: string;
+  sourceId: string;
+  status: MediaScanStatus;
+  generation: string;
+  scanned: number;
+  added: number;
+  updated: number;
+  removed: number;
+  unmatched: number;
+  currentPath: string | null;
+  error: string | null;
+  workerId: string | null;
+  leaseExpiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface MediaLibrarySettingsRecord {
+  tmdbReadAccessToken: string | null;
+  language: string;
+  region: string | null;
+  updatedAt: string;
+}
+
+export interface PublicMediaLibrarySettings {
+  tmdbTokenConfigured: boolean;
+  language: string;
+  region: string | null;
+  updatedAt: string;
+}
+
+export interface MediaLibraryStatus {
+  state: "unconfigured" | "idle" | "scanning" | "degraded" | "ready";
+  sources: number;
+  titles: number;
+  movies: number;
+  series: number;
+  unmatched: number;
+  activeScan: MediaScanRunRecord | null;
+  latestScan: MediaScanRunRecord | null;
+}
+
+export interface MediaHome {
+  continueWatching: MediaTitleSummary[];
+  recentlyAdded: MediaTitleSummary[];
+  movies: MediaTitleSummary[];
+  series: MediaTitleSummary[];
+}
+
+export interface MediaTitlePage {
+  titles: MediaTitleSummary[];
+  nextCursor: string | null;
+}
+
 export type PhotostaffTakenAtSource = "exif" | "file_mtime";
 export type PhotostaffAssetStatus = "ready" | "failed";
 export type PhotostaffJobKind = "full_scan" | "path_refresh";

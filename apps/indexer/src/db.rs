@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::error::{ErrorCode, IndexerError};
 use crate::extractor::{ExtractedFile, normalized_terms};
+use crate::media::{MediaCatalogEntry, MediaScanTask};
 use crate::storage::{FileIdentity, MountIdentity};
 
 type DbResult<T> = Result<T, IndexerError>;
@@ -202,7 +203,7 @@ impl Db {
                 .call(|connection| {
                     Ok(connection
                         .query_row(
-                            "SELECT 1 FROM schema_migrations WHERE id = '024_rust_indexer'",
+                            "SELECT 1 FROM schema_migrations WHERE id = '039_media_library'",
                             [],
                             |_| Ok(()),
                         )
@@ -218,7 +219,7 @@ impl Db {
             if started.elapsed() >= timeout {
                 return Err(IndexerError::new(
                     ErrorCode::Database,
-                    "Required migration 024_rust_indexer is not applied",
+                    "Required migration 039_media_library is not applied",
                     true,
                 ));
             }
@@ -857,6 +858,317 @@ impl Db {
                     i64_from(stats.skipped)?, i64_from(stats.failed)?,
                     if completed { None } else { Some("one or more files failed") }, i64_from(stats.bytes)?,
                     i64_from(stats.indexed + stats.unchanged)?, i64_from(stats.text_files)?, now_iso(), run_id],
+            ).map_err(IndexerError::database)?;
+            transaction.commit().map_err(IndexerError::database)
+        }).await
+    }
+
+    pub async fn claim_media_scan(&self, worker_id: &str) -> DbResult<Option<MediaScanTask>> {
+        let worker_id = worker_id.to_owned();
+        self.call(move |connection| {
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(IndexerError::database)?;
+            let now = now_iso();
+            transaction.execute(
+                "UPDATE media_scan_runs SET status = 'queued', worker_id = NULL, lease_expires_at = NULL, updated_at = ? \
+                 WHERE status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at <= ?)",
+                params![now, now],
+            ).map_err(IndexerError::database)?;
+            let id: Option<String> = transaction.query_row(
+                "SELECT r.id FROM media_scan_runs r JOIN media_sources s ON s.id = r.source_id \
+                 WHERE r.status = 'queued' AND s.enabled = 1 ORDER BY r.created_at, r.id LIMIT 1",
+                [],
+                |row| row.get(0),
+            ).optional().map_err(IndexerError::database)?;
+            let Some(id) = id else {
+                transaction.commit().map_err(IndexerError::database)?;
+                return Ok(None);
+            };
+            transaction.execute(
+                "UPDATE media_scan_runs SET status = 'running', worker_id = ?, lease_expires_at = ?, \
+                 started_at = COALESCE(started_at, ?), finished_at = NULL, error = NULL, updated_at = ? \
+                 WHERE id = ? AND status = 'queued'",
+                params![worker_id, future_iso(Duration::from_secs(30)), now, now, id],
+            ).map_err(IndexerError::database)?;
+            let settings_json: Option<String> = transaction.query_row(
+                "SELECT value_json FROM system_settings WHERE key = 'media_library_settings'",
+                [],
+                |row| row.get(0),
+            ).optional().map_err(IndexerError::database)?;
+            let task = transaction.query_row(
+                "SELECT r.id, r.generation, s.id, s.kind, s.root_id, s.storage_pool_id, s.path, \
+                        n.path, n.mount_policy, n.expected_source, n.expected_uuid, n.expected_fstype \
+                 FROM media_scan_runs r \
+                 JOIN media_sources s ON s.id = r.source_id \
+                 JOIN nas_roots n ON n.id = s.root_id \
+                 WHERE r.id = ? AND r.status = 'running' AND r.worker_id = ?",
+                params![id, worker_id],
+                |row| Ok(MediaScanTask {
+                    id: row.get(0)?,
+                    generation: row.get(1)?,
+                    source_id: row.get(2)?,
+                    kind: row.get(3)?,
+                    root_id: row.get(4)?,
+                    storage_pool_id: row.get(5)?,
+                    source_path: row.get(6)?,
+                    root_path: row.get(7)?,
+                    mount_policy: row.get(8)?,
+                    expected_source: row.get(9)?,
+                    expected_uuid: row.get(10)?,
+                    expected_fstype: row.get(11)?,
+                    settings_json: settings_json.clone(),
+                }),
+            ).map_err(IndexerError::database)?;
+            transaction.commit().map_err(IndexerError::database)?;
+            Ok(Some(task))
+        }).await
+    }
+
+    pub async fn update_media_scan_progress(
+        &self,
+        task_id: &str,
+        worker_id: &str,
+        scanned: u64,
+        unmatched: u64,
+        current_path: Option<&str>,
+    ) -> DbResult<bool> {
+        let values = (
+            task_id.to_owned(),
+            worker_id.to_owned(),
+            current_path.map(str::to_owned),
+        );
+        self.call(move |connection| {
+            Ok(connection.execute(
+                "UPDATE media_scan_runs SET scanned = ?, unmatched = ?, current_path = ?, \
+                 lease_expires_at = ?, updated_at = ? WHERE id = ? AND status = 'running' AND worker_id = ?",
+                params![
+                    i64_from(scanned)?, i64_from(unmatched)?, values.2,
+                    future_iso(Duration::from_secs(30)), now_iso(), values.0, values.1
+                ],
+            ).map_err(IndexerError::database)? == 1)
+        }).await
+    }
+
+    pub async fn fail_media_scan(
+        &self,
+        task_id: &str,
+        worker_id: &str,
+        error: &IndexerError,
+    ) -> DbResult<()> {
+        let values = (
+            task_id.to_owned(),
+            worker_id.to_owned(),
+            error.message.clone(),
+        );
+        self.call(move |connection| {
+            connection
+                .execute(
+                    "UPDATE media_scan_runs SET status = 'failed', error = ?, worker_id = NULL, \
+                 lease_expires_at = NULL, current_path = NULL, finished_at = ?, updated_at = ? \
+                 WHERE id = ? AND status = 'running' AND worker_id = ?",
+                    params![values.2, now_iso(), now_iso(), values.0, values.1],
+                )
+                .map_err(IndexerError::database)?;
+            Ok(())
+        })
+        .await
+    }
+
+    pub async fn publish_media_scan(
+        &self,
+        task: &MediaScanTask,
+        worker_id: &str,
+        entries: &[MediaCatalogEntry],
+    ) -> DbResult<()> {
+        let task = task.clone();
+        let worker_id = worker_id.to_owned();
+        let entries = entries.to_vec();
+        self.call(move |connection| {
+            let transaction = connection.transaction().map_err(IndexerError::database)?;
+            let active: bool = transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM media_scan_runs \
+                 WHERE id = ? AND generation = ? AND status = 'running' AND worker_id = ?)",
+                params![task.id, task.generation, worker_id],
+                |row| row.get(0),
+            ).map_err(IndexerError::database)?;
+            if !active {
+                return Err(IndexerError::new(
+                    ErrorCode::Database,
+                    "Media scan lease was lost",
+                    true,
+                ));
+            }
+            let existing_files = transaction.prepare(
+                "SELECT relative_path FROM media_files WHERE source_id = ?",
+            ).and_then(|mut statement| {
+                statement.query_map([&task.source_id], |row| row.get::<_, String>(0))?
+                    .collect::<Result<std::collections::HashSet<_>, _>>()
+            }).map_err(IndexerError::database)?;
+            transaction.execute(
+                "DELETE FROM media_artwork WHERE title_id IN \
+                 (SELECT id FROM media_titles WHERE source_id = ?)",
+                [&task.source_id],
+            ).map_err(IndexerError::database)?;
+            let now = now_iso();
+            for entry in &entries {
+                let title_id = transaction.query_row(
+                    "SELECT id FROM media_titles WHERE source_id = ? AND source_path = ?",
+                    params![task.source_id, entry.title.source_path],
+                    |row| row.get::<_, String>(0),
+                ).optional().map_err(IndexerError::database)?
+                    .unwrap_or_else(|| Uuid::new_v4().to_string());
+                transaction.execute(
+                    "INSERT INTO media_titles (
+                       id, source_id, kind, source_path, tmdb_id, title, original_title, sort_title,
+                       overview, year, release_date, runtime_minutes, original_language, genres_json,
+                       metadata_source, match_status, match_confidence, poster_key, backdrop_key,
+                       scan_generation, added_at, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(source_id, source_path) DO UPDATE SET
+                       tmdb_id = excluded.tmdb_id, title = excluded.title, original_title = excluded.original_title,
+                       sort_title = excluded.sort_title, overview = excluded.overview, year = excluded.year,
+                       release_date = excluded.release_date, runtime_minutes = excluded.runtime_minutes,
+                       original_language = excluded.original_language, genres_json = excluded.genres_json,
+                       metadata_source = excluded.metadata_source, match_status = excluded.match_status,
+                       match_confidence = excluded.match_confidence, poster_key = excluded.poster_key,
+                       backdrop_key = excluded.backdrop_key, scan_generation = excluded.scan_generation,
+                       updated_at = excluded.updated_at",
+                    params![
+                        title_id, task.source_id, task.kind, entry.title.source_path,
+                        entry.title.tmdb_id, entry.title.title, entry.title.original_title,
+                        entry.title.title.to_lowercase(), entry.title.overview, entry.title.year,
+                        entry.title.release_date, entry.title.runtime_minutes,
+                        entry.title.original_language, serde_json::to_string(&entry.title.genres).map_err(IndexerError::database)?,
+                        entry.title.metadata_source, entry.title.match_status,
+                        entry.title.match_confidence, entry.title.poster_key, entry.title.backdrop_key,
+                        task.generation, now, now
+                    ],
+                ).map_err(IndexerError::database)?;
+
+                transaction.execute(
+                    "UPDATE media_titles SET
+                       tmdb_id = (SELECT tmdb_id FROM media_match_overrides WHERE title_id = ?),
+                       match_status = CASE
+                         WHEN (SELECT excluded FROM media_match_overrides WHERE title_id = ?) = 1 THEN 'excluded'
+                         ELSE 'matched'
+                       END,
+                       match_confidence = CASE
+                         WHEN (SELECT excluded FROM media_match_overrides WHERE title_id = ?) = 1 THEN NULL
+                         ELSE 1
+                       END
+                     WHERE id = ? AND EXISTS (SELECT 1 FROM media_match_overrides WHERE title_id = ?)",
+                    params![title_id, title_id, title_id, title_id, title_id],
+                ).map_err(IndexerError::database)?;
+
+                let mut season_id = None;
+                let mut episode_id = None;
+                if let (Some(season), Some(episode)) = (&entry.season, &entry.episode) {
+                    let id = transaction.query_row(
+                        "SELECT id FROM media_seasons WHERE title_id = ? AND season_number = ?",
+                        params![title_id, season.number],
+                        |row| row.get::<_, String>(0),
+                    ).optional().map_err(IndexerError::database)?
+                        .unwrap_or_else(|| Uuid::new_v4().to_string());
+                    transaction.execute(
+                        "INSERT INTO media_seasons (id, title_id, season_number, name, overview, poster_key, updated_at) \
+                         VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(title_id, season_number) DO UPDATE SET \
+                         name = excluded.name, overview = excluded.overview, poster_key = excluded.poster_key, updated_at = excluded.updated_at",
+                        params![id, title_id, season.number, season.name, season.overview, season.poster_key, now],
+                    ).map_err(IndexerError::database)?;
+                    let ep_id = transaction.query_row(
+                        "SELECT id FROM media_episodes WHERE season_id = ? AND episode_number = ?",
+                        params![id, episode.number],
+                        |row| row.get::<_, String>(0),
+                    ).optional().map_err(IndexerError::database)?
+                        .unwrap_or_else(|| Uuid::new_v4().to_string());
+                    transaction.execute(
+                        "INSERT INTO media_episodes (
+                           id, title_id, season_id, episode_number, name, overview, air_date,
+                           runtime_minutes, still_key, updated_at
+                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(season_id, episode_number) DO UPDATE SET
+                           name = excluded.name, overview = excluded.overview, air_date = excluded.air_date,
+                           runtime_minutes = excluded.runtime_minutes, still_key = excluded.still_key,
+                           updated_at = excluded.updated_at",
+                        params![ep_id, title_id, id, episode.number, episode.name, episode.overview,
+                            episode.air_date, episode.runtime_minutes, episode.still_key, now],
+                    ).map_err(IndexerError::database)?;
+                    season_id = Some(id);
+                    episode_id = Some(ep_id);
+                }
+
+                let file_id = transaction.query_row(
+                    "SELECT id FROM media_files WHERE source_id = ? AND relative_path = ?",
+                    params![task.source_id, entry.file.relative_path],
+                    |row| row.get::<_, String>(0),
+                ).optional().map_err(IndexerError::database)?
+                    .unwrap_or_else(|| Uuid::new_v4().to_string());
+                transaction.execute(
+                    "INSERT INTO media_files (
+                       id, source_id, title_id, episode_id, root_id, storage_pool_id, relative_path,
+                       name, mime_type, size_bytes, mtime_ms, duration_seconds, container,
+                       video_codec, audio_codec, scan_generation, created_at, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(source_id, relative_path) DO UPDATE SET
+                       title_id = excluded.title_id, episode_id = excluded.episode_id,
+                       name = excluded.name, mime_type = excluded.mime_type, size_bytes = excluded.size_bytes,
+                       mtime_ms = excluded.mtime_ms, duration_seconds = excluded.duration_seconds,
+                       container = excluded.container, video_codec = excluded.video_codec,
+                       audio_codec = excluded.audio_codec, scan_generation = excluded.scan_generation,
+                       updated_at = excluded.updated_at",
+                    params![
+                        file_id, task.source_id, title_id, episode_id, task.root_id,
+                        task.storage_pool_id, entry.file.relative_path, entry.file.name,
+                        entry.file.mime_type, i64_from(entry.file.size_bytes)?, entry.file.mtime_ms,
+                        entry.file.duration_seconds, entry.file.container, entry.file.video_codec,
+                        entry.file.audio_codec, task.generation, now, now
+                    ],
+                ).map_err(IndexerError::database)?;
+
+                for artwork in &entry.artwork {
+                    let owner_season = artwork.for_season.then(|| season_id.clone()).flatten();
+                    let owner_episode = artwork.for_episode.then(|| episode_id.clone()).flatten();
+                    transaction.execute(
+                        "INSERT INTO media_artwork (
+                           id, title_id, season_id, episode_id, kind, source, source_url,
+                           cache_key, width, height, language, is_primary, updated_at
+                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![Uuid::new_v4().to_string(), title_id, owner_season, owner_episode,
+                            artwork.kind, artwork.source, artwork.source_url, artwork.cache_key,
+                            artwork.width, artwork.height, artwork.language, i64::from(artwork.is_primary), now],
+                    ).map_err(IndexerError::database)?;
+                }
+            }
+            let removed = transaction.execute(
+                "DELETE FROM media_files WHERE source_id = ? AND scan_generation <> ?",
+                params![task.source_id, task.generation],
+            ).map_err(IndexerError::database)?;
+            transaction.execute(
+                "DELETE FROM media_episodes WHERE title_id IN \
+                 (SELECT id FROM media_titles WHERE source_id = ?) \
+                 AND id NOT IN (SELECT episode_id FROM media_files WHERE episode_id IS NOT NULL)",
+                [&task.source_id],
+            ).map_err(IndexerError::database)?;
+            transaction.execute(
+                "DELETE FROM media_seasons WHERE title_id IN \
+                 (SELECT id FROM media_titles WHERE source_id = ?) \
+                 AND id NOT IN (SELECT season_id FROM media_episodes)",
+                [&task.source_id],
+            ).map_err(IndexerError::database)?;
+            transaction.execute(
+                "DELETE FROM media_titles WHERE source_id = ? \
+                 AND id NOT IN (SELECT title_id FROM media_files WHERE source_id = ?)",
+                params![task.source_id, task.source_id],
+            ).map_err(IndexerError::database)?;
+            let added = entries.iter().filter(|entry| !existing_files.contains(&entry.file.relative_path)).count();
+            let updated = entries.len().saturating_sub(added);
+            let unmatched = entries.iter().filter(|entry| entry.title.match_status != "matched").count();
+            transaction.execute(
+                "UPDATE media_scan_runs SET status = 'completed', scanned = ?, added = ?, updated = ?, removed = ?, \
+                 unmatched = ?, current_path = NULL, error = NULL, worker_id = NULL, lease_expires_at = NULL, \
+                 finished_at = ?, updated_at = ? WHERE id = ? AND status = 'running' AND worker_id = ?",
+                params![i64_from(entries.len() as u64)?, i64_from(added as u64)?, i64_from(updated as u64)?,
+                    i64_from(removed as u64)?, i64_from(unmatched as u64)?, now, now, task.id, worker_id],
             ).map_err(IndexerError::database)?;
             transaction.commit().map_err(IndexerError::database)
         }).await

@@ -7,7 +7,7 @@ use zos_indexer::error::{ErrorCode, IndexerError};
 use zos_indexer::storage::FileIdentity;
 
 #[tokio::test]
-async fn waits_for_migration_024() {
+async fn waits_for_migration_039() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().join("root");
     std::fs::create_dir(&root).unwrap();

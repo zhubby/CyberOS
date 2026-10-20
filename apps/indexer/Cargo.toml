@@ -10,7 +10,9 @@ futures-util.workspace = true
 nix.workspace = true
 notify.workspace = true
 quick-xml.workspace = true
+reqwest.workspace = true
 rusqlite.workspace = true
+rustls.workspace = true
 sd-notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -24,6 +26,7 @@ toml_edit.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 unicode-normalization.workspace = true
+url.workspace = true
 uuid.workspace = true
 zip.workspace = true
 

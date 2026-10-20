@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::db::{Db, IndexerSettings, QueueTask};
 use crate::error::{ErrorCode, IndexerError};
+use crate::media::{MediaScanTask, run_media_scan};
 use crate::scanner::run_task;
 use crate::watcher::{WatchMessage, merge_ancestor};
 
@@ -132,6 +133,10 @@ impl Indexer {
                             idle_polls = 0;
                             self.process_task(task, &snapshot).await?;
                         }
+                        None if let Some(task) = self.db.claim_media_scan(&self.worker_id).await? => {
+                            idle_polls = 0;
+                            self.process_media_scan(task).await?;
+                        }
                         None if once.is_some() => {
                             idle_polls = idle_polls.saturating_add(1);
                             if idle_polls >= 2 { break; }
@@ -245,6 +250,23 @@ impl Indexer {
                 Ok(())
             }
         }
+    }
+
+    async fn process_media_scan(&self, task: MediaScanTask) -> Result<(), IndexerError> {
+        let result = run_media_scan(&self.db, &task, &self.worker_id, &self.shutdown).await;
+        if let Err(error) = result {
+            self.db
+                .fail_media_scan(&task.id, &self.worker_id, &error)
+                .await?;
+            tracing::warn!(
+                scan_id = %task.id,
+                source_id = %task.source_id,
+                code = error.code.as_str(),
+                message = %error.message,
+                "Media scan failed"
+            );
+        }
+        Ok(())
     }
 }
 
