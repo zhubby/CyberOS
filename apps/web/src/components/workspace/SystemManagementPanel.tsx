@@ -69,7 +69,7 @@ import {
 } from "./ManagementDashboard.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
 import { SystemEthernetManagement } from "./SystemEthernetManagement.js";
-import { SystemWifiManagement } from "./SystemWifiManagement.js";
+import { SystemWifiReadonly } from "./SystemWifiReadonly.js";
 
 type StatusTone = "ready" | "warning" | "offline" | "neutral";
 type GaugeTone = "ready" | "warning" | "danger" | "neutral";
@@ -141,10 +141,12 @@ interface DiskCapacityUsage {
 
 export function SystemNetworkManagementPanel({
   locale,
+  onOpenWirelessSettings,
   onNotifyError,
   onNotifySuccess
 }: {
   locale: SupportedLocale;
+  onOpenWirelessSettings: () => void;
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
 }) {
@@ -321,7 +323,7 @@ export function SystemNetworkManagementPanel({
                     onStatus={handleEthernetStatus}
                     onRefresh={refreshSummary}
                     onNotifySuccess={(message) => onNotifySuccess(message)}
-                    onNotifyError={(message) => onNotifyError(message)}
+                    onNotifyError={onNotifyError}
                   />
                 ) : (
                   <section className="management-section">
@@ -334,13 +336,11 @@ export function SystemNetworkManagementPanel({
                 id: "wifi",
                 title: String(t("workspace.management.network.wifi.title")),
                 content: summary ? (
-                  <SystemWifiManagement
+                  <SystemWifiReadonly
                     wifi={summary.wifi}
-                    canManageWifi={summary.capabilities.canManageWifi}
-                    canManageHotspot={summary.capabilities.canManageHotspot}
+                    canScan={summary.capabilities.canManageWifi}
                     onStatus={handleWifiStatus}
-                    onRefresh={refreshSummary}
-                    onNotifySuccess={(message) => onNotifySuccess(message)}
+                    onOpenSettings={onOpenWirelessSettings}
                     onNotifyError={(message) => onNotifyError(message)}
                   />
                 ) : (

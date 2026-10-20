@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::error::VodError;
+use crate::protocol::validate_bluetooth_audio_device_id;
 use crate::storage::FileIdentity;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +22,8 @@ pub struct PersistedSession {
     pub position_seconds: f64,
     pub volume: f64,
     pub desired_paused: bool,
+    #[serde(default)]
+    pub audio_device_id: Option<String>,
     pub identity: FileIdentity,
     pub updated_at: String,
 }
@@ -124,6 +127,10 @@ fn valid_session(session: &PersistedSession) -> bool {
         && session.position_seconds >= 0.0
         && session.volume.is_finite()
         && (0.0..=100.0).contains(&session.volume)
+        && session
+            .audio_device_id
+            .as_deref()
+            .is_none_or(|value| validate_bluetooth_audio_device_id(value).is_ok())
 }
 
 #[cfg(test)]
@@ -140,6 +147,7 @@ mod tests {
             position_seconds: 12.0,
             volume: 80.0,
             desired_paused: true,
+            audio_device_id: None,
             identity: FileIdentity {
                 device: 1,
                 inode: 2,

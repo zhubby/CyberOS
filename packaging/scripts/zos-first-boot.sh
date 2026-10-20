@@ -98,13 +98,13 @@ fi
 install -d -m 0750 "$ROOT_DIR" "$ROOT_DIR/config" "$STATE_DIR" "$STATE_DIR/trash" \
   "$STATE_DIR/reports" "$STATE_DIR/pi-sessions" "$STATE_DIR/pi-agent" \
   "$STATE_DIR/photostaff" "$STATE_DIR/media-cache" "$STATE_DIR/backup-staging" \
-  "$STATE_DIR/vod-player" "$ROOT_DIR/logs" "$ROOT_DIR/home" \
+  "$STATE_DIR/vod-player" "$STATE_DIR/bluetooth" "$ROOT_DIR/logs" "$ROOT_DIR/home" \
   "$ROOT_DIR/home/termux" "$ROOT_DIR/apps" "$ROOT_DIR/deploy" \
   "$ROOT_DIR/system-backups" "$ROOT_DIR/data" "$ROOT_DIR/data/backup" "$NAS_ROOT_PATH"
 install -d -m 0711 "$ROOT_DIR/vm" "$ROOT_DIR/iso"
 install -d -m 0755 "$ROOT_DIR/home/share" "$STATE_DIR/hostd"
 install -d -m 0700 "$STATE_DIR/hostd/docker-daemon" \
-  "$STATE_DIR/hostd/network-manager" "$ROOT_DIR/system-backups/permissions"
+  "$STATE_DIR/hostd/network-manager" "$STATE_DIR/hostd/bluetooth" "$ROOT_DIR/system-backups/permissions"
 
 umask 077
 cat > "$CONFIG_PATH" <<EOF_CONFIG
@@ -115,6 +115,17 @@ environment = "production"
 host = "127.0.0.1"
 port = 3010
 allowed_origins = []
+
+[mcp]
+enabled = true
+pi_enabled = false
+pi_token_file = "mcp/pi.token"
+legacy_pi_tools_enabled = false
+external_enabled = false
+shell_enabled = false
+allowed_hosts = ["localhost", "127.0.0.1", "[::1]"]
+allowed_origins = ["localhost", "127.0.0.1", "[::1]"]
+max_concurrent_per_client = 4
 
 [worker]
 poll_ms = 750
@@ -213,7 +224,7 @@ if id zos >/dev/null 2>&1; then
   chown root:zos "$ROOT_DIR" "$ROOT_DIR/config"
   chown zos:zos "$STATE_DIR" "$STATE_DIR/trash" "$STATE_DIR/reports" \
     "$STATE_DIR/pi-sessions" "$STATE_DIR/pi-agent" "$STATE_DIR/photostaff" \
-    "$STATE_DIR/media-cache" "$STATE_DIR/backup-staging" "$STATE_DIR/vod-player" \
+    "$STATE_DIR/media-cache" "$STATE_DIR/backup-staging" "$STATE_DIR/vod-player" "$STATE_DIR/bluetooth" \
     "$ROOT_DIR/logs" \
     "$ROOT_DIR/home" "$ROOT_DIR/home/termux" "$ROOT_DIR/apps" "$ROOT_DIR/deploy" \
     "$ROOT_DIR/system-backups" "$ROOT_DIR/data" "$ROOT_DIR/data/backup" \

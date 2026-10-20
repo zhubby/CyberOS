@@ -57,6 +57,28 @@ describe("hostd protocol", () => {
       action: "reboot",
       accepted: true
     })).toEqual({ action: "reboot", accepted: true });
+
+    const bluetooth = {
+      collectedAt: "2026-10-20T00:00:00Z",
+      backend: "BlueZ",
+      available: true,
+      adapters: [{
+        id: "adapter-hci0",
+        address: "00:11:22:33:44:55",
+        name: "hci0",
+        alias: "ZOS",
+        state: "powered",
+        powered: true,
+        discovering: false,
+        defaultAdapter: true
+      }],
+      devices: [],
+      scan: { active: false, adapterId: null, startedAt: null, endsAt: null },
+      challenge: null,
+      error: null
+    } as const;
+    expect(parseHostdResult("bluetooth.manager", { action: "status" }, bluetooth)).toEqual(bluetooth);
+    expect(parseHostdResult("bluetooth.manager", { action: "status" }, { ...bluetooth, extra: true })).toBeNull();
   });
 
   it("pairs both storage actions with their exact result variants", () => {
@@ -238,7 +260,7 @@ describe("hostd protocol", () => {
     const fixtures = JSON.parse(await readFile(new URL("../fixtures/hostd-protocol-v1.json", import.meta.url), "utf8")) as {
       contracts: HostdFixtureContract[];
     };
-    expect(fixtures.contracts).toHaveLength(27);
+    expect(fixtures.contracts).toHaveLength(28);
     for (const contract of fixtures.contracts) {
       expect(parseFixtureContract(contract)).toEqual(contract.result);
     }
@@ -246,7 +268,7 @@ describe("hostd protocol", () => {
 });
 
 interface HostdFixtureContract {
-  operation: "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "system.power" | "system.ops";
+  operation: "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "system.power" | "system.ops";
   request: unknown;
   result: unknown;
 }
@@ -263,6 +285,8 @@ function parseFixtureContract(contract: HostdFixtureContract): unknown {
       return parseHostdResult(contract.operation, contract.request as HostdRequest<"docker.daemon">, contract.result);
     case "network.manager":
       return parseHostdResult(contract.operation, contract.request as HostdRequest<"network.manager">, contract.result);
+    case "bluetooth.manager":
+      return parseHostdResult(contract.operation, contract.request as HostdRequest<"bluetooth.manager">, contract.result);
     case "system.power":
       return parseHostdResult(contract.operation, contract.request as HostdRequest<"system.power">, contract.result);
     case "system.ops":

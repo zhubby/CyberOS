@@ -22,6 +22,9 @@ const status: VodPlayerStatus = {
   volume: 80,
   retryCount: 0,
   nextRetryAt: null,
+  audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
+  effectiveAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
+  audioFallbackReason: null,
   capabilities: {
     mpvAvailable: true,
     drmAvailable: true,
@@ -45,7 +48,8 @@ describe("VOD player broker protocol", () => {
           rootId: "primary",
           storagePoolId: "/dev/md/media",
           relativePath: "movies/clip.mp4",
-          startPositionSeconds: 4
+          startPositionSeconds: 4,
+          audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF"
         }
       }).trim()
     );
@@ -54,7 +58,8 @@ describe("VOD player broker protocol", () => {
       rootId: "primary",
       storagePoolId: "/dev/md/media",
       relativePath: "movies/clip.mp4",
-      startPositionSeconds: 4
+      startPositionSeconds: 4,
+      audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF"
     });
 
     expect(parseVodPlayerBrokerResponse(encodeVodPlayerBrokerMessage({
@@ -71,6 +76,11 @@ describe("VOD player broker protocol", () => {
       version: 1,
       id: "request-1",
       command: { type: "play", rootId: "primary", storagePoolId: "pool", relativePath: "../video.mp4" }
+    }))).toBeNull();
+    expect(parseVodPlayerBrokerRequest(JSON.stringify({
+      version: 1,
+      id: "request-1",
+      command: { type: "play", rootId: "primary", storagePoolId: "pool", relativePath: "video.mp4", audioDeviceId: "alsa/arbitrary" }
     }))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
       version: 1,

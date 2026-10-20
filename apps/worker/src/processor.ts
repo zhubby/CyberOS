@@ -6,6 +6,7 @@ import {
 } from "@zos/agent";
 import {
   appendEvent,
+  claimNextCapabilityContinuation,
   claimNextJob,
   createPendingApproval,
   createPiToolCallApproval,
@@ -21,6 +22,7 @@ import {
   getPhotostaffMetadataIndexStatus,
   getPiToolPolicySettings,
   getSession,
+  linkAgentJobToCapabilityRun,
   queryIndexedText,
   queryPhotostaffAssets,
   saveAgentProviderSession,
@@ -37,7 +39,8 @@ export interface ProcessNextJobDependencies {
 }
 
 export async function processNextJob({ db, config, agentRunner, allowLocalFallback }: ProcessNextJobDependencies): Promise<boolean> {
-  const job = claimNextJob(db);
+  const continuation = claimNextCapabilityContinuation(db);
+  const job = continuation ? getJob(db, continuation.jobId) : claimNextJob(db);
   if (!job) {
     return false;
   }
@@ -77,11 +80,12 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
   try {
     const shouldUseLocalFallback =
       allowLocalFallback === true || process.env.ZOS_ENABLE_LOCAL_AGENT_FALLBACK === "1";
+    const turnMessage = continuation ? capabilityContinuationMessage(continuation.run) : message.content;
     const result = shouldUseLocalFallback
       ? await runReadOnlyAgentTurn({
           session,
           root,
-          message: message.content,
+          message: turnMessage,
           emit: (event) => {
             appendEvent(db, {
               sessionId: session.id,
@@ -113,7 +117,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
       : await runPiAgentTurn({
           session,
           root,
-          message: message.content,
+          message: turnMessage,
           dataDir: config.dataDir,
           modelSettings: getModelProviderSettings(db) ?? defaultModelProviderSettings(config),
           toolPolicy: getPiToolPolicySettings(db) ?? defaultPiToolPolicySettings(),
@@ -147,6 +151,18 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
           markWaitingForApproval: () => {
             updateJobStatus(db, job.id, "waiting_approval", null, ["running"]);
           },
+          onCapabilityRunPending: (runId, providerSessionId) => {
+            linkAgentJobToCapabilityRun(db, { jobId: job.id, runId, providerSessionId });
+            updateJobStatus(db, job.id, "waiting_approval", null, ["running"]);
+          },
+          ...(config.mcp?.enabled && config.mcp.piEnabled ? {
+            mcp: {
+              enabled: true,
+              url: `http://127.0.0.1:${config.api.port}/mcp`,
+              tokenFile: config.mcp.piTokenFile,
+              legacyToolsEnabled: config.mcp.legacyPiToolsEnabled
+            }
+          } : {}),
           ...photostaffAgentTools(db, root.id)
         });
 
@@ -200,6 +216,18 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
   }
 
   return true;
+}
+
+function capabilityContinuationMessage(run: NonNullable<ReturnType<typeof claimNextCapabilityContinuation>>["run"]): string {
+  const outcome = run.state === "succeeded"
+    ? { state: run.state, result: run.result }
+    : { state: run.state, error: { code: run.errorCode, message: run.errorMessage } };
+  return [
+    "Internal ZOS continuation. Do not repeat the user's original request.",
+    `Capability run ${run.id} (${run.capabilityId}) reached a terminal state:`,
+    JSON.stringify(outcome),
+    "Continue the same conversation using this result. Explain the outcome briefly and only propose another change if it is still required."
+  ].join("\n");
 }
 
 export function photostaffAgentTools(db: ZosDatabase, sessionRootId: string): { photostaffTools?: PhotostaffAgentToolService } {

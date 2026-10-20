@@ -81,6 +81,7 @@ import type {
   SystemWifiScanInput,
   SystemWifiStatus,
   SystemWifiSummary,
+  BluetoothStatus,
   StorageOperationProposal
 } from "@zos/shared";
 import { DockerComposeService, type DockerComposeRuntime } from "./lib/docker-compose.js";
@@ -88,10 +89,11 @@ import { DockerRequestError, type DockerEngineRuntime, type DockerExecStream } f
 import { DockerDaemonRequestError, type DockerDaemonRuntime } from "./lib/docker-daemon.js";
 import { DockerHostAccessPolicy } from "./lib/docker-host-access.js";
 import type { NetworkManagerRuntime } from "./lib/network-manager.js";
+import type { BluetoothManagerRuntime } from "./lib/bluetooth-manager.js";
 import { EthernetManagerRequestError, type EthernetManagerRuntime } from "./lib/ethernet-manager.js";
 import { SystemPowerRequestError, type SystemPowerRuntime } from "./lib/power-management.js";
 import { streamDockerDaemonEvents } from "./routes/docker.js";
-import { streamEthernetEvents, streamWifiEvents } from "./routes/system.js";
+import { streamBluetoothEvents, streamEthernetEvents, streamWifiEvents } from "./routes/system.js";
 import type { SystemCommandRunner } from "./lib/system-management.js";
 import { buildServer as buildApiServer, type ServerDependencies } from "./server.js";
 
@@ -1471,6 +1473,47 @@ describe("API server", () => {
       closeSignal.emit("close");
       await vi.advanceTimersByTimeAsync(500);
       expect(networkManager.statusCalls).toBe(callsAtClose);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("serves Bluetooth state and dispatches adapter and device operations", async () => {
+    const bluetoothManager = new FakeBluetoothManager();
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      system: { commandRunner: new FakeSystemCommandRunner({}), bluetoothManager }
+    });
+
+    const status = await server.inject({ method: "GET", url: "/api/system/bluetooth" });
+    const scan = await server.inject({ method: "POST", url: "/api/system/bluetooth/scan/start", payload: { adapterId: "adapter-hci0" } });
+    const trust = await server.inject({ method: "PUT", url: "/api/system/bluetooth/devices/trust", payload: { adapterId: "adapter-hci0", address: "AA:BB:CC:DD:EE:FF", trusted: true } });
+    const connect = await server.inject({ method: "POST", url: "/api/system/bluetooth/devices/connect", payload: { adapterId: "adapter-hci0", address: "AA:BB:CC:DD:EE:FF" } });
+
+    expect(status.statusCode).toBe(200);
+    expect(status.json()).toMatchObject({ bluetooth: { backend: "BlueZ", available: true } });
+    expect(scan.statusCode).toBe(200);
+    expect(trust.statusCode).toBe(200);
+    expect(connect.statusCode).toBe(200);
+    expect(bluetoothManager.calls).toEqual(["scan:adapter-hci0", "trust:AA:BB:CC:DD:EE:FF:true", "connect:AA:BB:CC:DD:EE:FF"]);
+    await server.close();
+  });
+
+  it("streams changed Bluetooth state without duplicating unchanged samples", async () => {
+    vi.useFakeTimers();
+    try {
+      const bluetoothManager = new FakeBluetoothManager();
+      const closeSignal = new EventEmitter();
+      const chunks: string[] = [];
+      await streamBluetoothEvents(closeSignal, { write: (chunk) => chunks.push(chunk) }, bluetoothManager, { sampleMs: 100, heartbeatMs: 250 });
+      expect(chunks.filter((chunk) => chunk === "event: system.bluetooth.status\n")).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(chunks.filter((chunk) => chunk === "event: system.bluetooth.status\n")).toHaveLength(1);
+      bluetoothManager.status.adapters[0]!.powered = false;
+      await vi.advanceTimersByTimeAsync(100);
+      expect(chunks.filter((chunk) => chunk === "event: system.bluetooth.status\n")).toHaveLength(2);
+      closeSignal.emit("close");
     } finally {
       vi.useRealTimers();
     }
@@ -6272,6 +6315,34 @@ class FakeNetworkManager implements NetworkManagerRuntime {
   private async operationResult() {
     return { status: await this.getStatus(), rollback: "not_required" as const, message: null };
   }
+}
+
+class FakeBluetoothManager implements BluetoothManagerRuntime {
+  calls: string[] = [];
+  status: BluetoothStatus = {
+    collectedAt: "2026-10-20T00:00:00.000Z",
+    backend: "BlueZ",
+    available: true,
+    adapters: [{ id: "adapter-hci0", address: "00:11:22:33:44:55", name: "hci0", alias: "ZOS", state: "powered", powered: true, discovering: false, defaultAdapter: true }],
+    devices: [{ adapterId: "adapter-hci0", address: "AA:BB:CC:DD:EE:FF", name: "Headphones", alias: null, type: "headset", rssi: -42, paired: true, trusted: false, connected: false, servicesResolved: true, lastSeenAt: null }],
+    scan: { active: false, adapterId: null, startedAt: null, endsAt: null },
+    challenge: null,
+    error: null
+  };
+
+  async getStatus() { return structuredClone(this.status); }
+  async setAdapterPower(input: { adapterId: string; powered: boolean }) { this.calls.push(`power:${input.adapterId}:${input.powered}`); return this.result(); }
+  async setDefaultAdapter(input: { adapterId: string }) { this.calls.push(`default:${input.adapterId}`); return this.result(); }
+  async startScan(input: { adapterId: string }) { this.calls.push(`scan:${input.adapterId}`); return this.result(); }
+  async stopScan(input: { adapterId: string }) { this.calls.push(`stop:${input.adapterId}`); return this.result(); }
+  async pair(input: { adapterId: string; address: string }) { this.calls.push(`pair:${input.address}`); return this.result(); }
+  async cancelPairing(input: { adapterId: string; address: string }) { this.calls.push(`cancel:${input.address}`); return this.result(); }
+  async answerChallenge(input: { adapterId: string; address: string; challengeId: string; accept: boolean }) { this.calls.push(`challenge:${input.accept}`); return this.result(); }
+  async trust(input: { adapterId: string; address: string; trusted: boolean }) { this.calls.push(`trust:${input.address}:${input.trusted}`); return this.result(); }
+  async connect(input: { adapterId: string; address: string }) { this.calls.push(`connect:${input.address}`); return this.result(); }
+  async disconnect(input: { adapterId: string; address: string }) { this.calls.push(`disconnect:${input.address}`); return this.result(); }
+  async unpair(input: { adapterId: string; address: string }) { this.calls.push(`unpair:${input.address}`); return this.result(); }
+  private async result() { return { status: await this.getStatus(), message: null }; }
 }
 
 function storageCommandRunner({

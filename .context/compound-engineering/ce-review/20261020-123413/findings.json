@@ -1,0 +1,65 @@
+{
+  "mode": "autofix",
+  "verdict": "not_ready",
+  "findings": [
+    {
+      "severity": "P1",
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "confidence": 1,
+      "file": "packages/mcp/src/runtime.ts",
+      "line": 77,
+      "title": "Capability matrix is catalogued but not executable",
+      "evidence": [
+        "The IMPLEMENTED set covers the core read surface and one file mutation capability.",
+        "Descriptors without an adapter are registered unavailable and return NOT_READY.",
+        "The capability runtime dispatches only zos.files.mutate-propose."
+      ]
+    },
+    {
+      "severity": "P1",
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "confidence": 0.99,
+      "file": "packages/capabilities/src/parity-routes.test.ts",
+      "line": 10,
+      "title": "Parity CI is one-directional",
+      "evidence": [
+        "The test checks manifest routes against known API routes.",
+        "It does not fail for an actionable REST/UI route missing from the manifest."
+      ]
+    },
+    {
+      "severity": "P2",
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "confidence": 1,
+      "file": "docs/src/content/docs/reference/mcp-agent-capabilities.md",
+      "line": 103,
+      "title": "Native MCP Tasks are not implemented",
+      "evidence": [
+        "The documented implementation uses zos.runs.* for both protocol eras because SDK 2.3.1 lacks server Tasks runtime support."
+      ]
+    },
+    {
+      "severity": "P2",
+      "autofix_class": "manual",
+      "owner": "downstream-resolver",
+      "requires_verification": true,
+      "confidence": 0.98,
+      "file": "packages/mcp/src/server.ts",
+      "line": 87,
+      "title": "Rollout observability and shadow comparison are missing",
+      "evidence": [
+        "The MCP handler has request logging and limits but no OpenTelemetry capability metrics.",
+        "No REST/MCP shadow comparator or staged parity gate is present."
+      ]
+    }
+  ],
+  "applied_fixes": 10,
+  "failed_reviewers": [],
+  "suppressed_findings": 0
+}

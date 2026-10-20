@@ -101,7 +101,10 @@ describe("SQLite schema migrations", () => {
       "030_monitoring_rule_evaluation_status",
       "031_monitoring_unsilenced_event",
       "032_docker_host_access",
-      "033_docker_host_access_draft_links"
+      "033_docker_host_access_draft_links",
+      "034_mcp_capability_runs",
+      "035_mcp_transfer_tokens",
+      "036_bluetooth_transfers"
     ]);
   });
 

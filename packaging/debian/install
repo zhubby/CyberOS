@@ -1,4 +1,5 @@
 apps/api/dist/* usr/lib/zos/apps/api/dist/
+apps/mcp-cli/dist/* usr/lib/zos/apps/mcp-cli/dist/
 target/release/zos-monitor usr/lib/zos/bin/
 target/release/zos-alerter usr/lib/zos/bin/
 target/release/zos-hostd usr/lib/zos/bin/
@@ -11,6 +12,7 @@ apps/backup/dist/* usr/lib/zos/apps/backup/dist/
 apps/ops/dist/* usr/lib/zos/apps/ops/dist/
 target/release/zos-downloader usr/lib/zos/bin/
 target/release/zos-vod-player usr/lib/zos/bin/
+target/release/zos-bluetoothd usr/lib/zos/bin/
 apps/web/dist/* usr/lib/zos/apps/web/dist/
 docs/dist/* usr/lib/zos/docs/dist/
 node_modules/* usr/lib/zos/node_modules/
@@ -41,6 +43,7 @@ packaging/scripts/zos-migrate-fstab.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-libvirt.mjs usr/lib/zos/scripts/
 packaging/scripts/zos-relocate-mount.sh usr/lib/zos/scripts/
 packaging/scripts/zos-migrate-sigmaos.sh usr/lib/zos/scripts/
+packaging/scripts/zos-mcp usr/lib/zos/scripts/
 packaging/nginx/zos.conf usr/share/zos/nginx/
 packaging/etc/samba.conf usr/share/zos/
 packaging/systemd/*.service lib/systemd/system/

@@ -1,4 +1,5 @@
 import type {
+  BluetoothSettingsRecord,
   DownloadSettingsRecord,
   DockerSettingsRecord,
   IndexerSettingsRecord,
@@ -41,6 +42,16 @@ const DOWNLOAD_SETTING_KEY = "download_settings";
 const PHOTOSTAFF_MAP_SETTING_KEY = "photostaff_map_settings";
 const PHOTOSTAFF_PROCESSING_SETTING_KEY = "photostaff_processing_settings";
 const INDEXER_SETTING_KEY = "indexer_settings";
+const BLUETOOTH_SETTING_KEY = "bluetooth_settings";
+
+export const DEFAULT_BLUETOOTH_SETTINGS: Omit<BluetoothSettingsRecord, "updatedAt"> = {
+  defaultAdapterId: null,
+  defaultAudioDeviceId: null,
+  receiveEnabled: false,
+  inboxRootId: null,
+  inboxStoragePoolId: null,
+  inboxPath: null
+};
 
 export const DEFAULT_DOWNLOAD_CONCURRENCY = 1;
 export const DEFAULT_DOWNLOAD_SETTINGS: Omit<DownloadSettingsRecord, "updatedAt"> = {
@@ -85,6 +96,59 @@ export const DEFAULT_INDEXER_SETTINGS: Omit<IndexerSettingsRecord, "updatedAt"> 
 };
 
 export { DEFAULT_PI_TOOL_POLICY_SETTINGS } from "./settings-constants.js";
+
+export function defaultBluetoothSettings(): BluetoothSettingsRecord {
+  return { ...DEFAULT_BLUETOOTH_SETTINGS, updatedAt: new Date(0).toISOString() };
+}
+
+export function getBluetoothSettings(db: ZosDatabase): BluetoothSettingsRecord | null {
+  const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
+    .get(BLUETOOTH_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
+  if (!row) return null;
+  try {
+    const parsed = JSON.parse(row.value_json) as Partial<BluetoothSettingsRecord>;
+    return normalizeBluetoothSettings(parsed, typeof parsed.updatedAt === "string" ? parsed.updatedAt : row.updated_at);
+  } catch {
+    return null;
+  }
+}
+
+export function saveBluetoothSettings(
+  db: ZosDatabase,
+  settings: Partial<Omit<BluetoothSettingsRecord, "updatedAt">>
+): BluetoothSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const current = getBluetoothSettings(db) ?? defaultBluetoothSettings();
+  const record = normalizeBluetoothSettings({ ...current, ...settings }, updatedAt);
+  db.prepare(`
+    INSERT INTO system_settings (key, value_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+  `).run(BLUETOOTH_SETTING_KEY, JSON.stringify(record), updatedAt);
+  return record;
+}
+
+function normalizeBluetoothSettings(
+  input: Partial<BluetoothSettingsRecord>,
+  updatedAt: string
+): BluetoothSettingsRecord {
+  const text = (value: unknown, maximum = 4096) => typeof value === "string" && value.trim() && value.length <= maximum
+    ? value.trim()
+    : null;
+  const inboxRootId = text(input.inboxRootId, 256);
+  const inboxStoragePoolId = text(input.inboxStoragePoolId, 256);
+  const inboxPath = text(input.inboxPath);
+  const completeInbox = Boolean(inboxRootId && inboxStoragePoolId && inboxPath);
+  return {
+    defaultAdapterId: text(input.defaultAdapterId, 128),
+    defaultAudioDeviceId: text(input.defaultAudioDeviceId, 128),
+    receiveEnabled: input.receiveEnabled === true && completeInbox,
+    inboxRootId,
+    inboxStoragePoolId,
+    inboxPath,
+    updatedAt
+  };
+}
 
 export function getModelProviderSettings(db: ZosDatabase): ModelProviderSettingsRecord | null {
   const row = db

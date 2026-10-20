@@ -25,6 +25,7 @@ import type {
 } from "@zos/shared";
 import type { NetworkManagerRuntime } from "./network-manager.js";
 import type { EthernetManagerRuntime } from "./ethernet-manager.js";
+import type { BluetoothManagerRuntime } from "./bluetooth-manager.js";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 
 const execFileAsync = promisify(execFile);
@@ -40,6 +41,7 @@ export interface SystemManagementDependencies {
   commandRunner?: SystemCommandRunner;
   networkManager?: NetworkManagerRuntime;
   ethernetManager?: EthernetManagerRuntime;
+  bluetoothManager?: BluetoothManagerRuntime;
 }
 
 class NodeSystemCommandRunner implements SystemCommandRunner {

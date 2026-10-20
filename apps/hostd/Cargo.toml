@@ -18,6 +18,7 @@ toml_edit.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

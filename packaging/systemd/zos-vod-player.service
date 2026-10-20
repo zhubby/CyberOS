@@ -1,8 +1,8 @@
 [Unit]
 Description=ZOS VOD Player
 Documentation=file:///usr/share/doc/zos/README.md
-After=local-fs.target systemd-tmpfiles-setup.service zos-api.service
-Wants=zos-api.service
+After=local-fs.target systemd-tmpfiles-setup.service zos-api.service bluetooth.service bluealsa.service
+Wants=zos-api.service bluetooth.service bluealsa.service
 
 [Service]
 Type=notify

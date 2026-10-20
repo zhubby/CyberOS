@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Activity,
   Bot,
+  Bluetooth,
   BellRing,
   Check,
   Database,
@@ -20,6 +21,7 @@ import {
   Server,
   ShieldCheck,
   Wrench,
+  Wifi,
   X
 } from "lucide-react";
 import type {
@@ -28,12 +30,15 @@ import type {
   DownloadSettings,
   IndexerOverview,
   IndexerSettings,
+  NetworkSummary,
   NasRoot,
   ModelProviderSettings,
   PhotoLibrarySettings,
   PhotoLibraryStatus,
   PhotoProcessingSettings,
-  SystemInfo
+  SystemInfo,
+  WifiStatus,
+  BluetoothStatus
 } from "../../api.js";
 import {
   DANGEROUS_TOOL_POLICY_OPTIONS,
@@ -68,6 +73,9 @@ import { VersionSettingsPage } from "./VersionSettingsPage.js";
 import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
 import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
 import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
+import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
+import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
+import type { StorageFilePickerPool } from "../workspace/StorageFilePickerDialog.js";
 
 interface SettingsModalProps {
   activeSection: SettingsSectionId;
@@ -80,6 +88,7 @@ interface SettingsModalProps {
   indexerSettings: IndexerSettings | null;
   indexerStatus: IndexerOverview | null;
   roots: NasRoot[];
+  storagePools: StorageFilePickerPool[];
   photoSettings: PhotoLibrarySettings | null;
   photoStatus: PhotoLibraryStatus | null;
   photoProcessingSettings: PhotoProcessingSettings | null;
@@ -92,6 +101,8 @@ interface SettingsModalProps {
   themePreference: ThemePreference;
   previewFileSizeLimitBytes: number;
   codeFontSettings: CodeFontSettings;
+  networkSummary: NetworkSummary | null;
+  bluetoothStatus: BluetoothStatus | null;
   resolvedLocale: SupportedLocale;
   onClose: () => void;
   onFormChange: (form: ModelProviderFormState) => void;
@@ -111,6 +122,11 @@ interface SettingsModalProps {
   onThemePreferenceChange: (preference: ThemePreference) => void;
   onPreviewFileSizeLimitChange: (bytes: number) => void;
   onCodeFontSettingsChange: (settings: CodeFontSettings) => void;
+  onWifiStatus: (status: WifiStatus) => void;
+  onBluetoothStatus: (status: BluetoothStatus) => void;
+  onNetworkRefresh: () => Promise<void>;
+  onNotifySuccess: (message: string) => void;
+  onNotifyError: (message: string) => void;
   onSectionChange: (section: SettingsSectionId) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }
@@ -131,6 +147,7 @@ export function SettingsModal({
   indexerSettings,
   indexerStatus,
   roots,
+  storagePools,
   photoSettings,
   photoStatus,
   photoProcessingSettings,
@@ -143,6 +160,8 @@ export function SettingsModal({
   themePreference,
   previewFileSizeLimitBytes,
   codeFontSettings,
+  networkSummary,
+  bluetoothStatus,
   resolvedLocale,
   onClose,
   onFormChange,
@@ -156,6 +175,11 @@ export function SettingsModal({
   onThemePreferenceChange,
   onPreviewFileSizeLimitChange,
   onCodeFontSettingsChange,
+  onWifiStatus,
+  onBluetoothStatus,
+  onNetworkRefresh,
+  onNotifySuccess,
+  onNotifyError,
   onSectionChange,
   onSubmit
 }: SettingsModalProps) {
@@ -476,6 +500,27 @@ export function SettingsModal({
               onChange={onToolPolicyFormChange}
               onSubmit={onSubmit}
               onClose={onClose}
+            />
+          ) : null}
+
+          {activeSection === "wireless" ? (
+            <SettingsWirelessPage
+              network={networkSummary}
+              onStatus={onWifiStatus}
+              onRefresh={onNetworkRefresh}
+              onNotifySuccess={onNotifySuccess}
+              onNotifyError={onNotifyError}
+            />
+          ) : null}
+
+          {activeSection === "bluetooth" ? (
+            <SettingsBluetoothPage
+              status={bluetoothStatus}
+              pools={storagePools}
+              locale={resolvedLocale}
+              onStatus={onBluetoothStatus}
+              onNotifySuccess={onNotifySuccess}
+              onNotifyError={onNotifyError}
             />
           ) : null}
 
@@ -1760,6 +1805,10 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <KeyRound aria-hidden="true" size={16} />;
     case "agents":
       return <Bot aria-hidden="true" size={16} />;
+    case "wireless":
+      return <Wifi aria-hidden="true" size={16} />;
+    case "bluetooth":
+      return <Bluetooth aria-hidden="true" size={16} />;
     case "docker":
       return <Server aria-hidden="true" size={16} />;
     case "files":

@@ -1,20 +1,24 @@
-import { spawn } from "node:child_process";
-import { mkdir, lstat, readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, lstat, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   createAgentSession,
   createBashToolDefinition,
+  createCodemodeExtension,
   createEditToolDefinition,
   createFindToolDefinition,
   createGrepToolDefinition,
+  createLocalBashOperations,
   createLsToolDefinition,
+  createMcpExtension,
   createReadToolDefinition,
+  createToolSearchExtension,
   createWriteToolDefinition,
   DefaultResourceLoader,
   ModelRuntime,
   SessionManager,
   SettingsManager,
   type AgentSessionEvent,
+  type LoadedMcpConfig,
   type ToolDefinition
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -24,7 +28,6 @@ import {
   readText,
   resolveSafeExistingPath,
   resolveSafeTargetPath,
-  searchFiles,
   toRootRelative
 } from "@zos/nas-tools";
 import type {
@@ -57,9 +60,10 @@ export interface PiAgentEmitEvent {
 }
 
 export interface PiAgentTurnResult {
-  status: "completed" | "failed" | "cancelled";
+  status: "completed" | "failed" | "cancelled" | "waiting_approval";
   summary?: string;
   error?: string;
+  runId?: string;
 }
 
 export interface PiAgentInput {
@@ -82,8 +86,17 @@ export interface PiAgentInput {
   createToolApproval: (approval: PiToolCallApproval) => Promise<PendingApprovalRecord>;
   getApprovalStatus: (approvalId: string) => Promise<ApprovalStatus | null> | ApprovalStatus | null;
   markWaitingForApproval?: () => void | Promise<void>;
+  onCapabilityRunPending?: (runId: string, providerSessionId: string) => void | Promise<void>;
   photostaffTools?: PhotostaffAgentToolService;
+  mcp?: PiMcpRuntimeSettings;
   runner?: PiAgentRunner;
+}
+
+export interface PiMcpRuntimeSettings {
+  enabled: boolean;
+  url: string;
+  tokenFile: string;
+  legacyToolsEnabled: boolean;
 }
 
 export interface PhotostaffAgentToolService {
@@ -107,7 +120,9 @@ export interface PiAgentRuntimeInput {
   createToolApproval: PiAgentInput["createToolApproval"];
   getApprovalStatus: PiAgentInput["getApprovalStatus"];
   markWaitingForApproval?: PiAgentInput["markWaitingForApproval"];
+  onCapabilityRunPending?: PiAgentInput["onCapabilityRunPending"];
   photostaffTools?: PhotostaffAgentToolService;
+  mcp?: PiMcpRuntimeSettings;
 }
 
 type TextToolResult = {
@@ -115,7 +130,18 @@ type TextToolResult = {
   details: unknown;
 };
 
-const ALL_PI_TOOL_NAMES: PiToolName[] = ["read", "bash", "edit", "write", "grep", "find", "ls"];
+const LEGACY_PI_TOOL_NAMES: PiToolName[] = ["read", "bash", "edit", "write", "grep", "find", "ls"];
+const PHOTOSTAFF_TOOL_NAMES = ["search_photostaff", "get_photostaff_metadata"] as const;
+const DIRECT_MCP_TOOLS = [
+  "zos.catalog.get",
+  "zos.system.status",
+  "zos.roots.list",
+  "zos.files.list",
+  "zos.files.stat",
+  "zos.files.read",
+  "zos.files.search",
+  "zos.runs.get"
+] as const;
 const APPROVAL_POLL_MS = 500;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 type PiProviderConfig = Parameters<ModelRuntime["registerProvider"]>[1];
@@ -176,6 +202,7 @@ function configuredProviderModel(settings: ModelProviderSettingsRecord): NonNull
 async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTurnResult> {
   let latestAssistantText = "";
   let started = false;
+  let pendingRunId: string | null = null;
 
   try {
     if (!input.modelSettings.apiKey) {
@@ -215,11 +242,23 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
       ...(input.modelSettings.model ? { defaultModel: input.modelSettings.model } : {}),
       defaultProjectTrust: "never"
     });
+    const mcpConfig = input.mcp?.enabled ? await loadControlledPiMcpConfig(input.mcp) : null;
+    const legacyToolsEnabled = !input.mcp?.enabled || input.mcp.legacyToolsEnabled;
     const resourceLoader = new DefaultResourceLoader({
       cwd: input.root.path,
       agentDir: piAgentDir,
       settingsManager,
       noExtensions: true,
+      extensionFactories: mcpConfig ? [
+        createCodemodeExtension({ mode: "on", models: false }),
+        createToolSearchExtension(),
+        createMcpExtension({
+          loadConfig: () => mcpConfig,
+          updateConfig: () => undefined,
+          logPath: path.join(piAgentDir, "mcp.log"),
+          startupWaitMs: 10_000
+        })
+      ] : [],
       noSkills: true,
       noPromptTemplates: true,
       noThemes: true,
@@ -227,8 +266,9 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
       appendSystemPrompt: [
         [
           "You are running inside ZOS.",
-          "All filesystem access must go through ZOS tools and stay inside the configured NAS root.",
-          "Use bash, edit, and write only when needed; ZOS will ask the user for approval before executing them."
+          "Use the ZOS MCP server for NAS and system capabilities. Paths are always relative to a selected NAS root.",
+          "Mutating capabilities return durable runs and require approval in the first-party ZOS UI.",
+          "Never request or include passwords, API keys, Wi-Fi secrets, registry tokens, or host absolute paths."
         ].join("\n")
       ]
     });
@@ -239,8 +279,12 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
       agentDir: piAgentDir,
       modelRuntime,
       ...(model ? { model } : {}),
-      tools: ALL_PI_TOOL_NAMES,
-      customTools: createZosPiTools(input),
+      tools: [
+        ...(mcpConfig ? ["codemode", "tool_search"] : []),
+        ...(legacyToolsEnabled ? LEGACY_PI_TOOL_NAMES : []),
+        ...(legacyToolsEnabled && input.photostaffTools ? PHOTOSTAFF_TOOL_NAMES : [])
+      ],
+      customTools: legacyToolsEnabled ? createZosPiTools(input) : [],
       resourceLoader,
       settingsManager,
       sessionManager
@@ -261,11 +305,22 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
         },
         onAssistantMessage: (content) => {
           latestAssistantText = content;
+        },
+        onCapabilityRunPending: async (runId) => {
+          if (pendingRunId) return;
+          pendingRunId = runId;
+          await input.onCapabilityRunPending?.(runId, piSession.sessionId);
+          await input.emit({
+            type: "approval.pending",
+            payload: { kind: "capability_run", runId }
+          });
+          await piSession.abort();
         }
       });
     });
 
     try {
+      await piSession.bindExtensions({});
       await piSession.prompt(input.message);
       await piSession.waitForIdle();
     } finally {
@@ -275,6 +330,9 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
 
     if (input.isCancelled()) {
       return { status: "cancelled" };
+    }
+    if (pendingRunId) {
+      return { status: "waiting_approval", runId: pendingRunId };
     }
     if (latestAssistantText) {
       await input.emit({
@@ -302,6 +360,9 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
     if (input.isCancelled()) {
       return { status: "cancelled" };
     }
+    if (pendingRunId) {
+      return { status: "waiting_approval", runId: pendingRunId };
+    }
     const message = error instanceof Error ? error.message : String(error);
     if (!started) {
       await input.emit({
@@ -325,9 +386,49 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
   }
 }
 
-function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
+export async function loadControlledPiMcpConfig(settings: PiMcpRuntimeSettings): Promise<LoadedMcpConfig> {
+  const tokenStat = await stat(settings.tokenFile);
+  if (!tokenStat.isFile()) {
+    throw new Error("ZOS Pi MCP token path is not a regular file");
+  }
+  if ((tokenStat.mode & 0o077) !== 0) {
+    throw new Error("ZOS Pi MCP token file permissions must be 0600");
+  }
+  const token = (await readFile(settings.tokenFile, "utf8")).trim();
+  if (!/^zos_mcp_[A-Za-z0-9_-]{40,}$/u.test(token)) {
+    throw new Error("ZOS Pi MCP token file is invalid");
+  }
+  return {
+    servers: [{
+      name: "zos",
+      source: "zos:internal",
+      scope: "global",
+      config: {
+        type: "http",
+        url: settings.url,
+        headers: { Authorization: `Bearer ${token}` },
+        exposure: "codemode",
+        description: "ZOS NAS capabilities, durable runs, resources, and approval-gated proposals.",
+        toolExposure: Object.fromEntries(DIRECT_MCP_TOOLS.map((name) => [name, "direct" as const]))
+      }
+    }],
+    autoEnableCodemode: true,
+    errors: []
+  };
+}
+
+export function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
   const read = createReadToolDefinition(input.root.path);
-  const bash = createBashToolDefinition(input.root.path);
+  const localBash = createLocalBashOperations({ shellPath: "/bin/bash" });
+  const bash = createBashToolDefinition(input.root.path, {
+    exposeSessionEnvironment: false,
+    operations: {
+      exec: (command, cwd, options) => localBash.exec(command, cwd, {
+        ...options,
+        env: safeShellEnvironment(cwd)
+      })
+    }
+  });
   const edit = createEditToolDefinition(input.root.path);
   const write = createWriteToolDefinition(input.root.path);
   const grep = createGrepToolDefinition(input.root.path);
@@ -336,88 +437,95 @@ function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
 
   const readTool = {
       ...read,
-      execute: async (_toolCallId: string, params: Parameters<typeof read.execute>[1]) => {
-        if (input.toolPolicy.read === "disabled") {
-          return textResult("ZOS policy denied read.");
-        }
-        const preview = await readText(input.root, params.path, MAX_TOOL_OUTPUT_BYTES);
-        const content = sliceLines(preview.content, params.offset, params.limit);
-        return textResult(content + (preview.truncated ? "\n\n[Output truncated]" : ""), {
-          truncation: preview.truncated ? { truncated: true } : undefined
-        });
-      }
+      execute: async (toolCallId: string, params: Parameters<typeof read.execute>[1]) =>
+        withReadToolPolicy(input, {
+          toolCallId,
+          toolName: "read",
+          args: { ...params },
+          summary: `Read ${params.path}`,
+          execute: async () => {
+            const preview = await readText(input.root, params.path, MAX_TOOL_OUTPUT_BYTES);
+            const content = sliceLines(preview.content, params.offset, params.limit);
+            return textResult(content + (preview.truncated ? "\n\n[Output truncated]" : ""), {
+              truncation: preview.truncated ? { truncated: true } : undefined
+            });
+          }
+        })
     } as typeof read;
   const lsTool = {
       ...ls,
-      execute: async (_toolCallId: string, params: Parameters<typeof ls.execute>[1]) => {
-        if (input.toolPolicy.ls === "disabled") {
-          return textResult("ZOS policy denied ls.");
-        }
-        const entries = await listDir(input.root, params.path ?? ".");
-        const limit = params.limit ?? 100;
-        return textResult(
-          entries
-            .slice(0, limit)
-            .map((entry) => `${entry.kind.padEnd(9)} ${entry.path}`)
-            .join("\n") || "(empty)",
-          {
-            entryLimitReached: entries.length > limit ? limit : undefined
+      execute: async (toolCallId: string, params: Parameters<typeof ls.execute>[1]) =>
+        withReadToolPolicy(input, {
+          toolCallId,
+          toolName: "ls",
+          args: { ...params },
+          summary: `List ${params.path ?? "."}`,
+          execute: async () => {
+            const entries = await listDir(input.root, params.path ?? ".");
+            const limit = params.limit ?? 100;
+            return textResult(
+              entries
+                .slice(0, limit)
+                .map((entry) => `${entry.kind.padEnd(9)} ${entry.path}`)
+                .join("\n") || "(empty)",
+              {
+                entryLimitReached: entries.length > limit ? limit : undefined
+              }
+            );
           }
-        );
-      }
+        })
     } as typeof ls;
   const findTool = {
       ...find,
-      execute: async (_toolCallId: string, params: Parameters<typeof find.execute>[1]) => {
-        if (input.toolPolicy.find === "disabled") {
-          return textResult("ZOS policy denied find.");
-        }
-        const query = params.pattern.replaceAll("*", "").trim() || params.pattern;
-        const matches = await searchFiles(input.root, {
-          path: params.path ?? ".",
-          query,
-          limit: params.limit ?? 100
-        });
-        return textResult(matches.map((entry) => entry.path).join("\n") || "No matches.", {
-          resultLimitReached: matches.length >= (params.limit ?? 100) ? params.limit ?? 100 : undefined
-        });
-      }
+      execute: async (toolCallId: string, params: Parameters<typeof find.execute>[1]) =>
+        withReadToolPolicy(input, {
+          toolCallId,
+          toolName: "find",
+          args: { ...params },
+          summary: `Find ${params.pattern} in ${params.path ?? "."}`,
+          execute: async () => {
+            const limit = Math.max(1, Math.min(params.limit ?? 100, 1_000));
+            const matches = await globNasRoot(input.root, params.path ?? ".", params.pattern, limit);
+            return textResult(matches.join("\n") || "No matches.", {
+              resultLimitReached: matches.length >= limit ? limit : undefined
+            });
+          }
+        })
     } as typeof find;
   const grepTool = {
       ...grep,
-      execute: async (_toolCallId: string, params: Parameters<typeof grep.execute>[1]) => {
-        if (input.toolPolicy.grep === "disabled") {
-          return textResult("ZOS policy denied grep.");
-        }
-        const matches = await grepNasRoot(input.root, {
-          pattern: params.pattern,
-          path: params.path ?? ".",
-          ignoreCase: Boolean(params.ignoreCase),
-          literal: Boolean(params.literal),
-          limit: params.limit ?? 100
-        });
-        return textResult(matches.join("\n") || "No matches.", {
-          matchLimitReached: matches.length >= (params.limit ?? 100) ? params.limit ?? 100 : undefined
-        });
-      }
+      execute: async (toolCallId: string, params: Parameters<typeof grep.execute>[1]) =>
+        withReadToolPolicy(input, {
+          toolCallId,
+          toolName: "grep",
+          args: { ...params },
+          summary: `Search text in ${params.path ?? "."}`,
+          execute: async () => {
+            const matches = await grepNasRoot(input.root, {
+              pattern: params.pattern,
+              path: params.path ?? ".",
+              ignoreCase: Boolean(params.ignoreCase),
+              literal: Boolean(params.literal),
+              limit: params.limit ?? 100
+            });
+            return textResult(matches.join("\n") || "No matches.", {
+              matchLimitReached: matches.length >= (params.limit ?? 100) ? params.limit ?? 100 : undefined
+            });
+          }
+        })
     } as typeof grep;
   const bashTool = {
       ...bash,
       executionMode: "sequential",
-      execute: async (toolCallId: string, params: Parameters<typeof bash.execute>[1]) => {
+      execute: async (...executeArgs: Parameters<typeof bash.execute>) => {
+        const [toolCallId, params] = executeArgs;
         return withApproval(input, {
           toolCallId,
           toolName: "bash",
           args: { ...params },
           risk: commandRisk(params.command),
-          summary: `Run shell command: ${params.command}`,
-          execute: async () => {
-            const cwd = await resolveSafeExistingPath(input.root.path, ".");
-            const result = await runBash(params.command, cwd.realPath, params.timeout);
-            return textResult(result.output, {
-              fullOutputPath: undefined
-            });
-          }
+          summary: `Run an approved shell command (${Buffer.byteLength(params.command, "utf8")} bytes)`,
+          execute: async () => bash.execute(...executeArgs) as Promise<TextToolResult>
         });
       }
     } as typeof bash;
@@ -607,7 +715,7 @@ async function withApproval(
   input: PiAgentRuntimeInput,
   approval: {
     toolCallId: string;
-    toolName: "bash" | "edit" | "write";
+    toolName: PiToolName;
     args: Record<string, unknown>;
     risk: "low" | "medium" | "high";
     summary: string;
@@ -621,8 +729,8 @@ async function withApproval(
   const request = await input.createToolApproval({
     toolCallId: approval.toolCallId,
     toolName: approval.toolName,
-    args: redactToolArgs(approval.toolName, approval.args),
-    cwd: input.root.path,
+    args: redactPiToolArgs(approval.toolName, approval.args),
+    cwd: ".",
     risk: approval.risk,
     summary: approval.summary
   });
@@ -648,6 +756,22 @@ async function withApproval(
   return approval.execute();
 }
 
+async function withReadToolPolicy(
+  input: PiAgentRuntimeInput,
+  operation: {
+    toolCallId: string;
+    toolName: Extract<PiToolName, "read" | "grep" | "find" | "ls">;
+    args: Record<string, unknown>;
+    summary: string;
+    execute: () => Promise<TextToolResult>;
+  }
+): Promise<TextToolResult> {
+  const policy = input.toolPolicy[operation.toolName];
+  if (policy === "disabled") return textResult(`ZOS policy denied ${operation.toolName}.`);
+  if (policy === "auto") return operation.execute();
+  return withApproval(input, { ...operation, risk: "low" });
+}
+
 async function waitForApprovalDecision(input: PiAgentRuntimeInput, approvalId: string): Promise<ApprovalStatus> {
   while (!input.isCancelled()) {
     const status = await input.getApprovalStatus(approvalId);
@@ -668,6 +792,7 @@ async function mapPiEvent(
   callbacks: {
     onStarted: () => void;
     onAssistantMessage: (content: string) => void;
+    onCapabilityRunPending: (runId: string) => void | Promise<void>;
   }
 ): Promise<void> {
   if (event.type === "agent_start") {
@@ -687,7 +812,7 @@ async function mapPiEvent(
       payload: {
         id: event.toolCallId,
         name: event.toolName,
-        input: event.args,
+        input: redactPiToolArgs(event.toolName, event.args),
         debug: compactPiEvent(event)
       }
     });
@@ -699,15 +824,36 @@ async function mapPiEvent(
       payload: {
         id: event.toolCallId,
         name: event.toolName,
-        output: event.result,
+        output: redactSensitiveValue(event.result),
         debug: compactPiEvent(event)
       }
     });
+    const pendingRunId = capabilityPendingRunId(event.result);
+    if (pendingRunId) await callbacks.onCapabilityRunPending(pendingRunId);
     return;
   }
   if (event.type === "message_end" && event.message.role === "assistant") {
     callbacks.onAssistantMessage(extractAssistantText(event.message));
   }
+}
+
+export function capabilityPendingRunId(result: unknown): string | null {
+  let candidate = result;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!candidate || typeof candidate !== "object") return null;
+    const record = candidate as Record<string, unknown>;
+    const data = record.data;
+    if (
+      typeof record.runId === "string"
+      && data !== null
+      && typeof data === "object"
+      && (data as Record<string, unknown>).state === "waiting_approval"
+    ) {
+      return record.runId;
+    }
+    candidate = record.structuredContent;
+  }
+  return null;
 }
 
 function extractAssistantText(message: { content?: unknown }): string {
@@ -777,6 +923,45 @@ async function grepNasRoot(
         matches.push(`${relativePath}:${index + 1}:${line}`);
       }
     });
+  }
+
+  await visit(safe.realPath);
+  return matches;
+}
+
+async function globNasRoot(
+  root: NasRootRecord,
+  requestedPath: string,
+  pattern: string,
+  limit: number
+): Promise<string[]> {
+  if (!pattern.trim() || pattern.includes("\0")) {
+    throw new Error("find pattern must be a non-empty glob");
+  }
+  const safe = await resolveSafeExistingPath(root.path, requestedPath);
+  const matches: string[] = [];
+  const matchesPath = (relativePath: string) => {
+    const normalized = relativePath.split(path.sep).join("/");
+    return path.matchesGlob(normalized, pattern)
+      || (!pattern.includes("/") && path.matchesGlob(path.posix.basename(normalized), pattern));
+  };
+
+  async function visit(absolutePath: string): Promise<void> {
+    if (matches.length >= limit) return;
+    const entryStat = await lstat(absolutePath);
+    if (entryStat.isSymbolicLink()) return;
+    const relativePath = path.relative(safe.realPath, absolutePath);
+    if (relativePath && matchesPath(relativePath)) {
+      matches.push(relativePath.split(path.sep).join("/"));
+    }
+    if (!entryStat.isDirectory()) return;
+    const entries = await readdir(absolutePath, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      if (entry.name === ".git" || entry.name === "node_modules") continue;
+      await visit(path.join(absolutePath, entry.name));
+      if (matches.length >= limit) return;
+    }
   }
 
   await visit(safe.realPath);
@@ -860,40 +1045,17 @@ async function assertClosestExistingParentInside(rootRealPath: string, absoluteP
   throw new Error("Mutation target parent does not exist inside the NAS root");
 }
 
-async function runBash(command: string, cwd: string, timeout?: number): Promise<{ output: string; exitCode: number | null }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, {
-      cwd,
-      shell: true,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    let output = "";
-    const timeoutMs = timeout && timeout > 0 ? timeout : 120_000;
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-    }, timeoutMs);
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
-      output = truncateText(output);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
-      output = truncateText(output);
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("close", (exitCode) => {
-      clearTimeout(timer);
-      resolve({
-        exitCode,
-        output: `exitCode=${exitCode ?? "killed"}\n${output}`
-      });
-    });
-  });
+function safeShellEnvironment(cwd: string): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {
+    HOME: cwd,
+    PATH: "/usr/local/bin:/usr/bin:/bin",
+    TMPDIR: "/tmp"
+  };
+  for (const name of ["LANG", "LC_ALL", "TZ"] as const) {
+    const value = process.env[name];
+    if (value && /^[A-Za-z0-9_+./:@-]{1,128}$/u.test(value)) environment[name] = value;
+  }
+  return environment;
 }
 
 function commandRisk(command: string): "low" | "medium" | "high" {
@@ -902,14 +1064,64 @@ function commandRisk(command: string): "low" | "medium" | "high" {
     : "medium";
 }
 
-function redactToolArgs(toolName: PiToolName, args: Record<string, unknown>): Record<string, unknown> {
-  if (toolName !== "write" || typeof args.content !== "string") {
-    return args;
+export function redactPiToolArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+  const redacted = redactSensitiveValue(args) as Record<string, unknown>;
+  if (toolName === "bash" && typeof args.command === "string") {
+    return {
+      ...redacted,
+      command: `[${Buffer.byteLength(args.command, "utf8")} byte command redacted]`
+    };
   }
-  return {
-    ...args,
-    content: `[${Buffer.byteLength(args.content, "utf8")} bytes]`
-  };
+  if (toolName === "write" && typeof args.content === "string") {
+    return {
+      ...redacted,
+      content: `[${Buffer.byteLength(args.content, "utf8")} bytes]`
+    };
+  }
+  if (toolName === "edit" && Array.isArray(args.edits)) {
+    return {
+      ...redacted,
+      edits: `[${args.edits.length} edit${args.edits.length === 1 ? "" : "s"} redacted]`
+    };
+  }
+  return redacted;
+}
+
+function redactSensitiveValue(value: unknown, seen = new WeakSet<object>(), depth = 0): unknown {
+  if (depth > 12) return "[nested value redacted]";
+  if (Array.isArray(value)) return value.map((item) => redactSensitiveValue(item, seen, depth + 1));
+  if (!value || typeof value !== "object") return value;
+  if (seen.has(value)) return "[circular value redacted]";
+  seen.add(value);
+  const entries = Object.entries(value).map(([key, item]) => {
+    if (isSecretField(key)) return [key, "[redacted]"];
+    if (isUrlField(key) && typeof item === "string") return [key, redactAuditUrl(item)];
+    return [key, redactSensitiveValue(item, seen, depth + 1)];
+  });
+  return Object.fromEntries(entries);
+}
+
+function isSecretField(key: string): boolean {
+  const normalized = key.replaceAll(/([a-z0-9])([A-Z])/gu, "$1_$2").toLowerCase();
+  return /(^|[_-])(password|passphrase|secret|token|api[_-]?key|authorization|cookie|private[_-]?key|psk)($|[_-])/u.test(normalized);
+}
+
+function isUrlField(key: string): boolean {
+  const normalized = key.replaceAll(/([a-z0-9])([A-Z])/gu, "$1_$2").toLowerCase();
+  return normalized === "url" || normalized.endsWith("_url");
+}
+
+function redactAuditUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return "[configured URL]";
+  }
 }
 
 function settingsSnapshot(settings: ModelProviderSettingsRecord): Record<string, unknown> {

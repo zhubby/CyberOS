@@ -1,0 +1,533 @@
+import { createHash, randomUUID } from "node:crypto";
+import type { CapabilityErrorCode, CapabilityRisk, CapabilityRunState, JsonValue } from "@zos/capabilities";
+import type { ZosDatabase } from "../connection.js";
+
+export interface CapabilityRunRecord {
+  id: string;
+  clientId: string | null;
+  subjectId: string;
+  subjectKind: "pi" | "local" | "lan" | "system";
+  capabilityId: string;
+  state: CapabilityRunState;
+  risk: CapabilityRisk;
+  input: JsonValue;
+  inputDigest: string;
+  idempotencyKey: string | null;
+  progress: JsonValue;
+  domainOperationType: string | null;
+  domainOperationId: string | null;
+  result: JsonValue | null;
+  errorCode: CapabilityErrorCode | null;
+  errorMessage: string | null;
+  revision: number;
+  cancellable: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string;
+}
+
+export interface CapabilityApprovalRecord {
+  id: string;
+  runId: string;
+  status: "pending" | "approved" | "rejected" | "expired" | "failed";
+  proposal: JsonValue;
+  risk: Exclude<CapabilityRisk, "read">;
+  revision: number;
+  requiresConfirmation: boolean;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CapabilityRunRow {
+  id: string;
+  client_id: string | null;
+  subject_id: string;
+  subject_kind: CapabilityRunRecord["subjectKind"];
+  capability_id: string;
+  state: CapabilityRunState;
+  risk: CapabilityRisk;
+  input_json: string;
+  input_digest: string;
+  idempotency_key: string | null;
+  progress_json: string;
+  domain_operation_type: string | null;
+  domain_operation_id: string | null;
+  result_json: string | null;
+  error_code: CapabilityErrorCode | null;
+  error_message: string | null;
+  revision: number;
+  cancellable: 0 | 1;
+  expires_at: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+}
+
+interface CapabilityApprovalRow {
+  id: string;
+  run_id: string;
+  status: CapabilityApprovalRecord["status"];
+  proposal_json: string;
+  risk: CapabilityApprovalRecord["risk"];
+  revision: number;
+  requires_confirmation: 0 | 1;
+  decided_by: string | null;
+  decided_at: string | null;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const TERMINAL_STATES: readonly CapabilityRunState[] = ["succeeded", "failed", "cancelled", "expired"];
+
+export function createCapabilityRun(db: ZosDatabase, input: {
+  clientId?: string | null;
+  subjectId: string;
+  subjectKind: CapabilityRunRecord["subjectKind"];
+  capabilityId: string;
+  risk: CapabilityRisk;
+  redactedInput: JsonValue;
+  idempotencyKey?: string | null;
+  state?: Extract<CapabilityRunState, "queued" | "running">;
+  cancellable?: boolean;
+  expiresAt?: string | null;
+}): CapabilityRunRecord {
+  const inputJson = stableJson(input.redactedInput);
+  if (input.idempotencyKey && input.clientId) {
+    const existing = db.prepare(`
+      SELECT * FROM capability_runs
+      WHERE client_id = ? AND capability_id = ? AND idempotency_key = ?
+    `).get(input.clientId, input.capabilityId, input.idempotencyKey) as CapabilityRunRow | undefined;
+    if (existing) {
+      if (existing.input_digest !== digestJson(inputJson)) throw new Error("Idempotency key conflicts with different input");
+      return mapRun(existing);
+    }
+  }
+  const now = new Date().toISOString();
+  const run: CapabilityRunRecord = {
+    id: randomUUID(),
+    clientId: input.clientId ?? null,
+    subjectId: input.subjectId,
+    subjectKind: input.subjectKind,
+    capabilityId: input.capabilityId,
+    state: input.state ?? "queued",
+    risk: input.risk,
+    input: input.redactedInput,
+    inputDigest: digestJson(inputJson),
+    idempotencyKey: input.idempotencyKey ?? null,
+    progress: {},
+    domainOperationType: null,
+    domainOperationId: null,
+    result: null,
+    errorCode: null,
+    errorMessage: null,
+    revision: 1,
+    cancellable: input.cancellable ?? true,
+    expiresAt: input.expiresAt ?? null,
+    createdAt: now,
+    startedAt: input.state === "running" ? now : null,
+    finishedAt: null,
+    updatedAt: now
+  };
+  const tx = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO capability_runs (
+        id, client_id, subject_id, subject_kind, capability_id, state, risk, input_json, input_digest,
+        idempotency_key, progress_json, revision, cancellable, expires_at, created_at, started_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, ?, ?, ?, ?, ?)
+    `).run(run.id, run.clientId, run.subjectId, run.subjectKind, run.capabilityId, run.state, run.risk,
+      inputJson, run.inputDigest, run.idempotencyKey, run.cancellable ? 1 : 0, run.expiresAt, now, run.startedAt, now);
+    appendCapabilityRunEvent(db, run.id, "run.created", { state: run.state });
+  });
+  tx();
+  return run;
+}
+
+export function createCapabilityProposal(db: ZosDatabase, input: {
+  clientId: string;
+  subjectId: string;
+  subjectKind: "pi" | "local" | "lan";
+  capabilityId: string;
+  risk: Exclude<CapabilityRisk, "read">;
+  redactedInput: JsonValue;
+  proposal: JsonValue;
+  idempotencyKey?: string | null;
+  requiresConfirmation?: boolean;
+  expiresAt: string;
+}): { run: CapabilityRunRecord; approval: CapabilityApprovalRecord } {
+  const tx = db.transaction(() => {
+    const created = createCapabilityRun(db, {
+      clientId: input.clientId,
+      subjectId: input.subjectId,
+      subjectKind: input.subjectKind,
+      capabilityId: input.capabilityId,
+      risk: input.risk,
+      redactedInput: input.redactedInput,
+      ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
+      expiresAt: input.expiresAt
+    });
+    const existingApproval = getCapabilityApprovalByRun(db, created.id);
+    if (existingApproval) return { run: getCapabilityRun(db, created.id)!, approval: existingApproval };
+    const now = new Date().toISOString();
+    const approval: CapabilityApprovalRecord = {
+      id: randomUUID(),
+      runId: created.id,
+      status: "pending",
+      proposal: input.proposal,
+      risk: input.risk,
+      revision: 1,
+      requiresConfirmation: input.requiresConfirmation ?? false,
+      decidedBy: null,
+      decidedAt: null,
+      expiresAt: input.expiresAt,
+      createdAt: now,
+      updatedAt: now
+    };
+    db.prepare(`
+      INSERT INTO capability_approvals (
+        id, run_id, status, proposal_json, risk, revision, requires_confirmation, expires_at, created_at, updated_at
+      ) VALUES (?, ?, 'pending', ?, ?, 1, ?, ?, ?, ?)
+    `).run(approval.id, approval.runId, stableJson(approval.proposal), approval.risk,
+      approval.requiresConfirmation ? 1 : 0, approval.expiresAt, now, now);
+    db.prepare(`
+      UPDATE capability_runs SET state = 'waiting_approval', updated_at = ?, revision = revision + 1
+      WHERE id = ? AND state = 'queued'
+    `).run(now, created.id);
+    appendCapabilityRunEvent(db, created.id, "approval.requested", { approvalId: approval.id, revision: 1 });
+    return { run: getCapabilityRun(db, created.id)!, approval };
+  });
+  return tx();
+}
+
+export function getCapabilityRun(db: ZosDatabase, runId: string): CapabilityRunRecord | null {
+  const row = db.prepare("SELECT * FROM capability_runs WHERE id = ?").get(runId) as CapabilityRunRow | undefined;
+  return row ? mapRun(row) : null;
+}
+
+export function getOwnedCapabilityRun(db: ZosDatabase, clientId: string, runId: string): CapabilityRunRecord | null {
+  const row = db.prepare("SELECT * FROM capability_runs WHERE id = ? AND client_id = ?").get(runId, clientId) as CapabilityRunRow | undefined;
+  return row ? mapRun(row) : null;
+}
+
+export function listOwnedCapabilityRuns(db: ZosDatabase, input: {
+  clientId: string;
+  limit?: number;
+  before?: { createdAt: string; id: string };
+}): CapabilityRunRecord[] {
+  const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
+  const rows = input.before
+    ? db.prepare(`
+        SELECT * FROM capability_runs
+        WHERE client_id = ? AND (created_at < ? OR (created_at = ? AND id < ?))
+        ORDER BY created_at DESC, id DESC LIMIT ?
+      `).all(input.clientId, input.before.createdAt, input.before.createdAt, input.before.id, limit)
+    : db.prepare(`SELECT * FROM capability_runs WHERE client_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`).all(input.clientId, limit);
+  return (rows as CapabilityRunRow[]).map(mapRun);
+}
+
+export function cancelOwnedCapabilityRun(db: ZosDatabase, clientId: string, runId: string): CapabilityRunRecord | null {
+  const now = new Date().toISOString();
+  const tx = db.transaction(() => {
+    const result = db.prepare(`
+      UPDATE capability_runs
+      SET state = 'cancelled', error_code = 'CANCELLED', error_message = 'Cancelled by client',
+          cancellable = 0, finished_at = ?, updated_at = ?, revision = revision + 1
+      WHERE id = ? AND client_id = ? AND cancellable = 1
+        AND state IN ('queued', 'running', 'waiting_approval')
+    `).run(now, now, runId, clientId);
+    if (result.changes !== 1) return null;
+    db.prepare(`UPDATE capability_approvals SET status = 'expired', updated_at = ? WHERE run_id = ? AND status = 'pending'`).run(now, runId);
+    appendCapabilityRunEvent(db, runId, "run.cancelled", {});
+    return getCapabilityRun(db, runId);
+  });
+  return tx();
+}
+
+export function transitionCapabilityRun(db: ZosDatabase, input: {
+  runId: string;
+  expectedRevision: number;
+  from: readonly CapabilityRunState[];
+  to: CapabilityRunState;
+  progress?: JsonValue;
+  result?: JsonValue | null;
+  errorCode?: CapabilityErrorCode | null;
+  errorMessage?: string | null;
+  cancellable?: boolean;
+  domainOperationType?: string | null;
+  domainOperationId?: string | null;
+}): CapabilityRunRecord | null {
+  const now = new Date().toISOString();
+  const terminal = TERMINAL_STATES.includes(input.to);
+  const placeholders = input.from.map(() => "?").join(", ");
+  const result = db.prepare(`
+    UPDATE capability_runs SET
+      state = ?, progress_json = COALESCE(?, progress_json), result_json = ?, error_code = ?, error_message = ?,
+      cancellable = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(?, cancellable) END,
+      domain_operation_type = COALESCE(?, domain_operation_type),
+      domain_operation_id = COALESCE(?, domain_operation_id), started_at = CASE WHEN ? = 'running' THEN COALESCE(started_at, ?) ELSE started_at END,
+      finished_at = CASE WHEN ? = 1 THEN ? ELSE finished_at END, updated_at = ?, revision = revision + 1
+    WHERE id = ? AND revision = ? AND state IN (${placeholders})
+  `).run(input.to, input.progress === undefined ? null : stableJson(input.progress), input.result === undefined ? null : stableJson(input.result),
+    input.errorCode ?? null, input.errorMessage ?? null, terminal ? 1 : 0,
+    input.cancellable === undefined ? null : input.cancellable ? 1 : 0,
+    input.domainOperationType ?? null, input.domainOperationId ?? null, input.to, now, terminal ? 1 : 0, now, now,
+    input.runId, input.expectedRevision, ...input.from);
+  if (result.changes !== 1) return null;
+  appendCapabilityRunEvent(db, input.runId, `run.${input.to}`, input.progress ?? {});
+  return getCapabilityRun(db, input.runId);
+}
+
+export function getCapabilityApprovalByRun(db: ZosDatabase, runId: string): CapabilityApprovalRecord | null {
+  const row = db.prepare("SELECT * FROM capability_approvals WHERE run_id = ?").get(runId) as CapabilityApprovalRow | undefined;
+  return row ? mapApproval(row) : null;
+}
+
+export function listPendingCapabilityApprovals(db: ZosDatabase): Array<CapabilityApprovalRecord & { run: CapabilityRunRecord }> {
+  const rows = db.prepare("SELECT * FROM capability_approvals WHERE status = 'pending' ORDER BY created_at, id").all() as CapabilityApprovalRow[];
+  return rows.flatMap((row) => {
+    const run = getCapabilityRun(db, row.run_id);
+    return run ? [{ ...mapApproval(row), run }] : [];
+  });
+}
+
+export function expireCapabilityApprovals(db: ZosDatabase, now = new Date().toISOString()): number {
+  const tx = db.transaction(() => {
+    const rows = db.prepare(`
+      SELECT a.id, a.run_id FROM capability_approvals a
+      JOIN capability_runs r ON r.id = a.run_id
+      WHERE a.status = 'pending' AND a.expires_at <= ? AND r.state = 'waiting_approval'
+      ORDER BY a.expires_at, a.id
+    `).all(now) as Array<{ id: string; run_id: string }>;
+    if (rows.length === 0) return 0;
+    const expireApproval = db.prepare(`
+      UPDATE capability_approvals
+      SET status = 'expired', updated_at = ?, revision = revision + 1
+      WHERE id = ? AND status = 'pending' AND expires_at <= ?
+    `);
+    const expireRun = db.prepare(`
+      UPDATE capability_runs
+      SET state = 'expired', error_code = 'APPROVAL_EXPIRED',
+        error_message = 'Approval expired before a first-party decision', cancellable = 0,
+        finished_at = ?, updated_at = ?, revision = revision + 1
+      WHERE id = ? AND state = 'waiting_approval'
+    `);
+    let expired = 0;
+    for (const row of rows) {
+      if (expireApproval.run(now, row.id, now).changes !== 1) continue;
+      if (expireRun.run(now, now, row.run_id).changes !== 1) {
+        throw new Error(`Capability run ${row.run_id} changed while expiring its approval`);
+      }
+      appendCapabilityRunEvent(db, row.run_id, "approval.expired", { approvalId: row.id });
+      appendCapabilityRunEvent(db, row.run_id, "run.expired", { reason: "approval_expired" });
+      expired += 1;
+    }
+    return expired;
+  });
+  return tx.immediate();
+}
+
+export function listRunnableCapabilityRuns(db: ZosDatabase, limit = 50): CapabilityRunRecord[] {
+  const rows = db.prepare(`
+    SELECT r.* FROM capability_runs r
+    JOIN capability_approvals a ON a.run_id = r.id
+    WHERE r.state = 'queued' AND a.status = 'approved'
+    ORDER BY r.created_at, r.id LIMIT ?
+  `).all(Math.max(1, Math.min(limit, 200))) as CapabilityRunRow[];
+  return rows.map(mapRun);
+}
+
+export function failInterruptedCapabilityRuns(db: ZosDatabase): number {
+  const now = new Date().toISOString();
+  const rows = db.prepare("SELECT id FROM capability_runs WHERE state = 'running'").all() as Array<{ id: string }>;
+  if (rows.length === 0) return 0;
+  const tx = db.transaction(() => {
+    const update = db.prepare(`
+      UPDATE capability_runs SET state = 'failed', error_code = 'INTERNAL',
+        error_message = 'Execution was interrupted; destructive operations are not replayed automatically',
+        cancellable = 0, finished_at = ?, updated_at = ?, revision = revision + 1
+      WHERE id = ? AND state = 'running'
+    `);
+    let changed = 0;
+    for (const row of rows) {
+      const result = update.run(now, now, row.id);
+      if (result.changes === 1) {
+        changed += 1;
+        appendCapabilityRunEvent(db, row.id, "run.failed", { reason: "interrupted" });
+      }
+    }
+    return changed;
+  });
+  return tx();
+}
+
+export function decideCapabilityApproval(db: ZosDatabase, input: {
+  approvalId: string;
+  expectedRevision: number;
+  decision: "approved" | "rejected";
+  decidedBy: string;
+  confirmed?: boolean;
+}): { approval: CapabilityApprovalRecord; run: CapabilityRunRecord } | null {
+  const now = new Date().toISOString();
+  expireCapabilityApprovals(db, now);
+  const tx = db.transaction(() => {
+    const row = db.prepare("SELECT * FROM capability_approvals WHERE id = ?").get(input.approvalId) as CapabilityApprovalRow | undefined;
+    if (!row || row.status !== "pending" || row.revision !== input.expectedRevision || row.expires_at <= now) return null;
+    if (row.requires_confirmation === 1 && input.decision === "approved" && input.confirmed !== true) return null;
+    const run = getCapabilityRun(db, row.run_id);
+    if (!run || run.state !== "waiting_approval") return null;
+    const result = db.prepare(`
+      UPDATE capability_approvals
+      SET status = ?, decided_by = ?, decided_at = ?, updated_at = ?, revision = revision + 1
+      WHERE id = ? AND status = 'pending' AND revision = ?
+    `).run(input.decision, input.decidedBy, now, now, row.id, input.expectedRevision);
+    if (result.changes !== 1) return null;
+    let runResult;
+    if (input.decision === "approved") {
+      runResult = db.prepare(`
+        UPDATE capability_runs SET state = 'queued', updated_at = ?, revision = revision + 1
+        WHERE id = ? AND state = 'waiting_approval'
+      `).run(now, row.run_id);
+    } else {
+      runResult = db.prepare(`
+        UPDATE capability_runs SET state = 'failed', error_code = 'APPROVAL_REJECTED',
+          error_message = 'Rejected in ZOS', cancellable = 0,
+          finished_at = ?, updated_at = ?, revision = revision + 1
+        WHERE id = ? AND state = 'waiting_approval'
+      `).run(now, now, row.run_id);
+    }
+    if (runResult.changes !== 1) {
+      throw new Error(`Capability run ${row.run_id} changed while deciding its approval`);
+    }
+    appendCapabilityRunEvent(db, row.run_id, `approval.${input.decision}`, { approvalId: row.id });
+    const approval = db.prepare("SELECT * FROM capability_approvals WHERE id = ?").get(row.id) as CapabilityApprovalRow;
+    return { approval: mapApproval(approval), run: getCapabilityRun(db, row.run_id)! };
+  });
+  return tx.immediate();
+}
+
+export function linkAgentJobToCapabilityRun(db: ZosDatabase, input: { jobId: string; runId: string; providerSessionId?: string | null }): void {
+  db.prepare(`
+    INSERT INTO agent_capability_runs(job_id, run_id, provider_session_id, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(run_id) DO UPDATE SET provider_session_id = excluded.provider_session_id
+  `).run(input.jobId, input.runId, input.providerSessionId ?? null, new Date().toISOString());
+}
+
+export function getCapabilityRunForAgentJob(db: ZosDatabase, jobId: string): CapabilityRunRecord | null {
+  const row = db.prepare(`
+    SELECT r.* FROM capability_runs r
+    JOIN agent_capability_runs a ON a.run_id = r.id
+    WHERE a.job_id = ? ORDER BY a.created_at DESC LIMIT 1
+  `).get(jobId) as CapabilityRunRow | undefined;
+  return row ? mapRun(row) : null;
+}
+
+export function claimNextCapabilityContinuation(db: ZosDatabase): { jobId: string; run: CapabilityRunRecord } | null {
+  const now = new Date().toISOString();
+  const terminalStates = "'succeeded', 'failed', 'cancelled', 'expired'";
+  const tx = db.transaction(() => {
+    const candidate = db.prepare(`
+      SELECT j.id AS job_id, r.id AS run_id
+      FROM jobs j
+      JOIN agent_capability_runs a ON a.job_id = j.id
+      JOIN capability_runs r ON r.id = a.run_id
+      WHERE j.kind = 'agent' AND j.status = 'waiting_approval'
+        AND r.state IN (${terminalStates})
+        AND a.run_id = (
+          SELECT latest.run_id FROM agent_capability_runs latest
+          WHERE latest.job_id = j.id
+          ORDER BY latest.created_at DESC, latest.run_id DESC LIMIT 1
+        )
+      ORDER BY j.created_at, j.id LIMIT 1
+    `).get() as { job_id: string; run_id: string } | undefined;
+    if (!candidate) return null;
+    const updated = db.prepare(`
+      UPDATE jobs SET status = 'running', error = NULL, updated_at = ?
+      WHERE id = ? AND status = 'waiting_approval'
+    `).run(now, candidate.job_id);
+    if (updated.changes !== 1) return null;
+    const run = getCapabilityRun(db, candidate.run_id);
+    return run ? { jobId: candidate.job_id, run } : null;
+  });
+  return tx();
+}
+
+export function listCapabilityRunEvents(db: ZosDatabase, runId: string, afterId = 0): Array<{ id: number; type: string; payload: JsonValue; createdAt: string }> {
+  const rows = db.prepare(`
+    SELECT id, type, payload_json, created_at FROM capability_run_events
+    WHERE run_id = ? AND id > ? ORDER BY id LIMIT 500
+  `).all(runId, afterId) as Array<{ id: number; type: string; payload_json: string; created_at: string }>;
+  return rows.map((row) => ({ id: row.id, type: row.type, payload: JSON.parse(row.payload_json) as JsonValue, createdAt: row.created_at }));
+}
+
+function appendCapabilityRunEvent(db: ZosDatabase, runId: string, type: string, payload: JsonValue): void {
+  db.prepare(`INSERT INTO capability_run_events(run_id, type, payload_json, created_at) VALUES (?, ?, ?, ?)`)
+    .run(runId, type, stableJson(payload), new Date().toISOString());
+}
+
+function stableJson(value: JsonValue): string {
+  return JSON.stringify(sortJson(value));
+}
+
+function sortJson(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [key, sortJson(item)]));
+  }
+  return value;
+}
+
+function digestJson(json: string): string {
+  return createHash("sha256").update(json, "utf8").digest("hex");
+}
+
+function mapRun(row: CapabilityRunRow): CapabilityRunRecord {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    subjectId: row.subject_id,
+    subjectKind: row.subject_kind,
+    capabilityId: row.capability_id,
+    state: row.state,
+    risk: row.risk,
+    input: JSON.parse(row.input_json) as JsonValue,
+    inputDigest: row.input_digest,
+    idempotencyKey: row.idempotency_key,
+    progress: JSON.parse(row.progress_json) as JsonValue,
+    domainOperationType: row.domain_operation_type,
+    domainOperationId: row.domain_operation_id,
+    result: row.result_json ? JSON.parse(row.result_json) as JsonValue : null,
+    errorCode: row.error_code,
+    errorMessage: row.error_message,
+    revision: row.revision,
+    cancellable: row.cancellable === 1,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function mapApproval(row: CapabilityApprovalRow): CapabilityApprovalRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    status: row.status,
+    proposal: JSON.parse(row.proposal_json) as JsonValue,
+    risk: row.risk,
+    revision: row.revision,
+    requiresConfirmation: row.requires_confirmation === 1,
+    decidedBy: row.decided_by,
+    decidedAt: row.decided_at,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}

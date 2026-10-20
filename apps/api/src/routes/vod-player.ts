@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
+import { getBluetoothSettings } from "@zos/db";
 import { inferMimeType, inferPreviewKind } from "@zos/nas-tools";
 import type { VodPlayerCommand, VodPlayerErrorCode } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
@@ -7,7 +8,7 @@ import { createVodPlayerRuntime, VodPlayerRuntimeError, type VodPlayerRuntime } 
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 type VodPlayerCommandBody =
-  | { type: "play"; rootId?: string; storagePoolId?: string; path?: string; startPositionSeconds?: number }
+  | { type: "play"; rootId?: string; storagePoolId?: string; path?: string; startPositionSeconds?: number; audioDeviceId?: string }
   | { type: "pause" | "resume" | "stop" | "retry"; sessionId?: string }
   | { type: "seek"; sessionId?: string; seconds?: number }
   | { type: "set-volume"; sessionId?: string; volume?: number };
@@ -44,6 +45,11 @@ async function buildCommand(body: VodPlayerCommandBody | undefined, context: Api
     if (body.startPositionSeconds !== undefined && (!Number.isFinite(body.startPositionSeconds) || body.startPositionSeconds < 0)) {
       throw new VodPlayerRuntimeError("Start position must be non-negative", 400, "INVALID_COMMAND");
     }
+    const configuredAudioDeviceId = getBluetoothSettings(context.db)?.defaultAudioDeviceId ?? null;
+    if (body.audioDeviceId !== undefined && body.audioDeviceId !== configuredAudioDeviceId) {
+      throw new VodPlayerRuntimeError("Bluetooth audio device is not selected in system settings", 400, "INVALID_COMMAND");
+    }
+    const audioDeviceId = body.audioDeviceId ?? configuredAudioDeviceId;
     const scope = await resolveStoragePoolScope(context.db, context.system, body.rootId, body.storagePoolId);
     const safe = await resolveScopedExistingPath(scope, body.path);
     const metadata = await stat(safe.realPath);
@@ -56,7 +62,8 @@ async function buildCommand(body: VodPlayerCommandBody | undefined, context: Api
       rootId: scope.root.id,
       storagePoolId: scope.pool.id,
       relativePath: safe.relativePath,
-      ...(body.startPositionSeconds === undefined ? {} : { startPositionSeconds: body.startPositionSeconds })
+      ...(body.startPositionSeconds === undefined ? {} : { startPositionSeconds: body.startPositionSeconds }),
+      ...(audioDeviceId ? { audioDeviceId } : {})
     };
   }
   const sessionId = body.sessionId;

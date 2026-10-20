@@ -465,6 +465,12 @@
   color: var(--warning-text);
 }
 
+.vod-player-message.is-warning {
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
 .vod-player-message span {
   flex: 1 1 auto;
   min-width: 0;

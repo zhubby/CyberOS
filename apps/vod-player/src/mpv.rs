@@ -94,6 +94,7 @@ impl MpvHandle {
         position_seconds: f64,
         volume: f64,
         paused: bool,
+        audio_device: Option<&str>,
     ) -> Result<Self, VodError> {
         Self::start_with_executable(
             config,
@@ -101,6 +102,7 @@ impl MpvHandle {
             position_seconds,
             volume,
             paused,
+            audio_device,
             OsStr::new("mpv"),
         )
         .await
@@ -112,6 +114,7 @@ impl MpvHandle {
         position_seconds: f64,
         volume: f64,
         paused: bool,
+        audio_device: Option<&str>,
         executable: &OsStr,
     ) -> Result<Self, VodError> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -151,7 +154,7 @@ impl MpvHandle {
         if let Some(connector) = &config.drm_connector {
             args.push(format!("--drm-connector={connector}"));
         }
-        if let Some(device) = &config.audio_device {
+        if let Some(device) = audio_device.or(config.audio_device.as_deref()) {
             args.push(format!("--audio-device={device}"));
         }
         args.push(format!("fdclose://{MPV_MEDIA_FD}"));
@@ -262,6 +265,12 @@ impl MpvHandle {
             handle.shutdown().await;
             return Err(error);
         }
+        if audio_device.is_some()
+            && let Err(error) = handle.verify_requested_audio_output().await
+        {
+            handle.shutdown().await;
+            return Err(error);
+        }
         for (id, property) in [
             (1, "time-pos"),
             (2, "duration"),
@@ -278,6 +287,28 @@ impl MpvHandle {
             }
         }
         Ok(handle)
+    }
+
+    async fn verify_requested_audio_output(&mut self) -> Result<(), VodError> {
+        let tracks = self
+            .command(json!(["get_property", "track-list"]))
+            .await
+            .map_err(bluetooth_audio_unavailable)?;
+        if !has_selected_audio_track(&tracks) {
+            return Ok(());
+        }
+        let output = self
+            .command(json!(["get_property", "audio-out-params"]))
+            .await
+            .map_err(bluetooth_audio_unavailable)?;
+        if output.is_object() {
+            Ok(())
+        } else {
+            Err(VodError::unavailable(
+                ErrorCode::AudioUnavailable,
+                "Bluetooth audio device did not open",
+            ))
+        }
     }
 
     pub async fn command(&mut self, command: Value) -> Result<Value, VodError> {
@@ -404,6 +435,22 @@ impl MpvHandle {
         .await
         .is_ok()
     }
+}
+
+fn has_selected_audio_track(value: &Value) -> bool {
+    value.as_array().is_some_and(|tracks| {
+        tracks.iter().any(|track| {
+            track.get("type").and_then(Value::as_str) == Some("audio")
+                && track.get("selected").and_then(Value::as_bool) == Some(true)
+        })
+    })
+}
+
+fn bluetooth_audio_unavailable(error: VodError) -> VodError {
+    VodError::unavailable(
+        ErrorCode::AudioUnavailable,
+        format!("Bluetooth audio device did not open: {}", error.message),
+    )
 }
 
 pub async fn probe(config: &VodPlayerConfig) -> CapabilityProbe {
@@ -798,6 +845,8 @@ while IFS= read -r line <&5; do
   printf '%s\n' '{"event":"property-change","name":"time-pos","data":12}' >&6
   case "$line" in
     *'"pause",true'*) printf '{"request_id":%s,"error":"failure","data":null}\n' "$request_id" >&6 ;;
+    *'"track-list"'*) printf '{"request_id":%s,"error":"success","data":[{"type":"audio","selected":true}]}\n' "$request_id" >&6 ;;
+    *'"audio-out-params"'*) printf '{"request_id":%s,"error":"property unavailable","data":null}\n' "$request_id" >&6 ;;
     *) printf '{"request_id":%s,"error":"success","data":null}\n' "$request_id" >&6 ;;
   esac
 done
@@ -911,6 +960,7 @@ done
             0.0,
             80.0,
             false,
+            None,
             executable.as_os_str(),
         )
         .await
@@ -937,6 +987,7 @@ done
             0.0,
             80.0,
             false,
+            None,
             executable.as_os_str(),
         )
         .await
@@ -947,6 +998,30 @@ done
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::PlaybackFailed);
         handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn requested_audio_device_must_open_before_startup_succeeds() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = fake_mpv(directory.path());
+        let result = MpvHandle::start_with_executable(
+            &config(directory.path()),
+            media(directory.path()),
+            0.0,
+            80.0,
+            false,
+            Some("alsa/bluealsa:DEV=AA:BB:CC:DD:EE:FF,PROFILE=a2dp"),
+            executable.as_os_str(),
+        )
+        .await;
+        let error = match result {
+            Ok(handle) => {
+                handle.shutdown().await;
+                panic!("mpv unexpectedly accepted an unavailable audio output")
+            }
+            Err(error) => error,
+        };
+        assert_eq!(error.code, ErrorCode::AudioUnavailable);
     }
 
     #[cfg(target_os = "linux")]
@@ -969,6 +1044,7 @@ done
             0.0,
             80.0,
             false,
+            None,
             executable.as_os_str(),
         )
         .await
@@ -990,6 +1066,7 @@ done
             0.0,
             80.0,
             false,
+            None,
             executable.as_os_str(),
         )
         .await
@@ -1012,6 +1089,7 @@ done
             0.0,
             80.0,
             false,
+            None,
             executable.as_os_str(),
         )
         .await;

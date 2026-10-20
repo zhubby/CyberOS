@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/alerter", "apps/downloader", "apps/host-accessd", "apps/hostd", "apps/indexer", "apps/monitor", "apps/photostaff", "apps/termux", "apps/vod-player", "crates/monitoring-contracts"]
+members = ["apps/alerter", "apps/bluetoothd", "apps/downloader", "apps/host-accessd", "apps/hostd", "apps/indexer", "apps/monitor", "apps/photostaff", "apps/termux", "apps/vod-player", "crates/monitoring-contracts"]
 resolver = "2"
 
 [workspace.package]
@@ -25,6 +25,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 ts-rs = { version = "=12.0.1", default-features = false, features = ["serde-compat", "serde-json-impl"] }
 uuid = { version = "1.18.1", features = ["v4"] }
+zbus = { version = "6.0.0", default-features = false, features = ["tokio", "proxy", "object-manager"] }
 unicode-normalization = "0.1.25"
 zip = { version = "7.0.0", default-features = false, features = ["deflate"] }
 zos-monitoring-contracts = { path = "crates/monitoring-contracts" }

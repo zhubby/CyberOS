@@ -58,6 +58,7 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
             "storagePoolId",
             "relativePath",
             "startPositionSeconds",
+            "audioDeviceId",
         ],
         "pause" | "resume" | "stop" | "retry" => &["type", "sessionId"],
         "seek" => &["type", "sessionId", "seconds"],
@@ -94,6 +95,9 @@ pub enum Command {
         #[serde(rename = "startPositionSeconds")]
         #[cfg_attr(test, ts(optional = nullable))]
         start_position_seconds: Option<f64>,
+        #[serde(rename = "audioDeviceId")]
+        #[cfg_attr(test, ts(optional = nullable))]
+        audio_device_id: Option<String>,
     },
     Pause {
         #[serde(rename = "sessionId")]
@@ -132,6 +136,7 @@ impl Command {
                 storage_pool_id,
                 relative_path,
                 start_position_seconds,
+                audio_device_id,
             } => {
                 validate_id(root_id)?;
                 validate_id(storage_pool_id)?;
@@ -142,6 +147,9 @@ impl Command {
                         "Start position must be a non-negative number",
                         400,
                     ));
+                }
+                if let Some(audio_device_id) = audio_device_id {
+                    validate_bluetooth_audio_device_id(audio_device_id)?;
                 }
                 Ok(())
             }
@@ -224,6 +232,9 @@ pub struct Status {
     pub volume: f64,
     pub retry_count: u32,
     pub next_retry_at: Option<String>,
+    pub audio_device_id: Option<String>,
+    pub effective_audio_device_id: Option<String>,
+    pub audio_fallback_reason: Option<String>,
     pub capabilities: Capabilities,
     pub error: Option<String>,
     pub error_code: Option<ErrorCode>,
@@ -265,6 +276,29 @@ fn validate_id(value: &str) -> Result<(), VodError> {
         return Err(VodError::new(
             ErrorCode::InvalidCommand,
             "Invalid VOD player identifier",
+            400,
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_bluetooth_audio_device_id(value: &str) -> Result<(), VodError> {
+    let Some(address) = value.strip_prefix("bluetooth:") else {
+        return Err(VodError::new(
+            ErrorCode::InvalidCommand,
+            "Invalid Bluetooth audio device id",
+            400,
+        ));
+    };
+    if address.len() != 17
+        || address.split(':').count() != 6
+        || !address.split(':').all(|part| {
+            part.len() == 2 && part.chars().all(|character| character.is_ascii_hexdigit())
+        })
+    {
+        return Err(VodError::new(
+            ErrorCode::InvalidCommand,
+            "Invalid Bluetooth audio device id",
             400,
         ));
     }

@@ -28,6 +28,7 @@ describe("SettingsModal", () => {
       indexerSettings: null,
       indexerStatus: null,
       roots: [],
+      storagePools: [],
       photoSettings: null,
       photoStatus: null,
       photoProcessingSettings: null,
@@ -40,6 +41,8 @@ describe("SettingsModal", () => {
       themePreference: "system",
       previewFileSizeLimitBytes: 10 * 1024 * 1024,
       codeFontSettings: { familyId: "system", fontSizePx: 12 },
+      networkSummary: null,
+      bluetoothStatus: null,
       resolvedLocale: "en",
       onClose: vi.fn(),
       onFormChange: vi.fn(),
@@ -53,6 +56,11 @@ describe("SettingsModal", () => {
       onThemePreferenceChange: vi.fn(),
       onPreviewFileSizeLimitChange: vi.fn(),
       onCodeFontSettingsChange: vi.fn(),
+      onWifiStatus: vi.fn(),
+      onBluetoothStatus: vi.fn(),
+      onNetworkRefresh: vi.fn(async () => undefined),
+      onNotifySuccess: vi.fn(),
+      onNotifyError: vi.fn(),
       onSectionChange: vi.fn(),
       onSubmit: vi.fn()
     }));

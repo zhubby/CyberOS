@@ -39,6 +39,17 @@ interface TomlConfig {
     port?: number;
     allowed_origins?: string[];
   };
+  mcp?: {
+    enabled?: boolean;
+    pi_enabled?: boolean;
+    pi_token_file?: string;
+    legacy_pi_tools_enabled?: boolean;
+    external_enabled?: boolean;
+    shell_enabled?: boolean;
+    allowed_hosts?: string[];
+    allowed_origins?: string[];
+    max_concurrent_per_client?: number;
+  };
   worker?: {
     poll_ms?: number;
   };
@@ -221,6 +232,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
       port: toPort(env.ZOS_API_PORT, fileConfig.api?.port ?? 3010),
       allowedOrigins: loadAllowedOrigins(env, fileConfig)
     },
+    mcp: {
+      enabled: toBoolean(env.ZOS_MCP_ENABLED, fileConfig.mcp?.enabled ?? true),
+      piEnabled: toBoolean(env.ZOS_MCP_PI_ENABLED, fileConfig.mcp?.pi_enabled ?? false),
+      piTokenFile: loadMcpPiTokenFile(env, fileConfig, paths),
+      legacyPiToolsEnabled: toBoolean(
+        env.ZOS_MCP_LEGACY_PI_TOOLS_ENABLED,
+        fileConfig.mcp?.legacy_pi_tools_enabled ?? false
+      ),
+      externalEnabled: toBoolean(env.ZOS_MCP_EXTERNAL_ENABLED, fileConfig.mcp?.external_enabled ?? false),
+      shellEnabled: toBoolean(env.ZOS_MCP_SHELL_ENABLED, fileConfig.mcp?.shell_enabled ?? false),
+      allowedHosts: csvSetting(env.ZOS_MCP_ALLOWED_HOSTS, fileConfig.mcp?.allowed_hosts, ["localhost", "127.0.0.1", "[::1]"]),
+      allowedOrigins: csvSetting(env.ZOS_MCP_ALLOWED_ORIGINS, fileConfig.mcp?.allowed_origins, ["localhost", "127.0.0.1", "[::1]"]),
+      maxConcurrentPerClient: toPositiveInteger(
+        env.ZOS_MCP_MAX_CONCURRENT_PER_CLIENT,
+        fileConfig.mcp?.max_concurrent_per_client ?? 4
+      )
+    },
     worker: {
       pollMs: toPositiveInteger(env.ZOS_WORKER_POLL_MS, fileConfig.worker?.poll_ms ?? 750)
     },
@@ -260,6 +288,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
     health,
     monitoring
   };
+}
+
+function loadMcpPiTokenFile(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, paths: ZosPaths): string {
+  const configured = env.ZOS_MCP_PI_TOKEN_FILE ?? fileConfig.mcp?.pi_token_file;
+  const tokenFile = configured
+    ? (path.isAbsolute(configured) ? path.resolve(configured) : path.resolve(paths.configDir, configured))
+    : path.join(paths.configDir, "mcp", "pi.token");
+  if (!tokenFile.startsWith(`${path.resolve(paths.configDir)}${path.sep}`)) {
+    throw new Error("MCP Pi token file must be inside the ZOS config directory");
+  }
+  return tokenFile;
 }
 
 function loadMonitoringConfig(
@@ -873,6 +912,11 @@ function loadAllowedOrigins(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): str
   }
 
   return fileConfig.api?.allowed_origins ?? [];
+}
+
+function csvSetting(envValue: string | undefined, fileValue: string[] | undefined, fallback: string[]): string[] {
+  const values = envValue === undefined ? (fileValue ?? fallback) : envValue.split(",");
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 function toBoolean(value: string | boolean | undefined, fallback: boolean): boolean {

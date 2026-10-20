@@ -235,6 +235,7 @@ describe("ChatPane agent rail", () => {
         transcript: [],
         transcriptPhase: "ready",
         activeApprovals: [],
+        activeCapabilityApprovals: [],
         message: "",
         composerPath: null,
         status: "ready",
@@ -252,7 +253,9 @@ describe("ChatPane agent rail", () => {
         notificationUnreadCount: 3,
         onSelectSession: noop,
         onApprove: noop,
+        onApproveCapability: noop,
         onReject: noop,
+        onRejectCapability: noop,
         onSubmitMessage: noop,
         onMessageChange: noop,
         onClearComposerPath: noop,
@@ -300,6 +303,7 @@ describe("ChatPane agent rail", () => {
         transcript: [],
         transcriptPhase: "loading",
         activeApprovals: [],
+        activeCapabilityApprovals: [],
         message: "Draft stays editable",
         composerPath: null,
         status: "loading",
@@ -317,7 +321,9 @@ describe("ChatPane agent rail", () => {
         notificationUnreadCount: 0,
         onSelectSession: noop,
         onApprove: noop,
+        onApproveCapability: noop,
         onReject: noop,
+        onRejectCapability: noop,
         onSubmitMessage: noop,
         onMessageChange: noop,
         onClearComposerPath: noop,
@@ -332,5 +338,80 @@ describe("ChatPane agent rail", () => {
     expect(html).not.toContain('class="empty-state"');
     expect(html).not.toMatch(/<textarea[^>]*disabled/gu);
     expect(html).toMatch(/<button class="primary-button" type="submit" disabled=""/gu);
+  });
+
+  it("renders first-party capability approval provenance and revision", async () => {
+    await initI18n();
+    const noop = () => undefined;
+    const html = renderToStaticMarkup(
+      createElement(ChatPane, {
+        active: true,
+        selectedRoot: undefined,
+        activeSessionSummary: undefined,
+        sessions: [],
+        activeSessionId: "",
+        transcript: [],
+        transcriptPhase: "ready",
+        activeApprovals: [],
+        activeCapabilityApprovals: [{
+          id: "approval-1",
+          runId: "run-1",
+          status: "pending",
+          proposal: {
+            summary: "Move reports/final.pdf to Archive/final.pdf",
+            request: { rootId: "primary", sourcePath: "reports/final.pdf", targetPath: "Archive/final.pdf" }
+          },
+          risk: "critical",
+          revision: 3,
+          requiresConfirmation: true,
+          expiresAt: "2026-09-17T10:15:00.000Z",
+          createdAt: "2026-09-17T10:00:00.000Z",
+          updatedAt: "2026-09-17T10:00:00.000Z",
+          client: { id: "client-1", name: "Studio Agent", kind: "lan", tokenPrefix: "zos_mcp_example" },
+          run: {
+            id: "run-1",
+            capabilityId: "zos.files.mutate-propose",
+            state: "waiting_approval",
+            subjectId: "client-1",
+            subjectKind: "lan",
+            input: {},
+            revision: 2,
+            createdAt: "2026-09-17T10:00:00.000Z"
+          }
+        }],
+        message: "",
+        composerPath: null,
+        status: "ready",
+        locale: "en",
+        modelSettings: null,
+        activeJobId: null,
+        messageSubmitting: false,
+        hasSession: false,
+        transcriptRef: createRef<HTMLDivElement>(),
+        onCreateAgent: noop,
+        onDeleteSession: noop,
+        onOpenSettings: noop,
+        onOpenNotifications: noop,
+        onRequestSystemPower: async () => true,
+        notificationUnreadCount: 0,
+        onSelectSession: noop,
+        onApprove: noop,
+        onApproveCapability: noop,
+        onReject: noop,
+        onRejectCapability: noop,
+        onSubmitMessage: noop,
+        onMessageChange: noop,
+        onClearComposerPath: noop,
+        onCancelActiveJob: noop,
+        onOpenWorkspacePath: noop
+      })
+    );
+
+    expect(html).toContain("zos.files.mutate-propose");
+    expect(html).toContain("Studio Agent (lan)");
+    expect(html).toContain("reports/final.pdf -&gt; Archive/final.pdf");
+    expect(html).toContain('data-risk="critical"');
+    expect(html).toContain("Revision");
+    expect(html).toContain(">3<");
   });
 });

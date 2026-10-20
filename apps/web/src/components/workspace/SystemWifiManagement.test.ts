@@ -64,4 +64,22 @@ describe("SystemWifiManagement", () => {
     expect(html).toContain("Saved networks");
     expect(html).toContain("zhubbyf50pro");
   });
+
+  it("disables scanning and hotspot configuration while the radio is off", async () => {
+    await initI18n();
+    await i18n.changeLanguage("en");
+
+    const html = renderToStaticMarkup(createElement(SystemWifiManagement, {
+      wifi: { ...wifi, radioEnabled: false },
+      canManageWifi: true,
+      canManageHotspot: true,
+      onStatus: () => undefined,
+      onRefresh: async () => undefined,
+      onNotifySuccess: () => undefined,
+      onNotifyError: () => undefined
+    }));
+
+    expect(html).toMatch(/<button type="button" disabled="">.*?<span>Scan<\/span><\/button>/s);
+    expect(html).toMatch(/<button type="button" disabled="">.*?<span>Hotspot<\/span><\/button>/s);
+  });
 });

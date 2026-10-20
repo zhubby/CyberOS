@@ -44,13 +44,13 @@ import {
 } from "../../api.js";
 import {
   groupSystemWifiAccessPoints,
-  parseSystemWifiStatus,
   systemWifiChannels,
   systemWifiDeviceTone,
   validSystemWifiPassword,
   validSystemWifiSsid,
   type SystemWifiNetworkGroup
 } from "../../lib/system-wifi.js";
+import { useSystemWifiStatus } from "../../lib/use-system-wifi-status.js";
 
 type WifiSummary = NetworkSummary["wifi"];
 type WifiProfile = WifiSummary["profiles"][number];
@@ -116,7 +116,7 @@ export function SystemWifiManagement({
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reconnecting, setReconnecting] = useState(false);
+  const reconnecting = useSystemWifiStatus(onStatus);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [connectDialog, setConnectDialog] = useState<ConnectDialogState | null>(null);
   const [profileDialog, setProfileDialog] = useState<ProfileDialogState | null>(null);
@@ -126,31 +126,20 @@ export function SystemWifiManagement({
   const profiles = wifi.profiles.filter((profile) => !profile.device || profile.device === selectedDevice?.name);
   const hotspot = wifi.hotspots.find((candidate) => candidate.device === selectedDevice?.name) ?? null;
   const networks = useMemo(() => {
-    if (!scan || scan.device !== selectedDevice?.name) return [];
+    if (wifi.radioEnabled !== true || !scan || scan.device !== selectedDevice?.name) return [];
     return groupSystemWifiAccessPoints(scan.accessPoints);
-  }, [scan, selectedDevice?.name]);
+  }, [scan, selectedDevice?.name, wifi.radioEnabled]);
 
   useEffect(() => {
     if (!selectedDevice && wifi.devices[0]) setSelectedDeviceId(wifi.devices[0].id);
   }, [selectedDevice, wifi.devices]);
 
   useEffect(() => {
-    if (typeof EventSource === "undefined") return;
-    const source = new EventSource("/api/system/network/wifi/events");
-    source.onopen = () => setReconnecting(false);
-    source.onerror = () => setReconnecting(true);
-    source.addEventListener("system.wifi.status", (event) => {
-      const status = parseSystemWifiStatus((event as MessageEvent<string>).data);
-      if (status) {
-        setReconnecting(false);
-        onStatus(status);
-      }
-    });
-    return () => source.close();
-  }, [onStatus]);
+    if (wifi.radioEnabled !== true) setScan(null);
+  }, [wifi.radioEnabled]);
 
   async function refreshScan() {
-    if (!selectedDevice || scanning || !canManageWifi) return;
+    if (!selectedDevice || scanning || !canManageWifi || wifi.radioEnabled !== true) return;
     setScanning(true);
     setError(null);
     try {
@@ -393,7 +382,7 @@ export function SystemWifiManagement({
   }
 
   const unavailable = wifi.backend !== "NetworkManager" || !selectedDevice;
-  const selectedDeviceCanHotspot = canManageHotspot && selectedDevice?.capabilities.accessPoint === true;
+  const selectedDeviceCanHotspot = wifi.radioEnabled === true && canManageHotspot && selectedDevice?.capabilities.accessPoint === true;
 
   return (
     <>
@@ -423,7 +412,7 @@ export function SystemWifiManagement({
             >
               {wifi.radioEnabled ? <Wifi aria-hidden="true" size={15} /> : <WifiOff aria-hidden="true" size={15} />}
             </button>
-            <button type="button" onClick={() => void refreshScan()} disabled={!canManageWifi || !selectedDevice || scanning || busy} aria-busy={scanning || undefined}>
+            <button type="button" onClick={() => void refreshScan()} disabled={wifi.radioEnabled !== true || !canManageWifi || !selectedDevice || scanning || busy} aria-busy={scanning || undefined}>
               {scanning ? <LoaderCircle aria-hidden="true" size={14} /> : <RefreshCw aria-hidden="true" size={14} />}
               <span>{t("workspace.management.network.wifi.scan")}</span>
             </button>

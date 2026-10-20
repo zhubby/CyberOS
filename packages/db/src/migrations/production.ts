@@ -1749,5 +1749,157 @@ export const productionMigrations: Migration[] = [
       CREATE INDEX idx_docker_compose_host_access_drafts_expires_at
         ON docker_compose_host_access_drafts(expires_at);
     `
+  },
+  {
+    id: "034_mcp_capability_runs",
+    sql: `
+      CREATE TABLE mcp_clients (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
+        kind TEXT NOT NULL CHECK (kind IN ('pi', 'local', 'lan')),
+        token_digest TEXT NOT NULL UNIQUE,
+        token_prefix TEXT NOT NULL,
+        scopes_json TEXT NOT NULL,
+        expires_at TEXT,
+        revoked_at TEXT,
+        last_used_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_mcp_clients_active
+        ON mcp_clients(revoked_at, expires_at, created_at);
+
+      CREATE TABLE capability_runs (
+        id TEXT PRIMARY KEY,
+        client_id TEXT REFERENCES mcp_clients(id) ON DELETE SET NULL,
+        subject_id TEXT NOT NULL,
+        subject_kind TEXT NOT NULL CHECK (subject_kind IN ('pi', 'local', 'lan', 'system')),
+        capability_id TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'waiting_approval', 'succeeded', 'failed', 'cancelled', 'expired')),
+        risk TEXT NOT NULL CHECK (risk IN ('read', 'low', 'medium', 'high', 'critical')),
+        input_json TEXT NOT NULL,
+        input_digest TEXT NOT NULL,
+        idempotency_key TEXT,
+        progress_json TEXT NOT NULL DEFAULT '{}',
+        domain_operation_type TEXT,
+        domain_operation_id TEXT,
+        result_json TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        cancellable INTEGER NOT NULL DEFAULT 1 CHECK (cancellable IN (0, 1)),
+        lease_owner TEXT,
+        lease_expires_at TEXT,
+        expires_at TEXT,
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE UNIQUE INDEX idx_capability_runs_idempotency
+        ON capability_runs(client_id, capability_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL;
+      CREATE INDEX idx_capability_runs_owner_created
+        ON capability_runs(client_id, created_at DESC, id DESC);
+      CREATE INDEX idx_capability_runs_claim
+        ON capability_runs(state, lease_expires_at, created_at);
+
+      CREATE TABLE capability_run_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL REFERENCES capability_runs(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_capability_run_events_run
+        ON capability_run_events(run_id, id);
+
+      CREATE TABLE capability_approvals (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL UNIQUE REFERENCES capability_runs(id) ON DELETE CASCADE,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected', 'expired', 'failed')),
+        proposal_json TEXT NOT NULL,
+        risk TEXT NOT NULL CHECK (risk IN ('low', 'medium', 'high', 'critical')),
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        requires_confirmation INTEGER NOT NULL DEFAULT 0 CHECK (requires_confirmation IN (0, 1)),
+        decided_by TEXT,
+        decided_at TEXT,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_capability_approvals_pending
+        ON capability_approvals(status, created_at);
+
+      CREATE TABLE agent_capability_runs (
+        job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        run_id TEXT NOT NULL UNIQUE REFERENCES capability_runs(id) ON DELETE CASCADE,
+        provider_session_id TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (job_id, run_id)
+      );
+    `
+  },
+  {
+    id: "035_mcp_transfer_tokens",
+    sql: `
+      CREATE TABLE mcp_transfer_tokens (
+        token_digest TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL REFERENCES mcp_clients(id) ON DELETE CASCADE,
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE CASCADE,
+        relative_path TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+        modified_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_mcp_transfer_tokens_expiry
+        ON mcp_transfer_tokens(expires_at, used_at);
+    `
+  },
+  {
+    id: "036_bluetooth_transfers",
+    sql: `
+      CREATE TABLE bluetooth_transfers (
+        id TEXT PRIMARY KEY,
+        direction TEXT NOT NULL CHECK (direction IN ('send', 'receive')),
+        adapter_id TEXT,
+        device_address TEXT NOT NULL,
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE RESTRICT,
+        storage_pool_id TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'paused', 'completed', 'failed', 'cancelled')),
+        transferred_bytes INTEGER NOT NULL DEFAULT 0 CHECK (transferred_bytes >= 0),
+        total_bytes INTEGER CHECK (total_bytes IS NULL OR total_bytes >= 0),
+        error TEXT,
+        obex_transfer_path TEXT,
+        control_requested TEXT CHECK (control_requested IS NULL OR control_requested = 'cancel'),
+        read_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        last_progress_at TEXT
+      );
+
+      CREATE INDEX idx_bluetooth_transfers_status_created_at
+        ON bluetooth_transfers(status, created_at);
+      CREATE INDEX idx_bluetooth_transfers_updated_at
+        ON bluetooth_transfers(updated_at DESC);
+
+      CREATE TABLE bluetooth_transfer_service_state (
+        id TEXT PRIMARY KEY CHECK (id = 'primary'),
+        heartbeat_at TEXT NOT NULL,
+        error TEXT
+      );
+    `
   }
 ];

@@ -37,6 +37,7 @@ struct HostdState {
     storage_lock: Mutex<()>,
     docker_lock: Mutex<()>,
     network_lock: Mutex<()>,
+    bluetooth_lock: Mutex<()>,
     power_lock: Mutex<()>,
     ops_lock: Mutex<()>,
 }
@@ -57,6 +58,7 @@ impl HostdServer {
                 storage_lock: Mutex::new(()),
                 docker_lock: Mutex::new(()),
                 network_lock: Mutex::new(()),
+                bluetooth_lock: Mutex::new(()),
                 power_lock: Mutex::new(()),
                 ops_lock: Mutex::new(()),
             }),
@@ -335,6 +337,12 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
                 .await
                 .map(HostdResult::NetworkManager)
         }
+        HostdRequest::BluetoothManager(request) => {
+            let _guard = state.bluetooth_lock.lock().await;
+            crate::bluetooth::handle(request)
+                .await
+                .map(HostdResult::BluetoothManager)
+        }
         HostdRequest::SystemPower(request) => {
             let _guard = state.power_lock.lock().await;
             crate::power::command(request, state.runner.as_ref())
@@ -424,6 +432,7 @@ mod tests {
             storage_lock: Mutex::new(()),
             docker_lock: Mutex::new(()),
             network_lock: Mutex::new(()),
+            bluetooth_lock: Mutex::new(()),
             power_lock: Mutex::new(()),
             ops_lock: Mutex::new(()),
         })

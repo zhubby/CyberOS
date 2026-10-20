@@ -1,0 +1,264 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import Fastify from "fastify";
+import { ensureNasRoots, openZosDb, saveBluetoothSettings, type ZosDatabase } from "@zos/db";
+import type { BluetoothOperationResult, BluetoothStatus } from "@zos/shared";
+import { afterEach, describe, expect, it } from "vitest";
+import type { ApiRouteContext } from "../context.js";
+import type { BluetoothManagerRuntime } from "../lib/bluetooth-manager.js";
+import { registerBluetoothTransferRoutes, streamBluetoothTransfers } from "./bluetooth-transfers.js";
+
+const poolId = "/dev/md/test-pool";
+let temporaryDirectory: string | null = null;
+let database: ZosDatabase | null = null;
+
+afterEach(async () => {
+  database?.close();
+  database = null;
+  if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
+  temporaryDirectory = null;
+});
+
+describe("Bluetooth transfer routes", () => {
+  it("uses stable audio ids and rejects arbitrary ALSA device strings", async () => {
+    const { server } = await setup();
+    const response = await server.inject({ method: "GET", url: "/api/system/bluetooth/settings" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().audioDevices).toEqual([
+      expect.objectContaining({ id: "bluetooth:AA:BB:CC:DD:EE:FF", name: "Living room" })
+    ]);
+
+    const rejected = await server.inject({
+      method: "PATCH",
+      url: "/api/system/bluetooth/settings",
+      payload: { defaultAudioDeviceId: "alsa/hw:0" }
+    });
+    expect(rejected.statusCode).toBe(404);
+
+    const accepted = await server.inject({
+      method: "PATCH",
+      url: "/api/system/bluetooth/settings",
+      payload: { defaultAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF" }
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json().settings.defaultAudioDeviceId).toBe("bluetooth:AA:BB:CC:DD:EE:FF");
+
+    const invalidReceiveToggle = await server.inject({
+      method: "PATCH",
+      url: "/api/system/bluetooth/settings",
+      payload: { receiveEnabled: "yes" }
+    });
+    expect(invalidReceiveToggle.statusCode).toBe(400);
+    await server.close();
+  });
+
+  it("queues only scoped files for a paired device and supports cancellation", async () => {
+    const { server, bluetooth } = await setup();
+    const queued = await server.inject({
+      method: "POST",
+      url: "/api/system/bluetooth/transfers",
+      payload: {
+        adapterId: "adapter-hci0",
+        address: "aa:bb:cc:dd:ee:ff",
+        rootId: "local",
+        storagePoolId: poolId,
+        paths: ["clip.bin"]
+      }
+    });
+    expect(queued.statusCode).toBe(201);
+    expect(queued.json().transfers).toEqual([
+      expect.objectContaining({
+        deviceAddress: "AA:BB:CC:DD:EE:FF",
+        relativePath: "clip.bin",
+        status: "queued",
+        totalBytes: 5
+      })
+    ]);
+    const id = queued.json().transfers[0].id as string;
+    const cancelled = await server.inject({
+      method: "POST",
+      url: `/api/system/bluetooth/transfers/${id}/cancel`
+    });
+    expect(cancelled.json().transfer.status).toBe("cancelled");
+
+    const traversal = await server.inject({
+      method: "POST",
+      url: "/api/system/bluetooth/transfers",
+      payload: {
+        adapterId: "adapter-hci0",
+        address: "AA:BB:CC:DD:EE:FF",
+        rootId: "local",
+        storagePoolId: poolId,
+        paths: ["../clip.bin"]
+      }
+    });
+    expect(traversal.statusCode).toBe(400);
+
+    bluetooth.status.devices[0]!.paired = false;
+    const unpaired = await server.inject({
+      method: "POST",
+      url: "/api/system/bluetooth/transfers",
+      payload: {
+        adapterId: "adapter-hci0",
+        address: "AA:BB:CC:DD:EE:FF",
+        rootId: "local",
+        storagePoolId: poolId,
+        paths: ["clip.bin"]
+      }
+    });
+    expect(unpaired.statusCode).toBe(409);
+    await server.close();
+  });
+
+  it("streams persistent transfer state over SSE", async () => {
+    const { server } = await setup();
+    const chunks: string[] = [];
+    let close: () => void = () => undefined;
+    await streamBluetoothTransfers(
+      { once: (_event, listener) => { close = listener; } },
+      {
+        write: (chunk) => {
+          chunks.push(chunk);
+          if (chunk.startsWith("data:")) close();
+        },
+        end: () => undefined
+      },
+      { db: database! },
+      { sampleMs: 1, heartbeatMs: 10 }
+    );
+    expect(chunks.join("")).toContain("event: system.bluetooth.transfers");
+    expect(chunks.join("")).toContain('"transfers":[]');
+    await server.close();
+  });
+
+  it("reports enabled receiving as paused when the inbox storage goes offline", async () => {
+    const { server, storage } = await setup();
+    saveBluetoothSettings(database!, {
+      receiveEnabled: true,
+      inboxRootId: "local",
+      inboxStoragePoolId: poolId,
+      inboxPath: "inbox"
+    });
+
+    storage.online = false;
+    const response = await server.inject({ method: "GET", url: "/api/system/bluetooth/settings" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().settings.receiveEnabled).toBe(true);
+    expect(response.json().inboxStatus).toEqual({
+      status: "paused",
+      reason: "storage_unavailable"
+    });
+    await server.close();
+  });
+
+  it("keeps inbox preferences available while host Bluetooth integration is offline", async () => {
+    const { server, bluetooth } = await setup();
+    bluetooth.getStatus = async () => { throw new Error("hostd is offline"); };
+
+    const initial = await server.inject({ method: "GET", url: "/api/system/bluetooth/settings" });
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json().audioDevices).toEqual([]);
+
+    const saved = await server.inject({
+      method: "PATCH",
+      url: "/api/system/bluetooth/settings",
+      payload: {
+        receiveEnabled: true,
+        inboxRootId: "local",
+        inboxStoragePoolId: poolId,
+        inboxPath: "inbox"
+      }
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({
+      settings: { receiveEnabled: true, inboxPath: "inbox" },
+      inboxStatus: { status: "ready", reason: null }
+    });
+
+    const audio = await server.inject({
+      method: "PATCH",
+      url: "/api/system/bluetooth/settings",
+      payload: { defaultAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF" }
+    });
+    expect(audio.statusCode).toBe(503);
+    await server.close();
+  });
+});
+
+async function setup(): Promise<{
+  server: ReturnType<typeof Fastify>;
+  bluetooth: FakeBluetoothManager;
+  storage: { online: boolean };
+}> {
+  temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-bluetooth-transfers-"));
+  const root = path.join(temporaryDirectory, "root");
+  await mkdir(root);
+  await mkdir(path.join(root, "inbox"));
+  await writeFile(path.join(root, "clip.bin"), "video");
+  database = openZosDb(path.join(temporaryDirectory, "zos.sqlite"));
+  ensureNasRoots(database, [{ id: "local", name: "Local", path: root }]);
+  const bluetooth = new FakeBluetoothManager();
+  const storage = { online: true };
+  const server = Fastify({ logger: false });
+  registerBluetoothTransferRoutes(server, {
+    config: { hostd: { socketPath: "/tmp/hostd.sock" } },
+    db: database,
+    system: {
+      bluetoothManager: bluetooth,
+      commandRunner: {
+        async run(command: string) {
+          if (command === "findmnt") {
+            return JSON.stringify({
+              filesystems: storage.online
+                ? [{ source: poolId, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }]
+                : []
+            });
+          }
+          if (command === "mdadm") return `ARRAY ${poolId} name=test UUID=test`;
+          if (command === "smartctl") return JSON.stringify({ devices: [] });
+          return JSON.stringify({ blockdevices: [] });
+        }
+      }
+    }
+  } as unknown as ApiRouteContext);
+  return { server, bluetooth, storage };
+}
+
+class FakeBluetoothManager implements BluetoothManagerRuntime {
+  status: BluetoothStatus = {
+    collectedAt: "2026-10-20T00:00:00.000Z",
+    backend: "BlueZ",
+    available: true,
+    adapters: [{
+      id: "adapter-hci0", address: "00:11:22:33:44:55", name: "hci0", alias: "Host",
+      state: "powered", powered: true, discovering: false, defaultAdapter: true
+    }],
+    devices: [{
+      adapterId: "adapter-hci0", address: "AA:BB:CC:DD:EE:FF", name: "Speaker",
+      alias: "Living room", type: "speaker", rssi: -42, paired: true, trusted: true,
+      connected: true, servicesResolved: true, lastSeenAt: "2026-10-20T00:00:00.000Z"
+    }],
+    scan: { active: false, adapterId: null, startedAt: null, endsAt: null },
+    challenge: null,
+    error: null
+  };
+
+  async getStatus() { return this.status; }
+  async setAdapterPower() { return this.result(); }
+  async setDefaultAdapter() { return this.result(); }
+  async startScan() { return this.result(); }
+  async stopScan() { return this.result(); }
+  async pair() { return this.result(); }
+  async cancelPairing() { return this.result(); }
+  async answerChallenge() { return this.result(); }
+  async trust() { return this.result(); }
+  async connect() { return this.result(); }
+  async disconnect() { return this.result(); }
+  async unpair() { return this.result(); }
+
+  private result(): BluetoothOperationResult {
+    return { status: this.status, message: null };
+  }
+}

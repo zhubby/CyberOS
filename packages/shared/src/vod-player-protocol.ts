@@ -18,8 +18,8 @@ export type VodPlayerStatus = GeneratedVodPlayerStatus;
 type GeneratedPlayCommand = Extract<VodPlayerWireCommand, { type: "play" }>;
 export type VodPlayerCommand =
   | Exclude<VodPlayerWireCommand, { type: "status" | "play" }>
-  | Omit<GeneratedPlayCommand, "startPositionSeconds">
-    & { startPositionSeconds?: number };
+  | Omit<GeneratedPlayCommand, "startPositionSeconds" | "audioDeviceId">
+    & { startPositionSeconds?: number; audioDeviceId?: string };
 
 export type VodPlayerBrokerRequest = {
   version: typeof VOD_PLAYER_PROTOCOL_VERSION;
@@ -83,9 +83,10 @@ function parseCommand(value: Record<string, unknown>): VodPlayerBrokerRequest["c
   if (value.type === "status") return hasOnlyKeys(value, ["type"]) ? { type: "status" } : null;
   if (value.type === "play") {
     if (
-      !hasOnlyKeys(value, ["type", "rootId", "storagePoolId", "relativePath", "startPositionSeconds"]) ||
+      !hasOnlyKeys(value, ["type", "rootId", "storagePoolId", "relativePath", "startPositionSeconds", "audioDeviceId"]) ||
       !safeIdentifier(value.rootId) || !safeIdentifier(value.storagePoolId) ||
-      typeof value.relativePath !== "string" || !safeRelativePath(value.relativePath)
+      typeof value.relativePath !== "string" || !safeRelativePath(value.relativePath) ||
+      (value.audioDeviceId !== undefined && value.audioDeviceId !== null && !isBluetoothAudioDeviceId(value.audioDeviceId))
     ) return null;
     const startPositionSeconds = optionalNonNegative(value.startPositionSeconds);
     if (value.startPositionSeconds !== undefined && value.startPositionSeconds !== null && startPositionSeconds === null) return null;
@@ -94,7 +95,8 @@ function parseCommand(value: Record<string, unknown>): VodPlayerBrokerRequest["c
       rootId: value.rootId,
       storagePoolId: value.storagePoolId,
       relativePath: value.relativePath,
-      ...(startPositionSeconds === null ? {} : { startPositionSeconds })
+      ...(startPositionSeconds === null ? {} : { startPositionSeconds }),
+      ...(typeof value.audioDeviceId === "string" ? { audioDeviceId: value.audioDeviceId } : {})
     };
   }
   if (!safeIdentifier(value.sessionId)) return null;
@@ -124,7 +126,8 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     !hasOnlyKeys(value, [
       "state", "sessionId", "serviceInstanceId", "revision", "rootId", "storagePoolId",
       "relativePath", "fileName", "positionSeconds", "durationSeconds", "volume", "retryCount",
-      "nextRetryAt", "capabilities", "error", "errorCode", "updatedAt"
+      "nextRetryAt", "audioDeviceId", "effectiveAudioDeviceId", "audioFallbackReason",
+      "capabilities", "error", "errorCode", "updatedAt"
     ]) ||
     !isVodPlayerState(value.state)
   ) return null;
@@ -145,6 +148,9 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     positionSeconds === null || (value.durationSeconds !== null && durationSeconds === null) ||
     volume === null || volume < 0 || volume > 100 ||
     (typeof value.nextRetryAt !== "string" && value.nextRetryAt !== null) ||
+    (value.audioDeviceId !== null && !isBluetoothAudioDeviceId(value.audioDeviceId)) ||
+    (value.effectiveAudioDeviceId !== null && !isBluetoothAudioDeviceId(value.effectiveAudioDeviceId)) ||
+    !isNullableString(value.audioFallbackReason) ||
     !capabilities || (typeof value.error !== "string" && value.error !== null) ||
     (value.errorCode !== null && !isVodPlayerErrorCode(value.errorCode)) ||
     typeof value.updatedAt !== "string"
@@ -163,6 +169,9 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     volume,
     retryCount,
     nextRetryAt: value.nextRetryAt,
+    audioDeviceId: value.audioDeviceId,
+    effectiveAudioDeviceId: value.effectiveAudioDeviceId,
+    audioFallbackReason: value.audioFallbackReason,
     capabilities,
     error: value.error,
     errorCode: value.errorCode,
@@ -210,6 +219,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
 function safeIdentifier(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 256 && !value.includes("\0");
 }
@@ -220,6 +233,10 @@ function safeRequestId(value: unknown): value is string {
 
 function safeRelativePath(value: string): boolean {
   return !value.startsWith("/") && !value.split("/").some((segment) => !segment || segment === "." || segment === "..");
+}
+
+function isBluetoothAudioDeviceId(value: unknown): value is string {
+  return typeof value === "string" && /^bluetooth:(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/iu.test(value);
 }
 
 function finiteNumber(value: unknown): number | null {

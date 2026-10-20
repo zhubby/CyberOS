@@ -4,6 +4,9 @@ import type {
   ApprovalStatus,
   BackupRunKind,
   BackupRunStatus,
+  BluetoothTransferControlRequest,
+  BluetoothTransferDirection,
+  BluetoothTransferStatus,
   DownloadTaskStatus,
   DownloadTaskPhase,
   DownloadMode,
@@ -266,6 +269,29 @@ export type DbDownloadTaskRow = {
   next_retry_at: string | null;
   control_requested: DownloadControlRequest | null;
   segment_count: number;
+};
+
+export type DbBluetoothTransferRow = {
+  id: string;
+  direction: BluetoothTransferDirection;
+  adapter_id: string | null;
+  device_address: string;
+  root_id: string;
+  storage_pool_id: string;
+  relative_path: string;
+  display_name: string;
+  status: BluetoothTransferStatus;
+  transferred_bytes: number;
+  total_bytes: number | null;
+  error: string | null;
+  obex_transfer_path: string | null;
+  control_requested: BluetoothTransferControlRequest | null;
+  read_at: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  last_progress_at: string | null;
 };
 
 export type DbPhotostaffAssetRow = {

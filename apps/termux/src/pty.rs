@@ -64,7 +64,9 @@ pub fn spawn(mut command: Command, cols: u16, rows: u16) -> Result<PtyProcess, T
         });
     }
     let child = command.spawn()?;
-    let master = Arc::new(AsyncFd::new(pair.master)?);
+    // SAFETY: OwnedFd keeps the valid PTY descriptor open and stable for the
+    // entire lifetime of AsyncFd.
+    let master = Arc::new(unsafe { AsyncFd::register(pair.master) }.map_err(io::Error::from)?);
     Ok(PtyProcess { master, child })
 }
 

@@ -17,6 +17,9 @@ function status(overrides: Partial<VodPlayerStatus> = {}): VodPlayerStatus {
     volume: 75,
     retryCount: 0,
     nextRetryAt: null,
+    audioDeviceId: null,
+    effectiveAudioDeviceId: null,
+    audioFallbackReason: null,
     capabilities: {
       mpvAvailable: true,
       drmAvailable: true,

@@ -1,3 +1,4 @@
+pub mod bluetooth;
 pub mod command;
 pub mod config;
 pub mod docker_daemon;

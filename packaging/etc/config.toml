@@ -6,6 +6,17 @@ host = "127.0.0.1"
 port = 3010
 allowed_origins = []
 
+[mcp]
+enabled = true
+pi_enabled = false
+pi_token_file = "mcp/pi.token"
+legacy_pi_tools_enabled = false
+external_enabled = false
+shell_enabled = false
+allowed_hosts = ["localhost", "127.0.0.1", "[::1]"]
+allowed_origins = ["localhost", "127.0.0.1", "[::1]"]
+max_concurrent_per_client = 4
+
 [worker]
 poll_ms = 750
 

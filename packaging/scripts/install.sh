@@ -330,6 +330,7 @@ if command -v systemctl >/dev/null 2>&1; then
     zos-worker@1.service \
     zos-photostaff.service \
     zos-downloader.service \
+    zos-bluetoothd.service \
     zos-indexer.service
   systemctl restart zos-hostd.service zos-termux.service
   if [ "$DOCKER_ENABLED" = "1" ]; then
@@ -344,7 +345,7 @@ if command -v systemctl >/dev/null 2>&1; then
   fi
   systemctl start zos-health.service || \
     log "warning: initial health evaluation failed; the health timer will retry"
-  systemctl restart zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service
+  systemctl restart zos-worker@1.service zos-photostaff.service zos-downloader.service zos-bluetoothd.service zos-indexer.service
   if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
     systemctl enable --now zos-vod-player.service
   fi

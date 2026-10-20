@@ -6,7 +6,7 @@ use crate::ops::{OpsRequest, OpsResult};
 use crate::power::{PowerRequest, PowerResult};
 use crate::shares::{ShareApplyRequest, ShareApplyResult};
 use crate::storage::{StorageCommand, StorageCommandResult, StorageOperation, StorageResult};
-use crate::{docker_daemon, network_manager};
+use crate::{bluetooth, docker_daemon, network_manager};
 
 pub const PROTOCOL_VERSION: u8 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -34,6 +34,8 @@ pub(crate) enum HostdOperation {
     DockerDaemon,
     #[serde(rename = "network.manager")]
     NetworkManager,
+    #[serde(rename = "bluetooth.manager")]
+    BluetoothManager,
     #[serde(rename = "system.power")]
     SystemPower,
     #[serde(rename = "system.ops")]
@@ -55,6 +57,8 @@ pub(crate) enum HostdRequest {
     DockerDaemon(docker_daemon::DockerRequest),
     #[serde(rename = "network.manager")]
     NetworkManager(network_manager::NetworkRequest),
+    #[serde(rename = "bluetooth.manager")]
+    BluetoothManager(bluetooth::BluetoothRequest),
     #[serde(rename = "system.power")]
     SystemPower(PowerRequest),
     #[serde(rename = "system.ops")]
@@ -69,6 +73,7 @@ pub(crate) enum HostdResult {
     StorageOperation(StorageResult),
     DockerDaemon(docker_daemon::DockerResult),
     NetworkManager(network_manager::NetworkResult),
+    BluetoothManager(bluetooth::BluetoothResult),
     SystemPower(PowerResult),
     SystemOps(OpsResult),
 }
@@ -123,6 +128,11 @@ impl RequestEnvelope {
 
     pub(crate) fn into_contract(self) -> Result<HostdRequest, HostdError> {
         let operation = HostdOperation::parse(&self.operation)?;
+        if matches!(operation, HostdOperation::BluetoothManager)
+            && !bluetooth::request_has_exact_fields(&self.payload)
+        {
+            return Err(HostdError::validation(operation.invalid_payload_message()));
+        }
         serde_json::from_value(serde_json::json!({
             "operation": self.operation,
             "payload": self.payload,
@@ -144,6 +154,7 @@ impl HostdOperation {
             Self::StorageOperation => "Invalid storage operation request",
             Self::DockerDaemon => "Invalid Docker daemon request",
             Self::NetworkManager => "Invalid NetworkManager request",
+            Self::BluetoothManager => "Invalid Bluetooth request",
             Self::SystemPower => "A confirmed power action is required",
             Self::SystemOps => "Invalid system.ops payload",
         }
@@ -209,6 +220,8 @@ mod tests {
         DockerDaemon(docker_daemon::DockerResult),
         #[serde(rename = "network.manager")]
         NetworkManager(network_manager::NetworkResult),
+        #[serde(rename = "bluetooth.manager")]
+        BluetoothManager(bluetooth::BluetoothResult),
         #[serde(rename = "system.power")]
         SystemPower(PowerResult),
         #[serde(rename = "system.ops")]
@@ -227,6 +240,7 @@ mod tests {
         crate::storage::export_protocol_bindings(&config);
         crate::docker_daemon::export_protocol_bindings(&config);
         crate::network_manager::export_protocol_bindings(&config);
+        crate::bluetooth::export_protocol_bindings(&config);
         crate::power::export_protocol_bindings(&config);
         crate::ops::export_protocol_bindings(&config);
     }
@@ -259,7 +273,7 @@ mod tests {
             "/../../packages/shared/fixtures/hostd-protocol-v1.json"
         )))
         .unwrap();
-        assert_eq!(fixtures.contracts.len(), 27);
+        assert_eq!(fixtures.contracts.len(), 28);
 
         for contract in fixtures.contracts {
             let frame = serde_json::to_vec(&serde_json::json!({
@@ -288,6 +302,14 @@ mod tests {
             (
                 "network.manager",
                 serde_json::json!({ "action": "unknown" }),
+            ),
+            (
+                "bluetooth.manager",
+                serde_json::json!({ "action": "unknown" }),
+            ),
+            (
+                "bluetooth.manager",
+                serde_json::json!({ "action": "status", "extra": true }),
             ),
             (
                 "storage.operation",

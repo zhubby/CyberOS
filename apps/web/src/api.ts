@@ -1,4 +1,14 @@
 import type {
+  BluetoothAdapterInput,
+  BluetoothAudioDevice as SharedBluetoothAudioDevice,
+  BluetoothDeviceInput,
+  BluetoothInboxStatus as SharedBluetoothInboxStatus,
+  BluetoothOperationResult,
+  BluetoothPairingChallengeInput,
+  BluetoothSettingsRecord as SharedBluetoothSettings,
+  BluetoothStatus as SharedBluetoothStatus,
+  BluetoothTransferRecord as SharedBluetoothTransfer,
+  BluetoothTransferServiceHealth as SharedBluetoothTransferServiceHealth,
   DockerCreateInput,
   DockerDaemonConfigSnapshot,
   DockerDaemonConfigUpdateInput,
@@ -337,6 +347,40 @@ export interface PendingApproval {
   createdAt: string;
 }
 
+export interface CapabilityApproval {
+  id: string;
+  runId: string;
+  status: "pending";
+  proposal: Record<string, unknown>;
+  risk: "low" | "medium" | "high" | "critical";
+  revision: number;
+  requiresConfirmation: boolean;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  client: {
+    id: string;
+    name: string;
+    kind: "pi" | "local" | "lan";
+    tokenPrefix: string;
+  } | null;
+  run: {
+    id: string;
+    capabilityId: string;
+    state: string;
+    subjectId: string;
+    subjectKind: "pi" | "local" | "lan" | "system";
+    input: unknown;
+    revision: number;
+    createdAt: string;
+  };
+}
+
+export interface ApprovalQueue {
+  approvals: PendingApproval[];
+  capabilityApprovals: CapabilityApproval[];
+}
+
 export interface FileOperation {
   id: string;
   approvalId: string | null;
@@ -369,12 +413,15 @@ export type FileBatch = SharedFileBatch;
 export interface NotificationListResult {
   notifications: OperationNotification[];
   unreadCount: number;
+  bluetoothTransfers: BluetoothTransfer[];
+  bluetoothUnreadCount: number;
 }
 
 export interface NotificationSummary {
   unreadCount: number;
   operations: number;
   alerts: number;
+  bluetoothTransfers: number;
 }
 
 export type FilePreviewKind =
@@ -423,6 +470,12 @@ export type SystemInfoStorageVolume = PublicSystemInfo["storage"]["volumes"][num
 export type NetworkSummary = SystemNetworkSummary;
 export type NetworkTrafficSummary = SystemNetworkTrafficSummary;
 export type WifiStatus = SystemWifiStatus;
+export type BluetoothStatus = SharedBluetoothStatus;
+export type BluetoothAudioDevice = SharedBluetoothAudioDevice;
+export type BluetoothInboxStatus = SharedBluetoothInboxStatus;
+export type BluetoothSettings = SharedBluetoothSettings;
+export type BluetoothTransfer = SharedBluetoothTransfer;
+export type BluetoothTransferServiceHealth = SharedBluetoothTransferServiceHealth;
 export type EthernetStatus = SharedSystemEthernetStatus;
 export type EthernetApplyTransaction = SharedSystemEthernetApplyTransaction;
 export type StorageSummary = SystemStorageSummary;
@@ -474,7 +527,7 @@ export type DockerOperation = DockerOperationRecord;
 export type ShareOperation = ShareOperationRecord;
 export type VodPlayerStatus = SharedVodPlayerStatus;
 export type VodPlayerCommand =
-  | { type: "play"; rootId: string; storagePoolId: string; path: string; startPositionSeconds?: number }
+  | { type: "play"; rootId: string; storagePoolId: string; path: string; startPositionSeconds?: number; audioDeviceId?: string }
   | Exclude<SharedVodPlayerCommand, { type: "play" }>;
 
 export interface FileMeta {
@@ -622,6 +675,110 @@ export async function getSystemNetworkTraffic(): Promise<NetworkTrafficSummary> 
   await ensureOk(response);
   const body = (await response.json()) as { traffic: NetworkTrafficSummary };
   return body.traffic;
+}
+
+export async function getSystemBluetooth(): Promise<BluetoothStatus> {
+  const response = await fetch("/api/system/bluetooth");
+  await ensureOk(response);
+  return ((await response.json()) as { bluetooth: BluetoothStatus }).bluetooth;
+}
+
+export interface BluetoothSettingsResponse {
+  settings: BluetoothSettings;
+  audioDevices: BluetoothAudioDevice[];
+  inboxStatus: BluetoothInboxStatus;
+}
+
+export interface BluetoothTransfersResponse {
+  transfers: BluetoothTransfer[];
+  health: BluetoothTransferServiceHealth;
+}
+
+export async function getBluetoothSettings(): Promise<BluetoothSettingsResponse> {
+  return fetchJson<BluetoothSettingsResponse>("/api/system/bluetooth/settings");
+}
+
+export async function saveBluetoothSettings(
+  patch: Partial<Omit<BluetoothSettings, "updatedAt">>
+): Promise<{ settings: BluetoothSettings; inboxStatus: BluetoothInboxStatus }> {
+  return fetchJson<{ settings: BluetoothSettings; inboxStatus: BluetoothInboxStatus }>(
+    "/api/system/bluetooth/settings",
+    jsonRequest("PATCH", patch)
+  );
+}
+
+export async function getBluetoothTransfers(): Promise<BluetoothTransfersResponse> {
+  return fetchJson<BluetoothTransfersResponse>("/api/system/bluetooth/transfers");
+}
+
+export async function createBluetoothTransfers(input: {
+  adapterId: string;
+  address: string;
+  rootId: string;
+  storagePoolId: string;
+  paths: string[];
+}): Promise<BluetoothTransfer[]> {
+  return fetchJson<{ transfers: BluetoothTransfer[] }>(
+    "/api/system/bluetooth/transfers",
+    jsonRequest("POST", input)
+  ).then((body) => body.transfers);
+}
+
+export async function cancelBluetoothTransfer(id: string): Promise<BluetoothTransfer> {
+  return fetchJson<{ transfer: BluetoothTransfer }>(
+    `/api/system/bluetooth/transfers/${encodeURIComponent(id)}/cancel`,
+    { method: "POST" }
+  ).then((body) => body.transfer);
+}
+
+export function setBluetoothAdapterPower(input: BluetoothAdapterInput & { powered: boolean }) {
+  return bluetoothMutation("/api/system/bluetooth/adapter/power", "PUT", input);
+}
+
+export function setDefaultBluetoothAdapter(input: BluetoothAdapterInput) {
+  return bluetoothMutation("/api/system/bluetooth/default-adapter", "PUT", input);
+}
+
+export function startBluetoothScan(input: BluetoothAdapterInput) {
+  return bluetoothMutation("/api/system/bluetooth/scan/start", "POST", input);
+}
+
+export function stopBluetoothScan(input: BluetoothAdapterInput) {
+  return bluetoothMutation("/api/system/bluetooth/scan/stop", "POST", input);
+}
+
+export function pairBluetoothDevice(input: BluetoothDeviceInput) {
+  return bluetoothMutation("/api/system/bluetooth/devices/pair", "POST", input);
+}
+
+export function cancelBluetoothPairing(input: BluetoothDeviceInput) {
+  return bluetoothMutation("/api/system/bluetooth/devices/cancel-pairing", "POST", input);
+}
+
+export function respondBluetoothPairing(input: BluetoothPairingChallengeInput & { accept: boolean }) {
+  return bluetoothMutation("/api/system/bluetooth/pairing/respond", "POST", input);
+}
+
+export function setBluetoothDeviceTrust(input: BluetoothDeviceInput & { trusted: boolean }) {
+  return bluetoothMutation("/api/system/bluetooth/devices/trust", "PUT", input);
+}
+
+export function connectBluetoothDevice(input: BluetoothDeviceInput) {
+  return bluetoothMutation("/api/system/bluetooth/devices/connect", "POST", input);
+}
+
+export function disconnectBluetoothDevice(input: BluetoothDeviceInput) {
+  return bluetoothMutation("/api/system/bluetooth/devices/disconnect", "POST", input);
+}
+
+export function unpairBluetoothDevice(input: BluetoothDeviceInput) {
+  return bluetoothMutation("/api/system/bluetooth/devices/unpair", "POST", input);
+}
+
+async function bluetoothMutation(url: string, method: "POST" | "PUT", input: unknown): Promise<BluetoothOperationResult> {
+  const response = await fetch(url, jsonRequest(method, input));
+  await ensureOk(response);
+  return ((await response.json()) as { result: BluetoothOperationResult }).result;
 }
 
 export async function getMonitoringOverview(): Promise<MonitoringOverview> {
@@ -2134,11 +2291,23 @@ export async function sendVodPlayerCommand(command: VodPlayerCommand): Promise<V
   return body.status;
 }
 
-export async function getApprovals(): Promise<PendingApproval[]> {
+export async function getApprovals(): Promise<ApprovalQueue> {
   const response = await fetch("/api/approvals");
   await ensureOk(response);
-  const body = (await response.json()) as { approvals: PendingApproval[] };
-  return body.approvals;
+  return (await response.json()) as ApprovalQueue;
+}
+
+export async function decideCapabilityApproval(
+  approval: Pick<CapabilityApproval, "id" | "revision">,
+  decision: "approved" | "rejected",
+  confirmed = false
+): Promise<void> {
+  const response = await fetch(`/api/capability-approvals/${encodeURIComponent(approval.id)}/decision`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ decision, expectedRevision: approval.revision, confirmed })
+  });
+  await ensureOk(response);
 }
 
 export async function getNotifications(limit = 100): Promise<NotificationListResult> {
@@ -2163,6 +2332,24 @@ export async function markNotificationRead(id: string): Promise<{
     notification: OperationNotification;
     unreadCount: number;
   };
+}
+
+export async function markBluetoothTransferRead(id: string): Promise<{
+  transfer: BluetoothTransfer;
+  unreadCount: number;
+}> {
+  return fetchJson<{ transfer: BluetoothTransfer; unreadCount: number }>(
+    `/api/notifications/bluetooth/${encodeURIComponent(id)}/read`,
+    { method: "PATCH" }
+  );
+}
+
+export async function markAllBluetoothTransfersRead(): Promise<number> {
+  const result = await fetchJson<{ updated: number }>(
+    "/api/notifications/bluetooth/read-all",
+    { method: "POST" }
+  );
+  return result.updated;
 }
 
 export async function markAllNotificationsRead(): Promise<number> {

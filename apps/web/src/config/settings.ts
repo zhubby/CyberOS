@@ -17,6 +17,8 @@ export type SettingsSectionId =
   | "version"
   | "model-providers"
   | "agents"
+  | "wireless"
+  | "bluetooth"
   | "docker"
   | "files"
   | "indexer"
@@ -27,7 +29,7 @@ export type SettingsSectionId =
   | "appearance"
   | "advanced";
 
-export type SettingsGroupId = "zos" | "ai" | "workspace" | "administration";
+export type SettingsGroupId = "zos" | "devices" | "ai" | "workspace" | "administration";
 export type SettingsState = "ready" | "missing" | "loading";
 
 type Translate = TFunction<"translation">;
@@ -77,6 +79,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "ai"
   },
   {
+    id: "wireless",
+    group: "devices"
+  },
+  {
+    id: "bluetooth",
+    group: "devices"
+  },
+  {
     id: "docker",
     group: "administration"
   },
@@ -119,6 +129,8 @@ const SECTION_TITLE_KEYS = {
   version: "settings.sections.version.title",
   "model-providers": "settings.sections.modelProviders.title",
   agents: "settings.sections.agents.title",
+  wireless: "settings.sections.wireless.title",
+  bluetooth: "settings.sections.bluetooth.title",
   docker: "settings.sections.docker.title",
   files: "settings.sections.files.title",
   indexer: "settings.sections.indexer.title",
@@ -135,6 +147,8 @@ const SECTION_DESCRIPTION_KEYS = {
   version: "settings.sections.version.description",
   "model-providers": "settings.sections.modelProviders.description",
   agents: "settings.sections.agents.description",
+  wireless: "settings.sections.wireless.description",
+  bluetooth: "settings.sections.bluetooth.description",
   docker: "settings.sections.docker.description",
   files: "settings.sections.files.description",
   indexer: "settings.sections.indexer.description",
@@ -149,6 +163,7 @@ const SECTION_DESCRIPTION_KEYS = {
 const GROUP_LABEL_KEYS = {
   zos: "settings.groups.zos",
   ai: "settings.groups.ai",
+  devices: "settings.groups.devices",
   workspace: "settings.groups.workspace",
   administration: "settings.groups.administration"
 } as const satisfies Record<SettingsGroupId, string>;

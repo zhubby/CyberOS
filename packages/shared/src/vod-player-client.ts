@@ -134,6 +134,9 @@ function disabledStatus(): VodPlayerStatus {
     volume: 100,
     retryCount: 0,
     nextRetryAt: null,
+    audioDeviceId: null,
+    effectiveAudioDeviceId: null,
+    audioFallbackReason: null,
     capabilities: {
       mpvAvailable: false,
       drmAvailable: false,

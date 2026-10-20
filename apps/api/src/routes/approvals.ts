@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
+import { executeApprovedCapabilityRun } from "@zos/capability-runtime";
 import {
   appendEvent,
   deleteDockerComposeHostAccessDraft,
@@ -7,6 +8,7 @@ import {
   createTrashEntry,
   enqueuePhotostaffJob,
   getDockerSettings,
+  getMcpClient,
   getApproval,
   getDockerOperationByApproval,
   getDockerComposeHostAccessDraftByApproval,
@@ -19,6 +21,9 @@ import {
   getPhotostaffLibrarySettings,
   listDockerRegistryCredentials,
   listPendingApprovals,
+  listPendingCapabilityApprovals,
+  decideCapabilityApproval,
+  expireCapabilityApprovals,
   recordAppliedOperation,
   saveShareSettings,
   updateDockerOperationStatus,
@@ -65,9 +70,53 @@ import { applyApprovedVmOperation } from "./vms.js";
 export function registerApprovalRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   const { config, db, system } = context;
   const currentConfig = () => effectiveDockerConfig(config, getDockerSettings(db));
-  server.get("/api/approvals", async () => ({
-    approvals: listPendingApprovals(db)
-  }));
+  server.get("/api/approvals", async () => {
+    expireCapabilityApprovals(db);
+    return {
+      approvals: listPendingApprovals(db),
+      capabilityApprovals: listPendingCapabilityApprovals(db).map((approval) => {
+        const client = approval.run.clientId ? getMcpClient(db, approval.run.clientId) : null;
+        return {
+          ...approval,
+          client: client ? {
+            id: client.id,
+            name: client.name,
+            kind: client.kind,
+            tokenPrefix: client.tokenPrefix
+          } : null
+        };
+      })
+    };
+  });
+
+  server.post<{
+    Params: { id: string };
+    Body: { decision?: "approved" | "rejected"; expectedRevision?: number; confirmed?: boolean };
+  }>("/api/capability-approvals/:id/decision", async (request, reply) => {
+    const decision = request.body?.decision;
+    const expectedRevision = request.body?.expectedRevision;
+    if ((decision !== "approved" && decision !== "rejected") || !Number.isInteger(expectedRevision)) {
+      reply.status(400).send({ error: "A valid decision and expectedRevision are required" });
+      return;
+    }
+    const decided = decideCapabilityApproval(db, {
+      approvalId: request.params.id,
+      expectedRevision: expectedRevision!,
+      decision,
+      decidedBy: "local-admin",
+      confirmed: request.body?.confirmed === true
+    });
+    if (!decided) {
+      reply.status(409).send({ error: "Approval changed, expired, or requires explicit confirmation" });
+      return;
+    }
+    if (decision === "approved") {
+      const run = await executeApprovedCapabilityRun({ db, config }, decided.run.id);
+      reply.status(202).send({ ...decided, run });
+      return;
+    }
+    reply.status(200).send(decided);
+  });
 
   server.post<{
     Params: { id: string };

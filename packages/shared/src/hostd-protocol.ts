@@ -3,6 +3,7 @@ import type {
   HostdEthernetStatus,
   HostdDockerDaemonSnapshot,
   HostdDockerDaemonUpdateResult,
+  HostdBluetoothManagerResult,
   HostdNetworkInspectionResult as GeneratedNetworkInspectionResult,
   HostdNetworkMutationResult,
   HostdNetworkProfileInspection as GeneratedNetworkProfileInspection,
@@ -19,7 +20,8 @@ import type {
   SystemEthernetStatus,
   SystemWifiBand,
   SystemWifiScanResult,
-  SystemWifiSecurity
+  SystemWifiSecurity,
+  BluetoothStatus
 } from "./types.js";
 
 export type { HostdOperation, HostdRequestContract, HostdResultContract } from "./generated/hostd.js";
@@ -76,9 +78,10 @@ export type HostdResult<Operation extends HostdOperation, Request extends HostdR
   Operation extends "shares.apply" ? HostdShareApplyResult
     : Operation extends "storage.command" ? HostdStorageCommandResult
       : Operation extends "storage.operation" ? HostdStorageResult<Request>
-        : Operation extends "docker.daemon" ? HostdDockerResult<Request>
-          : Operation extends "network.manager" ? HostdNetworkResult<Request>
-            : Operation extends "system.power" ? HostdPowerResult
+            : Operation extends "docker.daemon" ? HostdDockerResult<Request>
+              : Operation extends "network.manager" ? HostdNetworkResult<Request>
+                : Operation extends "bluetooth.manager" ? HostdBluetoothManagerResult
+                : Operation extends "system.power" ? HostdPowerResult
               : Operation extends "system.ops" ? HostdOpsResult
                 : never;
 
@@ -103,6 +106,9 @@ export function parseHostdResult<
     case "network.manager":
       parsed = parseNetworkResult(request, value);
       break;
+    case "bluetooth.manager":
+      parsed = parseBluetoothStatus(value);
+      break;
     case "system.power":
       parsed = parsePowerResult(request, value);
       break;
@@ -111,6 +117,54 @@ export function parseHostdResult<
       break;
   }
   return parsed as HostdResult<Operation, Request> | null;
+}
+
+export function parseBluetoothStatus(value: unknown): BluetoothStatus | null {
+  if (!isRecordWithKeys(value, ["collectedAt", "backend", "available", "adapters", "devices", "scan", "challenge", "error"])) return null;
+  if (typeof value.collectedAt !== "string" || (value.backend !== "BlueZ" && value.backend !== "unknown")
+    || typeof value.available !== "boolean" || !Array.isArray(value.adapters) || !value.adapters.every(isBluetoothAdapter)
+    || !Array.isArray(value.devices) || !value.devices.every(isBluetoothDevice)
+    || !isBluetoothScan(value.scan) || (value.challenge !== null && !isBluetoothChallenge(value.challenge))
+    || !isNullableString(value.error)) return null;
+  return value as unknown as BluetoothStatus;
+}
+
+function isBluetoothAdapter(value: unknown): boolean {
+  if (!isRecordWithKeys(value, ["id", "address", "name", "alias", "state", "powered", "discovering", "defaultAdapter"])) return false;
+  return typeof value.id === "string" && /^adapter-[a-z0-9_.:-]{1,64}$/u.test(value.id)
+    && isBluetoothAddress(value.address) && typeof value.name === "string" && typeof value.alias === "string"
+    && ["powered", "off", "unavailable"].includes(String(value.state)) && typeof value.powered === "boolean"
+    && typeof value.discovering === "boolean" && typeof value.defaultAdapter === "boolean";
+}
+
+function isBluetoothDevice(value: unknown): boolean {
+  if (!isRecordWithKeys(value, ["adapterId", "address", "name", "alias", "type", "rssi", "paired", "trusted", "connected", "servicesResolved", "lastSeenAt"])) return false;
+  return typeof value.adapterId === "string" && /^adapter-[a-z0-9_.:-]{1,64}$/u.test(value.adapterId)
+    && isBluetoothAddress(value.address) && isNullableString(value.name) && isNullableString(value.alias)
+    && ["unknown", "phone", "computer", "headset", "speaker", "keyboard", "mouse", "gamepad", "wearable"].includes(String(value.type))
+    && (value.rssi === null || isIntegerInRange(value.rssi, -127, 20)) && typeof value.paired === "boolean"
+    && typeof value.trusted === "boolean" && typeof value.connected === "boolean"
+    && typeof value.servicesResolved === "boolean" && isNullableString(value.lastSeenAt);
+}
+
+function isBluetoothScan(value: unknown): boolean {
+  return isRecordWithKeys(value, ["active", "adapterId", "startedAt", "endsAt"])
+    && typeof value.active === "boolean" && (value.adapterId === null || typeof value.adapterId === "string")
+    && isNullableString(value.startedAt) && isNullableString(value.endsAt);
+}
+
+function isBluetoothChallenge(value: unknown): boolean {
+  if (!isRecordWithKeys(value, ["id", "adapterId", "deviceAddress", "kind", "pin", "passkey", "expiresAt"])) return false;
+  return typeof value.id === "string" && /^[a-f0-9-]{16,64}$/iu.test(value.id)
+    && typeof value.adapterId === "string" && /^adapter-[a-z0-9_.:-]{1,64}$/u.test(value.adapterId)
+    && isBluetoothAddress(value.deviceAddress)
+    && ["pin", "numeric_comparison", "confirmation"].includes(String(value.kind))
+    && isNullableString(value.pin) && (value.passkey === null || isIntegerInRange(value.passkey, 0, 999999))
+    && typeof value.expiresAt === "string";
+}
+
+function isBluetoothAddress(value: unknown): value is string {
+  return typeof value === "string" && /^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/iu.test(value);
 }
 
 function parseShareResult(value: unknown): HostdShareApplyResult | null {

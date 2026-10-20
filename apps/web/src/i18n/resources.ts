@@ -64,7 +64,12 @@ export const en = {
       tabs: {
         label: "Notification type",
         operations: "Operations",
+        bluetooth: "Bluetooth",
         alerts: "Alerts"
+      },
+      bluetooth: {
+        emptyTitle: "No Bluetooth transfers",
+        emptyBody: "Bluetooth sends and received files will appear here."
       },
       alerts: {
         emptyTitle: "No alert incidents",
@@ -172,7 +177,17 @@ export const en = {
     risks: {
       low: "low",
       medium: "medium",
-      high: "high"
+      high: "high",
+      critical: "critical"
+    },
+    capabilityApproval: {
+      kicker: "Agent capability request",
+      detail: "Review the immutable capability proposal before ZOS executes it.",
+      client: "Client",
+      revision: "Revision",
+      target: "Target",
+      expires: "Expires",
+      confirm: "This action requires an additional first-party confirmation. Approve and execute it now?"
     },
     approvalCards: {
       fileOperation: "File operation",
@@ -1396,7 +1411,7 @@ export const en = {
       network: {
         eyebrow: "Network",
         title: "Network",
-        description: "Live interface, route, traffic, Wi-Fi, and hotspot management.",
+        description: "Live interfaces, routes, traffic, Ethernet management, and Wi-Fi status.",
         loading: "Loading network interfaces.",
         readyDetail: "Live interface and route data from the host networking stack.",
         partialDetail: "Some network commands failed; available interfaces are still shown.",
@@ -1516,6 +1531,10 @@ export const en = {
         wifi: {
           title: "Wi-Fi",
           description: "Manage wireless adapters, saved networks, and a local hotspot.",
+          readOnlyDescription: "Connection status and nearby Wi-Fi networks. Configuration is in Settings.",
+          openSettings: "Open wireless settings",
+          radioOffTitle: "Wi-Fi radio is off",
+          radioOffDescription: "Nearby networks are hidden while the radio is off. Turn it on in Wireless settings.",
           managedMode: "Managed",
           device: "Wireless device",
           enableRadio: "Enable Wi-Fi radio",
@@ -2017,6 +2036,7 @@ export const en = {
     localProfile: "Local profile",
     groups: {
       zos: "ZOS",
+      devices: "Devices",
       ai: "AI",
       workspace: "Workspace",
       administration: "Administration"
@@ -2037,6 +2057,14 @@ export const en = {
       agents: {
         title: "Agents",
         description: "Tool execution policy and approval behavior."
+      },
+      wireless: {
+        title: "Wireless",
+        description: "Wi-Fi adapters, radio, saved networks, and hotspot configuration."
+      },
+      bluetooth: {
+        title: "Bluetooth",
+        description: "Adapters, discovery, pairing, trust, and device connections."
       },
       docker: {
         title: "Docker",
@@ -2074,6 +2102,101 @@ export const en = {
         title: "Advanced",
         description: "Runtime paths, process details, and service configuration."
       }
+    },
+    bluetooth: {
+      adaptersTitle: "Bluetooth adapters",
+      adaptersDescription: "Choose the default adapter and control its radio.",
+      defaultAdapter: "Default adapter",
+      turnOn: "Turn on",
+      turnOff: "Turn off",
+      noAdapters: "No Bluetooth adapter was found. Check the hardware and BlueZ service.",
+      reconnecting: "Reconnecting to Bluetooth status...",
+      devicesTitle: "Devices",
+      devicesDescription: "Scan for nearby devices, then pair, trust, and connect them independently.",
+      scan: "Scan for 15 seconds",
+      stopScan: "Stop scan",
+      scanning: "Scanning for nearby Bluetooth devices...",
+      noDevices: "No Bluetooth devices found.",
+      adapterOffReason: "Turn on this adapter before scanning or managing devices.",
+      paired: "Paired",
+      trusted: "Trusted",
+      connected: "Connected",
+      pair: "Pair",
+      trust: "Trust",
+      untrust: "Remove trust",
+      connect: "Connect",
+      disconnect: "Disconnect",
+      forget: "Forget device",
+      challengeTitle: "Confirm Bluetooth pairing",
+      challengeKinds: {
+        pin: "Enter the PIN shown by the other device.",
+        numeric_comparison: "Confirm that this number matches the other device.",
+        confirmation: "Confirm the pairing request."
+      },
+      pin: "PIN",
+      confirm: "Confirm pairing",
+      operationSucceeded: "Bluetooth state updated.",
+      operationFailed: "The Bluetooth operation failed.",
+      settingsSaved: "Bluetooth settings saved.",
+      audio: {
+        title: "Player audio output",
+        description: "Route the next ZOS/VOD playback to a paired headset or speaker.",
+        output: "Audio device",
+        systemDefault: "System ALSA / HDMI output",
+        disconnected: "disconnected",
+        nextPlayback: "Changes apply from the next playback. If Bluetooth audio fails, playback falls back to the configured system output."
+      },
+      inbox: {
+        title: "Trusted device inbox",
+        description: "Receive files into a mounted NAS directory without exposing arbitrary filesystem access.",
+        location: "Inbox location",
+        choose: "Choose inbox directory",
+        receive: "Enable background receiving",
+        trustedOnly: "Only paired devices that you explicitly trust may send files.",
+        required: "Choose an online, writable NAS directory before enabling receiving.",
+        pauseReasons: {
+          storage_unavailable: "Receiving is paused because the inbox storage is offline or unavailable.",
+          invalid_directory: "Receiving is paused because the inbox directory is no longer valid.",
+          not_writable: "Receiving is paused because the inbox directory is not writable.",
+          insufficient_space: "Receiving is paused because the inbox storage has no free space."
+        },
+        pickerTitle: "Choose Bluetooth inbox",
+        pickerDescription: "Select a directory on an online NAS storage pool.",
+        pickerList: "Inbox directories",
+        pickerEmpty: "This directory has no subdirectories.",
+        useDirectory: "Use this directory"
+      },
+      transfers: {
+        title: "File transfers",
+        description: "Persistent send and receive progress from the Bluetooth transfer service.",
+        sendFiles: "Send files",
+        empty: "No Bluetooth transfers yet.",
+        singlePoolRequired: "Files in one batch must come from the same storage pool.",
+        queued: "Queued {{count}} file(s) for Bluetooth transfer.",
+        filePickerTitle: "Select files to send",
+        filePickerDescription: "Choose up to 100 regular files from one mounted NAS storage pool.",
+        filePickerList: "Files",
+        filePickerEmpty: "This directory has no files.",
+        filePickerNone: "No files selected",
+        filePickerSelect: "Queue {{count}} file(s)",
+        filesSelected: "{{count}} file(s) selected",
+        health: {
+          stale: "The Bluetooth transfer service heartbeat is stale.",
+          unavailable: "The Bluetooth transfer service is unavailable."
+        },
+        directions: { send: "Sending", receive: "Receiving" },
+        statuses: {
+          queued: "Queued",
+          running: "Transferring",
+          paused: "Paused",
+          completed: "Completed",
+          failed: "Failed",
+          cancelled: "Cancelled"
+        }
+      }
+    },
+    wireless: {
+      statusUnavailable: "Wireless status is unavailable."
     },
     alerts: {
       saved: "Alert settings saved.",
@@ -2449,6 +2572,7 @@ export const en = {
       unknownFile: "No file selected",
       error: "Playback error",
       playbackError: "VOD Player could not play this file.",
+      audioFallback: "Bluetooth audio was unavailable. Playback is using the system output: {{reason}}",
       recoveringIn: "Retry {{count}} in {{seconds}}s",
       seek: "Seek",
       volume: "Volume",
@@ -2580,7 +2704,12 @@ export const zhCN = {
       tabs: {
         label: "通知类型",
         operations: "操作",
+        bluetooth: "蓝牙传输",
         alerts: "告警"
+      },
+      bluetooth: {
+        emptyTitle: "暂无蓝牙传输",
+        emptyBody: "蓝牙发送和接收的文件会显示在这里。"
       },
       alerts: {
         emptyTitle: "暂无告警事件",
@@ -2688,7 +2817,17 @@ export const zhCN = {
     risks: {
       low: "低",
       medium: "中",
-      high: "高"
+      high: "高",
+      critical: "严重"
+    },
+    capabilityApproval: {
+      kicker: "Agent 能力请求",
+      detail: "请在 ZOS 执行前检查这个不可变能力提案。",
+      client: "客户端",
+      revision: "修订版本",
+      target: "目标",
+      expires: "过期时间",
+      confirm: "此操作需要额外的第一方确认。确认现在批准并执行吗？"
     },
     approvalCards: {
       fileOperation: "文件操作",
@@ -3912,7 +4051,7 @@ export const zhCN = {
       network: {
         eyebrow: "网络",
         title: "网络",
-        description: "实时查看接口、路由和流量，并管理 Wi-Fi 与热点。",
+        description: "实时查看接口、路由和流量，管理以太网并查看 Wi-Fi 状态。",
         loading: "正在加载网络接口。",
         readyDetail: "来自宿主网络栈的实时接口和路由数据。",
         partialDetail: "部分网络命令失败；仍会展示可用接口。",
@@ -4032,6 +4171,10 @@ export const zhCN = {
         wifi: {
           title: "无线网络",
           description: "管理无线网卡、已保存网络和本机热点。",
+          readOnlyDescription: "查看连接状态和附近的 Wi-Fi 网络，配置操作请前往设置。",
+          openSettings: "打开无线网卡设置",
+          radioOffTitle: "Wi-Fi 射频已关闭",
+          radioOffDescription: "射频关闭时不会显示附近网络，请在无线网卡设置中开启。",
           managedMode: "可管理",
           device: "无线设备",
           enableRadio: "开启 Wi-Fi 射频",
@@ -4533,6 +4676,7 @@ export const zhCN = {
     localProfile: "本地配置",
     groups: {
       zos: "ZOS",
+      devices: "设备",
       ai: "AI",
       workspace: "工作区",
       administration: "管理"
@@ -4553,6 +4697,14 @@ export const zhCN = {
       agents: {
         title: "Agents",
         description: "工具执行策略和审批行为。"
+      },
+      wireless: {
+        title: "无线网卡",
+        description: "管理 Wi-Fi 网卡、射频、已保存网络和热点。"
+      },
+      bluetooth: {
+        title: "蓝牙",
+        description: "管理适配器、扫描、配对、信任和设备连接。"
       },
       docker: {
         title: "Docker",
@@ -4590,6 +4742,101 @@ export const zhCN = {
         title: "高级",
         description: "运行时路径、进程详情和服务配置。"
       }
+    },
+    bluetooth: {
+      adaptersTitle: "蓝牙适配器",
+      adaptersDescription: "选择默认适配器并控制蓝牙射频。",
+      defaultAdapter: "默认适配器",
+      turnOn: "开启",
+      turnOff: "关闭",
+      noAdapters: "未发现蓝牙适配器，请检查硬件和 BlueZ 服务。",
+      reconnecting: "正在重新连接蓝牙状态...",
+      devicesTitle: "设备",
+      devicesDescription: "扫描附近设备，并分别执行配对、信任和连接操作。",
+      scan: "扫描 15 秒",
+      stopScan: "停止扫描",
+      scanning: "正在扫描附近的蓝牙设备...",
+      noDevices: "未发现蓝牙设备。",
+      adapterOffReason: "请先开启此适配器，再扫描或管理设备。",
+      paired: "已配对",
+      trusted: "已信任",
+      connected: "已连接",
+      pair: "配对",
+      trust: "信任",
+      untrust: "取消信任",
+      connect: "连接",
+      disconnect: "断开",
+      forget: "遗忘设备",
+      challengeTitle: "确认蓝牙配对",
+      challengeKinds: {
+        pin: "请输入另一台设备上显示的 PIN。",
+        numeric_comparison: "请确认此数字与另一台设备一致。",
+        confirmation: "请确认配对请求。"
+      },
+      pin: "PIN",
+      confirm: "确认配对",
+      operationSucceeded: "蓝牙状态已更新。",
+      operationFailed: "蓝牙操作失败。",
+      settingsSaved: "蓝牙设置已保存。",
+      audio: {
+        title: "播放器音频输出",
+        description: "将下一次 ZOS/VOD 播放输出到已配对的耳机或音箱。",
+        output: "音频设备",
+        systemDefault: "系统 ALSA / HDMI 输出",
+        disconnected: "未连接",
+        nextPlayback: "变更从下一次播放生效。蓝牙音频失败时会回退到已配置的系统输出。"
+      },
+      inbox: {
+        title: "可信设备收件箱",
+        description: "将接收文件写入已挂载的 NAS 目录，不开放任意文件系统访问。",
+        location: "收件位置",
+        choose: "选择收件目录",
+        receive: "启用常驻接收",
+        trustedOnly: "只有已配对且由你明确标记为信任的设备才能发送文件。",
+        required: "请先选择在线且可写的 NAS 目录，再开启接收。",
+        pauseReasons: {
+          storage_unavailable: "收件存储已离线或不可用，接收已暂停。",
+          invalid_directory: "收件目录已失效，接收已暂停。",
+          not_writable: "收件目录不可写，接收已暂停。",
+          insufficient_space: "收件存储空间不足，接收已暂停。"
+        },
+        pickerTitle: "选择蓝牙收件箱",
+        pickerDescription: "在在线 NAS 存储池中选择一个目录。",
+        pickerList: "收件目录",
+        pickerEmpty: "此目录中没有子目录。",
+        useDirectory: "使用此目录"
+      },
+      transfers: {
+        title: "文件传输",
+        description: "由蓝牙传输服务持久记录的发送、接收和进度。",
+        sendFiles: "发送文件",
+        empty: "暂无蓝牙传输。",
+        singlePoolRequired: "同一批文件必须来自同一个存储池。",
+        queued: "已将 {{count}} 个文件加入蓝牙传输队列。",
+        filePickerTitle: "选择要发送的文件",
+        filePickerDescription: "从一个已挂载的 NAS 存储池中选择最多 100 个普通文件。",
+        filePickerList: "文件",
+        filePickerEmpty: "此目录中没有文件。",
+        filePickerNone: "未选择文件",
+        filePickerSelect: "将 {{count}} 个文件加入队列",
+        filesSelected: "已选择 {{count}} 个文件",
+        health: {
+          stale: "蓝牙传输服务心跳已过期。",
+          unavailable: "蓝牙传输服务不可用。"
+        },
+        directions: { send: "发送", receive: "接收" },
+        statuses: {
+          queued: "排队中",
+          running: "传输中",
+          paused: "已暂停",
+          completed: "已完成",
+          failed: "失败",
+          cancelled: "已取消"
+        }
+      }
+    },
+    wireless: {
+      statusUnavailable: "无线网络状态不可用。"
     },
     alerts: {
       saved: "告警设置已保存。",
@@ -4965,6 +5212,7 @@ export const zhCN = {
       unknownFile: "未选择文件",
       error: "播放错误",
       playbackError: "VOD Player 无法播放此文件。",
+      audioFallback: "蓝牙音频不可用，播放已回退到系统输出：{{reason}}",
       recoveringIn: "第 {{count}} 次恢复，{{seconds}} 秒后重试",
       seek: "跳转",
       volume: "音量",

@@ -3,6 +3,7 @@ import {
   ArrowUp,
   Check,
   Disc3,
+  File,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -44,19 +45,21 @@ export function StorageFilePickerDialog({
   directorySelectionDisabledReason,
   onCancel,
   onSelect,
+  onSelectMany,
   onRequestCreateFolder
 }: {
   pools: StorageFilePickerPool[];
   initialPoolId: string;
   locale: SupportedLocale;
-  mode?: "iso" | "directory";
-  directoryPurpose?: "downloads" | "photoMove" | "fileMove";
+  mode?: "iso" | "directory" | "files";
+  directoryPurpose?: "downloads" | "photoMove" | "fileMove" | "bluetoothInbox";
   initialPath?: string;
   boundaryPath?: string;
   directorySelectionDisabled?: (path: string) => boolean;
   directorySelectionDisabledReason?: string;
   onCancel: () => void;
   onSelect: (selection: StorageFileSelection) => void;
+  onSelectMany?: (selections: StorageFileSelection[]) => void;
   onRequestCreateFolder?: (input: {
     rootId: string;
     storagePoolId: string;
@@ -72,6 +75,7 @@ export function StorageFilePickerDialog({
   const [currentPath, setCurrentPath] = useState(initialPath ?? initialPool?.path ?? ".");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [selection, setSelection] = useState<FileEntry | null>(null);
+  const [multiSelection, setMultiSelection] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
@@ -79,7 +83,16 @@ export function StorageFilePickerDialog({
   const [createFolderSubmitting, setCreateFolderSubmitting] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const loadRequestId = useRef(0);
-  const directoryCopy = directoryPurpose === "photoMove"
+  const directoryCopy = directoryPurpose === "bluetoothInbox"
+    ? {
+        eyebrow: t("settings.bluetooth.inbox.location"),
+        title: t("settings.bluetooth.inbox.pickerTitle"),
+        description: t("settings.bluetooth.inbox.pickerDescription"),
+        list: t("settings.bluetooth.inbox.pickerList"),
+        empty: t("settings.bluetooth.inbox.pickerEmpty"),
+        select: t("settings.bluetooth.inbox.useDirectory")
+      }
+    : directoryPurpose === "photoMove"
     ? {
         eyebrow: t("workspace.photos.moveDestination"),
         title: t("workspace.photos.movePickerTitle"),
@@ -114,6 +127,16 @@ export function StorageFilePickerDialog({
     none: t("workspace.management.virtualMachines.isoPickerNoneSelected"),
     select: t("workspace.management.virtualMachines.isoPickerSelect")
   };
+  const multiFileCopy = {
+    eyebrow: t("settings.bluetooth.transfers.sendFiles"),
+    title: t("settings.bluetooth.transfers.filePickerTitle"),
+    description: t("settings.bluetooth.transfers.filePickerDescription"),
+    list: t("settings.bluetooth.transfers.filePickerList"),
+    empty: t("settings.bluetooth.transfers.filePickerEmpty"),
+    none: t("settings.bluetooth.transfers.filePickerNone"),
+    select: t("settings.bluetooth.transfers.filePickerSelect", { count: multiSelection.length })
+  };
+  const activeFileCopy = mode === "files" ? multiFileCopy : fileCopy;
   const pickerRootPath = boundaryPath && selectedPool?.id === initialPool?.id ? boundaryPath : selectedPool?.path ?? ".";
   const currentDirectoryDisabled = mode === "directory" && Boolean(directorySelectionDisabled?.(currentPath));
 
@@ -130,7 +153,9 @@ export function StorageFilePickerDialog({
       if (requestId !== loadRequestId.current) return;
       setEntries(listing.entries.filter((entry) => mode === "directory"
         ? isDirectoryPickerEntry(entry)
-        : isIsoPickerEntry(entry)));
+        : mode === "files"
+          ? isMultiFilePickerEntry(entry)
+          : isIsoPickerEntry(entry)));
     } catch (nextError) {
       if (requestId !== loadRequestId.current) return;
       setEntries([]);
@@ -178,6 +203,7 @@ export function StorageFilePickerDialog({
     setSelectedPoolId(pool.id);
     setCurrentPath(pool.path);
     setSelection(null);
+    setMultiSelection([]);
   }
 
   function openDirectory(path: string) {
@@ -195,6 +221,16 @@ export function StorageFilePickerDialog({
         path: currentPath,
         name: currentPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? selectedPool.name
       });
+      return;
+    }
+    if (mode === "files") {
+      if (multiSelection.length === 0 || !onSelectMany) return;
+      onSelectMany(multiSelection.map((entry) => ({
+        rootId: selectedPool.rootId,
+        storagePoolId: selectedPool.id,
+        path: entry.path,
+        name: entry.name
+      })));
       return;
     }
     if (!selection) return;
@@ -277,22 +313,22 @@ export function StorageFilePickerDialog({
       >
         <header className="storage-file-picker-header">
           <div className="storage-file-picker-heading">
-            <span className="vm-create-icon" aria-hidden="true">{mode === "directory" ? <FolderOpen size={20} /> : <Disc3 size={20} />}</span>
+            <span className="vm-create-icon" aria-hidden="true">{mode === "directory" ? <FolderOpen size={20} /> : mode === "files" ? <File size={20} /> : <Disc3 size={20} />}</span>
             <div>
               <span className="eyebrow">
                 {mode === "directory"
                   ? directoryCopy.eyebrow
-                  : fileCopy.eyebrow}
+                  : activeFileCopy.eyebrow}
               </span>
               <h3 id="storage-file-picker-title">
                 {mode === "directory"
                   ? directoryCopy.title
-                  : fileCopy.title}
+                  : activeFileCopy.title}
               </h3>
               <p>
                 {mode === "directory"
                   ? directoryCopy.description
-                  : fileCopy.description}
+                  : activeFileCopy.description}
               </p>
             </div>
           </div>
@@ -348,7 +384,7 @@ export function StorageFilePickerDialog({
           <section className="storage-file-picker-browser">
             <div className="storage-file-picker-toolbar">
               <div className="storage-file-picker-location">
-                <span>{mode === "directory" ? directoryCopy.eyebrow : fileCopy.list}</span>
+                <span>{mode === "directory" ? directoryCopy.eyebrow : activeFileCopy.list}</span>
                 <nav className="storage-file-picker-breadcrumbs" aria-label={t("workspace.breadcrumbs")}>
                   {selectedPool ? (
                     <button type="button" onClick={() => openDirectory(pickerRootPath)}>
@@ -407,7 +443,7 @@ export function StorageFilePickerDialog({
               role="listbox"
               aria-label={mode === "directory"
                 ? directoryCopy.list
-                : fileCopy.list}
+                : activeFileCopy.list}
             >
               {loading ? (
                 <div className="storage-file-picker-state"><LoaderCircle className="is-spinning" aria-hidden="true" size={19} /><span>{t("common.states.loading")}</span></div>
@@ -420,13 +456,15 @@ export function StorageFilePickerDialog({
                 <div className="storage-file-picker-state"><HardDrive aria-hidden="true" size={19} /><span>{t("workspace.management.virtualMachines.isoPickerNoPools")}</span></div>
               ) : entries.length === 0 ? (
                 <div className="storage-file-picker-state">
-                  {mode === "directory" ? <Folder aria-hidden="true" size={19} /> : <Disc3 aria-hidden="true" size={19} />}
-                  <span>{mode === "directory" ? directoryCopy.empty : fileCopy.empty}</span>
+                  {mode === "directory" ? <Folder aria-hidden="true" size={19} /> : mode === "files" ? <File aria-hidden="true" size={19} /> : <Disc3 aria-hidden="true" size={19} />}
+                  <span>{mode === "directory" ? directoryCopy.empty : activeFileCopy.empty}</span>
                 </div>
               ) : (
                 entries.map((entry) => {
                   const isDirectory = entry.kind === "directory";
-                  const isSelected = selection?.path === entry.path;
+                  const isSelected = mode === "files"
+                    ? multiSelection.some((candidate) => candidate.path === entry.path)
+                    : selection?.path === entry.path;
                   return (
                     <button
                       key={entry.path}
@@ -434,10 +472,20 @@ export function StorageFilePickerDialog({
                       className={`storage-file-picker-row${isSelected ? " is-selected" : ""}`}
                       role="option"
                       aria-selected={isSelected}
-                      onClick={() => isDirectory ? openDirectory(entry.path) : setSelection(entry)}
+                      onClick={() => {
+                        if (isDirectory) {
+                          openDirectory(entry.path);
+                        } else if (mode === "files") {
+                          setMultiSelection((current) => current.some((candidate) => candidate.path === entry.path)
+                            ? current.filter((candidate) => candidate.path !== entry.path)
+                            : current.length >= 100 ? current : [...current, entry]);
+                        } else {
+                          setSelection(entry);
+                        }
+                      }}
                     >
                       <span className="storage-file-picker-file-icon" data-kind={isDirectory ? "directory" : "iso"}>
-                        {isDirectory ? <Folder aria-hidden="true" size={17} /> : <Disc3 aria-hidden="true" size={17} />}
+                        {isDirectory ? <Folder aria-hidden="true" size={17} /> : mode === "files" ? <File aria-hidden="true" size={17} /> : <Disc3 aria-hidden="true" size={17} />}
                       </span>
                       <span className="storage-file-picker-file-name">{entry.name}</span>
                       <span className="storage-file-picker-file-meta">
@@ -460,7 +508,11 @@ export function StorageFilePickerDialog({
           {mode === "directory" ? (
             <span title={currentPath}>{currentPath}</span>
           ) : (
-            <span title={selection?.path}>{selection?.name ?? fileCopy.none}</span>
+            <span title={selection?.path}>{mode === "files"
+              ? multiSelection.length > 0
+                ? t("settings.bluetooth.transfers.filesSelected", { count: multiSelection.length })
+                : activeFileCopy.none
+              : selection?.name ?? fileCopy.none}</span>
           )}
           <div>
             <button type="button" onClick={onCancel}>{t("common.actions.cancel")}</button>
@@ -468,10 +520,10 @@ export function StorageFilePickerDialog({
               type="button"
               className="vm-create-submit"
               onClick={confirmSelection}
-              disabled={currentDirectoryDisabled || (mode !== "directory" && !selection)}
+              disabled={currentDirectoryDisabled || (mode === "files" ? multiSelection.length === 0 : mode !== "directory" && !selection)}
               title={currentDirectoryDisabled ? directorySelectionDisabledReason : undefined}
             >
-              {mode === "directory" ? directoryCopy.select : fileCopy.select}
+              {mode === "directory" ? directoryCopy.select : activeFileCopy.select}
             </button>
           </div>
         </footer>
@@ -486,6 +538,10 @@ export function isIsoPickerEntry(entry: FileEntry): boolean {
 
 export function isDirectoryPickerEntry(entry: FileEntry): boolean {
   return entry.isSafe && entry.kind === "directory";
+}
+
+export function isMultiFilePickerEntry(entry: FileEntry): boolean {
+  return entry.isSafe && (entry.kind === "directory" || entry.kind === "file");
 }
 
 export function parentPickerPath(poolPath: string, currentPath: string): string {

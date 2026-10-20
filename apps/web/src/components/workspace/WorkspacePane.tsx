@@ -492,6 +492,7 @@ export function WorkspacePane({
   onNotifyError,
   onNotifySuccess,
   onNotifyWarning,
+  onOpenDeviceSettings,
   onClosePreview,
   onRollback
 }: {
@@ -570,6 +571,7 @@ export function WorkspacePane({
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
   onNotifyWarning: (message: string | null) => void;
+  onOpenDeviceSettings: (section: "wireless" | "bluetooth") => void;
   onClosePreview: () => void;
   onRollback: (operation: FileOperation) => void;
 }) {
@@ -1752,6 +1754,7 @@ export function WorkspacePane({
               onNotifyError={onNotifyError}
               onNotifySuccess={onNotifySuccess}
               onNotifyWarning={onNotifyWarning}
+              onOpenDeviceSettings={onOpenDeviceSettings}
             />
           )}
           {terminalMounted ? (

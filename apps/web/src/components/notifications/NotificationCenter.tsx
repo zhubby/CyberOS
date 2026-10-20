@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   Ban,
   Bell,
+  Bluetooth,
   CheckCheck,
   CircleCheck,
   CircleX,
@@ -10,13 +11,16 @@ import {
   Container,
   FileCog,
   HardDrive,
+  Inbox,
   LoaderCircle,
   MonitorCog,
   Share2,
+  Send,
   ShieldAlert,
   X
 } from "lucide-react";
-import type { MonitoringAlertIncident, OperationNotification } from "../../api.js";
+import type { BluetoothTransfer, MonitoringAlertIncident, OperationNotification } from "../../api.js";
+import { formatBytes } from "../../i18n/format.js";
 import { formatDate, formatRelativeTime, formatTime } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 
@@ -26,14 +30,18 @@ export function NotificationCenter({
   open,
   loading,
   notifications,
+  bluetoothTransfers,
   alertIncidents,
   unreadCount,
   operationUnreadCount,
+  bluetoothUnreadCount,
   alertUnreadCount,
   locale,
   onClose,
   onRead,
   onReadAll,
+  onReadBluetooth,
+  onReadAllBluetooth,
   onReadAlert,
   onReadAllAlerts,
   onAcknowledgeAlert
@@ -41,14 +49,18 @@ export function NotificationCenter({
   open: boolean;
   loading: boolean;
   notifications: OperationNotification[];
+  bluetoothTransfers: BluetoothTransfer[];
   alertIncidents: MonitoringAlertIncident[];
   unreadCount: number;
   operationUnreadCount: number;
+  bluetoothUnreadCount: number;
   alertUnreadCount: number;
   locale: SupportedLocale;
   onClose: () => void;
   onRead: (id: string) => void;
   onReadAll: () => void;
+  onReadBluetooth: (id: string) => void;
+  onReadAllBluetooth: () => void;
   onReadAlert: (id: string) => void;
   onReadAllAlerts: () => void;
   onAcknowledgeAlert: (id: string) => void;
@@ -58,8 +70,12 @@ export function NotificationCenter({
   const drawerRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [activeTab, setActiveTab] = useState<"operations" | "alerts">("operations");
-  const activeUnreadCount = activeTab === "operations" ? operationUnreadCount : alertUnreadCount;
+  const [activeTab, setActiveTab] = useState<"operations" | "bluetooth" | "alerts">("operations");
+  const activeUnreadCount = activeTab === "operations"
+    ? operationUnreadCount
+    : activeTab === "bluetooth"
+      ? bluetoothUnreadCount
+      : alertUnreadCount;
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -125,7 +141,7 @@ export function NotificationCenter({
           <div className="notification-drawer-actions">
             <button
               type="button"
-              onClick={activeTab === "operations" ? onReadAll : onReadAllAlerts}
+              onClick={activeTab === "operations" ? onReadAll : activeTab === "bluetooth" ? onReadAllBluetooth : onReadAllAlerts}
               disabled={activeUnreadCount === 0}
               title={t("notifications.center.markAllRead")}
               aria-label={t("notifications.center.markAllRead")}
@@ -153,6 +169,9 @@ export function NotificationCenter({
           <button type="button" role="tab" aria-selected={activeTab === "operations"} onClick={() => setActiveTab("operations")}>
             {t("notifications.center.tabs.operations")}<span>{operationUnreadCount}</span>
           </button>
+          <button type="button" role="tab" aria-selected={activeTab === "bluetooth"} onClick={() => setActiveTab("bluetooth")}>
+            {t("notifications.center.tabs.bluetooth")}<span>{bluetoothUnreadCount}</span>
+          </button>
           <button type="button" role="tab" aria-selected={activeTab === "alerts"} onClick={() => setActiveTab("alerts")}>
             {t("notifications.center.tabs.alerts")}<span>{alertUnreadCount}</span>
           </button>
@@ -166,6 +185,15 @@ export function NotificationCenter({
               locale={locale}
               now={now}
               onRead={onRead}
+              t={translate}
+            />
+          ) : activeTab === "bluetooth" ? (
+            <BluetoothTransfersList
+              loading={loading}
+              transfers={bluetoothTransfers}
+              locale={locale}
+              now={now}
+              onRead={onReadBluetooth}
               t={translate}
             />
           ) : (
@@ -183,6 +211,38 @@ export function NotificationCenter({
       </aside>
     </div>
   );
+}
+
+function BluetoothTransfersList({ loading, transfers, locale, now, onRead, t }: {
+  loading: boolean;
+  transfers: BluetoothTransfer[];
+  locale: SupportedLocale;
+  now: number;
+  onRead: (id: string) => void;
+  t: Translate;
+}) {
+  if (loading && transfers.length === 0) {
+    return <div className="notification-empty" role="status"><LoaderCircle className="notification-spinner" aria-hidden="true" size={20} /><span>{t("notifications.center.loading")}</span></div>;
+  }
+  if (transfers.length === 0) {
+    return <div className="notification-empty"><Bluetooth aria-hidden="true" size={20} /><strong>{t("notifications.center.bluetooth.emptyTitle")}</strong><span>{t("notifications.center.bluetooth.emptyBody")}</span></div>;
+  }
+  return <>{transfers.map((transfer) => {
+    const timestamp = transfer.finishedAt ?? transfer.updatedAt;
+    const relativeTime = formatRelativeTime(timestamp, locale, now);
+    const absoluteTime = `${formatDate(timestamp, locale)} ${formatTime(timestamp, locale)}`;
+    const Icon = transfer.direction === "send" ? Send : Inbox;
+    return <button type="button" key={transfer.id} className="notification-item" data-status={transfer.status} data-unread={transfer.readAt === null ? "true" : "false"} onClick={() => onRead(transfer.id)} aria-label={`${transfer.displayName}. ${t(`settings.bluetooth.transfers.statuses.${transfer.status}`)}`}>
+      <span className="notification-status-icon" aria-hidden="true"><Icon size={17} /></span>
+      <span className="notification-item-content">
+        <span className="notification-item-title"><Bluetooth aria-hidden="true" size={14} /><strong>{transfer.displayName}</strong></span>
+        <span className="notification-item-summary">{t(`settings.bluetooth.transfers.directions.${transfer.direction}`)} · {t(`settings.bluetooth.transfers.statuses.${transfer.status}`)} · {formatBytes(transfer.transferredBytes, locale)}{transfer.totalBytes === null ? "" : ` / ${formatBytes(transfer.totalBytes, locale)}`}</span>
+        {transfer.error ? <span className="notification-item-error">{transfer.error}</span> : null}
+        <time dateTime={timestamp} title={absoluteTime}>{relativeTime}</time>
+      </span>
+      {transfer.readAt === null ? <span className="notification-unread-dot" aria-hidden="true" /> : null}
+    </button>;
+  })}</>;
 }
 
 function OperationsList({ loading, notifications, locale, now, onRead, t }: {

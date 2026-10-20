@@ -901,6 +901,11 @@
   background: rgb(214 144 33 / 16%);
 }
 
+.approval-card-icon[data-kind="capability"] {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
 .approval-card-body {
   grid-area: body;
   display: grid;
@@ -1000,7 +1005,8 @@
   background: rgb(240 178 50 / 15%);
 }
 
-.risk-pill[data-risk="high"] {
+.risk-pill[data-risk="high"],
+.risk-pill[data-risk="critical"] {
   color: #ff9da1;
   background: rgb(218 55 60 / 15%);
 }

@@ -1,8 +1,14 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { VodPlayerStatus } from "../../api.js";
+import { i18n, initI18n } from "../../i18n/index.js";
 import { VodPlayerControls } from "./VodPlayerControls.js";
+
+beforeAll(async () => {
+  await initI18n();
+  await i18n.changeLanguage("en");
+});
 
 const status: VodPlayerStatus = {
   state: "playing",
@@ -18,6 +24,9 @@ const status: VodPlayerStatus = {
   volume: 75,
   retryCount: 0,
   nextRetryAt: null,
+  audioDeviceId: null,
+  effectiveAudioDeviceId: null,
+  audioFallbackReason: null,
   capabilities: { mpvAvailable: true, drmAvailable: true, audioAvailable: true, hardwareDecode: "enabled", error: null },
   error: null,
   errorCode: null,
@@ -46,5 +55,16 @@ describe("VodPlayerControls", () => {
     }));
     expect(html).toContain("vod-player-message");
     expect(html).toContain("is-recovering");
+  });
+
+  it("explains Bluetooth audio fallback", () => {
+    const html = renderToStaticMarkup(createElement(VodPlayerControls, {
+      status: { ...status, audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF", audioFallbackReason: "BlueALSA device unavailable" },
+      busy: false,
+      onCommand: vi.fn(),
+      onRetry: vi.fn()
+    }));
+    expect(html).toContain("Bluetooth audio was unavailable");
+    expect(html).toContain("BlueALSA device unavailable");
   });
 });

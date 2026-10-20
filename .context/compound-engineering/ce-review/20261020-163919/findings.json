@@ -1,0 +1,17 @@
+{
+  "mode": "interactive_autofix",
+  "verdict": "ready_after_verification",
+  "scope": {
+    "branch": "main",
+    "dirty_worktree": true,
+    "untracked_feature_files_manually_included": true
+  },
+  "findings": [],
+  "applied_fixes": 11,
+  "residual_risks": [
+    "Real BlueZ, OBEX, and BlueALSA hardware integration was not available locally.",
+    "The Debian package and appliance image were not installed or booted during review."
+  ],
+  "failed_reviewers": [],
+  "suppressed_findings": 0
+}

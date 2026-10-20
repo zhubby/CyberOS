@@ -24,6 +24,7 @@ import {
 import remarkGfm from "remark-gfm";
 import type {
   DockerOperationProposal,
+  CapabilityApproval,
   ModelProviderSettings,
   NasRoot,
   PendingApproval,
@@ -50,6 +51,7 @@ import type { TranscriptPhase } from "../../lib/transcript.js";
 import { PowerControl } from "../power/PowerControl.js";
 
 type ApprovalRisk = PendingApproval["proposal"][number]["risk"];
+type CapabilityApprovalRisk = CapabilityApproval["risk"];
 type ApprovalCardKind = "file" | "tool" | "docker" | "vm" | "share" | "storage";
 type ComposerKeyDownEvent = Pick<KeyboardEvent<HTMLTextAreaElement>, "key" | "shiftKey" | "nativeEvent">;
 type ComposerFeedbackState = "sending" | "queued" | "running" | "reconnecting";
@@ -182,6 +184,7 @@ export function ChatPane({
   transcript,
   transcriptPhase,
   activeApprovals,
+  activeCapabilityApprovals,
   message,
   composerPath,
   status,
@@ -199,7 +202,9 @@ export function ChatPane({
   notificationUnreadCount,
   onSelectSession,
   onApprove,
+  onApproveCapability,
   onReject,
+  onRejectCapability,
   onSubmitMessage,
   onMessageChange,
   onClearComposerPath,
@@ -214,6 +219,7 @@ export function ChatPane({
   transcript: TranscriptMessage[];
   transcriptPhase: TranscriptPhase;
   activeApprovals: PendingApproval[];
+  activeCapabilityApprovals: CapabilityApproval[];
   message: string;
   composerPath: string | null;
   status: AppStatus;
@@ -231,7 +237,9 @@ export function ChatPane({
   notificationUnreadCount: number;
   onSelectSession: (session: SessionSummary) => void;
   onApprove: (approvalId: string) => void;
+  onApproveCapability: (approval: CapabilityApproval) => void;
   onReject: (approvalId: string) => void;
+  onRejectCapability: (approval: CapabilityApproval) => void;
   onSubmitMessage: (event: FormEvent<HTMLFormElement>) => void;
   onMessageChange: (message: string) => void;
   onClearComposerPath: () => void;
@@ -243,7 +251,7 @@ export function ChatPane({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const rootAgentTitle = t("chat.rootAgent");
-  const hasConversationContent = transcript.length > 0 || activeApprovals.length > 0;
+  const hasConversationContent = transcript.length > 0 || activeApprovals.length > 0 || activeCapabilityApprovals.length > 0;
   const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), rootAgentTitle);
   const composerFeedback = composerFeedbackState({ activeJobId, messageSubmitting, status });
   const deleteDisabled = !activeSessionSummary || composerFeedback !== null || status === "cancelling";
@@ -336,6 +344,76 @@ export function ChatPane({
             type="button"
             className="approval-reject"
             onClick={() => onReject(approval.id)}
+            title={t("common.actions.reject")}
+          >
+            <X aria-hidden="true" size={15} />
+            <span>{t("common.actions.reject")}</span>
+          </button>
+        </div>
+      </article>
+    );
+  };
+
+  const renderCapabilityApprovalCard = (approval: CapabilityApproval) => {
+    const proposal = approval.proposal;
+    const request = isRecord(proposal.request) ? proposal.request : null;
+    const summary = typeof proposal.summary === "string"
+      ? proposal.summary
+      : t("chat.capabilityApproval.detail");
+    const target = [request?.rootId, request?.sourcePath, request?.targetPath]
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .join(" -> ");
+    return (
+      <article className="approval-card" aria-label={t("chat.pendingApprovals")}>
+        <div className="approval-card-icon" aria-hidden="true" data-kind="capability">
+          <Settings size={18} />
+        </div>
+        <div className="approval-card-body">
+          <div className="approval-card-head">
+            <div>
+              <span className="approval-card-kicker">{t("chat.capabilityApproval.kicker")}</span>
+              <strong>{approval.run.capabilityId}</strong>
+            </div>
+            <span className="risk-pill" data-risk={approval.risk}>
+              {t("chat.risk", { risk: approvalRiskLabel(approval.risk, translate) })}
+            </span>
+          </div>
+          <p>{summary}</p>
+          <dl className="approval-card-details">
+            <div>
+              <dt>{t("chat.capabilityApproval.client")}</dt>
+              <dd>{approval.client ? `${approval.client.name} (${approval.client.kind})` : approval.run.subjectKind}</dd>
+            </div>
+            <div>
+              <dt>{t("chat.capabilityApproval.revision")}</dt>
+              <dd>{String(approval.revision)}</dd>
+            </div>
+            {target ? (
+              <div>
+                <dt>{t("chat.capabilityApproval.target")}</dt>
+                <dd title={target}>{target}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt>{t("chat.capabilityApproval.expires")}</dt>
+              <dd>{formatTime(approval.expiresAt, locale)}</dd>
+            </div>
+          </dl>
+        </div>
+        <div className="approval-actions">
+          <button
+            type="button"
+            className="approval-approve"
+            onClick={() => onApproveCapability(approval)}
+            title={t("common.actions.approve")}
+          >
+            <Check aria-hidden="true" size={15} />
+            <span>{t("common.actions.approve")}</span>
+          </button>
+          <button
+            type="button"
+            className="approval-reject"
+            onClick={() => onRejectCapability(approval)}
             title={t("common.actions.reject")}
           >
             <X aria-hidden="true" size={15} />
@@ -474,6 +552,20 @@ export function ChatPane({
                       <span className="message-meta">{t("chat.approvals")}</span>
                     </header>
                     {renderApprovalCard(approval)}
+                  </div>
+                </article>
+              ))}
+              {activeCapabilityApprovals.map((approval) => (
+                <article key={`capability-approval-${approval.id}`} className="message message-assistant message-approval">
+                  <div className="avatar" aria-hidden="true">
+                    <Bot size={17} />
+                  </div>
+                  <div>
+                    <header>
+                      <strong>{t("chat.zosAgent")}</strong>
+                      <span className="message-meta">{t("chat.approvals")}</span>
+                    </header>
+                    {renderCapabilityApprovalCard(approval)}
                   </div>
                 </article>
               ))}
@@ -754,7 +846,10 @@ function markdownCodeLanguage(className: string | undefined): string | null {
   return match?.[1] ?? null;
 }
 
-function approvalRiskLabel(risk: ApprovalRisk, t: Translate): string {
+function approvalRiskLabel(risk: ApprovalRisk | CapabilityApprovalRisk, t: Translate): string {
+  if (risk === "critical") {
+    return t("chat.risks.critical");
+  }
   if (risk === "high") {
     return t("chat.risks.high");
   }
@@ -762,6 +857,10 @@ function approvalRiskLabel(risk: ApprovalRisk, t: Translate): string {
     return t("chat.risks.medium");
   }
   return t("chat.risks.low");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function approvalCard(approval: PendingApproval, t: Translate): ApprovalCard {

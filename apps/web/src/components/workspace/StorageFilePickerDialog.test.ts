@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../../api.js";
-import { isIsoPickerEntry, parentPickerPath, pickerBreadcrumbs } from "./StorageFilePickerDialog.js";
+import { isIsoPickerEntry, isMultiFilePickerEntry, parentPickerPath, pickerBreadcrumbs } from "./StorageFilePickerDialog.js";
 
 const entry = (name: string, kind: FileEntry["kind"], isSafe = true): FileEntry => ({
   name,
@@ -18,6 +18,13 @@ describe("StorageFilePickerDialog helpers", () => {
     expect(isIsoPickerEntry(entry("notes.txt", "file"))).toBe(false);
     expect(isIsoPickerEntry(entry("escape.iso", "symlink"))).toBe(false);
     expect(isIsoPickerEntry(entry("unsafe", "directory", false))).toBe(false);
+  });
+
+  it("allows safe regular files for multi-file Bluetooth selection", () => {
+    expect(isMultiFilePickerEntry(entry("folder", "directory"))).toBe(true);
+    expect(isMultiFilePickerEntry(entry("notes.txt", "file"))).toBe(true);
+    expect(isMultiFilePickerEntry(entry("link", "symlink"))).toBe(false);
+    expect(isMultiFilePickerEntry(entry("unsafe.bin", "file", false))).toBe(false);
   });
 
   it("keeps parent navigation inside the selected pool", () => {

@@ -14,7 +14,7 @@ STATE_PATH="$BASE_DIR/current-release.json"
 LOCK_PATH=/run/lock/zos-deploy.lock
 
 TIMERS='zos-maintenance.timer zos-health.timer zos-backup-daily.timer zos-backup-weekly.timer'
-CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'
+CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-bluetoothd.service zos-indexer.service'
 RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service zos-alerter.service"
 SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'
 OPTIONAL_RUNTIME_SERVICES='zos-host-accessd.service'
@@ -293,6 +293,7 @@ activate_runtime() {
   start_service_stably zos-worker@1.service
   start_service_stably zos-photostaff.service
   start_service_stably zos-downloader.service
+  start_service_stably zos-bluetoothd.service
   start_service_stably zos-indexer.service
 
   log "enabling ZOS schedules"

@@ -1,0 +1,37 @@
+[Unit]
+Description=ZOS Bluetooth transfer service
+Documentation=file:///usr/share/doc/zos/README.md
+After=dbus.service bluetooth.service local-fs.target zos-api.service
+Wants=bluetooth.service zos-api.service
+Requires=zos-api.service
+RequiresMountsFor=/zos/data
+
+[Service]
+Type=simple
+User=zos
+Group=zos
+Environment=ZOS_ROOT=/zos
+Environment=ZOS_CONFIG=/zos/config/config.toml
+Environment=HOME=/zos/state/bluetooth
+Environment=XDG_CACHE_HOME=/zos/state/bluetooth/cache
+WorkingDirectory=/zos/state/bluetooth
+ExecStart=/usr/bin/dbus-run-session -- /usr/lib/zos/bin/zos-bluetoothd
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+KillMode=control-group
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/zos/state/bluetooth /zos/state/zos.sqlite /zos/state/zos.sqlite-shm /zos/state/zos.sqlite-wal /zos/data
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX AF_BLUETOOTH
+IPAddressDeny=any
+CapabilityBoundingSet=
+MemoryMax=256M
+CPUQuota=100%
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

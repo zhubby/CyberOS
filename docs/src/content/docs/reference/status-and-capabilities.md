@@ -4,7 +4,7 @@ description: Job、approval、operation、index、backup 和可用能力的当�
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/shared/src/types.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, packages/db/src/repositories/approval-status.ts, packages/db/src/repositories/index-run-status.ts, packages/db/src/repositories/backup-runs.ts]
+sourceOfTruth: [packages/shared/src/types.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/api/src/lib/bluetooth-manager.ts, apps/api/src/routes/bluetooth-transfers.ts, apps/bluetoothd/src/lib.rs, packages/db/src/repositories/approval-status.ts, packages/db/src/repositories/index-run-status.ts, packages/db/src/repositories/backup-runs.ts]
 sidebar:
   order: 4
 ---
@@ -23,7 +23,21 @@ Job 状态包括 `queued`、`running`、`waiting_approval`、`completed`、`fail
 
 无线设备状态通过 `system.wifi.status` SSE 独立更新。SSE 断开时界面显示 `reconnecting`，不把旧状态当作实时状态。扫描是显式请求，保留 BSSID 级结果；界面按 SSID 和安全模式分组并默认使用最强 AP。
 
+Wi-Fi 的射频、连接、已保存网络和热点操作统一位于“设置 > 设备 > 无线网卡”。网络面板只显示连接状态和最近一次显式扫描结果；进入面板时仅在射频开启、NetworkManager 与 hostd 可用时自动扫描一次。射频关闭后网络卡片清空旧扫描结果并显示设置入口，不把缓存结果当作当前环境。
+
 同一无线网卡不能同时作为客户端和热点；不同网卡互不影响。热点 autostart 默认关闭，停止热点会同时关闭 autostart 并尝试恢复启动热点前的客户端 profile。成功切换后不设置超时回滚，失败激活会执行即时恢复并公开恢复结果。
+
+## 蓝牙设备管理
+
+蓝牙状态以 BlueZ 系统 D-Bus 为唯一权威来源，ZOS 不复制配对密钥、信任状态或连接状态。`zos-hostd` 通过专用 `bluetooth.manager` 协议枚举适配器和设备、控制射频与扫描，并执行配对、取消配对、信任、连接、断开和遗忘；API 通过 `system.bluetooth.status` SSE 发布变化。默认适配器偏好保存在 root-only `/zos/state/hostd/bluetooth/default-adapter`。
+
+系统支持多个适配器，所有扫描和设备操作都携带适配器 ID 与规范化 MAC 地址，hostd 会重新解析 BlueZ 对象并拒绝未知对象。设置页的手动扫描默认持续约 15 秒；配对成功不会自动信任。没有蓝牙硬件、BlueZ 未运行或系统 D-Bus 不可用时，不影响其他 ZOS 服务启动，页面会显示具体不可用原因。
+
+蓝牙设备管理依赖 Debian `bluez`；音频和文件传输还依赖 `bluez-obexd`、`bluez-alsa-utils`、`libasound2-plugin-bluez`、用户会话 D-Bus 和非 root `zos-bluetoothd`。`zos-bluetoothd` 负责 OBEX 会话、逐文件队列、进度和持久传输记录，hostd 仍只负责需要系统权限的 BlueZ 控制。传输状态通过独立 SSE 发布并进入通知中心，不写入聊天流。
+
+音频只改变 ZOS/VOD 播放输出，不改变系统 UI 音频，也不支持手机向 ZOS 输入音频。设置只保存枚举产生的稳定 `bluetooth:<MAC>` ID；API 和 VOD 都不接受任意 ALSA 设备字符串。选择从下一次播放生效；设备断开或 BlueALSA 打开失败时，VOD 立即回退到原有 ALSA/HDMI 输出，并在播放器状态中保留原因。
+
+文件发送只接受已挂载 NAS 存储池内经安全解析的普通文件，批量任务逐文件记录 `queued`、`running`、`completed`、`failed` 或 `cancelled`。文件接收是用户明确开启的系统托管收件箱特例，不进入 Agent approval；只有已配对且手动标记为 Trusted 的设备可以发送。每次接收都会重新验证 NAS root、存储池挂载源、目录可写性、符号链接/防穿越和可用空间；离线或空间不足时拒绝新传输。同名文件追加时间戳和序号，绝不覆盖现有文件。
 
 ## Docker 的两个状态信号
 

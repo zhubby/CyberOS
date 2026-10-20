@@ -37,6 +37,7 @@ struct DesiredSession {
     position_seconds: f64,
     volume: f64,
     paused: bool,
+    audio_device_id: Option<String>,
     identity: Option<FileIdentity>,
 }
 
@@ -83,6 +84,7 @@ impl ControllerHandle {
                     position_seconds: saved.position_seconds,
                     volume: saved.volume,
                     paused: saved.desired_paused,
+                    audio_device_id: saved.audio_device_id,
                     identity: Some(saved.identity),
                 })
             }
@@ -195,6 +197,7 @@ impl Controller {
                 storage_pool_id,
                 relative_path,
                 start_position_seconds,
+                audio_device_id,
             } => {
                 self.stop_mpv().await;
                 self.retry_at = None;
@@ -208,6 +211,7 @@ impl Controller {
                     position_seconds: start_position_seconds.unwrap_or(0.0),
                     volume: self.status.volume,
                     paused: false,
+                    audio_device_id,
                     identity: None,
                 });
                 self.status.state = PlayerState::Starting;
@@ -350,14 +354,54 @@ impl Controller {
         self.status.next_retry_at = None;
         self.publish();
         self.persist_current()?;
-        let mpv = MpvHandle::start(
-            &self.config,
-            media,
-            desired.position_seconds,
-            desired.volume,
-            desired.paused,
-        )
-        .await?;
+        let requested_audio_device = desired
+            .audio_device_id
+            .as_deref()
+            .map(bluetooth_alsa_device);
+        let mpv = if let Some(audio_device) = requested_audio_device.as_deref() {
+            match MpvHandle::start(
+                &self.config,
+                media.try_clone()?,
+                desired.position_seconds,
+                desired.volume,
+                desired.paused,
+                Some(audio_device),
+            )
+            .await
+            {
+                Ok(mpv) => {
+                    self.status.effective_audio_device_id = desired.audio_device_id.clone();
+                    self.status.audio_fallback_reason = None;
+                    mpv
+                }
+                Err(error) => {
+                    self.status.effective_audio_device_id = None;
+                    self.status.audio_fallback_reason = Some(error.message.clone());
+                    tracing::warn!(device_id = ?desired.audio_device_id, message = %error.message, "Bluetooth audio failed; falling back to configured output");
+                    MpvHandle::start(
+                        &self.config,
+                        media,
+                        desired.position_seconds,
+                        desired.volume,
+                        desired.paused,
+                        None,
+                    )
+                    .await?
+                }
+            }
+        } else {
+            self.status.effective_audio_device_id = None;
+            self.status.audio_fallback_reason = None;
+            MpvHandle::start(
+                &self.config,
+                media,
+                desired.position_seconds,
+                desired.volume,
+                desired.paused,
+                None,
+            )
+            .await?
+        };
         self.mpv = Some(mpv);
         self.retry_at = None;
         self.status.state = if desired.paused {
@@ -600,6 +644,7 @@ impl Controller {
             self.status.file_name = file_name(&desired.relative_path);
             self.status.position_seconds = desired.position_seconds;
             self.status.volume = desired.volume;
+            self.status.audio_device_id = desired.audio_device_id.clone();
         }
     }
 
@@ -626,6 +671,7 @@ impl Controller {
                 position_seconds: desired.position_seconds,
                 volume: desired.volume,
                 desired_paused: desired.paused,
+                audio_device_id: desired.audio_device_id.clone(),
                 identity,
                 updated_at: now(),
             },
@@ -671,6 +717,9 @@ fn empty_status(service_instance_id: String, capabilities: Capabilities) -> Stat
         volume: 100.0,
         retry_count: 0,
         next_retry_at: None,
+        audio_device_id: None,
+        effective_audio_device_id: None,
+        audio_fallback_reason: None,
         capabilities,
         error: None,
         error_code: None,
@@ -693,6 +742,11 @@ fn file_name(path: &str) -> Option<String> {
         .file_name()
         .and_then(|name| name.to_str())
         .map(str::to_owned)
+}
+
+fn bluetooth_alsa_device(device_id: &str) -> String {
+    let address = device_id.strip_prefix("bluetooth:").unwrap_or_default();
+    format!("alsa/bluealsa:DEV={address},PROFILE=a2dp")
 }
 
 #[cfg(test)]
@@ -775,6 +829,14 @@ mod tests {
     }
 
     #[test]
+    fn bluetooth_ids_map_to_bluealsa_without_accepting_an_alsa_device() {
+        assert_eq!(
+            bluetooth_alsa_device("bluetooth:AA:BB:CC:DD:EE:FF"),
+            "alsa/bluealsa:DEV=AA:BB:CC:DD:EE:FF,PROFILE=a2dp"
+        );
+    }
+
+    #[test]
     fn deterministic_decode_failures_do_not_retry() {
         assert_eq!(
             classify_end_file_failure("error", Some("decoder not found for codec")).code,
@@ -820,6 +882,7 @@ mod tests {
             position_seconds: 0.0,
             volume: 100.0,
             paused: false,
+            audio_device_id: None,
             identity: None,
         });
         controller.status.retry_count = 1;

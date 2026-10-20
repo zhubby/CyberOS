@@ -47,7 +47,7 @@ install -d "$OUT_DIR"
 mmdebstrap \
   --architectures="$ARCH" \
   --variant=minbase \
-  --include=systemd-sysv,ca-certificates,curl,nodejs,npm,sqlite3,tmux,nginx,restic,git,rsync,network-manager,wpasupplicant,dnsmasq-base,wireless-regdb,iw,docker.io,docker-cli,docker-compose,libvirt-daemon-system,libvirt-clients,qemu-system-arm,qemu-efi-aarch64,qemu-utils,virtinst,ipxe-qemu,gzip,unzip,libarchive-tools,unrar-free,mdadm,btrfs-progs,tesseract-ocr,tesseract-ocr-chi-sim,tesseract-ocr-eng,poppler-utils,ffmpeg,libraw-bin,imagemagick,libheif-examples,libimage-exiftool-perl,libvips-tools,mpv,seatd,smartmontools,samba,apache2,apache2-utils,vsftpd,libpam-pwdfile,nfs-kernel-server,minidlna \
+  --include=systemd-sysv,ca-certificates,curl,nodejs,npm,sqlite3,tmux,nginx,restic,git,rsync,network-manager,wpasupplicant,dnsmasq-base,wireless-regdb,iw,bluez,bluez-obexd,bluez-alsa-utils,libasound2-plugin-bluez,dbus-user-session,docker.io,docker-cli,docker-compose,libvirt-daemon-system,libvirt-clients,qemu-system-arm,qemu-efi-aarch64,qemu-utils,virtinst,ipxe-qemu,gzip,unzip,libarchive-tools,unrar-free,mdadm,btrfs-progs,tesseract-ocr,tesseract-ocr-chi-sim,tesseract-ocr-eng,poppler-utils,ffmpeg,libraw-bin,imagemagick,libheif-examples,libimage-exiftool-perl,libvips-tools,mpv,seatd,smartmontools,samba,apache2,apache2-utils,vsftpd,libpam-pwdfile,nfs-kernel-server,minidlna \
   "$SUITE" "$ROOTFS" "$MIRROR"
 
 case "$ARCH" in
@@ -76,9 +76,9 @@ systemd-nspawn -D "$ROOTFS" /usr/lib/zos/scripts/zos-nginx.sh
 if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
   systemd-nspawn -D "$ROOTFS" /bin/sh -eu -c \
     'sed -i "/^\\[vod_player\\]/,/^\\[/ s/^enabled = false$/enabled = true/" /zos/config/config.toml'
-  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service zos-hostd.service zos-termux.service zos-vod-player.service zos-api.service zos-monitor.service zos-alerter.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-maintenance.timer zos-backup-daily.timer zos-backup-weekly.timer zos-health.timer
+  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service zos-hostd.service zos-termux.service zos-vod-player.service zos-bluetoothd.service zos-api.service zos-monitor.service zos-alerter.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-maintenance.timer zos-backup-daily.timer zos-backup-weekly.timer zos-health.timer
 else
-  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service zos-hostd.service zos-termux.service zos-api.service zos-monitor.service zos-alerter.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-maintenance.timer zos-backup-daily.timer zos-backup-weekly.timer zos-health.timer
+  systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service zos-hostd.service zos-termux.service zos-bluetoothd.service zos-api.service zos-monitor.service zos-alerter.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-maintenance.timer zos-backup-daily.timer zos-backup-weekly.timer zos-health.timer
 fi
 
 tar --numeric-owner -C "$ROOTFS" -cpf "$TARBALL" .

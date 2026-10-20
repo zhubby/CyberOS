@@ -315,7 +315,8 @@ export function WorkspaceManagementPanel({
   onWorkQueuesChanged,
   onNotifyError,
   onNotifySuccess,
-  onNotifyWarning
+  onNotifyWarning,
+  onOpenDeviceSettings
 }: {
   panel: ManagementPanelId;
   roots: NasRoot[];
@@ -330,6 +331,7 @@ export function WorkspaceManagementPanel({
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
   onNotifyWarning: (message: string | null) => void;
+  onOpenDeviceSettings: (section: "wireless" | "bluetooth") => void;
 }) {
   if (panel === "docker") {
     return (
@@ -365,6 +367,7 @@ export function WorkspaceManagementPanel({
         locale={locale}
         onNotifyError={onNotifyError}
         onNotifySuccess={onNotifySuccess}
+        onOpenWirelessSettings={() => onOpenDeviceSettings("wireless")}
       />
     );
   }

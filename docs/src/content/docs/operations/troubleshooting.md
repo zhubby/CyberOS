@@ -4,7 +4,7 @@ description: API、静态资源、terminal、timer、indexer、backup 和 SQLite
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/monitor/src/adapters/metrics_sqlite.rs, apps/alerter/src/adapters/alert_store, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
+sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/monitor/src/adapters/metrics_sqlite.rs, apps/alerter/src/adapters/alert_store, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, apps/bluetoothd/src/lib.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-bluetoothd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
 sidebar:
   order: 4
 ---
@@ -121,6 +121,47 @@ sudo journalctl -u NetworkManager.service -u zos-hostd.service -n 100 --no-pager
 非 NetworkManager 主机不会自动迁移。`wlan0` 为 unmanaged 时检查 NetworkManager 配置和已有 Netplan renderer，不要直接删除外部 profile。扫描失败但状态可读通常表示 hostd、radio 或权限异常；确认 `/run/zos/hostd.sock`、unit 的 `/etc/NetworkManager/system-connections` 写路径以及 `iw` 是否安装。
 
 热点启动失败时，检查 `/zos/state/hostd/network-manager/state.json` 和 NetworkManager journal。该文件只记录待恢复 profile UUID，不含密码；不要手工编辑正在使用的状态。若自动恢复失败，使用 `nmcli connection up uuid <uuid> ifname <device>` 恢复，确认客户端连接后再移除对应状态。Wi-Fi/热点密码位于 root-only `.nmconnection` 文件中，不要把文件正文复制到日志或工单。
+
+## 蓝牙、BlueZ 与配对
+
+“设置 > 设备 > 蓝牙”显示无适配器或 BlueZ 不可用时，依次检查系统总线、BlueZ 服务、控制器和 hostd：
+
+```bash
+sudo systemctl status dbus.service bluetooth.service zos-hostd.service --no-pager
+sudo journalctl -u bluetooth.service -u zos-hostd.service -n 120 --no-pager
+busctl --system tree org.bluez
+bluetoothctl list
+rfkill list bluetooth
+```
+
+ZOS 通过 BlueZ D-Bus 操作设备，不解析 `bluetoothctl` 输出；`bluetoothctl` 只用于人工诊断。存在控制器但页面为空时，确认 `org.bluez.Adapter1` 对象可见，以及 `/run/zos/hostd.sock` 可访问。扫描立即停止通常是适配器未上电、被 rfkill 阻止或已有其他进程持有 discovery；先解除硬件阻止，再从页面重新启动 15 秒扫描。
+
+默认适配器偏好位于 `/zos/state/hostd/bluetooth/default-adapter`，不包含密钥。配对密钥和 Trusted 标志由 BlueZ 保存，不要复制 `/var/lib/bluetooth` 到日志或工单。配对挑战过期后应重新发起配对，不要重复提交旧 challenge ID。
+
+音频无声或发生回退时，分别检查 BlueALSA、ALSA 插件和 VOD 日志：
+
+```bash
+dpkg-query -W bluez-alsa-utils libasound2-plugin-bluez
+sudo systemctl status bluealsa.service zos-vod-player.service --no-pager
+sudo journalctl -u bluealsa.service -u zos-vod-player.service -n 120 --no-pager
+sudo -u zos aplay -L | sed -n '/bluealsa/,+4p'
+```
+
+设置页只允许枚举出的 `bluetooth:<MAC>`，不要把 `hw:*`、`bluealsa:*` 或其他 ALSA 字符串直接写入数据库。输出设备断开或 ALSA 打开失败时，VOD 应继续使用原有 ALSA/HDMI，并在播放器条显示回退原因。蓝牙设备重新连接后，重新开始一次播放才会再次选择它。
+
+文件传输异常时检查 OBEX、独立传输服务、持久队列和目标存储：
+
+```bash
+dpkg-query -W bluez-obexd dbus-user-session
+sudo systemctl status zos-bluetoothd.service bluetooth.service --no-pager
+sudo journalctl -u zos-bluetoothd.service -u bluetooth.service -n 160 --no-pager
+sudo -u zos sqlite3 /zos/state/zos.sqlite \
+  'select direction,status,count(*) from bluetooth_transfers group by direction,status;'
+findmnt -T /zos/data/primary
+df -h /zos/data/primary
+```
+
+`zos-bluetoothd` 通过自己的用户会话 D-Bus 激活 `bluez-obexd`。服务反复退出时检查 `dbus-run-session`、OBEX D-Bus activation 文件及 `/zos/state/bluetooth` 所有权，不要改为 root。收件被拒绝时确认发送设备同时为 Paired 和 Trusted、收件开关已开启、所选 NAS 目录仍属于同一挂载源且 `zos` 可写。目录离线、空间不足、出现符号链接或挂载源变化都会拒绝新文件；修复后重新从发送端发起，不要手工把失败记录改为完成。接收文件重名会自动改名，不需要预先删除原文件。
 
 ## 多网口 Ethernet 与 checkpoint
 

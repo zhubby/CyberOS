@@ -23,7 +23,7 @@ LIBVIRT_URI=qemu:///system
 LEGACY_TIMERS='sigmaos-maintenance.timer sigmaos-health.timer sigmaos-backup-daily.timer sigmaos-backup-weekly.timer'
 LEGACY_SERVICES='sigmaos-hostd.service sigmaos-termux.service sigmaos-vod-player.service sigmaos-webdav.service sigmaos-api.service sigmaos-worker@1.service sigmaos-photostaff.service sigmaos-downloader.service sigmaos-indexer.service sigmaos-maintenance.service sigmaos-health.service sigmaos-backup-daily.service sigmaos-backup-weekly.service'
 SHARE_SERVICES='smbd.service nmbd.service vsftpd.service nfs-server.service minidlna.service'
-ZOS_SERVICES='zos-hostd.service zos-termux.service zos-vod-player.service zos-webdav.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'
+ZOS_SERVICES='zos-hostd.service zos-termux.service zos-vod-player.service zos-bluetoothd.service zos-webdav.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'
 
 backup_dir=
 state_file=

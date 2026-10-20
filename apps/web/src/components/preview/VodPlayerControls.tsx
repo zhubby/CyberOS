@@ -67,6 +67,13 @@ export function VodPlayerControls({ status, busy, onCommand, onRetry }: {
         </div>
       ) : null}
 
+      {status.audioFallbackReason ? (
+        <div className="vod-player-message is-warning" role="status">
+          <AlertTriangle aria-hidden="true" size={15} />
+          <span>{t("preview.vodPlayer.audioFallback", { reason: status.audioFallbackReason })}</span>
+        </div>
+      ) : null}
+
       <label className="vod-player-progress">
         <span className="visually-hidden">{t("preview.vodPlayer.seek")}</span>
         <input

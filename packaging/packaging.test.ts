@@ -118,7 +118,15 @@ describe("native packaging artifacts", () => {
     expect(vodPlayerUnit).toContain("WatchdogSec=20s");
     expect(vodPlayerUnit).toContain("TimeoutStopSec=30s");
     expect(vodPlayerUnit).toContain("ProtectSystem=strict");
+    expect(vodPlayerUnit).toContain("Wants=zos-api.service bluetooth.service bluealsa.service");
     expect(vodPlayerUnit).not.toContain("RequiresMountsFor=/zos/data");
+    const bluetoothUnit = await readPackagingFile("systemd", "zos-bluetoothd.service");
+    expect(bluetoothUnit).toContain("User=zos");
+    expect(bluetoothUnit).toContain("ExecStart=/usr/bin/dbus-run-session -- /usr/lib/zos/bin/zos-bluetoothd");
+    expect(bluetoothUnit).toContain("RequiresMountsFor=/zos/data");
+    expect(bluetoothUnit).toContain("ReadWritePaths=/zos/state/bluetooth");
+    expect(bluetoothUnit).toContain("RestrictAddressFamilies=AF_UNIX AF_BLUETOOTH");
+    expect(bluetoothUnit).toContain("CapabilityBoundingSet=");
     const photostaffUnit = await readPackagingFile("systemd", "zos-photostaff.service");
     expect(photostaffUnit).toContain("ExecStart=/usr/lib/zos/bin/zos-photostaff");
     expect(photostaffUnit).toContain("Type=notify");
@@ -198,6 +206,7 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("usr/lib/zos/apps/ops/dist/");
     expect(install).not.toContain("apps/scheduler");
     expect(install).toContain("target/release/zos-vod-player usr/lib/zos/bin/");
+    expect(install).toContain("target/release/zos-bluetoothd usr/lib/zos/bin/");
     expect(install).not.toContain("apps/player-helper");
     expect(install).toContain("target/release/zos-downloader usr/lib/zos/bin/");
     expect(install).not.toContain("apps/downloader/dist/");
@@ -242,6 +251,8 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("packaging/scripts/zos-refresh-vod-player.sh usr/lib/zos/scripts/");
     expect(install).toContain("packaging/scripts/zos-deploy-bootstrap.sh usr/lib/zos/scripts/");
     expect(install).toContain("packaging/scripts/zos-deploy usr/lib/zos/scripts/");
+    expect(install).toContain("apps/mcp-cli/dist/* usr/lib/zos/apps/mcp-cli/dist/");
+    expect(install).toContain("packaging/scripts/zos-mcp usr/lib/zos/scripts/");
     expect(install).toContain("packaging/nginx/zos.conf usr/share/zos/nginx/");
     expect(install).toContain("packaging/etc/config.toml zos/config/");
     expect(install).toContain("lib/systemd/system/");
@@ -249,11 +260,12 @@ describe("native packaging artifacts", () => {
     expect(tmpfiles).toContain("/run/zos");
     expect(tmpfiles).toContain("/run/mdadm");
     expect(tmpfiles).toContain("d /run/samba 0755 root root -");
-    expect(control).toContain("Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, libheif-examples");
+    expect(control).toContain("Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, openssl, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, bluez");
     expect(control).toMatch(/^Depends:.*poppler-utils.*tesseract-ocr-chi-sim.*tesseract-ocr-eng/m);
     expect(control).toMatch(/^Depends:.*libheif-examples/m);
     expect(control).not.toContain("Recommends: libheif-examples");
     expect(control).toContain("Build-Depends: debhelper-compat (= 13), nodejs, npm, cargo, rustc, acl");
+    expect(control).toMatch(/^Depends:.*bluez-obexd.*bluez-alsa-utils.*libasound2-plugin-bluez.*dbus-user-session/m);
     expect(control).toContain("mpv");
     expect(control).toContain("libheif-examples");
     expect(control).toContain("libimage-exiftool-perl");
@@ -277,10 +289,14 @@ describe("native packaging artifacts", () => {
     expect(postinst).toContain("ZOS_DEPLOY_USER=sigmaos-deploy");
     expect(postinst).toContain("install -d -o root -g zos -m 0751 /zos");
     expect(postinst).toContain("install -d -o root -g zos -m 0750 /zos/config");
+    expect(postinst).toContain("ln -sfn /usr/lib/zos/scripts/zos-mcp /usr/local/sbin/zos-mcp");
     expect(postinst).not.toContain("install -d -o root -g zos -m 0755 /zos");
     expect(postinst).toContain("/zos/state/hostd/docker-daemon");
     expect(postinst).toContain("/zos/state/hostd/network-manager");
+    expect(postinst).toContain("/zos/state/bluetooth");
     expect(defaultConfig).toContain("[monitoring]");
+    expect(defaultConfig).toContain("[mcp]");
+    expect(defaultConfig).toContain("external_enabled = false");
     expect(defaultConfig).toContain("max_database_bytes = 536870912");
     expect(refreshVodPlayer).toContain("ZOS_VOD_PLAYER_SOCKET_PATH");
     expect(refreshVodPlayer).toContain("ZOS_VOD_PLAYER_STATE_PATH");
@@ -330,11 +346,17 @@ describe("native packaging artifacts", () => {
     expect(manifest).toContain("zos-downloader.service");
     expect(manifest).toContain("zos-photostaff.service");
     expect(manifest).toContain("zos-vod-player.service");
+    expect(manifest).toContain("zos-bluetoothd.service");
     expect(manifest).not.toContain("zos-player-helper.service");
     expect(manifest).toContain("mpv");
     expect(manifest).toContain("samba");
     expect(buildImage).toMatch(/--include=.*(^|,)git(,|\\|\s)/s);
     expect(buildImage).toMatch(/--include=.*(^|,)samba(,|\\|\s)/s);
+    expect(buildImage).toMatch(/--include=.*(^|,)bluez(,|\\|\s)/s);
+    expect(buildImage).toMatch(/--include=.*(^|,)bluez-obexd(,|\\|\s)/s);
+    expect(buildImage).toContain("bluez-alsa-utils");
+    expect(buildImage).toContain("libasound2-plugin-bluez");
+    expect(buildImage).toContain("dbus-user-session");
     expect(manifest).toContain("tesseract-ocr");
     expect(manifest).toContain("tesseract-ocr-chi-sim");
     expect(manifest).toContain("tesseract-ocr-eng");
@@ -582,6 +604,8 @@ describe("native packaging artifacts", () => {
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3010;");
     expect(nginx).toContain("proxy_set_header Upgrade $http_upgrade;");
     expect(nginx).toContain("client_max_body_size 4g;");
+    expect(nginx).toContain("location = /mcp");
+    expect(nginx).toMatch(/location = \/mcp \{\s+return 404;/u);
     expect(nginxScript).toContain("nginx -t");
     expect(nginxScript).toContain("enabled_dir=/etc/nginx/sites-enabled");
     expect(nginxScript).toContain("ln -sfn");
@@ -608,7 +632,7 @@ describe("native packaging artifacts", () => {
     expect(unit).toContain("ProtectSystem=strict");
     expect(unit).toContain("ReadWritePaths=/etc /run/zos /run/mdadm /zos/config /zos/data");
     expect(unit).toContain("ReadWritePaths=-/run/samba -/var/lib/samba -/var/cache/samba -/var/log/samba");
-    expect(unit).toContain("ReadWritePaths=-/zos/state/hostd/docker-daemon /zos/state/hostd/network-manager");
+    expect(unit).toContain("ReadWritePaths=-/zos/state/hostd/docker-daemon /zos/state/hostd/network-manager /zos/state/hostd/bluetooth");
     expect(unit).not.toMatch(/ReadWritePaths=.*(?:^|\s)\/var\/lib\/zos(?:\s|$)/mu);
     expect(unit).not.toContain("/zos/logs");
     expect(unit).toContain("CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER");
@@ -624,6 +648,7 @@ describe("native packaging artifacts", () => {
     expect(postinst).toContain("zos-migrate-sigmaos.sh apply");
     expect(postinst).toContain("/zos/state/hostd/docker-daemon");
     expect(postinst).toContain("/zos/state/hostd/network-manager");
+    expect(postinst).toContain("/zos/state/hostd/bluetooth");
     expect(postinst).toContain("/zos/home/share");
     expect(postinst).toContain("usermod --home /zos/home/share zos-share");
     expect(postinst).toContain("/zos/apps");
@@ -739,6 +764,7 @@ describe("native packaging artifacts", () => {
       "start_service_stably zos-worker@1.service",
       "start_service_stably zos-photostaff.service",
       "start_service_stably zos-downloader.service",
+      "start_service_stably zos-bluetoothd.service",
       "start_service_stably zos-indexer.service",
       "systemctl enable $TIMERS",
       "systemctl start $TIMERS"
@@ -766,7 +792,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
     expect(deploy).toContain("sleep 30");
     expect(deploy).toContain(
-      "CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service'"
+      "CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-bluetoothd.service zos-indexer.service'"
     );
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
     expect(deploy).toContain('die "one or more services restarted during stabilization"');

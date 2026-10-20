@@ -222,6 +222,20 @@
       "result": { "id": "550e8400-e29b-41d4-a716-446655440010", "status": "rolled_back", "deviceIds": ["2ccf67c96807"], "createdAt": "2026-10-10T00:00:00Z", "deadlineAt": null, "rollback": "succeeded", "error": null }
     },
     {
+      "operation": "bluetooth.manager",
+      "request": { "action": "status" },
+      "result": {
+        "collectedAt": "2026-10-10T00:00:00Z",
+        "backend": "BlueZ",
+        "available": false,
+        "adapters": [],
+        "devices": [],
+        "scan": { "active": false, "adapterId": null, "startedAt": null, "endsAt": null },
+        "challenge": null,
+        "error": null
+      }
+    },
+    {
       "operation": "system.power",
       "request": { "action": "reboot", "confirmed": true },
       "result": { "action": "reboot", "accepted": true }

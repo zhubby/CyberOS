@@ -1,5 +1,10 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { saveBluetoothSettings } from "@zos/db";
 import type {
+  BluetoothAdapterInput,
+  BluetoothDeviceInput,
+  BluetoothPairingChallengeInput,
+  BluetoothStatus,
   SystemEthernetStatus,
   SystemEthernetUpdateInput,
   SystemPowerAction,
@@ -12,6 +17,12 @@ import type {
 } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { unknownBuildInfo } from "../lib/build-info.js";
+import {
+  BluetoothManagerRequestError,
+  HostdBluetoothManagerClient,
+  unavailableBluetoothStatus,
+  type BluetoothManagerRuntime
+} from "../lib/bluetooth-manager.js";
 import {
   EthernetManagerRequestError,
   SystemEthernetManagerRuntime,
@@ -37,8 +48,10 @@ const WIFI_SAMPLE_MS = 1000;
 const WIFI_HEARTBEAT_MS = 15_000;
 const ETHERNET_SAMPLE_MS = 1000;
 const ETHERNET_HEARTBEAT_MS = 15_000;
+const BLUETOOTH_SAMPLE_MS = 1000;
+const BLUETOOTH_HEARTBEAT_MS = 15_000;
 
-export function registerSystemRoutes(server: FastifyInstance, { buildInfo, config, system }: ApiRouteContext): void {
+export function registerSystemRoutes(server: FastifyInstance, { buildInfo, config, db, system }: ApiRouteContext): void {
   const networkManager = system?.networkManager ?? new SystemNetworkManagerRuntime({
     ...(system?.commandRunner ? { commandRunner: system.commandRunner } : {}),
     hostdSocketPath: config.hostd.socketPath
@@ -46,6 +59,7 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
   const ethernetManager = system?.ethernetManager ?? new SystemEthernetManagerRuntime(config.hostd.socketPath);
   const systemDependencies = { ...system, networkManager, ethernetManager };
   const power = system?.power ?? new HostdSystemPowerRuntime(config.hostd.socketPath);
+  const bluetooth = system?.bluetoothManager ?? new HostdBluetoothManagerClient(config.hostd.socketPath);
 
   server.get("/api/system/build-info", async () => ({
     build: buildInfo ?? unknownBuildInfo()
@@ -58,6 +72,59 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
   server.get("/api/system/network/traffic", async () => ({
     traffic: await collectSystemNetworkTraffic(system)
   }));
+
+  server.get("/api/system/bluetooth", async () => ({
+    bluetooth: await bluetooth.getStatus().catch((error) => unavailableBluetoothStatus(safeBluetoothError(error)))
+  }));
+
+  server.get("/api/system/bluetooth/events", async (request, reply) => {
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+      "x-accel-buffering": "no"
+    });
+    await streamBluetoothEvents(request.raw, reply.raw, bluetooth);
+  });
+
+  server.put<{ Body: BluetoothAdapterInput & { powered: boolean } }>("/api/system/bluetooth/adapter/power", async (request, reply) => {
+    await sendBluetoothMutation(reply, () => bluetooth.setAdapterPower(request.body));
+  });
+  server.put<{ Body: BluetoothAdapterInput }>("/api/system/bluetooth/default-adapter", async (request, reply) => {
+    await sendBluetoothMutation(reply, async () => {
+      const result = await bluetooth.setDefaultAdapter(request.body);
+      saveBluetoothSettings(db, { defaultAdapterId: request.body.adapterId });
+      return result;
+    });
+  });
+  server.post<{ Body: BluetoothAdapterInput }>("/api/system/bluetooth/scan/start", async (request, reply) => {
+    await sendBluetoothMutation(reply, () => bluetooth.startScan(request.body));
+  });
+  server.post<{ Body: BluetoothAdapterInput }>("/api/system/bluetooth/scan/stop", async (request, reply) => {
+    await sendBluetoothMutation(reply, () => bluetooth.stopScan(request.body));
+  });
+  server.post<{ Body: BluetoothDeviceInput }>("/api/system/bluetooth/devices/pair", async (request, reply) => {
+    await sendBluetoothMutation(reply, () => bluetooth.pair(request.body));
+  });
+  server.post<{ Body: BluetoothDeviceInput }>("/api/system/bluetooth/devices/cancel-pairing", async (request, reply) => {
+    await sendBluetoothMutation(reply, () => bluetooth.cancelPairing(request.body));
+  });
+  server.post<{ Body: BluetoothPairingChallengeInput & { accept: boolean } }>("/api/system/bluetooth/pairing/respond", async (request, reply) => {
+    await sendBluetoothMutation(reply, () => bluetooth.answerChallenge(request.body));
+  });
+  server.put<{ Body: BluetoothDeviceInput & { trusted: boolean } }>("/api/system/bluetooth/devices/trust", async (request, reply) => {
+    await sendBluetoothMutation(reply, () => bluetooth.trust(request.body));
+  });
+  for (const [path, action] of [
+    ["/api/system/bluetooth/devices/connect", "connect"],
+    ["/api/system/bluetooth/devices/disconnect", "disconnect"],
+    ["/api/system/bluetooth/devices/unpair", "unpair"]
+  ] as const) {
+    server.post<{ Body: BluetoothDeviceInput }>(path, async (request, reply) => {
+      await sendBluetoothMutation(reply, () => bluetooth[action](request.body));
+    });
+  }
 
   server.get("/api/system/network/ethernet", async (_request, reply) => {
     try {
@@ -422,6 +489,49 @@ function wifiStatusSignature(status: SystemWifiStatus): string {
   });
 }
 
+export async function streamBluetoothEvents(
+  closeSignal: WifiEventCloseSignal,
+  output: WifiEventOutput,
+  bluetooth: Pick<BluetoothManagerRuntime, "getStatus">,
+  options: { sampleMs?: number; heartbeatMs?: number } = {}
+): Promise<void> {
+  const sampleMs = options.sampleMs ?? BLUETOOTH_SAMPLE_MS;
+  const heartbeatMs = options.heartbeatMs ?? BLUETOOTH_HEARTBEAT_MS;
+  let closed = false;
+  let sampling = false;
+  let lastSignature: string | null = null;
+  let sampleTimer: ReturnType<typeof setInterval> | null = null;
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  closeSignal.on("close", () => {
+    closed = true;
+    if (sampleTimer) clearInterval(sampleTimer);
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+  });
+  output.write("retry: 2000\n\n");
+  const sample = async () => {
+    if (closed || sampling) return;
+    sampling = true;
+    const status = await bluetooth.getStatus().catch((error) => unavailableBluetoothStatus(safeBluetoothError(error)));
+    const signature = bluetoothStatusSignature(status);
+    if (!closed && signature !== lastSignature) {
+      lastSignature = signature;
+      output.write("event: system.bluetooth.status\n");
+      output.write(`data: ${JSON.stringify(status)}\n\n`);
+    }
+    sampling = false;
+  };
+  await sample();
+  if (closed) return;
+  sampleTimer = setInterval(() => void sample(), sampleMs);
+  heartbeatTimer = setInterval(() => {
+    if (!closed) output.write(": heartbeat\n\n");
+  }, heartbeatMs);
+}
+
+function bluetoothStatusSignature(status: BluetoothStatus): string {
+  return JSON.stringify({ backend: status.backend, available: status.available, adapters: status.adapters, devices: status.devices, scan: status.scan, challenge: status.challenge, error: status.error });
+}
+
 async function requireManagementPathConfirmation(
   networkManager: Pick<NetworkManagerRuntime, "getStatus">,
   device: string | undefined,
@@ -456,4 +566,16 @@ function sendSystemPowerError(reply: FastifyReply, error: unknown): void {
   reply.status(error instanceof SystemPowerRequestError ? error.statusCode : 503).send({
     error: safeSystemPowerMessage(error)
   });
+}
+
+async function sendBluetoothMutation(reply: FastifyReply, action: () => Promise<unknown>): Promise<void> {
+  try {
+    reply.send({ result: await action() });
+  } catch (error) {
+    reply.status(error instanceof BluetoothManagerRequestError ? error.statusCode : 503).send({ error: safeBluetoothError(error) });
+  }
+}
+
+function safeBluetoothError(error: unknown): string {
+  return error instanceof BluetoothManagerRequestError ? error.message : "BlueZ and the host integration service are unavailable";
 }

@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createSession,
   createUserMessageAndJob,
+  createCapabilityProposal,
+  createMcpClient,
+  decideCapabilityApproval,
   deleteSession,
   ensureNasRoots,
   getAgentProviderSession,
@@ -218,6 +221,64 @@ describe("worker processor", () => {
     await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
 
     expect(seenProviderSessions).toEqual([null, "pi-session-reused"]);
+  });
+
+  it("resumes the same Pi job with a terminal capability run continuation", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Move alpha.txt"
+    });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const pending = createCapabilityProposal(db, {
+      clientId: client.id,
+      subjectId: client.id,
+      subjectKind: "pi",
+      capabilityId: "zos.files.mutate-propose",
+      risk: "high",
+      redactedInput: { operation: "move", rootId: "local" },
+      proposal: { target: "beta.txt", revision: "r1" },
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    const messages: string[] = [];
+    const providerSessions: Array<string | null> = [];
+    let invocation = 0;
+    const runner: PiAgentRunner = async (input) => {
+      invocation += 1;
+      messages.push(input.message);
+      providerSessions.push(input.providerSession?.providerSessionId ?? null);
+      if (invocation === 1) {
+        await input.saveProviderSession({
+          providerSessionId: "pi-session-continuation",
+          sessionFile: path.join(tempDir, "pi-sessions", "continuation.jsonl"),
+          providerName: "openai",
+          model: "",
+          settingsSnapshot: { providerName: "openai" }
+        });
+        await input.onCapabilityRunPending?.(pending.run.id, "pi-session-continuation");
+        return { status: "waiting_approval", runId: pending.run.id };
+      }
+      return { status: "completed", summary: "The change was rejected." };
+    };
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+    expect(getJob(db, job.id)?.status).toBe("waiting_approval");
+    expect(decideCapabilityApproval(db, {
+      approvalId: pending.approval.id,
+      expectedRevision: pending.approval.revision,
+      decision: "rejected",
+      decidedBy: "local-admin"
+    })?.run.state).toBe("failed");
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+
+    expect(getJob(db, job.id)?.status).toBe("completed");
+    expect(messages[0]).toBe("Move alpha.txt");
+    expect(messages[1]).toContain("Internal ZOS continuation");
+    expect(messages[1]).toContain(pending.run.id);
+    expect(messages[1]).toContain("APPROVAL_REJECTED");
+    expect(messages[1]).not.toContain("Move alpha.txt");
+    expect(providerSessions).toEqual([null, "pi-session-continuation"]);
   });
 
   it("only injects photostaff tools for sessions on the configured photostaff root", async () => {

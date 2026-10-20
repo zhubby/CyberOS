@@ -3,18 +3,40 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import path from "node:path";
-import { deleteExpiredDockerComposeHostAccessDrafts, deleteExpiredDockerCreateDrafts, getDockerSettings } from "@zos/db";
+import {
+  deleteExpiredDockerComposeHostAccessDrafts,
+  deleteExpiredDockerCreateDrafts,
+  deleteExpiredMcpTransferTokens,
+  expireCapabilityApprovals,
+  getDockerSettings,
+  getMonitoringAlertSummary,
+  getShareSettings,
+  listDockerComposeAppSummaries,
+  listDockerOperations,
+  listDockerRegistryCredentials,
+  listVmOperations
+} from "@zos/db";
 import { MonitoringReader } from "@zos/monitoring";
 import type { ServerDependencies } from "./context.js";
-import { DEFAULT_MONITORING_CONFIG } from "@zos/shared";
+import { DEFAULT_MONITORING_CONFIG, type MonitoringQueryRequest } from "@zos/shared";
+import type { JsonValue } from "@zos/capabilities";
 import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
-import { effectiveDockerConfig } from "./lib/settings.js";
+import { defaultShareSettings, effectiveDockerConfig } from "./lib/settings.js";
 import { registerApiRoutes } from "./routes/index.js";
 import { FileBatchRunner } from "./lib/file-batch-runner.js";
 import { DockerHostAccessPolicy, reconcileRunningDockerHostAccess } from "./lib/docker-host-access.js";
 import { DockerHostAccessControlClient } from "./lib/docker-host-access-control.js";
 import { dockerEngine } from "./lib/docker-service.js";
+import { collectDockerSummary } from "./lib/docker-service.js";
+import { registerMcp } from "@zos/mcp";
+import { recoverCapabilityRuns } from "@zos/capability-runtime";
+import { collectSystemNetwork, collectSystemNetworkTraffic, collectSystemStorage } from "./lib/system-management.js";
+import { SystemNetworkManagerRuntime } from "./lib/network-manager.js";
+import { SystemEthernetManagerRuntime } from "./lib/ethernet-manager.js";
+import { collectShareSummary } from "./lib/share-service.js";
+import { collectVmSummary } from "./lib/vm-service.js";
+import { createVodPlayerRuntime } from "./lib/vod-player.js";
 
 export type { ServerDependencies } from "./context.js";
 
@@ -44,6 +66,8 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   const expireHostAccessDrafts = () => {
     deleteExpiredDockerCreateDrafts(db);
     deleteExpiredDockerComposeHostAccessDrafts(db);
+    deleteExpiredMcpTransferTokens(db);
+    expireCapabilityApprovals(db);
   };
   expireHostAccessDrafts();
   const hostAccessRuntime = hostAccess ?? {
@@ -79,6 +103,67 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     fileBatches,
     hostAccess: hostAccessRuntime
   });
+  const mcpNetworkManager = system?.networkManager ?? new SystemNetworkManagerRuntime({
+    ...(system?.commandRunner ? { commandRunner: system.commandRunner } : {}),
+    hostdSocketPath: config.hostd.socketPath
+  });
+  const mcpEthernetManager = system?.ethernetManager ?? new SystemEthernetManagerRuntime(config.hostd.socketPath);
+  const mcpVodPlayer = vodPlayer ?? createVodPlayerRuntime(config.vodPlayer);
+  const readAdapters = {
+    "zos.monitoring.overview": () => asJsonValue({
+      ...monitoring.overview(),
+      catalog: monitoring.catalog(),
+      alerts: getMonitoringAlertSummary(db)
+    }),
+    "zos.monitoring.query": (input: JsonValue) => asJsonValue(
+      monitoring.query(input as unknown as MonitoringQueryRequest)
+    ),
+    "zos.network.status": async () => {
+      const [network, traffic, wifi, ethernet] = await Promise.all([
+        collectSystemNetwork({ ...system, networkManager: mcpNetworkManager, ethernetManager: mcpEthernetManager }),
+        collectSystemNetworkTraffic(system),
+        mcpNetworkManager.getStatus(),
+        mcpEthernetManager.getStatus()
+      ]);
+      return asJsonValue({ network, traffic, wifi, ethernet });
+    },
+    "zos.storage.status": async () => {
+      const shareSettings = getShareSettings(db) ?? defaultShareSettings(config);
+      const [storage, sharesSummary] = await Promise.all([
+        collectSystemStorage(system),
+        collectShareSummary(shareSettings, shares)
+      ]);
+      return asJsonValue({ storage, shares: sharesSummary });
+    },
+    "zos.docker.status": async () => {
+      const effectiveConfig = effectiveDockerConfig(config, getDockerSettings(db));
+      return asJsonValue({
+        summary: await collectDockerSummary(effectiveConfig, dockerRuntime),
+        apps: listDockerComposeAppSummaries(db),
+        operations: listDockerOperations(db, { limit: 100 }),
+        registries: listDockerRegistryCredentials(db).map((registry) => ({
+          id: registry.id,
+          name: registry.name,
+          serverAddress: registry.serverAddress,
+          username: registry.username,
+          credentialConfigured: Boolean(registry.password),
+          updatedAt: registry.updatedAt
+        })),
+        hostAccess: hostAccessRuntime.policy.catalog()
+      });
+    },
+    "zos.vm.status": async () => asJsonValue({
+      summary: await collectVmSummary(config, vm),
+      operations: listVmOperations(db, { limit: 100 })
+    }),
+    "zos.vod.status": async () => asJsonValue({ status: await mcpVodPlayer.getStatus() })
+  } satisfies Readonly<Record<string, (input: JsonValue) => JsonValue | Promise<JsonValue>>>;
+  registerMcp(server, { db, config, readAdapters, ...(buildInfo ? { buildInfo } : {}) }, {
+    enabled: config.mcp?.enabled ?? false,
+    ...(config.mcp?.allowedHosts ? { allowedHosts: config.mcp.allowedHosts } : {}),
+    ...(config.mcp?.allowedOrigins ? { allowedOrigins: config.mcp.allowedOrigins } : {}),
+    ...(config.mcp?.maxConcurrentPerClient ? { maxConcurrentPerClient: config.mcp.maxConcurrentPerClient } : {})
+  });
   const hostAccessDraftCleanup = setInterval(() => {
     try {
       expireHostAccessDrafts();
@@ -89,6 +174,10 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   hostAccessDraftCleanup.unref();
 
   server.addHook("onReady", async () => {
+    const recoveredRuns = await recoverCapabilityRuns({ db, config });
+    if (recoveredRuns.expired > 0 || recoveredRuns.interrupted > 0 || recoveredRuns.resumed > 0) {
+      server.log.info(recoveredRuns, "Recovered capability runs");
+    }
     fileBatches.start();
     const currentDockerConfig = effectiveDockerConfig(config, getDockerSettings(db)).docker;
     const engine = currentDockerConfig.enabled ? dockerEngine(currentDockerConfig, dockerRuntime) : null;
@@ -126,6 +215,10 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   });
 
   return server;
+}
+
+function asJsonValue(value: unknown): JsonValue {
+  return JSON.parse(JSON.stringify(value)) as JsonValue;
 }
 
 function isLoopbackHost(host: string): boolean {

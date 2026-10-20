@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openZosDb, type ZosDatabase } from "@zos/db";
+import { ensureNasRoots, openZosDb, saveBluetoothSettings, type ZosDatabase } from "@zos/db";
 import type { ZosConfig, VodPlayerStatus } from "@zos/shared";
 import { VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { buildServer } from "../server.js";
@@ -44,6 +44,43 @@ describe("VOD Player API", () => {
     });
     expect(traversal.statusCode).toBe(400);
     await server.close();
+  });
+
+  it("uses only the Bluetooth audio device selected in system settings", async () => {
+    const { root } = await setup();
+    const calls: unknown[] = [];
+    saveBluetoothSettings(db!, { defaultAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF" });
+    const app = await buildServer({
+      config: testConfig(root, true),
+      db: db!,
+      system: storageSystem(root),
+      vodPlayer: fakeRuntime(calls)
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/vod-player/command",
+      payload: { type: "play", rootId: "local", storagePoolId: poolId, path: "clip.mp4" }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(calls).toEqual([expect.objectContaining({
+      type: "play",
+      audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF"
+    })]);
+
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/vod-player/command",
+      payload: {
+        type: "play",
+        rootId: "local",
+        storagePoolId: poolId,
+        path: "clip.mp4",
+        audioDeviceId: "alsa/hw:0"
+      }
+    });
+    expect(rejected.statusCode).toBe(400);
+    expect(calls).toHaveLength(1);
+    await app.close();
   });
 
   it("removes the old player routes and exposes disabled status", async () => {
@@ -226,6 +263,9 @@ function vodPlayerStatus(): VodPlayerStatus {
     volume: 100,
     retryCount: 0,
     nextRetryAt: null,
+    audioDeviceId: null,
+    effectiveAudioDeviceId: null,
+    audioFallbackReason: null,
     capabilities: { mpvAvailable: true, drmAvailable: true, audioAvailable: true, hardwareDecode: "unknown", error: null },
     error: null,
     errorCode: null,

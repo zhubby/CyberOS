@@ -1,11 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import {
+  countUnreadBluetoothTransfers,
   countUnreadOperationNotifications,
   expireStaleVmConsoleOperations,
+  getMonitoringAlertSummary,
+  listBluetoothTransfers,
   listOperationNotifications,
+  markAllBluetoothTransfersRead,
   markAllOperationNotificationsRead,
-  markOperationNotificationRead,
-  getMonitoringAlertSummary
+  markBluetoothTransferRead,
+  markOperationNotificationRead
 } from "@zos/db";
 import type { ApiRouteContext } from "../context.js";
 
@@ -13,7 +17,13 @@ export function registerNotificationRoutes(server: FastifyInstance, { db }: ApiR
   server.get("/api/notifications/summary", async () => {
     const operations = countUnreadOperationNotifications(db);
     const alerts = getMonitoringAlertSummary(db).unreadCount;
-    return { unreadCount: operations + alerts, operations, alerts };
+    const bluetoothTransfers = countUnreadBluetoothTransfers(db);
+    return {
+      unreadCount: operations + alerts + bluetoothTransfers,
+      operations,
+      alerts,
+      bluetoothTransfers
+    };
   });
   server.get<{
     Querystring: { limit?: string };
@@ -27,8 +37,28 @@ export function registerNotificationRoutes(server: FastifyInstance, { db }: ApiR
     const notifications = listOperationNotifications(db, { limit });
     reply.send({
       notifications,
-      unreadCount: countUnreadOperationNotifications(db)
+      unreadCount: countUnreadOperationNotifications(db),
+      bluetoothTransfers: listBluetoothTransfers(db, { limit }),
+      bluetoothUnreadCount: countUnreadBluetoothTransfers(db)
     });
+  });
+
+  server.patch<{
+    Params: { id: string };
+  }>("/api/notifications/bluetooth/:id/read", async (request, reply) => {
+    const transfer = markBluetoothTransferRead(db, request.params.id);
+    if (!transfer) {
+      reply.status(404).send({ error: "Bluetooth transfer notification not found" });
+      return;
+    }
+    reply.send({
+      transfer,
+      unreadCount: countUnreadBluetoothTransfers(db)
+    });
+  });
+
+  server.post("/api/notifications/bluetooth/read-all", async (_request, reply) => {
+    reply.send({ updated: markAllBluetoothTransfersRead(db) });
   });
 
   server.patch<{

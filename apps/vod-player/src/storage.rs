@@ -30,6 +30,16 @@ pub struct OpenedMedia {
     pub file_name: String,
 }
 
+impl OpenedMedia {
+    pub fn try_clone(&self) -> Result<Self, VodError> {
+        Ok(Self {
+            file: self.file.try_clone()?,
+            identity: self.identity,
+            file_name: self.file_name.clone(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MountLocation {
     path: PathBuf,

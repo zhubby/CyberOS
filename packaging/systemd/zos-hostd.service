@@ -1,9 +1,9 @@
 [Unit]
 Description=ZOS privileged host integration daemon
 Documentation=file:///usr/share/doc/zos/README.md
-After=local-fs.target systemd-tmpfiles-setup.service NetworkManager.service
+After=local-fs.target systemd-tmpfiles-setup.service NetworkManager.service bluetooth.service
 Before=network-online.target
-Wants=NetworkManager.service
+Wants=NetworkManager.service bluetooth.service
 
 [Service]
 Type=simple
@@ -22,7 +22,7 @@ ProtectHome=read-only
 ReadWritePaths=/etc /run/zos /run/mdadm /zos/config /zos/data
 # smbpasswd needs Samba's lock, state, cache, and log directories to initialize its databases.
 ReadWritePaths=-/run/samba -/var/lib/samba -/var/cache/samba -/var/log/samba
-ReadWritePaths=-/zos/state/hostd/docker-daemon /zos/state/hostd/network-manager
+ReadWritePaths=-/zos/state/hostd/docker-daemon /zos/state/hostd/network-manager /zos/state/hostd/bluetooth
 ReadWritePaths=/zos/system-backups/permissions
 NoNewPrivileges=yes
 PrivateTmp=yes

@@ -156,6 +156,64 @@ export interface DownloadWorkerHealth {
   retryWaitTasks: number;
 }
 
+export interface BluetoothSettingsRecord {
+  defaultAdapterId: string | null;
+  defaultAudioDeviceId: string | null;
+  receiveEnabled: boolean;
+  inboxRootId: string | null;
+  inboxStoragePoolId: string | null;
+  inboxPath: string | null;
+  updatedAt: string;
+}
+
+export interface BluetoothAudioDevice {
+  id: string;
+  adapterId: string;
+  address: string;
+  name: string;
+  connected: boolean;
+}
+
+export interface BluetoothInboxStatus {
+  status: "disabled" | "unconfigured" | "ready" | "paused";
+  reason: "storage_unavailable" | "invalid_directory" | "not_writable" | "insufficient_space" | null;
+}
+
+export type BluetoothTransferDirection = "send" | "receive";
+export type BluetoothTransferStatus = "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
+export type BluetoothTransferControlRequest = "cancel";
+
+export interface BluetoothTransferRecord {
+  id: string;
+  direction: BluetoothTransferDirection;
+  adapterId: string | null;
+  deviceAddress: string;
+  rootId: string;
+  storagePoolId: string;
+  relativePath: string;
+  displayName: string;
+  status: BluetoothTransferStatus;
+  transferredBytes: number;
+  totalBytes: number | null;
+  error: string | null;
+  obexTransferPath: string | null;
+  controlRequested: BluetoothTransferControlRequest | null;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastProgressAt: string | null;
+}
+
+export interface BluetoothTransferServiceHealth {
+  status: "ready" | "stale" | "unavailable";
+  heartbeatAt: string | null;
+  error: string | null;
+  activeTransfers: number;
+  queuedTransfers: number;
+}
+
 export type PhotostaffTakenAtSource = "exif" | "file_mtime";
 export type PhotostaffAssetStatus = "ready" | "failed";
 export type PhotostaffJobKind = "full_scan" | "path_refresh";
@@ -1049,6 +1107,7 @@ export interface ZosConfig {
     port: number;
     allowedOrigins: string[];
   };
+  mcp?: McpConfig;
   worker: {
     pollMs: number;
   };
@@ -1080,6 +1139,18 @@ export interface ZosConfig {
     backupStaleMs: number;
   };
   monitoring?: MonitoringConfig;
+}
+
+export interface McpConfig {
+  enabled: boolean;
+  piEnabled: boolean;
+  piTokenFile: string;
+  legacyPiToolsEnabled: boolean;
+  externalEnabled: boolean;
+  shellEnabled: boolean;
+  allowedHosts: string[];
+  allowedOrigins: string[];
+  maxConcurrentPerClient: number;
 }
 
 export interface MonitoringConfig {
@@ -1419,6 +1490,84 @@ export interface SystemWifiScanResult {
   device: string;
   scannedAt: string;
   accessPoints: SystemWifiAccessPoint[];
+}
+
+export type BluetoothBackend = "BlueZ" | "unknown";
+export type BluetoothAdapterState = "powered" | "off" | "unavailable";
+export type BluetoothDeviceType = "unknown" | "phone" | "computer" | "headset" | "speaker" | "keyboard" | "mouse" | "gamepad" | "wearable";
+export type BluetoothPairingChallengeKind = "pin" | "numeric_comparison" | "confirmation";
+
+export interface BluetoothAdapter {
+  id: string;
+  address: string;
+  name: string;
+  alias: string;
+  state: BluetoothAdapterState;
+  powered: boolean;
+  discovering: boolean;
+  defaultAdapter: boolean;
+}
+
+export interface BluetoothDevice {
+  adapterId: string;
+  address: string;
+  name: string | null;
+  alias: string | null;
+  type: BluetoothDeviceType;
+  rssi: number | null;
+  paired: boolean;
+  trusted: boolean;
+  connected: boolean;
+  servicesResolved: boolean;
+  lastSeenAt: string | null;
+}
+
+export interface BluetoothScanStatus {
+  active: boolean;
+  adapterId: string | null;
+  startedAt: string | null;
+  endsAt: string | null;
+}
+
+export interface BluetoothPairingChallenge {
+  id: string;
+  adapterId: string;
+  deviceAddress: string;
+  kind: BluetoothPairingChallengeKind;
+  pin: string | null;
+  passkey: number | null;
+  expiresAt: string;
+}
+
+export interface BluetoothStatus {
+  collectedAt: string;
+  backend: BluetoothBackend;
+  available: boolean;
+  adapters: BluetoothAdapter[];
+  devices: BluetoothDevice[];
+  scan: BluetoothScanStatus;
+  challenge: BluetoothPairingChallenge | null;
+  error: string | null;
+}
+
+export interface BluetoothAdapterInput {
+  adapterId: string;
+}
+
+export interface BluetoothDeviceInput extends BluetoothAdapterInput {
+  address: string;
+}
+
+export interface BluetoothPairingChallengeInput extends BluetoothDeviceInput {
+  challengeId: string;
+  pin?: string;
+}
+
+export type BluetoothScanInput = BluetoothAdapterInput;
+
+export interface BluetoothOperationResult {
+  status: BluetoothStatus;
+  message: string | null;
 }
 
 export interface SystemWifiConnectInput {

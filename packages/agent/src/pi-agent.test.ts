@@ -4,7 +4,7 @@ import path from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { ModelProviderSettingsRecord, PhotostaffMetadataDetail, PhotostaffQueryPage } from "@zos/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPhotostaffAgentTools, registerConfiguredProvider } from "./pi-agent.js";
+import { capabilityPendingRunId, createPhotostaffAgentTools, redactPiToolArgs, registerConfiguredProvider } from "./pi-agent.js";
 
 let tempDir: string;
 
@@ -57,6 +57,46 @@ describe("Pi agent provider configuration", () => {
       id: "local-model",
       baseUrl: "http://127.0.0.1:11434/v1",
       api: "openai-completions"
+    });
+  });
+});
+
+describe("Pi MCP run continuation", () => {
+  it("recognizes pending runs from direct and codemode MCP results", () => {
+    const capabilityResult = {
+      schemaVersion: "1.0",
+      data: { state: "waiting_approval" },
+      runId: "8092a6ca-b703-4863-88aa-78f2d911cc4a"
+    };
+    expect(capabilityPendingRunId({ structuredContent: capabilityResult })).toBe(capabilityResult.runId);
+    expect(capabilityPendingRunId({ structuredContent: { structuredContent: capabilityResult } })).toBe(capabilityResult.runId);
+    expect(capabilityPendingRunId({
+      structuredContent: { ...capabilityResult, data: { state: "succeeded" } }
+    })).toBeNull();
+  });
+
+  it("redacts secrets and complete legacy mutation payloads from durable events", () => {
+    expect(redactPiToolArgs("bash", {
+      command: "curl -H 'Authorization: Bearer secret' https://example.test",
+      env: { API_KEY: "secret", LANG: "en_US.UTF-8" }
+    })).toEqual({
+      command: "[59 byte command redacted]",
+      env: { API_KEY: "[redacted]", LANG: "en_US.UTF-8" }
+    });
+    expect(redactPiToolArgs("write", { path: "notes.txt", content: "private content" })).toEqual({
+      path: "notes.txt",
+      content: "[15 bytes]"
+    });
+    expect(redactPiToolArgs("zos.downloads.manage-propose", {
+      request: {
+        url: "https://user:password@example.test/file?token=secret",
+        registryToken: "secret"
+      }
+    })).toEqual({
+      request: {
+        url: "https://example.test/file",
+        registryToken: "[redacted]"
+      }
     });
   });
 });

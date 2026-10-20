@@ -4,6 +4,7 @@ import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X }
 import {
   applyFileMutation,
   approveRequest,
+  decideCapabilityApproval,
   cancelJob,
   createFileBatch,
   createSession,
@@ -27,6 +28,8 @@ import {
   getRoots,
   getSessions,
   getSystemInfo,
+  getSystemNetwork,
+  getSystemBluetooth,
   getSystemStorage,
   getTextPreview,
   getTranscript,
@@ -41,6 +44,8 @@ import {
   rejectRequest,
   requestSystemPower,
   markAllNotificationsRead,
+  markAllBluetoothTransfersRead,
+  markBluetoothTransferRead,
   markNotificationRead,
   acknowledgeMonitoringAlertIncident,
   readAllMonitoringAlertIncidents,
@@ -79,12 +84,17 @@ import {
   type NasRoot,
   type OperationNotification,
   type PendingApproval,
+  type CapabilityApproval,
   type PhotoLibrarySettings,
   type PhotoLibraryStatus,
   type PhotoProcessingSettings,
   type Session,
   type SessionSummary,
   type SystemInfo,
+  type NetworkSummary,
+  type WifiStatus,
+  type BluetoothStatus,
+  type BluetoothTransfer,
   type SystemPowerAction,
   type StorageSummary,
   type TextPreview,
@@ -202,6 +212,7 @@ export function App() {
   const [transcriptState, dispatchTranscript] = useReducer(transcriptReducer, initialTranscriptState);
   const transcript = transcriptState.messages;
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
+  const [capabilityApprovals, setCapabilityApprovals] = useState<CapabilityApproval[]>([]);
   const [operations, setOperations] = useState<FileOperation[]>([]);
   const [fileBatches, setFileBatches] = useState<FileBatch[]>([]);
   const [dockerOperations, setDockerOperations] = useState<DockerOperation[]>([]);
@@ -232,10 +243,12 @@ export function App() {
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [warningNotice, setWarningNotice] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<OperationNotification[]>([]);
+  const [bluetoothTransfers, setBluetoothTransfers] = useState<BluetoothTransfer[]>([]);
   const [alertIncidents, setAlertIncidents] = useState<MonitoringAlertIncident[]>([]);
   const [operationUnreadCount, setOperationUnreadCount] = useState(0);
+  const [bluetoothUnreadCount, setBluetoothUnreadCount] = useState(0);
   const [alertUnreadCount, setAlertUnreadCount] = useState(0);
-  const notificationUnreadCount = operationUnreadCount + alertUnreadCount;
+  const notificationUnreadCount = operationUnreadCount + bluetoothUnreadCount + alertUnreadCount;
   const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
   const closeNotificationCenter = useCallback(() => setNotificationCenterOpen(false), []);
@@ -266,6 +279,8 @@ export function App() {
   );
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsNetwork, setSettingsNetwork] = useState<NetworkSummary | null>(null);
+  const [settingsBluetooth, setSettingsBluetooth] = useState<BluetoothStatus | null>(null);
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(() => readStoredLanguagePreference());
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => readStoredThemePreference());
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => readSystemTheme());
@@ -840,8 +855,10 @@ export function App() {
         getNotificationsSummary()
       ]);
       setNotifications(result.notifications);
+      setBluetoothTransfers(result.bluetoothTransfers);
       setAlertIncidents(incidents);
       setOperationUnreadCount(summary.operations);
+      setBluetoothUnreadCount(summary.bluetoothTransfers);
       setAlertUnreadCount(summary.alerts);
     } catch (nextError) {
       if (showError) setError(toErrorMessage(nextError));
@@ -866,6 +883,7 @@ export function App() {
       setAlertIncidents((current) => current.map((item) => item.id === id ? incident : item));
       const summary = await getNotificationsSummary();
       setOperationUnreadCount(summary.operations);
+      setBluetoothUnreadCount(summary.bluetoothTransfers);
       setAlertUnreadCount(summary.alerts);
     } catch (nextError) {
       setError(toErrorMessage(nextError));
@@ -900,14 +918,33 @@ export function App() {
     }
   }
 
+  async function readBluetoothTransfer(id: string) {
+    try {
+      const result = await markBluetoothTransferRead(id);
+      setBluetoothTransfers((current) => current.map((item) => item.id === id ? result.transfer : item));
+      setBluetoothUnreadCount(result.unreadCount);
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+    }
+  }
+
+  async function readAllBluetoothTransfers() {
+    try {
+      await markAllBluetoothTransfersRead();
+      await refreshNotifications(true);
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+    }
+  }
+
   function openNotificationCenter() {
     setNotificationCenterOpen(true);
     void refreshNotifications(true);
   }
 
-  async function openSettings() {
+  async function openSettings(section: SettingsSectionId = "overview") {
     setSettingsOpen(true);
-    setActiveSettingsSection("overview");
+    setActiveSettingsSection(section);
     setSettingsLoading(true);
     setError(null);
     setSystemInfoError(null);
@@ -924,7 +961,9 @@ export function App() {
         photoProcessingSettingsResult,
         photoStatusResult,
         systemInfoResult,
-        buildInfoResult
+        buildInfoResult,
+        networkResult,
+        bluetoothResult
       ] = await Promise.allSettled([
         getModelProviderSettings(),
         getPiToolPolicySettings(),
@@ -936,7 +975,9 @@ export function App() {
         getPhotoProcessingSettings(),
         getPhotoStatus(),
         getSystemInfo(),
-        getBuildInfo()
+        getBuildInfo(),
+        getSystemNetwork(),
+        getSystemBluetooth()
       ]);
 
       const errors: string[] = [];
@@ -1022,6 +1063,20 @@ export function App() {
         setBuildInfoError(toErrorMessage(buildInfoResult.reason));
       }
 
+      if (networkResult.status === "fulfilled") {
+        setSettingsNetwork(networkResult.value);
+      } else {
+        setSettingsNetwork(null);
+        errors.push(toErrorMessage(networkResult.reason));
+      }
+
+      if (bluetoothResult.status === "fulfilled") {
+        setSettingsBluetooth(bluetoothResult.value);
+      } else {
+        setSettingsBluetooth(null);
+        errors.push(toErrorMessage(bluetoothResult.reason));
+      }
+
       if (errors.length > 0) {
         setError(errors.join("\n"));
       }
@@ -1094,6 +1149,25 @@ export function App() {
       setError(toErrorMessage(nextError));
       throw nextError;
     }
+  }
+
+  const handleSettingsWifiStatus = useCallback((wifi: WifiStatus) => {
+    setSettingsNetwork((current) => current ? {
+      ...current,
+      capabilities: {
+        ...current.capabilities,
+        backend: wifi.backend === "NetworkManager" || current.ethernet.backend === "NetworkManager" ? "NetworkManager" : wifi.backend,
+        hostdReady: wifi.hostdReady || current.ethernet.hostdReady,
+        canApplyConfiguration: (wifi.backend === "NetworkManager" && wifi.hostdReady) || (current.ethernet.backend === "NetworkManager" && current.ethernet.hostdReady),
+        canManageWifi: wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.length > 0,
+        canManageHotspot: wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.some((device) => device.capabilities.accessPoint)
+      },
+      wifi: { ...wifi, profiles: current.wifi.profiles }
+    } : current);
+  }, []);
+
+  async function refreshSettingsNetwork() {
+    setSettingsNetwork(await getSystemNetwork());
   }
 
   async function changeIndexerSettings(patch: Partial<Omit<IndexerSettings, "updatedAt">>) {
@@ -1681,7 +1755,8 @@ export function App() {
       if (queueSessionId !== (session?.id ?? null) || queueStoragePoolId !== selectedStoragePoolIdRef.current) {
         return;
       }
-      setApprovals(nextApprovals);
+      setApprovals(nextApprovals.approvals);
+      setCapabilityApprovals(nextApprovals.capabilityApprovals);
       setOperations(
         queueStoragePoolId
           ? nextOperations.filter((operation) => operation.metadata.storagePoolId === queueStoragePoolId)
@@ -1691,7 +1766,9 @@ export function App() {
       setDockerOperations(nextDockerOperations);
       setVmOperations(nextVmOperations);
       setNotifications(nextNotifications.notifications);
+      setBluetoothTransfers(nextNotifications.bluetoothTransfers);
       setOperationUnreadCount(nextNotifications.unreadCount);
+      setBluetoothUnreadCount(nextNotifications.bluetoothUnreadCount);
       setNotificationsLoading(false);
       setOperationsReady(true);
     } catch (nextError) {
@@ -1761,6 +1838,30 @@ export function App() {
       setStatus("ready");
     } catch (nextError) {
       setError(toErrorMessage(nextError));
+      setStatus("error");
+    }
+  }
+
+  async function handleCapabilityDecision(approval: CapabilityApproval, decision: "approved" | "rejected") {
+    const confirmed = decision === "approved" && approval.requiresConfirmation
+      ? window.confirm(t("chat.capabilityApproval.confirm"))
+      : false;
+    if (decision === "approved" && approval.requiresConfirmation && !confirmed) {
+      return;
+    }
+    setStatus(decision === "approved" ? "applying" : "rejecting");
+    try {
+      await decideCapabilityApproval(approval, decision, confirmed);
+      await Promise.all([refreshWorkQueues(), refreshFiles()]);
+      if (decision === "approved") {
+        setSuccessNotice(t("notifications.operationSucceeded"));
+      } else {
+        setWarningNotice(t("notifications.operationRejected"));
+      }
+      setStatus("ready");
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+      await refreshWorkQueues();
       setStatus("error");
     }
   }
@@ -2237,6 +2338,9 @@ export function App() {
       volume: current?.volume ?? 100,
       retryCount: current?.retryCount ?? 0,
       nextRetryAt: null,
+      audioDeviceId: current?.audioDeviceId ?? null,
+      effectiveAudioDeviceId: current?.effectiveAudioDeviceId ?? null,
+      audioFallbackReason: current?.audioFallbackReason ?? null,
       capabilities: current?.capabilities ?? {
         mpvAvailable: false,
         drmAvailable: false,
@@ -2391,6 +2495,7 @@ export function App() {
         transcript={transcript}
         transcriptPhase={transcriptState.phase}
         activeApprovals={activeApprovals}
+        activeCapabilityApprovals={capabilityApprovals}
         message={message}
         composerPath={composerPath}
         status={status}
@@ -2408,6 +2513,8 @@ export function App() {
         notificationUnreadCount={notificationUnreadCount}
         onSelectSession={(nextSession) => void selectSession(nextSession)}
         onApprove={(approvalId) => void handleApprove(approvalId)}
+        onApproveCapability={(approval) => void handleCapabilityDecision(approval, "approved")}
+        onRejectCapability={(approval) => void handleCapabilityDecision(approval, "rejected")}
         onReject={(approvalId) => void handleReject(approvalId)}
         onSubmitMessage={(event) => void submitMessage(event)}
         onMessageChange={setMessage}
@@ -2558,6 +2665,7 @@ export function App() {
         onNotifyError={setError}
         onNotifySuccess={setSuccessNotice}
         onNotifyWarning={setWarningNotice}
+        onOpenDeviceSettings={(section) => void openSettings(section)}
         onClosePreview={() => setSelectedFilePath(null)}
         onRollback={(operation) => void handleRollback(operation)}
       />
@@ -2566,14 +2674,18 @@ export function App() {
         open={notificationCenterOpen}
         loading={notificationsLoading}
         notifications={notifications}
+        bluetoothTransfers={bluetoothTransfers}
         alertIncidents={alertIncidents}
         unreadCount={notificationUnreadCount}
         operationUnreadCount={operationUnreadCount}
+        bluetoothUnreadCount={bluetoothUnreadCount}
         alertUnreadCount={alertUnreadCount}
         locale={resolvedLocale}
         onClose={closeNotificationCenter}
         onRead={(id) => void readNotification(id)}
         onReadAll={() => void readAllNotifications()}
+        onReadBluetooth={(id) => void readBluetoothTransfer(id)}
+        onReadAllBluetooth={() => void readAllBluetoothTransfers()}
         onReadAlert={(id) => void readAlertIncident(id)}
         onReadAllAlerts={() => void readAllAlertIncidents()}
         onAcknowledgeAlert={(id) => void acknowledgeAlertIncident(id)}
@@ -2603,6 +2715,7 @@ export function App() {
           indexerSettings={indexerSettings}
           indexerStatus={indexerStatus}
           roots={roots}
+          storagePools={storagePoolOptions}
           photoSettings={photoSettings}
           photoStatus={photoStatus}
           photoProcessingSettings={photoProcessingSettings}
@@ -2615,6 +2728,8 @@ export function App() {
           themePreference={themePreference}
           previewFileSizeLimitBytes={previewFileSizeLimitBytes}
           codeFontSettings={codeFontSettings}
+          networkSummary={settingsNetwork}
+          bluetoothStatus={settingsBluetooth}
           resolvedLocale={resolvedLocale}
           onClose={() => setSettingsOpen(false)}
           onFormChange={setModelSettingsForm}
@@ -2628,6 +2743,11 @@ export function App() {
           onThemePreferenceChange={changeThemePreference}
           onPreviewFileSizeLimitChange={changePreviewFileSizeLimit}
           onCodeFontSettingsChange={changeCodeFontSettings}
+          onWifiStatus={handleSettingsWifiStatus}
+          onBluetoothStatus={setSettingsBluetooth}
+          onNetworkRefresh={refreshSettingsNetwork}
+          onNotifySuccess={setSuccessNotice}
+          onNotifyError={setError}
           onSectionChange={setActiveSettingsSection}
           onSubmit={(event) => void saveSettings(event)}
         />

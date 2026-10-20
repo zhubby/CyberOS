@@ -1677,9 +1677,9 @@
 }
 
 @container system-ethernet-section (max-width: 620px) {
-  .system-ethernet-header,
+  .management-section-header.system-ethernet-header,
   .system-ethernet-device { align-items: stretch; grid-template-columns: minmax(0, 1fr); }
-  .system-ethernet-header { display: grid; }
+  .management-section-header.system-ethernet-header { display: grid; }
   .system-ethernet-actions { justify-content: flex-start; }
   .system-ethernet-device-actions { justify-content: space-between; }
 }
@@ -6324,6 +6324,14 @@
   container-type: inline-size;
   display: grid;
   grid-column: 1 / -1;
+}
+
+.system-wifi-section[data-disabled="true"] {
+  border-color: var(--line-soft);
+}
+
+.system-wifi-readonly-list .system-wifi-network-row {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
 }
 
 .system-wifi-content {

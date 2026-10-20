@@ -123,6 +123,9 @@ function status(): VodPlayerStatus {
     volume: 80,
     retryCount: 0,
     nextRetryAt: null,
+    audioDeviceId: null,
+    effectiveAudioDeviceId: null,
+    audioFallbackReason: null,
     capabilities: {
       mpvAvailable: true,
       drmAvailable: true,
