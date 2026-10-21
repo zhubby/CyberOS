@@ -39,6 +39,7 @@ let
     ++ lib.optionals cfg.integrations.virtualMachines.enable [ libvirt qemu ]
     ++ lib.optionals cfg.integrations.vodPlayer.enable [ mpv ]
     ++ lib.optionals cfg.integrations.tvMode.enable [ chromium curl seatd v4l-utils weston wtype ];
+  photostaffRuntimePath = runtimePath ++ (with pkgs; [ exiftool ffmpeg libheif libraw vips ]);
   hardenedService = {
     User = "zos";
     Group = "zos";
@@ -85,13 +86,14 @@ let
     requiresMountsFor ? [ ],
     wantedBy ? [ "multi-user.target" ],
     root ? false,
+    path ? runtimePath,
     environment ? { },
     serviceConfig ? { }
   }:
     {
       inherit description after before wants requires wantedBy;
       environment = baseEnvironment // environment;
-      path = runtimePath;
+      inherit path;
       unitConfig = lib.optionalAttrs (requiresMountsFor != [ ]) {
         RequiresMountsFor = requiresMountsFor;
       };
@@ -418,6 +420,7 @@ in {
           zos-photostaff = rustService {
             description = "ZOS media worker";
             binary = "zos-photostaff";
+            path = photostaffRuntimePath;
             after = [ "local-fs.target" ] ++ lib.optional cfg.components.api.enable "zos-api.service";
             wants = lib.optional cfg.components.api.enable "zos-api.service";
             serviceConfig = {

@@ -25,7 +25,7 @@ let
     cargoLock.lockFile = src + "/Cargo.lock";
     doCheck = true;
     SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-    nativeBuildInputs = [ pkgs.pkg-config ];
+    nativeBuildInputs = [ pkgs.coreutils pkgs.pkg-config ];
     buildInputs = [ pkgs.openssl ];
     installPhase = ''
       runHook preInstall

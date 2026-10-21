@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::os::unix::process::ExitStatusExt;
@@ -13,6 +14,7 @@ use crate::error::{ErrorCode, PhotostaffError};
 
 const CHILD_MEDIA_FD: i32 = 198;
 const STDERR_TAIL_BYTES: usize = 16 * 1024;
+const DEFAULT_COMMAND_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
 #[derive(Debug, Clone)]
 pub struct CommandLimits {
@@ -69,10 +71,7 @@ impl CommandRunner {
         command
             .args(arguments)
             .env_clear()
-            .env(
-                "PATH",
-                "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            )
+            .env("PATH", command_path())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -206,6 +205,12 @@ impl CommandRunner {
             stderr_tail,
         })
     }
+}
+
+fn command_path() -> OsString {
+    std::env::var_os("PATH")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| OsString::from(DEFAULT_COMMAND_PATH))
 }
 
 pub fn child_media_path() -> &'static str {

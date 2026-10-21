@@ -19,8 +19,11 @@ describe("native packaging artifacts", () => {
     expect(packages).toContain("importNpmLock.npmConfigHook");
     expect(packages).not.toContain("importNpmLock.buildNodeModules");
     expect(packages).toContain("rm -rf $out/lib/zos/node_modules/@zos");
+    expect(packages).toContain("nativeBuildInputs = [ pkgs.coreutils pkgs.pkg-config ];");
     expect(packages).toContain('SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";');
     expect(module).toContain('SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";');
+    expect(module).toContain("photostaffRuntimePath = runtimePath ++");
+    expect(module).toContain("path = photostaffRuntimePath;");
   });
 
   it("builds monitor and alerter as independent Rust applications", async () => {
