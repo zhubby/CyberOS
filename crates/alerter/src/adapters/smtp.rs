@@ -9,6 +9,9 @@ use crate::domain::delivery::{ClaimedDelivery, SmtpSecurity, SmtpSettings};
 use crate::error::AlerterError;
 use crate::ports::MailTransport;
 
+const DNS_TIMEOUT: Duration = Duration::from_secs(10);
+const DELIVERY_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LettreMailTransport;
 
@@ -27,10 +30,19 @@ pub async fn deliver(
     settings: &SmtpSettings,
     delivery: &ClaimedDelivery,
 ) -> Result<(), AlerterError> {
+    deliver_with_timeouts(settings, delivery, DNS_TIMEOUT, DELIVERY_TIMEOUT).await
+}
+
+async fn deliver_with_timeouts(
+    settings: &SmtpSettings,
+    delivery: &ClaimedDelivery,
+    dns_timeout: Duration,
+    delivery_timeout: Duration,
+) -> Result<(), AlerterError> {
     if !settings.enabled {
         return Err(AlerterError::Smtp("SMTP delivery is disabled".to_owned()));
     }
-    let addresses = resolve_destination(settings).await?;
+    let addresses = resolve_destination(settings, dns_timeout).await?;
     let from = settings
         .from
         .parse()
@@ -60,24 +72,31 @@ pub async fn deliver(
             .map_err(|_| AlerterError::Smtp("SMTP TLS configuration failed".to_owned()))?,
     }
     .port(settings.port)
-    .timeout(Some(Duration::from_secs(30)));
+    .timeout(Some(delivery_timeout));
     if !settings.username.is_empty() || !settings.password.is_empty() {
         transport = transport.credentials(Credentials::new(
             settings.username.clone(),
             settings.password.clone(),
         ));
     }
-    transport
-        .build()
-        .send(message)
+    tokio::time::timeout(delivery_timeout, transport.build().send(message))
         .await
+        .map_err(|_| AlerterError::Smtp("SMTP delivery timed out".to_owned()))?
         .map_err(|_| AlerterError::Smtp("SMTP delivery failed".to_owned()))?;
     Ok(())
 }
 
-async fn resolve_destination(settings: &SmtpSettings) -> Result<Vec<IpAddr>, AlerterError> {
-    let addresses: Vec<_> = tokio::net::lookup_host((settings.host.as_str(), settings.port))
-        .await
+async fn resolve_destination(
+    settings: &SmtpSettings,
+    timeout: Duration,
+) -> Result<Vec<IpAddr>, AlerterError> {
+    let resolved = tokio::time::timeout(
+        timeout,
+        tokio::net::lookup_host((settings.host.as_str(), settings.port)),
+    )
+    .await
+    .map_err(|_| AlerterError::Smtp("SMTP host resolution timed out".to_owned()))?;
+    let addresses: Vec<_> = resolved
         .map_err(|_| AlerterError::Smtp("SMTP host resolution failed".to_owned()))?
         .map(|address| address.ip())
         .collect();
@@ -249,12 +268,10 @@ mod tests {
             writer.write_all(b"250 fake-smtp\r\n").await.unwrap();
         });
 
-        assert!(
-            deliver(&settings(port, SmtpSecurity::StartTls), &delivery())
-                .await
-                .is_err()
-        );
-        server.await.unwrap();
+        let result = deliver(&settings(port, SmtpSecurity::StartTls), &delivery()).await;
+        server.abort();
+        let _ = server.await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -266,11 +283,34 @@ mod tests {
             drop(stream);
         });
 
-        assert!(
-            deliver(&settings(port, SmtpSecurity::Tls), &delivery())
-                .await
-                .is_err()
-        );
-        server.await.unwrap();
+        let result = deliver(&settings(port, SmtpSecurity::Tls), &delivery()).await;
+        server.abort();
+        let _ = server.await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn stalled_smtp_session_respects_delivery_timeout() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.unwrap();
+            std::future::pending::<()>().await;
+        });
+
+        let result = deliver_with_timeouts(
+            &settings(port, SmtpSecurity::None),
+            &delivery(),
+            Duration::from_secs(1),
+            Duration::from_millis(100),
+        )
+        .await;
+        server.abort();
+        let _ = server.await;
+
+        assert!(matches!(
+            result,
+            Err(AlerterError::Smtp(message)) if message == "SMTP delivery timed out"
+        ));
     }
 }
