@@ -1,3 +1,9 @@
+zos (1.5.7) unstable; urgency=medium
+
+  * Make photostaff command execution portable to Nix and provide its required media tools.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 23:01:12 +0000
+
 zos (1.5.6) unstable; urgency=medium
 
   * Provide deterministic CA trust for Nix Rust builds and runtime services.
