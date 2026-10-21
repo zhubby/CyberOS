@@ -1,0 +1,312 @@
+#!/bin/sh
+set -eu
+
+state_dir=${ZOS_TV_STATE_DIR:-/zos/state/tv/control}
+state_file="$state_dir/desktop-state"
+config_dir=${ZOS_TV_CONFIG_DIR:-/etc/zos/tv-mode}
+enabled_marker="$config_dir/enabled"
+systemd_dir=${ZOS_TV_SYSTEMD_DIR:-/etc/systemd/system}
+vod_dropin_dir="$systemd_dir/zos-vod-player.service.d"
+vod_dropin="$vod_dropin_dir/50-zos-tv-mode.conf"
+api_dropin_dir="$systemd_dir/zos-api.service.d"
+api_dropin="$api_dropin_dir/50-zos-tv-mode.conf"
+policy_file=${ZOS_HOST_MUTATION_POLICY_FILE:-/etc/zos/host-mutation-policy}
+status_url=${ZOS_TV_STATUS_URL:-http://127.0.0.1:3010/api/tv/status}
+wait_seconds=${ZOS_TV_WAIT_SECONDS:-90}
+
+log() {
+  printf 'zos-tv-mode: %s\n' "$*"
+}
+
+die() {
+  printf 'zos-tv-mode: %s\n' "$*" >&2
+  exit 1
+}
+
+require_root() {
+  [ "$(id -u)" -eq 0 ] || die "must run as root"
+}
+
+require_mutable_host() {
+  policy=${ZOS_HOST_MUTATION_POLICY:-}
+  if [ -f "$policy_file" ]; then
+    policy=$(sed -n '1p' "$policy_file")
+  fi
+  case "$policy" in
+    ""|mutable) ;;
+    declarative) die "TV mode is managed declaratively on this host" ;;
+    *) die "ZOS_HOST_MUTATION_POLICY must be mutable or declarative" ;;
+  esac
+}
+
+validate_paths() {
+  case "$state_dir:$config_dir:$systemd_dir" in
+    /*:/*:/*) ;;
+    *) die "state, configuration, and systemd paths must be absolute" ;;
+  esac
+  case "$wait_seconds" in
+    ""|*[!0-9]*) die "ZOS_TV_WAIT_SECONDS must be a non-negative integer" ;;
+  esac
+}
+
+state_value() {
+  key=$1
+  sed -n "s/^${key}=//p" "$state_file" | sed -n '1p'
+}
+
+validate_unit() {
+  case "$1" in
+    none) ;;
+    *.service)
+      case "$1" in *[!a-zA-Z0-9_.@-]*) die "saved display manager unit is invalid" ;; esac
+      ;;
+    *) die "saved display manager unit is invalid" ;;
+  esac
+}
+
+load_state() {
+  [ -f "$state_file" ] || return 1
+  dm_unit=$(state_value DM_UNIT)
+  dm_enabled=$(state_value DM_ENABLED)
+  dm_active=$(state_value DM_ACTIVE)
+  dm_masked=$(state_value DM_MASKED)
+  vod_active=$(state_value VOD_ACTIVE)
+  api_active=$(state_value API_ACTIVE)
+  validate_unit "$dm_unit"
+  case "$dm_enabled" in
+    enabled|enabled-runtime|disabled|static|indirect|generated|linked|linked-runtime|alias|masked|masked-runtime|not-found|unknown) ;;
+    *) die "saved display manager enablement is invalid" ;;
+  esac
+  case "$dm_active:$dm_masked:$vod_active:$api_active" in
+    [01]:[01]:[01]:[01]) ;;
+    *) die "saved TV mode state is invalid" ;;
+  esac
+}
+
+unit_active() {
+  if systemctl is-active --quiet "$1" 2>/dev/null; then printf '1'; else printf '0'; fi
+}
+
+capture_state() {
+  install -d -o root -g root -m 0700 "$state_dir"
+  dm_unit=$(systemctl show display-manager.service --property=Id --value 2>/dev/null || true)
+  if [ -z "$dm_unit" ] || [ "$dm_unit" = "display-manager.service" ]; then
+    dm_unit=none
+  fi
+  validate_unit "$dm_unit"
+  if [ "$dm_unit" = none ]; then
+    dm_enabled=not-found
+    dm_active=0
+    dm_masked=0
+  else
+    dm_enabled=$(systemctl is-enabled "$dm_unit" 2>/dev/null || true)
+    dm_enabled=${dm_enabled:-unknown}
+    case "$dm_enabled" in
+      enabled|enabled-runtime|disabled|static|indirect|generated|linked|linked-runtime|alias|masked|masked-runtime|not-found) ;;
+      *) dm_enabled=unknown ;;
+    esac
+    case "$dm_enabled" in
+      masked|masked-runtime) dm_masked=1 ;;
+      *) dm_masked=0 ;;
+    esac
+    dm_active=$(unit_active "$dm_unit")
+  fi
+  vod_active=$(unit_active zos-vod-player.service)
+  api_active=$(unit_active zos-api.service)
+
+  temporary=$(mktemp "$state_dir/.desktop-state.XXXXXX")
+  trap 'rm -f "$temporary"' EXIT HUP INT TERM
+  {
+    printf 'DM_UNIT=%s\n' "$dm_unit"
+    printf 'DM_ENABLED=%s\n' "$dm_enabled"
+    printf 'DM_ACTIVE=%s\n' "$dm_active"
+    printf 'DM_MASKED=%s\n' "$dm_masked"
+    printf 'VOD_ACTIVE=%s\n' "$vod_active"
+    printf 'API_ACTIVE=%s\n' "$api_active"
+  } > "$temporary"
+  chmod 0600 "$temporary"
+  mv -f "$temporary" "$state_file"
+  trap - EXIT HUP INT TERM
+}
+
+write_file_atomically() {
+  destination=$1
+  directory=${destination%/*}
+  install -d -o root -g root -m 0755 "$directory"
+  temporary=$(mktemp "$directory/.zos-tv-mode.XXXXXX")
+  trap 'rm -f "$temporary"' EXIT HUP INT TERM
+  cat > "$temporary"
+  chmod 0644 "$temporary"
+  mv -f "$temporary" "$destination"
+  trap - EXIT HUP INT TERM
+}
+
+display_manager_dropin() {
+  [ "$dm_unit" != none ] || return 0
+  printf '%s/%s.d/50-zos-tv-mode.conf' "$systemd_dir" "$dm_unit"
+}
+
+install_dropins() {
+  install -d -o root -g root -m 0755 "$config_dir"
+  marker_tmp=$(mktemp "$config_dir/.enabled.XXXXXX")
+  printf 'enabled\n' > "$marker_tmp"
+  chmod 0644 "$marker_tmp"
+  mv -f "$marker_tmp" "$enabled_marker"
+
+  dm_dropin=$(display_manager_dropin)
+  if [ -n "$dm_dropin" ]; then
+    write_file_atomically "$dm_dropin" <<EOF
+[Unit]
+ConditionPathExists=!$enabled_marker
+Conflicts=zos-tv.target
+EOF
+  fi
+  write_file_atomically "$vod_dropin" <<'EOF'
+[Service]
+Environment=ZOS_VOD_PLAYER_ENABLED=1
+Environment=ZOS_VOD_PLAYER_VIDEO_OUTPUT=wayland
+Environment=XDG_RUNTIME_DIR=/run/zos-tv
+Environment=WAYLAND_DISPLAY=wayland-0
+EOF
+  write_file_atomically "$api_dropin" <<'EOF'
+[Service]
+Environment=ZOS_VOD_PLAYER_ENABLED=1
+EOF
+}
+
+remove_dropins() {
+  rm -f "$enabled_marker" "$vod_dropin" "$api_dropin"
+  rmdir "$vod_dropin_dir" 2>/dev/null || true
+  rmdir "$api_dropin_dir" 2>/dev/null || true
+  dm_dropin=$(display_manager_dropin)
+  if [ -n "$dm_dropin" ]; then
+    rm -f "$dm_dropin"
+    rmdir "${dm_dropin%/*}" 2>/dev/null || true
+  fi
+  rmdir "$config_dir" 2>/dev/null || true
+}
+
+restore_runtime() {
+  if [ "$vod_active" = 1 ]; then
+    systemctl restart zos-vod-player.service || return 1
+  else
+    systemctl stop zos-vod-player.service 2>/dev/null || true
+  fi
+  if [ "$api_active" = 1 ]; then
+    systemctl restart zos-api.service || return 1
+  else
+    systemctl stop zos-api.service 2>/dev/null || true
+  fi
+  if [ "$dm_unit" != none ] && [ "$dm_active" = 1 ] && [ "$dm_masked" = 0 ]; then
+    systemctl start "$dm_unit" || return 1
+  fi
+}
+
+rollback_enable() {
+  log "startup failed; restoring the previous desktop session"
+  systemctl stop zos-tv.target 2>/dev/null || true
+  systemctl disable zos-tv.target 2>/dev/null || true
+  remove_dropins
+  systemctl daemon-reload 2>/dev/null || true
+  if restore_runtime; then
+    rm -f "$state_file"
+  else
+    log "previous desktop session could not be fully restored; keeping $state_file for a later disable retry"
+  fi
+}
+
+tv_ready() {
+  payload=$(curl --fail --silent --show-error --max-time 3 "$status_url" 2>/dev/null) || return 1
+  printf '%s' "$payload" | node -e '
+    let input = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { input += chunk; });
+    process.stdin.on("end", () => {
+      const status = JSON.parse(input).status;
+      process.exit(status?.enabled === true && status?.state === "ready" ? 0 : 1);
+    });
+  ' >/dev/null 2>&1
+}
+
+wait_until_ready() {
+  attempt=0
+  while [ "$attempt" -le "$wait_seconds" ]; do
+    if tv_ready; then return 0; fi
+    [ "$attempt" -lt "$wait_seconds" ] || break
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  return 1
+}
+
+enable_runtime() {
+  install_dropins || return 1
+  systemctl daemon-reload || return 1
+  if [ "$dm_unit" != none ] && [ "$(unit_active "$dm_unit")" = 1 ]; then
+    systemctl stop "$dm_unit" || return 1
+  fi
+  systemctl enable zos-tv.target || return 1
+  systemctl restart zos-api.service || return 1
+  systemctl restart zos-vod-player.service || return 1
+  systemctl start zos-tv.target || return 1
+  wait_until_ready
+}
+
+enable_tv() {
+  if ! load_state; then capture_state; load_state; fi
+  if ! enable_runtime; then
+    rollback_enable
+    die "TV mode startup failed or did not become ready within ${wait_seconds}s"
+  fi
+  log "enabled; local HDMI output is using the ZOS TV shell"
+}
+
+disable_tv() {
+  if ! load_state; then
+    systemctl stop zos-tv.target 2>/dev/null || true
+    systemctl disable zos-tv.target 2>/dev/null || true
+    rm -f "$enabled_marker" "$vod_dropin" "$api_dropin"
+    systemctl daemon-reload
+    log "already disabled"
+    return
+  fi
+  systemctl stop zos-tv.target 2>/dev/null || true
+  systemctl disable zos-tv.target 2>/dev/null || true
+  remove_dropins
+  systemctl daemon-reload
+  restore_runtime
+  rm -f "$state_file"
+  log "disabled; previous desktop session state restored"
+}
+
+show_status() {
+  if [ -f "$enabled_marker" ]; then local_state=enabled; else local_state=disabled; fi
+  target_state=$(systemctl is-active zos-tv.target 2>/dev/null || true)
+  printf 'mode=%s\ntarget=%s\n' "$local_state" "${target_state:-unknown}"
+  payload=$(curl --fail --silent --show-error --max-time 3 "$status_url" 2>/dev/null || true)
+  if [ -n "$payload" ]; then
+    printf '%s' "$payload" | node -e '
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { input += chunk; });
+      process.stdin.on("end", () => {
+        const value = JSON.parse(input).status;
+        for (const name of ["weston", "chromium", "vodPlayer", "cec"]) {
+          const component = value[name] ?? {};
+          console.log(`${name}=${component.state ?? "unknown"}${component.detail ? ` (${component.detail})` : ""}`);
+        }
+      });
+    '
+  fi
+}
+
+require_root
+validate_paths
+command -v systemctl >/dev/null 2>&1 || die "systemctl is required"
+
+case "${1:-}" in
+  enable) require_mutable_host; enable_tv ;;
+  disable) require_mutable_host; disable_tv ;;
+  status) show_status ;;
+  *) die "usage: zos-tv-mode enable|disable|status" ;;
+esac

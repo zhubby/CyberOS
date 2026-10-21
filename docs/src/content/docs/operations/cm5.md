@@ -4,7 +4,7 @@ description: 在 arm64 CM5 上原生构建、安装、验收和回滚 ZOS。
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [packaging/scripts/build-deb.sh, packaging/scripts/install.sh, packaging/scripts/zos-deploy, packaging/debian/rules]
+sourceOfTruth: [packaging/scripts/build-deb.sh, packaging/scripts/install.sh, packaging/scripts/zos-deploy, packaging/scripts/zos-tv-mode, packaging/systemd/zos-tv.target, packaging/debian/rules]
 sidebar:
   order: 2
 ---
@@ -42,6 +42,68 @@ sudo ZOS_NAS_ROOT_PATH=/zos/data/primary \
 ```
 
 安装脚本支持 `ZOS_APT_MIRROR`、`ZOS_APT_SECURITY_MIRROR`、`ZOS_RPI_MIRROR`、`ZOS_NODE_MIRROR` 和 `ZOS_NPM_REGISTRY`。它会先备份并修改已知源，再构建当前 checkout 的 Debian 包；在生产主机上应保存脚本输出和 `.zos` 产物。
+
+## HDMI 电视模式
+
+电视模式不是把 Debian 桌面换成另一个完整桌面。Weston 以非 root `zos` 用户持有 DRM/HDMI 会话，Chromium 只运行全屏 `/tv/` Web shell，电影解码和音视频输出仍由原生 mpv/VOD 进程完成。这样媒体库、匹配、播放进度和 Web 管理页共享同一 API，同时把浏览界面与硬件播放故障隔离开。
+
+新安装时可直接启用；`ZOS_ENABLE_TV_MODE=1` 会同时启用 VOD：
+
+```bash
+sudo ZOS_NAS_ROOT_PATH=/zos/data/primary \
+  ZOS_ENABLE_NGINX=1 \
+  ZOS_ENABLE_TV_MODE=1 \
+  ./packaging/scripts/install.sh
+```
+
+已经安装 ZOS 时，在本地控制台执行：
+
+```bash
+sudo zos-tv-mode enable
+sudo zos-tv-mode status
+```
+
+启用命令会原子记录当前 display manager 的 unit、enabled/masked 和 active 状态，只停止当前桌面会话，不改动管理员原有的 enabled/masked 配置。随后它安装仅由 ZOS 管理的 drop-in、启用 `zos-tv.target`，并等待 `/api/tv/status` 最多 90 秒；Weston、Chromium 或 VOD 未就绪会自动清理 drop-in 并恢复此前桌面。升级包会保留当前 TV/桌面选择，不会因安装脚本默认值而切换模式。
+
+恢复桌面使用：
+
+```bash
+sudo zos-tv-mode disable
+```
+
+禁用会停止 TV target、删除 ZOS 自己的 drop-in，并且仅在桌面启用前处于 active 时重新启动它。不要手动删除 `/zos/state/tv/control/desktop-state`；该文件是失败回滚和桌面恢复依据。NixOS 使用 `services.zos.integrations.tvMode.enable` 声明拓扑，`zos-tv-mode enable|disable` 在 declarative policy 下会拒绝执行。
+
+### 健康与输入
+
+媒体设置页展示 TV 总体状态及 Weston、Chromium、VOD、CEC 四个组件。命令行检查：
+
+```bash
+curl -fsS http://127.0.0.1:3010/api/tv/status
+sudo systemctl status zos-tv.target zos-tv-weston.service zos-tv-chromium.service \
+  zos-vod-player.service zos-tv-cec.service --no-pager
+sudo journalctl -u zos-tv-weston.service -u zos-tv-chromium.service \
+  -u zos-vod-player.service -u zos-tv-cec.service -n 200 --no-pager
+```
+
+CEC 缺失只会使遥控输入降级，不会判定 TV 模式失败。USB/无线键盘始终可作为回退：方向键移动焦点，Enter 选择，Escape/Back 停止播放或返回，空格/媒体播放键切换暂停，左右键在播放中前后跳 10 秒，`A`/`S` 切换音轨/字幕。ZOS 不会在首版自动切换电视输入源或控制 HDMI 电源。
+
+### 4K SDR 验收
+
+使用已知正常的 3840×2160 SDR H.264/H.265 文件完整播放至少 10 分钟，并记录文件编码、码率和结果。验收期间执行：
+
+```bash
+cat /run/zos-tv/weston.ini
+curl -fsS http://127.0.0.1:3010/api/vod-player/status > /tmp/zos-vod-status.json
+node -e '
+  const status = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).status;
+  console.log({ state: status.state, videoOutput: status.videoOutput,
+    hardwareDecode: status.capabilities.hardwareDecode, error: status.error });
+' /tmp/zos-vod-status.json
+sudo journalctl -u zos-vod-player.service -u zos-tv-weston.service --since '15 minutes ago' --no-pager
+sudo dmesg --level=err,warn | tail -n 100
+```
+
+通过条件是 Weston 选择 4K preferred mode 并使用 scale 2、`videoOutput` 为 `wayland`、播放中 `hardwareDecode` 为 `enabled`、画面无持续掉帧/撕裂、音画同步且服务没有重启。`hardwareDecode=software`、温度或 CPU 持续异常、DRM reset、黑屏、音画漂移或任一必需服务重启都应判为失败；先执行 `sudo zos-tv-mode disable` 恢复桌面，再保留 journal、`/run/zos-tv/weston.log` 和状态 JSON 排查。
 
 ## CM5 验收清单
 

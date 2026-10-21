@@ -74,7 +74,7 @@ let
     '';
     installPhase = ''
       runHook preInstall
-      mkdir -p $out/lib/zos/apps $out/lib/zos/packages/agent $out/bin
+      mkdir -p $out/lib/zos/apps $out/lib/zos/packages/agent $out/lib/zos/scripts $out/bin
       for workspace in api backup mcp-cli ops web worker; do
         mkdir -p "$out/lib/zos/apps/$workspace"
         cp -R "packages/$workspace/dist" "$out/lib/zos/apps/$workspace/dist"
@@ -84,9 +84,15 @@ let
         cp -R packages/agent/node_modules $out/lib/zos/packages/agent/node_modules
       fi
       install -Dm644 package.json package-lock.json .zos/build-info.json -t $out/lib/zos
+      for script in zos-tv-mode zos-tv-prepare zos-tv-weston zos-tv-chromium zos-tv-cec zos-tv-write-status; do
+        install -Dm755 "packaging/scripts/$script" "$out/lib/zos/scripts/$script"
+      done
       makeWrapper ${pkgs.nodejs_22}/bin/node $out/bin/zos-mcp \
         --add-flags "$out/lib/zos/apps/mcp-cli/dist/index.js" \
         --set NODE_PATH "$out/lib/zos/node_modules"
+      makeWrapper $out/lib/zos/scripts/zos-tv-mode $out/bin/zos-tv-mode \
+        --set ZOS_HOST_MUTATION_POLICY declarative \
+        --prefix PATH : ${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gnused pkgs.nodejs_22 pkgs.systemd ]}
       runHook postInstall
     '';
   });

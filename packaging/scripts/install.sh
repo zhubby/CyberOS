@@ -20,6 +20,7 @@ NGINX_ENABLED=${ZOS_ENABLE_NGINX:-1}
 DOCKER_ENABLED=${ZOS_ENABLE_DOCKER:-0}
 VM_ENABLED=${ZOS_ENABLE_VM:-0}
 VOD_PLAYER_ENABLED=${ZOS_ENABLE_VOD_PLAYER:-0}
+TV_MODE_ENABLED=${ZOS_ENABLE_TV_MODE:-0}
 VOD_PLAYER_USER=${ZOS_VOD_PLAYER_USER:-zos}
 TERMINAL_USER=${ZOS_TERMUX_USER:-zos}
 DEBIAN_FRONTEND=noninteractive
@@ -145,6 +146,13 @@ case "$VOD_PLAYER_ENABLED" in
   0|1) ;;
   *) die "ZOS_ENABLE_VOD_PLAYER must be 0 or 1" ;;
 esac
+case "$TV_MODE_ENABLED" in
+  0|1) ;;
+  *) die "ZOS_ENABLE_TV_MODE must be 0 or 1" ;;
+esac
+if [ "$TV_MODE_ENABLED" = "1" ]; then
+  VOD_PLAYER_ENABLED=1
+fi
 case "$VOD_PLAYER_USER" in
   *[!a-zA-Z0-9._-]*|root) die "ZOS_VOD_PLAYER_USER must name a non-root local user" ;;
 esac
@@ -191,6 +199,9 @@ install_optional_runtime() {
   fi
   if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
     runtime_packages="$runtime_packages mpv seatd"
+  fi
+  if [ "$TV_MODE_ENABLED" = "1" ]; then
+    runtime_packages="$runtime_packages chromium weston v4l-utils wtype fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji"
   fi
   if [ -n "$runtime_packages" ]; then
     log "installing optional runtime components:$runtime_packages"
@@ -369,4 +380,9 @@ if [ "$NGINX_ENABLED" = "1" ]; then
 else
   log "installed successfully; Nginx reverse proxy disabled"
   log "API listens on http://127.0.0.1:3010"
+fi
+
+if [ "$TV_MODE_ENABLED" = "1" ]; then
+  log "enabling the local HDMI TV shell"
+  /usr/local/sbin/zos-tv-mode enable
 fi

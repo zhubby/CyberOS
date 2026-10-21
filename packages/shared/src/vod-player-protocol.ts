@@ -6,7 +6,7 @@ import type {
   VodPlayerWireCommand
 } from "./generated/vod-player.js";
 
-export const VOD_PLAYER_PROTOCOL_VERSION = 1 as const;
+export const VOD_PLAYER_PROTOCOL_VERSION = 2 as const;
 export const VOD_PLAYER_BROKER_MAX_FRAME_BYTES = 128 * 1024;
 export const VOD_PLAYER_BROKER_CONNECT_TIMEOUT_MS = 5_000;
 
@@ -18,8 +18,8 @@ export type VodPlayerStatus = GeneratedVodPlayerStatus;
 type GeneratedPlayCommand = Extract<VodPlayerWireCommand, { type: "play" }>;
 export type VodPlayerCommand =
   | Exclude<VodPlayerWireCommand, { type: "status" | "play" }>
-  | Omit<GeneratedPlayCommand, "startPositionSeconds" | "audioDeviceId">
-    & { startPositionSeconds?: number; audioDeviceId?: string };
+  | Omit<GeneratedPlayCommand, "startPositionSeconds" | "audioDeviceId" | "mediaFileId">
+    & { startPositionSeconds?: number; audioDeviceId?: string; mediaFileId?: string };
 
 export type VodPlayerBrokerRequest = {
   version: typeof VOD_PLAYER_PROTOCOL_VERSION;
@@ -83,10 +83,11 @@ function parseCommand(value: Record<string, unknown>): VodPlayerBrokerRequest["c
   if (value.type === "status") return hasOnlyKeys(value, ["type"]) ? { type: "status" } : null;
   if (value.type === "play") {
     if (
-      !hasOnlyKeys(value, ["type", "rootId", "storagePoolId", "relativePath", "startPositionSeconds", "audioDeviceId"]) ||
+      !hasOnlyKeys(value, ["type", "rootId", "storagePoolId", "relativePath", "startPositionSeconds", "audioDeviceId", "mediaFileId"]) ||
       !safeIdentifier(value.rootId) || !safeIdentifier(value.storagePoolId) ||
       typeof value.relativePath !== "string" || !safeRelativePath(value.relativePath) ||
-      (value.audioDeviceId !== undefined && value.audioDeviceId !== null && !isBluetoothAudioDeviceId(value.audioDeviceId))
+      (value.audioDeviceId !== undefined && value.audioDeviceId !== null && !isBluetoothAudioDeviceId(value.audioDeviceId)) ||
+      (value.mediaFileId !== undefined && value.mediaFileId !== null && !safeIdentifier(value.mediaFileId))
     ) return null;
     const startPositionSeconds = optionalNonNegative(value.startPositionSeconds);
     if (value.startPositionSeconds !== undefined && value.startPositionSeconds !== null && startPositionSeconds === null) return null;
@@ -96,11 +97,16 @@ function parseCommand(value: Record<string, unknown>): VodPlayerBrokerRequest["c
       storagePoolId: value.storagePoolId,
       relativePath: value.relativePath,
       ...(startPositionSeconds === null ? {} : { startPositionSeconds }),
-      ...(typeof value.audioDeviceId === "string" ? { audioDeviceId: value.audioDeviceId } : {})
+      ...(typeof value.audioDeviceId === "string" ? { audioDeviceId: value.audioDeviceId } : {}),
+      ...(typeof value.mediaFileId === "string" ? { mediaFileId: value.mediaFileId } : {})
     };
   }
   if (!safeIdentifier(value.sessionId)) return null;
-  if (value.type === "pause" || value.type === "resume" || value.type === "stop" || value.type === "retry") {
+  if (
+    value.type === "pause" || value.type === "resume" || value.type === "toggle-pause" ||
+    value.type === "stop" || value.type === "retry" || value.type === "cycle-audio-track" ||
+    value.type === "cycle-subtitle-track"
+  ) {
     return hasOnlyKeys(value, ["type", "sessionId"])
       ? { type: value.type, sessionId: value.sessionId }
       : null;
@@ -110,12 +116,27 @@ function parseCommand(value: Record<string, unknown>): VodPlayerBrokerRequest["c
     const seconds = nonNegative(value.seconds);
     return seconds === null ? null : { type: "seek", sessionId: value.sessionId, seconds };
   }
+  if (value.type === "seek-relative") {
+    if (!hasOnlyKeys(value, ["type", "sessionId", "seconds"])) return null;
+    const seconds = finiteNumber(value.seconds);
+    return seconds === null || seconds < -3_600 || seconds > 3_600
+      ? null
+      : { type: "seek-relative", sessionId: value.sessionId, seconds };
+  }
   if (value.type === "set-volume") {
     if (!hasOnlyKeys(value, ["type", "sessionId", "volume"])) return null;
     const volume = finiteNumber(value.volume);
     return volume === null || volume < 0 || volume > 100
       ? null
       : { type: "set-volume", sessionId: value.sessionId, volume };
+  }
+  if (value.type === "set-audio-track") {
+    if (!hasOnlyKeys(value, ["type", "sessionId", "trackId"]) || !positiveInteger(value.trackId)) return null;
+    return { type: "set-audio-track", sessionId: value.sessionId, trackId: value.trackId };
+  }
+  if (value.type === "set-subtitle-track") {
+    if (!hasOnlyKeys(value, ["type", "sessionId", "trackId"]) || (value.trackId !== null && !positiveInteger(value.trackId))) return null;
+    return { type: "set-subtitle-track", sessionId: value.sessionId, trackId: value.trackId };
   }
   return null;
 }
@@ -125,8 +146,9 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     !isRecord(value) ||
     !hasOnlyKeys(value, [
       "state", "sessionId", "serviceInstanceId", "revision", "rootId", "storagePoolId",
-      "relativePath", "fileName", "positionSeconds", "durationSeconds", "volume", "retryCount",
+      "relativePath", "fileName", "mediaFileId", "videoOutput", "positionSeconds", "durationSeconds", "volume", "retryCount",
       "nextRetryAt", "audioDeviceId", "effectiveAudioDeviceId", "audioFallbackReason",
+      "audioTracks", "subtitleTracks", "selectedAudioTrackId", "selectedSubtitleTrackId",
       "capabilities", "error", "errorCode", "updatedAt"
     ]) ||
     !isVodPlayerState(value.state)
@@ -145,12 +167,17 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     (typeof value.storagePoolId !== "string" && value.storagePoolId !== null) ||
     (typeof value.relativePath !== "string" && value.relativePath !== null) ||
     (typeof value.fileName !== "string" && value.fileName !== null) ||
+    (typeof value.mediaFileId !== "string" && value.mediaFileId !== null) ||
+    (value.videoOutput !== "drm" && value.videoOutput !== "wayland") ||
     positionSeconds === null || (value.durationSeconds !== null && durationSeconds === null) ||
     volume === null || volume < 0 || volume > 100 ||
     (typeof value.nextRetryAt !== "string" && value.nextRetryAt !== null) ||
     (value.audioDeviceId !== null && !isBluetoothAudioDeviceId(value.audioDeviceId)) ||
     (value.effectiveAudioDeviceId !== null && !isBluetoothAudioDeviceId(value.effectiveAudioDeviceId)) ||
     !isNullableString(value.audioFallbackReason) ||
+    !isTrackList(value.audioTracks) || !isTrackList(value.subtitleTracks) ||
+    (value.selectedAudioTrackId !== null && !positiveInteger(value.selectedAudioTrackId)) ||
+    (value.selectedSubtitleTrackId !== null && !positiveInteger(value.selectedSubtitleTrackId)) ||
     !capabilities || (typeof value.error !== "string" && value.error !== null) ||
     (value.errorCode !== null && !isVodPlayerErrorCode(value.errorCode)) ||
     typeof value.updatedAt !== "string"
@@ -164,6 +191,8 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     storagePoolId: value.storagePoolId,
     relativePath: value.relativePath,
     fileName: value.fileName,
+    mediaFileId: value.mediaFileId,
+    videoOutput: value.videoOutput,
     positionSeconds,
     durationSeconds,
     volume,
@@ -172,11 +201,23 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     audioDeviceId: value.audioDeviceId,
     effectiveAudioDeviceId: value.effectiveAudioDeviceId,
     audioFallbackReason: value.audioFallbackReason,
+    audioTracks: value.audioTracks,
+    subtitleTracks: value.subtitleTracks,
+    selectedAudioTrackId: value.selectedAudioTrackId,
+    selectedSubtitleTrackId: value.selectedSubtitleTrackId,
     capabilities,
     error: value.error,
     errorCode: value.errorCode,
     updatedAt: value.updatedAt
   };
+}
+
+function isTrackList(value: unknown): value is VodPlayerStatus["audioTracks"] {
+  return Array.isArray(value) && value.every((track) => (
+    isRecord(track) && hasOnlyKeys(track, ["id", "language", "title", "default", "forced", "external"]) &&
+    positiveInteger(track.id) && isNullableString(track.language) && isNullableString(track.title) &&
+    typeof track.default === "boolean" && typeof track.forced === "boolean" && typeof track.external === "boolean"
+  ));
 }
 
 function parseCapabilities(value: unknown): VodPlayerCapabilities | null {
@@ -225,6 +266,10 @@ function isNullableString(value: unknown): value is string | null {
 
 function safeIdentifier(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 256 && !value.includes("\0");
+}
+
+function positiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 function safeRequestId(value: unknown): value is string {

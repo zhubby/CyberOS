@@ -24,6 +24,7 @@ export type SettingsSectionId =
   | "operations"
   | "alerts"
   | "photos"
+  | "media"
   | "downloads"
   | "appearance"
   | "advanced";
@@ -109,6 +110,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "workspace"
   },
   {
+    id: "media",
+    group: "workspace"
+  },
+  {
     id: "downloads",
     group: "workspace"
   },
@@ -135,6 +140,7 @@ const SECTION_TITLE_KEYS = {
   operations: "settings.sections.operations.title",
   alerts: "settings.sections.alerts.title",
   photos: "settings.sections.photos.title",
+  media: "settings.sections.media.title",
   downloads: "settings.sections.downloads.title",
   appearance: "settings.sections.appearance.title",
   advanced: "settings.sections.advanced.title"
@@ -153,6 +159,7 @@ const SECTION_DESCRIPTION_KEYS = {
   operations: "settings.sections.operations.description",
   alerts: "settings.sections.alerts.description",
   photos: "settings.sections.photos.description",
+  media: "settings.sections.media.description",
   downloads: "settings.sections.downloads.description",
   appearance: "settings.sections.appearance.description",
   advanced: "settings.sections.advanced.description"

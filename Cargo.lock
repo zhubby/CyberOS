@@ -2792,6 +2792,7 @@ name = "zos-vod-player"
 version = "1.5.0"
 dependencies = [
  "nix",
+ "rusqlite",
  "sd-notify",
  "serde",
  "serde_json",

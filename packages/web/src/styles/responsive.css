@@ -294,6 +294,36 @@
 }
 
 @media (max-width: 620px) {
+  .settings-media-page,
+  .settings-media-metadata {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-media-source {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settings-media-source-state {
+    text-align: left;
+  }
+
+  .settings-media-toggle {
+    justify-self: start;
+  }
+
+  .settings-media-row-actions {
+    justify-self: end;
+  }
+
+  .settings-tv-components > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settings-tv-components small {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+
   .host-access-capability-list {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p1
 issue_id: "009"
 tags: [cm5, tv, media-library, hdmi, cec, frontend, packaging]
@@ -73,15 +73,15 @@ player protocol, then reversible kiosk packaging and CM5 validation.
 
 ## Acceptance Criteria
 
-- [ ] Administrators can configure movie and series source directories and a redacted TMDB token.
-- [ ] The indexer creates a local-first movie and episode catalog with deterministic match states.
-- [ ] `/tv/` supports remote-focus navigation, details, seasons, search, full offline Pinyin candidates, and idle black screen.
-- [ ] TV and Web clients control one VOD session with progress, audio tracks, and subtitle tracks.
-- [ ] TV mode starts a Wayland kiosk instead of the Debian desktop and can restore the previous desktop state.
-- [ ] CEC navigation has explicit health reporting and keyboard fallback.
-- [ ] Unit, integration, browser, packaging, build, lint, and type checks pass.
-- [ ] CM5 documentation includes installation, rollback, health checks, and 4K SDR acceptance steps.
-- [ ] Full code review completes with no unresolved P0/P1 findings.
+- [x] Administrators can configure movie and series source directories and a redacted TMDB token.
+- [x] The indexer creates a local-first movie and episode catalog with deterministic match states.
+- [x] `/tv/` supports remote-focus navigation, details, seasons, search, full offline Pinyin candidates, and idle black screen.
+- [x] TV and Web clients control one VOD session with progress, audio tracks, and subtitle tracks.
+- [x] TV mode starts a Wayland kiosk instead of the Debian desktop and can restore the previous desktop state.
+- [x] CEC navigation has explicit health reporting and keyboard fallback.
+- [x] Unit, integration, browser, packaging, build, lint, and type checks pass.
+- [x] CM5 documentation includes installation, rollback, health checks, and 4K SDR acceptance steps.
+- [x] Full code review completes with no unresolved P0/P1 findings.
 
 ## Work Log
 
@@ -99,6 +99,28 @@ player protocol, then reversible kiosk packaging and CM5 validation.
 - Playback can extend the current mpv daemon, but DRM/KMS must move to Wayland
   while the persistent TV shell owns the display session.
 - Media scraping requires a separate durable catalog and correction workflow.
+
+### 2026-10-21 - Implementation Complete
+
+**By:** Codex
+
+**Actions:**
+- Delivered the TV shell, media administration, match correction, native VOD
+  progress and track controls, health API, CEC bridge, and reversible kiosk
+  services across Debian, appliance, and Nix packaging.
+- Completed an autofix code review and resolved rollback persistence, systemd
+  stop propagation, Wayland runtime permissions, async UI races, default audio
+  routing, idle timing, and Wayland player argument issues.
+- Passed `make ci`, shell syntax checks, focused tests, and the final browser
+  smoke at 1920x1080 with no application errors.
+
+**Learnings:**
+- A systemd target's `Requires=` relationship does not provide the desired
+  stop propagation; kiosk-owned services also need `PartOf=`.
+- The desktop restoration snapshot must survive every partial rollback until
+  the prior runtime has actually been restored.
+- Nix evaluation and real CM5 DRM/CEC/4K validation remain release-environment
+  checks because this macOS host has neither Nix nor the target hardware.
 
 ## Notes
 

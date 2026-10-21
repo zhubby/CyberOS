@@ -7,6 +7,7 @@ import {
   ensureNasRoots,
   openZosDb,
   replaceMediaArtwork,
+  saveBluetoothSettings,
   upsertMediaCatalogEntry,
   type ZosDatabase
 } from "@zos/db";
@@ -21,6 +22,7 @@ let root: string;
 let db: ZosDatabase;
 let server: FastifyInstance;
 let playerCommands: unknown[];
+let candidateSearches: unknown[];
 
 beforeEach(async () => {
   temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-media-api-"));
@@ -29,13 +31,31 @@ beforeEach(async () => {
   db = openZosDb(path.join(temporaryDirectory, "zos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
   playerCommands = [];
+  candidateSearches = [];
   server = Fastify();
   registerMediaRoutes(server, {
     config: testConfig(),
     db,
     system: storageSystem(),
     vodPlayer: fakePlayer(playerCommands)
-  } as unknown as ApiRouteContext);
+  } as unknown as ApiRouteContext, {
+    searchTmdb: async (input) => {
+      candidateSearches.push(input);
+      return [{
+        tmdbId: 329865,
+        kind: input.kind,
+        title: "Arrival",
+        originalTitle: "Arrival",
+        overview: "First contact",
+        year: 2016,
+        releaseDate: "2016-11-11",
+        originalLanguage: "en",
+        posterUrl: "https://image.tmdb.org/t/p/w500/arrival.jpg",
+        backdropUrl: null,
+        popularity: 42
+      }];
+    }
+  });
 });
 
 afterEach(async () => {
@@ -99,6 +119,35 @@ describe("Media API", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().title.files[0].id).toBe(stored.file.id);
 
+    const filtered = await server.inject({ method: "GET", url: "/api/media/titles?matchStatus=unmatched" });
+    expect(filtered.json().titles).toEqual([expect.objectContaining({ id: stored.title.id })]);
+    expect((await server.inject({ method: "GET", url: "/api/media/titles?matchStatus=invalid" })).statusCode).toBe(400);
+
+    const missingToken = await server.inject({
+      method: "GET",
+      url: `/api/media/titles/${stored.title.id}/match-candidates`
+    });
+    expect(missingToken.statusCode).toBe(409);
+    await server.inject({
+      method: "PATCH",
+      url: "/api/media/settings",
+      payload: { tmdbReadAccessToken: "secret-token", language: "zh-CN", region: "CN" }
+    });
+    const candidates = await server.inject({
+      method: "GET",
+      url: `/api/media/titles/${stored.title.id}/match-candidates?query=Arrival`
+    });
+    expect(candidates.statusCode).toBe(200);
+    expect(candidates.json().candidates).toEqual([expect.objectContaining({ tmdbId: 329865 })]);
+    expect(candidateSearches).toEqual([expect.objectContaining({
+      token: "secret-token",
+      kind: "movie",
+      query: "Arrival",
+      language: "zh-CN",
+      region: "CN",
+      limit: 10
+    })]);
+
     const progress = await server.inject({
       method: "POST",
       url: `/api/media/files/${stored.file.id}/progress`,
@@ -113,6 +162,7 @@ describe("Media API", () => {
     });
     expect(matched.json().title).toEqual(expect.objectContaining({ tmdbId: 329865, matchStatus: "matched" }));
 
+    saveBluetoothSettings(db, { defaultAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF" });
     const played = await server.inject({
       method: "POST",
       url: `/api/media/files/${stored.file.id}/play`,
@@ -124,6 +174,8 @@ describe("Media API", () => {
       rootId: "local",
       storagePoolId: poolId,
       relativePath: "Movies/Arrival.2016.mkv",
+      mediaFileId: stored.file.id,
+      audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
       startPositionSeconds: 120
     })]);
   });
@@ -203,6 +255,8 @@ function playerStatus(): VodPlayerStatus {
     storagePoolId: poolId,
     relativePath: "Movies/Arrival.2016.mkv",
     fileName: "Arrival.2016.mkv",
+    mediaFileId: null,
+    videoOutput: "drm",
     positionSeconds: 120,
     durationSeconds: null,
     volume: 100,
@@ -211,6 +265,10 @@ function playerStatus(): VodPlayerStatus {
     audioDeviceId: null,
     effectiveAudioDeviceId: null,
     audioFallbackReason: null,
+    audioTracks: [],
+    subtitleTracks: [],
+    selectedAudioTrackId: null,
+    selectedSubtitleTrackId: null,
     capabilities: { mpvAvailable: true, drmAvailable: true, audioAvailable: true, hardwareDecode: "unknown", error: null },
     error: null,
     errorCode: null,

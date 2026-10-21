@@ -299,6 +299,7 @@ mod tests {
             enabled: true,
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
+            database_path: directory.join("zos.sqlite"),
             command_timeout_ms: 100,
             startup_timeout_ms: 100,
             checkpoint_interval_ms: 5_000,

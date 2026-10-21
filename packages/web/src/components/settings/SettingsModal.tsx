@@ -10,6 +10,7 @@ import {
   Database,
   Download,
   Folder,
+  Film,
   HardDrive,
   Image as ImageIcon,
   Images,
@@ -75,6 +76,7 @@ import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
 import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
 import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
 import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
+import { SettingsMediaPage } from "./SettingsMediaPage.js";
 import type { StorageFilePickerPool } from "../workspace/StorageFilePickerDialog.js";
 
 interface SettingsModalProps {
@@ -597,6 +599,15 @@ export function SettingsModal({
               loading={loading}
               onSettingsChange={onPhotoProcessingSettingsChange}
               onClose={onClose}
+            />
+          ) : null}
+
+          {activeSection === "media" ? (
+            <SettingsMediaPage
+              pools={storagePools}
+              locale={resolvedLocale}
+              onNotifySuccess={onNotifySuccess}
+              onNotifyError={onNotifyError}
             />
           ) : null}
 
@@ -1831,6 +1842,8 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <BellRing aria-hidden="true" size={16} />;
     case "photos":
       return <Images aria-hidden="true" size={16} />;
+    case "media":
+      return <Film aria-hidden="true" size={16} />;
     case "downloads":
       return <Download aria-hidden="true" size={16} />;
     case "appearance":

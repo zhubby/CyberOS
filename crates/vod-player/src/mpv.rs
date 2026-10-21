@@ -28,6 +28,7 @@ const MPV_MEDIA_FD: RawFd = 4;
 const CHILD_FD_DUPLICATE_MINIMUM: RawFd = 200;
 const TEXT_FILE_BUSY_RETRIES: usize = 5;
 const TEXT_FILE_BUSY_RETRY_DELAY: Duration = Duration::from_millis(10);
+const TV_INPUT_CONFIG_PATH: &str = "/usr/share/zos/mpv-input.conf";
 
 pub struct CapabilityProbe {
     pub capabilities: Capabilities,
@@ -148,11 +149,9 @@ impl MpvHandle {
             format!("--start={position_seconds}"),
             format!("--input-ipc-client=fd://{MPV_IPC_FD}"),
         ];
+        append_video_output_args(&mut args, config);
         if paused {
             args.push("--pause".to_owned());
-        }
-        if let Some(connector) = &config.drm_connector {
-            args.push(format!("--drm-connector={connector}"));
         }
         if let Some(device) = audio_device.or(config.audio_device.as_deref()) {
             args.push(format!("--audio-device={device}"));
@@ -277,6 +276,7 @@ impl MpvHandle {
             (3, "pause"),
             (4, "volume"),
             (5, "hwdec-current"),
+            (6, "track-list"),
         ] {
             if let Err(error) = handle
                 .command(json!(["observe_property", id, property]))
@@ -434,6 +434,22 @@ impl MpvHandle {
         })
         .await
         .is_ok()
+    }
+}
+
+fn append_video_output_args(args: &mut Vec<String>, config: &VodPlayerConfig) {
+    if config.video_output == "wayland" {
+        args.extend([
+            "--fullscreen=yes".to_owned(),
+            "--border=no".to_owned(),
+            "--ontop=yes".to_owned(),
+            "--wayland-app-id=zos-vod-player".to_owned(),
+            "--osd-level=1".to_owned(),
+            "--osd-on-seek=bar".to_owned(),
+            format!("--input-conf={TV_INPUT_CONFIG_PATH}"),
+        ]);
+    } else if let Some(connector) = &config.drm_connector {
+        args.push(format!("--drm-connector={connector}"));
     }
 }
 
@@ -788,6 +804,7 @@ mod tests {
             enabled: true,
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
+            database_path: directory.join("zos.sqlite"),
             command_timeout_ms: 250,
             startup_timeout_ms: 500,
             checkpoint_interval_ms: 5_000,
@@ -947,6 +964,24 @@ done
         assert_eq!(
             classify_end_file_failure("eof", None).code,
             ErrorCode::UnsupportedMedia
+        );
+    }
+
+    #[test]
+    fn wayland_output_is_fullscreen_and_uses_the_restricted_input_map() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut test_config = config(directory.path());
+        test_config.video_output = "wayland".to_owned();
+        test_config.drm_connector = Some("HDMI-A-1".to_owned());
+        let mut args = Vec::new();
+        append_video_output_args(&mut args, &test_config);
+        assert!(args.contains(&"--fullscreen=yes".to_owned()));
+        assert!(args.contains(&"--wayland-app-id=zos-vod-player".to_owned()));
+        assert!(args.contains(&format!("--input-conf={TV_INPUT_CONFIG_PATH}")));
+        assert!(
+            !args
+                .iter()
+                .any(|argument| argument.starts_with("--drm-connector="))
         );
     }
 

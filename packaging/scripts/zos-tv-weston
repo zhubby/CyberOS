@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+runtime_dir=${ZOS_TV_RUNTIME_DIR:-/run/zos-tv}
+status_writer=${ZOS_TV_SCRIPT_DIR:-/usr/lib/zos/scripts}/zos-tv-write-status
+socket_path="$runtime_dir/wayland-0"
+weston_pid=
+
+cleanup() {
+  if [ -n "$weston_pid" ]; then
+    kill "$weston_pid" 2>/dev/null || true
+    wait "$weston_pid" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT HUP INT TERM
+
+if ! command -v weston >/dev/null 2>&1; then
+  "$status_writer" weston unavailable "Weston is not installed"
+  exit 127
+fi
+
+"$status_writer" weston degraded "Weston is starting"
+weston --backend=drm-backend.so --shell=kiosk-shell.so --socket=wayland-0 \
+  --config="$runtime_dir/weston.ini" --log="$runtime_dir/weston.log" --tty=1 &
+weston_pid=$!
+
+attempt=0
+while [ "$attempt" -lt 150 ]; do
+  kill -0 "$weston_pid" 2>/dev/null || break
+  if [ -S "$socket_path" ]; then
+    while kill -0 "$weston_pid" 2>/dev/null; do
+      "$status_writer" weston ready "wayland-0"
+      sleep 5
+    done
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+
+if [ ! -S "$socket_path" ]; then
+  "$status_writer" weston unavailable "Wayland socket was not created"
+fi
+wait "$weston_pid"

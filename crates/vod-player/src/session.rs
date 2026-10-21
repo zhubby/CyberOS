@@ -24,13 +24,15 @@ pub struct PersistedSession {
     pub desired_paused: bool,
     #[serde(default)]
     pub audio_device_id: Option<String>,
+    #[serde(default)]
+    pub media_file_id: Option<String>,
     pub identity: FileIdentity,
     pub updated_at: String,
 }
 
 pub enum LoadOutcome {
     Empty,
-    Session(PersistedSession),
+    Session(Box<PersistedSession>),
     Corrupt(PathBuf),
 }
 
@@ -43,8 +45,8 @@ pub fn load(path: &Path) -> Result<LoadOutcome, VodError> {
         Err(error) => return Err(error.into()),
     };
     match serde_json::from_slice::<PersistedSession>(&bytes) {
-        Ok(session) if session.version == 1 && valid_session(&session) => {
-            Ok(LoadOutcome::Session(session))
+        Ok(session) if matches!(session.version, 1 | 2) && valid_session(&session) => {
+            Ok(LoadOutcome::Session(Box::new(session)))
         }
         _ => {
             let quarantined = path.with_file_name(format!(
@@ -148,6 +150,7 @@ mod tests {
             volume: 80.0,
             desired_paused: true,
             audio_device_id: None,
+            media_file_id: None,
             identity: FileIdentity {
                 device: 1,
                 inode: 2,

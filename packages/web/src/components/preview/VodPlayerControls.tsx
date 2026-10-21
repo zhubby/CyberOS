@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
+  Captions,
+  ListMusic,
   LoaderCircle,
   Pause,
   Play,
@@ -40,7 +42,9 @@ export function VodPlayerControls({ status, busy, onCommand, onRetry }: {
   type ControlIntent =
     | { type: "pause" | "resume" | "stop" | "retry" }
     | { type: "seek"; seconds: number }
-    | { type: "set-volume"; volume: number };
+    | { type: "set-volume"; volume: number }
+    | { type: "set-audio-track"; trackId: number }
+    | { type: "set-subtitle-track"; trackId: number | null };
   const command = (next: ControlIntent) => {
     if (sessionId) onCommand({ ...next, sessionId } as Exclude<VodPlayerCommand, { type: "play" }>);
   };
@@ -107,8 +111,59 @@ export function VodPlayerControls({ status, busy, onCommand, onRetry }: {
           <input type="range" min="0" max="100" step="1" value={status.volume} onChange={(event) => command({ type: "set-volume", volume: Number(event.target.value) })} disabled={busy || !sessionId} />
         </label>
       </div>
+
+      {status.audioTracks.length > 0 || status.subtitleTracks.length > 0 ? (
+        <div className="vod-player-tracks">
+          {status.audioTracks.length > 0 ? (
+            <label>
+              <ListMusic aria-hidden="true" size={15} />
+              <span className="visually-hidden">{t("preview.vodPlayer.audioTrack")}</span>
+              <select
+                value={status.selectedAudioTrackId ?? ""}
+                disabled={controlsDisabled}
+                aria-label={t("preview.vodPlayer.audioTrack")}
+                onChange={(event) => command({ type: "set-audio-track", trackId: Number(event.target.value) })}
+              >
+                {status.audioTracks.map((track, index) => (
+                  <option key={track.id} value={track.id}>{trackLabel(track, index, t("preview.vodPlayer.audioTrack"))}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {status.subtitleTracks.length > 0 ? (
+            <label>
+              <Captions aria-hidden="true" size={15} />
+              <span className="visually-hidden">{t("preview.vodPlayer.subtitleTrack")}</span>
+              <select
+                value={status.selectedSubtitleTrackId ?? "off"}
+                disabled={controlsDisabled}
+                aria-label={t("preview.vodPlayer.subtitleTrack")}
+                onChange={(event) => command({
+                  type: "set-subtitle-track",
+                  trackId: event.target.value === "off" ? null : Number(event.target.value)
+                })}
+              >
+                <option value="off">{t("preview.vodPlayer.subtitleOff")}</option>
+                {status.subtitleTracks.map((track, index) => (
+                  <option key={track.id} value={track.id}>{trackLabel(track, index, t("preview.vodPlayer.subtitleTrack"))}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
+}
+
+function trackLabel(
+  track: VodPlayerStatus["audioTracks"][number],
+  index: number,
+  fallback: string
+): string {
+  return [track.title, track.language?.toUpperCase(), !track.title && !track.language ? `${fallback} ${index + 1}` : null]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function retrySeconds(nextRetryAt: string | null): number {

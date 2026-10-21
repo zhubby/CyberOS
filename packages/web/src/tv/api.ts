@@ -1,4 +1,4 @@
-import type { MediaHome, MediaTitleDetail, MediaTitlePage, VodPlayerStatus } from "@zos/shared";
+import type { MediaHome, MediaTitleDetail, MediaTitlePage, VodPlayerCommand, VodPlayerStatus } from "@zos/shared";
 
 export async function getMediaHome(): Promise<MediaHome> {
   return fetchJson<MediaHome>("/api/media/home");
@@ -9,9 +9,12 @@ export async function getMediaTitle(id: string): Promise<MediaTitleDetail> {
   return result.title;
 }
 
-export async function searchMedia(query: string): Promise<MediaTitlePage> {
+export async function searchMedia(query: string, signal?: AbortSignal): Promise<MediaTitlePage> {
   const params = new URLSearchParams({ query, limit: "60" });
-  return fetchJson<MediaTitlePage>(`/api/media/titles?${params.toString()}`);
+  return fetchJson<MediaTitlePage>(
+    `/api/media/titles?${params.toString()}`,
+    signal ? { signal } : undefined
+  );
 }
 
 export async function playMediaFile(fileId: string, startPositionSeconds?: number): Promise<VodPlayerStatus> {
@@ -24,12 +27,29 @@ export async function playMediaFile(fileId: string, startPositionSeconds?: numbe
   return ((await response.json()) as { status: VodPlayerStatus }).status;
 }
 
+export async function getVodPlayerStatus(): Promise<VodPlayerStatus> {
+  const result = await fetchJson<{ status: VodPlayerStatus }>("/api/vod-player/status");
+  return result.status;
+}
+
+export async function sendVodPlayerCommand(
+  command: Exclude<VodPlayerCommand, { type: "play" }>
+): Promise<VodPlayerStatus> {
+  const response = await fetch("/api/vod-player/command", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(command)
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { status: VodPlayerStatus }).status;
+}
+
 export function mediaArtworkUrl(titleId: string, kind: "poster" | "backdrop" | "still"): string {
   return `/api/media/titles/${encodeURIComponent(titleId)}/artwork/${kind}`;
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
   await ensureOk(response);
   return (await response.json()) as T;
 }

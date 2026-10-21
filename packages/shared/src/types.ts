@@ -221,6 +221,20 @@ export type MediaMetadataSource = "nfo" | "tmdb" | "filename";
 export type MediaScanStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type MediaArtworkKind = "poster" | "backdrop" | "still";
 
+export interface MediaMatchCandidate {
+  tmdbId: number;
+  kind: MediaTitleKind;
+  title: string;
+  originalTitle: string | null;
+  overview: string | null;
+  year: number | null;
+  releaseDate: string | null;
+  originalLanguage: string | null;
+  posterUrl: string | null;
+  backdropUrl: string | null;
+  popularity: number | null;
+}
+
 export interface MediaSourceRecord {
   id: string;
   name: string;
@@ -385,6 +399,22 @@ export interface MediaHome {
 export interface MediaTitlePage {
   titles: MediaTitleSummary[];
   nextCursor: string | null;
+}
+
+export interface TvComponentHealth {
+  state: "ready" | "degraded" | "unavailable";
+  detail: string | null;
+  updatedAt: string | null;
+}
+
+export interface TvModeStatus {
+  enabled: boolean;
+  state: "disabled" | "starting" | "ready" | "degraded";
+  weston: TvComponentHealth;
+  chromium: TvComponentHealth;
+  cec: TvComponentHealth;
+  vodPlayer: TvComponentHealth;
+  updatedAt: string;
 }
 
 export type PhotostaffTakenAtSource = "exif" | "file_mtime";
@@ -1262,7 +1292,7 @@ export interface VodPlayerConfig {
   checkpointIntervalMs: number;
   retryBaseDelayMs: number;
   retryMaxDelayMs: number;
-  videoOutput: "drm";
+  videoOutput: "drm" | "wayland";
   drmConnector: string | null;
   audioOutput: "alsa";
   audioDevice: string | null;

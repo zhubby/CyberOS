@@ -22,13 +22,14 @@ if [ "$1" = "configure" ]; then
     /zos/state /zos/state/trash /zos/state/reports \
     /zos/state/pi-sessions /zos/state/pi-agent /zos/state/photostaff \
     /zos/state/media-cache /zos/state/backup-staging /zos/state/vod-player /zos/state/bluetooth \
+    /zos/state/tv /zos/state/tv/chromium \
     /zos/logs /zos/home /zos/home/termux /zos/apps /zos/deploy \
     /zos/system-backups /zos/data/backup /zos/data/primary
   install -d -o zos -g zos -m 0711 /zos/vm /zos/iso
   install -d -o root -g root -m 0755 /zos/home/share /zos/state/hostd
   install -d -o root -g root -m 0700 \
     /zos/state/hostd/docker-daemon /zos/state/hostd/network-manager /zos/state/hostd/bluetooth \
-    /zos/system-backups/permissions
+    /zos/state/tv/control /zos/system-backups/permissions
 
   legacy_migration=0
   if [ -f /etc/sigmaos/config.toml ]; then
@@ -53,6 +54,7 @@ if [ "$1" = "configure" ]; then
   install -d -o root -g root -m 0755 /usr/local/sbin
   ln -sfn /usr/lib/zos/scripts/zos-deploy /usr/local/sbin/zos-deploy
   ln -sfn /usr/lib/zos/scripts/zos-mcp /usr/local/sbin/zos-mcp
+  ln -sfn /usr/lib/zos/scripts/zos-tv-mode /usr/local/sbin/zos-tv-mode
 
   if [ "$legacy_migration" = "1" ] && id sigmaos-deploy >/dev/null 2>&1; then
     if ! ZOS_DEPLOY_USER=sigmaos-deploy /usr/lib/zos/scripts/zos-deploy-bootstrap.sh; then

@@ -19,6 +19,8 @@ const status: VodPlayerStatus = {
   storagePoolId: "pool",
   relativePath: "movies/clip.mp4",
   fileName: "clip.mp4",
+  mediaFileId: null,
+  videoOutput: "drm",
   positionSeconds: 30,
   durationSeconds: 120,
   volume: 75,
@@ -27,6 +29,10 @@ const status: VodPlayerStatus = {
   audioDeviceId: null,
   effectiveAudioDeviceId: null,
   audioFallbackReason: null,
+  audioTracks: [],
+  subtitleTracks: [],
+  selectedAudioTrackId: null,
+  selectedSubtitleTrackId: null,
   capabilities: { mpvAvailable: true, drmAvailable: true, audioAvailable: true, hardwareDecode: "enabled", error: null },
   error: null,
   errorCode: null,
@@ -66,5 +72,24 @@ describe("VodPlayerControls", () => {
     }));
     expect(html).toContain("Bluetooth audio was unavailable");
     expect(html).toContain("BlueALSA device unavailable");
+  });
+
+  it("exposes audio and subtitle track selection", () => {
+    const html = renderToStaticMarkup(createElement(VodPlayerControls, {
+      status: {
+        ...status,
+        audioTracks: [{ id: 1, language: "eng", title: "Stereo", default: true, forced: false, external: false }],
+        subtitleTracks: [{ id: 2, language: "zho", title: "简体中文", default: true, forced: false, external: false }],
+        selectedAudioTrackId: 1,
+        selectedSubtitleTrackId: 2
+      },
+      busy: false,
+      onCommand: vi.fn(),
+      onRetry: vi.fn()
+    }));
+    expect(html).toContain("Audio track");
+    expect(html).toContain("Stereo · ENG");
+    expect(html).toContain("Subtitles off");
+    expect(html).toContain("简体中文 · ZHO");
   });
 });

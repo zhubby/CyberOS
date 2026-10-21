@@ -52,7 +52,7 @@ export function StorageFilePickerDialog({
   initialPoolId: string;
   locale: SupportedLocale;
   mode?: "iso" | "directory" | "files";
-  directoryPurpose?: "downloads" | "photoMove" | "fileMove" | "bluetoothInbox";
+  directoryPurpose?: "downloads" | "photoMove" | "fileMove" | "bluetoothInbox" | "mediaLibrary";
   initialPath?: string;
   boundaryPath?: string;
   directorySelectionDisabled?: (path: string) => boolean;
@@ -92,6 +92,15 @@ export function StorageFilePickerDialog({
         empty: t("settings.bluetooth.inbox.pickerEmpty"),
         select: t("settings.bluetooth.inbox.useDirectory")
       }
+    : directoryPurpose === "mediaLibrary"
+      ? {
+          eyebrow: t("settings.media.sourceDirectory"),
+          title: t("settings.media.pickerTitle"),
+          description: t("settings.media.pickerDescription"),
+          list: t("settings.media.pickerList"),
+          empty: t("settings.media.pickerEmpty"),
+          select: t("settings.media.useDirectory")
+        }
     : directoryPurpose === "photoMove"
     ? {
         eyebrow: t("workspace.photos.moveDestination"),

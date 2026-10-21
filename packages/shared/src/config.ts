@@ -142,7 +142,7 @@ interface TomlConfig {
     checkpoint_interval_ms?: number;
     retry_base_delay_ms?: number;
     retry_max_delay_ms?: number;
-    video_output?: "drm";
+    video_output?: "drm" | "wayland";
     drm_connector?: string;
     audio_output?: "alsa";
     audio_device?: string;
@@ -713,7 +713,7 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, pat
   if (!/^[a-zA-Z0-9._-]+$/.test(playerUser) || playerUser === "root") {
     throw new Error("VOD Player user must name a non-root local account");
   }
-  if (videoOutput !== "drm" || audioOutput !== "alsa" || !["auto-safe", "auto", "no"].includes(hwdec)) {
+  if (!(["drm", "wayland"] as const).includes(videoOutput as "drm" | "wayland") || audioOutput !== "alsa" || !["auto-safe", "auto", "no"].includes(hwdec)) {
     throw new Error("VOD Player output configuration is invalid");
   }
   const retryBaseDelayMs = strictPositiveInteger(
@@ -754,7 +754,7 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, pat
     ),
     retryBaseDelayMs,
     retryMaxDelayMs,
-    videoOutput: "drm",
+    videoOutput: videoOutput as VodPlayerConfig["videoOutput"],
     drmConnector:
       normalizeText(env.ZOS_VOD_PLAYER_DRM_CONNECTOR) ??
       normalizeText(player?.drm_connector) ??

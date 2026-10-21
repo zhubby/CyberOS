@@ -1,0 +1,10 @@
+[Unit]
+Description=ZOS TV appliance session
+Requires=zos-tv-prepare.service zos-tv-weston.service zos-tv-chromium.service zos-vod-player.service
+Wants=zos-tv-cec.service
+Conflicts=display-manager.service
+After=zos-api.service zos-vod-player.service zos-tv-weston.service zos-tv-chromium.service
+AllowIsolate=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -116,8 +116,32 @@ describe("native packaging artifacts", () => {
     expect(vodPlayerUnit).toContain("WatchdogSec=20s");
     expect(vodPlayerUnit).toContain("TimeoutStopSec=30s");
     expect(vodPlayerUnit).toContain("ProtectSystem=strict");
+    expect(vodPlayerUnit).toContain("/zos/state/zos.sqlite-wal");
     expect(vodPlayerUnit).toContain("Wants=zos-api.service bluetooth.service bluealsa.service");
     expect(vodPlayerUnit).not.toContain("RequiresMountsFor=/zos/data");
+    const tvTarget = await readPackagingFile("systemd", "zos-tv.target");
+    expect(tvTarget).toContain("Requires=zos-tv-prepare.service zos-tv-weston.service zos-tv-chromium.service zos-vod-player.service");
+    expect(tvTarget).toContain("Conflicts=display-manager.service");
+    const tvPrepare = await readPackagingFile("systemd", "zos-tv-prepare.service");
+    expect(tvPrepare).toContain("PartOf=zos-tv.target");
+    expect(tvPrepare).toContain("RuntimeDirectoryMode=0700");
+    const tvWeston = await readPackagingFile("systemd", "zos-tv-weston.service");
+    expect(tvWeston).toContain("PartOf=zos-tv.target");
+    expect(tvWeston).toContain("User=zos");
+    expect(tvWeston).toContain("DeviceAllow=char-drm rw");
+    expect(tvWeston).toContain("DeviceAllow=char-input r");
+    const tvChromium = await readPackagingFile("systemd", "zos-tv-chromium.service");
+    expect(tvChromium).toContain("PartOf=zos-tv.target");
+    expect(tvChromium).toContain("IPAddressAllow=localhost");
+    expect(tvChromium).not.toContain("--no-sandbox");
+    await expect(readPackagingFile("systemd", "zos-tv-cec.service")).resolves.toContain("PartOf=zos-tv.target");
+    await expect(readPackagingFile("scripts", "zos-tv-prepare")).resolves.toContain("install -d -m 0700");
+    const mpvInput = await readPackagingFile("etc", "mpv-input.conf");
+    expect(mpvInput).toContain("LEFT seek -10 relative+exact");
+    expect(mpvInput).toContain("UP cycle aid");
+    expect(mpvInput).toContain("DOWN cycle sid");
+    expect(mpvInput).toContain("ENTER cycle pause");
+    expect(mpvInput).toContain("ESC quit");
     const bluetoothUnit = await readPackagingFile("systemd", "zos-bluetoothd.service");
     expect(bluetoothUnit).toContain("User=zos");
     expect(bluetoothUnit).toContain("ExecStart=/usr/bin/dbus-run-session -- /usr/lib/zos/bin/zos-bluetoothd");
@@ -206,6 +230,8 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("usr/lib/zos/apps/ops/dist/");
     expect(install).not.toContain("packages/scheduler");
     expect(install).toContain("target/release/zos-vod-player usr/lib/zos/bin/");
+    expect(install).toContain("packaging/scripts/zos-tv-mode usr/lib/zos/scripts/");
+    expect(install).toContain("packaging/systemd/*.target lib/systemd/system/");
     expect(install).toContain("target/release/zos-bluetoothd usr/lib/zos/bin/");
     expect(install).not.toContain("packages/player-helper");
     expect(install).toContain("target/release/zos-downloader usr/lib/zos/bin/");
@@ -271,6 +297,7 @@ describe("native packaging artifacts", () => {
     expect(control).toContain("libimage-exiftool-perl");
     expect(control).toContain("libvips-tools");
     expect(control).toMatch(/^Depends:.*ffmpeg.*libraw-bin/m);
+    expect(control).toMatch(/^Depends:.*chromium.*weston.*mpv.*v4l-utils.*wtype/m);
     expect(control).not.toMatch(/^Suggests:.*ffmpeg/m);
     expect(control).toContain("Suggests:");
     expect(control).toContain("git");
@@ -290,6 +317,8 @@ describe("native packaging artifacts", () => {
     expect(postinst).toContain("install -d -o root -g zos -m 0751 /zos");
     expect(postinst).toContain("install -d -o root -g zos -m 0750 /zos/config");
     expect(postinst).toContain("ln -sfn /usr/lib/zos/scripts/zos-mcp /usr/local/sbin/zos-mcp");
+    expect(postinst).toContain("ln -sfn /usr/lib/zos/scripts/zos-tv-mode /usr/local/sbin/zos-tv-mode");
+    expect(postinst).toContain("/zos/state/tv/control");
     expect(postinst).not.toContain("install -d -o root -g zos -m 0755 /zos");
     expect(postinst).toContain("/zos/state/hostd/docker-daemon");
     expect(postinst).toContain("/zos/state/hostd/network-manager");
@@ -307,6 +336,8 @@ describe("native packaging artifacts", () => {
     expect(postrm.indexOf("optional-groups.conf")).toBeLessThan(postrm.indexOf("systemctl daemon-reload"));
     expect(postrm).toContain("zos-termux.service.d/identity.conf");
     expect(postrm).toContain("zos-vod-player.service.d/identity.conf");
+    expect(postrm).toContain("zos-vod-player.service.d/50-zos-tv-mode.conf");
+    await expect(readPackagingFile("debian", "prerm")).resolves.toContain("zos-tv-mode disable");
   });
 
   it("ships first-boot and appliance image scaffolding", async () => {
@@ -346,9 +377,14 @@ describe("native packaging artifacts", () => {
     expect(manifest).toContain("zos-downloader.service");
     expect(manifest).toContain("zos-photostaff.service");
     expect(manifest).toContain("zos-vod-player.service");
+    expect(manifest).toContain("zos-tv.target");
+    expect(manifest).toContain("zos-tv-weston.service");
     expect(manifest).toContain("zos-bluetoothd.service");
     expect(manifest).not.toContain("zos-player-helper.service");
     expect(manifest).toContain("mpv");
+    expect(manifest).toContain("chromium");
+    expect(manifest).toContain("weston");
+    expect(manifest).toContain("wtype");
     expect(manifest).toContain("samba");
     expect(buildImage).toMatch(/--include=.*(^|,)git(,|\\|\s)/s);
     expect(buildImage).toMatch(/--include=.*(^|,)samba(,|\\|\s)/s);
@@ -357,6 +393,8 @@ describe("native packaging artifacts", () => {
     expect(buildImage).toContain("bluez-alsa-utils");
     expect(buildImage).toContain("libasound2-plugin-bluez");
     expect(buildImage).toContain("dbus-user-session");
+    expect(buildImage).toContain("ZOS_ENABLE_TV_MODE");
+    expect(buildImage).toContain("systemctl enable zos-tv.target");
     expect(manifest).toContain("tesseract-ocr");
     expect(manifest).toContain("tesseract-ocr-chi-sim");
     expect(manifest).toContain("tesseract-ocr-eng");

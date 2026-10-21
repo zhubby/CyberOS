@@ -364,6 +364,7 @@
 
 .vod-player-heading,
 .vod-player-actions,
+.vod-player-tracks,
 .vod-player-progress,
 .vod-player-message {
   display: flex;
@@ -434,6 +435,30 @@
   min-width: 0;
 }
 
+.vod-player-tracks {
+  min-width: 0;
+}
+
+.vod-player-tracks label {
+  display: flex;
+  flex: 1 1 180px;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.vod-player-tracks select {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface);
+}
+
 .vod-player-actions .is-primary {
   color: var(--accent);
 }
@@ -482,6 +507,11 @@
 @media (max-width: 640px) {
   .vod-player-actions {
     flex-wrap: wrap;
+  }
+
+  .vod-player-tracks {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .vod-player-volume {

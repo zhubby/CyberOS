@@ -1,0 +1,18 @@
+{
+  "requests": [
+    "{\"version\":2,\"id\":\"status-1\",\"command\":{\"type\":\"status\"}}",
+    "{\"version\":2,\"id\":\"play-1\",\"command\":{\"type\":\"play\",\"rootId\":\"primary\",\"storagePoolId\":\"pool-1\",\"relativePath\":\"movies/clip.mp4\",\"mediaFileId\":\"file-1\"}}",
+    "{\"version\":2,\"id\":\"play-2\",\"command\":{\"type\":\"play\",\"rootId\":\"primary\",\"storagePoolId\":\"pool-1\",\"relativePath\":\"movies/clip.mp4\",\"startPositionSeconds\":null,\"audioDeviceId\":\"bluetooth:AA:BB:CC:DD:EE:FF\",\"mediaFileId\":null}}",
+    "{\"version\":2,\"id\":\"pause-1\",\"command\":{\"type\":\"pause\",\"sessionId\":\"session-1\"}}",
+    "{\"version\":2,\"id\":\"toggle-1\",\"command\":{\"type\":\"toggle-pause\",\"sessionId\":\"session-1\"}}",
+    "{\"version\":2,\"id\":\"seek-relative-1\",\"command\":{\"type\":\"seek-relative\",\"sessionId\":\"session-1\",\"seconds\":-10}}",
+    "{\"version\":2,\"id\":\"audio-1\",\"command\":{\"type\":\"set-audio-track\",\"sessionId\":\"session-1\",\"trackId\":1}}",
+    "{\"version\":2,\"id\":\"subtitle-1\",\"command\":{\"type\":\"set-subtitle-track\",\"sessionId\":\"session-1\",\"trackId\":null}}",
+    "{\"version\":2,\"id\":\"cycle-audio-1\",\"command\":{\"type\":\"cycle-audio-track\",\"sessionId\":\"session-1\"}}",
+    "{\"version\":2,\"id\":\"cycle-subtitle-1\",\"command\":{\"type\":\"cycle-subtitle-track\",\"sessionId\":\"session-1\"}}"
+  ],
+  "responses": [
+    "{\"version\":2,\"id\":\"status-1\",\"ok\":true,\"status\":{\"state\":\"playing\",\"sessionId\":\"session-1\",\"serviceInstanceId\":\"instance-1\",\"revision\":7,\"rootId\":\"primary\",\"storagePoolId\":\"pool-1\",\"relativePath\":\"movies/clip.mp4\",\"fileName\":\"clip.mp4\",\"mediaFileId\":\"file-1\",\"videoOutput\":\"wayland\",\"positionSeconds\":12.5,\"durationSeconds\":90.0,\"volume\":80.0,\"retryCount\":0,\"nextRetryAt\":null,\"audioDeviceId\":null,\"effectiveAudioDeviceId\":null,\"audioFallbackReason\":null,\"audioTracks\":[{\"id\":1,\"language\":\"eng\",\"title\":\"Stereo\",\"default\":true,\"forced\":false,\"external\":false}],\"subtitleTracks\":[],\"selectedAudioTrackId\":1,\"selectedSubtitleTrackId\":null,\"capabilities\":{\"mpvAvailable\":true,\"drmAvailable\":true,\"audioAvailable\":true,\"hardwareDecode\":\"enabled\",\"error\":null},\"error\":null,\"errorCode\":null,\"updatedAt\":\"2026-10-10T00:00:00Z\"}}",
+    "{\"version\":2,\"id\":\"play-1\",\"ok\":false,\"error\":\"The session changed\",\"code\":\"SESSION_CONFLICT\",\"statusCode\":409}"
+  ]
+}
