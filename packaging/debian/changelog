@@ -1,3 +1,9 @@
+zos (1.5.5) unstable; urgency=medium
+
+  * Bound SMTP DNS and delivery sessions so alerter TLS safety checks cannot hang release builds.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 22:31:45 +0000
+
 zos (1.5.4) unstable; urgency=medium
 
   * Remove development-only workspace links from production packages.
