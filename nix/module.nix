@@ -15,6 +15,7 @@ let
     ZOS_HOST_MUTATION_POLICY = "declarative";
     ZOS_BUILD_INFO_PATH = "${packageRoot}/build-info.json";
     NODE_PATH = "${packageRoot}/node_modules";
+    SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
   };
   runtimePath = with pkgs; [
     bashInteractive
