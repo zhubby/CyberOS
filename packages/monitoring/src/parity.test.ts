@@ -5,28 +5,37 @@ import { DEFAULT_MONITORING_CONFIG } from "@zos/shared";
 import { describe, expect, it } from "vitest";
 import fixture from "../contracts/golden/metrics-parity.json" with { type: "json" };
 import { queryMetrics } from "./query.js";
-import { MetricsWriter, type CollectorStatusUpdate } from "./store.js";
+import {
+  MetricsFixture,
+  type MetricsFixtureCollectorStatus,
+  type MetricsFixtureRollup
+} from "./test-utils.js";
 
-describe("Rust writer compatibility fixture", () => {
-  it("preserves the v3 raw, rollup, reset, query, and collector contracts", () => {
+describe("Rust metrics schema compatibility fixture", () => {
+  it("reads the v3 raw, rollup, reset, query, and collector contracts", () => {
     const directory = mkdtempSync(path.join(os.tmpdir(), "zos-monitor-parity-"));
     const databasePath = path.join(directory, "metrics.sqlite");
-    const writer = new MetricsWriter(databasePath, DEFAULT_MONITORING_CONFIG, { recoverCorruption: false });
+    const metrics = new MetricsFixture(databasePath);
     try {
-      for (const sample of fixture.samples) writer.writeSamples([sample]);
-      for (const update of fixture.collectorUpdates) {
-        writer.recordCollectorStatus({
-          ...update,
-          state: update.state as CollectorStatusUpdate["state"]
-        });
-      }
+      metrics.insertSamples(fixture.expected.raw);
+      metrics.insertRollups("metric_rollups_1m", withGoldenLabels(fixture.expected.rollups1m));
+      metrics.insertRollups("metric_rollups_1h", withGoldenLabels(fixture.expected.rollups1h));
+      metrics.recordCollectorStatus({
+        collector: fixture.expected.collectorStatus.collector,
+        state: fixture.expected.collectorStatus.state as MetricsFixtureCollectorStatus["state"],
+        attemptedAtMs: fixture.expected.collectorStatus.lastAttemptMs,
+        lastSuccessAtMs: fixture.expected.collectorStatus.lastSuccessMs,
+        durationMs: fixture.expected.collectorStatus.durationMs,
+        consecutiveFailures: fixture.expected.collectorStatus.consecutiveFailures,
+        error: fixture.expected.collectorStatus.error
+      });
 
-      expect(readRaw(writer)).toEqual(fixture.expected.raw);
-      expect(readRollups(writer, "metric_rollups_1m")).toEqual(fixture.expected.rollups1m);
-      expect(readRollups(writer, "metric_rollups_1h")).toEqual(fixture.expected.rollups1h);
-      expect(readCollectorStatus(writer)).toEqual(fixture.expected.collectorStatus);
+      expect(readRaw(metrics)).toEqual(fixture.expected.raw);
+      expect(readRollups(metrics, "metric_rollups_1m")).toEqual(fixture.expected.rollups1m);
+      expect(readRollups(metrics, "metric_rollups_1h")).toEqual(fixture.expected.rollups1h);
+      expect(readCollectorStatus(metrics)).toEqual(fixture.expected.collectorStatus);
 
-      const query = queryMetrics(writer.db, {
+      const query = queryMetrics(metrics.db, {
         start: "1970-01-01T00:00:00.000Z",
         end: "1970-01-01T00:03:00.000Z",
         maxPoints: 3,
@@ -38,14 +47,23 @@ describe("Rust writer compatibility fixture", () => {
       expect(query.series[0]?.points.map(({ value }) => value)).toEqual(fixture.expected.query.gaugeValues);
       expect(query.series[1]?.points.map(({ value }) => value)).toEqual(fixture.expected.query.counterRateValues);
     } finally {
-      writer.close();
+      metrics.close();
       rmSync(directory, { recursive: true, force: true });
     }
   });
 });
 
-function readRaw(writer: MetricsWriter) {
-  return (writer.db.prepare(`
+function withGoldenLabels(
+  rollups: readonly Omit<MetricsFixtureRollup, "labels">[]
+): MetricsFixtureRollup[] {
+  return rollups.map((rollup) => ({
+    ...rollup,
+    labels: fixture.expected.raw.find((sample) => sample.metric === rollup.metric)?.labels ?? {}
+  }));
+}
+
+function readRaw(metrics: MetricsFixture) {
+  return (metrics.db.prepare(`
     SELECT series.metric_name AS metric, series.labels_json AS labels, sample.timestamp_ms AS timestampMs,
       sample.value AS value
     FROM metric_samples_raw sample JOIN metric_series series ON series.id = sample.series_id
@@ -54,8 +72,8 @@ function readRaw(writer: MetricsWriter) {
     .map((row) => ({ ...row, labels: JSON.parse(row.labels) as Record<string, string> }));
 }
 
-function readRollups(writer: MetricsWriter, table: "metric_rollups_1m" | "metric_rollups_1h") {
-  return (writer.db.prepare(`
+function readRollups(metrics: MetricsFixture, table: "metric_rollups_1m" | "metric_rollups_1h") {
+  return (metrics.db.prepare(`
     SELECT series.metric_name AS metric, rollup.bucket_ms AS bucketMs,
       rollup.first_timestamp_ms AS firstTimestampMs, rollup.last_timestamp_ms AS lastTimestampMs,
       rollup.first_value AS firstValue, rollup.last_value AS lastValue, rollup.min_value AS minValue,
@@ -66,8 +84,8 @@ function readRollups(writer: MetricsWriter, table: "metric_rollups_1m" | "metric
   `).all());
 }
 
-function readCollectorStatus(writer: MetricsWriter) {
-  return writer.db.prepare(`
+function readCollectorStatus(metrics: MetricsFixture) {
+  return metrics.db.prepare(`
     SELECT collector_id AS collector, state, last_attempt_ms AS lastAttemptMs,
       last_success_ms AS lastSuccessMs, duration_ms AS durationMs,
       consecutive_failures AS consecutiveFailures, error

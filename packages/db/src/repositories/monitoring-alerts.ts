@@ -6,6 +6,7 @@ import type {
   MonitoringAlertContactInput,
   MonitoringAlertDelivery,
   MonitoringAlertIncident,
+  MonitoringAlertIncidentDetail,
   MonitoringAlertIncidentEvent,
   MonitoringAlertRule,
   MonitoringAlertRuleInput,
@@ -46,6 +47,13 @@ export class MonitoringAlertDeliveryCapacityError extends Error {
   constructor() {
     super("Alert delivery queue is full");
     this.name = "MonitoringAlertDeliveryCapacityError";
+  }
+}
+
+export class MonitoringSmtpUnavailableError extends Error {
+  constructor() {
+    super("SMTP delivery is disabled or incomplete");
+    this.name = "MonitoringSmtpUnavailableError";
   }
 }
 
@@ -147,13 +155,62 @@ export function deleteMonitoringAlertRule(
 
 export function listMonitoringAlertIncidents(
   db: ZosDatabase,
-  options: { status?: "firing" | "resolved"; limit?: number } = {}
+  options: { status?: "firing" | "resolved"; limit?: number; groupHealthEpisodes?: boolean } = {}
 ): MonitoringAlertIncident[] {
   const limit = Math.max(1, Math.min(200, options.limit ?? 100));
-  const rows = options.status
-    ? db.prepare("SELECT * FROM monitoring_alert_incidents WHERE status = ? ORDER BY firing_at DESC LIMIT ?")
-      .all(options.status, limit)
-    : db.prepare("SELECT * FROM monitoring_alert_incidents ORDER BY firing_at DESC LIMIT ?").all(limit);
+  const rows = options.groupHealthEpisodes
+    ? db.prepare(`
+        WITH health_incident_counts AS (
+          SELECT series_key, COUNT(*) AS incident_count
+          FROM monitoring_alert_incidents
+          WHERE source = 'health'
+          GROUP BY series_key
+        ), health_event_counts AS (
+          SELECT incidents.series_key, COUNT(*) AS event_count
+          FROM monitoring_alert_incident_events events
+          JOIN monitoring_alert_incidents incidents ON incidents.id = events.incident_id
+          WHERE incidents.source = 'health' AND events.type = 'fired'
+          GROUP BY incidents.series_key
+        ), ranked AS (
+          SELECT incidents.*,
+            CASE WHEN incidents.source = 'health' THEN MAX(
+              COALESCE(health_incident_counts.incident_count, 1),
+              COALESCE(health_event_counts.event_count, 1)
+            ) ELSE 1 END AS occurrence_count,
+            ROW_NUMBER() OVER (
+              PARTITION BY CASE WHEN incidents.source = 'health' THEN incidents.series_key ELSE incidents.id END
+              ORDER BY incidents.firing_at DESC, incidents.id DESC
+            ) AS episode_rank
+          FROM monitoring_alert_incidents incidents
+          LEFT JOIN health_incident_counts ON health_incident_counts.series_key = incidents.series_key
+            AND incidents.source = 'health'
+          LEFT JOIN health_event_counts ON health_event_counts.series_key = incidents.series_key
+            AND incidents.source = 'health'
+          ${options.status ? "WHERE incidents.status = ?" : ""}
+        )
+        SELECT * FROM ranked
+        WHERE episode_rank = 1
+        ORDER BY firing_at DESC LIMIT ?
+      `).all(...(options.status ? [options.status, limit] : [limit]))
+    : options.status
+      ? db.prepare(`
+          SELECT incidents.*,
+            CASE WHEN incidents.source = 'health' THEN MAX(1,
+              (SELECT COUNT(*) FROM monitoring_alert_incident_events events
+                WHERE events.incident_id = incidents.id AND events.type = 'fired')
+            ) ELSE 1 END AS occurrence_count
+          FROM monitoring_alert_incidents incidents
+          WHERE status = ? ORDER BY firing_at DESC LIMIT ?
+        `)
+        .all(options.status, limit)
+      : db.prepare(`
+          SELECT incidents.*,
+            CASE WHEN incidents.source = 'health' THEN MAX(1,
+              (SELECT COUNT(*) FROM monitoring_alert_incident_events events
+                WHERE events.incident_id = incidents.id AND events.type = 'fired')
+            ) ELSE 1 END AS occurrence_count
+          FROM monitoring_alert_incidents incidents ORDER BY firing_at DESC LIMIT ?
+        `).all(limit);
   return (rows as AlertIncidentRow[]).map(mapIncident);
 }
 
@@ -162,6 +219,26 @@ export function getMonitoringAlertIncident(db: ZosDatabase, id: string): Monitor
     | AlertIncidentRow
     | undefined;
   return row ? mapIncident(row) : null;
+}
+
+export function getMonitoringAlertIncidentDetail(
+  db: ZosDatabase,
+  id: string
+): MonitoringAlertIncidentDetail | null {
+  const row = db.prepare("SELECT * FROM monitoring_alert_incidents WHERE id = ?")
+    .get(id) as AlertIncidentRow | undefined;
+  if (!row) return null;
+  const deliveries = (db.prepare(`
+    SELECT id, incident_id, kind, status, attempt_count, due_at, sent_at, last_error, created_at, updated_at
+    FROM monitoring_alert_deliveries WHERE incident_id = ? ORDER BY created_at, id
+  `).all(id) as DeliveryRow[]).map(mapDelivery);
+  return {
+    incident: mapIncident(row),
+    events: listMonitoringAlertIncidentEvents(db, id),
+    ruleSnapshot: parseObject(row.rule_snapshot_json),
+    policySnapshot: row.policy_snapshot_json === null ? null : parseObject(row.policy_snapshot_json),
+    deliveries
+  };
 }
 
 export function listMonitoringAlertIncidentEvents(
@@ -313,20 +390,46 @@ export function deleteMonitoringAlertContact(db: ZosDatabase, id: string, expect
     ], id) || escalationTargetExists(db, "contact", id));
 }
 
-export function getMonitoringAlertSummary(db: ZosDatabase): MonitoringAlertSummary {
+const ALERTER_STALE_AFTER_MS = 30_000;
+
+export function getMonitoringAlertSummary(
+  db: ZosDatabase,
+  now = new Date()
+): MonitoringAlertSummary {
   const counts = db.prepare(`
     SELECT
-      SUM(CASE WHEN read_at IS NULL THEN 1 ELSE 0 END) AS unread_count,
+      (
+        SELECT COUNT(*) FROM (
+          SELECT CASE WHEN source = 'health' THEN 'health:' || series_key ELSE id END AS notification_key
+          FROM monitoring_alert_incidents
+          WHERE read_at IS NULL
+          GROUP BY notification_key
+        ) unread_groups
+      ) AS unread_count,
       SUM(CASE WHEN status = 'firing' THEN 1 ELSE 0 END) AS firing_count
     FROM monitoring_alert_incidents
   `).get() as { unread_count: number | null; firing_count: number | null };
   const state = db.prepare(`
-    SELECT status, pending_deliveries FROM monitoring_alerter_state WHERE id = 1
-  `).get() as { status: MonitoringAlertSummary["alerterStatus"]; pending_deliveries: number };
+    SELECT status, last_evaluation_at, pending_deliveries
+    FROM monitoring_alerter_state WHERE id = 1
+  `).get() as {
+    status: Exclude<MonitoringAlertSummary["alerterStatus"], "unavailable">;
+    last_evaluation_at: string | null;
+    pending_deliveries: number;
+  };
+  const lastEvaluationMs = state.last_evaluation_at === null
+    ? Number.NaN
+    : Date.parse(state.last_evaluation_at);
+  const alerterStatus = state.status === "starting" || !Number.isFinite(lastEvaluationMs)
+    ? "starting"
+    : now.getTime() - lastEvaluationMs > ALERTER_STALE_AFTER_MS
+      ? "unavailable"
+      : state.status;
   return {
     unreadCount: counts.unread_count ?? 0,
     firingCount: counts.firing_count ?? 0,
-    alerterStatus: state.status,
+    alerterStatus,
+    lastEvaluationAt: state.last_evaluation_at,
     pendingDeliveries: state.pending_deliveries
   };
 }
@@ -405,6 +508,8 @@ export function saveMonitoringHealthRouting(
 }
 
 export function enqueueMonitoringTestEmail(db: ZosDatabase, recipient: string): MonitoringAlertDelivery {
+  const smtp = getMonitoringSmtpSettings(db);
+  if (!smtp.enabled || !smtp.host || !smtp.from) throw new MonitoringSmtpUnavailableError();
   const pending = db.prepare(`
     SELECT COUNT(*) FROM monitoring_alert_deliveries
     WHERE status IN ('pending', 'retrying', 'sending')
@@ -502,17 +607,28 @@ function changeIncident(
   return db.transaction(() => {
     const current = getMonitoringAlertIncident(db, id);
     if (!current) return null;
-    if (action === "read" ? current.readAt !== null : current.acknowledgedAt !== null) {
+    if (action === "acknowledged" && current.acknowledgedAt !== null) {
       return current;
     }
     const now = new Date().toISOString();
+    const ids = action === "read" && current.source === "health"
+      ? db.prepare(`
+          SELECT id FROM monitoring_alert_incidents
+          WHERE source = 'health' AND series_key = ? AND read_at IS NULL
+        `).pluck().all(current.seriesKey) as string[]
+      : action === "read" && current.readAt !== null
+        ? []
+        : [id];
+    if (ids.length === 0) return current;
     const column = action === "read" ? "read_at" : "acknowledged_at";
-    db.prepare(`UPDATE monitoring_alert_incidents SET ${column} = COALESCE(${column}, ?), updated_at = ? WHERE id = ?`)
-      .run(now, now, id);
-    db.prepare(`
+    const placeholders = ids.map(() => "?").join(", ");
+    db.prepare(`UPDATE monitoring_alert_incidents SET ${column} = COALESCE(${column}, ?), updated_at = ? WHERE id IN (${placeholders})`)
+      .run(now, now, ...ids);
+    const insertEvent = db.prepare(`
       INSERT INTO monitoring_alert_incident_events(incident_id, type, details_json, created_at)
       VALUES (?, ?, '{}', ?)
-    `).run(id, action, now);
+    `);
+    for (const incidentId of ids) insertEvent.run(incidentId, action, now);
     if (action === "acknowledged") {
       db.prepare(`
         UPDATE monitoring_alert_deliveries SET status = 'cancelled', updated_at = ?
@@ -687,7 +803,8 @@ function mapIncident(row: AlertIncidentRow): MonitoringAlertIncident {
     acknowledgedAt: row.acknowledged_at,
     readAt: row.read_at,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    occurrenceCount: row.occurrence_count ?? 1
   };
 }
 
@@ -749,8 +866,16 @@ interface AlertIncidentRow {
   severity: MonitoringAlertIncident["severity"]; title: string; current_value: number | null;
   firing_at: string; resolved_at: string | null; close_reason: MonitoringAlertIncident["closeReason"];
   acknowledged_at: string | null; read_at: string | null; created_at: string; updated_at: string;
+  rule_snapshot_json: string; policy_snapshot_json: string | null;
+  occurrence_count?: number;
 }
-interface IncidentEventRow { id: number; incident_id: string; type: string; details_json: string; created_at: string }
+interface IncidentEventRow {
+  id: number;
+  incident_id: string;
+  type: MonitoringAlertIncidentEvent["type"];
+  details_json: string;
+  created_at: string;
+}
 interface SilenceRow {
   id: string; rule_id: string; series_key: string | null; starts_at: string; ends_at: string;
   reason: string; revision: number; cancelled_at: string | null; created_at: string; updated_at: string;

@@ -17,6 +17,8 @@ export interface MonitoringSeriesDescriptor {
   id: number;
   metric: string;
   labels: Record<string, string>;
+  active: boolean;
+  lastSampleAt: string | null;
 }
 
 export interface MonitoringCatalogResponse {

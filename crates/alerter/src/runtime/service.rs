@@ -35,10 +35,12 @@ impl AlerterService {
     }
 
     pub async fn run(self) -> Result<(), AlerterError> {
-        let _ = sd_notify::notify(&[
-            NotifyState::Status("Waiting for alert schema"),
-            NotifyState::Ready,
-        ]);
+        let _ = sd_notify::notify(&[NotifyState::Status("Waiting for alert schema")]);
+        if !wait_for_first_evaluation(&self.config, self.shutdown.child_token()).await? {
+            let _ = sd_notify::notify(&[NotifyState::Stopping]);
+            return Ok(());
+        }
+        let _ = sd_notify::notify(&[NotifyState::Status("Evaluating alerts"), NotifyState::Ready]);
         let evaluation = run_evaluation_loop(self.config.clone(), self.shutdown.child_token());
         let delivery = run_delivery_loop(
             self.config.database_path.clone(),
@@ -50,11 +52,47 @@ impl AlerterService {
     }
 }
 
+async fn wait_for_first_evaluation(
+    config: &AlerterConfig,
+    shutdown: CancellationToken,
+) -> Result<bool, AlerterError> {
+    loop {
+        let database_path = config.database_path.clone();
+        let metrics_path = config.metrics_database_path.clone();
+        let monitoring_enabled = config.monitoring_enabled;
+        let sampling = config.sampling;
+        let now_ms = SystemClock.wall_time_ms();
+        let result = tokio::task::spawn_blocking(move || {
+            evaluate_once(
+                &database_path,
+                &metrics_path,
+                monitoring_enabled,
+                sampling,
+                now_ms,
+            )
+        })
+        .await
+        .map_err(|error| AlerterError::Runtime(error.to_string()))?;
+        match result {
+            Ok(()) => return Ok(true),
+            Err(AlerterError::AlertSchemaUnavailable) => {
+                tracing::info!("alert schema is not ready; retrying");
+            }
+            Err(error) => return Err(error),
+        }
+        tokio::select! {
+            _ = shutdown.cancelled() => return Ok(false),
+            _ = tokio::time::sleep(Duration::from_secs(1)) => {}
+        }
+    }
+}
+
 async fn run_evaluation_loop(
     config: AlerterConfig,
     shutdown: CancellationToken,
 ) -> Result<(), AlerterError> {
-    let mut schedule = tokio::time::interval_at(Instant::now(), EVALUATION_INTERVAL);
+    let mut schedule =
+        tokio::time::interval_at(Instant::now() + EVALUATION_INTERVAL, EVALUATION_INTERVAL);
     schedule.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
         tokio::select! {

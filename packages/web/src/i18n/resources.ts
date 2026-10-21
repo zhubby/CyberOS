@@ -106,6 +106,7 @@ export const en = {
         emptyTitle: "No alert incidents",
         emptyBody: "Monitoring and health incidents will appear here.",
         acknowledge: "Acknowledge",
+        occurrences: "{{count}} occurrences",
         statuses: { firing: "Firing", resolved: "Resolved" },
         severity: { warning: "Warning", critical: "Critical" }
       },
@@ -637,7 +638,22 @@ export const en = {
         incidents: {
           title: "Alert incidents", description: "{{firing}} firing · {{unread}} unread", filterLabel: "Incident status",
           empty: "No incidents match this filter.", markRead: "Mark as read", acknowledge: "Acknowledge",
-          silence: "Silence this instance for one hour", silenceReason: "Silenced from incident view",
+          silence: "Silence", details: "View incident details", detailEyebrow: "Incident",
+          overview: "Overview", status: "Status", series: "Series", firedAt: "Started", currentValue: "Current value",
+          timeline: "Timeline", deliveries: "Email delivery", noDeliveries: "No email deliveries were created.",
+          snapshots: "Evaluation snapshots", ruleSnapshot: "Rule snapshot", policySnapshot: "Escalation policy snapshot",
+          noPolicySnapshot: "No escalation policy was attached when this incident fired.",
+          attempts: "{{count}} attempts", createSilence: "Create silence", silenceScope: "Scope",
+          scopeSeries: "This series", scopeRule: "Entire rule", silenceStarts: "Starts", silenceEnds: "Ends",
+          silenceReason: "Reason",
+          statuses: { firing: "Firing", resolved: "Resolved" },
+          events: {
+            fired: "Fired", acknowledged: "Acknowledged", read: "Marked as read", recovered: "Recovered",
+            rule_changed: "Rule changed", disabled: "Rule disabled", deleted: "Rule deleted", silenced: "Silenced",
+            unsilenced: "Silence ended", delivery_succeeded: "Email delivered", delivery_failed: "Email failed"
+          },
+          deliveryKinds: { firing: "Firing alert", reminder: "Reminder", resolved: "Resolution", test: "Test" },
+          deliveryStatuses: { pending: "Pending", sending: "Sending", retrying: "Retrying", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled" },
           filters: { all: "All", firing: "Firing", resolved: "Resolved" }
         }
       },
@@ -2339,7 +2355,7 @@ export const en = {
         title: "Email delivery", description: "SMTP credentials remain server-side and are never returned by the API.",
         enabled: "Enable SMTP delivery", host: "Host", port: "Port", security: "Security", username: "Username",
         password: "Password", passwordConfigured: "Credential configured", from: "From address",
-        testRecipient: "Test recipient", sendTest: "Send test"
+        testRecipient: "Test recipient", sendTest: "Send test", testDisabled: "Enable and save SMTP before sending a test."
       },
       contacts: { title: "Contacts", description: "People who may receive alert deliveries.", name: "Name", email: "Email" },
       groups: { title: "Contact groups", description: "Resolve group membership when an escalation stage becomes due.", name: "Group name" },
@@ -2889,6 +2905,7 @@ export const zhCN = {
         emptyTitle: "暂无告警事件",
         emptyBody: "监控和健康事件会显示在这里。",
         acknowledge: "确认",
+        occurrences: "发生 {{count}} 次",
         statuses: { firing: "告警中", resolved: "已恢复" },
         severity: { warning: "警告", critical: "严重" }
       },
@@ -3420,7 +3437,22 @@ export const zhCN = {
         incidents: {
           title: "告警事件", description: "{{firing}} 个触发中 · {{unread}} 个未读", filterLabel: "事件状态",
           empty: "没有符合筛选条件的事件。", markRead: "标为已读", acknowledge: "确认",
-          silence: "静默此实例一小时", silenceReason: "从事件视图创建的静默",
+          silence: "静默", details: "查看事件详情", detailEyebrow: "告警事件",
+          overview: "概览", status: "状态", series: "序列", firedAt: "开始时间", currentValue: "当前值",
+          timeline: "时间线", deliveries: "邮件投递", noDeliveries: "此事件没有生成邮件投递。",
+          snapshots: "求值快照", ruleSnapshot: "规则快照", policySnapshot: "升级策略快照",
+          noPolicySnapshot: "事件触发时未绑定升级策略。",
+          attempts: "尝试 {{count}} 次", createSilence: "创建静默", silenceScope: "范围",
+          scopeSeries: "当前序列", scopeRule: "整条规则", silenceStarts: "开始时间", silenceEnds: "结束时间",
+          silenceReason: "原因",
+          statuses: { firing: "触发中", resolved: "已恢复" },
+          events: {
+            fired: "已触发", acknowledged: "已确认", read: "已读", recovered: "已恢复",
+            rule_changed: "规则已修改", disabled: "规则已停用", deleted: "规则已删除", silenced: "已静默",
+            unsilenced: "静默已结束", delivery_succeeded: "邮件已送达", delivery_failed: "邮件失败"
+          },
+          deliveryKinds: { firing: "触发通知", reminder: "重复提醒", resolved: "恢复通知", test: "测试邮件" },
+          deliveryStatuses: { pending: "等待中", sending: "发送中", retrying: "重试中", succeeded: "已送达", failed: "失败", cancelled: "已取消" },
           filters: { all: "全部", firing: "触发中", resolved: "已恢复" }
         }
       },
@@ -5122,7 +5154,7 @@ export const zhCN = {
         title: "邮件投递", description: "SMTP 凭据只保存在服务端，API 不会返回密码。",
         enabled: "启用 SMTP 投递", host: "主机", port: "端口", security: "安全模式", username: "用户名",
         password: "密码", passwordConfigured: "凭据已配置", from: "发件地址",
-        testRecipient: "测试收件人", sendTest: "发送测试"
+        testRecipient: "测试收件人", sendTest: "发送测试", testDisabled: "请先启用并保存 SMTP，再发送测试邮件。"
       },
       contacts: { title: "联系人", description: "可接收告警邮件的人员。", name: "名称", email: "邮箱" },
       groups: { title: "联系人组", description: "升级阶段到期时解析当前组成员。", name: "组名称" },

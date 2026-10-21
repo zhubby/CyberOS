@@ -427,6 +427,215 @@
   font-size: 11px;
 }
 
+.management-modal-backdrop.monitoring-incident-detail-backdrop {
+  z-index: 90;
+}
+
+.monitoring-incident-detail-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(780px, 100%);
+  max-height: min(780px, calc(100dvh - 36px));
+}
+
+.monitoring-incident-detail-dialog > header h2 {
+  margin-top: 3px;
+}
+
+.monitoring-incident-detail-body {
+  min-height: 0;
+  padding: 0 16px 18px;
+  overflow: auto;
+}
+
+.monitoring-incident-detail-section,
+.monitoring-incident-silence-form {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.monitoring-incident-detail-section h3,
+.monitoring-incident-silence-form h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-family: var(--font-emphasis);
+}
+
+.monitoring-incident-detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  margin: 0;
+}
+
+.monitoring-incident-detail-list > div {
+  min-width: 0;
+}
+
+.monitoring-incident-detail-list dt,
+.monitoring-incident-silence-grid label > span {
+  color: var(--muted-2);
+  font-size: 10px;
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+}
+
+.monitoring-incident-detail-list dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.monitoring-incident-timeline {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.monitoring-incident-timeline li {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+  padding: 6px 0;
+}
+
+.monitoring-incident-timeline li > span {
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.monitoring-incident-timeline li > div,
+.monitoring-incident-deliveries article > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.monitoring-incident-timeline strong,
+.monitoring-incident-deliveries strong {
+  font-size: 11px;
+}
+
+.monitoring-incident-timeline time,
+.monitoring-incident-timeline code,
+.monitoring-incident-deliveries span,
+.monitoring-incident-deliveries small,
+.monitoring-incident-detail-empty {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.monitoring-incident-timeline code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.monitoring-incident-deliveries {
+  display: grid;
+  gap: 6px;
+}
+
+.monitoring-incident-deliveries article {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--subtle-bg);
+}
+
+.monitoring-incident-detail-empty {
+  margin: 0;
+}
+
+.monitoring-incident-snapshots details {
+  border-top: 1px solid var(--line-soft);
+}
+
+.monitoring-incident-snapshots summary {
+  padding: 8px 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+}
+
+.monitoring-incident-snapshots pre {
+  max-height: 220px;
+  margin: 0 0 9px;
+  padding: 9px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--code-bg);
+  color: var(--text);
+  font-size: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.monitoring-incident-silence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.monitoring-incident-silence-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.monitoring-incident-silence-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+.monitoring-incident-silence-grid input,
+.monitoring-incident-silence-grid select {
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--input-bg, var(--surface));
+  color: var(--text);
+  font: inherit;
+}
+
+.monitoring-incident-detail-actions,
+.monitoring-incident-detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.monitoring-incident-detail-actions {
+  margin-top: 10px;
+}
+
+.monitoring-incident-detail-actions button,
+.monitoring-incident-detail-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.monitoring-incident-detail-footer {
+  min-height: 54px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--channel-bg);
+}
+
 .settings-alerts-page {
   display: grid;
   gap: 12px;
@@ -584,6 +793,24 @@
   .monitoring-incident-list article > .monitoring-alert-row-actions {
     grid-column: 2;
     justify-content: flex-start;
+  }
+
+  .monitoring-incident-detail-list,
+  .monitoring-incident-silence-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .monitoring-incident-silence-grid .span-2 {
+    grid-column: auto;
+  }
+
+  .monitoring-incident-detail-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .monitoring-incident-detail-footer button {
+    width: 100%;
   }
 }
 

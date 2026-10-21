@@ -1,4 +1,4 @@
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -7,6 +7,8 @@ use super::codec::iso;
 use super::deliveries::{add_event, add_event_with_details, queue_resolved_delivery};
 use super::escalation::snapshot_policy_id;
 use crate::error::AlerterError;
+
+const HEALTH_EPISODE_COOLDOWN_MS: i64 = 60 * 60 * 1_000;
 
 impl AlertStore {
     pub(super) fn sync_health_incidents(&mut self, now_ms: i64) -> Result<(), AlerterError> {
@@ -42,10 +44,53 @@ impl AlertStore {
             if exists {
                 continue;
             }
-            let id = Uuid::new_v4().to_string();
             let series_key = format!("{code}:{scope}");
             let title = format!("Health: {code}");
             let snapshot = json!({ "code": code, "scope": scope, "details": details });
+            let recent_incident: Option<String> = transaction
+                .query_row(
+                    "SELECT id FROM monitoring_alert_incidents \
+                     WHERE source = 'health' AND series_key = ? AND status = 'resolved' \
+                       AND resolved_at >= ? \
+                     ORDER BY resolved_at DESC LIMIT 1",
+                    params![
+                        series_key,
+                        iso(now_ms.saturating_sub(HEALTH_EPISODE_COOLDOWN_MS))
+                    ],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if let Some(incident_id) = recent_incident {
+                transaction.execute(
+                    "UPDATE monitoring_alert_deliveries SET status = 'cancelled', updated_at = ? \
+                     WHERE incident_id = ? AND kind = 'resolved' \
+                       AND status IN ('pending', 'retrying')",
+                    params![now, incident_id],
+                )?;
+                transaction.execute(
+                    "UPDATE monitoring_alert_incidents SET status = 'firing', health_alert_id = ?, \
+                     severity = ?, title = ?, resolved_at = NULL, close_reason = NULL, \
+                     rule_snapshot_json = ?, updated_at = ? \
+                     WHERE id = ?",
+                    params![
+                        health_id,
+                        severity,
+                        title,
+                        snapshot.to_string(),
+                        now,
+                        incident_id
+                    ],
+                )?;
+                add_event_with_details(
+                    &transaction,
+                    &incident_id,
+                    "fired",
+                    &json!({ "reopened": true }),
+                    &now,
+                )?;
+                continue;
+            }
+            let id = Uuid::new_v4().to_string();
             let policy_snapshot = if initialized {
                 let setting: String = transaction.query_row(
                     "SELECT value_json FROM system_settings WHERE key = 'monitoring_health_routing'",

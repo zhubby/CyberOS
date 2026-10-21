@@ -137,6 +137,7 @@ import type {
   MonitoringAlertRuleInput as SharedMonitoringAlertRuleInput,
   MonitoringAlertIncident as SharedMonitoringAlertIncident,
   MonitoringAlertIncidentEvent as SharedMonitoringAlertIncidentEvent,
+  MonitoringAlertIncidentDetail as SharedMonitoringAlertIncidentDetail,
   MonitoringAlertSilence as SharedMonitoringAlertSilence,
   MonitoringAlertSilenceInput as SharedMonitoringAlertSilenceInput,
   MonitoringAlertContact as SharedMonitoringAlertContact,
@@ -227,6 +228,7 @@ export type MonitoringAlertRule = SharedMonitoringAlertRule;
 export type MonitoringAlertRuleInput = SharedMonitoringAlertRuleInput;
 export type MonitoringAlertIncident = SharedMonitoringAlertIncident;
 export type MonitoringAlertIncidentEvent = SharedMonitoringAlertIncidentEvent;
+export type MonitoringAlertIncidentDetail = SharedMonitoringAlertIncidentDetail;
 export type MonitoringAlertSilence = SharedMonitoringAlertSilence;
 export type MonitoringAlertSilenceInput = SharedMonitoringAlertSilenceInput;
 export type MonitoringAlertContact = SharedMonitoringAlertContact;
@@ -812,10 +814,22 @@ export async function deleteMonitoringAlertRule(id: string, revision: number): P
   await fetchEmpty(`/api/monitoring/alerts/rules/${encodeURIComponent(id)}?expectedRevision=${revision}`, { method: "DELETE" });
 }
 
-export async function getMonitoringAlertIncidents(status?: "firing" | "resolved"): Promise<MonitoringAlertIncident[]> {
-  const query = status ? `?status=${status}&limit=200` : "?limit=200";
+export async function getMonitoringAlertIncidents(
+  status?: "firing" | "resolved",
+  groupHealthEpisodes = false
+): Promise<MonitoringAlertIncident[]> {
+  const params = new URLSearchParams({ limit: "200" });
+  if (status) params.set("status", status);
+  if (groupHealthEpisodes) params.set("groupHealth", "true");
+  const query = `?${params.toString()}`;
   return fetchJson<{ incidents: MonitoringAlertIncident[] }>(`/api/monitoring/alerts/incidents${query}`)
     .then((body) => body.incidents);
+}
+
+export async function getMonitoringAlertIncident(id: string): Promise<MonitoringAlertIncidentDetail> {
+  return fetchJson<MonitoringAlertIncidentDetail>(
+    `/api/monitoring/alerts/incidents/${encodeURIComponent(id)}`
+  );
 }
 
 export async function readMonitoringAlertIncident(id: string): Promise<MonitoringAlertIncident> {

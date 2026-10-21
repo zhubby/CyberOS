@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
 import { MonitoringReader } from "@zos/monitoring";
-import { MetricsWriter } from "@zos/monitoring/test-utils";
+import { MetricsFixture } from "@zos/monitoring/test-utils";
 import { DEFAULT_MONITORING_CONFIG } from "@zos/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { registerErrorHandler } from "../errors.js";
@@ -41,9 +41,9 @@ describe("monitoring routes", () => {
 
   it("serves the fixed catalog and bounded historical queries", async () => {
     const databasePath = await tempDatabase();
-    const writer = new MetricsWriter(databasePath, { ...DEFAULT_MONITORING_CONFIG });
+    const writer = new MetricsFixture(databasePath);
     const timestampMs = Date.parse("2026-01-01T00:00:10.000Z");
-    writer.writeSamples([{ metric: "zos_host_load1", value: 0.5, timestampMs }]);
+    writer.insertSamples([{ metric: "zos_host_load1", value: 0.5, timestampMs }]);
     writer.recordCollectorStatus({ collector: "host", state: "ready", attemptedAtMs: timestampMs, durationMs: 2 });
     writer.close();
 
@@ -53,7 +53,12 @@ describe("monitoring routes", () => {
       expect.objectContaining({ name: "zos_host_load1", kind: "gauge", unit: "load" })
     ]));
     expect(catalog.series).toEqual([
-      expect.objectContaining({ metric: "zos_host_load1", labels: {} })
+      expect.objectContaining({
+        metric: "zos_host_load1",
+        labels: {},
+        active: false,
+        lastSampleAt: "2026-01-01T00:00:10.000Z"
+      })
     ]);
 
     const response = await server.inject({
@@ -71,16 +76,50 @@ describe("monitoring routes", () => {
     await server.close();
   });
 
+  it("excludes series without data in the requested window before applying limits", async () => {
+    const databasePath = await tempDatabase();
+    const writer = new MetricsFixture(databasePath);
+    writer.insertSamples(Array.from({ length: 64 }, (_, index) => ({
+      metric: "zos_queue_depth",
+      labels: { queue: `stale-${index}` },
+      timestampMs: Date.parse("2025-12-01T00:00:00.000Z"),
+      value: index
+    })));
+    writer.insertSamples([{
+      metric: "zos_host_load1",
+      timestampMs: Date.parse("2026-01-01T00:10:00.000Z"),
+      value: 1
+    }]);
+    writer.close();
+    const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: {
+        ...validQuery(),
+        selectors: [{ metric: "zos_queue_depth" }, { metric: "zos_host_load1" }]
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().series).toEqual([
+      expect.objectContaining({ metric: "zos_host_load1", points: expect.any(Array) })
+    ]);
+    expect(response.json().series[0].points).not.toHaveLength(0);
+    await server.close();
+  });
+
   it("rejects unsafe selectors and bounds oversized requests", async () => {
     const databasePath = await tempDatabase();
-    const writer = new MetricsWriter(databasePath, { ...DEFAULT_MONITORING_CONFIG });
-    writer.writeSamples(Array.from({ length: 64 }, (_, index) => ({
+    const writer = new MetricsFixture(databasePath);
+    writer.insertSamples(Array.from({ length: 64 }, (_, index) => ({
       metric: "zos_queue_depth",
       labels: { queue: `queue-${index}` },
       timestampMs: Date.parse("2026-01-01T00:00:00.000Z"),
       value: index
     })));
-    writer.writeSamples([{
+    writer.insertSamples([{
       metric: "zos_host_load1",
       timestampMs: Date.parse("2026-01-01T00:00:00.000Z"),
       value: 1
@@ -186,15 +225,36 @@ describe("monitoring routes", () => {
     await server.close();
   });
 
+  it("returns a path-free 503 when a cached catalog reader becomes invalid", async () => {
+    const databasePath = await tempDatabase();
+    const metrics = new MetricsFixture(databasePath);
+    metrics.insertSamples([{
+      metric: "zos_host_load1",
+      timestampMs: Date.parse("2026-01-01T00:00:00.000Z"),
+      value: 1
+    }]);
+    const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
+    expect((await server.inject({ method: "GET", url: "/api/monitoring/catalog" })).statusCode).toBe(200);
+
+    metrics.db.exec("DROP TABLE metric_samples_raw");
+    const response = await server.inject({ method: "GET", url: "/api/monitoring/catalog" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ error: "Monitoring data is unavailable" });
+    expect(response.body).not.toContain(databasePath);
+    metrics.close();
+    await server.close();
+  });
+
   it("does not expose collector paths in the overview", async () => {
     const databasePath = await tempDatabase();
-    const writer = new MetricsWriter(databasePath, { ...DEFAULT_MONITORING_CONFIG });
+    const writer = new MetricsFixture(databasePath);
     writer.recordCollectorStatus({
       collector: "host",
       state: "error",
       attemptedAtMs: Date.parse("2026-01-01T00:00:00.000Z"),
       durationMs: 1,
-      error: "permission denied: /secret/host/path"
+      error: "Collector permission denied"
     });
     writer.close();
     const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));

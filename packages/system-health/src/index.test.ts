@@ -14,7 +14,7 @@ import {
   upsertRootReadiness,
   type ZosDatabase
 } from "@zos/db";
-import { MetricsWriter } from "@zos/monitoring/test-utils";
+import { MetricsFixture } from "@zos/monitoring/test-utils";
 import { DEFAULT_MONITORING_CONFIG, type ZosConfig } from "@zos/shared";
 import { evaluateSystemHealth, runScheduledHealthEvaluation } from "./index.js";
 
@@ -157,7 +157,7 @@ describe("shared system health evaluator", () => {
 
   it("adds a warning when enabled monitoring has stopped sampling", async () => {
     const sampledAt = Date.parse("2026-01-01T00:00:00.000Z");
-    const writer = new MetricsWriter(config.metricsDatabasePath!, config.monitoring!);
+    const writer = new MetricsFixture(config.metricsDatabasePath!);
     writer.recordCollectorStatus({
       collector: "host",
       state: "ready",

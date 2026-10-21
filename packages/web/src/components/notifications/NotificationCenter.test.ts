@@ -31,7 +31,8 @@ function incident(): MonitoringAlertIncident {
     seriesKey: "host", labels: {}, status: "firing", severity: "critical",
     title: "CPU saturation", currentValue: 0.98, firingAt: "2026-09-18T00:00:00.000Z",
     resolvedAt: null, closeReason: null, acknowledgedAt: null, readAt: null,
-    createdAt: "2026-09-18T00:00:00.000Z", updatedAt: "2026-09-18T00:01:00.000Z"
+    createdAt: "2026-09-18T00:00:00.000Z", updatedAt: "2026-09-18T00:01:00.000Z",
+    occurrenceCount: 1
   };
 }
 

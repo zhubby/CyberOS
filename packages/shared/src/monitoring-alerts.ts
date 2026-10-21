@@ -52,14 +52,36 @@ export interface MonitoringAlertIncident {
   readAt: string | null;
   createdAt: string;
   updatedAt: string;
+  occurrenceCount: number;
 }
+
+export type MonitoringAlertIncidentEventType =
+  | "fired"
+  | "acknowledged"
+  | "read"
+  | "recovered"
+  | "rule_changed"
+  | "disabled"
+  | "deleted"
+  | "silenced"
+  | "unsilenced"
+  | "delivery_succeeded"
+  | "delivery_failed";
 
 export interface MonitoringAlertIncidentEvent {
   id: number;
   incidentId: string;
-  type: string;
+  type: MonitoringAlertIncidentEventType;
   details: Record<string, unknown>;
   createdAt: string;
+}
+
+export interface MonitoringAlertIncidentDetail {
+  incident: MonitoringAlertIncident;
+  events: MonitoringAlertIncidentEvent[];
+  ruleSnapshot: Record<string, unknown>;
+  policySnapshot: Record<string, unknown> | null;
+  deliveries: MonitoringAlertDelivery[];
 }
 
 export interface MonitoringAlertSilenceInput {
@@ -197,6 +219,7 @@ export interface MonitoringAlertDelivery {
 export interface MonitoringAlertSummary {
   unreadCount: number;
   firingCount: number;
-  alerterStatus: "starting" | "ready" | "degraded";
+  alerterStatus: "starting" | "ready" | "degraded" | "unavailable";
+  lastEvaluationAt: string | null;
   pendingDeliveries: number;
 }

@@ -11,6 +11,7 @@ export function registerMonitoringRoutes(server: FastifyInstance, context: ApiRo
       unreadCount: 0,
       firingCount: 0,
       alerterStatus: "starting" as const,
+      lastEvaluationAt: null,
       pendingDeliveries: 0
     }
   }));

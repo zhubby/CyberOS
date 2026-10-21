@@ -618,6 +618,12 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('runtime_before="$(runtime_fingerprint)"');
     expect(deployWorkflow).toContain('runtime_after="$(runtime_fingerprint)"');
     expect(deployWorkflow).toContain("sleep 30");
+    expect(deployWorkflow).toContain('payload?.alerts?.alerterStatus !== "ready"');
+    expect(deployWorkflow).toContain("Date.now() - lastEvaluationAt > 30_000");
+    expect(deployWorkflow).toContain("payload.series.some");
+    expect(deployWorkflow).toContain("series.points.length > 720");
+    expect(deployWorkflow).toContain("responseBytes > 4 * 1024 * 1024");
+    expect(deployWorkflow).toContain("elapsedMs > 500");
     expect(deployWorkflow).not.toContain("zos-terminal-helper.service");
     expect(migrationPreflight).toContain("/api/vms/summary");
     expect(migrationPreflight).toContain("recovery_audit");
@@ -642,6 +648,9 @@ describe("native packaging artifacts", () => {
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3010;");
     expect(nginx).toContain("proxy_set_header Upgrade $http_upgrade;");
     expect(nginx).toContain("client_max_body_size 4g;");
+    expect(nginx).toContain("gzip on;");
+    expect(nginx).toContain("gzip_types application/json;");
+    expect(nginx).not.toContain("gzip_types text/event-stream");
     expect(nginx).toContain("location = /mcp");
     expect(nginx).toMatch(/location = \/mcp \{\s+return 404;/u);
     expect(nginxScript).toContain("nginx -t");

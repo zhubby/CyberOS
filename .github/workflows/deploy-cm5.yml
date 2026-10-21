@@ -876,6 +876,57 @@ jobs:
               !Number.isFinite(payload?.retention?.databaseBytes) || payload.retention.databaseBytes <= 0) {
             throw new Error(`monitoring did not produce a usable sample: ${JSON.stringify(payload)}`);
           }
+          const lastEvaluationAt = Date.parse(payload?.alerts?.lastEvaluationAt ?? "");
+          if (payload?.alerts?.alerterStatus !== "ready" || !Number.isFinite(lastEvaluationAt) ||
+              Date.now() - lastEvaluationAt > 30_000) {
+            throw new Error(`alerter did not complete a recent evaluation: ${JSON.stringify(payload?.alerts)}`);
+          }
+          NODE
+          node --input-type=module <<'NODE'
+            const end = new Date();
+            const start = new Date(end.getTime() - 60 * 60 * 1000);
+            const request = {
+              start: start.toISOString(),
+              end: end.toISOString(),
+              maxPoints: 720,
+              selectors: [
+                { metric: "zos_host_cpu_usage_ratio" },
+                { metric: "zos_host_load1" },
+                { metric: "zos_host_memory_used_bytes" },
+                { metric: "zos_host_memory_total_bytes" },
+                { metric: "zos_host_network_receive_bytes_total", transform: "rate" },
+                { metric: "zos_host_network_transmit_bytes_total", transform: "rate" },
+                { metric: "zos_host_disk_read_bytes_total", transform: "rate" },
+                { metric: "zos_host_disk_written_bytes_total", transform: "rate" },
+                { metric: "zos_host_filesystem_available_bytes" },
+                { metric: "zos_host_filesystem_size_bytes" },
+                { metric: "zos_host_temperature_celsius" },
+                { metric: "zos_queue_depth" }
+              ]
+            };
+            const startedAt = performance.now();
+            const response = await fetch("http://127.0.0.1:3010/api/monitoring/query", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(request)
+            });
+            const body = await response.text();
+            const elapsedMs = performance.now() - startedAt;
+            if (!response.ok) throw new Error(`monitoring query failed (${response.status}): ${body}`);
+            const payload = JSON.parse(body);
+            if (!Array.isArray(payload?.series) || payload.series.length === 0) {
+              throw new Error("monitoring query returned no series");
+            }
+            if (payload.series.some((series) => !Array.isArray(series.points) || series.points.length > 720)) {
+              throw new Error("monitoring query exceeded the 720-point per-series limit");
+            }
+            const responseBytes = Buffer.byteLength(body);
+            if (responseBytes > 4 * 1024 * 1024) {
+              throw new Error(`monitoring query response is too large: ${responseBytes} bytes`);
+            }
+            if (elapsedMs > 500) {
+              throw new Error(`monitoring query exceeded the 500ms target: ${elapsedMs.toFixed(1)}ms`);
+            }
           NODE
           REMOTE
 
