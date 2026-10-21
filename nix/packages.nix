@@ -41,16 +41,15 @@ let
     '';
   };
 
-  rootNodeModules = pkgs.importNpmLock.buildNodeModules {
+  rootNpmDeps = pkgs.importNpmLock {
     npmRoot = cleanSource;
-    nodejs = pkgs.nodejs_22;
   };
 
   zos-node = pkgs.stdenv.mkDerivation (finalAttrs: {
     pname = "zos-node";
     inherit version;
     src = cleanSource;
-    npmDeps = rootNodeModules;
+    npmDeps = rootNpmDeps;
     npmRoot = ".";
     nativeBuildInputs = with pkgs; [
       nodejs_22
@@ -97,16 +96,15 @@ let
     '';
   });
 
-  docsNodeModules = pkgs.importNpmLock.buildNodeModules {
+  docsNpmDeps = pkgs.importNpmLock {
     npmRoot = cleanSource + "/docs";
-    nodejs = pkgs.nodejs_22;
   };
 
   zos-docs = pkgs.stdenv.mkDerivation {
     pname = "zos-docs";
     inherit version;
     src = cleanSource;
-    npmDeps = docsNodeModules;
+    npmDeps = docsNpmDeps;
     npmRoot = "docs";
     nativeBuildInputs = with pkgs; [ nodejs_22 importNpmLock.npmConfigHook ];
     buildPhase = ''

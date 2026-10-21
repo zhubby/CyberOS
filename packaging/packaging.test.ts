@@ -10,6 +10,15 @@ const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const execFileAsync = promisify(execFile);
 
 describe("native packaging artifacts", () => {
+  it("uses the offline importNpmLock contract for Nix production builds", async () => {
+    const packages = await readFile(path.join(repoRoot, "nix/packages.nix"), "utf8");
+
+    expect(packages).toContain("rootNpmDeps = pkgs.importNpmLock {");
+    expect(packages).toContain("docsNpmDeps = pkgs.importNpmLock {");
+    expect(packages).toContain("importNpmLock.npmConfigHook");
+    expect(packages).not.toContain("importNpmLock.buildNodeModules");
+  });
+
   it("builds monitor and alerter as independent Rust applications", async () => {
     const workspace = await readFile(path.join(repoRoot, "Cargo.toml"), "utf8");
     const monitor = await readFile(path.join(repoRoot, "crates/monitor/Cargo.toml"), "utf8");
