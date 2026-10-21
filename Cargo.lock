@@ -2586,7 +2586,7 @@ dependencies = [
 
 [[package]]
 name = "zos-alerter"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "async-trait",
  "jiff",
@@ -2609,7 +2609,7 @@ dependencies = [
 
 [[package]]
 name = "zos-bluetoothd"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "nix",
  "rusqlite",
@@ -2628,7 +2628,7 @@ dependencies = [
 
 [[package]]
 name = "zos-downloader"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "futures-util",
  "httpdate",
@@ -2654,7 +2654,7 @@ dependencies = [
 
 [[package]]
 name = "zos-host-accessd"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "nix",
  "serde",
@@ -2669,7 +2669,7 @@ dependencies = [
 
 [[package]]
 name = "zos-hostd"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "async-trait",
  "nix",
@@ -2690,7 +2690,7 @@ dependencies = [
 
 [[package]]
 name = "zos-indexer"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "futures-util",
  "nix",
@@ -2719,7 +2719,7 @@ dependencies = [
 
 [[package]]
 name = "zos-monitor"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "async-trait",
  "nix",
@@ -2740,7 +2740,7 @@ dependencies = [
 
 [[package]]
 name = "zos-monitoring-contracts"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -2748,7 +2748,7 @@ dependencies = [
 
 [[package]]
 name = "zos-photostaff"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "futures-util",
  "nix",
@@ -2771,7 +2771,7 @@ dependencies = [
 
 [[package]]
 name = "zos-termux"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "base64 0.22.1",
  "nix",
@@ -2789,7 +2789,7 @@ dependencies = [
 
 [[package]]
 name = "zos-vod-player"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "nix",
  "rusqlite",
