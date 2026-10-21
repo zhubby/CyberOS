@@ -220,6 +220,7 @@ export const en = {
       revision: "Revision",
       target: "Target",
       expires: "Expires",
+      preview: "Requested action",
       confirm: "This action requires an additional first-party confirmation. Approve and execute it now?"
     },
     approvalCards: {
@@ -739,8 +740,8 @@ export const en = {
       deleteSelected: "Delete",
       switchRootForManagement: "Switch the active Agent to the photo library root before moving or deleting photos.",
       deleteTitle: "Delete {{count}} selected items?",
-      deleteBody: "The selected media will move to ZOS trash after approval.",
-      requestDelete: "Request delete",
+      deleteBody: "The selected media will move to ZOS trash immediately after confirmation.",
+      requestDelete: "Move to trash",
       loadMore: "Load more media",
       viewer: "Media viewer",
       zoomOut: "Zoom out",
@@ -1007,7 +1008,7 @@ export const en = {
         },
         logsEyebrow: "Container logs",
         noLogs: "No logs returned.",
-        consoleConnecting: "Connecting to approved Docker console...",
+        consoleConnecting: "Connecting to Docker console...",
         consoleReady: "Console connected.",
         consoleClosed: "Console closed.",
         consoleDisconnected: "Console disconnected.",
@@ -1116,7 +1117,7 @@ export const en = {
         },
         hostAccess: {
           title: "Host Access",
-          description: "Grant fixed, read-only host observation capabilities. Selected grants require approval.",
+          description: "Grant fixed, read-only host observation capabilities. Selected grants are applied during container creation.",
           service: "Target service",
           validateServices: "Validate the Compose definition before selecting a target service.",
           loading: "Loading Host Access policy...",
@@ -1192,7 +1193,7 @@ export const en = {
           warningNasBind: "Service {{service}} uses a NAS bind mount.",
           warningElevated: "Service {{service}} requests elevated host access.",
           saved: "Compose App saved. Deploy it to apply this revision.",
-          savedDeployFailed: "The App was saved, but an approval request could not be created.",
+          savedDeployFailed: "The App was saved, but deployment could not be started.",
           deleted: "Compose App deleted. Images, volumes, networks, and NAS data were retained.",
           needsDeploy: "Needs deploy",
           hostAccessPending: "Pending apply",
@@ -1203,7 +1204,7 @@ export const en = {
           reload: "Reload latest",
           deleteTitle: "Delete this Compose App?",
           deleteDescription: "{{name}} will be removed from ZOS with its generated definition directory. Images, named volumes, networks, and NAS data are retained.",
-          deleteBlocked: "Remove this project's containers through the approved Down action before deleting the App.",
+          deleteBlocked: "Run Down to remove this project's containers before deleting the App.",
           deleteEngineRequired: "Docker Engine must be available so ZOS can verify that no project containers remain.",
           confirmDelete: "Delete App",
           errors: {
@@ -1219,7 +1220,7 @@ export const en = {
         },
         composeTitle: "Compose projects",
         containerCreating: "Creating",
-        composeDescription: "System-managed Apps stored in ZOS and deployed through approval-gated actions.",
+        composeDescription: "System-managed Apps stored in ZOS and deployed directly from this panel.",
         resourcesTitle: "Runtime pressure",
         resourcesDescription: "Aggregated CPU, memory, network, and volume signals from the Docker runtime.",
         pressureTitle: "Runtime pressure",
@@ -1321,7 +1322,7 @@ export const en = {
         declarativeReadOnly: "Share settings are managed by the system configuration and are read-only here.",
         readyDetail: "Share settings are enabled and host services report healthy status.",
         partialDetail: "Share settings are enabled, but one or more host services need attention.",
-        disabledDetail: "Share publishing is disabled; saved directories are kept until the next approved apply.",
+        disabledDetail: "Share publishing is disabled; saved directories are kept until sharing is enabled and saved again.",
         notSaved: "Not saved",
         noRoots: "No NAS roots",
         noShares: "No shared directories are configured.",
@@ -2100,7 +2101,7 @@ export const en = {
       },
       docker: {
         title: "Docker",
-        description: "Local Engine access, managed Compose Apps, and approval-gated console access."
+        description: "Local Engine access, managed Compose Apps, and short-lived console sessions."
       },
       files: {
         title: "Files & Preview",
@@ -2538,7 +2539,7 @@ export const en = {
       readOnlyTitle: "Read-Only Tools",
       readOnlyDescription: "Tools that can run automatically while staying inside the NAS root.",
       dangerousTitle: "Approval Tools",
-      dangerousDescription: "Mutating or shell tools always require approval or can be disabled.",
+      dangerousDescription: "Choose whether mutating and shell capabilities run automatically, require approval or confirmation, or stay disabled.",
       modes: {
         auto: "Auto",
         approve: "Approve",
@@ -3002,6 +3003,7 @@ export const zhCN = {
       revision: "修订版本",
       target: "目标",
       expires: "过期时间",
+      preview: "请求内容",
       confirm: "此操作需要额外的第一方确认。确认现在批准并执行吗？"
     },
     approvalCards: {
@@ -3521,8 +3523,8 @@ export const zhCN = {
       deleteSelected: "删除",
       switchRootForManagement: "请先将当前 Agent 切换到照片库所在的根目录，再移动或删除照片。",
       deleteTitle: "删除所选的 {{count}} 个媒体项？",
-      deleteBody: "审批通过后，所选媒体会移动到 ZOS 回收站。",
-      requestDelete: "请求删除",
+      deleteBody: "确认后，所选媒体会立即移动到 ZOS 回收站。",
+      requestDelete: "移入回收站",
       loadMore: "加载更多媒体",
       viewer: "媒体查看器",
       zoomOut: "缩小",
@@ -3789,7 +3791,7 @@ export const zhCN = {
         },
         logsEyebrow: "容器日志",
         noLogs: "没有返回日志。",
-        consoleConnecting: "正在连接已审批的 Docker 控制台...",
+        consoleConnecting: "正在连接 Docker 控制台...",
         consoleReady: "控制台已连接。",
         consoleClosed: "控制台已关闭。",
         consoleDisconnected: "控制台连接已断开。",
@@ -3898,7 +3900,7 @@ export const zhCN = {
         },
         hostAccess: {
           title: "宿主访问",
-          description: "授予固定且只读的宿主观测能力；所选授权必须经过审批。",
+          description: "授予固定且只读的宿主观测能力；所选授权会在创建容器时直接应用。",
           service: "目标服务",
           validateServices: "请先验证 Compose 定义，再选择目标服务。",
           loading: "正在加载宿主访问策略...",
@@ -3974,7 +3976,7 @@ export const zhCN = {
           warningNasBind: "服务 {{service}} 使用 NAS bind mount。",
           warningElevated: "服务 {{service}} 请求高权限宿主机访问。",
           saved: "Compose App 已保存；部署后此 revision 才会生效。",
-          savedDeployFailed: "App 已保存，但未能创建部署审批请求。",
+          savedDeployFailed: "App 已保存，但未能启动部署。",
           deleted: "Compose App 已删除；镜像、卷、网络和 NAS 数据均已保留。",
           needsDeploy: "需要部署",
           hostAccessPending: "待应用",
@@ -3985,7 +3987,7 @@ export const zhCN = {
           reload: "重新加载最新版本",
           deleteTitle: "删除这个 Compose App？",
           deleteDescription: "将从 ZOS 删除 {{name}} 及其生成的定义目录；镜像、named volume、网络和 NAS 数据会保留。",
-          deleteBlocked: "请先通过需审批的 Down 操作移除该项目容器，再删除 App。",
+          deleteBlocked: "请先执行 Down 移除该项目容器，再删除 App。",
           deleteEngineRequired: "Docker Engine 必须可用，ZOS 才能确认项目容器已经全部移除。",
           confirmDelete: "删除 App",
           errors: {
@@ -4001,7 +4003,7 @@ export const zhCN = {
         },
         composeTitle: "Compose 项目",
         containerCreating: "创建中",
-        composeDescription: "由 ZOS 统一保存和发布的 App，部署操作继续经过审批。",
+        composeDescription: "由 ZOS 统一保存和发布的 App，可在此面板直接部署。",
         resourcesTitle: "运行时压力",
         resourcesDescription: "汇总 Docker 运行时的 CPU、内存、网络和卷信号。",
         pressureTitle: "运行时压力",
@@ -4103,7 +4105,7 @@ export const zhCN = {
         declarativeReadOnly: "共享设置由系统配置声明式管理，此处仅供查看。",
         readyDetail: "共享设置已启用，宿主服务状态正常。",
         partialDetail: "共享设置已启用，但一个或多个宿主服务需要处理。",
-        disabledDetail: "共享发布已禁用；已保存目录会保留到下一次审批应用。",
+        disabledDetail: "共享发布已禁用；已保存目录会保留，直到重新启用并保存共享。",
         notSaved: "未保存",
         noRoots: "没有 NAS root",
         noShares: "尚未配置共享目录。",
@@ -4882,7 +4884,7 @@ export const zhCN = {
       },
       docker: {
         title: "Docker",
-        description: "本机 Engine 访问、托管 Compose App 和审批式控制台访问。"
+        description: "本机 Engine 访问、托管 Compose App 和短时控制台会话。"
       },
       files: {
         title: "文件与预览",
@@ -5320,7 +5322,7 @@ export const zhCN = {
       readOnlyTitle: "只读工具",
       readOnlyDescription: "只读工具可自动运行，但始终受 NAS root 路径保护。",
       dangerousTitle: "审批工具",
-      dangerousDescription: "会修改文件或执行 shell 的工具必须审批，或直接禁用。",
+      dangerousDescription: "设置文件变更与 shell 能力为自动执行、审批、二次确认或禁用。",
       modes: {
         auto: "自动",
         approve: "审批",

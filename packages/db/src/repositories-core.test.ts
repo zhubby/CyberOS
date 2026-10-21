@@ -5,13 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendEvent,
   claimNextJob,
+  createCapabilityProposal,
   createActionMessageAndJob,
-  createDockerOperationApproval,
   createDockerOperationRecord,
   createDockerComposeApp,
   createDockerRegistryCredential,
   createDownloadTask,
-  createPiToolCallApproval,
   createSession,
   createUserMessageAndJob,
   claimNextDownloadTask,
@@ -28,6 +27,9 @@ import {
   getDownloadTask,
   getModelProviderSettings,
   getAgentCapabilityPolicySettings,
+  getCapabilityApprovalByRun,
+  getCapabilityRun,
+  getCapabilityRunPayload,
   getOperationNotificationByJob,
   listEvents,
   listDockerOperations,
@@ -36,6 +38,7 @@ import {
   listMessages,
   listTranscriptItems,
   listOperationNotifications,
+  listPendingAgentCapabilityApprovals,
   markAllOperationNotificationsRead,
   markOperationNotificationRead,
   openZosDb,
@@ -52,6 +55,7 @@ import {
   listDockerComposeApps,
   listDockerComposeAppSummaries,
   markDockerComposeAppDeployed,
+  linkAgentJobToCapabilityRun,
   restoreDockerComposeApp,
   updateDockerRegistryCredential,
   updateDockerComposeApp,
@@ -59,6 +63,8 @@ import {
   updateOperationNotificationForJob,
   type ZosDatabase
 } from "./index.js";
+import { createPiToolCallApproval } from "./repositories/approvals.js";
+import { createDockerOperationApproval } from "./repositories/docker-operations.js";
 
 let tempDir: string;
 let db: ZosDatabase;
@@ -197,6 +203,40 @@ describe("core repositories", () => {
 
     expect(updateJobStatus(db, job.id, "cancelled", null, ["queued", "running"])).toBe(true);
     expect(updateJobStatus(db, job.id, "completed", null, ["running"])).toBe(false);
+  });
+
+  it("cancels pending capability approvals with their Agent job", () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Inspect two files",
+      status: "waiting_approval"
+    });
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const proposals = ["first.txt", "second.txt"].map((file) => createCapabilityProposal(db, {
+      subjectId: session.id,
+      subjectKind: "pi",
+      capabilityId: "zos.files.read",
+      risk: "low",
+      redactedInput: { file },
+      proposal: { summary: `Read ${file}` },
+      privatePayload: { kind: "pi_tool", file },
+      expiresAt
+    }));
+    for (const proposal of proposals) {
+      linkAgentJobToCapabilityRun(db, { jobId: job.id, runId: proposal.run.id });
+    }
+
+    expect(updateJobStatus(db, job.id, "cancelled", null, ["waiting_approval"])).toBe(true);
+    expect(listPendingAgentCapabilityApprovals(db, { sessionId: session.id })).toEqual([]);
+    for (const proposal of proposals) {
+      expect(getCapabilityApprovalByRun(db, proposal.run.id)?.status).toBe("expired");
+      expect(getCapabilityRun(db, proposal.run.id)).toMatchObject({
+        state: "cancelled",
+        errorCode: "CANCELLED"
+      });
+      expect(getCapabilityRunPayload(db, proposal.run.id)).toBeNull();
+    }
   });
 
   it("persists one evolving operation notification for an internal action job", () => {

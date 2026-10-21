@@ -7,8 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createDownloadTask,
   createMcpClient,
+  defaultAgentCapabilityPolicySettings,
   ensureNasRoots,
+  getCapabilityApprovalByRun,
+  getCapabilityRun,
   openZosDb,
+  saveAgentCapabilityPolicySettings,
   saveModelProviderSettings,
   transitionDownloadTask,
   type ZosDatabase
@@ -189,6 +193,7 @@ describe("MCP Streamable HTTP", () => {
     expect(list.statusCode).toBe(200);
     const names = (parseMcpResponse(list.body).result.tools as Array<{ name: string }>).map((tool) => tool.name);
     expect(names).toContain("zos.files.read");
+    expect(names).not.toContain("zos.files.mutate");
     expect(names).not.toContain("zos.docker.manage-propose");
 
     const read = await postMcp({
@@ -204,6 +209,94 @@ describe("MCP Streamable HTTP", () => {
       data: { rootId: "primary", preview: { content: "hello from ZOS", truncated: false } }
     });
     expect(JSON.stringify(readPayload)).not.toContain(tempDir);
+  });
+
+  it("applies Agent policy to Pi MCP file capabilities and creates only Agent capability proposals", async () => {
+    const pi = createMcpClient(db, {
+      name: "Pi",
+      kind: "pi",
+      scopes: ["zos:catalog:read", "zos:files:read", "zos:files:propose"]
+    });
+    token = pi.token;
+    const defaults = defaultAgentCapabilityPolicySettings();
+    saveAgentCapabilityPolicySettings(db, {
+      policies: { ...defaults.policies, "zos.files.read": "disabled" }
+    });
+
+    const disabled = await postMcp({ jsonrpc: "2.0", id: 20, method: "tools/list", params: {} }, "2025-11-25");
+    const disabledNames = (parseMcpResponse(disabled.body).result.tools as Array<{ name: string }>)
+      .map((tool) => tool.name);
+    expect(disabledNames).not.toContain("zos.files.read");
+    expect(disabledNames).not.toContain("zos.files.resource-link");
+    const disabledResources = await postMcp({
+      jsonrpc: "2.0",
+      id: 201,
+      method: "resources/templates/list",
+      params: {}
+    }, "2025-11-25");
+    const disabledResourceUris = (parseMcpResponse(disabledResources.body).result.resourceTemplates as Array<{ uriTemplate: string }>)
+      .map((resource) => resource.uriTemplate);
+    expect(disabledResourceUris).not.toContain("zos://files/{rootId}/{+path}");
+
+    saveAgentCapabilityPolicySettings(db, {
+      policies: { ...defaults.policies, "zos.files.read": "approve" }
+    });
+    const approvalTools = await postMcp({
+      jsonrpc: "2.0",
+      id: 202,
+      method: "tools/list",
+      params: {}
+    }, "2025-11-25");
+    const approvalToolNames = (parseMcpResponse(approvalTools.body).result.tools as Array<{ name: string }>)
+      .map((tool) => tool.name);
+    expect(approvalToolNames).toContain("zos.files.read");
+    expect(approvalToolNames).not.toContain("zos.files.resource-link");
+    const read = await postMcp({
+      jsonrpc: "2.0",
+      id: 21,
+      method: "tools/call",
+      params: { name: "zos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
+    }, "2025-11-25");
+    const readResult = parseMcpResponse(read.body).result.structuredContent as {
+      data: { state: string };
+      runId: string;
+    };
+    expect(readResult.data.state).toBe("waiting_approval");
+    expect(getCapabilityRun(db, readResult.runId)).toMatchObject({
+      clientId: pi.id,
+      subjectKind: "pi",
+      capabilityId: "zos.files.read",
+      state: "waiting_approval"
+    });
+
+    saveAgentCapabilityPolicySettings(db, {
+      policies: {
+        ...defaults.policies,
+        "zos.files.read": "approve",
+        "zos.files.mutate": "confirm"
+      }
+    });
+    const mutation = await postMcp({
+      jsonrpc: "2.0",
+      id: 22,
+      method: "tools/call",
+      params: {
+        name: "zos.files.mutate",
+        arguments: { request: { operation: "mkdir", rootId: "primary", targetPath: "Archive" } }
+      }
+    }, "2025-11-25");
+    const mutationResult = parseMcpResponse(mutation.body).result.structuredContent as {
+      data: { state: string };
+      runId: string;
+    };
+    expect(mutationResult.data.state).toBe("waiting_approval");
+    expect(getCapabilityRun(db, mutationResult.runId)).toMatchObject({
+      clientId: pi.id,
+      subjectKind: "pi",
+      capabilityId: "zos.files.mutate",
+      state: "waiting_approval"
+    });
+    expect(getCapabilityApprovalByRun(db, mutationResult.runId)?.requiresConfirmation).toBe(true);
   });
 
   it("refuses NAS reads when a required mount is not ready", async () => {
@@ -311,12 +404,7 @@ describe("MCP Streamable HTTP", () => {
       }
     }, "2025-11-25");
     const payload = parseMcpResponse(proposed.body);
-    expect(payload.result).toMatchObject({
-      isError: true,
-      structuredContent: {
-        data: { error: { code: "NOT_READY" } }
-      }
-    });
+    expect(payload.error).toBeDefined();
     await expect(readFile(path.join(tempDir, "hello.txt"), "utf8")).resolves.toBe("hello from ZOS");
     expect(db.prepare("SELECT COUNT(*) FROM capability_runs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
@@ -419,6 +507,7 @@ interface McpTestResponse {
   jsonrpc: string;
   id: number;
   result: Record<string, unknown>;
+  error?: Record<string, unknown>;
 }
 
 function parseMcpResponse(body: string): McpTestResponse {

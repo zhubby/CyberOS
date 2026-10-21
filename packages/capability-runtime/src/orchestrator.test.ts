@@ -8,16 +8,24 @@ import {
   createMcpClient,
   createSession,
   createUserMessageAndJob,
+  defaultAgentCapabilityPolicySettings,
   decideCapabilityApproval,
   ensureNasRoots,
   getCapabilityApprovalByRun,
   getCapabilityRun,
+  getCapabilityRunPayload,
   linkAgentJobToCapabilityRun,
   openZosDb,
+  saveAgentCapabilityPolicySettings,
   type ZosDatabase
 } from "@zos/db";
 import type { ZosConfig } from "@zos/shared";
-import { executeApprovedCapabilityRun, proposeFileMutation, recoverCapabilityRuns } from "./orchestrator.js";
+import {
+  executeApprovedCapabilityRun,
+  proposeFileMutation,
+  proposePiMcpFileCapability,
+  recoverCapabilityRuns
+} from "./orchestrator.js";
 
 let tempDir: string;
 let rootDir: string;
@@ -38,6 +46,60 @@ afterEach(async () => {
 });
 
 describe("capability mutation runtime", () => {
+  it("executes an approved Pi MCP read and stores its result for continuation", async () => {
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:read"] });
+    const proposed = await proposePiMcpFileCapability({
+      dependencies: dependencies(),
+      subject: { id: client.id, clientId: client.id, kind: "pi", scopes: new Set(client.scopes) },
+      capabilityId: "zos.files.read",
+      request: { rootId: "primary", path: "source.txt" },
+      requiresConfirmation: false
+    });
+    linkProposalToAgentJob(proposed.runId!);
+    const approval = getCapabilityApprovalByRun(db, proposed.runId!)!;
+    expect(decideCapabilityApproval(db, {
+      approvalId: approval.id,
+      expectedRevision: approval.revision,
+      decision: "approved",
+      decidedBy: "local-admin"
+    })).not.toBeNull();
+
+    const run = await executeApprovedCapabilityRun(dependencies(), proposed.runId!);
+
+    expect(run).toMatchObject({
+      state: "succeeded",
+      result: { data: { rootId: "primary", preview: { content: "version one", truncated: false } } }
+    });
+  });
+
+  it("rechecks Agent policy immediately before an approved capability executes", async () => {
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:read"] });
+    const proposed = await proposePiMcpFileCapability({
+      dependencies: dependencies(),
+      subject: { id: client.id, clientId: client.id, kind: "pi", scopes: new Set(client.scopes) },
+      capabilityId: "zos.files.read",
+      request: { rootId: "primary", path: "source.txt" },
+      requiresConfirmation: false
+    });
+    linkProposalToAgentJob(proposed.runId!);
+    const approval = getCapabilityApprovalByRun(db, proposed.runId!)!;
+    expect(decideCapabilityApproval(db, {
+      approvalId: approval.id,
+      expectedRevision: approval.revision,
+      decision: "approved",
+      decidedBy: "local-admin"
+    })).not.toBeNull();
+    const defaults = defaultAgentCapabilityPolicySettings();
+    saveAgentCapabilityPolicySettings(db, {
+      policies: { ...defaults.policies, "zos.files.read": "disabled" }
+    });
+
+    const run = await executeApprovedCapabilityRun(dependencies(), proposed.runId!);
+
+    expect(run).toMatchObject({ state: "failed", errorCode: "FORBIDDEN" });
+    expect(getCapabilityRunPayload(db, proposed.runId!)).toBeNull();
+  });
+
   it("rejects an approved proposal when the source revision changed", async () => {
     const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
     const proposed = await proposeFileMutation({

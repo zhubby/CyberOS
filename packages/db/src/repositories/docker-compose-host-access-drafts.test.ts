@@ -6,7 +6,6 @@ import {
   createActionMessageAndJob,
   createDockerComposeApp,
   createDockerComposeHostAccessDraft,
-  createDockerOperationApproval,
   createSession,
   deleteExpiredDockerComposeHostAccessDrafts,
   ensureNasRoots,
@@ -18,6 +17,7 @@ import {
   openZosDb,
   type ZosDatabase
 } from "../index.js";
+import { createDockerOperationApproval } from "./docker-operations.js";
 
 let tempDir: string;
 let db: ZosDatabase;

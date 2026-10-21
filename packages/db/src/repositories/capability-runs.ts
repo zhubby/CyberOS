@@ -322,7 +322,8 @@ export function listPendingAgentCapabilityApprovals(
     JOIN capability_runs r ON r.id = a.run_id AND r.subject_kind = 'pi'
     JOIN agent_capability_runs acr ON acr.run_id = r.id
     JOIN jobs j ON j.id = acr.job_id AND j.kind = 'agent'
-    WHERE a.status = 'pending' AND (? IS NULL OR j.session_id = ?)
+    WHERE a.status = 'pending' AND r.state = 'waiting_approval' AND j.status = 'waiting_approval'
+      AND (? IS NULL OR j.session_id = ?)
     ORDER BY a.created_at, a.id
   `).all(input.sessionId ?? null, input.sessionId ?? null) as Array<CapabilityApprovalRow & {
     job_id: string;
@@ -367,6 +368,52 @@ export function getCapabilityRunPayload(db: ZosDatabase, runId: string): JsonVal
 
 export function deleteCapabilityRunPayload(db: ZosDatabase, runId: string): boolean {
   return db.prepare("DELETE FROM capability_run_payloads WHERE run_id = ?").run(runId).changes === 1;
+}
+
+export function cancelAgentCapabilityRunsForJob(
+  db: ZosDatabase,
+  jobId: string,
+  now = new Date().toISOString()
+): number {
+  const tx = db.transaction(() => {
+    const rows = db.prepare(`
+      SELECT r.id, a.id AS approval_id
+      FROM capability_runs r
+      JOIN agent_capability_runs acr ON acr.run_id = r.id
+      JOIN capability_approvals a ON a.run_id = r.id
+      WHERE acr.job_id = ? AND r.state = 'waiting_approval' AND a.status = 'pending'
+      ORDER BY r.created_at, r.id
+    `).all(jobId) as Array<{ id: string; approval_id: string }>;
+
+    const expireApproval = db.prepare(`
+      UPDATE capability_approvals
+      SET status = 'expired', updated_at = ?, revision = revision + 1
+      WHERE id = ? AND status = 'pending'
+    `);
+    const cancelRun = db.prepare(`
+      UPDATE capability_runs
+      SET state = 'cancelled', error_code = 'CANCELLED', error_message = 'Agent job was cancelled',
+          cancellable = 0, finished_at = ?, updated_at = ?, revision = revision + 1
+      WHERE id = ? AND state = 'waiting_approval'
+    `);
+
+    let cancelled = 0;
+    for (const row of rows) {
+      if (expireApproval.run(now, row.approval_id).changes !== 1) continue;
+      if (cancelRun.run(now, now, row.id).changes !== 1) {
+        throw new Error(`Capability run ${row.id} changed while cancelling its Agent job`);
+      }
+      appendCapabilityRunEvent(db, row.id, "approval.expired", {
+        approvalId: row.approval_id,
+        reason: "job_cancelled"
+      });
+      appendCapabilityRunEvent(db, row.id, "run.cancelled", { reason: "job_cancelled" });
+      deleteCapabilityRunPayload(db, row.id);
+      cancelled += 1;
+    }
+    return cancelled;
+  });
+  return tx.immediate();
 }
 
 export function expireCapabilityApprovals(db: ZosDatabase, now = new Date().toISOString()): number {
@@ -509,32 +556,44 @@ export function getCapabilityRunForAgentJob(db: ZosDatabase, jobId: string): Cap
   return row ? mapRun(row) : null;
 }
 
-export function claimNextCapabilityContinuation(db: ZosDatabase): { jobId: string; run: CapabilityRunRecord } | null {
+export function claimNextCapabilityContinuation(db: ZosDatabase): { jobId: string; runs: CapabilityRunRecord[] } | null {
   const now = new Date().toISOString();
   const terminalStates = "'succeeded', 'failed', 'cancelled', 'expired'";
   const tx = db.transaction(() => {
     const candidate = db.prepare(`
-      SELECT j.id AS job_id, r.id AS run_id
+      SELECT j.id AS job_id
       FROM jobs j
       JOIN agent_capability_runs a ON a.job_id = j.id
       JOIN capability_runs r ON r.id = a.run_id
       WHERE j.kind = 'agent' AND j.status = 'waiting_approval'
         AND r.state IN (${terminalStates})
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_capability_runs pending_link
+          JOIN capability_runs pending_run ON pending_run.id = pending_link.run_id
+          WHERE pending_link.job_id = j.id
+            AND pending_run.state NOT IN (${terminalStates})
+        )
         AND a.run_id = (
           SELECT latest.run_id FROM agent_capability_runs latest
           WHERE latest.job_id = j.id
           ORDER BY latest.created_at DESC, latest.run_id DESC LIMIT 1
         )
       ORDER BY j.created_at, j.id LIMIT 1
-    `).get() as { job_id: string; run_id: string } | undefined;
+    `).get() as { job_id: string } | undefined;
     if (!candidate) return null;
     const updated = db.prepare(`
       UPDATE jobs SET status = 'running', error = NULL, updated_at = ?
       WHERE id = ? AND status = 'waiting_approval'
     `).run(now, candidate.job_id);
     if (updated.changes !== 1) return null;
-    const run = getCapabilityRun(db, candidate.run_id);
-    return run ? { jobId: candidate.job_id, run } : null;
+    const rows = db.prepare(`
+      SELECT r.* FROM capability_runs r
+      JOIN agent_capability_runs a ON a.run_id = r.id
+      WHERE a.job_id = ?
+      ORDER BY a.created_at, a.run_id
+    `).all(candidate.job_id) as CapabilityRunRow[];
+    const runs = rows.map(mapRun);
+    return runs.length > 0 ? { jobId: candidate.job_id, runs } : null;
   });
   return tx();
 }

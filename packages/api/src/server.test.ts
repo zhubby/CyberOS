@@ -12,7 +12,6 @@ import {
   appendEvent,
   createActionMessageAndJob,
   createCapabilityProposal,
-  createPendingApproval,
   createDockerRegistryCredential,
   createSession,
   createUserMessageAndJob,
@@ -3984,7 +3983,44 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("protects sessions waiting for approval and cascades rows after work completes", async () => {
+  it("reports approved capability execution failures instead of returning success", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Read a file",
+      status: "waiting_approval"
+    });
+    const proposal = createCapabilityProposal(db, {
+      subjectId: session.id,
+      subjectKind: "pi",
+      capabilityId: "zos.files.read",
+      risk: "low",
+      redactedInput: { path: "hello.txt" },
+      proposal: { summary: "Read hello.txt" },
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    linkAgentJobToCapabilityRun(db, { jobId: job.id, runId: proposal.run.id });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/api/capability-approvals/${proposal.approval.id}/decision`,
+      payload: {
+        sessionId: session.id,
+        decision: "approved",
+        expectedRevision: proposal.approval.revision
+      }
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({
+      code: "NOT_READY",
+      run: { id: proposal.run.id, state: "failed", errorCode: "NOT_READY" }
+    });
+    await server.close();
+  });
+
+  it("protects sessions with active Agent work and cascades rows after work completes", async () => {
     const session = createSession(db, { rootId: "local" });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
@@ -3995,20 +4031,6 @@ describe("API server", () => {
       jobId: job.id,
       type: "agent.completed",
       payload: { summary: "done" }
-    });
-    createPendingApproval(db, {
-      jobId: job.id,
-      proposal: [
-        {
-          operation: "rename",
-          rootId: "local",
-          sourcePath: "hello.txt",
-          targetPath: "renamed.txt",
-          risk: "low",
-          reversible: true,
-          summary: "Rename hello.txt"
-        }
-      ]
     });
     updateJobStatus(db, job.id, "waiting_approval");
     const server = await buildServer({ config: testConfig(tempDir), db });
@@ -4021,7 +4043,7 @@ describe("API server", () => {
     expect(activeResponse.statusCode).toBe(409);
     expect(activeResponse.json()).toEqual({ error: "Session has active work" });
     expect(getSession(db, session.id)).toMatchObject({ id: session.id });
-    expect(listPendingApprovals(db)).toHaveLength(1);
+    expect(listPendingApprovals(db)).toEqual([]);
 
     updateJobStatus(db, job.id, "completed");
     const completedResponse = await server.inject({
@@ -4035,7 +4057,7 @@ describe("API server", () => {
     expect(listEvents(db, { sessionId: session.id })).toEqual([]);
     expect(getJob(db, job.id)).toBeNull();
     expect(listPendingApprovals(db)).toEqual([]);
-    expect(listFileOperations(db)).toHaveLength(1);
+    expect(listFileOperations(db)).toEqual([]);
     await server.close();
   });
 

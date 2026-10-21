@@ -8,13 +8,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createActionMessageAndJob,
   createDockerConsoleAuthorization,
-  createDockerOperationApproval,
   createDockerOperationRecord,
-  createPendingApproval,
   createSession,
   createUserMessageAndJob,
   createVmConsoleAuthorization,
-  createVmOperationApproval,
   ensureNasRoots,
   getApproval,
   getDockerOperation,
@@ -28,6 +25,9 @@ import {
   updateDockerOperationStatus,
   updateVmOperationStatus
 } from "./index.js";
+import { createPendingApproval } from "./repositories/approvals.js";
+import { createDockerOperationApproval } from "./repositories/docker-operations.js";
+import { createVmOperationApproval } from "./repositories/vm-operations.js";
 
 let tempDir: string;
 

@@ -7,17 +7,20 @@ import { CapabilityError, type CapabilityExecution, type CapabilitySubject, type
 import {
   createCapabilityProposal,
   createTrashEntry,
+  defaultAgentCapabilityPolicySettings,
   deleteCapabilityRunPayload,
   expireCapabilityApprovals,
   failInterruptedCapabilityRuns,
   getCapabilityApprovalByRun,
   getAgentCapabilityApproval,
+  getAgentCapabilityPolicySettings,
   getCapabilityRun,
   getCapabilityRunPayload,
   getMcpClient,
   getNasRoot,
   getRootReadiness,
   listRunnableCapabilityRuns,
+  queryIndexAdvanced,
   recordAppliedOperation,
   transitionCapabilityRun,
   type CapabilityRunRecord,
@@ -30,11 +33,18 @@ import {
   readText,
   resolveSafeExistingPath,
   resolveSafeTargetPath,
+  statPath,
   toRootRelative
 } from "@zos/nas-tools";
-import type { FileMutationOperation, FileOperationProposal, NasRootRecord, ZosConfig } from "@zos/shared";
+import type { AgentCapabilityId, FileMutationOperation, FileOperationProposal, NasRootRecord, ZosConfig } from "@zos/shared";
 
 const FILE_MUTATION_CAPABILITY = "zos.files.mutate";
+const PI_MCP_FILE_CAPABILITIES = [
+  "zos.files.list",
+  "zos.files.stat",
+  "zos.files.read",
+  "zos.files.search"
+] as const;
 const FILE_PROPOSAL_TTL_MS = 15 * 60_000;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 const execFileAsync = promisify(execFile);
@@ -66,6 +76,7 @@ export interface PiToolCapabilityRequest {
   toolName: PiToolCapabilityName;
   args: Record<string, unknown>;
   redactedArgs: Record<string, unknown>;
+  previewArgs: Record<string, unknown>;
   risk: "low" | "medium" | "high" | "critical";
   summary: string;
   requiresConfirmation: boolean;
@@ -88,6 +99,14 @@ interface StoredPiToolPayload {
   toolName: PiToolCapabilityName;
   args: Record<string, JsonValue>;
   revision: string | null;
+}
+
+export type PiMcpFileCapabilityId = typeof PI_MCP_FILE_CAPABILITIES[number];
+
+interface StoredPiMcpFilePayload {
+  kind: "pi_mcp_file";
+  capabilityId: PiMcpFileCapabilityId;
+  input: Record<string, JsonValue>;
 }
 
 export async function proposePiToolCapability(input: {
@@ -123,7 +142,7 @@ export async function proposePiToolCapability(input: {
       toolName: input.request.toolName,
       capabilityId,
       summary: input.request.summary,
-      args: input.request.redactedArgs,
+      args: input.request.previewArgs,
       revision
     }),
     privatePayload: toJsonValue(payload),
@@ -145,11 +164,62 @@ export async function proposePiToolCapability(input: {
   };
 }
 
+export async function proposePiMcpFileCapability(input: {
+  dependencies: CapabilityRuntimeDependencies;
+  subject: CapabilitySubject;
+  capabilityId: PiMcpFileCapabilityId;
+  request: JsonValue;
+  requiresConfirmation: boolean;
+}): Promise<CapabilityExecution> {
+  if (input.subject.kind !== "pi") {
+    throw new CapabilityError("FORBIDDEN", "Only the built-in Pi agent can request file capability approval");
+  }
+  const request = requireJsonObject(input.request);
+  await validatePiMcpFileCapability(input.dependencies, input.capabilityId, request);
+  const summary = piMcpFileSummary(input.capabilityId, request);
+  const expiresAt = new Date(Date.now() + FILE_PROPOSAL_TTL_MS).toISOString();
+  const created = createCapabilityProposal(input.dependencies.db, {
+    clientId: input.subject.clientId,
+    subjectId: input.subject.id,
+    subjectKind: "pi",
+    capabilityId: input.capabilityId,
+    risk: "low",
+    redactedInput: toJsonValue(request),
+    proposal: toJsonValue({
+      kind: "pi_mcp_file",
+      capabilityId: input.capabilityId,
+      summary,
+      args: request
+    }),
+    privatePayload: toJsonValue({
+      kind: "pi_mcp_file",
+      capabilityId: input.capabilityId,
+      input: request
+    } satisfies StoredPiMcpFilePayload),
+    requiresConfirmation: input.requiresConfirmation,
+    expiresAt
+  });
+  return {
+    data: {
+      state: created.run.state,
+      approval: {
+        id: created.approval.id,
+        status: created.approval.status,
+        revision: created.approval.revision,
+        expiresAt: created.approval.expiresAt
+      },
+      proposal: { summary }
+    },
+    runId: created.run.id
+  };
+}
+
 export async function proposeFileMutation(input: {
   dependencies: CapabilityRuntimeDependencies;
   subject: CapabilitySubject;
   request: JsonValue;
   idempotencyKey?: string;
+  requiresConfirmation?: boolean;
 }): Promise<CapabilityExecution> {
   if (input.subject.kind !== "pi") {
     throw new CapabilityError("FORBIDDEN", "Only the built-in Pi agent can request mutation approval");
@@ -172,6 +242,7 @@ export async function proposeFileMutation(input: {
       redactedInput: toJsonValue({ request, ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}) }),
       proposal: toJsonValue(proposal),
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      requiresConfirmation: input.requiresConfirmation === true,
       expiresAt
     });
   } catch (error) {
@@ -210,15 +281,35 @@ export async function executeApprovedCapabilityRun(
     if (initial.subjectKind !== "pi" || !getAgentCapabilityApproval(dependencies.db, approval.id)) {
       return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Approval is not linked to a Pi Agent conversation");
     }
+    const policyCapabilityId = agentPolicyCapabilityId(initial.capabilityId);
+    if (policyCapabilityId) {
+      const policy = (getAgentCapabilityPolicySettings(dependencies.db) ?? defaultAgentCapabilityPolicySettings())
+        .policies[policyCapabilityId];
+      if (policy === "disabled") {
+        return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Capability was disabled after approval was requested");
+      }
+      if (policy === "confirm" && !approval.requiresConfirmation) {
+        return failQueuedRun(dependencies.db, initial, "CONFLICT", "Capability now requires a new confirmed approval");
+      }
+    }
     const client = initial.clientId ? getMcpClient(dependencies.db, initial.clientId) : null;
     const now = new Date().toISOString();
     if (initial.clientId && (!client || client.kind !== "pi" || client.revokedAt || (client.expiresAt && client.expiresAt <= now))) {
       return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Pi client credential is no longer active");
     }
-    if (client && initial.capabilityId === FILE_MUTATION_CAPABILITY && !client.scopes.includes("zos:files:propose")) {
-      return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Pi client no longer has the required scope");
+    const payload = getCapabilityRunPayload(dependencies.db, initial.id);
+    if (client) {
+      const requiredScope = initial.capabilityId === FILE_MUTATION_CAPABILITY
+        ? "zos:files:propose"
+        : isStoredPiMcpFilePayload(payload) ? "zos:files:read" : null;
+      if (requiredScope && !client.scopes.includes(requiredScope)) {
+        return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Pi client no longer has the required scope");
+      }
     }
-    if (Object.values(PI_TOOL_CAPABILITIES).includes(initial.capabilityId)) {
+    if (isStoredPiMcpFilePayload(payload)) {
+      return executeApprovedPiMcpFileRun(dependencies, initial, payload);
+    }
+    if (isStoredPiToolPayload(payload)) {
       return executeApprovedPiToolRun(dependencies, initial);
     }
     if (initial.capabilityId !== FILE_MUTATION_CAPABILITY) {
@@ -303,6 +394,63 @@ export async function executeApprovedCapabilityRun(
     const current = getCapabilityRun(dependencies.db, runId);
     if (!current || current.state !== "queued") return current ?? initial;
     return failQueuedRun(dependencies.db, current, capabilityFailureCode(error), safeFailureMessage(error, dependencies));
+  }
+}
+
+export async function executeFileReadCapability(
+  dependencies: Pick<CapabilityRuntimeDependencies, "db">,
+  capabilityId: PiMcpFileCapabilityId,
+  input: Record<string, JsonValue>
+): Promise<CapabilityExecution> {
+  const rootId = requiredText(input.rootId, "rootId");
+  const root = requireReadyRoot(dependencies.db, rootId);
+  switch (capabilityId) {
+    case "zos.files.list": {
+      const requestedPath = optionalText(input.path) ?? ".";
+      const entries = await mapPathError(() => listDir(root, requestedPath));
+      const limit = strictBoundedInteger(input.limit, 50, 1, 200);
+      const offset = decodeFileOffsetCursor(optionalText(input.cursor), `${rootId}\0${requestedPath}`);
+      const pageEntries = entries.slice(offset, offset + limit);
+      const nextOffset = offset + pageEntries.length;
+      return {
+        data: { rootId, path: requestedPath, entries: toJsonValue(pageEntries) },
+        page: {
+          limit,
+          nextCursor: nextOffset < entries.length
+            ? encodeFileOffsetCursor(nextOffset, `${rootId}\0${requestedPath}`)
+            : null
+        }
+      };
+    }
+    case "zos.files.stat": {
+      const metadata = await mapPathError(() => statPath(root, requiredText(input.path, "path")));
+      return { data: { rootId, stat: toJsonValue(metadata) } };
+    }
+    case "zos.files.read": {
+      const maxBytes = strictBoundedInteger(input.maxBytes, 64 * 1024, 1, 128 * 1024);
+      const preview = await mapPathError(() => readText(root, requiredText(input.path, "path"), maxBytes));
+      return { data: { rootId, maxBytes, preview: toJsonValue(preview) } };
+    }
+    case "zos.files.search": {
+      const limit = strictBoundedInteger(input.limit, 50, 1, 100);
+      try {
+        const page = queryIndexAdvanced(dependencies.db, {
+          rootId,
+          storagePoolId: rootId,
+          path: optionalText(input.path) ?? ".",
+          query: requiredText(input.query, "query"),
+          cursor: optionalText(input.cursor) ?? null,
+          limit
+        });
+        return {
+          data: { rootId, files: toJsonValue(page.files) },
+          page: { limit, nextCursor: page.nextCursor }
+        };
+      } catch (error) {
+        if (error instanceof CapabilityError) throw error;
+        throw new CapabilityError("INVALID_ARGUMENT", "File search request is invalid", { cause: error });
+      }
+    }
   }
 }
 
@@ -509,6 +657,50 @@ async function executeApprovedPiToolRun(
   }
 }
 
+async function executeApprovedPiMcpFileRun(
+  dependencies: CapabilityRuntimeDependencies,
+  initial: CapabilityRunRecord,
+  payload: StoredPiMcpFilePayload
+): Promise<CapabilityRunRecord> {
+  await validatePiMcpFileCapability(dependencies, payload.capabilityId, payload.input);
+  const running = transitionCapabilityRun(dependencies.db, {
+    runId: initial.id,
+    expectedRevision: initial.revision,
+    from: ["queued"],
+    to: "running",
+    progress: { phase: "executing" },
+    cancellable: false
+  });
+  if (!running) return getCapabilityRun(dependencies.db, initial.id)!;
+
+  try {
+    const result = await executeFileReadCapability(dependencies, payload.capabilityId, payload.input);
+    const completed = transitionCapabilityRun(dependencies.db, {
+      runId: initial.id,
+      expectedRevision: running.revision,
+      from: ["running"],
+      to: "succeeded",
+      progress: { phase: "complete" },
+      result: toJsonValue(result),
+      cancellable: false
+    })!;
+    deleteCapabilityRunPayload(dependencies.db, initial.id);
+    return completed;
+  } catch (error) {
+    const failed = transitionCapabilityRun(dependencies.db, {
+      runId: initial.id,
+      expectedRevision: running.revision,
+      from: ["running"],
+      to: "failed",
+      errorCode: capabilityFailureCode(error),
+      errorMessage: safeFailureMessage(error, dependencies),
+      cancellable: false
+    })!;
+    deleteCapabilityRunPayload(dependencies.db, initial.id);
+    return failed;
+  }
+}
+
 function parseStoredPiToolPayload(value: JsonValue | null): StoredPiToolPayload {
   if (!isRecord(value) || value.kind !== "pi_tool") {
     throw new CapabilityError("INTERNAL", "Stored Agent capability payload is missing");
@@ -528,6 +720,72 @@ function parseStoredPiToolPayload(value: JsonValue | null): StoredPiToolPayload 
     args: value.args,
     revision: typeof value.revision === "string" ? value.revision : null
   };
+}
+
+function isStoredPiToolPayload(value: JsonValue | null): value is JsonValue & StoredPiToolPayload {
+  return isRecord(value) && value.kind === "pi_tool";
+}
+
+function isStoredPiMcpFilePayload(value: JsonValue | null): value is JsonValue & StoredPiMcpFilePayload {
+  return isRecord(value)
+    && value.kind === "pi_mcp_file"
+    && typeof value.capabilityId === "string"
+    && PI_MCP_FILE_CAPABILITIES.includes(value.capabilityId as PiMcpFileCapabilityId)
+    && isRecord(value.input);
+}
+
+async function validatePiMcpFileCapability(
+  dependencies: CapabilityRuntimeDependencies,
+  capabilityId: PiMcpFileCapabilityId,
+  input: Record<string, JsonValue>
+): Promise<void> {
+  const root = requireReadyRoot(dependencies.db, requiredText(input.rootId, "rootId"));
+  switch (capabilityId) {
+    case "zos.files.list":
+      strictBoundedInteger(input.limit, 50, 1, 200);
+      decodeFileOffsetCursor(optionalText(input.cursor), `${root.id}\0${optionalText(input.path) ?? "."}`);
+      await mapPathError(() => resolveSafeExistingPath(root.path, optionalText(input.path) ?? "."));
+      return;
+    case "zos.files.stat":
+      await mapPathError(() => resolveSafeExistingPath(root.path, requiredText(input.path, "path")));
+      return;
+    case "zos.files.read":
+      strictBoundedInteger(input.maxBytes, 64 * 1024, 1, 128 * 1024);
+      await mapPathError(() => resolveSafeExistingPath(root.path, requiredText(input.path, "path")));
+      return;
+    case "zos.files.search":
+      requiredText(input.query, "query");
+      strictBoundedInteger(input.limit, 50, 1, 100);
+      if (optionalText(input.path)) {
+        await mapPathError(() => resolveSafeExistingPath(root.path, optionalText(input.path)!));
+      }
+  }
+}
+
+function piMcpFileSummary(capabilityId: PiMcpFileCapabilityId, input: Record<string, JsonValue>): string {
+  const requestedPath = optionalText(input.path) ?? ".";
+  switch (capabilityId) {
+    case "zos.files.list": return `List ${requestedPath}`;
+    case "zos.files.stat": return `Inspect ${requestedPath}`;
+    case "zos.files.read": return `Read ${requestedPath}`;
+    case "zos.files.search": return `Search ${requestedPath}`;
+  }
+}
+
+function agentPolicyCapabilityId(capabilityId: string): AgentCapabilityId | null {
+  switch (capabilityId) {
+    case "zos.files.list": return "zos.files.list";
+    case "zos.files.stat":
+    case "zos.files.read": return "zos.files.read";
+    case "zos.files.search": return "zos.files.search";
+    case "zos.files.grep": return "zos.files.grep";
+    case "zos.files.find": return "zos.files.find";
+    case FILE_MUTATION_CAPABILITY: return FILE_MUTATION_CAPABILITY;
+    case "zos.files.edit": return "zos.files.edit";
+    case "zos.files.write": return "zos.files.write";
+    case "zos.shell.run": return "zos.shell.run";
+    default: return null;
+  }
 }
 
 async function validatePiToolRequest(
@@ -763,6 +1021,47 @@ function boundedLimit(value: unknown, fallback: number, maximum: number): number
   return Math.max(1, Math.min(optionalInteger(value) ?? fallback, maximum));
 }
 
+function strictBoundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new CapabilityError("INVALID_ARGUMENT", `Integer must be between ${minimum} and ${maximum}`);
+  }
+  return value;
+}
+
+function requireJsonObject(value: JsonValue): Record<string, JsonValue> {
+  if (!isRecord(value)) throw new CapabilityError("INVALID_ARGUMENT", "Tool input must be an object");
+  return value;
+}
+
+function encodeFileOffsetCursor(offset: number, signatureInput: string): string {
+  const signature = createHash("sha256").update(signatureInput).digest("base64url").slice(0, 16);
+  return Buffer.from(JSON.stringify({ v: 1, offset, signature }), "utf8").toString("base64url");
+}
+
+function decodeFileOffsetCursor(cursor: string | undefined, signatureInput: string): number {
+  if (!cursor) return 0;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+      v?: unknown;
+      offset?: unknown;
+      signature?: unknown;
+    };
+    const signature = createHash("sha256").update(signatureInput).digest("base64url").slice(0, 16);
+    if (
+      parsed.v !== 1
+      || !Number.isInteger(parsed.offset)
+      || Number(parsed.offset) < 0
+      || parsed.signature !== signature
+    ) {
+      throw new Error("invalid cursor");
+    }
+    return Number(parsed.offset);
+  } catch {
+    throw new CapabilityError("INVALID_ARGUMENT", "Invalid cursor");
+  }
+}
+
 function sliceLines(content: string, offset?: number, limit?: number): string {
   const lines = content.split("\n");
   const start = offset ? Math.max(0, offset - 1) : 0;
@@ -790,7 +1089,7 @@ function failQueuedRun(
   errorCode: "INVALID_ARGUMENT" | "FORBIDDEN" | "NOT_READY" | "CONFLICT" | "INTERNAL",
   errorMessage: string
 ): CapabilityRunRecord {
-  return transitionCapabilityRun(db, {
+  const failed = transitionCapabilityRun(db, {
     runId: run.id,
     expectedRevision: run.revision,
     from: ["queued"],
@@ -798,7 +1097,9 @@ function failQueuedRun(
     errorCode,
     errorMessage,
     cancellable: false
-  }) ?? getCapabilityRun(db, run.id)!;
+  });
+  if (failed) deleteCapabilityRunPayload(db, run.id);
+  return failed ?? getCapabilityRun(db, run.id)!;
 }
 
 function capabilityFailureCode(error: unknown): "INVALID_ARGUMENT" | "FORBIDDEN" | "NOT_READY" | "CONFLICT" | "INTERNAL" {

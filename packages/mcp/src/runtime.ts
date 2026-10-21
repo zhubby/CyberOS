@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   CapabilityError,
   CapabilityRegistry,
@@ -10,6 +10,12 @@ import {
   type CapabilityResult,
   type JsonValue
 } from "@zos/capabilities";
+import {
+  executeFileReadCapability,
+  proposeFileMutation,
+  proposePiMcpFileCapability,
+  type PiMcpFileCapabilityId
+} from "@zos/capability-runtime";
 import {
   cancelOwnedCapabilityRun,
   countUnreadOperationNotifications,
@@ -52,12 +58,11 @@ import {
   listOwnedCapabilityRuns,
   listPhotostaffAssets,
   listRootReadiness,
-  queryIndexAdvanced,
   type McpClientRecord,
   type ZosDatabase
 } from "@zos/db";
-import { inferMimeType, listDir, readText, statPath } from "@zos/nas-tools";
-import type { DownloadTaskStatus, PublicBuildInfo, ZosConfig } from "@zos/shared";
+import { inferMimeType, statPath } from "@zos/nas-tools";
+import type { AgentCapabilityId, AgentCapabilityPolicyMode, DownloadTaskStatus, PublicBuildInfo, ZosConfig } from "@zos/shared";
 
 export interface McpRuntimeDependencies {
   db: ZosDatabase;
@@ -73,6 +78,15 @@ export interface ClientRuntime {
   context: CapabilityContext;
 }
 
+const FILE_MUTATION_CAPABILITY = "zos.files.mutate";
+const FILE_RESOURCE_LINK_CAPABILITY = "zos.files.resource-link";
+const PI_MCP_FILE_CAPABILITIES = new Set<PiMcpFileCapabilityId>([
+  "zos.files.list",
+  "zos.files.stat",
+  "zos.files.read",
+  "zos.files.search"
+]);
+
 const IMPLEMENTED = new Set([
   "zos.system.status",
   "zos.roots.list",
@@ -81,6 +95,7 @@ const IMPLEMENTED = new Set([
   "zos.files.read",
   "zos.files.resource-link",
   "zos.files.search",
+  "zos.files.mutate",
   "zos.index.status",
   "zos.photos.query",
   "zos.photos.status",
@@ -110,10 +125,25 @@ export function createClientRuntime(dependencies: McpRuntimeDependencies, client
     traceId: randomUUID(),
     services
   };
+  const policySettings = getAgentCapabilityPolicySettings(dependencies.db) ?? defaultAgentCapabilityPolicySettings();
   for (const base of createCatalogDescriptors()) {
+    const agentCapabilityId = agentPolicyCapabilityId(base.id);
+    if (base.id === FILE_MUTATION_CAPABILITY && client.kind !== "pi") continue;
+    if (
+      base.id === FILE_RESOURCE_LINK_CAPABILITY
+      && client.kind === "pi"
+      && policySettings.policies["zos.files.read"] !== "auto"
+    ) continue;
+    if (client.kind === "pi" && agentCapabilityId && policySettings.policies[agentCapabilityId] === "disabled") continue;
+    const agentPolicy = client.kind === "pi" && agentCapabilityId
+      ? policySettings.policies[agentCapabilityId]
+      : null;
+    const configured = agentPolicy && agentPolicy !== "auto"
+      ? { ...base, approval: "first_party" as const }
+      : base;
     const descriptor: CapabilityDescriptor = IMPLEMENTED.has(base.id) || dependencies.readAdapters?.[base.id]
-      ? { ...base, execute: (input, executionContext) => executeImplemented(base.id, input, executionContext) }
-      : { ...base, availability: () => ({ available: false, reason: "Domain adapter is not installed" }) };
+      ? { ...configured, execute: (input, executionContext) => executeImplemented(base.id, input, executionContext) }
+      : { ...configured, availability: () => ({ available: false, reason: "Domain adapter is not installed" }) };
     registry.register(descriptor);
   }
   return { client, registry, context };
@@ -150,6 +180,32 @@ async function executeImplemented(
 ): Promise<CapabilityExecution> {
   const dependencies = runtimeDependencies(context);
   const object = inputObject(input);
+  const policy = piAgentPolicy(dependencies, context, id);
+  if (policy === "disabled") {
+    throw new CapabilityError("FORBIDDEN", "Capability is disabled by the Agent policy");
+  }
+  if (context.subject.kind === "pi" && id === FILE_RESOURCE_LINK_CAPABILITY && policy !== "auto") {
+    throw new CapabilityError("FORBIDDEN", "File resource links require automatic Agent read access");
+  }
+  if (context.subject.kind === "pi" && id === FILE_MUTATION_CAPABILITY) {
+    const idempotencyKey = optionalString(object.idempotencyKey);
+    return proposeFileMutation({
+      dependencies,
+      subject: context.subject,
+      request: object.request ?? null,
+      requiresConfirmation: policy === "confirm",
+      ...(idempotencyKey ? { idempotencyKey } : {})
+    });
+  }
+  if (context.subject.kind === "pi" && isPiMcpFileCapability(id) && policy && policy !== "auto") {
+    return proposePiMcpFileCapability({
+      dependencies,
+      subject: context.subject,
+      capabilityId: id,
+      request: input,
+      requiresConfirmation: policy === "confirm"
+    });
+  }
   const adapter = dependencies.readAdapters?.[id];
   if (adapter) {
     try {
@@ -189,15 +245,12 @@ async function executeImplemented(
     case "zos.terminal.tabs":
       return terminalTabs(dependencies, object);
     case "zos.files.list":
-      return listFiles(dependencies, object);
     case "zos.files.stat":
-      return statFile(dependencies, object);
     case "zos.files.read":
-      return readFile(dependencies, object);
+    case "zos.files.search":
+      return executeFileReadCapability(dependencies, id, object);
     case "zos.files.resource-link":
       return createFileResourceLink(dependencies, context.subject.clientId, object);
-    case "zos.files.search":
-      return searchFiles(dependencies, object);
     case "zos.runs.get":
       return getRun(dependencies, context.subject.clientId, object);
     case "zos.runs.list":
@@ -410,39 +463,6 @@ function rootsStatus(dependencies: McpRuntimeDependencies, requestedRootId?: str
   };
 }
 
-async function listFiles(dependencies: McpRuntimeDependencies, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
-  const rootId = requiredString(input.rootId, "rootId");
-  const requestedPath = optionalString(input.path) ?? ".";
-  const root = requiredRoot(dependencies.db, rootId);
-  const entries = await mapFsError(() => listDir(root, requestedPath));
-  const limit = boundedInteger(input.limit, 50, 1, 200);
-  const offset = decodeOffsetCursor(optionalString(input.cursor), `${rootId}\0${requestedPath}`);
-  const pageEntries = entries.slice(offset, offset + limit);
-  const nextOffset = offset + pageEntries.length;
-  return {
-    data: { rootId, path: requestedPath, entries: jsonValue(pageEntries) },
-    page: {
-      limit,
-      nextCursor: nextOffset < entries.length ? encodeOffsetCursor(nextOffset, `${rootId}\0${requestedPath}`) : null
-    }
-  };
-}
-
-async function statFile(dependencies: McpRuntimeDependencies, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
-  const rootId = requiredString(input.rootId, "rootId");
-  const requestedPath = requiredString(input.path, "path");
-  const stat = await mapFsError(() => statPath(requiredRoot(dependencies.db, rootId), requestedPath));
-  return { data: { rootId, stat: jsonValue(stat) } };
-}
-
-async function readFile(dependencies: McpRuntimeDependencies, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
-  const rootId = requiredString(input.rootId, "rootId");
-  const requestedPath = requiredString(input.path, "path");
-  const maxBytes = boundedInteger(input.maxBytes, 64 * 1024, 1, 128 * 1024);
-  const preview = await mapFsError(() => readText(requiredRoot(dependencies.db, rootId), requestedPath, maxBytes));
-  return { data: { rootId, maxBytes, preview: jsonValue(preview) } };
-}
-
 async function createFileResourceLink(
   dependencies: McpRuntimeDependencies,
   clientId: string,
@@ -473,29 +493,6 @@ async function createFileResourceLink(
       oneTime: true
     }
   };
-}
-
-function searchFiles(dependencies: McpRuntimeDependencies, input: Record<string, JsonValue>): CapabilityExecution {
-  const rootId = requiredString(input.rootId, "rootId");
-  requiredRoot(dependencies.db, rootId);
-  const query = requiredString(input.query, "query");
-  const limit = boundedInteger(input.limit, 50, 1, 100);
-  try {
-    const page = queryIndexAdvanced(dependencies.db, {
-      rootId,
-      storagePoolId: rootId,
-      path: optionalString(input.path) ?? ".",
-      query,
-      cursor: optionalString(input.cursor) ?? null,
-      limit
-    });
-    return {
-      data: { rootId, files: jsonValue(page.files) },
-      page: { limit, nextCursor: page.nextCursor }
-    };
-  } catch (error) {
-    throw new CapabilityError("INVALID_ARGUMENT", safeErrorMessage(error), { cause: error });
-  }
 }
 
 function getRun(dependencies: McpRuntimeDependencies, clientId: string, input: Record<string, JsonValue>): CapabilityExecution {
@@ -566,6 +563,34 @@ function runtimeDependencies(context: CapabilityContext): McpRuntimeDependencies
   return dependencies as McpRuntimeDependencies;
 }
 
+function piAgentPolicy(
+  dependencies: McpRuntimeDependencies,
+  context: CapabilityContext,
+  capabilityId: string
+): AgentCapabilityPolicyMode | null {
+  if (context.subject.kind !== "pi") return null;
+  const policyCapabilityId = agentPolicyCapabilityId(capabilityId);
+  if (!policyCapabilityId) return null;
+  const settings = getAgentCapabilityPolicySettings(dependencies.db) ?? defaultAgentCapabilityPolicySettings();
+  return settings.policies[policyCapabilityId];
+}
+
+function agentPolicyCapabilityId(capabilityId: string): AgentCapabilityId | null {
+  switch (capabilityId) {
+    case "zos.files.list": return "zos.files.list";
+    case "zos.files.stat":
+    case "zos.files.read":
+    case FILE_RESOURCE_LINK_CAPABILITY: return "zos.files.read";
+    case "zos.files.search": return "zos.files.search";
+    case FILE_MUTATION_CAPABILITY: return FILE_MUTATION_CAPABILITY;
+    default: return null;
+  }
+}
+
+function isPiMcpFileCapability(capabilityId: string): capabilityId is PiMcpFileCapabilityId {
+  return PI_MCP_FILE_CAPABILITIES.has(capabilityId as PiMcpFileCapabilityId);
+}
+
 function inputObject(input: JsonValue): Record<string, JsonValue> {
   if (!input || Array.isArray(input) || typeof input !== "object") throw new CapabilityError("INVALID_ARGUMENT", "Tool input must be an object");
   return input;
@@ -615,23 +640,6 @@ async function mapFsError<T>(operation: () => Promise<T>): Promise<T> {
 function safeErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "Request failed";
   return error.message.replaceAll(/\/[^\s]+/gu, "[path]").slice(0, 500);
-}
-
-function encodeOffsetCursor(offset: number, signatureInput: string): string {
-  const signature = createHash("sha256").update(signatureInput).digest("base64url").slice(0, 16);
-  return Buffer.from(JSON.stringify({ v: 1, offset, signature }), "utf8").toString("base64url");
-}
-
-function decodeOffsetCursor(cursor: string | undefined, signatureInput: string): number {
-  if (!cursor) return 0;
-  try {
-    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as { v?: unknown; offset?: unknown; signature?: unknown };
-    const signature = createHash("sha256").update(signatureInput).digest("base64url").slice(0, 16);
-    if (parsed.v !== 1 || !Number.isInteger(parsed.offset) || Number(parsed.offset) < 0 || parsed.signature !== signature) throw new Error();
-    return Number(parsed.offset);
-  } catch {
-    throw new CapabilityError("INVALID_ARGUMENT", "Invalid cursor");
-  }
 }
 
 function encodeRunCursor(createdAt: string, id: string): string {

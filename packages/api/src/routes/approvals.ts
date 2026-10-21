@@ -59,7 +59,16 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
 
     if (decision === "approved") {
       const run = await executeApprovedCapabilityRun({ db, config }, decided.run.id);
-      reply.status(202).send({ ...decided, run });
+      if (run.state === "failed" || run.state === "cancelled" || run.state === "expired") {
+        reply.status(422).send({
+          error: run.errorMessage ?? "Approved Agent capability failed",
+          ...(run.errorCode ? { code: run.errorCode } : {}),
+          ...decided,
+          run
+        });
+        return;
+      }
+      reply.status(run.state === "succeeded" ? 200 : 202).send({ ...decided, run });
       return;
     }
 

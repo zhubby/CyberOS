@@ -4,7 +4,6 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createSession,
-  createShareOperationApproval,
   createUserMessageAndJob,
   ensureNasRoots,
   getApproval,
@@ -15,6 +14,7 @@ import {
   updateShareOperationStatus,
   type ZosDatabase
 } from "./index.js";
+import { createShareOperationApproval } from "./repositories/share-operations.js";
 
 let tempDir: string;
 let db: ZosDatabase;

@@ -91,11 +91,19 @@ sudo zos-mcp tls init --hostname nas.example.lan --port 8443 \
 
 ## Runs and approval
 
-Read tools return bounded structured results. Mutating tools create an
-immutable durable run in `waiting_approval`. The first-party Web UI shows the
-client, capability, target, risk, revision, and expiry. MCP has no approval
-tool. Approval rechecks the client, scope, NAS readiness, path and proposal
-revision before executing once.
+For the protected Pi identity, file list, stat, read, and search follow the
+Agent capability policy. `auto` returns a bounded structured result;
+`approve` and `confirm` create an immutable durable run in
+`waiting_approval`; `disabled` removes the capability. File resource links are
+available to Pi only when read access is `auto`, so they cannot bypass a read
+approval. Pi file mutations always create an immutable approval proposal.
+
+Only capability requests linked to a Pi Agent job appear in the first-party
+Web UI. Workspace REST operations and non-Pi MCP clients do not create
+approval state. The approval card shows the client, capability, target, risk,
+revision, expiry, and a bounded secret-redacted action preview. MCP has no
+approval tool. Approval rechecks the Agent policy, client, scope, NAS
+readiness, path, and proposal revision before executing once.
 
 Clients can inspect the same run through `zos.runs.get`, `zos.runs.list`, and
 `zos.runs.wait`. `zos.runs.cancel` is an owner-scoped safety control: it only

@@ -79,7 +79,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
   try {
     const shouldUseLocalFallback =
       allowLocalFallback === true || process.env.ZOS_ENABLE_LOCAL_AGENT_FALLBACK === "1";
-    const turnMessage = continuation ? capabilityContinuationMessage(continuation.run) : message.content;
+    const turnMessage = continuation ? capabilityContinuationMessage(continuation.runs) : message.content;
     const result = shouldUseLocalFallback
       ? await runReadOnlyAgentTurn({
           session,
@@ -210,15 +210,21 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
   return true;
 }
 
-function capabilityContinuationMessage(run: NonNullable<ReturnType<typeof claimNextCapabilityContinuation>>["run"]): string {
-  const outcome = run.state === "succeeded"
-    ? { state: run.state, result: run.result }
-    : { state: run.state, error: { code: run.errorCode, message: run.errorMessage } };
+function capabilityContinuationMessage(
+  runs: NonNullable<ReturnType<typeof claimNextCapabilityContinuation>>["runs"]
+): string {
+  const outcomes = runs.map((run) => ({
+    runId: run.id,
+    capabilityId: run.capabilityId,
+    ...(run.state === "succeeded"
+      ? { state: run.state, result: run.result }
+      : { state: run.state, error: { code: run.errorCode, message: run.errorMessage } })
+  }));
   return [
     "Internal ZOS continuation. Do not repeat the user's original request.",
-    `Capability run ${run.id} (${run.capabilityId}) reached a terminal state:`,
-    JSON.stringify(outcome),
-    "Continue the same conversation using this result. Explain the outcome briefly and only propose another change if it is still required."
+    "All capability runs requested by the previous turn reached terminal states:",
+    JSON.stringify(outcomes),
+    "Continue the same conversation using these results. Explain the outcomes briefly and only propose another change if it is still required."
   ].join("\n");
 }
 

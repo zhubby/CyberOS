@@ -6,7 +6,6 @@ import {
   consumeDockerCreateDraft,
   createActionMessageAndJob,
   createDockerCreateDraft,
-  createDockerOperationApproval,
   createSession,
   deleteExpiredDockerCreateDrafts,
   ensureNasRoots,
@@ -17,6 +16,7 @@ import {
   getJob,
   linkDockerCreateDraft
 } from "../index.js";
+import { createDockerOperationApproval } from "./docker-operations.js";
 import { openZosDb, type ZosDatabase } from "../index.js";
 
 let tempDir: string;

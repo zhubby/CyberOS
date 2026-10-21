@@ -16,6 +16,7 @@ import {
   createOperationNotification,
   updateOperationNotificationForJob
 } from "./operation-notifications.js";
+import { cancelAgentCapabilityRunsForJob } from "./capability-runs.js";
 
 export function createUserMessageAndJob(
   db: ZosDatabase,
@@ -186,6 +187,7 @@ export function updateJobStatus(
           SET status = 'expired', updated_at = ?
           WHERE job_id = ? AND status = 'pending'
         `).run(updatedAt, jobId);
+        cancelAgentCapabilityRunsForJob(db, jobId, updatedAt);
       }
       const notificationStatus = notificationStatusForJob(status);
       if (notificationStatus) {

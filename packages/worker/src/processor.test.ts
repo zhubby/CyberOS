@@ -13,6 +13,7 @@ import {
   getAgentProviderSession,
   getJob,
   listEvents,
+  listPendingAgentCapabilityApprovals,
   listPendingApprovals,
   openZosDb,
   savePhotostaffLibrarySettings,
@@ -280,6 +281,59 @@ describe("worker processor", () => {
     expect(messages[1]).toContain("APPROVAL_REJECTED");
     expect(messages[1]).not.toContain("Move alpha.txt");
     expect(providerSessions).toEqual([null, "pi-session-continuation"]);
+  });
+
+  it("links every pending capability and waits for all decisions before continuing", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Inspect both files" });
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const proposals = ["alpha.txt", "beta.txt"].map((pathValue) => createCapabilityProposal(db, {
+      subjectId: session.id,
+      subjectKind: "pi",
+      capabilityId: "zos.files.read",
+      risk: "low",
+      redactedInput: { path: pathValue },
+      proposal: { summary: `Read ${pathValue}` },
+      expiresAt
+    }));
+    let invocation = 0;
+    const messages: string[] = [];
+    const runner: PiAgentRunner = async (input) => {
+      invocation += 1;
+      messages.push(input.message);
+      if (invocation === 1) {
+        for (const proposal of proposals) {
+          await input.onCapabilityRunPending?.(proposal.run.id, "pi-multi-approval");
+        }
+        return { status: "waiting_approval", runId: proposals[0]!.run.id };
+      }
+      return { status: "completed", summary: "Both decisions received." };
+    };
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+    expect(listPendingAgentCapabilityApprovals(db, { sessionId: session.id })).toHaveLength(2);
+
+    expect(decideCapabilityApproval(db, {
+      approvalId: proposals[1]!.approval.id,
+      expectedRevision: proposals[1]!.approval.revision,
+      decision: "rejected",
+      decidedBy: "local-admin"
+    })).not.toBeNull();
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(false);
+    expect(getJob(db, job.id)?.status).toBe("waiting_approval");
+
+    expect(decideCapabilityApproval(db, {
+      approvalId: proposals[0]!.approval.id,
+      expectedRevision: proposals[0]!.approval.revision,
+      decision: "rejected",
+      decidedBy: "local-admin"
+    })).not.toBeNull();
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+    expect(getJob(db, job.id)?.status).toBe("completed");
+    expect(invocation).toBe(2);
+    expect(messages[1]).toContain(proposals[0]!.run.id);
+    expect(messages[1]).toContain(proposals[1]!.run.id);
+    expect(messages[1]?.match(/APPROVAL_REJECTED/gu)).toHaveLength(2);
   });
 
   it("only injects photostaff tools for sessions on the configured photostaff root", async () => {

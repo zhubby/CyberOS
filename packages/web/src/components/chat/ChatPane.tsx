@@ -272,6 +272,10 @@ export function ChatPane({
     const summary = typeof proposal.summary === "string"
       ? proposal.summary
       : t("chat.capabilityApproval.detail");
+    const args = isRecord(proposal.args) ? proposal.args : null;
+    const preview = args
+      ? typeof args.command === "string" ? args.command : JSON.stringify(args, null, 2)
+      : null;
     const target = [request?.rootId, request?.sourcePath, request?.targetPath]
       .filter((value): value is string => typeof value === "string" && value.length > 0)
       .join(" -> ");
@@ -291,6 +295,12 @@ export function ChatPane({
             </span>
           </div>
           <p>{summary}</p>
+          {preview ? (
+            <section className="approval-card-preview">
+              <span>{t("chat.capabilityApproval.preview")}</span>
+              <pre>{preview}</pre>
+            </section>
+          ) : null}
           <dl className="approval-card-details">
             <div>
               <dt>{t("chat.capabilityApproval.client")}</dt>

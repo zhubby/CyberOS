@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   consumeDockerConsoleAuthorization,
   createDockerConsoleAuthorization,
-  createDockerOperationApproval,
   createSession,
   createUserMessageAndJob,
   ensureNasRoots,
@@ -14,6 +13,7 @@ import {
   updateDockerOperationStatus,
   type ZosDatabase
 } from "./index.js";
+import { createDockerOperationApproval } from "./repositories/docker-operations.js";
 
 let tempDir: string;
 let db: ZosDatabase;

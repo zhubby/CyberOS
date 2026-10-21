@@ -9,7 +9,9 @@ sidebar:
   order: 3
 ---
 
-API 只写入 message 和 queued job。worker 负责 claim、取消检测、provider session、事件持久化和最终 job 状态；它不会直接绕过 approval 执行文件变更。
+API 只写入 message 和 queued job。worker 负责 claim、取消检测、provider session、事件持久化和最终 job 状态。只有 Pi 在 Agent 对话中按策略请求能力时才会创建 approval；Workspace 右侧面板调用各自的 REST 操作并直接返回结果，不进入 Agent approval 状态机。
+
+一次 Pi turn 可以并行产生多个 approval。worker 会关联全部 capability run，等待它们全部进入终态，再把完整结果集合交回同一个 provider session 继续对话。取消 Agent job 会同时过期仍待处理的 approval，并删除对应的私有执行 payload。
 
 Pi 工具按 `read`、`grep`、`find`、`ls`、`bash`、`edit`、`write` 分组，策略可配置。没有 provider key 时，正式 Pi turn 失败；开发环境可显式启用 model-free read-only fallback。
 

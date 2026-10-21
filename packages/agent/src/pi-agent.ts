@@ -123,6 +123,7 @@ export interface PiAgentCapabilityRequest {
   toolName: PiToolName;
   args: Record<string, unknown>;
   redactedArgs: Record<string, unknown>;
+  previewArgs: Record<string, unknown>;
   risk: "low" | "medium" | "high" | "critical";
   summary: string;
   requiresConfirmation: boolean;
@@ -148,6 +149,7 @@ const DIRECT_MCP_TOOLS = [
   "zos.files.stat",
   "zos.files.read",
   "zos.files.search",
+  "zos.files.mutate",
   "zos.runs.get"
 ] as const;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
@@ -209,7 +211,10 @@ function configuredProviderModel(settings: ModelProviderSettingsRecord): NonNull
 async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTurnResult> {
   let latestAssistantText = "";
   let started = false;
-  let pendingRunId: string | null = null;
+  const pendingRunIds = new Set<string>();
+  let abortRequested = false;
+  let eventError: unknown = null;
+  let eventChain = Promise.resolve();
 
   try {
     if (!input.modelSettings.apiKey) {
@@ -306,38 +311,49 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
     });
 
     const unsubscribe = piSession.subscribe((event) => {
-      void mapPiEvent(event, input.emit, {
-        onStarted: () => {
-          started = true;
-        },
-        onAssistantMessage: (content) => {
-          latestAssistantText = content;
-        },
-        onCapabilityRunPending: async (runId) => {
-          if (pendingRunId) return;
-          pendingRunId = runId;
-          await input.onCapabilityRunPending?.(runId, piSession.sessionId);
-          await input.emit({
-            type: "approval.pending",
-            payload: { kind: "capability_run", runId }
-          });
-          await piSession.abort();
-        }
-      });
+      eventChain = eventChain
+        .then(() => mapPiEvent(event, input.emit, {
+          onStarted: () => {
+            started = true;
+          },
+          onAssistantMessage: (content) => {
+            latestAssistantText = content;
+          },
+          onCapabilityRunPending: async (runId) => {
+            if (pendingRunIds.has(runId)) return;
+            await input.onCapabilityRunPending?.(runId, piSession.sessionId);
+            pendingRunIds.add(runId);
+            if (!abortRequested) {
+              abortRequested = true;
+              await piSession.abort();
+            }
+            await input.emit({
+              type: "approval.pending",
+              payload: { kind: "capability_run", runId }
+            });
+          }
+        }))
+        .catch((error: unknown) => {
+          eventError ??= error;
+        });
     });
 
     try {
       await piSession.bindExtensions({});
       await piSession.prompt(input.message);
       await piSession.waitForIdle();
+      await eventChain;
+      if (eventError) throw eventError;
     } finally {
       unsubscribe();
+      await eventChain;
       piSession.dispose();
     }
 
     if (input.isCancelled()) {
       return { status: "cancelled" };
     }
+    const pendingRunId = pendingRunIds.values().next().value as string | undefined;
     if (pendingRunId) {
       return { status: "waiting_approval", runId: pendingRunId };
     }
@@ -367,6 +383,7 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
     if (input.isCancelled()) {
       return { status: "cancelled" };
     }
+    const pendingRunId = pendingRunIds.values().next().value as string | undefined;
     if (pendingRunId) {
       return { status: "waiting_approval", runId: pendingRunId };
     }
@@ -740,6 +757,7 @@ async function withApproval(
     toolName: approval.toolName,
     args: approval.args,
     redactedArgs: redactPiToolArgs(approval.toolName, approval.args),
+    previewArgs: previewPiToolArgs(approval.toolName, approval.args),
     risk: approval.risk,
     summary: approval.summary,
     requiresConfirmation: policy === "confirm"
@@ -1056,6 +1074,85 @@ export function redactPiToolArgs(toolName: string, args: Record<string, unknown>
     };
   }
   return redacted;
+}
+
+const MAX_APPROVAL_PREVIEW_BYTES = 32 * 1024;
+const MAX_APPROVAL_SNIPPET_BYTES = 8 * 1024;
+
+export function previewPiToolArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+  const redacted = redactSensitiveValue(args) as Record<string, unknown>;
+  let preview: Record<string, unknown> = redacted;
+  if (toolName === "bash" && typeof args.command === "string") {
+    preview = {
+      ...redacted,
+      command: truncateApprovalPreview(redactShellPreviewText(args.command), MAX_APPROVAL_PREVIEW_BYTES)
+    };
+  } else if (toolName === "write" && typeof args.content === "string") {
+    preview = {
+      ...redacted,
+      content: truncateApprovalPreview(redactPreviewText(args.content), MAX_APPROVAL_PREVIEW_BYTES),
+      contentBytes: Buffer.byteLength(args.content, "utf8")
+    };
+  } else if (toolName === "edit" && Array.isArray(args.edits)) {
+    preview = {
+      ...redacted,
+      edits: args.edits.slice(0, 20).map((edit) => {
+        if (!edit || typeof edit !== "object") return "[invalid edit]";
+        const record = edit as Record<string, unknown>;
+        return {
+          oldText: typeof record.oldText === "string"
+            ? truncateApprovalPreview(redactPreviewText(record.oldText), MAX_APPROVAL_SNIPPET_BYTES)
+            : record.oldText,
+          newText: typeof record.newText === "string"
+            ? truncateApprovalPreview(redactPreviewText(record.newText), MAX_APPROVAL_SNIPPET_BYTES)
+            : record.newText
+        };
+      }),
+      editCount: args.edits.length
+    };
+  }
+  return boundApprovalPreview(preview);
+}
+
+function redactPreviewText(value: string): string {
+  return value
+    .replace(/(authorization\s*:\s*(?:bearer|basic)\s+)[^\s'"\\]+/giu, "$1[redacted]")
+    .replace(/\b([A-Za-z_][A-Za-z0-9_]*(?:PASSWORD|PASSWD|PASSPHRASE|SECRET|TOKEN|API_KEY|PRIVATE_KEY|PSK))=(?:'[^']*'|"[^"]*"|[^\s]+)/giu, "$1=[redacted]")
+    .replace(/(--(?:password|passphrase|secret|token|api[-_]?key|private[-_]?key|psk)(?:=|\s+))(?:'[^']*'|"[^"]*"|[^\s]+)/giu, "$1[redacted]")
+    .replace(/(["']?(?:password|passphrase|secret|token|api[_-]?key|private[_-]?key|psk)["']?\s*[:=]\s*)(?:'[^']*'|"[^"]*"|[^\s,}\]]+)/giu, "$1[redacted]")
+    .replace(/https?:\/\/[^\s'"<>]+/giu, (url) => redactAuditUrl(url));
+}
+
+function redactShellPreviewText(value: string): string {
+  const redacted = value
+    .replace(/(authorization\s*:\s*(?:bearer|basic)\s+)[^\s'"\\;|&()<>]+/giu, "$1[redacted]")
+    .replace(/\b([A-Za-z_][A-Za-z0-9_]*(?:PASSWORD|PASSWD|PASSPHRASE|SECRET|TOKEN|API_KEY|PRIVATE_KEY|PSK))=(?:'[^']*'|"[^"]*"|[^\s;|&()<>]+)/giu, "$1=[redacted]")
+    .replace(/(--(?:password|passphrase|secret|token|api[-_]?key|private[-_]?key|psk)(?:=|\s+))(?:'[^']*'|"[^"]*"|[^\s;|&()<>]+)/giu, "$1[redacted]")
+    .replace(/(["']?(?:password|passphrase|secret|token|api[_-]?key|private[_-]?key|psk)["']?\s*[:=]\s*)(?:'[^']*'|"[^"]*"|[^\s,}\];|&()<>]+)/giu, "$1[redacted]");
+  return redactShellPreviewUrls(redacted);
+}
+
+function redactShellPreviewUrls(value: string): string {
+  return value
+    .replace(/"(https?:\/\/[^"\s<>]+)"/giu, (_match, url: string) => `"${redactAuditUrl(url)}"`)
+    .replace(/'(https?:\/\/[^'\s<>]+)'/giu, (_match, url: string) => `'${redactAuditUrl(url)}'`)
+    .replace(/https?:\/\/[^\s'"<>;|&()]+/giu, (url) => redactAuditUrl(url));
+}
+
+function boundApprovalPreview(value: Record<string, unknown>): Record<string, unknown> {
+  const formatted = JSON.stringify(value, null, 2);
+  if (Buffer.byteLength(formatted, "utf8") <= MAX_APPROVAL_PREVIEW_BYTES) return value;
+  return {
+    preview: truncateApprovalPreview(formatted, MAX_APPROVAL_PREVIEW_BYTES),
+    truncated: true
+  };
+}
+
+function truncateApprovalPreview(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
+  const suffix = "\n[preview truncated]";
+  const bytes = Buffer.from(value, "utf8");
+  return `${bytes.subarray(0, Math.max(0, maxBytes - Buffer.byteLength(suffix))).toString("utf8")}${suffix}`;
 }
 
 function redactSensitiveValue(value: unknown, seen = new WeakSet<object>(), depth = 0): unknown {

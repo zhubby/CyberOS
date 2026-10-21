@@ -4,7 +4,13 @@ import path from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { ModelProviderSettingsRecord, PhotostaffMetadataDetail, PhotostaffQueryPage } from "@zos/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { capabilityPendingRunId, createPhotostaffAgentTools, redactPiToolArgs, registerConfiguredProvider } from "./pi-agent.js";
+import {
+  capabilityPendingRunId,
+  createPhotostaffAgentTools,
+  previewPiToolArgs,
+  redactPiToolArgs,
+  registerConfiguredProvider
+} from "./pi-agent.js";
 
 let tempDir: string;
 
@@ -97,6 +103,32 @@ describe("Pi MCP run continuation", () => {
         url: "https://example.test/file",
         registryToken: "[redacted]"
       }
+    });
+  });
+
+  it("keeps approval previews reviewable while redacting common secrets", () => {
+    expect(previewPiToolArgs("bash", {
+      command: "API_KEY=secret;printf ok && curl --token 'hidden' -H 'Authorization: Bearer bearer-secret' https://user:password@example.test/path?token=secret;printf done",
+      env: { PASSWORD: "secret", LANG: "en_US.UTF-8" }
+    })).toEqual({
+      command: "API_KEY=[redacted];printf ok && curl --token [redacted] -H 'Authorization: Bearer [redacted]' https://example.test/path;printf done",
+      env: { PASSWORD: "[redacted]", LANG: "en_US.UTF-8" }
+    });
+    expect(previewPiToolArgs("write", {
+      path: "notes.txt",
+      content: "title=Review me\npassword: private"
+    })).toEqual({
+      path: "notes.txt",
+      content: "title=Review me\npassword: [redacted]",
+      contentBytes: 33
+    });
+    expect(previewPiToolArgs("edit", {
+      path: "notes.txt",
+      edits: [{ oldText: "before", newText: "after" }]
+    })).toEqual({
+      path: "notes.txt",
+      edits: [{ oldText: "before", newText: "after" }],
+      editCount: 1
     });
   });
 });

@@ -359,7 +359,8 @@ describe("ChatPane agent rail", () => {
           status: "pending",
           proposal: {
             summary: "Move reports/final.pdf to Archive/final.pdf",
-            request: { rootId: "primary", sourcePath: "reports/final.pdf", targetPath: "Archive/final.pdf" }
+            request: { rootId: "primary", sourcePath: "reports/final.pdf", targetPath: "Archive/final.pdf" },
+            args: { command: "mkdir -p Archive && mv reports/final.pdf Archive/final.pdf" }
           },
           risk: "critical",
           revision: 3,
@@ -411,5 +412,7 @@ describe("ChatPane agent rail", () => {
     expect(html).toContain('data-risk="critical"');
     expect(html).toContain("Revision");
     expect(html).toContain(">3<");
+    expect(html).toContain("Requested action");
+    expect(html).toContain("mkdir -p Archive &amp;&amp; mv reports/final.pdf Archive/final.pdf");
   });
 });

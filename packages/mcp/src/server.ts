@@ -294,7 +294,10 @@ function registerResources(server: McpServer, runtime: ClientRuntime): void {
       mimeType: "application/json"
     }, async (uri, variables) => resourceFromCapability(uri, runtime, "zos.runs.get", { runId: String(variables.id) }));
   }
-  if (runtime.context.subject.scopes.has("zos:files:read")) {
+  if (
+    runtime.context.subject.scopes.has("zos:files:read")
+    && runtime.registry.get("zos.files.read")?.approval === "none"
+  ) {
     server.registerResource("ZOS bounded text file", new ResourceTemplate("zos://files/{rootId}/{+path}", { list: undefined }), {
       title: "ZOS bounded text file",
       description: "A bounded UTF-8 preview addressed by NAS root and root-relative path",
@@ -344,7 +347,7 @@ function schemaForTool(id: string, readOnly: boolean) {
     case "zos.files.read": return readInput;
     case "zos.files.resource-link": return pathInput;
     case "zos.files.search": return searchInput;
-    case "zos.files.mutate-propose": return fileMutationInput;
+    case "zos.files.mutate": return fileMutationInput;
     case "zos.index.status": return indexStatusInput;
     case "zos.photos.query": return photosQueryInput;
     case "zos.downloads.list": return downloadsInput;
