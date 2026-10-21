@@ -165,9 +165,12 @@ import {
 import { loadFileListingForView, syncSessionPath } from "./lib/session.js";
 import { readStoredStoragePoolId, writeStoredStoragePoolId } from "./lib/storage-pool-settings.js";
 import { scheduleToastDismissal } from "./lib/toast.js";
+import { createTrailingSingleFlight } from "./lib/trailing-single-flight.js";
 import { acceptVodPlayerStatus } from "./lib/vod-player-status.js";
 
 type MobileView = "chat" | "workspace";
+
+const WORK_QUEUE_NOTIFICATION_DEBOUNCE_MS = 1_000;
 const MAX_UPLOAD_BATCHES = 8;
 const VOD_PLAYER_ERROR_CODES = new Set([
   "VOD_PLAYER_DISABLED",
@@ -326,6 +329,8 @@ export function App() {
     [warningNotice]
   );
   const notificationRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notificationFileListingRefreshRef = useRef(false);
+  const workQueueRefreshRef = useRef<ReturnType<typeof createTrailingSingleFlight> | null>(null);
 
   const selectedRoot = roots.find((root) => root.id === selectedRootId);
   const storagePoolOptions = useMemo(() => {
@@ -577,23 +582,25 @@ export function App() {
       seenEvents.current.add(parsed.id);
 
       if (parsed.audience === "notification") {
+        const fileBatchId = typeof parsed.payload.fileBatchId === "string" ? parsed.payload.fileBatchId : null;
+        if (
+          fileBatchId
+          && (parsed.type === "job.completed" || parsed.type === "job.failed" || parsed.type === "job.cancelled")
+          && parsed.payload.rootId === selectedRootIdRef.current
+          && parsed.payload.storagePoolId === selectedStoragePoolIdRef.current
+        ) {
+          notificationFileListingRefreshRef.current = true;
+        }
         if (notificationRefreshTimerRef.current) clearTimeout(notificationRefreshTimerRef.current);
         notificationRefreshTimerRef.current = setTimeout(() => {
           notificationRefreshTimerRef.current = null;
-          const fileBatchId = typeof parsed.payload.fileBatchId === "string" ? parsed.payload.fileBatchId : null;
-          if (fileBatchId) {
-            void refreshFileBatches();
-            if (
-              (parsed.type === "job.completed" || parsed.type === "job.failed" || parsed.type === "job.cancelled")
-              && parsed.payload.rootId === selectedRootIdRef.current
-              && parsed.payload.storagePoolId === selectedStoragePoolIdRef.current
-            ) {
-              void Promise.all([refreshWorkQueues(), refreshCurrentFileListing()]);
-            }
-          } else {
-            void refreshWorkQueues();
-          }
-        }, 100);
+          const refreshFileListing = notificationFileListingRefreshRef.current;
+          notificationFileListingRefreshRef.current = false;
+          void Promise.all([
+            refreshWorkQueues(),
+            ...(refreshFileListing ? [refreshCurrentFileListing()] : [])
+          ]);
+        }, WORK_QUEUE_NOTIFICATION_DEBOUNCE_MS);
         return;
       }
 
@@ -652,6 +659,7 @@ export function App() {
         clearTimeout(notificationRefreshTimerRef.current);
         notificationRefreshTimerRef.current = null;
       }
+      notificationFileListingRefreshRef.current = false;
     };
   }, [session]);
 
@@ -1759,7 +1767,12 @@ export function App() {
     markUploadBatchCancelled(batchId);
   }
 
-  async function refreshWorkQueues() {
+  function refreshWorkQueues(): Promise<void> {
+    workQueueRefreshRef.current ??= createTrailingSingleFlight(performWorkQueueRefresh);
+    return workQueueRefreshRef.current.request();
+  }
+
+  async function performWorkQueueRefresh(): Promise<void> {
     const queueSessionId = activeSessionIdRef.current || null;
     const queueStoragePoolId = selectedStoragePoolIdRef.current;
     try {
