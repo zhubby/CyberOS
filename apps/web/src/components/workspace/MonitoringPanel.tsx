@@ -75,7 +75,17 @@ export function monitoringRefreshInterval(range: MonitoringRange): number {
   return RANGE_OPTIONS.find((option) => option.id === range)?.refreshMs ?? 60_000;
 }
 
-export function MonitoringPanel({ locale }: { locale: SupportedLocale }) {
+export function MonitoringPanel({
+  locale,
+  visible = true
+}: {
+  locale: SupportedLocale;
+  visible?: boolean;
+}) {
+  return visible ? <MonitoringPanelContent locale={locale} /> : null;
+}
+
+function MonitoringPanelContent({ locale }: { locale: SupportedLocale }) {
   const { t } = useTranslation();
   const dashboard = useManagementDashboard("monitoring");
   const [range, setRange] = useState<MonitoringRange>("1h");

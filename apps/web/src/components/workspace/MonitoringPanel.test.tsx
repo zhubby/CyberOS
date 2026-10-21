@@ -27,6 +27,15 @@ describe("MonitoringPanel", () => {
     }
   });
 
+  it("does not mount charts or polling while the mobile workspace is hidden", () => {
+    const html = renderToStaticMarkup(createElement(MonitoringPanel, {
+      locale: "en",
+      visible: false
+    }));
+
+    expect(html).toBe("");
+  });
+
   it("keeps missing points null so charts render collection gaps", () => {
     const series = [
       metricSeries("zos_host_memory_used_bytes", [1, null, 3]),

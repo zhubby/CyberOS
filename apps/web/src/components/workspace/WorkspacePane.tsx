@@ -1732,7 +1732,7 @@ export function WorkspacePane({
               onNotifyWarning={onNotifyWarning}
             />
           ) : activePanel === "monitoring" ? (
-            <MonitoringPanel locale={locale} />
+            <MonitoringPanel locale={locale} visible={workspaceVisible} />
           ) : activePanel === "terminal" || !workspaceVisible ? null : (
             <WorkspaceManagementPanel
               panel={activePanel}
