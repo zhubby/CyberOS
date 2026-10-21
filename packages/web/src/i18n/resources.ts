@@ -2122,6 +2122,10 @@ export const en = {
         title: "Photos",
         description: "Photo library location, indexing state, and processing limits."
       },
+      media: {
+        title: "Media",
+        description: "Movie and series sources, matching, scans, and TV metadata."
+      },
       appearance: {
         title: "Appearance",
         description: "Language and theme preferences."
@@ -2134,6 +2138,68 @@ export const en = {
         title: "Advanced",
         description: "Runtime paths, process details, and service configuration."
       }
+    },
+    media: {
+      loading: "Loading media library settings",
+      metadataTitle: "Metadata",
+      metadataDescription: "TMDB is optional. Local NFO and filename metadata remain available without it.",
+      tmdbToken: "TMDB read access token",
+      tokenConfigured: "Configured; leave blank to keep",
+      tokenMissing: "Not configured",
+      clearToken: "Clear saved TMDB token",
+      language: "Metadata language",
+      region: "Release region",
+      settingsSaved: "Media metadata settings saved.",
+      statusTitle: "Library status",
+      statusDescription: "Catalog totals and the current scanner state.",
+      movies: "Movies",
+      series: "Series",
+      unmatched: "Needs match",
+      library: "Library",
+      states: {
+        unconfigured: "Not configured",
+        idle: "Idle",
+        scanning: "Scanning",
+        degraded: "Needs attention",
+        ready: "Ready"
+      },
+      sourcesTitle: "Media sources",
+      sourcesDescription: "Each source stays inside one mounted NAS storage pool.",
+      addMovies: "Add movies",
+      addSeries: "Add series",
+      noSources: "No media sources configured.",
+      sourceAdded: "Media source added and scan queued.",
+      sourceUpdated: "Media source updated.",
+      sourceDeleted: "Media source deleted.",
+      sourceDirectory: "Media source",
+      pickerTitle: "Choose media directory",
+      pickerDescription: "Select a movie or series directory on an online NAS storage pool.",
+      pickerList: "Media directories",
+      pickerEmpty: "This directory has no subdirectories.",
+      useDirectory: "Use this directory",
+      enabled: "Enabled",
+      scan: "Scan source",
+      scanQueued: "Media scan queued.",
+      notScanned: "Not scanned",
+      scanStates: {
+        queued: "Queued",
+        running: "Scanning",
+        completed: "Completed",
+        failed: "Failed",
+        cancelled: "Cancelled"
+      },
+      matchingTitle: "Match correction",
+      matchingDescription: "Review titles that could not be matched automatically.",
+      noUnmatched: "No titles need matching.",
+      kinds: { movie: "Movie", series: "Series" },
+      exclude: "Exclude",
+      searchCandidates: "Search TMDB candidates",
+      search: "Search",
+      searching: "Searching TMDB",
+      noCandidates: "No candidates found.",
+      noOverview: "No overview available.",
+      matchSaved: "Match saved and source scan queued.",
+      titleExcluded: "Title excluded and source scan queued."
     },
     bluetooth: {
       adaptersTitle: "Bluetooth adapters",
@@ -4815,6 +4881,10 @@ export const zhCN = {
         title: "相册",
         description: "照片库位置、索引状态和处理限制。"
       },
+      media: {
+        title: "媒体库",
+        description: "管理电影与剧集目录、匹配、扫描和电视元数据。"
+      },
       appearance: {
         title: "外观",
         description: "语言与主题偏好。"
@@ -4827,6 +4897,68 @@ export const zhCN = {
         title: "高级",
         description: "运行时路径、进程详情和服务配置。"
       }
+    },
+    media: {
+      loading: "正在加载媒体库设置",
+      metadataTitle: "元数据",
+      metadataDescription: "TMDB 为可选服务；未配置时仍可使用本地 NFO 和文件名元数据。",
+      tmdbToken: "TMDB 读取令牌",
+      tokenConfigured: "已配置，留空保持不变",
+      tokenMissing: "未配置",
+      clearToken: "清除已保存的 TMDB 令牌",
+      language: "元数据语言",
+      region: "发行地区",
+      settingsSaved: "媒体元数据设置已保存。",
+      statusTitle: "媒体库状态",
+      statusDescription: "目录统计与当前扫描状态。",
+      movies: "电影",
+      series: "剧集",
+      unmatched: "待匹配",
+      library: "媒体库",
+      states: {
+        unconfigured: "未配置",
+        idle: "空闲",
+        scanning: "扫描中",
+        degraded: "需要处理",
+        ready: "正常"
+      },
+      sourcesTitle: "媒体源",
+      sourcesDescription: "每个媒体源始终限制在一个已挂载的 NAS 存储池内。",
+      addMovies: "添加电影",
+      addSeries: "添加剧集",
+      noSources: "尚未配置媒体源。",
+      sourceAdded: "媒体源已添加并加入扫描队列。",
+      sourceUpdated: "媒体源已更新。",
+      sourceDeleted: "媒体源已删除。",
+      sourceDirectory: "媒体源",
+      pickerTitle: "选择媒体目录",
+      pickerDescription: "在在线 NAS 存储池中选择电影或剧集目录。",
+      pickerList: "媒体目录",
+      pickerEmpty: "此目录中没有子目录。",
+      useDirectory: "使用此目录",
+      enabled: "启用",
+      scan: "扫描媒体源",
+      scanQueued: "媒体扫描已加入队列。",
+      notScanned: "尚未扫描",
+      scanStates: {
+        queued: "排队中",
+        running: "扫描中",
+        completed: "已完成",
+        failed: "失败",
+        cancelled: "已取消"
+      },
+      matchingTitle: "匹配校正",
+      matchingDescription: "检查无法自动匹配的电影和剧集。",
+      noUnmatched: "当前没有待匹配项目。",
+      kinds: { movie: "电影", series: "剧集" },
+      exclude: "排除",
+      searchCandidates: "搜索 TMDB 候选项",
+      search: "搜索",
+      searching: "正在搜索 TMDB",
+      noCandidates: "没有找到候选项。",
+      noOverview: "暂无简介。",
+      matchSaved: "匹配已保存，并重新扫描媒体源。",
+      titleExcluded: "项目已排除，并重新扫描媒体源。"
     },
     bluetooth: {
       adaptersTitle: "蓝牙适配器",

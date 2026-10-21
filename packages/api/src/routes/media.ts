@@ -25,17 +25,27 @@ import {
   updateMediaSource
 } from "@zos/db";
 import { inferMimeType } from "@zos/nas-tools";
-import type { MediaSourceKind } from "@zos/shared";
+import type { MediaMatchCandidate, MediaMatchStatus, MediaSourceKind } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
+import { searchTmdbCandidates, type TmdbCandidateSearchInput } from "../lib/tmdb-client.js";
 import { createVodPlayerRuntime } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 const ARTWORK_MAX_BYTES = 15 * 1024 * 1024;
 const DEFAULT_PROFILE_ID = "local-admin";
 
-export function registerMediaRoutes(server: FastifyInstance, context: ApiRouteContext): void {
+interface MediaRouteDependencies {
+  searchTmdb?: (input: TmdbCandidateSearchInput) => Promise<MediaMatchCandidate[]>;
+}
+
+export function registerMediaRoutes(
+  server: FastifyInstance,
+  context: ApiRouteContext,
+  dependencies: MediaRouteDependencies = {}
+): void {
   const { db } = context;
   const vodPlayer = context.vodPlayer ?? createVodPlayerRuntime(context.config.vodPlayer);
+  const searchTmdb = dependencies.searchTmdb ?? searchTmdbCandidates;
 
   server.get("/api/media/settings", async () => ({
     settings: toPublicMediaLibrarySettings(getMediaLibrarySettings(db) ?? defaultMediaLibrarySettings())
@@ -117,14 +127,18 @@ export function registerMediaRoutes(server: FastifyInstance, context: ApiRouteCo
   server.get("/api/media/home", async () => getMediaHome(db, DEFAULT_PROFILE_ID));
 
   server.get<{
-    Querystring: { kind?: string; query?: string; limit?: string };
+    Querystring: { kind?: string; matchStatus?: string; query?: string; limit?: string };
   }>("/api/media/titles", async (request, reply) => {
     if (request.query.kind !== undefined && request.query.kind !== "movie" && request.query.kind !== "series") {
       return reply.status(400).send({ error: "Media kind must be movie or series" });
     }
+    if (request.query.matchStatus !== undefined && !isMediaMatchStatus(request.query.matchStatus)) {
+      return reply.status(400).send({ error: "Media match status is invalid" });
+    }
     reply.send({
       titles: listMediaTitles(db, {
         ...(request.query.kind ? { kind: request.query.kind } : {}),
+        ...(request.query.matchStatus ? { matchStatus: request.query.matchStatus } : {}),
         ...(request.query.query ? { query: request.query.query } : {}),
         limit: numericLimit(request.query.limit, 40, 100),
         profileId: DEFAULT_PROFILE_ID
@@ -137,6 +151,31 @@ export function registerMediaRoutes(server: FastifyInstance, context: ApiRouteCo
     const title = getMediaTitle(db, request.params.id);
     if (!title) return reply.status(404).send({ error: "Media title not found" });
     reply.send({ title });
+  });
+
+  server.get<{
+    Params: { id: string };
+    Querystring: { query?: string };
+  }>("/api/media/titles/:id/match-candidates", async (request, reply) => {
+    const title = getMediaTitle(db, request.params.id);
+    if (!title) return reply.status(404).send({ error: "Media title not found" });
+    const settings = getMediaLibrarySettings(db) ?? defaultMediaLibrarySettings();
+    if (!settings.tmdbReadAccessToken) {
+      return reply.status(409).send({ error: "TMDB token is not configured" });
+    }
+    try {
+      const candidates = await searchTmdb({
+        token: settings.tmdbReadAccessToken,
+        kind: title.kind,
+        query: request.query.query?.trim() || title.title,
+        language: settings.language,
+        region: settings.region,
+        limit: 10
+      });
+      reply.send({ candidates });
+    } catch {
+      reply.status(502).send({ error: "TMDB search is unavailable" });
+    }
   });
 
   server.get<{
@@ -344,6 +383,10 @@ function imageExtension(pathname: string): string {
 function numericLimit(value: string | undefined, fallback: number, maximum: number): number {
   const parsed = Number(value ?? fallback);
   return Number.isInteger(parsed) ? Math.max(1, Math.min(maximum, parsed)) : fallback;
+}
+
+function isMediaMatchStatus(value: string): value is MediaMatchStatus {
+  return value === "matched" || value === "pending" || value === "unmatched" || value === "excluded";
 }
 
 function sendMediaError(reply: FastifyReply, error: unknown, fallback: string): void {

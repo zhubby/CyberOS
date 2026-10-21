@@ -750,11 +750,18 @@ export function getMediaTitle(db: ZosDatabase, id: string, profileId = DEFAULT_P
 
 export function listMediaTitles(
   db: ZosDatabase,
-  input: { kind?: MediaTitleKind; query?: string; limit?: number; profileId?: string } = {}
+  input: {
+    kind?: MediaTitleKind;
+    matchStatus?: MediaMatchStatus;
+    query?: string;
+    limit?: number;
+    profileId?: string;
+  } = {}
 ): MediaTitleSummary[] {
   const profileId = input.profileId ?? DEFAULT_PROFILE_ID;
-  const clauses = ["t.match_status <> 'excluded'"];
+  const clauses = input.matchStatus ? ["t.match_status = ?"] : ["t.match_status <> 'excluded'"];
   const values: unknown[] = [];
+  if (input.matchStatus) values.push(input.matchStatus);
   if (input.kind) {
     clauses.push("t.kind = ?");
     values.push(input.kind);

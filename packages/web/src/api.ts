@@ -152,7 +152,15 @@ import type {
   MonitoringSmtpSettingsInput as SharedMonitoringSmtpSettingsInput,
   MonitoringHealthRouting as SharedMonitoringHealthRouting,
   MonitoringAlertDelivery as SharedMonitoringAlertDelivery,
-  MonitoringAlertSummary as SharedMonitoringAlertSummary
+  MonitoringAlertSummary as SharedMonitoringAlertSummary,
+  MediaLibraryStatus as SharedMediaLibraryStatus,
+  MediaMatchCandidate as SharedMediaMatchCandidate,
+  MediaMatchStatus as SharedMediaMatchStatus,
+  MediaScanRunRecord as SharedMediaScanRun,
+  MediaSourceKind as SharedMediaSourceKind,
+  MediaSourceRecord as SharedMediaSource,
+  MediaTitleSummary as SharedMediaTitleSummary,
+  PublicMediaLibrarySettings as SharedPublicMediaLibrarySettings
 } from "@zos/shared";
 
 export interface NasRoot {
@@ -257,6 +265,14 @@ export type PhotoQueryAsset = SharedPhotoQueryAsset;
 export type PhotoQueryPage = SharedPhotoQueryPage;
 export type PhotoQueryRequest = SharedPhotoQueryRequest;
 export type PhotoTimelinePage = SharedPhotoTimelinePage;
+export type MediaLibrarySettings = SharedPublicMediaLibrarySettings;
+export type MediaLibraryStatus = SharedMediaLibraryStatus;
+export type MediaMatchCandidate = SharedMediaMatchCandidate;
+export type MediaMatchStatus = SharedMediaMatchStatus;
+export type MediaScanRun = SharedMediaScanRun;
+export type MediaSourceKind = SharedMediaSourceKind;
+export type MediaSource = SharedMediaSource;
+export type MediaTitleSummary = SharedMediaTitleSummary;
 export type TerminalTab = SharedTerminalTab;
 export type TerminalTabState = SharedTerminalTabState;
 export type VmSummary = PublicVmSummary;
@@ -1694,6 +1710,104 @@ export async function requestPhotoScan(): Promise<PhotoJob> {
   const response = await fetch("/api/photos/scans", { method: "POST" });
   await ensureOk(response);
   return ((await response.json()) as { job: PhotoJob }).job;
+}
+
+export async function getMediaLibrarySettings(): Promise<MediaLibrarySettings> {
+  return fetchJson<{ settings: MediaLibrarySettings }>("/api/media/settings").then((body) => body.settings);
+}
+
+export async function updateMediaLibrarySettings(input: {
+  tmdbReadAccessToken?: string | null;
+  language?: string;
+  region?: string | null;
+}): Promise<MediaLibrarySettings> {
+  return fetchJson<{ settings: MediaLibrarySettings }>(
+    "/api/media/settings",
+    jsonRequest("PATCH", input)
+  ).then((body) => body.settings);
+}
+
+export async function getMediaSources(): Promise<MediaSource[]> {
+  return fetchJson<{ sources: MediaSource[] }>("/api/media/sources").then((body) => body.sources);
+}
+
+export async function createMediaSource(input: {
+  name: string;
+  kind: MediaSourceKind;
+  rootId: string;
+  storagePoolId: string;
+  path: string;
+}): Promise<{ source: MediaSource; scan: MediaScanRun }> {
+  return fetchJson<{ source: MediaSource; scan: MediaScanRun }>(
+    "/api/media/sources",
+    jsonRequest("POST", input)
+  );
+}
+
+export async function updateMediaSource(
+  id: string,
+  patch: { name?: string; enabled?: boolean }
+): Promise<MediaSource> {
+  return fetchJson<{ source: MediaSource }>(
+    `/api/media/sources/${encodeURIComponent(id)}`,
+    jsonRequest("PATCH", patch)
+  ).then((body) => body.source);
+}
+
+export async function deleteMediaSource(id: string): Promise<void> {
+  const response = await fetch(`/api/media/sources/${encodeURIComponent(id)}`, { method: "DELETE" });
+  await ensureOk(response);
+}
+
+export async function requestMediaScan(sourceId: string): Promise<MediaScanRun> {
+  return fetchJson<{ scan: MediaScanRun }>(
+    `/api/media/sources/${encodeURIComponent(sourceId)}/scan`,
+    { method: "POST" }
+  ).then((body) => body.scan);
+}
+
+export async function getMediaLibraryStatus(): Promise<MediaLibraryStatus> {
+  return fetchJson<{ status: MediaLibraryStatus }>("/api/media/status").then((body) => body.status);
+}
+
+export async function getMediaScans(sourceId?: string, limit = 20): Promise<MediaScanRun[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (sourceId) params.set("sourceId", sourceId);
+  return fetchJson<{ scans: MediaScanRun[] }>(`/api/media/scans?${params.toString()}`).then((body) => body.scans);
+}
+
+export async function getMediaTitles(input: {
+  kind?: MediaSourceKind;
+  matchStatus?: MediaMatchStatus;
+  query?: string;
+  limit?: number;
+} = {}): Promise<MediaTitleSummary[]> {
+  const params = new URLSearchParams();
+  if (input.kind) params.set("kind", input.kind);
+  if (input.matchStatus) params.set("matchStatus", input.matchStatus);
+  if (input.query) params.set("query", input.query);
+  if (input.limit) params.set("limit", String(input.limit));
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return fetchJson<{ titles: MediaTitleSummary[] }>(`/api/media/titles${suffix}`).then((body) => body.titles);
+}
+
+export async function getMediaMatchCandidates(id: string, query?: string): Promise<MediaMatchCandidate[]> {
+  const params = new URLSearchParams();
+  if (query?.trim()) params.set("query", query.trim());
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return fetchJson<{ candidates: MediaMatchCandidate[] }>(
+    `/api/media/titles/${encodeURIComponent(id)}/match-candidates${suffix}`
+  ).then((body) => body.candidates);
+}
+
+export async function updateMediaMatch(
+  id: string,
+  input: { tmdbId?: number | null; excluded?: boolean }
+): Promise<MediaTitleSummary> {
+  return fetchJson<{ title: MediaTitleSummary }>(
+    `/api/media/titles/${encodeURIComponent(id)}/match`,
+    jsonRequest("PUT", input)
+  ).then((body) => body.title);
 }
 
 export async function uploadPhoto(file: File, directory?: string): Promise<{ path: string; operation: FileOperation }> {
