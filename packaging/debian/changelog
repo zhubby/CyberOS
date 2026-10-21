@@ -1,3 +1,9 @@
+zos (1.4.5) unstable; urgency=medium
+
+  * Pause hidden monitoring charts on compact screens.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 03:24:33 +0000
+
 zos (1.4.4) unstable; urgency=medium
 
   * Prevent notification replay from exhausting API rate limits
