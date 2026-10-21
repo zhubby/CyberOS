@@ -129,17 +129,19 @@ in pkgs.testers.runNixOSTest {
             "operation": "network.manager",
             "payload": {"action": "radio", "input": {"enabled": True, "confirmed": True}},
         })
-        command = """python3 - <<'PY'
-import json, socket
-request = %s
-client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-client.connect('/run/zos/hostd.sock')
-client.sendall((request + '\\n').encode())
-client.shutdown(socket.SHUT_WR)
-response = json.loads(client.makefile().readline())
-assert response['error']['status'] == 501, response
-assert response['error']['code'] == 'unsupported', response
-PY""" % repr(request)
+        command = (
+            "python3 - <<'PY'\n"
+            "import json, socket\n"
+            "request = %s\n"
+            "client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n"
+            "client.connect('/run/zos/hostd.sock')\n"
+            "client.sendall((request + '\\n').encode())\n"
+            "client.shutdown(socket.SHUT_WR)\n"
+            "response = json.loads(client.makefile().readline())\n"
+            "assert response['error']['status'] == 501, response\n"
+            "assert response['error']['code'] == 'unsupported', response\n"
+            "PY"
+        ) % repr(request)
         machine.succeed(command)
         machine.succeed("test ! -e /zos/state/hostd/network-manager")
 
