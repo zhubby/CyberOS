@@ -134,7 +134,7 @@ git diff --check
 
 ```bash
 VERSION="$(node -p 'require("./package.json").version')"
-git add package.json package-lock.json apps packages packaging
+git add package.json package-lock.json crates packages packaging
 git commit -m "chore(release): v${VERSION}"
 git push origin main
 ```
@@ -154,7 +154,8 @@ git push origin "v${VERSION}"
 2. `Package (amd64)` 在 Ubuntu runner 构建并检查 Debian 产物。
 3. `Package (arm64)` 在原生 ARM64 runner 的固定 `node:22-bookworm` 容器中构建，确保 `better-sqlite3` 原生模块和 Rust hostd/termux 二进制匹配 CM5。
 4. `Documentation browser smoke` 构建文档并用 Chromium 检查导航、搜索与页面渲染。
-5. tag run 在上述 job 全部成功后创建 GitHub Release，包含两个架构的 `.deb`、`.changes`、`.buildinfo`、`SHA256SUMS` 和 `release-manifest.json`。
+5. `Nix` 在原生 `x86_64-linux` 与 `aarch64-linux` runner 上执行 `nix flake check`；x86_64 同时运行 NixOS VM 模块测试。
+6. tag run 在上述 job 全部成功后创建 GitHub Release，包含两个架构的 `.deb`、`.changes`、`.buildinfo`、`SHA256SUMS` 和 `release-manifest.json`。
 
 `release-manifest.json` 是 CM5 部署的最小可信描述：
 

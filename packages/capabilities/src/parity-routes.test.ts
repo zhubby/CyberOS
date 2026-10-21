@@ -9,7 +9,7 @@ const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete"]);
 
 describe("capability REST parity", () => {
   it("only maps routes that exist in the API source", () => {
-    const routeDirectory = fileURLToPath(new URL("../../../apps/api/src/routes/", import.meta.url));
+    const routeDirectory = fileURLToPath(new URL("../../api/src/routes/", import.meta.url));
     const knownRoutes = new Set<string>();
     for (const name of readdirSync(routeDirectory)) {
       if (!name.endsWith(".ts") || name.endsWith(".test.ts")) continue;

@@ -4,7 +4,7 @@ description: AI job、审批、索引搜索和备份恢复的跨进程数据流�
 type: explanation
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/api/src/routes/sessions.ts, apps/worker/src/processor.ts, packages/agent/src/pi-agent.ts, apps/indexer/src/service.rs, apps/indexer/src/scanner.rs, apps/backup/src/backup.ts]
+sourceOfTruth: [packages/api/src/routes/sessions.ts, packages/worker/src/processor.ts, packages/agent/src/pi-agent.ts, crates/indexer/src/service.rs, crates/indexer/src/scanner.rs, packages/backup/src/backup.ts]
 sidebar:
   order: 2
 ---

@@ -12,16 +12,14 @@ const execFileAsync = promisify(execFile);
 describe("native packaging artifacts", () => {
   it("builds monitor and alerter as independent Rust applications", async () => {
     const workspace = await readFile(path.join(repoRoot, "Cargo.toml"), "utf8");
-    const monitor = await readFile(path.join(repoRoot, "apps/monitor/Cargo.toml"), "utf8");
-    const alerter = await readFile(path.join(repoRoot, "apps/alerter/Cargo.toml"), "utf8");
+    const monitor = await readFile(path.join(repoRoot, "crates/monitor/Cargo.toml"), "utf8");
+    const alerter = await readFile(path.join(repoRoot, "crates/alerter/Cargo.toml"), "utf8");
     const contracts = await readFile(
       path.join(repoRoot, "crates/monitoring-contracts/Cargo.toml"),
       "utf8"
     );
 
-    expect(workspace).toContain('"apps/monitor"');
-    expect(workspace).toContain('"apps/alerter"');
-    expect(workspace).toContain('"crates/monitoring-contracts"');
+    expect(workspace).toContain('members = ["crates/*"]');
     expect(monitor).toContain('name = "zos-monitor"');
     expect(monitor).not.toContain('name = "zos-alerter"');
     expect(monitor).not.toContain("lettre.workspace");
@@ -191,25 +189,25 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("usr/lib/zos/apps/api/dist/");
     expect(install).toContain("target/release/zos-monitor usr/lib/zos/bin/");
     expect(install).toContain("target/release/zos-alerter usr/lib/zos/bin/");
-    expect(install).not.toContain("apps/monitor/dist/");
+    expect(install).not.toContain("crates/monitor/dist/");
     expect(install).toContain("target/release/zos-hostd usr/lib/zos/bin/");
     expect(install).toContain("target/release/zos-host-accessd usr/lib/zos/bin/");
     expect(install).toContain("target/release/zos-termux usr/lib/zos/bin/");
-    expect(install).not.toContain("apps/terminal-helper");
+    expect(install).not.toContain("packages/terminal-helper");
     expect(install).toContain("usr/lib/zos/apps/worker/dist/");
     expect(install).toContain("target/release/zos-photostaff usr/lib/zos/bin/");
-    expect(install).not.toContain("apps/photo-worker");
-    expect(install).not.toContain("apps/photostaff/dist/");
+    expect(install).not.toContain("packages/photo-worker");
+    expect(install).not.toContain("crates/photostaff/dist/");
     expect(install).toContain("target/release/zos-indexer usr/lib/zos/bin/");
-    expect(install).not.toContain("apps/indexer/dist/");
+    expect(install).not.toContain("crates/indexer/dist/");
     expect(install).toContain("usr/lib/zos/apps/backup/dist/");
     expect(install).toContain("usr/lib/zos/apps/ops/dist/");
-    expect(install).not.toContain("apps/scheduler");
+    expect(install).not.toContain("packages/scheduler");
     expect(install).toContain("target/release/zos-vod-player usr/lib/zos/bin/");
     expect(install).toContain("target/release/zos-bluetoothd usr/lib/zos/bin/");
-    expect(install).not.toContain("apps/player-helper");
+    expect(install).not.toContain("packages/player-helper");
     expect(install).toContain("target/release/zos-downloader usr/lib/zos/bin/");
-    expect(install).not.toContain("apps/downloader/dist/");
+    expect(install).not.toContain("crates/downloader/dist/");
     expect(install).toContain("node_modules/* usr/lib/zos/node_modules/");
     expect(install).toContain(
       "packages/agent/node_modules/* usr/lib/zos/packages/agent/node_modules/"
@@ -251,7 +249,7 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("packaging/scripts/zos-refresh-vod-player.sh usr/lib/zos/scripts/");
     expect(install).toContain("packaging/scripts/zos-deploy-bootstrap.sh usr/lib/zos/scripts/");
     expect(install).toContain("packaging/scripts/zos-deploy usr/lib/zos/scripts/");
-    expect(install).toContain("apps/mcp-cli/dist/* usr/lib/zos/apps/mcp-cli/dist/");
+    expect(install).toContain("packages/mcp-cli/dist/* usr/lib/zos/apps/mcp-cli/dist/");
     expect(install).toContain("packaging/scripts/zos-mcp usr/lib/zos/scripts/");
     expect(install).toContain("packaging/nginx/zos.conf usr/share/zos/nginx/");
     expect(install).toContain("packaging/etc/config.toml zos/config/");

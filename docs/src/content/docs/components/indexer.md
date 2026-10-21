@@ -4,7 +4,7 @@ description: NAS 遍历、增量索引、FTS5 和失败保护。
 type: explanation
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/indexer/src/service.rs, apps/indexer/src/scanner.rs, apps/indexer/src/extractor.rs, apps/indexer/src/storage.rs, packages/db/src/repositories/index-search.ts]
+sourceOfTruth: [crates/indexer/src/service.rs, crates/indexer/src/scanner.rs, crates/indexer/src/extractor.rs, crates/indexer/src/storage.rs, packages/db/src/repositories/index-search.ts]
 sidebar:
   order: 4
 ---

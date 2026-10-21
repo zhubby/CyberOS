@@ -4,7 +4,7 @@ description: ZOS 的系统上下文、容器边界和主要依赖方向。
 type: explanation
 status: current
 audience: [developer, operator]
-sourceOfTruth: [README.md, apps/api/src/server.ts, apps/worker/src/processor.ts, apps/monitor/src/application/monitor.rs, apps/alerter/src/application/evaluation.rs, crates/monitoring-contracts/src/lib.rs, packages/db/src/connection.ts, packages/monitoring/contracts/metrics-catalog.json]
+sourceOfTruth: [README.md, packages/api/src/server.ts, packages/worker/src/processor.ts, crates/monitor/src/application/monitor.rs, crates/alerter/src/application/evaluation.rs, crates/monitoring-contracts/src/lib.rs, packages/db/src/connection.ts, packages/monitoring/contracts/metrics-catalog.json]
 sidebar:
   order: 1
 ---

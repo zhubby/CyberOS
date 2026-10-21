@@ -1,0 +1,168 @@
+import type { FastifyInstance } from "fastify";
+import {
+  createShareOperationRecord,
+  getShareSettings,
+  listNasRoots,
+  saveShareSettings,
+  updateShareOperationStatus
+} from "@zos/db";
+import type { ShareOperationProposal } from "@zos/shared";
+import type { ApiRouteContext } from "../context.js";
+import { HostdRequestError } from "../lib/hostd-client.js";
+import { normalizeShareSettingsInput, type ShareSettingsInput } from "../lib/share-settings.js";
+import {
+  applyShareSettings,
+  collectShareSummary,
+  safeShareMessage,
+  serializeShareMutation,
+  toPublicShareOperation
+} from "../lib/share-service.js";
+import { defaultShareSettings, toPublicShareSettings } from "../lib/settings.js";
+
+export function registerShareRoutes(server: FastifyInstance, context: ApiRouteContext): void {
+  const { config, db } = context;
+
+  server.get("/api/shares/summary", async () => {
+    const settings = getShareSettings(db) ?? defaultShareSettings(config);
+    return {
+      summary: await collectShareSummary(settings, {
+        ...context.shares,
+        mutationPolicy: config.hostd.mutationPolicy ?? "mutable"
+      })
+    };
+  });
+
+  server.put<{
+    Body: {
+      username?: string;
+      password?: string;
+      expectedUpdatedAt?: string;
+    };
+  }>("/api/shares/account", async (request, reply) => {
+    if ((config.hostd.mutationPolicy ?? "mutable") === "declarative") {
+      reply.status(501).send({ error: "Share configuration is managed declaratively on this host" });
+      return;
+    }
+    try {
+      const response = await serializeShareMutation(async () => {
+        const { username, password, expectedUpdatedAt } = request.body ?? {};
+        if (typeof username !== "string" || typeof expectedUpdatedAt !== "string" || !expectedUpdatedAt) {
+          throw new ShareAccountUpdateError(400, "Username and expected settings revision are required");
+        }
+        if (password !== undefined && typeof password !== "string") {
+          throw new ShareAccountUpdateError(400, "Password must be a string");
+        }
+
+        const existing = getShareSettings(db) ?? defaultShareSettings(config);
+        if (existing.updatedAt !== expectedUpdatedAt) {
+          throw new ShareAccountUpdateError(409, "Share settings changed; reload before saving the account");
+        }
+        const roots = listNasRoots(db);
+        let settings;
+        try {
+          settings = await normalizeShareSettingsInput({
+            account: {
+              username,
+              ...(password ? { password } : {})
+            }
+          }, existing, roots);
+        } catch (error) {
+          throw new ShareAccountUpdateError(400, safeShareMessage(error));
+        }
+
+        let applied;
+        try {
+          applied = await applyShareSettings(config, settings, roots, context.shares);
+        } catch (error) {
+          const statusCode = error instanceof HostdRequestError && error.statusCode === 503 ? 503 : 502;
+          throw new ShareAccountUpdateError(statusCode, safeShareMessage(error));
+        }
+
+        const { updatedAt: _normalizedAt, ...settingsToSave } = settings;
+        const saved = saveShareSettings(db, settingsToSave);
+        return {
+          settings: toPublicShareSettings(saved),
+          appliedAt: applied.appliedAt
+        };
+      });
+      reply.send(response);
+    } catch (error) {
+      if (error instanceof ShareAccountUpdateError) {
+        reply.status(error.statusCode).send({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  });
+
+  server.post<{
+    Body: {
+      settings?: ShareSettingsInput;
+    };
+  }>("/api/shares/settings", async (request, reply) => {
+    if ((config.hostd.mutationPolicy ?? "mutable") === "declarative") {
+      reply.status(501).send({ error: "Share configuration is managed declaratively on this host" });
+      return;
+    }
+    const existing = getShareSettings(db) ?? defaultShareSettings(config);
+    const roots = listNasRoots(db);
+    try {
+      const settings = await normalizeShareSettingsInput(request.body?.settings, existing, roots);
+      const publicSettings = toPublicShareSettings(settings);
+      const proposal: ShareOperationProposal = {
+        action: "apply_settings",
+        risk: "high",
+        summary: shareProposalSummary(settings),
+        settings: publicSettings
+      };
+      const operation = createShareOperationRecord(db, {
+        proposal,
+        settings
+      });
+      try {
+        const applied = await applyShareSettings(config, settings, roots, context.shares);
+        const { updatedAt: _normalizedAt, ...settingsToSave } = settings;
+        const saved = saveShareSettings(db, settingsToSave);
+        const completed = updateShareOperationStatus(db, operation.id, "applied", {
+          ...applied,
+          settingsUpdatedAt: saved.updatedAt,
+          appliedAt: new Date().toISOString()
+        });
+        reply.status(200).send({
+          settings: toPublicShareSettings(saved),
+          operation: completed ? toPublicShareOperation(completed) : null
+        });
+      } catch (error) {
+        const message = safeShareMessage(error);
+        updateShareOperationStatus(db, operation.id, "failed", {
+          error: message,
+          failedAt: new Date().toISOString()
+        });
+        throw error;
+      }
+    } catch (error) {
+      reply.status(400).send({ error: safeShareMessage(error) });
+    }
+  });
+}
+
+class ShareAccountUpdateError extends Error {
+  constructor(readonly statusCode: 400 | 409 | 502 | 503, message: string) {
+    super(message);
+    this.name = "ShareAccountUpdateError";
+  }
+}
+
+function shareProposalSummary(settings: Awaited<ReturnType<typeof normalizeShareSettingsInput>>): string {
+  const enabledProtocols = settings.shares.reduce(
+    (count, share) =>
+      count +
+      Number(share.protocols.smb.enabled) +
+      Number(share.protocols.webdav.enabled) +
+      Number(share.protocols.ftp.enabled) +
+      Number(share.protocols.nfs.enabled) +
+      Number(share.protocols.dlna.enabled),
+    0
+  );
+  return `Apply share services configuration for ${settings.shares.length} share${settings.shares.length === 1 ? "" : "s"} and ${enabledProtocols} enabled protocol${enabledProtocols === 1 ? "" : "s"}`;
+}

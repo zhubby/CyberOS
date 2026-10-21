@@ -5,20 +5,26 @@ short Claude-specific handoff; this file is the project source of truth.
 
 ## Project And Runtime
 
-ZOS is a TypeScript npm-workspaces monorepo for a single-user Linux NAS
-appliance. It is deployed as native Node.js processes and systemd units, not as
-a Docker container.
+ZOS is a mixed TypeScript/Rust monorepo for a single-user Linux NAS appliance.
+It is deployed as native processes and systemd units, not as a Docker
+container. TypeScript workspaces live only under `packages/`; Rust workspace
+members live only under `crates/`. The repository has no source `apps/`
+directory. Installed paths such as `/usr/lib/zos/apps` and the managed Compose
+root `/zos/apps` are runtime compatibility paths and must not be renamed as
+part of source-layout work.
 
-- `apps/web`: React/Vite web UI.
-- `apps/api`: Fastify API, WebSocket/SSE endpoints, and production static files.
-- `apps/worker`: agent job worker.
-- `apps/indexer`: SQLite/FTS NAS indexer.
-- `apps/ops`: one-shot health evaluation and maintenance jobs.
-- `apps/backup`, `apps/hostd`, `apps/termux`: backup and host
-  integration processes.
+- `packages/web`: React/Vite web UI.
+- `packages/api`: Fastify API, WebSocket/SSE endpoints, and production static files.
+- `packages/worker`: agent job worker.
+- `packages/ops`, `packages/backup`: one-shot operations and restic jobs.
 - `packages/db`, `packages/nas-tools`, `packages/agent`, `packages/shared`:
   persistence, path-safe filesystem operations, agent routing, and shared
   configuration/types.
+- `crates/indexer`, `crates/monitor`, `crates/alerter`, `crates/photostaff`,
+  `crates/downloader`: NAS indexing, monitoring, alerts, media, and downloads.
+- `crates/hostd`, `crates/host-accessd`, `crates/termux`,
+  `crates/bluetoothd`, `crates/vod-player`: host integration processes.
+- `nix`: reproducible packages, the NixOS module, and its VM test.
 - `docs`: Astro/Starlight documentation site and Playwright smoke tests.
 - `scripts`: build metadata, version policy, and release preparation.
 - `packaging`: Debian rules, systemd units, Nginx config, host installer, and
@@ -29,7 +35,8 @@ a Docker container.
 Node.js 22 (the documented minimum is 22.12+) and npm are required for local
 development and CI. Production packages support Debian-family `amd64` and
 `arm64`; native modules such as `better-sqlite3` and Rust daemons must be built
-for the target architecture.
+for the target architecture. The flake provides pinned Node.js/Rust development
+shells on Linux and macOS plus Linux packages for `x86_64` and `aarch64`.
 
 ## Working Tree And Scope
 
@@ -55,6 +62,10 @@ npm --prefix docs ci
 # convenience target (root npm install + docs npm ci):
 make install
 ```
+
+With Nix installed, `nix develop` provides the pinned Node.js and Rust tools;
+run `npm ci` and `npm --prefix docs ci` inside the shell when working outside a
+Nix package build.
 
 Use an isolated development data directory so local processes cannot read or
 mutate production NAS paths:
@@ -96,8 +107,9 @@ make check                    # typecheck + lint + test
 make ci                       # make check + build
 ```
 
-The root Vitest config runs tests under `packages/**`, `apps/**`,
-`packaging/**`, and `scripts/**` in a Node environment with a threaded pool.
+The root Vitest config runs tests under `packages/**`, `packaging/**`, and
+`scripts/**` in a Node environment with a threaded pool. Cargo tests cover
+`crates/**`.
 The test suite includes API contracts, path/traversal safety, database/schema,
 worker/indexer/operations behavior, web components, packaging declarations, and
 build/version scripts. Add focused tests for behavior changes; preserve the
@@ -125,6 +137,8 @@ package job then builds and validates one `.deb`, `.changes`, and `.buildinfo`
 artifact for each of `amd64` and `arm64`. The docs-browser job separately
 installs Chromium and runs the Playwright smoke suite. Tagged releases also
 require the tag to be reachable from `main` and to match the Debian changelog.
+The Nix CI matrix additionally runs `nix flake check` on native
+`x86_64-linux` and `aarch64-linux` runners; the NixOS VM test runs on x86_64.
 
 ## Deployment And Packaging
 
@@ -188,6 +202,23 @@ Defaults are Debian bookworm, `arm64`, and `.zos/appliance`. The output is
 mount, and first-boot configuration remain outside this script. Docker, VM,
 and backup are disabled by the generated first-boot defaults and must be
 enabled/configured deliberately.
+
+### NixOS module
+
+`flake.nix` exports `nixosModules.default` and packages for `x86_64-linux` and
+`aarch64-linux`. The module creates the `zos` account, `/zos` state layout,
+native systemd services/timers, and an optional Nginx proxy. Non-secret TOML
+may be rendered from `services.zos.settings`; use
+`services.zos.configFile` for secret-bearing configuration so secrets do not
+enter the Nix store.
+
+The module always sets `ZOS_HOST_MUTATION_POLICY=declarative`. Inspection stays
+available, but share, storage-pool, NetworkManager, and Docker daemon
+configuration writes return HTTP 501 and hostd protocol error `unsupported`.
+Declare those host resources through NixOS. This policy does not make `/zos`
+or NAS files immutable and does not disable approved application/file actions.
+See `docs/src/content/docs/operations/nixos.md` for configuration and rollback
+details.
 
 ### Post-deploy checks and operations
 

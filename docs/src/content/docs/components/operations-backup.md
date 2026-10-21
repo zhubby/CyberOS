@@ -4,12 +4,12 @@ description: 运维任务生命周期、健康评估、安全维护和 restic �
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/ops/src/runner.ts, apps/ops/src/maintenance.ts, apps/backup/src/backup.ts, packages/system-health/src/index.ts, packaging/systemd/zos-health.timer, packaging/systemd/zos-maintenance.timer]
+sourceOfTruth: [packages/ops/src/runner.ts, packages/ops/src/maintenance.ts, packages/backup/src/backup.ts, packages/system-health/src/index.ts, packaging/systemd/zos-health.timer, packaging/systemd/zos-maintenance.timer]
 sidebar:
   order: 5
 ---
 
-systemd timers 是唯一周期调度层。`apps/ops` 是严格的 one-shot CLI，只接受 `health` 或 `maintenance`：health 每 15 分钟运行，maintenance 每日 04:30 运行；Web 运维页的手动执行经 API 和 hostd 固定 allowlist 启动相同的两个 unit，不接受任意 unit、参数或命令。
+systemd timers 是唯一周期调度层。`packages/ops` 是严格的 one-shot CLI，只接受 `health` 或 `maintenance`：health 每 15 分钟运行，maintenance 每日 04:30 运行；Web 运维页的手动执行经 API 和 hostd 固定 allowlist 启动相同的两个 unit，不接受任意 unit、参数或命令。
 
 每次运行都写入 `ops_runs`，包含开始、heartbeat、结束、结构化摘要和安全错误。运行中每 5 秒 heartbeat；超过 2 分钟未更新会在下一次启动时标记为 `interrupted`。每类任务保留最近 30 条，`GET /api/system/operations` 汇总 `never_run`、`running`、`ready`、`failed` 或 `stale` 状态并返回历史。
 

@@ -1,3 +1,9 @@
+zos (1.5.0) unstable; urgency=medium
+
+  * Migrate source workspaces to crates and packages, add declarative host policy, and introduce Nix delivery.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 06:14:15 +0000
+
 zos (1.4.5) unstable; urgency=medium
 
   * Pause hidden monitoring charts on compact screens.

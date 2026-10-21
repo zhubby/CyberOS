@@ -4,7 +4,7 @@ description: Pi agent、只读 fallback、job queue 和 approval 状态机。
 type: explanation
 status: current
 audience: [developer]
-sourceOfTruth: [apps/worker/src/processor.ts, packages/agent/src/pi-agent.ts, packages/agent/src/read-only-agent.ts, packages/db/src/repositories/jobs.ts]
+sourceOfTruth: [packages/worker/src/processor.ts, packages/agent/src/pi-agent.ts, packages/agent/src/read-only-agent.ts, packages/db/src/repositories/jobs.ts]
 sidebar:
   order: 3
 ---

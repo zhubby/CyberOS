@@ -4,7 +4,7 @@ description: Rust hostd 和 termux 的 Unix socket、权限与进程边界。
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/hostd/src/server.rs, apps/hostd/src/shares.rs, apps/hostd/src/storage.rs, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/termux/src/server.rs, apps/termux/src/pty.rs, apps/termux/src/session_policy.rs, packages/shared/src/termux-protocol.ts, packaging/systemd/zos-hostd.service, packaging/systemd/zos-termux.service]
+sourceOfTruth: [crates/hostd/src/server.rs, crates/hostd/src/shares.rs, crates/hostd/src/storage.rs, crates/hostd/src/docker_daemon.rs, crates/hostd/src/network_manager.rs, crates/termux/src/server.rs, crates/termux/src/pty.rs, crates/termux/src/session_policy.rs, packages/shared/src/termux-protocol.ts, packaging/systemd/zos-hostd.service, packaging/systemd/zos-termux.service]
 sidebar:
   order: 6
 ---

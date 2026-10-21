@@ -28,7 +28,8 @@ npm run build       # required for frontend, docs, packaging, or build changes
 ```
 
 `make check` is the typecheck/lint/test gate; `make ci` adds the full build.
-The root Vitest suite covers apps, packages, packaging, and build scripts.
+The root Vitest suite covers packages, packaging, and build scripts; Cargo
+tests cover the Rust crates.
 Documentation browser smoke is separate and requires a built docs site plus
 Chromium:
 
@@ -55,6 +56,9 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
   emits a systemd rootfs tarball, not a bootable board image. It requires
   `mmdebstrap` and `systemd-nspawn`; pass `ZOS_DEB` explicitly when the
   artifact is not at the default path.
+- `flake.nix` exports Linux packages, development shells, and a NixOS module.
+  NixOS runs with `ZOS_HOST_MUTATION_POLICY=declarative`; host configuration
+  writes are rejected and must be expressed through NixOS options.
 - After installation, check the resident services, timers, and journald. Verify
   `/health`, `/api/roots/readiness`, and `/api/system/health`; liveness alone is
   not NAS or backup readiness. Oneshot jobs normally become `inactive (dead)`

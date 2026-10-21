@@ -13,6 +13,8 @@ sidebar:
 
 最重要的约束是：API 只能绑定 loopback；生产 NAS root 默认要求 mount readiness；Docker 默认关闭；备份仓库必须显式初始化；provider secret 只返回“是否已配置”。完整字段和环境变量应以 `packages/shared/src/config.ts` 为准。
 
+`ZOS_HOST_MUTATION_POLICY` 接受 `mutable` 或 `declarative`，默认是 `mutable`。Debian 部署保持默认行为；NixOS module 固定设置为 `declarative`。声明式模式只限制宿主机配置写入：共享、存储池、NetworkManager 和 Docker daemon 配置由外部系统管理，API 对这些写请求返回 501，读取与状态采集继续工作。不要在普通 Debian 安装上设置 `declarative`，除非另一个配置管理系统已经接管这些资源。
+
 ## 最小开发配置
 
 不建议直接把带有生产路径和 VM 开关的 `config.example.toml` 当作开发配置。可以使用以下环境变量覆盖默认值：

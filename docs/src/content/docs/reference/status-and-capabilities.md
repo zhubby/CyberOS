@@ -4,7 +4,7 @@ description: Job、approval、operation、index、backup 和可用能力的当�
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/shared/src/types.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/api/src/lib/bluetooth-manager.ts, apps/api/src/routes/bluetooth-transfers.ts, apps/bluetoothd/src/lib.rs, packages/db/src/repositories/approval-status.ts, packages/db/src/repositories/index-run-status.ts, packages/db/src/repositories/backup-runs.ts]
+sourceOfTruth: [packages/shared/src/types.ts, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, packages/api/src/lib/bluetooth-manager.ts, packages/api/src/routes/bluetooth-transfers.ts, crates/bluetoothd/src/lib.rs, packages/db/src/repositories/approval-status.ts, packages/db/src/repositories/index-run-status.ts, packages/db/src/repositories/backup-runs.ts]
 sidebar:
   order: 4
 ---
@@ -12,6 +12,12 @@ sidebar:
 Job 状态包括 `queued`、`running`、`waiting_approval`、`completed`、`failed`、`cancelled`；approval 包括 `pending`、`approved`、`rejected`、`expired`、`applied`、`failed`；文件 operation 记录 proposed、applied、rolled_back、failed。
 
 当前已实现文件浏览、预览、上传、编辑、归档检查、搜索、照片完整标量元数据索引与多维查询、一键下载的 Natural Earth II 栅格 PMTiles 地图、视频播放、RAW 预览、XMP sidecar 联动、agent 只读照片查询、approval、trash/restore、Docker/VM/share/terminal 控制、NetworkManager 物理 Ethernet/Wi-Fi/热点控制、indexer、restic backup 和健康 API。
+
+## 宿主机变更策略
+
+网络、存储、共享和 Docker summary 的 `capabilities.hostMutationPolicy` 为 `mutable` 或 `declarative`。声明式模式下，对应的 `canApplyConfiguration`、`canCreatePool`、`canDeletePool`、`canManageEthernet`、`canManageWifi`、`canManageHotspot`、`canUpdateDaemonConfiguration` 会变为 `false`；Web 控件进入只读状态。服务端仍独立拒绝写请求并返回 HTTP 501，不能把 UI 禁用当作安全边界。
+
+该策略不覆盖 NAS 文件操作、agent approval、Compose App 运行副本、终端或电源控制。它表达的是宿主机持久配置的所有权，不是全局只读模式。NixOS module 固定使用 `declarative`；Debian 默认使用 `mutable`。
 
 照片能力不支持在线地图、矢量 PMTiles、地理编码、人物识别、语义图像搜索、手动相册、分享链接、媒体编辑或元数据写回。原媒体与 sidecar 不被修改，WebP 衍生图不保留元数据；“完整元数据”指防御性限额内的全部标量标签，不包含 MakerNote、嵌入缩略图和二进制负载。Agent 可按位置筛选，但结果不会向云模型返回精确 GPS、序列号、联系信息或人物区域。
 

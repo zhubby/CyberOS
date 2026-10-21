@@ -4,7 +4,7 @@ description: SQLite WAL、表域和 migration policy。
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/db/src/schema.ts, packages/db/src/connection.ts, packages/db/src/migrations/core.ts, packages/db/src/migrations/production.ts, packages/monitoring/contracts/migrations, apps/monitor/src/adapters/metrics_sqlite.rs, apps/alerter/src/adapters/alert_store]
+sourceOfTruth: [packages/db/src/schema.ts, packages/db/src/connection.ts, packages/db/src/migrations/core.ts, packages/db/src/migrations/production.ts, packages/monitoring/contracts/migrations, crates/monitor/src/adapters/metrics_sqlite.rs, crates/alerter/src/adapters/alert_store]
 sidebar:
   order: 5
 ---

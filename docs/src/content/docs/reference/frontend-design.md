@@ -5,22 +5,22 @@ type: reference
 status: current
 audience: [developer]
 sourceOfTruth:
-  - apps/web/src/styles/base.css
-  - apps/web/src/styles/brand.css
-  - apps/web/src/styles/theme.css
-  - apps/web/src/styles/layout.css
-  - apps/web/src/styles/chat.css
-  - apps/web/src/styles/workspace.css
-  - apps/web/src/styles/photos.css
-  - apps/web/src/styles/responsive.css
-  - apps/web/src/styles/interactions.css
-  - apps/web/src/components/chat/ChatPane.tsx
-  - apps/web/src/components/workspace/ManagementDashboard.tsx
-  - apps/web/src/components/workspace/PanelHeader.tsx
-  - apps/web/src/components/workspace/WorkspacePane.tsx
-  - apps/web/src/components/workspace/PhotoLibraryPanel.tsx
-  - apps/web/src/components/settings/SettingsIndexerPage.tsx
-  - apps/web/public/zos-icon.svg
+  - packages/web/src/styles/base.css
+  - packages/web/src/styles/brand.css
+  - packages/web/src/styles/theme.css
+  - packages/web/src/styles/layout.css
+  - packages/web/src/styles/chat.css
+  - packages/web/src/styles/workspace.css
+  - packages/web/src/styles/photos.css
+  - packages/web/src/styles/responsive.css
+  - packages/web/src/styles/interactions.css
+  - packages/web/src/components/chat/ChatPane.tsx
+  - packages/web/src/components/workspace/ManagementDashboard.tsx
+  - packages/web/src/components/workspace/PanelHeader.tsx
+  - packages/web/src/components/workspace/WorkspacePane.tsx
+  - packages/web/src/components/workspace/PhotoLibraryPanel.tsx
+  - packages/web/src/components/settings/SettingsIndexerPage.tsx
+  - packages/web/public/zos-icon.svg
   - docs/src/styles/custom.css
 sidebar:
   order: 2
@@ -207,7 +207,7 @@ Docker、虚拟机、网络、存储和共享面板使用同一套可编辑组�
 
 ## 7. 文案与本地化
 
-- 所有用户可见文案进入 `apps/web/src/i18n/resources.ts`，组件不写只存在于单一语言的硬编码文案。
+- 所有用户可见文案进入 `packages/web/src/i18n/resources.ts`，组件不写只存在于单一语言的硬编码文案。
 - 中英文都要保持短、直接、以动作为中心；同一操作在不同面板使用同一翻译键或同一术语。
 - `Agent`、`Workspace`、`Docker`、`VM`、`NAS` 等产品和技术名词保持稳定，不要在不同页面随意改写。
 - 错误文案说明发生了什么、用户能做什么；不要泄露凭据、内部路径或不必要的堆栈。

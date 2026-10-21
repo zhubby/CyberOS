@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/alerter", "apps/bluetoothd", "apps/downloader", "apps/host-accessd", "apps/hostd", "apps/indexer", "apps/monitor", "apps/photostaff", "apps/termux", "apps/vod-player", "crates/monitoring-contracts"]
+members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]

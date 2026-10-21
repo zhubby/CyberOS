@@ -4,7 +4,7 @@ description: 从源码启动 ZOS，并完成第一次文件浏览、索引和 ag
 type: tutorial
 status: current
 audience: [developer, user]
-sourceOfTruth: [README.md, package.json, config.example.toml, packages/shared/src/config.ts, apps/api/src/index.ts]
+sourceOfTruth: [README.md, package.json, config.example.toml, packages/shared/src/config.ts, packages/api/src/index.ts]
 sidebar:
   order: 1
 ---

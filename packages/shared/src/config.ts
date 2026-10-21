@@ -425,8 +425,17 @@ function loadHostdConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ZosCon
     normalizeText(fileConfig.hostd?.socket_path) ??
     "/run/zos/hostd.sock";
   return {
-    socketPath: path.isAbsolute(socketPath) ? socketPath : "/run/zos/hostd.sock"
+    socketPath: path.isAbsolute(socketPath) ? socketPath : "/run/zos/hostd.sock",
+    mutationPolicy: parseHostMutationPolicy(env.ZOS_HOST_MUTATION_POLICY)
   };
+}
+
+function parseHostMutationPolicy(value: string | undefined): "mutable" | "declarative" {
+  const normalized = normalizeText(value) ?? "mutable";
+  if (normalized === "mutable" || normalized === "declarative") {
+    return normalized;
+  }
+  throw new Error("ZOS_HOST_MUTATION_POLICY must be mutable or declarative");
 }
 
 function loadVmConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, cwd: string, paths: ZosPaths): VmConfig {

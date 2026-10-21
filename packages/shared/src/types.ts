@@ -1222,8 +1222,11 @@ export interface ShareConfig {
   shares: ShareDefinitionConfig[];
 }
 
+export type HostMutationPolicy = "mutable" | "declarative";
+
 export interface HostdConfig {
   socketPath: string;
+  mutationPolicy?: HostMutationPolicy;
 }
 
 export interface TerminalConfig {
@@ -1389,7 +1392,7 @@ export function isModelProviderName(value: unknown): value is ModelProviderName 
   );
 }
 
-export type BuildSource = "release" | "ci" | "local" | "unknown";
+export type BuildSource = "release" | "ci" | "local" | "nix" | "unknown";
 
 export interface PublicBuildInfo {
   version: string;
@@ -1400,6 +1403,7 @@ export interface PublicBuildInfo {
   builtAt: string | null;
   source: BuildSource;
   dirty: boolean | null;
+  reproducible: boolean;
 }
 
 export interface PublicSystemInfo {
@@ -1915,6 +1919,7 @@ export interface SystemNetworkSummary {
     canManageWifi: boolean;
     canManageHotspot: boolean;
     hostdReady: boolean;
+    hostMutationPolicy: HostMutationPolicy;
   };
   metrics: {
     interfaces: number;
@@ -2066,9 +2071,10 @@ export interface SystemStorageSummary {
   status: SystemCollectionStatus;
   capabilities: {
     backend: "mdadm";
-    canCreatePool: true;
+    canCreatePool: boolean;
     canDeletePool: boolean;
     canApplyConfiguration: false;
+    hostMutationPolicy: HostMutationPolicy;
   };
   metrics: {
     pools: number;
@@ -2709,6 +2715,10 @@ export interface DockerComposeAppDeleteInput {
 export interface DockerSummary {
   collectedAt: string;
   enabled: boolean;
+  capabilities: {
+    canUpdateDaemonConfiguration: boolean;
+    hostMutationPolicy: HostMutationPolicy;
+  };
   daemon: DockerDaemonStatus;
   engine: DockerEngineSummary;
   metrics: {
@@ -3082,6 +3092,10 @@ export interface ShareSummary {
   collectedAt: string;
   enabled: boolean;
   settingsUpdatedAt: string;
+  capabilities: {
+    canApplyConfiguration: boolean;
+    hostMutationPolicy: HostMutationPolicy;
+  };
   metrics: {
     shares: number;
     enabledProtocols: number;

@@ -40,7 +40,8 @@ describe("build metadata generation", () => {
       branch: "main",
       builtAt: "2026-09-14T00:00:00.000Z",
       source: "release",
-      dirty: false
+      dirty: false,
+      reproducible: false
     });
   });
 
@@ -49,7 +50,7 @@ describe("build metadata generation", () => {
       ["rev-parse HEAD", "0123456789abcdef\n"],
       ["describe --tags --exact-match HEAD", "v0.2.0\n"],
       ["branch --show-current", "feature/version\n"],
-      ["status --porcelain=v1 --untracked-files=normal", " M apps/api/src/index.ts\n"]
+      ["status --porcelain=v1 --untracked-files=normal", " M packages/api/src/index.ts\n"]
     ]);
     const info = await collectBuildInfo({
       repoRoot,
@@ -63,7 +64,8 @@ describe("build metadata generation", () => {
       tag: "v0.2.0",
       branch: "feature/version",
       source: "local",
-      dirty: true
+      dirty: true,
+      reproducible: false
     });
     expect(info.builtAt).toBe("2026-09-14T02:03:04.000Z");
   });
@@ -84,9 +86,31 @@ describe("build metadata generation", () => {
       tag: null,
       branch: null,
       source: "unknown",
-      dirty: null
+      dirty: null,
+      reproducible: false
     });
     expect(info.builtAt).toBe("2026-09-14T00:00:00.000Z");
+  });
+
+  it("marks pinned Nix metadata as reproducible", async () => {
+    const info = await collectBuildInfo({
+      repoRoot,
+      env: {
+        ZOS_BUILD_SOURCE: "nix",
+        ZOS_BUILD_COMMIT_SHA: "abcdef0123456789",
+        ZOS_BUILD_DIRTY: "false",
+        ZOS_BUILD_REPRODUCIBLE: "true",
+        SOURCE_DATE_EPOCH: "1789344000"
+      },
+      runGit: async () => ""
+    });
+
+    expect(info).toMatchObject({
+      source: "nix",
+      dirty: false,
+      reproducible: true,
+      builtAt: "2026-09-14T00:00:00.000Z"
+    });
   });
 
   it("writes only the public build fields to the generated JSON file", async () => {
@@ -98,12 +122,13 @@ describe("build metadata generation", () => {
       branch: null,
       builtAt: null,
       source: "unknown",
-      dirty: null
+      dirty: null,
+      reproducible: false
     });
     const value = JSON.parse(await readFile(outputPath, "utf8"));
 
     expect(Object.keys(value).sort()).toEqual(
-      ["branch", "builtAt", "commitSha", "commitShortSha", "dirty", "source", "tag", "version"].sort()
+      ["branch", "builtAt", "commitSha", "commitShortSha", "dirty", "reproducible", "source", "tag", "version"].sort()
     );
   });
 });

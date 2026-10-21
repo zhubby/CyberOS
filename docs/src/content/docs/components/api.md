@@ -4,7 +4,7 @@ description: HTTP 路由、SSE、WebSocket 和静态资源服务。
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/api/src/server.ts, apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/sessions.ts]
+sourceOfTruth: [packages/api/src/server.ts, packages/api/src/routes/index.ts, packages/api/src/routes/files.ts, packages/api/src/routes/sessions.ts]
 sidebar:
   order: 2
 ---

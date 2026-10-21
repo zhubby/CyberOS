@@ -1,0 +1,96 @@
+{
+  "runId": "20261021-crates-packages-nix-migration",
+  "mode": "autofix",
+  "base": "29489fd29e1a2a3551845a4adad802e35b8a5e3f",
+  "head": "working-tree",
+  "intent": "Move Rust sources to crates, move TypeScript workspaces to packages, remove the source apps directory, add reproducible Nix packaging and a NixOS module, and refresh repository documentation.",
+  "scope": {
+    "trackedFiles": 547,
+    "trackedInsertions": 1039,
+    "trackedDeletions": 541,
+    "untrackedImplementationFilesManuallyReviewed": [
+      "docs/src/content/docs/operations/nixos.md",
+      "flake.lock",
+      "flake.nix",
+      "nix/module.nix",
+      "nix/packages.nix",
+      "nix/tests/nixos-module.nix",
+      "scripts/workspace-layout.test.mjs"
+    ]
+  },
+  "findings": [
+    {
+      "id": "nix-service-write-boundaries",
+      "severity": "high",
+      "confidence": 0.99,
+      "reviewers": ["security", "project-standards", "correctness"],
+      "file": "nix/module.nix",
+      "line": 40,
+      "summary": "The initial shared service policy made all of /zos and /run/zos writable by every service and left root hostd without the Debian unit's capability bound.",
+      "disposition": "safe_auto_applied"
+    },
+    {
+      "id": "nix-runtime-service-parity",
+      "severity": "high",
+      "confidence": 0.98,
+      "reviewers": ["correctness", "reliability", "deployment"],
+      "file": "nix/module.nix",
+      "line": 227,
+      "summary": "The default terminal service lacked the required passwd home and interactive shell, while optional Bluetooth and VOD services lacked runtime setup used by the native Debian units.",
+      "disposition": "safe_auto_applied"
+    },
+    {
+      "id": "nix-external-option-conflicts",
+      "severity": "medium",
+      "confidence": 0.99,
+      "reviewers": ["correctness", "maintainability"],
+      "file": "nix/module.nix",
+      "line": 647,
+      "summary": "Disabled ZOS integrations initially forced Docker, libvirt, and Bluetooth to false, conflicting with independent system-level NixOS definitions.",
+      "disposition": "safe_auto_applied"
+    },
+    {
+      "id": "nixos-firewall-contract",
+      "severity": "medium",
+      "confidence": 0.96,
+      "reviewers": ["reliability", "documentation"],
+      "file": "nix/module.nix",
+      "line": 192,
+      "summary": "The module exposed an external Nginx listener but provided no explicit firewall contract, so the documented LAN endpoint could remain unreachable on a default NixOS firewall.",
+      "disposition": "safe_auto_applied"
+    },
+    {
+      "id": "unknown-capability-ui-state",
+      "severity": "low",
+      "confidence": 0.97,
+      "reviewers": ["correctness", "agent-native", "kieran-typescript"],
+      "file": "packages/web/src/components/workspace/ShareManagementPanel.tsx",
+      "line": 90,
+      "summary": "Share and Docker daemon write controls became enabled when their first capability request failed instead of failing closed until write capability was known.",
+      "disposition": "safe_auto_applied"
+    }
+  ],
+  "appliedFixes": [
+    "matched Nix service write paths, capability bounds, resource limits, dependencies, and runtime identities to the established native service boundaries",
+    "configured the terminal account home and shell plus Bluetooth, VOD, and host-access runtime prerequisites",
+    "made optional host integrations additive so disabled ZOS options do not override external NixOS ownership",
+    "added an explicit nginx.openFirewall option with a secure default and documented deployment behavior",
+    "made UI mutation controls require an affirmative server capability",
+    "added NixOS VM assertions for service write paths, root hostd capability bounds, and the terminal account"
+  ],
+  "residualActionableWork": [],
+  "advisories": [
+    {
+      "owner": "linux-ci",
+      "summary": "The full Nix package closure and NixOS VM derivation were evaluated but not built locally; native x86_64-linux and aarch64-linux CI remain authoritative."
+    }
+  ],
+  "verification": {
+    "makeCi": "passed",
+    "docsBrowser": "passed: 2 Playwright tests",
+    "nixEvaluation": "passed: nix flake check --no-build --all-systems",
+    "nixWorkspaceLayoutBuild": "passed before the final module-only review fixes",
+    "diffCheck": "passed"
+  },
+  "verdict": "ready_for_linux_nix_ci"
+}

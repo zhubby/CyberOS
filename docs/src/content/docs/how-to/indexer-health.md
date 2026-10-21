@@ -4,7 +4,7 @@ description: 运行索引、查看 freshness、mount readiness 和健康告警�
 type: how-to
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/indexer/src/service.rs, apps/indexer/src/scanner.rs, apps/indexer/src/watcher.rs, apps/api/src/routes/indexer.ts, apps/api/src/routes/health-status.ts]
+sourceOfTruth: [crates/indexer/src/service.rs, crates/indexer/src/scanner.rs, crates/indexer/src/watcher.rs, packages/api/src/routes/indexer.ts, packages/api/src/routes/health-status.ts]
 sidebar:
   order: 3
 ---

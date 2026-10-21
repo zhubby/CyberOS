@@ -4,7 +4,7 @@ description: API、静态资源、terminal、timer、indexer、backup 和 SQLite
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [apps/api/src/routes/health-status.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/monitor/src/adapters/metrics_sqlite.rs, apps/alerter/src/adapters/alert_store, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/hostd/src/docker_daemon.rs, apps/hostd/src/network_manager.rs, apps/hostd/src/network_manager/ethernet.rs, apps/bluetoothd/src/lib.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-bluetoothd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, apps/api/src/web-static.ts]
+sourceOfTruth: [packages/api/src/routes/health-status.ts, packages/api/src/routes/monitoring.ts, packages/api/src/routes/monitoring-alerts.ts, crates/monitor/src/adapters/metrics_sqlite.rs, crates/alerter/src/adapters/alert_store, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, crates/hostd/src/docker_daemon.rs, crates/hostd/src/network_manager.rs, crates/hostd/src/network_manager/ethernet.rs, crates/bluetoothd/src/lib.rs, packaging/systemd/zos-hostd.service, packaging/systemd/zos-bluetoothd.service, packaging/systemd/zos-monitor.service, packaging/systemd/zos-alerter.service, packaging/systemd/zos-api.service, packaging/systemd/zos-indexer.service, packages/api/src/web-static.ts]
 sidebar:
   order: 4
 ---

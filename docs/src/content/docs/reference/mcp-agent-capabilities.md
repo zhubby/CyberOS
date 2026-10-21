@@ -8,8 +8,8 @@ sourceOfTruth:
   - packages/capabilities/src/registry.ts
   - packages/capability-runtime/src/orchestrator.ts
   - packages/mcp/src/server.ts
-  - apps/mcp-cli/src/index.ts
-  - apps/api/src/server.ts
+  - packages/mcp-cli/src/index.ts
+  - packages/api/src/server.ts
   - packaging/scripts/zos-mcp
 ---
 

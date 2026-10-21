@@ -4,7 +4,7 @@ description: 在无桌面 Debian NAS 设备上使用 ZOS 将视频直接输出�
 type: how-to
 status: current
 audience: [user, operator]
-sourceOfTruth: [apps/vod-player/src/controller.rs, apps/api/src/routes/vod-player.ts, apps/web/src/components/preview/VodPlayerControls.tsx, packaging/systemd/zos-vod-player.service]
+sourceOfTruth: [crates/vod-player/src/controller.rs, packages/api/src/routes/vod-player.ts, packages/web/src/components/preview/VodPlayerControls.tsx, packaging/systemd/zos-vod-player.service]
 sidebar:
   order: 2
 ---

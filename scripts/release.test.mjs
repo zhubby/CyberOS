@@ -60,7 +60,7 @@ describe("release versioning", () => {
 
     expect(state.manifests.map(({ relativePath }) => relativePath)).toEqual([
       "package.json",
-      "apps/api/package.json",
+      "packages/api/package.json",
       "packages/shared/package.json"
     ]);
   });
@@ -78,13 +78,13 @@ describe("release versioning", () => {
   });
 
   it("reports version drift before preparing a release", async () => {
-    const apiPath = path.join(fixtureRoot, "apps/api/package.json");
+    const apiPath = path.join(fixtureRoot, "packages/api/package.json");
     const apiManifest = JSON.parse(await readFile(apiPath, "utf8"));
     apiManifest.version = "0.0.9";
     await writeFile(apiPath, JSON.stringify(apiManifest));
 
     const state = await readVersionState(fixtureRoot);
-    expect(versionStateErrors(state)).toContain("apps/api/package.json has version \"0.0.9\"; expected 0.1.0");
+    expect(versionStateErrors(state)).toContain("packages/api/package.json has version \"0.0.9\"; expected 0.1.0");
     await expect(prepareRelease(fixtureRoot, { increment: "patch", note: "Should fail." })).rejects.toThrow(
       /inconsistent/u
     );
@@ -104,39 +104,39 @@ describe("release versioning", () => {
 });
 
 const PRODUCT_CARGO_PACKAGES = [
-  ["apps/alerter/Cargo.toml", "zos-alerter"],
-  ["apps/bluetoothd/Cargo.toml", "zos-bluetoothd"],
-  ["apps/downloader/Cargo.toml", "zos-downloader"],
-  ["apps/host-accessd/Cargo.toml", "zos-host-accessd"],
-  ["apps/hostd/Cargo.toml", "zos-hostd"],
-  ["apps/indexer/Cargo.toml", "zos-indexer"],
-  ["apps/monitor/Cargo.toml", "zos-monitor"],
-  ["apps/photostaff/Cargo.toml", "zos-photostaff"],
-  ["apps/termux/Cargo.toml", "zos-termux"],
-  ["apps/vod-player/Cargo.toml", "zos-vod-player"],
+  ["crates/alerter/Cargo.toml", "zos-alerter"],
+  ["crates/bluetoothd/Cargo.toml", "zos-bluetoothd"],
+  ["crates/downloader/Cargo.toml", "zos-downloader"],
+  ["crates/host-accessd/Cargo.toml", "zos-host-accessd"],
+  ["crates/hostd/Cargo.toml", "zos-hostd"],
+  ["crates/indexer/Cargo.toml", "zos-indexer"],
+  ["crates/monitor/Cargo.toml", "zos-monitor"],
+  ["crates/photostaff/Cargo.toml", "zos-photostaff"],
+  ["crates/termux/Cargo.toml", "zos-termux"],
+  ["crates/vod-player/Cargo.toml", "zos-vod-player"],
   ["crates/monitoring-contracts/Cargo.toml", "zos-monitoring-contracts"]
 ].map(([manifestPath, packageName]) => ({ manifestPath, packageName }));
 
 async function writeFixture(root) {
   await Promise.all([
-    mkdir(path.join(root, "apps/api"), { recursive: true }),
-    mkdir(path.join(root, "apps/alerter"), { recursive: true }),
-    mkdir(path.join(root, "apps/bluetoothd"), { recursive: true }),
-    mkdir(path.join(root, "apps/downloader"), { recursive: true }),
-    mkdir(path.join(root, "apps/host-accessd"), { recursive: true }),
-    mkdir(path.join(root, "apps/hostd"), { recursive: true }),
-    mkdir(path.join(root, "apps/indexer"), { recursive: true }),
-    mkdir(path.join(root, "apps/monitor"), { recursive: true }),
-    mkdir(path.join(root, "apps/photostaff"), { recursive: true }),
-    mkdir(path.join(root, "apps/termux"), { recursive: true }),
-    mkdir(path.join(root, "apps/vod-player"), { recursive: true }),
+    mkdir(path.join(root, "packages/api"), { recursive: true }),
+    mkdir(path.join(root, "crates/alerter"), { recursive: true }),
+    mkdir(path.join(root, "crates/bluetoothd"), { recursive: true }),
+    mkdir(path.join(root, "crates/downloader"), { recursive: true }),
+    mkdir(path.join(root, "crates/host-accessd"), { recursive: true }),
+    mkdir(path.join(root, "crates/hostd"), { recursive: true }),
+    mkdir(path.join(root, "crates/indexer"), { recursive: true }),
+    mkdir(path.join(root, "crates/monitor"), { recursive: true }),
+    mkdir(path.join(root, "crates/photostaff"), { recursive: true }),
+    mkdir(path.join(root, "crates/termux"), { recursive: true }),
+    mkdir(path.join(root, "crates/vod-player"), { recursive: true }),
     mkdir(path.join(root, "crates/monitoring-contracts"), { recursive: true }),
     mkdir(path.join(root, "packages/shared"), { recursive: true }),
     mkdir(path.join(root, "packaging/debian"), { recursive: true }),
     mkdir(path.join(root, "packaging/appliance"), { recursive: true })
   ]);
 
-  const rootManifest = { name: "zos", version: "0.1.0", workspaces: ["apps/*", "packages/*"] };
+  const rootManifest = { name: "zos", version: "0.1.0", workspaces: ["packages/*"] };
   const apiManifest = {
     name: "@zos/api",
     version: "0.1.0",
@@ -148,8 +148,8 @@ async function writeFixture(root) {
     version: "0.1.0",
     lockfileVersion: 3,
     packages: {
-      "": { name: "zos", version: "0.1.0", workspaces: ["apps/*", "packages/*"] },
-      "apps/api": {
+      "": { name: "zos", version: "0.1.0", workspaces: ["packages/*"] },
+      "packages/api": {
         name: "@zos/api",
         version: "0.1.0",
         dependencies: { "@zos/shared": "0.1.0" }
@@ -160,7 +160,7 @@ async function writeFixture(root) {
 
   await Promise.all([
     writeFile(path.join(root, "package.json"), JSON.stringify(rootManifest, null, 2)),
-    writeFile(path.join(root, "apps/api/package.json"), JSON.stringify(apiManifest, null, 2)),
+    writeFile(path.join(root, "packages/api/package.json"), JSON.stringify(apiManifest, null, 2)),
     writeFile(path.join(root, "packages/shared/package.json"), JSON.stringify(sharedManifest, null, 2)),
     writeFile(path.join(root, "package-lock.json"), JSON.stringify(lock, null, 2)),
     ...PRODUCT_CARGO_PACKAGES.map(({ manifestPath, packageName }) =>

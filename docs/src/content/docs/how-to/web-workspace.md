@@ -4,7 +4,7 @@ description: 文件浏览、搜索、预览、上传、agent 对话和审批操�
 type: how-to
 status: current
 audience: [user, operator]
-sourceOfTruth: [apps/web/src/App.tsx, apps/web/src/components/workspace/WorkspacePane.tsx, apps/web/src/components/workspace/PhotoLibraryPanel.tsx, apps/web/src/components/workspace/LocalTerminalPanel.tsx, apps/web/src/components/workspace/DockerImageManagement.tsx, apps/web/src/components/chat/ChatPane.tsx, apps/web/src/components/preview/PreviewContent.tsx, apps/web/src/api.ts]
+sourceOfTruth: [packages/web/src/App.tsx, packages/web/src/components/workspace/WorkspacePane.tsx, packages/web/src/components/workspace/PhotoLibraryPanel.tsx, packages/web/src/components/workspace/LocalTerminalPanel.tsx, packages/web/src/components/workspace/DockerImageManagement.tsx, packages/web/src/components/chat/ChatPane.tsx, packages/web/src/components/preview/PreviewContent.tsx, packages/web/src/api.ts]
 sidebar:
   order: 1
 ---

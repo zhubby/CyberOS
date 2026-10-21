@@ -93,7 +93,7 @@ describe("loadConfig", () => {
       },
       shares: []
     });
-    expect(config.hostd).toEqual({ socketPath: "/run/zos/hostd.sock" });
+    expect(config.hostd).toEqual({ socketPath: "/run/zos/hostd.sock", mutationPolicy: "mutable" });
     expect(config.terminal).toEqual({
       user: null,
       termuxSocketPath: "/run/zos/termux.sock",
@@ -239,14 +239,31 @@ describe("loadConfig", () => {
     await writeFile(configPath, `[hostd]\nsocket_path = "/tmp/toml-hostd.sock"\n`);
 
     expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).hostd).toEqual({
-      socketPath: "/tmp/toml-hostd.sock"
+      socketPath: "/tmp/toml-hostd.sock",
+      mutationPolicy: "mutable"
     });
     expect(loadConfig({
       ZOS_CONFIG: configPath,
       ZOS_HOSTD_SOCKET_PATH: "/run/override-hostd.sock"
     } as NodeJS.ProcessEnv, tempDir).hostd).toEqual({
-      socketPath: "/run/override-hostd.sock"
+      socketPath: "/run/override-hostd.sock",
+      mutationPolicy: "mutable"
     });
+  });
+
+  it("loads and validates the host mutation policy", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    const configPath = path.join(tempDir, "config.toml");
+    await writeFile(configPath, "");
+
+    expect(loadConfig({
+      ZOS_CONFIG: configPath,
+      ZOS_HOST_MUTATION_POLICY: "declarative"
+    } as NodeJS.ProcessEnv, tempDir!).hostd.mutationPolicy).toBe("declarative");
+    expect(() => loadConfig({
+      ZOS_CONFIG: configPath,
+      ZOS_HOST_MUTATION_POLICY: "automatic"
+    } as NodeJS.ProcessEnv, tempDir!)).toThrow("ZOS_HOST_MUTATION_POLICY");
   });
 
   it("loads Docker settings from environment overrides", async () => {
@@ -488,7 +505,7 @@ describe("loadConfig", () => {
 
     const config = loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
 
-    expect(config.hostd).toEqual({ socketPath: "/tmp/hostd.sock" });
+    expect(config.hostd).toEqual({ socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" });
     expect(config.shares).toMatchObject({
       enabled: true,
       account: {

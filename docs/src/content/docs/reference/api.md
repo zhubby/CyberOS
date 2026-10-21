@@ -4,7 +4,7 @@ description: API 传输面、端点分组和稳定契约。
 type: reference
 status: current
 audience: [developer]
-sourceOfTruth: [apps/api/src/routes/index.ts, apps/api/src/routes/files.ts, apps/api/src/routes/photos.ts, apps/api/src/routes/sessions.ts, apps/api/src/routes/downloads.ts, apps/api/src/routes/docker.ts, apps/api/src/routes/shares.ts, apps/api/src/routes/system.ts, apps/api/src/routes/terminal.ts, apps/api/src/routes/monitoring.ts, apps/api/src/routes/monitoring-alerts.ts, apps/api/src/routes/notifications.ts, apps/api/src/lib/docker-daemon.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/network-manager.ts, apps/api/src/lib/ethernet-manager.ts, apps/web/src/api.ts]
+sourceOfTruth: [packages/api/src/routes/index.ts, packages/api/src/routes/files.ts, packages/api/src/routes/photos.ts, packages/api/src/routes/sessions.ts, packages/api/src/routes/downloads.ts, packages/api/src/routes/docker.ts, packages/api/src/routes/shares.ts, packages/api/src/routes/system.ts, packages/api/src/routes/terminal.ts, packages/api/src/routes/monitoring.ts, packages/api/src/routes/monitoring-alerts.ts, packages/api/src/routes/notifications.ts, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, packages/web/src/api.ts]
 sidebar:
   order: 2
 ---

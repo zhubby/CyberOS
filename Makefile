@@ -86,7 +86,7 @@ check: protocol-check typecheck lint test ## Run protocol drift, typecheck, lint
 ci: check build ## Run the full local verification suite.
 
 clean: ## Remove generated build and packaging artifacts.
-	rm -rf apps/*/dist packages/*/dist coverage target .zos/deb-build .zos/appliance
+	rm -rf packages/*/dist coverage target .zos/deb-build .zos/appliance
 
 deb: ## Build the Debian package artifacts.
 	./packaging/scripts/build-deb.sh

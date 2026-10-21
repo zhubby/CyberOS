@@ -4,16 +4,16 @@ import path from "node:path";
 const INTERNAL_PACKAGE_PREFIX = "@zos/";
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 const PRODUCT_CARGO_PACKAGES = [
-  { manifestPath: "apps/alerter/Cargo.toml", packageName: "zos-alerter" },
-  { manifestPath: "apps/bluetoothd/Cargo.toml", packageName: "zos-bluetoothd" },
-  { manifestPath: "apps/downloader/Cargo.toml", packageName: "zos-downloader" },
-  { manifestPath: "apps/host-accessd/Cargo.toml", packageName: "zos-host-accessd" },
-  { manifestPath: "apps/hostd/Cargo.toml", packageName: "zos-hostd" },
-  { manifestPath: "apps/indexer/Cargo.toml", packageName: "zos-indexer" },
-  { manifestPath: "apps/monitor/Cargo.toml", packageName: "zos-monitor" },
-  { manifestPath: "apps/photostaff/Cargo.toml", packageName: "zos-photostaff" },
-  { manifestPath: "apps/termux/Cargo.toml", packageName: "zos-termux" },
-  { manifestPath: "apps/vod-player/Cargo.toml", packageName: "zos-vod-player" },
+  { manifestPath: "crates/alerter/Cargo.toml", packageName: "zos-alerter" },
+  { manifestPath: "crates/bluetoothd/Cargo.toml", packageName: "zos-bluetoothd" },
+  { manifestPath: "crates/downloader/Cargo.toml", packageName: "zos-downloader" },
+  { manifestPath: "crates/host-accessd/Cargo.toml", packageName: "zos-host-accessd" },
+  { manifestPath: "crates/hostd/Cargo.toml", packageName: "zos-hostd" },
+  { manifestPath: "crates/indexer/Cargo.toml", packageName: "zos-indexer" },
+  { manifestPath: "crates/monitor/Cargo.toml", packageName: "zos-monitor" },
+  { manifestPath: "crates/photostaff/Cargo.toml", packageName: "zos-photostaff" },
+  { manifestPath: "crates/termux/Cargo.toml", packageName: "zos-termux" },
+  { manifestPath: "crates/vod-player/Cargo.toml", packageName: "zos-vod-player" },
   { manifestPath: "crates/monitoring-contracts/Cargo.toml", packageName: "zos-monitoring-contracts" }
 ];
 const STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;

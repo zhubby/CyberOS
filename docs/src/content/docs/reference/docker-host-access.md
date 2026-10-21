@@ -5,11 +5,11 @@ type: reference
 status: current
 audience: [operator, developer]
 sourceOfTruth:
-  - apps/api/src/lib/docker-host-access.ts
-  - apps/api/src/lib/docker-host-access-control.ts
-  - apps/host-accessd/src/main.rs
-  - apps/host-accessd/src/proxy.rs
-  - apps/hostd/src/host_access.rs
+  - packages/api/src/lib/docker-host-access.ts
+  - packages/api/src/lib/docker-host-access-control.ts
+  - crates/host-accessd/src/main.rs
+  - crates/host-accessd/src/proxy.rs
+  - crates/hostd/src/host_access.rs
   - packaging/systemd/zos-host-accessd.service
 sidebar:
   order: 7

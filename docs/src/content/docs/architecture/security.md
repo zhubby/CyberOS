@@ -4,7 +4,7 @@ description: ZOS 的 loopback、NAS root、审批和宿主机权限边界。
 type: explanation
 status: current
 audience: [developer, operator]
-sourceOfTruth: [apps/api/src/server.ts, apps/api/src/lib/docker-registry.ts, apps/api/src/lib/docker-compose.ts, apps/api/src/lib/docker-host-access.ts, apps/host-accessd/src/proxy.rs, packages/db/src/repositories/docker-registry-credentials.ts, packages/db/src/repositories/docker-compose-apps.ts, packages/nas-tools/src/path-safety.ts, apps/hostd/src/server.rs, apps/hostd/src/network_manager/ethernet.rs, apps/termux/src/server.rs, apps/termux/src/pty.rs]
+sourceOfTruth: [packages/api/src/server.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/docker-compose.ts, packages/api/src/lib/docker-host-access.ts, crates/host-accessd/src/proxy.rs, packages/db/src/repositories/docker-registry-credentials.ts, packages/db/src/repositories/docker-compose-apps.ts, packages/nas-tools/src/path-safety.ts, crates/hostd/src/server.rs, crates/hostd/src/network_manager/ethernet.rs, crates/termux/src/server.rs, crates/termux/src/pty.rs]
 sidebar:
   order: 3
 ---
@@ -14,6 +14,8 @@ v1 假设可信的单用户设备，没有多用户认证边界。API 强制绑�
 所有 NAS 路径都相对于已配置 root 解析，拒绝 traversal、绝对路径和不安全的符号链接逃逸。Pi 的 `read/ls/find/grep` 使用受限 wrapper；`bash/edit/write` 需要 approval。trash 是可恢复隔离区，v1 不永久删除。
 
 Docker socket 近似 root 权限。Rust `hostd` 通过受限 root Unix socket 执行 allowlist 配置与命令；Rust `termux` 验证 Unix peer UID，并以固定的非 root `zos` 用户运行 native PTY。systemd 使用 `ProtectSystem=strict`、`NoNewPrivileges` 和最小 capability 集合。
+
+NixOS module 把 `ZOS_HOST_MUTATION_POLICY` 固定为 `declarative`。API 和 hostd 双层拒绝共享、持久存储、Docker daemon 与 NetworkManager 配置写入，返回 HTTP 501 / hostd `unsupported`；hostd 也不会执行 NetworkManager 启动恢复和周期恢复写入。读取、扫描和状态汇总仍可用。该边界要求操作者通过 NixOS 配置管理宿主资源，但不会把 `/zos`、NAS 数据或应用状态变成不可写。
 
 Docker Host Access 不把原始 Docker socket、system D-Bus、宿主根目录或设备节点交给容器。固定只读宿主来源由策略解析器物化；Docker metadata 经过非 root `zos-host-accessd` 的方法与字段白名单代理，兼容标记默认关闭。Host Access service 强制 drop all capabilities 与 no-new-privileges，并拒绝 privileged、host namespace、device、capability 和 security option 冲突。完整授权指纹、环境值与宿主路径只保存在权限受限的服务端状态，公开审批只返回能力、风险和 image digest 摘要。完整边界见 [Docker 宿主观测授权](/docs/reference/docker-host-access/)。
 

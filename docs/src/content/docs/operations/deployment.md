@@ -11,6 +11,8 @@ sidebar:
 
 生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 ZOS 自身放入 Docker。API、monitor、alerter、worker、downloader、indexer、hostd、termux 是常驻服务；启用 Docker 时还会启动非 root `zos-host-accessd`。maintenance、health、backup 由 oneshot service 和 timer 驱动。
 
+NixOS 使用同一组原生进程，但由 flake module 声明 package、用户、目录、systemd、timer 和 Nginx。NixOS 的安装与升级流程、模块选项以及声明式宿主机边界见 [NixOS 部署](/docs/operations/nixos/)；本页其余步骤针对 Debian package 与 appliance。
+
 `zos-host-accessd` 的 Docker collector 兼容标记默认关闭。部署 helper 会保留并诊断这个可选服务，但不会把未验证代理标为可用。目标机完成真实 Netdata/node-exporter 兼容测试后，才可通过 systemd drop-in 设置 `ZOS_HOST_ACCESS_DOCKER_COMPATIBLE=1`；步骤、验收项和回退边界见 [Docker 宿主观测授权](/docs/reference/docker-host-access/)。
 
 Nginx 只反向代理到 loopback API。程序文件位于 `/usr/lib/zos`，持久数据统一位于 `/zos`，运行时 socket 位于 `/run/zos`。API 静态提供 React Web 与 `/docs/` 文档站。

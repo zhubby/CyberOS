@@ -19,4 +19,5 @@ ZOS 是面向个人设备的原生 Linux NAS appliance。它以 React/Vite 提�
 - [配置与运行时边界](/docs/start/configuration/)
 - [系统架构](/docs/architecture/system-overview/)
 - [部署与恢复](/docs/operations/deployment/)
+- [NixOS 部署](/docs/operations/nixos/)
 - [Appliance 镜像构建](/docs/operations/appliance-image/)

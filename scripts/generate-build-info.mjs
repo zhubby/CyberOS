@@ -9,7 +9,7 @@ import { fileURLToPath, URL } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const BUILD_SOURCES = new Set(["release", "ci", "local", "unknown"]);
+const BUILD_SOURCES = new Set(["release", "ci", "local", "nix", "unknown"]);
 
 export async function collectBuildInfo({ repoRoot, env = process.env, now = new Date(), runGit = defaultRunGit }) {
   const packageManifest = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
@@ -27,6 +27,7 @@ export async function collectBuildInfo({ repoRoot, env = process.env, now = new 
     (await optionalGit(runGit, repoRoot, ["branch", "--show-current"]));
   const dirty = await resolveDirtyState(env, runGit, repoRoot);
 
+  const source = resolveBuildSource(env, tag, commitSha);
   return {
     version: packageManifest.version,
     commitSha,
@@ -34,8 +35,9 @@ export async function collectBuildInfo({ repoRoot, env = process.env, now = new 
     tag,
     branch,
     builtAt: resolveBuildTime(env, now),
-    source: resolveBuildSource(env, tag, commitSha),
-    dirty
+    source,
+    dirty,
+    reproducible: resolveReproducibleState(env, source)
   };
 }
 
@@ -97,6 +99,16 @@ function resolveBuildSource(env, tag, commitSha) {
   }
   if (env.GITHUB_ACTIONS === "true") return tag ? "release" : "ci";
   return commitSha ? "local" : "unknown";
+}
+
+function resolveReproducibleState(env, source) {
+  const explicit = optionalText(env.ZOS_BUILD_REPRODUCIBLE);
+  if (explicit) {
+    if (["1", "true"].includes(explicit.toLowerCase())) return true;
+    if (["0", "false"].includes(explicit.toLowerCase())) return false;
+    throw new Error("ZOS_BUILD_REPRODUCIBLE must be true, false, 1, or 0");
+  }
+  return source === "nix" && Boolean(optionalText(env.SOURCE_DATE_EPOCH));
 }
 
 function normalizeCommitSha(value) {

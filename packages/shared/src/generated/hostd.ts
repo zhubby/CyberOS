@@ -26,7 +26,7 @@ export type HostdDockerDaemonUpdateInput = { content: string, expectedRevision: 
 
 export type HostdDockerDaemonUpdateResult = { snapshot: HostdDockerDaemonSnapshot, restarted: boolean, rollback: HostdDockerDaemonRollbackStatus, error: string | null, };
 
-export type HostdErrorCode = "protocol_error" | "validation" | "forbidden" | "not_found" | "conflict" | "timeout" | "output_too_large" | "unavailable" | "operation_failed" | "restart_failed" | "internal";
+export type HostdErrorCode = "protocol_error" | "validation" | "forbidden" | "not_found" | "conflict" | "timeout" | "output_too_large" | "unavailable" | "operation_failed" | "restart_failed" | "unsupported" | "internal";
 
 export type HostdEthernetAddress = { family: string, address: string, prefixLength: number | null, cidr: string | null, scope: string | null, label: string | null, };
 

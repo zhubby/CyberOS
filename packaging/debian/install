@@ -1,19 +1,19 @@
-apps/api/dist/* usr/lib/zos/apps/api/dist/
-apps/mcp-cli/dist/* usr/lib/zos/apps/mcp-cli/dist/
+packages/api/dist/* usr/lib/zos/apps/api/dist/
+packages/mcp-cli/dist/* usr/lib/zos/apps/mcp-cli/dist/
 target/release/zos-monitor usr/lib/zos/bin/
 target/release/zos-alerter usr/lib/zos/bin/
 target/release/zos-hostd usr/lib/zos/bin/
 target/release/zos-host-accessd usr/lib/zos/bin/
 target/release/zos-termux usr/lib/zos/bin/
-apps/worker/dist/* usr/lib/zos/apps/worker/dist/
+packages/worker/dist/* usr/lib/zos/apps/worker/dist/
 target/release/zos-photostaff usr/lib/zos/bin/
 target/release/zos-indexer usr/lib/zos/bin/
-apps/backup/dist/* usr/lib/zos/apps/backup/dist/
-apps/ops/dist/* usr/lib/zos/apps/ops/dist/
+packages/backup/dist/* usr/lib/zos/apps/backup/dist/
+packages/ops/dist/* usr/lib/zos/apps/ops/dist/
 target/release/zos-downloader usr/lib/zos/bin/
 target/release/zos-vod-player usr/lib/zos/bin/
 target/release/zos-bluetoothd usr/lib/zos/bin/
-apps/web/dist/* usr/lib/zos/apps/web/dist/
+packages/web/dist/* usr/lib/zos/apps/web/dist/
 docs/dist/* usr/lib/zos/docs/dist/
 node_modules/* usr/lib/zos/node_modules/
 # The worker bundle keeps the Pi SDK external so it can share the packaged

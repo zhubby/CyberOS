@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/web/public/zos-icon.svg" alt="ZOS logo" width="96" height="96">
+  <img src="packages/web/public/zos-icon.svg" alt="ZOS logo" width="96" height="96">
 </p>
 
 <h1 align="center">ZOS</h1>
@@ -122,17 +122,17 @@ The main runtime components are:
 
 | Component | Responsibility |
 | --- | --- |
-| `apps/web` | React 19 workspace UI, previews, settings, activity, and management panels. |
-| `apps/api` | REST API, SSE event feed, WebSocket terminals, static production UI, and approved operation execution. |
-| `apps/worker` | Claims queued jobs, runs agent turns, persists events, and pauses work for approvals. |
-| `apps/photostaff` | Rust media worker with resumable scans, metadata extraction, and journaled image derivatives. |
-| `apps/indexer` | Walks NAS roots, hashes files, extracts bounded text, and maintains the FTS index. |
-| `apps/ops` | Runs one-shot health evaluation and safe maintenance with persisted lifecycle history. |
-| `apps/monitor` | Rust metrics collector: collection, rollups, retention, and metrics database capacity protection. |
-| `apps/alerter` | Rust alert engine: rule evaluation, incidents, escalation, health synchronization, and mail delivery. |
+| `packages/web` | React 19 workspace UI, previews, settings, activity, and management panels. |
+| `packages/api` | REST API, SSE event feed, WebSocket terminals, static production UI, and approved operation execution. |
+| `packages/worker` | Claims queued jobs, runs agent turns, persists events, and pauses work for approvals. |
+| `crates/photostaff` | Rust media worker with resumable scans, metadata extraction, and journaled image derivatives. |
+| `crates/indexer` | Walks NAS roots, hashes files, extracts bounded text, and maintains the FTS index. |
+| `packages/ops` | Runs one-shot health evaluation and safe maintenance with persisted lifecycle history. |
+| `crates/monitor` | Rust metrics collector: collection, rollups, retention, and metrics database capacity protection. |
+| `crates/alerter` | Rust alert engine: rule evaluation, incidents, escalation, health synchronization, and mail delivery. |
 | `crates/monitoring-contracts` | Shared Rust metric catalog, schema version, and sampling cadence contract. |
-| `apps/hostd` | Rust host integration daemon for approved shares, storage, Docker daemon, and NetworkManager changes. |
-| `apps/termux` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `zos` account. |
+| `crates/hostd` | Rust host integration daemon for approved shares, storage, Docker daemon, and NetworkManager changes. |
+| `crates/termux` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `zos` account. |
 | `packages/agent` | Pi SDK integration, NAS-scoped tools, session persistence, and tool policy enforcement. |
 | `packages/db` | SQLite connection, migrations, repositories, job queue, approvals, operations, and FTS queries. |
 | `packages/monitoring` | Language-neutral metric contracts plus TypeScript read-only metrics queries. |
@@ -159,8 +159,8 @@ ZOS currently assumes a trusted, single-user appliance. It has no multi-user aut
 - Write-capable Pi tools default to approval or disabled policies, configurable from the UI.
 - Approved file changes are audited. Trash uses a ZOS-managed quarantine area, and v1 never permanently deletes it during maintenance.
 - Docker management is disabled by default. Access to `/var/run/docker.sock` is effectively root-equivalent.
-- The local terminal is a real interactive login shell running through Rust `apps/termux` as the non-root `zos` user. The API service also runs as `zos`; `NoNewPrivileges` and an empty capability set prevent terminal `sudo` escalation.
-- Privileged host changes are isolated in Rust `apps/hostd`, which accepts versioned JSONL requests over an authenticated Unix socket and only performs allowlisted operations.
+- The local terminal is a real interactive login shell running through Rust `crates/termux` as the non-root `zos` user. The API service also runs as `zos`; `NoNewPrivileges` and an empty capability set prevent terminal `sudo` escalation.
+- Privileged host changes are isolated in Rust `crates/hostd`, which accepts versioned JSONL requests over an authenticated Unix socket and only performs allowlisted operations.
 
 Always configure at least one explicit NAS root. When no root is provided, the development fallback is the host filesystem root.
 
@@ -297,11 +297,18 @@ Use `minor` or `major` when appropriate. The command only updates version source
 
 Every build writes `.zos/build-info.json` with the product version, commit SHA, tag or branch, build time, build source, and dirty state. The API exposes the public subset at `/api/system/build-info`, and the web UI shows it under Settings > Version. Debian packages install the immutable metadata at `/usr/lib/zos/build-info.json`.
 
-The equivalent Make targets are available through `make check` and `make ci`. The production API serves `apps/web/dist` when it is present, so a source build can be run with the API and worker in separate shells:
+The equivalent Make targets are available through `make check` and `make ci`. The production API serves `packages/web/dist` when it is present, so a source build can be run with the API and worker in separate shells:
 
 ```bash
 npm run start -w @zos/api
 npm run start -w @zos/worker
+```
+
+Nix users can enter the pinned Node.js/Rust development environment and run the same repository checks:
+
+```bash
+nix develop
+make ci
 ```
 
 ## Debian package and appliance image
@@ -321,6 +328,19 @@ ZOS_DEB=/absolute/path/to/zos_<version>_arm64.deb make appliance
 ```
 
 See [`packaging/appliance/README.md`](packaging/appliance/README.md) for image-builder inputs. Tagged releases are configured to publish `amd64` and `arm64` Debian artifacts with checksums through GitHub Actions.
+
+## Nix and NixOS
+
+The flake exports reproducible Linux packages for `x86_64-linux` and `aarch64-linux`, development shells for Linux and macOS, and a NixOS module at `nixosModules.default`:
+
+```bash
+nix flake check
+nix build .#zos
+```
+
+The NixOS module runs ZOS as native systemd services and stores mutable state under `/zos`; it does not run the application in a container. Host configuration is intentionally declarative on NixOS. NetworkManager, storage-pool, share-service, and Docker daemon configuration remain visible in ZOS but cannot be changed through the API or Web UI. Configure those resources with NixOS options instead.
+
+See [the NixOS deployment guide](docs/src/content/docs/operations/nixos.md) for module options, secret handling, service selection, validation, upgrades, and rollback limits.
 
 ### Install on a Raspberry Pi OS or Debian host
 
@@ -345,20 +365,29 @@ Optional integrations are listed as Debian `Suggests` rather than hard dependenc
 ## Repository layout
 
 ```text
-apps/
+crates/
+  alerter/         Alert evaluation and mail delivery
+  bluetoothd/      Non-root Bluetooth media and transfer service
+  downloader/      HTTP download worker
+  host-accessd/    Restricted Docker host-observation proxy
+  hostd/           Privileged host integration daemon
+  indexer/         NAS scanner and SQLite FTS indexer
+  monitor/         Host and ZOS metrics collector
+  photostaff/      Photo and video indexing worker
+  termux/          PTY daemon with tmux-backed terminal persistence
+  vod-player/      HDMI/DRM playback daemon
+packages/
   api/            Fastify API and host adapters
+  agent/          Pi runtime and policy-gated tools
   backup/         Restic validate, backup, check, and staging restore CLI
-  hostd/          Rust privileged host integration daemon
-  indexer/        NAS scanner and SQLite FTS indexer
+  db/             SQLite schema and repositories
+  mcp*/            MCP server, CLI, capability registry, and runtime
+  nas-tools/      Path-safe NAS operations
   ops/            One-shot health evaluation and maintenance
-  termux/         Rust PTY daemon with tmux-backed terminal persistence
+  shared/         Configuration and shared types
   web/            React/Vite user interface
   worker/         Agent job processor
-packages/
-  agent/          Pi runtime and policy-gated tools
-  db/             SQLite schema and repositories
-  nas-tools/      Path-safe NAS operations
-  shared/         Configuration and shared types
+nix/              Nix packages, NixOS module, and VM test
 packaging/
   appliance/      Rootfs image scaffold
   debian/         Debian package metadata

@@ -4,7 +4,7 @@ description: 使用 restic 完成校验、初始化、日常备份、检查和 s
 type: how-to
 status: current
 audience: [operator]
-sourceOfTruth: [apps/backup/src/index.ts, apps/backup/src/backup.ts, packaging/systemd/zos-backup-daily.timer]
+sourceOfTruth: [packages/backup/src/index.ts, packages/backup/src/backup.ts, packaging/systemd/zos-backup-daily.timer]
 sidebar:
   order: 2
 ---
