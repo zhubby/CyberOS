@@ -1,3 +1,9 @@
+zos (1.5.2) unstable; urgency=medium
+
+  * Restore clean TypeScript and Nix release builds for the monitoring and alerting update.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 16:00:50 +0000
+
 zos (1.5.1) unstable; urgency=medium
 
   * Harden monitoring and alert incident handling, complete TV mode, and align agent policy and Nix delivery.
