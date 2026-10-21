@@ -10,7 +10,7 @@ import type {
   MonitoringTransform
 } from "@zos/shared";
 import { getMetricDefinition } from "./catalog.js";
-import { listMetricSeries, parseLabels } from "./database.js";
+import { filterSeriesWithDataInRange, listMetricSeries, parseLabels } from "./database.js";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -48,7 +48,12 @@ export function queryMetrics(
 ): MonitoringQueryResponse {
   const normalized = validateMonitoringQuery(request);
   const rangeMs = normalized.endMs - normalized.startMs;
-  const descriptors = listMetricSeries(db);
+  const descriptors = filterSeriesWithDataInRange(
+    db,
+    listMetricSeries(db),
+    normalized.startMs,
+    normalized.endMs
+  );
   const requests: Array<Pick<QueryPlan, "descriptor" | "transform">> = [];
   let returnedSeries = 0;
 
@@ -144,7 +149,7 @@ export function queryMetrics(
       getMetricDefinition(plan.descriptor.metric)!.kind,
       plan.transform
     )
-  }));
+  })).filter((series) => series.points.length > 0);
 
   return {
     start: new Date(normalized.startMs).toISOString(),

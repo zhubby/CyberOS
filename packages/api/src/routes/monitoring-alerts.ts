@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   MonitoringAlertDeliveryCapacityError,
+  MonitoringSmtpUnavailableError,
   MonitoringAlertReferenceConflictError,
   MonitoringAlertRevisionConflictError,
   acknowledgeMonitoringAlertIncident,
@@ -17,13 +18,12 @@ import {
   deleteMonitoringOncallSchedule,
   enqueueMonitoringTestEmail,
   getMonitoringAlertDelivery,
-  getMonitoringAlertIncident,
+  getMonitoringAlertIncidentDetail,
   getMonitoringAlertSummary,
   getMonitoringHealthRouting,
   getMonitoringSmtpSettings,
   listMonitoringAlertContacts,
   listMonitoringAlertGroups,
-  listMonitoringAlertIncidentEvents,
   listMonitoringAlertIncidents,
   listMonitoringAlertRules,
   listMonitoringAlertSilences,
@@ -89,7 +89,7 @@ export function registerMonitoringAlertRoutes(server: FastifyInstance, { db }: A
     })
   );
 
-  server.get<{ Querystring: { status?: string; limit?: string } }>(
+  server.get<{ Querystring: { status?: string; limit?: string; groupHealth?: string } }>(
     "/api/monitoring/alerts/incidents",
     async (request, reply) => {
       const status = request.query.status;
@@ -98,15 +98,23 @@ export function registerMonitoringAlertRoutes(server: FastifyInstance, { db }: A
       }
       const limit = request.query.limit === undefined ? 100 : Number(request.query.limit);
       if (!Number.isInteger(limit) || limit < 1 || limit > 200) return badRequest(reply, "Invalid incident limit");
+      if (request.query.groupHealth !== undefined
+        && request.query.groupHealth !== "true"
+        && request.query.groupHealth !== "false") {
+        return badRequest(reply, "Invalid health grouping option");
+      }
       reply.send({
-        incidents: listMonitoringAlertIncidents(db, status === undefined ? { limit } : { status, limit })
+        incidents: listMonitoringAlertIncidents(db, {
+          ...(status === undefined ? {} : { status }),
+          limit,
+          groupHealthEpisodes: request.query.groupHealth === "true"
+        })
       });
     }
   );
   server.get<{ Params: { id: string } }>("/api/monitoring/alerts/incidents/:id", async (request, reply) => {
-    const incident = getMonitoringAlertIncident(db, request.params.id);
-    if (!incident) return notFound(reply, "Alert incident not found");
-    reply.send({ incident, events: listMonitoringAlertIncidentEvents(db, incident.id) });
+    const detail = getMonitoringAlertIncidentDetail(db, request.params.id);
+    return detail ? reply.send(detail) : notFound(reply, "Alert incident not found");
   });
   server.post<{ Params: { id: string } }>("/api/monitoring/alerts/incidents/:id/read", async (request, reply) => {
     const incident = markMonitoringAlertIncidentRead(db, request.params.id);
@@ -180,6 +188,9 @@ export function registerMonitoringAlertRoutes(server: FastifyInstance, { db }: A
       const delivery = enqueueMonitoringTestEmail(db, recipient);
       reply.status(202).send({ deliveryId: delivery.id });
     } catch (error) {
+      if (error instanceof MonitoringSmtpUnavailableError) {
+        return reply.status(409).send({ error: error.message });
+      }
       if (error instanceof MonitoringAlertDeliveryCapacityError) {
         return reply.status(503).send({ error: error.message });
       }

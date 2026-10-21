@@ -183,6 +183,9 @@ impl AlertInstance {
             InstanceState::Recovering if triggering => {
                 self.transition(InstanceState::Firing, now_ms);
             }
+            InstanceState::Recovering if !recovered => {
+                self.transition(InstanceState::Firing, now_ms);
+            }
             InstanceState::Recovering
                 if recovered && elapsed(now_ms, self.state_since_ms) >= rule.recovery_duration =>
             {
@@ -305,6 +308,39 @@ mod tests {
             EvaluationOutcome::Unchanged
         );
         assert_eq!(instance.state, InstanceState::Normal);
+    }
+
+    #[test]
+    fn recovery_duration_requires_continuous_recovered_values() {
+        let current = rule();
+        let mut instance = AlertInstance {
+            state: InstanceState::Firing,
+            state_since_ms: 0,
+            last_value: Some(0.95),
+        };
+
+        assert_eq!(
+            instance.evaluate(&current, Some(0.75), 10_000),
+            EvaluationOutcome::StateChanged(InstanceState::Recovering)
+        );
+        assert_eq!(
+            instance.evaluate(&current, Some(0.85), 100_000),
+            EvaluationOutcome::Fired
+        );
+        assert_eq!(instance.state, InstanceState::Firing);
+        assert_eq!(
+            instance.evaluate(&current, Some(0.75), 110_000),
+            EvaluationOutcome::StateChanged(InstanceState::Recovering)
+        );
+        assert_eq!(
+            instance.evaluate(&current, Some(0.75), 130_000),
+            EvaluationOutcome::Unchanged
+        );
+        assert_eq!(instance.state, InstanceState::Recovering);
+        assert_eq!(
+            instance.evaluate(&current, Some(0.75), 230_000),
+            EvaluationOutcome::Resolved
+        );
     }
 
     #[test]

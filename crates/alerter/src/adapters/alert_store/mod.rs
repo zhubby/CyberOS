@@ -302,6 +302,93 @@ mod tests {
     }
 
     #[test]
+    fn health_flaps_reopen_the_recent_incident_episode() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE monitoring_alerter_state(\
+                   id INTEGER PRIMARY KEY, health_initialized INTEGER, updated_at TEXT\
+                 );\
+                 INSERT INTO monitoring_alerter_state VALUES (1, 1, '2026-03-10T00:00:00Z');\
+                 CREATE TABLE system_settings(key TEXT PRIMARY KEY, value_json TEXT);\
+                 INSERT INTO system_settings VALUES (\
+                   'monitoring_health_routing', '{\"warningPolicyId\":null,\"criticalPolicyId\":null}'\
+                 );\
+                 CREATE TABLE health_alerts(\
+                   id TEXT PRIMARY KEY, code TEXT, scope TEXT, severity TEXT, details TEXT, status TEXT\
+                 );\
+                 INSERT INTO health_alerts VALUES (\
+                   'health-2', 'indexer_unavailable', 'system', 'warning', 'offline', 'active'\
+                 );\
+                 CREATE TABLE monitoring_alert_incidents(\
+                   id TEXT PRIMARY KEY, source TEXT, rule_id TEXT, health_alert_id TEXT, series_key TEXT,\
+                   status TEXT, severity TEXT, title TEXT, firing_at TEXT, read_at TEXT,\
+                   rule_snapshot_json TEXT, policy_snapshot_json TEXT, created_at TEXT, updated_at TEXT,\
+                   resolved_at TEXT, close_reason TEXT\
+                 );\
+                 INSERT INTO monitoring_alert_incidents VALUES (\
+                   'incident-1', 'health', NULL, 'health-1', 'indexer_unavailable:system',\
+                   'resolved', 'warning', 'Health: indexer_unavailable', '2026-03-10T00:00:00Z', NULL,\
+                   '{}', NULL, '2026-03-10T00:00:00Z', '2026-03-10T00:10:00Z',\
+                   '2026-03-10T00:10:00Z', 'health_resolved'\
+                 );\
+                 CREATE TABLE monitoring_alert_incident_events(\
+                   id INTEGER PRIMARY KEY AUTOINCREMENT, incident_id TEXT, type TEXT, details_json TEXT,\
+                   created_at TEXT\
+                 );\
+                 CREATE TABLE monitoring_alert_deliveries(\
+                   id TEXT PRIMARY KEY, incident_id TEXT, kind TEXT, status TEXT, recipients_json TEXT,\
+                   updated_at TEXT\
+                 );\
+                 INSERT INTO monitoring_alert_deliveries VALUES (\
+                   'resolved-pending', 'incident-1', 'resolved', 'pending', \
+                   '[\"operator@example.test\"]', '2026-03-10T00:10:00Z'\
+                 );",
+            )
+            .unwrap();
+        let mut store = AlertStore { connection };
+
+        store
+            .sync_health_incidents(timestamp_ms("2026-03-10T00:30:00Z"))
+            .unwrap();
+
+        let row: (String, String, Option<String>, Option<String>) = store
+            .connection
+            .query_row(
+                "SELECT status, health_alert_id, resolved_at, close_reason \
+                 FROM monitoring_alert_incidents WHERE id = 'incident-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        let details: String = store
+            .connection
+            .query_row(
+                "SELECT details_json FROM monitoring_alert_incident_events WHERE incident_id = 'incident-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            row,
+            ("firing".to_owned(), "health-2".to_owned(), None, None)
+        );
+        let delivery_status: String = store
+            .connection
+            .query_row(
+                "SELECT status FROM monitoring_alert_deliveries WHERE id = 'resolved-pending'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(delivery_status, "cancelled");
+        assert_eq!(
+            serde_json::from_str::<Value>(&details).unwrap(),
+            json!({ "reopened": true })
+        );
+    }
+
+    #[test]
     fn claim_cancels_delivery_covered_by_an_active_silence() {
         let mut store = delivery_test_store();
         let now_ms = timestamp_ms("2026-03-10T00:00:00Z");
@@ -621,5 +708,63 @@ mod tests {
             row.1.as_deref(),
             Some("Delivery interrupted after final attempt")
         );
+    }
+
+    #[test]
+    fn maintenance_cancels_disabled_smtp_tests_and_prunes_old_terminal_tests() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE system_settings(key TEXT PRIMARY KEY, value_json TEXT);\
+                 INSERT INTO system_settings VALUES ('monitoring_smtp', '{\"enabled\":false}');\
+                 CREATE TABLE monitoring_alert_deliveries(\
+                   id TEXT PRIMARY KEY, incident_id TEXT, kind TEXT, status TEXT, last_error TEXT, \
+                   updated_at TEXT\
+                 );\
+                 INSERT INTO monitoring_alert_deliveries VALUES \
+                   ('pending-test', NULL, 'test', 'pending', NULL, '2026-01-01T00:00:00Z'),\
+                   ('old-test', NULL, 'test', 'failed', 'failed', '2026-01-01T00:00:00Z'),\
+                   ('incident-mail', 'incident-1', 'firing', 'pending', NULL, '2026-01-01T00:00:00Z');\
+                 CREATE TABLE monitoring_alert_delivery_attempts(finished_at TEXT);\
+                 CREATE TABLE monitoring_alert_silences(cancelled_at TEXT, ends_at TEXT);\
+                 CREATE TABLE monitoring_alert_incidents(\
+                   id TEXT PRIMARY KEY, status TEXT, resolved_at TEXT\
+                 );",
+            )
+            .unwrap();
+        let store = AlertStore { connection };
+
+        store
+            .maintain(timestamp_ms("2026-03-10T00:00:00Z"))
+            .unwrap();
+
+        let pending: (String, Option<String>) = store
+            .connection
+            .query_row(
+                "SELECT status, last_error FROM monitoring_alert_deliveries WHERE id = 'pending-test'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(pending.0, "cancelled");
+        assert_eq!(pending.1.as_deref(), Some("SMTP delivery is disabled"));
+        let old_exists: bool = store
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM monitoring_alert_deliveries WHERE id = 'old-test')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let incident_status: String = store
+            .connection
+            .query_row(
+                "SELECT status FROM monitoring_alert_deliveries WHERE id = 'incident-mail'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!old_exists);
+        assert_eq!(incident_status, "pending");
     }
 }

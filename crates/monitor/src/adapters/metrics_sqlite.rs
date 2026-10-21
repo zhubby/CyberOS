@@ -19,6 +19,7 @@ const MINUTE_MS: i64 = 60_000;
 const HOUR_MS: i64 = 60 * MINUTE_MS;
 const MAX_SERIES_PER_METRIC: i64 = 64;
 const MAX_SERIES: i64 = 512;
+const INACTIVE_SERIES_AFTER_MS: i64 = 24 * 60 * 60 * 1_000;
 
 const MIGRATIONS: &[(i64, &str)] = &[
     (
@@ -538,24 +539,66 @@ fn ensure_series(
     {
         return Ok(Some(id));
     }
-    let total: i64 =
-        transaction.query_row("SELECT COUNT(*) FROM metric_series", [], |row| row.get(0))?;
-    if total >= MAX_SERIES {
-        return Ok(None);
-    }
-    let metric_total: i64 = transaction.query_row(
+    let mut metric_total: i64 = transaction.query_row(
         "SELECT COUNT(*) FROM metric_series WHERE metric_name = ?",
         [&sample.metric],
         |row| row.get(0),
     )?;
     if metric_total >= MAX_SERIES_PER_METRIC {
-        return Ok(None);
+        reclaim_inactive_series(transaction, Some(&sample.metric), sample.timestamp_ms)?;
+        metric_total = transaction.query_row(
+            "SELECT COUNT(*) FROM metric_series WHERE metric_name = ?",
+            [&sample.metric],
+            |row| row.get(0),
+        )?;
+        if metric_total >= MAX_SERIES_PER_METRIC {
+            return Ok(None);
+        }
+    }
+    let mut total: i64 =
+        transaction.query_row("SELECT COUNT(*) FROM metric_series", [], |row| row.get(0))?;
+    if total >= MAX_SERIES {
+        reclaim_inactive_series(transaction, None, sample.timestamp_ms)?;
+        total =
+            transaction.query_row("SELECT COUNT(*) FROM metric_series", [], |row| row.get(0))?;
+        if total >= MAX_SERIES {
+            return Ok(None);
+        }
     }
     transaction.execute(
         "INSERT INTO metric_series(metric_name, labels_key, labels_json, created_at_ms) VALUES (?, ?, ?, ?)",
         params![sample.metric, labels, labels, sample.timestamp_ms],
     )?;
     Ok(Some(transaction.last_insert_rowid()))
+}
+
+fn reclaim_inactive_series(
+    transaction: &Transaction<'_>,
+    metric: Option<&str>,
+    now_ms: i64,
+) -> Result<(), MonitorError> {
+    let cutoff = now_ms.saturating_sub(INACTIVE_SERIES_AFTER_MS);
+    if let Some(metric) = metric {
+        transaction.execute(
+            "DELETE FROM metric_series WHERE id IN (\
+             SELECT series.id FROM metric_series series \
+             WHERE series.metric_name = ? \
+               AND NOT EXISTS (SELECT 1 FROM metric_samples_raw raw WHERE raw.series_id = series.id AND raw.timestamp_ms >= ?) \
+             ORDER BY COALESCE((SELECT MAX(timestamp_ms) FROM metric_samples_raw raw WHERE raw.series_id = series.id), series.created_at_ms) ASC \
+             LIMIT 1)",
+            params![metric, cutoff],
+        )?;
+    } else {
+        transaction.execute(
+            "DELETE FROM metric_series WHERE id IN (\
+             SELECT series.id FROM metric_series series \
+             WHERE NOT EXISTS (SELECT 1 FROM metric_samples_raw raw WHERE raw.series_id = series.id AND raw.timestamp_ms >= ?) \
+             ORDER BY COALESCE((SELECT MAX(timestamp_ms) FROM metric_samples_raw raw WHERE raw.series_id = series.id), series.created_at_ms) ASC \
+             LIMIT 1)",
+            [cutoff],
+        )?;
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -1099,6 +1142,53 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let store = MetricsStore::open(directory.path().join("metrics.sqlite"), config()).unwrap();
         assert!(store.database_bytes() > 0);
+    }
+
+    #[test]
+    fn reclaims_an_inactive_series_when_a_metric_reaches_its_limit() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store =
+            MetricsStore::open(directory.path().join("metrics.sqlite"), config()).unwrap();
+        let old_samples: Vec<_> = (0..MAX_SERIES_PER_METRIC)
+            .map(|index| {
+                MetricSample::new("zos_queue_depth", 1_000, index as f64)
+                    .with_label("queue", format!("old-{index}"))
+            })
+            .collect();
+        assert_eq!(
+            store.write_samples(&old_samples).unwrap(),
+            MAX_SERIES_PER_METRIC as usize
+        );
+
+        let replacement_time = 1_000 + INACTIVE_SERIES_AFTER_MS + 1;
+        assert_eq!(
+            store
+                .write_samples(
+                    &[MetricSample::new("zos_queue_depth", replacement_time, 1.0)
+                        .with_label("queue", "replacement"),]
+                )
+                .unwrap(),
+            1
+        );
+
+        let count: i64 = store
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM metric_series WHERE metric_name = 'zos_queue_depth'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let replacement: i64 = store
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM metric_series WHERE metric_name = 'zos_queue_depth' AND labels_json = '{\"queue\":\"replacement\"}'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, MAX_SERIES_PER_METRIC);
+        assert_eq!(replacement, 1);
     }
 
     #[test]

@@ -872,7 +872,7 @@ export function App() {
     try {
       const [result, incidents, summary] = await Promise.all([
         getNotifications(),
-        getMonitoringAlertIncidents(),
+        getMonitoringAlertIncidents(undefined, true),
         getNotificationsSummary()
       ]);
       setNotifications(result.notifications);

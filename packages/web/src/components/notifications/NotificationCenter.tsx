@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { BluetoothTransfer, MonitoringAlertIncident, OperationNotification } from "../../api.js";
 import { formatBytes } from "../../i18n/format.js";
-import { formatDate, formatRelativeTime, formatTime } from "../../i18n/format.js";
+import { formatDate, formatRelativeTime } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -231,7 +231,7 @@ function BluetoothTransfersList({ loading, transfers, locale, now, onRead, t }: 
   return <>{transfers.map((transfer) => {
     const timestamp = transfer.finishedAt ?? transfer.updatedAt;
     const relativeTime = formatRelativeTime(timestamp, locale, now);
-    const absoluteTime = `${formatDate(timestamp, locale)} ${formatTime(timestamp, locale)}`;
+    const absoluteTime = formatDate(timestamp, locale);
     const Icon = transfer.direction === "send" ? Send : Inbox;
     return <button type="button" key={transfer.id} className="notification-item" data-status={transfer.status} data-unread={transfer.readAt === null ? "true" : "false"} onClick={() => onRead(transfer.id)} aria-label={`${transfer.displayName}. ${t(`settings.bluetooth.transfers.statuses.${transfer.status}`)}`}>
       <span className="notification-status-icon" aria-hidden="true"><Icon size={17} /></span>
@@ -271,7 +271,7 @@ function OperationsList({ loading, notifications, locale, now, onRead, t }: {
               const StatusIcon = notificationStatusIcon(notification.status);
               const KindIcon = notificationKindIcon(notification.kind);
               const relativeTime = formatRelativeTime(notification.updatedAt, locale, now);
-              const absoluteTime = `${formatDate(notification.updatedAt, locale)} ${formatTime(notification.updatedAt, locale)}`;
+              const absoluteTime = formatDate(notification.updatedAt, locale);
               return (
                 <button
                   type="button"
@@ -320,12 +320,12 @@ function AlertsList({ loading, incidents, locale, now, onRead, onAcknowledge, t 
   return <>{incidents.map((incident) => {
     const timestamp = incident.resolvedAt ?? incident.firingAt;
     const relativeTime = formatRelativeTime(timestamp, locale, now);
-    const absoluteTime = `${formatDate(timestamp, locale)} ${formatTime(timestamp, locale)}`;
+    const absoluteTime = formatDate(timestamp, locale);
     return <article key={incident.id} className="notification-item notification-alert-item" data-status={incident.status} data-severity={incident.severity} data-unread={incident.readAt === null ? "true" : "false"}>
       <span className="notification-status-icon" aria-hidden="true"><ShieldAlert size={17} /></span>
       <button type="button" className="notification-alert-content" onClick={() => onRead(incident.id)} aria-label={`${incident.title}. ${t(`notifications.center.alerts.statuses.${incident.status}`)}`}>
         <span className="notification-item-title"><strong>{incident.title}</strong></span>
-        <span className="notification-item-summary">{t(`notifications.center.alerts.statuses.${incident.status}`)} · {t(`notifications.center.alerts.severity.${incident.severity}`)}</span>
+        <span className="notification-item-summary">{t(`notifications.center.alerts.statuses.${incident.status}`)} · {t(`notifications.center.alerts.severity.${incident.severity}`)}{incident.occurrenceCount > 1 ? ` · ${t("notifications.center.alerts.occurrences", { count: incident.occurrenceCount })}` : ""}</span>
         <time dateTime={timestamp} title={absoluteTime}>{relativeTime}</time>
       </button>
       <span className="notification-alert-actions">

@@ -52,10 +52,15 @@ export class MonitoringReader {
   catalog(): MonitoringCatalogResponse {
     if (!this.config.enabled) return { metrics: [...MONITORING_CATALOG], series: [] };
     const db = this.tryDatabase();
-    return {
-      metrics: [...MONITORING_CATALOG],
-      series: db ? listMetricSeries(db) : []
-    };
+    if (!db) return { metrics: [...MONITORING_CATALOG], series: [] };
+    try {
+      return {
+        metrics: [...MONITORING_CATALOG],
+        series: this.withSeriesActivity(listMetricSeries(db), Date.now())
+      };
+    } catch (error) {
+      this.invalidate(error);
+    }
   }
 
   overview(now = new Date()): MonitoringOverviewResponse {
@@ -64,7 +69,11 @@ export class MonitoringReader {
     if (!db) return this.emptyOverview("starting", now);
     try {
       const collectors = listCollectorStatuses(db);
-      const latest = latestMetricValues(db);
+      const latest = latestMetricValues(db).filter((value) => this.isActive(
+        value.metric,
+        Date.parse(value.sampledAt),
+        now.getTime()
+      ));
       const writesPaused = monitoringWritesPaused(db);
       const lastSuccessMs = Math.max(
         ...collectors.flatMap((collector) => collector.lastSuccessAt ? [Date.parse(collector.lastSuccessAt)] : []),
@@ -181,6 +190,27 @@ export class MonitoringReader {
       databaseBytes: metricsDatabaseBytes(this.databasePath),
       writesPaused
     };
+  }
+
+  private withSeriesActivity(
+    series: MonitoringCatalogResponse["series"],
+    nowMs: number
+  ): MonitoringCatalogResponse["series"] {
+    return series.map((descriptor) => ({
+      ...descriptor,
+      active: descriptor.lastSampleAt !== null
+        && this.isActive(descriptor.metric, Date.parse(descriptor.lastSampleAt), nowMs)
+    }));
+  }
+
+  private isActive(metric: string, sampledAtMs: number, nowMs: number): boolean {
+    const cadence = MONITORING_CATALOG.find((definition) => definition.name === metric)?.cadence;
+    const intervalMs = cadence === "temperature"
+      ? this.config.temperatureSampleIntervalMs
+      : cadence === "standard"
+        ? this.config.standardSampleIntervalMs
+        : this.config.fastSampleIntervalMs;
+    return Number.isFinite(sampledAtMs) && nowMs - sampledAtMs <= Math.max(STALE_AFTER_MS, intervalMs * 3);
   }
 }
 

@@ -80,6 +80,27 @@ describe("monitoring alert routes", () => {
     await server.close();
   });
 
+  it("marks the alerter unavailable when its last evaluation is stale", async () => {
+    const { server, db } = await buildRoutesWithDb();
+    db.prepare(`
+      UPDATE monitoring_alerter_state
+      SET status = 'ready', last_evaluation_at = '2026-01-01T00:00:00.000Z'
+      WHERE id = 1
+    `).run();
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/api/monitoring/alerts/summary"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      alerterStatus: "unavailable",
+      lastEvaluationAt: "2026-01-01T00:00:00.000Z"
+    });
+    await server.close();
+  });
+
   it("never returns the SMTP password and queues tests through the outbox", async () => {
     const server = await buildRoutes();
     const saved = await server.inject({
@@ -116,8 +137,39 @@ describe("monitoring alert routes", () => {
     await server.close();
   });
 
+  it("rejects test email while SMTP delivery is disabled", async () => {
+    const server = await buildRoutes();
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/alerts/test-email",
+      payload: { recipient: "operator@example.test" }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "SMTP delivery is disabled or incomplete" });
+    await server.close();
+  });
+
   it("rejects test email when the outbox reaches its pending limit", async () => {
     const { server, db } = await buildRoutesWithDb();
+    const smtp = await server.inject({
+      method: "PATCH",
+      url: "/api/monitoring/alerts/smtp",
+      payload: {
+        expectedRevision: 1,
+        smtp: {
+          enabled: true,
+          host: "smtp.internal",
+          port: 587,
+          security: "starttls",
+          username: "zos",
+          password: "secret-value",
+          from: "zos@example.test"
+        }
+      }
+    });
+    expect(smtp.statusCode).toBe(200);
     const now = new Date().toISOString();
     db.prepare(`
       WITH RECURSIVE sequence(value) AS (
@@ -179,6 +231,18 @@ describe("monitoring alert routes", () => {
       SELECT COUNT(*) FROM monitoring_alert_incident_events
       WHERE incident_id = 'incident-1' AND type = 'acknowledged'
     `).pluck().get()).toBe(1);
+    const detail = await server.inject({
+      method: "GET",
+      url: "/api/monitoring/alerts/incidents/incident-1"
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({
+      incident: { id: "incident-1" },
+      ruleSnapshot: {},
+      policySnapshot: null,
+      events: expect.arrayContaining([expect.objectContaining({ type: "acknowledged" })]),
+      deliveries: [expect.objectContaining({ id: "delivery-1", status: "cancelled" })]
+    });
     await server.close();
   });
 
@@ -204,6 +268,61 @@ describe("monitoring alert routes", () => {
       .toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM monitoring_alert_incident_events WHERE type = 'read'").pluck().get())
       .toBe(2);
+    await server.close();
+  });
+
+  it("groups repeated health episodes and reads the group together", async () => {
+    const { server, db } = await buildRoutesWithDb();
+    const insert = db.prepare(`
+      INSERT INTO monitoring_alert_incidents(
+        id, source, series_key, status, severity, title, firing_at, resolved_at,
+        close_reason, rule_snapshot_json, created_at, updated_at
+      ) VALUES (?, 'health', 'indexer_unavailable:system', 'resolved', 'warning',
+        'Health: indexer_unavailable', ?, ?, 'health_resolved', '{}', ?, ?)
+    `);
+    insert.run(
+      "health-episode-1",
+      "2026-03-10T00:00:00.000Z",
+      "2026-03-10T00:05:00.000Z",
+      "2026-03-10T00:00:00.000Z",
+      "2026-03-10T00:05:00.000Z"
+    );
+    insert.run(
+      "health-episode-2",
+      "2026-03-10T01:00:00.000Z",
+      "2026-03-10T01:05:00.000Z",
+      "2026-03-10T01:00:00.000Z",
+      "2026-03-10T01:05:00.000Z"
+    );
+    const insertFired = db.prepare(`
+      INSERT INTO monitoring_alert_incident_events(incident_id, type, details_json, created_at)
+      VALUES (?, 'fired', ?, ?)
+    `);
+    insertFired.run("health-episode-1", "{}", "2026-03-10T00:00:00.000Z");
+    insertFired.run("health-episode-2", "{}", "2026-03-10T01:00:00.000Z");
+    insertFired.run("health-episode-2", JSON.stringify({ reopened: true }), "2026-03-10T01:02:00.000Z");
+
+    const grouped = await server.inject({
+      method: "GET",
+      url: "/api/monitoring/alerts/incidents?groupHealth=true"
+    });
+    expect(grouped.statusCode).toBe(200);
+    expect(grouped.json().incidents).toEqual([
+      expect.objectContaining({ id: "health-episode-2", occurrenceCount: 3 })
+    ]);
+    expect((await server.inject({ method: "GET", url: "/api/monitoring/alerts/summary" })).json().unreadCount)
+      .toBe(1);
+
+    await server.inject({
+      method: "POST",
+      url: "/api/monitoring/alerts/incidents/health-episode-2/read"
+    });
+    expect(db.prepare(`
+      SELECT COUNT(*) FROM monitoring_alert_incidents
+      WHERE series_key = 'indexer_unavailable:system' AND read_at IS NULL
+    `).pluck().get()).toBe(0);
+    expect((await server.inject({ method: "GET", url: "/api/monitoring/alerts/summary" })).json().unreadCount)
+      .toBe(0);
     await server.close();
   });
 

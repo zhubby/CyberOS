@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BellOff,
   Check,
   CheckCheck,
   CircleAlert,
+  Eye,
   LoaderCircle,
+  Mail,
   Pencil,
   Plus,
   RefreshCw,
@@ -18,19 +20,22 @@ import {
   createMonitoringAlertSilence,
   deleteMonitoringAlertRule,
   getMonitoringAlertIncidents,
+  getMonitoringAlertIncident,
   getMonitoringAlertRules,
   getMonitoringCatalog,
   getMonitoringEscalationPolicies,
   readMonitoringAlertIncident,
   updateMonitoringAlertRule,
   type MonitoringAlertIncident,
+  type MonitoringAlertIncidentDetail,
   type MonitoringAlertRule,
   type MonitoringAlertRuleInput,
   type MonitoringEscalationPolicy,
   type MonitoringCatalog
 } from "../../api.js";
-import { formatDate, formatLocaleNumber, formatTime } from "../../i18n/format.js";
+import { formatDate, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { useModalDialog } from "./useModalDialog.js";
 
 type AlertView = "rules" | "incidents";
 type IncidentFilter = "all" | "firing" | "resolved";
@@ -68,8 +73,10 @@ function RulesView() {
   const [editing, setEditing] = useState<MonitoringAlertRule | "new" | null>(null);
   const [draft, setDraft] = useState<MonitoringAlertRuleInput>(DEFAULT_RULE);
   const [selectorText, setSelectorText] = useState("{}");
+  const refreshRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = ++refreshRequestId.current;
     setLoading(true);
     try {
       const [nextRules, nextPolicies, nextCatalog] = await Promise.all([
@@ -77,14 +84,15 @@ function RulesView() {
         getMonitoringEscalationPolicies(),
         getMonitoringCatalog()
       ]);
+      if (requestId !== refreshRequestId.current) return;
       setRules(nextRules);
       setPolicies(nextPolicies);
       setCatalog(nextCatalog);
       setError(null);
     } catch (nextError) {
-      setError(errorMessage(nextError));
+      if (requestId === refreshRequestId.current) setError(errorMessage(nextError));
     } finally {
-      setLoading(false);
+      if (requestId === refreshRequestId.current) setLoading(false);
     }
   }, []);
 
@@ -287,42 +295,113 @@ function IncidentsView({ locale }: { locale: SupportedLocale }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detailIncident, setDetailIncident] = useState<MonitoringAlertIncident | null>(null);
+  const [detail, setDetail] = useState<MonitoringAlertIncidentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [showSilence, setShowSilence] = useState(false);
+  const refreshRequestId = useRef(0);
+  const detailRequestId = useRef(0);
+  const detailIncidentId = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
+    const requestId = ++refreshRequestId.current;
     setLoading(true);
     try {
-      setIncidents(await getMonitoringAlertIncidents(filter === "all" ? undefined : filter));
+      const nextIncidents = await getMonitoringAlertIncidents(filter === "all" ? undefined : filter);
+      if (requestId !== refreshRequestId.current) return;
+      setIncidents(nextIncidents);
       setError(null);
     } catch (nextError) {
-      setError(errorMessage(nextError));
+      if (requestId === refreshRequestId.current) setError(errorMessage(nextError));
     } finally {
-      setLoading(false);
+      if (requestId === refreshRequestId.current) setLoading(false);
     }
   }, [filter]);
   useEffect(() => void refresh(), [refresh]);
 
-  async function apply(incident: MonitoringAlertIncident, action: "read" | "ack" | "silence") {
+  async function openDetail(incident: MonitoringAlertIncident, silence = false) {
+    const requestId = ++detailRequestId.current;
+    detailIncidentId.current = incident.id;
+    setDetailIncident(incident);
+    setDetail(null);
+    setDetailError(null);
+    setShowSilence(silence);
+    setDetailLoading(true);
+    try {
+      const nextDetail = await getMonitoringAlertIncident(incident.id);
+      if (requestId === detailRequestId.current) setDetail(nextDetail);
+    } catch (nextError) {
+      if (requestId === detailRequestId.current) setDetailError(errorMessage(nextError));
+    } finally {
+      if (requestId === detailRequestId.current) setDetailLoading(false);
+    }
+  }
+
+  function closeDetail() {
+    if (busyId) return;
+    detailRequestId.current += 1;
+    detailIncidentId.current = null;
+    setDetailIncident(null);
+    setDetail(null);
+    setDetailError(null);
+    setShowSilence(false);
+  }
+
+  async function apply(incident: MonitoringAlertIncident, action: "read" | "ack") {
     setBusyId(incident.id);
     try {
-      if (action === "silence") {
-        if (!incident.ruleId) return;
-        const startsAt = new Date();
-        await createMonitoringAlertSilence({
-          ruleId: incident.ruleId,
-          seriesKey: incident.seriesKey,
-          startsAt: startsAt.toISOString(),
-          endsAt: new Date(startsAt.getTime() + 60 * 60_000).toISOString(),
-          reason: String(t("workspace.monitoring.alerts.incidents.silenceReason"))
-        });
-        return;
-      }
       const updated = action === "read"
         ? await readMonitoringAlertIncident(incident.id)
         : await acknowledgeMonitoringAlertIncident(incident.id);
-      setIncidents((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setIncidents((current) => current.map((item) => {
+        if (item.id === updated.id) return updated;
+        if (action === "read" && updated.source === "health"
+          && item.source === "health" && item.seriesKey === updated.seriesKey) {
+          return { ...item, readAt: updated.readAt, updatedAt: updated.updatedAt };
+        }
+        return item;
+      }));
+      if (detailIncidentId.current === incident.id) {
+        const requestId = ++detailRequestId.current;
+        const nextDetail = await getMonitoringAlertIncident(incident.id);
+        if (requestId === detailRequestId.current && detailIncidentId.current === incident.id) {
+          setDetail(nextDetail);
+          setDetailIncident(updated);
+        }
+      }
+      setError(null);
+      setDetailError(null);
+    } catch (nextError) {
+      const message = errorMessage(nextError);
+      setError(message);
+      if (detailIncidentId.current === incident.id) setDetailError(message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function createSilence(input: { scope: "series" | "rule"; startsAt: string; endsAt: string; reason: string }) {
+    const incident = detail?.incident ?? detailIncident;
+    if (!incident?.ruleId) return;
+    setBusyId(incident.id);
+    try {
+      await createMonitoringAlertSilence({
+        ruleId: incident.ruleId,
+        seriesKey: input.scope === "series" ? incident.seriesKey : null,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        reason: input.reason
+      });
+      const requestId = ++detailRequestId.current;
+      const nextDetail = await getMonitoringAlertIncident(incident.id);
+      if (requestId === detailRequestId.current && detailIncidentId.current === incident.id) {
+        setDetail(nextDetail);
+        setShowSilence(false);
+      }
       setError(null);
     } catch (nextError) {
-      setError(errorMessage(nextError));
+      setDetailError(errorMessage(nextError));
     } finally {
       setBusyId(null);
     }
@@ -350,18 +429,143 @@ function IncidentsView({ locale }: { locale: SupportedLocale }) {
             <div className="monitoring-incident-main">
               <header><strong>{incident.title}</strong><span className="monitoring-alert-severity" data-severity={incident.severity}>{t(`workspace.monitoring.alerts.severity.${incident.severity}`)}</span></header>
               <p>{formatSelector(incident.labels)}{incident.currentValue === null ? "" : ` · ${formatLocaleNumber(incident.currentValue, locale, { maximumFractionDigits: 3 })}`}</p>
-              <time dateTime={incident.firingAt}>{formatDate(incident.firingAt, locale)} {formatTime(incident.firingAt, locale)}</time>
+              <time dateTime={incident.firingAt}>{formatDate(incident.firingAt, locale)}</time>
             </div>
             <div className="monitoring-alert-row-actions">
               {incident.readAt === null ? <button type="button" disabled={busyId === incident.id} onClick={() => void apply(incident, "read")} title={t("workspace.monitoring.alerts.incidents.markRead")} aria-label={t("workspace.monitoring.alerts.incidents.markRead")}><Check size={15} /></button> : null}
               {incident.status === "firing" && incident.acknowledgedAt === null ? <button type="button" disabled={busyId === incident.id} onClick={() => void apply(incident, "ack")} title={t("workspace.monitoring.alerts.incidents.acknowledge")} aria-label={t("workspace.monitoring.alerts.incidents.acknowledge")}><CheckCheck size={15} /></button> : null}
-              {incident.status === "firing" && incident.ruleId ? <button type="button" disabled={busyId === incident.id} onClick={() => void apply(incident, "silence")} title={t("workspace.monitoring.alerts.incidents.silence")} aria-label={t("workspace.monitoring.alerts.incidents.silence")}><BellOff size={15} /></button> : null}
+              <button type="button" disabled={busyId === incident.id} onClick={() => void openDetail(incident)} title={t("workspace.monitoring.alerts.incidents.details")} aria-label={t("workspace.monitoring.alerts.incidents.details")}><Eye size={15} /></button>
+              {incident.status === "firing" && incident.ruleId ? <button type="button" disabled={busyId === incident.id} onClick={() => void openDetail(incident, true)} title={t("workspace.monitoring.alerts.incidents.silence")} aria-label={t("workspace.monitoring.alerts.incidents.silence")}><BellOff size={15} /></button> : null}
             </div>
           </article>
         ))}</div>
       )}
+      {detailIncident ? <IncidentDetailDialog
+        incident={detail?.incident ?? detailIncident}
+        detail={detail}
+        loading={detailLoading}
+        error={detailError}
+        locale={locale}
+        busy={busyId === detailIncident.id}
+        showSilence={showSilence}
+        onShowSilence={setShowSilence}
+        onClose={closeDetail}
+        onRead={(incident) => void apply(incident, "read")}
+        onAcknowledge={(incident) => void apply(incident, "ack")}
+        onCreateSilence={(input) => void createSilence(input)}
+      /> : null}
     </div>
   );
+}
+
+function IncidentDetailDialog({
+  incident,
+  detail,
+  loading,
+  error,
+  locale,
+  busy,
+  showSilence,
+  onShowSilence,
+  onClose,
+  onRead,
+  onAcknowledge,
+  onCreateSilence
+}: {
+  incident: MonitoringAlertIncident;
+  detail: MonitoringAlertIncidentDetail | null;
+  loading: boolean;
+  error: string | null;
+  locale: SupportedLocale;
+  busy: boolean;
+  showSilence: boolean;
+  onShowSilence: (show: boolean) => void;
+  onClose: () => void;
+  onRead: (incident: MonitoringAlertIncident) => void;
+  onAcknowledge: (incident: MonitoringAlertIncident) => void;
+  onCreateSilence: (input: { scope: "series" | "rule"; startsAt: string; endsAt: string; reason: string }) => void;
+}) {
+  const { t } = useTranslation();
+  const dialogRef = useModalDialog(onClose, busy);
+  const silenceScopeRef = useRef<HTMLSelectElement>(null);
+  const silenceTriggerRef = useRef<HTMLButtonElement>(null);
+  const previousShowSilence = useRef(false);
+  const [scope, setScope] = useState<"series" | "rule">("series");
+  const [startsAt, setStartsAt] = useState(() => localDateTime(new Date()));
+  const [endsAt, setEndsAt] = useState(() => localDateTime(new Date(Date.now() + 60 * 60_000)));
+  const [reason, setReason] = useState("");
+  const validSilence = reason.trim().length > 0
+    && Number.isFinite(new Date(startsAt).getTime())
+    && new Date(endsAt).getTime() > new Date(startsAt).getTime();
+
+  useEffect(() => {
+    const wasVisible = previousShowSilence.current;
+    previousShowSilence.current = showSilence;
+    if (wasVisible === showSilence) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (showSilence) silenceScopeRef.current?.focus();
+      else (silenceTriggerRef.current ?? dialogRef.current)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dialogRef, showSilence]);
+
+  return <div className="management-modal-backdrop monitoring-incident-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    <section ref={dialogRef} tabIndex={-1} className="management-modal monitoring-incident-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="monitoring-incident-detail-title">
+      <header>
+        <div><span className="eyebrow">{t("workspace.monitoring.alerts.incidents.detailEyebrow")}</span><h2 id="monitoring-incident-detail-title">{incident.title}</h2></div>
+        <button type="button" className="management-icon-action" onClick={onClose} disabled={busy} title={t("common.actions.close")} aria-label={t("common.actions.close")}><X size={16} /></button>
+      </header>
+      <div className="monitoring-incident-detail-body">
+        {error ? <div className="monitoring-alert-error" role="alert"><CircleAlert size={16} />{error}</div> : null}
+        {loading ? <LoadingState /> : detail ? <>
+          <section className="monitoring-incident-detail-section">
+            <h3>{t("workspace.monitoring.alerts.incidents.overview")}</h3>
+            <dl className="monitoring-incident-detail-list">
+              <div><dt>{t("workspace.monitoring.alerts.fields.severity")}</dt><dd>{t(`workspace.monitoring.alerts.severity.${incident.severity}`)}</dd></div>
+              <div><dt>{t("workspace.monitoring.alerts.incidents.status")}</dt><dd>{t(`workspace.monitoring.alerts.incidents.statuses.${incident.status}`)}</dd></div>
+              <div><dt>{t("workspace.monitoring.alerts.incidents.series")}</dt><dd className="is-mono">{incident.seriesKey}</dd></div>
+              <div><dt>{t("workspace.monitoring.alerts.incidents.firedAt")}</dt><dd>{formatDate(incident.firingAt, locale)}</dd></div>
+              <div><dt>{t("workspace.monitoring.alerts.incidents.currentValue")}</dt><dd>{incident.currentValue === null ? t("common.dash") : formatLocaleNumber(incident.currentValue, locale, { maximumFractionDigits: 3 })}</dd></div>
+              <div><dt>{t("workspace.monitoring.alerts.fields.selector")}</dt><dd className="is-mono">{formatSelector(incident.labels)}</dd></div>
+            </dl>
+          </section>
+          <section className="monitoring-incident-detail-section">
+            <h3>{t("workspace.monitoring.alerts.incidents.timeline")}</h3>
+            <ol className="monitoring-incident-timeline">{detail.events.map((event) => <li key={event.id}><span aria-hidden="true" /><div><strong>{t(`workspace.monitoring.alerts.incidents.events.${event.type}`)}</strong><time dateTime={event.createdAt}>{formatDate(event.createdAt, locale)}</time>{Object.keys(event.details).length ? <code>{JSON.stringify(event.details)}</code> : null}</div></li>)}</ol>
+          </section>
+          <section className="monitoring-incident-detail-section">
+            <h3>{t("workspace.monitoring.alerts.incidents.deliveries")}</h3>
+            {detail.deliveries.length ? <div className="monitoring-incident-deliveries">{detail.deliveries.map((delivery) => <article key={delivery.id}><Mail size={15} aria-hidden="true" /><div><strong>{t(`workspace.monitoring.alerts.incidents.deliveryKinds.${delivery.kind}`)}</strong><span>{t(`workspace.monitoring.alerts.incidents.deliveryStatuses.${delivery.status}`)} · {t("workspace.monitoring.alerts.incidents.attempts", { count: delivery.attemptCount })}</span>{delivery.lastError ? <small>{delivery.lastError}</small> : null}</div></article>)}</div> : <p className="monitoring-incident-detail-empty">{t("workspace.monitoring.alerts.incidents.noDeliveries")}</p>}
+          </section>
+          <section className="monitoring-incident-detail-section monitoring-incident-snapshots">
+            <h3>{t("workspace.monitoring.alerts.incidents.snapshots")}</h3>
+            <details><summary>{t("workspace.monitoring.alerts.incidents.ruleSnapshot")}</summary><pre>{JSON.stringify(detail.ruleSnapshot, null, 2)}</pre></details>
+            {detail.policySnapshot ? <details><summary>{t("workspace.monitoring.alerts.incidents.policySnapshot")}</summary><pre>{JSON.stringify(detail.policySnapshot, null, 2)}</pre></details> : <p className="monitoring-incident-detail-empty">{t("workspace.monitoring.alerts.incidents.noPolicySnapshot")}</p>}
+          </section>
+          {showSilence && incident.ruleId ? <form className="monitoring-incident-silence-form" onSubmit={(event) => { event.preventDefault(); if (validSilence) onCreateSilence({ scope, startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(), reason: reason.trim() }); }}>
+            <h3>{t("workspace.monitoring.alerts.incidents.createSilence")}</h3>
+            <div className="monitoring-incident-silence-grid">
+              <label><span>{t("workspace.monitoring.alerts.incidents.silenceScope")}</span><select ref={silenceScopeRef} value={scope} onChange={(event) => setScope(event.target.value as "series" | "rule")}><option value="series">{t("workspace.monitoring.alerts.incidents.scopeSeries")}</option><option value="rule">{t("workspace.monitoring.alerts.incidents.scopeRule")}</option></select></label>
+              <label><span>{t("workspace.monitoring.alerts.incidents.silenceStarts")}</span><input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} /></label>
+              <label><span>{t("workspace.monitoring.alerts.incidents.silenceEnds")}</span><input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} /></label>
+              <label className="span-2"><span>{t("workspace.monitoring.alerts.incidents.silenceReason")}</span><input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} /></label>
+            </div>
+            <div className="monitoring-incident-detail-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => onShowSilence(false)}>{t("common.actions.cancel")}</button><button type="submit" className="primary-button" disabled={busy || !validSilence}>{busy ? <LoaderCircle className="is-spinning" size={15} /> : <BellOff size={15} />}{t("workspace.monitoring.alerts.incidents.silence")}</button></div>
+          </form> : null}
+        </> : null}
+      </div>
+      <footer className="monitoring-incident-detail-footer">
+        {incident.readAt === null ? <button type="button" className="secondary-button" disabled={busy} onClick={() => onRead(incident)}><Check size={15} />{t("workspace.monitoring.alerts.incidents.markRead")}</button> : null}
+        {incident.status === "firing" && incident.acknowledgedAt === null ? <button type="button" className="secondary-button" disabled={busy} onClick={() => onAcknowledge(incident)}><CheckCheck size={15} />{t("workspace.monitoring.alerts.incidents.acknowledge")}</button> : null}
+        {incident.status === "firing" && incident.ruleId && !showSilence ? <button ref={silenceTriggerRef} type="button" className="primary-button" disabled={busy} onClick={() => onShowSilence(true)}><BellOff size={15} />{t("workspace.monitoring.alerts.incidents.silence")}</button> : null}
+      </footer>
+    </section>
+  </div>;
+}
+
+function localDateTime(value: Date): string {
+  const offsetMs = value.getTimezoneOffset() * 60_000;
+  return new Date(value.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 function NumberField({ label, value, min, max, onChange }: { label: string; value: number; min?: number; max?: number; onChange: (value: number) => void }) {
