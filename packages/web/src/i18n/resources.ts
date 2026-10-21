@@ -2156,6 +2156,26 @@ export const en = {
       series: "Series",
       unmatched: "Needs match",
       library: "Library",
+      tvStatusTitle: "TV mode health",
+      tvStatusDescription: "Read-only status for the local HDMI shell and playback services.",
+      tvStates: {
+        disabled: "Disabled",
+        starting: "Starting",
+        ready: "Ready",
+        degraded: "Needs attention"
+      },
+      tvComponents: {
+        weston: "Weston",
+        chromium: "Chromium shell",
+        vodPlayer: "VOD Player",
+        cec: "HDMI-CEC"
+      },
+      componentStates: {
+        ready: "Ready",
+        degraded: "Degraded",
+        unavailable: "Unavailable"
+      },
+      noStatusDetail: "No detail reported",
       states: {
         unconfigured: "Not configured",
         idle: "Idle",
@@ -2695,6 +2715,9 @@ export const en = {
       recoveringIn: "Retry {{count}} in {{seconds}}s",
       seek: "Seek",
       volume: "Volume",
+      audioTrack: "Audio track",
+      subtitleTrack: "Subtitle track",
+      subtitleOff: "Subtitles off",
       rewind: "Back 10 seconds",
       forward: "Forward 10 seconds",
       pause: "Pause",
@@ -4915,6 +4938,26 @@ export const zhCN = {
       series: "剧集",
       unmatched: "待匹配",
       library: "媒体库",
+      tvStatusTitle: "电视模式健康状态",
+      tvStatusDescription: "本机 HDMI 界面与播放服务的只读运行状态。",
+      tvStates: {
+        disabled: "未启用",
+        starting: "启动中",
+        ready: "正常",
+        degraded: "需要处理"
+      },
+      tvComponents: {
+        weston: "Weston",
+        chromium: "Chromium 界面",
+        vodPlayer: "VOD 播放器",
+        cec: "HDMI-CEC"
+      },
+      componentStates: {
+        ready: "正常",
+        degraded: "降级",
+        unavailable: "不可用"
+      },
+      noStatusDetail: "暂无状态详情",
       states: {
         unconfigured: "未配置",
         idle: "空闲",
@@ -5454,6 +5497,9 @@ export const zhCN = {
       recoveringIn: "第 {{count}} 次恢复，{{seconds}} 秒后重试",
       seek: "跳转",
       volume: "音量",
+      audioTrack: "音轨",
+      subtitleTrack: "字幕",
+      subtitleOff: "关闭字幕",
       rewind: "后退 10 秒",
       forward: "前进 10 秒",
       pause: "暂停",

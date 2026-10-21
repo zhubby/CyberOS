@@ -17,9 +17,19 @@ import {
   type RefObject
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { MediaFileRecord, MediaHome, MediaTitleDetail, MediaTitleSummary } from "@zos/shared";
-import { getMediaHome, getMediaTitle, mediaArtworkUrl, playMediaFile, searchMedia } from "./api.js";
+import type { MediaFileRecord, MediaHome, MediaTitleDetail, MediaTitleSummary, VodPlayerCommand, VodPlayerStatus } from "@zos/shared";
+import { acceptVodPlayerStatus } from "../lib/vod-player-status.js";
+import {
+  getMediaHome,
+  getMediaTitle,
+  getVodPlayerStatus,
+  mediaArtworkUrl,
+  playMediaFile,
+  searchMedia,
+  sendVodPlayerCommand
+} from "./api.js";
 import type { PinyinImeElement } from "./pinyin-ime.js";
+import { isActiveVodPlayback, playbackCommandForKey, vodPlayerPollDelay } from "./player-controls.js";
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 const VIRTUAL_KEYS = [
@@ -40,8 +50,12 @@ export function TvApp() {
   const [notice, setNotice] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sleeping, setSleeping] = useState(false);
+  const [playerStatus, setPlayerStatus] = useState<VodPlayerStatus | null>(null);
   const [clock, setClock] = useState(() => new Date());
   const mainRef = useRef<HTMLElement>(null);
+  const playerStatusRef = useRef<VodPlayerStatus | null>(null);
+  const playerWasActiveRef = useRef(false);
+  const lastProgressRefreshRef = useRef(0);
 
   const loadHome = useCallback(async () => {
     try {
@@ -70,6 +84,13 @@ export function TvApp() {
     }
   }, [t]);
 
+  const applyPlayerStatus = useCallback((next: VodPlayerStatus) => {
+    const accepted = acceptVodPlayerStatus(playerStatusRef.current, next);
+    playerStatusRef.current = accepted;
+    setPlayerStatus(accepted);
+    return accepted;
+  }, []);
+
   const returnHome = useCallback(() => {
     setSearchOpen(false);
     setView({ kind: "home" });
@@ -91,19 +112,20 @@ export function TvApp() {
   const playFile = useCallback(async (file: MediaFileRecord, position?: number) => {
     setNotice(t("tv.playing"));
     try {
-      await playMediaFile(file.id, position);
+      applyPlayerStatus(await playMediaFile(file.id, position));
       window.setTimeout(() => setNotice(null), 1_800);
     } catch (playError) {
       setNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
     }
-  }, [t]);
+  }, [applyPlayerStatus, t]);
 
   const playTitle = useCallback(async (summary: MediaTitleSummary) => {
     try {
       const detail = await getMediaTitle(summary.id);
-      const file = preferredFile(detail, summary.progress?.fileId);
+      const progress = summary.progress?.completed ? null : summary.progress;
+      const file = preferredFile(detail, progress?.fileId);
       if (!file) throw new Error(t("tv.playFailed"));
-      await playFile(file, summary.progress?.positionSeconds);
+      await playFile(file, progress?.positionSeconds);
     } catch (playError) {
       setNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
     }
@@ -115,6 +137,39 @@ export function TvApp() {
     events.addEventListener("snapshot", () => void loadHome());
     return () => events.close();
   }, [loadHome]);
+
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const response = await getVodPlayerStatus();
+        if (!active) return;
+        const next = applyPlayerStatus(response);
+        if (isActiveVodPlayback(next) && Date.now() - lastProgressRefreshRef.current >= 5_000) {
+          lastProgressRefreshRef.current = Date.now();
+          void loadHome();
+        }
+        timer = setTimeout(poll, vodPlayerPollDelay(next));
+      } catch {
+        if (active) timer = setTimeout(poll, 5_000);
+      }
+    };
+    void poll();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [applyPlayerStatus, loadHome]);
+
+  useEffect(() => {
+    const active = isActiveVodPlayback(playerStatus);
+    if (playerWasActiveRef.current && !active) {
+      void loadHome();
+      window.requestAnimationFrame(() => focusFirst());
+    }
+    playerWasActiveRef.current = active;
+  }, [loadHome, playerStatus]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 30_000);
@@ -141,11 +196,20 @@ export function TvApp() {
   useRemoteNavigation({
     sleeping,
     setSleeping,
+    playerStatus,
+    onPlayerCommand: async (command) => {
+      try {
+        applyPlayerStatus(await sendVodPlayerCommand(command));
+      } catch (commandError) {
+        setNotice(commandError instanceof Error ? commandError.message : t("tv.playFailed"));
+      }
+    },
     onBack: back,
     onPlay: () => {
       if (view.kind === "detail") {
-        const file = preferredFile(view.title, view.title.progress?.fileId);
-        if (file) void playFile(file, view.title.progress?.positionSeconds);
+        const progress = view.title.progress?.completed ? null : view.title.progress;
+        const file = preferredFile(view.title, progress?.fileId);
+        if (file) void playFile(file, progress?.positionSeconds);
       } else if (featured) {
         void playTitle(featured);
       }
@@ -216,7 +280,7 @@ export function TvApp() {
               <div className="tv-feature-actions">
                 <button className="tv-primary-action" type="button" data-tv-focusable onClick={() => void playTitle(featured)}>
                   <Play fill="currentColor" aria-hidden="true" />
-                  {featured.progress ? t("tv.resume") : t("tv.play")}
+                  {featured.progress && !featured.progress.completed ? t("tv.resume") : t("tv.play")}
                 </button>
                 <button className="tv-secondary-action" type="button" data-tv-focusable onClick={() => void openTitle(featured)}>
                   {t("tv.open")}
@@ -309,7 +373,8 @@ function DetailView({
   onPlay: (file: MediaFileRecord, position?: number) => void;
 }) {
   const { t } = useTranslation();
-  const primary = preferredFile(title, title.progress?.fileId);
+  const progress = title.progress?.completed ? null : title.progress;
+  const primary = preferredFile(title, progress?.fileId);
   return (
     <main className="tv-detail">
       <img
@@ -335,10 +400,10 @@ function DetailView({
             className="tv-primary-action"
             type="button"
             data-tv-focusable
-            onClick={() => onPlay(primary, title.progress?.positionSeconds)}
+            onClick={() => onPlay(primary, progress?.positionSeconds)}
           >
             <Play fill="currentColor" aria-hidden="true" />
-            {title.progress ? t("tv.resume") : t("tv.play")}
+            {progress ? t("tv.resume") : t("tv.play")}
           </button>
         ) : null}
 
@@ -402,10 +467,18 @@ function SearchOverlay({
       setResults([]);
       return;
     }
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void searchMedia(query).then((page) => setResults(page.titles)).catch(() => setResults([]));
+      void searchMedia(query, controller.signal)
+        .then((page) => setResults(page.titles))
+        .catch(() => {
+          if (!controller.signal.aborted) setResults([]);
+        });
     }, 240);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [query]);
 
   return (
@@ -509,37 +582,54 @@ function TvStatus({ label, detail, error = false }: { label: string; detail?: st
 function useRemoteNavigation({
   sleeping,
   setSleeping,
+  playerStatus,
+  onPlayerCommand,
   onBack,
   onPlay
 }: {
   sleeping: boolean;
   setSleeping: (value: boolean) => void;
+  playerStatus: VodPlayerStatus | null;
+  onPlayerCommand: (command: Exclude<VodPlayerCommand, { type: "play" }>) => void;
   onBack: () => void;
   onPlay: () => void;
 }) {
+  const current = useRef({ sleeping, setSleeping, playerStatus, onPlayerCommand, onBack, onPlay });
   useEffect(() => {
-    let idleTimer = window.setTimeout(() => setSleeping(true), IDLE_TIMEOUT_MS);
+    current.current = { sleeping, setSleeping, playerStatus, onPlayerCommand, onBack, onPlay };
+  }, [onBack, onPlay, onPlayerCommand, playerStatus, setSleeping, sleeping]);
+
+  useEffect(() => {
+    let idleTimer = window.setTimeout(() => current.current.setSleeping(true), IDLE_TIMEOUT_MS);
     const resetIdle = () => {
       window.clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(() => setSleeping(true), IDLE_TIMEOUT_MS);
+      idleTimer = window.setTimeout(() => current.current.setSleeping(true), IDLE_TIMEOUT_MS);
     };
     const handleKey = (event: KeyboardEvent) => {
-      if (sleeping) {
+      const state = current.current;
+      if (state.sleeping) {
         event.preventDefault();
         event.stopPropagation();
-        setSleeping(false);
+        state.setSleeping(false);
         resetIdle();
         return;
       }
       resetIdle();
+      const playbackCommand = playbackCommandForKey(state.playerStatus, event.key);
+      if (playbackCommand) {
+        event.preventDefault();
+        event.stopPropagation();
+        state.onPlayerCommand(playbackCommand);
+        return;
+      }
       if (["Escape", "BrowserBack", "GoBack"].includes(event.key) || event.keyCode === 461) {
         event.preventDefault();
-        onBack();
+        state.onBack();
         return;
       }
       if (["MediaPlayPause", "MediaPlay"].includes(event.key)) {
         event.preventDefault();
-        onPlay();
+        state.onPlay();
         return;
       }
       if (event.key === "Enter") {
@@ -567,7 +657,7 @@ function useRemoteNavigation({
       window.removeEventListener("keydown", handleKey, true);
       window.removeEventListener("pointerdown", handlePointer, true);
     };
-  }, [onBack, onPlay, setSleeping, sleeping]);
+  }, []);
 }
 
 type Direction = "left" | "right" | "up" | "down";

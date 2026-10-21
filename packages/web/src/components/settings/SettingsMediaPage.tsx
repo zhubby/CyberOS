@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   Check,
   Film,
@@ -19,6 +19,7 @@ import {
   getMediaScans,
   getMediaSources,
   getMediaTitles,
+  getTvStatus,
   requestMediaScan,
   updateMediaLibrarySettings,
   updateMediaMatch,
@@ -29,7 +30,8 @@ import {
   type MediaScanRun,
   type MediaSource,
   type MediaSourceKind,
-  type MediaTitleSummary
+  type MediaTitleSummary,
+  type TvModeStatus
 } from "../../api.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import {
@@ -44,6 +46,7 @@ interface MediaPageData {
   status: MediaLibraryStatus;
   scans: MediaScanRun[];
   unmatched: MediaTitleSummary[];
+  tvStatus: TvModeStatus;
 }
 
 export function SettingsMediaPage({
@@ -70,29 +73,38 @@ export function SettingsMediaPage({
   const [clearTmdbToken, setClearTmdbToken] = useState(false);
   const [language, setLanguage] = useState("zh-CN");
   const [region, setRegion] = useState("CN");
+  const loadSequence = useRef(0);
+  const candidateSearchSequence = useRef(0);
 
-  const load = useCallback(async (reportError = true) => {
+  const load = useCallback(async (reportError = true, syncForm = false) => {
+    const sequence = ++loadSequence.current;
     try {
-      const [settings, sources, status, scans, pending, unmatched] = await Promise.all([
+      const [settings, sources, status, scans, pending, unmatched, tvStatus] = await Promise.all([
         getMediaLibrarySettings(),
         getMediaSources(),
         getMediaLibraryStatus(),
         getMediaScans(undefined, 30),
         getMediaTitles({ matchStatus: "pending", limit: 100 }),
-        getMediaTitles({ matchStatus: "unmatched", limit: 100 })
+        getMediaTitles({ matchStatus: "unmatched", limit: 100 }),
+        getTvStatus()
       ]);
+      if (sequence !== loadSequence.current) return;
       setData({
         settings,
         sources,
         status,
         scans,
         unmatched: [...pending, ...unmatched].filter((title, index, titles) =>
-          titles.findIndex((candidate) => candidate.id === title.id) === index)
+          titles.findIndex((candidate) => candidate.id === title.id) === index),
+        tvStatus
       });
-      setLanguage(settings.language);
-      setRegion(settings.region ?? "");
+      if (syncForm) {
+        setLanguage(settings.language);
+        setRegion(settings.region ?? "");
+      }
       setError(null);
     } catch (nextError) {
+      if (sequence !== loadSequence.current) return;
       const message = nextError instanceof Error ? nextError.message : String(nextError);
       setError(message);
       if (reportError) onNotifyError(message);
@@ -100,9 +112,13 @@ export function SettingsMediaPage({
   }, [onNotifyError]);
 
   useEffect(() => {
-    void load();
+    void load(true, true);
     const timer = window.setInterval(() => void load(false), 5_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      loadSequence.current += 1;
+      candidateSearchSequence.current += 1;
+    };
   }, [load]);
 
   async function run(key: string, operation: () => Promise<void>, successMessage: string) {
@@ -152,19 +168,23 @@ export function SettingsMediaPage({
   }
 
   async function searchCandidates(title: MediaTitleSummary, query = candidateQuery) {
+    const sequence = ++candidateSearchSequence.current;
     setSelectedTitleId(title.id);
     setBusy(`candidates-${title.id}`);
     try {
-      setCandidates(await getMediaMatchCandidates(title.id, query));
+      const nextCandidates = await getMediaMatchCandidates(title.id, query);
+      if (sequence === candidateSearchSequence.current) setCandidates(nextCandidates);
     } catch (nextError) {
+      if (sequence !== candidateSearchSequence.current) return;
       setCandidates([]);
       onNotifyError(nextError instanceof Error ? nextError.message : String(nextError));
     } finally {
-      setBusy(null);
+      if (sequence === candidateSearchSequence.current) setBusy(null);
     }
   }
 
   async function applyMatch(title: MediaTitleSummary, candidate: MediaMatchCandidate | null) {
+    candidateSearchSequence.current += 1;
     await run(`match-${title.id}`, async () => {
       await updateMediaMatch(title.id, candidate ? { tmdbId: candidate.tmdbId, excluded: false } : { excluded: true });
       await requestMediaScan(title.sourceId);
@@ -352,6 +372,30 @@ export function SettingsMediaContent({
             <div><strong>{data.status.series}</strong><span>{t("settings.media.series")}</span></div>
             <div><strong>{data.status.unmatched}</strong><span>{t("settings.media.unmatched")}</span></div>
             <div><strong>{t(`settings.media.states.${data.status.state}`)}</strong><span>{t("settings.media.library")}</span></div>
+          </dl>
+        </section>
+
+        <section className="settings-section-card settings-field-wide settings-tv-status">
+          <header>
+            <div>
+              <h3>{t("settings.media.tvStatusTitle")}</h3>
+              <p>{t("settings.media.tvStatusDescription")}</p>
+            </div>
+            <strong className={`settings-tv-overall is-${data.tvStatus.state}`}>
+              {t(`settings.media.tvStates.${data.tvStatus.state}`)}
+            </strong>
+          </header>
+          <dl className="settings-tv-components">
+            {(["weston", "chromium", "vodPlayer", "cec"] as const).map((component) => {
+              const health = data.tvStatus[component];
+              return (
+                <div key={component}>
+                  <dt>{t(`settings.media.tvComponents.${component}`)}</dt>
+                  <dd className={`is-${health.state}`}>{t(`settings.media.componentStates.${health.state}`)}</dd>
+                  <small title={health.detail ?? undefined}>{health.detail ?? t("settings.media.noStatusDetail")}</small>
+                </div>
+              );
+            })}
           </dl>
         </section>
 

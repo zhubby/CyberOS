@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+[ "$#" -eq 3 ] || exit 64
+component=$1
+state=$2
+detail=$3
+case "$component" in weston|chromium|cec) ;; *) exit 64 ;; esac
+case "$state" in ready|degraded|unavailable) ;; *) exit 64 ;; esac
+
+status_dir=${ZOS_TV_STATUS_DIR:-/run/zos-tv/status}
+[ -d "$status_dir" ] || exit 1
+escaped_detail=$(printf '%s' "$detail" | sed 's/\\/\\\\/g; s/"/\\"/g')
+updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+temporary=$(mktemp "$status_dir/.${component}.XXXXXX")
+trap 'rm -f "$temporary"' EXIT HUP INT TERM
+printf '{"state":"%s","detail":"%s","updatedAt":"%s"}\n' \
+  "$state" "$escaped_detail" "$updated_at" > "$temporary"
+chmod 0644 "$temporary"
+mv -f "$temporary" "$status_dir/$component.json"
+trap - EXIT HUP INT TERM

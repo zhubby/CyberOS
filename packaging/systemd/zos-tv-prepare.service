@@ -1,0 +1,19 @@
+[Unit]
+Description=Prepare the ZOS TV runtime
+ConditionPathExists=/etc/zos/tv-mode/enabled
+PartOf=zos-tv.target
+Before=zos-tv-weston.service zos-tv-chromium.service zos-tv-cec.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/zos/scripts/zos-tv-prepare
+RemainAfterExit=yes
+RuntimeDirectory=zos-tv
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=restart
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/zos-tv
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER

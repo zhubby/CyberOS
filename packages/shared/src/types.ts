@@ -401,6 +401,22 @@ export interface MediaTitlePage {
   nextCursor: string | null;
 }
 
+export interface TvComponentHealth {
+  state: "ready" | "degraded" | "unavailable";
+  detail: string | null;
+  updatedAt: string | null;
+}
+
+export interface TvModeStatus {
+  enabled: boolean;
+  state: "disabled" | "starting" | "ready" | "degraded";
+  weston: TvComponentHealth;
+  chromium: TvComponentHealth;
+  cec: TvComponentHealth;
+  vodPlayer: TvComponentHealth;
+  updatedAt: string;
+}
+
 export type PhotostaffTakenAtSource = "exif" | "file_mtime";
 export type PhotostaffAssetStatus = "ready" | "failed";
 export type PhotostaffJobKind = "full_scan" | "path_refresh";

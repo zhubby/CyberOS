@@ -16,6 +16,11 @@ units = [
   "zos-alerter.service",
   "zos-termux.service",
   "zos-vod-player.service",
+  "zos-tv-prepare.service",
+  "zos-tv-weston.service",
+  "zos-tv-chromium.service",
+  "zos-tv-cec.service",
+  "zos-tv.target",
   "zos-bluetoothd.service",
   "zos-hostd.service",
   "zos-host-accessd.service",
@@ -78,7 +83,14 @@ ocr_media_helpers = [
 ]
 media_playback = [
   "mpv",
-  "seatd"
+  "seatd",
+  "chromium",
+  "weston",
+  "v4l-utils",
+  "wtype",
+  "fonts-noto-core",
+  "fonts-noto-cjk",
+  "fonts-noto-color-emoji"
 ]
 nas_health = [
   "mdadm",

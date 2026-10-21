@@ -73,4 +73,23 @@ describe("VodPlayerControls", () => {
     expect(html).toContain("Bluetooth audio was unavailable");
     expect(html).toContain("BlueALSA device unavailable");
   });
+
+  it("exposes audio and subtitle track selection", () => {
+    const html = renderToStaticMarkup(createElement(VodPlayerControls, {
+      status: {
+        ...status,
+        audioTracks: [{ id: 1, language: "eng", title: "Stereo", default: true, forced: false, external: false }],
+        subtitleTracks: [{ id: 2, language: "zho", title: "简体中文", default: true, forced: false, external: false }],
+        selectedAudioTrackId: 1,
+        selectedSubtitleTrackId: 2
+      },
+      busy: false,
+      onCommand: vi.fn(),
+      onRetry: vi.fn()
+    }));
+    expect(html).toContain("Audio track");
+    expect(html).toContain("Stereo · ENG");
+    expect(html).toContain("Subtitles off");
+    expect(html).toContain("简体中文 · ZHO");
+  });
 });

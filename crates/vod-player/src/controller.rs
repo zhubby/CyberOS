@@ -75,6 +75,7 @@ impl ControllerHandle {
                 None
             }
             LoadOutcome::Session(saved) => {
+                let saved = *saved;
                 status.state = PlayerState::Recovering;
                 status.session_id = Some(saved.session_id.clone());
                 status.root_id = Some(saved.root_id.clone());
@@ -703,10 +704,14 @@ impl Controller {
             }
             MpvEvent::Exit { code, signal } => {
                 if self.mpv.take().is_some() && self.desired.is_some() {
-                    self.schedule_recovery(VodError::unavailable(
-                        ErrorCode::PlaybackFailed,
-                        format!("mpv exited unexpectedly (code {code:?}, signal {signal:?})"),
-                    ));
+                    if is_clean_mpv_exit(code, signal) {
+                        self.finish_external_stop();
+                    } else {
+                        self.schedule_recovery(VodError::unavailable(
+                            ErrorCode::PlaybackFailed,
+                            format!("mpv exited unexpectedly (code {code:?}, signal {signal:?})"),
+                        ));
+                    }
                 }
             }
             MpvEvent::ProtocolFailure(message) => {
@@ -741,6 +746,19 @@ impl Controller {
         ));
         self.publish();
         let _ = self.persist_current();
+    }
+
+    fn finish_external_stop(&mut self) {
+        self.save_progress();
+        self.desired = None;
+        self.retry_at = None;
+        self.stable_since = None;
+        self.status.state = PlayerState::Stopped;
+        self.status.next_retry_at = None;
+        self.status.error = None;
+        self.status.error_code = None;
+        let _ = session::clear(&self.config.state_path);
+        self.publish();
     }
 
     fn set_terminal_error(&mut self, error: VodError) {
@@ -858,6 +876,10 @@ impl Controller {
         self.stop_mpv().await;
         let _ = self.persist_current();
     }
+}
+
+fn is_clean_mpv_exit(code: Option<i32>, signal: Option<i32>) -> bool {
+    code == Some(0) && signal.is_none()
 }
 
 fn empty_status(
@@ -1172,5 +1194,12 @@ mod tests {
 
         assert_eq!(controller.status.retry_count, 1);
         assert!(controller.retry_at.is_none());
+    }
+
+    #[test]
+    fn clean_mpv_exit_is_treated_as_an_external_stop() {
+        assert!(is_clean_mpv_exit(Some(0), None));
+        assert!(!is_clean_mpv_exit(Some(1), None));
+        assert!(!is_clean_mpv_exit(None, Some(15)));
     }
 }

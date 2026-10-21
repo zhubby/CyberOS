@@ -7,6 +7,7 @@ import {
   ensureNasRoots,
   openZosDb,
   replaceMediaArtwork,
+  saveBluetoothSettings,
   upsertMediaCatalogEntry,
   type ZosDatabase
 } from "@zos/db";
@@ -161,6 +162,7 @@ describe("Media API", () => {
     });
     expect(matched.json().title).toEqual(expect.objectContaining({ tmdbId: 329865, matchStatus: "matched" }));
 
+    saveBluetoothSettings(db, { defaultAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF" });
     const played = await server.inject({
       method: "POST",
       url: `/api/media/files/${stored.file.id}/play`,
@@ -173,6 +175,7 @@ describe("Media API", () => {
       storagePoolId: poolId,
       relativePath: "Movies/Arrival.2016.mkv",
       mediaFileId: stored.file.id,
+      audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
       startPositionSeconds: 120
     })]);
   });

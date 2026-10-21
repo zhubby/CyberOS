@@ -153,9 +153,6 @@ impl MpvHandle {
         if paused {
             args.push("--pause".to_owned());
         }
-        if let Some(connector) = &config.drm_connector {
-            args.push(format!("--drm-connector={connector}"));
-        }
         if let Some(device) = audio_device.or(config.audio_device.as_deref()) {
             args.push(format!("--audio-device={device}"));
         }
@@ -451,6 +448,8 @@ fn append_video_output_args(args: &mut Vec<String>, config: &VodPlayerConfig) {
             "--osd-on-seek=bar".to_owned(),
             format!("--input-conf={TV_INPUT_CONFIG_PATH}"),
         ]);
+    } else if let Some(connector) = &config.drm_connector {
+        args.push(format!("--drm-connector={connector}"));
     }
 }
 
@@ -973,11 +972,17 @@ done
         let directory = tempfile::tempdir().unwrap();
         let mut test_config = config(directory.path());
         test_config.video_output = "wayland".to_owned();
+        test_config.drm_connector = Some("HDMI-A-1".to_owned());
         let mut args = Vec::new();
         append_video_output_args(&mut args, &test_config);
         assert!(args.contains(&"--fullscreen=yes".to_owned()));
         assert!(args.contains(&"--wayland-app-id=zos-vod-player".to_owned()));
         assert!(args.contains(&format!("--input-conf={TV_INPUT_CONFIG_PATH}")));
+        assert!(
+            !args
+                .iter()
+                .any(|argument| argument.starts_with("--drm-connector="))
+        );
     }
 
     #[tokio::test]

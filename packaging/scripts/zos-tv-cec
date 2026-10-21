@@ -1,0 +1,75 @@
+#!/bin/sh
+set -eu
+
+runtime_dir=${ZOS_TV_RUNTIME_DIR:-/run/zos-tv}
+status_writer=${ZOS_TV_SCRIPT_DIR:-/usr/lib/zos/scripts}/zos-tv-write-status
+cec_pid=
+heartbeat_pid=
+events_fifo=
+
+cleanup() {
+  [ -n "$cec_pid" ] && kill "$cec_pid" 2>/dev/null || true
+  [ -n "$heartbeat_pid" ] && kill "$heartbeat_pid" 2>/dev/null || true
+  [ -n "$events_fifo" ] && rm -f "$events_fifo"
+}
+trap cleanup EXIT HUP INT TERM
+
+send_key() {
+  command -v wtype >/dev/null 2>&1 || return 0
+  wtype -k "$1" >/dev/null 2>&1 || true
+}
+
+handle_cec_line() {
+  line=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case "$line" in
+    *"ui-cmd: 'up'"*) send_key Up ;;
+    *"ui-cmd: 'down'"*) send_key Down ;;
+    *"ui-cmd: 'left'"*) send_key Left ;;
+    *"ui-cmd: 'right'"*) send_key Right ;;
+    *"ui-cmd: 'select'"*|*"ui-cmd: 'enter'"*) send_key Return ;;
+    *"ui-cmd: 'back'"*|*"ui-cmd: 'exit'"*) send_key Escape ;;
+    *"ui-cmd: 'play'"*|*"ui-cmd: 'pause'"*|*"ui-cmd: 'play function'"*) send_key XF86AudioPlay ;;
+    *"ui-cmd: 'stop'"*) send_key XF86AudioStop ;;
+    *"ui-cmd: 'f1 (blue)'"*) send_key a ;;
+    *"ui-cmd: 'f2 (red)'"*) send_key s ;;
+  esac
+}
+
+if ! command -v cec-ctl >/dev/null 2>&1; then
+  "$status_writer" cec unavailable "cec-ctl is not installed"
+  exit 127
+fi
+
+while :; do
+  set -- /dev/cec*
+  if [ "$1" = "/dev/cec*" ]; then
+    "$status_writer" cec degraded "No CEC adapter detected; keyboard input remains available"
+    sleep 5
+    continue
+  fi
+  device=$1
+  events_fifo="$runtime_dir/cec-events.$$"
+  rm -f "$events_fifo"
+  mkfifo -m 0600 "$events_fifo"
+  cec-ctl -d "$device" --playback --monitor > "$events_fifo" 2>&1 &
+  cec_pid=$!
+  (
+    while kill -0 "$cec_pid" 2>/dev/null; do
+      "$status_writer" cec ready "$device"
+      sleep 5
+    done
+  ) &
+  heartbeat_pid=$!
+  while IFS= read -r event_line; do
+    handle_cec_line "$event_line"
+  done < "$events_fifo"
+  wait "$cec_pid" 2>/dev/null || true
+  kill "$heartbeat_pid" 2>/dev/null || true
+  wait "$heartbeat_pid" 2>/dev/null || true
+  cec_pid=
+  heartbeat_pid=
+  rm -f "$events_fifo"
+  events_fifo=
+  "$status_writer" cec degraded "CEC monitor stopped; retrying"
+  sleep 2
+done

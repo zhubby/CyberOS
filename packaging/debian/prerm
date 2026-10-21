@@ -2,6 +2,7 @@
 set -e
 
 if [ "$1" = "remove" ] && command -v systemctl >/dev/null 2>&1; then
+  /usr/lib/zos/scripts/zos-tv-mode disable
   systemctl stop zos-alerter.service zos-monitor.service zos-host-accessd.service zos-hostd.service zos-termux.service zos-vod-player.service zos-bluetoothd.service zos-api.service zos-photostaff.service zos-downloader.service 'zos-worker@*.service' zos-indexer.service zos-health.service zos-maintenance.service 2>/dev/null || true
   systemctl disable zos-alerter.service zos-monitor.service zos-host-accessd.service zos-hostd.service zos-termux.service zos-vod-player.service zos-bluetoothd.service zos-api.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-health.timer zos-maintenance.timer 2>/dev/null || true
   if command -v tmux >/dev/null 2>&1; then

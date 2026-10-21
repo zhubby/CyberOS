@@ -8,6 +8,7 @@ import {
   defaultMediaLibrarySettings,
   deleteMediaSource,
   enqueueMediaScan,
+  getBluetoothSettings,
   getMediaArtwork,
   getMediaFile,
   getMediaHome,
@@ -246,12 +247,14 @@ export function registerMediaRoutes(
       const scope = await resolveStoragePoolScope(db, context.system, file.rootId, file.storagePoolId);
       const safe = await resolveScopedExistingPath(scope, file.relativePath);
       if (!(await stat(safe.realPath)).isFile()) return reply.status(404).send({ error: "Media file not found" });
+      const audioDeviceId = getBluetoothSettings(db)?.defaultAudioDeviceId ?? null;
       const status = await vodPlayer.command({
         type: "play",
         rootId: file.rootId,
         storagePoolId: file.storagePoolId,
         relativePath: safe.relativePath,
         mediaFileId: file.id,
+        ...(audioDeviceId ? { audioDeviceId } : {}),
         ...(startPositionSeconds === undefined ? {} : { startPositionSeconds })
       });
       reply.send({ status });

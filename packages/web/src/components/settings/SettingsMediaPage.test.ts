@@ -29,7 +29,16 @@ describe("SettingsMediaContent", () => {
           title: "Arrival", originalTitle: null, overview: null, year: 2016, releaseDate: null, runtimeMinutes: null,
           originalLanguage: null, genres: [], metadataSource: "filename", matchStatus: "unmatched", matchConfidence: null,
           posterKey: null, backdropKey: null, addedAt: "2026-10-21T00:00:00.000Z", updatedAt: "2026-10-21T00:00:00.000Z", progress: null
-        }]
+        }],
+        tvStatus: {
+          enabled: true,
+          state: "ready",
+          weston: { state: "ready", detail: "wayland-0", updatedAt: "2026-10-21T00:00:00.000Z" },
+          chromium: { state: "ready", detail: "/tv/", updatedAt: "2026-10-21T00:00:00.000Z" },
+          vodPlayer: { state: "ready", detail: "idle", updatedAt: "2026-10-21T00:00:00.000Z" },
+          cec: { state: "degraded", detail: "Keyboard input remains available", updatedAt: "2026-10-21T00:00:00.000Z" },
+          updatedAt: "2026-10-21T00:00:00.000Z"
+        }
       },
       busy: null,
       deleteId: null,
@@ -51,5 +60,7 @@ describe("SettingsMediaContent", () => {
     expect(html).toContain("Completed");
     expect(html).toContain("Match correction");
     expect(html).toContain("First contact");
+    expect(html).toContain("TV mode health");
+    expect(html).toContain("Keyboard input remains available");
   });
 });

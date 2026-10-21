@@ -36,7 +36,8 @@ let
     systemd
   ] ++ lib.optionals cfg.integrations.docker.enable [ docker ]
     ++ lib.optionals cfg.integrations.virtualMachines.enable [ libvirt qemu ]
-    ++ lib.optionals cfg.integrations.vodPlayer.enable [ mpv ];
+    ++ lib.optionals cfg.integrations.vodPlayer.enable [ mpv ]
+    ++ lib.optionals cfg.integrations.tvMode.enable [ chromium curl seatd v4l-utils weston wtype ];
   hardenedService = {
     User = "zos";
     Group = "zos";
@@ -200,6 +201,7 @@ in {
       docker.enable = mkEnableOption "Docker integration";
       virtualMachines.enable = mkEnableOption "libvirt virtual machine integration";
       vodPlayer.enable = mkEnableOption "DRM/ALSA VOD playback integration";
+      tvMode.enable = mkEnableOption "the local Weston and Chromium TV shell";
     };
   };
 
@@ -222,6 +224,18 @@ in {
           assertion = !cfg.components.vodPlayer.enable || cfg.integrations.vodPlayer.enable;
           message = "services.zos.components.vodPlayer requires services.zos.integrations.vodPlayer";
         }
+        {
+          assertion = !cfg.integrations.tvMode.enable || cfg.components.api.enable;
+          message = "services.zos.integrations.tvMode requires services.zos.components.api";
+        }
+        {
+          assertion = !cfg.integrations.tvMode.enable || cfg.components.vodPlayer.enable;
+          message = "services.zos.integrations.tvMode requires services.zos.components.vodPlayer";
+        }
+        {
+          assertion = !cfg.integrations.tvMode.enable || cfg.integrations.vodPlayer.enable;
+          message = "services.zos.integrations.tvMode requires services.zos.integrations.vodPlayer";
+        }
       ];
 
       users.groups.zos = { };
@@ -233,7 +247,8 @@ in {
         shell = pkgs.bashInteractive;
         extraGroups = lib.optional cfg.integrations.docker.enable "docker"
           ++ lib.optional cfg.integrations.virtualMachines.enable "libvirtd"
-          ++ lib.optionals cfg.integrations.vodPlayer.enable [ "audio" "render" "video" ];
+          ++ lib.optionals cfg.integrations.vodPlayer.enable [ "audio" "render" "video" ]
+          ++ lib.optionals cfg.integrations.tvMode.enable [ "input" "seat" ];
       };
 
       systemd.tmpfiles.rules = [
@@ -251,11 +266,15 @@ in {
         "d /zos/state/bluetooth 0750 zos zos -"
         "d /zos/state/hostd/bluetooth 0750 root root -"
         "d /zos/state/vod-player 0750 zos zos -"
+        "d /zos/state/tv 0750 zos zos -"
+        "d /zos/state/tv/chromium 0750 zos zos -"
         "d /zos/system-backups 0750 root root -"
         "d /zos/system-backups/permissions 0700 root root -"
         "d /run/zos 0770 root zos -"
         "L+ /zos/config/config.toml - - - - ${configSource}"
       ];
+
+      environment.etc."zos/host-mutation-policy".text = "declarative\n";
 
       networking.firewall.allowedTCPPorts = lib.optional
         (cfg.nginx.enable && cfg.nginx.openFirewall)
@@ -322,6 +341,8 @@ in {
             environment = {
               ZOS_WEB_DIST = "${packageRoot}/apps/web/dist";
               ZOS_DOCS_DIST = "${packageRoot}/docs/dist";
+            } // lib.optionalAttrs cfg.integrations.tvMode.enable {
+              ZOS_VOD_PLAYER_ENABLED = "1";
             };
             serviceConfig = {
               ReadWritePaths = [ "/zos/state" "/zos/logs" "/zos/data" "/zos/vm" "/zos/iso" "/zos/apps" ];
@@ -501,7 +522,13 @@ in {
             after = [ "local-fs.target" "systemd-tmpfiles-setup.service" ]
               ++ lib.optional cfg.components.api.enable "zos-api.service";
             wants = lib.optional cfg.components.api.enable "zos-api.service";
-            environment = { HOME = "/zos/state/vod-player"; };
+            environment = { HOME = "/zos/state/vod-player"; }
+              // lib.optionalAttrs cfg.integrations.tvMode.enable {
+                ZOS_VOD_PLAYER_ENABLED = "1";
+                ZOS_VOD_PLAYER_VIDEO_OUTPUT = "wayland";
+                XDG_RUNTIME_DIR = "/run/zos-tv";
+                WAYLAND_DISPLAY = "wayland-0";
+              };
             serviceConfig = {
               Type = "notify";
               NotifyAccess = "main";
@@ -519,6 +546,114 @@ in {
             };
           };
         })
+        (mkIf cfg.integrations.tvMode.enable {
+          zos-tv-prepare = {
+            description = "Prepare the ZOS TV runtime";
+            partOf = [ "zos-tv.target" ];
+            before = [ "zos-tv-weston.service" "zos-tv-chromium.service" "zos-tv-cec.service" ];
+            path = runtimePath;
+            environment = baseEnvironment;
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = "${packageRoot}/scripts/zos-tv-prepare";
+              RemainAfterExit = true;
+              RuntimeDirectory = "zos-tv";
+              RuntimeDirectoryMode = "0700";
+              RuntimeDirectoryPreserve = "restart";
+              ProtectSystem = "strict";
+              ProtectHome = true;
+              ReadWritePaths = [ "/run/zos-tv" ];
+              NoNewPrivileges = true;
+              PrivateTmp = true;
+              CapabilityBoundingSet = [ "CAP_CHOWN" "CAP_DAC_OVERRIDE" "CAP_FOWNER" ];
+            };
+          };
+          zos-tv-weston = {
+            description = "ZOS TV Weston kiosk compositor";
+            partOf = [ "zos-tv.target" ];
+            requires = [ "zos-tv-prepare.service" ];
+            wants = [ "seatd.service" ];
+            after = [ "zos-tv-prepare.service" "seatd.service" ];
+            conflicts = [ "getty@tty1.service" ];
+            path = runtimePath;
+            environment = baseEnvironment // {
+              XDG_RUNTIME_DIR = "/run/zos-tv";
+              LIBSEAT_BACKEND = "seatd";
+              ZOS_TV_SCRIPT_DIR = "${packageRoot}/scripts";
+            };
+            serviceConfig = hardenedService // {
+              ExecStart = "${packageRoot}/scripts/zos-tv-weston";
+              SupplementaryGroups = [ "video" "render" "input" "seat" ];
+              TimeoutStopSec = "15s";
+              TTYPath = "/dev/tty1";
+              StandardInput = "tty";
+              TTYReset = true;
+              TTYVHangup = true;
+              TTYVTDisallocate = true;
+              ProtectHome = true;
+              ReadWritePaths = [ "/run/zos-tv" ];
+              PrivateDevices = false;
+              DevicePolicy = "closed";
+              DeviceAllow = [ "char-drm rw" "char-input r" "/dev/tty1 rw" ];
+              RestrictAddressFamilies = [ "AF_UNIX" ];
+              MemoryMax = "256M";
+              TasksMax = 128;
+            };
+          };
+          zos-tv-chromium = {
+            description = "ZOS TV Chromium shell";
+            partOf = [ "zos-tv.target" ];
+            requires = [ "zos-tv-weston.service" "zos-api.service" ];
+            after = [ "zos-tv-weston.service" "zos-api.service" ];
+            path = runtimePath;
+            environment = baseEnvironment // {
+              HOME = "/zos/state/tv";
+              XDG_RUNTIME_DIR = "/run/zos-tv";
+              WAYLAND_DISPLAY = "wayland-0";
+              ZOS_TV_SCRIPT_DIR = "${packageRoot}/scripts";
+            };
+            serviceConfig = hardenedService // {
+              ExecStart = "${packageRoot}/scripts/zos-tv-chromium";
+              TimeoutStopSec = "20s";
+              ProtectHome = true;
+              ReadWritePaths = [ "/run/zos-tv" "/zos/state/tv" ];
+              RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+              IPAddressDeny = "any";
+              IPAddressAllow = "localhost";
+              MemoryMax = "1G";
+              CPUQuota = "250%";
+              TasksMax = 512;
+            };
+          };
+          zos-tv-cec = {
+            description = "ZOS TV HDMI-CEC remote input";
+            partOf = [ "zos-tv.target" ];
+            requires = [ "zos-tv-prepare.service" ];
+            wants = [ "zos-tv-weston.service" ];
+            after = [ "zos-tv-prepare.service" "zos-tv-weston.service" ];
+            path = runtimePath;
+            environment = baseEnvironment // {
+              XDG_RUNTIME_DIR = "/run/zos-tv";
+              WAYLAND_DISPLAY = "wayland-0";
+              ZOS_TV_SCRIPT_DIR = "${packageRoot}/scripts";
+            };
+            serviceConfig = hardenedService // {
+              ExecStart = "${packageRoot}/scripts/zos-tv-cec";
+              SupplementaryGroups = [ "video" "input" ];
+              Restart = "always";
+              RestartSec = "3s";
+              TimeoutStopSec = "10s";
+              ProtectHome = true;
+              ReadWritePaths = [ "/run/zos-tv" ];
+              PrivateDevices = false;
+              DevicePolicy = "closed";
+              DeviceAllow = [ "char-cec rw" ];
+              RestrictAddressFamilies = [ "AF_UNIX" ];
+              MemoryMax = "64M";
+              TasksMax = 32;
+            };
+          };
+        })
         (mkIf cfg.components.hostAccessd.enable {
           zos-host-accessd = rustService {
             description = "ZOS restricted host access proxy";
@@ -532,7 +667,7 @@ in {
             };
             serviceConfig = {
               RuntimeDirectory = "zos/host-access";
-              RuntimeDirectoryMode = "0750";
+              RuntimeDirectoryMode = "0700";
               RuntimeDirectoryPreserve = "restart";
               PrivateDevices = true;
               ProtectHome = true;
@@ -644,6 +779,31 @@ in {
       services.zos.components.hostAccessd.enable = lib.mkDefault cfg.integrations.docker.enable;
       services.zos.components.vodPlayer.enable = lib.mkDefault cfg.integrations.vodPlayer.enable;
     }
+    (mkIf cfg.integrations.tvMode.enable {
+      services.seatd.enable = true;
+      fonts.packages = with pkgs; [ noto-fonts noto-fonts-cjk-sans noto-fonts-color-emoji ];
+      environment.etc."zos/tv-mode/enabled".text = "declarative\n";
+      systemd.targets.zos-tv = {
+        description = "ZOS TV appliance session";
+        wantedBy = [ "multi-user.target" ];
+        requires = [
+          "zos-tv-prepare.service"
+          "zos-tv-weston.service"
+          "zos-tv-chromium.service"
+          "zos-vod-player.service"
+        ];
+        wants = [ "zos-tv-cec.service" ];
+        after = [
+          "zos-api.service"
+          "zos-vod-player.service"
+          "zos-tv-weston.service"
+          "zos-tv-chromium.service"
+        ];
+        before = [ "display-manager.service" ];
+        conflicts = [ "display-manager.service" ];
+        unitConfig.AllowIsolate = true;
+      };
+    })
     (mkIf cfg.integrations.docker.enable {
       virtualisation.docker.enable = true;
     })

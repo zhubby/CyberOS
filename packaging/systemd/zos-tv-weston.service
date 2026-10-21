@@ -1,0 +1,38 @@
+[Unit]
+Description=ZOS TV Weston kiosk compositor
+ConditionPathExists=/etc/zos/tv-mode/enabled
+PartOf=zos-tv.target
+Requires=zos-tv-prepare.service
+After=zos-tv-prepare.service seatd.service
+Wants=seatd.service
+
+[Service]
+Type=simple
+User=zos
+Group=zos
+SupplementaryGroups=video render input
+Environment=XDG_RUNTIME_DIR=/run/zos-tv
+Environment=LIBSEAT_BACKEND=seatd
+ExecStart=/usr/lib/zos/scripts/zos-tv-weston
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15s
+TTYPath=/dev/tty1
+StandardInput=tty
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/zos-tv
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=no
+DevicePolicy=closed
+DeviceAllow=char-drm rw
+DeviceAllow=char-input r
+DeviceAllow=/dev/tty1 rw
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=256M
+TasksMax=128

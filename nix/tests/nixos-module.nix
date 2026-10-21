@@ -76,6 +76,26 @@ in pkgs.testers.runNixOSTest {
       };
       environment.systemPackages = [ pkgs.curl pkgs.python3 pkgs.sqlite ];
     };
+
+    tv = { lib, ... }: {
+      imports = [ self.nixosModules.zos ];
+      services.zos = {
+        enable = true;
+        package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        settings = commonSettings;
+        components = minimalComponents // { vodPlayer.enable = true; };
+        integrations = {
+          vodPlayer.enable = true;
+          tvMode.enable = true;
+        };
+        timers.maintenance.enable = false;
+        nginx.enable = false;
+      };
+      # The VM validates the declarative graph without requiring virtual DRM/CEC hardware.
+      systemd.targets.zos-tv.wantedBy = lib.mkForce [ ];
+      systemd.services.zos-vod-player.wantedBy = lib.mkForce [ ];
+      environment.systemPackages = [ pkgs.curl ];
+    };
   };
 
   testScript = ''
@@ -125,5 +145,17 @@ PY""" % repr(request)
 
     generated.succeed("readlink /zos/config/config.toml | grep -F /nix/store/")
     external.succeed("test $(readlink /zos/config/config.toml) = /etc/zos-external.toml")
+
+    tv.wait_for_unit("zos-api.service")
+    tv.succeed("test $(cat /etc/zos/host-mutation-policy) = declarative")
+    tv.succeed("test $(cat /etc/zos/tv-mode/enabled) = declarative")
+    tv.succeed("systemctl show zos-tv.target -p Requires --value | grep -F zos-tv-weston.service")
+    tv.succeed("systemctl show zos-tv-prepare.service -p RuntimeDirectoryMode --value | grep -Fx 0700")
+    tv.succeed("systemctl show zos-tv-weston.service -p PartOf --value | grep -F zos-tv.target")
+    tv.succeed("systemctl show zos-tv-chromium.service -p PartOf --value | grep -F zos-tv.target")
+    tv.succeed("systemctl show zos-tv-chromium.service -p User --value | grep -Fx zos")
+    tv.succeed("systemctl show zos-vod-player.service -p Environment --value | grep -F ZOS_VOD_PLAYER_VIDEO_OUTPUT=wayland")
+    tv.succeed("systemctl show zos-api.service -p Environment --value | grep -F ZOS_VOD_PLAYER_ENABLED=1")
+    tv.fail("${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/zos-tv-mode enable")
   '';
 }

@@ -11,6 +11,7 @@ NODE_MIRROR="${ZOS_NODE_MIRROR:-https://mirrors.aliyun.com/nodejs-release}"
 NODE_MIRROR="${NODE_MIRROR%/}"
 NODE_VERSION="${ZOS_NODE_VERSION:-22.23.2}"
 VOD_PLAYER_ENABLED="${ZOS_ENABLE_VOD_PLAYER:-0}"
+TV_MODE_ENABLED="${ZOS_ENABLE_TV_MODE:-0}"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -35,6 +36,13 @@ case "$VOD_PLAYER_ENABLED" in
   0|1) ;;
   *) printf "ZOS_ENABLE_VOD_PLAYER must be 0 or 1\n" >&2; exit 1 ;;
 esac
+case "$TV_MODE_ENABLED" in
+  0|1) ;;
+  *) printf "ZOS_ENABLE_TV_MODE must be 0 or 1\n" >&2; exit 1 ;;
+esac
+if [ "$TV_MODE_ENABLED" = "1" ]; then
+  VOD_PLAYER_ENABLED=1
+fi
 
 if [ ! -f "$DEB_PATH" ]; then
   printf "Missing ZOS deb at %s. Build it first with packaging/scripts/build-deb.sh or set ZOS_DEB.\n" "$DEB_PATH" >&2
@@ -47,7 +55,7 @@ install -d "$OUT_DIR"
 mmdebstrap \
   --architectures="$ARCH" \
   --variant=minbase \
-  --include=systemd-sysv,ca-certificates,curl,nodejs,npm,sqlite3,tmux,nginx,restic,git,rsync,network-manager,wpasupplicant,dnsmasq-base,wireless-regdb,iw,bluez,bluez-obexd,bluez-alsa-utils,libasound2-plugin-bluez,dbus-user-session,docker.io,docker-cli,docker-compose,libvirt-daemon-system,libvirt-clients,qemu-system-arm,qemu-efi-aarch64,qemu-utils,virtinst,ipxe-qemu,gzip,unzip,libarchive-tools,unrar-free,mdadm,btrfs-progs,tesseract-ocr,tesseract-ocr-chi-sim,tesseract-ocr-eng,poppler-utils,ffmpeg,libraw-bin,imagemagick,libheif-examples,libimage-exiftool-perl,libvips-tools,mpv,seatd,smartmontools,samba,apache2,apache2-utils,vsftpd,libpam-pwdfile,nfs-kernel-server,minidlna \
+  --include=systemd-sysv,ca-certificates,curl,nodejs,npm,sqlite3,tmux,nginx,restic,git,rsync,network-manager,wpasupplicant,dnsmasq-base,wireless-regdb,iw,bluez,bluez-obexd,bluez-alsa-utils,libasound2-plugin-bluez,dbus-user-session,docker.io,docker-cli,docker-compose,libvirt-daemon-system,libvirt-clients,qemu-system-arm,qemu-efi-aarch64,qemu-utils,virtinst,ipxe-qemu,gzip,unzip,libarchive-tools,unrar-free,mdadm,btrfs-progs,tesseract-ocr,tesseract-ocr-chi-sim,tesseract-ocr-eng,poppler-utils,ffmpeg,libraw-bin,imagemagick,libheif-examples,libimage-exiftool-perl,libvips-tools,mpv,seatd,chromium,weston,v4l-utils,wtype,fonts-noto-core,fonts-noto-cjk,fonts-noto-color-emoji,smartmontools,samba,apache2,apache2-utils,vsftpd,libpam-pwdfile,nfs-kernel-server,minidlna \
   "$SUITE" "$ROOTFS" "$MIRROR"
 
 case "$ARCH" in
@@ -79,6 +87,35 @@ if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
   systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service zos-hostd.service zos-termux.service zos-vod-player.service zos-bluetoothd.service zos-api.service zos-monitor.service zos-alerter.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-maintenance.timer zos-backup-daily.timer zos-backup-weekly.timer zos-health.timer
 else
   systemd-nspawn -D "$ROOTFS" systemctl enable nginx.service zos-hostd.service zos-termux.service zos-bluetoothd.service zos-api.service zos-monitor.service zos-alerter.service zos-worker@1.service zos-photostaff.service zos-downloader.service zos-indexer.service zos-maintenance.timer zos-backup-daily.timer zos-backup-weekly.timer zos-health.timer
+fi
+
+if [ "$TV_MODE_ENABLED" = "1" ]; then
+  install -d -m 0755 "$ROOTFS/etc/zos/tv-mode" \
+    "$ROOTFS/etc/systemd/system/zos-vod-player.service.d" \
+    "$ROOTFS/etc/systemd/system/zos-api.service.d"
+  install -d -m 0700 "$ROOTFS/zos/state/tv/control"
+  printf 'enabled\n' > "$ROOTFS/etc/zos/tv-mode/enabled"
+  cat > "$ROOTFS/etc/systemd/system/zos-vod-player.service.d/50-zos-tv-mode.conf" <<'EOF'
+[Service]
+Environment=ZOS_VOD_PLAYER_ENABLED=1
+Environment=ZOS_VOD_PLAYER_VIDEO_OUTPUT=wayland
+Environment=XDG_RUNTIME_DIR=/run/zos-tv
+Environment=WAYLAND_DISPLAY=wayland-0
+EOF
+  cat > "$ROOTFS/etc/systemd/system/zos-api.service.d/50-zos-tv-mode.conf" <<'EOF'
+[Service]
+Environment=ZOS_VOD_PLAYER_ENABLED=1
+EOF
+  cat > "$ROOTFS/zos/state/tv/control/desktop-state" <<'EOF'
+DM_UNIT=none
+DM_ENABLED=not-found
+DM_ACTIVE=0
+DM_MASKED=0
+VOD_ACTIVE=1
+API_ACTIVE=1
+EOF
+  chmod 0600 "$ROOTFS/zos/state/tv/control/desktop-state"
+  systemd-nspawn -D "$ROOTFS" systemctl enable zos-tv.target
 fi
 
 tar --numeric-owner -C "$ROOTFS" -cpf "$TARBALL" .

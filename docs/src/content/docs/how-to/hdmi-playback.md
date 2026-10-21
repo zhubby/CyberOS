@@ -58,11 +58,11 @@ sudo systemctl restart zos-vod-player.service
 
 在文件面板选择视频后，点击预览标题栏中的 HDMI 播放按钮。视频会由设备本机的 mpv 读取 NAS 文件并输出到 HDMI；浏览器中的视频预览仍然独立工作。
 
-播放器条支持播放/暂停、停止、进度跳转、前进/后退 10 秒和音量。VOD Player 会持久化当前会话和位置，并在服务重启、存储暂时离线或 HDMI/音频设备重新连接后自动恢复；首版不保存播放队列或字幕选择。
+播放器条支持播放/暂停、停止、进度跳转、前进/后退 10 秒、音量以及音轨/字幕选择。VOD Player 会持久化当前会话和位置，并在服务重启、存储暂时离线或 HDMI/音频设备重新连接后自动恢复；首版不保存播放队列或字幕选择。
 
 ## 检查设备能力
 
-播放器使用 mpv 的 DRM/KMS 视频输出，不依赖 X11 或 Wayland。先检查设备和服务：
+仅启用 VOD Player 时，播放器使用 mpv 的 DRM/KMS 视频输出，不依赖 X11 或 Wayland。CM5 启用[电视模式](/docs/operations/cm5/#hdmi-电视模式)后，Weston 持有 DRM 会话，mpv 改为 Wayland 全屏客户端。先检查设备和服务：
 
 ```bash
 ls -l /dev/dri /dev/snd

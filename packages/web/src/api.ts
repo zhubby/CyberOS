@@ -160,7 +160,8 @@ import type {
   MediaSourceKind as SharedMediaSourceKind,
   MediaSourceRecord as SharedMediaSource,
   MediaTitleSummary as SharedMediaTitleSummary,
-  PublicMediaLibrarySettings as SharedPublicMediaLibrarySettings
+  PublicMediaLibrarySettings as SharedPublicMediaLibrarySettings,
+  TvModeStatus as SharedTvModeStatus
 } from "@zos/shared";
 
 export interface NasRoot {
@@ -273,6 +274,7 @@ export type MediaScanRun = SharedMediaScanRun;
 export type MediaSourceKind = SharedMediaSourceKind;
 export type MediaSource = SharedMediaSource;
 export type MediaTitleSummary = SharedMediaTitleSummary;
+export type TvModeStatus = SharedTvModeStatus;
 export type TerminalTab = SharedTerminalTab;
 export type TerminalTabState = SharedTerminalTabState;
 export type VmSummary = PublicVmSummary;
@@ -1768,6 +1770,10 @@ export async function requestMediaScan(sourceId: string): Promise<MediaScanRun> 
 
 export async function getMediaLibraryStatus(): Promise<MediaLibraryStatus> {
   return fetchJson<{ status: MediaLibraryStatus }>("/api/media/status").then((body) => body.status);
+}
+
+export async function getTvStatus(): Promise<TvModeStatus> {
+  return fetchJson<{ status: TvModeStatus }>("/api/tv/status").then((body) => body.status);
 }
 
 export async function getMediaScans(sourceId?: string, limit = 20): Promise<MediaScanRun[]> {

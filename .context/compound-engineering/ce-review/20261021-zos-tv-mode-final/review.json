@@ -1,0 +1,39 @@
+{
+  "runId": "20261021-zos-tv-mode-final",
+  "mode": "autofix",
+  "base": "97c4372",
+  "head": "working-tree",
+  "intent": "Deliver the CM5 ZOS TV shell, native playback controls, media administration, reversible kiosk runtime, packaging, health reporting, and documentation.",
+  "scope": {
+    "implementationFiles": 76,
+    "reviewAndTaskRecords": 3,
+    "insertions": 4047,
+    "deletions": 123
+  },
+  "findings": [
+    { "id": "preserve-rollback-state", "severity": "P1", "confidence": 0.99, "file": "packaging/scripts/zos-tv-mode", "line": 205, "disposition": "safe_auto_applied" },
+    { "id": "private-wayland-runtime", "severity": "P1", "confidence": 0.98, "file": "packaging/systemd/zos-tv-prepare.service", "line": 12, "disposition": "safe_auto_applied" },
+    { "id": "stop-tv-services-with-target", "severity": "P1", "confidence": 0.99, "file": "packaging/systemd/zos-tv-weston.service", "line": 4, "disposition": "safe_auto_applied" },
+    { "id": "abort-removal-on-restore-failure", "severity": "P1", "confidence": 0.96, "file": "packaging/debian/prerm", "line": 5, "disposition": "safe_auto_applied" },
+    { "id": "media-playback-bluetooth-output", "severity": "P1", "confidence": 0.98, "file": "packages/api/src/routes/media.ts", "line": 250, "disposition": "safe_auto_applied" },
+    { "id": "stable-idle-timer", "severity": "P1", "confidence": 0.98, "file": "packages/web/src/tv/TvApp.tsx", "line": 597, "disposition": "safe_auto_applied" },
+    { "id": "cancel-stale-tv-search", "severity": "P2", "confidence": 0.97, "file": "packages/web/src/tv/TvApp.tsx", "line": 463, "disposition": "safe_auto_applied" },
+    { "id": "sequence-media-settings-requests", "severity": "P2", "confidence": 0.97, "file": "packages/web/src/components/settings/SettingsMediaPage.tsx", "line": 79, "disposition": "safe_auto_applied" },
+    { "id": "drm-connector-only-for-drm", "severity": "P2", "confidence": 0.94, "file": "crates/vod-player/src/mpv.rs", "line": 440, "disposition": "safe_auto_applied" },
+    { "id": "completed-progress-restarts", "severity": "P2", "confidence": 0.95, "file": "packages/web/src/tv/TvApp.tsx", "line": 123, "disposition": "safe_auto_applied" }
+  ],
+  "residualActionableWork": [],
+  "advisories": [
+    { "owner": "linux-ci", "summary": "Run Nix evaluation and NixOS VM checks on native Linux CI." },
+    { "owner": "release", "summary": "Run the documented CM5 4K SDR, DRM, CEC, Bluetooth audio, and rollback acceptance checks on hardware." }
+  ],
+  "verification": {
+    "makeCi": "passed",
+    "focusedTests": "passed: 24 tests",
+    "browser": "passed: 1920x1080 TV shell and search/back smoke with no application errors",
+    "shellSyntax": "passed",
+    "diffCheck": "passed",
+    "nix": "not run: Nix is unavailable on this host"
+  },
+  "verdict": "ready_to_merge"
+}

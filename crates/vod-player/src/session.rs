@@ -32,7 +32,7 @@ pub struct PersistedSession {
 
 pub enum LoadOutcome {
     Empty,
-    Session(PersistedSession),
+    Session(Box<PersistedSession>),
     Corrupt(PathBuf),
 }
 
@@ -46,7 +46,7 @@ pub fn load(path: &Path) -> Result<LoadOutcome, VodError> {
     };
     match serde_json::from_slice::<PersistedSession>(&bytes) {
         Ok(session) if matches!(session.version, 1 | 2) && valid_session(&session) => {
-            Ok(LoadOutcome::Session(session))
+            Ok(LoadOutcome::Session(Box::new(session)))
         }
         _ => {
             let quarantined = path.with_file_name(format!(
