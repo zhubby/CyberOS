@@ -1,13 +1,19 @@
 import { constants as fsConstants } from "node:fs";
-import { access, stat } from "node:fs/promises";
+import { access, link, lstat, mkdir, open, stat, unlink } from "node:fs/promises";
+import path from "node:path";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   createBluetoothSendTransfers,
+  completeBluetoothReceiveFinalization,
   defaultBluetoothSettings,
+  failBluetoothReceiveFinalization,
   getBluetoothSettings,
   getBluetoothTransfer,
   getBluetoothTransferServiceHealth,
   listBluetoothTransfers,
+  listBluetoothReceiveFinalizations,
+  noteBluetoothReceiveFinalizationError,
+  reserveBluetoothReceiveFinalization,
   requestBluetoothTransferCancellation,
   saveBluetoothSettings
 } from "@zos/db";
@@ -33,19 +39,46 @@ const MAX_TRANSFER_FILES = 100;
 const MAX_TRANSFER_BODY_BYTES = 256 * 1024;
 const EVENT_SAMPLE_MS = 500;
 const EVENT_HEARTBEAT_MS = 15_000;
+const FINALIZATION_INTERVAL_MS = 1_000;
+const TRANSFER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 type SettingsPatch = Partial<Omit<BluetoothSettingsRecord, "updatedAt">>;
 
 export function registerBluetoothTransferRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   const bluetooth = context.system?.bluetoothManager ?? new HostdBluetoothManagerClient(context.config.hostd.socketPath);
+  let closed = false;
+  let finalization = Promise.resolve();
+  let finalizationTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleFinalization = () => {
+    finalization = finalizeBluetoothReceives(context)
+      .catch((error: unknown) => {
+        server.log.warn({ error }, "Bluetooth receive finalization failed");
+      })
+      .finally(() => {
+        if (closed) return;
+        finalizationTimer = setTimeout(scheduleFinalization, FINALIZATION_INTERVAL_MS);
+        finalizationTimer.unref();
+      });
+  };
+  scheduleFinalization();
+  server.addHook("onClose", async () => {
+    closed = true;
+    if (finalizationTimer) clearTimeout(finalizationTimer);
+    await finalization;
+  });
 
   server.get("/api/system/bluetooth/settings", async (_request, reply) => {
     try {
       const status = await bluetooth.getStatus().catch(() => unavailableBluetoothStatus());
-      const settings = getBluetoothSettings(context.db) ?? defaultBluetoothSettings();
+      const audioDevices = bluetoothAudioDevices(status);
+      const settings = migrateLegacyAudioDeviceId(
+        context.db,
+        getBluetoothSettings(context.db) ?? defaultBluetoothSettings(),
+        audioDevices
+      );
       reply.send({
         settings,
-        audioDevices: bluetoothAudioDevices(status),
+        audioDevices,
         inboxStatus: await getBluetoothInboxStatus(settings, context)
       });
     } catch (error) {
@@ -134,6 +167,259 @@ export function registerBluetoothTransferRoutes(server: FastifyInstance, context
   });
 }
 
+export async function finalizeBluetoothReceives(
+  context: ApiRouteContext,
+  incomingPath?: string
+): Promise<void> {
+  const transfers = listBluetoothReceiveFinalizations(context.db);
+  if (transfers.length === 0) return;
+  incomingPath ??= path.join(path.dirname(context.config.databasePath), "bluetooth", "incoming");
+  await mkdir(incomingPath, { recursive: true });
+  const inboxes = new Map<string, Promise<{
+    scope: Awaited<ReturnType<typeof resolveStoragePoolScope>>;
+    inbox: Awaited<ReturnType<typeof resolveScopedExistingPath>>;
+  }>>();
+  for (const transfer of transfers) {
+    if (!TRANSFER_ID_PATTERN.test(transfer.id)) {
+      failBluetoothReceiveFinalization(context.db, transfer.id, "Bluetooth receive transfer id is invalid");
+      continue;
+    }
+    const source = path.join(incomingPath, `${transfer.id}.part`);
+    const displayName = path.posix.basename(transfer.displayName);
+    if (!displayName || displayName === "." || displayName === ".." || displayName !== transfer.displayName) {
+      failBluetoothReceiveFinalization(context.db, transfer.id, "Bluetooth receive file name is invalid");
+      continue;
+    }
+    let published = false;
+    try {
+      const inboxPath = path.posix.dirname(transfer.relativePath);
+      const inboxKey = JSON.stringify([transfer.rootId, transfer.storagePoolId, inboxPath]);
+      let inboxPromise = inboxes.get(inboxKey);
+      if (!inboxPromise) {
+        inboxPromise = resolveBluetoothFinalizationInbox(context, {
+          rootId: transfer.rootId,
+          storagePoolId: transfer.storagePoolId,
+          path: inboxPath
+        });
+        inboxes.set(inboxKey, inboxPromise);
+      }
+      const { scope, inbox } = await inboxPromise;
+      const inboxMetadata = await stat(inbox.realPath);
+      if (!inboxMetadata.isDirectory()) {
+        noteBluetoothReceiveFinalizationError(context.db, transfer.id, "Bluetooth inbox is not a directory");
+        continue;
+      }
+      let finalizationRelativePath = transfer.finalizationRelativePath;
+      for (let collision = 0; collision < 1_000; collision += 1) {
+        const previousRelativePath = finalizationRelativePath;
+        if (!finalizationRelativePath) {
+          finalizationRelativePath = await nextBluetoothReceivePath(
+            inbox.realPath,
+            inbox.relativePath,
+            displayName,
+            transfer.createdAt,
+            collision
+          );
+          if (!reserveBluetoothReceiveFinalization(context.db, {
+            id: transfer.id,
+            previousRelativePath,
+            relativePath: finalizationRelativePath
+          })) {
+            finalizationRelativePath = null;
+            continue;
+          }
+        }
+        const destinationName = validateBluetoothReceivePath(inbox.relativePath, finalizationRelativePath);
+        const destinationPath = path.join(inbox.realPath, destinationName);
+        const temporaryPath = path.join(inbox.realPath, `.zos-bluetooth-${transfer.id}.part`);
+        const result = await publishReceivedFile(source, temporaryPath, destinationPath);
+        if (result === "collision") {
+          const replacement = await nextBluetoothReceivePath(
+            inbox.realPath,
+            inbox.relativePath,
+            displayName,
+            transfer.createdAt,
+            collision + 1
+          );
+          if (!reserveBluetoothReceiveFinalization(context.db, {
+            id: transfer.id,
+            previousRelativePath: finalizationRelativePath,
+            relativePath: replacement
+          })) {
+            break;
+          }
+          finalizationRelativePath = replacement;
+          continue;
+        }
+        published = true;
+        const completed = completeBluetoothReceiveFinalization(context.db, {
+          id: transfer.id,
+          rootId: scope.root.id,
+          storagePoolId: scope.pool.id,
+          relativePath: finalizationRelativePath,
+          displayName: destinationName
+        });
+        if (!completed) break;
+        await unlink(source).catch(() => undefined);
+        await unlink(temporaryPath).catch(() => undefined);
+        break;
+      }
+    } catch (error) {
+      if (published || error instanceof StorageScopeError || isRetryableFinalizationError(error)) {
+        noteBluetoothReceiveFinalizationError(
+          context.db,
+          transfer.id,
+          error instanceof Error ? error.message : "Bluetooth inbox is temporarily unavailable"
+        );
+        continue;
+      }
+      failBluetoothReceiveFinalization(
+        context.db,
+        transfer.id,
+        error instanceof Error ? error.message : "Bluetooth receive finalization failed"
+      );
+    }
+  }
+}
+
+async function resolveBluetoothFinalizationInbox(
+  context: ApiRouteContext,
+  selection: { rootId: string; storagePoolId: string; path: string }
+) {
+  const scope = await resolveStoragePoolScope(
+    context.db,
+    context.system,
+    selection.rootId,
+    selection.storagePoolId
+  );
+  return {
+    scope,
+    inbox: await resolveScopedExistingPath(scope, selection.path)
+  };
+}
+
+async function nextBluetoothReceivePath(
+  directory: string,
+  relativeDirectory: string,
+  requestedName: string,
+  createdAt: string,
+  startAttempt: number
+): Promise<string> {
+  const parsed = path.parse(requestedName);
+  const timestamp = createdAt.replace(/[^0-9A-Za-z-]/gu, "-");
+  for (let attempt = startAttempt; attempt < 1_000; attempt += 1) {
+    const name = attempt === 0
+      ? requestedName
+      : `${parsed.name}-${timestamp}${attempt === 1 ? "" : `-${attempt}`}${parsed.ext}`;
+    try {
+      await lstat(path.join(directory, name));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return path.posix.join(relativeDirectory, name);
+      }
+      throw error;
+    }
+  }
+  throw new Error("Could not allocate a unique Bluetooth inbox name");
+}
+
+function validateBluetoothReceivePath(relativeDirectory: string, relativePath: string): string {
+  const name = path.posix.basename(relativePath);
+  if (!name || name === "." || name === ".." || path.posix.join(relativeDirectory, name) !== relativePath) {
+    throw new Error("Bluetooth receive finalization path is invalid");
+  }
+  return name;
+}
+
+async function publishReceivedFile(
+  source: string,
+  temporaryPath: string,
+  destinationPath: string
+): Promise<"published" | "collision"> {
+  if (await pathsShareInode(temporaryPath, destinationPath)) return "published";
+  try {
+    await lstat(destinationPath);
+    return "collision";
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  await unlink(temporaryPath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  });
+  try {
+    const sourceHandle = await open(source, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    try {
+      const sourceMetadata = await sourceHandle.stat();
+      if (!sourceMetadata.isFile()) throw new Error("Bluetooth receive staging file is invalid");
+      const temporaryHandle = await open(
+        temporaryPath,
+        fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
+        0o600
+      );
+      try {
+        const buffer = Buffer.allocUnsafe(1024 * 1024);
+        let offset = 0;
+        for (;;) {
+          const { bytesRead } = await sourceHandle.read(buffer, 0, buffer.length, offset);
+          if (bytesRead === 0) break;
+          let written = 0;
+          while (written < bytesRead) {
+            const result = await temporaryHandle.write(
+              buffer,
+              written,
+              bytesRead - written,
+              offset + written
+            );
+            written += result.bytesWritten;
+          }
+          offset += bytesRead;
+        }
+        await temporaryHandle.sync();
+      } finally {
+        await temporaryHandle.close().catch(() => undefined);
+      }
+    } finally {
+      await sourceHandle.close().catch(() => undefined);
+    }
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
+  try {
+    await link(temporaryPath, destinationPath);
+    return "published";
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      if (await pathsShareInode(temporaryPath, destinationPath)) return "published";
+      await unlink(temporaryPath).catch(() => undefined);
+      return "collision";
+    }
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function pathsShareInode(left: string, right: string): Promise<boolean> {
+  try {
+    const [leftMetadata, rightMetadata] = await Promise.all([lstat(left), lstat(right)]);
+    return leftMetadata.isFile()
+      && rightMetadata.isFile()
+      && leftMetadata.dev === rightMetadata.dev
+      && leftMetadata.ino === rightMetadata.ino;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function isRetryableFinalizationError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return typeof code === "string" && (
+    code.startsWith("SQLITE_")
+    || ["EACCES", "EBUSY", "EDQUOT", "EIO", "EMFILE", "ENFILE", "ENODEV", "ENOMEM", "ENOSPC", "EROFS", "ESTALE"].includes(code)
+  );
+}
+
 async function getBluetoothInboxStatus(
   settings: BluetoothSettingsRecord,
   context: ApiRouteContext
@@ -167,10 +453,16 @@ async function getBluetoothInboxStatus(
 }
 
 export function bluetoothAudioDevices(status: BluetoothStatus): BluetoothAudioDevice[] {
-  return status.devices
-    .filter((device) => device.paired && (device.type === "headset" || device.type === "speaker"))
+  const candidates = status.devices
+    .filter((device) => device.paired && (device.type === "headset" || device.type === "speaker"));
+  return candidates
+    .filter((device) => {
+      const sameAddress = candidates.filter((candidate) => candidate.address.toUpperCase() === device.address.toUpperCase());
+      if (sameAddress.length === 1) return true;
+      return device.connected && sameAddress.filter((candidate) => candidate.connected).length === 1;
+    })
     .map((device) => ({
-      id: `bluetooth:${device.address}`,
+      id: bluetoothAudioDeviceId(device.adapterId, device.address),
       adapterId: device.adapterId,
       address: device.address,
       name: device.alias ?? device.name ?? device.address,
@@ -211,6 +503,9 @@ async function validateSettingsPatch(
       throw new BluetoothTransferRequestError("Bluetooth default adapter was not found", 404);
     }
     const audioDevices = bluetoothAudioDevices(status);
+    if ("defaultAudioDeviceId" in body && candidate.defaultAudioDeviceId !== null) {
+      candidate.defaultAudioDeviceId = resolveAudioDeviceId(candidate.defaultAudioDeviceId, audioDevices);
+    }
     if ("defaultAudioDeviceId" in body && candidate.defaultAudioDeviceId !== null
       && !audioDevices.some((device) => device.id === candidate.defaultAudioDeviceId)) {
       throw new BluetoothTransferRequestError("Bluetooth audio device was not found", 404);
@@ -248,6 +543,29 @@ async function validateSettingsPatch(
       inboxPath: candidate.inboxPath
     } : {})
   };
+}
+
+function bluetoothAudioDeviceId(adapterId: string, address: string): string {
+  return `bluetooth:${adapterId}/${address}`;
+}
+
+function resolveAudioDeviceId(value: string, devices: BluetoothAudioDevice[]): string {
+  if (!/^bluetooth:(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/iu.test(value)) return value;
+  const address = value.slice("bluetooth:".length);
+  const matches = devices.filter((device) => device.address.toUpperCase() === address.toUpperCase());
+  return matches.length === 1 ? matches[0]!.id : value;
+}
+
+function migrateLegacyAudioDeviceId(
+  db: ApiRouteContext["db"],
+  settings: BluetoothSettingsRecord,
+  devices: BluetoothAudioDevice[]
+): BluetoothSettingsRecord {
+  if (!settings.defaultAudioDeviceId) return settings;
+  const resolved = resolveAudioDeviceId(settings.defaultAudioDeviceId, devices);
+  return resolved === settings.defaultAudioDeviceId
+    ? settings
+    : saveBluetoothSettings(db, { defaultAudioDeviceId: resolved });
 }
 
 export async function streamBluetoothTransfers(

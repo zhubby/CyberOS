@@ -154,13 +154,22 @@ function isBluetoothScan(value: unknown): boolean {
 }
 
 function isBluetoothChallenge(value: unknown): boolean {
-  if (!isRecordWithKeys(value, ["id", "adapterId", "deviceAddress", "kind", "pin", "passkey", "expiresAt"])) return false;
+  if (!isRecordWithKeys(value, ["id", "adapterId", "deviceAddress", "kind", "pin", "passkey", "entered", "expiresAt"])) return false;
+  const kind = String(value.kind);
+  const pin = value.pin;
+  const passkey = value.passkey;
+  const entered = value.entered;
+  const shapeMatchesKind = kind === "pin_display"
+    ? typeof pin === "string" && /^[a-z0-9]{1,16}$/iu.test(pin) && passkey === null && entered === null
+    : kind === "passkey_display"
+      ? pin === null && isIntegerInRange(passkey, 0, 999999) && isIntegerInRange(entered, 0, 6)
+      : pin === null && entered === null && (kind === "numeric_comparison" ? isIntegerInRange(passkey, 0, 999999) : passkey === null);
   return typeof value.id === "string" && /^[a-f0-9-]{16,64}$/iu.test(value.id)
     && typeof value.adapterId === "string" && /^adapter-[a-z0-9_.:-]{1,64}$/u.test(value.adapterId)
     && isBluetoothAddress(value.deviceAddress)
-    && ["pin", "numeric_comparison", "confirmation"].includes(String(value.kind))
-    && isNullableString(value.pin) && (value.passkey === null || isIntegerInRange(value.passkey, 0, 999999))
-    && typeof value.expiresAt === "string";
+    && ["pin", "numeric_comparison", "confirmation", "pin_display", "passkey_display"].includes(String(value.kind))
+    && shapeMatchesKind
+    && isRfc3339Timestamp(value.expiresAt);
 }
 
 function isBluetoothAddress(value: unknown): value is string {
@@ -347,6 +356,12 @@ function isStringArray(value: unknown): value is string[] {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
+}
+
+function isRfc3339Timestamp(value: unknown): value is string {
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value)
+    && Number.isFinite(Date.parse(value));
 }
 
 function isIntegerInRange(value: unknown, minimum: number, maximum: number): value is number {

@@ -1,8 +1,13 @@
 import { stat } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
-import { getBluetoothSettings } from "@zos/db";
+import {
+  createOperationNotification,
+  getBluetoothSettings,
+  getOperationNotificationByOperation,
+  updateOperationNotificationForOperation
+} from "@zos/db";
 import { inferMimeType, inferPreviewKind } from "@zos/nas-tools";
-import type { VodPlayerCommand, VodPlayerErrorCode } from "@zos/shared";
+import type { VodPlayerCommand, VodPlayerErrorCode, VodPlayerStatus } from "@zos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { createVodPlayerRuntime, VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
@@ -18,7 +23,9 @@ export function registerVodPlayerRoutes(server: FastifyInstance, context: ApiRou
 
   server.get("/api/vod-player/status", async (_request, reply) => {
     try {
-      reply.send({ status: await runtime.getStatus() });
+      const status = await runtime.getStatus();
+      recordAudioFallback(context, status);
+      reply.send({ status });
     } catch (error) {
       sendVodPlayerError(reply, error);
     }
@@ -27,10 +34,30 @@ export function registerVodPlayerRoutes(server: FastifyInstance, context: ApiRou
   server.post<{ Body: VodPlayerCommandBody }>("/api/vod-player/command", async (request, reply) => {
     try {
       const command = await buildCommand(request.body, context);
-      reply.send({ status: await runtime.command(command) });
+      const status = await runtime.command(command);
+      recordAudioFallback(context, status);
+      reply.send({ status });
     } catch (error) {
       sendVodPlayerError(reply, error);
     }
+  });
+}
+
+function recordAudioFallback(context: ApiRouteContext, status: VodPlayerStatus): void {
+  if (!status.sessionId || !status.audioDeviceId || !status.audioFallbackReason) return;
+  const operationId = `vod-audio-fallback:${status.sessionId}`;
+  if (!getOperationNotificationByOperation(context.db, operationId)) {
+    createOperationNotification(context.db, {
+      operationId,
+      kind: "media",
+      status: "failed",
+      summary: `Bluetooth audio fallback${status.fileName ? ` for ${status.fileName}` : ""}`
+    });
+  }
+  updateOperationNotificationForOperation(context.db, {
+    operationId,
+    status: "failed",
+    error: status.audioFallbackReason
   });
 }
 

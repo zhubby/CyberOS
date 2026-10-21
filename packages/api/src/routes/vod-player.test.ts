@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openZosDb, saveBluetoothSettings, type ZosDatabase } from "@zos/db";
+import { ensureNasRoots, listOperationNotifications, openZosDb, saveBluetoothSettings, type ZosDatabase } from "@zos/db";
 import type { ZosConfig, VodPlayerStatus } from "@zos/shared";
 import { VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { buildServer } from "../server.js";
@@ -176,6 +176,31 @@ describe("VOD Player API", () => {
     expect(health.json().issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "vod_player_recovering", severity: "warning" })
     ]));
+    await app.close();
+    await server.close();
+  });
+
+  it("persists one notification per playback session when Bluetooth audio falls back", async () => {
+    const { server, root } = await setup();
+    const runtime = fakeRuntime([]);
+    runtime.getStatus = async () => ({
+      ...vodPlayerStatus(),
+      audioDeviceId: "bluetooth:adapter-hci0/AA:BB:CC:DD:EE:FF",
+      audioFallbackReason: "BlueALSA device unavailable"
+    });
+    const app = await buildServer({ config: testConfig(root, true), db: db!, vodPlayer: runtime });
+
+    await app.inject({ method: "GET", url: "/api/vod-player/status" });
+    await app.inject({ method: "GET", url: "/api/vod-player/status" });
+
+    expect(listOperationNotifications(db!)).toEqual([
+      expect.objectContaining({
+        operationId: "vod-audio-fallback:session-1",
+        kind: "media",
+        status: "failed",
+        error: "BlueALSA device unavailable"
+      })
+    ]);
     await app.close();
     await server.close();
   });

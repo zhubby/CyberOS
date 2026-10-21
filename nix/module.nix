@@ -483,8 +483,8 @@ in {
                 "/zos/state/zos.sqlite"
                 "-/zos/state/zos.sqlite-shm"
                 "-/zos/state/zos.sqlite-wal"
-                "/zos/data"
               ];
+              ReadOnlyPaths = [ "/zos/data" ];
               PrivateDevices = true;
               RestrictAddressFamilies = [ "AF_UNIX" "AF_BLUETOOTH" ];
               IPAddressDeny = "any";

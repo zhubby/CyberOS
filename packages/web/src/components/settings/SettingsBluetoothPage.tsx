@@ -20,8 +20,6 @@ import {
   StorageFilePickerDialog, type StorageFilePickerPool, type StorageFileSelection
 } from "../workspace/StorageFilePickerDialog.js";
 
-const SCAN_DURATION_MS = 15_000;
-
 export function SettingsBluetoothPage({
   status, pools, locale, onStatus, onNotifySuccess, onNotifyError
 }: {
@@ -48,17 +46,28 @@ export function SettingsBluetoothPage({
     ?? status?.adapters.find((candidate) => candidate.defaultAdapter)
     ?? status?.adapters[0]
     ?? null;
+  const selectedAdapterScanning = Boolean(adapter && status?.scan.active && status.scan.adapterId === adapter.id);
+  const anotherAdapterScanning = Boolean(adapter && status?.scan.active && status.scan.adapterId !== adapter.id);
+  const displayOnlyChallenge = status?.challenge?.kind === "pin_display" || status?.challenge?.kind === "passkey_display";
   const devices = useMemo(() => status?.devices.filter((device) => device.adapterId === adapter?.id)
     .sort((left, right) => Number(right.connected) - Number(left.connected) || Number(right.paired) - Number(left.paired) || (right.rssi ?? -128) - (left.rssi ?? -128)) ?? [], [adapter?.id, status?.devices]);
-  const audioDevices = useMemo<BluetoothAudioDevice[]>(() => status?.devices
-    .filter((device) => device.paired && (device.type === "headset" || device.type === "speaker"))
-    .map((device) => ({
-      id: `bluetooth:${device.address}`,
-      adapterId: device.adapterId,
-      address: device.address,
-      name: device.alias ?? device.name ?? device.address,
-      connected: device.connected
-    })) ?? [], [status?.devices]);
+  const audioDevices = useMemo<BluetoothAudioDevice[]>(() => {
+    const candidates = status?.devices
+      .filter((device) => device.paired && (device.type === "headset" || device.type === "speaker")) ?? [];
+    return candidates
+      .filter((device) => {
+        const sameAddress = candidates.filter((candidate) => candidate.address.toUpperCase() === device.address.toUpperCase());
+        if (sameAddress.length === 1) return true;
+        return device.connected && sameAddress.filter((candidate) => candidate.connected).length === 1;
+      })
+      .map((device) => ({
+        id: `bluetooth:${device.adapterId}/${device.address}`,
+        adapterId: device.adapterId,
+        address: device.address,
+        name: device.alias ?? device.name ?? device.address,
+        connected: device.connected
+      }));
+  }, [status?.devices]);
 
   useEffect(() => {
     if (!selectedAdapterId && adapter) setSelectedAdapterId(adapter.id);
@@ -80,14 +89,6 @@ export function SettingsBluetoothPage({
       });
     return () => { active = false; };
   }, [onNotifyError]);
-
-  useEffect(() => {
-    if (!status?.scan.active || status.scan.adapterId !== adapter?.id) return;
-    const timer = window.setTimeout(() => {
-      void runDevice("scan-stop", () => stopBluetoothScan({ adapterId: adapter.id }), false);
-    }, SCAN_DURATION_MS);
-    return () => window.clearTimeout(timer);
-  }, [adapter?.id, status?.scan.active, status?.scan.adapterId]);
 
   useEffect(() => {
     setPin("");
@@ -172,14 +173,16 @@ export function SettingsBluetoothPage({
     }
   }
 
-  const unavailableReason = status?.error
+  const unavailableReason = status?.error === "BlueZ and the host integration service are unavailable"
+    ? String(t("settings.bluetooth.unavailable"))
+    : status?.error
     ?? (!status?.available ? String(t("settings.bluetooth.noAdapters")) : null);
   const inboxConfigured = Boolean(settings?.inboxRootId && settings.inboxStoragePoolId && settings.inboxPath);
   const initialInboxPool = settings?.inboxStoragePoolId ?? pools[0]?.id ?? "";
 
   return (
     <div className="settings-content-body settings-device-page">
-      {status?.challenge ? <section ref={challengeRef} className="settings-section-card bluetooth-challenge" role="alertdialog" aria-labelledby="bluetooth-challenge-title" aria-describedby="bluetooth-challenge-description" tabIndex={-1}><header><div><h3 id="bluetooth-challenge-title">{t("settings.bluetooth.challengeTitle")}</h3><p id="bluetooth-challenge-description">{t(`settings.bluetooth.challengeKinds.${status.challenge.kind}`)}</p></div></header>{status.challenge.passkey !== null ? <strong className="bluetooth-passkey">{String(status.challenge.passkey).padStart(6, "0")}</strong> : null}{status.challenge.kind === "pin" ? <label><span>{t("settings.bluetooth.pin")}</span><input value={pin} onChange={(event) => setPin(event.target.value)} inputMode="numeric" autoComplete="one-time-code" /></label> : null}<div className="settings-inline-actions"><button type="button" onClick={() => void runDevice("challenge-reject", () => respondBluetoothPairing({ adapterId: status.challenge!.adapterId, address: status.challenge!.deviceAddress, challengeId: status.challenge!.id, accept: false }))}>{t("common.actions.cancel")}</button><button type="button" className="primary-button" disabled={status.challenge.kind === "pin" && !pin.trim()} onClick={() => void runDevice("challenge-accept", () => respondBluetoothPairing({ adapterId: status.challenge!.adapterId, address: status.challenge!.deviceAddress, challengeId: status.challenge!.id, accept: true, ...(pin ? { pin } : {}) }))}>{t("settings.bluetooth.confirm")}</button></div></section> : null}
+      {status?.challenge ? <section ref={challengeRef} className="settings-section-card bluetooth-challenge" role={displayOnlyChallenge ? "status" : "alertdialog"} aria-labelledby="bluetooth-challenge-title" aria-describedby="bluetooth-challenge-description" tabIndex={-1}><header><div><h3 id="bluetooth-challenge-title">{displayOnlyChallenge ? t("settings.bluetooth.displayChallengeTitle") : t("settings.bluetooth.challengeTitle")}</h3><p id="bluetooth-challenge-description">{t(`settings.bluetooth.challengeKinds.${status.challenge.kind}`)}</p></div></header>{status.challenge.pin !== null ? <strong className="bluetooth-passkey">{status.challenge.pin}</strong> : null}{status.challenge.passkey !== null ? <strong className="bluetooth-passkey">{String(status.challenge.passkey).padStart(6, "0")}</strong> : null}{status.challenge.kind === "passkey_display" && status.challenge.entered !== null ? <small>{t("settings.bluetooth.passkeyEntered", { entered: status.challenge.entered, total: 6 })}</small> : null}{status.challenge.kind === "pin" ? <label><span>{t("settings.bluetooth.pin")}</span><input value={pin} onChange={(event) => setPin(event.target.value)} inputMode="numeric" autoComplete="one-time-code" /></label> : null}{!displayOnlyChallenge ? <div className="settings-inline-actions"><button type="button" onClick={() => void runDevice("challenge-reject", () => respondBluetoothPairing({ adapterId: status.challenge!.adapterId, address: status.challenge!.deviceAddress, challengeId: status.challenge!.id, accept: false }))}>{t("common.actions.cancel")}</button><button type="button" className="primary-button" disabled={status.challenge.kind === "pin" && !pin.trim()} onClick={() => void runDevice("challenge-accept", () => respondBluetoothPairing({ adapterId: status.challenge!.adapterId, address: status.challenge!.deviceAddress, challengeId: status.challenge!.id, accept: true, ...(pin ? { pin } : {}) }))}>{t("settings.bluetooth.confirm")}</button></div> : null}</section> : null}
 
       <section className="settings-section-card bluetooth-settings-card">
         <header>
@@ -194,8 +197,9 @@ export function SettingsBluetoothPage({
       </section>
 
       {adapter ? <section className="settings-section-card bluetooth-devices-card">
-        <header><div><h3>{t("settings.bluetooth.devicesTitle")}</h3><p>{t("settings.bluetooth.devicesDescription")}</p></div><button type="button" disabled={!adapter.powered || busyKey !== null} onClick={() => void runDevice(status?.scan.active ? "scan-stop" : "scan", () => status?.scan.active ? stopBluetoothScan({ adapterId: adapter.id }) : startBluetoothScan({ adapterId: adapter.id }), false)}>{busyKey?.startsWith("scan") ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : status?.scan.active ? <X aria-hidden="true" size={15} /> : <RefreshCw aria-hidden="true" size={15} />}<span>{status?.scan.active ? t("settings.bluetooth.stopScan") : t("settings.bluetooth.scan")}</span></button></header>
-        {!adapter.powered ? <p className="settings-device-disabled">{t("settings.bluetooth.adapterOffReason")}</p> : devices.length ? <div className="bluetooth-device-list">{devices.map((device) => <article key={device.address} className="bluetooth-device-row">
+        <header><div><h3>{t("settings.bluetooth.devicesTitle")}</h3><p>{t("settings.bluetooth.devicesDescription")}</p></div><button type="button" disabled={!adapter.powered || busyKey !== null || anotherAdapterScanning} onClick={() => void runDevice(selectedAdapterScanning ? "scan-stop" : "scan", () => selectedAdapterScanning ? stopBluetoothScan({ adapterId: adapter.id }) : startBluetoothScan({ adapterId: adapter.id }), false)}>{busyKey?.startsWith("scan") ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : selectedAdapterScanning ? <X aria-hidden="true" size={15} /> : <RefreshCw aria-hidden="true" size={15} />}<span>{selectedAdapterScanning ? t("settings.bluetooth.stopScan") : t("settings.bluetooth.scan")}</span></button></header>
+        {anotherAdapterScanning ? <p className="settings-device-disabled">{t("settings.bluetooth.otherAdapterScanning", { adapter: status?.scan.adapterId ?? "" })}</p> : null}
+        {!adapter.powered ? <p className="settings-device-disabled">{t("settings.bluetooth.adapterOffReason")}</p> : devices.length ? <div className="bluetooth-device-list">{devices.map((device) => <article key={`${device.adapterId}:${device.address}`} className="bluetooth-device-row">
           <div className="bluetooth-device-icon">{deviceIcon(device.type)}</div>
           <div className="bluetooth-device-copy"><strong>{device.alias ?? device.name ?? device.address}</strong><small>{device.address}{device.rssi === null ? "" : ` · ${device.rssi} dBm`}</small><div className="bluetooth-device-badges">{device.paired ? <span>{t("settings.bluetooth.paired")}</span> : null}{device.trusted ? <span>{t("settings.bluetooth.trusted")}</span> : null}{device.connected ? <span className="is-ready">{t("settings.bluetooth.connected")}</span> : null}</div></div>
           <div className="bluetooth-device-actions">{!device.paired ? <button type="button" disabled={busyKey !== null} onClick={() => void runDevice(device.address, () => pairBluetoothDevice({ adapterId: adapter.id, address: device.address }))}>{t("settings.bluetooth.pair")}</button> : <>
@@ -204,12 +208,12 @@ export function SettingsBluetoothPage({
             <button type="button" className="management-icon-action" title={String(t("settings.bluetooth.transfers.sendFiles"))} aria-label={String(t("settings.bluetooth.transfers.sendFiles"))} disabled={busyKey !== null} onClick={() => { setSendTarget({ adapterId: adapter.id, address: device.address }); setPicker("files"); }}><Send size={15} /></button>
             <button type="button" className="management-icon-action is-danger" title={String(t("settings.bluetooth.forget"))} aria-label={String(t("settings.bluetooth.forget"))} disabled={busyKey !== null} onClick={() => void runDevice(`forget-${device.address}`, () => unpairBluetoothDevice({ adapterId: adapter.id, address: device.address }))}><Unplug size={15} /></button>
           </>}</div>
-        </article>)}</div> : <p className="management-empty">{status?.scan.active ? t("settings.bluetooth.scanning") : t("settings.bluetooth.noDevices")}</p>}
+        </article>)}</div> : <p className="management-empty">{selectedAdapterScanning ? t("settings.bluetooth.scanning") : t("settings.bluetooth.noDevices")}</p>}
       </section> : null}
 
       <section className="settings-section-card bluetooth-output-card">
         <header><div><h3>{t("settings.bluetooth.audio.title")}</h3><p>{t("settings.bluetooth.audio.description")}</p></div><Volume2 aria-hidden="true" size={19} /></header>
-        {settingsLoading ? <p className="management-empty">{t("common.states.loading")}</p> : <label className="bluetooth-field-row"><span>{t("settings.bluetooth.audio.output")}</span><select value={settings?.defaultAudioDeviceId ?? ""} disabled={busyKey !== null} onChange={(event) => void updateSettings({ defaultAudioDeviceId: event.target.value || null }, "audio")}><option value="">{t("settings.bluetooth.audio.systemDefault")}</option>{audioDevices.map((device) => <option key={device.id} value={device.id}>{device.name}{device.connected ? "" : ` (${t("settings.bluetooth.audio.disconnected")})`}</option>)}</select><small>{t("settings.bluetooth.audio.nextPlayback")}</small></label>}
+        {settingsLoading ? <p className="management-empty">{t("common.states.loading")}</p> : <BluetoothAudioOutputField audioDevices={audioDevices} defaultAudioDeviceId={settings?.defaultAudioDeviceId ?? null} disabled={busyKey !== null} onChange={(defaultAudioDeviceId) => void updateSettings({ defaultAudioDeviceId }, "audio")} />}
       </section>
 
       <section className="settings-section-card bluetooth-inbox-card">
@@ -233,6 +237,20 @@ export function SettingsBluetoothPage({
       {picker === "files" ? <StorageFilePickerDialog pools={pools} initialPoolId={pools[0]?.id ?? ""} locale={locale} mode="files" onCancel={() => { setPicker(null); setSendTarget(null); }} onSelect={() => undefined} onSelectMany={(selections) => void queueFiles(selections)} /> : null}
     </div>
   );
+}
+
+export function BluetoothAudioOutputField({
+  audioDevices, defaultAudioDeviceId, disabled, onChange
+}: {
+  audioDevices: BluetoothAudioDevice[];
+  defaultAudioDeviceId: string | null;
+  disabled: boolean;
+  onChange: (deviceId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const configuredDeviceUnavailable = defaultAudioDeviceId !== null
+    && !audioDevices.some((device) => device.id === defaultAudioDeviceId);
+  return <label className="bluetooth-field-row"><span>{t("settings.bluetooth.audio.output")}</span><select value={defaultAudioDeviceId ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value || null)}><option value="">{t("settings.bluetooth.audio.systemDefault")}</option>{configuredDeviceUnavailable ? <option value={defaultAudioDeviceId ?? ""} disabled>{t("settings.bluetooth.audio.configuredUnavailable")}</option> : null}{audioDevices.map((device) => <option key={device.id} value={device.id}>{device.name}{device.connected ? "" : ` (${t("settings.bluetooth.audio.disconnected")})`}</option>)}</select><small>{t("settings.bluetooth.audio.nextPlayback")}</small></label>;
 }
 
 function deviceIcon(type: BluetoothStatus["devices"][number]["type"]) {

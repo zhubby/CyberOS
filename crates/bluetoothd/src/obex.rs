@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use zbus::{Connection, ObjectPath, OwnedObjectPath, OwnedVariant, Proxy, Variant, interface};
@@ -6,7 +7,7 @@ use zbus::{Connection, ObjectPath, OwnedObjectPath, OwnedVariant, Proxy, Variant
 use crate::db::{Db, ReceiveRecord, SendTask};
 use crate::error::TransferError;
 use crate::safety::{
-    ensure_available_space, open_send_file, unique_receive_target, validate_storage_pool,
+    ensure_available_space, open_send_file, validate_receive_name, validate_storage_pool,
 };
 
 const OBEX: &str = "org.bluez.obex";
@@ -18,7 +19,7 @@ pub struct ObexRuntime {
 }
 
 impl ObexRuntime {
-    pub async fn initialize(db: Db) -> Result<Self, TransferError> {
+    pub async fn initialize(db: Db, incoming_path: PathBuf) -> Result<Self, TransferError> {
         let session = Connection::session().await?;
         let system = Connection::system().await?;
         session
@@ -29,6 +30,7 @@ impl ObexRuntime {
                     db,
                     session: session.clone(),
                     system: system.clone(),
+                    incoming_path,
                 },
             )
             .await?;
@@ -127,6 +129,7 @@ struct ObexAgent {
     db: Db,
     session: Connection,
     system: Connection,
+    incoming_path: PathBuf,
 }
 
 #[derive(Debug, zbus::DBusError)]
@@ -177,7 +180,7 @@ impl ObexAgent {
         )
         .await?;
         let name: String = transfer_proxy.get_property("Name").await?;
-        let size: u64 = transfer_proxy.get_property("Size").await.unwrap_or(0);
+        let size: Option<u64> = transfer_proxy.get_property("Size").await.ok();
         let session_path: OwnedObjectPath = transfer_proxy.get_property("Session").await?;
         let session_proxy = Proxy::new(
             &self.session,
@@ -187,39 +190,49 @@ impl ObexAgent {
         )
         .await?;
         let address: String = session_proxy.get_property("Destination").await?;
-        if !trusted_device(&self.system, &address).await? {
-            return Err(TransferError(
-                "Only trusted paired devices may send files".to_owned(),
-            ));
-        }
+        let adapter_address: String = session_proxy.get_property("Source").await?;
+        let adapter_id = trusted_adapter_id(&self.system, &adapter_address, &address)
+            .await?
+            .ok_or_else(|| {
+                TransferError("Only trusted paired devices may send files".to_owned())
+            })?;
         let root_path = self.db.root_path(root_id)?;
         let inbox_path = crate::safety::safe_existing(&root_path, inbox)?;
         validate_storage_pool(&root_path, pool_id, &inbox_path)?;
-        ensure_available_space(&inbox_path, size)?;
-        let target = unique_receive_target(&root_path, inbox, &name)?;
-        let relative = target
-            .strip_prefix(&root_path)
-            .map_err(|_| TransferError("Bluetooth inbox escaped the NAS root".to_owned()))?
+        ensure_available_space(&inbox_path, size.unwrap_or(0))?;
+        ensure_available_space(&self.incoming_path, size.unwrap_or(0))?;
+        let display_name = validate_receive_name(&name)?;
+        let relative = std::path::Path::new(inbox)
+            .join(display_name)
             .to_string_lossy()
             .to_string();
         let id = self.db.record_receive(ReceiveRecord {
+            adapter_id: &adapter_id,
             address: &address,
             root_id,
             pool_id,
             relative_path: &relative,
-            display_name: target
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or(&name),
-            total_bytes: (size > 0).then_some(size),
+            display_name,
+            total_bytes: size,
         })?;
-        let target_name = target.to_string_lossy().to_string();
+        let staging_target = self.incoming_path.join(format!("{id}.part"));
+        if staging_target.exists() {
+            let _ = self.db.finish(
+                &id,
+                "failed",
+                Some("Bluetooth receive staging path is already occupied"),
+            );
+            return Err(TransferError(
+                "Bluetooth receive staging path is already occupied".to_owned(),
+            ));
+        }
+        let target_name = staging_target.to_string_lossy().to_string();
         monitor_incoming(
             self.db.clone(),
             self.session.clone(),
             id,
             transfer.to_owned().into(),
-            target,
+            staging_target,
         );
         Ok(target_name)
     }
@@ -253,9 +266,27 @@ fn adapter_object_path(adapter_id: &str) -> Result<String, TransferError> {
     Ok(format!("/org/bluez/{adapter_name}"))
 }
 
-async fn trusted_device(system: &Connection, address: &str) -> Result<bool, TransferError> {
+async fn trusted_adapter_id(
+    system: &Connection,
+    adapter_address: &str,
+    address: &str,
+) -> Result<Option<String>, TransferError> {
     let objects = managed_objects(system).await?;
-    for interfaces in objects.values() {
+    let Some(adapter_path) = objects.iter().find_map(|(path, interfaces)| {
+        let properties = interfaces.get("org.bluez.Adapter1")?;
+        properties
+            .get("Address")
+            .and_then(|value| value.downcast_ref::<String>().ok())
+            .filter(|candidate| candidate.eq_ignore_ascii_case(adapter_address))
+            .map(|_| path.as_str().to_owned())
+    }) else {
+        return Ok(None);
+    };
+    let adapter_id = adapter_path_id(&adapter_path)?;
+    for (path, interfaces) in &objects {
+        if !device_belongs_to_adapter(path.as_str(), &adapter_path) {
+            continue;
+        }
         let Some(properties) = interfaces.get("org.bluez.Device1") else {
             continue;
         };
@@ -274,10 +305,30 @@ async fn trusted_device(system: &Connection, address: &str) -> Result<bool, Tran
             .as_deref()
             .is_some_and(|value| value.eq_ignore_ascii_case(address))
         {
-            return Ok(paired && trusted);
+            return Ok((paired && trusted).then_some(adapter_id));
         }
     }
-    Ok(false)
+    Ok(None)
+}
+
+fn adapter_path_id(adapter_path: &str) -> Result<String, TransferError> {
+    let name = adapter_path
+        .strip_prefix("/org/bluez/")
+        .filter(|value| {
+            value.starts_with("hci")
+                && !value.is_empty()
+                && value.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.')
+                })
+        })
+        .ok_or_else(|| TransferError("Invalid Bluetooth adapter path".to_owned()))?;
+    Ok(format!("adapter-{name}"))
+}
+
+fn device_belongs_to_adapter(device_path: &str, adapter_path: &str) -> bool {
+    device_path
+        .rsplit_once('/')
+        .is_some_and(|(parent, device)| parent == adapter_path && device.starts_with("dev_"))
 }
 
 type ManagedObjects = HashMap<OwnedObjectPath, HashMap<String, HashMap<String, OwnedVariant>>>;
@@ -341,7 +392,7 @@ fn monitor_incoming(
         .await;
         match result {
             Ok(()) => {
-                let _ = db.finish(&id, "completed", None);
+                let _ = db.await_receive_finalization(&id);
             }
             Err(_error) if db.cancel_requested(&id).unwrap_or(false) => {
                 let _ = db.finish(&id, "cancelled", None);
@@ -357,7 +408,7 @@ fn monitor_incoming(
 
 #[cfg(test)]
 mod tests {
-    use super::adapter_object_path;
+    use super::{adapter_object_path, adapter_path_id, device_belongs_to_adapter};
 
     #[test]
     fn adapter_ids_resolve_only_to_bluez_adapter_paths() {
@@ -367,5 +418,23 @@ mod tests {
         );
         assert!(adapter_object_path("hci0").is_err());
         assert!(adapter_object_path("adapter-../../hci0").is_err());
+    }
+
+    #[test]
+    fn trusted_device_paths_are_scoped_to_the_obex_source_adapter() {
+        assert_eq!(adapter_path_id("/org/bluez/hci1").unwrap(), "adapter-hci1");
+        assert!(adapter_path_id("/org/bluez/hci0/child").is_err());
+        assert!(device_belongs_to_adapter(
+            "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF",
+            "/org/bluez/hci0"
+        ));
+        assert!(!device_belongs_to_adapter(
+            "/org/bluez/hci1/dev_AA_BB_CC_DD_EE_FF",
+            "/org/bluez/hci0"
+        ));
+        assert!(!device_belongs_to_adapter(
+            "/org/bluez/hci0/child/dev_AA_BB_CC_DD_EE_FF",
+            "/org/bluez/hci0"
+        ));
     }
 }

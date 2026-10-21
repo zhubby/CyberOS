@@ -8,7 +8,7 @@ export type HostdBluetoothManagerRequest = { "action": "status" } | { "action": 
 
 export type HostdBluetoothManagerResult = { collectedAt: string, backend: string, available: boolean, adapters: Array<HostdBluetoothAdapter>, devices: Array<HostdBluetoothDevice>, scan: HostdBluetoothScanStatus, challenge: HostdBluetoothPairingChallenge | null, error: string | null, };
 
-export type HostdBluetoothPairingChallenge = { id: string, adapterId: string, deviceAddress: string, kind: string, pin: string | null, passkey: number | null, expiresAt: string, };
+export type HostdBluetoothPairingChallenge = { id: string, adapterId: string, deviceAddress: string, kind: string, pin: string | null, passkey: number | null, entered: number | null, expiresAt: string, };
 
 export type HostdBluetoothScanStatus = { active: boolean, adapterId: string | null, startedAt: string | null, endsAt: string | null, };
 

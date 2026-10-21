@@ -147,7 +147,7 @@ sudo journalctl -u bluealsa.service -u zos-vod-player.service -n 120 --no-pager
 sudo -u zos aplay -L | sed -n '/bluealsa/,+4p'
 ```
 
-设置页只允许枚举出的 `bluetooth:<MAC>`，不要把 `hw:*`、`bluealsa:*` 或其他 ALSA 字符串直接写入数据库。输出设备断开或 ALSA 打开失败时，VOD 应继续使用原有 ALSA/HDMI，并在播放器条显示回退原因。蓝牙设备重新连接后，重新开始一次播放才会再次选择它。
+设置页只允许枚举出的 `bluetooth:<adapter-id>/<MAC>`，不要把 `hw:*`、`bluealsa:*` 或其他 ALSA 字符串直接写入数据库。输出设备断开或 ALSA 打开失败时，VOD 应继续使用原有 ALSA/HDMI，在播放器条显示回退原因，并在通知中心留下该播放会话的回退记录。蓝牙设备重新连接后，重新开始一次播放才会再次选择它。
 
 文件传输异常时检查 OBEX、独立传输服务、持久队列和目标存储：
 
@@ -161,7 +161,7 @@ findmnt -T /zos/data/primary
 df -h /zos/data/primary
 ```
 
-`zos-bluetoothd` 通过自己的用户会话 D-Bus 激活 `bluez-obexd`。服务反复退出时检查 `dbus-run-session`、OBEX D-Bus activation 文件及 `/zos/state/bluetooth` 所有权，不要改为 root。收件被拒绝时确认发送设备同时为 Paired 和 Trusted、收件开关已开启、所选 NAS 目录仍属于同一挂载源且 `zos` 可写。目录离线、空间不足、出现符号链接或挂载源变化都会拒绝新文件；修复后重新从发送端发起，不要手工把失败记录改为完成。接收文件重名会自动改名，不需要预先删除原文件。
+`zos-bluetoothd` 通过自己的用户会话 D-Bus 激活 `bluez-obexd`。服务反复退出时检查 `dbus-run-session`、OBEX D-Bus activation 文件及 `/zos/state/bluetooth` 所有权，不要改为 root。收件被拒绝时确认发送设备同时为 Paired 和 Trusted、收件开关已开启、所选 NAS 目录仍属于同一挂载源且 `zos` 可写。目录离线、空间不足、出现符号链接或挂载源变化都会拒绝新文件；修复后重新从发送端发起，不要手工把失败记录改为完成。接收完成后会短暂显示“正在保存”，API 从 `/zos/state/bluetooth/incoming` 将文件安全落入接收授权时选定的收件目录；长期停留在该状态时同时检查 `zos-api` 日志和暂存目录。接收文件重名会自动追加时间戳或序号，不覆盖原文件。
 
 ## 多网口 Ethernet 与 checkpoint
 

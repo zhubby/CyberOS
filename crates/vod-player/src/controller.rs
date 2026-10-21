@@ -645,6 +645,8 @@ impl Controller {
             self.status.position_seconds = desired.position_seconds;
             self.status.volume = desired.volume;
             self.status.audio_device_id = desired.audio_device_id.clone();
+            self.status.effective_audio_device_id = None;
+            self.status.audio_fallback_reason = None;
         }
     }
 
@@ -745,7 +747,10 @@ fn file_name(path: &str) -> Option<String> {
 }
 
 fn bluetooth_alsa_device(device_id: &str) -> String {
-    let address = device_id.strip_prefix("bluetooth:").unwrap_or_default();
+    let target = device_id.strip_prefix("bluetooth:").unwrap_or_default();
+    let address = target
+        .rsplit_once('/')
+        .map_or(target, |(_, address)| address);
     format!("alsa/bluealsa:DEV={address},PROFILE=a2dp")
 }
 
@@ -834,6 +839,39 @@ mod tests {
             bluetooth_alsa_device("bluetooth:AA:BB:CC:DD:EE:FF"),
             "alsa/bluealsa:DEV=AA:BB:CC:DD:EE:FF,PROFILE=a2dp"
         );
+        assert_eq!(
+            bluetooth_alsa_device("bluetooth:adapter-hci1/AA:BB:CC:DD:EE:FF"),
+            "alsa/bluealsa:DEV=AA:BB:CC:DD:EE:FF,PROFILE=a2dp"
+        );
+    }
+
+    #[test]
+    fn new_session_clears_previous_audio_output_state() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.status.effective_audio_device_id =
+            Some("bluetooth:adapter-hci0/AA:BB:CC:DD:EE:FF".to_owned());
+        controller.status.audio_fallback_reason = Some("BlueALSA unavailable".to_owned());
+        controller.desired = Some(DesiredSession {
+            session_id: "next-session".to_owned(),
+            root_id: "root".to_owned(),
+            storage_pool_id: "pool".to_owned(),
+            relative_path: "movie.mp4".to_owned(),
+            position_seconds: 0.0,
+            volume: 100.0,
+            paused: false,
+            audio_device_id: Some("bluetooth:adapter-hci1/11:22:33:44:55:66".to_owned()),
+            identity: None,
+        });
+
+        controller.copy_desired_to_status();
+
+        assert_eq!(
+            controller.status.audio_device_id.as_deref(),
+            Some("bluetooth:adapter-hci1/11:22:33:44:55:66")
+        );
+        assert!(controller.status.effective_audio_device_id.is_none());
+        assert!(controller.status.audio_fallback_reason.is_none());
     }
 
     #[test]

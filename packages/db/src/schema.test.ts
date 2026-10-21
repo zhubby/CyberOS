@@ -132,8 +132,72 @@ describe("SQLite schema migrations", () => {
       "036_bluetooth_transfers",
       "037_agent_only_capability_approvals",
       "038_panel_operations_without_agent_jobs",
-      "039_media_library"
+      "039_media_library",
+      "040_media_operation_notifications",
+      "041_bluetooth_receive_finalization"
     ]);
+  });
+
+  it("preserves notification and Bluetooth transfer rows through migrations 040 and 041", () => {
+    const databasePath = path.join(tempDir, "bluetooth-finalization.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.pragma("foreign_keys = ON");
+    applyMigrationsThrough(legacy, "039_media_library");
+    ensureNasRoots(legacy, [{ id: "local", name: "Local", path: tempDir }]);
+    const now = "2026-10-20T00:00:00.000Z";
+    legacy.prepare(`
+      INSERT INTO operation_notifications (
+        id, job_id, session_id, operation_id, kind, status, summary, error, read_at, created_at, updated_at
+      ) VALUES ('notification-before-040', NULL, NULL, 'operation-before-040', 'share', 'succeeded',
+        'Existing notification', NULL, NULL, ?, ?)
+    `).run(now, now);
+    legacy.prepare(`
+      INSERT INTO bluetooth_transfers (
+        id, direction, adapter_id, device_address, root_id, storage_pool_id,
+        relative_path, display_name, status, transferred_bytes, total_bytes,
+        error, obex_transfer_path, control_requested, read_at, created_at,
+        updated_at, started_at, finished_at, last_progress_at
+      ) VALUES ('transfer-before-041', 'receive', 'adapter-hci0', 'AA:BB:CC:DD:EE:FF',
+        'local', 'pool-1', 'incoming/example.txt', 'example.txt', 'completed', 7, 7,
+        NULL, '/org/bluez/obex/transfer1', NULL, NULL, ?, ?, ?, ?, ?)
+    `).run(now, now, now, now, now);
+    legacy.close();
+
+    const migrated = openZosDb(databasePath);
+    try {
+      expect(migrated.prepare("SELECT kind, status, summary FROM operation_notifications WHERE id = ?")
+        .get("notification-before-040")).toEqual({
+        kind: "share",
+        status: "succeeded",
+        summary: "Existing notification"
+      });
+      expect(migrated.prepare("SELECT status, relative_path, finalization_relative_path FROM bluetooth_transfers WHERE id = ?")
+        .get("transfer-before-041")).toEqual({
+        status: "completed",
+        relative_path: "incoming/example.txt",
+        finalization_relative_path: null
+      });
+
+      migrated.prepare(`
+        INSERT INTO operation_notifications (
+          id, job_id, session_id, operation_id, kind, status, summary, error, read_at, created_at, updated_at
+        ) VALUES ('media-notification', NULL, NULL, 'media-operation', 'media', 'failed',
+          'Bluetooth audio fallback', 'device unavailable', NULL, ?, ?)
+      `).run(now, now);
+      migrated.prepare(`
+        UPDATE bluetooth_transfers
+        SET status = 'finalizing', finalization_relative_path = 'inbox/example.txt'
+        WHERE id = 'transfer-before-041'
+      `).run();
+
+      expect(migrated.prepare("SELECT kind FROM operation_notifications WHERE id = 'media-notification'").get())
+        .toEqual({ kind: "media" });
+      expect(migrated.prepare("SELECT status, finalization_relative_path FROM bluetooth_transfers WHERE id = 'transfer-before-041'").get())
+        .toEqual({ status: "finalizing", finalization_relative_path: "inbox/example.txt" });
+      expect(migrated.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      migrated.close();
+    }
   });
 
   it("preserves legacy history while detaching panel operations from Agent jobs", () => {

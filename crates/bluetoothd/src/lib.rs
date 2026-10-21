@@ -18,9 +18,10 @@ pub struct BluetoothTransferService {
 
 impl BluetoothTransferService {
     pub async fn new(config: &Config) -> Result<Self, TransferError> {
+        std::fs::create_dir_all(&config.incoming_path)?;
         let db = Db::open(&config.database_path)?;
-        db.recover_interrupted()?;
-        let obex = ObexRuntime::initialize(db.clone()).await?;
+        db.recover_interrupted(&config.incoming_path)?;
+        let obex = ObexRuntime::initialize(db.clone(), config.incoming_path.clone()).await?;
         Ok(Self { db, obex })
     }
 

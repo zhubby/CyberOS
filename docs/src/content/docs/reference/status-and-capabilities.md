@@ -39,9 +39,9 @@ Wi-Fi 的射频、连接、已保存网络和热点操作统一位于“设置 >
 
 系统支持多个适配器，所有扫描和设备操作都携带适配器 ID 与规范化 MAC 地址，hostd 会重新解析 BlueZ 对象并拒绝未知对象。设置页的手动扫描默认持续约 15 秒；配对成功不会自动信任。没有蓝牙硬件、BlueZ 未运行或系统 D-Bus 不可用时，不影响其他 ZOS 服务启动，页面会显示具体不可用原因。
 
-蓝牙设备管理依赖 Debian `bluez`；音频和文件传输还依赖 `bluez-obexd`、`bluez-alsa-utils`、`libasound2-plugin-bluez`、用户会话 D-Bus 和非 root `zos-bluetoothd`。`zos-bluetoothd` 负责 OBEX 会话、逐文件队列、进度和持久传输记录，hostd 仍只负责需要系统权限的 BlueZ 控制。传输状态通过独立 SSE 发布并进入通知中心，不写入聊天流。
+蓝牙设备管理依赖 Debian `bluez`；音频和文件传输还依赖 `bluez-obexd`、`bluez-alsa-utils`、`libasound2-plugin-bluez`、用户会话 D-Bus 和非 root `zos-bluetoothd`。`zos-bluetoothd` 负责 OBEX 会话、逐文件队列、进度和持久传输记录，hostd 仍只负责需要系统权限的 BlueZ 控制。传输状态通过独立 SSE 发布并进入通知中心，不写入聊天流。接收内容先写入 `/zos/state/bluetooth/incoming`；传输服务对 `/zos/data` 只有读权限，API 在重新校验接收授权时选定的收件目录、挂载和文件名后完成最终落盘。
 
-音频只改变 ZOS/VOD 播放输出，不改变系统 UI 音频，也不支持手机向 ZOS 输入音频。设置只保存枚举产生的稳定 `bluetooth:<MAC>` ID；API 和 VOD 都不接受任意 ALSA 设备字符串。选择从下一次播放生效；设备断开或 BlueALSA 打开失败时，VOD 立即回退到原有 ALSA/HDMI 输出，并在播放器状态中保留原因。
+音频只改变 ZOS/VOD 播放输出，不改变系统 UI 音频，也不支持手机向 ZOS 输入音频。设置只保存枚举产生的稳定 `bluetooth:<adapter-id>/<MAC>` ID；API 和 VOD 都不接受任意 ALSA 设备字符串，旧的 `bluetooth:<MAC>` 会在唯一匹配时自动迁移。选择从下一次播放生效；设备断开或 BlueALSA 打开失败时，VOD 立即回退到原有 ALSA/HDMI 输出，在播放器状态中保留原因，并按播放会话写入一条持久通知。
 
 文件发送只接受已挂载 NAS 存储池内经安全解析的普通文件，批量任务逐文件记录 `queued`、`running`、`completed`、`failed` 或 `cancelled`。文件接收是用户明确开启的系统托管收件箱特例，不进入 Agent approval；只有已配对且手动标记为 Trusted 的设备可以发送。每次接收都会重新验证 NAS root、存储池挂载源、目录可写性、符号链接/防穿越和可用空间；离线或空间不足时拒绝新传输。同名文件追加时间戳和序号，绝不覆盖现有文件。
 

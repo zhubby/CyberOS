@@ -36,6 +36,9 @@ describe("parseBluetoothTransfersEvent", () => {
   it("accepts an exact persistent transfer event", () => {
     expect(parseBluetoothTransfersEvent(JSON.stringify({ transfers: [transfer], health })))
       .toEqual({ transfers: [transfer], health });
+    const finalizing = { ...transfer, direction: "receive", status: "finalizing" };
+    expect(parseBluetoothTransfersEvent(JSON.stringify({ transfers: [finalizing], health })))
+      .toEqual({ transfers: [finalizing], health });
   });
 
   it("rejects unknown fields and invalid transfer state", () => {

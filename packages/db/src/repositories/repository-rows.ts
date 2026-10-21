@@ -281,6 +281,7 @@ export type DbBluetoothTransferRow = {
   storage_pool_id: string;
   relative_path: string;
   display_name: string;
+  finalization_relative_path: string | null;
   status: BluetoothTransferStatus;
   transferred_bytes: number;
   total_bytes: number | null;

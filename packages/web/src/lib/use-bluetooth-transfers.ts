@@ -88,7 +88,7 @@ function isBluetoothTransfer(value: unknown): value is BluetoothTransfer {
     && isNonEmptyString(value.storagePoolId)
     && typeof value.relativePath === "string"
     && isNonEmptyString(value.displayName)
-    && ["queued", "running", "paused", "completed", "failed", "cancelled"].includes(String(value.status))
+    && ["queued", "running", "paused", "finalizing", "completed", "failed", "cancelled"].includes(String(value.status))
     && isNonNegativeInteger(value.transferredBytes)
     && (value.totalBytes === null || isNonNegativeInteger(value.totalBytes))
     && isNullableString(value.error)

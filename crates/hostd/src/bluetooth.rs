@@ -15,6 +15,7 @@ const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const DEFAULT_ADAPTER_PATH: &str = "/zos/state/hostd/bluetooth/default-adapter";
 const AGENT_PATH: &str = "/org/zos/BluetoothAgent";
 const CHALLENGE_TTL: Duration = Duration::from_secs(60);
+const EXPLICIT_CONNECT_AUTHORIZATION_TTL: Duration = Duration::from_secs(30);
 const SCAN_DURATION: Duration = Duration::from_secs(15);
 
 static RUNTIME: OnceCell<Arc<BluetoothRuntime>> = OnceCell::const_new();
@@ -45,12 +46,15 @@ struct PairingAgent {
 
 struct AgentShared {
     pending: Mutex<Option<PendingChallenge>>,
+    connection: Option<Connection>,
+    connect_authorizations: Mutex<HashMap<String, Instant>>,
     notify: Notify,
 }
 
 struct PendingChallenge {
     challenge: Challenge,
     deadline: Instant,
+    expects_response: bool,
     response: Option<ChallengeResponse>,
 }
 
@@ -263,6 +267,7 @@ struct Challenge {
     kind: String,
     pin: Option<String>,
     passkey: Option<u32>,
+    entered: Option<u16>,
     expires_at: String,
 }
 
@@ -274,6 +279,8 @@ impl BluetoothRuntime {
         let agent = PairingAgent {
             shared: Arc::new(AgentShared {
                 pending: Mutex::new(None),
+                connection: Some(connection.clone()),
+                connect_authorizations: Mutex::new(HashMap::new()),
                 notify: Notify::new(),
             }),
         };
@@ -398,6 +405,11 @@ impl PairingAgent {
                 "Bluetooth pairing challenge does not match the target device",
             ));
         }
+        if !current.expects_response {
+            return Err(HostdError::conflict(
+                "Bluetooth pairing challenge is display-only",
+            ));
+        }
         current.response = Some(ChallengeResponse { accepted, pin });
         drop(pending);
         self.shared.notify.notify_waiters();
@@ -433,6 +445,7 @@ impl PairingAgent {
             kind: kind.to_owned(),
             pin: None,
             passkey,
+            entered: None,
             expires_at: format_timestamp(expires_at),
         };
         {
@@ -448,6 +461,7 @@ impl PairingAgent {
             *pending = Some(PendingChallenge {
                 challenge,
                 deadline,
+                expects_response: true,
                 response: None,
             });
         }
@@ -476,13 +490,145 @@ impl PairingAgent {
     async fn cancel_pending(&self) {
         let mut pending = self.shared.pending.lock().await;
         if let Some(current) = pending.as_mut() {
-            current.response = Some(ChallengeResponse {
-                accepted: false,
-                pin: None,
-            });
+            if current.expects_response {
+                current.response = Some(ChallengeResponse {
+                    accepted: false,
+                    pin: None,
+                });
+            } else {
+                *pending = None;
+            }
         }
         drop(pending);
         self.shared.notify.notify_waiters();
+    }
+
+    async fn cancel_for_device(&self, device_path: &str) {
+        let Some((adapter_id, address)) = device_identity(device_path) else {
+            return;
+        };
+        let mut pending = self.shared.pending.lock().await;
+        let matches = pending.as_ref().is_some_and(|current| {
+            current.challenge.adapter_id == adapter_id
+                && current
+                    .challenge
+                    .device_address
+                    .eq_ignore_ascii_case(&address)
+        });
+        if !matches {
+            return;
+        }
+        if pending
+            .as_ref()
+            .is_some_and(|current| current.expects_response)
+        {
+            if let Some(current) = pending.as_mut() {
+                current.response = Some(ChallengeResponse {
+                    accepted: false,
+                    pin: None,
+                });
+            }
+        } else {
+            *pending = None;
+        }
+        drop(pending);
+        self.shared.notify.notify_waiters();
+    }
+
+    async fn clear_for_device(&self, device_path: &str) {
+        let Some((adapter_id, address)) = device_identity(device_path) else {
+            return;
+        };
+        let mut pending = self.shared.pending.lock().await;
+        if pending.as_ref().is_some_and(|current| {
+            current.challenge.adapter_id == adapter_id
+                && current
+                    .challenge
+                    .device_address
+                    .eq_ignore_ascii_case(&address)
+        }) {
+            *pending = None;
+        }
+    }
+
+    async fn publish_display(
+        &self,
+        device: &ObjectPath<'_>,
+        kind: &str,
+        pin: Option<String>,
+        passkey: Option<u32>,
+        entered: Option<u16>,
+    ) -> Result<(), AgentError> {
+        let (adapter_id, address) = device_identity(device.as_str())
+            .ok_or_else(|| AgentError::Rejected("Invalid BlueZ device path".to_owned()))?;
+        let deadline = Instant::now() + CHALLENGE_TTL;
+        let expires_at = time::OffsetDateTime::now_utc()
+            + time::Duration::try_from(CHALLENGE_TTL).unwrap_or(time::Duration::seconds(60));
+        let mut pending = self.shared.pending.lock().await;
+        if pending
+            .as_ref()
+            .is_some_and(|current| current.deadline <= Instant::now())
+        {
+            *pending = None;
+        }
+        if let Some(current) = pending.as_mut() {
+            let same_display = !current.expects_response
+                && current.challenge.adapter_id == adapter_id
+                && current
+                    .challenge
+                    .device_address
+                    .eq_ignore_ascii_case(&address)
+                && current.challenge.kind == kind;
+            if !same_display {
+                return Err(AgentError::Rejected(
+                    "Another Bluetooth pairing challenge is active".to_owned(),
+                ));
+            }
+            current.challenge.pin = pin;
+            current.challenge.passkey = passkey;
+            current.challenge.entered = entered;
+            current.challenge.expires_at = format_timestamp(expires_at);
+            current.deadline = deadline;
+            return Ok(());
+        }
+        *pending = Some(PendingChallenge {
+            challenge: Challenge {
+                id: Uuid::new_v4().to_string(),
+                adapter_id,
+                device_address: address,
+                kind: kind.to_owned(),
+                pin,
+                passkey,
+                entered,
+                expires_at: format_timestamp(expires_at),
+            },
+            deadline,
+            expects_response: false,
+            response: None,
+        });
+        Ok(())
+    }
+
+    async fn begin_explicit_connect(&self, device_path: &str) {
+        self.shared.connect_authorizations.lock().await.insert(
+            device_path.to_owned(),
+            Instant::now() + EXPLICIT_CONNECT_AUTHORIZATION_TTL,
+        );
+    }
+
+    async fn end_explicit_connect(&self, device_path: &str) {
+        self.shared
+            .connect_authorizations
+            .lock()
+            .await
+            .remove(device_path);
+    }
+
+    async fn explicit_connect_authorized(&self, device_path: &str) -> bool {
+        let now = Instant::now();
+        let mut authorizations = self.shared.connect_authorizations.lock().await;
+        authorizations.retain(|_, deadline| *deadline > now);
+        authorizations.contains_key(device_path)
     }
 }
 
@@ -504,7 +650,22 @@ impl PairingAgent {
         Ok(pin)
     }
 
-    async fn display_pin_code(&self, _device: ObjectPath<'_>, _pin_code: String) {}
+    async fn display_pin_code(
+        &self,
+        device: ObjectPath<'_>,
+        pin_code: String,
+    ) -> Result<(), AgentError> {
+        if pin_code.is_empty()
+            || pin_code.len() > 16
+            || !pin_code.chars().all(|value| value.is_ascii_alphanumeric())
+        {
+            return Err(AgentError::Rejected(
+                "Invalid Bluetooth display PIN".to_owned(),
+            ));
+        }
+        self.publish_display(&device, "pin_display", Some(pin_code), None, None)
+            .await
+    }
 
     async fn request_passkey(&self, device: ObjectPath<'_>) -> Result<u32, AgentError> {
         let response = self.prompt(&device, "pin", None).await?;
@@ -515,7 +676,26 @@ impl PairingAgent {
             .ok_or_else(|| AgentError::Rejected("Invalid Bluetooth passkey".to_owned()))
     }
 
-    async fn display_passkey(&self, _device: ObjectPath<'_>, _passkey: u32, _entered: u16) {}
+    async fn display_passkey(
+        &self,
+        device: ObjectPath<'_>,
+        passkey: u32,
+        entered: u16,
+    ) -> Result<(), AgentError> {
+        if passkey > 999_999 || entered > 6 {
+            return Err(AgentError::Rejected(
+                "Invalid Bluetooth display passkey".to_owned(),
+            ));
+        }
+        self.publish_display(
+            &device,
+            "passkey_display",
+            None,
+            Some(passkey),
+            Some(entered),
+        )
+        .await
+    }
 
     async fn request_confirmation(
         &self,
@@ -533,10 +713,34 @@ impl PairingAgent {
 
     async fn authorize_service(
         &self,
-        _device: ObjectPath<'_>,
+        device: ObjectPath<'_>,
         _uuid: String,
     ) -> Result<(), AgentError> {
-        Ok(())
+        device_identity(device.as_str())
+            .ok_or_else(|| AgentError::Rejected("Invalid BlueZ device path".to_owned()))?;
+        let connection = self.shared.connection.as_ref().ok_or_else(|| {
+            AgentError::Rejected("BlueZ device authorization is unavailable".to_owned())
+        })?;
+        let objects = managed_objects(connection)
+            .await
+            .map_err(|_| AgentError::Rejected("BlueZ device authorization failed".to_owned()))?;
+        let properties = objects
+            .iter()
+            .find(|(path, interfaces)| {
+                path.as_str() == device.as_str() && interfaces.contains_key("org.bluez.Device1")
+            })
+            .and_then(|(_, interfaces)| interfaces.get("org.bluez.Device1"))
+            .ok_or_else(|| AgentError::Rejected("Bluetooth device was not found".to_owned()))?;
+        let paired = bool_property(properties, "Paired").unwrap_or(false);
+        let trusted = bool_property(properties, "Trusted").unwrap_or(false);
+        let explicit_connect = self.explicit_connect_authorized(device.as_str()).await;
+        if service_authorized(paired, trusted, explicit_connect) {
+            Ok(())
+        } else {
+            Err(AgentError::Rejected(
+                "Bluetooth service access requires a paired, trusted device".to_owned(),
+            ))
+        }
     }
 
     async fn cancel(&self) {
@@ -613,7 +817,9 @@ pub(crate) async fn handle(request: BluetoothRequest) -> Result<BluetoothResult,
             let pair_connection = connection.clone();
             let pair_runtime = Arc::clone(&runtime);
             tokio::spawn(async move {
-                if let Err(error) = device_call(&pair_connection, &device, "Pair").await {
+                let result = device_call(&pair_connection, &device, "Pair").await;
+                pair_runtime.agent.clear_for_device(&device).await;
+                if let Err(error) = result {
                     tracing::warn!(message = %error.message, "Bluetooth pairing failed");
                     pair_runtime.record_error(error.message).await;
                 }
@@ -623,14 +829,22 @@ pub(crate) async fn handle(request: BluetoothRequest) -> Result<BluetoothResult,
         BluetoothRequest::CancelPairing {
             adapter_id,
             address,
-        }
-        | BluetoothRequest::RejectPairing {
-            adapter_id,
-            address,
-            ..
         } => {
             let device = device_path(connection, &adapter_id, &address).await?;
-            runtime.agent.cancel_pending().await;
+            runtime.agent.cancel_for_device(&device).await;
+            device_call(connection, &device, "CancelPairing").await?;
+            collect_status(&runtime).await
+        }
+        BluetoothRequest::RejectPairing {
+            adapter_id,
+            address,
+            challenge_id,
+        } => {
+            let device = device_path(connection, &adapter_id, &address).await?;
+            runtime
+                .agent
+                .respond(&challenge_id, &adapter_id, &address, false, None)
+                .await?;
             device_call(connection, &device, "CancelPairing").await?;
             collect_status(&runtime).await
         }
@@ -662,7 +876,10 @@ pub(crate) async fn handle(request: BluetoothRequest) -> Result<BluetoothResult,
             address,
         } => {
             let device = device_path(connection, &adapter_id, &address).await?;
-            device_call(connection, &device, "Connect").await?;
+            runtime.agent.begin_explicit_connect(&device).await;
+            let result = device_call(connection, &device, "Connect").await;
+            runtime.agent.end_explicit_connect(&device).await;
+            result?;
             collect_status(&runtime).await
         }
         BluetoothRequest::Disconnect {
@@ -915,6 +1132,10 @@ fn valid_address(value: &str) -> bool {
         })
 }
 
+fn service_authorized(paired: bool, trusted: bool, explicit_connect: bool) -> bool {
+    paired && (trusted || explicit_connect)
+}
+
 fn device_identity(path: &str) -> Option<(String, String)> {
     let mut segments = path.rsplit('/');
     let device = segments.next()?.strip_prefix("dev_")?;
@@ -959,6 +1180,8 @@ mod tests {
         PairingAgent {
             shared: Arc::new(AgentShared {
                 pending: Mutex::new(None),
+                connection: None,
+                connect_authorizations: Mutex::new(HashMap::new()),
                 notify: Notify::new(),
             }),
         }
@@ -1070,6 +1293,69 @@ mod tests {
             .await;
         assert!(matches!(result, Err(AgentError::Canceled(_))));
         assert!(agent.challenge().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn pairing_agent_publishes_and_updates_display_only_passkeys() {
+        let agent = agent();
+        let device = ObjectPath::try_from("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF").unwrap();
+        agent
+            .publish_display(&device, "passkey_display", None, Some(123_456), Some(1))
+            .await
+            .unwrap();
+        let first = agent.challenge().await.unwrap();
+        assert_eq!(first.kind, "passkey_display");
+        assert_eq!(first.passkey, Some(123_456));
+        assert_eq!(first.entered, Some(1));
+        assert!(
+            agent
+                .respond(
+                    &first.id,
+                    &first.adapter_id,
+                    &first.device_address,
+                    true,
+                    None,
+                )
+                .await
+                .is_err()
+        );
+
+        agent
+            .publish_display(&device, "passkey_display", None, Some(123_456), Some(4))
+            .await
+            .unwrap();
+        let updated = agent.challenge().await.unwrap();
+        assert_eq!(updated.id, first.id);
+        assert_eq!(updated.entered, Some(4));
+
+        agent.cancel_pending().await;
+        assert!(agent.challenge().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn pairing_agent_cancels_only_the_target_devices_challenge() {
+        let agent = agent();
+        let device = ObjectPath::try_from("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF").unwrap();
+        agent
+            .publish_display(&device, "pin_display", Some("1234".to_owned()), None, None)
+            .await
+            .unwrap();
+
+        agent
+            .cancel_for_device("/org/bluez/hci1/dev_11_22_33_44_55_66")
+            .await;
+        assert!(agent.challenge().await.is_some());
+
+        agent.cancel_for_device(device.as_str()).await;
+        assert!(agent.challenge().await.is_none());
+    }
+
+    #[test]
+    fn service_authorization_requires_pairing_and_trust_or_an_explicit_connect() {
+        assert!(service_authorized(true, true, false));
+        assert!(service_authorized(true, false, true));
+        assert!(!service_authorized(false, true, true));
+        assert!(!service_authorized(true, false, false));
     }
 
     #[test]

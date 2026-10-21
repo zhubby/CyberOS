@@ -283,12 +283,30 @@ fn validate_id(value: &str) -> Result<(), VodError> {
 }
 
 pub(crate) fn validate_bluetooth_audio_device_id(value: &str) -> Result<(), VodError> {
-    let Some(address) = value.strip_prefix("bluetooth:") else {
+    let Some(target) = value.strip_prefix("bluetooth:") else {
         return Err(VodError::new(
             ErrorCode::InvalidCommand,
             "Invalid Bluetooth audio device id",
             400,
         ));
+    };
+    let address = if let Some((adapter_id, address)) = target.split_once('/') {
+        if !adapter_id.starts_with("adapter-")
+            || adapter_id.len() == "adapter-".len()
+            || adapter_id.len() > 72
+            || !adapter_id["adapter-".len()..].chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '_' | '.' | ':' | '-')
+            })
+        {
+            return Err(VodError::new(
+                ErrorCode::InvalidCommand,
+                "Invalid Bluetooth audio device id",
+                400,
+            ));
+        }
+        address
+    } else {
+        target
     };
     if address.len() != 17
         || address.split(':').count() != 6
@@ -400,6 +418,12 @@ mod tests {
         assert!(
             RequestEnvelope::parse(br#"{"version":1,"id":"r1","command":{"type":"pause"}}"#)
                 .is_err()
+        );
+        assert!(
+            validate_bluetooth_audio_device_id("bluetooth:adapter-hci1/AA:BB:CC:DD:EE:FF").is_ok()
+        );
+        assert!(
+            validate_bluetooth_audio_device_id("bluetooth:adapter-/AA:BB:CC:DD:EE:FF").is_err()
         );
     }
 

@@ -351,7 +351,11 @@ export function SystemNetworkManagementPanel({
                 content: summary ? (
                   <SystemWifiReadonly
                     wifi={summary.wifi}
-                    canScan={summary.capabilities.canManageWifi}
+                    canScan={
+                      summary.wifi.backend === "NetworkManager"
+                      && summary.wifi.hostdReady
+                      && summary.wifi.devices.length > 0
+                    }
                     onStatus={handleWifiStatus}
                     onOpenSettings={onOpenWirelessSettings}
                     onNotifyError={(message) => onNotifyError(message)}

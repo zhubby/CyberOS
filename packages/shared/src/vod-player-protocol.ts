@@ -236,7 +236,7 @@ function safeRelativePath(value: string): boolean {
 }
 
 function isBluetoothAudioDeviceId(value: unknown): value is string {
-  return typeof value === "string" && /^bluetooth:(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/iu.test(value);
+  return typeof value === "string" && /^bluetooth:(?:adapter-[a-z0-9_.:-]{1,64}\/)?(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/iu.test(value);
 }
 
 function finiteNumber(value: unknown): number | null {

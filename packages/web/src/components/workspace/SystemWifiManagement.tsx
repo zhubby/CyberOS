@@ -138,6 +138,14 @@ export function SystemWifiManagement({
     if (wifi.radioEnabled !== true) setScan(null);
   }, [wifi.radioEnabled]);
 
+  useEffect(() => {
+    if (canManageWifi) return;
+    setConfirmation(null);
+    setConnectDialog(null);
+    setProfileDialog(null);
+    setHotspotDialog(null);
+  }, [canManageWifi]);
+
   async function refreshScan() {
     if (!selectedDevice || scanning || !canManageWifi || wifi.radioEnabled !== true) return;
     setScanning(true);
@@ -178,7 +186,7 @@ export function SystemWifiManagement({
   }
 
   function connectSaved(network: SystemWifiNetworkGroup) {
-    if (!selectedDevice || !network.strongest.savedProfileId) return;
+    if (!canManageWifi || !selectedDevice || !network.strongest.savedProfileId) return;
     const execute = () => runMutation(
       () => connectSystemWifi({
         device: selectedDevice.name,
@@ -201,7 +209,7 @@ export function SystemWifiManagement({
   }
 
   function openConnect(network: SystemWifiNetworkGroup) {
-    if (network.security === "unsupported") return;
+    if (!canManageWifi || network.security === "unsupported") return;
     if (network.strongest.savedProfileId) {
       connectSaved(network);
       return;
@@ -235,7 +243,7 @@ export function SystemWifiManagement({
   }
 
   function requestDisconnect() {
-    if (!selectedDevice) return;
+    if (!canManageWifi || !selectedDevice) return;
     requestConfirmation({
       title: translate("workspace.management.network.wifi.confirm.disconnectTitle"),
       description: selectedDevice.managementPath
@@ -250,6 +258,7 @@ export function SystemWifiManagement({
   }
 
   function toggleRadio() {
+    if (!canManageWifi) return;
     const enabled = wifi.radioEnabled !== true;
     const execute = () => runMutation(
       () => setSystemWifiRadio({ enabled, confirmed: !enabled }),
@@ -270,7 +279,7 @@ export function SystemWifiManagement({
   }
 
   function editProfile(profile: WifiProfile) {
-    if (!profile.managed || profile.security === "unsupported") return;
+    if (!canManageWifi || !profile.managed || profile.security === "unsupported") return;
     setProfileDialog({
       profile,
       ssid: profile.ssid,
@@ -306,6 +315,7 @@ export function SystemWifiManagement({
   }
 
   function forgetProfile(profile: WifiProfile) {
+    if (!canManageWifi) return;
     requestConfirmation({
       title: translate("workspace.management.network.wifi.confirm.forgetTitle"),
       description: translate("workspace.management.network.wifi.confirm.forgetDescription", { ssid: profile.ssid }),
@@ -318,7 +328,7 @@ export function SystemWifiManagement({
   }
 
   function openHotspot() {
-    if (!selectedDevice) return;
+    if (!canManageHotspot || !selectedDevice) return;
     setHotspotDialog({
       existing: hotspot,
       ssid: hotspot?.ssid ?? "ZOS",
@@ -357,7 +367,7 @@ export function SystemWifiManagement({
   }
 
   function hotspotAction(action: "start" | "stop" | "delete") {
-    if (!selectedDevice) return;
+    if (!canManageHotspot || !selectedDevice) return;
     const labels = {
       start: ["workspace.management.network.wifi.confirm.hotspotStartTitle", "workspace.management.network.wifi.confirm.hotspotStartDescription", "workspace.management.network.wifi.messages.hotspotStarted"],
       stop: ["workspace.management.network.wifi.confirm.hotspotStopTitle", "workspace.management.network.wifi.confirm.hotspotStopDescription", "workspace.management.network.wifi.messages.hotspotStopped"],
@@ -382,6 +392,7 @@ export function SystemWifiManagement({
   }
 
   const unavailable = wifi.backend !== "NetworkManager" || !selectedDevice;
+  const declarativeReadOnly = wifi.backend === "NetworkManager" && wifi.hostdReady && Boolean(selectedDevice) && !canManageWifi;
   const selectedDeviceCanHotspot = wifi.radioEnabled === true && canManageHotspot && selectedDevice?.capabilities.accessPoint === true;
 
   return (
@@ -405,7 +416,7 @@ export function SystemWifiManagement({
               type="button"
               className="management-icon-action"
               onClick={toggleRadio}
-              disabled={unavailable || !wifi.hostdReady || busy}
+              disabled={unavailable || !wifi.hostdReady || !canManageWifi || busy}
               aria-pressed={wifi.radioEnabled === true}
               aria-label={wifi.radioEnabled ? t("workspace.management.network.wifi.disableRadio") : t("workspace.management.network.wifi.enableRadio")}
               title={wifi.radioEnabled ? t("workspace.management.network.wifi.disableRadio") : t("workspace.management.network.wifi.enableRadio")}
@@ -425,6 +436,15 @@ export function SystemWifiManagement({
 
         <div className="system-wifi-content">
           {error ? <p className="system-wifi-error" role="alert">{error}</p> : null}
+          {declarativeReadOnly ? (
+            <div className="system-wifi-unavailable" role="status">
+              <AlertTriangle aria-hidden="true" size={18} />
+              <div>
+                <strong>{t("workspace.management.network.wifi.readOnlyTitle")}</strong>
+                <p>{t("workspace.management.network.wifi.declarativeReadOnlyDescription")}</p>
+              </div>
+            </div>
+          ) : null}
           {wifi.backend !== "NetworkManager" ? (
             <div className="system-wifi-unavailable">
               <AlertTriangle aria-hidden="true" size={18} />
@@ -470,7 +490,7 @@ export function SystemWifiManagement({
                     <div><dt>{t("workspace.management.network.wifi.mode")}</dt><dd>{t(`workspace.management.network.wifi.modes.${selectedDevice.mode}`)}</dd></div>
                   </dl>
                   {selectedDevice.activeConnectionId && selectedDevice.mode === "client" ? (
-                    <button type="button" className="is-danger" onClick={requestDisconnect} disabled={busy}>
+                    <button type="button" className="is-danger" onClick={requestDisconnect} disabled={!canManageWifi || busy}>
                       <WifiOff aria-hidden="true" size={14} />
                       <span>{t("workspace.management.network.wifi.disconnect")}</span>
                     </button>
@@ -499,7 +519,7 @@ export function SystemWifiManagement({
                           <button
                             type="button"
                             onClick={() => openConnect(network)}
-                            disabled={busy || network.security === "unsupported" || network.strongest.active}
+                            disabled={!canManageWifi || busy || network.security === "unsupported" || network.strongest.active}
                           >
                             {network.strongest.active ? <Check aria-hidden="true" size={14} /> : <KeyRound aria-hidden="true" size={14} />}
                             <span>{network.strongest.active ? t("workspace.management.network.wifi.current") : t("workspace.management.network.wifi.connect")}</span>
@@ -533,14 +553,14 @@ export function SystemWifiManagement({
                           </span>
                           <div className="system-wifi-row-actions">
                             {!profile.active ? (
-                              <button type="button" className="management-icon-action" onClick={() => connectSaved(profileNetwork(profile))} disabled={busy} aria-label={t("workspace.management.network.wifi.connect")} title={t("workspace.management.network.wifi.connect")}>
+                              <button type="button" className="management-icon-action" onClick={() => connectSaved(profileNetwork(profile))} disabled={!canManageWifi || busy} aria-label={t("workspace.management.network.wifi.connect")} title={t("workspace.management.network.wifi.connect")}>
                                 <Wifi aria-hidden="true" size={14} />
                               </button>
                             ) : null}
-                            <button type="button" className="management-icon-action" onClick={() => editProfile(profile)} disabled={!profile.managed || busy} aria-label={t("common.actions.edit")} title={profile.managed ? t("common.actions.edit") : t("workspace.management.network.wifi.externalReadOnly")}>
+                            <button type="button" className="management-icon-action" onClick={() => editProfile(profile)} disabled={!canManageWifi || !profile.managed || busy} aria-label={t("common.actions.edit")} title={profile.managed ? t("common.actions.edit") : t("workspace.management.network.wifi.externalReadOnly")}>
                               <Pencil aria-hidden="true" size={14} />
                             </button>
-                            <button type="button" className="management-icon-action is-danger" onClick={() => forgetProfile(profile)} disabled={!profile.managed || busy} aria-label={t("workspace.management.network.wifi.forget")} title={profile.managed ? t("workspace.management.network.wifi.forget") : t("workspace.management.network.wifi.externalReadOnly")}>
+                            <button type="button" className="management-icon-action is-danger" onClick={() => forgetProfile(profile)} disabled={!canManageWifi || !profile.managed || busy} aria-label={t("workspace.management.network.wifi.forget")} title={profile.managed ? t("workspace.management.network.wifi.forget") : t("workspace.management.network.wifi.externalReadOnly")}>
                               <Trash2 aria-hidden="true" size={14} />
                             </button>
                           </div>
@@ -561,14 +581,14 @@ export function SystemWifiManagement({
                   <span className="management-status-pill" data-state={hotspot.active ? "ready" : "neutral"}>
                     {hotspot.active ? t("workspace.management.network.wifi.hotspot.running") : t("workspace.management.network.wifi.hotspot.stopped")}
                   </span>
-                  <button type="button" onClick={() => hotspotAction(hotspot.active ? "stop" : "start")} disabled={busy}>
+                  <button type="button" onClick={() => hotspotAction(hotspot.active ? "stop" : "start")} disabled={!canManageHotspot || busy}>
                     {hotspot.active ? <WifiOff aria-hidden="true" size={14} /> : <Radio aria-hidden="true" size={14} />}
                     <span>{hotspot.active ? t("workspace.management.network.wifi.hotspot.stop") : t("workspace.management.network.wifi.hotspot.start")}</span>
                   </button>
-                  <button type="button" className="management-icon-action" onClick={openHotspot} disabled={busy} aria-label={t("common.actions.edit")} title={t("common.actions.edit")}>
+                  <button type="button" className="management-icon-action" onClick={openHotspot} disabled={!canManageHotspot || busy} aria-label={t("common.actions.edit")} title={t("common.actions.edit")}>
                     <Settings aria-hidden="true" size={14} />
                   </button>
-                  <button type="button" className="management-icon-action is-danger" onClick={() => hotspotAction("delete")} disabled={busy} aria-label={t("common.actions.delete")} title={t("common.actions.delete")}>
+                  <button type="button" className="management-icon-action is-danger" onClick={() => hotspotAction("delete")} disabled={!canManageHotspot || busy} aria-label={t("common.actions.delete")} title={t("common.actions.delete")}>
                     <Trash2 aria-hidden="true" size={14} />
                   </button>
                 </div>

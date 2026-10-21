@@ -61,6 +61,17 @@ describe("VOD player broker protocol", () => {
       startPositionSeconds: 4,
       audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF"
     });
+    expect(parseVodPlayerBrokerRequest(JSON.stringify({
+      version: 1,
+      id: "request-2",
+      command: {
+        type: "play",
+        rootId: "primary",
+        storagePoolId: "/dev/md/media",
+        relativePath: "movies/clip.mp4",
+        audioDeviceId: "bluetooth:adapter-hci1/AA:BB:CC:DD:EE:FF"
+      }
+    }))?.command).toMatchObject({ audioDeviceId: "bluetooth:adapter-hci1/AA:BB:CC:DD:EE:FF" });
 
     expect(parseVodPlayerBrokerResponse(encodeVodPlayerBrokerMessage({
       version: VOD_PLAYER_PROTOCOL_VERSION,

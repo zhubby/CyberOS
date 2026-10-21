@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { BluetoothStatus } from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
-import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
+import { BluetoothAudioOutputField, SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
 
 beforeAll(async () => {
   await initI18n();
@@ -50,6 +50,30 @@ describe("SettingsBluetoothPage", () => {
     expect(html).toContain("BlueZ is unavailable");
   });
 
+  it("localizes the generic host integration unavailable reason", async () => {
+    await i18n.changeLanguage("zh-CN");
+    try {
+      const html = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
+        status: {
+          ...status,
+          available: false,
+          adapters: [],
+          devices: [],
+          error: "BlueZ and the host integration service are unavailable"
+        },
+        pools: [],
+        locale: "zh-CN",
+        onStatus: vi.fn(),
+        onNotifySuccess: vi.fn(),
+        onNotifyError: vi.fn()
+      }));
+      expect(html).toContain("BlueZ 和主机集成服务当前不可用。");
+      expect(html).not.toContain("BlueZ and the host integration service are unavailable");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+
   it("renders an accessible pairing challenge before adapter controls", () => {
     const html = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
       status: {
@@ -61,6 +85,7 @@ describe("SettingsBluetoothPage", () => {
           kind: "confirmation",
           pin: null,
           passkey: 1234,
+          entered: null,
           expiresAt: "2026-10-20T00:00:30Z"
         }
       },
@@ -75,5 +100,64 @@ describe("SettingsBluetoothPage", () => {
     expect(html).toContain('aria-describedby="bluetooth-challenge-description"');
     expect(html).toContain("001234");
     expect(html.indexOf("Pairing request")).toBeLessThan(html.indexOf("Bluetooth adapters"));
+  });
+
+  it("shows display-only passkeys without response controls", () => {
+    const html = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
+      status: {
+        ...status,
+        challenge: {
+          id: "challenge-display",
+          adapterId: "adapter-hci0",
+          deviceAddress: "AA:BB:CC:DD:EE:FF",
+          kind: "passkey_display",
+          pin: null,
+          passkey: 123456,
+          entered: 2,
+          expiresAt: "2026-10-20T00:00:30Z"
+        }
+      },
+      pools: [],
+      locale: "en",
+      onStatus: vi.fn(),
+      onNotifySuccess: vi.fn(),
+      onNotifyError: vi.fn()
+    }));
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain("123456");
+    expect(html).toContain("2 of 6 digits entered");
+    expect(html).not.toContain("Confirm pairing</button>");
+  });
+
+  it("does not offer to stop a scan owned by another adapter", () => {
+    const second = { ...status.adapters[0]!, id: "adapter-hci1", name: "hci1", alias: "USB" };
+    const html = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
+      status: {
+        ...status,
+        adapters: [status.adapters[0]!, second],
+        scan: { active: true, adapterId: "adapter-hci1", startedAt: null, endsAt: null }
+      },
+      pools: [],
+      locale: "en",
+      onStatus: vi.fn(),
+      onNotifySuccess: vi.fn(),
+      onNotifyError: vi.fn()
+    }));
+
+    expect(html).toContain("adapter-hci1 is currently scanning");
+    expect(html).not.toContain(">Stop scan</span>");
+  });
+
+  it("keeps an unavailable configured audio output visible and disabled", () => {
+    const html = renderToStaticMarkup(createElement(BluetoothAudioOutputField, {
+      audioDevices: [],
+      defaultAudioDeviceId: "bluetooth:adapter-hci0/AA:BB:CC:DD:EE:FF",
+      disabled: false,
+      onChange: vi.fn()
+    }));
+
+    expect(html).toContain("Configured Bluetooth output unavailable");
+    expect(html).toContain('value="bluetooth:adapter-hci0/AA:BB:CC:DD:EE:FF" disabled="" selected=""');
   });
 });

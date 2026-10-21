@@ -83,18 +83,18 @@ impl Db {
         }))
     }
 
-    pub fn recover_interrupted(&self) -> Result<(), TransferError> {
+    pub fn recover_interrupted(&self, incoming_path: &Path) -> Result<(), TransferError> {
         let connection = self.connection()?;
         let interrupted_receives = {
             let mut statement = connection.prepare(
-                "SELECT bluetooth_transfers.id, nas_roots.path, bluetooth_transfers.relative_path FROM bluetooth_transfers JOIN nas_roots ON nas_roots.id = bluetooth_transfers.root_id WHERE bluetooth_transfers.direction = 'receive' AND bluetooth_transfers.status = 'running'",
+                "SELECT id, transferred_bytes, total_bytes FROM bluetooth_transfers WHERE direction = 'receive' AND status = 'running'",
             )?;
             statement
                 .query_map([], |row| {
                     Ok((
                         row.get::<_, String>(0)?,
-                        PathBuf::from(row.get::<_, String>(1)?),
-                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
                     ))
                 })?
                 .collect::<Result<Vec<_>, _>>()?
@@ -104,14 +104,26 @@ impl Db {
             "UPDATE bluetooth_transfers SET status = 'queued', started_at = NULL, obex_transfer_path = NULL, control_requested = NULL, error = 'Transfer service restarted before completion', updated_at = ? WHERE direction = 'send' AND status = 'running'",
             [&timestamp],
         )?;
-        connection.execute(
-            "UPDATE bluetooth_transfers SET status = 'failed', error = 'Transfer service restarted before receive completed', control_requested = NULL, finished_at = ?, updated_at = ?, read_at = NULL WHERE direction = 'receive' AND status = 'running'",
-            params![timestamp, timestamp],
-        )?;
         drop(connection);
 
-        for (id, root_path, relative_path) in interrupted_receives {
-            if let Err(error) = remove_receive_partial(&root_path, &relative_path) {
+        for (id, transferred, total) in interrupted_receives {
+            let staging_path = incoming_path.join(format!("{id}.part"));
+            let staged_size = receive_partial_size(incoming_path, &staging_path).ok();
+            let is_complete = total.is_some_and(|expected| {
+                expected >= 0
+                    && transferred >= expected
+                    && staged_size == u64::try_from(expected).ok()
+            });
+            if is_complete {
+                self.await_receive_finalization(&id)?;
+                continue;
+            }
+            self.finish(
+                &id,
+                "failed",
+                Some("Transfer service restarted before receive completed"),
+            )?;
+            if let Err(error) = remove_receive_partial(incoming_path, &staging_path) {
                 tracing::warn!(transfer_id = %id, message = %error.0, "Failed to remove an interrupted Bluetooth receive target");
                 self.connection()?.execute(
                     "UPDATE bluetooth_transfers SET error = 'Transfer service restarted before receive completed; partial file cleanup failed' WHERE id = ?",
@@ -159,6 +171,19 @@ impl Db {
         Ok(())
     }
 
+    pub fn await_receive_finalization(&self, id: &str) -> Result<(), TransferError> {
+        let changed = self.connection()?.execute(
+            "UPDATE bluetooth_transfers SET status = 'finalizing', error = NULL, control_requested = NULL, read_at = NULL, updated_at = ? WHERE id = ? AND direction = 'receive' AND status = 'running'",
+            params![now(), id],
+        )?;
+        if changed != 1 {
+            return Err(TransferError(
+                "Bluetooth receive is no longer active".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn settings(&self) -> Result<Settings, TransferError> {
         let json = self
             .connection()?
@@ -190,8 +215,8 @@ impl Db {
     pub fn record_receive(&self, input: ReceiveRecord<'_>) -> Result<String, TransferError> {
         let id = uuid::Uuid::new_v4().to_string();
         self.connection()?.execute(
-            "INSERT INTO bluetooth_transfers(id, direction, device_address, root_id, storage_pool_id, relative_path, display_name, status, total_bytes, created_at, updated_at, started_at) VALUES (?, 'receive', ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)",
-            params![id, input.address, input.root_id, input.pool_id, input.relative_path, input.display_name, input.total_bytes.map(to_i64), now(), now(), now()],
+            "INSERT INTO bluetooth_transfers(id, direction, adapter_id, device_address, root_id, storage_pool_id, relative_path, display_name, status, total_bytes, created_at, updated_at, started_at) VALUES (?, 'receive', ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)",
+            params![id, input.adapter_id, input.address, input.root_id, input.pool_id, input.relative_path, input.display_name, input.total_bytes.map(to_i64), now(), now(), now()],
         )?;
         Ok(id)
     }
@@ -204,12 +229,27 @@ impl Db {
 }
 
 pub struct ReceiveRecord<'a> {
+    pub adapter_id: &'a str,
     pub address: &'a str,
     pub root_id: &'a str,
     pub pool_id: &'a str,
     pub relative_path: &'a str,
     pub display_name: &'a str,
     pub total_bytes: Option<u64>,
+}
+
+fn receive_partial_size(root: &Path, requested: &Path) -> Result<u64, TransferError> {
+    let relative = requested
+        .strip_prefix(root)
+        .map_err(|_| TransferError("Bluetooth staging path escaped its root".to_owned()))?;
+    let target = crate::safety::safe_existing(root, relative.to_string_lossy().as_ref())?;
+    let metadata = std::fs::symlink_metadata(target)?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(TransferError(
+            "Bluetooth receive staging file is invalid".to_owned(),
+        ));
+    }
+    Ok(metadata.len())
 }
 
 fn now() -> String {
@@ -222,9 +262,11 @@ fn to_i64(value: u64) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
 }
 
-fn remove_receive_partial(root: &Path, relative: &str) -> Result<(), TransferError> {
-    let requested = root.join(relative);
-    let target = match crate::safety::safe_existing(root, relative) {
+fn remove_receive_partial(root: &Path, requested: &Path) -> Result<(), TransferError> {
+    let relative = requested
+        .strip_prefix(root)
+        .map_err(|_| TransferError("Bluetooth staging path escaped its root".to_owned()))?;
+    let target = match crate::safety::safe_existing(root, relative.to_string_lossy().as_ref()) {
         Ok(target) => target,
         Err(error) => {
             return match std::fs::symlink_metadata(requested) {
@@ -372,7 +414,7 @@ mod tests {
         let root = directory.path().join("root");
         let inbox = root.join("inbox");
         fs::create_dir_all(&inbox).unwrap();
-        let partial = inbox.join("partial.txt");
+        let partial = directory.path().join("receive-1.part");
         fs::write(&partial, b"partial").unwrap();
         db.connection()
             .unwrap()
@@ -383,7 +425,7 @@ mod tests {
             .unwrap();
         insert_transfer(&db, "receive-1", "receive", "running", "root-1");
 
-        db.recover_interrupted().unwrap();
+        db.recover_interrupted(directory.path()).unwrap();
 
         assert!(!partial.exists());
         let (status, error): (String, Option<String>) = db
@@ -400,5 +442,43 @@ mod tests {
             error.as_deref(),
             Some("Transfer service restarted before receive completed")
         );
+    }
+
+    #[test]
+    fn recovery_preserves_a_fully_received_staging_file_for_finalization() {
+        let (db, directory) = test_db();
+        let root = directory.path().join("root");
+        fs::create_dir_all(root.join("inbox")).unwrap();
+        let partial = directory.path().join("receive-complete.part");
+        fs::write(&partial, b"complete").unwrap();
+        db.connection()
+            .unwrap()
+            .execute(
+                "INSERT INTO nas_roots(id, path, enabled) VALUES ('root-1', ?, 1)",
+                [root.to_string_lossy().as_ref()],
+            )
+            .unwrap();
+        insert_transfer(&db, "receive-complete", "receive", "running", "root-1");
+        db.connection()
+            .unwrap()
+            .execute(
+                "UPDATE bluetooth_transfers SET transferred_bytes = 8, total_bytes = 8 WHERE id = 'receive-complete'",
+                [],
+            )
+            .unwrap();
+
+        db.recover_interrupted(directory.path()).unwrap();
+
+        assert!(partial.exists());
+        let status: String = db
+            .connection()
+            .unwrap()
+            .query_row(
+                "SELECT status FROM bluetooth_transfers WHERE id = 'receive-complete'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "finalizing");
     }
 }

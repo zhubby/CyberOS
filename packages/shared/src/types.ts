@@ -15,7 +15,7 @@ export type JobKind = "agent" | "file_batch";
 
 export type AgentEventAudience = "chat" | "notification";
 
-export type OperationNotificationKind = "file" | "docker" | "vm" | "storage" | "share";
+export type OperationNotificationKind = "file" | "docker" | "vm" | "storage" | "share" | "media";
 
 export type OperationNotificationStatus =
   | "pending_approval"
@@ -180,7 +180,7 @@ export interface BluetoothInboxStatus {
 }
 
 export type BluetoothTransferDirection = "send" | "receive";
-export type BluetoothTransferStatus = "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
+export type BluetoothTransferStatus = "queued" | "running" | "paused" | "finalizing" | "completed" | "failed" | "cancelled";
 export type BluetoothTransferControlRequest = "cancel";
 
 export interface BluetoothTransferRecord {
@@ -1685,7 +1685,7 @@ export interface SystemWifiScanResult {
 export type BluetoothBackend = "BlueZ" | "unknown";
 export type BluetoothAdapterState = "powered" | "off" | "unavailable";
 export type BluetoothDeviceType = "unknown" | "phone" | "computer" | "headset" | "speaker" | "keyboard" | "mouse" | "gamepad" | "wearable";
-export type BluetoothPairingChallengeKind = "pin" | "numeric_comparison" | "confirmation";
+export type BluetoothPairingChallengeKind = "pin" | "numeric_comparison" | "confirmation" | "pin_display" | "passkey_display";
 
 export interface BluetoothAdapter {
   id: string;
@@ -1726,6 +1726,7 @@ export interface BluetoothPairingChallenge {
   kind: BluetoothPairingChallengeKind;
   pin: string | null;
   passkey: number | null;
+  entered: number | null;
   expiresAt: string;
 }
 

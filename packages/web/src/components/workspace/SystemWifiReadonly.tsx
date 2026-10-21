@@ -41,7 +41,10 @@ export function SystemWifiReadonly({
   }, [canScan, device?.name, wifi.radioEnabled]);
 
   useEffect(() => {
-    if (wifi.radioEnabled !== true) setScan(null);
+    if (wifi.radioEnabled !== true) {
+      scannedOnEntry.current = false;
+      setScan(null);
+    }
   }, [wifi.radioEnabled]);
 
   async function refreshScan() {
@@ -57,7 +60,8 @@ export function SystemWifiReadonly({
   }
 
   const radioOff = wifi.radioEnabled === false;
-  const unavailable = wifi.backend !== "NetworkManager" || !device;
+  const radioUnknown = wifi.backend === "NetworkManager" && Boolean(device) && wifi.radioEnabled === null;
+  const unavailable = wifi.backend !== "NetworkManager" || !device || radioUnknown;
   const disabled = radioOff || unavailable;
   return (
     <section className="management-section system-wifi-section" data-disabled={disabled || undefined}>
@@ -75,6 +79,8 @@ export function SystemWifiReadonly({
           <WifiOff aria-hidden="true" size={18} />
           <div><strong>{t("workspace.management.network.wifi.radioOffTitle")}</strong><p>{t("workspace.management.network.wifi.radioOffDescription")}</p></div>
         </div>
+      ) : radioUnknown ? (
+        <div className="system-wifi-unavailable"><AlertTriangle size={18} /><div><strong>{t("workspace.management.network.wifi.radioUnknownTitle")}</strong><p>{t("workspace.management.network.wifi.radioUnknownDescription")}</p></div></div>
       ) : unavailable ? (
         <div className="system-wifi-unavailable"><AlertTriangle size={18} /><div><strong>{t("workspace.management.network.wifi.unavailableTitle")}</strong><p>{t("workspace.management.network.wifi.unavailableDescription", { backend: wifi.backend })}</p></div></div>
       ) : (

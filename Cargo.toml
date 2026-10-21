@@ -23,7 +23,7 @@ tokio = { version = "1.48.0", features = ["fs", "io-util", "macros", "net", "pro
 toml_edit = { version = "0.23.7", features = ["serde"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
-ts-rs = { version = "=12.0.1", default-features = false, features = ["serde-compat", "serde-json-impl"] }
+ts-rs = { version = "=12.0.1", default-features = false, features = ["no-serde-warnings", "serde-compat", "serde-json-impl"] }
 uuid = { version = "1.18.1", features = ["v4"] }
 zbus = { version = "6.0.0", default-features = false, features = ["tokio", "proxy", "object-manager"] }
 unicode-normalization = "0.1.25"

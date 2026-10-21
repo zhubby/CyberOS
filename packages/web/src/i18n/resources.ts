@@ -115,7 +115,8 @@ export const en = {
         docker: "Docker",
         vm: "Virtual machine",
         storage: "Storage",
-        share: "Shares"
+        share: "Shares",
+        media: "Media"
       },
       statuses: {
         pending_approval: "Waiting for approval",
@@ -1562,10 +1563,14 @@ export const en = {
           openSettings: "Open wireless settings",
           radioOffTitle: "Wi-Fi radio is off",
           radioOffDescription: "Nearby networks are hidden while the radio is off. Turn it on in Wireless settings.",
+          radioUnknownTitle: "Wi-Fi radio state is unavailable",
+          radioUnknownDescription: "Refresh system status or check NetworkManager before scanning.",
           managedMode: "Managed",
           device: "Wireless device",
           enableRadio: "Enable Wi-Fi radio",
           disableRadio: "Disable Wi-Fi radio",
+          readOnlyTitle: "Wi-Fi settings are read-only",
+          declarativeReadOnlyDescription: "Wireless configuration is managed declaratively on this host.",
           scan: "Scan",
           scanning: "Scanning for nearby networks...",
           scanPrompt: "Run a scan to discover nearby networks.",
@@ -2136,6 +2141,7 @@ export const en = {
       defaultAdapter: "Default adapter",
       turnOn: "Turn on",
       turnOff: "Turn off",
+      unavailable: "BlueZ and the host integration service are unavailable.",
       noAdapters: "No Bluetooth adapter was found. Check the hardware and BlueZ service.",
       reconnecting: "Reconnecting to Bluetooth status...",
       devicesTitle: "Devices",
@@ -2155,11 +2161,16 @@ export const en = {
       disconnect: "Disconnect",
       forget: "Forget device",
       challengeTitle: "Confirm Bluetooth pairing",
+      displayChallengeTitle: "Bluetooth pairing code",
       challengeKinds: {
         pin: "Enter the PIN shown by the other device.",
         numeric_comparison: "Confirm that this number matches the other device.",
-        confirmation: "Confirm the pairing request."
+        confirmation: "Confirm the pairing request.",
+        pin_display: "Enter this PIN on the other device.",
+        passkey_display: "Enter this passkey on the other device."
       },
+      passkeyEntered: "{{entered}} of {{total}} digits entered",
+      otherAdapterScanning: "{{adapter}} is currently scanning. Stop that scan before scanning with this adapter.",
       pin: "PIN",
       confirm: "Confirm pairing",
       operationSucceeded: "Bluetooth state updated.",
@@ -2171,6 +2182,7 @@ export const en = {
         output: "Audio device",
         systemDefault: "System ALSA / HDMI output",
         disconnected: "disconnected",
+        configuredUnavailable: "Configured Bluetooth output unavailable",
         nextPlayback: "Changes apply from the next playback. If Bluetooth audio fails, playback falls back to the configured system output."
       },
       inbox: {
@@ -2216,6 +2228,7 @@ export const en = {
           queued: "Queued",
           running: "Transferring",
           paused: "Paused",
+          finalizing: "Saving",
           completed: "Completed",
           failed: "Failed",
           cancelled: "Cancelled"
@@ -2795,7 +2808,8 @@ export const zhCN = {
         docker: "Docker",
         vm: "虚拟机",
         storage: "存储",
-        share: "共享"
+        share: "共享",
+        media: "媒体"
       },
       statuses: {
         pending_approval: "等待审批",
@@ -4242,10 +4256,14 @@ export const zhCN = {
           openSettings: "打开无线网卡设置",
           radioOffTitle: "Wi-Fi 射频已关闭",
           radioOffDescription: "射频关闭时不会显示附近网络，请在无线网卡设置中开启。",
+          radioUnknownTitle: "无法获取 Wi-Fi 射频状态",
+          radioUnknownDescription: "请刷新系统状态或检查 NetworkManager 后再扫描。",
           managedMode: "可管理",
           device: "无线设备",
           enableRadio: "开启 Wi-Fi 射频",
           disableRadio: "关闭 Wi-Fi 射频",
+          readOnlyTitle: "无线网络设置为只读",
+          declarativeReadOnlyDescription: "此主机的无线网络配置由声明式系统配置管理。",
           scan: "扫描",
           scanning: "正在扫描附近网络...",
           scanPrompt: "扫描以发现附近的无线网络。",
@@ -4816,6 +4834,7 @@ export const zhCN = {
       defaultAdapter: "默认适配器",
       turnOn: "开启",
       turnOff: "关闭",
+      unavailable: "BlueZ 和主机集成服务当前不可用。",
       noAdapters: "未发现蓝牙适配器，请检查硬件和 BlueZ 服务。",
       reconnecting: "正在重新连接蓝牙状态...",
       devicesTitle: "设备",
@@ -4835,11 +4854,16 @@ export const zhCN = {
       disconnect: "断开",
       forget: "遗忘设备",
       challengeTitle: "确认蓝牙配对",
+      displayChallengeTitle: "蓝牙配对码",
       challengeKinds: {
         pin: "请输入另一台设备上显示的 PIN。",
         numeric_comparison: "请确认此数字与另一台设备一致。",
-        confirmation: "请确认配对请求。"
+        confirmation: "请确认配对请求。",
+        pin_display: "请在另一台设备上输入此 PIN。",
+        passkey_display: "请在另一台设备上输入此配对码。"
       },
+      passkeyEntered: "已输入 {{entered}} / {{total}} 位",
+      otherAdapterScanning: "{{adapter}} 正在扫描，请先停止该扫描再使用当前适配器。",
       pin: "PIN",
       confirm: "确认配对",
       operationSucceeded: "蓝牙状态已更新。",
@@ -4851,6 +4875,7 @@ export const zhCN = {
         output: "音频设备",
         systemDefault: "系统 ALSA / HDMI 输出",
         disconnected: "未连接",
+        configuredUnavailable: "已配置的蓝牙输出当前不可用",
         nextPlayback: "变更从下一次播放生效。蓝牙音频失败时会回退到已配置的系统输出。"
       },
       inbox: {
@@ -4896,6 +4921,7 @@ export const zhCN = {
           queued: "排队中",
           running: "传输中",
           paused: "已暂停",
+          finalizing: "正在保存",
           completed: "已完成",
           failed: "失败",
           cancelled: "已取消"

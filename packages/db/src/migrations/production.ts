@@ -2183,5 +2183,89 @@ export const productionMigrations: Migration[] = [
       CREATE INDEX idx_media_scan_runs_claim ON media_scan_runs(status, created_at);
       CREATE INDEX idx_media_scan_runs_source ON media_scan_runs(source_id, created_at DESC);
     `
+  },
+  {
+    id: "040_media_operation_notifications",
+    disableForeignKeys: true,
+    sql: `
+      PRAGMA legacy_alter_table = ON;
+
+      ALTER TABLE operation_notifications RENAME TO operation_notifications_old;
+      CREATE TABLE operation_notifications (
+        id TEXT PRIMARY KEY,
+        job_id TEXT UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
+        session_id TEXT REFERENCES agent_sessions(id) ON DELETE CASCADE,
+        operation_id TEXT UNIQUE,
+        kind TEXT NOT NULL CHECK (kind IN ('file', 'docker', 'vm', 'storage', 'share', 'media')),
+        status TEXT NOT NULL CHECK (status IN ('pending_approval', 'running', 'succeeded', 'failed', 'rejected', 'cancelled')),
+        summary TEXT NOT NULL,
+        error TEXT,
+        read_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK (job_id IS NOT NULL OR operation_id IS NOT NULL)
+      );
+      INSERT INTO operation_notifications (
+        id, job_id, session_id, operation_id, kind, status, summary, error, read_at, created_at, updated_at
+      )
+      SELECT id, job_id, session_id, operation_id, kind, status, summary, error, read_at, created_at, updated_at
+      FROM operation_notifications_old;
+      DROP TABLE operation_notifications_old;
+      CREATE INDEX idx_operation_notifications_updated_at ON operation_notifications(updated_at DESC);
+      CREATE INDEX idx_operation_notifications_unread_updated_at ON operation_notifications(read_at, updated_at DESC);
+
+      PRAGMA legacy_alter_table = OFF;
+    `
+  },
+  {
+    id: "041_bluetooth_receive_finalization",
+    disableForeignKeys: true,
+    sql: `
+      PRAGMA legacy_alter_table = ON;
+
+      ALTER TABLE bluetooth_transfers RENAME TO bluetooth_transfers_old;
+      CREATE TABLE bluetooth_transfers (
+        id TEXT PRIMARY KEY,
+        direction TEXT NOT NULL CHECK (direction IN ('send', 'receive')),
+        adapter_id TEXT,
+        device_address TEXT NOT NULL,
+        root_id TEXT NOT NULL REFERENCES nas_roots(id) ON DELETE RESTRICT,
+        storage_pool_id TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        finalization_relative_path TEXT,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'paused', 'finalizing', 'completed', 'failed', 'cancelled')),
+        transferred_bytes INTEGER NOT NULL DEFAULT 0 CHECK (transferred_bytes >= 0),
+        total_bytes INTEGER CHECK (total_bytes IS NULL OR total_bytes >= 0),
+        error TEXT,
+        obex_transfer_path TEXT,
+        control_requested TEXT CHECK (control_requested IS NULL OR control_requested = 'cancel'),
+        read_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        last_progress_at TEXT
+      );
+      INSERT INTO bluetooth_transfers (
+        id, direction, adapter_id, device_address, root_id, storage_pool_id,
+        relative_path, display_name, finalization_relative_path, status, transferred_bytes, total_bytes,
+        error, obex_transfer_path, control_requested, read_at, created_at,
+        updated_at, started_at, finished_at, last_progress_at
+      )
+      SELECT
+        id, direction, adapter_id, device_address, root_id, storage_pool_id,
+        relative_path, display_name, NULL, status, transferred_bytes, total_bytes,
+        error, obex_transfer_path, control_requested, read_at, created_at,
+        updated_at, started_at, finished_at, last_progress_at
+      FROM bluetooth_transfers_old;
+      DROP TABLE bluetooth_transfers_old;
+      CREATE INDEX idx_bluetooth_transfers_status_created_at
+        ON bluetooth_transfers(status, created_at);
+      CREATE INDEX idx_bluetooth_transfers_updated_at
+        ON bluetooth_transfers(updated_at DESC);
+
+      PRAGMA legacy_alter_table = OFF;
+    `
   }
 ];

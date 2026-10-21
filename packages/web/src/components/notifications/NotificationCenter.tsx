@@ -17,6 +17,7 @@ import {
   Share2,
   Send,
   ShieldAlert,
+  Volume2,
   X
 } from "lucide-react";
 import type { BluetoothTransfer, MonitoringAlertIncident, OperationNotification } from "../../api.js";
@@ -355,5 +356,6 @@ function notificationKindIcon(kind: OperationNotification["kind"]) {
   if (kind === "vm") return MonitorCog;
   if (kind === "storage") return HardDrive;
   if (kind === "share") return Share2;
+  if (kind === "media") return Volume2;
   return FileCog;
 }

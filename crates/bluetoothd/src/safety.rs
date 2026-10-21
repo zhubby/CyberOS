@@ -1,9 +1,7 @@
 use std::fs::{File, OpenOptions};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Component, Path, PathBuf};
 
 use nix::sys::statvfs::statvfs;
-use time::OffsetDateTime;
 
 use crate::error::TransferError;
 
@@ -56,47 +54,14 @@ pub fn ensure_available_space(directory: &Path, required: u64) -> Result<(), Tra
     Ok(())
 }
 
-pub fn unique_receive_target(
-    root: &Path,
-    relative_directory: &str,
-    requested_name: &str,
-) -> Result<PathBuf, TransferError> {
-    let directory = safe_existing(root, relative_directory)?;
-    if !directory.is_dir() {
-        return Err(TransferError(
-            "Bluetooth inbox is not a directory".to_owned(),
-        ));
-    }
-    let safe_name = Path::new(requested_name)
+pub fn validate_receive_name(requested_name: &str) -> Result<&str, TransferError> {
+    Path::new(requested_name)
         .file_name()
         .and_then(|value| value.to_str())
-        .filter(|value| !value.is_empty() && *value != "." && *value != "..")
-        .ok_or_else(|| TransferError("Invalid received file name".to_owned()))?;
-    let original = directory.join(safe_name);
-    if !original.exists() {
-        reserve(&original)?;
-        return Ok(original);
-    }
-    let source = Path::new(safe_name);
-    let stem = source
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("received");
-    let extension = source.extension().and_then(|value| value.to_str());
-    let timestamp = OffsetDateTime::now_utc().unix_timestamp();
-    for sequence in 1..=10_000 {
-        let name = match extension {
-            Some(extension) => format!("{stem}-{timestamp}-{sequence}.{extension}"),
-            None => format!("{stem}-{timestamp}-{sequence}"),
-        };
-        let candidate = directory.join(name);
-        if reserve(&candidate).is_ok() {
-            return Ok(candidate);
-        }
-    }
-    Err(TransferError(
-        "Could not allocate a unique Bluetooth inbox name".to_owned(),
-    ))
+        .filter(|value| {
+            !value.is_empty() && *value != "." && *value != ".." && *value == requested_name
+        })
+        .ok_or_else(|| TransferError("Invalid received file name".to_owned()))
 }
 
 pub fn safe_existing(root: &Path, relative: &str) -> Result<PathBuf, TransferError> {
@@ -149,15 +114,6 @@ fn reject_symlinks(root: &Path, target: &Path) -> Result<(), TransferError> {
             Err(error) => return Err(error.into()),
         }
     }
-    Ok(())
-}
-
-fn reserve(path: &Path) -> Result<(), TransferError> {
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)?;
     Ok(())
 }
 
@@ -226,16 +182,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_traversal_and_symlinks_and_allocates_unique_names() {
+    fn rejects_traversal_symlinks_and_unsafe_receive_names() {
         let directory = tempfile::tempdir().unwrap();
         std::fs::create_dir(directory.path().join("inbox")).unwrap();
         assert!(safe_existing(directory.path(), "../outside").is_err());
         std::os::unix::fs::symlink("inbox", directory.path().join("link")).unwrap();
         assert!(safe_existing(directory.path(), "link").is_err());
-        std::fs::write(directory.path().join("inbox/file.txt"), b"old").unwrap();
-        let target = unique_receive_target(directory.path(), "inbox", "file.txt").unwrap();
-        assert_ne!(target.file_name().unwrap(), "file.txt");
-        assert!(target.exists());
+        assert_eq!(validate_receive_name("file.txt").unwrap(), "file.txt");
+        assert!(validate_receive_name("../file.txt").is_err());
+        assert!(validate_receive_name("nested/file.txt").is_err());
     }
 
     #[test]

@@ -5,6 +5,7 @@ use crate::error::TransferError;
 
 pub struct Config {
     pub database_path: PathBuf,
+    pub incoming_path: PathBuf,
 }
 
 impl Config {
@@ -19,6 +20,7 @@ impl Config {
         };
         Ok(Self {
             database_path: root.join("state/zos.sqlite"),
+            incoming_path: root.join("state/bluetooth/incoming"),
         })
     }
 }

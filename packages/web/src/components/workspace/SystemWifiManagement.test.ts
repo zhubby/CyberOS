@@ -82,4 +82,33 @@ describe("SystemWifiManagement", () => {
     expect(html).toMatch(/<button type="button" disabled="">.*?<span>Scan<\/span><\/button>/s);
     expect(html).toMatch(/<button type="button" disabled="">.*?<span>Hotspot<\/span><\/button>/s);
   });
+
+  it("disables every write entry point when host networking is declarative", async () => {
+    await initI18n();
+    await i18n.changeLanguage("en");
+
+    const html = renderToStaticMarkup(createElement(SystemWifiManagement, {
+      wifi: {
+        ...wifi,
+        devices: [{
+          ...wifi.devices[0]!,
+          state: "connected",
+          mode: "client",
+          activeConnectionId: "profile-1",
+          activeConnectionName: "Home Wi-Fi"
+        }]
+      },
+      canManageWifi: false,
+      canManageHotspot: false,
+      onStatus: () => undefined,
+      onRefresh: async () => undefined,
+      onNotifySuccess: () => undefined,
+      onNotifyError: () => undefined
+    }));
+
+    expect(html).toContain("Wi-Fi settings are read-only");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Disable Wi-Fi radio"/u);
+    expect(html).toMatch(/<button type="button" class="is-danger" disabled="">/u);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Connect"/u);
+  });
 });

@@ -79,6 +79,28 @@ describe("hostd protocol", () => {
     } as const;
     expect(parseHostdResult("bluetooth.manager", { action: "status" }, bluetooth)).toEqual(bluetooth);
     expect(parseHostdResult("bluetooth.manager", { action: "status" }, { ...bluetooth, extra: true })).toBeNull();
+    const displayChallenge = {
+      ...bluetooth,
+      challenge: {
+        id: "11111111-1111-4111-8111-111111111111",
+        adapterId: "adapter-hci0",
+        deviceAddress: "AA:BB:CC:DD:EE:FF",
+        kind: "passkey_display",
+        pin: null,
+        passkey: 123456,
+        entered: 3,
+        expiresAt: "2026-10-20T00:01:00Z"
+      }
+    } as const;
+    expect(parseHostdResult("bluetooth.manager", { action: "status" }, displayChallenge)).toEqual(displayChallenge);
+    expect(parseHostdResult("bluetooth.manager", { action: "status" }, {
+      ...displayChallenge,
+      challenge: { ...displayChallenge.challenge, entered: 7 }
+    })).toBeNull();
+    expect(parseHostdResult("bluetooth.manager", { action: "status" }, {
+      ...displayChallenge,
+      challenge: { ...displayChallenge.challenge, expiresAt: "tomorrow" }
+    })).toBeNull();
   });
 
   it("pairs both storage actions with their exact result variants", () => {

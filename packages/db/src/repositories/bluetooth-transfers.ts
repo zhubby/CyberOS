@@ -9,7 +9,7 @@ import type { DbBluetoothTransferRow } from "./repository-rows.js";
 
 const COLUMNS = `
   id, direction, adapter_id, device_address, root_id, storage_pool_id,
-  relative_path, display_name, status, transferred_bytes, total_bytes,
+  relative_path, display_name, finalization_relative_path, status, transferred_bytes, total_bytes,
   error, obex_transfer_path, control_requested, read_at, created_at,
   updated_at, started_at, finished_at, last_progress_at
 `;
@@ -53,6 +53,112 @@ export function createBluetoothSendTransfers(
 export function getBluetoothTransfer(db: ZosDatabase, id: string): BluetoothTransferRecord | null {
   const row = db.prepare(`SELECT ${COLUMNS} FROM bluetooth_transfers WHERE id = ?`)
     .get(id) as DbBluetoothTransferRow | undefined;
+  return row ? mapTransfer(row) : null;
+}
+
+export type BluetoothReceiveFinalization = BluetoothTransferRecord & {
+  finalizationRelativePath: string | null;
+};
+
+export function listBluetoothReceiveFinalizations(db: ZosDatabase): BluetoothReceiveFinalization[] {
+  const rows = db.prepare(`
+    SELECT ${COLUMNS}
+    FROM bluetooth_transfers
+    WHERE direction = 'receive' AND status = 'finalizing'
+    ORDER BY updated_at, created_at
+    LIMIT 20
+  `).all() as DbBluetoothTransferRow[];
+  return rows.map((row) => ({
+    ...mapTransfer(row),
+    finalizationRelativePath: row.finalization_relative_path
+  }));
+}
+
+export function reserveBluetoothReceiveFinalization(
+  db: ZosDatabase,
+  input: {
+    id: string;
+    previousRelativePath: string | null;
+    relativePath: string;
+    now?: Date;
+  }
+): boolean {
+  return db.prepare(`
+    UPDATE bluetooth_transfers
+    SET finalization_relative_path = ?, error = NULL, read_at = NULL, updated_at = ?
+    WHERE id = ? AND direction = 'receive' AND status = 'finalizing'
+      AND finalization_relative_path IS ?
+  `).run(
+    input.relativePath,
+    (input.now ?? new Date()).toISOString(),
+    input.id,
+    input.previousRelativePath
+  ).changes === 1;
+}
+
+export function completeBluetoothReceiveFinalization(
+  db: ZosDatabase,
+  input: {
+    id: string;
+    rootId: string;
+    storagePoolId: string;
+    relativePath: string;
+    displayName: string;
+    now?: Date;
+  }
+): BluetoothTransferRecord | null {
+  const timestamp = (input.now ?? new Date()).toISOString();
+  const row = db.prepare(`
+    UPDATE bluetooth_transfers
+    SET root_id = ?, storage_pool_id = ?, relative_path = ?, display_name = ?,
+        finalization_relative_path = ?,
+        status = 'completed', error = NULL, control_requested = NULL,
+        read_at = NULL, finished_at = ?, updated_at = ?
+    WHERE id = ? AND direction = 'receive' AND status = 'finalizing'
+    RETURNING ${COLUMNS}
+  `).get(
+    input.rootId,
+    input.storagePoolId,
+    input.relativePath,
+    input.displayName,
+    input.relativePath,
+    timestamp,
+    timestamp,
+    input.id
+  ) as DbBluetoothTransferRow | undefined;
+  return row ? mapTransfer(row) : null;
+}
+
+export function failBluetoothReceiveFinalization(
+  db: ZosDatabase,
+  id: string,
+  error: string,
+  now = new Date()
+): BluetoothTransferRecord | null {
+  const timestamp = now.toISOString();
+  const row = db.prepare(`
+    UPDATE bluetooth_transfers
+    SET status = 'failed', error = ?, control_requested = NULL,
+        read_at = NULL, finished_at = ?, updated_at = ?
+    WHERE id = ? AND direction = 'receive' AND status = 'finalizing'
+    RETURNING ${COLUMNS}
+  `).get(error, timestamp, timestamp, id) as DbBluetoothTransferRow | undefined;
+  return row ? mapTransfer(row) : null;
+}
+
+export function noteBluetoothReceiveFinalizationError(
+  db: ZosDatabase,
+  id: string,
+  error: string,
+  now = new Date()
+): BluetoothTransferRecord | null {
+  const row = db.prepare(`
+    UPDATE bluetooth_transfers
+    SET error = ?, read_at = NULL, updated_at = ?
+    WHERE id = ? AND direction = 'receive' AND status = 'finalizing'
+      AND error IS NOT ?
+    RETURNING ${COLUMNS}
+  `).get(error, now.toISOString(), id, error) as DbBluetoothTransferRow | undefined;
   return row ? mapTransfer(row) : null;
 }
 
@@ -109,7 +215,7 @@ export function getBluetoothTransferServiceHealth(db: ZosDatabase, now = new Dat
     .get() as { heartbeat_at: string; error: string | null } | undefined;
   const counts = db.prepare(`
     SELECT
-      SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS active,
+      SUM(CASE WHEN status IN ('running', 'finalizing') THEN 1 ELSE 0 END) AS active,
       SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued
     FROM bluetooth_transfers
   `).get() as { active: number | null; queued: number | null };

@@ -1179,9 +1179,9 @@ export function App() {
         ...current.capabilities,
         backend: wifi.backend === "NetworkManager" || current.ethernet.backend === "NetworkManager" ? "NetworkManager" : wifi.backend,
         hostdReady: wifi.hostdReady || current.ethernet.hostdReady,
-        canApplyConfiguration: (wifi.backend === "NetworkManager" && wifi.hostdReady) || (current.ethernet.backend === "NetworkManager" && current.ethernet.hostdReady),
-        canManageWifi: wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.length > 0,
-        canManageHotspot: wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.some((device) => device.capabilities.accessPoint)
+        canApplyConfiguration: current.capabilities.hostMutationPolicy === "mutable" && ((wifi.backend === "NetworkManager" && wifi.hostdReady) || (current.ethernet.backend === "NetworkManager" && current.ethernet.hostdReady)),
+        canManageWifi: current.capabilities.hostMutationPolicy === "mutable" && wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.length > 0,
+        canManageHotspot: current.capabilities.hostMutationPolicy === "mutable" && wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.some((device) => device.capabilities.accessPoint)
       },
       wifi: { ...wifi, profiles: current.wifi.profiles }
     } : current);

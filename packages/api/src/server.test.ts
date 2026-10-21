@@ -194,6 +194,7 @@ describe("API server", () => {
     });
     expect(blocked.statusCode).toBe(429);
     expect(blocked.headers["retry-after"]).toBeDefined();
+    await server.close();
   });
 
   it("reports indexer status for configured roots", async () => {
