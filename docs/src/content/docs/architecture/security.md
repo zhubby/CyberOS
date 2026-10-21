@@ -11,7 +11,7 @@ sidebar:
 
 v1 假设可信的单用户设备，没有多用户认证边界。API 强制绑定 loopback；Nginx 可以把它代理到局域网，但这不等于增加了认证。
 
-所有 NAS 路径都相对于已配置 root 解析，拒绝 traversal、绝对路径和不安全的符号链接逃逸。Pi 的文件与 shell 能力遵循 Agent 策略中的 `auto`、`approve`、`confirm`、`disabled` 四档；MCP 文件 mutation 仍创建不可变 approval proposal。approval 只属于 Agent 对话，Workspace 面板操作不会创建 approval。trash 是可恢复隔离区，v1 不永久删除。
+所有 NAS 路径都相对于已配置 root 解析，拒绝 traversal、绝对路径和不安全的符号链接逃逸。Pi 的读取、编辑、写入与 shell 能力遵循 Agent 策略中的 `auto`、`approve`、`confirm`、`disabled` 四档；MCP 文件 mutation 只允许 `approve`、`confirm`、`disabled`，并始终创建不可变 approval proposal。approval 只属于 Agent 对话，Workspace 面板操作不会创建 approval。trash 是可恢复隔离区，v1 不永久删除。
 
 Docker socket 近似 root 权限。Rust `hostd` 通过受限 root Unix socket 执行 allowlist 配置与命令；Rust `termux` 验证 Unix peer UID，并以固定的非 root `zos` 用户运行 native PTY。systemd 使用 `ProtectSystem=strict`、`NoNewPrivileges` 和最小 capability 集合。
 

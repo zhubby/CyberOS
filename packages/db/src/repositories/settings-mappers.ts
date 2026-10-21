@@ -34,7 +34,7 @@ export function normalizeAgentCapabilityPolicySettings(
     const mode = settings.policies?.[capabilityId];
     if (mode !== undefined) {
       if (!isAgentCapabilityPolicyMode(mode)) throw new Error(`Invalid policy mode for ${capabilityId}`);
-      policies[capabilityId] = mode;
+      policies[capabilityId] = capabilityId === "zos.files.mutate" && mode === "auto" ? "approve" : mode;
     }
   }
   return { policies, updatedAt };

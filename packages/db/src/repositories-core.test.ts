@@ -423,6 +423,7 @@ describe("core repositories", () => {
       policies: {
         ...defaultAgentCapabilityPolicySettings().policies,
         "zos.files.list": "confirm",
+        "zos.files.mutate": "auto",
         "zos.shell.run": "disabled"
       }
     });

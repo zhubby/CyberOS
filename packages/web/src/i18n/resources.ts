@@ -2539,7 +2539,7 @@ export const en = {
       readOnlyTitle: "Read-Only Tools",
       readOnlyDescription: "Tools that can run automatically while staying inside the NAS root.",
       dangerousTitle: "Approval Tools",
-      dangerousDescription: "Choose whether mutating and shell capabilities run automatically, require approval or confirmation, or stay disabled.",
+      dangerousDescription: "File mutation proposals always require approval. Edit, write, and shell capabilities may run automatically, require approval or confirmation, or stay disabled.",
       modes: {
         auto: "Auto",
         approve: "Approve",
@@ -5322,7 +5322,7 @@ export const zhCN = {
       readOnlyTitle: "只读工具",
       readOnlyDescription: "只读工具可自动运行，但始终受 NAS root 路径保护。",
       dangerousTitle: "审批工具",
-      dangerousDescription: "设置文件变更与 shell 能力为自动执行、审批、二次确认或禁用。",
+      dangerousDescription: "文件变更提案始终需要审批；编辑、写入与 shell 能力可设置为自动执行、审批、二次确认或禁用。",
       modes: {
         auto: "自动",
         approve: "审批",

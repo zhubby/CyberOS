@@ -1414,6 +1414,7 @@ function SettingsToolPolicyPage({
     value: mode,
     label: toolPolicyModeLabel(mode, t)
   }));
+  const approvalRequiredPolicyOptions = policyOptions.filter((option) => option.value !== "auto");
   return (
     <form className="settings-form" onSubmit={onSubmit}>
       <div className="settings-content-body">
@@ -1435,7 +1436,7 @@ function SettingsToolPolicyPage({
                   <CustomSelect
                     id={`capability-policy-${capabilityId}`}
                     value={form.policies[capabilityId]}
-                    options={policyOptions}
+                    options={capabilityId === "zos.files.mutate" ? approvalRequiredPolicyOptions : policyOptions}
                     ariaLabel={`${capabilityId}: ${toolPolicyModeLabel(form.policies[capabilityId], t)}`}
                     onChange={(mode) =>
                       onChange({

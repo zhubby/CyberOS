@@ -15,6 +15,7 @@ No unresolved P0-P3 findings remain after the autofix and verification passes.
 - Agent continuation now waits for every linked capability run and returns the complete terminal result set instead of dropping all but the last approval outcome.
 - Capability runs that fail an execution precondition delete their private payload after transitioning to a terminal state.
 - Secret redaction in shell approval previews preserves command separators, so a URL or secret assignment cannot hide later commands from the reviewer.
+- The file mutation policy no longer offers an ineffective `auto` mode; persisted legacy `auto` values normalize safely to `approve`.
 - Agent cancellation expires every linked pending capability approval, cancels its run, and deletes private payloads.
 - Approved capability execution failures return an error response instead of a false success notification.
 
@@ -27,7 +28,7 @@ No unresolved P0-P3 findings remain after the autofix and verification passes.
 
 ## Verification
 
-- Passed: focused Agent/capability/MCP/worker/database tests, 61 tests.
+- Passed: focused Agent/capability/MCP/worker/database tests, 61 tests, plus the database policy normalization regression.
 - Passed: `npm run typecheck` and Astro documentation checks.
 - Passed: `npm run lint`, including Rust formatting, Clippy with warnings denied, and ESLint.
 - Passed: `npm test`: Rust workspace, 172 Vitest files with 1096 passed and 5 skipped, and documentation tests.
