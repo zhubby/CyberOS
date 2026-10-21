@@ -533,8 +533,14 @@ describe("DockerComposeService", () => {
       composeContent: "services:\n  app:\n    image: alpine\n",
       environment: []
     });
-    config.operationTimeoutMs = 50;
-    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "timeout");
+    const capturedConfigDirectory = path.join(tempDir, "captured-config-directory");
+    await writeFile(dockerShim, `#!/bin/sh
+printf '%s' "$DOCKER_CONFIG" > '${capturedConfigDirectory}'
+trap 'exit 0' TERM
+while :; do sleep 1; done
+`);
+    await chmod(dockerShim, 0o755);
+    config.operationTimeoutMs = 2_000;
     await expect(service.runProjectAction({
       action: "compose_pull",
       targetType: "compose_project",
@@ -543,7 +549,7 @@ describe("DockerComposeService", () => {
       risk: "medium",
       summary: "Pull Slow"
     }, credentials())).rejects.toThrow(/timed out/);
-    const directory = await readFile(path.join(tempDir, "captured-config-directory"), "utf8");
+    const directory = await readFile(capturedConfigDirectory, "utf8");
     await expect(access(directory)).rejects.toThrow();
   });
 });
