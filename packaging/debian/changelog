@@ -1,3 +1,9 @@
+zos (1.5.3) unstable; urgency=medium
+
+  * Fix Nix offline dependency installation for release builds.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 16:12:40 +0000
+
 zos (1.5.2) unstable; urgency=medium
 
   * Restore clean TypeScript and Nix release builds for the monitoring and alerting update.
