@@ -51,7 +51,7 @@ let
     inherit version;
     src = cleanSource;
     npmDeps = rootNodeModules;
-    npmRoot = cleanSource;
+    npmRoot = ".";
     nativeBuildInputs = with pkgs; [
       nodejs_22
       importNpmLock.npmConfigHook
@@ -107,17 +107,17 @@ let
     inherit version;
     src = cleanSource;
     npmDeps = docsNodeModules;
-    npmRoot = cleanSource + "/docs";
+    npmRoot = "docs";
     nativeBuildInputs = with pkgs; [ nodejs_22 importNpmLock.npmConfigHook ];
     buildPhase = ''
       runHook preBuild
-      npm run build
+      npm --prefix docs run build
       runHook postBuild
     '';
     installPhase = ''
       runHook preInstall
       mkdir -p $out/lib/zos/docs
-      cp -R dist $out/lib/zos/docs/dist
+      cp -R docs/dist $out/lib/zos/docs/dist
       runHook postInstall
     '';
   };

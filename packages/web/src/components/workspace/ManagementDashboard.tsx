@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, GripVertical, PanelsTopLeft, RotateCcw } from "lucide-react";
 import {
   Responsive,
   useContainerWidth,
   verticalCompactor,
+  type ResponsiveGridLayoutProps,
   type ResponsiveLayouts
 } from "react-grid-layout";
 import { absoluteStrategy } from "react-grid-layout/core";
@@ -26,6 +27,11 @@ import {
 } from "../../lib/management-dashboard-layout.js";
 import { ManagementWidgetSkeleton } from "./ManagementSkeleton.js";
 import { PanelHeaderAction } from "./PanelHeader.js";
+
+// The library's exported forwardRef erases its breakpoint generic to string.
+const ManagementResponsiveGrid = Responsive as ComponentType<
+  ResponsiveGridLayoutProps<ManagementDashboardBreakpoint>
+>;
 
 export interface ManagementDashboardItem {
   id: string;
@@ -202,7 +208,7 @@ export function ManagementDashboardGrid({
           ))}
         </div>
       ) : (
-        <Responsive<ManagementDashboardBreakpoint>
+        <ManagementResponsiveGrid
           className={`management-dashboard-grid${editable ? " is-editing" : ""}${loading ? " is-loading" : ""}`}
           width={width}
           layouts={dashboard.layouts}
@@ -223,7 +229,7 @@ export function ManagementDashboardGrid({
               <DashboardWidget item={item} dashboard={dashboard} editable={editable} loading={loading} />
             </div>
           ))}
-        </Responsive>
+        </ManagementResponsiveGrid>
       )}
       <span className="visually-hidden" id={`${dashboard.dashboardId}-layout-instructions`}>
         {t("workspace.management.layout.keyboardInstructions")}
