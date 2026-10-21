@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { VodPlayerConfig } from "./types.js";
 import { createVodPlayerRuntime, VodPlayerRuntimeError } from "./vod-player-client.js";
-import { encodeVodPlayerBrokerMessage, type VodPlayerBrokerResponse, type VodPlayerStatus } from "./vod-player-protocol.js";
+import { encodeVodPlayerBrokerMessage, type VodPlayerBrokerResponse, type VodPlayerStatus, VOD_PLAYER_PROTOCOL_VERSION } from "./vod-player-protocol.js";
 
 let temporaryDirectory: string | null = null;
 let server: net.Server | null = null;
@@ -24,7 +24,7 @@ afterEach(async () => {
 describe("VOD player broker client", () => {
   it("correlates a status response over the Unix socket", async () => {
     const socketPath = await startServer((request) => ({
-      version: 1,
+      version: VOD_PLAYER_PROTOCOL_VERSION,
       id: request.id,
       ok: true,
       status: status()
@@ -39,7 +39,7 @@ describe("VOD player broker client", () => {
 
   it("rejects a response with the wrong request id", async () => {
     const socketPath = await startServer(() => ({
-      version: 1,
+      version: VOD_PLAYER_PROTOCOL_VERSION,
       id: "different-request",
       ok: true,
       status: status()
@@ -118,6 +118,8 @@ function status(): VodPlayerStatus {
     storagePoolId: "/dev/md/media",
     relativePath: "movies/video.mp4",
     fileName: "video.mp4",
+    mediaFileId: null,
+    videoOutput: "drm",
     positionSeconds: 12,
     durationSeconds: 120,
     volume: 80,
@@ -126,6 +128,10 @@ function status(): VodPlayerStatus {
     audioDeviceId: null,
     effectiveAudioDeviceId: null,
     audioFallbackReason: null,
+    audioTracks: [],
+    subtitleTracks: [],
+    selectedAudioTrackId: null,
+    selectedSubtitleTrackId: null,
     capabilities: {
       mpvAvailable: true,
       drmAvailable: true,

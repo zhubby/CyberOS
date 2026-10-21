@@ -212,6 +212,7 @@ export function registerMediaRoutes(server: FastifyInstance, context: ApiRouteCo
         rootId: file.rootId,
         storagePoolId: file.storagePoolId,
         relativePath: safe.relativePath,
+        mediaFileId: file.id,
         ...(startPositionSeconds === undefined ? {} : { startPositionSeconds })
       });
       reply.send({ status });

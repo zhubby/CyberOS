@@ -1262,7 +1262,7 @@ export interface VodPlayerConfig {
   checkpointIntervalMs: number;
   retryBaseDelayMs: number;
   retryMaxDelayMs: number;
-  videoOutput: "drm";
+  videoOutput: "drm" | "wayland";
   drmConnector: string | null;
   audioOutput: "alsa";
   audioDevice: string | null;

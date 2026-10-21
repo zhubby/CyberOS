@@ -12,7 +12,8 @@ use uuid::Uuid;
 use crate::config::VodPlayerConfig;
 use crate::error::{ErrorCode, VodError};
 use crate::mpv::{MpvEvent, MpvHandle, classify_end_file_failure, probe, probe_active_outputs};
-use crate::protocol::{Capabilities, Command, HardwareDecode, PlayerState, Status};
+use crate::progress::ProgressStore;
+use crate::protocol::{Capabilities, Command, HardwareDecode, PlayerState, Status, Track};
 use crate::session::{self, LoadOutcome, PersistedSession};
 use crate::storage::{FileIdentity, open_media};
 
@@ -38,6 +39,7 @@ struct DesiredSession {
     volume: f64,
     paused: bool,
     audio_device_id: Option<String>,
+    media_file_id: Option<String>,
     identity: Option<FileIdentity>,
 }
 
@@ -54,13 +56,18 @@ struct Controller {
     stable_since: Option<Instant>,
     last_checkpoint: Instant,
     last_capability_probe: Instant,
+    progress: ProgressStore,
 }
 
 impl ControllerHandle {
     pub async fn start(config: Arc<VodPlayerConfig>) -> Result<Self, VodError> {
         let service_instance_id = Uuid::new_v4().to_string();
         let capabilities = probe(&config).await.capabilities;
-        let mut status = empty_status(service_instance_id, capabilities);
+        let mut status = empty_status(
+            service_instance_id,
+            capabilities,
+            config.video_output.clone(),
+        );
         let desired = match session::load(&config.state_path)? {
             LoadOutcome::Empty => None,
             LoadOutcome::Corrupt(path) => {
@@ -85,6 +92,7 @@ impl ControllerHandle {
                     volume: saved.volume,
                     paused: saved.desired_paused,
                     audio_device_id: saved.audio_device_id,
+                    media_file_id: saved.media_file_id,
                     identity: Some(saved.identity),
                 })
             }
@@ -93,6 +101,7 @@ impl ControllerHandle {
         let (sender, receiver) = mpsc::channel(32);
         let (shutdown_sender, shutdown_receiver) = watch::channel(false);
         let (done_sender, done_receiver) = watch::channel(false);
+        let progress = ProgressStore::new(config.database_path.clone());
         let mut controller = Controller {
             config,
             receiver,
@@ -106,6 +115,7 @@ impl ControllerHandle {
             stable_since: None,
             last_checkpoint: Instant::now(),
             last_capability_probe: Instant::now(),
+            progress,
         };
         tokio::spawn(async move { controller.run().await });
         Ok(Self {
@@ -198,7 +208,16 @@ impl Controller {
                 relative_path,
                 start_position_seconds,
                 audio_device_id,
+                media_file_id,
             } => {
+                if let Some(file_id) = media_file_id.as_deref() {
+                    self.progress.verify_media_file(
+                        file_id,
+                        &root_id,
+                        &storage_pool_id,
+                        &relative_path,
+                    )?;
+                }
                 self.stop_mpv().await;
                 self.retry_at = None;
                 self.stable_since = None;
@@ -212,6 +231,7 @@ impl Controller {
                     volume: self.status.volume,
                     paused: false,
                     audio_device_id,
+                    media_file_id,
                     identity: None,
                 });
                 self.status.state = PlayerState::Starting;
@@ -243,8 +263,25 @@ impl Controller {
                 self.stable_since = Some(Instant::now());
                 self.transition_checkpoint()?;
             }
+            Command::TogglePause { session_id } => {
+                self.assert_session(&session_id)?;
+                let paused = !self.desired.as_ref().is_some_and(|desired| desired.paused);
+                self.execute_mpv_command(json!(["set_property", "pause", paused]))
+                    .await?;
+                if let Some(desired) = self.desired.as_mut() {
+                    desired.paused = paused;
+                }
+                self.status.state = if paused {
+                    PlayerState::Paused
+                } else {
+                    PlayerState::Playing
+                };
+                self.stable_since = (!paused).then(Instant::now);
+                self.transition_checkpoint()?;
+            }
             Command::Stop { session_id } => {
                 self.assert_session(&session_id)?;
+                self.save_progress();
                 self.stop_mpv().await;
                 self.desired = None;
                 self.retry_at = None;
@@ -277,6 +314,22 @@ impl Controller {
                 self.status.position_seconds = seconds;
                 self.transition_checkpoint()?;
             }
+            Command::SeekRelative {
+                session_id,
+                seconds,
+            } => {
+                self.assert_session(&session_id)?;
+                self.execute_mpv_command(json!(["seek", seconds, "relative", "exact"]))
+                    .await?;
+                let position = (self.status.position_seconds + seconds)
+                    .max(0.0)
+                    .min(self.status.duration_seconds.unwrap_or(f64::MAX));
+                if let Some(desired) = self.desired.as_mut() {
+                    desired.position_seconds = position;
+                }
+                self.status.position_seconds = position;
+                self.transition_checkpoint()?;
+            }
             Command::SetVolume { session_id, volume } => {
                 self.assert_session(&session_id)?;
                 if self.mpv.is_some() {
@@ -288,6 +341,60 @@ impl Controller {
                 }
                 self.status.volume = volume;
                 self.transition_checkpoint()?;
+            }
+            Command::SetAudioTrack {
+                session_id,
+                track_id,
+            } => {
+                self.assert_session(&session_id)?;
+                if !self
+                    .status
+                    .audio_tracks
+                    .iter()
+                    .any(|track| track.id == track_id)
+                {
+                    return Err(VodError::new(
+                        ErrorCode::InvalidCommand,
+                        "Audio track is unavailable",
+                        400,
+                    ));
+                }
+                self.execute_mpv_command(json!(["set_property", "aid", track_id]))
+                    .await?;
+                self.status.selected_audio_track_id = Some(track_id);
+                self.publish();
+            }
+            Command::SetSubtitleTrack {
+                session_id,
+                track_id,
+            } => {
+                self.assert_session(&session_id)?;
+                if track_id.is_some_and(|id| {
+                    !self
+                        .status
+                        .subtitle_tracks
+                        .iter()
+                        .any(|track| track.id == id)
+                }) {
+                    return Err(VodError::new(
+                        ErrorCode::InvalidCommand,
+                        "Subtitle track is unavailable",
+                        400,
+                    ));
+                }
+                let value = track_id.map_or_else(|| json!("no"), |id| json!(id));
+                self.execute_mpv_command(json!(["set_property", "sid", value]))
+                    .await?;
+                self.status.selected_subtitle_track_id = track_id;
+                self.publish();
+            }
+            Command::CycleAudioTrack { session_id } => {
+                self.assert_session(&session_id)?;
+                self.execute_mpv_command(json!(["cycle", "aid"])).await?;
+            }
+            Command::CycleSubtitleTrack { session_id } => {
+                self.assert_session(&session_id)?;
+                self.execute_mpv_command(json!(["cycle", "sid"])).await?;
             }
         }
         Ok(self.status.clone())
@@ -534,6 +641,15 @@ impl Controller {
                             changed = true;
                         }
                     }
+                    "track-list" => {
+                        let (audio, subtitles, selected_audio, selected_subtitle) =
+                            parse_tracks(&value);
+                        self.status.audio_tracks = audio;
+                        self.status.subtitle_tracks = subtitles;
+                        self.status.selected_audio_track_id = selected_audio;
+                        self.status.selected_subtitle_track_id = selected_subtitle;
+                        changed = true;
+                    }
                     _ => {}
                 }
                 if changed {
@@ -545,13 +661,17 @@ impl Controller {
                     return;
                 }
                 self.stop_mpv().await;
-                self.desired = None;
                 self.retry_at = None;
                 self.status.state = PlayerState::Stopped;
                 self.status.position_seconds = self
                     .status
                     .duration_seconds
                     .unwrap_or(self.status.position_seconds);
+                if let Some(desired) = self.desired.as_mut() {
+                    desired.position_seconds = self.status.position_seconds;
+                }
+                self.save_progress();
+                self.desired = None;
                 self.status.error = None;
                 self.status.error_code = None;
                 let _ = session::clear(&self.config.state_path);
@@ -562,6 +682,18 @@ impl Controller {
                     return;
                 }
                 self.stop_mpv().await;
+                if matches!(reason.as_str(), "quit" | "stop") {
+                    self.save_progress();
+                    self.desired = None;
+                    self.retry_at = None;
+                    self.status.state = PlayerState::Stopped;
+                    self.status.error = None;
+                    self.status.error_code = None;
+                    let _ = session::clear(&self.config.state_path);
+                    self.publish();
+                    return;
+                }
+                self.save_progress();
                 let failure = classify_end_file_failure(&reason, error.as_deref());
                 if failure.retryable() {
                     self.schedule_recovery(failure);
@@ -612,6 +744,7 @@ impl Controller {
     }
 
     fn set_terminal_error(&mut self, error: VodError) {
+        self.save_progress();
         self.status.state = PlayerState::Error;
         self.status.error = Some(error.message);
         self.status.error_code = Some(error.code);
@@ -642,11 +775,16 @@ impl Controller {
             self.status.storage_pool_id = Some(desired.storage_pool_id.clone());
             self.status.relative_path = Some(desired.relative_path.clone());
             self.status.file_name = file_name(&desired.relative_path);
+            self.status.media_file_id = desired.media_file_id.clone();
             self.status.position_seconds = desired.position_seconds;
             self.status.volume = desired.volume;
             self.status.audio_device_id = desired.audio_device_id.clone();
             self.status.effective_audio_device_id = None;
             self.status.audio_fallback_reason = None;
+            self.status.audio_tracks.clear();
+            self.status.subtitle_tracks.clear();
+            self.status.selected_audio_track_id = None;
+            self.status.selected_subtitle_track_id = None;
         }
     }
 
@@ -665,7 +803,7 @@ impl Controller {
         session::persist(
             &self.config.state_path,
             &PersistedSession {
-                version: 1,
+                version: 2,
                 session_id: desired.session_id.clone(),
                 root_id: desired.root_id.clone(),
                 storage_pool_id: desired.storage_pool_id.clone(),
@@ -674,12 +812,30 @@ impl Controller {
                 volume: desired.volume,
                 desired_paused: desired.paused,
                 audio_device_id: desired.audio_device_id.clone(),
+                media_file_id: desired.media_file_id.clone(),
                 identity,
                 updated_at: now(),
             },
         )?;
+        self.save_progress();
         self.last_checkpoint = Instant::now();
         Ok(())
+    }
+
+    fn save_progress(&self) {
+        let Some(desired) = &self.desired else {
+            return;
+        };
+        let Some(file_id) = desired.media_file_id.as_deref() else {
+            return;
+        };
+        if let Err(error) = self.progress.save(
+            file_id,
+            desired.position_seconds,
+            self.status.duration_seconds,
+        ) {
+            tracing::warn!(code = ?error.code, media_file_id = %file_id, "failed to persist media progress");
+        }
     }
 
     fn publish(&mut self) {
@@ -704,7 +860,11 @@ impl Controller {
     }
 }
 
-fn empty_status(service_instance_id: String, capabilities: Capabilities) -> Status {
+fn empty_status(
+    service_instance_id: String,
+    capabilities: Capabilities,
+    video_output: String,
+) -> Status {
     Status {
         state: PlayerState::Idle,
         session_id: None,
@@ -714,6 +874,8 @@ fn empty_status(service_instance_id: String, capabilities: Capabilities) -> Stat
         storage_pool_id: None,
         relative_path: None,
         file_name: None,
+        media_file_id: None,
+        video_output,
         position_seconds: 0.0,
         duration_seconds: None,
         volume: 100.0,
@@ -722,11 +884,74 @@ fn empty_status(service_instance_id: String, capabilities: Capabilities) -> Stat
         audio_device_id: None,
         effective_audio_device_id: None,
         audio_fallback_reason: None,
+        audio_tracks: Vec::new(),
+        subtitle_tracks: Vec::new(),
+        selected_audio_track_id: None,
+        selected_subtitle_track_id: None,
         capabilities,
         error: None,
         error_code: None,
         updated_at: now(),
     }
+}
+
+fn parse_tracks(value: &serde_json::Value) -> (Vec<Track>, Vec<Track>, Option<i64>, Option<i64>) {
+    let mut audio = Vec::new();
+    let mut subtitles = Vec::new();
+    let mut selected_audio = None;
+    let mut selected_subtitle = None;
+    for item in value.as_array().into_iter().flatten() {
+        let Some(id) = item
+            .get("id")
+            .and_then(serde_json::Value::as_i64)
+            .filter(|id| *id > 0)
+        else {
+            continue;
+        };
+        let track = Track {
+            id,
+            language: item
+                .get("lang")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+            title: item
+                .get("title")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+            default: item
+                .get("default")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            forced: item
+                .get("forced")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            external: item
+                .get("external")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        };
+        let selected = item
+            .get("selected")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        match item.get("type").and_then(serde_json::Value::as_str) {
+            Some("audio") => {
+                if selected {
+                    selected_audio = Some(id);
+                }
+                audio.push(track);
+            }
+            Some("sub") => {
+                if selected {
+                    selected_subtitle = Some(id);
+                }
+                subtitles.push(track);
+            }
+            _ => {}
+        }
+    }
+    (audio, subtitles, selected_audio, selected_subtitle)
 }
 
 fn now() -> String {
@@ -764,6 +989,7 @@ mod tests {
             enabled: true,
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
+            database_path: directory.join("zos.sqlite"),
             command_timeout_ms: 100,
             startup_timeout_ms: 100,
             checkpoint_interval_ms: 5_000,
@@ -796,6 +1022,7 @@ mod tests {
                 hardware_decode: HardwareDecode::Software,
                 error: None,
             },
+            "drm".to_owned(),
         ));
         let status = status_sender.borrow().clone();
         let (_, shutdown) = watch::channel(false);
@@ -814,6 +1041,7 @@ mod tests {
                 stable_since: None,
                 last_checkpoint: Instant::now(),
                 last_capability_probe: Instant::now(),
+                progress: ProgressStore::new(directory.join("zos.sqlite")),
             },
             sender,
             done_receiver,
@@ -861,6 +1089,7 @@ mod tests {
             volume: 100.0,
             paused: false,
             audio_device_id: Some("bluetooth:adapter-hci1/11:22:33:44:55:66".to_owned()),
+            media_file_id: Some("media-1".to_owned()),
             identity: None,
         });
 
@@ -921,6 +1150,7 @@ mod tests {
             volume: 100.0,
             paused: false,
             audio_device_id: None,
+            media_file_id: None,
             identity: None,
         });
         controller.status.retry_count = 1;

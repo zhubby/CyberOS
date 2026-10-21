@@ -10,12 +10,14 @@ use crate::error::{ErrorCode, VodError};
 pub const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
 pub const DEFAULT_SOCKET_PATH: &str = "/run/zos/vod-player.sock";
 pub const DEFAULT_STATE_PATH: &str = "/zos/state/vod-player/session.json";
+pub const DEFAULT_ROOT_PATH: &str = "/zos";
 
 #[derive(Debug, Clone)]
 pub struct VodPlayerConfig {
     pub enabled: bool,
     pub socket_path: PathBuf,
     pub state_path: PathBuf,
+    pub database_path: PathBuf,
     pub command_timeout_ms: u64,
     pub startup_timeout_ms: u64,
     pub checkpoint_interval_ms: u64,
@@ -39,6 +41,7 @@ pub struct NasRoot {
 
 #[derive(Debug, Default, Deserialize)]
 struct FileConfig {
+    root_dir: Option<PathBuf>,
     #[serde(default)]
     vod_player: FileVodPlayer,
     #[serde(default)]
@@ -79,6 +82,11 @@ impl VodPlayerConfig {
             Err(error) => return Err(error.into()),
         };
         let player = file.vod_player;
+        let root_path = absolute_path(
+            text_env("ZOS_ROOT").map(PathBuf::from).or(file.root_dir),
+            DEFAULT_ROOT_PATH,
+            "root_dir",
+        )?;
         let enabled = bool_env("ZOS_VOD_PLAYER_ENABLED")?
             .or(player.enabled)
             .unwrap_or(false);
@@ -162,7 +170,7 @@ impl VodPlayerConfig {
         let hwdec = text_env("ZOS_VOD_PLAYER_HWDEC")
             .or(player.hwdec)
             .unwrap_or_else(|| "auto-safe".to_owned());
-        if video_output != "drm"
+        if !matches!(video_output.as_str(), "drm" | "wayland")
             || audio_output != "alsa"
             || !matches!(hwdec.as_str(), "auto-safe" | "auto" | "no")
         {
@@ -177,6 +185,7 @@ impl VodPlayerConfig {
             enabled,
             socket_path,
             state_path,
+            database_path: root_path.join("state/zos.sqlite"),
             command_timeout_ms: positive_setting(
                 number_env("ZOS_VOD_PLAYER_COMMAND_TIMEOUT_MS")?.or(player.command_timeout_ms),
                 5_000,

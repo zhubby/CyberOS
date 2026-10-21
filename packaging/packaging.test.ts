@@ -116,8 +116,15 @@ describe("native packaging artifacts", () => {
     expect(vodPlayerUnit).toContain("WatchdogSec=20s");
     expect(vodPlayerUnit).toContain("TimeoutStopSec=30s");
     expect(vodPlayerUnit).toContain("ProtectSystem=strict");
+    expect(vodPlayerUnit).toContain("/zos/state/zos.sqlite-wal");
     expect(vodPlayerUnit).toContain("Wants=zos-api.service bluetooth.service bluealsa.service");
     expect(vodPlayerUnit).not.toContain("RequiresMountsFor=/zos/data");
+    const mpvInput = await readPackagingFile("etc", "mpv-input.conf");
+    expect(mpvInput).toContain("LEFT seek -10 relative+exact");
+    expect(mpvInput).toContain("UP cycle aid");
+    expect(mpvInput).toContain("DOWN cycle sid");
+    expect(mpvInput).toContain("ENTER cycle pause");
+    expect(mpvInput).toContain("ESC quit");
     const bluetoothUnit = await readPackagingFile("systemd", "zos-bluetoothd.service");
     expect(bluetoothUnit).toContain("User=zos");
     expect(bluetoothUnit).toContain("ExecStart=/usr/bin/dbus-run-session -- /usr/lib/zos/bin/zos-bluetoothd");

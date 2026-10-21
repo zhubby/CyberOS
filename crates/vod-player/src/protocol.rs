@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{ErrorCode, VodError};
 
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 pub const MAX_FRAME_BYTES: usize = 128 * 1024;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -59,10 +59,19 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
             "relativePath",
             "startPositionSeconds",
             "audioDeviceId",
+            "mediaFileId",
         ],
-        "pause" | "resume" | "stop" | "retry" => &["type", "sessionId"],
+        "pause"
+        | "resume"
+        | "toggle-pause"
+        | "stop"
+        | "retry"
+        | "cycle-audio-track"
+        | "cycle-subtitle-track" => &["type", "sessionId"],
         "seek" => &["type", "sessionId", "seconds"],
+        "seek-relative" => &["type", "sessionId", "seconds"],
         "set-volume" => &["type", "sessionId", "volume"],
+        "set-audio-track" | "set-subtitle-track" => &["type", "sessionId", "trackId"],
         _ => {
             return Err(VodError::new(
                 ErrorCode::InvalidCommand,
@@ -98,12 +107,19 @@ pub enum Command {
         #[serde(rename = "audioDeviceId")]
         #[cfg_attr(test, ts(optional = nullable))]
         audio_device_id: Option<String>,
+        #[serde(rename = "mediaFileId")]
+        #[cfg_attr(test, ts(optional = nullable))]
+        media_file_id: Option<String>,
     },
     Pause {
         #[serde(rename = "sessionId")]
         session_id: String,
     },
     Resume {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+    },
+    TogglePause {
         #[serde(rename = "sessionId")]
         session_id: String,
     },
@@ -120,10 +136,35 @@ pub enum Command {
         session_id: String,
         seconds: f64,
     },
+    SeekRelative {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        seconds: f64,
+    },
     SetVolume {
         #[serde(rename = "sessionId")]
         session_id: String,
         volume: f64,
+    },
+    SetAudioTrack {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(rename = "trackId")]
+        track_id: i64,
+    },
+    SetSubtitleTrack {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(rename = "trackId")]
+        track_id: Option<i64>,
+    },
+    CycleAudioTrack {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+    },
+    CycleSubtitleTrack {
+        #[serde(rename = "sessionId")]
+        session_id: String,
     },
 }
 
@@ -137,6 +178,7 @@ impl Command {
                 relative_path,
                 start_position_seconds,
                 audio_device_id,
+                media_file_id,
             } => {
                 validate_id(root_id)?;
                 validate_id(storage_pool_id)?;
@@ -151,12 +193,18 @@ impl Command {
                 if let Some(audio_device_id) = audio_device_id {
                     validate_bluetooth_audio_device_id(audio_device_id)?;
                 }
+                if let Some(media_file_id) = media_file_id {
+                    validate_id(media_file_id)?;
+                }
                 Ok(())
             }
             Self::Pause { session_id }
             | Self::Resume { session_id }
+            | Self::TogglePause { session_id }
             | Self::Stop { session_id }
-            | Self::Retry { session_id } => validate_id(session_id),
+            | Self::Retry { session_id }
+            | Self::CycleAudioTrack { session_id }
+            | Self::CycleSubtitleTrack { session_id } => validate_id(session_id),
             Self::Seek {
                 session_id,
                 seconds,
@@ -164,12 +212,49 @@ impl Command {
                 validate_id(session_id)?;
                 validate_number(*seconds, 0.0, f64::MAX, "seek position")
             }
+            Self::SeekRelative {
+                session_id,
+                seconds,
+            } => {
+                validate_id(session_id)?;
+                validate_number(*seconds, -3_600.0, 3_600.0, "relative seek offset")
+            }
             Self::SetVolume { session_id, volume } => {
                 validate_id(session_id)?;
                 validate_number(*volume, 0.0, 100.0, "volume")
             }
+            Self::SetAudioTrack {
+                session_id,
+                track_id,
+            } => {
+                validate_id(session_id)?;
+                validate_track_id(*track_id)
+            }
+            Self::SetSubtitleTrack {
+                session_id,
+                track_id,
+            } => {
+                validate_id(session_id)?;
+                if let Some(track_id) = track_id {
+                    validate_track_id(*track_id)?;
+                }
+                Ok(())
+            }
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "vod-player.ts", rename = "VodPlayerTrack"))]
+#[serde(rename_all = "camelCase")]
+pub struct Track {
+    pub id: i64,
+    pub language: Option<String>,
+    pub title: Option<String>,
+    pub default: bool,
+    pub forced: bool,
+    pub external: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -227,6 +312,8 @@ pub struct Status {
     pub storage_pool_id: Option<String>,
     pub relative_path: Option<String>,
     pub file_name: Option<String>,
+    pub media_file_id: Option<String>,
+    pub video_output: String,
     pub position_seconds: f64,
     pub duration_seconds: Option<f64>,
     pub volume: f64,
@@ -235,6 +322,10 @@ pub struct Status {
     pub audio_device_id: Option<String>,
     pub effective_audio_device_id: Option<String>,
     pub audio_fallback_reason: Option<String>,
+    pub audio_tracks: Vec<Track>,
+    pub subtitle_tracks: Vec<Track>,
+    pub selected_audio_track_id: Option<i64>,
+    pub selected_subtitle_track_id: Option<i64>,
     pub capabilities: Capabilities,
     pub error: Option<String>,
     pub error_code: Option<ErrorCode>,
@@ -348,6 +439,17 @@ fn validate_number(value: f64, minimum: f64, maximum: f64, name: &str) -> Result
     Ok(())
 }
 
+fn validate_track_id(value: i64) -> Result<(), VodError> {
+    if value <= 0 {
+        return Err(VodError::new(
+            ErrorCode::InvalidCommand,
+            "Invalid media track id",
+            400,
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,14 +501,14 @@ mod tests {
     #[test]
     fn parses_strict_versioned_commands() {
         let request = RequestEnvelope::parse(
-            br#"{"version":1,"id":"r1","command":{"type":"play","rootId":"root","storagePoolId":"pool","relativePath":"movies/a.mp4","startPositionSeconds":4}}"#,
+            br#"{"version":2,"id":"r1","command":{"type":"play","rootId":"root","storagePoolId":"pool","relativePath":"movies/a.mp4","startPositionSeconds":4,"mediaFileId":"file-1"}}"#,
         )
         .unwrap();
         assert!(matches!(request.command, Command::Play { .. }));
         assert!(RequestEnvelope::parse(br#"{"id":"r1","command":{"type":"status"}}"#).is_err());
         assert!(
             RequestEnvelope::parse(
-                br#"{"version":1,"id":"r1","command":{"type":"status","extra":true}}"#
+                br#"{"version":2,"id":"r1","command":{"type":"status","extra":true}}"#
             )
             .is_err()
         );
@@ -414,11 +516,13 @@ mod tests {
 
     #[test]
     fn rejects_unsafe_paths_and_unbound_controls() {
-        assert!(RequestEnvelope::parse(br#"{"version":1,"id":"r1","command":{"type":"play","rootId":"root","storagePoolId":"pool","relativePath":"../a.mp4"}}"#).is_err());
+        assert!(RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"play","rootId":"root","storagePoolId":"pool","relativePath":"../a.mp4"}}"#).is_err());
         assert!(
-            RequestEnvelope::parse(br#"{"version":1,"id":"r1","command":{"type":"pause"}}"#)
+            RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"pause"}}"#)
                 .is_err()
         );
+        assert!(RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"seek-relative","sessionId":"session-1","seconds":-10}}"#).is_ok());
+        assert!(RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"set-subtitle-track","sessionId":"session-1","trackId":null}}"#).is_ok());
         assert!(
             validate_bluetooth_audio_device_id("bluetooth:adapter-hci1/AA:BB:CC:DD:EE:FF").is_ok()
         );
@@ -431,7 +535,7 @@ mod tests {
     fn accepts_the_shared_golden_frames() {
         let fixtures: GoldenFixtures = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../packages/shared/fixtures/vod-player-protocol-v1.json"
+            "/../../packages/shared/fixtures/vod-player-protocol-v2.json"
         )))
         .unwrap();
         for frame in fixtures.requests {
