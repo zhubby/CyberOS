@@ -1,3 +1,9 @@
+zos (1.5.1) unstable; urgency=medium
+
+  * Harden monitoring and alert incident handling, complete TV mode, and align agent policy and Nix delivery.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 15:28:21 +0000
+
 zos (1.5.0) unstable; urgency=medium
 
   * Migrate source workspaces to crates and packages, add declarative host policy, and introduce Nix delivery.
