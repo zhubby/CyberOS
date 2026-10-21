@@ -1,3 +1,9 @@
+zos (1.5.6) unstable; urgency=medium
+
+  * Provide deterministic CA trust for Nix Rust builds and runtime services.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 22:46:29 +0000
+
 zos (1.5.5) unstable; urgency=medium
 
   * Bound SMTP DNS and delivery sessions so alerter TLS safety checks cannot hang release builds.
