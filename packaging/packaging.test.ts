@@ -17,6 +17,7 @@ describe("native packaging artifacts", () => {
     expect(packages).toContain("docsNpmDeps = pkgs.importNpmLock {");
     expect(packages).toContain("importNpmLock.npmConfigHook");
     expect(packages).not.toContain("importNpmLock.buildNodeModules");
+    expect(packages).toContain("rm -rf $out/lib/zos/node_modules/@zos");
   });
 
   it("builds monitor and alerter as independent Rust applications", async () => {
@@ -532,6 +533,7 @@ describe("native packaging artifacts", () => {
     expect(buildDeb).toContain("ZOS_BUILD_SOURCE");
     expect(buildDeb).toContain("--exclude target");
     expect(rules).toContain("npm ci --registry");
+    expect(rules).toContain("rm -rf debian/zos/usr/lib/zos/node_modules/@zos");
     expect(rules).toContain("override_dh_strip:");
     expect(rules).toContain("dh_strip --exclude=.bare");
     expect(rules).toContain("override_dh_shlibdeps:");

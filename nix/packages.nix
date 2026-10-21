@@ -79,6 +79,7 @@ let
         cp -R "packages/$workspace/dist" "$out/lib/zos/apps/$workspace/dist"
       done
       cp -R node_modules $out/lib/zos/node_modules
+      rm -rf $out/lib/zos/node_modules/@zos
       if [ -d packages/agent/node_modules ]; then
         cp -R packages/agent/node_modules $out/lib/zos/packages/agent/node_modules
       fi
