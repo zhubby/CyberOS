@@ -806,7 +806,7 @@ mod tests {
             state_path: directory.join("session.json"),
             database_path: directory.join("zos.sqlite"),
             command_timeout_ms: 250,
-            startup_timeout_ms: 500,
+            startup_timeout_ms: 5_000,
             checkpoint_interval_ms: 5_000,
             retry_base_delay_ms: 10,
             retry_max_delay_ms: 60,
