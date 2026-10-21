@@ -31,7 +31,7 @@
   "overrides": {
     "@pagefind/default-ui": "1.5.0",
     "katex": "0.18.2",
-    "pagefind": "1.5.0",
+    "pagefind": "$pagefind",
     "postcss-selector-parser": "7.1.6"
   }
 }
