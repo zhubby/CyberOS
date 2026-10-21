@@ -1,3 +1,9 @@
+zos (1.4.4) unstable; urgency=medium
+
+  * Prevent notification replay from exhausting API rate limits
+
+ -- ZOS Maintainers <maintainers@zos.local>  Wed, 21 Oct 2026 01:35:36 +0000
+
 zos (1.4.3) unstable; urgency=medium
 
   * Improve startup reliability and narrow-screen TV layout

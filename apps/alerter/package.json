@@ -1,6 +1,6 @@
 {
   "name": "@zos/alerter",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "private": true,
   "scripts": {
     "dev": "cargo run -p zos-alerter"

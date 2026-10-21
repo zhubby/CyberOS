@@ -1,6 +1,6 @@
 {
   "name": "@zos/backup",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "type": "module",
   "exports": {
     ".": "./src/backup.ts"
@@ -13,8 +13,8 @@
     "build": "cd ../.. && tsup apps/backup/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir apps/backup/dist"
   },
   "dependencies": {
-    "@zos/db": "1.4.3",
-    "@zos/nas-tools": "1.4.3",
-    "@zos/shared": "1.4.3"
+    "@zos/db": "1.4.4",
+    "@zos/nas-tools": "1.4.4",
+    "@zos/shared": "1.4.4"
   }
 }
