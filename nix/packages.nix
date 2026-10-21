@@ -31,8 +31,13 @@ let
       runHook preInstall
       mkdir -p $out/lib/zos/bin
       releaseDir=target/release
-      if [ -n "''${CARGO_BUILD_TARGET:-}" ] && [ -d "target/$CARGO_BUILD_TARGET/release" ]; then
-        releaseDir="target/$CARGO_BUILD_TARGET/release"
+      if [ ! -x "$releaseDir/zos-alerter" ]; then
+        for candidate in target/*/release; do
+          if [ -x "$candidate/zos-alerter" ]; then
+            releaseDir="$candidate"
+            break
+          fi
+        done
       fi
       for binary in zos-alerter zos-bluetoothd zos-downloader zos-host-accessd zos-hostd \
         zos-indexer zos-monitor zos-photostaff zos-termux zos-vod-player; do
