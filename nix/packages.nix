@@ -47,26 +47,28 @@ let
     '';
   };
 
-  rootNodeModules = pkgs.importNpmLock.buildNodeModules {
+  node22NpmHooks = pkgs.callPackage
+    (pkgs.path + "/pkgs/build-support/node/import-npm-lock/hooks")
+    { nodejs = pkgs.nodejs_22; };
+
+  rootNpmDeps = pkgs.importNpmLock {
     npmRoot = cleanSource;
-    nodejs = pkgs.nodejs_22;
-    derivationArgs = {
-      nativeBuildInputs = [ pkgs.pkg-config ];
-      buildInputs = [ pkgs.sqlite ];
-    };
   };
 
   zos-node = pkgs.stdenv.mkDerivation (finalAttrs: {
     pname = "zos-node";
     inherit version;
     src = cleanSource;
-    npmDeps = rootNodeModules;
+    npmDeps = rootNpmDeps;
     npmRoot = ".";
     nativeBuildInputs = with pkgs; [
       nodejs_22
-      importNpmLock.linkNodeModulesHook
+      node22NpmHooks.npmConfigHook
       makeWrapper
+      pkg-config
+      python3
     ];
+    buildInputs = [ pkgs.sqlite ];
     env = {
       ZOS_BUILD_SOURCE = "nix";
       ZOS_BUILD_DIRTY = "false";

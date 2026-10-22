@@ -14,12 +14,14 @@ describe("native packaging artifacts", () => {
     const packages = await readFile(path.join(repoRoot, "nix/packages.nix"), "utf8");
     const module = await readFile(path.join(repoRoot, "nix/module.nix"), "utf8");
 
-    expect(packages).toContain("rootNodeModules = pkgs.importNpmLock.buildNodeModules {");
-    expect(packages).toContain("nodejs = pkgs.nodejs_22;");
-    expect(packages).toContain("npmDeps = rootNodeModules;");
+    expect(packages).toContain("rootNpmDeps = pkgs.importNpmLock {");
+    expect(packages).toContain("node22NpmHooks = pkgs.callPackage");
+    expect(packages).toContain('{ nodejs = pkgs.nodejs_22; };');
+    expect(packages).toContain("npmDeps = rootNpmDeps;");
     expect(packages).toContain("docsNpmDeps = pkgs.importNpmLock {");
     expect(packages).toContain("importNpmLock.npmConfigHook");
-    expect(packages).toContain("importNpmLock.linkNodeModulesHook");
+    expect(packages).toContain("node22NpmHooks.npmConfigHook");
+    expect(packages).not.toContain("importNpmLock.buildNodeModules");
     expect(packages).toContain("rm -rf $out/lib/zos/node_modules/@zos");
     expect(packages).toContain("const Database = require('better-sqlite3')");
     expect(packages).toContain(
