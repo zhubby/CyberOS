@@ -878,7 +878,8 @@ describe("native packaging artifacts", () => {
       "start_service_stably zos-bluetoothd.service",
       "start_service_stably zos-indexer.service",
       "systemctl enable $TIMERS",
-      "systemctl start $TIMERS"
+      "systemctl start $TIMERS",
+      'restore_tv_runtime_state "$state_dir"'
     ];
     for (let index = 1; index < activationOrder.length; index += 1) {
       expect(activateRuntime.indexOf(activationOrder[index - 1]!)).toBeGreaterThanOrEqual(0);
