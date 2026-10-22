@@ -1,9 +1,9 @@
 # ZOS TV Gamepad Input Review
 
 - Mode: autofix
-- Scope: current dirty working tree on `main`, including the untracked `crates/tv-gamepad` crate and gamepad systemd unit
+- Scope: `main..4e0425201cd9c6b33dce0309096367dc0df13f3a`, including TV gamepad support and the CM5 TV runtime restoration fixes released as `1.5.19`
 - Intent: add optional generic evdev gamepad control for the Chromium TV shell and fullscreen mpv without making CEC or a connected controller a TV startup dependency
-- Verdict: no unresolved P0-P3 code findings; CM5 hardware validation remains the release gate
+- Verdict: ready to merge; no unresolved P0-P3 code findings and CM5 release validation passed
 
 ## Findings
 
@@ -37,24 +37,24 @@ No unresolved findings remain after the autofix pass.
 
 ## Deployment Notes
 
-- Before deployment, build the arm64 Debian package and confirm `zos-tv-gamepad` plus `zos-tv-gamepad.service` are present in the artifact.
-- After installation, verify `systemctl status zos-tv-gamepad.service`, `journalctl -u zos-tv-gamepad.service`, `/run/zos-tv/status/gamepad.json`, and `/api/tv/status`.
-- Pair a real Xbox Series or Xbox One S controller from Web settings and confirm Paired, Trusted, and Connected, then exercise all mappings in both the library and mpv playback.
-- Power-cycle the controller and reboot the CM5 with the controller off; TV mode must remain ready and controller input must recover without a service restart.
-- Confirm controller, keyboard, and CEC input coexist without duplicate actions. Roll back by disabling the optional unit or installing the previous Debian package if input injection destabilizes the session.
+- Built `zos_1.5.19_arm64.deb` natively on the CM5 and verified its SHA256, build metadata, gamepad binary, CEC script, and systemd unit before deployment.
+- The managed deployment completed successfully and restored the enabled and active TV target. Core services, storage readiness, system health, monitoring, and the committed legacy migration state remained healthy.
+- A deliberate TV target stop left Weston, Chromium, and CEC with `Result=success` and no failed units. Restarting the target returned all five TV services to active and `/api/tv/status` to ready.
+- Browser acceptance confirmed `v1.5.19` and commit `4e0425201cd9c6b33dce0309096367dc0df13f3a`, rendered Gamepad health in Media settings, completed a Bluetooth scan, and received the exact Agent reply `验收通过` in a new session.
+- No supported physical gamepad was connected during release acceptance, so button mappings and reconnect behavior on real Xbox hardware remain a residual hardware check rather than a release blocker.
 
 ## Coverage
 
-- Full `make ci` passed after the final TypeScript timer fix, including protocol checks, Rust workspace tests, TypeScript and documentation checks, ESLint and Clippy, Vitest, and production builds.
+- Final local `make check` passed at `1.5.19`; the CM5 native Debian build also passed Rust release builds and tests, Web/API/Worker/Docs builds, 169 Vitest files with 1078 tests, and 5 documentation tests.
 - Focused tests cover gamepad capability detection, mappings, hysteresis, repeat, button deduplication, multiple devices, health recovery, hostd pairing policy, API status, UI status, and packaging declarations.
 - Headless Chromium verification passed at 1920x1080 and 390x844. The TV shell and F8 search rendered without overflow or console errors; media settings exposed Gamepad health; and a page-local Xbox status fixture rendered the Gamepad2 icon, Paired/Trusted/Connected badges, and trust, disconnect, send, and forget actions without layout overlap.
 - Nix could not be run locally because it is not installed on this macOS host; native Linux CI remains authoritative for `nix flake check` and the NixOS VM test.
-- Residual risk: no physical Xbox controller, target BlueZ adapter, CM5 evdev device, Weston compositor, or HDMI display is available in the local browser/test environment.
+- Residual risk: the CM5 BlueZ adapter, Weston compositor, CEC device, Chromium shell, and disconnected Gamepad service were exercised, but no physical Xbox controller was available to validate evdev mappings or reconnect behavior.
 - Suppressed findings: 0.
 - Failed reviewers: 0; project instructions required the reviewer lenses to run sequentially in the main thread.
 
 ---
 
-> **Verdict:** Ready for CM5 hardware validation
+> **Verdict:** Ready to merge
 >
-> **Reasoning:** The code, repository gates, and browser checks are clean. The remaining uncertainty is hardware and Linux runtime integration rather than an unresolved code finding.
+> **Reasoning:** The code and repository gates are clean, the native arm64 package deployed successfully, and host plus browser acceptance passed. The remaining uncertainty is limited to input from a physically connected gamepad.

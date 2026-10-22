@@ -2,12 +2,12 @@
   "runId": "20261022-tv-gamepad-input",
   "mode": "autofix",
   "base": "d68d39100c176bab5cc751df9614ca4f6eaa3979",
-  "head": "working-tree",
+  "head": "4e0425201cd9c6b33dce0309096367dc0df13f3a",
   "intent": "Add optional Bluetooth and USB gamepad input to ZOS TV mode through evdev and wtype, preserve keyboard and CEC behavior, expose non-fatal component health, and package the service for Debian, appliance, and Nix deployments.",
   "scope": {
-    "trackedFiles": 35,
-    "trackedInsertions": 458,
-    "trackedDeletions": 67,
+    "trackedFiles": 40,
+    "trackedInsertions": 246,
+    "trackedDeletions": 158,
     "untrackedImplementationFilesManuallyReviewed": [
       "crates/tv-gamepad/Cargo.toml",
       "crates/tv-gamepad/src/lib.rs",
@@ -27,7 +27,7 @@
   "advisories": [
     {
       "owner": "release",
-      "summary": "CM5 validation with a real Xbox Series or Xbox One S controller remains required for BlueZ pairing, Trusted and Connected state, reconnect behavior, evdev permissions, Wayland key injection, and simultaneous CEC and keyboard input."
+      "summary": "CM5 release validation passed with the controller disconnected; a real Xbox Series or Xbox One S controller is still required to exercise pairing, reconnect behavior, evdev mappings, and simultaneous CEC and keyboard input."
     },
     {
       "owner": "linux-ci",
@@ -35,15 +35,16 @@
     }
   ],
   "verification": {
-    "cargoWorkspace": "passed as part of make ci",
-    "vitest": "passed as part of make ci",
-    "typecheck": "passed as part of make ci",
-    "lint": "passed as part of make ci",
-    "build": "passed as part of make ci",
-    "makeCi": "passed",
+    "cargoWorkspace": "passed locally and in the native CM5 package build",
+    "vitest": "passed: 169 files and 1078 tests in the native CM5 package build",
+    "typecheck": "passed as part of final make check",
+    "lint": "passed as part of final make check",
+    "build": "passed in the native CM5 package build",
+    "makeCheck": "passed at version 1.5.19",
     "nix": "not run: nix is not installed on this host",
-    "browser": "passed: headless Chromium at 1920x1080 and 390x844; TV shell, F8 search, media gamepad health, and mocked connected Xbox device state rendered without layout overflow or page errors",
+    "browser": "passed on the deployed CM5: version identity, Media Gamepad health, Bluetooth scanning, and an exact Agent response were verified in Chrome",
+    "cm5Deployment": "passed: v1.5.19 installed, TV target restored, explicit stop/start left no failed units, and SQLite quick_check returned ok",
     "diffCheck": "passed before artifact creation"
   },
-  "verdict": "ready_for_cm5_hardware_validation"
+  "verdict": "ready_to_merge"
 }
