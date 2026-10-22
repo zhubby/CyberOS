@@ -47,24 +47,26 @@ let
     '';
   };
 
-  rootNpmDeps = pkgs.importNpmLock {
+  rootNodeModules = pkgs.importNpmLock.buildNodeModules {
     npmRoot = cleanSource;
+    nodejs = pkgs.nodejs_22;
+    derivationArgs = {
+      nativeBuildInputs = [ pkgs.pkg-config ];
+      buildInputs = [ pkgs.sqlite ];
+    };
   };
 
   zos-node = pkgs.stdenv.mkDerivation (finalAttrs: {
     pname = "zos-node";
     inherit version;
     src = cleanSource;
-    npmDeps = rootNpmDeps;
+    npmDeps = rootNodeModules;
     npmRoot = ".";
     nativeBuildInputs = with pkgs; [
       nodejs_22
-      importNpmLock.npmConfigHook
+      importNpmLock.linkNodeModulesHook
       makeWrapper
-      pkg-config
-      python3
     ];
-    buildInputs = [ pkgs.sqlite ];
     env = {
       ZOS_BUILD_SOURCE = "nix";
       ZOS_BUILD_DIRTY = "false";
@@ -75,6 +77,7 @@ let
       runHook preBuild
       npm run build:metadata
       npm run build --workspaces --if-present
+      node -e "const Database = require('better-sqlite3'); const database = new Database(':memory:'); database.close();"
       runHook postBuild
     '';
     installPhase = ''
@@ -89,6 +92,10 @@ let
       if [ -d packages/agent/node_modules ]; then
         cp -R packages/agent/node_modules $out/lib/zos/packages/agent/node_modules
       fi
+      mkdir -p $out/lib/zos/node_modules/@earendil-works
+      ln -s ../../packages/agent/node_modules/@earendil-works/pi-coding-agent \
+        $out/lib/zos/node_modules/@earendil-works/pi-coding-agent
+      node -e "require.resolve('@earendil-works/pi-coding-agent', { paths: ['$out/lib/zos/apps/worker/dist'] })"
       install -Dm644 package.json package-lock.json .zos/build-info.json -t $out/lib/zos
       for script in zos-tv-mode zos-tv-prepare zos-tv-weston zos-tv-chromium zos-tv-cec zos-tv-write-status; do
         install -Dm755 "packaging/scripts/$script" "$out/lib/zos/scripts/$script"
