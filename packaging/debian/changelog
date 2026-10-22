@@ -1,3 +1,9 @@
+zos (1.5.13) unstable; urgency=medium
+
+  * Fix Nix Node runtime dependency ABI and worker dependency resolution.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 22 Oct 2026 01:43:31 +0000
+
 zos (1.5.12) unstable; urgency=medium
 
   * Secure the shared NixOS state root so tmpfiles can create hostd state.
