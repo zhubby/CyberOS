@@ -173,7 +173,11 @@ describe("native packaging artifacts", () => {
     expect(tvCec).toContain("PartOf=zos-tv.target");
     expect(tvCec).toContain("CapabilityBoundingSet=CAP_NET_ADMIN");
     expect(tvCec).toContain("AmbientCapabilities=CAP_NET_ADMIN");
-    await expect(readPackagingFile("scripts", "zos-tv-cec")).resolves.toContain("trap 'exit 0' HUP INT TERM");
+    expect(tvCec).toContain("KillMode=mixed");
+    const tvCecScript = await readPackagingFile("scripts", "zos-tv-cec");
+    expect(tvCecScript).toContain("trap terminate HUP INT TERM");
+    expect(tvCecScript).toContain('wait "$cec_pid" 2>/dev/null || true');
+    expect(tvCecScript).toContain('wait "$heartbeat_pid" 2>/dev/null || true');
     const tvGamepad = await readPackagingFile("systemd", "zos-tv-gamepad.service");
     expect(tvTarget).toContain("Wants=zos-tv-cec.service zos-tv-gamepad.service");
     expect(tvGamepad).toContain("User=zos");

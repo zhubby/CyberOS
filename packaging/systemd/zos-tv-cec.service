@@ -17,6 +17,7 @@ ExecStart=/usr/lib/zos/scripts/zos-tv-cec
 Restart=always
 RestartSec=3
 TimeoutStopSec=10s
+KillMode=mixed
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/run/zos-tv
