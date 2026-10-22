@@ -65,10 +65,9 @@ restore_tv_runtime_state() {
   state_dir=$1
   unit_exists "$TV_RUNTIME_TARGET" || return 0
 
-  if [ -f "$state_dir/$TV_RUNTIME_TARGET.active" ]; then
-    systemctl start "$TV_RUNTIME_TARGET"
-  elif [ ! -f "$state_dir/$TV_RUNTIME_TARGET.recorded" ] && \
-       [ -f /etc/zos/tv-mode/enabled ] && \
+  if [ -f "$state_dir/$TV_RUNTIME_TARGET.recorded" ]; then
+    restore_unit_state "$TV_RUNTIME_TARGET" "$state_dir"
+  elif [ -f /etc/zos/tv-mode/enabled ] && \
        systemctl is-enabled --quiet "$TV_RUNTIME_TARGET" 2>/dev/null; then
     # Releases before 1.5.18 did not snapshot the TV target. Preserve an
     # enabled appliance session during the first upgrade to the fixed helper.

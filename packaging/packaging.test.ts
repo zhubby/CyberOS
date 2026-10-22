@@ -851,7 +851,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain('STATEFUL_RUNTIME_UNITS="$TV_RUNTIME_TARGET $TIMERS $WRITERS"');
     expect(deploy).toContain(': > "$state_dir/$unit.recorded"');
     expect(deploy).toContain('restore_tv_runtime_state "$state_dir"');
-    expect(deploy).toContain('[ ! -f "$state_dir/$TV_RUNTIME_TARGET.recorded" ]');
+    expect(deploy).toContain('restore_unit_state "$TV_RUNTIME_TARGET" "$state_dir"');
     expect(deploy).toContain("activate_runtime");
     expect(deploy).not.toContain("systemctl restart $RUNTIME_SERVICES");
     expect(deploy).not.toContain("systemctl enable --now $TIMERS");
