@@ -114,6 +114,8 @@ in pkgs.testers.runNixOSTest {
         machine.wait_until_succeeds("curl -fsS http://127.0.0.1:8080/docs/")
         machine.succeed("test $(stat -c %U /zos/state) = zos")
         machine.succeed("test $(stat -c %G /zos/state) = zos")
+        machine.succeed("test $(stat -c '%U:%G:%a' /zos/state/hostd) = root:root:755")
+        machine.succeed("test $(stat -c '%U:%G:%a' /zos/state/hostd/bluetooth) = root:root:700")
         machine.succeed("test -f /zos/state/zos.sqlite")
         machine.succeed("curl -fsS http://127.0.0.1:3010/api/settings/system-info | grep -F 'Nix Admin'")
         machine.succeed("getent passwd zos | grep -F ':/zos/home/termux:'")
