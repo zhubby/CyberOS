@@ -123,7 +123,7 @@ in pkgs.testers.runNixOSTest {
         machine.succeed("systemctl show zos-hostd.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /zos/data")
         machine.fail("systemctl show zos-hostd.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /etc")
         machine.succeed("systemctl show zos-hostd.service -p Requires --value | tr ' ' '\\n' | grep -Fx systemd-tmpfiles-setup.service")
-        machine.succeed("systemctl show zos-hostd.service -p CapabilityBoundingSet --value | grep -F CAP_SYS_ADMIN")
+        machine.succeed("systemctl show zos-hostd.service -p CapabilityBoundingSet --value | grep -Fi CAP_SYS_ADMIN")
 
         request = json.dumps({
             "version": 1,
