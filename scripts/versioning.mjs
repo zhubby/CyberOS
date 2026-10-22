@@ -13,6 +13,7 @@ const PRODUCT_CARGO_PACKAGES = [
   { manifestPath: "crates/monitor/Cargo.toml", packageName: "zos-monitor" },
   { manifestPath: "crates/photostaff/Cargo.toml", packageName: "zos-photostaff" },
   { manifestPath: "crates/termux/Cargo.toml", packageName: "zos-termux" },
+  { manifestPath: "crates/tv-gamepad/Cargo.toml", packageName: "zos-tv-gamepad" },
   { manifestPath: "crates/vod-player/Cargo.toml", packageName: "zos-vod-player" },
   { manifestPath: "crates/monitoring-contracts/Cargo.toml", packageName: "zos-monitoring-contracts" }
 ];

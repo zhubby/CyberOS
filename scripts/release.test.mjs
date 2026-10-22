@@ -113,6 +113,7 @@ const PRODUCT_CARGO_PACKAGES = [
   ["crates/monitor/Cargo.toml", "zos-monitor"],
   ["crates/photostaff/Cargo.toml", "zos-photostaff"],
   ["crates/termux/Cargo.toml", "zos-termux"],
+  ["crates/tv-gamepad/Cargo.toml", "zos-tv-gamepad"],
   ["crates/vod-player/Cargo.toml", "zos-vod-player"],
   ["crates/monitoring-contracts/Cargo.toml", "zos-monitoring-contracts"]
 ].map(([manifestPath, packageName]) => ({ manifestPath, packageName }));
@@ -129,6 +130,7 @@ async function writeFixture(root) {
     mkdir(path.join(root, "crates/monitor"), { recursive: true }),
     mkdir(path.join(root, "crates/photostaff"), { recursive: true }),
     mkdir(path.join(root, "crates/termux"), { recursive: true }),
+    mkdir(path.join(root, "crates/tv-gamepad"), { recursive: true }),
     mkdir(path.join(root, "crates/vod-player"), { recursive: true }),
     mkdir(path.join(root, "crates/monitoring-contracts"), { recursive: true }),
     mkdir(path.join(root, "packages/shared"), { recursive: true }),

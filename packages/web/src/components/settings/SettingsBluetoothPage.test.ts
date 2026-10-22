@@ -38,6 +38,24 @@ describe("SettingsBluetoothPage", () => {
     expect(html).toContain("Scan for 15 seconds");
   });
 
+  it("renders a dedicated gamepad icon and keeps device management actions", () => {
+    const html = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
+      status: {
+        ...status,
+        devices: [{ ...status.devices[0]!, name: "Xbox Wireless Controller", alias: null, type: "gamepad" }]
+      },
+      pools: [],
+      locale: "en",
+      onStatus: vi.fn(),
+      onNotifySuccess: vi.fn(),
+      onNotifyError: vi.fn()
+    }));
+    expect(html).toContain("Xbox Wireless Controller");
+    expect(html).toContain("lucide-gamepad-2");
+    expect(html).toContain("Trust");
+    expect(html).toContain("Connect");
+  });
+
   it("explains why controls are unavailable when no adapter exists", () => {
     const html = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
       status: { ...status, available: false, adapters: [], devices: [], error: "BlueZ is unavailable" },

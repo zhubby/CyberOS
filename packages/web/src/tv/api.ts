@@ -1,4 +1,4 @@
-import type { MediaHome, MediaTitleDetail, MediaTitlePage, VodPlayerCommand, VodPlayerStatus } from "@zos/shared";
+import type { MediaHome, MediaTitleDetail, MediaTitlePage, TvModeStatus, VodPlayerCommand, VodPlayerStatus } from "@zos/shared";
 
 export async function getMediaHome(): Promise<MediaHome> {
   return fetchJson<MediaHome>("/api/media/home");
@@ -29,6 +29,11 @@ export async function playMediaFile(fileId: string, startPositionSeconds?: numbe
 
 export async function getVodPlayerStatus(): Promise<VodPlayerStatus> {
   const result = await fetchJson<{ status: VodPlayerStatus }>("/api/vod-player/status");
+  return result.status;
+}
+
+export async function getTvModeStatus(): Promise<TvModeStatus> {
+  const result = await fetchJson<{ status: TvModeStatus }>("/api/tv/status");
   return result.status;
 }
 

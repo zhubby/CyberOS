@@ -21,7 +21,7 @@ fi
 
 "$status_writer" weston degraded "Weston is starting"
 weston --backend=drm-backend.so --shell=kiosk-shell.so --socket=wayland-0 \
-  --config="$runtime_dir/weston.ini" --log="$runtime_dir/weston.log" --tty=1 &
+  --config="$runtime_dir/weston.ini" --log="$runtime_dir/weston.log" &
 weston_pid=$!
 
 attempt=0

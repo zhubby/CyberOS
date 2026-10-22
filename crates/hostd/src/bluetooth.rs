@@ -822,6 +822,13 @@ pub(crate) async fn handle(request: BluetoothRequest) -> Result<BluetoothResult,
                 if let Err(error) = result {
                     tracing::warn!(message = %error.message, "Bluetooth pairing failed");
                     pair_runtime.record_error(error.message).await;
+                    return;
+                }
+                if let Err(error) =
+                    configure_paired_gamepad(&pair_connection, &pair_runtime.agent, &device).await
+                {
+                    tracing::warn!(message = %error.message, "Bluetooth gamepad setup needs attention");
+                    pair_runtime.record_error(error.message).await;
                 }
             });
             collect_status(&runtime).await
@@ -1087,6 +1094,51 @@ async fn device_call(connection: &Connection, path: &str, method: &str) -> Resul
         .map_err(|_| HostdError::operation_failed("BlueZ device operation failed"))
 }
 
+async fn configure_paired_gamepad(
+    connection: &Connection,
+    agent: &PairingAgent,
+    path: &str,
+) -> Result<(), HostdError> {
+    let Some(properties) = device_properties(connection, path).await? else {
+        return Err(HostdError::not_found(
+            "Paired Bluetooth device was not found",
+        ));
+    };
+    let Some(connect) = paired_gamepad_connect_policy(
+        device_type(string_property(&properties, "Icon").as_deref()),
+        bool_property(&properties, "Connected").unwrap_or(false),
+    ) else {
+        return Ok(());
+    };
+    set_property(connection, path, "org.bluez.Device1", "Trusted", true)
+        .await
+        .map_err(|_| {
+            HostdError::operation_failed("Gamepad paired, but automatic trust failed; retry trust")
+        })?;
+    if !connect {
+        return Ok(());
+    }
+    agent.begin_explicit_connect(path).await;
+    let result = device_call(connection, path, "Connect").await;
+    agent.end_explicit_connect(path).await;
+    result.map_err(|_| {
+        HostdError::operation_failed(
+            "Gamepad paired and trusted, but automatic connection failed; retry connection",
+        )
+    })
+}
+
+async fn device_properties(
+    connection: &Connection,
+    path: &str,
+) -> Result<Option<HashMap<String, OwnedVariant>>, HostdError> {
+    Ok(managed_objects(connection)
+        .await?
+        .into_iter()
+        .find(|(object_path, _)| object_path.as_str() == path)
+        .and_then(|(_, interfaces)| interfaces.get("org.bluez.Device1").cloned()))
+}
+
 async fn set_property<T>(
     connection: &Connection,
     path: &str,
@@ -1155,10 +1207,18 @@ fn device_type(icon: Option<&str>) -> &'static str {
         value if value.contains("audio") || value.contains("speaker") => "speaker",
         value if value.contains("keyboard") => "keyboard",
         value if value.contains("mouse") => "mouse",
-        value if value.contains("game") => "gamepad",
+        value
+            if value.contains("game") || value.contains("gaming") || value.contains("joystick") =>
+        {
+            "gamepad"
+        }
         value if value.contains("wearable") || value.contains("watch") => "wearable",
         _ => "unknown",
     }
+}
+
+fn paired_gamepad_connect_policy(device_type: &str, connected: bool) -> Option<bool> {
+    (device_type == "gamepad").then_some(!connected)
 }
 
 #[cfg(test)]
@@ -1356,6 +1416,26 @@ mod tests {
         assert!(service_authorized(true, false, true));
         assert!(!service_authorized(false, true, true));
         assert!(!service_authorized(true, false, false));
+    }
+
+    #[test]
+    fn only_gamepads_are_auto_trusted_and_connected_after_pairing() {
+        assert_eq!(
+            paired_gamepad_connect_policy(device_type(Some("input-gaming")), false),
+            Some(true)
+        );
+        assert_eq!(
+            paired_gamepad_connect_policy(device_type(Some("input-gaming")), true),
+            Some(false)
+        );
+        assert_eq!(
+            paired_gamepad_connect_policy(device_type(Some("input-keyboard")), false),
+            None
+        );
+        assert_eq!(
+            paired_gamepad_connect_policy(device_type(None), false),
+            None
+        );
     }
 
     #[test]

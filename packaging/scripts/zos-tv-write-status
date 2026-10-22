@@ -5,7 +5,7 @@ set -eu
 component=$1
 state=$2
 detail=$3
-case "$component" in weston|chromium|cec) ;; *) exit 64 ;; esac
+case "$component" in weston|chromium|cec|gamepad) ;; *) exit 64 ;; esac
 case "$state" in ready|degraded|unavailable) ;; *) exit 64 ;; esac
 
 status_dir=${ZOS_TV_STATUS_DIR:-/run/zos-tv/status}

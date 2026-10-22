@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bluetooth, Check, FileUp, FolderOpen, Headphones, Inbox, Laptop, LoaderCircle,
+  Bluetooth, Check, FileUp, FolderOpen, Gamepad2, Headphones, Inbox, Laptop, LoaderCircle,
   RefreshCw, Send, Shield, ShieldOff, Smartphone, Speaker, Unplug, Volume2, X
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -258,5 +258,6 @@ function deviceIcon(type: BluetoothStatus["devices"][number]["type"]) {
   if (type === "computer") return <Laptop aria-hidden="true" size={19} />;
   if (type === "speaker") return <Speaker aria-hidden="true" size={19} />;
   if (type === "headset") return <Headphones aria-hidden="true" size={19} />;
+  if (type === "gamepad") return <Gamepad2 aria-hidden="true" size={19} />;
   return <Bluetooth aria-hidden="true" size={19} />;
 }

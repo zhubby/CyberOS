@@ -37,6 +37,7 @@ describe("SettingsMediaContent", () => {
           chromium: { state: "ready", detail: "/tv/", updatedAt: "2026-10-21T00:00:00.000Z" },
           vodPlayer: { state: "ready", detail: "idle", updatedAt: "2026-10-21T00:00:00.000Z" },
           cec: { state: "degraded", detail: "Keyboard input remains available", updatedAt: "2026-10-21T00:00:00.000Z" },
+          gamepad: { state: "degraded", detail: "No supported gamepad connected", updatedAt: "2026-10-21T00:00:00.000Z" },
           updatedAt: "2026-10-21T00:00:00.000Z"
         }
       },

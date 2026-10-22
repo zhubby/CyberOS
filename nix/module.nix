@@ -556,7 +556,7 @@ in {
           zos-tv-prepare = {
             description = "Prepare the ZOS TV runtime";
             partOf = [ "zos-tv.target" ];
-            before = [ "zos-tv-weston.service" "zos-tv-chromium.service" "zos-tv-cec.service" ];
+            before = [ "zos-tv-weston.service" "zos-tv-chromium.service" "zos-tv-cec.service" "zos-tv-gamepad.service" ];
             path = runtimePath;
             environment = baseEnvironment;
             serviceConfig = {
@@ -654,6 +654,34 @@ in {
               PrivateDevices = false;
               DevicePolicy = "closed";
               DeviceAllow = [ "char-cec rw" ];
+              RestrictAddressFamilies = [ "AF_UNIX" ];
+              MemoryMax = "64M";
+              TasksMax = 32;
+            };
+          };
+          zos-tv-gamepad = {
+            description = "ZOS TV gamepad input";
+            partOf = [ "zos-tv.target" ];
+            requires = [ "zos-tv-prepare.service" ];
+            wants = [ "zos-tv-weston.service" ];
+            after = [ "zos-tv-prepare.service" "zos-tv-weston.service" ];
+            path = runtimePath;
+            environment = baseEnvironment // {
+              XDG_RUNTIME_DIR = "/run/zos-tv";
+              WAYLAND_DISPLAY = "wayland-0";
+              ZOS_TV_STATUS_WRITER = "${packageRoot}/scripts/zos-tv-write-status";
+            };
+            serviceConfig = hardenedService // {
+              ExecStart = "${packageRoot}/bin/zos-tv-gamepad";
+              SupplementaryGroups = [ "input" ];
+              Restart = "always";
+              RestartSec = "3s";
+              TimeoutStopSec = "10s";
+              ProtectHome = true;
+              ReadWritePaths = [ "/run/zos-tv" ];
+              PrivateDevices = false;
+              DevicePolicy = "closed";
+              DeviceAllow = [ "char-input r" ];
               RestrictAddressFamilies = [ "AF_UNIX" ];
               MemoryMax = "64M";
               TasksMax = 32;
@@ -798,7 +826,7 @@ in {
           "zos-tv-chromium.service"
           "zos-vod-player.service"
         ];
-        wants = [ "zos-tv-cec.service" ];
+        wants = [ "zos-tv-cec.service" "zos-tv-gamepad.service" ];
         after = [
           "zos-api.service"
           "zos-vod-player.service"

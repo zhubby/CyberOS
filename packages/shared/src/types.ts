@@ -413,6 +413,7 @@ export interface TvModeStatus {
   weston: TvComponentHealth;
   chromium: TvComponentHealth;
   cec: TvComponentHealth;
+  gamepad: TvComponentHealth;
   vodPlayer: TvComponentHealth;
   updatedAt: string;
 }

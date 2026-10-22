@@ -386,7 +386,7 @@ export function SettingsMediaContent({
             </strong>
           </header>
           <dl className="settings-tv-components">
-            {(["weston", "chromium", "vodPlayer", "cec"] as const).map((component) => {
+            {(["weston", "chromium", "vodPlayer", "cec", "gamepad"] as const).map((component) => {
               const health = data.tvStatus[component];
               return (
                 <div key={component}>

@@ -291,7 +291,7 @@ show_status() {
       process.stdin.on("data", (chunk) => { input += chunk; });
       process.stdin.on("end", () => {
         const value = JSON.parse(input).status;
-        for (const name of ["weston", "chromium", "vodPlayer", "cec"]) {
+        for (const name of ["weston", "chromium", "vodPlayer", "cec", "gamepad"]) {
           const component = value[name] ?? {};
           console.log(`${name}=${component.state ?? "unknown"}${component.detail ? ` (${component.detail})` : ""}`);
         }

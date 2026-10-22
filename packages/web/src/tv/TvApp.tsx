@@ -22,6 +22,7 @@ import { acceptVodPlayerStatus } from "../lib/vod-player-status.js";
 import {
   getMediaHome,
   getMediaTitle,
+  getTvModeStatus,
   getVodPlayerStatus,
   mediaArtworkUrl,
   playMediaFile,
@@ -29,7 +30,7 @@ import {
   sendVodPlayerCommand
 } from "./api.js";
 import type { PinyinImeElement } from "./pinyin-ime.js";
-import { isActiveVodPlayback, playbackCommandForKey, vodPlayerPollDelay } from "./player-controls.js";
+import { gamepadConnectionTransition, isActiveVodPlayback, playbackCommandForKey, vodPlayerPollDelay } from "./player-controls.js";
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 const VIRTUAL_KEYS = [
@@ -56,6 +57,24 @@ export function TvApp() {
   const playerStatusRef = useRef<VodPlayerStatus | null>(null);
   const playerWasActiveRef = useRef(false);
   const lastProgressRefreshRef = useRef(0);
+  const gamepadStateRef = useRef<"ready" | "degraded" | "unavailable" | null>(null);
+  const noticeTimeoutRef = useRef<number | null>(null);
+
+  const showNotice = useCallback((message: string, duration?: number) => {
+    if (noticeTimeoutRef.current) window.clearTimeout(noticeTimeoutRef.current);
+    noticeTimeoutRef.current = null;
+    setNotice(message);
+    if (duration !== undefined) {
+      noticeTimeoutRef.current = window.setTimeout(() => {
+        noticeTimeoutRef.current = null;
+        setNotice(null);
+      }, duration);
+    }
+  }, []);
+
+  useEffect(() => () => {
+    if (noticeTimeoutRef.current) window.clearTimeout(noticeTimeoutRef.current);
+  }, []);
 
   const loadHome = useCallback(async () => {
     try {
@@ -80,9 +99,9 @@ export function TvApp() {
       }
       window.requestAnimationFrame(() => focusFirst());
     } catch (loadError) {
-      setNotice(loadError instanceof Error ? loadError.message : t("tv.unavailableBody"));
+      showNotice(loadError instanceof Error ? loadError.message : t("tv.unavailableBody"));
     }
-  }, [t]);
+  }, [showNotice, t]);
 
   const applyPlayerStatus = useCallback((next: VodPlayerStatus) => {
     const accepted = acceptVodPlayerStatus(playerStatusRef.current, next);
@@ -110,14 +129,14 @@ export function TvApp() {
   }, [returnHome, searchOpen, view.kind]);
 
   const playFile = useCallback(async (file: MediaFileRecord, position?: number) => {
-    setNotice(t("tv.playing"));
+    showNotice(t("tv.playing"));
     try {
       applyPlayerStatus(await playMediaFile(file.id, position));
-      window.setTimeout(() => setNotice(null), 1_800);
+      showNotice(t("tv.playing"), 1_800);
     } catch (playError) {
-      setNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
+      showNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
     }
-  }, [applyPlayerStatus, t]);
+  }, [applyPlayerStatus, showNotice, t]);
 
   const playTitle = useCallback(async (summary: MediaTitleSummary) => {
     try {
@@ -127,9 +146,9 @@ export function TvApp() {
       if (!file) throw new Error(t("tv.playFailed"));
       await playFile(file, progress?.positionSeconds);
     } catch (playError) {
-      setNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
+      showNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
     }
-  }, [playFile, t]);
+  }, [playFile, showNotice, t]);
 
   useEffect(() => {
     void loadHome();
@@ -140,7 +159,7 @@ export function TvApp() {
 
   useEffect(() => {
     let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timer: number | undefined;
     const poll = async () => {
       try {
         const response = await getVodPlayerStatus();
@@ -150,15 +169,15 @@ export function TvApp() {
           lastProgressRefreshRef.current = Date.now();
           void loadHome();
         }
-        timer = setTimeout(poll, vodPlayerPollDelay(next));
+        timer = window.setTimeout(poll, vodPlayerPollDelay(next));
       } catch {
-        if (active) timer = setTimeout(poll, 5_000);
+        if (active) timer = window.setTimeout(poll, 5_000);
       }
     };
     void poll();
     return () => {
       active = false;
-      if (timer) clearTimeout(timer);
+      if (timer) window.clearTimeout(timer);
     };
   }, [applyPlayerStatus, loadHome]);
 
@@ -175,6 +194,30 @@ export function TvApp() {
     const timer = window.setInterval(() => setClock(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const status = await getTvModeStatus();
+        if (!active) return;
+        const transition = gamepadConnectionTransition(gamepadStateRef.current, status.gamepad.state);
+        gamepadStateRef.current = status.gamepad.state;
+        if (transition) {
+          showNotice(t(`tv.gamepad.${transition}`), 2_000);
+        }
+      } catch {
+        // Media and playback polling provide their own availability feedback.
+      }
+      if (active) timer = window.setTimeout(poll, 5_000);
+    };
+    void poll();
+    return () => {
+      active = false;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [showNotice, t]);
 
   useEffect(() => {
     const syncLocation = () => {
@@ -201,10 +244,11 @@ export function TvApp() {
       try {
         applyPlayerStatus(await sendVodPlayerCommand(command));
       } catch (commandError) {
-        setNotice(commandError instanceof Error ? commandError.message : t("tv.playFailed"));
+        showNotice(commandError instanceof Error ? commandError.message : t("tv.playFailed"));
       }
     },
     onBack: back,
+    onSearch: () => setSearchOpen(true),
     onPlay: () => {
       if (view.kind === "detail") {
         const progress = view.title.progress?.completed ? null : view.title.progress;
@@ -585,6 +629,7 @@ function useRemoteNavigation({
   playerStatus,
   onPlayerCommand,
   onBack,
+  onSearch,
   onPlay
 }: {
   sleeping: boolean;
@@ -592,12 +637,13 @@ function useRemoteNavigation({
   playerStatus: VodPlayerStatus | null;
   onPlayerCommand: (command: Exclude<VodPlayerCommand, { type: "play" }>) => void;
   onBack: () => void;
+  onSearch: () => void;
   onPlay: () => void;
 }) {
-  const current = useRef({ sleeping, setSleeping, playerStatus, onPlayerCommand, onBack, onPlay });
+  const current = useRef({ sleeping, setSleeping, playerStatus, onPlayerCommand, onBack, onSearch, onPlay });
   useEffect(() => {
-    current.current = { sleeping, setSleeping, playerStatus, onPlayerCommand, onBack, onPlay };
-  }, [onBack, onPlay, onPlayerCommand, playerStatus, setSleeping, sleeping]);
+    current.current = { sleeping, setSleeping, playerStatus, onPlayerCommand, onBack, onSearch, onPlay };
+  }, [onBack, onPlay, onPlayerCommand, onSearch, playerStatus, setSleeping, sleeping]);
 
   useEffect(() => {
     let idleTimer = window.setTimeout(() => current.current.setSleeping(true), IDLE_TIMEOUT_MS);
@@ -630,6 +676,12 @@ function useRemoteNavigation({
       if (["MediaPlayPause", "MediaPlay"].includes(event.key)) {
         event.preventDefault();
         state.onPlay();
+        return;
+      }
+      if (event.key === "F8") {
+        event.preventDefault();
+        event.stopPropagation();
+        state.onSearch();
         return;
       }
       if (event.key === "Enter") {

@@ -25,15 +25,16 @@ export function registerTvRoutes(
     const now = (dependencies.now ?? (() => new Date()))();
     const statusDirectory = dependencies.statusDirectory ?? DEFAULT_STATUS_DIRECTORY;
     const enabledMarker = dependencies.enabledMarker ?? DEFAULT_ENABLED_MARKER;
-    const [enabled, weston, chromium, cec, vodResult] = await Promise.all([
+    const [enabled, weston, chromium, cec, gamepad, vodResult] = await Promise.all([
       fileExists(enabledMarker),
       readComponentHealth(statusDirectory, "weston", now),
       readComponentHealth(statusDirectory, "chromium", now),
       readComponentHealth(statusDirectory, "cec", now),
+      readComponentHealth(statusDirectory, "gamepad", now),
       vodPlayer.getStatus().then(vodHealth).catch(() => unavailable("VOD Player is unavailable"))
     ]);
     return {
-      status: buildTvModeStatus({ enabled, weston, chromium, cec, vodPlayer: vodResult, now })
+      status: buildTvModeStatus({ enabled, weston, chromium, cec, gamepad, vodPlayer: vodResult, now })
     };
   });
 }
@@ -43,6 +44,7 @@ function buildTvModeStatus(input: {
   weston: TvComponentHealth;
   chromium: TvComponentHealth;
   cec: TvComponentHealth;
+  gamepad: TvComponentHealth;
   vodPlayer: TvComponentHealth;
   now: Date;
 }): TvModeStatus {

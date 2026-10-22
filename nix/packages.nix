@@ -40,7 +40,7 @@ let
         done
       fi
       for binary in zos-alerter zos-bluetoothd zos-downloader zos-host-accessd zos-hostd \
-        zos-indexer zos-monitor zos-photostaff zos-termux zos-vod-player; do
+        zos-indexer zos-monitor zos-photostaff zos-termux zos-tv-gamepad zos-vod-player; do
         install -Dm755 "$releaseDir/$binary" "$out/lib/zos/bin/$binary"
       done
       runHook postInstall

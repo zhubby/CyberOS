@@ -122,6 +122,38 @@ player protocol, then reversible kiosk packaging and CM5 validation.
 - Nix evaluation and real CM5 DRM/CEC/4K validation remain release-environment
   checks because this macOS host has neither Nix nor the target hardware.
 
+### 2026-10-22 - Gamepad Input Extension
+
+**By:** Goose
+
+**Actions:**
+- Added `crates/tv-gamepad` (`zos-tv-gamepad`): an evdev reader that scans
+  `/dev/input/event*` every second, detects supported gamepads by capability
+  (BTN_SOUTH/BTN_EAST plus a stick, hat, or D-pad buttons), and injects XKB keys
+  into the Wayland session with `wtype`.
+- Mapped D-pad/left stick to navigation with 0.55/0.35 hysteresis and
+  350ms/120ms repeat; A to Return, B to Escape, LB/RB to F6/F7 seek, X/Y to
+  F9/F10 track cycling, Menu to F8 search.
+- Extended `mpv-input.conf` and `player-controls.ts` so both playback paths
+  (mpv surface and Chromium shell) honor the same F-key commands, and made
+  Enter toggle pause and Arrow up/down cycle tracks during active playback.
+- Published `gamepad` as a fifth non-fatal TV status component through
+  `/api/tv/status`, the media settings page, and `zos-tv-mode status`, with
+  connect/disconnect notices in the TV shell.
+- Hardened hostd Bluetooth pairing to auto-trust and connect only devices BlueZ
+  classifies as gamepads, and widened `device_type` to `gaming`/`joystick` icons.
+- Wired `zos-tv-gamepad.service` through Debian, appliance, and Nix packaging,
+  added `wtype`-only injection (no `/dev/uinput`, `AF_UNIX` only, `input` group),
+  and fixed the CEC trap so signals exit 0 instead of failing the unit.
+- Moved Weston off `/dev/tty1` (`--tty=1` and TTY unit options removed) and
+  allowed `AF_NETLINK` for DRM/KMS, giving CAP_NET_ADMIN to the CEC service.
+
+**Learnings:**
+- Injecting synthesized XKB keys avoids `/dev/uinput` and keeps the service
+  unprivileged; the tradeoff is that the compositor must own input focus.
+- `Requires=` on the TV target does not stop children, so the gamepad unit also
+  declares `PartOf=` to follow target teardown.
+
 ## Notes
 
 - Existing uncommitted VOD, Bluetooth, and MCP work must be preserved.

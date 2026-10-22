@@ -25,6 +25,7 @@ describe("TV status API", () => {
     await writeHealth(statusDirectory, "weston", "ready", "wayland-0", now);
     await writeHealth(statusDirectory, "chromium", "ready", "/tv/", now);
     await writeHealth(statusDirectory, "cec", "degraded", "No CEC adapter", now);
+    await writeHealth(statusDirectory, "gamepad", "degraded", "No supported gamepad connected", now);
     const server = createServer(statusDirectory, enabledMarker, now);
 
     const response = await server.inject({ method: "GET", url: "/api/tv/status" });
@@ -35,6 +36,7 @@ describe("TV status API", () => {
       weston: expect.objectContaining({ state: "ready" }),
       chromium: expect.objectContaining({ state: "ready" }),
       cec: expect.objectContaining({ state: "degraded" }),
+      gamepad: expect.objectContaining({ state: "degraded" }),
       vodPlayer: expect.objectContaining({ state: "ready" })
     }));
     await server.close();
@@ -47,13 +49,32 @@ describe("TV status API", () => {
     await mkdir(statusDirectory);
     await writeFile(enabledMarker, "enabled\n");
     const stale = new Date("2026-10-21T07:00:00.000Z");
-    for (const component of ["weston", "chromium", "cec"]) {
+    for (const component of ["weston", "chromium", "cec", "gamepad"]) {
       await writeHealth(statusDirectory, component, "ready", null, stale);
     }
     const server = createServer(statusDirectory, enabledMarker, new Date("2026-10-21T08:00:00.000Z"));
     const status = (await server.inject({ method: "GET", url: "/api/tv/status" })).json().status;
     expect(status.state).toBe("degraded");
     expect(status.weston).toEqual(expect.objectContaining({ state: "unavailable", detail: "weston heartbeat is stale" }));
+    expect(status.gamepad).toEqual(expect.objectContaining({ state: "unavailable", detail: "gamepad heartbeat is stale" }));
+    await server.close();
+  });
+
+  it("keeps unavailable gamepad input non-fatal", async () => {
+    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-tv-status-"));
+    const statusDirectory = path.join(temporaryDirectory, "status");
+    const enabledMarker = path.join(temporaryDirectory, "enabled");
+    await mkdir(statusDirectory);
+    await writeFile(enabledMarker, "enabled\n");
+    const now = new Date("2026-10-21T08:00:00.000Z");
+    await writeHealth(statusDirectory, "weston", "ready", null, now);
+    await writeHealth(statusDirectory, "chromium", "ready", null, now);
+    await writeHealth(statusDirectory, "cec", "degraded", null, now);
+    const server = createServer(statusDirectory, enabledMarker, now);
+
+    const status = (await server.inject({ method: "GET", url: "/api/tv/status" })).json().status;
+    expect(status.state).toBe("ready");
+    expect(status.gamepad).toEqual(expect.objectContaining({ state: "unavailable" }));
     await server.close();
   });
 });

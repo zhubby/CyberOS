@@ -75,17 +75,21 @@ sudo zos-tv-mode disable
 
 ### 健康与输入
 
-媒体设置页展示 TV 总体状态及 Weston、Chromium、VOD、CEC 四个组件。命令行检查：
+媒体设置页展示 TV 总体状态及 Weston、Chromium、VOD、CEC、Gamepad 五个组件。命令行检查：
 
 ```bash
 curl -fsS http://127.0.0.1:3010/api/tv/status
 sudo systemctl status zos-tv.target zos-tv-weston.service zos-tv-chromium.service \
-  zos-vod-player.service zos-tv-cec.service --no-pager
+  zos-vod-player.service zos-tv-cec.service zos-tv-gamepad.service --no-pager
 sudo journalctl -u zos-tv-weston.service -u zos-tv-chromium.service \
-  -u zos-vod-player.service -u zos-tv-cec.service -n 200 --no-pager
+  -u zos-vod-player.service -u zos-tv-cec.service -u zos-tv-gamepad.service -n 200 --no-pager
 ```
 
-CEC 缺失只会使遥控输入降级，不会判定 TV 模式失败。USB/无线键盘始终可作为回退：方向键移动焦点，Enter 选择，Escape/Back 停止播放或返回，空格/媒体播放键切换暂停，左右键在播放中前后跳 10 秒，`A`/`S` 切换音轨/字幕。ZOS 不会在首版自动切换电视输入源或控制 HDMI 电源。
+CEC 和手柄输入都是可选组件；未连接 CEC 电视或未打开手柄只会显示降级，不会判定 TV 模式失败。USB/无线键盘始终可作为回退：方向键移动焦点，Enter 选择，Escape/Back 停止播放或返回，空格/媒体播放键切换暂停，左右键在播放中前后跳 10 秒，`A`/`S` 切换音轨/字幕。ZOS 不会在首版自动切换电视输入源或控制 HDMI 电源。
+
+Xbox Series、Xbox One S 及其他提供标准 Linux evdev 手柄能力的蓝牙或 USB 手柄由 `zos-tv-gamepad.service` 读取。首次蓝牙扫描和配对仍在 Web 的“设置 > 蓝牙”完成，不会在 TV 首屏自动扫描；BlueZ 将设备识别为 gamepad 且配对成功后，hostd 会设为受信任并尝试连接。自动连接失败不会撤销配对或信任，可在同一设置页重试连接。
+
+首版手柄映射如下：D-pad/左摇杆用于方向导航；A 确认或播放/暂停；B 返回或停止；LB/RB 在播放中后退/前进 10 秒；X/Y 切换音轨/字幕；Menu 打开媒体库搜索。休眠遮罩出现时，第一次手柄输入只唤醒屏幕。Guide、View、扳机、右摇杆、震动和电量暂不处理。手柄关闭、休眠或重新打开后服务会自动移除或重新打开 evdev 节点，无需重启 TV 模式。
 
 ### 4K SDR 验收
 

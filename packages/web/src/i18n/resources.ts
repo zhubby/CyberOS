@@ -74,7 +74,11 @@ export const en = {
     keyboardSpace: "Select",
     keyboardDelete: "Delete",
     keyboardLanguage: "Chinese / English",
-    sleep: "Display sleeping"
+    sleep: "Display sleeping",
+    gamepad: {
+      connected: "Gamepad connected",
+      disconnected: "Gamepad disconnected"
+    }
   },
   notifications: {
     errorTitle: "Error",
@@ -2185,7 +2189,8 @@ export const en = {
         weston: "Weston",
         chromium: "Chromium shell",
         vodPlayer: "VOD Player",
-        cec: "HDMI-CEC"
+        cec: "HDMI-CEC",
+        gamepad: "Gamepad input"
       },
       componentStates: {
         ready: "Ready",
@@ -2873,7 +2878,11 @@ export const zhCN = {
     keyboardSpace: "选词",
     keyboardDelete: "删除",
     keyboardLanguage: "中 / 英",
-    sleep: "显示器休眠"
+    sleep: "显示器休眠",
+    gamepad: {
+      connected: "手柄已连接",
+      disconnected: "手柄已断开"
+    }
   },
   notifications: {
     errorTitle: "错误",
@@ -4984,7 +4993,8 @@ export const zhCN = {
         weston: "Weston",
         chromium: "Chromium 界面",
         vodPlayer: "VOD 播放器",
-        cec: "HDMI-CEC"
+        cec: "HDMI-CEC",
+        gamepad: "手柄输入"
       },
       componentStates: {
         ready: "正常",
