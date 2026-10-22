@@ -1,6 +1,6 @@
 [package]
 name = "zos-hostd"
-version = "1.5.10"
+version = "1.5.11"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
