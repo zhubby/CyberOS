@@ -1,3 +1,9 @@
+zos (1.5.19) unstable; urgency=medium
+
+  * Fix clean shutdown and restoration of the TV appliance runtime during upgrades.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 22 Oct 2026 11:48:16 +0000
+
 zos (1.5.18) unstable; urgency=medium
 
   * Restore the CM5 TV session after package upgrades and make Weston and Chromium shutdown cleanly.
