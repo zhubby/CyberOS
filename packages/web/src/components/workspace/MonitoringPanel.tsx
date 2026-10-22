@@ -244,19 +244,18 @@ function MonitoringPanelContent({ locale }: { locale: SupportedLocale }) {
         </PanelHeaderActions>}
       />
 
-      <nav className="monitoring-view-tabs" role="tablist" aria-label={t("workspace.monitoring.tabs.label")}>
+      <nav className="view-tabs monitoring-view-tabs" role="tablist" aria-label={t("workspace.monitoring.tabs.label")}>
         {(["overview", "rules", "incidents"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
             role="tab"
             aria-selected={view === tab}
-            className={view === tab ? "is-active" : ""}
             onClick={() => setView(tab)}
           >
             {t(`workspace.monitoring.tabs.${tab}`)}
             {tab === "incidents" && overview?.alerts?.unreadCount ? (
-              <span aria-label={t("workspace.monitoring.alerts.unread", { count: overview.alerts.unreadCount })}>
+              <span className="view-tab-badge is-alert" aria-label={t("workspace.monitoring.alerts.unread", { count: overview.alerts.unreadCount })}>
                 {overview.alerts.unreadCount > 99 ? "99+" : overview.alerts.unreadCount}
               </span>
             ) : null}

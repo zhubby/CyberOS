@@ -1,52 +1,5 @@
 .monitoring-view-tabs {
-  display: flex;
-  min-height: 38px;
-  padding: 0 18px;
-  gap: 18px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.monitoring-view-tabs button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 2px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-family: var(--font-emphasis);
-  font-weight: 650;
-}
-
-.monitoring-view-tabs button::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  content: "";
-  background: transparent;
-}
-
-.monitoring-view-tabs button.is-active {
-  color: var(--text);
-}
-
-.monitoring-view-tabs button.is-active::after {
-  background: var(--accent);
-}
-
-.monitoring-view-tabs button > span {
-  min-width: 18px;
-  padding: 1px 4px;
-  border-radius: 6px;
-  background: var(--danger-soft);
-  color: var(--danger-text);
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
+  flex: 0 0 auto;
 }
 
 .monitoring-alert-page {
@@ -760,7 +713,6 @@
 }
 
 @media (max-width: 620px) {
-  .monitoring-view-tabs,
   .monitoring-alert-page {
     padding-right: 12px;
     padding-left: 12px;

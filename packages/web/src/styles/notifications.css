@@ -22,40 +22,7 @@
 }
 
 .notification-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.notification-tabs button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  min-height: 38px;
-  padding: 7px 10px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  color: var(--muted-2);
-  background: transparent;
-}
-
-.notification-tabs button[aria-selected="true"] {
-  border-bottom-color: var(--accent);
-  color: var(--text);
-  background: var(--accent-soft-bg);
-}
-
-.notification-tabs button span {
-  min-width: 19px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  color: var(--muted);
-  background: var(--surface);
-  font-size: 10px;
-  line-height: 1.5;
+  flex: 0 0 auto;
 }
 
 .notification-drawer-header {

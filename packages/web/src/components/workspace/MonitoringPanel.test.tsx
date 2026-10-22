@@ -19,6 +19,8 @@ describe("MonitoringPanel", () => {
     const html = renderToStaticMarkup(createElement(MonitoringPanel, { locale: "en" }));
 
     expect(html).toContain("Monitoring");
+    expect(html).toContain('class="view-tabs monitoring-view-tabs"');
+    expect(html).toContain('role="tab" aria-selected="true">Overview</button>');
     for (const label of ["1h", "6h", "24h", "7d", "30d", "1y"]) {
       expect(html).toContain(`>${label}</button>`);
     }

@@ -166,15 +166,15 @@ export function NotificationCenter({
           <span>{t("notifications.center.unreadCount", { count: unreadCount })}</span>
         </div>
 
-        <div className="notification-tabs" role="tablist" aria-label={t("notifications.center.tabs.label")}>
+        <div className="view-tabs notification-tabs" role="tablist" aria-label={t("notifications.center.tabs.label")}>
           <button type="button" role="tab" aria-selected={activeTab === "operations"} onClick={() => setActiveTab("operations")}>
-            {t("notifications.center.tabs.operations")}<span>{operationUnreadCount}</span>
+            {t("notifications.center.tabs.operations")}<span className="view-tab-badge">{operationUnreadCount}</span>
           </button>
           <button type="button" role="tab" aria-selected={activeTab === "bluetooth"} onClick={() => setActiveTab("bluetooth")}>
-            {t("notifications.center.tabs.bluetooth")}<span>{bluetoothUnreadCount}</span>
+            {t("notifications.center.tabs.bluetooth")}<span className="view-tab-badge">{bluetoothUnreadCount}</span>
           </button>
           <button type="button" role="tab" aria-selected={activeTab === "alerts"} onClick={() => setActiveTab("alerts")}>
-            {t("notifications.center.tabs.alerts")}<span>{alertUnreadCount}</span>
+            {t("notifications.center.tabs.alerts")}<span className="view-tab-badge">{alertUnreadCount}</span>
           </button>
         </div>
 
