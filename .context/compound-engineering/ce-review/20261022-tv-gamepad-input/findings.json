@@ -1,0 +1,49 @@
+{
+  "runId": "20261022-tv-gamepad-input",
+  "mode": "autofix",
+  "base": "d68d39100c176bab5cc751df9614ca4f6eaa3979",
+  "head": "working-tree",
+  "intent": "Add optional Bluetooth and USB gamepad input to ZOS TV mode through evdev and wtype, preserve keyboard and CEC behavior, expose non-fatal component health, and package the service for Debian, appliance, and Nix deployments.",
+  "scope": {
+    "trackedFiles": 35,
+    "trackedInsertions": 458,
+    "trackedDeletions": 67,
+    "untrackedImplementationFilesManuallyReviewed": [
+      "crates/tv-gamepad/Cargo.toml",
+      "crates/tv-gamepad/src/lib.rs",
+      "crates/tv-gamepad/src/main.rs",
+      "packaging/systemd/zos-tv-gamepad.service"
+    ]
+  },
+  "findings": [],
+  "appliedFixes": [
+    "separated transient Wayland preflight health from injection failures so a compositor that becomes ready after service startup can recover",
+    "centralized TV shell notice timer ownership so a gamepad transition cannot clear a later playback error",
+    "made full-width i32 axis normalization overflow-safe and added an extreme-range regression test",
+    "bounded the evdev event queue and added a two-second wtype timeout with child-process cleanup",
+    "replaced the synthetic wtype recovery assertion with a real failing-then-succeeding executable test"
+  ],
+  "residualActionableWork": [],
+  "advisories": [
+    {
+      "owner": "release",
+      "summary": "CM5 validation with a real Xbox Series or Xbox One S controller remains required for BlueZ pairing, Trusted and Connected state, reconnect behavior, evdev permissions, Wayland key injection, and simultaneous CEC and keyboard input."
+    },
+    {
+      "owner": "linux-ci",
+      "summary": "Nix is not installed on the local macOS host, so native Linux nix flake check and the NixOS VM test remain authoritative."
+    }
+  ],
+  "verification": {
+    "cargoWorkspace": "passed as part of make ci",
+    "vitest": "passed as part of make ci",
+    "typecheck": "passed as part of make ci",
+    "lint": "passed as part of make ci",
+    "build": "passed as part of make ci",
+    "makeCi": "passed",
+    "nix": "not run: nix is not installed on this host",
+    "browser": "pending browser mode selection",
+    "diffCheck": "passed before artifact creation"
+  },
+  "verdict": "ready_for_browser_and_cm5_hardware_validation"
+}
