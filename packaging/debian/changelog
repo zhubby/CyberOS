@@ -1,3 +1,9 @@
+zos (1.5.12) unstable; urgency=medium
+
+  * Secure the shared NixOS state root so tmpfiles can create hostd state.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 22 Oct 2026 01:09:23 +0000
+
 zos (1.5.11) unstable; urgency=medium
 
   * Require tmpfiles setup before hardened hostd startup.
