@@ -97,7 +97,10 @@ let
       mkdir -p $out/lib/zos/node_modules/@earendil-works
       ln -s ../../packages/agent/node_modules/@earendil-works/pi-coding-agent \
         $out/lib/zos/node_modules/@earendil-works/pi-coding-agent
-      node -e "require.resolve('@earendil-works/pi-coding-agent', { paths: ['$out/lib/zos/apps/worker/dist'] })"
+      dependencyCheck=$out/lib/zos/apps/worker/dist/.dependency-check.mjs
+      printf '%s\n' "import.meta.resolve('@earendil-works/pi-coding-agent');" > "$dependencyCheck"
+      node "$dependencyCheck"
+      rm "$dependencyCheck"
       install -Dm644 package.json package-lock.json .zos/build-info.json -t $out/lib/zos
       for script in zos-tv-mode zos-tv-prepare zos-tv-weston zos-tv-chromium zos-tv-cec zos-tv-write-status; do
         install -Dm755 "packaging/scripts/$script" "$out/lib/zos/scripts/$script"

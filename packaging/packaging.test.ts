@@ -27,7 +27,7 @@ describe("native packaging artifacts", () => {
     expect(packages).toContain(
       "../../packages/agent/node_modules/@earendil-works/pi-coding-agent"
     );
-    expect(packages).toContain("require.resolve('@earendil-works/pi-coding-agent'");
+    expect(packages).toContain("import.meta.resolve('@earendil-works/pi-coding-agent')");
     expect(packages).toContain("nativeBuildInputs = [ pkgs.coreutils pkgs.pkg-config ];");
     expect(packages).toContain("for candidate in target/*/release; do");
     expect(packages).toContain('SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";');
