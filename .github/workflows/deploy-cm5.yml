@@ -778,6 +778,31 @@ jobs:
             return 1
           }
 
+          wait_for_alerter_ready() {
+            status_path="$check_dir/monitoring-overview.json"
+            attempt=1
+            while [ "$attempt" -le 30 ]; do
+              if curl --fail --silent --show-error --max-time 15 \
+                http://127.0.0.1:3010/api/monitoring/overview > "$status_path" && \
+                node - "$status_path" <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const lastEvaluationAt = Date.parse(payload?.alerts?.lastEvaluationAt ?? "");
+          const ready = payload?.alerts?.alerterStatus === "ready" &&
+            Number.isFinite(lastEvaluationAt) && Date.now() - lastEvaluationAt <= 30_000;
+          process.exit(ready ? 0 : 1);
+          NODE
+              then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            printf 'alerter did not complete a recent evaluation after database checks\n' >&2
+            [ ! -s "$status_path" ] || cat "$status_path" >&2
+            return 1
+          }
+
           for unit in \
             zos-api.service \
             zos-monitor.service \
@@ -838,11 +863,13 @@ jobs:
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/roots/readiness > "$check_dir/readiness.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/health > "$check_dir/system-health.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/monitoring/overview > "$check_dir/monitoring-overview.json"
           wait_for_indexer_ready
 
           database_check="$(sudo -n /usr/local/sbin/zos-deploy --database-check)"
           [ "$database_check" = ok ]
+          # Database verification can take long enough to make an earlier overview
+          # snapshot stale even while the alerter is healthy. Capture it last.
+          wait_for_alerter_ready
 
           node - "$check_dir/build-info.json" "$expected_version" "$expected_commit_sha" <<'NODE'
           const fs = require("node:fs");
@@ -946,6 +973,12 @@ jobs:
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s <<'REMOTE'
           set -u
           for endpoint in \
+            /health \
+            /api/system/build-info \
+            /api/roots/readiness \
+            /api/system/health \
+            /api/indexer/status \
+            /api/monitoring/overview \
             /api/settings/shares \
             /api/roots \
             /api/shares/summary; do
@@ -954,6 +987,42 @@ jobs:
               "http://127.0.0.1:3010$endpoint" || true
             printf '\n'
           done
+          printf '\n===== ZOS service state =====\n'
+          systemctl show \
+            zos-api.service \
+            zos-monitor.service \
+            zos-alerter.service \
+            zos-worker@1.service \
+            zos-indexer.service \
+            zos-photostaff.service \
+            zos-downloader.service \
+            zos-hostd.service \
+            zos-termux.service \
+            --property=Id,ActiveState,SubState,MainPID,NRestarts,ExecMainStatus || true
+          printf '\n===== ZOS service status =====\n'
+          systemctl status \
+            zos-api.service \
+            zos-monitor.service \
+            zos-alerter.service \
+            zos-worker@1.service \
+            zos-indexer.service \
+            zos-photostaff.service \
+            zos-downloader.service \
+            zos-hostd.service \
+            zos-termux.service \
+            --no-pager --full || true
+          printf '\n===== ZOS service journal =====\n'
+          journalctl \
+            -u zos-api.service \
+            -u zos-monitor.service \
+            -u zos-alerter.service \
+            -u zos-worker@1.service \
+            -u zos-indexer.service \
+            -u zos-photostaff.service \
+            -u zos-downloader.service \
+            -u zos-hostd.service \
+            -u zos-termux.service \
+            -n 300 --no-pager || true
           printf '\n===== share service status =====\n'
           systemctl status \
             smbd.service \

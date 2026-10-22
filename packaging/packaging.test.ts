@@ -543,6 +543,10 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("systemctl restart zos-monitor.service");
     expect(installer).toContain("systemctl restart zos-alerter.service");
     expect(installer).toContain("systemctl start zos-health.service");
+    expect(deployWorkflow).toContain("wait_for_alerter_ready");
+    expect(deployWorkflow).toContain("after database checks");
+    expect(deployWorkflow).toContain("===== ZOS service journal =====");
+    expect(deployWorkflow).toContain("-u zos-alerter.service");
     expect(buildDeb).toContain("registry.npmmirror.com");
     expect(buildDeb).toContain("ZOS_BUILD_COMMIT_SHA");
     expect(buildDeb).toContain("ZOS_BUILD_DIRTY");
