@@ -313,6 +313,7 @@ in {
               ++ lib.optional cfg.components.bluetooth.enable "bluetooth.service";
             before = [ "network-online.target" ];
             wants = lib.optional cfg.components.bluetooth.enable "bluetooth.service";
+            requires = [ "systemd-tmpfiles-setup.service" ];
             serviceConfig = {
               TimeoutStopSec = "180s";
               ReadWritePaths = [
