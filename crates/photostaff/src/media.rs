@@ -611,24 +611,34 @@ async fn render_derivative(
     crop: Option<&str>,
     quality: u8,
 ) -> Result<(), PhotostaffError> {
+    let arguments = derivative_arguments(input, output, size, crop, quality);
+    runner
+        .run("vipsthumbnail", &arguments, Some(source), limits)
+        .await?;
+    Ok(())
+}
+
+fn derivative_arguments(
+    input: &Path,
+    output: &Path,
+    size: &str,
+    crop: Option<&str>,
+    quality: u8,
+) -> Vec<String> {
     let mut arguments = vec![
         input.to_string_lossy().into_owned(),
         "--size".into(),
         size.into(),
         "--rotate".into(),
-        "--strip".into(),
     ];
     if let Some(crop) = crop {
-        arguments.extend(["--crop".into(), crop.into()]);
+        arguments.push(format!("--crop={crop}"));
     }
     arguments.extend([
         "--output".into(),
-        format!("{}[Q={quality}]", output.display()),
+        format!("{}[Q={quality},strip]", output.display()),
     ]);
-    runner
-        .run("vipsthumbnail", &arguments, Some(source), limits)
-        .await?;
-    Ok(())
+    arguments
 }
 
 async fn validate_derivative(
@@ -1354,6 +1364,28 @@ mod tests {
         assert_eq!(
             derivative_input(None, "image/jpeg"),
             PathBuf::from(child_media_path())
+        );
+    }
+
+    #[test]
+    fn builds_debian_compatible_vipsthumbnail_arguments() {
+        assert_eq!(
+            derivative_arguments(
+                Path::new("/proc/self/fd/198"),
+                Path::new("/cache/thumbnail.webp"),
+                "512x512",
+                Some("attention"),
+                80,
+            ),
+            vec![
+                "/proc/self/fd/198",
+                "--size",
+                "512x512",
+                "--rotate",
+                "--crop=attention",
+                "--output",
+                "/cache/thumbnail.webp[Q=80,strip]",
+            ]
         );
     }
 
