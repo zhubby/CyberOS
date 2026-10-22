@@ -162,10 +162,13 @@ describe("native packaging artifacts", () => {
     const tvWestonScript = await readPackagingFile("scripts", "zos-tv-weston");
     expect(tvWestonScript).toContain("--backend=drm-backend.so");
     expect(tvWestonScript).not.toMatch(/--tty(?:=|\s)/);
+    expect(tvWestonScript).toContain("trap terminate HUP INT TERM");
     const tvChromium = await readPackagingFile("systemd", "zos-tv-chromium.service");
     expect(tvChromium).toContain("PartOf=zos-tv.target");
     expect(tvChromium).toContain("IPAddressAllow=localhost");
     expect(tvChromium).not.toContain("--no-sandbox");
+    await expect(readPackagingFile("scripts", "zos-tv-chromium"))
+      .resolves.toContain("trap terminate HUP INT TERM");
     const tvCec = await readPackagingFile("systemd", "zos-tv-cec.service");
     expect(tvCec).toContain("PartOf=zos-tv.target");
     expect(tvCec).toContain("CapabilityBoundingSet=CAP_NET_ADMIN");
@@ -845,6 +848,10 @@ describe("native packaging artifacts", () => {
       deploy.lastIndexOf('/usr/lib/zos/scripts/zos-deploy --activate-runtime "$work_dir" "$state_dir"')
     );
     expect(deploy).toContain("restore_unit_state \"$unit\" \"$state_dir\"");
+    expect(deploy).toContain('STATEFUL_RUNTIME_UNITS="$TV_RUNTIME_TARGET $TIMERS $WRITERS"');
+    expect(deploy).toContain(': > "$state_dir/$unit.recorded"');
+    expect(deploy).toContain('restore_tv_runtime_state "$state_dir"');
+    expect(deploy).toContain('[ ! -f "$state_dir/$TV_RUNTIME_TARGET.recorded" ]');
     expect(deploy).toContain("activate_runtime");
     expect(deploy).not.toContain("systemctl restart $RUNTIME_SERVICES");
     expect(deploy).not.toContain("systemctl enable --now $TIMERS");
@@ -855,7 +862,7 @@ describe("native packaging artifacts", () => {
       deploy.indexOf("\nverify_runtime() {")
     );
     const activationOrder = [
-      "for unit in $TIMERS $WRITERS; do",
+      "for unit in $STATEFUL_RUNTIME_UNITS; do",
       "systemctl enable $RUNTIME_SERVICES",
       "start_service_stably zos-hostd.service",
       "start_service_stably zos-termux.service",

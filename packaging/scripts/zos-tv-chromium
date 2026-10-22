@@ -11,9 +11,17 @@ cleanup() {
   if [ -n "$chromium_pid" ]; then
     kill "$chromium_pid" 2>/dev/null || true
     wait "$chromium_pid" 2>/dev/null || true
+    chromium_pid=
   fi
 }
-trap cleanup EXIT HUP INT TERM
+
+terminate() {
+  cleanup
+  exit 0
+}
+
+trap cleanup EXIT
+trap terminate HUP INT TERM
 
 chromium_bin=$(command -v chromium || command -v chromium-browser || true)
 if [ -z "$chromium_bin" ]; then

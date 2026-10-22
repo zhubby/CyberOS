@@ -18,7 +18,9 @@ CORE_RUNTIME_SERVICES='zos-hostd.service zos-termux.service zos-api.service zos-
 RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES zos-monitor.service zos-alerter.service"
 SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'
 OPTIONAL_RUNTIME_SERVICES='zos-host-accessd.service'
+TV_RUNTIME_TARGET=zos-tv.target
 WRITERS="zos-indexer.service zos-maintenance.service zos-health.service zos-backup-daily.service zos-backup-weekly.service $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES zos-vod-player.service"
+STATEFUL_RUNTIME_UNITS="$TV_RUNTIME_TARGET $TIMERS $WRITERS"
 
 success=0
 work_dir=
@@ -50,11 +52,29 @@ record_unit_state() {
   unit=$1
   state_dir=$2
   unit_exists "$unit" || return 0
+  : > "$state_dir/$unit.recorded"
   if systemctl is-enabled --quiet "$unit" 2>/dev/null; then
     : > "$state_dir/$unit.enabled"
   fi
   if systemctl is-active --quiet "$unit" 2>/dev/null; then
     : > "$state_dir/$unit.active"
+  fi
+}
+
+restore_tv_runtime_state() {
+  state_dir=$1
+  unit_exists "$TV_RUNTIME_TARGET" || return 0
+
+  if [ -f "$state_dir/$TV_RUNTIME_TARGET.active" ]; then
+    systemctl start "$TV_RUNTIME_TARGET"
+  elif [ ! -f "$state_dir/$TV_RUNTIME_TARGET.recorded" ] && \
+       [ -f /etc/zos/tv-mode/enabled ] && \
+       systemctl is-enabled --quiet "$TV_RUNTIME_TARGET" 2>/dev/null; then
+    # Releases before 1.5.18 did not snapshot the TV target. Preserve an
+    # enabled appliance session during the first upgrade to the fixed helper.
+    systemctl start "$TV_RUNTIME_TARGET"
+  else
+    systemctl stop "$TV_RUNTIME_TARGET" >/dev/null 2>&1 || true
   fi
 }
 
@@ -258,7 +278,7 @@ activate_runtime() {
   state_dir=$1
 
   log "stopping ZOS writers before runtime activation"
-  for unit in $TIMERS $WRITERS; do
+  for unit in $STATEFUL_RUNTIME_UNITS; do
     stop_unit "$unit"
   done
 
@@ -299,6 +319,9 @@ activate_runtime() {
   log "enabling ZOS schedules"
   systemctl enable $TIMERS
   systemctl start $TIMERS
+
+  log "restoring the TV appliance session"
+  restore_tv_runtime_state "$state_dir"
 }
 
 verify_runtime() {
@@ -469,6 +492,7 @@ capture_failure() {
       for unit in $WRITERS $TIMERS; do
         restore_unit_state "$unit" "$state_dir" >/dev/null 2>&1 || true
       done
+      restore_tv_runtime_state "$state_dir" >/dev/null 2>&1 || true
     fi
   fi
   trap - EXIT
@@ -634,7 +658,7 @@ if [ "$installed_status" = "install ok installed" ]; then
       install -d -o root -g root -m 0700 "$failure_dir"
     fi
     install -d -o root -g root -m 0700 "$state_dir"
-    for unit in $TIMERS $WRITERS; do
+    for unit in $STATEFUL_RUNTIME_UNITS; do
       record_unit_state "$unit" "$state_dir"
     done
     if [ "$create_upgrade_backup" -eq 1 ]; then
@@ -669,7 +693,7 @@ else
   install -d -o root -g root -m 0700 "$failure_dir"
 fi
 
-for unit in $TIMERS $WRITERS; do
+for unit in $STATEFUL_RUNTIME_UNITS; do
   record_unit_state "$unit" "$state_dir"
 done
 if [ "$create_upgrade_backup" -eq 1 ]; then
@@ -696,7 +720,7 @@ NODE
 fi
 
 log "stopping scheduled writers and services"
-for unit in $TIMERS $WRITERS; do
+for unit in $STATEFUL_RUNTIME_UNITS; do
   stop_unit "$unit"
 done
 

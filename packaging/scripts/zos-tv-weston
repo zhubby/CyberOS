@@ -10,9 +10,17 @@ cleanup() {
   if [ -n "$weston_pid" ]; then
     kill "$weston_pid" 2>/dev/null || true
     wait "$weston_pid" 2>/dev/null || true
+    weston_pid=
   fi
 }
-trap cleanup EXIT HUP INT TERM
+
+terminate() {
+  cleanup
+  exit 0
+}
+
+trap cleanup EXIT
+trap terminate HUP INT TERM
 
 if ! command -v weston >/dev/null 2>&1; then
   "$status_writer" weston unavailable "Weston is not installed"
