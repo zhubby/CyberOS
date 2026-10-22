@@ -1,6 +1,6 @@
 {
   "name": "@zos/shared",
-  "version": "1.5.14",
+  "version": "1.5.15",
   "type": "module",
   "exports": {
     ".": {
