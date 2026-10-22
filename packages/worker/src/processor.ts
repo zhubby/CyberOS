@@ -9,6 +9,7 @@ import {
   appendEvent,
   claimNextCapabilityContinuation,
   claimNextJob,
+  clearAgentProviderSession,
   agentCapabilityPolicyToPiToolPolicy,
   defaultAgentCapabilityPolicySettings,
   getAgentProviderSession,
@@ -75,6 +76,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
     const currentJob = getJob(db, job.id);
     return !currentJob || currentJob.status === "cancelled";
   };
+  let providerSessionSavedThisTurn: string | null = null;
 
   try {
     const shouldUseLocalFallback =
@@ -136,6 +138,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
               model: providerSession.model,
               settingsSnapshot: providerSession.settingsSnapshot
             });
+            providerSessionSavedThisTurn = providerSession.providerSessionId;
           },
           requestCapability: (request) => proposePiToolCapability({
             dependencies: { db, config },
@@ -164,6 +167,9 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
 
     if (result.status === "failed") {
       const error = result.error ?? "Agent turn failed";
+      if (providerSessionSavedThisTurn) {
+        clearAgentProviderSession(db, session.id, providerSessionSavedThisTurn);
+      }
       if (updateJobStatus(db, job.id, "failed", error, ["running", "waiting_approval"])) {
         appendEvent(db, {
           sessionId: session.id,
@@ -195,6 +201,9 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
     });
   } catch (error) {
     const messageText = error instanceof Error ? error.message : String(error);
+    if (providerSessionSavedThisTurn) {
+      clearAgentProviderSession(db, session.id, providerSessionSavedThisTurn);
+    }
     if (updateJobStatus(db, job.id, "failed", messageText, ["running", "waiting_approval"])) {
       appendEvent(db, {
         sessionId: session.id,

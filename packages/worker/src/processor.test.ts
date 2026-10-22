@@ -16,6 +16,7 @@ import {
   listPendingAgentCapabilityApprovals,
   listPendingApprovals,
   openZosDb,
+  saveAgentProviderSession,
   savePhotostaffLibrarySettings,
   upsertIndexedFile,
   type ZosDatabase
@@ -94,6 +95,13 @@ describe("worker processor", () => {
       content: "List files"
     });
     const runner: PiAgentRunner = async (input) => {
+      await input.saveProviderSession({
+        providerSessionId: "pi-session-failed",
+        sessionFile: path.join(tempDir, "pi-sessions", "pi-session-failed.jsonl"),
+        providerName: "openai",
+        model: "",
+        settingsSnapshot: { providerName: "openai" }
+      });
       await input.emit({
         type: "agent.started",
         payload: { provider: "pi" }
@@ -108,12 +116,131 @@ describe("worker processor", () => {
     await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
 
     expect(getJob(db, job.id)?.status).toBe("failed");
+    expect(getAgentProviderSession(db, session.id)).toBeNull();
     expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual([
       "job.running",
       "agent.started",
       "agent.failed",
       "job.failed"
     ]);
+  });
+
+  it("clears a provider session saved by a Pi runner that throws", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "List files"
+    });
+    const runner: PiAgentRunner = async (input) => {
+      await input.saveProviderSession({
+        providerSessionId: "pi-session-thrown",
+        sessionFile: path.join(tempDir, "pi-sessions", "pi-session-thrown.jsonl"),
+        providerName: "openai",
+        model: "",
+        settingsSnapshot: { providerName: "openai" }
+      });
+      throw new Error("Pi runner crashed");
+    };
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+
+    expect(getJob(db, job.id)?.status).toBe("failed");
+    expect(getAgentProviderSession(db, session.id)).toBeNull();
+    expect(listEvents(db, { sessionId: session.id }).at(-1)).toMatchObject({
+      type: "job.failed",
+      payload: { error: "Pi runner crashed" }
+    });
+  });
+
+  it("preserves an existing provider session when the failing runner did not save one", async () => {
+    const session = createSession(db, { rootId: "local" });
+    saveAgentProviderSession(db, {
+      sessionId: session.id,
+      providerSessionId: "pi-session-existing",
+      sessionFile: path.join(tempDir, "pi-sessions", "pi-session-existing.jsonl"),
+      providerName: "openai",
+      model: "",
+      settingsSnapshot: { providerName: "openai" }
+    });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "List files"
+    });
+    const runner: PiAgentRunner = async () => {
+      throw new Error("Pi failed before prompting");
+    };
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+
+    expect(getJob(db, job.id)?.status).toBe("failed");
+    expect(getAgentProviderSession(db, session.id)).toMatchObject({
+      providerSessionId: "pi-session-existing"
+    });
+    expect(listEvents(db, { sessionId: session.id }).at(-1)).toMatchObject({
+      type: "job.failed",
+      payload: { error: "Pi failed before prompting" }
+    });
+  });
+
+  it("does not clear a newer provider session saved by another turn", async () => {
+    const session = createSession(db, { rootId: "local" });
+    createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "List files"
+    });
+    const runner: PiAgentRunner = async (input) => {
+      await input.saveProviderSession({
+        providerSessionId: "pi-session-failing",
+        sessionFile: path.join(tempDir, "pi-sessions", "pi-session-failing.jsonl"),
+        providerName: "openai",
+        model: "",
+        settingsSnapshot: { providerName: "openai" }
+      });
+      saveAgentProviderSession(db, {
+        sessionId: session.id,
+        providerSessionId: "pi-session-newer",
+        sessionFile: path.join(tempDir, "pi-sessions", "pi-session-newer.jsonl"),
+        providerName: "openai",
+        model: "",
+        settingsSnapshot: { providerName: "openai" }
+      });
+      return { status: "failed", error: "Older turn failed" };
+    };
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+
+    expect(getAgentProviderSession(db, session.id)).toMatchObject({
+      providerSessionId: "pi-session-newer"
+    });
+  });
+
+  it("allows a later successful turn to restore the provider session after failure", async () => {
+    const session = createSession(db, { rootId: "local" });
+    createUserMessageAndJob(db, { sessionId: session.id, content: "First" });
+    createUserMessageAndJob(db, { sessionId: session.id, content: "Second" });
+    let turn = 0;
+    const runner: PiAgentRunner = async (input) => {
+      turn += 1;
+      expect(input.providerSession).toBeNull();
+      await input.saveProviderSession({
+        providerSessionId: session.id,
+        sessionFile: path.join(tempDir, "pi-sessions", `${session.id}.jsonl`),
+        providerName: "openai",
+        model: "",
+        settingsSnapshot: { providerName: "openai" }
+      });
+      return turn === 1
+        ? { status: "failed", error: "Rejected context" }
+        : { status: "completed", summary: "Recovered" };
+    };
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+    expect(getAgentProviderSession(db, session.id)).toBeNull();
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+    expect(getAgentProviderSession(db, session.id)).toMatchObject({
+      providerSessionId: session.id
+    });
   });
 
   it("treats a cascaded job record as cancellation", async () => {

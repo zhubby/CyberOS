@@ -170,6 +170,17 @@ export function saveAgentProviderSession(
   return record;
 }
 
+export function clearAgentProviderSession(
+  db: ZosDatabase,
+  sessionId: string,
+  providerSessionId: string
+): boolean {
+  return db.prepare(`
+    DELETE FROM agent_provider_sessions
+    WHERE session_id = ? AND provider_session_id = ?
+  `).run(sessionId, providerSessionId).changes === 1;
+}
+
 export function listMessages(
   db: ZosDatabase,
   input: { sessionId: string; limit?: number }

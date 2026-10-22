@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   capabilityPendingRunId,
   createPhotostaffAgentTools,
+  getPiTurnFailure,
+  mapPiAssistantMessageEnd,
   previewPiToolArgs,
   redactPiToolArgs,
   registerConfiguredProvider
@@ -64,6 +66,51 @@ describe("Pi agent provider configuration", () => {
       baseUrl: "http://127.0.0.1:11434/v1",
       api: "openai-completions"
     });
+  });
+});
+
+describe("Pi agent response handling", () => {
+  it("maps assistant message_end provider errors and successful text", () => {
+    const onAssistantMessage = vi.fn();
+    const onAssistantFailure = vi.fn();
+    const callbacks = { onAssistantMessage, onAssistantFailure };
+
+    mapPiAssistantMessageEnd({
+      role: "assistant",
+      content: [],
+      stopReason: "error",
+      errorMessage: "400: data_inspection_failed"
+    } as unknown as Parameters<typeof mapPiAssistantMessageEnd>[0], callbacks);
+
+    expect(onAssistantFailure).toHaveBeenCalledWith("400: data_inspection_failed");
+    expect(onAssistantMessage).not.toHaveBeenCalled();
+
+    mapPiAssistantMessageEnd({
+      role: "assistant",
+      content: [{ type: "text", text: "Done" }],
+      stopReason: "stop"
+    } as unknown as Parameters<typeof mapPiAssistantMessageEnd>[0], callbacks);
+
+    expect(onAssistantMessage).toHaveBeenCalledWith("Done");
+    expect(onAssistantFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses a fallback error and rejects empty terminal responses", () => {
+    const onAssistantFailure = vi.fn();
+
+    mapPiAssistantMessageEnd({
+      role: "assistant",
+      content: [],
+      stopReason: "error"
+    } as unknown as Parameters<typeof mapPiAssistantMessageEnd>[0], {
+      onAssistantMessage: vi.fn(),
+      onAssistantFailure
+    });
+
+    expect(onAssistantFailure).toHaveBeenCalledWith("Agent provider stopped with error");
+    expect(getPiTurnFailure(null, "")).toBe("Agent provider returned an empty response");
+    expect(getPiTurnFailure("Provider unavailable", "")).toBe("Provider unavailable");
+    expect(getPiTurnFailure(null, "Done")).toBeNull();
   });
 });
 

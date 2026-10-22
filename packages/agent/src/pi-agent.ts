@@ -210,6 +210,7 @@ function configuredProviderModel(settings: ModelProviderSettingsRecord): NonNull
 
 async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTurnResult> {
   let latestAssistantText = "";
+  let assistantFailure: string | null = null;
   let started = false;
   const pendingRunIds = new Set<string>();
   let abortRequested = false;
@@ -302,13 +303,14 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
       sessionManager
     });
 
-    await input.saveProviderSession({
+    const providerSession = {
       providerSessionId: piSession.sessionId,
       sessionFile: piSession.sessionFile ?? null,
       providerName: input.modelSettings.providerName,
       model: input.modelSettings.model,
       settingsSnapshot: settingsSnapshot(input.modelSettings)
-    });
+    };
+    await input.saveProviderSession(providerSession);
 
     const unsubscribe = piSession.subscribe((event) => {
       eventChain = eventChain
@@ -318,6 +320,11 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
           },
           onAssistantMessage: (content) => {
             latestAssistantText = content;
+            assistantFailure = null;
+          },
+          onAssistantFailure: (error) => {
+            latestAssistantText = "";
+            assistantFailure = error;
           },
           onCapabilityRunPending: async (runId) => {
             if (pendingRunIds.has(runId)) return;
@@ -357,15 +364,16 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
     if (pendingRunId) {
       return { status: "waiting_approval", runId: pendingRunId };
     }
-    if (latestAssistantText) {
-      await input.emit({
-        type: "agent.message",
-        payload: {
-          role: "assistant",
-          content: latestAssistantText
-        }
-      });
-    }
+    const turnFailure = getPiTurnFailure(assistantFailure, latestAssistantText);
+    if (turnFailure) throw new Error(turnFailure);
+    await input.saveProviderSession(providerSession);
+    await input.emit({
+      type: "agent.message",
+      payload: {
+        role: "assistant",
+        content: latestAssistantText
+      }
+    });
     await input.emit({
       type: "agent.completed",
       payload: {
@@ -786,6 +794,7 @@ async function mapPiEvent(
   callbacks: {
     onStarted: () => void;
     onAssistantMessage: (content: string) => void;
+    onAssistantFailure: (error: string) => void;
     onCapabilityRunPending: (runId: string) => void | Promise<void>;
   }
 ): Promise<void> {
@@ -827,8 +836,42 @@ async function mapPiEvent(
     return;
   }
   if (event.type === "message_end" && event.message.role === "assistant") {
-    callbacks.onAssistantMessage(extractAssistantText(event.message));
+    mapPiAssistantMessageEnd(event.message, callbacks);
   }
+}
+
+export function mapPiAssistantMessageEnd(
+  message: Extract<
+    Extract<AgentSessionEvent, { type: "message_end" }>["message"],
+    { role: "assistant" }
+  >,
+  callbacks: {
+    onAssistantMessage: (content: string) => void;
+    onAssistantFailure: (error: string) => void;
+  }
+): void {
+  const failure = getPiAssistantFailure(message);
+  if (failure) {
+    callbacks.onAssistantFailure(failure);
+  } else {
+    callbacks.onAssistantMessage(extractAssistantText(message));
+  }
+}
+
+function getPiAssistantFailure(message: {
+  stopReason?: unknown;
+  errorMessage?: unknown;
+}): string | null {
+  if (message.stopReason !== "error") return null;
+  if (typeof message.errorMessage === "string" && message.errorMessage.trim()) {
+    return message.errorMessage.trim();
+  }
+  return "Agent provider stopped with error";
+}
+
+export function getPiTurnFailure(assistantFailure: string | null, assistantText: string): string | null {
+  if (assistantFailure) return assistantFailure;
+  return assistantText.trim() ? null : "Agent provider returned an empty response";
 }
 
 export function capabilityPendingRunId(result: unknown): string | null {
