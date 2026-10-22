@@ -42,8 +42,8 @@
     "build": "passed as part of make ci",
     "makeCi": "passed",
     "nix": "not run: nix is not installed on this host",
-    "browser": "pending browser mode selection",
+    "browser": "passed: headless Chromium at 1920x1080 and 390x844; TV shell, F8 search, media gamepad health, and mocked connected Xbox device state rendered without layout overflow or page errors",
     "diffCheck": "passed before artifact creation"
   },
-  "verdict": "ready_for_browser_and_cm5_hardware_validation"
+  "verdict": "ready_for_cm5_hardware_validation"
 }

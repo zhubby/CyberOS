@@ -3,7 +3,7 @@
 - Mode: autofix
 - Scope: current dirty working tree on `main`, including the untracked `crates/tv-gamepad` crate and gamepad systemd unit
 - Intent: add optional generic evdev gamepad control for the Chromium TV shell and fullscreen mpv without making CEC or a connected controller a TV startup dependency
-- Verdict: no unresolved P0-P3 code findings; browser and CM5 hardware validation remain release gates
+- Verdict: no unresolved P0-P3 code findings; CM5 hardware validation remains the release gate
 
 ## Findings
 
@@ -47,6 +47,7 @@ No unresolved findings remain after the autofix pass.
 
 - Full `make ci` passed after the final TypeScript timer fix, including protocol checks, Rust workspace tests, TypeScript and documentation checks, ESLint and Clippy, Vitest, and production builds.
 - Focused tests cover gamepad capability detection, mappings, hysteresis, repeat, button deduplication, multiple devices, health recovery, hostd pairing policy, API status, UI status, and packaging declarations.
+- Headless Chromium verification passed at 1920x1080 and 390x844. The TV shell and F8 search rendered without overflow or console errors; media settings exposed Gamepad health; and a page-local Xbox status fixture rendered the Gamepad2 icon, Paired/Trusted/Connected badges, and trust, disconnect, send, and forget actions without layout overlap.
 - Nix could not be run locally because it is not installed on this macOS host; native Linux CI remains authoritative for `nix flake check` and the NixOS VM test.
 - Residual risk: no physical Xbox controller, target BlueZ adapter, CM5 evdev device, Weston compositor, or HDMI display is available in the local browser/test environment.
 - Suppressed findings: 0.
@@ -54,6 +55,6 @@ No unresolved findings remain after the autofix pass.
 
 ---
 
-> **Verdict:** Ready for browser and CM5 hardware validation
+> **Verdict:** Ready for CM5 hardware validation
 >
-> **Reasoning:** The code and repository gates are clean. The remaining uncertainty is hardware and Linux runtime integration rather than an unresolved code finding.
+> **Reasoning:** The code, repository gates, and browser checks are clean. The remaining uncertainty is hardware and Linux runtime integration rather than an unresolved code finding.
