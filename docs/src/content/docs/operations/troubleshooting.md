@@ -90,7 +90,7 @@ sudo stat -c '%U:%G %a %n' /zos/state /zos/state/hostd/docker-daemon /zos/state/
 sudo systemctl cat zos-hostd.service
 ```
 
-共享父目录保持 `zos:zos`，Docker 与 NetworkManager 恢复子目录保持 `root:root 700`。升级后检查现有 drop-in 不得重新引入共享父目录声明。CM5 上已有的 `deployment-state.conf` 如设置相同的嵌套目录，可保留；恢复文件无需迁移。修复权限前停止 timers 和所有数据库写入进程，先保存一致备份；仅修复核实错误的目标，不改变恢复材料权限。
+Debian 部署的共享父目录保持 `zos:zos 750`；NixOS module 使用 `root:zos 1770`，以便 tmpfiles 可以安全创建 root-owned hostd 子树，同时保留 `zos` 的写权限并用 sticky bit 防止替换子树。Docker 与 NetworkManager 恢复子目录在两种部署中都保持 `root:root 700`。升级后检查现有 drop-in 不得重新引入共享父目录声明。CM5 上已有的 `deployment-state.conf` 如设置相同的嵌套目录，可保留；恢复文件无需迁移。修复权限前停止 timers 和所有数据库写入进程，先保存一致备份；仅修复核实错误的目标，不改变恢复材料权限。
 
 在维护窗口分别验证 hostd→API/worker 和 API/worker→hostd 两种启动顺序，以及 hostd 单独重启后 API 仍可访问数据库。查看 `Permission denied`、`SQLITE_CANTOPEN` 和重启计数；不能只检查一次 `/health`。设备重启验收须另行安排，不能用服务重启代替。
 

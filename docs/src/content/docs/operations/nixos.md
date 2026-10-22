@@ -100,7 +100,7 @@ services.zos = {
 
 Nginx 默认启用并代理 loopback API；`/mcp` 与 `/mcp-transfer/` 不对 LAN 暴露。`services.zos.nginx.openFirewall` 默认为 `false`，只有明确设置为 `true` 才会把所选端口加入 NixOS firewall。也可以保持该选项关闭，由站点级 firewall 规则统一开放端口。
 
-module 沿用 Debian units 的分服务写权限：API、worker、索引、下载、备份和终端只获得各自需要的 `/zos` 子目录，root hostd 也不会获得整个 `/zos` 或 `/etc` 的写权限。终端账户固定使用 `/zos/home/termux` 与 Bash；VOD integration 只在启用时加入 `audio`、`render`、`video` 组。
+module 沿用 Debian units 的分服务写权限：API、worker、索引、下载、备份和终端只获得各自需要的 `/zos` 子目录，root hostd 也不会获得整个 `/zos` 或 `/etc` 的写权限。`/zos/state` 使用 `root:zos 1770`；sticky bit 允许 `zos` 服务写入自己的 SQLite 和运行状态，同时防止它们替换 root-owned `/zos/state/hostd` 子树，并避免 systemd-tmpfiles 拒绝不安全的所有权过渡。终端账户固定使用 `/zos/home/termux` 与 Bash；VOD integration 只在启用时加入 `audio`、`render`、`video` 组。
 
 ## 声明式宿主机边界
 

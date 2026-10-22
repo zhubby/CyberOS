@@ -257,7 +257,7 @@ in {
       systemd.tmpfiles.rules = [
         "d /zos 0755 root root -"
         "d /zos/config 0750 root zos -"
-        "d /zos/state 0750 zos zos -"
+        "d /zos/state 1770 root zos -"
         "d /zos/logs 0750 zos zos -"
         "d /zos/data 0750 zos zos -"
         "d /zos/apps 0750 zos zos -"
