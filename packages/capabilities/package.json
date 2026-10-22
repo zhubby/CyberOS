@@ -1,6 +1,6 @@
 {
   "name": "@zos/capabilities",
-  "version": "1.5.15",
+  "version": "1.5.16",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -8,6 +8,6 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@zos/shared": "1.5.15"
+    "@zos/shared": "1.5.16"
   }
 }

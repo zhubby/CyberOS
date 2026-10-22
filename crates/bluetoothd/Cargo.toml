@@ -1,6 +1,6 @@
 [package]
 name = "zos-bluetoothd"
-version = "1.5.15"
+version = "1.5.16"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
