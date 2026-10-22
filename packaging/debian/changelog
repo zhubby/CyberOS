@@ -1,3 +1,9 @@
+zos (1.5.17) unstable; urgency=medium
+
+  * Surface Agent provider failures and add optional TV gamepad input with verified CM5 packaging.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Thu, 22 Oct 2026 10:01:54 +0000
+
 zos (1.5.16) unstable; urgency=medium
 
   * Fix CM5 deployment verification to refresh alerter state after long database checks and capture core service diagnostics on failure
