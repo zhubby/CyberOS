@@ -1,15 +1,15 @@
 {
   "name": "@zos/capability-runtime",
-  "version": "1.5.30",
+  "version": "1.5.31",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@zos/capabilities": "1.5.30",
-    "@zos/db": "1.5.30",
-    "@zos/nas-tools": "1.5.30",
-    "@zos/shared": "1.5.30"
+    "@zos/capabilities": "1.5.31",
+    "@zos/db": "1.5.31",
+    "@zos/nas-tools": "1.5.31",
+    "@zos/shared": "1.5.31"
   }
 }
