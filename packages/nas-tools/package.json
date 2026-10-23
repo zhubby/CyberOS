@@ -1,12 +1,12 @@
 {
   "name": "@zos/nas-tools",
-  "version": "1.5.28",
+  "version": "1.5.29",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@zos/shared": "1.5.28"
+    "@zos/shared": "1.5.29"
   }
 }
