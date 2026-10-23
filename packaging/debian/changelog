@@ -1,3 +1,9 @@
+zos (1.5.23) unstable; urgency=medium
+
+  * Prevent cancelled Agent turns and broad MCP file searches from blocking the API.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 23 Oct 2026 08:09:23 +0000
+
 zos (1.5.22) unstable; urgency=medium
 
   * Restore ZOS MCP tools in Agent sessions.
