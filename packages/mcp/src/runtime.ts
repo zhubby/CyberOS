@@ -89,6 +89,7 @@ const PI_MCP_FILE_CAPABILITIES = new Set<PiMcpFileCapabilityId>([
 ]);
 
 const IMPLEMENTED = new Set([
+  "zos.catalog.get",
   "zos.system.status",
   "zos.roots.list",
   "zos.files.list",

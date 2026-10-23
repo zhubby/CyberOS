@@ -211,6 +211,27 @@ describe("MCP Streamable HTTP", () => {
     expect(JSON.stringify(readPayload)).not.toContain(tempDir);
   });
 
+  it("reports the catalog capability as available when its MCP tool is registered", async () => {
+    const catalog = await postMcp({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "zos.catalog.get", arguments: {} }
+    }, "2025-11-25");
+
+    const payload = parseMcpResponse(catalog.body);
+    const entries = (payload.result.structuredContent as { data: Array<{
+      id: string;
+      available: boolean;
+      reason: string | null;
+    }> }).data;
+    expect(entries.find((entry) => entry.id === "zos.catalog.get")).toMatchObject({
+      id: "zos.catalog.get",
+      available: true,
+      reason: null
+    });
+  });
+
   it("applies Agent policy to Pi MCP file capabilities and creates only Agent capability proposals", async () => {
     const pi = createMcpClient(db, {
       name: "Pi",
