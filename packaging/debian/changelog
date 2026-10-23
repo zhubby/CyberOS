@@ -1,3 +1,9 @@
+zos (1.5.20) unstable; urgency=medium
+
+  * Fix CM5 HDMI TV rendering by granting Chromium DRM access and cleaning stale Weston logs.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 23 Oct 2026 01:34:52 +0000
+
 zos (1.5.19) unstable; urgency=medium
 
   * Fix clean shutdown and restoration of the TV appliance runtime during upgrades.
