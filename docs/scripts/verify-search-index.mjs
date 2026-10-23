@@ -3,6 +3,8 @@ import path from "node:path";
 import process from "node:process";
 
 const outputDirectory = path.resolve("dist/pagefind");
+const readinessTimeoutMs = 5_000;
+const readinessPollMs = 50;
 
 try {
   const argument = process.argv[2];
@@ -18,8 +20,11 @@ try {
     process.exit(0);
   }
 
-  await requireNonemptyFile("pagefind.js");
-  await requireNonemptyFile("pagefind-entry.json");
+  // Astro's Pagefind integration can finish its final writes just after the
+  // build process exits on some filesystems. Wait only for the two entry files;
+  // all referenced assets are still validated strictly below.
+  await waitForNonemptyFile("pagefind.js");
+  await waitForNonemptyFile("pagefind-entry.json");
 
   const entry = JSON.parse(await readFile(path.join(outputDirectory, "pagefind-entry.json"), "utf8"));
   const languages = Object.values(entry.languages ?? {});
@@ -62,6 +67,24 @@ async function requireNonemptyFile(relativePath) {
   const details = await stat(path.join(outputDirectory, relativePath));
   if (!details.isFile() || details.size === 0) {
     throw new Error(`Missing or empty ${relativePath}`);
+  }
+}
+
+async function waitForNonemptyFile(relativePath) {
+  const deadline = Date.now() + readinessTimeoutMs;
+  while (true) {
+    try {
+      const details = await stat(path.join(outputDirectory, relativePath));
+      if (details.isFile() && details.size > 0) return;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+
+    if (Date.now() >= deadline) {
+      await requireNonemptyFile(relativePath);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, readinessPollMs));
   }
 }
 

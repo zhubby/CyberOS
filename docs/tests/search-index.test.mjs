@@ -53,6 +53,40 @@ test("accepts a complete nonempty Pagefind index", async () => {
   }
 });
 
+test("waits for Pagefind entry output to finish writing", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "zos-search-delayed-"));
+  const output = path.join(directory, "dist/pagefind");
+  try {
+    await mkdir(output, { recursive: true });
+    await writeFile(path.join(output, "pagefind.js"), "// browser bundle");
+
+    const resultPromise = runVerifier(directory);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await writeFile(
+      path.join(output, "pagefind.zh-cn_fixture.pf_meta"),
+      "metadata"
+    );
+    await writeFile(path.join(output, "wasm.unknown.pagefind"), "wasm");
+    await mkdir(path.join(output, "index"), { recursive: true });
+    await mkdir(path.join(output, "fragment"), { recursive: true });
+    await writeFile(path.join(output, "index/zh-cn_fixture.pf_index"), "index");
+    await writeFile(path.join(output, "fragment/zh-cn_fixture.pf_fragment"), "fragment");
+    await writeFile(
+      path.join(output, "pagefind-entry.json"),
+      JSON.stringify({
+        version: "1.5.0",
+        languages: { "zh-cn": { hash: "zh-cn_fixture", wasm: null, page_count: 1 } }
+      })
+    );
+
+    const result = await resultPromise;
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /validated/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("prepare removes only the previous Pagefind output", async () => {
   const fixture = await createFixture();
   const page = path.join(fixture.directory, "dist/index.html");
