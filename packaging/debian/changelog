@@ -1,3 +1,9 @@
+zos (1.5.21) unstable; urgency=medium
+
+  * Add configurable Agent MCP pairing and runtime enablement with hardened credential storage.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 23 Oct 2026 03:54:04 +0000
+
 zos (1.5.20) unstable; urgency=medium
 
   * Fix CM5 HDMI TV rendering by granting Chromium DRM access and cleaning stale Weston logs.
