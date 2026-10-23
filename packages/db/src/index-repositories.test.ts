@@ -450,4 +450,55 @@ describe("SQLite schema and repositories", () => {
     });
     expect(callerSort).toEqual({ field: "relevance", direction: "desc" });
   });
+
+  it("bounds broad filename-prefix searches before ranking results", () => {
+    const insertFts = db.prepare(`
+      INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms)
+      VALUES (?, 'local', ?, ?, 'unrelated body', 'unrelated body')
+    `);
+    const seed = db.transaction(() => {
+      for (let index = 0; index < 205; index += 1) {
+        const suffix = String(index).padStart(3, "0");
+        const name = `pool-item-${suffix}.txt`;
+        const fileId = upsertIndexedFile(db, {
+          rootId: "local",
+          path: `docs/${name}`,
+          name,
+          mimeType: "text/plain",
+          sizeBytes: 14,
+          mtimeMs: index,
+          body: "unrelated body"
+        });
+        insertFts.run(fileId, `docs/${name}`, name);
+      }
+      db.prepare(`
+        INSERT INTO index_content_state (root_id, status, updated_at)
+        VALUES ('local', 'ready', ?)
+        ON CONFLICT(root_id) DO UPDATE SET status = 'ready', updated_at = excluded.updated_at
+      `).run(new Date().toISOString());
+    });
+    seed();
+
+    const first = queryIndexAdvanced(db, {
+      rootId: "local",
+      storagePoolId: "pool",
+      query: "pool",
+      sort: { field: "name", direction: "asc" },
+      limit: 100
+    });
+    expect(first.files).toHaveLength(100);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(first.files[0]).toMatchObject({ path: "docs/pool-item-000.txt", snippet: "" });
+
+    const second = queryIndexAdvanced(db, {
+      rootId: "local",
+      storagePoolId: "pool",
+      query: "pool",
+      sort: { field: "name", direction: "asc" },
+      limit: 100,
+      cursor: first.nextCursor
+    });
+    expect(second.files).toHaveLength(100);
+    expect(second.nextCursor).toBeNull();
+  });
 });

@@ -20,7 +20,8 @@ import {
   piAgentToolNames,
   previewPiToolArgs,
   redactPiToolArgs,
-  registerConfiguredProvider
+  registerConfiguredProvider,
+  startPiCancellationMonitor
 } from "./pi-agent.js";
 
 let tempDir: string;
@@ -120,6 +121,34 @@ describe("Pi agent response handling", () => {
     expect(getPiTurnFailure(null, "")).toBe("Agent provider returned an empty response");
     expect(getPiTurnFailure("Provider unavailable", "")).toBe("Provider unavailable");
     expect(getPiTurnFailure(null, "Done")).toBeNull();
+  });
+});
+
+describe("Pi agent cancellation", () => {
+  it("aborts an active turn once when its job becomes cancelled", async () => {
+    vi.useFakeTimers();
+    try {
+      let cancelled = false;
+      const abort = vi.fn(async () => undefined);
+      const stop = startPiCancellationMonitor({
+        isCancelled: () => cancelled,
+        abort,
+        intervalMs: 10
+      });
+
+      await vi.advanceTimersByTimeAsync(20);
+      expect(abort).not.toHaveBeenCalled();
+
+      cancelled = true;
+      await vi.advanceTimersByTimeAsync(10);
+      expect(abort).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(abort).toHaveBeenCalledTimes(1);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

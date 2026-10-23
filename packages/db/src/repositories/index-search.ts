@@ -100,10 +100,14 @@ interface AdvancedSearchRow {
   extraction_source: IndexSearchResult["extractionSource"];
   extraction_status: IndexSearchResult["extractionStatus"];
   sort_value: string | number;
+  content_match: number;
+  content_match_count: number;
 }
 
 const HIGHLIGHT_START = "\u0001";
 const HIGHLIGHT_END = "\u0002";
+const MAX_FTS_CANDIDATES = 200;
+const MAX_SNIPPET_MATCHES = 10;
 
 export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest): IndexSearchPage {
   const normalized = normalizeAdvancedRequest(request);
@@ -151,43 +155,73 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
   const matchParameters: unknown[] = [];
   let joinSql = "";
   let scoreSql = "NULL";
-  let snippetSql = "''";
-  if (normalized.ftsQuery) {
+  const snippetSql = "''";
+  if (normalized.filenameFtsQuery && normalized.contentFtsQuery) {
     const contentState = db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
       .pluck().get(normalized.rootId) as string | undefined;
     const includeLegacy = contentState !== "ready";
     matchesSql = `
-      WITH matches AS (
+      WITH
+      current_name_matches AS MATERIALIZED (
         SELECT file_id,
-          -bm25(indexed_content_fts, 0.0, 0.0, 5.0, 10.0, 1.0, 0.5) AS score,
-          snippet(indexed_content_fts, 4, ?, ?, '...', 24) AS marked_snippet
+          -bm25(indexed_content_fts, 0.0, 0.0, 5.0, 10.0, 1.0, 0.5) AS score
         FROM indexed_content_fts
         WHERE root_id = ? AND indexed_content_fts MATCH ?
+        LIMIT ?
+      ),
+      current_content_matches AS MATERIALIZED (
+        SELECT file_id,
+          -bm25(indexed_content_fts, 0.0, 0.0, 5.0, 10.0, 1.0, 0.5) AS score
+        FROM indexed_content_fts
+        WHERE root_id = ? AND indexed_content_fts MATCH ?
+        LIMIT ?
+      )
+      ${includeLegacy ? `,
+      legacy_name_matches AS MATERIALIZED (
+        SELECT file_id,
+          -bm25(indexed_text, 0.0, 0.0, 5.0, 10.0, 1.0) AS score
+        FROM indexed_text
+        WHERE root_id = ? AND indexed_text MATCH ?
+          AND file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
+        LIMIT ?
+      ),
+      legacy_content_matches AS MATERIALIZED (
+        SELECT file_id,
+          -bm25(indexed_text, 0.0, 0.0, 5.0, 10.0, 1.0) AS score
+        FROM indexed_text
+        WHERE root_id = ? AND indexed_text MATCH ?
+          AND file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
+        LIMIT ?
+      )
+      ` : ""},
+      raw_matches AS (
+        SELECT file_id, score, 0 AS content_match FROM current_name_matches
+        UNION ALL
+        SELECT file_id, score, 1 AS content_match FROM current_content_matches
         ${includeLegacy ? `
           UNION ALL
-          SELECT file_id,
-            -bm25(indexed_text, 0.0, 0.0, 5.0, 10.0, 1.0) AS score,
-            snippet(indexed_text, 4, ?, ?, '...', 24) AS marked_snippet
-          FROM indexed_text
-          WHERE root_id = ? AND indexed_text MATCH ?
-            AND file_id NOT IN (
-              SELECT file_id FROM indexed_content_fts WHERE root_id = ?
-            )
+          SELECT file_id, score, 0 AS content_match FROM legacy_name_matches
+          UNION ALL
+          SELECT file_id, score, 1 AS content_match FROM legacy_content_matches
         ` : ""}
+      ),
+      matches AS MATERIALIZED (
+        SELECT file_id, MAX(score) AS score, MAX(content_match) AS content_match
+        FROM raw_matches
+        GROUP BY file_id
       )`;
-    matchParameters.push(HIGHLIGHT_START, HIGHLIGHT_END, normalized.rootId, normalized.ftsQuery);
+    matchParameters.push(
+      normalized.rootId, normalized.filenameFtsQuery, MAX_FTS_CANDIDATES,
+      normalized.rootId, normalized.contentFtsQuery, MAX_FTS_CANDIDATES
+    );
     if (includeLegacy) {
       matchParameters.push(
-        HIGHLIGHT_START,
-        HIGHLIGHT_END,
-        normalized.rootId,
-        normalized.ftsQuery,
-        normalized.rootId
+        normalized.rootId, normalized.filenameFtsQuery, normalized.rootId, MAX_FTS_CANDIDATES,
+        normalized.rootId, normalized.legacyContentFtsQuery, normalized.rootId, MAX_FTS_CANDIDATES
       );
     }
     joinSql = "JOIN matches m ON m.file_id = f.id";
     scoreSql = "m.score";
-    snippetSql = "m.marked_snippet";
   }
 
   const sql = `
@@ -196,7 +230,9 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
       f.size_bytes, f.mtime_ms, ${scoreSql} AS score,
       ${snippetSql} AS marked_snippet,
       f.extraction_source, f.extraction_status,
-      ${sortExpression} AS sort_value
+      ${sortExpression} AS sort_value,
+      ${normalized.filenameFtsQuery ? "m.content_match" : "0"} AS content_match,
+      ${normalized.filenameFtsQuery ? "(SELECT COUNT(*) FROM matches WHERE content_match = 1)" : "0"} AS content_match_count
     FROM indexed_files f
     ${joinSql}
     WHERE ${where.join(" AND ")}
@@ -210,6 +246,18 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
   ) as AdvancedSearchRow[];
   const hasMore = rows.length > normalized.limit;
   const pageRows = hasMore ? rows.slice(0, normalized.limit) : rows;
+  if (pageRows.length && pageRows[0]!.content_match_count <= MAX_SNIPPET_MATCHES) {
+    const snippets = queryMarkedSnippets(
+      db,
+      normalized.rootId,
+      normalized.contentFtsQuery,
+      normalized.legacyContentFtsQuery,
+      pageRows.filter((row) => row.content_match === 1).map((row) => row.file_id),
+      normalized.filenameFtsQuery ? db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
+        .pluck().get(normalized.rootId) !== "ready" : false
+    );
+    for (const row of pageRows) row.marked_snippet = snippets.get(row.file_id) ?? "";
+  }
   const files = pageRows.map(mapAdvancedSearchRow);
   const last = pageRows.at(-1);
   return {
@@ -259,17 +307,59 @@ function normalizeAdvancedRequest(request: IndexSearchRequest) {
   };
   return {
     ...signature,
-    ftsQuery: query ? literalFtsQuery(query) : null,
+    filenameFtsQuery: query ? literalFtsQuery(query, ["path", "name"], true) : null,
+    contentFtsQuery: query ? literalFtsQuery(query, ["body", "terms"], false) : null,
+    legacyContentFtsQuery: query ? literalFtsQuery(query, ["body"], false) : null,
     cursor: request.cursor ?? null,
     limit,
     signature
   };
 }
 
-function literalFtsQuery(query: string): string {
+function literalFtsQuery(query: string, columns: string[], prefix: boolean): string {
   const tokens = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
   if (!tokens.length) throw new Error("Search query must contain a letter or number");
-  return tokens.map((token) => `"${token.replaceAll('"', '""')}"*`).join(" AND ");
+  const terms = tokens
+    .map((token) => `"${token.replaceAll('"', '""')}"${prefix ? "*" : ""}`)
+    .join(" AND ");
+  return `{${columns.join(" ")}} : (${terms})`;
+}
+
+function queryMarkedSnippets(
+  db: ZosDatabase,
+  rootId: string,
+  currentQuery: string | null,
+  legacyQuery: string | null,
+  fileIds: string[],
+  includeLegacy: boolean
+): Map<string, string> {
+  const snippets = new Map<string, string>();
+  if (!currentQuery || !legacyQuery || !fileIds.length) return snippets;
+  const placeholders = fileIds.map(() => "?").join(", ");
+  const current = db.prepare(`
+    SELECT file_id, snippet(indexed_content_fts, 4, ?, ?, '...', 24) AS marked_snippet
+    FROM indexed_content_fts
+    WHERE root_id = ? AND indexed_content_fts MATCH ? AND file_id IN (${placeholders})
+  `).all(HIGHLIGHT_START, HIGHLIGHT_END, rootId, currentQuery, ...fileIds) as Array<{
+    file_id: string;
+    marked_snippet: string;
+  }>;
+  for (const row of current) snippets.set(row.file_id, row.marked_snippet);
+  if (!includeLegacy) return snippets;
+
+  const missing = fileIds.filter((fileId) => !snippets.has(fileId));
+  if (!missing.length) return snippets;
+  const missingPlaceholders = missing.map(() => "?").join(", ");
+  const legacy = db.prepare(`
+    SELECT file_id, snippet(indexed_text, 4, ?, ?, '...', 24) AS marked_snippet
+    FROM indexed_text
+    WHERE root_id = ? AND indexed_text MATCH ? AND file_id IN (${missingPlaceholders})
+  `).all(HIGHLIGHT_START, HIGHLIGHT_END, rootId, legacyQuery, ...missing) as Array<{
+    file_id: string;
+    marked_snippet: string;
+  }>;
+  for (const row of legacy) snippets.set(row.file_id, row.marked_snippet);
+  return snippets;
 }
 
 function normalizeSearchPath(value: string): string {

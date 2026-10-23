@@ -159,6 +159,7 @@ const MCP_RESOURCE_TOOL_NAMES = [
 ] as const;
 const ZOS_MCP_SERVER_NAME = "zos";
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
+const PI_CANCELLATION_POLL_MS = 100;
 type PiProviderConfig = Parameters<ModelRuntime["registerProvider"]>[1];
 type PiProviderApi = NonNullable<PiProviderConfig["api"]>;
 
@@ -318,6 +319,12 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
     };
     await input.saveProviderSession(providerSession);
 
+    const requestAbort = async () => {
+      if (abortRequested) return;
+      abortRequested = true;
+      await piSession.abort();
+    };
+
     const unsubscribe = piSession.subscribe((event) => {
       eventChain = eventChain
         .then(() => mapPiEvent(event, input.emit, {
@@ -336,10 +343,7 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
             if (pendingRunIds.has(runId)) return;
             await input.onCapabilityRunPending?.(runId, piSession.sessionId);
             pendingRunIds.add(runId);
-            if (!abortRequested) {
-              abortRequested = true;
-              await piSession.abort();
-            }
+            await requestAbort();
             await input.emit({
               type: "approval.pending",
               payload: { kind: "capability_run", runId }
@@ -350,14 +354,23 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
           eventError ??= error;
         });
     });
+    const stopCancellationMonitor = startPiCancellationMonitor({
+      isCancelled: input.isCancelled,
+      abort: requestAbort,
+      onError: (error) => {
+        eventError ??= error;
+      }
+    });
 
     try {
       await piSession.bindExtensions({});
-      await piSession.prompt(input.message);
+      if (input.isCancelled()) await requestAbort();
+      else await piSession.prompt(input.message);
       await piSession.waitForIdle();
       await eventChain;
       if (eventError) throw eventError;
     } finally {
+      stopCancellationMonitor();
       unsubscribe();
       await eventChain;
       piSession.dispose();
@@ -422,6 +435,34 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
       error: message
     };
   }
+}
+
+export function startPiCancellationMonitor(input: {
+  isCancelled: () => boolean;
+  abort: () => Promise<void>;
+  onError?: (error: unknown) => void;
+  intervalMs?: number;
+}): () => void {
+  let stopped = false;
+  let abortStarted = false;
+  const poll = () => {
+    if (stopped || abortStarted) return;
+    try {
+      if (!input.isCancelled()) return;
+      abortStarted = true;
+      void input.abort().catch((error: unknown) => input.onError?.(error));
+    } catch (error) {
+      abortStarted = true;
+      input.onError?.(error);
+    }
+  };
+  const timer = setInterval(poll, input.intervalMs ?? PI_CANCELLATION_POLL_MS);
+  timer.unref();
+  poll();
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }
 
 export function piAgentToolNames(options: {
