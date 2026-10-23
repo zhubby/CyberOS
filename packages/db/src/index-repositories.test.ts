@@ -352,6 +352,34 @@ describe("SQLite schema and repositories", () => {
     });
   });
 
+  it("does not call a queued task stalled while another task is running", () => {
+    const queuedAt = new Date("2026-01-01T00:00:00.000Z");
+    const now = new Date("2026-01-01T00:02:00.000Z");
+    enqueueIndexTask(db, { rootId: "local", path: "pending.txt", now: queuedAt });
+    enqueueIndexTask(db, { rootId: "local", path: "current.txt", now: queuedAt });
+    db.prepare(`
+      UPDATE index_queue
+      SET status = 'running', worker_id = 'worker-1', started_at = ?, updated_at = ?
+      WHERE root_id = ? AND path = ?
+    `).run(queuedAt.toISOString(), queuedAt.toISOString(), "local", "current.txt");
+
+    expect(getIndexerServiceStatus(db, now).queue).toMatchObject({
+      queued: 1,
+      running: 1,
+      stalled: false
+    });
+
+    db.prepare(`
+      UPDATE index_queue SET status = 'queued', worker_id = NULL
+      WHERE root_id = ? AND path = ?
+    `).run("local", "current.txt");
+    expect(getIndexerServiceStatus(db, now).queue).toMatchObject({
+      queued: 2,
+      running: 0,
+      stalled: true
+    });
+  });
+
   it("validates and persists indexer settings", () => {
     expect(getIndexerSettings(db)).toMatchObject({
       scanConcurrency: 4,

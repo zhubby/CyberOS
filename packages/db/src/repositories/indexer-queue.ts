@@ -162,7 +162,12 @@ export function getIndexerServiceStatus(
       retrying: queue.retrying,
       failed: queue.failed,
       oldestQueuedAt: queue.oldest_queued_at,
-      stalled: queue.queued > 0 && Number.isFinite(oldestQueuedMs) && now.getTime() - oldestQueuedMs > 60_000
+      // A queued task can legitimately wait behind a long-running full scan.
+      // Only report a stalled queue when no worker is actively processing work.
+      stalled: queue.queued > 0
+        && queue.running === 0
+        && Number.isFinite(oldestQueuedMs)
+        && now.getTime() - oldestQueuedMs > 60_000
     },
     rebuild: {
       status: rebuild.failed > 0
