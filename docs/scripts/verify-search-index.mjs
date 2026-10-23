@@ -1,6 +1,7 @@
 import { lstat, readFile, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 
 const outputDirectory = path.resolve("dist/pagefind");
 const readinessTimeoutMs = 5_000;
@@ -84,7 +85,7 @@ async function waitForNonemptyFile(relativePath) {
       await requireNonemptyFile(relativePath);
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, readinessPollMs));
+    await delay(readinessPollMs);
   }
 }
 

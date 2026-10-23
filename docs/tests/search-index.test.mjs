@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 import { spawn } from "node:child_process";
 import test from "node:test";
 import { URL, fileURLToPath } from "node:url";
@@ -61,7 +62,7 @@ test("waits for Pagefind entry output to finish writing", async () => {
     await writeFile(path.join(output, "pagefind.js"), "// browser bundle");
 
     const resultPromise = runVerifier(directory);
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await delay(150);
     await writeFile(
       path.join(output, "pagefind.zh-cn_fixture.pf_meta"),
       "metadata"
