@@ -1,0 +1,127 @@
+import { randomUUID } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync
+} from "node:fs";
+import path from "node:path";
+import { createCatalogDescriptors } from "@zos/capabilities";
+import {
+  createMcpClient,
+  findMcpClientByToken,
+  getAgentMcpSettings,
+  listMcpClients,
+  revokeMcpClient,
+  rotateMcpClientToken,
+  saveAgentMcpSettings,
+  type ZosDatabase
+} from "@zos/db";
+import type { PublicAgentMcpSettings, ZosConfig } from "@zos/shared";
+
+export function publicAgentMcpSettings(db: ZosDatabase, config: ZosConfig): PublicAgentMcpSettings {
+  const stored = getAgentMcpSettings(db);
+  const enabled = stored?.enabled ?? config.mcp?.piEnabled ?? false;
+  const available = config.mcp?.enabled ?? false;
+  const paired = available ? hasPairedPiClient(db, config) : false;
+  return {
+    enabled,
+    available,
+    paired,
+    status: !available ? "unavailable" : enabled ? (paired ? "ready" : "attention") : "disabled",
+    updatedAt: stored?.updatedAt ?? new Date(0).toISOString()
+  };
+}
+
+export function configureAgentMcp(db: ZosDatabase, config: ZosConfig, enabled: boolean): PublicAgentMcpSettings {
+  if (enabled) {
+    ensurePairedPiClient(db, config);
+  }
+  saveAgentMcpSettings(db, enabled);
+  return publicAgentMcpSettings(db, config);
+}
+
+function hasPairedPiClient(db: ZosDatabase, config: ZosConfig): boolean {
+  const token = readValidPiToken(config.mcp?.piTokenFile);
+  if (!token) return false;
+  return findMcpClientByToken(db, token)?.kind === "pi";
+}
+
+function ensurePairedPiClient(db: ZosDatabase, config: ZosConfig): void {
+  const tokenFile = config.mcp?.piTokenFile;
+  if (!tokenFile || !path.isAbsolute(tokenFile)) {
+    throw new Error("ZOS Pi MCP token file is not configured with an absolute path");
+  }
+
+  const now = new Date().toISOString();
+  const activeClients = listMcpClients(db).filter((client) =>
+    client.kind === "pi" && !client.revokedAt && (!client.expiresAt || client.expiresAt > now)
+  );
+  if (activeClients.length > 1) {
+    throw new Error("Multiple active Pi MCP clients require operator repair");
+  }
+
+  const existing = activeClients[0] ?? null;
+  const installedToken = readValidPiToken(tokenFile);
+  if (existing && installedToken && findMcpClientByToken(db, installedToken)?.id === existing.id) {
+    return;
+  }
+
+  let createdClientId: string | null = null;
+  let token: string;
+  if (existing) {
+    token = rotateMcpClientToken(db, existing.id).token;
+  } else {
+    const created = createMcpClient(db, {
+      name: "Built-in Pi",
+      kind: "pi",
+      scopes: piClientScopes()
+    });
+    createdClientId = created.id;
+    token = created.token;
+  }
+
+  try {
+    installPiToken(tokenFile, token);
+  } catch (error) {
+    if (createdClientId) revokeMcpClient(db, createdClientId);
+    throw error;
+  }
+}
+
+function piClientScopes(): string[] {
+  return [...new Set(createCatalogDescriptors().flatMap((descriptor) => descriptor.requiredScopes))]
+    .filter((scope) => scope !== "zos:admin:shell")
+    .sort();
+}
+
+function readValidPiToken(tokenFile: string | undefined): string | null {
+  if (!tokenFile || !existsSync(tokenFile)) return null;
+  try {
+    const tokenStat = statSync(tokenFile);
+    if (!tokenStat.isFile() || (tokenStat.mode & 0o077) !== 0) return null;
+    const token = readFileSync(tokenFile, "utf8").trim();
+    return /^zos_mcp_[A-Za-z0-9_-]{43}$/u.test(token) ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+function installPiToken(tokenFile: string, token: string): void {
+  const tokenDir = path.dirname(tokenFile);
+  mkdirSync(tokenDir, { recursive: true, mode: 0o700 });
+  chmodSync(tokenDir, 0o700);
+  const temporary = `${tokenFile}.tmp-${process.pid}-${randomUUID()}`;
+  try {
+    writeFileSync(temporary, `${token}\n`, { mode: 0o600, flag: "wx" });
+    chmodSync(temporary, 0o600);
+    renameSync(temporary, tokenFile);
+    chmodSync(tokenFile, 0o600);
+  } finally {
+    if (existsSync(temporary)) unlinkSync(temporary);
+  }
+}

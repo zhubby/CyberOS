@@ -38,6 +38,7 @@ import {
   getPhotostaffProcessingSettings,
   getPhotostaffWorkerHealth,
   getAgentCapabilityPolicySettings,
+  getAgentMcpSettings,
   getRootReadiness,
   getShareSettings,
   getTerminalTabState,
@@ -388,7 +389,7 @@ function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecuti
       environment: dependencies.config.environment ?? "production",
       flags: {
         mcpEnabled: dependencies.config.mcp?.enabled ?? false,
-        mcpPiEnabled: dependencies.config.mcp?.piEnabled ?? false,
+        mcpPiEnabled: getAgentMcpSettings(dependencies.db)?.enabled ?? dependencies.config.mcp?.piEnabled ?? false,
         mcpExternalEnabled: dependencies.config.mcp?.externalEnabled ?? false,
         mcpShellEnabled: dependencies.config.mcp?.shellEnabled ?? false,
         dockerEnabled: dependencies.config.docker.enabled,

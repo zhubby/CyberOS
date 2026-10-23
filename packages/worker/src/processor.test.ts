@@ -17,6 +17,7 @@ import {
   listPendingApprovals,
   openZosDb,
   saveAgentProviderSession,
+  saveAgentMcpSettings,
   savePhotostaffLibrarySettings,
   upsertIndexedFile,
   type ZosDatabase
@@ -86,6 +87,39 @@ describe("worker processor", () => {
       providerSessionId: "pi-session-1",
       providerName: "openai"
     });
+  });
+
+  it("applies the persisted Agent MCP switch to new jobs without a worker restart", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const config: ZosConfig = {
+      ...testConfig(),
+      mcp: {
+        enabled: true,
+        piEnabled: false,
+        piTokenFile: path.join(tempDir, "pi.token"),
+        legacyPiToolsEnabled: false,
+        externalEnabled: false,
+        shellEnabled: false,
+        allowedHosts: ["localhost", "127.0.0.1", "[::1]"],
+        allowedOrigins: ["localhost", "127.0.0.1", "[::1]"],
+        maxConcurrentPerClient: 4
+      }
+    };
+    const observed: boolean[] = [];
+    const runner: PiAgentRunner = async (input) => {
+      observed.push(Boolean(input.mcp?.enabled));
+      return { status: "completed", summary: "Done" };
+    };
+
+    saveAgentMcpSettings(db, true);
+    createUserMessageAndJob(db, { sessionId: session.id, content: "First" });
+    await processNextJob({ db, config, agentRunner: runner });
+
+    saveAgentMcpSettings(db, false);
+    createUserMessageAndJob(db, { sessionId: session.id, content: "Second" });
+    await processNextJob({ db, config, agentRunner: runner });
+
+    expect(observed).toEqual([true, false]);
   });
 
   it("marks Pi failures as failed jobs", async () => {

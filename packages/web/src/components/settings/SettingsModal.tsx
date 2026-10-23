@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type {
   AgentCapabilityId,
+  AgentMcpSettings,
   BuildInfo,
   DockerSettings,
   DownloadSettings,
@@ -99,6 +100,7 @@ interface SettingsModalProps {
   buildInfo: BuildInfo | null;
   buildInfoError: string | null;
   toolPolicyForm: ToolPolicyFormState;
+  agentMcpSettings: AgentMcpSettings | null;
   languagePreference: LanguagePreference;
   themePreference: ThemePreference;
   previewFileSizeLimitBytes: number;
@@ -120,6 +122,7 @@ interface SettingsModalProps {
     patch: Partial<Omit<PhotoProcessingSettings, "updatedAt">>
   ) => Promise<void>;
   onToolPolicyFormChange: (form: ToolPolicyFormState) => void;
+  onAgentMcpEnabledChange: (enabled: boolean) => Promise<void>;
   onLanguagePreferenceChange: (preference: LanguagePreference) => void;
   onThemePreferenceChange: (preference: ThemePreference) => void;
   onPreviewFileSizeLimitChange: (bytes: number) => void;
@@ -173,6 +176,7 @@ export function SettingsModal({
   buildInfo,
   buildInfoError,
   toolPolicyForm,
+  agentMcpSettings,
   languagePreference,
   themePreference,
   previewFileSizeLimitBytes,
@@ -188,6 +192,7 @@ export function SettingsModal({
   onIndexerReindex,
   onPhotoProcessingSettingsChange,
   onToolPolicyFormChange,
+  onAgentMcpEnabledChange,
   onLanguagePreferenceChange,
   onThemePreferenceChange,
   onPreviewFileSizeLimitChange,
@@ -512,9 +517,11 @@ export function SettingsModal({
           {activeSection === "agents" ? (
             <SettingsToolPolicyPage
               form={toolPolicyForm}
+              mcpSettings={agentMcpSettings}
               loading={loading}
               saving={saving}
               onChange={onToolPolicyFormChange}
+              onMcpEnabledChange={onAgentMcpEnabledChange}
               onSubmit={onSubmit}
               onClose={onClose}
             />
@@ -1396,29 +1403,74 @@ function DownloadNumberField({
 
 function SettingsToolPolicyPage({
   form,
+  mcpSettings,
   loading,
   saving,
   onChange,
+  onMcpEnabledChange,
   onSubmit,
   onClose
 }: {
   form: ToolPolicyFormState;
+  mcpSettings: AgentMcpSettings | null;
   loading: boolean;
   saving: boolean;
   onChange: (form: ToolPolicyFormState) => void;
+  onMcpEnabledChange: (enabled: boolean) => Promise<void>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const [mcpSaving, setMcpSaving] = useState(false);
   const policyOptions = AGENT_CAPABILITY_POLICY_OPTIONS.map((mode) => ({
     value: mode,
     label: toolPolicyModeLabel(mode, t)
   }));
   const approvalRequiredPolicyOptions = policyOptions.filter((option) => option.value !== "auto");
+
+  async function toggleMcp() {
+    if (!mcpSettings?.available || mcpSaving) return;
+    setMcpSaving(true);
+    try {
+      await onMcpEnabledChange(!mcpSettings.enabled);
+    } finally {
+      setMcpSaving(false);
+    }
+  }
+
   return (
     <form className="settings-form" onSubmit={onSubmit}>
       <div className="settings-content-body">
         <div className="settings-page-grid">
+          <section className="settings-section-card settings-field-wide">
+            <header>
+              <div>
+                <h3>{t("settings.toolPolicy.mcp.title")}</h3>
+                <p>{t("settings.toolPolicy.mcp.description")}</p>
+              </div>
+            </header>
+            <div className="settings-agent-mcp-row" data-status={mcpSettings?.status ?? "loading"}>
+              <span className="settings-agent-mcp-icon" aria-hidden="true">
+                <Bot size={17} />
+              </span>
+              <span className="settings-agent-mcp-copy">
+                <strong>{t("settings.toolPolicy.mcp.label")}</strong>
+                <small>{t(`settings.toolPolicy.mcp.status.${mcpSettings?.status ?? "loading"}`)}</small>
+              </span>
+              <button
+                className="settings-agent-mcp-switch"
+                type="button"
+                role="switch"
+                aria-checked={mcpSettings?.enabled ?? false}
+                aria-label={t("settings.toolPolicy.mcp.label")}
+                disabled={loading || mcpSaving || !mcpSettings?.available}
+                onClick={() => void toggleMcp()}
+              >
+                <span aria-hidden="true" />
+              </button>
+            </div>
+          </section>
+
           <section className="settings-section-card">
             <header>
               <div>

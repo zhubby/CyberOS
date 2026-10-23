@@ -2557,6 +2557,20 @@ export const en = {
       socketNote: "Docker socket access is root-equivalent. Only enable this on a trusted appliance."
     },
     toolPolicy: {
+      mcp: {
+        title: "Agent MCP",
+        description: "Control whether the built-in Agent uses the ZOS capability registry.",
+        label: "Use ZOS MCP",
+        status: {
+          loading: "Checking pairing status...",
+          disabled: "Off. Agent uses compatibility tools.",
+          ready: "Paired and ready for new Agent tasks.",
+          attention: "Enabled, but the protected credential needs repair. Turn it off and on again to repair it.",
+          unavailable: "MCP is disabled by host configuration."
+        },
+        enabledNotice: "Agent MCP enabled.",
+        disabledNotice: "Agent MCP disabled."
+      },
       readOnlyTitle: "Read-Only Tools",
       readOnlyDescription: "Tools that can run automatically while staying inside the NAS root.",
       dangerousTitle: "Approval Tools",
@@ -5361,6 +5375,20 @@ export const zhCN = {
       socketNote: "Docker socket 访问等同 root 权限。仅应在受信任的设备上启用。"
     },
     toolPolicy: {
+      mcp: {
+        title: "Agent MCP",
+        description: "控制内置 Agent 是否使用 ZOS 能力注册表。",
+        label: "使用 ZOS MCP",
+        status: {
+          loading: "正在检查配对状态...",
+          disabled: "已关闭，Agent 使用兼容工具。",
+          ready: "已配对，将对新的 Agent 任务生效。",
+          attention: "已开启，但受保护凭据需要修复；关闭后重新开启即可修复。",
+          unavailable: "主机配置已禁用 MCP。"
+        },
+        enabledNotice: "Agent MCP 已开启。",
+        disabledNotice: "Agent MCP 已关闭。"
+      },
       readOnlyTitle: "只读工具",
       readOnlyDescription: "只读工具可自动运行，但始终受 NAS root 路径保护。",
       dangerousTitle: "审批工具",

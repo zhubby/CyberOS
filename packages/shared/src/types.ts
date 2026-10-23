@@ -2144,6 +2144,17 @@ export interface AgentCapabilityPolicySettingsRecord {
 
 export type PublicAgentCapabilityPolicySettings = AgentCapabilityPolicySettingsRecord;
 
+export interface AgentMcpSettingsRecord {
+  enabled: boolean;
+  updatedAt: string;
+}
+
+export interface PublicAgentMcpSettings extends AgentMcpSettingsRecord {
+  available: boolean;
+  paired: boolean;
+  status: "disabled" | "ready" | "attention" | "unavailable";
+}
+
 export type PublicPiToolPolicySettings = PiToolPolicySettingsRecord;
 
 export interface AgentSessionRecord {

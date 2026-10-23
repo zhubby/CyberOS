@@ -376,6 +376,7 @@ describe("native packaging artifacts", () => {
     expect(postinst).toContain("ZOS_DEPLOY_USER=sigmaos-deploy");
     expect(postinst).toContain("install -d -o root -g zos -m 0751 /zos");
     expect(postinst).toContain("install -d -o root -g zos -m 0750 /zos/config");
+    expect(postinst).toContain("install -d -o zos -g zos -m 0700 /zos/config/mcp");
     expect(postinst).toContain("ln -sfn /usr/lib/zos/scripts/zos-mcp /usr/local/sbin/zos-mcp");
     expect(postinst).toContain("ln -sfn /usr/lib/zos/scripts/zos-tv-mode /usr/local/sbin/zos-tv-mode");
     expect(postinst).toContain("/zos/state/tv/control");
@@ -773,7 +774,7 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("zos-migrate-sigmaos.sh usr/lib/zos/scripts/");
     expect(install).toContain("zos-migration-copy-growth.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-migration-recovery.mjs usr/lib/zos/scripts/");
-    expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps");
+    expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps /zos/config/mcp");
     expect(apiUnit).toContain("CapabilityBoundingSet=\n");
   });
 

@@ -81,6 +81,13 @@ export function getMcpClient(db: ZosDatabase, clientId: string): McpClientRecord
 }
 
 export function authenticateMcpClient(db: ZosDatabase, token: string, now = new Date().toISOString()): McpClientRecord | null {
+  const client = findMcpClientByToken(db, token, now);
+  if (!client) return null;
+  db.prepare("UPDATE mcp_clients SET last_used_at = ?, updated_at = ? WHERE id = ?").run(now, now, client.id);
+  return { ...client, lastUsedAt: now, updatedAt: now };
+}
+
+export function findMcpClientByToken(db: ZosDatabase, token: string, now = new Date().toISOString()): McpClientRecord | null {
   if (!token.startsWith(TOKEN_PREFIX) || token.length < 50) return null;
   const candidateDigest = digestToken(token);
   const rows = db.prepare(`
@@ -88,9 +95,7 @@ export function authenticateMcpClient(db: ZosDatabase, token: string, now = new 
     WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)
   `).all(now) as McpClientRow[];
   const row = rows.find((candidate) => safeDigestEqual(candidate.token_digest, candidateDigest));
-  if (!row) return null;
-  db.prepare("UPDATE mcp_clients SET last_used_at = ?, updated_at = ? WHERE id = ?").run(now, now, row.id);
-  return mapClient({ ...row, last_used_at: now, updated_at: now });
+  return row ? mapClient(row) : null;
 }
 
 export function rotateMcpClientToken(

@@ -101,6 +101,7 @@ install -d -m 0750 "$ROOT_DIR" "$ROOT_DIR/config" "$STATE_DIR" "$STATE_DIR/trash
   "$STATE_DIR/vod-player" "$STATE_DIR/bluetooth" "$ROOT_DIR/logs" "$ROOT_DIR/home" \
   "$ROOT_DIR/home/termux" "$ROOT_DIR/apps" "$ROOT_DIR/deploy" \
   "$ROOT_DIR/system-backups" "$ROOT_DIR/data" "$ROOT_DIR/data/backup" "$NAS_ROOT_PATH"
+install -d -m 0700 "$ROOT_DIR/config/mcp"
 install -d -m 0711 "$ROOT_DIR/vm" "$ROOT_DIR/iso"
 install -d -m 0755 "$ROOT_DIR/home/share" "$STATE_DIR/hostd"
 install -d -m 0700 "$STATE_DIR/hostd/docker-daemon" \
@@ -222,6 +223,7 @@ EOF_CONFIG
 
 if id zos >/dev/null 2>&1; then
   chown root:zos "$ROOT_DIR" "$ROOT_DIR/config"
+  chown zos:zos "$ROOT_DIR/config/mcp"
   chown zos:zos "$STATE_DIR" "$STATE_DIR/trash" "$STATE_DIR/reports" \
     "$STATE_DIR/pi-sessions" "$STATE_DIR/pi-agent" "$STATE_DIR/photostaff" \
     "$STATE_DIR/media-cache" "$STATE_DIR/backup-staging" "$STATE_DIR/vod-player" "$STATE_DIR/bluetooth" \

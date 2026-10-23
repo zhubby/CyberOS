@@ -2,6 +2,7 @@ import type {
   AgentCapabilityId as SharedAgentCapabilityId,
   AgentCapabilityPolicyMode as SharedAgentCapabilityPolicyMode,
   PublicAgentCapabilityPolicySettings,
+  PublicAgentMcpSettings,
   BluetoothAdapterInput,
   BluetoothAudioDevice as SharedBluetoothAudioDevice,
   BluetoothDeviceInput,
@@ -459,6 +460,7 @@ export interface ModelProviderSettingsInput {
 }
 
 export type AgentCapabilityPolicySettings = PublicAgentCapabilityPolicySettings;
+export type AgentMcpSettings = PublicAgentMcpSettings;
 
 export type SystemInfo = PublicSystemInfo;
 export type BuildInfo = PublicBuildInfo;
@@ -1550,6 +1552,26 @@ export async function saveAgentCapabilityPolicySettings(
   });
   await ensureOk(response);
   const body = (await response.json()) as { settings: AgentCapabilityPolicySettings };
+  return body.settings;
+}
+
+export async function getAgentMcpSettings(): Promise<AgentMcpSettings> {
+  const response = await fetch("/api/settings/agent-mcp");
+  await ensureOk(response);
+  const body = (await response.json()) as { settings: AgentMcpSettings };
+  return body.settings;
+}
+
+export async function saveAgentMcpSettings(enabled: boolean): Promise<AgentMcpSettings> {
+  const response = await fetch("/api/settings/agent-mcp", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ enabled })
+  });
+  await ensureOk(response);
+  const body = (await response.json()) as { settings: AgentMcpSettings };
   return body.settings;
 }
 

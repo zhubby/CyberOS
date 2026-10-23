@@ -1665,6 +1665,99 @@
   white-space: nowrap;
 }
 
+.settings-agent-mcp-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: rgb(0 0 0 / 12%);
+}
+
+.settings-agent-mcp-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.settings-agent-mcp-copy,
+.settings-agent-mcp-copy strong,
+.settings-agent-mcp-copy small {
+  display: block;
+  min-width: 0;
+}
+
+.settings-agent-mcp-copy strong {
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.settings-agent-mcp-copy small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.settings-agent-mcp-row[data-status="ready"] .settings-agent-mcp-icon,
+.settings-agent-mcp-row[data-status="ready"] .settings-agent-mcp-copy small {
+  color: var(--success-text);
+}
+
+.settings-agent-mcp-row[data-status="attention"] .settings-agent-mcp-icon,
+.settings-agent-mcp-row[data-status="attention"] .settings-agent-mcp-copy small,
+.settings-agent-mcp-row[data-status="unavailable"] .settings-agent-mcp-copy small {
+  color: var(--warning-text);
+}
+
+.settings-agent-mcp-switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.settings-agent-mcp-switch > span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  transition: transform 150ms ease, background 150ms ease;
+}
+
+.settings-agent-mcp-switch[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.settings-agent-mcp-switch[aria-checked="true"] > span {
+  background: var(--accent-contrast);
+  transform: translateX(18px);
+}
+
+.settings-agent-mcp-switch:focus-visible {
+  outline: 2px solid var(--focus-ring-soft);
+  outline-offset: 2px;
+}
+
+.settings-agent-mcp-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .settings-device-page {
   display: grid;
   align-content: start;

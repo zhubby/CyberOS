@@ -21,6 +21,7 @@ import {
   getPhotostaffMetadataDetail,
   getPhotostaffMetadataIndexStatus,
   getAgentCapabilityPolicySettings,
+  getAgentMcpSettings,
   getSession,
   linkAgentJobToCapabilityRun,
   queryIndexedText,
@@ -150,7 +151,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
             linkAgentJobToCapabilityRun(db, { jobId: job.id, runId, providerSessionId });
             updateJobStatus(db, job.id, "waiting_approval", null, ["running"]);
           },
-          ...(config.mcp?.enabled && config.mcp.piEnabled ? {
+          ...(config.mcp?.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
             mcp: {
               enabled: true,
               url: `http://127.0.0.1:${config.api.port}/mcp`,

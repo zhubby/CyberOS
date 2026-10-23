@@ -10,6 +10,9 @@ sourceOfTruth:
   - packages/mcp/src/server.ts
   - packages/mcp-cli/src/index.ts
   - packages/api/src/server.ts
+  - packages/api/src/routes/settings.ts
+  - packages/api/src/lib/agent-mcp-settings.ts
+  - packages/worker/src/processor.ts
   - packaging/scripts/zos-mcp
 ---
 
@@ -30,8 +33,14 @@ shell_enabled = false
 ```
 
 Keep `external_enabled` and `shell_enabled` disabled until their prerequisites
-are configured. Pi continues to use its compatibility tools while
-`pi_enabled` is false.
+are configured. `enabled` remains the host-level gate. `pi_enabled` is the
+bootstrap default used only until an Agent MCP preference is saved in SQLite.
+
+The normal enablement path is **Settings > Agents > Use ZOS MCP**. Enabling the
+switch creates or repairs the protected `Built-in Pi` identity, writes its
+token with mode `0600`, and applies to newly claimed Agent jobs without a
+service restart. Disabling the switch stops MCP injection but preserves the
+paired credential so it can be enabled again without rotation.
 
 ## Pair a client
 
@@ -54,16 +63,16 @@ Read scopes use `zos:<domain>:read`; mutation proposal scopes use
 `zos:admin:shell` and `zos:admin:power` scopes. Tool discovery is filtered by
 scope and every invocation checks scope again.
 
-Create the protected Pi identity separately. The CLI writes its token to the
-configured file with mode `0600`:
+For recovery or headless setup, create the protected Pi identity with the CLI.
+The command writes its token to the configured file with mode `0600`:
 
 ```bash
 sudo zos-mcp client create --name "Built-in Pi" --kind pi
 ```
 
-After creating the Pi identity, set `pi_enabled = true` and restart
-`zos-api.service` and the worker services. Set `legacy_pi_tools_enabled = true`
-only for temporary rollback.
+After manual pairing, enable Agent MCP in the Web UI. A fully headless setup may
+instead set `pi_enabled = true` and restart `zos-api.service` and the worker
+services. Set `legacy_pi_tools_enabled = true` only for temporary rollback.
 
 ## LAN TLS
 

@@ -15,4 +15,6 @@ API 只写入 message 和 queued job。worker 负责 claim、取消检测、prov
 
 Pi 工具按 `read`、`grep`、`find`、`ls`、`bash`、`edit`、`write` 分组，策略可配置。没有 provider key 时，正式 Pi turn 失败；开发环境可显式启用 model-free read-only fallback。
 
+Agent 设置中的 MCP 开关保存在 SQLite。开启时 API 自动创建或修复受保护的 `Built-in Pi` 身份和 `0600` token；worker 在每次领取 job 时读取最新值，因此新任务无需重启即可切换 MCP 与兼容工具。关闭开关不会撤销凭据，主机级 `[mcp].enabled` 仍是不可由页面绕过的总开关。
+
 当 session root 与配置的 Photos 图库 root 一致时，worker 额外注入只读 `search_photostaff` 和 `get_photostaff_metadata`。工具名中的 `photostaff` 是内部模块标识；两者复用 Photos 数据库查询服务并强制限制到当前库版本。位置可以作为筛选条件，但工具输出再次移除精确 GPS、设备/镜头序列号、联系信息和人物区域，避免敏感元数据进入云模型上下文。

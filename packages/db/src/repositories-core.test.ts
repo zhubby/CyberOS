@@ -27,6 +27,7 @@ import {
   getDownloadTask,
   getModelProviderSettings,
   getAgentCapabilityPolicySettings,
+  getAgentMcpSettings,
   getCapabilityApprovalByRun,
   getCapabilityRun,
   getCapabilityRunPayload,
@@ -47,6 +48,7 @@ import {
   saveAgentProviderSession,
   saveDownloadSettings,
   saveAgentCapabilityPolicySettings,
+  saveAgentMcpSettings,
   transitionDownloadTask,
   updateDownloadTaskProgress,
   deleteDockerRegistryCredential,
@@ -442,6 +444,13 @@ describe("core repositories", () => {
         "zos.shell.run": "invalid" as never
       }
     })).toThrow(/Invalid policy mode/);
+  });
+
+  it("stores the Agent MCP enablement independently from host configuration", () => {
+    expect(getAgentMcpSettings(db)).toBeNull();
+    expect(saveAgentMcpSettings(db, true)).toMatchObject({ enabled: true });
+    expect(getAgentMcpSettings(db)).toMatchObject({ enabled: true });
+    expect(saveAgentMcpSettings(db, false)).toMatchObject({ enabled: false });
   });
 
   it("stores download settings and enforces the supported concurrency range", () => {

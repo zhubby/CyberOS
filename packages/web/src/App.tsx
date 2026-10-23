@@ -38,6 +38,7 @@ import {
   getNotifications,
   getNotificationsSummary,
   getAgentCapabilityPolicySettings,
+  getAgentMcpSettings,
   getPhotoLibrarySettings,
   getPhotoProcessingSettings,
   getPhotoStatus,
@@ -54,6 +55,7 @@ import {
   saveDockerSettings,
   saveModelProviderSettings,
   saveAgentCapabilityPolicySettings,
+  saveAgentMcpSettings,
   searchIndex,
   sendMessage,
   sendVodPlayerCommand,
@@ -63,6 +65,7 @@ import {
   updatePhotoProcessingSettings,
   uploadFile,
   type AgentEvent,
+  type AgentMcpSettings,
   type BuildInfo,
   type FileEntry,
   type FileBatch,
@@ -275,6 +278,7 @@ export function App() {
     modelSettingsToForm(null)
   );
   const [toolPolicyForm, setToolPolicyForm] = useState<ToolPolicyFormState>(() => defaultToolPolicyForm());
+  const [agentMcpSettings, setAgentMcpSettings] = useState<AgentMcpSettings | null>(null);
   const [dockerSettingsForm, setDockerSettingsForm] = useState<DockerSettingsFormState>(() =>
     dockerSettingsToForm(null)
   );
@@ -974,6 +978,7 @@ export function App() {
       const [
         settingsResult,
         toolPolicyResult,
+        agentMcpResult,
         dockerSettingsResult,
         downloadSettingsResult,
         indexerSettingsResult,
@@ -988,6 +993,7 @@ export function App() {
       ] = await Promise.allSettled([
         getModelProviderSettings(),
         getAgentCapabilityPolicySettings(),
+        getAgentMcpSettings(),
         getDockerSettings(),
         getDownloadSettings(),
         getIndexerSettings(),
@@ -1013,6 +1019,13 @@ export function App() {
         setToolPolicyForm(toolPolicyResult.value);
       } else {
         errors.push(toErrorMessage(toolPolicyResult.reason));
+      }
+
+      if (agentMcpResult.status === "fulfilled") {
+        setAgentMcpSettings(agentMcpResult.value);
+      } else {
+        setAgentMcpSettings(null);
+        errors.push(toErrorMessage(agentMcpResult.reason));
       }
 
       if (dockerSettingsResult.status === "fulfilled") {
@@ -1159,6 +1172,17 @@ export function App() {
       setError(toErrorMessage(nextError));
     } finally {
       setSettingsSaving(false);
+    }
+  }
+
+  async function changeAgentMcpEnabled(enabled: boolean): Promise<void> {
+    setError(null);
+    try {
+      const next = await saveAgentMcpSettings(enabled);
+      setAgentMcpSettings(next);
+      setSuccessNotice(t(enabled ? "settings.toolPolicy.mcp.enabledNotice" : "settings.toolPolicy.mcp.disabledNotice"));
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
     }
   }
 
@@ -2684,6 +2708,7 @@ export function App() {
           buildInfo={buildInfo}
           buildInfoError={buildInfoError}
           toolPolicyForm={toolPolicyForm}
+          agentMcpSettings={agentMcpSettings}
           languagePreference={languagePreference}
           themePreference={themePreference}
           previewFileSizeLimitBytes={previewFileSizeLimitBytes}
@@ -2699,6 +2724,7 @@ export function App() {
           onIndexerReindex={reindexRoot}
           onPhotoProcessingSettingsChange={changePhotoProcessingSettings}
           onToolPolicyFormChange={setToolPolicyForm}
+          onAgentMcpEnabledChange={changeAgentMcpEnabled}
           onLanguagePreferenceChange={changeLanguagePreference}
           onThemePreferenceChange={changeThemePreference}
           onPreviewFileSizeLimitChange={changePreviewFileSizeLimit}

@@ -19,6 +19,7 @@ import {
   finishBackupRun,
   finishIndexRun,
   getDockerSettings,
+  getAgentMcpSettings,
   getFileOperation,
   getFileBatch,
   getJob,
@@ -30,6 +31,7 @@ import {
   listDockerRegistryCredentials,
   listFileOperations,
   listMessages,
+  listMcpClients,
   listPendingApprovals,
   listOperationNotifications,
   listShareOperations,
@@ -3800,6 +3802,92 @@ describe("API server", () => {
       }
     });
     expect(invalid.statusCode).toBe(400);
+    await server.close();
+  });
+
+  it("pairs and toggles the built-in Agent MCP without exposing its token", async () => {
+    const tokenFile = path.join(tempDir, "config", "mcp", "pi.token");
+    const config: ZosConfig = {
+      ...testConfig(tempDir),
+      mcp: {
+        enabled: true,
+        piEnabled: false,
+        piTokenFile: tokenFile,
+        legacyPiToolsEnabled: false,
+        externalEnabled: false,
+        shellEnabled: false,
+        allowedHosts: ["localhost", "127.0.0.1", "[::1]"],
+        allowedOrigins: ["localhost", "127.0.0.1", "[::1]"],
+        maxConcurrentPerClient: 4
+      }
+    };
+    const server = await buildServer({ config, db });
+
+    const initial = await server.inject({ method: "GET", url: "/api/settings/agent-mcp" });
+    const enabled = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/agent-mcp",
+      payload: { enabled: true }
+    });
+    const token = (await readFile(tokenFile, "utf8")).trim();
+    const tokenStat = await stat(tokenFile);
+
+    expect(initial.json()).toMatchObject({
+      settings: { enabled: false, available: true, paired: false, status: "disabled" }
+    });
+    expect(enabled.statusCode).toBe(200);
+    expect(enabled.json()).toMatchObject({
+      settings: { enabled: true, available: true, paired: true, status: "ready" }
+    });
+    expect(enabled.payload).not.toContain(token);
+    expect(token).toMatch(/^zos_mcp_[A-Za-z0-9_-]{43}$/u);
+    expect(tokenStat.mode & 0o777).toBe(0o600);
+    expect(listMcpClients(db)).toEqual([
+      expect.objectContaining({ name: "Built-in Pi", kind: "pi", revokedAt: null })
+    ]);
+    expect(getAgentMcpSettings(db)).toMatchObject({ enabled: true });
+
+    await rm(tokenFile);
+    const attention = await server.inject({ method: "GET", url: "/api/settings/agent-mcp" });
+    const repaired = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/agent-mcp",
+      payload: { enabled: true }
+    });
+    const repairedToken = (await readFile(tokenFile, "utf8")).trim();
+    expect(attention.json()).toMatchObject({
+      settings: { enabled: true, paired: false, status: "attention" }
+    });
+    expect(repaired.json()).toMatchObject({
+      settings: { enabled: true, paired: true, status: "ready" }
+    });
+    expect(repaired.payload).not.toContain(repairedToken);
+    expect(repairedToken).not.toBe(token);
+    expect(listMcpClients(db)).toHaveLength(1);
+
+    const disabled = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/agent-mcp",
+      payload: { enabled: false }
+    });
+    expect(disabled.json()).toMatchObject({
+      settings: { enabled: false, paired: true, status: "disabled" }
+    });
+    expect(listMcpClients(db)).toHaveLength(1);
+    await server.close();
+  });
+
+  it("rejects Agent MCP enablement when the host service is disabled", async () => {
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const response = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/agent-mcp",
+      payload: { enabled: true }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(getAgentMcpSettings(db)).toBeNull();
+    expect(listMcpClients(db)).toEqual([]);
     await server.close();
   });
 

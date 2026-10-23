@@ -4,7 +4,7 @@ description: API 传输面、端点分组和稳定契约。
 type: reference
 status: current
 audience: [developer]
-sourceOfTruth: [packages/api/src/routes/index.ts, packages/api/src/routes/files.ts, packages/api/src/routes/photos.ts, packages/api/src/routes/sessions.ts, packages/api/src/routes/downloads.ts, packages/api/src/routes/docker.ts, packages/api/src/routes/shares.ts, packages/api/src/routes/system.ts, packages/api/src/routes/terminal.ts, packages/api/src/routes/monitoring.ts, packages/api/src/routes/monitoring-alerts.ts, packages/api/src/routes/notifications.ts, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, packages/web/src/api.ts]
+sourceOfTruth: [packages/api/src/routes/index.ts, packages/api/src/routes/files.ts, packages/api/src/routes/photos.ts, packages/api/src/routes/sessions.ts, packages/api/src/routes/downloads.ts, packages/api/src/routes/docker.ts, packages/api/src/routes/shares.ts, packages/api/src/routes/settings.ts, packages/api/src/routes/system.ts, packages/api/src/routes/terminal.ts, packages/api/src/routes/monitoring.ts, packages/api/src/routes/monitoring-alerts.ts, packages/api/src/routes/notifications.ts, packages/api/src/lib/agent-mcp-settings.ts, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, packages/web/src/api.ts]
 sidebar:
   order: 2
 ---
@@ -12,6 +12,12 @@ sidebar:
 REST 路由按 roots、files/search、photos、sessions/jobs/events、approvals/operations、indexer/readiness/health、monitoring、backup、settings、system、storage、shares、Docker、VM 和 terminal 分组。
 
 Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM console 使用 WebSocket。写操作的 approval 要求以 route 实现和 `packages/shared/src/types.ts` 为准；本页不复制易漂移的完整 JSON schema。
+
+## Agent 设置
+
+- `GET /api/settings/agent-mcp` 返回内置 Agent MCP 的 `enabled`、主机级 `available`、凭据 `paired` 和归一化状态。
+- `PATCH /api/settings/agent-mcp` 接收 `{ enabled: boolean }`。开启时服务端自动创建或修复 `Built-in Pi` 凭据，响应永不包含 token；关闭时保留配对。主机禁用 MCP 时返回 `409`。
+- `GET/PATCH /api/settings/agent-capability-policy` 继续独立管理每项能力的自动、审批、二次确认和禁用策略。
 
 ## Monitoring
 

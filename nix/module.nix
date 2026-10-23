@@ -257,6 +257,7 @@ in {
       systemd.tmpfiles.rules = [
         "d /zos 0755 root root -"
         "d /zos/config 0750 root zos -"
+        "d /zos/config/mcp 0700 zos zos -"
         "d /zos/state 1770 root zos -"
         "d /zos/logs 0750 zos zos -"
         "d /zos/data 0750 zos zos -"
@@ -350,7 +351,7 @@ in {
               ZOS_VOD_PLAYER_ENABLED = "1";
             };
             serviceConfig = {
-              ReadWritePaths = [ "/zos/state" "/zos/logs" "/zos/data" "/zos/vm" "/zos/iso" "/zos/apps" ];
+              ReadWritePaths = [ "/zos/state" "/zos/logs" "/zos/data" "/zos/vm" "/zos/iso" "/zos/apps" "/zos/config/mcp" ];
               MemoryMax = "512M";
               CPUQuota = "150%";
               TasksMax = 256;

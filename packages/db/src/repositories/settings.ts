@@ -1,5 +1,6 @@
 import type {
   AgentCapabilityPolicySettingsRecord,
+  AgentMcpSettingsRecord,
   BluetoothSettingsRecord,
   DownloadSettingsRecord,
   DockerSettingsRecord,
@@ -40,6 +41,7 @@ import type { DbSystemSettingRow } from "./repository-rows.js";
 const MODEL_PROVIDER_SETTING_KEY = "model_provider";
 const PI_TOOL_POLICY_SETTING_KEY = "pi_tool_policy";
 const AGENT_CAPABILITY_POLICY_SETTING_KEY = "agent_capability_policy";
+const AGENT_MCP_SETTING_KEY = "agent_mcp";
 const DOCKER_SETTING_KEY = "docker_settings";
 const SHARE_SETTING_KEY = "share_settings";
 const DOWNLOAD_SETTING_KEY = "download_settings";
@@ -262,6 +264,28 @@ export function saveAgentCapabilityPolicySettings(
     VALUES (?, ?, ?)
     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
   `).run(AGENT_CAPABILITY_POLICY_SETTING_KEY, JSON.stringify(record), updatedAt);
+  return record;
+}
+
+export function getAgentMcpSettings(db: ZosDatabase): AgentMcpSettingsRecord | null {
+  const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
+    .get(AGENT_MCP_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
+  if (!row) return null;
+  const value = JSON.parse(row.value_json) as { enabled?: unknown };
+  if (typeof value.enabled !== "boolean") {
+    throw new Error("Invalid Agent MCP enabled setting");
+  }
+  return { enabled: value.enabled, updatedAt: row.updated_at };
+}
+
+export function saveAgentMcpSettings(db: ZosDatabase, enabled: boolean): AgentMcpSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = { enabled, updatedAt };
+  db.prepare(`
+    INSERT INTO system_settings (key, value_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+  `).run(AGENT_MCP_SETTING_KEY, JSON.stringify(record), updatedAt);
   return record;
 }
 
