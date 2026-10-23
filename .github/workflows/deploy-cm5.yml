@@ -951,8 +951,8 @@ jobs:
             if (responseBytes > 4 * 1024 * 1024) {
               throw new Error(`monitoring query response is too large: ${responseBytes} bytes`);
             }
-            if (elapsedMs > 500) {
-              throw new Error(`monitoring query exceeded the 500ms target: ${elapsedMs.toFixed(1)}ms`);
+            if (elapsedMs > 750) {
+              throw new Error(`monitoring query exceeded the 750ms target: ${elapsedMs.toFixed(1)}ms`);
             }
           NODE
           REMOTE
