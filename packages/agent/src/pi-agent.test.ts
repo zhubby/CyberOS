@@ -1,14 +1,23 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import {
+  createAgentSession,
+  DefaultResourceLoader,
+  ModelRuntime,
+  SessionManager,
+  SettingsManager,
+  type ToolDefinition
+} from "@earendil-works/pi-coding-agent";
 import type { ModelProviderSettingsRecord, PhotostaffMetadataDetail, PhotostaffQueryPage } from "@zos/shared";
+import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   capabilityPendingRunId,
   createPhotostaffAgentTools,
   getPiTurnFailure,
   mapPiAssistantMessageEnd,
+  piAgentToolNames,
   previewPiToolArgs,
   redactPiToolArgs,
   registerConfiguredProvider
@@ -180,6 +189,116 @@ describe("Pi MCP run continuation", () => {
   });
 });
 
+describe("Pi MCP tool selection", () => {
+  it("filters dynamically registered MCP tools to the ZOS server and resource helpers", async () => {
+    const settingsManager = SettingsManager.inMemory({ defaultProjectTrust: "never" });
+    const resourceLoader = new DefaultResourceLoader({
+      cwd: tempDir,
+      agentDir: path.join(tempDir, "pi-agent"),
+      settingsManager,
+      noExtensions: true,
+      extensionFactories: [
+        (pi) => {
+          pi.on("session_start", () => {
+            for (const tool of [
+              stubTool("mcp__zos__zos_files_read", "direct"),
+              stubTool("mcp__zos__zos_apps_inspect", "codemode"),
+              stubTool("mcp__external__danger", "direct"),
+              stubTool("mcp__external__lookup", "codemode"),
+              stubTool("list_mcp_resources", "direct"),
+              stubTool("list_mcp_resource_templates", "direct"),
+              stubTool("read_mcp_resource", "direct")
+            ]) {
+              pi.registerTool(tool);
+            }
+          });
+        }
+      ],
+      noSkills: true,
+      noPromptTemplates: true,
+      noThemes: true,
+      noContextFiles: true
+    });
+    await resourceLoader.reload();
+    const { session } = await createAgentSession({
+      cwd: tempDir,
+      tools: piAgentToolNames({
+        mcpEnabled: true,
+        legacyToolsEnabled: false,
+        photostaffToolsEnabled: false
+      }),
+      resourceLoader,
+      settingsManager,
+      sessionManager: SessionManager.inMemory(tempDir)
+    });
+
+    try {
+      await session.bindExtensions({});
+
+      const activeTools = session.getActiveToolNames();
+      const callableTools = session.getCallableToolNames();
+      expect(activeTools).toContain("mcp__zos__zos_files_read");
+      expect(activeTools).not.toContain("mcp__zos__zos_apps_inspect");
+      expect(callableTools).toContain("mcp__zos__zos_apps_inspect");
+      expect(callableTools).not.toContain("mcp__external__danger");
+      expect(callableTools).not.toContain("mcp__external__lookup");
+      expect(callableTools).toEqual(expect.arrayContaining([
+        "list_mcp_resources",
+        "list_mcp_resource_templates",
+        "read_mcp_resource"
+      ]));
+      for (const toolName of ["read", "bash", "edit", "write", "grep", "find", "ls"]) {
+        expect(activeTools).not.toContain(toolName);
+      }
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("selects exact tool allowlists for MCP, legacy, and Photostaff modes", () => {
+    expect(piAgentToolNames({
+      mcpEnabled: false,
+      legacyToolsEnabled: false,
+      photostaffToolsEnabled: false
+    })).toEqual([]);
+
+    expect(piAgentToolNames({
+      mcpEnabled: true,
+      legacyToolsEnabled: false,
+      photostaffToolsEnabled: false
+    })).toEqual([
+      "codemode",
+      "tool_search",
+      "mcp__zos__*",
+      "list_mcp_resources",
+      "list_mcp_resource_templates",
+      "read_mcp_resource"
+    ]);
+
+    expect(piAgentToolNames({
+      mcpEnabled: false,
+      legacyToolsEnabled: true,
+      photostaffToolsEnabled: false
+    })).toEqual(["read", "bash", "edit", "write", "grep", "find", "ls"]);
+
+    expect(piAgentToolNames({
+      mcpEnabled: false,
+      legacyToolsEnabled: true,
+      photostaffToolsEnabled: true
+    })).toEqual([
+      "read",
+      "bash",
+      "edit",
+      "write",
+      "grep",
+      "find",
+      "ls",
+      "search_photostaff",
+      "get_photostaff_metadata"
+    ]);
+  });
+});
+
 describe("photostaff agent tools", () => {
   it("exposes structured read-only tools and strips sensitive metadata defensively", async () => {
     const page: PhotostaffQueryPage = {
@@ -279,5 +398,19 @@ function modelProviderSettings(
     apiKey: "secret-token",
     updatedAt: new Date(0).toISOString(),
     ...overrides
+  };
+}
+
+function stubTool(name: string, exposure: "direct" | "codemode"): ToolDefinition {
+  return {
+    name,
+    label: name,
+    description: name,
+    parameters: Type.Object({}),
+    exposure,
+    execute: async () => ({
+      content: [{ type: "text", text: "ok" }],
+      details: undefined
+    })
   };
 }

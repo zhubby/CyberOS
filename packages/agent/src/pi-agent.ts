@@ -152,6 +152,12 @@ const DIRECT_MCP_TOOLS = [
   "zos.files.mutate",
   "zos.runs.get"
 ] as const;
+const MCP_RESOURCE_TOOL_NAMES = [
+  "list_mcp_resources",
+  "list_mcp_resource_templates",
+  "read_mcp_resource"
+] as const;
+const ZOS_MCP_SERVER_NAME = "zos";
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 type PiProviderConfig = Parameters<ModelRuntime["registerProvider"]>[1];
 type PiProviderApi = NonNullable<PiProviderConfig["api"]>;
@@ -292,11 +298,11 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
       agentDir: piAgentDir,
       modelRuntime,
       ...(model ? { model } : {}),
-      tools: [
-        ...(mcpConfig ? ["codemode", "tool_search"] : []),
-        ...(legacyToolsEnabled ? LEGACY_PI_TOOL_NAMES : []),
-        ...(legacyToolsEnabled && input.photostaffTools ? PHOTOSTAFF_TOOL_NAMES : [])
-      ],
+      tools: piAgentToolNames({
+        mcpEnabled: mcpConfig !== null,
+        legacyToolsEnabled,
+        photostaffToolsEnabled: input.photostaffTools !== undefined
+      }),
       customTools: legacyToolsEnabled ? createZosPiTools(input) : [],
       resourceLoader,
       settingsManager,
@@ -418,6 +424,26 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
   }
 }
 
+export function piAgentToolNames(options: {
+  mcpEnabled: boolean;
+  legacyToolsEnabled: boolean;
+  photostaffToolsEnabled: boolean;
+}): string[] {
+  return [
+    // Pi requires an MCP allowlist match before direct tools can be declared to the model.
+    ...(options.mcpEnabled
+      ? [
+          "codemode",
+          "tool_search",
+          `mcp__${ZOS_MCP_SERVER_NAME}__*`,
+          ...MCP_RESOURCE_TOOL_NAMES
+        ]
+      : []),
+    ...(options.legacyToolsEnabled ? LEGACY_PI_TOOL_NAMES : []),
+    ...(options.legacyToolsEnabled && options.photostaffToolsEnabled ? PHOTOSTAFF_TOOL_NAMES : [])
+  ];
+}
+
 export async function loadControlledPiMcpConfig(settings: PiMcpRuntimeSettings): Promise<LoadedMcpConfig> {
   const tokenStat = await stat(settings.tokenFile);
   if (!tokenStat.isFile()) {
@@ -432,7 +458,7 @@ export async function loadControlledPiMcpConfig(settings: PiMcpRuntimeSettings):
   }
   return {
     servers: [{
-      name: "zos",
+      name: ZOS_MCP_SERVER_NAME,
       source: "zos:internal",
       scope: "global",
       config: {
