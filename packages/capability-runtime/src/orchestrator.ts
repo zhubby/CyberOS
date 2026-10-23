@@ -531,7 +531,7 @@ function requireReadyRoot(db: ZosDatabase, rootId: string): NasRootRecord {
 async function validateFileMutation(root: NasRootRecord, request: FileMutationRequest): Promise<void> {
   if (request.sourcePath) {
     const source = await mapPathError(() => resolveSafeExistingPath(root.path, request.sourcePath!));
-    const sourceLink = await lstat(source.absolutePath);
+    const sourceLink = await mapPathError(() => lstat(source.absolutePath));
     if (sourceLink.isSymbolicLink()) throw new CapabilityError("INVALID_ARGUMENT", "Refusing to mutate through a symlink");
   }
   if (request.targetPath) {
@@ -541,10 +541,12 @@ async function validateFileMutation(root: NasRootRecord, request: FileMutationRe
       throw new CapabilityError("CONFLICT", "Mutation target already exists");
     } catch (error) {
       if (error instanceof CapabilityError) throw error;
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new CapabilityError("INVALID_ARGUMENT", "NAS path is invalid or unavailable", { cause: error });
+      }
     }
     const parent = await mapPathError(() => resolveSafeExistingPath(root.path, path.dirname(target.relativePath)));
-    const parentStat = await stat(parent.realPath);
+    const parentStat = await mapPathError(() => stat(parent.realPath));
     if (!parentStat.isDirectory()) throw new CapabilityError("INVALID_ARGUMENT", "Mutation target parent must be a directory");
   }
 }
@@ -552,14 +554,14 @@ async function validateFileMutation(root: NasRootRecord, request: FileMutationRe
 async function fileMutationRevision(root: NasRootRecord, request: FileMutationRequest): Promise<string> {
   const state: Record<string, unknown> = { operation: request.operation, rootId: root.id };
   if (request.sourcePath) {
-    const source = await resolveSafeExistingPath(root.path, request.sourcePath);
-    const sourceStat = await stat(source.realPath);
+    const source = await mapPathError(() => resolveSafeExistingPath(root.path, request.sourcePath!));
+    const sourceStat = await mapPathError(() => stat(source.realPath));
     state.source = { path: source.relativePath, size: sourceStat.size, mtimeMs: sourceStat.mtimeMs, ino: sourceStat.ino, mode: sourceStat.mode };
   }
   if (request.targetPath) {
-    const target = await resolveSafeTargetPath(root.path, request.targetPath);
-    const parent = await resolveSafeExistingPath(root.path, path.dirname(target.relativePath));
-    const parentStat = await stat(parent.realPath);
+    const target = await mapPathError(() => resolveSafeTargetPath(root.path, request.targetPath!));
+    const parent = await mapPathError(() => resolveSafeExistingPath(root.path, path.dirname(target.relativePath)));
+    const parentStat = await mapPathError(() => stat(parent.realPath));
     state.target = { path: target.relativePath, exists: false, parentMtimeMs: parentStat.mtimeMs, parentIno: parentStat.ino };
   }
   return createHash("sha256").update(JSON.stringify(state)).digest("base64url");
