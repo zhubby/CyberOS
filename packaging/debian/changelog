@@ -1,3 +1,9 @@
+zos (1.5.26) unstable; urgency=medium
+
+  * Normalize protected NAS mutation errors for MCP clients
+
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 23 Oct 2026 17:36:08 +0000
+
 zos (1.5.25) unstable; urgency=medium
 
   * Keep broad Agent content searches responsive on large indexes.
