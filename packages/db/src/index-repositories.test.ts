@@ -500,5 +500,24 @@ describe("SQLite schema and repositories", () => {
     });
     expect(second.files).toHaveLength(100);
     expect(second.nextCursor).toBeNull();
+
+    const targetId = upsertIndexedFile(db, {
+      rootId: "local",
+      path: "target/pool-result.txt",
+      name: "pool-result.txt",
+      mimeType: "text/plain",
+      sizeBytes: 14,
+      mtimeMs: 999,
+      body: "unrelated body"
+    });
+    insertFts.run(targetId, "target/pool-result.txt", "pool-result.txt");
+    const scoped = queryIndexAdvanced(db, {
+      rootId: "local",
+      storagePoolId: "pool",
+      path: "target",
+      query: "pool",
+      limit: 10
+    });
+    expect(scoped.files).toMatchObject([{ path: "target/pool-result.txt" }]);
   });
 });

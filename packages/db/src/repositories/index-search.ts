@@ -114,34 +114,8 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
   const signature = createHash("sha256").update(JSON.stringify(normalized.signature)).digest("base64url");
   const cursor = decodeSearchCursor(normalized.cursor, signature);
   const parameters: unknown[] = [];
-  const where: string[] = ["f.root_id = ?"];
-  parameters.push(normalized.rootId);
-
-  const searchPath = normalized.path;
-  if (searchPath !== ".") {
-    where.push("(f.path = ? OR substr(f.path, 1, length(?) + 1) = ? || '/')");
-    parameters.push(searchPath, searchPath, searchPath);
-  }
-  addListFilter(where, parameters, "f.mime_type", normalized.mimeTypes);
-  addListFilter(where, parameters, categorySql(), normalized.categories);
-  addListFilter(where, parameters, "f.extraction_source", normalized.extractionSources);
-  addListFilter(where, parameters, "f.extraction_status", normalized.extractionStatuses);
-  if (normalized.modifiedFromMs !== null) {
-    where.push("f.mtime_ms >= ?");
-    parameters.push(normalized.modifiedFromMs);
-  }
-  if (normalized.modifiedToMs !== null) {
-    where.push("f.mtime_ms <= ?");
-    parameters.push(normalized.modifiedToMs);
-  }
-  if (normalized.sizeMin !== null) {
-    where.push("f.size_bytes >= ?");
-    parameters.push(normalized.sizeMin);
-  }
-  if (normalized.sizeMax !== null) {
-    where.push("f.size_bytes <= ?");
-    parameters.push(normalized.sizeMax);
-  }
+  const where: string[] = [];
+  addAdvancedSearchFilters(where, parameters, "f", normalized);
 
   const sortExpression = searchSortExpression(normalized.sort.field);
   const direction = normalized.sort.direction === "asc" ? "ASC" : "DESC";
@@ -160,37 +134,57 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
     const contentState = db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
       .pluck().get(normalized.rootId) as string | undefined;
     const includeLegacy = contentState !== "ready";
+    const candidateWhere: string[] = [];
+    const candidateParameters: unknown[] = [];
+    addAdvancedSearchFilters(candidateWhere, candidateParameters, "candidate_files", normalized);
+    const candidateFilterSql = candidateWhere.join(" AND ");
     matchesSql = `
       WITH
       current_name_matches AS MATERIALIZED (
-        SELECT file_id,
+        SELECT indexed_content_fts.file_id,
           -bm25(indexed_content_fts, 0.0, 0.0, 5.0, 10.0, 1.0, 0.5) AS score
         FROM indexed_content_fts
-        WHERE root_id = ? AND indexed_content_fts MATCH ?
+        JOIN indexed_files candidate_files
+          ON candidate_files.id = indexed_content_fts.file_id
+          AND candidate_files.root_id = indexed_content_fts.root_id
+        WHERE indexed_content_fts.root_id = ? AND indexed_content_fts MATCH ?
+          AND ${candidateFilterSql}
         LIMIT ?
       ),
       current_content_matches AS MATERIALIZED (
-        SELECT file_id,
+        SELECT indexed_content_fts.file_id,
           -bm25(indexed_content_fts, 0.0, 0.0, 5.0, 10.0, 1.0, 0.5) AS score
         FROM indexed_content_fts
-        WHERE root_id = ? AND indexed_content_fts MATCH ?
+        JOIN indexed_files candidate_files
+          ON candidate_files.id = indexed_content_fts.file_id
+          AND candidate_files.root_id = indexed_content_fts.root_id
+        WHERE indexed_content_fts.root_id = ? AND indexed_content_fts MATCH ?
+          AND ${candidateFilterSql}
         LIMIT ?
       )
       ${includeLegacy ? `,
       legacy_name_matches AS MATERIALIZED (
-        SELECT file_id,
+        SELECT indexed_text.file_id,
           -bm25(indexed_text, 0.0, 0.0, 5.0, 10.0, 1.0) AS score
         FROM indexed_text
-        WHERE root_id = ? AND indexed_text MATCH ?
-          AND file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
+        JOIN indexed_files candidate_files
+          ON candidate_files.id = indexed_text.file_id
+          AND candidate_files.root_id = indexed_text.root_id
+        WHERE indexed_text.root_id = ? AND indexed_text MATCH ?
+          AND ${candidateFilterSql}
+          AND indexed_text.file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
         LIMIT ?
       ),
       legacy_content_matches AS MATERIALIZED (
-        SELECT file_id,
+        SELECT indexed_text.file_id,
           -bm25(indexed_text, 0.0, 0.0, 5.0, 10.0, 1.0) AS score
         FROM indexed_text
-        WHERE root_id = ? AND indexed_text MATCH ?
-          AND file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
+        JOIN indexed_files candidate_files
+          ON candidate_files.id = indexed_text.file_id
+          AND candidate_files.root_id = indexed_text.root_id
+        WHERE indexed_text.root_id = ? AND indexed_text MATCH ?
+          AND ${candidateFilterSql}
+          AND indexed_text.file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
         LIMIT ?
       )
       ` : ""},
@@ -211,13 +205,13 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
         GROUP BY file_id
       )`;
     matchParameters.push(
-      normalized.rootId, normalized.filenameFtsQuery, MAX_FTS_CANDIDATES,
-      normalized.rootId, normalized.contentFtsQuery, MAX_FTS_CANDIDATES
+      normalized.rootId, normalized.filenameFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES,
+      normalized.rootId, normalized.contentFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES
     );
     if (includeLegacy) {
       matchParameters.push(
-        normalized.rootId, normalized.filenameFtsQuery, normalized.rootId, MAX_FTS_CANDIDATES,
-        normalized.rootId, normalized.legacyContentFtsQuery, normalized.rootId, MAX_FTS_CANDIDATES
+        normalized.rootId, normalized.filenameFtsQuery, ...candidateParameters, normalized.rootId, MAX_FTS_CANDIDATES,
+        normalized.rootId, normalized.legacyContentFtsQuery, ...candidateParameters, normalized.rootId, MAX_FTS_CANDIDATES
       );
     }
     joinSql = "JOIN matches m ON m.file_id = f.id";
@@ -394,13 +388,47 @@ function addListFilter(where: string[], parameters: unknown[], expression: strin
   parameters.push(...values);
 }
 
-function categorySql(): string {
+function addAdvancedSearchFilters(
+  where: string[],
+  parameters: unknown[],
+  alias: string,
+  input: ReturnType<typeof normalizeAdvancedRequest>
+): void {
+  where.push(`${alias}.root_id = ?`);
+  parameters.push(input.rootId);
+  if (input.path !== ".") {
+    where.push(`(${alias}.path = ? OR substr(${alias}.path, 1, length(?) + 1) = ? || '/')`);
+    parameters.push(input.path, input.path, input.path);
+  }
+  addListFilter(where, parameters, `${alias}.mime_type`, input.mimeTypes);
+  addListFilter(where, parameters, categorySql(alias), input.categories);
+  addListFilter(where, parameters, `${alias}.extraction_source`, input.extractionSources);
+  addListFilter(where, parameters, `${alias}.extraction_status`, input.extractionStatuses);
+  if (input.modifiedFromMs !== null) {
+    where.push(`${alias}.mtime_ms >= ?`);
+    parameters.push(input.modifiedFromMs);
+  }
+  if (input.modifiedToMs !== null) {
+    where.push(`${alias}.mtime_ms <= ?`);
+    parameters.push(input.modifiedToMs);
+  }
+  if (input.sizeMin !== null) {
+    where.push(`${alias}.size_bytes >= ?`);
+    parameters.push(input.sizeMin);
+  }
+  if (input.sizeMax !== null) {
+    where.push(`${alias}.size_bytes <= ?`);
+    parameters.push(input.sizeMax);
+  }
+}
+
+function categorySql(alias: string): string {
   return `CASE
-    WHEN lower(COALESCE(f.mime_type, '')) = 'application/pdf' THEN 'pdf'
-    WHEN lower(COALESCE(f.mime_type, '')) LIKE 'text/%' THEN 'text'
-    WHEN lower(COALESCE(f.mime_type, '')) LIKE '%wordprocessingml%' THEN 'document'
-    WHEN lower(COALESCE(f.mime_type, '')) LIKE '%spreadsheetml%' THEN 'spreadsheet'
-    WHEN lower(COALESCE(f.mime_type, '')) LIKE '%presentationml%' THEN 'presentation'
+    WHEN lower(COALESCE(${alias}.mime_type, '')) = 'application/pdf' THEN 'pdf'
+    WHEN lower(COALESCE(${alias}.mime_type, '')) LIKE 'text/%' THEN 'text'
+    WHEN lower(COALESCE(${alias}.mime_type, '')) LIKE '%wordprocessingml%' THEN 'document'
+    WHEN lower(COALESCE(${alias}.mime_type, '')) LIKE '%spreadsheetml%' THEN 'spreadsheet'
+    WHEN lower(COALESCE(${alias}.mime_type, '')) LIKE '%presentationml%' THEN 'presentation'
     ELSE 'other' END`;
 }
 
