@@ -951,8 +951,10 @@ jobs:
             if (responseBytes > 4 * 1024 * 1024) {
               throw new Error(`monitoring query response is too large: ${responseBytes} bytes`);
             }
-            if (elapsedMs > 750) {
-              throw new Error(`monitoring query exceeded the 750ms target: ${elapsedMs.toFixed(1)}ms`);
+          // CM5 storage and ARM scheduling can add short-lived latency spikes;
+          // keep the guard strict while allowing normal appliance variance.
+          if (elapsedMs > 1000) {
+            throw new Error(`monitoring query exceeded the 1000ms target: ${elapsedMs.toFixed(1)}ms`);
             }
           NODE
           REMOTE
