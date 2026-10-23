@@ -130,7 +130,7 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
   let joinSql = "";
   let scoreSql = "NULL";
   const snippetSql = "''";
-  if (normalized.filenameFtsQuery && normalized.contentFtsQuery) {
+  if (normalized.filenameTerms.length && normalized.contentFtsQuery) {
     const contentState = db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
       .pluck().get(normalized.rootId) as string | undefined;
     const includeLegacy = contentState !== "ready";
@@ -140,15 +140,13 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
     const candidateFilterSql = candidateWhere.join(" AND ");
     matchesSql = `
       WITH
-      current_name_matches AS MATERIALIZED (
-        SELECT indexed_content_fts.file_id,
-          -bm25(indexed_content_fts, 0.0, 0.0, 5.0, 10.0, 1.0, 0.5) AS score
-        FROM indexed_content_fts
-        JOIN indexed_files candidate_files
-          ON candidate_files.id = indexed_content_fts.file_id
-          AND candidate_files.root_id = indexed_content_fts.root_id
-        WHERE indexed_content_fts.root_id = ? AND indexed_content_fts MATCH ?
-          AND ${candidateFilterSql}
+      filename_matches AS MATERIALIZED (
+        SELECT candidate_files.id AS file_id, 1.0 AS score
+        FROM indexed_files candidate_files
+        WHERE ${candidateFilterSql}
+          AND ${normalized.filenameTerms.map(() =>
+            "(instr(lower(candidate_files.path), ?) > 0 OR instr(lower(candidate_files.name), ?) > 0)"
+          ).join(" AND ")}
         LIMIT ?
       ),
       current_content_matches AS MATERIALIZED (
@@ -163,18 +161,6 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
         LIMIT ?
       )
       ${includeLegacy ? `,
-      legacy_name_matches AS MATERIALIZED (
-        SELECT indexed_text.file_id,
-          -bm25(indexed_text, 0.0, 0.0, 5.0, 10.0, 1.0) AS score
-        FROM indexed_text
-        JOIN indexed_files candidate_files
-          ON candidate_files.id = indexed_text.file_id
-          AND candidate_files.root_id = indexed_text.root_id
-        WHERE indexed_text.root_id = ? AND indexed_text MATCH ?
-          AND ${candidateFilterSql}
-          AND indexed_text.file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
-        LIMIT ?
-      ),
       legacy_content_matches AS MATERIALIZED (
         SELECT indexed_text.file_id,
           -bm25(indexed_text, 0.0, 0.0, 5.0, 10.0, 1.0) AS score
@@ -189,12 +175,10 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
       )
       ` : ""},
       raw_matches AS (
-        SELECT file_id, score, 0 AS content_match FROM current_name_matches
+        SELECT file_id, score, 0 AS content_match FROM filename_matches
         UNION ALL
         SELECT file_id, score, 1 AS content_match FROM current_content_matches
         ${includeLegacy ? `
-          UNION ALL
-          SELECT file_id, score, 0 AS content_match FROM legacy_name_matches
           UNION ALL
           SELECT file_id, score, 1 AS content_match FROM legacy_content_matches
         ` : ""}
@@ -205,12 +189,13 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
         GROUP BY file_id
       )`;
     matchParameters.push(
-      normalized.rootId, normalized.filenameFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES,
+      ...candidateParameters,
+      ...normalized.filenameTerms.flatMap((term) => [term, term]),
+      MAX_FTS_CANDIDATES,
       normalized.rootId, normalized.contentFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES
     );
     if (includeLegacy) {
       matchParameters.push(
-        normalized.rootId, normalized.filenameFtsQuery, ...candidateParameters, normalized.rootId, MAX_FTS_CANDIDATES,
         normalized.rootId, normalized.legacyContentFtsQuery, ...candidateParameters, normalized.rootId, MAX_FTS_CANDIDATES
       );
     }
@@ -225,8 +210,8 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
       ${snippetSql} AS marked_snippet,
       f.extraction_source, f.extraction_status,
       ${sortExpression} AS sort_value,
-      ${normalized.filenameFtsQuery ? "m.content_match" : "0"} AS content_match,
-      ${normalized.filenameFtsQuery ? "(SELECT COUNT(*) FROM matches WHERE content_match = 1)" : "0"} AS content_match_count
+      ${normalized.filenameTerms.length ? "m.content_match" : "0"} AS content_match,
+      ${normalized.filenameTerms.length ? "(SELECT COUNT(*) FROM matches WHERE content_match = 1)" : "0"} AS content_match_count
     FROM indexed_files f
     ${joinSql}
     WHERE ${where.join(" AND ")}
@@ -247,7 +232,7 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
       normalized.contentFtsQuery,
       normalized.legacyContentFtsQuery,
       pageRows.filter((row) => row.content_match === 1).map((row) => row.file_id),
-      normalized.filenameFtsQuery ? db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
+      normalized.filenameTerms.length ? db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
         .pluck().get(normalized.rootId) !== "ready" : false
     );
     for (const row of pageRows) row.marked_snippet = snippets.get(row.file_id) ?? "";
@@ -301,20 +286,25 @@ function normalizeAdvancedRequest(request: IndexSearchRequest) {
   };
   return {
     ...signature,
-    filenameFtsQuery: query ? literalFtsQuery(query, ["path", "name"], true) : null,
-    contentFtsQuery: query ? literalFtsQuery(query, ["body", "terms"], false) : null,
-    legacyContentFtsQuery: query ? literalFtsQuery(query, ["body"], false) : null,
+    filenameTerms: query ? searchTokens(query) : [],
+    contentFtsQuery: query ? literalFtsQuery(query, ["body", "terms"]) : null,
+    legacyContentFtsQuery: query ? literalFtsQuery(query, ["body"]) : null,
     cursor: request.cursor ?? null,
     limit,
     signature
   };
 }
 
-function literalFtsQuery(query: string, columns: string[], prefix: boolean): string {
+function searchTokens(query: string): string[] {
   const tokens = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
   if (!tokens.length) throw new Error("Search query must contain a letter or number");
+  return tokens;
+}
+
+function literalFtsQuery(query: string, columns: string[]): string {
+  const tokens = searchTokens(query);
   const terms = tokens
-    .map((token) => `"${token.replaceAll('"', '""')}"${prefix ? "*" : ""}`)
+    .map((token) => `"${token.replaceAll('"', '""')}"`)
     .join(" AND ");
   return `{${columns.join(" ")}} : (${terms})`;
 }

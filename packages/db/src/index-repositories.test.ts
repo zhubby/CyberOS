@@ -451,7 +451,7 @@ describe("SQLite schema and repositories", () => {
     expect(callerSort).toEqual({ field: "relevance", direction: "desc" });
   });
 
-  it("bounds broad filename-prefix searches before ranking results", () => {
+  it("bounds broad filename searches without relying on the content FTS", () => {
     const insertFts = db.prepare(`
       INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms)
       VALUES (?, 'local', ?, ?, 'unrelated body', 'unrelated body')
@@ -501,7 +501,7 @@ describe("SQLite schema and repositories", () => {
     expect(second.files).toHaveLength(100);
     expect(second.nextCursor).toBeNull();
 
-    const targetId = upsertIndexedFile(db, {
+    upsertIndexedFile(db, {
       rootId: "local",
       path: "target/pool-result.txt",
       name: "pool-result.txt",
@@ -510,7 +510,6 @@ describe("SQLite schema and repositories", () => {
       mtimeMs: 999,
       body: "unrelated body"
     });
-    insertFts.run(targetId, "target/pool-result.txt", "pool-result.txt");
     const scoped = queryIndexAdvanced(db, {
       rootId: "local",
       storagePoolId: "pool",
