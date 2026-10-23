@@ -5,7 +5,7 @@ runtime_dir=${ZOS_TV_RUNTIME_DIR:-/run/zos-tv}
 install -d -m 0700 -o zos -g zos "$runtime_dir" "$runtime_dir/status"
 rm -f "$runtime_dir/wayland-0" "$runtime_dir/wayland-0.lock" "$runtime_dir/status/weston.json" \
   "$runtime_dir/status/chromium.json" "$runtime_dir/status/cec.json" \
-  "$runtime_dir/status/gamepad.json"
+  "$runtime_dir/status/gamepad.json" "$runtime_dir/weston.log"
 
 config_tmp=$(mktemp "$runtime_dir/.weston.ini.XXXXXX")
 trap 'rm -f "$config_tmp"' EXIT HUP INT TERM

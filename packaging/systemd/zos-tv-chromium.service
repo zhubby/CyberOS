@@ -9,6 +9,7 @@ After=zos-tv-weston.service zos-api.service
 Type=simple
 User=zos
 Group=zos
+SupplementaryGroups=video render
 Environment=HOME=/zos/state/tv
 Environment=XDG_RUNTIME_DIR=/run/zos-tv
 Environment=WAYLAND_DISPLAY=wayland-0

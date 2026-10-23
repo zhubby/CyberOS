@@ -165,6 +165,7 @@ describe("native packaging artifacts", () => {
     expect(tvWestonScript).toContain("trap terminate HUP INT TERM");
     const tvChromium = await readPackagingFile("systemd", "zos-tv-chromium.service");
     expect(tvChromium).toContain("PartOf=zos-tv.target");
+    expect(tvChromium).toContain("SupplementaryGroups=video render");
     expect(tvChromium).toContain("IPAddressAllow=localhost");
     expect(tvChromium).not.toContain("--no-sandbox");
     await expect(readPackagingFile("scripts", "zos-tv-chromium"))
@@ -189,6 +190,7 @@ describe("native packaging artifacts", () => {
     expect(tvGamepad).not.toMatch(/AF_INET|AF_BLUETOOTH/);
     const tvPrepareScript = await readPackagingFile("scripts", "zos-tv-prepare");
     expect(tvPrepareScript).toContain("install -d -m 0700");
+    expect(tvPrepareScript).toContain('"$runtime_dir/weston.log"');
     expect(tvPrepareScript).toContain('"$runtime_dir/status/gamepad.json"');
     await expect(readPackagingFile("scripts", "zos-tv-write-status")).resolves.toContain("weston|chromium|cec|gamepad");
     const mpvInput = await readPackagingFile("etc", "mpv-input.conf");
