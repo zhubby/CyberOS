@@ -138,6 +138,7 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
     const candidateParameters: unknown[] = [];
     addAdvancedSearchFilters(candidateWhere, candidateParameters, "candidate_files", normalized);
     const candidateFilterSql = candidateWhere.join(" AND ");
+    // Resolve FTS rowids through the lightweight shadow table so candidate scans do not decode stored bodies.
     matchesSql = `
       WITH
       filename_matches AS MATERIALIZED (
@@ -149,28 +150,36 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
           ).join(" AND ")}
         LIMIT ?
       ),
-      current_content_matches AS MATERIALIZED (
-        SELECT indexed_content_fts.file_id,
-          -bm25(indexed_content_fts, 0.0, 0.0, 5.0, 10.0, 1.0, 0.5) AS score
+      current_content_rows AS MATERIALIZED (
+        SELECT rowid
         FROM indexed_content_fts
+        WHERE indexed_content_fts MATCH ?
+      ),
+      current_content_matches AS MATERIALIZED (
+        SELECT content.c0 AS file_id, 0.5 AS score
+        FROM current_content_rows matched
+        JOIN indexed_content_fts_content content ON content.id = matched.rowid
         JOIN indexed_files candidate_files
-          ON candidate_files.id = indexed_content_fts.file_id
-          AND candidate_files.root_id = indexed_content_fts.root_id
-        WHERE indexed_content_fts.root_id = ? AND indexed_content_fts MATCH ?
-          AND ${candidateFilterSql}
+          ON candidate_files.id = content.c0
+        WHERE ${candidateFilterSql}
         LIMIT ?
       )
       ${includeLegacy ? `,
-      legacy_content_matches AS MATERIALIZED (
-        SELECT indexed_text.file_id,
-          -bm25(indexed_text, 0.0, 0.0, 5.0, 10.0, 1.0) AS score
+      legacy_content_rows AS MATERIALIZED (
+        SELECT rowid
         FROM indexed_text
+        WHERE indexed_text MATCH ?
+      ),
+      legacy_content_matches AS MATERIALIZED (
+        SELECT legacy_content.c0 AS file_id, 0.5 AS score
+        FROM legacy_content_rows matched
+        JOIN indexed_text_content legacy_content ON legacy_content.id = matched.rowid
         JOIN indexed_files candidate_files
-          ON candidate_files.id = indexed_text.file_id
-          AND candidate_files.root_id = indexed_text.root_id
-        WHERE indexed_text.root_id = ? AND indexed_text MATCH ?
-          AND ${candidateFilterSql}
-          AND indexed_text.file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
+          ON candidate_files.id = legacy_content.c0
+        LEFT JOIN indexed_content_fts_content current_content
+          ON current_content.c0 = legacy_content.c0
+        WHERE ${candidateFilterSql}
+          AND current_content.id IS NULL
         LIMIT ?
       )
       ` : ""},
@@ -192,11 +201,11 @@ export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest)
       ...candidateParameters,
       ...normalized.filenameTerms.flatMap((term) => [term, term]),
       MAX_FTS_CANDIDATES,
-      normalized.rootId, normalized.contentFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES
+      normalized.contentFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES
     );
     if (includeLegacy) {
       matchParameters.push(
-        normalized.rootId, normalized.legacyContentFtsQuery, ...candidateParameters, normalized.rootId, MAX_FTS_CANDIDATES
+        normalized.legacyContentFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES
       );
     }
     joinSql = "JOIN matches m ON m.file_id = f.id";

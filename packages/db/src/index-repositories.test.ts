@@ -419,6 +419,19 @@ describe("SQLite schema and repositories", () => {
     expect(firstPage.files[0]?.highlightRanges.length).toBeGreaterThan(0);
     expect(firstPage.nextCursor).toEqual(expect.any(String));
 
+    const contentOnly = queryIndexAdvanced(db, {
+      rootId: "local",
+      storagePoolId: "pool",
+      path: "docs",
+      query: "body",
+      sort: { field: "name", direction: "asc" },
+      limit: 10
+    });
+    expect(contentOnly.files).toMatchObject([
+      { path: "docs/alpha.txt", score: 0.5, snippet: expect.stringContaining("body") },
+      { path: "docs/project.txt", score: 0.5, snippet: expect.stringContaining("body") }
+    ]);
+
     const secondPage = queryIndexAdvanced(db, {
       rootId: "local",
       storagePoolId: "pool",
