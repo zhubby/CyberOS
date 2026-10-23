@@ -1,3 +1,9 @@
+zos (1.5.22) unstable; urgency=medium
+
+  * Restore ZOS MCP tools in Agent sessions.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Fri, 23 Oct 2026 05:39:41 +0000
+
 zos (1.5.21) unstable; urgency=medium
 
   * Add configurable Agent MCP pairing and runtime enablement with hardened credential storage.
