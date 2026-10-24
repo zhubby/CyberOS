@@ -10,6 +10,7 @@ export interface CustomSelectOption<T extends string = string> {
 interface CustomSelectProps<T extends string = string> {
   id?: string;
   value: T;
+  selectedValues?: T[];
   options: CustomSelectOption<T>[];
   onChange: (value: T) => void;
   ariaLabel?: string;
@@ -56,6 +57,7 @@ function nextEnabledIndex<T extends string>(
 export function CustomSelect<T extends string = string>({
   id,
   value,
+  selectedValues,
   options,
   onChange,
   ariaLabel,
@@ -71,6 +73,7 @@ export function CustomSelect<T extends string = string>({
   const [open, setOpen] = useState(false);
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+  const selectedValueSet = selectedValues ? new Set(selectedValues) : new Set([value]);
   const fallbackActiveIndex =
     selectedIndex >= 0 && !options[selectedIndex]?.disabled ? selectedIndex : firstEnabledIndex(options);
   const [activeIndex, setActiveIndex] = useState(fallbackActiveIndex);
@@ -200,7 +203,7 @@ export function CustomSelect<T extends string = string>({
       {open ? (
         <div id={listboxId} className="custom-select-menu" role="listbox" aria-labelledby={triggerId}>
           {options.map((option, index) => {
-            const selected = option.value === value;
+            const selected = selectedValueSet.has(option.value);
             const active = index === activeIndex;
             const optionClassName = [
               "custom-select-option",

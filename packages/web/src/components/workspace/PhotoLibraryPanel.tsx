@@ -70,6 +70,7 @@ import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
+import { CustomSelect, type CustomSelectOption } from "../common/CustomSelect.js";
 import {
   StorageFilePickerDialog,
   type StorageFilePickerPool
@@ -666,14 +667,20 @@ export function PhotoLibraryPanel({
             </div>
             <label className="photo-sort-field">
               <span>{t("workspace.photos.sort")}</span>
-              <select value={sortField} onChange={(event) => setSortField(event.target.value as PhotoQuerySortField)}>
-                <option value="captured_at">{t("workspace.photos.sortCaptured")}</option>
-                <option value="indexed_at">{t("workspace.photos.sortIndexed")}</option>
-                <option value="name">{t("workspace.photos.sortName")}</option>
-                <option value="size_bytes">{t("workspace.photos.sortSize")}</option>
-                <option value="rating">{t("workspace.photos.sortRating")}</option>
-                {filters.location?.kind === "near" ? <option value="distance">{t("workspace.photos.sortDistance")}</option> : null}
-              </select>
+              <CustomSelect
+                value={sortField}
+                options={[
+                  { value: "captured_at", label: t("workspace.photos.sortCaptured") },
+                  { value: "indexed_at", label: t("workspace.photos.sortIndexed") },
+                  { value: "name", label: t("workspace.photos.sortName") },
+                  { value: "size_bytes", label: t("workspace.photos.sortSize") },
+                  { value: "rating", label: t("workspace.photos.sortRating") },
+                  ...(filters.location?.kind === "near" ? [{ value: "distance", label: t("workspace.photos.sortDistance") }] : [])
+                ] as CustomSelectOption<PhotoQuerySortField>[]}
+                onChange={setSortField}
+                ariaLabel={t("workspace.photos.sort")}
+                className="photo-sort-select"
+              />
               <button type="button" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} title={t("workspace.photos.sortDirection")} aria-label={t("workspace.photos.sortDirection")}>
                 {sortDirection === "asc" ? "↑" : "↓"}
               </button>
@@ -712,7 +719,22 @@ export function PhotoLibraryPanel({
             <label><span>{t("workspace.photos.aperture")}</span><div className="photo-range-inputs"><input type="number" min="0" step="0.1" value={filters.aperture?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("aperture", numberRange(event.target.value, filters.aperture?.max))} /><input type="number" min="0" step="0.1" value={filters.aperture?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("aperture", numberRange(filters.aperture?.min, event.target.value))} /></div></label>
             <label><span>{t("workspace.photos.shutter")}</span><div className="photo-range-inputs"><input type="number" min="0" step="any" value={filters.exposureTimeSeconds?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("exposureTimeSeconds", numberRange(event.target.value, filters.exposureTimeSeconds?.max))} /><input type="number" min="0" step="any" value={filters.exposureTimeSeconds?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("exposureTimeSeconds", numberRange(filters.exposureTimeSeconds?.min, event.target.value))} /></div></label>
             <label><span>{t("workspace.photos.focalLength")}</span><div className="photo-range-inputs"><input type="number" min="0" value={filters.focalLengthMm?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("focalLengthMm", numberRange(event.target.value, filters.focalLengthMm?.max))} /><input type="number" min="0" value={filters.focalLengthMm?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("focalLengthMm", numberRange(filters.focalLengthMm?.min, event.target.value))} /></div></label>
-            <label><span>{t("workspace.photos.rating")}</span><select value={filters.rating?.min ?? ""} onChange={(event) => updateFilter("rating", event.target.value ? { min: Number(event.target.value) } : undefined)}><option value="">{t("workspace.photos.allValues")}</option>{[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating}+ ({facets?.ratings.find((item) => Number(item.value) === rating)?.count ?? 0})</option>)}</select></label>
+            <label>
+              <span>{t("workspace.photos.rating")}</span>
+              <CustomSelect
+                value={filters.rating?.min?.toString() ?? ""}
+                options={[
+                  { value: "", label: t("workspace.photos.allValues") },
+                  ...[1, 2, 3, 4, 5].map((rating) => ({
+                    value: String(rating),
+                    label: `${rating}+ (${facets?.ratings.find((item) => Number(item.value) === rating)?.count ?? 0})`
+                  }))
+                ]}
+                onChange={(value) => updateFilter("rating", value ? { min: Number(value) } : undefined)}
+                ariaLabel={t("workspace.photos.rating")}
+                className="photo-filter-select"
+              />
+            </label>
             <label className="photo-location-filter"><input type="checkbox" checked={filters.hasLocation === true} onChange={(event) => updateFilter("hasLocation", event.target.checked ? true : undefined)} /><span>{t("workspace.photos.hasLocation")}</span></label>
           </div>
           {facets?.keywords.length ? (
@@ -734,12 +756,20 @@ export function PhotoLibraryPanel({
               </div>
               {(filters.advanced?.conditions ?? []).map((condition, index) => (
                 <div className="photo-condition-row" key={`${index}:${condition.key}`}>
-                  <select className="photo-condition-field" value={condition.key} onChange={(event) => updateAdvancedCondition(index, { key: event.target.value })} aria-label={t("workspace.photos.metadataField")}>
-                    {metadataFields.map((field) => <option key={`${field.key}:${field.valueType}`} value={field.key}>{field.key} ({field.count})</option>)}
-                  </select>
-                  <select className="photo-condition-operator" value={condition.operator} onChange={(event) => updateAdvancedCondition(index, { operator: event.target.value as PhotoMetadataCondition["operator"] })} aria-label={t("workspace.photos.operator")}>
-                    {metadataOperatorOptions(t).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
+                  <CustomSelect
+                    className="photo-condition-field"
+                    value={condition.key}
+                    options={metadataFields.map((field) => ({ value: field.key, label: `${field.key} (${field.count})` }))}
+                    onChange={(value) => updateAdvancedCondition(index, { key: value })}
+                    ariaLabel={t("workspace.photos.metadataField")}
+                  />
+                  <CustomSelect
+                    className="photo-condition-operator"
+                    value={condition.operator}
+                    options={metadataOperatorOptions(t)}
+                    onChange={(value) => updateAdvancedCondition(index, { operator: value })}
+                    ariaLabel={t("workspace.photos.operator")}
+                  />
                   {condition.operator !== "exists" && condition.operator !== "not_exists" ? <input className="photo-condition-value" value={String(Array.isArray(condition.value) ? condition.value.join(",") : condition.value ?? "")} onChange={(event) => updateAdvancedCondition(index, { value: condition.operator === "in" ? event.target.value.split(",").map((value) => value.trim()).filter(Boolean) : event.target.value })} aria-label={t("workspace.photos.value")} /> : <span className="photo-condition-value" />}
                   {condition.operator === "between" ? <input className="photo-condition-value-to" value={String(condition.valueTo ?? "")} onChange={(event) => updateAdvancedCondition(index, { valueTo: event.target.value })} aria-label={t("workspace.photos.max")} /> : <span className="photo-condition-value-to" />}
                   <button type="button" onClick={() => {
@@ -1063,23 +1093,21 @@ function PhotoFacetSelect({
   return (
     <label className="photo-facet-filter">
       <span>{label}</span>
-      <select
+      <CustomSelect
         value=""
-        aria-label={label}
-        onChange={(event) => {
-          const value = event.target.value;
+        selectedValues={selected}
+        placeholder={summary}
+        ariaLabel={`${label}: ${summary}`}
+        className="photo-filter-select"
+        options={[
+          ...(selected.length ? [{ value: "__clear__", label: allLabel }] : []),
+          ...options.map((item) => ({ value: item.value, label: `${item.value} (${item.count})` }))
+        ]}
+        onChange={(value) => {
           if (value === "__clear__") onChange(undefined);
           else if (value) onChange(togglePhotoFacetValue(selected, value));
         }}
-      >
-        <option value="" disabled>{summary}</option>
-        {selected.length ? <option value="__clear__">{allLabel}</option> : null}
-        {options.map((item) => (
-          <option key={item.value} value={item.value}>
-            {selected.includes(item.value) ? "[x] " : ""}{item.value} ({item.count})
-          </option>
-        ))}
-      </select>
+      />
     </label>
   );
 }

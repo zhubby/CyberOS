@@ -104,11 +104,8 @@
   font-weight: 800;
 }
 
-.photo-sort-field select,
 .photo-sort-field button,
-.photo-common-filters select,
 .photo-common-filters input,
-.photo-condition-row select,
 .photo-condition-row input {
   height: 29px;
   min-width: 0;
@@ -116,6 +113,35 @@
   border-radius: 4px;
   color: var(--text);
   background: var(--input-bg);
+  font-size: 10.5px;
+}
+
+.photo-sort-field .custom-select,
+.photo-common-filters .custom-select,
+.photo-condition-row .custom-select {
+  min-width: 0;
+}
+
+.photo-sort-field .custom-select {
+  flex: 1 1 132px;
+  width: 132px;
+}
+
+.photo-sort-field .custom-select-trigger,
+.photo-common-filters .custom-select-trigger,
+.photo-condition-row .custom-select-trigger {
+  height: 29px;
+  min-height: 29px;
+  border-radius: 4px;
+  padding: 0 7px;
+  gap: 5px;
+  background: var(--input-bg);
+  font-size: 10.5px;
+}
+
+.photo-sort-field .custom-select-menu,
+.photo-common-filters .custom-select-menu,
+.photo-condition-row .custom-select-menu {
   font-size: 10.5px;
 }
 
@@ -1159,6 +1185,11 @@
 
   .photo-sort-field {
     flex: 1 1 auto;
+  }
+
+  .photo-sort-field .custom-select {
+    flex: 1 1 auto;
+    width: auto;
   }
 
   .photo-condition-row {
