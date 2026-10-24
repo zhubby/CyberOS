@@ -351,7 +351,7 @@ in {
               ZOS_VOD_PLAYER_ENABLED = "1";
             };
             serviceConfig = {
-              ReadWritePaths = [ "/zos/state" "/zos/logs" "/zos/data" "/zos/vm" "/zos/iso" "/zos/apps" "/zos/config/mcp" ];
+              ReadWritePaths = [ "/run/zos" "/zos/state" "/zos/logs" "/zos/data" "/zos/vm" "/zos/iso" "/zos/apps" "/zos/config/mcp" ];
               MemoryMax = "512M";
               CPUQuota = "150%";
               TasksMax = 256;
@@ -370,7 +370,7 @@ in {
               TimeoutStopSec = "30s";
               KillMode = "control-group";
               ReadOnlyPaths = [ "-/zos/data" ];
-              ReadWritePaths = [ "/zos/state" ];
+              ReadWritePaths = [ "/run/zos" "/zos/state" ];
               RestrictAddressFamilies = [ "AF_UNIX" ];
               MemoryMax = "256M";
               TasksMax = 64;
@@ -392,7 +392,7 @@ in {
               TimeoutStopSec = "30s";
               KillMode = "control-group";
               ReadOnlyPaths = [ "-/zos/data" ];
-              ReadWritePaths = [ "/zos/state" ];
+              ReadWritePaths = [ "/run/zos" "/zos/state" ];
               RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
               MemoryMax = "256M";
               TasksMax = 64;

@@ -3300,29 +3300,81 @@
   overflow: hidden;
 }
 
+.monitoring-overview-stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .monitoring-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.monitoring-toolbar-context {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line-soft);
-  background: var(--footer-bg);
+}
+
+.monitoring-toolbar-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.monitoring-toolbar-selection svg {
+  flex: 0 0 auto;
+  color: var(--accent-soft-text);
+}
+
+.monitoring-toolbar-selection strong {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+
+.monitoring-range-wrap {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .monitoring-range {
-  display: inline-grid;
-  grid-template-columns: repeat(6, minmax(42px, 1fr));
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
   padding: 3px;
   border: 1px solid var(--line-soft);
   border-radius: 6px;
   background: var(--surface);
 }
 
+.monitoring-range::-webkit-scrollbar {
+  display: none;
+}
+
 .monitoring-range button {
-  min-width: 42px;
-  height: 27px;
+  flex: 0 0 46px;
+  height: 29px;
   padding: 0 8px;
   border: 0;
   border-radius: 4px;
@@ -3602,12 +3654,26 @@
 
 @container workspace-stage (max-width: 700px) {
   .monitoring-toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 9px 12px;
   }
 
+  .monitoring-toolbar-context {
+    align-items: center;
+  }
+
+  .monitoring-range-wrap,
   .monitoring-range {
     width: 100%;
+  }
+
+  .monitoring-range-wrap {
+    justify-content: stretch;
+  }
+
+  .monitoring-range button {
+    flex: 1 0 48px;
   }
 
   .monitoring-live-status {
@@ -3624,12 +3690,17 @@
 }
 
 @container workspace-stage (max-width: 420px) {
-  .monitoring-range {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .monitoring-toolbar-context {
+    align-items: flex-start;
+    flex-wrap: wrap;
   }
 
-  .monitoring-range button {
-    min-width: 0;
+  .monitoring-toolbar-selection {
+    flex: 1 1 auto;
+  }
+
+  .monitoring-live-status {
+    margin-left: auto;
   }
 
   .monitoring-capacity-row {

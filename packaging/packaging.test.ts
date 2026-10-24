@@ -77,7 +77,10 @@ describe("native packaging artifacts", () => {
       expect(unit).toContain("ProtectSystem=strict");
       expect(unit).toContain("NoNewPrivileges=yes");
       expect(unit).toContain("CapabilityBoundingSet=");
-      expect(unit).toContain("ReadWritePaths=/zos/state");
+      expect(unit).toMatch(/ReadWritePaths=.*\/zos\/state/);
+      if (["zos-api.service", "zos-monitor.service", "zos-alerter.service"].includes(serviceName)) {
+        expect(unit).toMatch(/ReadWritePaths=.*\/run\/zos/);
+      }
       expect(unit).toContain("Environment=ZOS_ROOT=/zos");
       if (["zos-monitor.service", "zos-alerter.service", "zos-indexer.service"].includes(serviceName)) {
         expect(unit).toContain("ExecStart=/usr/lib/zos/bin/zos-");
@@ -96,7 +99,8 @@ describe("native packaging artifacts", () => {
     expect(monitorUnit).toContain("Type=notify");
     expect(monitorUnit).toContain("ExecStart=/usr/lib/zos/bin/zos-monitor");
     expect(monitorUnit).toContain("ReadOnlyPaths=-/zos/data");
-    expect(monitorUnit).toContain("ReadWritePaths=/zos/state");
+    expect(monitorUnit).toMatch(/ReadWritePaths=.*\/run\/zos/);
+    expect(monitorUnit).toMatch(/ReadWritePaths=.*\/zos\/state/);
     expect(monitorUnit).toContain("RestrictAddressFamilies=AF_UNIX");
     expect(monitorUnit).toContain("MemoryMax=256M");
     expect(monitorUnit).toContain("CPUWeight=20");
@@ -315,9 +319,14 @@ describe("native packaging artifacts", () => {
     await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
       "Environment=ZOS_BUILD_INFO_PATH=/usr/lib/zos/build-info.json"
     );
-    await expect(readPackagingFile("systemd", "zos-api.service")).resolves.toContain(
-      "ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps"
-    );
+    const apiUnit = await readPackagingFile("systemd", "zos-api.service");
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/run\/zos/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/state/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/logs/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/data/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/vm/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/iso/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/apps/);
     const hostAccessUnit = await readPackagingFile("systemd", "zos-host-accessd.service");
     expect(hostAccessUnit).toContain("User=zos");
     expect(hostAccessUnit).toContain("SupplementaryGroups=docker");
@@ -774,7 +783,14 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("zos-migrate-sigmaos.sh usr/lib/zos/scripts/");
     expect(install).toContain("zos-migration-copy-growth.mjs usr/lib/zos/scripts/");
     expect(install).toContain("zos-migration-recovery.mjs usr/lib/zos/scripts/");
-    expect(apiUnit).toContain("ReadWritePaths=/zos/state /zos/logs /zos/data /zos/vm /zos/iso /zos/apps /zos/config/mcp");
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/run\/zos/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/state/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/logs/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/data/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/vm/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/iso/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/apps/);
+    expect(apiUnit).toMatch(/ReadWritePaths=.*\/zos\/config\/mcp/);
     expect(apiUnit).toContain("CapabilityBoundingSet=\n");
   });
 

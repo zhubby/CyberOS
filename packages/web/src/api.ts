@@ -134,6 +134,7 @@ import type {
   MonitoringOverviewResponse as SharedMonitoringOverviewResponse,
   MonitoringQueryRequest as SharedMonitoringQueryRequest,
   MonitoringQueryResponse as SharedMonitoringQueryResponse,
+  MonitoringStreamEvent as SharedMonitoringStreamEvent,
   MonitoringAlertRule as SharedMonitoringAlertRule,
   MonitoringAlertRuleInput as SharedMonitoringAlertRuleInput,
   MonitoringAlertIncident as SharedMonitoringAlertIncident,
@@ -225,6 +226,7 @@ export type MonitoringCatalog = SharedMonitoringCatalogResponse;
 export type MonitoringOverview = SharedMonitoringOverviewResponse;
 export type MonitoringQueryRequest = SharedMonitoringQueryRequest;
 export type MonitoringQueryResponse = SharedMonitoringQueryResponse;
+export type MonitoringStreamEvent = SharedMonitoringStreamEvent;
 export type MonitoringAlertRule = SharedMonitoringAlertRule;
 export type MonitoringAlertRuleInput = SharedMonitoringAlertRuleInput;
 export type MonitoringAlertIncident = SharedMonitoringAlertIncident;

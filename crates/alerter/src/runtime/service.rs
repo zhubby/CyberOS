@@ -1,3 +1,4 @@
+use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -6,6 +7,7 @@ use tokio::time::{Instant, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
 use crate::adapters::alert_store::AlertStore;
+use crate::adapters::alerter_events::AlertEventPublisher;
 use crate::adapters::clock::SystemClock;
 use crate::adapters::metrics_sqlite::MetricsQuery;
 use crate::adapters::smtp::LettreMailTransport;
@@ -35,13 +37,31 @@ impl AlerterService {
     }
 
     pub async fn run(self) -> Result<(), AlerterError> {
+        let publisher = AlertEventPublisher::start(
+            env::var_os("ZOS_MONITORING_EVENTS_SOCKET")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    if env::var("ZOS_ENVIRONMENT").as_deref() == Ok("development") {
+                        self.config
+                            .database_path
+                            .parent()
+                            .unwrap_or_else(|| Path::new("."))
+                            .join("monitoring-events.sock")
+                    } else {
+                        PathBuf::from("/run/zos/monitoring-events.sock")
+                    }
+                }),
+        );
         let _ = sd_notify::notify(&[NotifyState::Status("Waiting for alert schema")]);
-        if !wait_for_first_evaluation(&self.config, self.shutdown.child_token()).await? {
+        if !wait_for_first_evaluation(&self.config, self.shutdown.child_token(), publisher.clone())
+            .await?
+        {
             let _ = sd_notify::notify(&[NotifyState::Stopping]);
             return Ok(());
         }
         let _ = sd_notify::notify(&[NotifyState::Status("Evaluating alerts"), NotifyState::Ready]);
-        let evaluation = run_evaluation_loop(self.config.clone(), self.shutdown.child_token());
+        let evaluation =
+            run_evaluation_loop(self.config.clone(), self.shutdown.child_token(), publisher);
         let delivery = run_delivery_loop(
             self.config.database_path.clone(),
             self.shutdown.child_token(),
@@ -55,6 +75,7 @@ impl AlerterService {
 async fn wait_for_first_evaluation(
     config: &AlerterConfig,
     shutdown: CancellationToken,
+    publisher: AlertEventPublisher,
 ) -> Result<bool, AlerterError> {
     loop {
         let database_path = config.database_path.clone();
@@ -74,7 +95,10 @@ async fn wait_for_first_evaluation(
         .await
         .map_err(|error| AlerterError::Runtime(error.to_string()))?;
         match result {
-            Ok(()) => return Ok(true),
+            Ok(summary) => {
+                publisher.publish_summary(summary, iso(now_ms));
+                return Ok(true);
+            }
             Err(AlerterError::AlertSchemaUnavailable) => {
                 tracing::info!("alert schema is not ready; retrying");
             }
@@ -90,6 +114,7 @@ async fn wait_for_first_evaluation(
 async fn run_evaluation_loop(
     config: AlerterConfig,
     shutdown: CancellationToken,
+    publisher: AlertEventPublisher,
 ) -> Result<(), AlerterError> {
     let mut schedule =
         tokio::time::interval_at(Instant::now() + EVALUATION_INTERVAL, EVALUATION_INTERVAL);
@@ -114,7 +139,8 @@ async fn run_evaluation_loop(
                     )
                 }).await.map_err(|error| AlerterError::Runtime(error.to_string()))?;
                 match result {
-                    Ok(()) => {
+                    Ok(summary) => {
+                        publisher.publish_summary(summary, iso(now_ms));
                         let _ = sd_notify::notify(&[NotifyState::Status("Evaluating alerts")]);
                     }
                     Err(AlerterError::AlertSchemaUnavailable) => {
@@ -199,10 +225,22 @@ fn evaluate_once(
     monitoring_enabled: bool,
     sampling: zos_monitoring_contracts::SamplingIntervals,
     now_ms: i64,
-) -> Result<(), AlerterError> {
+) -> Result<crate::ports::AlertSummary, AlerterError> {
     let mut store = AlertStore::open(database_path)?;
     let metrics = MetricsQuery::new(metrics_path, sampling);
-    EvaluationCycle::run(&mut store, &metrics, monitoring_enabled, now_ms)
+    EvaluationCycle::run(&mut store, &metrics, monitoring_enabled, now_ms)?;
+    store.summary(now_ms)
+}
+
+fn iso(now_ms: i64) -> String {
+    time::OffsetDateTime::from_unix_timestamp_nanos(i128::from(now_ms) * 1_000_000)
+        .ok()
+        .and_then(|value| {
+            value
+                .format(&time::format_description::well_known::Rfc3339)
+                .ok()
+        })
+        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_owned())
 }
 
 #[cfg(test)]

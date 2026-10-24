@@ -93,6 +93,59 @@ export interface MonitoringQueryResponse {
   series: MonitoringQuerySeries[];
 }
 
+export interface MonitoringStreamSample {
+  metric: string;
+  labels: Record<string, string>;
+  timestamp: string;
+  value: number;
+  rate: number | null;
+}
+
+export interface MonitoringStreamCollector {
+  collector: string;
+  state: MonitoringCollectorState;
+  lastAttemptAt: string;
+  lastSuccessAt: string | null;
+  durationMs: number;
+  consecutiveFailures: number;
+  error: string | null;
+}
+
+export interface MonitoringSamplesStreamEvent {
+  protocolVersion: 1;
+  source: "monitor";
+  sequence: number;
+  type: "samples";
+  sampledAt: string;
+  samples: MonitoringStreamSample[];
+  collectors: MonitoringStreamCollector[];
+  status: MonitoringState;
+}
+
+export interface MonitoringAlertsStreamEvent {
+  protocolVersion: 1;
+  source: "alerter";
+  sequence: number;
+  type: "alert_summary";
+  updatedAt: string;
+  summary: NonNullable<MonitoringOverviewResponse["alerts"]>;
+}
+
+export interface MonitoringStatusStreamEvent {
+  protocolVersion: 1;
+  source: "monitor" | "alerter";
+  sequence: number;
+  type: "status";
+  status: MonitoringState | "starting" | "ready" | "degraded" | "unavailable";
+  detail?: string;
+  updatedAt: string;
+}
+
+export type MonitoringStreamEvent =
+  | MonitoringSamplesStreamEvent
+  | MonitoringAlertsStreamEvent
+  | MonitoringStatusStreamEvent;
+
 export interface MonitoringHealthStatus {
   status: MonitoringState;
   lastSampleAt: string | null;

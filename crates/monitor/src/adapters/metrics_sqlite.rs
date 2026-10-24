@@ -8,6 +8,7 @@ use tokio::sync::{mpsc, oneshot};
 use zos_monitoring_contracts::METRICS_SCHEMA_VERSION;
 
 use crate::adapters::catalog;
+use crate::adapters::monitoring_events::{CollectionCommitted, MetricsEventPublisher};
 use crate::domain::config::MonitoringConfig;
 #[cfg(test)]
 use crate::domain::metric::MetricKind;
@@ -264,6 +265,14 @@ pub struct MetricsStoreHandle {
 
 impl MetricsStoreHandle {
     pub async fn start(path: PathBuf, config: MonitoringConfig) -> Result<Self, MonitorError> {
+        Self::start_with_publisher(path, config, None).await
+    }
+
+    pub async fn start_with_publisher(
+        path: PathBuf,
+        config: MonitoringConfig,
+        publisher: Option<MetricsEventPublisher>,
+    ) -> Result<Self, MonitorError> {
         let store = tokio::task::spawn_blocking(move || MetricsStore::open(path, config))
             .await
             .map_err(|error| MonitorError::Collector(error.to_string()))??;
@@ -290,7 +299,20 @@ impl MetricsStoreHandle {
                             duration_ms,
                             error.as_deref(),
                         );
-                        let _ = reply.send(result);
+                        if let (Ok(committed), Some(publisher)) = (&result, publisher.as_ref()) {
+                            publisher.publish_collection(CollectionCommitted {
+                                attempted_at_ms: committed.attempted_at_ms,
+                                samples: committed.samples.clone(),
+                                collector: committed.collector,
+                                state: committed.state,
+                                degraded: committed.degraded,
+                                last_success_at_ms: committed.last_success_at_ms,
+                                duration_ms: committed.duration_ms,
+                                consecutive_failures: committed.consecutive_failures,
+                                error: committed.error.clone(),
+                            });
+                        }
+                        let _ = reply.send(result.map(|_| ()));
                     }
                     StoreCommand::Maintain { now_ms, reply } => {
                         let _ = reply.send(store.maintain(now_ms));
@@ -401,13 +423,13 @@ enum StoreCommand {
 
 fn record_collection(
     store: &mut MetricsStore,
-    collector: &str,
+    collector: &'static str,
     state: CollectorState,
     samples: &[MetricSample],
     attempted_at_ms: i64,
     duration_ms: f64,
     error: Option<&str>,
-) -> Result<(), MonitorError> {
+) -> Result<CollectionCommitted, MonitorError> {
     let mut actual_state = state;
     let mut actual_error = error.map(str::to_owned);
     if state != CollectorState::Error {
@@ -438,6 +460,16 @@ fn record_collection(
         [collector],
         |row| row.get::<_, i64>(0),
     )?;
+    let last_success_at_ms = store.connection.query_row(
+        "SELECT last_success_ms FROM collector_status WHERE collector_id = ?",
+        [collector],
+        |row| row.get::<_, Option<i64>>(0),
+    )?;
+    let degraded = store.connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM collector_status WHERE state = 'error')",
+        [],
+        |row| row.get::<_, bool>(0),
+    )?;
     let mut self_samples = vec![
         MetricSample::new("zos_monitor_collector_up", attempted_at_ms, up)
             .with_label("collector", collector),
@@ -467,7 +499,23 @@ fn record_collection(
         ));
     }
     let _ = store.write_samples(&self_samples)?;
-    Ok(())
+    let mut published_samples = if actual_state == CollectorState::Error {
+        Vec::new()
+    } else {
+        samples.to_vec()
+    };
+    published_samples.extend(self_samples);
+    Ok(CollectionCommitted {
+        attempted_at_ms,
+        samples: published_samples,
+        collector,
+        state: actual_state,
+        degraded,
+        last_success_at_ms,
+        duration_ms,
+        consecutive_failures: failures,
+        error: actual_error,
+    })
 }
 
 fn schema_version(connection: &Connection) -> Result<i64, MonitorError> {

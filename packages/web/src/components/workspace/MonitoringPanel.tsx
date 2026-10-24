@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
+  Clock3,
   Cpu,
   Database,
   HardDrive,
@@ -24,7 +25,8 @@ import {
   getMonitoringOverview,
   queryMonitoringMetrics,
   type MonitoringOverview,
-  type MonitoringQueryResponse
+  type MonitoringQueryResponse,
+  type MonitoringStreamEvent
 } from "../../api.js";
 import { formatBytes, formatLocaleNumber, formatRelativeTime } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -37,12 +39,12 @@ import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeade
 import { MonitoringAlertsView } from "./MonitoringAlertsView.js";
 
 const RANGE_OPTIONS = [
-  { id: "1h", durationMs: 60 * 60_000, refreshMs: 10_000 },
-  { id: "6h", durationMs: 6 * 60 * 60_000, refreshMs: 10_000 },
-  { id: "24h", durationMs: 24 * 60 * 60_000, refreshMs: 10_000 },
-  { id: "7d", durationMs: 7 * 24 * 60 * 60_000, refreshMs: 60_000 },
-  { id: "30d", durationMs: 30 * 24 * 60 * 60_000, refreshMs: 60_000 },
-  { id: "1y", durationMs: 365 * 24 * 60 * 60_000, refreshMs: 60_000 }
+  { id: "1h", durationMs: 60 * 60_000 },
+  { id: "6h", durationMs: 6 * 60 * 60_000 },
+  { id: "24h", durationMs: 24 * 60 * 60_000 },
+  { id: "7d", durationMs: 7 * 24 * 60 * 60_000 },
+  { id: "30d", durationMs: 30 * 24 * 60 * 60_000 },
+  { id: "1y", durationMs: 365 * 24 * 60 * 60_000 }
 ] as const;
 
 type MonitoringRange = (typeof RANGE_OPTIONS)[number]["id"];
@@ -71,10 +73,6 @@ const CHART_COLORS = [
   "var(--muted)"
 ];
 
-export function monitoringRefreshInterval(range: MonitoringRange): number {
-  return RANGE_OPTIONS.find((option) => option.id === range)?.refreshMs ?? 60_000;
-}
-
 export function MonitoringPanel({
   locale,
   visible = true
@@ -97,6 +95,10 @@ function MonitoringPanelContent({ locale }: { locale: SupportedLocale }) {
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
   const rangeConfig = RANGE_OPTIONS.find((option) => option.id === range)!;
+  const refreshRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const rangeDurationRef = useRef(rangeConfig.durationMs);
+  const streamConnected = useRef(false);
+  const streamSequences = useRef<Partial<Record<"monitor" | "alerter", number>>>({});
 
   const refresh = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -130,30 +132,72 @@ function MonitoringPanelContent({ locale }: { locale: SupportedLocale }) {
     }
   }, [rangeConfig.durationMs]);
 
+  refreshRef.current = refresh;
+  rangeDurationRef.current = rangeConfig.durationMs;
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const syncPolling = () => {
-      if (timer) clearInterval(timer);
-      timer = null;
-      if (document.visibilityState === "visible") {
-        timer = setInterval(() => void refresh(), rangeConfig.refreshMs);
-      }
+    if (typeof EventSource === "undefined") return;
+    let source: EventSource | null = null;
+    let closed = false;
+    const open = () => {
+      if (closed || document.visibilityState !== "visible" || source) return;
+      source = new EventSource("/api/monitoring/events");
+      source.addEventListener("monitoring.samples", (event) => {
+        const parsed = parseMonitoringEvent(event);
+        if (parsed?.type === "samples") {
+          if (hasSequenceGap(streamSequences, parsed.source, parsed.sequence)) {
+            void refreshRef.current();
+            return;
+          }
+          setQuery((current) => current ? mergeMonitoringSamples(current, parsed, rangeDurationRef.current) : current);
+          setOverview((current) => current ? mergeMonitoringOverview(current, parsed) : current);
+        }
+      });
+      source.addEventListener("monitoring.alerts", (event) => {
+        const parsed = parseMonitoringEvent(event);
+        if (parsed?.type === "alert_summary") {
+          if (hasSequenceGap(streamSequences, parsed.source, parsed.sequence)) {
+            void refreshRef.current();
+            return;
+          }
+          setOverview((current) => current ? { ...current, alerts: parsed.summary } : current);
+        }
+      });
+      source.addEventListener("monitoring.status", (event) => {
+        const parsed = parseMonitoringEvent(event);
+        if (parsed?.type === "status") {
+          setOverview((current) => current ? { ...current, status: parsed.status === "ready" ? "ready" : parsed.status === "disabled" ? "disabled" : parsed.status === "degraded" ? "degraded" : "unavailable" } : current);
+        }
+      });
+      source.onopen = () => {
+        setError(null);
+        if (streamConnected.current) void refreshRef.current();
+        streamConnected.current = true;
+      };
+      source.onerror = () => {
+        setError("Monitoring event stream disconnected");
+      };
+    };
+    const close = () => {
+      source?.close();
+      source = null;
     };
     const handleVisibility = () => {
-      syncPolling();
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") open();
+      else close();
     };
-    syncPolling();
+    open();
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      if (timer) clearInterval(timer);
+      closed = true;
+      close();
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [rangeConfig.refreshMs, refresh]);
+  }, []);
 
   const series = query?.series ?? [];
   const cpuSeries = selectSeries(series, ["zos_host_cpu_usage_ratio", "zos_host_load1"]);
@@ -263,40 +307,51 @@ function MonitoringPanelContent({ locale }: { locale: SupportedLocale }) {
         ))}
       </nav>
 
-      {view === "overview" ? <><div className="monitoring-toolbar">
-        <div className="monitoring-range" role="group" aria-label={t("workspace.monitoring.range.label")}>
-          {RANGE_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={range === option.id ? "is-active" : ""}
-              aria-pressed={range === option.id}
-              onClick={() => setRange(option.id)}
-            >
-              {t(`workspace.monitoring.range.${option.id}`)}
-            </button>
-          ))}
-        </div>
-        {overview ? <MonitoringStatus status={overview.status} sampledAt={overview.sampledAt} locale={locale} /> : null}
-      </div>
-
-      {unavailable ? (
-        <MonitoringState icon={<Server size={26} />} state="offline" title={t("workspace.monitoring.states.unavailable")} detail={t("workspace.monitoring.states.unavailableDetail")} />
-      ) : disabled ? (
-        <MonitoringState icon={<Activity size={26} />} state="disabled" title={t("workspace.monitoring.states.disabled")} detail={t("workspace.monitoring.states.disabledDetail")} />
-      ) : starting ? (
-        <MonitoringState icon={<LoaderCircle className="is-spinning" size={26} />} state="starting" title={t("workspace.monitoring.states.starting")} detail={t("workspace.monitoring.states.startingDetail")} />
-      ) : (
-        <div className="management-body monitoring-body">
-          {overview?.status === "degraded" || overview?.status === "unavailable" || error ? (
-            <div className="monitoring-notice" data-state={overview?.status ?? "unavailable"} role="status">
-              <Activity aria-hidden="true" size={16} />
-              <span>{noticeDetail}</span>
+      {view === "overview" ? <div className="monitoring-overview-stage">
+        <div className="monitoring-toolbar" role="toolbar" aria-label={t("workspace.monitoring.range.label")}>
+          <div className="monitoring-toolbar-context">
+            <div className="monitoring-toolbar-selection">
+              <Clock3 aria-hidden="true" size={15} />
+              <span>{t("workspace.monitoring.range.label")}</span>
+              <strong>{t(`workspace.monitoring.range.${range}`)}</strong>
             </div>
-          ) : null}
-          <ManagementDashboardGrid dashboard={dashboard} items={dashboardItems} loading={initial} />
+            {overview ? <MonitoringStatus status={overview.status} sampledAt={overview.sampledAt} locale={locale} /> : null}
+          </div>
+          <div className="monitoring-range-wrap">
+            <div className="monitoring-range" role="group" aria-label={t("workspace.monitoring.range.label")}>
+              {RANGE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={range === option.id ? "is-active" : ""}
+                  aria-pressed={range === option.id}
+                  onClick={() => setRange(option.id)}
+                >
+                  {t(`workspace.monitoring.range.${option.id}`)}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      )}</> : <MonitoringAlertsView view={view} locale={locale} />}
+
+        {unavailable ? (
+          <MonitoringState icon={<Server size={26} />} state="offline" title={t("workspace.monitoring.states.unavailable")} detail={t("workspace.monitoring.states.unavailableDetail")} />
+        ) : disabled ? (
+          <MonitoringState icon={<Activity size={26} />} state="disabled" title={t("workspace.monitoring.states.disabled")} detail={t("workspace.monitoring.states.disabledDetail")} />
+        ) : starting ? (
+          <MonitoringState icon={<LoaderCircle className="is-spinning" size={26} />} state="starting" title={t("workspace.monitoring.states.starting")} detail={t("workspace.monitoring.states.startingDetail")} />
+        ) : (
+          <div className="management-body monitoring-body">
+            {overview?.status === "degraded" || overview?.status === "unavailable" || error ? (
+              <div className="monitoring-notice" data-state={overview?.status ?? "unavailable"} role="status">
+                <Activity aria-hidden="true" size={16} />
+                <span>{noticeDetail}</span>
+              </div>
+            ) : null}
+            <ManagementDashboardGrid dashboard={dashboard} items={dashboardItems} loading={initial} />
+          </div>
+        )}
+      </div> : <MonitoringAlertsView view={view} locale={locale} />}
     </section>
   );
 }
@@ -517,6 +572,110 @@ export function mergeMonitoringSeries(
     }
   }
   return [...rows.values()].sort((left, right) => String(left.timestamp).localeCompare(String(right.timestamp)));
+}
+
+export function mergeMonitoringSamples(
+  current: MonitoringQueryResponse,
+  event: Extract<MonitoringStreamEvent, { type: "samples" }>,
+  rangeDurationMs: number
+): MonitoringQueryResponse {
+  const eventTimes = event.samples.map((sample) => Date.parse(sample.timestamp)).filter(Number.isFinite);
+  if (eventTimes.length === 0) return current;
+  const currentEndMs = Date.parse(current.end);
+  const latestEventMs = Math.max(...eventTimes);
+  const liveStepMs = Math.max(1_000, Math.min(...current.series.map((item) => item.stepMs), 60_000));
+  const endMs = Math.max(currentEndMs, latestEventMs + (latestEventMs >= currentEndMs ? liveStepMs : 0));
+  const startMs = endMs - rangeDurationMs;
+  const series = current.series.map((item) => {
+    const points = new Map(item.points.map((point) => [point.timestamp, point.value]));
+    for (const sample of event.samples) {
+      if (sample.metric !== item.metric || !sameLabels(item.labels, sample.labels)) continue;
+      const timestampMs = Date.parse(sample.timestamp);
+      if (!Number.isFinite(timestampMs) || timestampMs < startMs || timestampMs >= endMs) continue;
+      const bucketMs = startMs + Math.floor((timestampMs - startMs) / item.stepMs) * item.stepMs;
+      const bucket = new Date(bucketMs).toISOString();
+      points.set(bucket, item.transform === "rate" ? sample.rate : sample.value);
+    }
+    return {
+      ...item,
+      points: [...points.entries()]
+        .filter(([timestamp]) => {
+          const timestampMs = Date.parse(timestamp);
+          return timestampMs >= startMs && timestampMs < endMs;
+        })
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([timestamp, value]) => ({ timestamp, value }))
+    };
+  });
+  return {
+    start: new Date(startMs).toISOString(),
+    end: new Date(endMs).toISOString(),
+    series
+  };
+}
+
+function mergeMonitoringOverview(
+  current: MonitoringOverview,
+  event: Extract<MonitoringStreamEvent, { type: "samples" }>
+): MonitoringOverview {
+  const latest = [...current.latest];
+  for (const sample of event.samples) {
+    const index = latest.findIndex((item) => item.metric === sample.metric && sameLabels(item.labels, sample.labels));
+    const next = {
+      metric: sample.metric,
+      labels: sample.labels,
+      value: sample.value,
+      sampledAt: sample.timestamp
+    };
+    if (index >= 0) latest[index] = next;
+    else latest.push(next);
+  }
+  const collectors = [...current.collectors];
+  for (const collector of event.collectors) {
+    const next = {
+      collector: collector.collector,
+      state: collector.state,
+      lastAttemptAt: collector.lastAttemptAt,
+      lastSuccessAt: collector.lastSuccessAt,
+      durationMs: collector.durationMs,
+      consecutiveFailures: collector.consecutiveFailures,
+      error: collector.error
+    };
+    const index = collectors.findIndex((item) => item.collector === next.collector);
+    if (index >= 0) collectors[index] = next;
+    else collectors.push(next);
+  }
+  return { ...current, status: event.status, sampledAt: event.sampledAt, latest, collectors };
+}
+
+function parseMonitoringEvent(event: Event): MonitoringStreamEvent | null {
+  if (!(event instanceof MessageEvent) || typeof event.data !== "string") return null;
+  try {
+    const value: unknown = JSON.parse(event.data);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const candidate = value as { protocolVersion?: unknown; type?: unknown };
+    return candidate.protocolVersion === 1 && typeof candidate.type === "string"
+      ? value as MonitoringStreamEvent
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasSequenceGap(
+  sequences: MutableRefObject<Partial<Record<"monitor" | "alerter", number>>>,
+  source: "monitor" | "alerter",
+  sequence: number
+): boolean {
+  const previous = sequences.current[source];
+  sequences.current[source] = sequence;
+  return previous !== undefined && sequence !== previous + 1;
+}
+
+function sameLabels(left: Record<string, string>, right: Record<string, string>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
 }
 
 function seriesLabel(series: QuerySeries, t: (key: string) => unknown): string {

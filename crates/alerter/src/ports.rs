@@ -10,6 +10,15 @@ pub trait Clock: Clone + Send + Sync + 'static {
     fn wall_time_ms(&self) -> i64;
 }
 
+#[derive(Debug, Clone)]
+pub struct AlertSummary {
+    pub unread_count: i64,
+    pub firing_count: i64,
+    pub alerter_status: String,
+    pub last_evaluation_at: Option<String>,
+    pub pending_deliveries: i64,
+}
+
 pub trait MetricsReader {
     fn evaluate(&self, rule: &AlertRule, now_ms: i64) -> Result<Vec<SeriesValue>, AlerterError>;
 }

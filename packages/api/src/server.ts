@@ -37,10 +37,11 @@ import { SystemEthernetManagerRuntime } from "./lib/ethernet-manager.js";
 import { collectShareSummary } from "./lib/share-service.js";
 import { collectVmSummary } from "./lib/vm-service.js";
 import { createVodPlayerRuntime } from "./lib/vod-player.js";
+import { MonitoringEventBroker } from "./lib/monitoring-events.js";
 
 export type { ServerDependencies } from "./context.js";
 
-export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photostaffMap, hostAccess }: ServerDependencies): Promise<FastifyInstance> {
+export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, monitoringEvents: monitoringEventsDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photostaffMap, hostAccess }: ServerDependencies): Promise<FastifyInstance> {
   if (!isLoopbackHost(config.api.host)) {
     throw new Error("ZOS API must bind to a loopback host");
   }
@@ -87,11 +88,20 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     config.metricsDatabasePath ?? path.join(config.dataDir, "metrics.sqlite"),
     config.monitoring ?? DEFAULT_MONITORING_CONFIG
   );
+  const monitoringEvents = monitoringEventsDependency ?? new MonitoringEventBroker({
+    socketPath: process.env.ZOS_MONITORING_EVENTS_SOCKET
+      ?? (config.environment === "production"
+        ? path.join(config.paths?.runDir ?? "/run/zos", "monitoring-events.sock")
+        : path.join(config.dataDir, "monitoring-events.sock")),
+    log: server.log
+  });
+  await monitoringEvents.start();
   registerApiRoutes(server, {
     ...(buildInfo ? { buildInfo } : {}),
     config,
     db,
     monitoring,
+    monitoringEvents,
     docker: dockerRuntime,
     ...(vm ? { vm } : {}),
     ...(shares ? { shares } : {}),
@@ -223,6 +233,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     clearInterval(hostAccessDraftCleanup);
     await fileBatches.stop();
     monitoring.close();
+    await monitoringEvents.close();
   });
 
   return server;

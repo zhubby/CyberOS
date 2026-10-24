@@ -5,7 +5,9 @@ use rusqlite::Connection;
 use crate::domain::delivery::{ClaimedDelivery, SmtpSettings};
 use crate::domain::rule::AlertRule;
 use crate::error::AlerterError;
-use crate::ports::{AlertEvaluationStore, DeliveryStore, EscalationStore, MaintenanceStore};
+use crate::ports::{
+    AlertEvaluationStore, AlertSummary, DeliveryStore, EscalationStore, MaintenanceStore,
+};
 
 mod codec;
 mod connection;
@@ -37,6 +39,45 @@ impl AlertStore {
     pub fn open(path: &std::path::Path) -> Result<Self, AlerterError> {
         Ok(Self {
             connection: connection::open(path)?,
+        })
+    }
+
+    pub fn summary(&self, now_ms: i64) -> Result<AlertSummary, AlerterError> {
+        let counts = self.connection.query_row(
+            "SELECT
+               (SELECT COUNT(*) FROM (
+                 SELECT CASE WHEN source = 'health' THEN 'health:' || series_key ELSE id END AS notification_key
+                 FROM monitoring_alert_incidents WHERE read_at IS NULL GROUP BY notification_key
+               )),
+               (SELECT COUNT(*) FROM monitoring_alert_incidents WHERE status = 'firing')",
+            [],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )?;
+        let state = self.connection.query_row(
+            "SELECT status, last_evaluation_at, pending_deliveries FROM monitoring_alerter_state WHERE id = 1",
+            [],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, i64>(2)?)),
+        )?;
+        let stale = state.1.as_deref().is_some_and(|value| {
+            time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+                .map(|timestamp| {
+                    now_ms - (timestamp.unix_timestamp_nanos() / 1_000_000) as i64 > 30_000
+                })
+                .unwrap_or(true)
+        });
+        let alerter_status = if state.0 == "starting" || state.1.is_none() {
+            "starting".to_owned()
+        } else if stale {
+            "unavailable".to_owned()
+        } else {
+            state.0
+        };
+        Ok(AlertSummary {
+            unread_count: counts.0,
+            firing_count: counts.1,
+            alerter_status,
+            last_evaluation_at: state.1,
+            pending_deliveries: state.2,
         })
     }
 }

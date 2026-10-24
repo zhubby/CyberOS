@@ -5,8 +5,8 @@ import type { MonitoringQueryResponse } from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
 import {
   MonitoringPanel,
-  mergeMonitoringSeries,
-  monitoringRefreshInterval
+  mergeMonitoringSamples,
+  mergeMonitoringSeries
 } from "./MonitoringPanel.js";
 
 beforeAll(async () => {
@@ -20,6 +20,10 @@ describe("MonitoringPanel", () => {
 
     expect(html).toContain("Monitoring");
     expect(html).toContain('class="view-tabs monitoring-view-tabs"');
+    expect(html).toContain('class="monitoring-overview-stage"');
+    expect(html).toContain('class="monitoring-toolbar" role="toolbar"');
+    expect(html).toContain('class="monitoring-toolbar-selection"');
+    expect(html).toContain('class="monitoring-range-wrap"');
     expect(html).toContain('role="tab" aria-selected="true">Overview</button>');
     for (const label of ["1h", "6h", "24h", "7d", "30d", "1y"]) {
       expect(html).toContain(`>${label}</button>`);
@@ -56,11 +60,40 @@ describe("MonitoringPanel", () => {
     ]);
   });
 
-  it("uses fast foreground refresh for short ranges and slow refresh for long ranges", () => {
-    expect(monitoringRefreshInterval("1h")).toBe(10_000);
-    expect(monitoringRefreshInterval("24h")).toBe(10_000);
-    expect(monitoringRefreshInterval("7d")).toBe(60_000);
-    expect(monitoringRefreshInterval("1y")).toBe(60_000);
+  it("merges committed samples without interpolating missing points", () => {
+    const current = {
+      start: "2026-01-01T00:00:00.000Z",
+      end: "2026-01-01T00:01:00.000Z",
+      series: [{
+        metric: "zos_host_cpu_usage_ratio",
+        labels: {},
+        transform: "value",
+        resolution: "raw",
+        stepMs: 10_000,
+        points: [
+          { timestamp: "2026-01-01T00:00:00.000Z", value: 0.2 },
+          { timestamp: "2026-01-01T00:00:10.000Z", value: null }
+        ]
+      }]
+    } satisfies MonitoringQueryResponse;
+    const next = mergeMonitoringSamples(current, {
+      protocolVersion: 1,
+      source: "monitor",
+      sequence: 1,
+      type: "samples",
+      sampledAt: "2026-01-01T00:00:20.000Z",
+      status: "ready",
+      collectors: [],
+      samples: [{
+        metric: "zos_host_cpu_usage_ratio",
+        labels: {},
+        timestamp: "2026-01-01T00:00:20.000Z",
+        value: 0.4,
+        rate: null
+      }]
+    }, 60_000);
+    expect(next.series[0]?.points.at(-1)?.value).toBe(0.4);
+    expect(next.series[0]?.points.some((point) => point.value === null)).toBe(true);
   });
 });
 

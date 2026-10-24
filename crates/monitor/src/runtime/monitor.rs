@@ -1,3 +1,5 @@
+use std::{env, path::PathBuf};
+
 use sd_notify::NotifyState;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -5,6 +7,7 @@ use tokio_util::sync::CancellationToken;
 use crate::adapters::clock::SystemClock;
 use crate::adapters::collectors::default_collectors;
 use crate::adapters::metrics_sqlite::MetricsStoreHandle;
+use crate::adapters::monitoring_events::MetricsEventPublisher;
 use crate::application::monitor::{run_collector, run_maintenance};
 use crate::domain::config::MonitorConfig;
 use crate::error::MonitorError;
@@ -41,9 +44,21 @@ impl MonitorService {
             return Ok(());
         }
 
-        let store = MetricsStoreHandle::start(
+        let publisher = MetricsEventPublisher::start(
+            env::var_os("ZOS_MONITORING_EVENTS_SOCKET")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    if env::var("ZOS_ENVIRONMENT").as_deref() == Ok("development") {
+                        self.config.state_dir.join("monitoring-events.sock")
+                    } else {
+                        PathBuf::from("/run/zos/monitoring-events.sock")
+                    }
+                }),
+        );
+        let store = MetricsStoreHandle::start_with_publisher(
             self.config.metrics_database_path.clone(),
             self.config.monitoring.clone(),
+            Some(publisher),
         )
         .await?;
         let mut tasks = JoinSet::new();

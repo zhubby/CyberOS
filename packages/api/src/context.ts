@@ -15,11 +15,13 @@ import type { VmRuntimeDependencies } from "./lib/vm-service.js";
 import type { PhotostaffMapArchiveRuntime } from "./lib/photostaff-map.js";
 import type { FileBatchRuntime } from "./lib/file-batch-runner.js";
 import type { DockerHostAccessRuntime } from "./lib/docker-host-access.js";
+import type { MonitoringEventBroker } from "./lib/monitoring-events.js";
 
 export interface ApiRouteContext {
   config: ZosConfig;
   db: ZosDatabase;
   monitoring: MonitoringReader;
+  monitoringEvents?: MonitoringEventBroker;
   buildInfo?: PublicBuildInfo;
   docker?: {
     engine?: DockerEngineRuntime;
@@ -40,6 +42,7 @@ export interface ApiRouteContext {
   hostAccess?: DockerHostAccessRuntime;
 }
 
-export type ServerDependencies = Omit<ApiRouteContext, "monitoring"> & {
+export type ServerDependencies = Omit<ApiRouteContext, "monitoring" | "monitoringEvents"> & {
   monitoring?: MonitoringReader;
+  monitoringEvents?: MonitoringEventBroker;
 };
