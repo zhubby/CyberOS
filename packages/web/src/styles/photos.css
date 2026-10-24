@@ -104,7 +104,7 @@
   font-weight: 800;
 }
 
-.photo-sort-field button,
+.photo-sort-field > button,
 .photo-common-filters input,
 .photo-condition-row input {
   height: 29px;
@@ -145,7 +145,7 @@
   font-size: 10.5px;
 }
 
-.photo-sort-field button {
+.photo-sort-field > button {
   width: 29px;
   padding: 0;
 }
