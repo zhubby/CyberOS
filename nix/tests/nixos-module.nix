@@ -157,6 +157,7 @@ in pkgs.testers.runNixOSTest {
     tv.succeed("test $(cat /etc/zos/tv-mode/enabled) = declarative")
     tv.succeed("systemctl show zos-tv.target -p Requires --value | grep -F zos-tv-weston.service")
     tv.succeed("systemctl show zos-tv-prepare.service -p RuntimeDirectoryMode --value | grep -Fx 0700")
+    tv.succeed("systemctl show zos-tv-prepare.service -p ExecStop --value | grep -F 'zos-tv-prepare stop'")
     tv.succeed("systemctl show zos-tv-weston.service -p PartOf --value | grep -F zos-tv.target")
     tv.succeed("systemctl show zos-tv-chromium.service -p PartOf --value | grep -F zos-tv.target")
     tv.succeed("systemctl show zos-tv-chromium.service -p User --value | grep -Fx zos")

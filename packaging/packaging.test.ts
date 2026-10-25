@@ -155,6 +155,9 @@ describe("native packaging artifacts", () => {
     const tvPrepare = await readPackagingFile("systemd", "zos-tv-prepare.service");
     expect(tvPrepare).toContain("PartOf=zos-tv.target");
     expect(tvPrepare).toContain("RuntimeDirectoryMode=0700");
+    expect(tvPrepare).toContain("ExecStart=/usr/lib/zos/scripts/zos-tv-prepare start");
+    expect(tvPrepare).toContain("ExecStop=/usr/lib/zos/scripts/zos-tv-prepare stop");
+    expect(tvPrepare).toContain("ReadWritePaths=/run/zos-tv /sys/class/drm");
     const tvWeston = await readPackagingFile("systemd", "zos-tv-weston.service");
     expect(tvWeston).toContain("PartOf=zos-tv.target");
     expect(tvWeston).toContain("User=zos");
@@ -194,6 +197,8 @@ describe("native packaging artifacts", () => {
     expect(tvGamepad).not.toMatch(/AF_INET|AF_BLUETOOTH/);
     const tvPrepareScript = await readPackagingFile("scripts", "zos-tv-prepare");
     expect(tvPrepareScript).toContain("install -d -m 0700");
+    expect(tvPrepareScript).toContain('card*-HDMI-A-*/status');
+    expect(tvPrepareScript).toContain('on-digital > "$connector_status"');
     expect(tvPrepareScript).toContain('"$runtime_dir/weston.log"');
     expect(tvPrepareScript).toContain('"$runtime_dir/status/gamepad.json"');
     await expect(readPackagingFile("scripts", "zos-tv-write-status")).resolves.toContain("weston|chromium|cec|gamepad");

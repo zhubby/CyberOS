@@ -4,7 +4,7 @@ description: 在无桌面 Debian NAS 设备上使用 ZOS 将视频直接输出�
 type: how-to
 status: current
 audience: [user, operator]
-sourceOfTruth: [crates/vod-player/src/controller.rs, packages/api/src/routes/vod-player.ts, packages/web/src/components/preview/VodPlayerControls.tsx, packaging/systemd/zos-vod-player.service]
+sourceOfTruth: [crates/vod-player/src/controller.rs, packages/api/src/routes/vod-player.ts, packages/web/src/components/preview/VodPlayerControls.tsx, packaging/systemd/zos-vod-player.service, packaging/scripts/zos-tv-prepare, packaging/scripts/zos-tv-weston]
 sidebar:
   order: 2
 ---
@@ -77,5 +77,6 @@ curl -fsS http://127.0.0.1:3010/api/vod-player/status
 - `No DRM device found`：内核没有暴露 `/dev/dri/card*`，或设备没有加载 GPU/HDMI 驱动。
 - `permission denied`：确认播放器用户属于存在的 `video`、`render` 和 `audio` 组，并重新运行 `zos-refresh-vod-player.sh`。
 - 没有声音：检查 `/proc/asound`，然后把 `audio_device` 设置为对应的 ALSA HDMI 设备。
+- TV 模式黑屏且 `/sys/class/drm/card*-HDMI-A-*/status` 全部为 `disconnected`：部分显示器或转接器不提供 HPD/EDID。TV 模式会在没有任何已连接 HDMI 时临时强制 `HDMI-A-1`，停止 TV 模式后恢复自动检测。若使用第二个接口，在 `zos-tv-prepare.service` drop-in 中设置 `Environment=ZOS_TV_HDMI_CONNECTOR=HDMI-A-2`；设置 `Environment=ZOS_TV_FORCE_HDMI=never` 可禁用 fallback。
 
 `hwdec = "auto-safe"` 会优先尝试可用硬件解码，驱动不支持时由 mpv 回退软件解码。具体硬件的解码能力仍需在目标板卡上验证。

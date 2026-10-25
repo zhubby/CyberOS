@@ -6,14 +6,15 @@ Before=zos-tv-weston.service zos-tv-chromium.service zos-tv-cec.service zos-tv-g
 
 [Service]
 Type=oneshot
-ExecStart=/usr/lib/zos/scripts/zos-tv-prepare
+ExecStart=/usr/lib/zos/scripts/zos-tv-prepare start
+ExecStop=/usr/lib/zos/scripts/zos-tv-prepare stop
 RemainAfterExit=yes
 RuntimeDirectory=zos-tv
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=restart
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/run/zos-tv
+ReadWritePaths=/run/zos-tv /sys/class/drm
 NoNewPrivileges=yes
 PrivateTmp=yes
 CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER

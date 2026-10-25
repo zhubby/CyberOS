@@ -12,6 +12,7 @@ User=zos
 Group=zos
 SupplementaryGroups=video render input
 Environment=XDG_RUNTIME_DIR=/run/zos-tv
+Environment=XDG_CACHE_HOME=/run/zos-tv/cache
 Environment=LIBSEAT_BACKEND=seatd
 ExecStart=/usr/lib/zos/scripts/zos-tv-weston
 Restart=on-failure

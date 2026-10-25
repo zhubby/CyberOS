@@ -2,9 +2,18 @@
 set -eu
 
 runtime_dir=${ZOS_TV_RUNTIME_DIR:-/run/zos-tv}
+drm_root=${ZOS_TV_DRM_ROOT:-/sys/class/drm}
 status_writer=${ZOS_TV_SCRIPT_DIR:-/usr/lib/zos/scripts}/zos-tv-write-status
 socket_path="$runtime_dir/wayland-0"
 weston_pid=
+
+hdmi_connected() {
+  for connector_status in "$drm_root"/card*-HDMI-A-*/status; do
+    [ -f "$connector_status" ] || continue
+    [ "$(cat "$connector_status")" = connected ] && return 0
+  done
+  return 1
+}
 
 cleanup() {
   if [ -n "$weston_pid" ]; then
@@ -27,6 +36,11 @@ if ! command -v weston >/dev/null 2>&1; then
   exit 127
 fi
 
+while ! hdmi_connected; do
+  "$status_writer" weston degraded "Waiting for HDMI output"
+  sleep 2
+done
+
 "$status_writer" weston degraded "Weston is starting"
 weston --backend=drm-backend.so --shell=kiosk-shell.so --socket=wayland-0 \
   --config="$runtime_dir/weston.ini" --log="$runtime_dir/weston.log" &
@@ -36,8 +50,16 @@ attempt=0
 while [ "$attempt" -lt 150 ]; do
   kill -0 "$weston_pid" 2>/dev/null || break
   if [ -S "$socket_path" ]; then
+    ready_detail=wayland-0
+    if [ -s "$runtime_dir/forced-connectors" ]; then
+      forced_status=$(sed -n '1p' "$runtime_dir/forced-connectors")
+      forced_dir=${forced_status%/status}
+      forced_name=${forced_dir##*/}
+      forced_name=${forced_name#*-}
+      ready_detail="wayland-0 ($forced_name forced)"
+    fi
     while kill -0 "$weston_pid" 2>/dev/null; do
-      "$status_writer" weston ready "wayland-0"
+      "$status_writer" weston ready "$ready_detail"
       sleep 5
     done
     break

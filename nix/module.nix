@@ -562,14 +562,15 @@ in {
             environment = baseEnvironment;
             serviceConfig = {
               Type = "oneshot";
-              ExecStart = "${packageRoot}/scripts/zos-tv-prepare";
+              ExecStart = "${packageRoot}/scripts/zos-tv-prepare start";
+              ExecStop = "${packageRoot}/scripts/zos-tv-prepare stop";
               RemainAfterExit = true;
               RuntimeDirectory = "zos-tv";
               RuntimeDirectoryMode = "0700";
               RuntimeDirectoryPreserve = "restart";
               ProtectSystem = "strict";
               ProtectHome = true;
-              ReadWritePaths = [ "/run/zos-tv" ];
+              ReadWritePaths = [ "/run/zos-tv" "/sys/class/drm" ];
               NoNewPrivileges = true;
               PrivateTmp = true;
               CapabilityBoundingSet = [ "CAP_CHOWN" "CAP_DAC_OVERRIDE" "CAP_FOWNER" ];
@@ -585,6 +586,7 @@ in {
             path = runtimePath;
             environment = baseEnvironment // {
               XDG_RUNTIME_DIR = "/run/zos-tv";
+              XDG_CACHE_HOME = "/run/zos-tv/cache";
               LIBSEAT_BACKEND = "seatd";
               ZOS_TV_SCRIPT_DIR = "${packageRoot}/scripts";
             };
