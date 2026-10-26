@@ -1216,37 +1216,31 @@
 .composer-footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
 .composer-model-config {
-  display: grid;
-  align-self: center;
-  gap: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-}
-
-.composer-model-config span,
-.composer-model-config strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.composer-model-config span {
-  color: var(--muted-2);
-  font-size: 10.5px;
-  font-family: var(--font-emphasis);
-  font-weight: 800;
-  line-height: 1;
-}
-
-.composer-model-config strong {
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.25;
+}
+
+.composer-model-config svg {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+}
+
+.composer-model-config span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-actions {

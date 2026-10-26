@@ -524,9 +524,13 @@ export function ChatPane({
             </div>
           ) : null}
           <div className="composer-footer">
-            <div className="composer-model-config" title={modelRoute}>
-              <span>{t("chat.modelConfiguration")}</span>
-              <strong>{modelRoute}</strong>
+            <div
+              className="composer-model-config"
+              title={modelRoute}
+              aria-label={`${t("chat.modelConfiguration")}: ${modelRoute}`}
+            >
+              <Bot aria-hidden="true" size={14} />
+              <span>{modelRoute}</span>
             </div>
             <div className="composer-actions">
               <button

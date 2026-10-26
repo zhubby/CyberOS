@@ -277,6 +277,8 @@ describe("ChatPane agent rail", () => {
     expect(html).toContain('class="notification-badge"');
     expect(html).toContain('class="settings-button agent-settings-button"');
     expect(html).toContain('class="agent-power-button"');
+    expect(html).toContain('class="composer-model-config" title="Not loaded" aria-label="Model config: Not loaded"');
+    expect(html).not.toContain(">Model config</span>");
     expect(html.indexOf('class="session-list"')).toBeLessThan(html.indexOf('class="agent-footer"'));
     expect(html.indexOf('class="agent-notification-button"')).toBeLessThan(html.indexOf('class="settings-button agent-settings-button"'));
     expect(html.indexOf('class="settings-button agent-settings-button"')).toBeLessThan(html.indexOf('class="agent-power-button"'));
