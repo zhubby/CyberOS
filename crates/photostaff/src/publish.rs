@@ -259,7 +259,17 @@ fn target_matches(path: &Path, expected: FileIdentity, cache_root: &Path) -> boo
     open_regular_nofollow(path)
         .ok()
         .and_then(|file| FileIdentity::from_file(&file).ok())
-        == Some(expected)
+        .is_some_and(|actual| published_identity_matches(actual, expected))
+}
+
+fn published_identity_matches(actual: FileIdentity, expected: FileIdentity) -> bool {
+    // Publishing changes ctime when the temporary file is renamed or hard-linked.
+    // The full identity is still checked before publication; these stable fields
+    // prove the target is the same inode and file version recorded in the journal.
+    actual.device == expected.device
+        && actual.inode == expected.inode
+        && actual.size == expected.size
+        && actual.mtime_ns == expected.mtime_ns
 }
 
 fn files_equal(left: &Path, right: &Path) -> Result<bool, PhotostaffError> {
@@ -383,6 +393,57 @@ fn _path(path: PathBuf) -> PathBuf {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn publishes_a_new_derivative_with_rename_stable_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let cache = directory.path().join("photostaff");
+        let derivatives = cache.join("thumbnail");
+        std::fs::create_dir_all(&derivatives).unwrap();
+        let source = derivatives.join(".source.tmp.webp");
+        let target = derivatives.join("target.webp");
+        std::fs::write(&source, b"webp derivative").unwrap();
+        let identity = FileIdentity::from_file(&File::open(&source).unwrap()).unwrap();
+
+        publish_one(&source, &target, identity, &cache).unwrap();
+
+        assert!(!source.exists());
+        assert_eq!(std::fs::read(&target).unwrap(), b"webp derivative");
+        assert!(target_matches(&target, identity, &cache));
+    }
+
+    #[test]
+    fn published_identity_allows_only_ctime_to_change() {
+        let expected = FileIdentity {
+            device: 1,
+            inode: 2,
+            size: 3,
+            mtime_ns: 4,
+            ctime_ns: 5,
+        };
+
+        assert!(published_identity_matches(
+            FileIdentity {
+                ctime_ns: 6,
+                ..expected
+            },
+            expected
+        ));
+        assert!(!published_identity_matches(
+            FileIdentity {
+                inode: 7,
+                ..expected
+            },
+            expected
+        ));
+        assert!(!published_identity_matches(
+            FileIdentity {
+                mtime_ns: 8,
+                ..expected
+            },
+            expected
+        ));
+    }
 
     #[test]
     fn publishes_without_replacing_an_existing_file() {
