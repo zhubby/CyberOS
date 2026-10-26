@@ -209,7 +209,8 @@ fn cleanup_orphan_paths(
     cleanup_directory(&cache_root.join("scratch"), preserved, |_| true)?;
     for name in ["thumbnail", "preview"] {
         cleanup_directory(&cache_root.join(name), preserved, |file_name| {
-            file_name.starts_with('.') && file_name.ends_with(".tmp")
+            file_name.starts_with('.')
+                && (file_name.ends_with(".tmp") || file_name.ends_with(".tmp.webp"))
         })?;
     }
     Ok(())
@@ -450,12 +451,14 @@ mod tests {
         for path in [&thumbnail, &preview, &scratch] {
             std::fs::create_dir_all(path).unwrap();
         }
-        let orphan_thumbnail = thumbnail.join(".orphan.tmp");
-        let preserved_thumbnail = thumbnail.join(".preserved.tmp");
+        let legacy_orphan_thumbnail = thumbnail.join(".legacy-orphan.tmp");
+        let orphan_thumbnail = thumbnail.join(".orphan.uuid.tmp.webp");
+        let preserved_thumbnail = thumbnail.join(".preserved.uuid.tmp.webp");
         let published_thumbnail = thumbnail.join("published.webp");
-        let orphan_preview = preview.join(".orphan.tmp");
+        let orphan_preview = preview.join(".orphan.uuid.tmp.webp");
         let scratch_file = scratch.join("intermediate.jpg");
         for path in [
+            &legacy_orphan_thumbnail,
             &orphan_thumbnail,
             &preserved_thumbnail,
             &published_thumbnail,
@@ -468,6 +471,7 @@ mod tests {
 
         cleanup_orphan_paths(&cache, &preserved).unwrap();
 
+        assert!(!legacy_orphan_thumbnail.exists());
         assert!(!orphan_thumbnail.exists());
         assert!(!orphan_preview.exists());
         assert!(!scratch_file.exists());

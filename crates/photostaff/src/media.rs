@@ -229,16 +229,8 @@ pub async fn process_media(
     let preview_key = derivative_key(&content_hash, "preview", "2048-inside-q85");
     let thumbnail_path = cache_root.join(&thumbnail_key);
     let preview_path = cache_root.join(&preview_key);
-    let thumbnail_temp_path = thumbnail_dir.join(format!(
-        ".{}.{}.tmp",
-        thumbnail_path.file_name().unwrap().to_string_lossy(),
-        Uuid::new_v4()
-    ));
-    let preview_temp_path = preview_dir.join(format!(
-        ".{}.{}.tmp",
-        preview_path.file_name().unwrap().to_string_lossy(),
-        Uuid::new_v4()
-    ));
+    let thumbnail_temp_path = derivative_temp_path(&thumbnail_path);
+    let preview_temp_path = derivative_temp_path(&preview_path);
     let mut temporary_files = TemporaryFiles::default();
     temporary_files.track(&thumbnail_temp_path);
     temporary_files.track(&preview_temp_path);
@@ -723,6 +715,18 @@ fn derivative_key(content_hash: &str, purpose: &str, parameters: &str) -> String
         format!("{content_hash}|{purpose}|{parameters}|{PIPELINE_VERSION}").as_bytes(),
     );
     format!("{purpose}/{digest:x}.webp")
+}
+
+fn derivative_temp_path(target: &Path) -> PathBuf {
+    let directory = target.parent().expect("derivative target has a parent");
+    let stem = target
+        .file_stem()
+        .expect("derivative target has a file stem");
+    directory.join(format!(
+        ".{}.{}.tmp.webp",
+        stem.to_string_lossy(),
+        Uuid::new_v4()
+    ))
 }
 
 fn normalize_metadata(
@@ -1386,6 +1390,21 @@ mod tests {
                 "--output",
                 "/cache/thumbnail.webp[Q=80,strip]",
             ]
+        );
+    }
+
+    #[test]
+    fn keeps_the_webp_extension_on_derivative_temporary_paths() {
+        let target = Path::new("/cache/thumbnail/hash.webp");
+        let temporary = derivative_temp_path(target);
+        let file_name = temporary.file_name().unwrap().to_string_lossy();
+
+        assert_eq!(temporary.parent(), target.parent());
+        assert!(file_name.starts_with(".hash."));
+        assert!(file_name.ends_with(".tmp.webp"));
+        assert_eq!(
+            temporary.extension().and_then(|value| value.to_str()),
+            Some("webp")
         );
     }
 
