@@ -1,3 +1,9 @@
+zos (1.7.1) unstable; urgency=medium
+
+  * Stabilize Pagefind output validation for Nix release builds.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 27 Oct 2026 05:03:19 +0000
+
 zos (1.7.0) unstable; urgency=medium
 
   * Add complete Pi MCP capability parity with secure approvals and restricted shell access.
