@@ -1,3 +1,9 @@
+zos (1.7.7) unstable; urgency=medium
+
+  * Clear stale Agent turn controls immediately when switching or creating sessions.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 27 Oct 2026 17:21:43 +0000
+
 zos (1.7.6) unstable; urgency=medium
 
   * Support Agent steer, follow-up, abort, and retry commands in HTTP browser contexts.

@@ -1,6 +1,6 @@
 [package]
 name = "zos-alerter"
-version = "1.7.6"
+version = "1.7.7"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
