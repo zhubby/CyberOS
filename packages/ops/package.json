@@ -1,6 +1,6 @@
 {
   "name": "@zos/ops",
-  "version": "1.7.7",
+  "version": "1.7.8",
   "type": "module",
   "exports": {
     ".": "./src/runner.ts"
@@ -12,8 +12,8 @@
     "build": "cd ../.. && tsup packages/ops/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir packages/ops/dist"
   },
   "dependencies": {
-    "@zos/db": "1.7.7",
-    "@zos/shared": "1.7.7",
-    "@zos/system-health": "1.7.7"
+    "@zos/db": "1.7.8",
+    "@zos/shared": "1.7.8",
+    "@zos/system-health": "1.7.8"
   }
 }

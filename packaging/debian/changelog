@@ -1,3 +1,9 @@
+zos (1.7.8) unstable; urgency=medium
+
+  * Keep the CM5 HDMI TV shell visible while idle and report unsupported CEC input injection.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 27 Oct 2026 20:17:19 +0000
+
 zos (1.7.7) unstable; urgency=medium
 
   * Clear stale Agent turn controls immediately when switching or creating sessions.
