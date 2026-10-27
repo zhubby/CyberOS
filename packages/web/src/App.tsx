@@ -1427,6 +1427,7 @@ export function App() {
       seenEvents.current.clear();
       activeSessionIdRef.current = nextSession.id;
       setCapabilityApprovals([]);
+      commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
       setSession(nextSession);
       setActiveSessionId(nextSession.id);
       setComposerPath(null);
@@ -1462,6 +1463,7 @@ export function App() {
       seenEvents.current.clear();
       activeSessionIdRef.current = nextSession.id;
       setCapabilityApprovals([]);
+      commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
       setSession(nextSession);
       setActiveSessionId(nextSession.id);
       setComposerPath(null);
@@ -1492,6 +1494,7 @@ export function App() {
     seenEvents.current.clear();
     activeSessionIdRef.current = nextSession.id;
     setCapabilityApprovals([]);
+    commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
     setSession(nextSession);
     setActiveSessionId(nextSession.id);
     dispatchTranscript({ type: "begin", sessionId: nextSession.id });
