@@ -1,3 +1,9 @@
+zos (1.7.2) unstable; urgency=medium
+
+  * Stabilize Pi agent sessions, recovery, and streaming controls.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 27 Oct 2026 10:03:07 +0000
+
 zos (1.7.1) unstable; urgency=medium
 
   * Stabilize Pagefind output validation for Nix release builds.
