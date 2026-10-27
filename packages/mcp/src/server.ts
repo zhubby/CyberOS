@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { open } from "node:fs/promises";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { hostHeaderValidation, originValidation } from "@modelcontextprotocol/fastify";
@@ -6,8 +6,14 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { CapabilityError, capabilityErrorShape, capabilityResult, type JsonValue } from "@zos/capabilities";
-import { authenticateMcpClient, consumeMcpTransferToken, getNasRoot } from "@zos/db";
-import { resolveSafeExistingPath } from "@zos/nas-tools";
+import {
+  authenticateMcpClient,
+  consumeMcpResourceToken,
+  consumeMcpTransferToken,
+  getNasRoot,
+  type McpResourceRecord
+} from "@zos/db";
+import { assertNoSymlinkPathSegments, resolveSafeExistingPath } from "@zos/nas-tools";
 import { catalogForClient, createClientRuntime, invokeCapability, type ClientRuntime, type McpRuntimeDependencies } from "./runtime.js";
 
 export interface McpRegistrationOptions {
@@ -26,63 +32,6 @@ const outputSchema = z.object({
   runId: z.string().nullable(),
   traceId: z.string()
 });
-
-const emptyInput = z.object({}).strict();
-const rootsInput = z.object({ rootId: z.string().min(1).max(128).optional() }).strict();
-const listFilesInput = z.object({
-  rootId: z.string().min(1).max(128),
-  path: z.string().max(4096).optional(),
-  cursor: z.string().max(2048).optional(),
-  limit: z.number().int().min(1).max(200).optional()
-}).strict();
-const pathInput = z.object({ rootId: z.string().min(1).max(128), path: z.string().min(1).max(4096) }).strict();
-const readInput = pathInput.extend({ maxBytes: z.number().int().min(1).max(128 * 1024).optional() }).strict();
-const searchInput = z.object({
-  rootId: z.string().min(1).max(128),
-  path: z.string().max(4096).optional(),
-  query: z.string().min(1).max(500),
-  cursor: z.string().max(4096).optional(),
-  limit: z.number().int().min(1).max(100).optional()
-}).strict();
-const limitInput = z.object({ limit: z.number().int().min(1).max(200).optional() }).strict();
-const indexStatusInput = z.object({ rootId: z.string().min(1).max(128).optional() }).strict();
-const photosQueryInput = z.object({
-  assetId: z.string().min(1).max(256).optional(),
-  cursor: z.string().max(2048).optional(),
-  limit: z.number().int().min(1).max(100).optional()
-}).strict().refine((input) => !(input.assetId && input.cursor), "assetId cannot be combined with cursor");
-const downloadsInput = z.object({
-  statuses: z.array(z.enum(["queued", "running", "paused", "completed", "failed", "cancelled"])).max(6).optional(),
-  limit: z.number().int().min(1).max(200).optional()
-}).strict();
-const alertsInput = z.object({
-  status: z.enum(["firing", "resolved"]).optional(),
-  limit: z.number().int().min(1).max(200).optional()
-}).strict();
-const terminalTabsInput = z.object({ rootId: z.string().min(1).max(128) }).strict();
-const monitoringQueryInput = z.object({
-  start: z.string().min(1).max(64),
-  end: z.string().min(1).max(64),
-  maxPoints: z.number().int().min(2).max(720).optional(),
-  selectors: z.array(z.object({
-    metric: z.string().min(1).max(256),
-    labels: z.record(z.string().max(128), z.string().min(1).max(128)).optional(),
-    transform: z.enum(["value", "rate"]).optional()
-  }).strict()).min(1).max(12)
-}).strict();
-const runsListInput = z.object({ cursor: z.string().max(2048).optional(), limit: z.number().int().min(1).max(200).optional() }).strict();
-const runInput = z.object({ runId: z.string().uuid() }).strict();
-const runWaitInput = runInput.extend({ timeoutMs: z.number().int().min(0).max(20_000).optional() }).strict();
-const genericInput = z.object({ request: z.record(z.string(), z.json()), idempotencyKey: z.string().min(8).max(200).optional() }).strict();
-const fileMutationInput = z.object({
-  request: z.object({
-    operation: z.enum(["mkdir", "move", "copy", "rename", "trash"]),
-    rootId: z.string().min(1).max(128),
-    sourcePath: z.string().min(1).max(4096).optional(),
-    targetPath: z.string().min(1).max(4096).optional()
-  }).strict(),
-  idempotencyKey: z.string().min(8).max(200).optional()
-}).strict();
 
 export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDependencies, options: McpRegistrationOptions): void {
   if (!options.enabled) return;
@@ -232,6 +181,42 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
       reply.status(404).send({ error: "file_not_found" });
     }
   });
+
+  server.get<{ Params: { token: string } }>("/mcp-resource/:token", { preHandler: guards }, async (request, reply) => {
+    const external = request.headers["x-zos-mcp-external"] === "1";
+    if (external && (dependencies.config.mcp?.externalEnabled !== true || request.headers["x-forwarded-proto"] !== "https")) {
+      reply.status(403).send({ error: "https_required" });
+      return;
+    }
+    const credential = bearerToken(request.headers.authorization);
+    const client = credential ? authenticateMcpClient(dependencies.db, credential) : null;
+    if (!client) {
+      reply.header("www-authenticate", "Bearer").status(401).send({ error: "invalid_token" });
+      return;
+    }
+    const resource = consumeMcpResourceToken(dependencies.db, {
+      token: request.params.token,
+      clientId: client.id
+    });
+    if (!resource) {
+      reply.status(404).send({ error: "resource_not_found" });
+      return;
+    }
+    if (!dependencies.resourceResponder && resource.kind !== "file") {
+      reply.status(503).send({ error: "resource_handler_unavailable" });
+      return;
+    }
+    try {
+      return dependencies.resourceResponder
+        ? await dependencies.resourceResponder(resource, request, reply)
+        : await serveFallbackFileResource(dependencies, resource, reply);
+    } catch (error) {
+      request.log.warn({ err: error, clientId: client.id, kind: resource.kind }, "MCP resource download failed");
+      if (reply.sent) return reply;
+      const shaped = resourceErrorShape(error);
+      reply.status(shaped.statusCode).send({ error: shaped.code });
+    }
+  });
 }
 
 function createMcpServer(runtime: ClientRuntime): McpServer {
@@ -243,7 +228,7 @@ function createMcpServer(runtime: ClientRuntime): McpServer {
   server.registerTool("zos.catalog.get", {
     title: "List ZOS capabilities",
     description: "Return the scoped capability catalog and runtime availability.",
-    inputSchema: emptyInput,
+    inputSchema: z.fromJSONSchema(runtime.registry.get("zos.catalog.get")!.inputSchema as Parameters<typeof z.fromJSONSchema>[0]),
     outputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }, async () => wrapTool(async (traceId) => capabilityResult({ data: await catalogForClient(runtime) }, traceId)));
@@ -253,7 +238,7 @@ function createMcpServer(runtime: ClientRuntime): McpServer {
     server.registerTool(descriptor.id, {
       title: descriptor.title,
       description: `${descriptor.description} Approval: ${descriptor.approval}.`,
-      inputSchema: schemaForTool(descriptor.id, descriptor.risk === "read"),
+      inputSchema: z.fromJSONSchema(descriptor.inputSchema as Parameters<typeof z.fromJSONSchema>[0]),
       outputSchema,
       annotations: descriptor.annotations,
       _meta: {
@@ -339,32 +324,6 @@ async function resourceFromCapability(uri: URL, runtime: ClientRuntime, capabili
   return { contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(result) }] };
 }
 
-function schemaForTool(id: string, readOnly: boolean) {
-  switch (id) {
-    case "zos.roots.list": return rootsInput;
-    case "zos.files.list": return listFilesInput;
-    case "zos.files.stat": return pathInput;
-    case "zos.files.read": return readInput;
-    case "zos.files.resource-link": return pathInput;
-    case "zos.files.search": return searchInput;
-    case "zos.files.mutate": return fileMutationInput;
-    case "zos.index.status": return indexStatusInput;
-    case "zos.photos.query": return photosQueryInput;
-    case "zos.downloads.list": return downloadsInput;
-    case "zos.alerts.read": return alertsInput;
-    case "zos.notifications.list": return z.object({ limit: z.number().int().min(1).max(100).optional() }).strict();
-    case "zos.terminal.tabs": return terminalTabsInput;
-    case "zos.monitoring.query": return monitoringQueryInput;
-    case "zos.operations.list":
-    case "zos.backup.status": return limitInput;
-    case "zos.runs.get":
-    case "zos.runs.cancel": return runInput;
-    case "zos.runs.list": return runsListInput;
-    case "zos.runs.wait": return runWaitInput;
-    default: return readOnly ? emptyInput : genericInput;
-  }
-}
-
 async function wrapTool(operation: (traceId: string) => Promise<ReturnType<typeof capabilityResult>>) {
   const traceId = randomUUID();
   try {
@@ -384,4 +343,51 @@ function bearerToken(header: string | undefined): string | null {
   if (!header) return null;
   const match = /^Bearer ([^\s]+)$/u.exec(header);
   return match?.[1] ?? null;
+}
+
+function resourceErrorShape(error: unknown): { statusCode: number; code: string } {
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as { statusCode?: unknown; code?: unknown };
+    if (
+      typeof candidate.statusCode === "number" && candidate.statusCode >= 400 && candidate.statusCode <= 599 &&
+      typeof candidate.code === "string" && /^[a-z][a-z0-9_]{0,63}$/u.test(candidate.code)
+    ) {
+      return { statusCode: candidate.statusCode, code: candidate.code };
+    }
+  }
+  return { statusCode: 404, code: "resource_not_found" };
+}
+
+async function serveFallbackFileResource(
+  dependencies: McpRuntimeDependencies,
+  resource: McpResourceRecord,
+  reply: FastifyReply
+): Promise<unknown> {
+  if (!resource.descriptor || typeof resource.descriptor !== "object" || Array.isArray(resource.descriptor)) {
+    throw { statusCode: 400, code: "invalid_resource" };
+  }
+  const descriptor = resource.descriptor as Record<string, JsonValue>;
+  if (typeof descriptor.rootId !== "string" || typeof descriptor.path !== "string") {
+    throw { statusCode: 400, code: "invalid_resource" };
+  }
+  const root = getNasRoot(dependencies.db, descriptor.rootId);
+  if (!root) throw { statusCode: 404, code: "root_not_found" };
+  const safe = await resolveSafeExistingPath(root.path, descriptor.path);
+  await assertNoSymlinkPathSegments(safe.rootRealPath, safe.absolutePath);
+  const file = await open(safe.realPath, "r");
+  const current = await file.stat();
+  const revision = createHash("sha256").update(JSON.stringify({
+    relativePath: safe.relativePath,
+    sizeBytes: current.size,
+    modifiedAt: current.mtime.toISOString()
+  }), "utf8").digest("hex");
+  if (!current.isFile() || revision !== resource.revision) {
+    await file.close();
+    throw { statusCode: 409, code: "resource_changed" };
+  }
+  reply.header("content-type", resource.mimeType);
+  reply.header("content-length", String(current.size));
+  reply.header("cache-control", "private, no-store");
+  reply.header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(resource.fileName)}`);
+  return reply.send(file.createReadStream());
 }

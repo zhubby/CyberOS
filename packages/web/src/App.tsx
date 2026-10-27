@@ -1857,16 +1857,14 @@ export function App() {
     }
   }
 
-  async function handleCapabilityDecision(approval: CapabilityApproval, decision: "approved" | "rejected") {
-    const confirmed = decision === "approved" && approval.requiresConfirmation
-      ? window.confirm(t("chat.capabilityApproval.confirm"))
-      : false;
-    if (decision === "approved" && approval.requiresConfirmation && !confirmed) {
-      return;
-    }
+  async function handleCapabilityDecision(
+    approval: CapabilityApproval,
+    decision: "approved" | "rejected",
+    options: { confirmed?: boolean; secretInput?: Record<string, string> } = {}
+  ) {
     setStatus(decision === "approved" ? "applying" : "rejecting");
     try {
-      await decideCapabilityApproval(approval, decision, confirmed);
+      await decideCapabilityApproval(approval, decision, options);
       await Promise.all([refreshWorkQueues(), refreshFiles(), reloadSessions()]);
       if (decision === "approved") {
         setSuccessNotice(t("notifications.operationSucceeded"));
@@ -2500,7 +2498,7 @@ export function App() {
         onRequestSystemPower={handleSystemPower}
         notificationUnreadCount={notificationUnreadCount}
         onSelectSession={(nextSession) => void selectSession(nextSession)}
-        onApproveCapability={(approval) => void handleCapabilityDecision(approval, "approved")}
+        onApproveCapability={(approval, options) => void handleCapabilityDecision(approval, "approved", options)}
         onRejectCapability={(approval) => void handleCapabilityDecision(approval, "rejected")}
         onSubmitMessage={(event) => void submitMessage(event)}
         onMessageChange={setMessage}

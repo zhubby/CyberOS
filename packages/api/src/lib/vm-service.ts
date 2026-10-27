@@ -156,6 +156,12 @@ export async function applyVmOperation(
         "--atomic"
       ]);
       return { action: proposal.action, domainName: domain, snapshotMode: "disk-only" };
+    case "snapshot_revert":
+      await runVirsh(runner, vmConfig, ["snapshot-revert", domain, requiredSnapshot(proposal), "--running"]);
+      return { action: proposal.action, domainName: domain, snapshotName: requiredSnapshot(proposal) };
+    case "snapshot_delete":
+      await runVirsh(runner, vmConfig, ["snapshot-delete", domain, requiredSnapshot(proposal)]);
+      return { action: proposal.action, domainName: domain, snapshotName: requiredSnapshot(proposal) };
     case "delete": {
       const diskPaths = await collectDomainDiskChain(vmConfig, runner, domain);
       await runVirsh(runner, vmConfig, ["destroy", domain]).catch(() => undefined);

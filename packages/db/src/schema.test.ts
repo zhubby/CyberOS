@@ -134,7 +134,8 @@ describe("SQLite schema migrations", () => {
       "038_panel_operations_without_agent_jobs",
       "039_media_library",
       "040_media_operation_notifications",
-      "041_bluetooth_receive_finalization"
+      "041_bluetooth_receive_finalization",
+      "042_mcp_resource_tokens"
     ]);
   });
 

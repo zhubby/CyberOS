@@ -19,6 +19,7 @@ import {
   revokeMcpClient,
   rotateMcpClientToken,
   saveAgentMcpSettings,
+  updateMcpClientScopes,
   type ZosDatabase
 } from "@zos/db";
 import type { PublicAgentMcpSettings, ZosConfig } from "@zos/shared";
@@ -45,6 +46,13 @@ export function configureAgentMcp(db: ZosDatabase, config: ZosConfig, enabled: b
   return publicAgentMcpSettings(db, config);
 }
 
+export function reconcileAgentMcp(db: ZosDatabase, config: ZosConfig): PublicAgentMcpSettings {
+  const stored = getAgentMcpSettings(db);
+  const enabled = stored?.enabled ?? config.mcp?.piEnabled ?? false;
+  if ((config.mcp?.enabled ?? false) && enabled) ensurePairedPiClient(db, config);
+  return publicAgentMcpSettings(db, config);
+}
+
 function hasPairedPiClient(db: ZosDatabase, config: ZosConfig): boolean {
   const token = readValidPiToken(config.mcp?.piTokenFile);
   if (!token) return false;
@@ -67,19 +75,22 @@ function ensurePairedPiClient(db: ZosDatabase, config: ZosConfig): void {
 
   const existing = activeClients[0] ?? null;
   const installedToken = readValidPiToken(tokenFile);
+  const desiredScopes = piClientScopes(config);
   if (existing && installedToken && findMcpClientByToken(db, installedToken)?.id === existing.id) {
+    if (!sameScopes(existing.scopes, desiredScopes)) updateMcpClientScopes(db, existing.id, desiredScopes);
     return;
   }
 
   let createdClientId: string | null = null;
   let token: string;
   if (existing) {
+    if (!sameScopes(existing.scopes, desiredScopes)) updateMcpClientScopes(db, existing.id, desiredScopes);
     token = rotateMcpClientToken(db, existing.id).token;
   } else {
     const created = createMcpClient(db, {
       name: "Built-in Pi",
       kind: "pi",
-      scopes: piClientScopes()
+      scopes: desiredScopes
     });
     createdClientId = created.id;
     token = created.token;
@@ -93,10 +104,14 @@ function ensurePairedPiClient(db: ZosDatabase, config: ZosConfig): void {
   }
 }
 
-function piClientScopes(): string[] {
+function piClientScopes(config: ZosConfig): string[] {
   return [...new Set(createCatalogDescriptors().flatMap((descriptor) => descriptor.requiredScopes))]
-    .filter((scope) => scope !== "zos:admin:shell")
+    .filter((scope) => scope !== "zos:admin:shell" || config.mcp?.shellEnabled === true)
     .sort();
+}
+
+function sameScopes(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((scope, index) => scope === right[index]);
 }
 
 function readValidPiToken(tokenFile: string | undefined): string | null {

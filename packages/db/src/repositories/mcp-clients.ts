@@ -116,6 +116,22 @@ export function rotateMcpClientToken(
   return { client: mapClient(row), token };
 }
 
+export function updateMcpClientScopes(
+  db: ZosDatabase,
+  clientId: string,
+  scopes: readonly string[]
+): McpClientRecord {
+  const normalized = normalizeScopes(scopes);
+  if (normalized.length === 0) throw new Error("At least one scope is required");
+  const now = new Date().toISOString();
+  const result = db.prepare(`
+    UPDATE mcp_clients SET scopes_json = ?, updated_at = ?
+    WHERE id = ? AND revoked_at IS NULL
+  `).run(JSON.stringify(normalized), now, clientId);
+  if (result.changes !== 1) throw new Error("Active MCP client not found");
+  return getMcpClient(db, clientId)!;
+}
+
 export function revokeMcpClient(db: ZosDatabase, clientId: string): boolean {
   const now = new Date().toISOString();
   const revoke = db.transaction(() => {

@@ -1,4 +1,5 @@
 import type { ZosDatabase } from "@zos/db";
+import type { CapabilityRuntimeDependencies } from "@zos/capability-runtime";
 import type { MonitoringReader } from "@zos/monitoring";
 import type { PublicBuildInfo, ZosConfig } from "@zos/shared";
 import type { DockerComposeRuntime } from "./lib/docker-compose.js";
@@ -40,6 +41,7 @@ export interface ApiRouteContext {
   photostaffMap?: PhotostaffMapArchiveRuntime;
   fileBatches?: FileBatchRuntime;
   hostAccess?: DockerHostAccessRuntime;
+  capabilityRuntime?: CapabilityRuntimeDependencies;
 }
 
 export type ServerDependencies = Omit<ApiRouteContext, "monitoring" | "monitoringEvents"> & {

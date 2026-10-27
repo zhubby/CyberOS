@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CapabilityError } from "@zos/capabilities";
 import {
   createCapabilityRun,
+  cancelOwnedCapabilityRun,
   createMcpClient,
   createSession,
   createUserMessageAndJob,
@@ -14,6 +15,7 @@ import {
   getCapabilityApprovalByRun,
   getCapabilityRun,
   getCapabilityRunPayload,
+  listCapabilityRunEvents,
   linkAgentJobToCapabilityRun,
   openZosDb,
   saveAgentCapabilityPolicySettings,
@@ -21,11 +23,16 @@ import {
 } from "@zos/db";
 import type { ZosConfig } from "@zos/shared";
 import {
+  capabilityRunSecretRequirements,
   executeApprovedCapabilityRun,
+  executeStartedSecretCapabilityRun,
   proposeFileMutation,
+  proposeDomainCapability,
+  proposePiToolCapability,
   proposePiMcpFileCapability,
   recoverCapabilityRuns
 } from "./orchestrator.js";
+import type { CapabilityDomainAdapter } from "./adapters.js";
 
 let tempDir: string;
 let rootDir: string;
@@ -188,10 +195,165 @@ describe("capability mutation runtime", () => {
     expect(getCapabilityRun(db, run.id)).toMatchObject({ state: "failed", errorCode: "INTERNAL" });
     await expect(access(path.join(rootDir, "NeverCreate"))).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  it("rejects the legacy arbitrary bash bridge in favor of structured Shell argv", async () => {
+    await expect(proposePiToolCapability({
+      dependencies: dependencies(),
+      sessionId: "session-1",
+      rootId: "primary",
+      request: {
+        toolCallId: "tool-1",
+        toolName: "bash",
+        args: { command: "cat /etc/passwd" },
+        redactedArgs: { command: "cat /etc/passwd" },
+        previewArgs: { command: "cat /etc/passwd" },
+        risk: "critical",
+        summary: "Run shell command",
+        requiresConfirmation: true
+      }
+    })).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+      message: "Legacy bash execution is disabled; use zos.shell.run with structured argv"
+    });
+  });
+
+  it("deduplicates identical domain proposals and rejects conflicting idempotency input", async () => {
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:settings:propose"] });
+    const adapter = recordingAdapter();
+    const runtime = domainDependencies("zos.settings.update-propose", adapter);
+    const first = await proposeDomainCapability({
+      dependencies: runtime,
+      subject: domainSubject(client.id, "zos:settings:propose"),
+      capabilityId: "zos.settings.update-propose",
+      request: { operation: "agent_policy", value: "first" },
+      idempotencyKey: "settings-change-0001"
+    });
+    const repeated = await proposeDomainCapability({
+      dependencies: runtime,
+      subject: domainSubject(client.id, "zos:settings:propose"),
+      capabilityId: "zos.settings.update-propose",
+      request: { value: "first", operation: "agent_policy" },
+      idempotencyKey: "settings-change-0001"
+    });
+
+    expect(repeated.runId).toBe(first.runId);
+    await expect(proposeDomainCapability({
+      dependencies: runtime,
+      subject: domainSubject(client.id, "zos:settings:propose"),
+      capabilityId: "zos.settings.update-propose",
+      request: { operation: "agent_policy", value: "different" },
+      idempotencyKey: "settings-change-0001"
+    })).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("resumes an approved queued domain run after restart", async () => {
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:notifications:propose"] });
+    const adapter = recordingAdapter();
+    const runtime = domainDependencies("zos.notifications.read-state-propose", adapter);
+    const proposed = await proposeDomainCapability({
+      dependencies: runtime,
+      subject: domainSubject(client.id, "zos:notifications:propose"),
+      capabilityId: "zos.notifications.read-state-propose",
+      request: { operation: "read_all" }
+    });
+    linkProposalToAgentJob(proposed.runId!);
+    const approval = getCapabilityApprovalByRun(db, proposed.runId!)!;
+    expect(decideCapabilityApproval(db, {
+      approvalId: approval.id,
+      expectedRevision: approval.revision,
+      decision: "approved",
+      decidedBy: "local-admin"
+    })?.run.state).toBe("queued");
+
+    await expect(recoverCapabilityRuns(runtime)).resolves.toEqual({ expired: 0, interrupted: 0, resumed: 1 });
+    expect(getCapabilityRun(db, proposed.runId!)).toMatchObject({
+      state: "succeeded",
+      result: { executed: true },
+      domainOperationType: "test_operation",
+      domainOperationId: "operation-1"
+    });
+    expect(adapter.executions).toHaveLength(1);
+    expect(getCapabilityRunPayload(db, proposed.runId!)).toBeNull();
+  });
+
+  it("executes secret-bearing work from memory without persisting the secret", async () => {
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:settings:propose"] });
+    const adapter = recordingAdapter(true);
+    const runtime = domainDependencies("zos.settings.update-propose", adapter);
+    const proposed = await proposeDomainCapability({
+      dependencies: runtime,
+      subject: domainSubject(client.id, "zos:settings:propose"),
+      capabilityId: "zos.settings.update-propose",
+      request: { operation: "model_provider", replaceApiKey: true }
+    });
+    linkProposalToAgentJob(proposed.runId!);
+    expect(capabilityRunSecretRequirements(runtime, proposed.runId!)).toEqual([
+      { name: "apiKey", label: "API key", minLength: 8, maxLength: 128 }
+    ]);
+    const approval = getCapabilityApprovalByRun(db, proposed.runId!)!;
+    const decided = decideCapabilityApproval(db, {
+      approvalId: approval.id,
+      expectedRevision: approval.revision,
+      decision: "approved",
+      decidedBy: "local-admin",
+      startRunning: true
+    })!;
+    expect(decided.run).toMatchObject({ state: "running", cancellable: false });
+    expect(cancelOwnedCapabilityRun(db, client.id, proposed.runId!)).toBeNull();
+
+    const secret = "local-secret-value";
+    const completed = await executeStartedSecretCapabilityRun(runtime, proposed.runId!, { apiKey: secret });
+
+    expect(completed).toMatchObject({ state: "succeeded", result: { executed: true } });
+    expect(adapter.executions).toEqual([{ apiKey: secret }]);
+    expect(getCapabilityRunPayload(db, proposed.runId!)).toBeNull();
+    expect(JSON.stringify(listCapabilityRunEvents(db, proposed.runId!))).not.toContain(secret);
+    const persistedCapabilityState = db.prepare(`
+      SELECT group_concat(value, '') FROM (
+        SELECT input_json AS value FROM capability_runs WHERE id = ?
+        UNION ALL SELECT proposal_json FROM capability_approvals WHERE run_id = ?
+        UNION ALL SELECT payload_json FROM capability_run_events WHERE run_id = ?
+      )
+    `).pluck().get(proposed.runId!, proposed.runId!, proposed.runId!);
+    expect(String(persistedCapabilityState)).not.toContain(secret);
+  });
 });
 
 function subject(clientId: string) {
   return { id: clientId, clientId, kind: "pi" as const, scopes: new Set(["zos:files:propose"]) };
+}
+
+function domainSubject(clientId: string, scope: string) {
+  return { id: clientId, clientId, kind: "pi" as const, scopes: new Set([scope]) };
+}
+
+function domainDependencies(capabilityId: string, adapter: CapabilityDomainAdapter) {
+  return { db, config: testConfig(), adapters: { [capabilityId]: adapter } };
+}
+
+function recordingAdapter(requiresSecret = false): CapabilityDomainAdapter & { executions: Array<Record<string, string>> } {
+  const executions: Array<Record<string, string>> = [];
+  return {
+    executions,
+    availability: () => ({ available: true }),
+    prepare: (request) => ({
+      summary: "Execute test operation",
+      revision: "revision-1",
+      privatePayload: { request },
+      ...(requiresSecret ? {
+        requiredSecrets: [{ name: "apiKey", label: "API key", minLength: 8, maxLength: 128 }]
+      } : {})
+    }),
+    revalidate: () => undefined,
+    execute: (_prepared, _context, secrets) => {
+      executions.push({ ...secrets });
+      return {
+        data: { executed: true },
+        domainOperationType: "test_operation",
+        domainOperationId: "operation-1"
+      };
+    }
+  };
 }
 
 function linkProposalToAgentJob(runId: string): void {

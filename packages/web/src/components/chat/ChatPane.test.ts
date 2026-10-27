@@ -362,7 +362,8 @@ describe("ChatPane agent rail", () => {
           proposal: {
             summary: "Move reports/final.pdf to Archive/final.pdf",
             request: { rootId: "primary", sourcePath: "reports/final.pdf", targetPath: "Archive/final.pdf" },
-            args: { command: "mkdir -p Archive && mv reports/final.pdf Archive/final.pdf" }
+            args: { command: "mkdir -p Archive && mv reports/final.pdf Archive/final.pdf" },
+            requiredSecrets: [{ name: "localPassword", label: "Local approval password", minLength: 8 }]
           },
           risk: "critical",
           revision: 3,
@@ -416,5 +417,7 @@ describe("ChatPane agent rail", () => {
     expect(html).toContain(">3<");
     expect(html).toContain("Requested action");
     expect(html).toContain("mkdir -p Archive &amp;&amp; mv reports/final.pdf Archive/final.pdf");
+    expect(html).toContain("Local approval password");
+    expect(html).not.toContain("local-secret-value");
   });
 });

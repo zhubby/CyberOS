@@ -155,7 +155,9 @@ async function buildVmProposal(body: VmActionBody, context: ApiRouteContext): Pr
   if (action !== "create" && !targetInstance) throw new Error("Virtual machine not found");
   if (action === "create" && summary.instances.some((instance) => instance.name === domainName)) throw new Error("Virtual machine already exists");
   if (action === "console" && !targetInstance?.uuid) throw new Error("Virtual machine identity is unavailable");
-  if (action === "snapshot" && !normalizeDomain(body.snapshotName)) throw new Error("Snapshot name is required");
+  if (["snapshot", "snapshot_revert", "snapshot_delete"].includes(action) && !normalizeDomain(body.snapshotName)) {
+    throw new Error("Snapshot name is required");
+  }
   const storageIso = action === "create" && body.isoPath ? await resolveStorageIso(body, context) : null;
   const isoPath = storageIso?.absolutePath ?? body.isoPath;
   if (action === "create" && !isoPath && !body.diskPath) throw new Error("An ISO or existing disk path is required");
@@ -164,7 +166,7 @@ async function buildVmProposal(body: VmActionBody, context: ApiRouteContext): Pr
   if (action === "create" && body.diskPath && !isInside(vmConfig.storagePath, body.diskPath)) throw new Error("Disk path must stay inside the configured VM storage path");
   if (body.networkName && !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/u.test(body.networkName)) throw new Error("Network name is invalid");
   const advanced = action === "create" ? validateCreateOptions(body, summary.host.architecture) : {};
-  const risk = action === "delete" || action === "create" ? "high" : "medium";
+  const risk = ["delete", "create", "snapshot_revert", "snapshot_delete"].includes(action) ? "high" : "medium";
   return {
     action, ...(domainName ? { domainName } : {}), ...(action === "console" ? { domainUuid: targetInstance!.uuid! } : {}), ...(normalizeDomain(body.snapshotName) ? { snapshotName: normalizeDomain(body.snapshotName)! } : {}),
     ...(body.vcpu !== undefined ? { vcpu: boundedInteger(body.vcpu, 1, 128, "vCPU") } : {}),

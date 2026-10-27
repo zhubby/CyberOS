@@ -2406,12 +2406,18 @@ export async function getApprovals(sessionId: string): Promise<ApprovalQueue> {
 export async function decideCapabilityApproval(
   approval: Pick<CapabilityApproval, "id" | "revision" | "sessionId">,
   decision: "approved" | "rejected",
-  confirmed = false
+  options: { confirmed?: boolean; secretInput?: Record<string, string> } = {}
 ): Promise<void> {
   const response = await fetch(`/api/capability-approvals/${encodeURIComponent(approval.id)}/decision`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sessionId: approval.sessionId, decision, expectedRevision: approval.revision, confirmed })
+    body: JSON.stringify({
+      sessionId: approval.sessionId,
+      decision,
+      expectedRevision: approval.revision,
+      confirmed: options.confirmed === true,
+      ...(options.secretInput ? { secretInput: options.secretInput } : {})
+    })
   });
   await ensureOk(response);
 }

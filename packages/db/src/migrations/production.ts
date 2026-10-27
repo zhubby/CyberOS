@@ -2267,5 +2267,26 @@ export const productionMigrations: Migration[] = [
 
       PRAGMA legacy_alter_table = OFF;
     `
+  },
+  {
+    id: "042_mcp_resource_tokens",
+    sql: `
+      CREATE TABLE mcp_resource_tokens (
+        token_digest TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL REFERENCES mcp_clients(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('file', 'file_export', 'photo_media', 'photo_export')),
+        descriptor_json TEXT NOT NULL CHECK (length(descriptor_json) <= 65536),
+        revision TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        size_bytes INTEGER CHECK (size_bytes IS NULL OR size_bytes >= 0),
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_mcp_resource_tokens_expiry
+        ON mcp_resource_tokens(expires_at, used_at);
+    `
   }
 ];

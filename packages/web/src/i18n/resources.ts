@@ -225,7 +225,9 @@ export const en = {
       revision: "Revision",
       target: "Target",
       expires: "Expires",
+      secrets: "Local input",
       preview: "Requested action",
+      localConfirmation: "Approve capability",
       confirm: "This action requires an additional first-party confirmation. Approve and execute it now?"
     },
     approvalCards: {
@@ -3043,7 +3045,9 @@ export const zhCN = {
       revision: "修订版本",
       target: "目标",
       expires: "过期时间",
+      secrets: "本机补录",
       preview: "请求内容",
+      localConfirmation: "批准能力",
       confirm: "此操作需要额外的第一方确认。确认现在批准并执行吗？"
     },
     approvalCards: {

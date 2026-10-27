@@ -1,6 +1,7 @@
 import { PARITY_MANIFEST } from "./parity-manifest.js";
-import type { CapabilityApprovalPolicy, CapabilityDescriptor, CapabilityRisk, JsonSchema } from "./contracts.js";
-import { EMPTY_OBJECT_SCHEMA, GENERIC_OBJECT_SCHEMA, strictObject } from "./schemas.js";
+import type { CapabilityApprovalPolicy, CapabilityDescriptor, CapabilityRisk } from "./contracts.js";
+import { capabilityInputSchema } from "./request-contracts.js";
+import { GENERIC_OBJECT_SCHEMA } from "./schemas.js";
 
 const DEFAULT_OUTPUT_LIMIT = 256 * 1024;
 
@@ -18,7 +19,7 @@ export function createCatalogDescriptors(): CapabilityDescriptor[] {
     domain: entry.domain,
     title: entry.uiOutcome,
     description: entry.uiOutcome,
-    inputSchema: inputSchemaFor(entry.capabilityId, entry.risk),
+    inputSchema: capabilityInputSchema(entry.capabilityId),
     outputSchema: GENERIC_OBJECT_SCHEMA,
     risk: entry.risk,
     requiredScopes: [scopeFor(entry.domain, entry.risk, entry.approval)],
@@ -32,28 +33,4 @@ export function createCatalogDescriptors(): CapabilityDescriptor[] {
       openWorldHint: false
     }
   }));
-}
-
-function inputSchemaFor(capabilityId: string, risk: CapabilityRisk): JsonSchema {
-  if (capabilityId === "zos.files.mutate") {
-    return strictObject({
-      request: strictObject({
-        operation: { type: "string", enum: ["mkdir", "move", "copy", "rename", "trash"] },
-        rootId: { type: "string", minLength: 1, maxLength: 128 },
-        sourcePath: { type: "string", minLength: 1, maxLength: 4096 },
-        targetPath: { type: "string", minLength: 1, maxLength: 4096 }
-      }, ["operation", "rootId"]),
-      idempotencyKey: { type: "string", minLength: 8, maxLength: 200 }
-    }, ["request"]);
-  }
-  if (capabilityId === "zos.files.resource-link") {
-    return strictObject({
-      rootId: { type: "string", minLength: 1, maxLength: 128 },
-      path: { type: "string", minLength: 1, maxLength: 4096 }
-    }, ["rootId", "path"]);
-  }
-  return risk === "read" ? EMPTY_OBJECT_SCHEMA : strictObject({
-    request: GENERIC_OBJECT_SCHEMA,
-    idempotencyKey: { type: "string", minLength: 8, maxLength: 200 }
-  }, ["request"]);
 }

@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
 import { mkdir, lstat, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
-import { CapabilityError, type CapabilityExecution, type CapabilitySubject, type JsonValue } from "@zos/capabilities";
+import {
+  CapabilityError,
+  createCatalogDescriptors,
+  type CapabilityExecution,
+  type CapabilitySubject,
+  type JsonValue
+} from "@zos/capabilities";
 import {
   createCapabilityProposal,
   createTrashEntry,
@@ -37,17 +41,31 @@ import {
   toRootRelative
 } from "@zos/nas-tools";
 import type { AgentCapabilityId, FileMutationOperation, FileOperationProposal, NasRootRecord, ZosConfig } from "@zos/shared";
+import {
+  isStoredCapabilityAdapterPayload,
+  parseStoredCapabilityAdapterProposal,
+  validateCapabilitySecretInput,
+  type CapabilityAdapterContext,
+  type CapabilityDomainAdapter,
+  type PreparedCapabilityAction,
+  type StoredCapabilityAdapterPayload,
+  type StoredCapabilityAdapterProposal
+} from "./adapters.js";
+import { executeExtendedFileReadCapability } from "./file-read.js";
 
 const FILE_MUTATION_CAPABILITY = "zos.files.mutate";
 const PI_MCP_FILE_CAPABILITIES = [
   "zos.files.list",
   "zos.files.stat",
   "zos.files.read",
-  "zos.files.search"
+  "zos.files.search",
+  "zos.files.grep",
+  "zos.files.find",
+  "zos.files.git",
+  "zos.files.archive-inspect"
 ] as const;
 const FILE_PROPOSAL_TTL_MS = 15 * 60_000;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
-const execFileAsync = promisify(execFile);
 const SUPPORTED_FILE_MUTATIONS = new Set<FileMutationOperation>(["mkdir", "move", "copy", "rename", "trash"]);
 
 interface FileMutationRequest {
@@ -67,6 +85,7 @@ interface StoredFileMutationProposal {
 export interface CapabilityRuntimeDependencies {
   db: ZosDatabase;
   config: ZosConfig;
+  adapters?: Readonly<Record<string, CapabilityDomainAdapter>>;
 }
 
 export type PiToolCapabilityName = "read" | "grep" | "find" | "ls" | "bash" | "edit" | "write";
@@ -265,9 +284,104 @@ export async function proposeFileMutation(input: {
   };
 }
 
+export async function proposeDomainCapability(input: {
+  dependencies: CapabilityRuntimeDependencies;
+  subject: CapabilitySubject;
+  capabilityId: string;
+  request: JsonValue;
+  idempotencyKey?: string;
+  requiresConfirmation?: boolean;
+}): Promise<CapabilityExecution> {
+  if (input.subject.kind !== "pi") {
+    throw new CapabilityError("FORBIDDEN", "Only the built-in Pi agent can request capability approval");
+  }
+  const descriptor = createCatalogDescriptors().find((item) => item.id === input.capabilityId);
+  if (!descriptor || descriptor.risk === "read" || descriptor.approval === "none" || descriptor.approval === "owner_control") {
+    throw new CapabilityError("INVALID_ARGUMENT", "Capability does not support a mutation proposal");
+  }
+  rejectSecretLikeFields(input.request);
+  const adapter = input.dependencies.adapters?.[input.capabilityId];
+  if (!adapter) throw new CapabilityError("NOT_READY", "Domain adapter is not installed", { retryable: true });
+  const context = adapterContext(input.dependencies, input.subject, input.capabilityId);
+  await requireAdapterAvailability(adapter, context);
+  let prepared: PreparedCapabilityAction;
+  try {
+    prepared = await adapter.prepare(input.request, context);
+  } catch (error) {
+    throw adapterError(error, "Capability request could not be prepared");
+  }
+  validatePreparedAction(prepared);
+  const proposal: StoredCapabilityAdapterProposal = {
+    kind: "domain_adapter",
+    version: 1,
+    capabilityId: input.capabilityId,
+    title: descriptor.title,
+    summary: prepared.summary,
+    target: prepared.target ?? null,
+    changes: prepared.changes ?? null,
+    revision: prepared.revision ?? null,
+    risk: descriptor.risk,
+    requiredSecrets: prepared.requiredSecrets ?? []
+  };
+  const payload: StoredCapabilityAdapterPayload = {
+    kind: "domain_adapter",
+    version: 1,
+    capabilityId: input.capabilityId,
+    prepared
+  };
+  const expiresAt = new Date(Date.now() + FILE_PROPOSAL_TTL_MS).toISOString();
+  let created;
+  try {
+    created = createCapabilityProposal(input.dependencies.db, {
+      clientId: input.subject.clientId,
+      subjectId: input.subject.id,
+      subjectKind: "pi",
+      capabilityId: input.capabilityId,
+      risk: descriptor.risk,
+      redactedInput: toJsonValue({
+        request: input.request,
+        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {})
+      }),
+      proposal: toJsonValue(proposal),
+      privatePayload: toJsonValue(payload),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      requiresConfirmation: input.requiresConfirmation === true || descriptor.approval === "first_party_confirm",
+      expiresAt
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to persist capability proposal";
+    if (message.includes("Idempotency key conflicts")) throw new CapabilityError("CONFLICT", message, { cause: error });
+    throw new CapabilityError("INTERNAL", "Failed to persist capability proposal", { cause: error });
+  }
+  return {
+    data: {
+      state: created.run.state,
+      approval: {
+        id: created.approval.id,
+        status: created.approval.status,
+        revision: created.approval.revision,
+        expiresAt: created.approval.expiresAt
+      },
+      proposal: {
+        summary: proposal.summary,
+        target: proposal.target,
+        changes: proposal.changes,
+        revision: proposal.revision,
+        requiredSecrets: proposal.requiredSecrets.map(({ name, label, description }) => ({
+          name,
+          label,
+          ...(description ? { description } : {})
+        }))
+      }
+    },
+    runId: created.run.id
+  };
+}
+
 export async function executeApprovedCapabilityRun(
   dependencies: CapabilityRuntimeDependencies,
-  runId: string
+  runId: string,
+  options: { secretInput?: unknown } = {}
 ): Promise<CapabilityRunRecord> {
   const initial = getCapabilityRun(dependencies.db, runId);
   if (!initial) throw new Error("Capability run not found");
@@ -299,9 +413,7 @@ export async function executeApprovedCapabilityRun(
     }
     const payload = getCapabilityRunPayload(dependencies.db, initial.id);
     if (client) {
-      const requiredScope = initial.capabilityId === FILE_MUTATION_CAPABILITY
-        ? "zos:files:propose"
-        : isStoredPiMcpFilePayload(payload) ? "zos:files:read" : null;
+      const requiredScope = requiredScopeForCapability(initial.capabilityId, payload);
       if (requiredScope && !client.scopes.includes(requiredScope)) {
         return failQueuedRun(dependencies.db, initial, "FORBIDDEN", "Pi client no longer has the required scope");
       }
@@ -311,6 +423,9 @@ export async function executeApprovedCapabilityRun(
     }
     if (isStoredPiToolPayload(payload)) {
       return executeApprovedPiToolRun(dependencies, initial);
+    }
+    if (isStoredCapabilityAdapterPayload(payload)) {
+      return executeApprovedDomainAdapterRun(dependencies, initial, payload, options.secretInput);
     }
     if (initial.capabilityId !== FILE_MUTATION_CAPABILITY) {
       return failQueuedRun(dependencies.db, initial, "NOT_READY", "Capability execution adapter is not installed");
@@ -397,6 +512,259 @@ export async function executeApprovedCapabilityRun(
   }
 }
 
+export function capabilityRunSecretRequirements(
+  dependencies: Pick<CapabilityRuntimeDependencies, "db">,
+  runId: string
+) {
+  const approval = getCapabilityApprovalByRun(dependencies.db, runId);
+  if (!approval) return [];
+  try {
+    return parseStoredCapabilityAdapterProposal(approval.proposal).requiredSecrets;
+  } catch {
+    return [];
+  }
+}
+
+export async function executeStartedSecretCapabilityRun(
+  dependencies: CapabilityRuntimeDependencies,
+  runId: string,
+  secretInput: unknown
+): Promise<CapabilityRunRecord> {
+  const initial = getCapabilityRun(dependencies.db, runId);
+  if (!initial) throw new Error("Capability run not found");
+  if (initial.state !== "running") return initial;
+  const fail = (code: "INVALID_ARGUMENT" | "FORBIDDEN" | "NOT_READY" | "CONFLICT" | "INTERNAL", message: string) =>
+    failRunningRun(dependencies.db, getCapabilityRun(dependencies.db, runId) ?? initial, code, message);
+  try {
+    const approval = getCapabilityApprovalByRun(dependencies.db, runId);
+    if (!approval || approval.status !== "approved") return fail("CONFLICT", "Capability run does not have an approved first-party decision");
+    if (initial.subjectKind !== "pi" || !getAgentCapabilityApproval(dependencies.db, approval.id)) {
+      return fail("FORBIDDEN", "Approval is not linked to a Pi Agent conversation");
+    }
+    const policyCapabilityId = agentPolicyCapabilityId(initial.capabilityId);
+    if (policyCapabilityId) {
+      const policy = (getAgentCapabilityPolicySettings(dependencies.db) ?? defaultAgentCapabilityPolicySettings())
+        .policies[policyCapabilityId];
+      if (policy === "disabled") return fail("FORBIDDEN", "Capability was disabled after approval was requested");
+      if (policy === "confirm" && !approval.requiresConfirmation) {
+        return fail("CONFLICT", "Capability now requires a new confirmed approval");
+      }
+    }
+    const client = initial.clientId ? getMcpClient(dependencies.db, initial.clientId) : null;
+    const now = new Date().toISOString();
+    if (initial.clientId && (!client || client.kind !== "pi" || client.revokedAt || (client.expiresAt && client.expiresAt <= now))) {
+      return fail("FORBIDDEN", "Pi client credential is no longer active");
+    }
+    const payload = getCapabilityRunPayload(dependencies.db, runId);
+    if (!isStoredCapabilityAdapterPayload(payload)) {
+      return fail("INTERNAL", "Secret-bearing capability payload is invalid");
+    }
+    if (client) {
+      const requiredScope = requiredScopeForCapability(initial.capabilityId, payload);
+      if (requiredScope && !client.scopes.includes(requiredScope)) {
+        return fail("FORBIDDEN", "Pi client no longer has the required scope");
+      }
+    }
+    if (payload.capabilityId !== initial.capabilityId) return fail("INTERNAL", "Stored capability payload does not match the run");
+    const adapter = dependencies.adapters?.[initial.capabilityId];
+    if (!adapter) return fail("NOT_READY", "Domain adapter is not installed");
+    const proposal = parseStoredCapabilityAdapterProposal(approval.proposal);
+    if (proposal.capabilityId !== initial.capabilityId || proposal.revision !== (payload.prepared.revision ?? null)) {
+      return fail("CONFLICT", "Capability proposal no longer matches its prepared request");
+    }
+    const secrets = validateCapabilitySecretInput(proposal.requiredSecrets, secretInput);
+    const context = adapterContext(dependencies, {
+      id: initial.subjectId,
+      clientId: initial.clientId ?? initial.subjectId,
+      kind: initial.subjectKind,
+      scopes: new Set(client?.scopes ?? [])
+    }, initial.capabilityId);
+    await requireAdapterAvailability(adapter, context);
+    await adapter.revalidate(payload.prepared, context);
+    const executed = await adapter.execute(payload.prepared, context, secrets);
+    const current = getCapabilityRun(dependencies.db, runId);
+    if (!current || current.state !== "running") return current ?? initial;
+    const completed = transitionCapabilityRun(dependencies.db, {
+      runId,
+      expectedRevision: current.revision,
+      from: ["running"],
+      to: "succeeded",
+      progress: { phase: "complete" },
+      result: executed.data,
+      ...(executed.domainOperationType ? { domainOperationType: executed.domainOperationType } : {}),
+      ...(executed.domainOperationId ? { domainOperationId: executed.domainOperationId } : {}),
+      cancellable: false
+    })!;
+    deleteCapabilityRunPayload(dependencies.db, runId);
+    return completed;
+  } catch (error) {
+    return fail(capabilityFailureCode(error), safeFailureMessage(error, dependencies));
+  }
+}
+
+async function executeApprovedDomainAdapterRun(
+  dependencies: CapabilityRuntimeDependencies,
+  initial: CapabilityRunRecord,
+  payload: StoredCapabilityAdapterPayload,
+  secretInput: unknown
+): Promise<CapabilityRunRecord> {
+  if (payload.capabilityId !== initial.capabilityId) {
+    return failQueuedRun(dependencies.db, initial, "INTERNAL", "Stored capability payload does not match the run");
+  }
+  const adapter = dependencies.adapters?.[initial.capabilityId];
+  if (!adapter) {
+    return failQueuedRun(dependencies.db, initial, "NOT_READY", "Domain adapter is not installed");
+  }
+  const approval = getCapabilityApprovalByRun(dependencies.db, initial.id);
+  if (!approval) return failQueuedRun(dependencies.db, initial, "CONFLICT", "Capability approval is missing");
+  let proposal: StoredCapabilityAdapterProposal;
+  try {
+    proposal = parseStoredCapabilityAdapterProposal(approval.proposal);
+  } catch {
+    return failQueuedRun(dependencies.db, initial, "INTERNAL", "Stored capability proposal is invalid");
+  }
+  if (proposal.capabilityId !== initial.capabilityId || proposal.revision !== (payload.prepared.revision ?? null)) {
+    return failQueuedRun(dependencies.db, initial, "CONFLICT", "Capability proposal no longer matches its prepared request");
+  }
+  let secrets: Readonly<Record<string, string>>;
+  try {
+    secrets = validateCapabilitySecretInput(proposal.requiredSecrets, secretInput);
+  } catch (error) {
+    return failQueuedRun(
+      dependencies.db,
+      initial,
+      "INVALID_ARGUMENT",
+      error instanceof Error ? error.message : "Required secret input is invalid"
+    );
+  }
+  const client = initial.clientId ? getMcpClient(dependencies.db, initial.clientId) : null;
+  const context = adapterContext(dependencies, {
+    id: initial.subjectId,
+    clientId: initial.clientId ?? initial.subjectId,
+    kind: initial.subjectKind,
+    scopes: new Set(client?.scopes ?? [])
+  }, initial.capabilityId);
+  try {
+    await requireAdapterAvailability(adapter, context);
+    await adapter.revalidate(payload.prepared, context);
+  } catch (error) {
+    return failQueuedRun(
+      dependencies.db,
+      initial,
+      capabilityFailureCode(error),
+      safeFailureMessage(error, dependencies)
+    );
+  }
+
+  const running = transitionCapabilityRun(dependencies.db, {
+    runId: initial.id,
+    expectedRevision: initial.revision,
+    from: ["queued"],
+    to: "running",
+    progress: { phase: "executing" },
+    cancellable: false
+  });
+  if (!running) return getCapabilityRun(dependencies.db, initial.id)!;
+
+  try {
+    const executed = await adapter.execute(payload.prepared, context, secrets);
+    const completed = transitionCapabilityRun(dependencies.db, {
+      runId: initial.id,
+      expectedRevision: running.revision,
+      from: ["running"],
+      to: "succeeded",
+      progress: { phase: "complete" },
+      result: executed.data,
+      ...(executed.domainOperationType ? { domainOperationType: executed.domainOperationType } : {}),
+      ...(executed.domainOperationId ? { domainOperationId: executed.domainOperationId } : {}),
+      cancellable: false
+    })!;
+    deleteCapabilityRunPayload(dependencies.db, initial.id);
+    return completed;
+  } catch (error) {
+    const failed = transitionCapabilityRun(dependencies.db, {
+      runId: initial.id,
+      expectedRevision: running.revision,
+      from: ["running"],
+      to: "failed",
+      errorCode: capabilityFailureCode(error),
+      errorMessage: safeFailureMessage(error, dependencies),
+      cancellable: false
+    })!;
+    deleteCapabilityRunPayload(dependencies.db, initial.id);
+    return failed;
+  }
+}
+
+function adapterContext(
+  dependencies: CapabilityRuntimeDependencies,
+  subject: CapabilitySubject,
+  capabilityId: string
+): CapabilityAdapterContext {
+  return { db: dependencies.db, config: dependencies.config, capabilityId, subject };
+}
+
+async function requireAdapterAvailability(
+  adapter: CapabilityDomainAdapter,
+  context: CapabilityAdapterContext
+): Promise<void> {
+  let availability;
+  try {
+    availability = await adapter.availability(context);
+  } catch (error) {
+    throw new CapabilityError(
+      "NOT_READY",
+      safeFailureMessage(error, { db: context.db, config: context.config }),
+      { retryable: true, cause: error }
+    );
+  }
+  if (!availability.available) {
+    throw new CapabilityError("NOT_READY", availability.reason ?? "Capability dependency is unavailable", { retryable: true });
+  }
+}
+
+function validatePreparedAction(prepared: PreparedCapabilityAction): void {
+  if (!prepared || typeof prepared.summary !== "string" || !prepared.summary.trim() || prepared.summary.length > 1000) {
+    throw new CapabilityError("INTERNAL", "Capability adapter returned an invalid summary");
+  }
+  const requirements = prepared.requiredSecrets ?? [];
+  const names = new Set<string>();
+  for (const requirement of requirements) {
+    if (!/^[a-z][a-zA-Z0-9]{0,63}$/u.test(requirement.name) || !requirement.label.trim() || names.has(requirement.name)) {
+      throw new CapabilityError("INTERNAL", "Capability adapter returned an invalid secret requirement");
+    }
+    names.add(requirement.name);
+  }
+}
+
+function rejectSecretLikeFields(value: JsonValue, pathSegments: string[] = []): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => rejectSecretLikeFields(item, [...pathSegments, String(index)]));
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [key, item] of Object.entries(value)) {
+    const normalized = key.replace(/[-_]/gu, "").toLowerCase();
+    if (["password", "passphrase", "apikey", "token", "secret", "credential"].includes(normalized)) {
+      throw new CapabilityError(
+        "INVALID_ARGUMENT",
+        `${[...pathSegments, key].join(".")} must be entered in the local approval interface`
+      );
+    }
+    rejectSecretLikeFields(item, [...pathSegments, key]);
+  }
+}
+
+function requiredScopeForCapability(capabilityId: string, payload: JsonValue | null): string | null {
+  if (isStoredPiMcpFilePayload(payload)) return "zos:files:read";
+  return createCatalogDescriptors().find((descriptor) => descriptor.id === capabilityId)?.requiredScopes[0] ?? null;
+}
+
+function adapterError(error: unknown, fallback: string): CapabilityError {
+  if (error instanceof CapabilityError) return error;
+  return new CapabilityError("INVALID_ARGUMENT", error instanceof Error ? error.message : fallback, { cause: error });
+}
+
 export async function executeFileReadCapability(
   dependencies: Pick<CapabilityRuntimeDependencies, "db">,
   capabilityId: PiMcpFileCapabilityId,
@@ -451,6 +819,11 @@ export async function executeFileReadCapability(
         throw new CapabilityError("INVALID_ARGUMENT", "File search request is invalid", { cause: error });
       }
     }
+    case "zos.files.grep":
+    case "zos.files.find":
+    case "zos.files.git":
+    case "zos.files.archive-inspect":
+      return executeExtendedFileReadCapability(dependencies, capabilityId, input);
   }
 }
 
@@ -761,6 +1134,18 @@ async function validatePiMcpFileCapability(
       if (optionalText(input.path)) {
         await mapPathError(() => resolveSafeExistingPath(root.path, optionalText(input.path)!));
       }
+      return;
+    case "zos.files.grep":
+      requiredText(input.pattern, "pattern");
+      await executeExtendedFileReadCapability(dependencies, capabilityId, { ...input, limit: 1, maxFiles: 1, maxBytes: 1 });
+      return;
+    case "zos.files.find":
+      await executeExtendedFileReadCapability(dependencies, capabilityId, { ...input, limit: 1, maxEntries: 1 });
+      return;
+    case "zos.files.git":
+    case "zos.files.archive-inspect":
+      await executeExtendedFileReadCapability(dependencies, capabilityId, input);
+      return;
   }
 }
 
@@ -771,6 +1156,10 @@ function piMcpFileSummary(capabilityId: PiMcpFileCapabilityId, input: Record<str
     case "zos.files.stat": return `Inspect ${requestedPath}`;
     case "zos.files.read": return `Read ${requestedPath}`;
     case "zos.files.search": return `Search ${requestedPath}`;
+    case "zos.files.grep": return `Search file contents below ${requestedPath}`;
+    case "zos.files.find": return `Find files below ${requestedPath}`;
+    case "zos.files.git": return `Inspect Git state at ${requestedPath}`;
+    case "zos.files.archive-inspect": return `Inspect archive ${requestedPath}`;
   }
 }
 
@@ -804,9 +1193,7 @@ async function validatePiToolRequest(
       return null;
     }
     case "bash": {
-      const command = requiredText(args.command, "command");
-      if (Buffer.byteLength(command, "utf8") > 64 * 1024) throw new CapabilityError("INVALID_ARGUMENT", "command is too large");
-      return null;
+      throw new CapabilityError("INVALID_ARGUMENT", "Legacy bash execution is disabled; use zos.shell.run with structured argv");
     }
     case "edit": {
       const edits = parseEdits(args.edits);
@@ -857,21 +1244,7 @@ async function executePiTool(
       return { text: truncateText(matches.join("\n") || "No matches."), truncated: matches.length >= limit };
     }
     case "bash": {
-      const command = requiredText(args.command, "command");
-      const timeout = boundedLimit(args.timeout, 120_000, 600_000);
-      try {
-        const result = await execFileAsync("/bin/bash", ["-lc", command], {
-          cwd: root.path,
-          env: safeShellEnvironment(root.path),
-          timeout,
-          maxBuffer: MAX_TOOL_OUTPUT_BYTES
-        });
-        return { text: truncateText(`${result.stdout}${result.stderr}`) || "Command completed." };
-      } catch (error) {
-        const processError = error as Error & { stdout?: string; stderr?: string };
-        const output = truncateText(`${processError.stdout ?? ""}${processError.stderr ?? ""}`.trim());
-        throw new Error(output || "Shell command failed");
-      }
+      throw new CapabilityError("INVALID_ARGUMENT", "Legacy bash execution is disabled; use zos.shell.run with structured argv");
     }
     case "edit": {
       const requestedPath = requiredText(args.path, "path");
@@ -1076,15 +1449,6 @@ function truncateText(text: string): string {
     : `${text.slice(0, MAX_TOOL_OUTPUT_BYTES)}\n\n[Output truncated]`;
 }
 
-function safeShellEnvironment(cwd: string): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = { HOME: cwd, PATH: "/usr/local/bin:/usr/bin:/bin", TMPDIR: "/tmp" };
-  for (const name of ["LANG", "LC_ALL", "TZ"] as const) {
-    const value = process.env[name];
-    if (value && /^[A-Za-z0-9_+./:@-]{1,128}$/u.test(value)) environment[name] = value;
-  }
-  return environment;
-}
-
 function failQueuedRun(
   db: ZosDatabase,
   run: CapabilityRunRecord,
@@ -1095,6 +1459,26 @@ function failQueuedRun(
     runId: run.id,
     expectedRevision: run.revision,
     from: ["queued"],
+    to: "failed",
+    errorCode,
+    errorMessage,
+    cancellable: false
+  });
+  if (failed) deleteCapabilityRunPayload(db, run.id);
+  return failed ?? getCapabilityRun(db, run.id)!;
+}
+
+function failRunningRun(
+  db: ZosDatabase,
+  run: CapabilityRunRecord,
+  errorCode: "INVALID_ARGUMENT" | "FORBIDDEN" | "NOT_READY" | "CONFLICT" | "INTERNAL",
+  errorMessage: string
+): CapabilityRunRecord {
+  if (run.state !== "running") return run;
+  const failed = transitionCapabilityRun(db, {
+    runId: run.id,
+    expectedRevision: run.revision,
+    from: ["running"],
     to: "failed",
     errorCode,
     errorMessage,

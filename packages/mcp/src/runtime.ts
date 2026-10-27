@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CapabilityError,
   CapabilityRegistry,
@@ -12,14 +13,16 @@ import {
 } from "@zos/capabilities";
 import {
   executeFileReadCapability,
+  proposeDomainCapability,
   proposeFileMutation,
   proposePiMcpFileCapability,
+  type CapabilityDomainAdapter,
   type PiMcpFileCapabilityId
 } from "@zos/capability-runtime";
 import {
   cancelOwnedCapabilityRun,
   countUnreadOperationNotifications,
-  createMcpTransferToken,
+  createMcpResourceToken,
   defaultDownloadSettings,
   defaultIndexerSettings,
   defaultAgentCapabilityPolicySettings,
@@ -60,6 +63,7 @@ import {
   listPhotostaffAssets,
   listRootReadiness,
   type McpClientRecord,
+  type McpResourceRecord,
   type ZosDatabase
 } from "@zos/db";
 import { inferMimeType, statPath } from "@zos/nas-tools";
@@ -69,8 +73,18 @@ export interface McpRuntimeDependencies {
   db: ZosDatabase;
   config: ZosConfig;
   buildInfo?: PublicBuildInfo;
-  readAdapters?: Readonly<Record<string, (input: JsonValue) => JsonValue | Promise<JsonValue>>>;
+  readAdapters?: Readonly<Record<string, (
+    input: JsonValue,
+    context: CapabilityContext,
+    dependencies: McpRuntimeDependencies
+  ) => JsonValue | Promise<JsonValue>>>;
+  adapters?: Readonly<Record<string, CapabilityDomainAdapter>>;
   transferBaseUrl?: string;
+  resourceResponder?: (
+    resource: McpResourceRecord,
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => unknown | Promise<unknown>;
 }
 
 export interface ClientRuntime {
@@ -85,7 +99,11 @@ const PI_MCP_FILE_CAPABILITIES = new Set<PiMcpFileCapabilityId>([
   "zos.files.list",
   "zos.files.stat",
   "zos.files.read",
-  "zos.files.search"
+  "zos.files.search",
+  "zos.files.grep",
+  "zos.files.find",
+  "zos.files.git",
+  "zos.files.archive-inspect"
 ]);
 
 const IMPLEMENTED = new Set([
@@ -97,6 +115,10 @@ const IMPLEMENTED = new Set([
   "zos.files.read",
   "zos.files.resource-link",
   "zos.files.search",
+  "zos.files.grep",
+  "zos.files.find",
+  "zos.files.git",
+  "zos.files.archive-inspect",
   "zos.files.mutate",
   "zos.index.status",
   "zos.photos.query",
@@ -130,7 +152,11 @@ export function createClientRuntime(dependencies: McpRuntimeDependencies, client
   const policySettings = getAgentCapabilityPolicySettings(dependencies.db) ?? defaultAgentCapabilityPolicySettings();
   for (const base of createCatalogDescriptors()) {
     const agentCapabilityId = agentPolicyCapabilityId(base.id);
-    if (base.id === FILE_MUTATION_CAPABILITY && client.kind !== "pi") continue;
+    if (
+      client.kind !== "pi" &&
+      (base.approval === "first_party" || base.approval === "first_party_confirm")
+    ) continue;
+    if (base.id === "zos.shell.run" && dependencies.config.mcp?.shellEnabled !== true) continue;
     if (
       base.id === FILE_RESOURCE_LINK_CAPABILITY
       && client.kind === "pi"
@@ -143,8 +169,20 @@ export function createClientRuntime(dependencies: McpRuntimeDependencies, client
     const configured = agentPolicy && agentPolicy !== "auto"
       ? { ...base, approval: "first_party" as const }
       : base;
-    const descriptor: CapabilityDescriptor = IMPLEMENTED.has(base.id) || dependencies.readAdapters?.[base.id]
-      ? { ...configured, execute: (input, executionContext) => executeImplemented(base.id, input, executionContext) }
+    const adapter = dependencies.adapters?.[base.id];
+    const descriptor: CapabilityDescriptor = IMPLEMENTED.has(base.id) || dependencies.readAdapters?.[base.id] || adapter
+      ? {
+          ...configured,
+          ...(adapter ? {
+            availability: (executionContext) => adapter.availability({
+              db: dependencies.db,
+              config: dependencies.config,
+              capabilityId: base.id,
+              subject: executionContext.subject
+            })
+          } : {}),
+          execute: (input, executionContext) => executeImplemented(base.id, input, executionContext)
+        }
       : { ...configured, availability: () => ({ available: false, reason: "Domain adapter is not installed" }) };
     registry.register(descriptor);
   }
@@ -199,6 +237,25 @@ async function executeImplemented(
       ...(idempotencyKey ? { idempotencyKey } : {})
     });
   }
+  const domainAdapter = dependencies.adapters?.[id];
+  if (domainAdapter) {
+    const descriptor = createCatalogDescriptors().find((item) => item.id === id);
+    if (!descriptor) throw new CapabilityError("INVALID_ARGUMENT", "Capability is not registered");
+    if (descriptor.risk !== "read" && descriptor.approval !== "owner_control") {
+      const idempotency = optionalString(object.idempotencyKey);
+      const request = id === "zos.shell.run"
+        ? jsonValue(Object.fromEntries(Object.entries(object).filter(([key]) => key !== "idempotencyKey")))
+        : object.request ?? null;
+      return proposeDomainCapability({
+        dependencies,
+        subject: context.subject,
+        capabilityId: id,
+        request,
+        requiresConfirmation: policy === "confirm",
+        ...(idempotency ? { idempotencyKey: idempotency } : {})
+      });
+    }
+  }
   if (context.subject.kind === "pi" && isPiMcpFileCapability(id) && policy && policy !== "auto") {
     return proposePiMcpFileCapability({
       dependencies,
@@ -211,7 +268,7 @@ async function executeImplemented(
   const adapter = dependencies.readAdapters?.[id];
   if (adapter) {
     try {
-      return { data: await adapter(input) };
+      return { data: await adapter(input, context, dependencies) };
     } catch (error) {
       if (error instanceof CapabilityError) throw error;
       const validation = error instanceof Error && error.name === "MonitoringValidationError";
@@ -250,6 +307,10 @@ async function executeImplemented(
     case "zos.files.stat":
     case "zos.files.read":
     case "zos.files.search":
+    case "zos.files.grep":
+    case "zos.files.find":
+    case "zos.files.git":
+    case "zos.files.archive-inspect":
       return executeFileReadCapability(dependencies, id, object);
     case "zos.files.resource-link":
       return createFileResourceLink(dependencies, context.subject.clientId, object);
@@ -477,20 +538,26 @@ async function createFileResourceLink(
   if (metadata.kind !== "file") throw new CapabilityError("INVALID_ARGUMENT", "Resource links require a regular file");
   if (!dependencies.transferBaseUrl) throw new CapabilityError("NOT_READY", "Transfer URL is unavailable", { retryable: true });
   const expiresAt = new Date(Date.now() + 60_000).toISOString();
-  const created = createMcpTransferToken(dependencies.db, {
+  const created = createMcpResourceToken(dependencies.db, {
     clientId,
-    rootId,
-    relativePath: metadata.path,
+    kind: "file",
+    descriptor: { rootId, path: metadata.path },
+    revision: createHash("sha256").update(JSON.stringify({
+      relativePath: metadata.path,
+      sizeBytes: metadata.sizeBytes,
+      modifiedAt: metadata.modifiedAt
+    }), "utf8").digest("hex"),
     mimeType: inferMimeType(metadata.path),
+    fileName: metadata.path.split("/").at(-1) ?? "download",
     sizeBytes: metadata.sizeBytes,
-    modifiedAt: metadata.modifiedAt,
     expiresAt
   });
   return {
     data: {
-      url: `${dependencies.transferBaseUrl}/mcp-transfer/${created.token}`,
-      mimeType: created.transfer.mimeType,
-      sizeBytes: created.transfer.sizeBytes,
+      url: `${dependencies.transferBaseUrl}/mcp-resource/${created.token}`,
+      mimeType: created.resource.mimeType,
+      sizeBytes: created.resource.sizeBytes,
+      fileName: created.resource.fileName,
       expiresAt,
       oneTime: true
     }
@@ -584,7 +651,12 @@ function agentPolicyCapabilityId(capabilityId: string): AgentCapabilityId | null
     case "zos.files.read":
     case FILE_RESOURCE_LINK_CAPABILITY: return "zos.files.read";
     case "zos.files.search": return "zos.files.search";
+    case "zos.files.grep": return "zos.files.grep";
+    case "zos.files.find": return "zos.files.find";
     case FILE_MUTATION_CAPABILITY: return FILE_MUTATION_CAPABILITY;
+    case "zos.files.edit": return "zos.files.edit";
+    case "zos.files.write": return "zos.files.write";
+    case "zos.shell.run": return "zos.shell.run";
     default: return null;
   }
 }

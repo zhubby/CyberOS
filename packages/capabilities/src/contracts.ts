@@ -37,6 +37,9 @@ export interface JsonSchema {
   required?: string[];
   additionalProperties?: boolean | JsonSchema;
   items?: JsonSchema;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
   enum?: JsonPrimitive[];
   const?: JsonPrimitive;
   oneOf?: JsonSchema[];
@@ -47,6 +50,8 @@ export interface JsonSchema {
   maxLength?: number;
   pattern?: string;
   format?: string;
+  minProperties?: number;
+  maxProperties?: number;
   default?: JsonValue;
 }
 

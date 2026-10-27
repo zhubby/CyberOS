@@ -25,6 +25,7 @@ export * from "./repositories/indexed-files.js";
 export * from "./repositories/jobs.js";
 export * from "./repositories/media-library.js";
 export * from "./repositories/mcp-clients.js";
+export * from "./repositories/mcp-resource-tokens.js";
 export * from "./repositories/mcp-transfer-tokens.js";
 export * from "./repositories/monitoring-alerts.js";
 export * from "./repositories/nas-roots.js";

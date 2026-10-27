@@ -45,6 +45,14 @@ type ComposerKeyDownEvent = Pick<KeyboardEvent<HTMLTextAreaElement>, "key" | "sh
 type ComposerFeedbackState = "sending" | "queued" | "running" | "reconnecting";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
+type CapabilityDecisionOptions = { confirmed: boolean; secretInput?: Record<string, string> };
+type CapabilitySecretRequirement = {
+  name: string;
+  label: string;
+  description?: string;
+  minLength?: number;
+  maxLength?: number;
+};
 
 export function shouldSubmitComposerMessage(event: ComposerKeyDownEvent): boolean {
   return event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing;
@@ -221,7 +229,7 @@ export function ChatPane({
   onRequestSystemPower: (action: SystemPowerAction) => Promise<boolean>;
   notificationUnreadCount: number;
   onSelectSession: (session: SessionSummary) => void;
-  onApproveCapability: (approval: CapabilityApproval) => void;
+  onApproveCapability: (approval: CapabilityApproval, options: CapabilityDecisionOptions) => void;
   onRejectCapability: (approval: CapabilityApproval) => void;
   onSubmitMessage: (event: FormEvent<HTMLFormElement>) => void;
   onMessageChange: (message: string) => void;
@@ -232,7 +240,10 @@ export function ChatPane({
   const { t } = useTranslation();
   const translate = t as Translate;
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [approvalDialog, setApprovalDialog] = useState<CapabilityApproval | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const approvalDialogRef = useRef<HTMLElement | null>(null);
+  const approvalDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
   const rootAgentTitle = t("chat.rootAgent");
   const hasConversationContent = transcript.length > 0 || activeCapabilityApprovals.length > 0;
   const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), rootAgentTitle);
@@ -252,6 +263,21 @@ export function ChatPane({
     }
   }, [composerPath]);
 
+  useEffect(() => {
+    if (!approvalDialog) return;
+    approvalDialogRef.current?.focus();
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") closeApprovalDialog();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [approvalDialog]);
+
+  function closeApprovalDialog() {
+    setApprovalDialog(null);
+    queueMicrotask(() => approvalDialogTriggerRef.current?.focus());
+  }
+
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (composerPath && !message && (event.key === "Backspace" || event.key === "Delete")) {
       event.preventDefault();
@@ -269,16 +295,20 @@ export function ChatPane({
   const renderCapabilityApprovalCard = (approval: CapabilityApproval) => {
     const proposal = approval.proposal;
     const request = isRecord(proposal.request) ? proposal.request : null;
+    const changes = proposal.changes ?? proposal.args ?? request;
     const summary = typeof proposal.summary === "string"
       ? proposal.summary
       : t("chat.capabilityApproval.detail");
-    const args = isRecord(proposal.args) ? proposal.args : null;
-    const preview = args
-      ? typeof args.command === "string" ? args.command : JSON.stringify(args, null, 2)
-      : null;
-    const target = [request?.rootId, request?.sourcePath, request?.targetPath]
+    const preview = changes === null || changes === undefined
+      ? null
+      : typeof changes === "string" ? changes : JSON.stringify(changes, null, 2);
+    const proposalTarget = formatApprovalValue(proposal.target);
+    const requestTarget = [request?.rootId, request?.sourcePath, request?.targetPath]
       .filter((value): value is string => typeof value === "string" && value.length > 0)
       .join(" -> ");
+    const target = proposalTarget ?? requestTarget;
+    const secrets = capabilitySecretRequirements(approval);
+    const title = typeof proposal.title === "string" ? proposal.title : approval.run.capabilityId;
     return (
       <article className="approval-card" aria-label={t("chat.pendingApprovals")}>
         <div className="approval-card-icon" aria-hidden="true" data-kind="capability">
@@ -288,7 +318,7 @@ export function ChatPane({
           <div className="approval-card-head">
             <div>
               <span className="approval-card-kicker">{t("chat.capabilityApproval.kicker")}</span>
-              <strong>{approval.run.capabilityId}</strong>
+              <strong>{title}</strong>
             </div>
             <span className="risk-pill" data-risk={approval.risk}>
               {t("chat.risk", { risk: approvalRiskLabel(approval.risk, translate) })}
@@ -308,7 +338,7 @@ export function ChatPane({
             </div>
             <div>
               <dt>{t("chat.capabilityApproval.revision")}</dt>
-              <dd>{String(approval.revision)}</dd>
+              <dd>{formatApprovalValue(proposal.revision) ?? String(approval.revision)}</dd>
             </div>
             {target ? (
               <div>
@@ -320,13 +350,25 @@ export function ChatPane({
               <dt>{t("chat.capabilityApproval.expires")}</dt>
               <dd>{formatTime(approval.expiresAt, locale)}</dd>
             </div>
+            {secrets.length ? (
+              <div>
+                <dt>{t("chat.capabilityApproval.secrets")}</dt>
+                <dd>{secrets.map((secret) => secret.label).join(", ")}</dd>
+              </div>
+            ) : null}
           </dl>
         </div>
         <div className="approval-actions">
           <button
             type="button"
             className="approval-approve"
-            onClick={() => onApproveCapability(approval)}
+            onClick={(event) => {
+              if (secrets.length > 0 || approval.requiresConfirmation) {
+                approvalDialogTriggerRef.current = event.currentTarget;
+                setApprovalDialog(approval);
+              }
+              else onApproveCapability(approval, { confirmed: false });
+            }}
             title={t("common.actions.approve")}
           >
             <Check aria-hidden="true" size={15} />
@@ -598,8 +640,99 @@ export function ChatPane({
           </section>
         </div>
       ) : null}
+
+      {approvalDialog ? (
+        <div
+          className="approval-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeApprovalDialog();
+          }}
+        >
+          <form
+            className="approval-secret-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="approval-secret-title"
+            ref={(node) => { approvalDialogRef.current = node; }}
+            tabIndex={-1}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const approval = approvalDialog;
+              const secretInput = Object.fromEntries(
+                capabilitySecretRequirements(approval).map(({ name }) => [
+                  name,
+                  String(new FormData(event.currentTarget).get(name) ?? "")
+                ])
+              );
+              event.currentTarget.reset();
+              closeApprovalDialog();
+              onApproveCapability(approval, {
+                confirmed: approval.requiresConfirmation,
+                ...(Object.keys(secretInput).length ? { secretInput } : {})
+              });
+            }}
+          >
+            <header>
+              <span className="eyebrow">{t("chat.capabilityApproval.kicker")}</span>
+              <h2 id="approval-secret-title">{t("chat.capabilityApproval.localConfirmation")}</h2>
+            </header>
+            <p>{typeof approvalDialog.proposal.summary === "string" ? approvalDialog.proposal.summary : t("chat.capabilityApproval.detail")}</p>
+            {capabilitySecretRequirements(approvalDialog).map((requirement) => (
+              <label key={requirement.name} className="approval-secret-field">
+                <span>{requirement.label}</span>
+                <input
+                  type="password"
+                  name={requirement.name}
+                  required
+                  minLength={requirement.minLength ?? 1}
+                  maxLength={requirement.maxLength ?? 4096}
+                  autoComplete="new-password"
+                />
+                {requirement.description ? <small>{requirement.description}</small> : null}
+              </label>
+            ))}
+            {approvalDialog.requiresConfirmation ? (
+              <label className="approval-strong-confirmation">
+                <input type="checkbox" required />
+                <span>{t("chat.capabilityApproval.confirm")}</span>
+              </label>
+            ) : null}
+            <footer>
+              <button type="button" className="secondary-button" onClick={closeApprovalDialog}>
+                {t("common.actions.cancel")}
+              </button>
+              <button type="submit" className={approvalDialog.risk === "high" || approvalDialog.risk === "critical" ? "danger-button" : "primary-button"}>
+                <Check aria-hidden="true" size={15} />
+                <span>{t("common.actions.approve")}</span>
+              </button>
+            </footer>
+          </form>
+        </div>
+      ) : null}
     </section>
   );
+}
+
+function capabilitySecretRequirements(approval: CapabilityApproval): CapabilitySecretRequirement[] {
+  const value = approval.proposal.requiredSecrets;
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.name !== "string" || typeof item.label !== "string") return [];
+    return [{
+      name: item.name,
+      label: item.label,
+      ...(typeof item.description === "string" ? { description: item.description } : {}),
+      ...(typeof item.minLength === "number" ? { minLength: item.minLength } : {}),
+      ...(typeof item.maxLength === "number" ? { maxLength: item.maxLength } : {})
+    }];
+  });
+}
+
+function formatApprovalValue(value: unknown): string | null {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return null;
 }
 
 function TranscriptSkeleton() {

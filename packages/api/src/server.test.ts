@@ -13,6 +13,7 @@ import {
   createActionMessageAndJob,
   createCapabilityProposal,
   createDockerRegistryCredential,
+  createMcpClient,
   createSession,
   createUserMessageAndJob,
   ensureNasRoots,
@@ -22,6 +23,9 @@ import {
   getAgentMcpSettings,
   getFileOperation,
   getFileBatch,
+  getCapabilityRun,
+  getCapabilityApprovalByRun,
+  getCapabilityRunPayload,
   getJob,
   getSession,
   getShareSettings,
@@ -4071,7 +4075,7 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("reports approved capability execution failures instead of returning success", async () => {
+  it("queues approved non-secret capabilities and records background execution failures", async () => {
     const session = createSession(db, { rootId: "local" });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
@@ -4100,11 +4104,115 @@ describe("API server", () => {
       }
     });
 
-    expect(response.statusCode).toBe(422);
+    expect(response.statusCode).toBe(202);
     expect(response.json()).toMatchObject({
-      code: "NOT_READY",
-      run: { id: proposal.run.id, state: "failed", errorCode: "NOT_READY" }
+      run: { id: proposal.run.id, state: "queued" }
     });
+    await vi.waitFor(() => {
+      expect(getCapabilityRun(db, proposal.run.id)).toMatchObject({
+        id: proposal.run.id,
+        state: "failed",
+        errorCode: "NOT_READY"
+      });
+    });
+    await server.close();
+  });
+
+  it("keeps secret approvals pending until local input is supplied and never stores it in capability state", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Configure the model provider",
+      status: "waiting_approval"
+    });
+    const client = createMcpClient(db, {
+      name: "Built-in Pi",
+      kind: "pi",
+      scopes: ["zos:settings:propose"]
+    });
+    const requiredSecrets = [{ name: "apiKey", label: "Model API key", minLength: 1, maxLength: 4096 }];
+    const prepared = {
+      summary: "Configure the model provider",
+      revision: null,
+      privatePayload: {
+        request: {
+          operation: "model_provider",
+          providerName: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          model: "gpt-test",
+          replaceApiKey: true,
+          clearApiKey: false
+        }
+      },
+      requiredSecrets
+    };
+    const proposal = createCapabilityProposal(db, {
+      clientId: client.id,
+      subjectId: client.id,
+      subjectKind: "pi",
+      capabilityId: "zos.settings.update-propose",
+      risk: "high",
+      redactedInput: { request: prepared.privatePayload.request },
+      proposal: {
+        kind: "domain_adapter",
+        version: 1,
+        capabilityId: "zos.settings.update-propose",
+        title: "Update settings",
+        summary: prepared.summary,
+        target: null,
+        changes: prepared.privatePayload.request,
+        revision: null,
+        risk: "high",
+        requiredSecrets
+      },
+      privatePayload: {
+        kind: "domain_adapter",
+        version: 1,
+        capabilityId: "zos.settings.update-propose",
+        prepared
+      },
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    linkAgentJobToCapabilityRun(db, { jobId: job.id, runId: proposal.run.id });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const missing = await server.inject({
+      method: "POST",
+      url: `/api/capability-approvals/${proposal.approval.id}/decision`,
+      payload: {
+        sessionId: session.id,
+        decision: "approved",
+        expectedRevision: proposal.approval.revision
+      }
+    });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json()).toMatchObject({ code: "SECRET_INPUT_REQUIRED" });
+    expect(getCapabilityApprovalByRun(db, proposal.run.id)).toMatchObject({ status: "pending", revision: 1 });
+    expect(getCapabilityRun(db, proposal.run.id)).toMatchObject({ state: "waiting_approval" });
+
+    const secret = "local-only-model-key";
+    const approved = await server.inject({
+      method: "POST",
+      url: `/api/capability-approvals/${proposal.approval.id}/decision`,
+      payload: {
+        sessionId: session.id,
+        decision: "approved",
+        expectedRevision: proposal.approval.revision,
+        secretInput: { apiKey: secret }
+      }
+    });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.body).not.toContain(secret);
+    expect(getCapabilityRun(db, proposal.run.id)).toMatchObject({ state: "succeeded" });
+    expect(getCapabilityRunPayload(db, proposal.run.id)).toBeNull();
+    const persistedCapabilityState = db.prepare(`
+      SELECT group_concat(value, '') FROM (
+        SELECT input_json AS value FROM capability_runs WHERE id = ?
+        UNION ALL SELECT proposal_json FROM capability_approvals WHERE run_id = ?
+        UNION ALL SELECT payload_json FROM capability_run_events WHERE run_id = ?
+      )
+    `).pluck().get(proposal.run.id, proposal.run.id, proposal.run.id);
+    expect(String(persistedCapabilityState)).not.toContain(secret);
     await server.close();
   });
 

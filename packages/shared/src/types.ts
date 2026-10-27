@@ -2986,6 +2986,8 @@ export type VmOperationAction =
   | "resume"
   | "reset"
   | "snapshot"
+  | "snapshot_revert"
+  | "snapshot_delete"
   | "delete"
   | "console";
 export type VmOperationStatus = "proposed" | "approved" | "applied" | "failed";

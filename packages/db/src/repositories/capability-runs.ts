@@ -260,6 +260,7 @@ export function cancelOwnedCapabilityRun(db: ZosDatabase, clientId: string, runI
     if (result.changes !== 1) return null;
     db.prepare(`UPDATE capability_approvals SET status = 'expired', updated_at = ? WHERE run_id = ? AND status = 'pending'`).run(now, runId);
     appendCapabilityRunEvent(db, runId, "run.cancelled", {});
+    deleteCapabilityRunPayload(db, runId);
     return getCapabilityRun(db, runId);
   });
   return tx();
@@ -480,6 +481,7 @@ export function failInterruptedCapabilityRuns(db: ZosDatabase): number {
       if (result.changes === 1) {
         changed += 1;
         appendCapabilityRunEvent(db, row.id, "run.failed", { reason: "interrupted" });
+        deleteCapabilityRunPayload(db, row.id);
       }
     }
     return changed;
@@ -493,6 +495,7 @@ export function decideCapabilityApproval(db: ZosDatabase, input: {
   decision: "approved" | "rejected";
   decidedBy: string;
   confirmed?: boolean;
+  startRunning?: boolean;
 }): { approval: CapabilityApprovalRecord; run: CapabilityRunRecord } | null {
   const now = new Date().toISOString();
   expireCapabilityApprovals(db, now);
@@ -510,10 +513,15 @@ export function decideCapabilityApproval(db: ZosDatabase, input: {
     if (result.changes !== 1) return null;
     let runResult;
     if (input.decision === "approved") {
+      const nextState = input.startRunning === true ? "running" : "queued";
       runResult = db.prepare(`
-        UPDATE capability_runs SET state = 'queued', updated_at = ?, revision = revision + 1
+        UPDATE capability_runs SET state = ?,
+          progress_json = CASE WHEN ? = 'running' THEN '{"phase":"executing"}' ELSE progress_json END,
+          cancellable = CASE WHEN ? = 'running' THEN 0 ELSE cancellable END,
+          started_at = CASE WHEN ? = 'running' THEN ? ELSE started_at END,
+          updated_at = ?, revision = revision + 1
         WHERE id = ? AND state = 'waiting_approval'
-      `).run(now, row.run_id);
+      `).run(nextState, nextState, nextState, nextState, now, now, row.run_id);
     } else {
       runResult = db.prepare(`
         UPDATE capability_runs SET state = 'failed', error_code = 'APPROVAL_REJECTED',
@@ -526,6 +534,11 @@ export function decideCapabilityApproval(db: ZosDatabase, input: {
       throw new Error(`Capability run ${row.run_id} changed while deciding its approval`);
     }
     appendCapabilityRunEvent(db, row.run_id, `approval.${input.decision}`, { approvalId: row.id });
+    if (input.decision === "approved" && input.startRunning === true) {
+      appendCapabilityRunEvent(db, row.run_id, "run.running", { phase: "executing", secretInput: true });
+    } else if (input.decision === "rejected") {
+      deleteCapabilityRunPayload(db, row.run_id);
+    }
     const approval = db.prepare("SELECT * FROM capability_approvals WHERE id = ?").get(row.id) as CapabilityApprovalRow;
     return { approval: mapApproval(approval), run: getCapabilityRun(db, row.run_id)! };
   });

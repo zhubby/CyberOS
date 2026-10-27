@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   deleteExpiredDockerComposeHostAccessDrafts,
   deleteExpiredDockerCreateDrafts,
+  deleteExpiredMcpResourceTokens,
   deleteExpiredMcpTransferTokens,
   expireCapabilityApprovals,
   getDockerSettings,
@@ -17,9 +18,9 @@ import {
   listVmOperations
 } from "@zos/db";
 import { MonitoringReader } from "@zos/monitoring";
-import type { ServerDependencies } from "./context.js";
+import type { ApiRouteContext, ServerDependencies } from "./context.js";
 import { DEFAULT_MONITORING_CONFIG, type MonitoringQueryRequest } from "@zos/shared";
-import type { JsonValue } from "@zos/capabilities";
+import { CapabilityError, type JsonValue } from "@zos/capabilities";
 import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
 import { defaultShareSettings, effectiveDockerConfig } from "./lib/settings.js";
@@ -29,7 +30,7 @@ import { DockerHostAccessPolicy, reconcileRunningDockerHostAccess } from "./lib/
 import { DockerHostAccessControlClient } from "./lib/docker-host-access-control.js";
 import { dockerEngine } from "./lib/docker-service.js";
 import { collectDockerSummary } from "./lib/docker-service.js";
-import { registerMcp } from "@zos/mcp";
+import { registerMcp, type McpRuntimeDependencies } from "@zos/mcp";
 import { recoverCapabilityRuns } from "@zos/capability-runtime";
 import { collectSystemNetwork, collectSystemNetworkTraffic, collectSystemStorage } from "./lib/system-management.js";
 import { SystemNetworkManagerRuntime } from "./lib/network-manager.js";
@@ -38,6 +39,13 @@ import { collectShareSummary } from "./lib/share-service.js";
 import { collectVmSummary } from "./lib/vm-service.js";
 import { createVodPlayerRuntime } from "./lib/vod-player.js";
 import { MonitoringEventBroker } from "./lib/monitoring-events.js";
+import { createCapabilityAdapters } from "./lib/capability-adapters.js";
+import {
+  createMcpResourceResponder,
+  createPhotoMediaMcpResource,
+  McpResourceError
+} from "./lib/mcp-resources.js";
+import { reconcileAgentMcp } from "./lib/agent-mcp-settings.js";
 
 export type { ServerDependencies } from "./context.js";
 
@@ -64,9 +72,11 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
 
   registerErrorHandler(server);
   await server.register(fastifyWebsocket);
+  reconcileAgentMcp(db, config);
   const expireHostAccessDrafts = () => {
     deleteExpiredDockerCreateDrafts(db);
     deleteExpiredDockerComposeHostAccessDrafts(db);
+    deleteExpiredMcpResourceTokens(db);
     deleteExpiredMcpTransferTokens(db);
     expireCapabilityApprovals(db);
   };
@@ -96,7 +106,10 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     log: server.log
   });
   await monitoringEvents.start();
-  registerApiRoutes(server, {
+  const resourceBaseUrl = `http://127.0.0.1:${config.api.port}`;
+  const capabilityAdapters = createCapabilityAdapters(server, { resourceBaseUrl });
+  const capabilityRuntime = { db, config, adapters: capabilityAdapters };
+  const routeContext: ApiRouteContext = {
     ...(buildInfo ? { buildInfo } : {}),
     config,
     db,
@@ -111,8 +124,10 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     ...(vodPlayer ? { vodPlayer } : {}),
     ...(photostaffMap ? { photostaffMap } : {}),
     fileBatches,
-    hostAccess: hostAccessRuntime
-  });
+    hostAccess: hostAccessRuntime,
+    capabilityRuntime
+  };
+  registerApiRoutes(server, routeContext);
   const mcpNetworkManager = system?.networkManager ?? new SystemNetworkManagerRuntime({
     ...(system?.commandRunner ? { commandRunner: system.commandRunner } : {}),
     hostdSocketPath: config.hostd.socketPath
@@ -177,9 +192,46 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
       summary: await collectVmSummary(config, vm),
       operations: listVmOperations(db, { limit: 100 })
     }),
-    "zos.vod.status": async () => asJsonValue({ status: await mcpVodPlayer.getStatus() })
-  } satisfies Readonly<Record<string, (input: JsonValue) => JsonValue | Promise<JsonValue>>>;
-  registerMcp(server, { db, config, readAdapters, ...(buildInfo ? { buildInfo } : {}) }, {
+    "zos.vod.status": async () => asJsonValue({ status: await mcpVodPlayer.getStatus() }),
+    "zos.photos.media": async (input: JsonValue, executionContext, dependencies) => {
+      if (!input || typeof input !== "object" || Array.isArray(input)) {
+        throw new CapabilityError("INVALID_ARGUMENT", "Photo media request is invalid");
+      }
+      const request = input as Record<string, JsonValue>;
+      if (typeof request.assetId !== "string" || typeof request.variant !== "string") {
+        throw new CapabilityError("INVALID_ARGUMENT", "assetId and variant are required");
+      }
+      if (!["thumbnail", "preview", "original", "video"].includes(request.variant)) {
+        throw new CapabilityError("INVALID_ARGUMENT", "Photo media variant is invalid");
+      }
+      if (!dependencies.transferBaseUrl) {
+        throw new CapabilityError("NOT_READY", "Resource URL is unavailable", { retryable: true });
+      }
+      try {
+        return await createPhotoMediaMcpResource({
+          db,
+          config,
+          clientId: executionContext.subject.clientId,
+          baseUrl: dependencies.transferBaseUrl,
+          assetId: request.assetId,
+          variant: request.variant as "thumbnail" | "preview" | "original" | "video"
+        });
+      } catch (error) {
+        if (error instanceof McpResourceError) {
+          if (error.statusCode === 409) throw new CapabilityError("CONFLICT", error.message);
+          if (error.statusCode >= 500) throw new CapabilityError("NOT_READY", error.message, { retryable: true });
+          throw new CapabilityError("INVALID_ARGUMENT", error.message);
+        }
+        throw error;
+      }
+    }
+  } satisfies NonNullable<McpRuntimeDependencies["readAdapters"]>;
+  registerMcp(server, {
+    ...capabilityRuntime,
+    readAdapters,
+    resourceResponder: createMcpResourceResponder(routeContext),
+    ...(buildInfo ? { buildInfo } : {})
+  }, {
     enabled: config.mcp?.enabled ?? false,
     ...(config.mcp?.allowedHosts ? { allowedHosts: config.mcp.allowedHosts } : {}),
     ...(config.mcp?.allowedOrigins ? { allowedOrigins: config.mcp.allowedOrigins } : {}),
@@ -195,7 +247,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   hostAccessDraftCleanup.unref();
 
   server.addHook("onReady", async () => {
-    const recoveredRuns = await recoverCapabilityRuns({ db, config });
+    const recoveredRuns = await recoverCapabilityRuns(capabilityRuntime);
     if (recoveredRuns.expired > 0 || recoveredRuns.interrupted > 0 || recoveredRuns.resumed > 0) {
       server.log.info(recoveredRuns, "Recovered capability runs");
     }

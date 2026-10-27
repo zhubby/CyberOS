@@ -1,5 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { executeApprovedCapabilityRun } from "@zos/capability-runtime";
+import {
+  capabilityRunSecretRequirements,
+  executeApprovedCapabilityRun,
+  executeStartedSecretCapabilityRun,
+  validateCapabilitySecretInput
+} from "@zos/capability-runtime";
 import {
   decideCapabilityApproval,
   deleteCapabilityRunPayload,
@@ -11,6 +16,7 @@ import type { ApiRouteContext } from "../context.js";
 
 export function registerApprovalRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   const { config, db } = context;
+  const capabilityRuntime = context.capabilityRuntime ?? { db, config };
 
   server.get<{
     Querystring: { sessionId?: string };
@@ -29,7 +35,13 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
 
   server.post<{
     Params: { id: string };
-    Body: { sessionId?: string; decision?: "approved" | "rejected"; expectedRevision?: number; confirmed?: boolean };
+    Body: {
+      sessionId?: string;
+      decision?: "approved" | "rejected";
+      expectedRevision?: number;
+      confirmed?: boolean;
+      secretInput?: Record<string, string>;
+    };
   }>("/api/capability-approvals/:id/decision", async (request, reply) => {
     const sessionId = request.body?.sessionId;
     const decision = request.body?.decision;
@@ -45,12 +57,30 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
       return;
     }
 
+    const secretRequirements = capabilityRunSecretRequirements(capabilityRuntime, approval.run.id);
+    let secretInput: Readonly<Record<string, string>> = {};
+    if (decision === "approved") {
+      try {
+        secretInput = validateCapabilitySecretInput(
+          capabilityRunSecretRequirements(capabilityRuntime, approval.run.id),
+          request.body?.secretInput
+        );
+      } catch (error) {
+        reply.status(400).send({
+          error: error instanceof Error ? error.message : "Required secret input is invalid",
+          code: "SECRET_INPUT_REQUIRED"
+        });
+        return;
+      }
+    }
+
     const decided = decideCapabilityApproval(db, {
       approvalId: approval.id,
       expectedRevision: expectedRevision!,
       decision,
       decidedBy: "local-admin",
-      confirmed: request.body?.confirmed === true
+      confirmed: request.body?.confirmed === true,
+      startRunning: decision === "approved" && secretRequirements.length > 0
     });
     if (!decided) {
       reply.status(409).send({ error: "Approval changed, expired, or requires explicit confirmation" });
@@ -58,7 +88,16 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
     }
 
     if (decision === "approved") {
-      const run = await executeApprovedCapabilityRun({ db, config }, decided.run.id);
+      if (secretRequirements.length === 0) {
+        setImmediate(() => {
+          void executeApprovedCapabilityRun(capabilityRuntime, decided.run.id).catch((error) => {
+            server.log.error({ err: error, runId: decided.run.id }, "Capability run execution failed");
+          });
+        });
+        reply.status(202).send(decided);
+        return;
+      }
+      const run = await executeStartedSecretCapabilityRun(capabilityRuntime, decided.run.id, secretInput);
       if (run.state === "failed" || run.state === "cancelled" || run.state === "expired") {
         reply.status(422).send({
           error: run.errorMessage ?? "Approved Agent capability failed",

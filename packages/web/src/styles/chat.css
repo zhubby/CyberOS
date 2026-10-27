@@ -431,13 +431,12 @@
 
 .chat-header-copy {
   display: grid;
-  grid-template-rows: 21px 13px;
-  gap: 2px;
+  grid-template-rows: 23px 13px;
   height: 36px;
 }
 
 .chat-header .chat-header-copy h2 {
-  line-height: 21px;
+  line-height: 23px;
 }
 
 .chat-header-subtitle {
@@ -539,6 +538,98 @@
 }
 
 .session-delete-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.approval-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 76;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: var(--modal-backdrop);
+}
+
+.approval-secret-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(460px, 100%);
+  max-height: min(720px, calc(100vh - 36px));
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--dialog-bg);
+  box-shadow: var(--shadow);
+}
+
+.approval-secret-dialog header {
+  display: grid;
+  gap: 4px;
+}
+
+.approval-secret-dialog h2,
+.approval-secret-dialog p {
+  margin: 0;
+}
+
+.approval-secret-dialog h2 {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.approval-secret-dialog p,
+.approval-secret-field small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.approval-secret-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.approval-secret-field > span {
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+}
+
+.approval-secret-field input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.approval-secret-field small {
+  font-size: 11px;
+}
+
+.approval-strong-confirmation {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.approval-strong-confirmation input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+}
+
+.approval-secret-dialog footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
