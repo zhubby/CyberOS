@@ -184,6 +184,9 @@ describe("native packaging artifacts", () => {
     expect(tvCec).toContain("KillMode=mixed");
     const tvCecScript = await readPackagingFile("scripts", "zos-tv-cec");
     expect(tvCecScript).toContain("trap terminate HUP INT TERM");
+    expect(tvCecScript).toContain('wtype -k F24');
+    expect(tvCecScript).toContain("Wayland virtual keyboard input is unavailable");
+    expect(tvCecScript).toContain('"$status_writer" cec degraded');
     expect(tvCecScript).toContain('wait "$cec_pid" 2>/dev/null || true');
     expect(tvCecScript).toContain('wait "$heartbeat_pid" 2>/dev/null || true');
     const tvGamepad = await readPackagingFile("systemd", "zos-tv-gamepad.service");

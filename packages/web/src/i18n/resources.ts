@@ -74,7 +74,6 @@ export const en = {
     keyboardSpace: "Select",
     keyboardDelete: "Delete",
     keyboardLanguage: "Chinese / English",
-    sleep: "Display sleeping",
     gamepad: {
       connected: "Gamepad connected",
       disconnected: "Gamepad disconnected"
@@ -2905,7 +2904,6 @@ export const zhCN = {
     keyboardSpace: "选词",
     keyboardDelete: "删除",
     keyboardLanguage: "中 / 英",
-    sleep: "显示器休眠",
     gamepad: {
       connected: "手柄已连接",
       disconnected: "手柄已断开"

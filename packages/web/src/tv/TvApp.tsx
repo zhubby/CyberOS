@@ -32,7 +32,6 @@ import {
 import type { PinyinImeElement } from "./pinyin-ime.js";
 import { gamepadConnectionTransition, isActiveVodPlayback, playbackCommandForKey, vodPlayerPollDelay } from "./player-controls.js";
 
-const IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 const VIRTUAL_KEYS = [
   ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
   ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
@@ -50,7 +49,6 @@ export function TvApp() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [sleeping, setSleeping] = useState(false);
   const [playerStatus, setPlayerStatus] = useState<VodPlayerStatus | null>(null);
   const [clock, setClock] = useState(() => new Date());
   const mainRef = useRef<HTMLElement>(null);
@@ -237,8 +235,6 @@ export function TvApp() {
   }, [returnHome]);
 
   useRemoteNavigation({
-    sleeping,
-    setSleeping,
     playerStatus,
     onPlayerCommand: async (command) => {
       try {
@@ -354,7 +350,6 @@ export function TvApp() {
 
       {searchOpen ? <SearchOverlay onClose={back} onOpen={openTitle} /> : null}
       {notice ? <div className="tv-notice" role="status">{notice}</div> : null}
-      {sleeping ? <div className="tv-sleep" role="status" aria-label={t("tv.sleep")} /> : null}
     </div>
   );
 }
@@ -624,43 +619,26 @@ function TvStatus({ label, detail, error = false }: { label: string; detail?: st
 }
 
 function useRemoteNavigation({
-  sleeping,
-  setSleeping,
   playerStatus,
   onPlayerCommand,
   onBack,
   onSearch,
   onPlay
 }: {
-  sleeping: boolean;
-  setSleeping: (value: boolean) => void;
   playerStatus: VodPlayerStatus | null;
   onPlayerCommand: (command: Exclude<VodPlayerCommand, { type: "play" }>) => void;
   onBack: () => void;
   onSearch: () => void;
   onPlay: () => void;
 }) {
-  const current = useRef({ sleeping, setSleeping, playerStatus, onPlayerCommand, onBack, onSearch, onPlay });
+  const current = useRef({ playerStatus, onPlayerCommand, onBack, onSearch, onPlay });
   useEffect(() => {
-    current.current = { sleeping, setSleeping, playerStatus, onPlayerCommand, onBack, onSearch, onPlay };
-  }, [onBack, onPlay, onPlayerCommand, onSearch, playerStatus, setSleeping, sleeping]);
+    current.current = { playerStatus, onPlayerCommand, onBack, onSearch, onPlay };
+  }, [onBack, onPlay, onPlayerCommand, onSearch, playerStatus]);
 
   useEffect(() => {
-    let idleTimer = window.setTimeout(() => current.current.setSleeping(true), IDLE_TIMEOUT_MS);
-    const resetIdle = () => {
-      window.clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(() => current.current.setSleeping(true), IDLE_TIMEOUT_MS);
-    };
     const handleKey = (event: KeyboardEvent) => {
       const state = current.current;
-      if (state.sleeping) {
-        event.preventDefault();
-        event.stopPropagation();
-        state.setSleeping(false);
-        resetIdle();
-        return;
-      }
-      resetIdle();
       const playbackCommand = playbackCommandForKey(state.playerStatus, event.key);
       if (playbackCommand) {
         event.preventDefault();
@@ -701,14 +679,8 @@ function useRemoteNavigation({
         moveFocus(direction);
       }
     };
-    const handlePointer = () => resetIdle();
     window.addEventListener("keydown", handleKey, true);
-    window.addEventListener("pointerdown", handlePointer, true);
-    return () => {
-      window.clearTimeout(idleTimer);
-      window.removeEventListener("keydown", handleKey, true);
-      window.removeEventListener("pointerdown", handlePointer, true);
-    };
+    return () => window.removeEventListener("keydown", handleKey, true);
   }, []);
 }
 

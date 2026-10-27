@@ -3,6 +3,8 @@ set -eu
 
 runtime_dir=${ZOS_TV_RUNTIME_DIR:-/run/zos-tv}
 status_writer=${ZOS_TV_SCRIPT_DIR:-/usr/lib/zos/scripts}/zos-tv-write-status
+socket_path="$runtime_dir/wayland-0"
+input_error_file="$runtime_dir/cec-input-error"
 cec_pid=
 heartbeat_pid=
 events_fifo=
@@ -22,6 +24,7 @@ cleanup() {
     rm -f "$events_fifo"
     events_fifo=
   fi
+  rm -f "$input_error_file"
 }
 
 terminate() {
@@ -33,8 +36,19 @@ trap cleanup EXIT
 trap terminate HUP INT TERM
 
 send_key() {
-  command -v wtype >/dev/null 2>&1 || return 0
-  wtype -k "$1" >/dev/null 2>&1 || true
+  [ ! -s "$input_error_file" ] || return 0
+  if ! wtype -k "$1" >/dev/null 2>&1; then
+    printf '%s\n' "Wayland virtual keyboard input is unavailable" > "$input_error_file"
+    "$status_writer" cec degraded "$(sed -n '1p' "$input_error_file")"
+  fi
+}
+
+publish_status() {
+  if [ -s "$input_error_file" ]; then
+    "$status_writer" cec degraded "$(sed -n '1p' "$input_error_file")"
+  else
+    "$status_writer" cec ready "$1"
+  fi
 }
 
 handle_cec_line() {
@@ -58,6 +72,22 @@ if ! command -v cec-ctl >/dev/null 2>&1; then
   exit 127
 fi
 
+rm -f "$input_error_file"
+if ! command -v wtype >/dev/null 2>&1; then
+  printf '%s\n' "wtype is not installed; keyboard input remains available" > "$input_error_file"
+else
+  attempt=0
+  while [ "$attempt" -lt 15 ] && [ ! -S "$socket_path" ]; do
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  if [ ! -S "$socket_path" ]; then
+    printf '%s\n' "Wayland display is unavailable; keyboard input remains available" > "$input_error_file"
+  elif ! wtype -k F24 >/dev/null 2>&1; then
+    printf '%s\n' "Wayland virtual keyboard input is unavailable; keyboard input remains available" > "$input_error_file"
+  fi
+fi
+
 while :; do
   set -- /dev/cec*
   if [ "$1" = "/dev/cec*" ]; then
@@ -73,7 +103,7 @@ while :; do
   cec_pid=$!
   (
     while kill -0 "$cec_pid" 2>/dev/null; do
-      "$status_writer" cec ready "$device"
+      publish_status "$device"
       sleep 5
     done
   ) &
