@@ -88,6 +88,29 @@ test("waits for Pagefind entry output to finish writing", async () => {
   }
 });
 
+test("waits for Pagefind assets referenced by an existing entry", async () => {
+  const fixture = await createFixture();
+  try {
+    const resultPromise = runVerifier(fixture.directory);
+    await delay(150);
+    for (const [name, contents] of [
+      ["pagefind.zh-cn_fixture.pf_meta", "metadata"],
+      ["wasm.unknown.pagefind", "wasm"],
+      ["index/zh-cn_fixture.pf_index", "index"],
+      ["fragment/zh-cn_fixture.pf_fragment", "fragment"]
+    ]) {
+      await mkdir(path.dirname(path.join(fixture.output, name)), { recursive: true });
+      await writeFile(path.join(fixture.output, name), contents);
+    }
+
+    const result = await resultPromise;
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /validated/i);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
 test("prepare removes only the previous Pagefind output", async () => {
   const fixture = await createFixture();
   const page = path.join(fixture.directory, "dist/index.html");
@@ -121,6 +144,7 @@ function runVerifier(cwd, argument) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [verifier, ...(argument ? [argument] : [])], {
       cwd,
+      env: { ...process.env, ZOS_PAGEFIND_READINESS_TIMEOUT_MS: "500" },
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
