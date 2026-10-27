@@ -12,6 +12,7 @@ import { defaultAgentCapabilityPolicySettings } from "@zos/db";
 
 export function defaultModelProviderSettings(config: ZosConfig): ModelProviderSettingsRecord {
   return {
+    generation: 1,
     providerName: "openai",
     baseUrl: config.model.localEndpoint,
     model: "",
@@ -22,6 +23,7 @@ export function defaultModelProviderSettings(config: ZosConfig): ModelProviderSe
 
 export function toPublicModelProviderSettings(settings: ModelProviderSettingsRecord) {
   return {
+    generation: settings.generation,
     providerName: settings.providerName,
     baseUrl: settings.baseUrl,
     model: settings.model,

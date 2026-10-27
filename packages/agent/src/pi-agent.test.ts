@@ -19,6 +19,8 @@ import {
   mapPiAssistantMessageEnd,
   piAgentToolNames,
   previewPiToolArgs,
+  projectPiSessionEntry,
+  publicPiSessionFile,
   redactPiToolArgs,
   registerConfiguredProvider,
   startPiCancellationMonitor
@@ -80,6 +82,57 @@ describe("Pi agent provider configuration", () => {
 });
 
 describe("Pi agent response handling", () => {
+  it("projects persisted Pi entries with stable source identities", async () => {
+    const emit = vi.fn(async () => undefined);
+    await projectPiSessionEntry({
+      type: "message",
+      id: "assistant-1",
+      parentId: null,
+      timestamp: "2026-10-27T00:00:00.000Z",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Inspecting files" },
+          { type: "toolCall", id: "tool-1", name: "read", arguments: { path: "notes.txt" } }
+        ],
+        stopReason: "toolUse"
+      }
+    } as Parameters<typeof projectPiSessionEntry>[0], emit);
+    await projectPiSessionEntry({
+      type: "message",
+      id: "tool-result-1",
+      parentId: "assistant-1",
+      timestamp: "2026-10-27T00:00:01.000Z",
+      message: {
+        role: "toolResult",
+        toolCallId: "tool-1",
+        toolName: "read",
+        content: [{ type: "text", text: "hello" }],
+        isError: false,
+        timestamp: 0
+      }
+    } as Parameters<typeof projectPiSessionEntry>[0], emit);
+
+    expect(emit).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      type: "tool_execution_start",
+      sourceId: "tool:tool-1:start"
+    }));
+    expect(emit).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      type: "agent.message",
+      sourceId: "entry:assistant-1:assistant",
+      payload: expect.objectContaining({ content: "Inspecting files" })
+    }));
+    expect(emit).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      type: "tool_execution_end",
+      sourceId: "tool:tool-1:end"
+    }));
+  });
+
+  it("never exposes the host path of a Pi transcript in public events or stats", () => {
+    expect(publicPiSessionFile("/zos/state/pi-sessions/session-1.jsonl")).toBe("session-1.jsonl");
+    expect(publicPiSessionFile(null)).toBeNull();
+  });
+
   it("maps assistant message_end provider errors and successful text", () => {
     const onAssistantMessage = vi.fn();
     const onAssistantFailure = vi.fn();
@@ -308,7 +361,7 @@ describe("Pi MCP tool selection", () => {
       mcpEnabled: false,
       legacyToolsEnabled: true,
       photostaffToolsEnabled: false
-    })).toEqual(["read", "bash", "edit", "write", "grep", "find", "ls"]);
+    })).toEqual(["read", "edit", "write", "grep", "find", "ls"]);
 
     expect(piAgentToolNames({
       mcpEnabled: false,
@@ -316,7 +369,6 @@ describe("Pi MCP tool selection", () => {
       photostaffToolsEnabled: true
     })).toEqual([
       "read",
-      "bash",
       "edit",
       "write",
       "grep",
@@ -421,6 +473,7 @@ function modelProviderSettings(
   overrides: Partial<ModelProviderSettingsRecord>
 ): ModelProviderSettingsRecord {
   return {
+    generation: 1,
     providerName: "openai",
     baseUrl: null,
     model: "",

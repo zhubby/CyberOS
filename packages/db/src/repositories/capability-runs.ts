@@ -569,8 +569,13 @@ export function getCapabilityRunForAgentJob(db: ZosDatabase, jobId: string): Cap
   return row ? mapRun(row) : null;
 }
 
-export function claimNextCapabilityContinuation(db: ZosDatabase): { jobId: string; runs: CapabilityRunRecord[] } | null {
-  const now = new Date().toISOString();
+export function claimNextCapabilityContinuation(
+  db: ZosDatabase,
+  input: { workerId: string; leaseMs: number; now?: Date } = { workerId: "legacy-worker", leaseMs: 30_000 }
+): { jobId: string; runs: CapabilityRunRecord[] } | null {
+  const nowDate = input.now ?? new Date();
+  const now = nowDate.toISOString();
+  const leaseUntil = new Date(nowDate.getTime() + input.leaseMs).toISOString();
   const terminalStates = "'succeeded', 'failed', 'cancelled', 'expired'";
   const tx = db.transaction(() => {
     const candidate = db.prepare(`
@@ -591,13 +596,27 @@ export function claimNextCapabilityContinuation(db: ZosDatabase): { jobId: strin
           WHERE latest.job_id = j.id
           ORDER BY latest.created_at DESC, latest.run_id DESC LIMIT 1
         )
+        AND NOT EXISTS (
+          SELECT 1 FROM jobs active
+          JOIN agent_messages active_message ON active_message.id = active.message_id
+          WHERE active.session_id = j.session_id AND active.id <> j.id
+            AND active.kind = 'agent' AND active.status = 'running'
+            AND active_message.role = 'user'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_session_commands active_command
+          WHERE active_command.session_id = j.session_id
+            AND active_command.status = 'running'
+            AND active_command.lease_until > ?
+        )
       ORDER BY j.created_at, j.id LIMIT 1
-    `).get() as { job_id: string } | undefined;
+    `).get(now) as { job_id: string } | undefined;
     if (!candidate) return null;
     const updated = db.prepare(`
-      UPDATE jobs SET status = 'running', error = NULL, updated_at = ?
+      UPDATE jobs SET status = 'running', error = NULL, error_code = NULL,
+        attempt = attempt + 1, lease_owner = ?, lease_until = ?, heartbeat_at = ?, updated_at = ?
       WHERE id = ? AND status = 'waiting_approval'
-    `).run(now, candidate.job_id);
+    `).run(input.workerId, leaseUntil, now, now, candidate.job_id);
     if (updated.changes !== 1) return null;
     const rows = db.prepare(`
       SELECT r.* FROM capability_runs r
@@ -608,7 +627,7 @@ export function claimNextCapabilityContinuation(db: ZosDatabase): { jobId: strin
     const runs = rows.map(mapRun);
     return runs.length > 0 ? { jobId: candidate.job_id, runs } : null;
   });
-  return tx();
+  return tx.immediate();
 }
 
 export function listCapabilityRunEvents(db: ZosDatabase, runId: string, afterId = 0): Array<{ id: number; type: string; payload: JsonValue; createdAt: string }> {

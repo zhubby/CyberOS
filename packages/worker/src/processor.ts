@@ -1,18 +1,24 @@
+import { existsSync } from "node:fs";
 import {
+  PiActiveTurnUnavailableError,
+  runPiAgentCommand,
   runPiAgentTurn,
   runReadOnlyAgentTurn,
   type PhotostaffAgentToolService,
+  type PiAgentCommand,
   type PiAgentRunner
 } from "@zos/agent";
 import { proposePiToolCapability } from "@zos/capability-runtime";
 import {
   appendEvent,
+  claimNextAgentSessionCommand,
   claimNextCapabilityContinuation,
   claimNextJob,
   clearAgentProviderSession,
   agentCapabilityPolicyToPiToolPolicy,
   defaultAgentCapabilityPolicySettings,
   getAgentProviderSession,
+  getActiveAgentJobForSession,
   getJob,
   getMessage,
   getModelProviderSettings,
@@ -23,9 +29,13 @@ import {
   getAgentCapabilityPolicySettings,
   getAgentMcpSettings,
   getSession,
+  finishAgentSessionCommand,
   linkAgentJobToCapabilityRun,
   queryIndexedText,
   queryPhotostaffAssets,
+  requeueAgentSessionCommand,
+  renewAgentJobLease,
+  renewAgentSessionCommandLease,
   saveAgentProviderSession,
   updateJobStatus,
   type ZosDatabase
@@ -37,11 +47,241 @@ export interface ProcessNextJobDependencies {
   config: ZosConfig;
   agentRunner?: PiAgentRunner;
   allowLocalFallback?: boolean;
+  workerId?: string;
+  leaseMs?: number;
+  heartbeatMs?: number;
 }
 
-export async function processNextJob({ db, config, agentRunner, allowLocalFallback }: ProcessNextJobDependencies): Promise<boolean> {
-  const continuation = claimNextCapabilityContinuation(db);
-  const job = continuation ? getJob(db, continuation.jobId) : claimNextJob(db);
+export const AGENT_JOB_LEASE_MS = 30_000;
+export const AGENT_JOB_HEARTBEAT_MS = 10_000;
+export const AGENT_COMMAND_LEASE_MS = 30_000;
+export const AGENT_COMMAND_HEARTBEAT_MS = 10_000;
+
+export interface ProcessNextAgentCommandDependencies {
+  db: ZosDatabase;
+  config: ZosConfig;
+  workerId: string;
+  commandRunner?: typeof runPiAgentCommand;
+  leaseMs?: number;
+  heartbeatMs?: number;
+}
+
+export async function processNextAgentCommand({
+  db,
+  config,
+  workerId,
+  commandRunner = runPiAgentCommand,
+  leaseMs = AGENT_COMMAND_LEASE_MS,
+  heartbeatMs = AGENT_COMMAND_HEARTBEAT_MS
+}: ProcessNextAgentCommandDependencies): Promise<boolean> {
+  const command = claimNextAgentSessionCommand(db, { workerId, leaseMs });
+  if (!command) return false;
+  let commandLeaseLost = false;
+  const stopHeartbeat = startAgentSessionCommandHeartbeat({
+    db,
+    commandId: command.id,
+    workerId,
+    leaseMs,
+    heartbeatMs,
+    onLeaseLost: () => {
+      commandLeaseLost = true;
+    }
+  });
+
+  try {
+  const session = getSession(db, command.sessionId);
+  const root = session ? getNasRoot(db, session.rootId) : null;
+  const activeJob = command.jobId
+    ? getJob(db, command.jobId)
+    : getActiveAgentJobForSession(db, command.sessionId);
+  const runId = `command:${command.id}`;
+  appendEvent(db, {
+    sessionId: command.sessionId,
+    jobId: activeJob?.id ?? command.jobId,
+    type: "command.running",
+    runId,
+    sourceId: `${runId}:running`,
+    payload: { commandId: command.id, type: command.type }
+  });
+
+  if (!session || !root) {
+    const error = "Command references a missing session or NAS root";
+    const failed = finishAgentSessionCommand(db, {
+      commandId: command.id,
+      workerId,
+      status: "failed",
+      error
+    });
+    if (failed) {
+      appendEvent(db, {
+        sessionId: command.sessionId,
+        type: "command.failed",
+        runId,
+        sourceId: `${runId}:failed`,
+        payload: { commandId: command.id, type: command.type, error }
+      });
+    }
+    return true;
+  }
+
+  try {
+    if (command.type === "abort" && activeJob) {
+      if (updateJobStatus(db, activeJob.id, "cancelled", null, ["running"])) {
+        appendEvent(db, {
+          sessionId: session.id,
+          jobId: activeJob.id,
+          type: "job.cancelled",
+          payload: { jobId: activeJob.id }
+        });
+      }
+    }
+    const workingPath = activeJob?.workingPath ?? session.currentPath;
+    const result = await commandRunner({
+      session: { ...session, currentPath: workingPath },
+      root,
+      workingPath,
+      dataDir: config.dataDir,
+      modelSettings: getModelProviderSettings(db) ?? defaultModelProviderSettings(config),
+      toolPolicy: agentCapabilityPolicyToPiToolPolicy(
+        getAgentCapabilityPolicySettings(db) ?? defaultAgentCapabilityPolicySettings()
+      ),
+      providerSession: getAgentProviderSession(db, session.id),
+      emit: (event) => {
+        appendEvent(db, {
+          sessionId: session.id,
+          jobId: activeJob?.id ?? null,
+          type: event.type,
+          payload: event.payload,
+          ...(event.source === undefined ? {} : { source: event.source }),
+          ...(event.sourceId === undefined ? {} : { sourceId: event.sourceId }),
+          ...(event.runId === undefined ? {} : { runId: event.runId }),
+          ...(event.sequence === undefined ? {} : { sequence: event.sequence })
+        });
+      },
+      isCancelled: () => commandLeaseLost,
+      saveProviderSession: (providerSession) => {
+        saveAgentProviderSession(db, {
+          sessionId: session.id,
+          providerSessionId: providerSession.providerSessionId,
+          sessionFile: providerSession.sessionFile,
+          providerName: providerSession.providerName,
+          model: providerSession.model,
+          settingsSnapshot: providerSession.settingsSnapshot,
+          ...(providerSession.runtimeGeneration === undefined ? {} : {
+            runtimeGeneration: providerSession.runtimeGeneration
+          }),
+          ...(providerSession.runtimeProvider === undefined ? {} : {
+            runtimeProvider: providerSession.runtimeProvider
+          }),
+          ...(providerSession.runtimeModel === undefined ? {} : {
+            runtimeModel: providerSession.runtimeModel
+          }),
+          ...(providerSession.projectionCursor === undefined ? {} : {
+            projectionCursor: providerSession.projectionCursor
+          })
+        });
+      },
+      requestCapability: (request) => proposePiToolCapability({
+        dependencies: { db, config },
+        sessionId: session.id,
+        rootId: root.id,
+        request
+      }),
+      onCapabilityRunPending: (capabilityRunId, providerSessionId) => {
+        if (!activeJob) throw new Error("Idle command cannot wait for a capability approval");
+        linkAgentJobToCapabilityRun(db, {
+          jobId: activeJob.id,
+          runId: capabilityRunId,
+          providerSessionId
+        });
+      },
+      ...(config.mcp?.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
+        mcp: {
+          enabled: true,
+          url: `http://127.0.0.1:${config.api.port}/mcp`,
+          tokenFile: config.mcp.piTokenFile,
+          legacyToolsEnabled: config.mcp.legacyPiToolsEnabled
+        }
+      } : {}),
+      ...photostaffAgentTools(db, root.id)
+    }, {
+      type: command.type as PiAgentCommand["type"],
+      payload: command.payload
+    });
+    const completed = finishAgentSessionCommand(db, {
+      commandId: command.id,
+      workerId,
+      status: "completed",
+      result
+    });
+    if (!completed) return true;
+    if (command.type === "steer" || command.type === "follow_up") {
+      appendEvent(db, {
+        sessionId: session.id,
+        jobId: activeJob?.id ?? null,
+        type: "agent.message",
+        runId,
+        sourceId: `${runId}:user-message`,
+        payload: {
+          role: "user",
+          content: command.payload.content,
+          delivery: command.type
+        }
+      });
+    }
+    appendEvent(db, {
+      sessionId: session.id,
+      jobId: activeJob?.id ?? null,
+      type: "command.completed",
+      runId,
+      sourceId: `${runId}:completed`,
+      payload: { commandId: command.id, type: command.type, result }
+    });
+  } catch (error) {
+    const currentActiveJob = activeJob ? getJob(db, activeJob.id) : null;
+    if (
+      error instanceof PiActiveTurnUnavailableError
+      && currentActiveJob?.status === "running"
+      && currentActiveJob.leaseOwner === workerId
+    ) {
+      requeueAgentSessionCommand(db, { commandId: command.id, workerId });
+      return true;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    const failed = finishAgentSessionCommand(db, {
+      commandId: command.id,
+      workerId,
+      status: "failed",
+      error: message
+    });
+    if (!failed) return true;
+    appendEvent(db, {
+      sessionId: session.id,
+      jobId: activeJob?.id ?? null,
+      type: "command.failed",
+      runId,
+      sourceId: `${runId}:failed`,
+      payload: { commandId: command.id, type: command.type, error: message }
+    });
+  }
+  return true;
+  } finally {
+    stopHeartbeat();
+  }
+}
+
+export async function processNextJob({
+  db,
+  config,
+  agentRunner,
+  allowLocalFallback,
+  workerId = `worker-${process.pid}`,
+  leaseMs = AGENT_JOB_LEASE_MS,
+  heartbeatMs = AGENT_JOB_HEARTBEAT_MS
+}: ProcessNextJobDependencies): Promise<boolean> {
+  const claim = { workerId, leaseMs };
+  const continuation = claimNextCapabilityContinuation(db, claim);
+  const job = continuation ? getJob(db, continuation.jobId) : claimNextJob(db, claim);
   if (!job) {
     return false;
   }
@@ -64,7 +304,20 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
     return true;
   }
 
-  appendEvent(db, {
+  let leaseLost = false;
+  const stopHeartbeat = startAgentJobHeartbeat({
+    db,
+    jobId: job.id,
+    workerId,
+    leaseMs,
+    heartbeatMs,
+    onLeaseLost: () => {
+      leaseLost = true;
+    }
+  });
+
+  try {
+    appendEvent(db, {
     sessionId: session.id,
     jobId: job.id,
     type: "job.running",
@@ -73,19 +326,21 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
     }
   });
 
-  const isCancelled = () => {
-    const currentJob = getJob(db, job.id);
-    return !currentJob || currentJob.status === "cancelled";
-  };
-  let providerSessionSavedThisTurn: string | null = null;
+    const isCancelled = () => {
+      const currentJob = getJob(db, job.id);
+      if (!currentJob || currentJob.status === "cancelled" || currentJob.status === "failed") return true;
+      return currentJob.status === "running" && (leaseLost || currentJob.leaseOwner !== workerId);
+    };
+    let providerSessionSavedThisTurn: string | null = null;
 
   try {
+    const turnSession = { ...session, currentPath: job.workingPath };
     const shouldUseLocalFallback =
       allowLocalFallback === true || process.env.ZOS_ENABLE_LOCAL_AGENT_FALLBACK === "1";
     const turnMessage = continuation ? capabilityContinuationMessage(continuation.runs) : message.content;
     const result = shouldUseLocalFallback
       ? await runReadOnlyAgentTurn({
-          session,
+          session: turnSession,
           root,
           message: turnMessage,
           emit: (event) => {
@@ -111,9 +366,10 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
           },
         })
       : await runPiAgentTurn({
-          session,
+          session: turnSession,
           root,
           message: turnMessage,
+          workingPath: job.workingPath,
           dataDir: config.dataDir,
           modelSettings: getModelProviderSettings(db) ?? defaultModelProviderSettings(config),
           toolPolicy: agentCapabilityPolicyToPiToolPolicy(
@@ -126,7 +382,11 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
               sessionId: session.id,
               jobId: job.id,
               type: event.type,
-              payload: event.payload
+              payload: event.payload,
+              ...(event.source === undefined ? {} : { source: event.source }),
+              ...(event.sourceId === undefined ? {} : { sourceId: event.sourceId }),
+              ...(event.runId === undefined ? {} : { runId: event.runId }),
+              ...(event.sequence === undefined ? {} : { sequence: event.sequence })
             });
           },
           isCancelled,
@@ -137,7 +397,19 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
               sessionFile: providerSession.sessionFile,
               providerName: providerSession.providerName,
               model: providerSession.model,
-              settingsSnapshot: providerSession.settingsSnapshot
+              settingsSnapshot: providerSession.settingsSnapshot,
+              ...(providerSession.runtimeGeneration === undefined ? {} : {
+                runtimeGeneration: providerSession.runtimeGeneration
+              }),
+              ...(providerSession.runtimeProvider === undefined ? {} : {
+                runtimeProvider: providerSession.runtimeProvider
+              }),
+              ...(providerSession.runtimeModel === undefined ? {} : {
+                runtimeModel: providerSession.runtimeModel
+              }),
+              ...(providerSession.projectionCursor === undefined ? {} : {
+                projectionCursor: providerSession.projectionCursor
+              })
             });
             providerSessionSavedThisTurn = providerSession.providerSessionId;
           },
@@ -149,7 +421,6 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
           }),
           onCapabilityRunPending: (runId, providerSessionId) => {
             linkAgentJobToCapabilityRun(db, { jobId: job.id, runId, providerSessionId });
-            updateJobStatus(db, job.id, "waiting_approval", null, ["running"]);
           },
           ...(config.mcp?.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
             mcp: {
@@ -169,7 +440,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
     if (result.status === "failed") {
       const error = result.error ?? "Agent turn failed";
       if (providerSessionSavedThisTurn) {
-        clearAgentProviderSession(db, session.id, providerSessionSavedThisTurn);
+        clearUnpersistedProviderSession(db, session.id, providerSessionSavedThisTurn);
       }
       if (updateJobStatus(db, job.id, "failed", error, ["running", "waiting_approval"])) {
         appendEvent(db, {
@@ -185,7 +456,19 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
     }
 
     if (result.status === "waiting_approval") {
-      updateJobStatus(db, job.id, "waiting_approval", null, ["running"]);
+      if (updateJobStatus(db, job.id, "waiting_approval", null, ["running"])) {
+        appendEvent(db, {
+          sessionId: session.id,
+          jobId: job.id,
+          type: "approval.pending",
+          sourceId: result.runId ? `approval:${result.runId}:job-waiting` : `job:${job.id}:waiting-approval`,
+          runId: result.runId ? `capability:${result.runId}` : `job:${job.id}`,
+          payload: {
+            jobId: job.id,
+            ...(result.runId ? { runId: result.runId } : {})
+          }
+        });
+      }
       return true;
     }
 
@@ -203,7 +486,7 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
   } catch (error) {
     const messageText = error instanceof Error ? error.message : String(error);
     if (providerSessionSavedThisTurn) {
-      clearAgentProviderSession(db, session.id, providerSessionSavedThisTurn);
+      clearUnpersistedProviderSession(db, session.id, providerSessionSavedThisTurn);
     }
     if (updateJobStatus(db, job.id, "failed", messageText, ["running", "waiting_approval"])) {
       appendEvent(db, {
@@ -217,7 +500,83 @@ export async function processNextJob({ db, config, agentRunner, allowLocalFallba
     }
   }
 
-  return true;
+    return true;
+  } finally {
+    stopHeartbeat();
+  }
+}
+
+function clearUnpersistedProviderSession(
+  db: ZosDatabase,
+  sessionId: string,
+  providerSessionId: string
+): void {
+  const saved = getAgentProviderSession(db, sessionId);
+  if (
+    saved?.providerSessionId === providerSessionId
+    && saved.sessionFile
+    && existsSync(saved.sessionFile)
+  ) {
+    return;
+  }
+  clearAgentProviderSession(db, sessionId, providerSessionId);
+}
+
+export function startAgentJobHeartbeat(input: {
+  db: ZosDatabase;
+  jobId: string;
+  workerId: string;
+  leaseMs: number;
+  heartbeatMs: number;
+  onLeaseLost: () => void;
+}): () => void {
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(timer);
+  };
+  const timer = setInterval(() => {
+    if (renewAgentJobLease(input.db, {
+      jobId: input.jobId,
+      workerId: input.workerId,
+      leaseMs: input.leaseMs
+    })) return;
+
+    const current = getJob(input.db, input.jobId);
+    stop();
+    if (current?.status === "running") input.onLeaseLost();
+  }, input.heartbeatMs);
+  timer.unref();
+  return stop;
+}
+
+export function startAgentSessionCommandHeartbeat(input: {
+  db: ZosDatabase;
+  commandId: string;
+  workerId: string;
+  leaseMs: number;
+  heartbeatMs: number;
+  onLeaseLost: () => void;
+}): () => void {
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(timer);
+  };
+  const timer = setInterval(() => {
+    if (renewAgentSessionCommandLease(input.db, {
+      commandId: input.commandId,
+      workerId: input.workerId,
+      leaseMs: input.leaseMs
+    })) return;
+
+    stop();
+    input.onLeaseLost();
+  }, input.heartbeatMs);
+  timer.unref();
+  return stop;
 }
 
 function capabilityContinuationMessage(
@@ -273,6 +632,7 @@ export function photostaffAgentTools(db: ZosDatabase, sessionRootId: string): { 
 
 function defaultModelProviderSettings(config: ZosConfig): ModelProviderSettingsRecord {
   return {
+    generation: 1,
     providerName: "openai",
     baseUrl: config.model.localEndpoint,
     model: "",

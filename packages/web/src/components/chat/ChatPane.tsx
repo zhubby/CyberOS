@@ -6,11 +6,14 @@ import {
   Bell,
   Check,
   CircleStop,
+  CornerDownLeft,
   HardDrive,
+  ListEnd,
   LoaderCircle,
   MessageSquare,
   MessageSquarePlus,
   Plus,
+  RotateCcw,
   Send,
   Settings,
   Trash2,
@@ -19,6 +22,7 @@ import {
 import remarkGfm from "remark-gfm";
 import type {
   CapabilityApproval,
+  AgentToolActivity,
   ModelProviderSettings,
   NasRoot,
   SessionSummary,
@@ -46,6 +50,7 @@ type ComposerFeedbackState = "sending" | "queued" | "running" | "reconnecting";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 type CapabilityDecisionOptions = { confirmed: boolean; secretInput?: Record<string, string> };
+export type AgentDeliveryMode = "prompt" | "steer" | "follow_up";
 type CapabilitySecretRequirement = {
   name: string;
   label: string;
@@ -60,6 +65,10 @@ export function shouldSubmitComposerMessage(event: ComposerKeyDownEvent): boolea
 
 export function composeAgentMessage(message: string, composerPath: string | null): string {
   return [composerPath, message.trim()].filter(Boolean).join("\n");
+}
+
+export function hasActiveAgentTurn(activeJobId: string | null, status: AppStatus): boolean {
+  return activeJobId !== null && status === "agent-running";
 }
 
 export function agentSessionHeaderTitle(
@@ -181,12 +190,14 @@ export function ChatPane({
   transcript,
   transcriptPhase,
   activeCapabilityApprovals,
+  agentToolActivities = [],
   message,
   composerPath,
   status,
   locale,
   modelSettings,
   activeJobId,
+  retryJobId = null,
   messageSubmitting,
   hasSession,
   transcriptRef,
@@ -203,6 +214,7 @@ export function ChatPane({
   onMessageChange,
   onClearComposerPath,
   onCancelActiveJob,
+  onRetryInterruptedJob = () => undefined,
   onOpenWorkspacePath
 }: {
   active: boolean;
@@ -213,12 +225,14 @@ export function ChatPane({
   transcript: TranscriptMessage[];
   transcriptPhase: TranscriptPhase;
   activeCapabilityApprovals: CapabilityApproval[];
+  agentToolActivities?: AgentToolActivity[];
   message: string;
   composerPath: string | null;
   status: AppStatus;
   locale: SupportedLocale;
   modelSettings: ModelProviderSettings | null;
   activeJobId: string | null;
+  retryJobId?: string | null;
   messageSubmitting: boolean;
   hasSession: boolean;
   transcriptRef: RefObject<HTMLDivElement | null>;
@@ -231,23 +245,28 @@ export function ChatPane({
   onSelectSession: (session: SessionSummary) => void;
   onApproveCapability: (approval: CapabilityApproval, options: CapabilityDecisionOptions) => void;
   onRejectCapability: (approval: CapabilityApproval) => void;
-  onSubmitMessage: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmitMessage: (event: FormEvent<HTMLFormElement>, deliveryMode: AgentDeliveryMode) => void;
   onMessageChange: (message: string) => void;
   onClearComposerPath: () => void;
   onCancelActiveJob: () => void;
+  onRetryInterruptedJob?: () => void;
   onOpenWorkspacePath: (path: string) => void;
 }) {
   const { t } = useTranslation();
   const translate = t as Translate;
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [approvalDialog, setApprovalDialog] = useState<CapabilityApproval | null>(null);
+  const [deliveryMode, setDeliveryMode] = useState<Exclude<AgentDeliveryMode, "prompt">>("follow_up");
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const approvalDialogRef = useRef<HTMLElement | null>(null);
   const approvalDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
   const rootAgentTitle = t("chat.rootAgent");
-  const hasConversationContent = transcript.length > 0 || activeCapabilityApprovals.length > 0;
+  const hasConversationContent = transcript.length > 0
+    || activeCapabilityApprovals.length > 0
+    || agentToolActivities.length > 0;
   const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), rootAgentTitle);
   const composerFeedback = composerFeedbackState({ activeJobId, messageSubmitting, status });
+  const activeAgentTurn = hasActiveAgentTurn(activeJobId, status);
   const deleteDisabled = !activeSessionSummary || composerFeedback !== null || status === "cancelling";
   const composerStatusId = "composer-status";
   const ComposerIcon = composerFeedback ? LoaderCircle : Send;
@@ -487,13 +506,14 @@ export function ChatPane({
           ) : hasConversationContent ? (
             <>
               {transcript.map((item) => (
-                <article key={item.id} className={`message message-${item.role}`}>
+                <article key={item.id} className={`message message-${item.role}${item.streaming ? " is-streaming" : ""}`}>
                   <div className="avatar" aria-hidden="true">
                     {item.role === "assistant" ? <Bot size={17} /> : <MessageSquare size={17} />}
                   </div>
                   <div>
                     <header>
                       <strong>{item.role === "assistant" ? t("chat.zosAgent") : t("chat.you")}</strong>
+                      {item.streaming ? <span className="message-meta">{t("chat.streaming")}</span> : null}
                       <time>{formatTime(item.createdAt, locale)}</time>
                     </header>
                     <ChatMessageContent
@@ -519,6 +539,21 @@ export function ChatPane({
                   </div>
                 </article>
               ))}
+              {agentToolActivities.length ? (
+                <div className="agent-tool-activity" role="status" aria-live="polite">
+                  {agentToolActivities.map((tool) => (
+                    <div key={`${tool.runId}:${tool.id}`} data-state={tool.status}>
+                      {tool.status === "running"
+                        ? <LoaderCircle aria-hidden="true" className="composer-spinner" size={14} />
+                        : tool.status === "completed"
+                          ? <Check aria-hidden="true" size={14} />
+                          : <X aria-hidden="true" size={14} />}
+                      <span>{tool.name}</span>
+                      <small>{t(`chat.toolStatus.${tool.status}`)}</small>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </>
           ) : transcriptPhase === "ready" ? (
             <div className="empty-state">
@@ -529,7 +564,11 @@ export function ChatPane({
           ) : null}
         </div>
 
-        <form className="composer" onSubmit={onSubmitMessage} aria-busy={messageSubmitting}>
+        <form
+          className="composer"
+          onSubmit={(event) => onSubmitMessage(event, activeAgentTurn ? deliveryMode : "prompt")}
+          aria-busy={messageSubmitting}
+        >
           {composerPath ? (
             <div className="composer-path-block" role="group" aria-label={t("workspace.actions.sendPathToAgent")}>
               <div className="composer-path-content">
@@ -565,6 +604,30 @@ export function ChatPane({
               </div>
             </div>
           ) : null}
+          {activeAgentTurn ? (
+            <div className="composer-delivery" role="group" aria-label={t("chat.deliveryMode")}>
+              <button
+                type="button"
+                className={deliveryMode === "steer" ? "is-active" : ""}
+                aria-pressed={deliveryMode === "steer"}
+                onClick={() => setDeliveryMode("steer")}
+                title={t("chat.steer")}
+              >
+                <CornerDownLeft aria-hidden="true" size={14} />
+                <span>{t("chat.steer")}</span>
+              </button>
+              <button
+                type="button"
+                className={deliveryMode === "follow_up" ? "is-active" : ""}
+                aria-pressed={deliveryMode === "follow_up"}
+                onClick={() => setDeliveryMode("follow_up")}
+                title={t("chat.followUp")}
+              >
+                <ListEnd aria-hidden="true" size={14} />
+                <span>{t("chat.followUp")}</span>
+              </button>
+            </div>
+          ) : null}
           <div className="composer-footer">
             <div
               className="composer-model-config"
@@ -575,6 +638,18 @@ export function ChatPane({
               <span>{modelRoute}</span>
             </div>
             <div className="composer-actions">
+              {retryJobId ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={onRetryInterruptedJob}
+                  aria-label={t("chat.retryInterrupted")}
+                  title={t("chat.retryInterrupted")}
+                >
+                  <RotateCcw aria-hidden="true" size={16} />
+                  <span>{t("chat.retry")}</span>
+                </button>
+              ) : null}
               <button
                 className="secondary-button"
                 type="button"
@@ -594,6 +669,7 @@ export function ChatPane({
                   || (!message.trim() && !composerPath)
                   || messageSubmitting
                   || transcriptPhase === "loading"
+                  || (activeJobId !== null && !activeAgentTurn)
                 }
                 aria-busy={messageSubmitting || undefined}
                 aria-label={t("common.actions.send")}

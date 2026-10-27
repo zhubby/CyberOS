@@ -1,4 +1,4 @@
-import type { TranscriptMessage } from "../api.js";
+import type { AgentEvent, TranscriptMessage } from "../api.js";
 
 export type TranscriptPhase = "idle" | "loading" | "ready" | "error";
 
@@ -6,13 +6,15 @@ export interface TranscriptState {
   sessionId: string | null;
   phase: TranscriptPhase;
   messages: TranscriptMessage[];
+  streamSequences: Record<string, number>;
 }
 
 export type TranscriptAction =
   | { type: "prepare" }
   | { type: "begin"; sessionId: string }
   | { type: "snapshot"; sessionId: string; messages: TranscriptMessage[] }
-  | { type: "event"; sessionId: string; message: TranscriptMessage }
+  | { type: "event"; sessionId: string; message: TranscriptMessage; runId?: string }
+  | { type: "stream"; sessionId: string; event: AgentEvent }
   | { type: "optimistic"; sessionId: string; message: TranscriptMessage }
   | { type: "acknowledge"; sessionId: string; optimisticId: string; message: TranscriptMessage }
   | { type: "rollback"; sessionId: string; optimisticId: string }
@@ -22,7 +24,8 @@ export type TranscriptAction =
 export const initialTranscriptState: TranscriptState = {
   sessionId: null,
   phase: "idle",
-  messages: []
+  messages: [],
+  streamSequences: {}
 };
 
 export function transcriptReducer(state: TranscriptState, action: TranscriptAction): TranscriptState {
@@ -30,10 +33,10 @@ export function transcriptReducer(state: TranscriptState, action: TranscriptActi
     return initialTranscriptState;
   }
   if (action.type === "prepare") {
-    return { sessionId: null, phase: "loading", messages: [] };
+    return { sessionId: null, phase: "loading", messages: [], streamSequences: {} };
   }
   if (action.type === "begin") {
-    return { sessionId: action.sessionId, phase: "loading", messages: [] };
+    return { sessionId: action.sessionId, phase: "loading", messages: [], streamSequences: {} };
   }
   if (state.sessionId !== action.sessionId) {
     return state;
@@ -46,7 +49,40 @@ export function transcriptReducer(state: TranscriptState, action: TranscriptActi
       messages: mergeTranscriptMessages(action.messages, state.messages)
     };
   }
-  if (action.type === "event" || action.type === "optimistic") {
+  if (action.type === "stream") {
+    return reduceStreamEvent(state, action.event);
+  }
+  if (action.type === "event") {
+    const streamId = action.runId ? `stream:${action.runId}` : null;
+    const persistedAssistantContent = action.message.role === "assistant"
+      ? action.message.content
+      : null;
+    const removedStreamRunIds = state.messages.flatMap((message) =>
+      message.id.startsWith("stream:")
+        && (message.id === streamId || message.content === persistedAssistantContent)
+        ? [message.id.slice("stream:".length)]
+        : []
+    );
+    return {
+      ...state,
+      messages: mergeTranscriptMessages(
+        state.messages.filter((message) =>
+          message.id !== streamId
+          && !(
+            persistedAssistantContent !== null
+            && message.id.startsWith("stream:")
+            && message.content === persistedAssistantContent
+          )
+        ),
+        [action.message]
+      ),
+      streamSequences: withoutKeys(
+        state.streamSequences,
+        action.runId ? [...removedStreamRunIds, action.runId] : removedStreamRunIds
+      )
+    };
+  }
+  if (action.type === "optimistic") {
     return {
       ...state,
       messages: mergeTranscriptMessages(state.messages, [action.message])
@@ -71,6 +107,41 @@ export function transcriptReducer(state: TranscriptState, action: TranscriptActi
     ...state,
     phase: "error"
   };
+}
+
+function reduceStreamEvent(state: TranscriptState, event: AgentEvent): TranscriptState {
+  if (event.type !== "message_start" && event.type !== "message_update" && event.type !== "message_end") {
+    return state;
+  }
+  if (event.payload.role !== "assistant") return state;
+  const runId = event.runId ?? `legacy:${event.id}`;
+  const sequence = event.sequence ?? event.id;
+  const previousSequence = state.streamSequences[runId] ?? -1;
+  if (sequence <= previousSequence) return state;
+  const content = typeof event.payload.content === "string" ? event.payload.content : "";
+  const streamId = `stream:${runId}`;
+  const withoutCurrent = state.messages.filter((message) => message.id !== streamId);
+  return {
+    ...state,
+    messages: content
+      ? mergeTranscriptMessages(withoutCurrent, [{
+          id: streamId,
+          role: "assistant",
+          content,
+          createdAt: event.createdAt,
+          sequence: null,
+          streaming: event.type !== "message_end"
+        }])
+      : withoutCurrent,
+    streamSequences: { ...state.streamSequences, [runId]: sequence }
+  };
+}
+
+function withoutKeys(values: Record<string, number>, keys: string[]): Record<string, number> {
+  if (keys.length === 0) return values;
+  const next = { ...values };
+  for (const key of keys) delete next[key];
+  return next;
 }
 
 export function mergeTranscriptMessages(

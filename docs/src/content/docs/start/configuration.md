@@ -50,6 +50,8 @@ max_database_bytes = 536870912
 
 SMTP 与 Health severity 路由通过 Settings > Alerts 或 `/api/monitoring/alerts/*` 管理并保存在主库，不写入 TOML。API 不返回 SMTP 密码；清空、轮换凭据和测试投递都应通过告警设置接口完成。
 
+Agent worker 默认并行处理两个不同 session，同一 session 仍由数据库 lease 串行化。可通过 `[worker].concurrency` 或 `ZOS_WORKER_CONCURRENCY` 调整单个 worker 的并行度；多 worker 实例共享同一套 lease 约束。
+
 `ZOS_NAS_ROOTS` 和 `ZOS_VM_ISO_ROOTS` 支持逗号分隔的多个路径；带冒号的 root 使用 `id:name:path` 格式。生产 NAS root 必须是 `/zos/data` 的直接子目录，且不能使用保留的 `/zos/data/backup`；backup repository、staging 和 NAS root 不能互相覆盖。
 
 ## Photos 离线地图镜像

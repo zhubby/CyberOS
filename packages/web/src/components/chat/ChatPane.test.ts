@@ -9,6 +9,7 @@ import {
   agentSessionHeaderTitle,
   composeAgentMessage,
   composerFeedbackState,
+  hasActiveAgentTurn,
   shouldSubmitComposerMessage
 } from "./ChatPane.js";
 
@@ -111,6 +112,15 @@ describe("composerFeedbackState", () => {
         status: "queued" as AppStatus
       })
     ).toBeNull();
+  });
+});
+
+describe("hasActiveAgentTurn", () => {
+  it("enables turn controls only after the worker starts the job", () => {
+    expect(hasActiveAgentTurn("job-1", "agent-running")).toBe(true);
+    expect(hasActiveAgentTurn("job-1", "queued")).toBe(false);
+    expect(hasActiveAgentTurn("job-1", "ready")).toBe(false);
+    expect(hasActiveAgentTurn(null, "agent-running")).toBe(false);
   });
 });
 

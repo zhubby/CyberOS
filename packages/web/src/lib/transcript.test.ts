@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TranscriptMessage } from "../api.js";
+import type { AgentEvent } from "../api.js";
 import { initialTranscriptState, transcriptReducer } from "./transcript.js";
 
 function message(id: string, sequence: number | null, content = id): TranscriptMessage {
@@ -53,6 +54,63 @@ describe("transcriptReducer", () => {
       ["event:2", "updated"],
       ["event:3", "event:3"]
     ]);
+  });
+
+  it("merges assistant stream updates by run sequence and ignores duplicates and stale updates", () => {
+    let state = transcriptReducer(initialTranscriptState, { type: "begin", sessionId: "session-1" });
+    state = transcriptReducer(state, {
+      type: "stream",
+      sessionId: "session-1",
+      event: streamEvent("message_start", 1, "")
+    });
+    state = transcriptReducer(state, {
+      type: "stream",
+      sessionId: "session-1",
+      event: streamEvent("message_update", 3, "Hello world")
+    });
+    state = transcriptReducer(state, {
+      type: "stream",
+      sessionId: "session-1",
+      event: streamEvent("message_update", 2, "Hello")
+    });
+    state = transcriptReducer(state, {
+      type: "stream",
+      sessionId: "session-1",
+      event: streamEvent("message_update", 3, "Duplicate")
+    });
+    state = transcriptReducer(state, {
+      type: "stream",
+      sessionId: "session-1",
+      event: streamEvent("message_end", 4, "Hello world")
+    });
+
+    expect(state.messages).toEqual([
+      expect.objectContaining({
+        id: "stream:run-1",
+        role: "assistant",
+        content: "Hello world",
+        streaming: false
+      })
+    ]);
+    expect(state.streamSequences).toEqual({ "run-1": 4 });
+  });
+
+  it("replaces a completed stream when a replayed projection has a stable entry run", () => {
+    let state = transcriptReducer(initialTranscriptState, { type: "begin", sessionId: "session-1" });
+    state = transcriptReducer(state, {
+      type: "stream",
+      sessionId: "session-1",
+      event: streamEvent("message_end", 4, "Done")
+    });
+    state = transcriptReducer(state, {
+      type: "event",
+      sessionId: "session-1",
+      runId: "pi-entry:assistant-10",
+      message: message("event:10", 2, "Done")
+    });
+
+    expect(state.messages.map((item) => item.id)).toEqual(["event:10"]);
+    expect(state.streamSequences).toEqual({});
   });
 
   it("ignores late work from another session", () => {
@@ -141,3 +199,21 @@ describe("transcriptReducer", () => {
     expect(state).toMatchObject({ sessionId: "session-1", phase: "error", messages: [] });
   });
 });
+
+function streamEvent(type: "message_start" | "message_update" | "message_end", sequence: number, content: string): AgentEvent {
+  return {
+    schemaVersion: 1,
+    id: sequence,
+    sessionId: "session-1",
+    jobId: "job-1",
+    type,
+    audience: "chat",
+    transcriptSequence: null,
+    source: "pi",
+    sourceId: `run-1:${sequence}`,
+    runId: "run-1",
+    sequence,
+    payload: { role: "assistant", content },
+    createdAt: "2026-10-27T00:00:00.000Z"
+  };
+}

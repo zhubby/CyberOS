@@ -36,6 +36,10 @@ export function mapProviderSession(row: DbProviderSessionRow): AgentProviderSess
     providerName: normalizeModelProviderName(row.provider_name),
     model: row.model,
     settingsSnapshot: JSON.parse(row.settings_snapshot_json) as Record<string, unknown>,
+    runtimeGeneration: row.runtime_generation,
+    runtimeProvider: normalizeModelProviderName(row.runtime_provider ?? row.provider_name),
+    runtimeModel: row.runtime_model ?? row.model,
+    projectionCursor: row.projection_cursor,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

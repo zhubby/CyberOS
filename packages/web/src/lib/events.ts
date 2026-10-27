@@ -16,7 +16,7 @@ export function eventToTranscriptMessage(event: AgentEvent): TranscriptMessage |
   }
   return {
     id: `event:${event.id}`,
-    role: "assistant",
+    role: event.payload.role === "user" ? "user" : "assistant",
     content,
     createdAt: event.createdAt,
     sequence: event.transcriptSequence ?? null

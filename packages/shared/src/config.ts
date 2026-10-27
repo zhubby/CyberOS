@@ -52,6 +52,7 @@ interface TomlConfig {
   };
   worker?: {
     poll_ms?: number;
+    concurrency?: number;
   };
   admin?: {
     display_name?: string;
@@ -250,7 +251,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
       )
     },
     worker: {
-      pollMs: toPositiveInteger(env.ZOS_WORKER_POLL_MS, fileConfig.worker?.poll_ms ?? 750)
+      pollMs: toPositiveInteger(env.ZOS_WORKER_POLL_MS, fileConfig.worker?.poll_ms ?? 750),
+      concurrency: toPositiveInteger(
+        env.ZOS_WORKER_CONCURRENCY,
+        fileConfig.worker?.concurrency ?? 2
+      )
     },
     admin: {
       displayName: env.ZOS_ADMIN_DISPLAY_NAME ?? fileConfig.admin?.display_name ?? "ZOS Admin",

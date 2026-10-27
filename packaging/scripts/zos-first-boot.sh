@@ -130,6 +130,7 @@ max_concurrent_per_client = 4
 
 [worker]
 poll_ms = 750
+concurrency = 2
 
 [monitoring]
 enabled = true

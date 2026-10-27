@@ -6,6 +6,7 @@ import {
   validateCapabilitySecretInput
 } from "@zos/capability-runtime";
 import {
+  appendEvent,
   decideCapabilityApproval,
   deleteCapabilityRunPayload,
   expireCapabilityApprovals,
@@ -86,6 +87,19 @@ export function registerApprovalRoutes(server: FastifyInstance, context: ApiRout
       reply.status(409).send({ error: "Approval changed, expired, or requires explicit confirmation" });
       return;
     }
+    appendEvent(db, {
+      sessionId,
+      jobId: approval.jobId,
+      type: "approval.updated",
+      sourceId: `approval:${decided.approval.id}:${decided.approval.revision}`,
+      runId: `capability:${decided.run.id}`,
+      payload: {
+        approvalId: decided.approval.id,
+        capabilityRunId: decided.run.id,
+        status: decided.approval.status,
+        runState: decided.run.state
+      }
+    });
 
     if (decision === "approved") {
       if (secretRequirements.length === 0) {

@@ -874,7 +874,52 @@ export type AgentEventType =
   | "job.running"
   | "job.completed"
   | "job.failed"
-  | "job.cancelled";
+  | "job.cancelled"
+  | "message_start"
+  | "message_update"
+  | "message_end"
+  | "tool_execution_start"
+  | "tool_execution_update"
+  | "tool_execution_end"
+  | "turn_start"
+  | "turn_end"
+  | "agent_end"
+  | "compaction_start"
+  | "compaction_end"
+  | "model_change"
+  | "thinking_level_change"
+  | "resource_error"
+  | "approval.updated"
+  | "command.queued"
+  | "command.running"
+  | "command.completed"
+  | "command.failed";
+
+export type AgentSessionCommandType =
+  | "prompt"
+  | "steer"
+  | "follow_up"
+  | "abort"
+  | "compact"
+  | "set_model"
+  | "set_thinking_level"
+  | "stats";
+
+export type AgentSessionCommandStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export interface AgentSessionCommandRecord {
+  id: string;
+  idempotencyKey: string;
+  sessionId: string;
+  jobId: string | null;
+  type: AgentSessionCommandType;
+  payload: Record<string, unknown>;
+  status: AgentSessionCommandStatus;
+  result: unknown;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface NasRootConfig {
   id: string;
@@ -1330,6 +1375,7 @@ export interface ZosConfig {
   mcp?: McpConfig;
   worker: {
     pollMs: number;
+    concurrency?: number;
   };
   admin: {
     displayName: string;
@@ -1401,6 +1447,7 @@ export type ModelProviderName = (typeof MODEL_PROVIDER_NAMES)[number];
 export type ModelProviderKind = ModelProviderName;
 
 export interface ModelProviderSettingsRecord {
+  generation: number;
   providerName: ModelProviderName;
   baseUrl: string | null;
   model: string;
@@ -1409,6 +1456,7 @@ export interface ModelProviderSettingsRecord {
 }
 
 export interface PublicModelProviderSettings {
+  generation: number;
   providerName: ModelProviderName;
   baseUrl: string | null;
   model: string;
@@ -2161,6 +2209,7 @@ export interface AgentSessionRecord {
   id: string;
   rootId: string;
   currentPath: string;
+  piResourcesTrusted?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -2172,6 +2221,10 @@ export interface AgentProviderSessionRecord {
   providerName: ModelProviderName;
   model: string;
   settingsSnapshot: Record<string, unknown>;
+  runtimeGeneration: number;
+  runtimeProvider: ModelProviderName;
+  runtimeModel: string;
+  projectionCursor: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2193,6 +2246,12 @@ export interface JobRecord {
   createdAt: string;
   updatedAt: string;
   error: string | null;
+  errorCode: string | null;
+  attempt: number;
+  leaseOwner: string | null;
+  leaseUntil: string | null;
+  heartbeatAt: string | null;
+  workingPath: string;
 }
 
 export type FileBatchOperation = "move" | "trash";
@@ -2224,12 +2283,17 @@ export interface FileBatchRecord {
 }
 
 export interface AgentEventRecord<TPayload = unknown> {
+  schemaVersion: 1;
   id: number;
   sessionId: string;
   jobId: string | null;
   type: AgentEventType;
   audience: AgentEventAudience;
   transcriptSequence: number | null;
+  source: string;
+  sourceId: string | null;
+  runId: string;
+  sequence: number;
   payload: TPayload;
   createdAt: string;
 }

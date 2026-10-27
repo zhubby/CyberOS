@@ -3,9 +3,9 @@ import { useTranslation } from "react-i18next";
 import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X } from "lucide-react";
 import {
   applyFileMutation,
+  cancelJob,
   decideCapabilityApproval,
   cancelFileBatch as cancelFileBatchRequest,
-  cancelJob,
   createFileBatch,
   createSession,
   deleteSession,
@@ -57,6 +57,8 @@ import {
   saveAgentCapabilityPolicySettings,
   saveAgentMcpSettings,
   searchIndex,
+  retryAgentJob,
+  sendAgentSessionCommand,
   sendMessage,
   sendVodPlayerCommand,
   updateSessionPath,
@@ -65,6 +67,7 @@ import {
   updatePhotoProcessingSettings,
   uploadFile,
   type AgentEvent,
+  type AgentToolActivity,
   type AgentMcpSettings,
   type BuildInfo,
   type FileEntry,
@@ -102,7 +105,12 @@ import {
   type VodPlayerCommand,
   type VodPlayerStatus
 } from "./api.js";
-import { ChatPane, composeAgentMessage } from "./components/chat/ChatPane.js";
+import {
+  ChatPane,
+  composeAgentMessage,
+  hasActiveAgentTurn,
+  type AgentDeliveryMode
+} from "./components/chat/ChatPane.js";
 import { NotificationCenter } from "./components/notifications/NotificationCenter.js";
 import { FileEditorModal } from "./components/editor/FileEditorModal.js";
 import { SettingsModal } from "./components/settings/SettingsModal.js";
@@ -165,7 +173,7 @@ import {
   type ResolvedTheme,
   type ThemePreference
 } from "./lib/theme-settings.js";
-import { loadFileListingForView, syncSessionPath } from "./lib/session.js";
+import { loadFileListingForView } from "./lib/session.js";
 import { readStoredStoragePoolId, writeStoredStoragePoolId } from "./lib/storage-pool-settings.js";
 import { scheduleToastDismissal } from "./lib/toast.js";
 import { createTrailingSingleFlight } from "./lib/trailing-single-flight.js";
@@ -203,6 +211,17 @@ function vodPlayerErrorCode(error: unknown): NonNullable<VodPlayerStatus["errorC
     : "INTERNAL";
 }
 
+function upsertToolActivity(
+  activities: AgentToolActivity[],
+  next: AgentToolActivity
+): AgentToolActivity[] {
+  const existingIndex = activities.findIndex(
+    (activity) => activity.id === next.id && activity.runId === next.runId
+  );
+  if (existingIndex === -1) return [...activities, next];
+  return activities.map((activity, index) => index === existingIndex ? next : activity);
+}
+
 export function App() {
   const { t } = useTranslation();
   const [roots, setRoots] = useState<NasRoot[]>([]);
@@ -238,6 +257,8 @@ export function App() {
   const [composerPath, setComposerPath] = useState<string | null>(null);
   const [messageSubmitting, setMessageSubmitting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [retryJobId, setRetryJobId] = useState<string | null>(null);
+  const [agentToolActivities, setAgentToolActivities] = useState<AgentToolActivity[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOptions, setSearchOptions] = useState<WorkspaceSearchOptions>(() => defaultWorkspaceSearchOptions());
   const [searchResults, setSearchResults] = useState<IndexSearchResult[] | null>(null);
@@ -485,7 +506,7 @@ export function App() {
       }
 
       dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
-      setStatus("ready");
+      restoreSessionJob(nextSession);
       void refreshWorkQueues();
     }
 
@@ -577,13 +598,23 @@ export function App() {
       return;
     }
 
+    setAgentToolActivities([]);
+    setRetryJobId(null);
+
     const source = new EventSource(`/api/sessions/${session.id}/events`);
+    let connectionRevision = 0;
+    let eventRevision = 0;
+    let reconnectPending = false;
+    let statusBeforeReconnect: AppStatus | null = null;
+    let disposed = false;
     const handleEvent = (raw: MessageEvent<string>) => {
       const parsed = JSON.parse(raw.data) as AgentEvent;
+      const eventRunId = parsed.runId ?? `legacy:${parsed.id}`;
       if (seenEvents.current.has(parsed.id)) {
         return;
       }
       seenEvents.current.add(parsed.id);
+      eventRevision += 1;
 
       if (parsed.audience === "notification") {
         const fileBatchId = typeof parsed.payload.fileBatchId === "string" ? parsed.payload.fileBatchId : null;
@@ -610,28 +641,71 @@ export function App() {
 
       const transcriptMessage = eventToTranscriptMessage(parsed);
       if (transcriptMessage) {
-        dispatchTranscript({ type: "event", sessionId: session.id, message: transcriptMessage });
+        dispatchTranscript({
+          type: "event",
+          sessionId: session.id,
+          message: transcriptMessage,
+          runId: eventRunId
+        });
+      } else if (
+        parsed.type === "message_start"
+        || parsed.type === "message_update"
+        || parsed.type === "message_end"
+      ) {
+        dispatchTranscript({ type: "stream", sessionId: session.id, event: parsed });
       }
 
+      if (parsed.type === "tool_execution_start" || parsed.type === "tool_execution_update") {
+        const toolId = typeof parsed.payload.id === "string" ? parsed.payload.id : null;
+        const toolName = typeof parsed.payload.name === "string" ? parsed.payload.name : null;
+        if (toolId && toolName) {
+          setAgentToolActivities((current) => upsertToolActivity(current, {
+            id: toolId,
+            runId: eventRunId,
+            name: toolName,
+            status: "running"
+          }));
+        }
+      }
+      if (parsed.type === "tool_execution_end") {
+        const toolId = typeof parsed.payload.id === "string" ? parsed.payload.id : null;
+        const toolName = typeof parsed.payload.name === "string" ? parsed.payload.name : null;
+        if (toolId && toolName) {
+          setAgentToolActivities((current) => upsertToolActivity(current, {
+            id: toolId,
+            runId: eventRunId,
+            name: toolName,
+            status: parsed.payload.isError === true ? "failed" : "completed"
+          }));
+        }
+      }
+
+      const eventJobId = getEventJobId(parsed);
       if (parsed.type === "job.running") {
         setStatus("agent-running");
+        if (eventJobId) setActiveJobId(eventJobId);
+        setRetryJobId(null);
       }
-      const eventJobId = getEventJobId(parsed);
       if (parsed.type === "job.completed") {
         setStatus("ready");
         setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
         void refreshWorkQueues();
         void reloadSessions();
+        setAgentToolActivities([]);
       }
       if (parsed.type === "job.failed") {
         setStatus("error");
         setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
+        setAgentToolActivities([]);
+        if (eventJobId && parsed.payload.retryable === true) setRetryJobId(eventJobId);
       }
       if (parsed.type === "job.cancelled") {
         setStatus("cancelled");
         setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
+        setAgentToolActivities([]);
       }
-      if (parsed.type === "approval.pending") {
+      if (parsed.type === "approval.pending" || parsed.type === "approval.updated") {
+        setStatus("ready");
         void Promise.all([refreshWorkQueues(), reloadSessions()]);
       }
     };
@@ -644,7 +718,26 @@ export function App() {
       "tool_call.started",
       "tool_call.completed",
       "tool_call.failed",
+      "message_start",
+      "message_update",
+      "message_end",
+      "tool_execution_start",
+      "tool_execution_update",
+      "tool_execution_end",
+      "turn_start",
+      "turn_end",
+      "agent_end",
+      "compaction_start",
+      "compaction_end",
+      "model_change",
+      "thinking_level_change",
+      "resource_error",
+      "command.queued",
+      "command.running",
+      "command.completed",
+      "command.failed",
       "approval.pending",
+      "approval.updated",
       "job.running",
       "job.completed",
       "job.failed",
@@ -653,11 +746,60 @@ export function App() {
     for (const eventType of eventTypes) {
       source.addEventListener(eventType, handleEvent);
     }
+    source.onopen = () => {
+      if (!reconnectPending) return;
+      reconnectPending = false;
+      setStatus((current) => current === "reconnecting"
+        ? statusBeforeReconnect ?? "ready"
+        : current);
+      statusBeforeReconnect = null;
+      const expectedConnectionRevision = connectionRevision;
+      const expectedEventRevision = eventRevision;
+      const expectedSessionId = session.id;
+      const expectedRootId = selectedRootIdRef.current;
+      if (!expectedRootId) return;
+
+      void getSessions(expectedRootId).then((nextSessions) => {
+        if (
+          disposed
+          || connectionRevision !== expectedConnectionRevision
+          || eventRevision !== expectedEventRevision
+          || activeSessionIdRef.current !== expectedSessionId
+          || selectedRootIdRef.current !== expectedRootId
+        ) {
+          return;
+        }
+        setSessions(nextSessions);
+        const hydratedSession = nextSessions.find((item) => item.id === expectedSessionId);
+        if (hydratedSession) {
+          setSession(hydratedSession);
+          restoreSessionJob(hydratedSession);
+        } else {
+          setStatus("ready");
+        }
+      }).catch((nextError: unknown) => {
+        if (
+          disposed
+          || connectionRevision !== expectedConnectionRevision
+          || activeSessionIdRef.current !== expectedSessionId
+        ) {
+          return;
+        }
+        setError(toErrorMessage(nextError));
+        setStatus("error");
+      });
+    };
     source.onerror = () => {
-      setStatus("reconnecting");
+      reconnectPending = true;
+      connectionRevision += 1;
+      setStatus((current) => {
+        if (current !== "reconnecting") statusBeforeReconnect = current;
+        return "reconnecting";
+      });
     };
 
     return () => {
+      disposed = true;
       source.close();
       if (notificationRefreshTimerRef.current) {
         clearTimeout(notificationRefreshTimerRef.current);
@@ -1270,7 +1412,7 @@ export function App() {
         return;
       }
       dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
-      setStatus("ready");
+      restoreSessionJob(nextSession);
     } catch (nextError) {
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
         return;
@@ -1292,6 +1434,7 @@ export function App() {
     let nextSession: Session | null = null;
     try {
       nextSession = await createSession(selectedRootId, currentPath);
+      const createdSessionId = nextSession.id;
       seenEvents.current.clear();
       activeSessionIdRef.current = nextSession.id;
       setCapabilityApprovals([]);
@@ -1308,7 +1451,7 @@ export function App() {
       }
       setSessions(nextSessions);
       dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
-      setStatus("ready");
+      restoreSessionJob(nextSessions.find((item) => item.id === createdSessionId) ?? nextSession);
       setMobileView("chat");
     } catch (nextError) {
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
@@ -1335,6 +1478,7 @@ export function App() {
       }
       dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
       setComposerPath(null);
+      restoreSessionJob(nextSession);
     } catch (error) {
       if (isCurrentSessionViewRequest(sessionRequestId)) {
         dispatchTranscript({ type: "failed", sessionId: nextSession.id });
@@ -1367,6 +1511,18 @@ export function App() {
       setError(toErrorMessage(nextError));
       setStatus("error");
       void reloadSessions();
+    }
+  }
+
+  function restoreSessionJob(nextSession: Session | SessionSummary): void {
+    const activeJob = "activeJob" in nextSession ? nextSession.activeJob : null;
+    setActiveJobId(activeJob?.id ?? null);
+    if (activeJob?.status === "running") {
+      setStatus("agent-running");
+    } else if (activeJob?.status === "queued") {
+      setStatus("queued");
+    } else {
+      setStatus("ready");
     }
   }
 
@@ -1535,7 +1691,7 @@ export function App() {
     }
   }
 
-  async function submitMessage(event: FormEvent<HTMLFormElement>) {
+  async function submitMessage(event: FormEvent<HTMLFormElement>, deliveryMode: AgentDeliveryMode) {
     event.preventDefault();
     const typedContent = message.trim();
     const attachedPath = composerPath;
@@ -1544,6 +1700,9 @@ export function App() {
       return;
     }
 
+    const activeTurn = hasActiveAgentTurn(activeJobId, status);
+    if (activeJobId && !activeTurn) return;
+    const isQueuedInput = activeTurn && deliveryMode !== "prompt";
     const now = new Date().toISOString();
     const optimisticMessage = {
       id: `local:${now}`,
@@ -1557,22 +1716,28 @@ export function App() {
     setMessage("");
     setComposerPath(null);
     setError(null);
-    dispatchTranscript({ type: "optimistic", sessionId: session.id, message: optimisticMessage });
-    setStatus("queued");
+    if (!isQueuedInput) {
+      dispatchTranscript({ type: "optimistic", sessionId: session.id, message: optimisticMessage });
+      setStatus("queued");
+    }
     try {
-      const syncedSession = await syncSessionPath(session, currentPath);
-      setSession((current) => (current?.id === syncedSession.id ? syncedSession : current));
-      const result = await sendMessage(syncedSession.id, content);
+      if (isQueuedInput) {
+        await sendAgentSessionCommand(session.id, deliveryMode, { content });
+        return;
+      }
+      const result = await sendMessage(session.id, content, currentPath);
       dispatchTranscript({
         type: "acknowledge",
-        sessionId: syncedSession.id,
+        sessionId: session.id,
         optimisticId: optimisticMessage.id,
         message: result.transcriptMessage
       });
       setActiveJobId(result.job.id);
       void reloadSessions();
     } catch (nextError) {
-      dispatchTranscript({ type: "rollback", sessionId: session.id, optimisticId: optimisticMessage.id });
+      if (!isQueuedInput) {
+        dispatchTranscript({ type: "rollback", sessionId: session.id, optimisticId: optimisticMessage.id });
+      }
       setMessage((current) => (current.length > 0 ? current : typedContent));
       setComposerPath((current) => current ?? attachedPath);
       setError(toErrorMessage(nextError));
@@ -1583,12 +1748,33 @@ export function App() {
   }
 
   async function cancelActiveJob() {
-    if (!activeJobId) {
+    if (!activeJobId || !session) {
       return;
     }
+    try {
+      if (hasActiveAgentTurn(activeJobId, status)) {
+        await sendAgentSessionCommand(session.id, "abort");
+      } else {
+        await cancelJob(activeJobId);
+      }
+      setStatus("cancelling");
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+      setStatus("error");
+    }
+  }
 
-    await cancelJob(activeJobId);
-    setStatus("cancelling");
+  async function retryInterruptedJob() {
+    if (!retryJobId) return;
+    const result = await retryAgentJob(retryJobId);
+    setRetryJobId(null);
+    setActiveJobId(result.job.id);
+    dispatchTranscript({
+      type: "event",
+      sessionId: result.job.sessionId,
+      message: result.transcriptMessage
+    });
+    setStatus("queued");
   }
 
   function nextUploadBatchId(): string {
@@ -2482,12 +2668,14 @@ export function App() {
         transcript={transcript}
         transcriptPhase={transcriptState.phase}
         activeCapabilityApprovals={capabilityApprovals}
+        agentToolActivities={agentToolActivities}
         message={message}
         composerPath={composerPath}
         status={status}
         locale={resolvedLocale}
         modelSettings={modelSettings}
         activeJobId={activeJobId}
+        retryJobId={retryJobId}
         hasSession={Boolean(session)}
         messageSubmitting={messageSubmitting}
         transcriptRef={transcriptRef}
@@ -2500,10 +2688,11 @@ export function App() {
         onSelectSession={(nextSession) => void selectSession(nextSession)}
         onApproveCapability={(approval, options) => void handleCapabilityDecision(approval, "approved", options)}
         onRejectCapability={(approval) => void handleCapabilityDecision(approval, "rejected")}
-        onSubmitMessage={(event) => void submitMessage(event)}
+        onSubmitMessage={(event, deliveryMode) => void submitMessage(event, deliveryMode)}
         onMessageChange={setMessage}
         onClearComposerPath={() => setComposerPath(null)}
         onCancelActiveJob={() => void cancelActiveJob()}
+        onRetryInterruptedJob={() => void retryInterruptedJob()}
         onOpenWorkspacePath={(path) => void openWorkspacePath(path)}
       />
 

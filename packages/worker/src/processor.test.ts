@@ -1,8 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  claimNextCapabilityContinuation,
+  claimNextJob,
+  createAgentSessionCommand,
   createSession,
   createUserMessageAndJob,
   createCapabilityProposal,
@@ -11,20 +14,22 @@ import {
   deleteSession,
   ensureNasRoots,
   getAgentProviderSession,
+  getAgentSessionCommand,
   getJob,
   listEvents,
   listPendingAgentCapabilityApprovals,
   listPendingApprovals,
   openZosDb,
+  recoverInterruptedAgentSessionCommands,
   saveAgentProviderSession,
   saveAgentMcpSettings,
   savePhotostaffLibrarySettings,
   upsertIndexedFile,
   type ZosDatabase
 } from "@zos/db";
-import type { PiAgentRunner } from "@zos/agent";
+import { PiActiveTurnUnavailableError, type PiAgentRunner } from "@zos/agent";
 import type { ZosConfig } from "@zos/shared";
-import { photostaffAgentTools, processNextJob } from "./processor.js";
+import { photostaffAgentTools, processNextAgentCommand, processNextJob } from "./processor.js";
 
 let tempDir: string;
 let rootDir: string;
@@ -86,6 +91,171 @@ describe("worker processor", () => {
     expect(getAgentProviderSession(db, session.id)).toMatchObject({
       providerSessionId: "pi-session-1",
       providerName: "openai"
+    });
+  });
+
+  it("processes different sessions concurrently in one worker", async () => {
+    const firstSession = createSession(db, { rootId: "local" });
+    const secondSession = createSession(db, { rootId: "local" });
+    const firstJob = createUserMessageAndJob(db, {
+      sessionId: firstSession.id,
+      content: "First"
+    }).job;
+    const secondJob = createUserMessageAndJob(db, {
+      sessionId: secondSession.id,
+      content: "Second"
+    }).job;
+    const started: string[] = [];
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runner: PiAgentRunner = async (input) => {
+      started.push(input.session.id);
+      await blocked;
+      return { status: "completed", summary: input.session.id };
+    };
+
+    const first = processNextJob({
+      db,
+      config: testConfig(),
+      workerId: "worker-1",
+      agentRunner: runner
+    });
+    await vi.waitFor(() => expect(started).toEqual([firstSession.id]));
+    const second = processNextJob({
+      db,
+      config: testConfig(),
+      workerId: "worker-1",
+      agentRunner: runner
+    });
+    await vi.waitFor(() => expect(started).toEqual([firstSession.id, secondSession.id]));
+
+    release();
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    expect(getJob(db, firstJob.id)?.status).toBe("completed");
+    expect(getJob(db, secondJob.id)?.status).toBe("completed");
+  });
+
+  it("executes active commands only for the worker holding the session lease", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Inspect logs" });
+    expect(claimNextJob(db, { workerId: "worker-owner", leaseMs: 30_000 })?.id).toBe(job.id);
+    const command = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "steer-owner-1",
+      type: "steer",
+      payload: { content: "Focus on errors" }
+    });
+    const commandRunner = vi.fn(async () => ({ disposition: "queued" }));
+
+    await expect(processNextAgentCommand({
+      db,
+      config: testConfig(),
+      workerId: "worker-other",
+      commandRunner
+    })).resolves.toBe(false);
+    await expect(processNextAgentCommand({
+      db,
+      config: testConfig(),
+      workerId: "worker-owner",
+      commandRunner
+    })).resolves.toBe(true);
+
+    expect(commandRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ session: expect.objectContaining({ id: session.id }) }),
+      { type: "steer", payload: { content: "Focus on errors" } }
+    );
+    expect(getAgentSessionCommand(db, command.id)).toMatchObject({
+      status: "completed",
+      result: { disposition: "queued" }
+    });
+    expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual([
+      "command.running",
+      "agent.message",
+      "command.completed"
+    ]);
+  });
+
+  it("cancels the active job before dispatching an abort command", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Long task" });
+    expect(claimNextJob(db, { workerId: "worker-owner", leaseMs: 30_000 })?.id).toBe(job.id);
+    const command = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "abort-1",
+      type: "abort"
+    });
+    const statuses: Array<string | undefined> = [];
+
+    await expect(processNextAgentCommand({
+      db,
+      config: testConfig(),
+      workerId: "worker-owner",
+      commandRunner: async () => {
+        statuses.push(getJob(db, job.id)?.status);
+        return { aborted: true };
+      }
+    })).resolves.toBe(true);
+
+    expect(statuses).toEqual(["cancelled"]);
+    expect(getJob(db, job.id)?.status).toBe("cancelled");
+    expect(getAgentSessionCommand(db, command.id)?.status).toBe("completed");
+  });
+
+  it("requeues steer while the claimed Pi session is still starting", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Long task" });
+    expect(claimNextJob(db, { workerId: "worker-owner", leaseMs: 30_000 })?.id).toBe(job.id);
+    const command = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "steer-starting-1",
+      type: "steer",
+      payload: { content: "Focus on errors" }
+    });
+
+    await expect(processNextAgentCommand({
+      db,
+      config: testConfig(),
+      workerId: "worker-owner",
+      commandRunner: async () => {
+        throw new PiActiveTurnUnavailableError("steer");
+      }
+    })).resolves.toBe(true);
+
+    expect(getAgentSessionCommand(db, command.id)).toMatchObject({ status: "queued", error: null });
+  });
+
+  it("signals cancellation when an idle command loses its lease", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const command = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "compact-lease-loss",
+      type: "compact"
+    });
+    let cancellationObserved = false;
+
+    await expect(processNextAgentCommand({
+      db,
+      config: testConfig(),
+      workerId: "command-worker",
+      leaseMs: 1_000,
+      heartbeatMs: 5,
+      commandRunner: async (input) => {
+        db.prepare("UPDATE agent_session_commands SET lease_until = ? WHERE id = ?")
+          .run(new Date(0).toISOString(), command.id);
+        await vi.waitFor(() => expect(input.isCancelled()).toBe(true));
+        cancellationObserved = true;
+        return { compacted: true };
+      }
+    })).resolves.toBe(true);
+
+    expect(cancellationObserved).toBe(true);
+    expect(getAgentSessionCommand(db, command.id)?.status).toBe("running");
+    expect(recoverInterruptedAgentSessionCommands(db)).toBe(1);
+    expect(getAgentSessionCommand(db, command.id)).toMatchObject({
+      status: "failed",
+      error: "Agent worker stopped while executing this command"
     });
   });
 
@@ -183,6 +353,36 @@ describe("worker processor", () => {
     expect(listEvents(db, { sessionId: session.id }).at(-1)).toMatchObject({
       type: "job.failed",
       payload: { error: "Pi runner crashed" }
+    });
+  });
+
+  it("preserves a durable Pi session when a turn fails after JSONL persistence", async () => {
+    const session = createSession(db, { rootId: "local" });
+    createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "List files"
+    });
+    const sessionFile = path.join(tempDir, "pi-sessions", "pi-session-durable.jsonl");
+    await mkdir(path.dirname(sessionFile), { recursive: true });
+    await writeFile(sessionFile, '{"type":"session","id":"pi-session-durable"}\n');
+    const runner: PiAgentRunner = async (input) => {
+      await input.saveProviderSession({
+        providerSessionId: "pi-session-durable",
+        sessionFile,
+        providerName: "openai",
+        model: "",
+        settingsSnapshot: { providerName: "openai" },
+        projectionCursor: "entry-1"
+      });
+      throw new Error("Pi failed after persistence");
+    };
+
+    await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
+
+    expect(getAgentProviderSession(db, session.id)).toMatchObject({
+      providerSessionId: "pi-session-durable",
+      sessionFile,
+      projectionCursor: "entry-1"
     });
   });
 
@@ -442,6 +642,68 @@ describe("worker processor", () => {
     expect(messages[1]).toContain("APPROVAL_REJECTED");
     expect(messages[1]).not.toContain("Move alpha.txt");
     expect(providerSessions).toEqual([null, "pi-session-continuation"]);
+  });
+
+  it("does not hand off an approved continuation until the originating Pi turn is idle", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Move alpha.txt"
+    });
+    const pending = createCapabilityProposal(db, {
+      subjectId: session.id,
+      subjectKind: "pi",
+      capabilityId: "zos.files.mutate-propose",
+      risk: "high",
+      redactedInput: { operation: "move", rootId: "local" },
+      proposal: { target: "beta.txt", revision: "r1" },
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    let notifyPending!: () => void;
+    let releaseTurn!: () => void;
+    const pendingLinked = new Promise<void>((resolve) => {
+      notifyPending = resolve;
+    });
+    const turnReleased = new Promise<void>((resolve) => {
+      releaseTurn = resolve;
+    });
+    const runner: PiAgentRunner = async (input) => {
+      await input.onCapabilityRunPending?.(pending.run.id, "pi-session-handoff");
+      notifyPending();
+      await turnReleased;
+      return { status: "waiting_approval", runId: pending.run.id };
+    };
+
+    const processing = processNextJob({
+      db,
+      config: testConfig(),
+      workerId: "worker-origin",
+      agentRunner: runner
+    });
+    await pendingLinked;
+
+    expect(decideCapabilityApproval(db, {
+      approvalId: pending.approval.id,
+      expectedRevision: pending.approval.revision,
+      decision: "rejected",
+      decidedBy: "local-admin"
+    })?.run.state).toBe("failed");
+    expect(getJob(db, job.id)?.status).toBe("running");
+    expect(claimNextCapabilityContinuation(db, {
+      workerId: "worker-continuation",
+      leaseMs: 30_000
+    })).toBeNull();
+
+    releaseTurn();
+    await expect(processing).resolves.toBe(true);
+    expect(getJob(db, job.id)?.status).toBe("waiting_approval");
+    expect(claimNextCapabilityContinuation(db, {
+      workerId: "worker-continuation",
+      leaseMs: 30_000
+    })).toMatchObject({
+      jobId: job.id,
+      runs: [expect.objectContaining({ id: pending.run.id, state: "failed" })]
+    });
   });
 
   it("links every pending capability and waits for all decisions before continuing", async () => {

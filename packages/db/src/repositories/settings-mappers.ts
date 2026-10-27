@@ -45,6 +45,9 @@ export function mapModelProviderSettings(row: DbSystemSettingRow): ModelProvider
   const parsed = JSON.parse(row.value_json) as Partial<ModelProviderSettingsRecord> & { provider?: string };
   const providerName = normalizeModelProviderName(parsed.providerName ?? parsed.provider);
   return {
+    generation: typeof parsed.generation === "number" && Number.isInteger(parsed.generation) && parsed.generation > 0
+      ? parsed.generation
+      : 1,
     providerName,
     baseUrl: parsed.baseUrl ?? null,
     model: parsed.model ?? "",

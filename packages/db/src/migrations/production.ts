@@ -2288,5 +2288,89 @@ export const productionMigrations: Migration[] = [
       CREATE INDEX idx_mcp_resource_tokens_expiry
         ON mcp_resource_tokens(expires_at, used_at);
     `
+  },
+  {
+    id: "043_agent_job_leases_and_pi_projection",
+    prepare: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_provider_sessions (
+          session_id TEXT PRIMARY KEY REFERENCES agent_sessions(id) ON DELETE CASCADE,
+          provider_session_id TEXT NOT NULL,
+          session_file TEXT,
+          provider_name TEXT NOT NULL,
+          model TEXT NOT NULL,
+          settings_snapshot_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `);
+    },
+    sql: `
+      ALTER TABLE jobs ADD COLUMN attempt INTEGER NOT NULL DEFAULT 0 CHECK (attempt >= 0);
+      ALTER TABLE jobs ADD COLUMN lease_owner TEXT;
+      ALTER TABLE jobs ADD COLUMN lease_until TEXT;
+      ALTER TABLE jobs ADD COLUMN heartbeat_at TEXT;
+      ALTER TABLE jobs ADD COLUMN error_code TEXT;
+      ALTER TABLE jobs ADD COLUMN working_path TEXT NOT NULL DEFAULT '.';
+      ALTER TABLE agent_sessions ADD COLUMN pi_resources_trusted INTEGER NOT NULL DEFAULT 0
+        CHECK (pi_resources_trusted IN (0, 1));
+
+      CREATE INDEX idx_jobs_agent_session_status
+        ON jobs(session_id, status, created_at)
+        WHERE kind = 'agent';
+      CREATE UNIQUE INDEX one_active_agent_job_per_session
+        ON jobs(session_id)
+        WHERE kind = 'agent' AND status = 'running' AND lease_owner IS NOT NULL;
+
+      ALTER TABLE agent_events ADD COLUMN source TEXT NOT NULL DEFAULT 'zos';
+      ALTER TABLE agent_events ADD COLUMN source_id TEXT;
+      ALTER TABLE agent_events ADD COLUMN run_id TEXT;
+      ALTER TABLE agent_events ADD COLUMN sequence INTEGER;
+      UPDATE agent_events SET sequence = id WHERE sequence IS NULL;
+      CREATE UNIQUE INDEX idx_agent_events_source
+        ON agent_events(session_id, source, source_id)
+        WHERE source_id IS NOT NULL;
+      CREATE INDEX idx_agent_events_run_sequence
+        ON agent_events(session_id, run_id, sequence)
+        WHERE run_id IS NOT NULL;
+
+      ALTER TABLE agent_provider_sessions ADD COLUMN runtime_generation INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE agent_provider_sessions ADD COLUMN runtime_provider TEXT;
+      ALTER TABLE agent_provider_sessions ADD COLUMN runtime_model TEXT;
+      ALTER TABLE agent_provider_sessions ADD COLUMN projection_cursor TEXT;
+      UPDATE agent_provider_sessions
+      SET runtime_provider = provider_name, runtime_model = model
+      WHERE runtime_provider IS NULL OR runtime_model IS NULL;
+
+      CREATE TABLE agent_session_commands (
+        id TEXT PRIMARY KEY,
+        idempotency_key TEXT NOT NULL,
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+        job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+        type TEXT NOT NULL CHECK (type IN (
+          'prompt', 'steer', 'follow_up', 'abort', 'compact',
+          'set_model', 'set_thinking_level', 'stats'
+        )),
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN (
+          'queued', 'running', 'completed', 'failed', 'cancelled'
+        )),
+        result_json TEXT,
+        error TEXT,
+        lease_owner TEXT,
+        lease_until TEXT,
+        heartbeat_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(session_id, idempotency_key)
+      );
+      CREATE INDEX idx_agent_session_commands_status_created_at
+        ON agent_session_commands(status, created_at);
+      CREATE INDEX idx_agent_session_commands_session_created_at
+        ON agent_session_commands(session_id, created_at);
+      CREATE UNIQUE INDEX one_running_agent_command_per_session
+        ON agent_session_commands(session_id)
+        WHERE status = 'running';
+    `
   }
 ];

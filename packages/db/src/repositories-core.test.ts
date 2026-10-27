@@ -4,8 +4,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendEvent,
+  claimNextAgentSessionCommand,
+  claimNextCapabilityContinuation,
   claimNextJob,
   createCapabilityProposal,
+  createAgentSessionCommand,
   createActionMessageAndJob,
   createDockerOperationRecord,
   createDockerComposeApp,
@@ -21,10 +24,12 @@ import {
   deleteSession,
   ensureNasRoots,
   getAgentProviderSession,
+  getAgentSessionCommand,
   getApproval,
   getDockerOperation,
   getDownloadSettings,
   getDownloadTask,
+  getJob,
   getModelProviderSettings,
   getAgentCapabilityPolicySettings,
   getAgentMcpSettings,
@@ -43,13 +48,19 @@ import {
   markAllOperationNotificationsRead,
   markOperationNotificationRead,
   openZosDb,
+  recoverExpiredAgentJobs,
+  recoverInterruptedAgentSessionCommands,
   recordAppliedOperation,
+  renewAgentJobLease,
+  renewAgentSessionCommandLease,
+  finishAgentSessionCommand,
   pruneOperationNotifications,
   saveAgentProviderSession,
   saveDownloadSettings,
   saveAgentCapabilityPolicySettings,
   saveAgentMcpSettings,
   transitionDownloadTask,
+  transitionCapabilityRun,
   updateDownloadTaskProgress,
   deleteDockerRegistryCredential,
   deleteDockerComposeApp,
@@ -95,9 +106,14 @@ describe("core repositories", () => {
       content: "List this folder"
     });
 
-    const claimed = claimNextJob(db);
+    const claimed = claimNextJob(db, { workerId: "worker-1", leaseMs: 30_000 });
     expect(claimed?.id).toBe(job.id);
     expect(claimed?.status).toBe("running");
+    expect(claimed).toMatchObject({
+      attempt: 1,
+      leaseOwner: "worker-1",
+      workingPath: "."
+    });
 
     appendEvent(db, {
       sessionId: session.id,
@@ -113,6 +129,299 @@ describe("core repositories", () => {
         payload: { summary: "done" }
       }
     ]);
+  });
+
+  it("serializes Agent jobs per session while allowing different sessions to run", () => {
+    const firstSession = createSession(db, { rootId: "local" });
+    const secondSession = createSession(db, { rootId: "local" });
+    const first = createUserMessageAndJob(db, { sessionId: firstSession.id, content: "First" });
+    const blocked = createUserMessageAndJob(db, { sessionId: firstSession.id, content: "Second" });
+    const parallel = createUserMessageAndJob(db, { sessionId: secondSession.id, content: "Parallel" });
+    const now = new Date("2026-10-27T00:00:00.000Z");
+
+    expect(claimNextJob(db, { workerId: "worker-1", leaseMs: 30_000, now })?.id).toBe(first.job.id);
+    expect(claimNextJob(db, { workerId: "worker-2", leaseMs: 30_000, now })?.id).toBe(parallel.job.id);
+    expect(claimNextJob(db, { workerId: "worker-3", leaseMs: 30_000, now })).toBeNull();
+    expect(getJob(db, blocked.job.id)?.status).toBe("queued");
+  });
+
+  it("returns the original prompt job for an idempotency key without duplicating transcript state", () => {
+    const session = createSession(db, { rootId: "local", currentPath: "docs" });
+    const first = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "First request",
+      workingPath: "docs",
+      commandIdempotencyKey: "prompt-1"
+    });
+    const duplicate = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Duplicate request",
+      workingPath: ".",
+      commandIdempotencyKey: "prompt-1"
+    });
+
+    expect(duplicate).toEqual(first);
+    expect(listMessages(db, { sessionId: session.id })).toHaveLength(1);
+    expect(listTranscriptItems(db, { sessionId: session.id })).toHaveLength(1);
+    expect(getJob(db, first.job.id)?.workingPath).toBe("docs");
+  });
+
+  it("renews owned leases and conservatively fails expired Agent jobs", () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Long turn" });
+    const claimedAt = new Date("2026-10-27T00:00:00.000Z");
+    expect(claimNextJob(db, { workerId: "worker-1", leaseMs: 1_000, now: claimedAt })?.id).toBe(job.id);
+
+    expect(renewAgentJobLease(db, {
+      jobId: job.id,
+      workerId: "worker-2",
+      leaseMs: 1_000,
+      now: new Date("2026-10-27T00:00:00.500Z")
+    })).toBe(false);
+    expect(renewAgentJobLease(db, {
+      jobId: job.id,
+      workerId: "worker-1",
+      leaseMs: 1_000,
+      now: new Date("2026-10-27T00:00:00.500Z")
+    })).toBe(true);
+    expect(recoverExpiredAgentJobs(db, new Date("2026-10-27T00:00:01.000Z"))).toBe(0);
+    expect(recoverExpiredAgentJobs(db, new Date("2026-10-27T00:00:01.501Z"))).toBe(1);
+    expect(getJob(db, job.id)).toMatchObject({
+      status: "failed",
+      errorCode: "WORKER_INTERRUPTED",
+      leaseOwner: null,
+      leaseUntil: null,
+      attempt: 1
+    });
+    expect(listEvents(db, { sessionId: session.id }).at(-1)).toMatchObject({
+      type: "job.failed",
+      payload: {
+        errorCode: "WORKER_INTERRUPTED",
+        retryable: true,
+        attempt: 1
+      }
+    });
+  });
+
+  it("keeps session commands idempotent and restricts active commands to the lease owner", () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Long turn" });
+    const now = new Date();
+    expect(claimNextJob(db, { workerId: "worker-1", leaseMs: 30_000, now })?.id).toBe(job.id);
+
+    const first = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "steer-1",
+      type: "steer",
+      payload: { content: "Focus on logs" }
+    });
+    const duplicate = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "steer-1",
+      type: "steer",
+      payload: { content: "This must not replace the original" }
+    });
+    createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "stats-1",
+      type: "stats"
+    });
+
+    expect(duplicate).toEqual(first);
+    expect(claimNextAgentSessionCommand(db, { workerId: "worker-2", now })).toBeNull();
+    expect(claimNextAgentSessionCommand(db, { workerId: "worker-1", now })).toMatchObject({
+      id: first.id,
+      status: "running",
+      payload: { content: "Focus on logs" }
+    });
+    finishAgentSessionCommand(db, {
+      commandId: first.id,
+      workerId: "worker-1",
+      status: "completed"
+    });
+    expect(claimNextAgentSessionCommand(db, { workerId: "worker-1", now })).toBeNull();
+
+    const stale = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "steer-stale",
+      type: "steer",
+      payload: { content: "This turn is ending" }
+    });
+    expect(stale.jobId).toBe(job.id);
+    updateJobStatus(db, job.id, "completed");
+    expect(getAgentSessionCommand(db, stale.id)).toMatchObject({
+      status: "failed",
+      error: "Active agent turn ended before the command could run"
+    });
+    const idleCommand = claimNextAgentSessionCommand(db, { workerId: "worker-2", now });
+    expect(idleCommand).toMatchObject({ type: "stats", status: "running" });
+    expect(getAgentSessionCommand(db, first.id)?.status).toBe("completed");
+  });
+
+  it("leases one command per session across workers and recovers only expired owners", () => {
+    const session = createSession(db, { rootId: "local" });
+    const first = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "stats-first",
+      type: "stats"
+    });
+    const second = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "stats-second",
+      type: "stats"
+    });
+    const claimedAt = new Date("2026-10-27T00:00:00.000Z");
+
+    expect(claimNextAgentSessionCommand(db, {
+      workerId: "worker-1",
+      leaseMs: 1_000,
+      now: claimedAt
+    })?.id).toBe(first.id);
+    expect(claimNextAgentSessionCommand(db, {
+      workerId: "worker-2",
+      leaseMs: 1_000,
+      now: new Date("2026-10-27T00:00:00.500Z")
+    })).toBeNull();
+    expect(renewAgentSessionCommandLease(db, {
+      commandId: first.id,
+      workerId: "worker-2",
+      leaseMs: 1_000,
+      now: new Date("2026-10-27T00:00:00.500Z")
+    })).toBe(false);
+    expect(recoverInterruptedAgentSessionCommands(
+      db,
+      new Date("2026-10-27T00:00:00.999Z")
+    )).toBe(0);
+    expect(recoverInterruptedAgentSessionCommands(
+      db,
+      new Date("2026-10-27T00:00:01.001Z")
+    )).toBe(1);
+    expect(getAgentSessionCommand(db, first.id)).toMatchObject({
+      status: "failed",
+      error: "Agent worker stopped while executing this command"
+    });
+    expect(claimNextAgentSessionCommand(db, {
+      workerId: "worker-2",
+      leaseMs: 1_000,
+      now: new Date("2026-10-27T00:00:01.001Z")
+    })?.id).toBe(second.id);
+  });
+
+  it("does not claim a prompt while a live idle command owns the session", () => {
+    const session = createSession(db, { rootId: "local" });
+    createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "compact-before-prompt",
+      type: "compact"
+    });
+    const now = new Date("2026-10-27T00:00:00.000Z");
+    expect(claimNextAgentSessionCommand(db, {
+      workerId: "command-worker",
+      leaseMs: 30_000,
+      now
+    })).toMatchObject({ status: "running" });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Wait for compaction"
+    });
+
+    expect(claimNextJob(db, {
+      workerId: "job-worker",
+      leaseMs: 30_000,
+      now
+    })).toBeNull();
+    recoverInterruptedAgentSessionCommands(db, new Date("2026-10-27T00:00:30.001Z"));
+    expect(claimNextJob(db, {
+      workerId: "job-worker",
+      leaseMs: 30_000,
+      now: new Date("2026-10-27T00:00:30.001Z")
+    })?.id).toBe(job.id);
+  });
+
+  it("does not resume an approval continuation while a live command owns the session", () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Inspect this folder"
+    });
+    const now = new Date();
+    const afterCommandLease = new Date(now.getTime() + 30_001);
+    expect(claimNextJob(db, {
+      workerId: "turn-worker",
+      leaseMs: 30_000,
+      now
+    })?.id).toBe(job.id);
+    const command = createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "steer-before-approval",
+      type: "steer",
+      payload: { content: "Check permissions first" }
+    });
+    expect(claimNextAgentSessionCommand(db, {
+      workerId: "turn-worker",
+      leaseMs: 30_000,
+      now
+    })?.id).toBe(command.id);
+
+    const proposal = createCapabilityProposal(db, {
+      subjectId: session.id,
+      subjectKind: "pi",
+      capabilityId: "zos.files.read",
+      risk: "low",
+      redactedInput: { path: "." },
+      proposal: { summary: "Read current folder" },
+      expiresAt: new Date(now.getTime() + 300_000).toISOString()
+    });
+    linkAgentJobToCapabilityRun(db, { jobId: job.id, runId: proposal.run.id });
+    expect(transitionCapabilityRun(db, {
+      runId: proposal.run.id,
+      expectedRevision: proposal.run.revision,
+      from: ["waiting_approval"],
+      to: "succeeded",
+      result: { allowed: true }
+    })?.state).toBe("succeeded");
+    expect(updateJobStatus(db, job.id, "waiting_approval", null, ["running"])).toBe(true);
+
+    expect(claimNextCapabilityContinuation(db, {
+      workerId: "continuation-worker",
+      leaseMs: 30_000,
+      now
+    })).toBeNull();
+    recoverInterruptedAgentSessionCommands(db, afterCommandLease);
+    expect(claimNextCapabilityContinuation(db, {
+      workerId: "continuation-worker",
+      leaseMs: 30_000,
+      now: afterCommandLease
+    })?.jobId).toBe(job.id);
+  });
+
+  it("deduplicates projected Pi events and their transcript entries by source identity", () => {
+    const session = createSession(db, { rootId: "local" });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Hello" });
+    const first = appendEvent(db, {
+      sessionId: session.id,
+      jobId: job.id,
+      type: "agent.message",
+      source: "pi",
+      sourceId: "entry:assistant-1",
+      runId: "run-1",
+      sequence: 7,
+      payload: { role: "assistant", content: "Original" }
+    });
+    const duplicate = appendEvent(db, {
+      sessionId: session.id,
+      jobId: job.id,
+      type: "agent.message",
+      source: "pi",
+      sourceId: "entry:assistant-1",
+      runId: "run-1",
+      sequence: 8,
+      payload: { role: "assistant", content: "Duplicate" }
+    });
+
+    expect(duplicate).toEqual(first);
+    expect(listEvents(db, { sessionId: session.id })).toHaveLength(1);
+    expect(listTranscriptItems(db, { sessionId: session.id })).toHaveLength(2);
   });
 
   it("persists visible chat items with one monotonic transaction sequence", () => {
@@ -354,13 +663,15 @@ describe("core repositories", () => {
       sessionFile: path.join(tempDir, "pi-sessions", "pi-1.jsonl"),
       providerName: "openai",
       model: "",
-      settingsSnapshot: { providerName: "openai", apiKeyConfigured: true }
+      settingsSnapshot: { providerName: "openai", apiKeyConfigured: true },
+      projectionCursor: "entry-7"
     });
 
     expect(getAgentProviderSession(db, session.id)).toMatchObject({
       sessionId: session.id,
       providerSessionId: "pi-1",
       providerName: "openai",
+      projectionCursor: "entry-7",
       settingsSnapshot: {
         providerName: "openai",
         apiKeyConfigured: true

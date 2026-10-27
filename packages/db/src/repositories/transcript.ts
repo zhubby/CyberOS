@@ -22,6 +22,10 @@ type DbTranscriptRow = {
   event_type: AgentEventRecord["type"] | null;
   event_payload_json: string | null;
   event_created_at: string | null;
+  event_source: string | null;
+  event_source_id: string | null;
+  event_run_id: string | null;
+  event_sequence: number | null;
   event_message_role: AgentMessageRecord["role"] | null;
 };
 
@@ -43,6 +47,10 @@ export function listTranscriptItems(
       event.type AS event_type,
       event.payload_json AS event_payload_json,
       event.created_at AS event_created_at,
+      event.source AS event_source,
+      event.source_id AS event_source_id,
+      event.run_id AS event_run_id,
+      event.sequence AS event_sequence,
       event_message.role AS event_message_role
     FROM agent_transcript_items AS transcript
     LEFT JOIN agent_messages AS message ON message.id = transcript.message_id
@@ -70,6 +78,10 @@ export function listTranscriptItems(
       type: row.event_type as AgentEventRecord["type"],
       payload_json: row.event_payload_json as string,
       created_at: row.event_created_at as string,
+      source: row.event_source as string,
+      source_id: row.event_source_id,
+      run_id: row.event_run_id,
+      sequence: row.event_sequence,
       message_role: row.event_message_role,
       transcript_sequence: row.sequence
     } satisfies DbEventRow)

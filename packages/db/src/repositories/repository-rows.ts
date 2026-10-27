@@ -46,6 +46,7 @@ export type DbSessionRow = {
   id: string;
   root_id: string;
   current_path: string;
+  pi_resources_trusted?: 0 | 1;
   created_at: string;
   updated_at: string;
 };
@@ -67,6 +68,12 @@ export type DbJobRow = {
   created_at: string;
   updated_at: string;
   error: string | null;
+  error_code: string | null;
+  attempt: number;
+  lease_owner: string | null;
+  lease_until: string | null;
+  heartbeat_at: string | null;
+  working_path: string;
 };
 
 export type DbEventRow = {
@@ -76,6 +83,10 @@ export type DbEventRow = {
   type: AgentEventType;
   payload_json: string;
   created_at: string;
+  source: string;
+  source_id: string | null;
+  run_id: string | null;
+  sequence: number | null;
   message_role?: AgentMessageRecord["role"] | null;
   transcript_sequence?: number | null;
 };
@@ -220,6 +231,10 @@ export type DbProviderSessionRow = {
   provider_name: string;
   model: string;
   settings_snapshot_json: string;
+  runtime_generation: number;
+  runtime_provider: string | null;
+  runtime_model: string | null;
+  projection_cursor: string | null;
   created_at: string;
   updated_at: string;
 };

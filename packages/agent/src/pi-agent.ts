@@ -1,24 +1,24 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, lstat, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   createAgentSession,
-  createBashToolDefinition,
   createCodemodeExtension,
   createEditToolDefinition,
   createFindToolDefinition,
   createGrepToolDefinition,
-  createLocalBashOperations,
   createLsToolDefinition,
   createMcpExtension,
   createReadToolDefinition,
   createToolSearchExtension,
   createWriteToolDefinition,
   DefaultResourceLoader,
-  ModelRuntime,
   SessionManager,
   SettingsManager,
+  type AgentSession,
   type AgentSessionEvent,
   type LoadedMcpConfig,
+  type SessionEntry,
   type ToolDefinition
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -32,6 +32,7 @@ import {
 } from "@zos/nas-tools";
 import type {
   AgentProviderSessionRecord,
+  AgentSessionCommandType,
   AgentSessionRecord,
   ModelProviderSettingsRecord,
   ModelProviderName,
@@ -42,18 +43,22 @@ import type {
   PhotostaffQueryPage,
   PhotostaffQueryRequest
 } from "@zos/shared";
+import {
+  ModelRuntimeManager,
+  type ModelRuntimeBinding
+} from "./model-runtime-manager.js";
+import { AgentSessionManager } from "./agent-session-manager.js";
+import { PiResourcePolicy } from "./pi-resource-policy.js";
+
+export { registerConfiguredProvider } from "./model-runtime-manager.js";
 
 export interface PiAgentEmitEvent {
-  type:
-    | "agent.started"
-    | "agent.message"
-    | "agent.completed"
-    | "agent.failed"
-    | "tool_call.started"
-    | "tool_call.completed"
-    | "tool_call.failed"
-    | "approval.pending";
+  type: import("@zos/shared").AgentEventType;
   payload: Record<string, unknown>;
+  source?: "pi" | "zos";
+  sourceId?: string;
+  runId?: string;
+  sequence?: number;
 }
 
 export interface PiAgentTurnResult {
@@ -67,6 +72,7 @@ export interface PiAgentInput {
   session: AgentSessionRecord;
   root: NasRootRecord;
   message: string;
+  workingPath: string;
   dataDir: string;
   modelSettings: ModelProviderSettingsRecord;
   toolPolicy: PiToolPolicySettingsRecord;
@@ -79,6 +85,10 @@ export interface PiAgentInput {
     providerName: ModelProviderName;
     model: string;
     settingsSnapshot: Record<string, unknown>;
+    runtimeGeneration?: number;
+    runtimeProvider?: ModelProviderName;
+    runtimeModel?: string;
+    projectionCursor?: string | null;
   }) => void | Promise<void>;
   requestCapability: (request: PiAgentCapabilityRequest) => Promise<PiAgentCapabilityExecution>;
   onCapabilityRunPending?: (runId: string, providerSessionId: string) => void | Promise<void>;
@@ -105,6 +115,7 @@ export interface PiAgentRuntimeInput {
   session: AgentSessionRecord;
   root: NasRootRecord;
   message: string;
+  workingPath: string;
   dataDir: string;
   modelSettings: ModelProviderSettingsRecord;
   toolPolicy: PiToolPolicySettingsRecord;
@@ -139,7 +150,7 @@ type TextToolResult = {
   details: unknown;
 };
 
-const LEGACY_PI_TOOL_NAMES: PiToolName[] = ["read", "bash", "edit", "write", "grep", "find", "ls"];
+const LEGACY_PI_TOOL_NAMES: PiToolName[] = ["read", "edit", "write", "grep", "find", "ls"];
 const PHOTOSTAFF_TOOL_NAMES = ["search_photostaff", "get_photostaff_metadata"] as const;
 const DIRECT_MCP_TOOLS = [
   "zos.catalog.get",
@@ -160,9 +171,7 @@ const MCP_RESOURCE_TOOL_NAMES = [
 const ZOS_MCP_SERVER_NAME = "zos";
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 const PI_CANCELLATION_POLL_MS = 100;
-type PiProviderConfig = Parameters<ModelRuntime["registerProvider"]>[1];
-type PiProviderApi = NonNullable<PiProviderConfig["api"]>;
-
+const PI_PROJECTION_ROOT = "__root__";
 export async function runPiAgentTurn(input: PiAgentInput): Promise<PiAgentTurnResult> {
   const runtimeInput: PiAgentRuntimeInput = {
     ...input,
@@ -171,102 +180,173 @@ export async function runPiAgentTurn(input: PiAgentInput): Promise<PiAgentTurnRe
   return (input.runner ?? runPiSdkAgentTurn)(runtimeInput);
 }
 
-export function registerConfiguredProvider(
-  modelRuntime: ModelRuntime,
-  settings: ModelProviderSettingsRecord
-): void {
-  if (!settings.baseUrl) {
-    return;
-  }
-
-  if (settings.model && !modelRuntime.getModel(settings.providerName, settings.model)) {
-    modelRuntime.registerProvider(settings.providerName, {
-      baseUrl: settings.baseUrl,
-      api: providerApi(settings.providerName),
-      models: [configuredProviderModel(settings)]
-    });
-    return;
-  }
-
-  modelRuntime.registerProvider(settings.providerName, {
-    baseUrl: settings.baseUrl
-  });
+export interface PiAgentCommand {
+  type: Exclude<AgentSessionCommandType, "prompt">;
+  payload: Record<string, unknown>;
 }
 
-function providerApi(providerName: ModelProviderName): PiProviderApi {
-  return providerName === "anthropic" ? "anthropic-messages" : "openai-completions";
+type PiActiveAgentCommand = PiAgentCommand & {
+  type: "steer" | "follow_up" | "abort";
+};
+
+export class PiActiveTurnUnavailableError extends Error {
+  constructor(commandType: "steer" | "follow_up") {
+    super(`${commandType} is waiting for the active Pi turn to start`);
+    this.name = "PiActiveTurnUnavailableError";
+  }
 }
 
-function configuredProviderModel(settings: ModelProviderSettingsRecord): NonNullable<PiProviderConfig["models"]>[number] {
-  return {
-    id: settings.model,
-    name: settings.model,
-    api: providerApi(settings.providerName),
-    reasoning: false,
-    input: ["text"],
-    cost: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0
-    },
-    contextWindow: 128000,
-    maxTokens: 16384
+export async function runPiAgentCommand(
+  input: Omit<PiAgentInput, "message" | "runner">,
+  command: PiAgentCommand
+): Promise<unknown> {
+  const runtimeInput: PiAgentRuntimeInput = {
+    ...input,
+    message: "",
+    isCancelled: input.isCancelled ?? (() => false)
   };
+  let host = piAgentHosts.get(input.dataDir);
+  if (!host) {
+    host = new PiAgentSessionHost(input.dataDir);
+    piAgentHosts.set(input.dataDir, host);
+  }
+  return host.command(runtimeInput, command);
 }
+
+export async function disposePiAgentHosts(): Promise<void> {
+  const hosts = [...piAgentHosts.values()];
+  piAgentHosts.clear();
+  await Promise.all(hosts.map((host) => host.dispose()));
+}
+
+const piAgentHosts = new Map<string, PiAgentSessionHost>();
 
 async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTurnResult> {
-  let latestAssistantText = "";
-  let assistantFailure: string | null = null;
-  let started = false;
-  const pendingRunIds = new Set<string>();
-  let abortRequested = false;
-  let eventError: unknown = null;
-  let eventChain = Promise.resolve();
+  let host = piAgentHosts.get(input.dataDir);
+  if (!host) {
+    host = new PiAgentSessionHost(input.dataDir);
+    piAgentHosts.set(input.dataDir, host);
+  }
+  return host.run(input);
+}
 
-  try {
-    if (!input.modelSettings.apiKey) {
-      throw new Error(`Pi API key is not configured for provider "${input.modelSettings.providerName}"`);
-    }
-    if (input.isCancelled()) {
-      return { status: "cancelled" };
-    }
+interface HostedTurn {
+  input: PiAgentRuntimeInput;
+  runId: string;
+  latestAssistantText: string;
+  assistantFailure: string | null;
+  started: boolean;
+  pendingRunIds: Set<string>;
+  abortRequested: boolean;
+  eventError: unknown;
+  eventChain: Promise<void>;
+  sequence: number;
+}
 
-    const piSessionDir = path.join(input.dataDir, "pi-sessions");
-    const piAgentDir = path.join(input.dataDir, "pi-agent");
-    await mkdir(piSessionDir, { recursive: true });
-    await mkdir(piAgentDir, { recursive: true });
+interface HostedPiSession {
+  piSession: AgentSession;
+  bridge: PiAgentRuntimeInput;
+  runtime: ModelRuntimeBinding;
+  projectionCursor: string;
+  activeTurn: HostedTurn | null;
+  unsubscribe: () => void;
+}
 
-    const modelRuntime = await ModelRuntime.create({
-      authPath: path.join(piAgentDir, "auth.json"),
-      modelsPath: null
+export class PiAgentSessionHost {
+  private readonly sessions = new AgentSessionManager<HostedPiSession>();
+  private readonly loaded = new Map<string, HostedPiSession>();
+  private readonly runtimes: ModelRuntimeManager;
+  private readonly piSessionDir: string;
+  private readonly piAgentDir: string;
+  private readonly resourcePolicy = new PiResourcePolicy();
+
+  constructor(private readonly dataDir: string) {
+    this.piSessionDir = path.join(dataDir, "pi-sessions");
+    this.piAgentDir = path.join(dataDir, "pi-agent");
+    this.runtimes = new ModelRuntimeManager(this.piAgentDir);
+  }
+
+  async run(input: PiAgentRuntimeInput): Promise<PiAgentTurnResult> {
+    if (input.isCancelled()) return { status: "cancelled" };
+    const workspace = await resolveSafeExistingPath(input.root.path, input.workingPath);
+    const workspaceStat = await stat(workspace.realPath);
+    if (!workspaceStat.isDirectory()) throw new Error("Agent working path must be a directory");
+    await mkdir(this.piSessionDir, { recursive: true });
+    await mkdir(this.piAgentDir, { recursive: true });
+
+    const runtime = await this.runtimes.get(input.modelSettings, input.providerSession);
+    const fingerprint = JSON.stringify({
+      workingPath: workspace.relativePath,
+      runtimeGeneration: runtime.generation,
+      mcp: input.mcp ?? null,
+      photostaff: Boolean(input.photostaffTools),
+      resourcesTrusted: input.session.piResourcesTrusted === true
     });
-    registerConfiguredProvider(modelRuntime, input.modelSettings);
-    await modelRuntime.setRuntimeApiKey(input.modelSettings.providerName, input.modelSettings.apiKey);
+    return this.sessions.run({
+      sessionId: input.session.id,
+      fingerprint,
+      create: () => this.createSession(input, workspace, runtime, fingerprint),
+      execute: (hosted) => this.runTurn(hosted, input)
+    });
+  }
 
-    const model = input.modelSettings.model
-      ? modelRuntime.getModel(input.modelSettings.providerName, input.modelSettings.model)
-      : undefined;
-    if (input.modelSettings.model && !model) {
-      throw new Error(
-        `Pi model "${input.modelSettings.model}" is not available for provider "${input.modelSettings.providerName}". Set a Base URL when using a custom model ID.`
-      );
+  async command(input: PiAgentRuntimeInput, command: PiAgentCommand): Promise<unknown> {
+    if (isActiveAgentCommand(command)) {
+      return this.runActiveCommand(input.session.id, command);
     }
 
-    const sessionManager =
-      input.providerSession?.sessionFile
-        ? SessionManager.open(input.providerSession.sessionFile, piSessionDir, input.root.path)
-        : SessionManager.create(input.root.path, piSessionDir, { id: input.session.id });
+    const commandInput = command.type === "set_model"
+      ? this.bindInputToCurrentRuntime(input, command.payload)
+      : input;
+    const workspace = await resolveSafeExistingPath(commandInput.root.path, commandInput.workingPath);
+    const workspaceStat = await stat(workspace.realPath);
+    if (!workspaceStat.isDirectory()) throw new Error("Agent working path must be a directory");
+    await mkdir(this.piSessionDir, { recursive: true });
+    await mkdir(this.piAgentDir, { recursive: true });
+    const runtime = await this.runtimes.get(commandInput.modelSettings, commandInput.providerSession);
+    const fingerprint = JSON.stringify({
+      workingPath: workspace.relativePath,
+      runtimeGeneration: runtime.generation,
+      mcp: commandInput.mcp ?? null,
+      photostaff: Boolean(commandInput.photostaffTools),
+      resourcesTrusted: commandInput.session.piResourcesTrusted === true
+    });
+    return this.sessions.run({
+      sessionId: commandInput.session.id,
+      fingerprint,
+      create: () => this.createSession(commandInput, workspace, runtime, fingerprint),
+      execute: (hosted) => this.runIdleCommand(hosted, commandInput, command)
+    });
+  }
+
+  dispose(): Promise<void> {
+    return this.sessions.disposeAll();
+  }
+
+  get sessionCount(): number {
+    return this.sessions.size;
+  }
+
+  private async createSession(
+    input: PiAgentRuntimeInput,
+    workspace: Awaited<ReturnType<typeof resolveSafeExistingPath>>,
+    runtime: ModelRuntimeBinding,
+    fingerprint: string
+  ) {
+    const sessionManager = input.providerSession?.sessionFile
+      ? SessionManager.open(input.providerSession.sessionFile, this.piSessionDir, workspace.realPath)
+      : SessionManager.create(workspace.realPath, this.piSessionDir, { id: input.session.id });
     const settingsManager = SettingsManager.inMemory({
-      defaultProvider: input.modelSettings.providerName,
-      ...(input.modelSettings.model ? { defaultModel: input.modelSettings.model } : {}),
+      defaultProvider: runtime.settings.providerName,
+      ...(runtime.settings.model ? { defaultModel: runtime.settings.model } : {}),
       defaultProjectTrust: "never"
     });
     const mcpConfig = input.mcp?.enabled ? await loadControlledPiMcpConfig(input.mcp) : null;
     const legacyToolsEnabled = !input.mcp?.enabled || input.mcp.legacyToolsEnabled;
+    const resourcePolicy = this.resourcePolicy.evaluate(input.session);
     const resourceLoader = new DefaultResourceLoader({
-      cwd: input.root.path,
-      agentDir: piAgentDir,
+      cwd: workspace.realPath,
+      agentDir: this.piAgentDir,
       settingsManager,
       noExtensions: true,
       extensionFactories: mcpConfig ? [
@@ -275,165 +355,433 @@ async function runPiSdkAgentTurn(input: PiAgentRuntimeInput): Promise<PiAgentTur
         createMcpExtension({
           loadConfig: () => mcpConfig,
           updateConfig: () => undefined,
-          logPath: path.join(piAgentDir, "mcp.log"),
+          logPath: path.join(this.piAgentDir, "mcp.log"),
           startupWaitMs: 10_000
         })
       ] : [],
-      noSkills: true,
-      noPromptTemplates: true,
+      noSkills: !resourcePolicy.allowProjectSkills,
+      noPromptTemplates: !resourcePolicy.allowProjectPrompts,
       noThemes: true,
-      noContextFiles: true,
-      appendSystemPrompt: [
-        [
-          "You are running inside ZOS.",
-          "Use the ZOS MCP server for NAS and system capabilities. Paths are always relative to a selected NAS root.",
-          "Mutating capabilities return durable runs and require approval in the first-party ZOS UI.",
-          "Never request or include passwords, API keys, Wi-Fi secrets, registry tokens, or host absolute paths."
-        ].join("\n")
-      ]
+      noContextFiles: !resourcePolicy.allowProjectContext,
+      appendSystemPrompt: [zosSystemPrompt(workspace.relativePath)]
     });
-    await resourceLoader.reload();
+    try {
+      await resourceLoader.reload({
+        resolveProjectTrust: async () => input.session.piResourcesTrusted === true
+      });
+    } catch {
+      await input.emit({
+        type: "resource_error",
+        source: "pi",
+        sourceId: `resource:${input.session.id}:${runtime.generation}:reload`,
+        runId: `resource:${input.session.id}`,
+        sequence: 1,
+        payload: { resourceType: "loader", error: "Pi resources could not be loaded" }
+      });
+      throw new Error("Pi resources could not be loaded");
+    }
+    await emitResourceDiagnostics(input, resourceLoader, runtime.generation);
 
+    const bridge = { ...input };
     const { session: piSession } = await createAgentSession({
-      cwd: input.root.path,
-      agentDir: piAgentDir,
-      modelRuntime,
-      ...(model ? { model } : {}),
+      cwd: workspace.realPath,
+      agentDir: this.piAgentDir,
+      modelRuntime: runtime.runtime,
+      ...(runtime.model ? { model: runtime.model } : {}),
       tools: piAgentToolNames({
         mcpEnabled: mcpConfig !== null,
         legacyToolsEnabled,
         photostaffToolsEnabled: input.photostaffTools !== undefined
       }),
-      customTools: legacyToolsEnabled ? createZosPiTools(input) : [],
+      customTools: legacyToolsEnabled ? createZosPiTools(bridge) : [],
       resourceLoader,
       settingsManager,
       sessionManager
     });
-
-    const providerSession = {
-      providerSessionId: piSession.sessionId,
-      sessionFile: piSession.sessionFile ?? null,
-      providerName: input.modelSettings.providerName,
-      model: input.modelSettings.model,
-      settingsSnapshot: settingsSnapshot(input.modelSettings)
+    const savedProjectionCursor = input.providerSession?.projectionCursor;
+    const projectionCursor = savedProjectionCursor
+      ?? (input.providerSession ? piSession.sessionManager.getLeafId() ?? PI_PROJECTION_ROOT : PI_PROJECTION_ROOT);
+    const hosted: HostedPiSession = {
+      piSession,
+      bridge,
+      runtime,
+      projectionCursor,
+      activeTurn: null,
+      unsubscribe: () => undefined
     };
-    await input.saveProviderSession(providerSession);
+    if (savedProjectionCursor || !input.providerSession) {
+      await this.reconcileProjection(hosted, input);
+    }
+    this.loaded.set(input.session.id, hosted);
+    hosted.unsubscribe = piSession.subscribe((event) => this.handleEvent(hosted, event));
+    await piSession.bindExtensions({});
+    await input.saveProviderSession(providerSessionSnapshot(hosted));
+    return {
+      sessionId: input.session.id,
+      fingerprint,
+      session: hosted,
+      dispose: async () => {
+        if (this.loaded.get(input.session.id) === hosted) this.loaded.delete(input.session.id);
+        hosted.unsubscribe();
+        if (!hosted.piSession.isIdle) await hosted.piSession.abort();
+        hosted.piSession.dispose();
+      }
+    };
+  }
 
+  private async reconcileProjection(hosted: HostedPiSession, input: PiAgentRuntimeInput): Promise<void> {
+    const branch = hosted.piSession.sessionManager.getBranch();
+    const cursorIndex = hosted.projectionCursor === PI_PROJECTION_ROOT
+      ? -1
+      : branch.findIndex((entry) => entry.id === hosted.projectionCursor);
+    if (cursorIndex < -1 || (cursorIndex === -1 && hosted.projectionCursor !== PI_PROJECTION_ROOT)) {
+      hosted.projectionCursor = hosted.piSession.sessionManager.getLeafId() ?? PI_PROJECTION_ROOT;
+      await input.emit({
+        type: "resource_error",
+        source: "pi",
+        sourceId: `projection:${input.session.id}:cursor-missing`,
+        runId: `projection:${input.session.id}`,
+        payload: {
+          resourceType: "session_projection",
+          error: "Pi projection cursor is not on the active session branch"
+        }
+      });
+      return;
+    }
+
+    for (const entry of branch.slice(cursorIndex + 1)) {
+      await projectPiSessionEntry(entry, input.emit);
+      hosted.projectionCursor = entry.id;
+      await input.saveProviderSession(providerSessionSnapshot(hosted));
+    }
+  }
+
+  private async runActiveCommand(sessionId: string, command: PiActiveAgentCommand): Promise<unknown> {
+    const hosted = this.loaded.get(sessionId);
+    if (command.type === "abort" && (!hosted?.activeTurn || !hosted.piSession.isStreaming)) {
+      return { aborted: false, reason: "turn_not_started_or_already_idle" };
+    }
+    if (!hosted?.activeTurn || !hosted.piSession.isStreaming) {
+      if (command.type === "abort") {
+        return { aborted: false, reason: "turn_not_started_or_already_idle" };
+      }
+      throw new PiActiveTurnUnavailableError(command.type);
+    }
+    if (command.type === "abort") {
+      await hosted.piSession.abort();
+      return { aborted: true };
+    }
+    const content = commandContent(command.payload);
+    const disposition = command.type === "steer"
+      ? await hosted.piSession.steer(content, undefined, { source: "rpc" })
+      : await hosted.piSession.followUp(content, undefined, { source: "rpc" });
+    return { disposition };
+  }
+
+  private async runIdleCommand(
+    hosted: HostedPiSession,
+    input: PiAgentRuntimeInput,
+    command: PiAgentCommand
+  ): Promise<unknown> {
+    if (input.isCancelled()) throw new Error("Agent command lease was lost");
+    if (!hosted.piSession.isIdle) throw new Error(`${command.type} requires an idle Pi session`);
+    Object.assign(hosted.bridge, input);
+    const turn: HostedTurn = {
+      input,
+      runId: randomUUID(),
+      latestAssistantText: "",
+      assistantFailure: null,
+      started: false,
+      pendingRunIds: new Set(),
+      abortRequested: false,
+      eventError: null,
+      eventChain: Promise.resolve(),
+      sequence: 0
+    };
+    hosted.activeTurn = turn;
     const requestAbort = async () => {
-      if (abortRequested) return;
-      abortRequested = true;
-      await piSession.abort();
+      if (turn.abortRequested) return;
+      turn.abortRequested = true;
+      await hosted.piSession.abort();
     };
-
-    const unsubscribe = piSession.subscribe((event) => {
-      eventChain = eventChain
-        .then(() => mapPiEvent(event, input.emit, {
-          onStarted: () => {
-            started = true;
-          },
-          onAssistantMessage: (content) => {
-            latestAssistantText = content;
-            assistantFailure = null;
-          },
-          onAssistantFailure: (error) => {
-            latestAssistantText = "";
-            assistantFailure = error;
-          },
-          onCapabilityRunPending: async (runId) => {
-            if (pendingRunIds.has(runId)) return;
-            await input.onCapabilityRunPending?.(runId, piSession.sessionId);
-            pendingRunIds.add(runId);
-            await requestAbort();
-            await input.emit({
-              type: "approval.pending",
-              payload: { kind: "capability_run", runId }
-            });
-          }
-        }))
-        .catch((error: unknown) => {
-          eventError ??= error;
-        });
-    });
     const stopCancellationMonitor = startPiCancellationMonitor({
       isCancelled: input.isCancelled,
       abort: requestAbort,
       onError: (error) => {
-        eventError ??= error;
+        turn.eventError ??= error;
+      }
+    });
+    try {
+      let result: unknown;
+      if (command.type === "compact") {
+        const instructions = optionalCommandString(command.payload.instructions);
+        result = await hosted.piSession.compact(instructions ?? undefined);
+      } else if (command.type === "set_model") {
+        const provider = requiredCommandString(command.payload.provider, "provider");
+        const modelId = requiredCommandString(command.payload.model, "model");
+        const model = hosted.runtime.runtime.getModel(provider, modelId);
+        if (!model) throw new Error(`Pi model "${modelId}" is unavailable for provider "${provider}"`);
+        await hosted.piSession.setModel(model);
+        await input.saveProviderSession(providerSessionSnapshot(hosted));
+        result = { provider, model: modelId, runtimeGeneration: hosted.runtime.generation };
+      } else if (command.type === "set_thinking_level") {
+        const level = requiredCommandString(command.payload.level, "level") as Parameters<AgentSession["setThinkingLevel"]>[0];
+        if (!["off", "minimal", "low", "medium", "high", "xhigh"].includes(level)) {
+          throw new Error(`Unsupported thinking level "${level}"`);
+        }
+        hosted.piSession.setThinkingLevel(level);
+        result = { level: hosted.piSession.thinkingLevel };
+      } else if (command.type === "stats") {
+        const stats = hosted.piSession.getSessionStats();
+        result = {
+          ...stats,
+          sessionFile: publicPiSessionFile(stats.sessionFile)
+        };
+      } else {
+        throw new Error(`Unsupported idle command "${command.type}"`);
+      }
+      await turn.eventChain;
+      if (turn.eventError) throw turn.eventError;
+      if (input.isCancelled()) throw new Error("Agent command lease was lost");
+      return result;
+    } finally {
+      stopCancellationMonitor();
+      await turn.eventChain;
+      if (hosted.activeTurn === turn) hosted.activeTurn = null;
+    }
+  }
+
+  private bindInputToCurrentRuntime(
+    input: PiAgentRuntimeInput,
+    payload: Record<string, unknown>
+  ): PiAgentRuntimeInput {
+    const provider = requiredCommandString(payload.provider, "provider");
+    const model = requiredCommandString(payload.model, "model");
+    if (provider !== input.modelSettings.providerName || model !== input.modelSettings.model) {
+      throw new Error("set_model must target the currently configured provider and model");
+    }
+    if (!input.providerSession) return input;
+    return {
+      ...input,
+      providerSession: {
+        ...input.providerSession,
+        providerName: input.modelSettings.providerName,
+        model: input.modelSettings.model,
+        settingsSnapshot: settingsSnapshot(input.modelSettings),
+        runtimeGeneration: input.modelSettings.generation,
+        runtimeProvider: input.modelSettings.providerName,
+        runtimeModel: input.modelSettings.model
+      }
+    };
+  }
+
+  private async runTurn(hosted: HostedPiSession, input: PiAgentRuntimeInput): Promise<PiAgentTurnResult> {
+    Object.assign(hosted.bridge, input);
+    const turn: HostedTurn = {
+      input,
+      runId: randomUUID(),
+      latestAssistantText: "",
+      assistantFailure: null,
+      started: false,
+      pendingRunIds: new Set(),
+      abortRequested: false,
+      eventError: null,
+      eventChain: Promise.resolve(),
+      sequence: 0
+    };
+    hosted.activeTurn = turn;
+    const requestAbort = async () => {
+      if (turn.abortRequested) return;
+      turn.abortRequested = true;
+      await hosted.piSession.abort();
+    };
+    const stopCancellationMonitor = startPiCancellationMonitor({
+      isCancelled: input.isCancelled,
+      abort: requestAbort,
+      onError: (error) => {
+        turn.eventError ??= error;
       }
     });
 
     try {
-      await piSession.bindExtensions({});
+      await input.saveProviderSession(providerSessionSnapshot(hosted));
       if (input.isCancelled()) await requestAbort();
-      else await piSession.prompt(input.message);
-      await piSession.waitForIdle();
-      await eventChain;
-      if (eventError) throw eventError;
-    } finally {
-      stopCancellationMonitor();
-      unsubscribe();
-      await eventChain;
-      piSession.dispose();
-    }
+      else await hosted.piSession.prompt(input.message);
+      await hosted.piSession.waitForIdle();
+      await turn.eventChain;
+      if (turn.eventError) throw turn.eventError;
+      if (input.isCancelled()) return { status: "cancelled", runId: turn.runId };
+      const pendingRunId = turn.pendingRunIds.values().next().value as string | undefined;
+      if (pendingRunId) return { status: "waiting_approval", runId: pendingRunId };
 
-    if (input.isCancelled()) {
-      return { status: "cancelled" };
-    }
-    const pendingRunId = pendingRunIds.values().next().value as string | undefined;
-    if (pendingRunId) {
-      return { status: "waiting_approval", runId: pendingRunId };
-    }
-    const turnFailure = getPiTurnFailure(assistantFailure, latestAssistantText);
-    if (turnFailure) throw new Error(turnFailure);
-    await input.saveProviderSession(providerSession);
-    await input.emit({
-      type: "agent.message",
-      payload: {
-        role: "assistant",
-        content: latestAssistantText
-      }
-    });
-    await input.emit({
-      type: "agent.completed",
-      payload: {
-        provider: "pi",
-        providerSessionId: piSession.sessionId,
-        sessionFile: piSession.sessionFile ?? null,
-        summary: latestAssistantText
-      }
-    });
-    return {
-      status: "completed",
-      summary: latestAssistantText
-    };
-  } catch (error) {
-    if (input.isCancelled()) {
-      return { status: "cancelled" };
-    }
-    const pendingRunId = pendingRunIds.values().next().value as string | undefined;
-    if (pendingRunId) {
-      return { status: "waiting_approval", runId: pendingRunId };
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    if (!started) {
-      await input.emit({
-        type: "agent.started",
+      const turnFailure = getPiTurnFailure(turn.assistantFailure, turn.latestAssistantText);
+      if (turnFailure) throw new Error(turnFailure);
+      await input.saveProviderSession(providerSessionSnapshot(hosted));
+      await this.emitTurnEvent(turn, {
+        type: "agent.completed",
         payload: {
-          provider: "pi"
+          provider: "pi",
+          providerSessionId: hosted.piSession.sessionId,
+          sessionFile: publicPiSessionFile(hosted.piSession.sessionFile),
+          summary: turn.latestAssistantText
         }
       });
+      return { status: "completed", summary: turn.latestAssistantText, runId: turn.runId };
+    } catch (error) {
+      if (input.isCancelled()) return { status: "cancelled", runId: turn.runId };
+      const pendingRunId = turn.pendingRunIds.values().next().value as string | undefined;
+      if (pendingRunId) return { status: "waiting_approval", runId: pendingRunId };
+      const message = error instanceof Error ? error.message : String(error);
+      if (!turn.started) {
+        await this.emitTurnEvent(turn, { type: "agent.started", payload: { provider: "pi" } });
+      }
+      await this.emitTurnEvent(turn, { type: "agent.failed", payload: { provider: "pi", error: message } });
+      return { status: "failed", error: message, runId: turn.runId };
+    } finally {
+      stopCancellationMonitor();
+      await turn.eventChain;
+      if (hosted.activeTurn === turn) hosted.activeTurn = null;
     }
+  }
+
+  private handleEvent(hosted: HostedPiSession, event: AgentSessionEvent): void {
+    const turn = hosted.activeTurn;
+    if (!turn) return;
+    turn.eventChain = turn.eventChain
+      .then(() => mapPiEvent(event, (projected) => this.emitTurnEvent(turn, projected), {
+        onStarted: () => {
+          turn.started = true;
+        },
+        onAssistantMessage: (content) => {
+          turn.latestAssistantText = content;
+          turn.assistantFailure = null;
+        },
+        onAssistantFailure: (error) => {
+          turn.latestAssistantText = "";
+          turn.assistantFailure = error;
+        },
+        onEntryAppended: async (entry) => {
+          await projectPiSessionEntry(entry, (projected) => this.emitTurnEvent(turn, {
+            ...projected,
+            runId: turn.runId
+          }));
+          hosted.projectionCursor = entry.id;
+          await turn.input.saveProviderSession(providerSessionSnapshot(hosted));
+        },
+        onCapabilityRunPending: async (runId) => {
+          if (turn.pendingRunIds.has(runId)) return;
+          await turn.input.onCapabilityRunPending?.(runId, hosted.piSession.sessionId);
+          turn.pendingRunIds.add(runId);
+          if (!turn.abortRequested) {
+            turn.abortRequested = true;
+            await hosted.piSession.abort();
+          }
+          await this.emitTurnEvent(turn, {
+            type: "approval.pending",
+            payload: { kind: "capability_run", runId }
+          });
+        }
+      }))
+      .catch((error: unknown) => {
+        turn.eventError ??= error;
+      });
+  }
+
+  private emitTurnEvent(turn: HostedTurn, event: PiAgentEmitEvent): void | Promise<void> {
+    const sequence = event.sequence ?? ++turn.sequence;
+    return turn.input.emit({
+      ...event,
+      source: event.source ?? "pi",
+      sourceId: event.sourceId ?? `${turn.runId}:${sequence}`,
+      runId: event.runId ?? turn.runId,
+      sequence
+    });
+  }
+}
+
+function isActiveAgentCommand(command: PiAgentCommand): command is PiActiveAgentCommand {
+  return command.type === "steer" || command.type === "follow_up" || command.type === "abort";
+}
+
+function commandContent(payload: Record<string, unknown>): string {
+  return requiredCommandString(payload.content, "content");
+}
+
+function requiredCommandString(value: unknown, field: string): string {
+  const normalized = optionalCommandString(value);
+  if (!normalized) throw new Error(`Command ${field} is required`);
+  return normalized;
+}
+
+function optionalCommandString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function providerSessionSnapshot(hosted: HostedPiSession) {
+  const settings = hosted.runtime.settings;
+  return {
+    providerSessionId: hosted.piSession.sessionId,
+    sessionFile: hosted.piSession.sessionFile ?? null,
+    providerName: settings.providerName,
+    model: settings.model,
+    settingsSnapshot: settingsSnapshot(settings),
+    runtimeGeneration: hosted.runtime.generation,
+    runtimeProvider: settings.providerName,
+    runtimeModel: settings.model,
+    projectionCursor: hosted.projectionCursor
+  };
+}
+
+function zosSystemPrompt(workingPath: string): string {
+  return [
+    "You are running inside ZOS.",
+    `The current working directory is ${workingPath}.`,
+    "Use the ZOS MCP server for NAS and system capabilities. Paths are always relative to a selected NAS root.",
+    "Mutating capabilities return durable runs and require approval in the first-party ZOS UI.",
+    "Never request or include passwords, API keys, Wi-Fi secrets, registry tokens, or host absolute paths."
+  ].join("\n");
+}
+
+async function emitResourceDiagnostics(
+  input: PiAgentRuntimeInput,
+  loader: DefaultResourceLoader,
+  generation: number
+): Promise<void> {
+  const diagnostics: Array<{ resourceType: string; path?: string }> = [];
+  for (const error of loader.getExtensions().errors) {
+    diagnostics.push({ resourceType: "extension", path: error.path });
+  }
+  for (const diagnostic of loader.getSkills().diagnostics) {
+    if (diagnostic.type === "error") {
+      diagnostics.push({
+        resourceType: "skill",
+        ...(diagnostic.path ? { path: diagnostic.path } : {})
+      });
+    }
+  }
+  for (const diagnostic of loader.getPrompts().diagnostics) {
+    if (diagnostic.type === "error") {
+      diagnostics.push({
+        resourceType: "prompt",
+        ...(diagnostic.path ? { path: diagnostic.path } : {})
+      });
+    }
+  }
+  let sequence = 1;
+  for (const diagnostic of diagnostics) {
     await input.emit({
-      type: "agent.failed",
+      type: "resource_error",
+      source: "pi",
+      sourceId: `resource:${input.session.id}:${generation}:${diagnostic.resourceType}:${sequence}`,
+      runId: `resource:${input.session.id}`,
+      sequence,
       payload: {
-        provider: "pi",
-        error: message
+        resourceType: diagnostic.resourceType,
+        resource: diagnostic.path ? path.basename(diagnostic.path) : null,
+        error: `Pi ${diagnostic.resourceType} resource could not be loaded`
       }
     });
-    return {
-      status: "failed",
-      error: message
-    };
+    sequence += 1;
   }
 }
 
@@ -518,16 +866,6 @@ export async function loadControlledPiMcpConfig(settings: PiMcpRuntimeSettings):
 
 export function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
   const read = createReadToolDefinition(input.root.path);
-  const localBash = createLocalBashOperations({ shellPath: "/bin/bash" });
-  const bash = createBashToolDefinition(input.root.path, {
-    exposeSessionEnvironment: false,
-    operations: {
-      exec: (command, cwd, options) => localBash.exec(command, cwd, {
-        ...options,
-        env: safeShellEnvironment(cwd)
-      })
-    }
-  });
   const edit = createEditToolDefinition(input.root.path);
   const write = createWriteToolDefinition(input.root.path);
   const grep = createGrepToolDefinition(input.root.path);
@@ -613,21 +951,6 @@ export function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
           }
         })
     } as typeof grep;
-  const bashTool = {
-      ...bash,
-      executionMode: "sequential",
-      execute: async (...executeArgs: Parameters<typeof bash.execute>) => {
-        const [toolCallId, params] = executeArgs;
-        return withApproval(input, {
-          toolCallId,
-          toolName: "bash",
-          args: { ...params },
-          risk: "critical",
-          summary: `Run an approved shell command (${Buffer.byteLength(params.command, "utf8")} bytes)`,
-          execute: async () => bash.execute(...executeArgs) as Promise<TextToolResult>
-        });
-      }
-    } as typeof bash;
   const editTool = {
       ...edit,
       executionMode: "sequential",
@@ -675,7 +998,7 @@ export function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
     } as typeof write;
 
   const photostaffTools = input.photostaffTools ? createPhotostaffAgentTools(input.photostaffTools) : [];
-  return [readTool, lsTool, findTool, grepTool, ...photostaffTools, bashTool, editTool, writeTool] as unknown as ToolDefinition[];
+  return [readTool, lsTool, findTool, grepTool, ...photostaffTools, editTool, writeTool] as unknown as ToolDefinition[];
 }
 
 const photostaffScalarSchema = Type.Union([Type.String({ maxLength: 65_536 }), Type.Number(), Type.Boolean()]);
@@ -862,9 +1185,14 @@ async function mapPiEvent(
     onStarted: () => void;
     onAssistantMessage: (content: string) => void;
     onAssistantFailure: (error: string) => void;
+    onEntryAppended: (entry: SessionEntry) => void | Promise<void>;
     onCapabilityRunPending: (runId: string) => void | Promise<void>;
   }
 ): Promise<void> {
+  if (event.type === "entry_appended") {
+    await callbacks.onEntryAppended(event.entry);
+    return;
+  }
   if (event.type === "agent_start") {
     callbacks.onStarted();
     await emit({
@@ -876,9 +1204,54 @@ async function mapPiEvent(
     });
     return;
   }
+  if (event.type === "turn_start") {
+    await emit({ type: "turn_start", payload: {} });
+    return;
+  }
+  if (event.type === "turn_end") {
+    await emit({
+      type: "turn_end",
+      payload: {
+        message: projectPiMessage(event.message),
+        toolResultCount: event.toolResults.length
+      }
+    });
+    return;
+  }
+  if (event.type === "message_start") {
+    await emit({
+      type: "message_start",
+      payload: projectPiMessage(event.message)
+    });
+    return;
+  }
+  if (event.type === "message_update") {
+    await emit({
+      type: "message_update",
+      payload: {
+        ...projectPiMessage(event.message),
+        updateType: event.assistantMessageEvent.type,
+        delta: event.assistantMessageEvent.type === "text_delta"
+          ? event.assistantMessageEvent.delta
+          : ""
+      }
+    });
+    return;
+  }
+  if (event.type === "message_end") {
+    await emit({
+      type: "message_end",
+      payload: projectPiMessage(event.message)
+    });
+    if (event.message.role === "assistant") {
+      mapPiAssistantMessageEnd(event.message, callbacks);
+    }
+    return;
+  }
   if (event.type === "tool_execution_start") {
     await emit({
-      type: "tool_call.started",
+      type: "tool_execution_start",
+      sourceId: `tool:${event.toolCallId}:start`,
       payload: {
         id: event.toolCallId,
         name: event.toolName,
@@ -888,13 +1261,28 @@ async function mapPiEvent(
     });
     return;
   }
+  if (event.type === "tool_execution_update") {
+    await emit({
+      type: "tool_execution_update",
+      payload: {
+        id: event.toolCallId,
+        name: event.toolName,
+        input: redactPiToolArgs(event.toolName, event.args),
+        output: redactSensitiveValue(event.partialResult)
+      }
+    });
+    return;
+  }
   if (event.type === "tool_execution_end") {
     await emit({
-      type: event.isError ? "tool_call.failed" : "tool_call.completed",
+      type: "tool_execution_end",
+      sourceId: `tool:${event.toolCallId}:end`,
       payload: {
         id: event.toolCallId,
         name: event.toolName,
         output: redactSensitiveValue(event.result),
+        isError: event.isError,
+        durationMs: event.durationMs ?? null,
         debug: compactPiEvent(event)
       }
     });
@@ -902,9 +1290,150 @@ async function mapPiEvent(
     if (pendingRunId) await callbacks.onCapabilityRunPending(pendingRunId);
     return;
   }
-  if (event.type === "message_end" && event.message.role === "assistant") {
-    mapPiAssistantMessageEnd(event.message, callbacks);
+  if (event.type === "agent_end") {
+    await emit({
+      type: "agent_end",
+      payload: {
+        willRetry: event.willRetry,
+        messageCount: event.messages.length
+      }
+    });
+    return;
   }
+  if (event.type === "compaction_start") {
+    await emit({ type: "compaction_start", payload: { reason: event.reason } });
+    return;
+  }
+  if (event.type === "compaction_end") {
+    await emit({
+      type: "compaction_end",
+      payload: {
+        reason: event.reason,
+        aborted: event.aborted,
+        willRetry: event.willRetry,
+        error: event.errorMessage ?? null
+      }
+    });
+    return;
+  }
+  if (event.type === "thinking_level_changed") {
+    await emit({
+      type: "thinking_level_change",
+      payload: { level: event.level }
+    });
+  }
+}
+
+export async function projectPiSessionEntry(
+  entry: SessionEntry,
+  emit: PiAgentRuntimeInput["emit"]
+): Promise<void> {
+  const runId = `pi-entry:${entry.id}`;
+  if (entry.type === "message" && entry.message.role === "assistant") {
+    for (const item of entry.message.content) {
+      if (item.type !== "toolCall") continue;
+      await emit({
+        type: "tool_execution_start",
+        source: "pi",
+        sourceId: `tool:${item.id}:start`,
+        runId,
+        payload: {
+          id: item.id,
+          name: item.name,
+          input: redactPiToolArgs(item.name, item.arguments)
+        }
+      });
+    }
+    const content = extractAssistantText(entry.message);
+    if (content || entry.message.errorMessage) {
+      await emit({
+        type: "agent.message",
+        source: "pi",
+        sourceId: `entry:${entry.id}:assistant`,
+        runId,
+        payload: {
+          role: "assistant",
+          content,
+          stopReason: entry.message.stopReason,
+          error: entry.message.errorMessage ?? null
+        }
+      });
+    }
+    if (entry.message.stopReason === "error" || entry.message.stopReason === "aborted") {
+      await emit({
+        type: "agent.failed",
+        source: "pi",
+        sourceId: `entry:${entry.id}:failure`,
+        runId,
+        payload: {
+          provider: "pi",
+          error: entry.message.errorMessage ?? `Pi run ${entry.message.stopReason}`,
+          interrupted: entry.message.stopReason === "aborted"
+        }
+      });
+    }
+    return;
+  }
+  if (entry.type === "message" && entry.message.role === "toolResult") {
+    await emit({
+      type: "tool_execution_end",
+      source: "pi",
+      sourceId: `tool:${entry.message.toolCallId}:end`,
+      runId,
+      payload: {
+        id: entry.message.toolCallId,
+        name: entry.message.toolName,
+        output: redactSensitiveValue(entry.message.content),
+        isError: entry.message.isError,
+        durationMs: entry.message.durationMs ?? null
+      }
+    });
+    return;
+  }
+  if (entry.type === "compaction") {
+    await emit({
+      type: "compaction_end",
+      source: "pi",
+      sourceId: `entry:${entry.id}`,
+      runId,
+      payload: {
+        reason: "persisted",
+        aborted: false,
+        willRetry: false,
+        error: null,
+        tokensBefore: entry.tokensBefore
+      }
+    });
+    return;
+  }
+  if (entry.type === "model_change") {
+    await emit({
+      type: "model_change",
+      source: "pi",
+      sourceId: `entry:${entry.id}`,
+      runId,
+      payload: { provider: entry.provider, model: entry.modelId }
+    });
+    return;
+  }
+  if (entry.type === "thinking_level_change") {
+    await emit({
+      type: "thinking_level_change",
+      source: "pi",
+      sourceId: `entry:${entry.id}`,
+      runId,
+      payload: { level: entry.thinkingLevel }
+    });
+  }
+}
+
+function projectPiMessage(message: { role: string; content?: unknown; stopReason?: unknown; errorMessage?: unknown }) {
+  return {
+    role: message.role,
+    content: message.role === "assistant" ? extractAssistantText(message) : "",
+    stopReason: typeof message.stopReason === "string" ? message.stopReason : null,
+    error: typeof message.errorMessage === "string" ? message.errorMessage : null
+  };
 }
 
 export function mapPiAssistantMessageEnd(
@@ -1150,19 +1679,6 @@ async function assertClosestExistingParentInside(rootRealPath: string, absoluteP
   throw new Error("Mutation target parent does not exist inside the NAS root");
 }
 
-function safeShellEnvironment(cwd: string): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = {
-    HOME: cwd,
-    PATH: "/usr/local/bin:/usr/bin:/bin",
-    TMPDIR: "/tmp"
-  };
-  for (const name of ["LANG", "LC_ALL", "TZ"] as const) {
-    const value = process.env[name];
-    if (value && /^[A-Za-z0-9_+./:@-]{1,128}$/u.test(value)) environment[name] = value;
-  }
-  return environment;
-}
-
 export function redactPiToolArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
   const redacted = redactSensitiveValue(args) as Record<string, unknown>;
   if (toolName === "bash" && typeof args.command === "string") {
@@ -1304,12 +1820,17 @@ function redactAuditUrl(value: string): string {
 
 function settingsSnapshot(settings: ModelProviderSettingsRecord): Record<string, unknown> {
   return {
+    generation: settings.generation,
     providerName: settings.providerName,
     baseUrl: settings.baseUrl,
     model: settings.model,
     apiKeyConfigured: Boolean(settings.apiKey),
     updatedAt: settings.updatedAt
   };
+}
+
+export function publicPiSessionFile(sessionFile: string | null | undefined): string | null {
+  return sessionFile ? path.basename(sessionFile) : null;
 }
 
 function compactPiEvent(event: AgentSessionEvent): Record<string, unknown> {

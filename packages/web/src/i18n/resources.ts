@@ -294,6 +294,17 @@ export const en = {
     messagePlaceholder: "Message ZOS Agent",
     messageAria: "Agent message",
     modelConfiguration: "Model config",
+    streaming: "Streaming",
+    deliveryMode: "Active turn delivery",
+    steer: "Steer",
+    followUp: "Follow-up",
+    retryInterrupted: "Continue the interrupted turn",
+    retry: "Retry",
+    toolStatus: {
+      running: "Running",
+      completed: "Completed",
+      failed: "Failed"
+    },
     messageStatus: {
       sending: "Sending...",
       queued: "Waiting for agent reply...",
@@ -3114,6 +3125,17 @@ export const zhCN = {
     messagePlaceholder: "给 ZOS Agent 发消息",
     messageAria: "Agent 消息",
     modelConfiguration: "模型配置",
+    streaming: "生成中",
+    deliveryMode: "当前 turn 的消息方式",
+    steer: "插入指令",
+    followUp: "后续处理",
+    retryInterrupted: "继续被中断的 turn",
+    retry: "重试",
+    toolStatus: {
+      running: "执行中",
+      completed: "已完成",
+      failed: "失败"
+    },
     messageStatus: {
       sending: "发送中...",
       queued: "等待 agent 回复...",

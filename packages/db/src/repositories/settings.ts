@@ -169,26 +169,30 @@ export function getModelProviderSettings(db: ZosDatabase): ModelProviderSettings
 
 export function saveModelProviderSettings(
   db: ZosDatabase,
-  settings: Omit<ModelProviderSettingsRecord, "updatedAt">
+  settings: Omit<ModelProviderSettingsRecord, "generation" | "updatedAt">
 ): ModelProviderSettingsRecord {
-  const updatedAt = new Date().toISOString();
-  const record: ModelProviderSettingsRecord = {
-    providerName: normalizeModelProviderName(settings.providerName),
-    baseUrl: settings.baseUrl?.trim() || null,
-    model: settings.model.trim(),
-    apiKey: settings.apiKey?.trim() || null,
-    updatedAt
-  };
+  return db.transaction(() => {
+    const updatedAt = new Date().toISOString();
+    const generation = (getModelProviderSettings(db)?.generation ?? 0) + 1;
+    const record: ModelProviderSettingsRecord = {
+      generation,
+      providerName: normalizeModelProviderName(settings.providerName),
+      baseUrl: settings.baseUrl?.trim() || null,
+      model: settings.model.trim(),
+      apiKey: settings.apiKey?.trim() || null,
+      updatedAt
+    };
 
-  db.prepare(`
-    INSERT INTO system_settings (key, value_json, updated_at)
-    VALUES (?, ?, ?)
-    ON CONFLICT(key) DO UPDATE SET
-      value_json = excluded.value_json,
-      updated_at = excluded.updated_at
-  `).run(MODEL_PROVIDER_SETTING_KEY, JSON.stringify(record), updatedAt);
+    db.prepare(`
+      INSERT INTO system_settings (key, value_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value_json = excluded.value_json,
+        updated_at = excluded.updated_at
+    `).run(MODEL_PROVIDER_SETTING_KEY, JSON.stringify(record), updatedAt);
 
-  return record;
+    return record;
+  }).immediate();
 }
 
 export function defaultPiToolPolicySettings(): PiToolPolicySettingsRecord {

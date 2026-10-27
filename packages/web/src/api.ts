@@ -302,6 +302,7 @@ export interface SessionSummary extends Session {
   firstMessage: string | null;
   lastMessage: string | null;
   pendingApprovalCount: number;
+  activeJob?: Job | null;
 }
 
 export interface TranscriptMessage {
@@ -310,6 +311,7 @@ export interface TranscriptMessage {
   content: string;
   createdAt: string;
   sequence: number | null;
+  streaming?: boolean;
 }
 
 export interface Job {
@@ -407,14 +409,49 @@ export type StorageFilesystem = SharedStorageFilesystem;
 export type StorageRaidLevel = SharedStorageRaidLevel;
 
 export interface AgentEvent {
+  schemaVersion?: 1;
   id: number;
   sessionId: string;
   jobId: string | null;
   type: string;
   audience: "chat" | "notification";
   transcriptSequence: number | null;
+  source?: string;
+  sourceId?: string | null;
+  runId?: string;
+  sequence?: number;
   payload: Record<string, unknown>;
   createdAt: string;
+}
+
+export type AgentSessionCommandType =
+  | "steer"
+  | "follow_up"
+  | "abort"
+  | "compact"
+  | "set_model"
+  | "set_thinking_level"
+  | "stats";
+
+export interface AgentSessionCommand {
+  id: string;
+  idempotencyKey: string;
+  sessionId: string;
+  jobId: string | null;
+  type: AgentSessionCommandType | "prompt";
+  payload: Record<string, unknown>;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  result: unknown;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentToolActivity {
+  id: string;
+  runId: string;
+  name: string;
+  status: "running" | "completed" | "failed";
 }
 
 export type OperationNotification = SharedOperationNotification;
@@ -2493,14 +2530,15 @@ export async function rollbackOperation(operationId: string): Promise<void> {
 
 export async function sendMessage(
   sessionId: string,
-  content: string
+  content: string,
+  path?: string
 ): Promise<{ job: Job; transcriptMessage: TranscriptMessage }> {
   const response = await fetch(`/api/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content, ...(path ? { path } : {}) })
   });
   await ensureOk(response);
   const body = (await response.json()) as {
@@ -2530,6 +2568,36 @@ export async function sendMessage(
     };
   }
   throw new Error("Message response did not include a transcript message");
+}
+
+export async function sendAgentSessionCommand(
+  sessionId: string,
+  type: AgentSessionCommandType,
+  payload: Record<string, unknown> = {}
+): Promise<AgentSessionCommand> {
+  const response = await fetch(`/api/sessions/${sessionId}/commands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type,
+      payload,
+      idempotencyKey: crypto.randomUUID()
+    })
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { command: AgentSessionCommand }).command;
+}
+
+export async function retryAgentJob(
+  jobId: string
+): Promise<{ job: Job; transcriptMessage: TranscriptMessage }> {
+  const response = await fetch(`/api/jobs/${jobId}/retry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idempotencyKey: crypto.randomUUID() })
+  });
+  await ensureOk(response);
+  return (await response.json()) as { job: Job; transcriptMessage: TranscriptMessage };
 }
 
 export async function cancelJob(jobId: string): Promise<void> {

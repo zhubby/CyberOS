@@ -249,6 +249,7 @@ allowed_origins = []
 
 [worker]
 poll_ms = 750
+concurrency = 2
 
 [docker]
 enabled = false

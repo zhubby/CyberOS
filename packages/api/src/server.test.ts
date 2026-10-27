@@ -10,7 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PHOTOSTAFF_SUPPORTED_EXTENSIONS, resolveZosPaths } from "@zos/shared";
 import {
   appendEvent,
+  claimNextJob,
   createActionMessageAndJob,
+  createAgentSessionCommand,
   createCapabilityProposal,
   createDockerRegistryCredential,
   createMcpClient,
@@ -41,6 +43,7 @@ import {
   listShareOperations,
   linkAgentJobToCapabilityRun,
   openZosDb,
+  recoverExpiredAgentJobs,
   recordIndexFailure,
   saveDockerSettings,
   savePhotostaffLibrarySettings,
@@ -3942,7 +3945,11 @@ describe("API server", () => {
           rootId: "local",
           currentPath: ".",
           firstMessage: "Summarize downloads",
-          lastMessage: "Summarize downloads"
+          lastMessage: "Summarize downloads",
+          activeJob: {
+            sessionId: session.id,
+            status: "queued"
+          }
         }
       ]
     });
@@ -3977,6 +3984,120 @@ describe("API server", () => {
       }
     });
     expect(escaped.statusCode).toBe(400);
+    await server.close();
+  });
+
+  it("atomically snapshots a validated message path into the session and job", async () => {
+    await mkdir(path.join(rootDir, "docs"));
+    const session = createSession(db, { rootId: "local", currentPath: "." });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/api/sessions/${session.id}/messages`,
+      headers: { "idempotency-key": "prompt-docs-1" },
+      payload: { content: "Inspect this directory", path: "docs" }
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      job: { workingPath: "docs" },
+      command: { type: "prompt", idempotencyKey: "prompt-docs-1", status: "completed" }
+    });
+    expect(getSession(db, session.id)).toMatchObject({ currentPath: "docs" });
+    await server.close();
+  });
+
+  it("persists Pi resource trust and only accepts active-turn commands during an active job", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const trusted = await server.inject({
+      method: "PATCH",
+      url: `/api/sessions/${session.id}`,
+      payload: { piResourcesTrusted: true }
+    });
+    const idle = await server.inject({
+      method: "POST",
+      url: `/api/sessions/${session.id}/commands`,
+      payload: {
+        type: "follow_up",
+        idempotencyKey: "follow-up-1",
+        payload: { content: "Check the logs next" }
+      }
+    });
+    const { job } = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Inspect logs"
+    });
+    expect(claimNextJob(db, { workerId: "worker-1", leaseMs: 30_000 })?.id).toBe(job.id);
+    const first = await server.inject({
+      method: "POST",
+      url: `/api/sessions/${session.id}/commands`,
+      payload: {
+        type: "follow_up",
+        idempotencyKey: "follow-up-1",
+        payload: { content: "Check the logs next" }
+      }
+    });
+    const duplicate = await server.inject({
+      method: "POST",
+      url: `/api/sessions/${session.id}/commands`,
+      payload: {
+        type: "follow_up",
+        idempotencyKey: "follow-up-1",
+        payload: { content: "This duplicate must be ignored" }
+      }
+    });
+
+    expect(trusted.statusCode).toBe(200);
+    expect(trusted.json().session).toMatchObject({ piResourcesTrusted: true });
+    expect(idle.statusCode).toBe(409);
+    expect(idle.json()).toMatchObject({ code: "SESSION_NOT_ACTIVE" });
+    expect(first.statusCode).toBe(202);
+    expect(first.json().command).toMatchObject({ jobId: job.id });
+    expect(duplicate.statusCode).toBe(202);
+    expect(duplicate.json().command).toEqual(first.json().command);
+    expect(listEvents(db, { sessionId: session.id }).filter((event) => event.type === "command.queued"))
+      .toHaveLength(1);
+    await server.close();
+  });
+
+  it("retries interrupted jobs with a new continuation job without replaying the original prompt", async () => {
+    const session = createSession(db, { rootId: "local" });
+    const original = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Delete old artifacts",
+      workingPath: "."
+    });
+    const claimedAt = new Date("2026-10-27T00:00:00.000Z");
+    expect(claimNextJob(db, { workerId: "dead-worker", leaseMs: 1_000, now: claimedAt })?.id)
+      .toBe(original.job.id);
+    expect(recoverExpiredAgentJobs(db, new Date("2026-10-27T00:00:02.000Z"))).toBe(1);
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const first = await server.inject({
+      method: "POST",
+      url: `/api/jobs/${original.job.id}/retry`,
+      payload: { idempotencyKey: "retry-interrupted-1" }
+    });
+    const duplicate = await server.inject({
+      method: "POST",
+      url: `/api/jobs/${original.job.id}/retry`,
+      payload: { idempotencyKey: "retry-interrupted-1" }
+    });
+
+    expect(first.statusCode).toBe(202);
+    expect(first.json()).toMatchObject({
+      job: { id: expect.not.stringMatching(original.job.id), status: "queued", workingPath: "." },
+      transcriptMessage: {
+        role: "user",
+        content: expect.stringContaining("Continue from the interrupted turn")
+      }
+    });
+    expect(first.json().transcriptMessage.content).not.toContain(original.message.content);
+    expect(duplicate.json().job.id).toBe(first.json().job.id);
+    expect(listMessages(db, { sessionId: session.id })).toHaveLength(2);
     await server.close();
   });
 
@@ -4067,6 +4188,18 @@ describe("API server", () => {
       payload: { sessionId: firstSession.id, decision: "rejected", expectedRevision: first.approval.revision }
     });
     expect(rejected.statusCode).toBe(200);
+    expect(listEvents(db, { sessionId: firstSession.id })).toContainEqual(
+      expect.objectContaining({
+        jobId: firstJob.id,
+        type: "approval.updated",
+        payload: expect.objectContaining({
+          approvalId: first.approval.id,
+          capabilityRunId: first.run.id,
+          status: "rejected",
+          runState: "failed"
+        })
+      })
+    );
     const refreshed = await server.inject({ method: "GET", url: "/api/sessions?rootId=local" });
     expect(refreshed.json().sessions.find((session: { id: string }) => session.id === firstSession.id))
       .toMatchObject({ pendingApprovalCount: 0 });
@@ -4262,6 +4395,26 @@ describe("API server", () => {
     createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Summarize downloads"
+    });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: `/api/sessions/${session.id}`
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "Session has active work" });
+    expect(getSession(db, session.id)).toMatchObject({ id: session.id });
+    await server.close();
+  });
+
+  it("rejects deleting sessions with queued Agent commands", async () => {
+    const session = createSession(db, { rootId: "local" });
+    createAgentSessionCommand(db, {
+      sessionId: session.id,
+      idempotencyKey: "stats-before-delete",
+      type: "stats"
     });
     const server = await buildServer({ config: testConfig(tempDir), db });
 

@@ -1,5 +1,6 @@
 export { getApproval } from "./repositories/approvals.js";
 export * from "./repositories/approval-status.js";
+export * from "./repositories/agent-session-commands.js";
 export * from "./repositories/bluetooth-transfers.js";
 export * from "./repositories/capability-runs.js";
 export * from "./repositories/docker-console-authorizations.js";
