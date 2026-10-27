@@ -244,7 +244,7 @@ describe("worker processor", () => {
       commandRunner: async (input) => {
         db.prepare("UPDATE agent_session_commands SET lease_until = ? WHERE id = ?")
           .run(new Date(0).toISOString(), command.id);
-        await vi.waitFor(() => expect(input.isCancelled()).toBe(true));
+        await vi.waitFor(() => expect(input.isCancelled?.()).toBe(true));
         cancellationObserved = true;
         return { compacted: true };
       }
