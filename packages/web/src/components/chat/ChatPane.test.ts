@@ -74,6 +74,7 @@ describe("composerFeedbackState", () => {
     expect(
       composerFeedbackState({
         activeJobId: null,
+        activeJobStatus: null,
         messageSubmitting: true,
         status: "queued" as AppStatus
       })
@@ -84,20 +85,23 @@ describe("composerFeedbackState", () => {
     expect(
       composerFeedbackState({
         activeJobId: "job-1",
+        activeJobStatus: "queued",
         messageSubmitting: false,
-        status: "queued" as AppStatus
+        status: "ready" as AppStatus
       })
     ).toBe("queued");
     expect(
       composerFeedbackState({
         activeJobId: "job-1",
+        activeJobStatus: "running",
         messageSubmitting: false,
-        status: "agent-running" as AppStatus
+        status: "ready" as AppStatus
       })
     ).toBe("running");
     expect(
       composerFeedbackState({
         activeJobId: "job-1",
+        activeJobStatus: "running",
         messageSubmitting: false,
         status: "reconnecting" as AppStatus
       })
@@ -108,6 +112,7 @@ describe("composerFeedbackState", () => {
     expect(
       composerFeedbackState({
         activeJobId: null,
+        activeJobStatus: null,
         messageSubmitting: false,
         status: "queued" as AppStatus
       })
@@ -116,11 +121,11 @@ describe("composerFeedbackState", () => {
 });
 
 describe("hasActiveAgentTurn", () => {
-  it("enables turn controls only after the worker starts the job", () => {
-    expect(hasActiveAgentTurn("job-1", "agent-running")).toBe(true);
+  it("tracks the Agent job independently from the page status", () => {
+    expect(hasActiveAgentTurn("job-1", "running")).toBe(true);
     expect(hasActiveAgentTurn("job-1", "queued")).toBe(false);
-    expect(hasActiveAgentTurn("job-1", "ready")).toBe(false);
-    expect(hasActiveAgentTurn(null, "agent-running")).toBe(false);
+    expect(hasActiveAgentTurn("job-1", "completed")).toBe(false);
+    expect(hasActiveAgentTurn(null, "running")).toBe(false);
   });
 });
 
@@ -253,6 +258,7 @@ describe("ChatPane agent rail", () => {
         locale: "en",
         modelSettings: null,
         activeJobId: null,
+        activeJobStatus: null,
         messageSubmitting: false,
         hasSession: true,
         transcriptRef: createRef<HTMLDivElement>(),
@@ -323,6 +329,7 @@ describe("ChatPane agent rail", () => {
         locale: "en",
         modelSettings: null,
         activeJobId: null,
+        activeJobStatus: null,
         messageSubmitting: false,
         hasSession: true,
         transcriptRef: createRef<HTMLDivElement>(),
@@ -399,6 +406,7 @@ describe("ChatPane agent rail", () => {
         locale: "en",
         modelSettings: null,
         activeJobId: null,
+        activeJobStatus: null,
         messageSubmitting: false,
         hasSession: false,
         transcriptRef: createRef<HTMLDivElement>(),

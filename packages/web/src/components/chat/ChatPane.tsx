@@ -23,6 +23,7 @@ import remarkGfm from "remark-gfm";
 import type {
   CapabilityApproval,
   AgentToolActivity,
+  JobStatus,
   ModelProviderSettings,
   NasRoot,
   SessionSummary,
@@ -67,8 +68,8 @@ export function composeAgentMessage(message: string, composerPath: string | null
   return [composerPath, message.trim()].filter(Boolean).join("\n");
 }
 
-export function hasActiveAgentTurn(activeJobId: string | null, status: AppStatus): boolean {
-  return activeJobId !== null && status === "agent-running";
+export function hasActiveAgentTurn(activeJobId: string | null, activeJobStatus: JobStatus | null): boolean {
+  return activeJobId !== null && activeJobStatus === "running";
 }
 
 export function agentSessionHeaderTitle(
@@ -84,10 +85,12 @@ export function agentSessionHeaderTitle(
 
 export function composerFeedbackState({
   activeJobId,
+  activeJobStatus,
   messageSubmitting,
   status
 }: {
   activeJobId: string | null;
+  activeJobStatus: JobStatus | null;
   messageSubmitting: boolean;
   status: AppStatus;
 }): ComposerFeedbackState | null {
@@ -97,14 +100,14 @@ export function composerFeedbackState({
   if (!activeJobId) {
     return null;
   }
-  if (status === "queued") {
-    return "queued";
-  }
-  if (status === "agent-running") {
-    return "running";
-  }
   if (status === "reconnecting") {
     return "reconnecting";
+  }
+  if (activeJobStatus === "queued") {
+    return "queued";
+  }
+  if (activeJobStatus === "running") {
+    return "running";
   }
   return null;
 }
@@ -197,6 +200,7 @@ export function ChatPane({
   locale,
   modelSettings,
   activeJobId,
+  activeJobStatus,
   retryJobId = null,
   messageSubmitting,
   hasSession,
@@ -232,6 +236,7 @@ export function ChatPane({
   locale: SupportedLocale;
   modelSettings: ModelProviderSettings | null;
   activeJobId: string | null;
+  activeJobStatus: JobStatus | null;
   retryJobId?: string | null;
   messageSubmitting: boolean;
   hasSession: boolean;
@@ -265,8 +270,8 @@ export function ChatPane({
     || activeCapabilityApprovals.length > 0
     || agentToolActivities.length > 0;
   const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), rootAgentTitle);
-  const composerFeedback = composerFeedbackState({ activeJobId, messageSubmitting, status });
-  const activeAgentTurn = hasActiveAgentTurn(activeJobId, status);
+  const composerFeedback = composerFeedbackState({ activeJobId, activeJobStatus, messageSubmitting, status });
+  const activeAgentTurn = hasActiveAgentTurn(activeJobId, activeJobStatus);
   const deleteDisabled = !activeSessionSummary || composerFeedback !== null || status === "cancelling";
   const composerStatusId = "composer-status";
   const ComposerIcon = composerFeedback ? LoaderCircle : Send;
@@ -654,7 +659,7 @@ export function ChatPane({
                 className="secondary-button"
                 type="button"
                 onClick={onCancelActiveJob}
-                disabled={!activeJobId}
+                disabled={!activeJobId || status === "cancelling"}
                 aria-label={t("common.actions.stop")}
                 title={t("common.actions.stop")}
               >
@@ -669,6 +674,7 @@ export function ChatPane({
                   || (!message.trim() && !composerPath)
                   || messageSubmitting
                   || transcriptPhase === "loading"
+                  || status === "cancelling"
                   || (activeJobId !== null && !activeAgentTurn)
                 }
                 aria-busy={messageSubmitting || undefined}

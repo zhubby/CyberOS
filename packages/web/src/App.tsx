@@ -82,6 +82,7 @@ import {
   type IndexerSettings,
   type IndexSearchRequest,
   type IndexSearchResult,
+  type JobStatus,
   type SaveEditableTextResult,
   type FileListing,
   type ModelProviderSettings,
@@ -257,6 +258,7 @@ export function App() {
   const [composerPath, setComposerPath] = useState<string | null>(null);
   const [messageSubmitting, setMessageSubmitting] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [activeJobStatus, setActiveJobStatus] = useState<JobStatus | null>(null);
   const [retryJobId, setRetryJobId] = useState<string | null>(null);
   const [agentToolActivities, setAgentToolActivities] = useState<AgentToolActivity[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -684,11 +686,13 @@ export function App() {
       if (parsed.type === "job.running") {
         setStatus("agent-running");
         if (eventJobId) setActiveJobId(eventJobId);
+        setActiveJobStatus("running");
         setRetryJobId(null);
       }
       if (parsed.type === "job.completed") {
         setStatus("ready");
         setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
+        setActiveJobStatus(null);
         void refreshWorkQueues();
         void reloadSessions();
         setAgentToolActivities([]);
@@ -696,12 +700,14 @@ export function App() {
       if (parsed.type === "job.failed") {
         setStatus("error");
         setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
+        setActiveJobStatus(null);
         setAgentToolActivities([]);
         if (eventJobId && parsed.payload.retryable === true) setRetryJobId(eventJobId);
       }
       if (parsed.type === "job.cancelled") {
         setStatus("cancelled");
         setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
+        setActiveJobStatus(null);
         setAgentToolActivities([]);
       }
       if (parsed.type === "approval.pending" || parsed.type === "approval.updated") {
@@ -1501,6 +1507,7 @@ export function App() {
       const nextSessions = remainingSessions.length ? remainingSessions : await getSessions(selectedRootId);
       setSessions(nextSessions);
       setActiveJobId(null);
+      setActiveJobStatus(null);
       setMessage("");
       setComposerPath(null);
       await loadSessionIntoView(nextSession);
@@ -1517,6 +1524,7 @@ export function App() {
   function restoreSessionJob(nextSession: Session | SessionSummary): void {
     const activeJob = "activeJob" in nextSession ? nextSession.activeJob : null;
     setActiveJobId(activeJob?.id ?? null);
+    setActiveJobStatus(activeJob?.status ?? null);
     if (activeJob?.status === "running") {
       setStatus("agent-running");
     } else if (activeJob?.status === "queued") {
@@ -1700,7 +1708,7 @@ export function App() {
       return;
     }
 
-    const activeTurn = hasActiveAgentTurn(activeJobId, status);
+    const activeTurn = hasActiveAgentTurn(activeJobId, activeJobStatus);
     if (activeJobId && !activeTurn) return;
     const isQueuedInput = activeTurn && deliveryMode !== "prompt";
     const now = new Date().toISOString();
@@ -1733,6 +1741,7 @@ export function App() {
         message: result.transcriptMessage
       });
       setActiveJobId(result.job.id);
+      setActiveJobStatus((current) => current === "running" ? current : result.job.status);
       void reloadSessions();
     } catch (nextError) {
       if (!isQueuedInput) {
@@ -1752,7 +1761,7 @@ export function App() {
       return;
     }
     try {
-      if (hasActiveAgentTurn(activeJobId, status)) {
+      if (hasActiveAgentTurn(activeJobId, activeJobStatus)) {
         await sendAgentSessionCommand(session.id, "abort");
       } else {
         await cancelJob(activeJobId);
@@ -1769,6 +1778,7 @@ export function App() {
     const result = await retryAgentJob(retryJobId);
     setRetryJobId(null);
     setActiveJobId(result.job.id);
+    setActiveJobStatus((current) => current === "running" ? current : result.job.status);
     dispatchTranscript({
       type: "event",
       sessionId: result.job.sessionId,
@@ -2382,6 +2392,7 @@ export function App() {
       setActiveSessionId("");
       dispatchTranscript({ type: "reset" });
       setActiveJobId(null);
+      setActiveJobStatus(null);
     }
     activeSearchQueryRef.current = "";
     setSearchQuery("");
@@ -2675,6 +2686,7 @@ export function App() {
         locale={resolvedLocale}
         modelSettings={modelSettings}
         activeJobId={activeJobId}
+        activeJobStatus={activeJobStatus}
         retryJobId={retryJobId}
         hasSession={Boolean(session)}
         messageSubmitting={messageSubmitting}

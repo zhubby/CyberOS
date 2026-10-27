@@ -54,6 +54,7 @@ import type {
   IndexSearchSortField as SharedIndexSearchSortField,
   IndexerServiceStatus as SharedIndexerServiceStatus,
   IndexerSettingsRecord as SharedIndexerSettingsRecord,
+  JobStatus as SharedJobStatus,
   ModelProviderName as SharedModelProviderName,
   PublicBuildInfo,
   PublicModelProviderSettings,
@@ -318,8 +319,10 @@ export interface Job {
   id: string;
   sessionId: string;
   messageId: string;
-  status: string;
+  status: SharedJobStatus;
 }
+
+export type JobStatus = SharedJobStatus;
 
 export interface AgentMessage {
   id: string;
