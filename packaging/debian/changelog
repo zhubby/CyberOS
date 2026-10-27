@@ -1,3 +1,9 @@
+zos (1.7.0) unstable; urgency=medium
+
+  * Add complete Pi MCP capability parity with secure approvals and restricted shell access.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 27 Oct 2026 03:59:47 +0000
+
 zos (1.6.3) unstable; urgency=medium
 
   * Fix Photo indexing by validating derivative identity across atomic cache publication.
