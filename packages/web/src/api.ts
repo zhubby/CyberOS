@@ -167,6 +167,7 @@ import type {
   PublicMediaLibrarySettings as SharedPublicMediaLibrarySettings,
   TvModeStatus as SharedTvModeStatus
 } from "@zos/shared";
+import { createClientId } from "./lib/client-id.js";
 
 export interface NasRoot {
   id: string;
@@ -2584,7 +2585,7 @@ export async function sendAgentSessionCommand(
     body: JSON.stringify({
       type,
       payload,
-      idempotencyKey: crypto.randomUUID()
+      idempotencyKey: createClientId()
     })
   });
   await ensureOk(response);
@@ -2597,7 +2598,7 @@ export async function retryAgentJob(
   const response = await fetch(`/api/jobs/${jobId}/retry`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idempotencyKey: crypto.randomUUID() })
+    body: JSON.stringify({ idempotencyKey: createClientId() })
   });
   await ensureOk(response);
   return (await response.json()) as { job: Job; transcriptMessage: TranscriptMessage };

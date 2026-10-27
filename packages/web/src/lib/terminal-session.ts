@@ -1,3 +1,5 @@
+import { createClientId } from "./client-id.js";
+
 const TERMINAL_SESSION_KEY_PREFIX = "zos:terminal-session:v2:";
 const LEGACY_TERMINAL_SESSION_KEY_PREFIX = "zos:terminal-session:";
 
@@ -8,16 +10,7 @@ export interface TerminalSessionStorage {
 }
 
 export function createTerminalSessionId(): string {
-  if (typeof window !== "undefined") {
-    try {
-      if (typeof window.crypto.randomUUID === "function") {
-        return window.crypto.randomUUID();
-      }
-    } catch {
-      // Some embedded browsers expose crypto but block randomUUID.
-    }
-  }
-  return "00000000-0000-4000-8000-000000000000".replace(/[0]/gu, () => Math.floor(Math.random() * 16).toString(16));
+  return createClientId();
 }
 
 export function readStoredTerminalSessionId(rootId: string, storage = browserStorage()): string | null {
