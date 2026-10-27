@@ -82,7 +82,6 @@ import {
   type IndexerSettings,
   type IndexSearchRequest,
   type IndexSearchResult,
-  type JobStatus,
   type SaveEditableTextResult,
   type FileListing,
   type ModelProviderSettings,
@@ -139,6 +138,14 @@ import {
   type LanguagePreference
 } from "./i18n/locale.js";
 import { eventToTranscriptMessage, getEventJobId } from "./lib/events.js";
+import {
+  EMPTY_ACTIVE_AGENT_JOB,
+  markActiveAgentJobRunning,
+  markActiveAgentJobWaitingApproval,
+  settleActiveAgentJob,
+  targetsActiveAgentJob,
+  type ActiveAgentJobState
+} from "./lib/agent-job-state.js";
 import { initialTranscriptState, transcriptReducer } from "./lib/transcript.js";
 import { workspaceAbsolutePath, workspaceParentPath } from "./lib/chat-paths.js";
 import {
@@ -257,8 +264,17 @@ export function App() {
   const [message, setMessage] = useState("");
   const [composerPath, setComposerPath] = useState<string | null>(null);
   const [messageSubmitting, setMessageSubmitting] = useState(false);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [activeJobStatus, setActiveJobStatus] = useState<JobStatus | null>(null);
+  const [activeAgentJob, setActiveAgentJob] = useState<ActiveAgentJobState>(EMPTY_ACTIVE_AGENT_JOB);
+  const activeAgentJobRef = useRef<ActiveAgentJobState>(EMPTY_ACTIVE_AGENT_JOB);
+  const commitActiveAgentJob = useCallback((next: ActiveAgentJobState) => {
+    activeAgentJobRef.current = next;
+    setActiveAgentJob(next);
+  }, []);
+  const transitionActiveAgentJob = useCallback((transition: (current: ActiveAgentJobState) => ActiveAgentJobState) => {
+    commitActiveAgentJob(transition(activeAgentJobRef.current));
+  }, [commitActiveAgentJob]);
+  const activeJobId = activeAgentJob.id;
+  const activeJobStatus = activeAgentJob.status;
   const [retryJobId, setRetryJobId] = useState<string | null>(null);
   const [agentToolActivities, setAgentToolActivities] = useState<AgentToolActivity[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -685,33 +701,35 @@ export function App() {
       const eventJobId = getEventJobId(parsed);
       if (parsed.type === "job.running") {
         setStatus("agent-running");
-        if (eventJobId) setActiveJobId(eventJobId);
-        setActiveJobStatus("running");
+        transitionActiveAgentJob((current) => markActiveAgentJobRunning(current, eventJobId));
         setRetryJobId(null);
       }
-      if (parsed.type === "job.completed") {
+      const targetsCurrentJob = targetsActiveAgentJob(activeAgentJobRef.current, eventJobId);
+      if (parsed.type === "job.completed" && targetsCurrentJob) {
         setStatus("ready");
-        setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
-        setActiveJobStatus(null);
+        transitionActiveAgentJob((current) => settleActiveAgentJob(current, eventJobId));
         void refreshWorkQueues();
         void reloadSessions();
         setAgentToolActivities([]);
       }
-      if (parsed.type === "job.failed") {
+      if (parsed.type === "job.failed" && targetsCurrentJob) {
         setStatus("error");
-        setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
-        setActiveJobStatus(null);
+        transitionActiveAgentJob((current) => settleActiveAgentJob(current, eventJobId));
         setAgentToolActivities([]);
         if (eventJobId && parsed.payload.retryable === true) setRetryJobId(eventJobId);
       }
-      if (parsed.type === "job.cancelled") {
+      if (parsed.type === "job.cancelled" && targetsCurrentJob) {
         setStatus("cancelled");
-        setActiveJobId((current) => (!eventJobId || current === eventJobId ? null : current));
-        setActiveJobStatus(null);
+        transitionActiveAgentJob((current) => settleActiveAgentJob(current, eventJobId));
         setAgentToolActivities([]);
       }
       if (parsed.type === "approval.pending" || parsed.type === "approval.updated") {
-        setStatus("ready");
+        if (parsed.type === "approval.pending" && targetsCurrentJob) {
+          transitionActiveAgentJob((current) => markActiveAgentJobWaitingApproval(current, eventJobId));
+        }
+        if (targetsCurrentJob) {
+          setStatus("ready");
+        }
         void Promise.all([refreshWorkQueues(), reloadSessions()]);
       }
     };
@@ -1506,8 +1524,7 @@ export function App() {
       const nextSession = remainingSessions[0] ?? (await createSession(selectedRootId, "."));
       const nextSessions = remainingSessions.length ? remainingSessions : await getSessions(selectedRootId);
       setSessions(nextSessions);
-      setActiveJobId(null);
-      setActiveJobStatus(null);
+      commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
       setMessage("");
       setComposerPath(null);
       await loadSessionIntoView(nextSession);
@@ -1523,8 +1540,10 @@ export function App() {
 
   function restoreSessionJob(nextSession: Session | SessionSummary): void {
     const activeJob = "activeJob" in nextSession ? nextSession.activeJob : null;
-    setActiveJobId(activeJob?.id ?? null);
-    setActiveJobStatus(activeJob?.status ?? null);
+    commitActiveAgentJob({
+      id: activeJob?.id ?? null,
+      status: activeJob?.status ?? null
+    });
     if (activeJob?.status === "running") {
       setStatus("agent-running");
     } else if (activeJob?.status === "queued") {
@@ -1740,8 +1759,9 @@ export function App() {
         optimisticId: optimisticMessage.id,
         message: result.transcriptMessage
       });
-      setActiveJobId(result.job.id);
-      setActiveJobStatus((current) => current === "running" ? current : result.job.status);
+      transitionActiveAgentJob((current) => current.status === "running"
+        ? current
+        : { id: result.job.id, status: result.job.status });
       void reloadSessions();
     } catch (nextError) {
       if (!isQueuedInput) {
@@ -1777,8 +1797,9 @@ export function App() {
     if (!retryJobId) return;
     const result = await retryAgentJob(retryJobId);
     setRetryJobId(null);
-    setActiveJobId(result.job.id);
-    setActiveJobStatus((current) => current === "running" ? current : result.job.status);
+    transitionActiveAgentJob((current) => current.status === "running"
+      ? current
+      : { id: result.job.id, status: result.job.status });
     dispatchTranscript({
       type: "event",
       sessionId: result.job.sessionId,
@@ -2391,8 +2412,7 @@ export function App() {
       setSession(null);
       setActiveSessionId("");
       dispatchTranscript({ type: "reset" });
-      setActiveJobId(null);
-      setActiveJobStatus(null);
+      commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
     }
     activeSearchQueryRef.current = "";
     setSearchQuery("");
