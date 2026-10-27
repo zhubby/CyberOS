@@ -1,6 +1,6 @@
 {
   "name": "@zos/mcp",
-  "version": "1.7.5",
+  "version": "1.7.6",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -10,11 +10,11 @@
     "@modelcontextprotocol/fastify": "2.0.1",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
-    "@zos/capabilities": "1.7.5",
-    "@zos/capability-runtime": "1.7.5",
-    "@zos/db": "1.7.5",
-    "@zos/nas-tools": "1.7.5",
-    "@zos/shared": "1.7.5",
+    "@zos/capabilities": "1.7.6",
+    "@zos/capability-runtime": "1.7.6",
+    "@zos/db": "1.7.6",
+    "@zos/nas-tools": "1.7.6",
+    "@zos/shared": "1.7.6",
     "fastify": "^5.12.5",
     "zod": "^4.2.0"
   },

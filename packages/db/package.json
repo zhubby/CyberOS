@@ -1,14 +1,14 @@
 {
   "name": "@zos/db",
-  "version": "1.7.5",
+  "version": "1.7.6",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@zos/capabilities": "1.7.5",
-    "@zos/shared": "1.7.5",
+    "@zos/capabilities": "1.7.6",
+    "@zos/shared": "1.7.6",
     "better-sqlite3": "^12.2.0"
   }
 }
