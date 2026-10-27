@@ -1,14 +1,14 @@
 {
   "name": "@zos/mcp-cli",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "cd ../.. && tsup packages/mcp-cli/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir packages/mcp-cli/dist"
   },
   "dependencies": {
-    "@zos/capabilities": "1.7.3",
-    "@zos/db": "1.7.3",
-    "@zos/shared": "1.7.3"
+    "@zos/capabilities": "1.7.4",
+    "@zos/db": "1.7.4",
+    "@zos/shared": "1.7.4"
   }
 }
