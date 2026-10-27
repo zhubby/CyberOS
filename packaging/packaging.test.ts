@@ -704,7 +704,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("payload.series.some");
     expect(deployWorkflow).toContain("series.points.length > 720");
     expect(deployWorkflow).toContain("responseBytes > 4 * 1024 * 1024");
-    expect(deployWorkflow).toContain("elapsedMs > 1000");
+    expect(deployWorkflow).toContain("for (let attempt = 1; attempt <= 3; attempt += 1)");
+    expect(deployWorkflow).toContain("const bestElapsedMs = Math.min(...latencySamplesMs)");
+    expect(deployWorkflow).toContain("bestElapsedMs > 1000");
     expect(deployWorkflow).not.toContain("zos-terminal-helper.service");
     expect(migrationPreflight).toContain("/api/vms/summary");
     expect(migrationPreflight).toContain("recovery_audit");
