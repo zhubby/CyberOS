@@ -894,9 +894,9 @@ describe("native packaging artifacts", () => {
       "systemctl enable $RUNTIME_SERVICES",
       "start_service_stably zos-hostd.service",
       "start_service_stably zos-termux.service",
-      'restore_unit_state zos-vod-player.service "$state_dir"',
       "start_service_stably zos-api.service",
       "wait_for_url http://127.0.0.1:3010/health",
+      'restore_unit_state zos-vod-player.service "$state_dir"',
       "start_service_stably zos-monitor.service",
       "start_service_stably zos-alerter.service",
       "systemctl start zos-health.service",
@@ -951,7 +951,8 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain('failure_dir="$BACKUP_DIR/${manifest_tag}-retry-${retry_timestamp}"');
     expect(deploy).toContain('capture_runtime_diagnostics "$failure_dir"');
     expect(deploy).toContain("SHARE_SERVICES='smbd.service nmbd.service zos-webdav.service vsftpd.service nfs-server.service minidlna.service'");
-    expect(deploy).toContain("systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES $SHARE_SERVICES");
+    expect(deploy).toContain("systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES zos-vod-player.service $SHARE_SERVICES");
+    expect(deploy).toContain("-u zos-vod-player.service -u smbd.service");
     expect(deploy).toContain("-u vsftpd.service -u nfs-server.service -u minidlna.service");
     expect(deploy).toContain('cat "$target_diagnostics_path/services-status.txt" >&2');
     expect(deploy).toContain('cat "$target_diagnostics_path/services-journal.txt" >&2');

@@ -293,11 +293,16 @@ activate_runtime() {
   else
     systemctl disable zos-host-accessd.service >/dev/null 2>&1 || true
   fi
-  restore_unit_state zos-vod-player.service "$state_dir"
 
   log "starting the API and waiting for startup recovery"
   start_service_stably zos-api.service
   wait_for_url http://127.0.0.1:3010/health || die "API startup recovery failed"
+
+  # The player opens the shared SQLite database during startup. Restoring it
+  # before the API is healthy lets systemd satisfy After=zos-api.service while
+  # the API is still running migrations and recovery.
+  log "restoring the VOD player after API database recovery"
+  restore_unit_state zos-vod-player.service "$state_dir"
 
   log "starting monitoring after API database recovery"
   start_service_stably zos-monitor.service
@@ -465,9 +470,9 @@ EOF
 
 capture_runtime_diagnostics() {
   target_diagnostics_path=$1
-  systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
+  systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES zos-vod-player.service $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
   systemctl --failed --no-legend --plain > "$target_diagnostics_path/failed-units.txt" 2>&1 || true
-  journalctl -u zos-api.service -u zos-monitor.service -u zos-alerter.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-host-accessd.service -u zos-termux.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
+  journalctl -u zos-api.service -u zos-monitor.service -u zos-alerter.service -u zos-worker@1.service -u zos-photostaff.service -u zos-downloader.service -u zos-indexer.service -u zos-hostd.service -u zos-host-accessd.service -u zos-termux.service -u zos-vod-player.service -u smbd.service -u nmbd.service -u zos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
 
   log "service status at failure:" >&2
   cat "$target_diagnostics_path/services-status.txt" >&2
