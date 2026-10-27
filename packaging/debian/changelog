@@ -1,3 +1,9 @@
+zos (1.7.5) unstable; urgency=medium
+
+  * Keep Agent controls consistent across concurrent job events.
+
+ -- ZOS Maintainers <maintainers@zos.local>  Tue, 27 Oct 2026 14:45:45 +0000
+
 zos (1.7.4) unstable; urgency=medium
 
   * Prevent VOD startup races while restoring the appliance runtime.
