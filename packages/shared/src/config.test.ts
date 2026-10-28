@@ -393,6 +393,8 @@ describe("loadConfig", () => {
       CYBEROS_CONFIG: "/cyberos/config/config.toml",
       CYBEROS_ENVIRONMENT: "production"
     } as NodeJS.ProcessEnv;
+    const passwordFile = path.join(tempDir, "restic-password");
+    await writeFile(passwordFile, "secret\n");
 
     expect(() => loadConfig({ ...base, CYBEROS_VM_STORAGE_PATH: "/cyberos/state/vms" }, tempDir!))
       .toThrow("VM storage must be under /cyberos/vm");
@@ -403,22 +405,23 @@ describe("loadConfig", () => {
     expect(() => loadConfig({
       ...base,
       CYBEROS_BACKUP_ENABLED: "1",
-      CYBEROS_BACKUP_REPOSITORY: "/cyberos/data/pool-1/backups"
+      CYBEROS_BACKUP_REPOSITORY: "/cyberos/data/pool-1/backups",
+      CYBEROS_BACKUP_PASSWORD_FILE: passwordFile
     }, tempDir!)).toThrow("Production backup repository must be /cyberos/backup");
     expect(() => loadConfig({
       ...base,
       CYBEROS_BACKUP_ENABLED: "1",
-      CYBEROS_BACKUP_REPOSITORY: "/cyberos/backup/restic"
+      CYBEROS_BACKUP_REPOSITORY: "/cyberos/backup/restic",
+      CYBEROS_BACKUP_PASSWORD_FILE: passwordFile
     }, tempDir!)).toThrow("Production backup repository must be /cyberos/backup");
     expect(() => loadConfig({
       ...base,
       CYBEROS_BACKUP_ENABLED: "1",
       CYBEROS_BACKUP_REPOSITORY: "/cyberos/backup",
-      CYBEROS_BACKUP_STAGING_PATH: "/cyberos/logs/backup-staging"
+      CYBEROS_BACKUP_STAGING_PATH: "/cyberos/logs/backup-staging",
+      CYBEROS_BACKUP_PASSWORD_FILE: passwordFile
     }, tempDir!)).toThrow("Backup staging must be under /cyberos/state");
 
-    const passwordFile = path.join(tempDir, "restic-password");
-    await writeFile(passwordFile, "secret\n");
     expect(() => loadConfig({
       ...base,
       CYBEROS_BACKUP_ENABLED: "1",
