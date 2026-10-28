@@ -150,18 +150,24 @@
 
 @container workspace-stage (max-width: 620px) {
   .management-header {
-    grid-template-areas:
-      "icon copy"
-      "actions actions";
-    grid-template-columns: 36px minmax(0, 1fr);
-    gap: 10px 12px;
-    min-height: auto;
-    padding: 14px 16px;
+    grid-template-areas: "icon copy actions";
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 8px;
+    min-height: 64px;
+    padding: 12px;
   }
 
   .panel-header-actions {
-    width: 100%;
-    justify-content: flex-end;
+    width: auto;
+    max-width: min(200px, 40cqw);
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+
+  .panel-header-actions::-webkit-scrollbar {
+    display: none;
   }
 }
 

@@ -7,7 +7,6 @@ import {
   Check,
   CircleStop,
   CornerDownLeft,
-  HardDrive,
   ListEnd,
   LoaderCircle,
   MessageSquare,
@@ -481,12 +480,6 @@ export function ChatPane({
         <header className="chat-header">
           <div className="chat-header-copy">
             <h2>{activeSessionTitle}</h2>
-            <span className="chat-header-subtitle">
-              <HardDrive aria-hidden="true" size={13} />
-              <span className="chat-header-root">{selectedRoot?.name ?? t("chat.noRoot")}</span>
-              <span className="chat-header-subtitle-dot" aria-hidden="true" />
-              <span>{t("chat.localNasWorkspace")}</span>
-            </span>
           </div>
           <button
             type="button"

@@ -251,6 +251,7 @@ export function App() {
   const [operationsReady, setOperationsReady] = useState(false);
   const [uploadBatches, setUploadBatches] = useState<UploadBatchState[]>([]);
   const [currentPath, setCurrentPath] = useState(".");
+  const [fileListingLoading, setFileListingLoading] = useState(false);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [gitStatus, setGitStatus] = useState<FileListing["git"]>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
@@ -576,7 +577,7 @@ export function App() {
 
     let active = true;
     const pool = selectedStoragePool;
-    const fileRequestId = beginFileListingRequest();
+    const fileRequestId = beginFileListingRequest(true);
     setStatus("loading");
     setError(null);
     setSearchQuery("");
@@ -602,6 +603,7 @@ export function App() {
         if (!active || !isCurrentFileListingRequest(fileRequestId)) {
           return;
         }
+        finishFileListingRequest(fileRequestId);
         setError(toErrorMessage(nextError));
         setStatus("error");
       });
@@ -1564,7 +1566,7 @@ export function App() {
     const requestStoragePoolId = selectedStoragePoolId;
     setStatus(activeSearchQueryRef.current ? "searching" : "loading");
     try {
-      const committed = await refreshCurrentFileListing();
+      const committed = await refreshCurrentFileListing(activeSearchQueryRef.current, true);
       if (committed && selectedRootIdRef.current === requestRootId && selectedStoragePoolIdRef.current === requestStoragePoolId) {
         setStatus("ready");
       }
@@ -1577,16 +1579,24 @@ export function App() {
     }
   }
 
-  async function refreshCurrentFileListing(query = activeSearchQueryRef.current): Promise<boolean> {
+  async function refreshCurrentFileListing(
+    query = activeSearchQueryRef.current,
+    visible = false
+  ): Promise<boolean> {
     if (!selectedRootId || !selectedStoragePoolId) {
       return false;
     }
     if (query) {
-      return executeAdvancedSearch(undefined, null, false);
+      return executeAdvancedSearch(undefined, null, false, visible);
     }
-    const fileRequestId = beginFileListingRequest();
-    const listing = await loadFileListingForView(selectedRootId, currentPath, query, selectedStoragePoolId);
-    return commitFileListing(fileRequestId, listing);
+    const fileRequestId = beginFileListingRequest(visible);
+    try {
+      const listing = await loadFileListingForView(selectedRootId, currentPath, query, selectedStoragePoolId);
+      return commitFileListing(fileRequestId, listing);
+    } catch (error) {
+      finishFileListingRequest(fileRequestId);
+      throw error;
+    }
   }
 
   async function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -1597,7 +1607,8 @@ export function App() {
   async function executeAdvancedSearch(
     options = searchOptions,
     cursor: string | null = null,
-    append = false
+    append = false,
+    visible = true
   ): Promise<boolean> {
     const query = searchQuery.trim();
     const hasFilters = hasWorkspaceSearchFilters(options);
@@ -1612,7 +1623,7 @@ export function App() {
 
     setStatus("searching");
     activeSearchQueryRef.current = query || "__filters__";
-    const fileRequestId = beginFileListingRequest();
+    const fileRequestId = beginFileListingRequest(visible);
     try {
       const request: IndexSearchRequest = {
         rootId: selectedRootId,
@@ -1646,6 +1657,7 @@ export function App() {
       if (!isCurrentFileListingRequest(fileRequestId)) {
         return false;
       }
+      finishFileListingRequest(fileRequestId);
       setError(toErrorMessage(nextError));
       setStatus("error");
       return false;
@@ -1680,7 +1692,7 @@ export function App() {
     setSelectedFilePath(null);
     setPreviewMeta(null);
     setTextPreview(null);
-    const fileRequestId = beginFileListingRequest();
+    const fileRequestId = beginFileListingRequest(true);
     try {
       const nextListing = await getFiles(selectedRootId, pathname, selectedStoragePool.id);
       if (
@@ -1716,6 +1728,7 @@ export function App() {
       ) {
         return;
       }
+      finishFileListingRequest(fileRequestId);
       setError(toErrorMessage(nextError));
       setStatus("error");
     }
@@ -2402,7 +2415,7 @@ export function App() {
     preferredStoragePoolIdRef.current = pool.id;
     writeStoredStoragePoolId(pool.id);
 
-    beginFileListingRequest();
+    beginFileListingRequest(true);
     selectedRootIdRef.current = pool.rootId;
     selectedStoragePoolIdRef.current = pool.id;
     currentPathRef.current = pool.path;
@@ -2445,9 +2458,18 @@ export function App() {
     void openDirectory(pathname);
   }
 
-  function beginFileListingRequest(): number {
+  function beginFileListingRequest(visible = false): number {
     fileListingRequestId.current += 1;
+    setFileListingLoading(visible);
     return fileListingRequestId.current;
+  }
+
+  function finishFileListingRequest(requestId: number): boolean {
+    if (!isCurrentFileListingRequest(requestId)) {
+      return false;
+    }
+    setFileListingLoading(false);
+    return true;
   }
 
   function beginSessionViewRequest(): number {
@@ -2469,6 +2491,7 @@ export function App() {
     }
     setEntries(listing.entries);
     setGitStatus(listing.git);
+    setFileListingLoading(false);
     return true;
   }
 
@@ -2581,6 +2604,7 @@ export function App() {
     setStatus("loading");
     setError(null);
     setPreviewError(null);
+    const fileRequestId = beginFileListingRequest(true);
     const requestRootId = selectedRootId;
     const requestStoragePoolId = selectedStoragePool.id;
     const hadActiveSearch = Boolean(activeSearchQueryRef.current);
@@ -2612,6 +2636,7 @@ export function App() {
         }
       }
       setSelectedFilePath(linkedMeta.path);
+      finishFileListingRequest(fileRequestId);
       setStatus("ready");
     } catch (nextError) {
       if (
@@ -2620,6 +2645,7 @@ export function App() {
       ) {
         return;
       }
+      finishFileListingRequest(fileRequestId);
       setError(toErrorMessage(nextError));
       setStatus("error");
     }
@@ -2808,9 +2834,7 @@ export function App() {
         currentPath={currentPath}
         breadcrumbs={breadcrumbs}
         entries={entries}
-        fileListingLoading={
-          storageSummaryLoading || status === "starting" || status === "loading" || status === "searching"
-        }
+        fileListingLoading={storageSummaryLoading || fileListingLoading}
         gitStatus={gitStatus}
         selectedFilePath={selectedFilePath}
         previewMeta={previewMeta}
