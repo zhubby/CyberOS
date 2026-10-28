@@ -177,6 +177,7 @@ install_rust_toolchain() {
     sh "$rustup_init" -y --profile minimal --default-toolchain "$RUST_VERSION_REQUIRED"
     rm -f "$rustup_init"
   fi
+  "$CARGO_HOME/bin/rustup" set auto-self-update disable
   "$CARGO_HOME/bin/rustup" toolchain install "$RUST_VERSION_REQUIRED" --profile minimal
   "$CARGO_HOME/bin/rustup" default "$RUST_VERSION_REQUIRED"
   rustc --version | grep -Eq "^rustc ${RUST_VERSION_REQUIRED} " \

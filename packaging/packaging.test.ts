@@ -460,6 +460,7 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("CYBEROS_NPM_REGISTRY");
     expect(installer).toContain("CYBEROS_RUSTUP_INIT_URL");
     expect(installer).toContain("RUST_VERSION_REQUIRED=1.95.0");
+    expect(installer).toContain('rustup" set auto-self-update disable');
     expect(installer).toContain("CYBEROS_APT_BACKUP_DIR");
     expect(installer).toContain("/cyberos/system-backups/apt");
     expect(installer).toContain("CYBEROS_APT_BACKUP_DIR must be under /cyberos/system-backups");
