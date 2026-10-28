@@ -361,17 +361,17 @@ if command -v systemctl >/dev/null 2>&1; then
   if ! systemctl restart cyberos-alerter.service; then
     log "warning: alerting service failed to start; core services remain available"
   fi
-  systemctl start cyberos-health.service || \
-    log "warning: initial health evaluation failed; the health timer will retry"
   systemctl restart cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service
   if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
     systemctl enable --now cyberos-vod-player.service
   fi
-  systemctl enable \
+  systemctl enable --now \
     cyberos-maintenance.timer \
     cyberos-backup-daily.timer \
     cyberos-backup-weekly.timer \
     cyberos-health.timer
+  systemctl start cyberos-health.service || \
+    log "warning: initial health evaluation failed; the health timer will retry"
 fi
 
 if [ "$NGINX_ENABLED" = "1" ]; then

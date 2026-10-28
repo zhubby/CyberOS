@@ -279,15 +279,15 @@ activate_runtime() {
   log "starting alert evaluation after API database recovery"
   start_service_stably cyberos-alerter.service
 
-  log "refreshing health after monitoring startup"
-  systemctl start cyberos-health.service
-
   log "starting background database writers sequentially"
   start_service_stably cyberos-worker@1.service
   start_service_stably cyberos-photos.service
   start_service_stably cyberos-downloader.service
   start_service_stably cyberos-bluetoothd.service
   start_service_stably cyberos-indexer.service
+
+  log "refreshing health after all runtime services are stable"
+  systemctl start cyberos-health.service
 
   log "enabling CyberOS schedules"
   systemctl enable $TIMERS

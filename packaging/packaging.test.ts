@@ -501,6 +501,12 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("cyberos-nginx.sh");
     expect(installer).toContain("systemctl restart nginx");
     expect(installer).toContain("systemctl enable --now");
+    expect(installer).toMatch(
+      /systemctl enable --now \\\n\s+cyberos-maintenance\.timer \\\n\s+cyberos-backup-daily\.timer \\\n\s+cyberos-backup-weekly\.timer \\\n\s+cyberos-health\.timer/u
+    );
+    expect(installer.indexOf("systemctl restart cyberos-worker@1.service")).toBeLessThan(
+      installer.indexOf("systemctl start cyberos-health.service")
+    );
     expect(installer).toContain("systemctl restart cyberos-monitor.service");
     expect(installer).toContain("systemctl restart cyberos-alerter.service");
     expect(installer).toContain("systemctl start cyberos-health.service");
@@ -781,12 +787,12 @@ describe("native packaging artifacts", () => {
       'restore_unit_state cyberos-vod-player.service "$state_dir"',
       "start_service_stably cyberos-monitor.service",
       "start_service_stably cyberos-alerter.service",
-      "systemctl start cyberos-health.service",
       "start_service_stably cyberos-worker@1.service",
       "start_service_stably cyberos-photos.service",
       "start_service_stably cyberos-downloader.service",
       "start_service_stably cyberos-bluetoothd.service",
       "start_service_stably cyberos-indexer.service",
+      "systemctl start cyberos-health.service",
       "systemctl enable $TIMERS",
       "systemctl start $TIMERS",
       'restore_tv_runtime_state "$state_dir"'
