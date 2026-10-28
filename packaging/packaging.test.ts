@@ -538,6 +538,10 @@ describe("native packaging artifacts", () => {
     // Production runs the separately managed Node.js 22 binary in /usr/local;
     // Debian stable only needs to satisfy the package-level Node dependency.
     expect(control).toContain("Depends: nodejs (>= 20)");
+    const depends = control.match(/^Depends: (.+)$/mu)?.[1] ?? "";
+    const suggests = control.match(/^Suggests: (.+)$/mu)?.[1] ?? "";
+    expect(depends.split(", ")).toContain("smartmontools");
+    expect(suggests.split(", ")).not.toContain("smartmontools");
     expect(control).toContain("qemu-efi-aarch64");
     expect(control).toContain("ipxe-qemu");
     expect(postinst).toContain("-m 0711 /cyberos/vm");
