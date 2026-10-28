@@ -322,6 +322,7 @@ export const en = {
     storagePoolStates: {
       ready: "Ready",
       warning: "Attention",
+      offline: "Offline",
       unknown: "Unknown"
     },
     breadcrumbs: "Breadcrumbs",
@@ -3153,6 +3154,7 @@ export const zhCN = {
     storagePoolStates: {
       ready: "就绪",
       warning: "需关注",
+      offline: "离线",
       unknown: "未知"
     },
     breadcrumbs: "面包屑",

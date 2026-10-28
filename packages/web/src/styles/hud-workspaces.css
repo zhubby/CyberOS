@@ -1,0 +1,1161 @@
+/* Workspace-specific HUD composition for Agent and Files. */
+
+:root {
+  --hud-void: var(--zos-hud-void);
+  --hud-deep: var(--zos-hud-deep);
+  --hud-panel: var(--zos-hud-panel);
+  --hud-panel-raised: var(--zos-hud-panel-raised);
+  --hud-panel-hover: var(--zos-hud-panel-hover);
+  --hud-text: var(--zos-hud-text);
+  --hud-muted: var(--zos-hud-muted);
+  --hud-dim: var(--zos-hud-dim);
+  --hud-red: var(--zos-hud-red-soft);
+  --hud-red-strong: var(--zos-hud-red);
+  --hud-cyan: var(--zos-hud-cyan-soft);
+  --hud-yellow: var(--zos-hud-yellow);
+  --hud-line: var(--zos-hud-line);
+  --hud-line-soft: var(--zos-hud-line-soft);
+  --hud-cyan-soft: var(--zos-hud-cyan-wash);
+  --hud-yellow-soft: var(--zos-hud-yellow-wash);
+  --hud-grid: var(--zos-hud-grid);
+}
+
+.chat-pane,
+.workspace-stage[data-panel="files"],
+.mobile-tabs {
+  color-scheme: dark;
+}
+
+.chat-pane {
+  grid-template-columns: 72px minmax(0, 1fr);
+  color: var(--hud-text);
+  background: var(--hud-void);
+}
+
+.agent-list,
+.workspace-panel-rail {
+  color: var(--hud-text);
+  background:
+    linear-gradient(180deg, rgb(255 51 95 / 7%), transparent 24%),
+    var(--hud-void);
+}
+
+.agent-list {
+  padding: 10px 9px 8px;
+  border-right: 1px solid var(--hud-red);
+  box-shadow: inset -5px 0 0 rgb(255 51 95 / 6%);
+}
+
+.brand {
+  height: 58px;
+  padding-bottom: 9px;
+  border-bottom-color: var(--hud-line);
+  background: transparent;
+}
+
+.agent-brand-logo {
+  width: 34px;
+  height: 34px;
+  filter: invert(1) drop-shadow(2px 2px 0 rgb(255 51 95 / 74%));
+}
+
+.brand:hover .agent-brand-logo {
+  filter: invert(1) drop-shadow(2px 2px 0 var(--hud-cyan));
+  transform: translateY(-1px);
+}
+
+.agent-list-head {
+  padding: 9px 0 8px;
+}
+
+.agent-list-head::before {
+  color: var(--hud-red);
+}
+
+.agent-list-head button,
+.agent-notification-button,
+.agent-settings-button,
+.agent-power-button {
+  width: 46px;
+  height: 38px;
+  border-color: var(--hud-line-soft);
+  color: var(--hud-dim);
+  background: rgb(255 255 255 / 2%);
+}
+
+.agent-list-head button {
+  border-color: rgb(252 238 10 / 46%);
+  color: var(--hud-yellow);
+  background: var(--hud-yellow-soft);
+}
+
+.agent-list-head button:hover,
+.agent-notification-button:hover,
+.agent-settings-button:hover,
+.agent-power-button:hover {
+  border-color: var(--hud-cyan);
+  color: var(--hud-void);
+  background: var(--hud-cyan);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.session-list {
+  gap: 6px;
+}
+
+.session-item {
+  width: 48px;
+  height: 44px;
+  min-height: 44px;
+  border-color: transparent;
+  border-left: 2px solid var(--hud-line-soft);
+  color: var(--hud-dim);
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.session-item::after {
+  color: var(--hud-dim);
+}
+
+.session-item:hover {
+  border-color: var(--hud-cyan);
+  border-left-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-cyan-soft);
+}
+
+.session-item.is-active {
+  border-color: var(--hud-yellow);
+  border-left: 5px solid var(--hud-red);
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: 3px 3px 0 rgb(255 51 95 / 70%);
+}
+
+.agent-footer {
+  gap: 7px;
+  padding-top: 9px;
+  border-top-color: var(--hud-line);
+}
+
+.agent-status-indicator {
+  color: var(--hud-cyan);
+}
+
+.chat-main {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--hud-text);
+  background:
+    linear-gradient(115deg, rgb(255 51 95 / 5%), transparent 34%),
+    var(--hud-grid),
+    var(--hud-deep);
+  background-size: auto, 28px 28px, auto;
+  animation: hud-panel-reveal 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chat-main::after,
+.workspace-stage[data-panel="files"]::after {
+  position: absolute;
+  z-index: 12;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: rgb(51 230 242 / 58%);
+  box-shadow: 0 0 14px rgb(51 230 242 / 28%);
+  content: "";
+  pointer-events: none;
+  animation: hud-scan-once 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chat-header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto 34px;
+  align-items: center;
+  gap: 12px;
+  min-height: 70px;
+  padding: 10px 14px 10px 12px;
+  border-bottom: 1px solid var(--hud-red);
+  color: var(--hud-text);
+  background:
+    linear-gradient(90deg, rgb(255 51 95 / 9%), transparent 44%),
+    var(--hud-panel);
+  box-shadow: inset 0 -4px 0 rgb(255 51 95 / 5%);
+}
+
+.chat-header-index {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--hud-void);
+  background: var(--hud-red);
+  box-shadow: 3px 3px 0 var(--hud-cyan);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.chat-header-copy {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  height: auto;
+}
+
+.chat-header .chat-header-copy h2 {
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  color: var(--hud-text);
+  font-size: 21px;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chat-header .chat-header-copy h2::before {
+  content: none;
+}
+
+.chat-header-status,
+.files-header-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: rgb(51 230 242 / 6%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.chat-header-status-dot,
+.files-header-state > span:first-child {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+}
+
+.chat-header-status[data-state="error"],
+.chat-header-status[data-state="offline"],
+.files-header-state[data-state="offline"] {
+  border-color: var(--hud-red);
+  color: var(--hud-red);
+  background: rgb(255 51 95 / 8%);
+}
+
+.chat-header-status[data-state="loading"],
+.chat-header-status[data-state="starting"],
+.chat-header-status[data-state="queued"],
+.chat-header-status[data-state="reconnecting"],
+.files-header-state[data-state="warning"],
+.files-header-state[data-state="unknown"] {
+  border-color: var(--hud-yellow);
+  color: var(--hud-yellow);
+  background: var(--hud-yellow-soft);
+}
+
+.chat-header .chat-delete-session-button {
+  width: 34px;
+  height: 34px;
+  border-color: var(--hud-line);
+  color: var(--hud-red);
+  background: transparent;
+}
+
+.chat-header .chat-delete-session-button:hover:not(:disabled) {
+  border-color: var(--hud-red);
+  color: var(--hud-void);
+  background: var(--hud-red);
+}
+
+.chat-header .chat-delete-session-button:disabled {
+  border-color: var(--hud-line-soft);
+  color: var(--hud-dim);
+  background: transparent;
+}
+
+.transcript {
+  padding: 14px 12px 20px 14px;
+  background: transparent;
+}
+
+.message {
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 10px 17px 4px;
+  border-bottom: 1px solid var(--hud-line-soft);
+  color: var(--hud-text);
+}
+
+.message:hover {
+  background: linear-gradient(90deg, rgb(255 51 95 / 6%), transparent 68%);
+}
+
+.message .avatar {
+  width: 30px;
+  height: 30px;
+  border-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-void);
+  box-shadow: 3px 3px 0 rgb(51 230 242 / 36%);
+}
+
+.message-user .avatar {
+  border-color: var(--hud-red);
+  color: var(--hud-void);
+  background: var(--hud-red);
+  box-shadow: 3px 3px 0 rgb(255 51 95 / 35%);
+}
+
+.message > div:last-child,
+.message-user > div:last-child {
+  max-width: 76ch;
+  padding-left: 12px;
+  border-left: 2px solid var(--hud-cyan);
+}
+
+.message-user > div:last-child {
+  border-left-color: var(--hud-red);
+}
+
+.message header strong {
+  color: var(--hud-text);
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.message time,
+.message-meta {
+  color: var(--hud-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.message.is-streaming .message-meta,
+.message-assistant header strong {
+  color: var(--hud-cyan);
+}
+
+.message-user header strong {
+  color: var(--hud-red);
+}
+
+.chat-pane .message :where(.message-text, .message-markdown, p, li) {
+  color: var(--hud-text);
+}
+
+.chat-pane .message-markdown {
+  font-size: 13.5px;
+  line-height: 1.58;
+}
+
+.chat-pane .message-markdown a {
+  color: var(--hud-cyan);
+}
+
+.chat-pane .message-markdown blockquote {
+  border-left-color: var(--hud-red);
+  color: var(--hud-muted);
+}
+
+.chat-pane :where(.message-markdown code, .message-path-button, .message-code-block) {
+  border-color: var(--hud-line);
+  color: var(--hud-yellow);
+  background: var(--hud-void);
+}
+
+.chat-pane .message-markdown :where(th, td) {
+  border-color: var(--hud-line);
+}
+
+.chat-pane .message-markdown th {
+  color: var(--hud-cyan);
+  background: var(--hud-panel-raised);
+}
+
+.chat-pane .empty-state {
+  width: min(390px, calc(100% - 28px));
+  min-height: 180px;
+  margin: auto;
+  padding: 28px;
+  border: 1px solid var(--hud-line);
+  color: var(--hud-muted);
+  background:
+    linear-gradient(135deg, rgb(255 51 95 / 8%), transparent 48%),
+    var(--hud-panel);
+  box-shadow: 6px 6px 0 rgb(255 51 95 / 24%);
+}
+
+.chat-pane .empty-state > svg {
+  border-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-void);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.chat-pane .empty-state strong {
+  color: var(--hud-text);
+}
+
+.transcript-skeleton-avatar,
+.transcript-skeleton-heading,
+.transcript-skeleton-line {
+  background: var(--hud-panel-raised);
+}
+
+.agent-tool-activity > div {
+  border-color: var(--hud-line-soft);
+  color: var(--hud-muted);
+  background: rgb(22 13 18 / 78%);
+}
+
+.chat-pane .approval-card {
+  border-color: var(--hud-line);
+  color: var(--hud-text);
+  background: var(--hud-panel);
+  box-shadow: 4px 4px 0 rgb(255 51 95 / 25%);
+}
+
+.chat-pane .approval-card :where(strong, p, dd) {
+  color: var(--hud-text);
+}
+
+.composer {
+  gap: 8px;
+  margin: 0 14px 14px;
+  padding: 12px;
+  border: 1px solid var(--hud-line);
+  border-left: 3px solid var(--hud-yellow);
+  color: var(--hud-text);
+  background:
+    linear-gradient(90deg, rgb(255 51 95 / 6%) 1px, transparent 1px),
+    var(--hud-panel);
+  background-size: 28px 100%, auto;
+  box-shadow: 5px 5px 0 rgb(255 51 95 / 22%);
+}
+
+.composer::before {
+  top: -1px;
+  right: 18px;
+  width: 72px;
+  height: 2px;
+  background: var(--hud-cyan);
+  box-shadow: 0 0 10px rgb(51 230 242 / 34%);
+}
+
+.composer textarea {
+  min-height: 68px;
+  color: var(--hud-text) !important;
+  caret-color: var(--hud-cyan);
+}
+
+.composer textarea::placeholder {
+  color: var(--hud-dim) !important;
+}
+
+.composer :where(.composer-model-config, .composer-meta) {
+  color: var(--hud-muted);
+}
+
+.composer .composer-model-config svg {
+  color: var(--hud-cyan);
+}
+
+.composer-path-block {
+  border-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-cyan-soft);
+}
+
+.composer .secondary-button,
+.composer .primary-button {
+  border-color: var(--hud-yellow);
+  color: var(--hud-yellow);
+  background: transparent;
+  box-shadow: none;
+}
+
+.composer .primary-button {
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.composer .secondary-button:hover:not(:disabled) {
+  border-color: var(--hud-cyan);
+  color: var(--hud-void);
+  background: var(--hud-cyan);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.composer .primary-button:hover:not(:disabled) {
+  border-color: var(--hud-yellow);
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: 5px 5px 0 var(--hud-red);
+}
+
+.composer :where(.secondary-button, .primary-button):disabled {
+  border-color: var(--hud-line-soft);
+  color: var(--hud-dim);
+  background: rgb(255 255 255 / 2%);
+  box-shadow: none;
+}
+
+.composer-delivery {
+  border-color: var(--hud-line);
+  background: var(--hud-void);
+}
+
+.composer-delivery button {
+  color: var(--hud-muted);
+}
+
+.composer-delivery button.is-active {
+  color: var(--hud-void);
+  background: var(--hud-cyan);
+}
+
+.workspace-pane {
+  background: var(--hud-void);
+}
+
+.workspace-shell {
+  grid-template-columns: minmax(0, 1fr) 72px;
+  background: var(--hud-void);
+}
+
+.workspace-stage[data-panel="files"] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--hud-text);
+  background:
+    linear-gradient(120deg, rgb(255 51 95 / 5%), transparent 36%),
+    var(--hud-grid),
+    var(--hud-deep);
+  background-size: auto, 28px 28px, auto;
+}
+
+.workspace-panel-rail {
+  gap: 7px;
+  padding: 10px 8px;
+  border-left: 1px solid var(--hud-red);
+  box-shadow: inset 5px 0 0 rgb(255 51 95 / 6%);
+}
+
+.workspace-panel-tab {
+  width: 54px;
+  min-height: 52px;
+  border-color: transparent;
+  color: var(--hud-dim);
+  background: transparent;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.workspace-panel-tab span {
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.workspace-panel-tab:hover,
+.workspace-panel-tab:focus-visible {
+  border-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-cyan-soft);
+}
+
+.workspace-panel-tab.is-active {
+  border-color: var(--hud-yellow);
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: inset -5px 0 0 var(--hud-red), 3px 3px 0 rgb(255 51 95 / 55%);
+}
+
+.files-header {
+  position: relative;
+  grid-template-areas: "icon copy meta actions";
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  gap: 13px;
+  min-height: 70px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hud-red);
+  color: var(--hud-text);
+  background:
+    linear-gradient(90deg, rgb(255 51 95 / 9%), transparent 46%),
+    var(--hud-panel);
+  box-shadow: inset 0 -4px 0 rgb(255 51 95 / 5%);
+}
+
+.files-header .management-title-icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-void);
+  box-shadow: 3px 3px 0 rgb(51 230 242 / 30%);
+}
+
+.files-header .management-title-icon::after {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  color: var(--hud-red);
+  font: 800 7px/1 var(--font-mono);
+  content: "02";
+}
+
+.files-header .management-title-copy {
+  height: 40px;
+  grid-template-rows: 23px 13px;
+}
+
+.files-header .management-title-copy h2 {
+  color: var(--hud-text);
+  font-size: 21px;
+  line-height: 22px;
+}
+
+.files-header .management-title-copy h2::before {
+  content: none;
+}
+
+.files-header .management-title-copy p {
+  color: var(--hud-muted);
+}
+
+.panel-header-meta {
+  grid-area: meta;
+}
+
+.files-header-state[data-state="ready"] {
+  border-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+}
+
+.files-header-actions .files-header-button,
+.files-header-actions .activity-menu-button {
+  border-color: var(--hud-line-soft);
+  color: var(--hud-muted);
+  background: rgb(255 255 255 / 2%);
+}
+
+.files-header-actions :where(.files-header-button, .activity-menu-button):hover:not(:disabled) {
+  border-color: var(--hud-cyan);
+  color: var(--hud-void);
+  background: var(--hud-cyan);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.app-shell .files-header-actions .files-header-button:disabled,
+.app-shell .files-header-actions .activity-menu-button:disabled {
+  border-color: var(--hud-line-soft);
+  color: var(--hud-dim);
+  background: transparent;
+}
+
+.files-navigation-bar {
+  padding: 10px 14px 12px;
+  border-bottom: 1px solid var(--hud-line);
+  background:
+    linear-gradient(90deg, rgb(51 230 242 / 4%), transparent 52%),
+    var(--hud-panel-raised);
+}
+
+.files-navigation-bar .root-control label {
+  color: var(--hud-cyan);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.files-navigation-bar :where(.storage-pool-switcher-trigger, .search, .search input) {
+  border-color: var(--hud-line);
+  color: var(--hud-text);
+  background: var(--hud-void) !important;
+}
+
+.files-navigation-bar :where(.storage-pool-switcher-trigger, .search):hover {
+  border-color: var(--hud-cyan);
+}
+
+.files-navigation-bar .search svg {
+  color: var(--hud-cyan);
+}
+
+.files-navigation-bar .search input::placeholder {
+  color: var(--hud-dim);
+}
+
+.storage-pool-switcher-copy strong {
+  color: var(--hud-text);
+}
+
+.storage-pool-switcher-copy small {
+  color: var(--hud-muted);
+}
+
+.storage-pool-switcher-icon {
+  color: var(--hud-yellow);
+  background: var(--hud-yellow-soft);
+}
+
+.storage-pool-switcher-icon[data-state="ready"] {
+  color: var(--hud-cyan);
+  background: var(--hud-cyan-soft);
+}
+
+.storage-pool-menu,
+.workspace-search-filter-menu {
+  border-color: var(--hud-red);
+  color: var(--hud-text);
+  background: var(--hud-panel-raised);
+  box-shadow: 6px 6px 0 rgb(255 51 95 / 30%);
+}
+
+.workspace-stage[data-panel="files"] .workspace-grid {
+  padding: 12px 14px 16px;
+}
+
+.workspace-stage[data-panel="files"] .file-browser {
+  border: 1px solid var(--hud-line);
+  color: var(--hud-text);
+  background: var(--hud-panel);
+  box-shadow: 5px 5px 0 rgb(255 51 95 / 20%);
+}
+
+.files-list-header {
+  min-height: 58px;
+  border-bottom: 1px solid var(--hud-line);
+  background:
+    linear-gradient(90deg, rgb(255 51 95 / 8%), transparent 50%),
+    var(--hud-panel-raised);
+}
+
+.files-content-breadcrumbs {
+  color: var(--hud-text);
+}
+
+.files-content-breadcrumbs button {
+  color: var(--hud-cyan);
+}
+
+.files-content-breadcrumbs button:hover:not(:disabled) {
+  color: var(--hud-yellow);
+}
+
+.files-list-summary {
+  color: var(--hud-muted);
+}
+
+.workspace-stage[data-panel="files"] .file-row {
+  border-bottom-color: var(--hud-line-soft);
+  color: var(--hud-muted);
+  background: transparent;
+}
+
+.workspace-stage[data-panel="files"] .file-row-head {
+  border-bottom: 1px solid var(--hud-red);
+  color: var(--hud-cyan);
+  background: var(--hud-void);
+}
+
+.workspace-stage[data-panel="files"] .file-row:not(.file-row-head):hover,
+.workspace-stage[data-panel="files"] .file-row:not(.file-row-head):focus-visible {
+  color: var(--hud-text);
+  background: linear-gradient(90deg, rgb(51 230 242 / 10%), transparent 76%);
+  box-shadow: inset 3px 0 0 var(--hud-cyan);
+}
+
+.workspace-stage[data-panel="files"] .file-row.is-previewed,
+.workspace-stage[data-panel="files"] .file-row.is-batch-selected,
+.workspace-stage[data-panel="files"] .file-row[aria-selected="true"] {
+  color: var(--hud-text);
+  background: linear-gradient(90deg, rgb(255 51 95 / 15%), transparent 72%);
+  box-shadow: inset 5px 0 0 var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .file-name > svg {
+  color: var(--hud-cyan);
+}
+
+.workspace-stage[data-panel="files"] .file-row.is-batch-selected .file-name > svg {
+  color: var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .file-action-button {
+  border-color: var(--hud-line-soft);
+  color: var(--hud-muted);
+  background: var(--hud-void);
+}
+
+.workspace-stage[data-panel="files"] .file-action-button:hover:not(:disabled) {
+  border-color: var(--hud-cyan);
+  color: var(--hud-void);
+  background: var(--hud-cyan);
+}
+
+.workspace-stage[data-panel="files"] .file-action-button.is-danger {
+  color: var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .file-action-button.is-danger:hover:not(:disabled) {
+  border-color: var(--hud-red);
+  color: var(--hud-void);
+  background: var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .workspace-empty-state {
+  align-self: center;
+  width: min(410px, calc(100% - 32px));
+  min-height: 210px;
+  margin: auto;
+  border: 0;
+  border-block: 1px solid var(--hud-line);
+  color: var(--hud-muted);
+  background:
+    linear-gradient(90deg, transparent, rgb(255 51 95 / 7%) 50%, transparent);
+  box-shadow: none;
+}
+
+.workspace-stage[data-panel="files"] .workspace-empty-state > svg {
+  border-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-void);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .workspace-empty-state strong {
+  color: var(--hud-text);
+}
+
+.workspace-stage[data-panel="files"] .workspace-empty-state .secondary-button {
+  border-color: var(--hud-yellow);
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: 4px 4px 0 var(--hud-red);
+}
+
+.mobile-tabs {
+  border-bottom-color: var(--hud-red);
+  background: var(--hud-void);
+}
+
+.mobile-tab-buttons {
+  border-color: var(--hud-line);
+  background: var(--hud-deep);
+}
+
+.mobile-tab-buttons button {
+  color: var(--hud-muted);
+  background: transparent;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.mobile-tab-buttons button.is-active {
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: inset 0 -3px 0 var(--hud-red);
+}
+
+@keyframes hud-scan-once {
+  from {
+    top: 0;
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.82;
+  }
+  to {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes hud-panel-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-pane :where(button, textarea, a):focus-visible,
+.workspace-stage[data-panel="files"] :where(button, input, select, [tabindex="0"]):focus-visible,
+.workspace-panel-rail button:focus-visible,
+.mobile-tabs button:focus-visible {
+  outline: 2px solid var(--hud-cyan);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1040px) {
+  .chat-pane.is-mobile-active {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
+  .agent-list {
+    padding-inline: 5px;
+  }
+
+  .agent-list-head button,
+  .agent-notification-button,
+  .agent-settings-button,
+  .agent-power-button,
+  .session-item {
+    width: 44px;
+  }
+
+  .workspace-shell {
+    grid-template-columns: minmax(0, 1fr) 52px;
+  }
+
+  .workspace-panel-rail {
+    padding-inline: 4px;
+  }
+
+  .workspace-panel-tab {
+    width: 42px;
+    min-height: 46px;
+  }
+
+  .files-navigation-bar,
+  .files-navigation-bar.has-root-switcher,
+  .files-navigation-bar.has-storage-pool-switcher,
+  .files-navigation-bar.has-batch-selection,
+  .files-navigation-bar.has-root-switcher.has-storage-pool-switcher.has-multiple-switchers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-stage[data-panel="files"] .file-browser {
+    height: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .mobile-tabs {
+    padding: 7px 8px;
+  }
+
+  .mobile-tab-buttons {
+    gap: 0;
+  }
+
+  .mobile-tab-buttons button {
+    min-height: 40px;
+  }
+
+  .chat-header {
+    grid-template-columns: 36px minmax(0, 1fr) minmax(52px, auto) 34px;
+    gap: 8px;
+    min-height: 64px;
+    padding-inline: 10px;
+  }
+
+  .chat-header-index {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+
+  .chat-header .chat-header-copy h2 {
+    font-size: 18px;
+  }
+
+  .chat-header-status {
+    width: auto;
+    max-width: 72px;
+    min-height: 26px;
+    padding: 0 6px;
+    overflow: hidden;
+  }
+
+  .chat-header-status > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .message {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 9px;
+    padding-right: 4px;
+  }
+
+  .message .avatar {
+    width: 27px;
+    height: 27px;
+  }
+
+  .message > div:last-child,
+  .message-user > div:last-child {
+    padding-left: 9px;
+  }
+
+  .composer {
+    margin: 0 8px 9px;
+    padding: 10px;
+    box-shadow: 4px 4px 0 rgb(255 51 95 / 28%);
+  }
+
+  .files-header {
+    grid-template-areas: "icon copy meta actions";
+    grid-template-columns: 36px minmax(0, 1fr) minmax(44px, auto) 70px;
+    gap: 8px;
+    min-height: 64px;
+    padding-inline: 10px 7px;
+  }
+
+  .files-header .management-title-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .files-header .management-title-copy {
+    height: 36px;
+    grid-template-rows: 21px 12px;
+  }
+
+  .files-header .management-title-copy h2 {
+    font-size: 18px;
+    line-height: 20px;
+  }
+
+  .files-header-state {
+    width: auto;
+    max-width: 66px;
+    min-height: 26px;
+    padding: 0 6px;
+    overflow: hidden;
+  }
+
+  .files-header-state > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .files-header-actions {
+    width: 70px;
+    max-width: 70px;
+    overflow-x: auto;
+  }
+
+  .files-navigation-bar {
+    padding: 9px 10px 11px;
+  }
+
+  .workspace-stage[data-panel="files"] .workspace-grid {
+    padding: 10px 10px 14px;
+  }
+
+  .workspace-stage[data-panel="files"] .workspace-empty-state {
+    width: calc(100% - 20px);
+    min-height: 200px;
+    padding: 24px 14px;
+  }
+}
+
+@media (max-width: 360px) {
+  .chat-pane.is-mobile-active {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .agent-list-head button,
+  .agent-notification-button,
+  .agent-settings-button,
+  .agent-power-button,
+  .session-item {
+    width: 40px;
+  }
+
+  .chat-header {
+    grid-template-columns: 32px minmax(0, 1fr) minmax(44px, auto) 32px;
+    gap: 5px;
+    padding-inline: 7px;
+  }
+
+  .chat-header-index {
+    width: 31px;
+    height: 31px;
+  }
+
+  .chat-header .chat-header-copy h2,
+  .files-header .management-title-copy h2 {
+    font-size: 16px;
+  }
+
+  .workspace-shell {
+    grid-template-columns: minmax(0, 1fr) 48px;
+  }
+
+  .workspace-panel-tab {
+    width: 38px;
+  }
+
+  .files-header {
+    grid-template-columns: 32px minmax(0, 1fr) minmax(40px, auto) 68px;
+    gap: 5px;
+    padding-inline: 7px 5px;
+  }
+
+  .files-header .management-title-icon {
+    width: 31px;
+    height: 31px;
+  }
+
+  .chat-header-status,
+  .files-header-state {
+    max-width: 58px;
+    padding-inline: 5px;
+    font-size: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-main::after,
+  .workspace-stage[data-panel="files"]::after,
+  .chat-pane,
+  .chat-main,
+  .workspace-pane,
+  .session-item.is-active,
+  .workspace-panel-tab.is-active {
+    animation: none;
+  }
+
+  .chat-header-status,
+  .files-header-state,
+  .mobile-tab-buttons button,
+  .session-item,
+  .workspace-panel-tab {
+    transition: none;
+  }
+}

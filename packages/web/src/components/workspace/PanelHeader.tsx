@@ -5,6 +5,7 @@ export interface PanelHeaderProps {
   title: ReactNode;
   subtitle: ReactNode;
   actions: ReactNode;
+  meta?: ReactNode;
   className?: string;
 }
 
@@ -13,6 +14,7 @@ export function PanelHeader({
   title,
   subtitle,
   actions,
+  meta,
   className
 }: PanelHeaderProps) {
   return (
@@ -22,6 +24,7 @@ export function PanelHeader({
         <h2>{title}</h2>
         <p>{subtitle}</p>
       </div>
+      {meta ? <div className="panel-header-meta">{meta}</div> : null}
       {actions}
     </header>
   );

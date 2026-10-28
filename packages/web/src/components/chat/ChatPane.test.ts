@@ -290,6 +290,8 @@ describe("ChatPane agent rail", () => {
     expect(html).not.toContain("Local NAS workspace");
     expect(html).toContain('class="icon-button chat-delete-session-button"');
     expect(html).toContain('aria-label="Delete session"');
+    expect(html).toContain('class="chat-header-index" aria-hidden="true">01</span>');
+    expect(html).toContain('class="chat-header-status" data-state="ready" role="status" aria-label="Ready"');
     expect(html).toContain('class="agent-status-indicator"');
     expect(html).toContain('class="agent-notification-button"');
     expect(html).toContain('class="notification-badge"');

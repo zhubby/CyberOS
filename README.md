@@ -62,7 +62,7 @@ The following surfaces are intentionally limited today:
 - A local PTY terminal over WebSocket using a separately configured non-root host user (the API remains `zos`).
 - Optional Docker Engine and Compose discovery, metrics, logs, lifecycle actions, direct container/volume/network creation, and one-time approved console sessions.
 - Approval-gated SMB, WebDAV, FTP, NFS, and DLNA share configuration through the privileged Rust `zos-hostd` daemon.
-- English and Simplified Chinese UI, light/dark themes, preview limits, and editor font settings.
+- English and Simplified Chinese UI, a unified dark HUD theme, preview limits, and editor font settings.
 
 ### Native appliance services
 

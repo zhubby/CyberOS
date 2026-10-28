@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isPathWithinStoragePool } from "../../App.js";
-import { defaultWorkspaceSearchOptions, hasWorkspaceSearchFilters } from "./WorkspacePane.js";
+import { defaultWorkspaceSearchOptions, hasWorkspaceSearchFilters, storagePoolStateKey } from "./WorkspacePane.js";
 
 describe("isPathWithinStoragePool", () => {
   it("allows nested paths when the pool is mounted at the NAS root", () => {
@@ -26,5 +26,18 @@ describe("workspace search options", () => {
     expect(hasWorkspaceSearchFilters({ ...defaults, extractionStatuses: ["stale"] })).toBe(true);
     expect(hasWorkspaceSearchFilters({ ...defaults, sizeMin: "1024" })).toBe(true);
     expect(hasWorkspaceSearchFilters({ ...defaults, sort: { field: "mtime", direction: "desc" } })).toBe(true);
+  });
+});
+
+describe("storage pool HUD status", () => {
+  it("maps every pool state to a localized status key", () => {
+    expect(["ready", "warning", "offline", "unknown"].map((status) =>
+      storagePoolStateKey(status as Parameters<typeof storagePoolStateKey>[0])
+    )).toEqual([
+      "workspace.storagePoolStates.ready",
+      "workspace.storagePoolStates.warning",
+      "workspace.storagePoolStates.offline",
+      "workspace.storagePoolStates.unknown"
+    ]);
   });
 });

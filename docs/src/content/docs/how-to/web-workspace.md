@@ -87,7 +87,7 @@ Compose 项目区的“创建”按钮用于管理系统托管 App。名称用�
 
 “保存”只生成新的 revision 并显示“需要部署”；“保存并部署”在保存成功后发起现有 Compose Up approval，审批创建失败不会撤销已保存内容。Engine 离线时仍可查看、创建和编辑，但不能部署或删除。删除前必须先通过 Down approval 移除项目容器，再进行独立二次确认；删除 App 不会清理镜像、named volume、网络或 NAS bind mount 数据。
 
-设置面板可以修改 model provider、Pi tool policy、Docker 配置、语言、主题、预览大小和编辑器字体。保存 provider secret 后 UI 只显示是否已配置，不会回显密钥。
+设置面板可以修改 model provider、Pi tool policy、Docker 配置、语言、预览大小和编辑器字体。界面固定使用深色 HUD 主题；保存 provider secret 后 UI 只显示是否已配置，不会回显密钥。
 
 ## 常见状态判断
 

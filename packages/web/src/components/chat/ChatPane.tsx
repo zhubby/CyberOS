@@ -269,6 +269,8 @@ export function ChatPane({
     || activeCapabilityApprovals.length > 0
     || agentToolActivities.length > 0;
   const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), rootAgentTitle);
+  const activeSessionIndex = sessions.findIndex((item) => item.id === activeSessionId);
+  const activeSessionCode = String((activeSessionIndex >= 0 ? activeSessionIndex : 0) + 1).padStart(2, "0");
   const composerFeedback = composerFeedbackState({ activeJobId, activeJobStatus, messageSubmitting, status });
   const activeAgentTurn = hasActiveAgentTurn(activeJobId, activeJobStatus);
   const deleteDisabled = !activeSessionSummary || composerFeedback !== null || status === "cancelling";
@@ -478,8 +480,18 @@ export function ChatPane({
 
       <section className="chat-main" aria-label={t("chat.agentChat")}>
         <header className="chat-header">
+          <span className="chat-header-index" aria-hidden="true">{activeSessionCode}</span>
           <div className="chat-header-copy">
             <h2>{activeSessionTitle}</h2>
+          </div>
+          <div
+            className="chat-header-status"
+            data-state={status}
+            role="status"
+            aria-label={t(`status.${status}`)}
+          >
+            <span className="chat-header-status-dot" aria-hidden="true" />
+            <span>{t(`status.${status}`)}</span>
           </div>
           <button
             type="button"

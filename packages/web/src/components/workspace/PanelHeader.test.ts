@@ -11,6 +11,7 @@ describe("PanelHeader", () => {
       icon: createElement(RefreshCw, { "aria-hidden": true, size: 20 }),
       title: "Downloads",
       subtitle: "Queue and monitor downloads.",
+      meta: createElement("span", { className: "example-header-state", role: "status" }, "Ready"),
       actions: createElement(
         PanelHeaderActions,
         {
@@ -27,8 +28,11 @@ describe("PanelHeader", () => {
     expect(html).toContain('class="management-header example-header"');
     expect(html).toContain('<h2>Downloads</h2>');
     expect(html).toContain('<p>Queue and monitor downloads.</p>');
+    expect(html).toContain('class="panel-header-meta"');
+    expect(html).toContain('class="example-header-state" role="status">Ready</span>');
     expect(html.indexOf("management-title-icon")).toBeLessThan(html.indexOf("management-title-copy"));
-    expect(html.indexOf("management-title-copy")).toBeLessThan(html.indexOf("panel-header-actions"));
+    expect(html.indexOf("management-title-copy")).toBeLessThan(html.indexOf("panel-header-meta"));
+    expect(html.indexOf("panel-header-meta")).toBeLessThan(html.indexOf("panel-header-actions"));
     expect(html).not.toContain("eyebrow");
     expect(html).not.toContain("panel-inline-status");
   });

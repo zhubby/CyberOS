@@ -1392,3 +1392,577 @@ textarea {
     transition: none;
   }
 }
+
+/* Deep HUD global theme. Layout remains owned by the feature stylesheets. */
+
+.app-shell {
+  color: var(--text);
+  background:
+    linear-gradient(115deg, rgb(255 0 60 / 4%), transparent 36%),
+    var(--zos-hud-grid),
+    var(--app-bg);
+  background-size: auto, 28px 28px, auto;
+}
+
+.app-shell::after {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--cyber-red) 0 12%,
+    transparent 12% 76%,
+    var(--cyber-yellow) 76% 88%,
+    var(--cyber-cyan) 88%
+  );
+}
+
+.app-shell :where(input, textarea, select, .custom-select-trigger) {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--input-bg);
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+.app-shell :where(input, textarea, select, .custom-select-trigger):hover:not(:disabled) {
+  border-color: var(--zos-hud-line);
+}
+
+.app-shell :where(input, textarea, select, .custom-select-trigger):focus-visible,
+.app-shell .custom-select.is-open .custom-select-trigger {
+  border-color: var(--cyber-cyan);
+  box-shadow: inset 3px 0 0 var(--cyber-cyan);
+}
+
+.app-shell :where(input, textarea)::placeholder {
+  color: var(--muted-2);
+}
+
+.app-shell :where(
+  button,
+  a[href],
+  input,
+  textarea,
+  select,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline-color: var(--cyber-cyan);
+  box-shadow: var(--zos-focus-ring);
+}
+
+.app-shell :where(
+  .primary-button,
+  .is-primary,
+  .vm-create-submit,
+  .download-create-button
+) {
+  border-color: var(--cyber-yellow);
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: 3px 3px 0 rgb(255 0 60 / 55%);
+}
+
+.app-shell :where(
+  .primary-button,
+  .is-primary,
+  .vm-create-submit,
+  .download-create-button
+)::after {
+  border-color: var(--cyber-ink);
+}
+
+.app-shell :where(
+  .secondary-button,
+  .file-action-button,
+  .preview-tool-button,
+  .management-row-action,
+  .panel-header-action
+) {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.app-shell :where(
+  .secondary-button,
+  .file-action-button,
+  .preview-tool-button,
+  .management-row-action,
+  .panel-header-action
+):hover:not(:disabled) {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-cyan);
+  background: var(--surface-hover);
+}
+
+.app-shell :where(.danger-button, .is-danger) {
+  border-color: var(--cyber-red);
+  color: var(--cyber-ink);
+  background: var(--cyber-red);
+}
+
+.app-shell button:disabled,
+.app-shell [aria-disabled="true"] {
+  border-color: var(--control-disabled-border);
+  color: var(--control-disabled-text);
+  background: var(--control-disabled-bg);
+}
+
+.app-shell button[aria-busy="true"] {
+  border-color: var(--cyber-yellow);
+  color: var(--cyber-yellow);
+  background: var(--surface-strong);
+}
+
+.view-tabs {
+  border-bottom-color: var(--line);
+  background: var(--surface);
+}
+
+.view-tabs > button {
+  border-right-color: var(--line);
+  color: var(--muted);
+}
+
+.view-tabs > button:hover {
+  color: var(--cyber-cyan);
+  background: var(--zos-hud-cyan-wash);
+}
+
+.view-tabs > button[aria-selected="true"] {
+  border-bottom-color: var(--cyber-red);
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: inset 4px 0 0 var(--cyber-red);
+}
+
+.agent-list,
+.settings-rail,
+.workspace-panel-rail {
+  color: var(--text);
+  background:
+    linear-gradient(180deg, rgb(255 0 60 / 6%), transparent 28%),
+    var(--cyber-ink);
+}
+
+.agent-list,
+.settings-rail {
+  border-right-color: var(--cyber-red);
+}
+
+.brand,
+.workspace-header,
+.panel-header,
+.management-header,
+.settings-content-header,
+.notification-drawer-header,
+.preview-toolbar,
+.editor-header,
+.editor-footer {
+  border-color: var(--zos-hud-line);
+  color: var(--text);
+  background:
+    linear-gradient(90deg, rgb(255 0 60 / 8%), transparent 46%),
+    var(--surface);
+}
+
+.brand-banner,
+.brand-banner-wordmark {
+  color: var(--cyber-yellow);
+}
+
+.agent-list-head,
+.dock-title,
+.settings-nav h3 {
+  color: var(--muted-2);
+}
+
+.agent-list-head button,
+.settings-button,
+.agent-notification-button,
+.agent-power-button,
+.agent-list .icon-button,
+.workspace-header .icon-button,
+.settings-content-header button,
+.notification-drawer-actions button {
+  border-color: var(--line);
+  color: var(--muted);
+  background: rgb(244 236 231 / 3%);
+}
+
+.agent-list-head button:hover,
+.settings-button:hover,
+.agent-notification-button:hover,
+.agent-power-button:hover,
+.agent-list .icon-button:hover,
+.workspace-header .icon-button:hover:not(:disabled),
+.settings-content-header button:hover,
+.notification-drawer-actions button:hover:not(:disabled) {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-ink);
+  background: var(--cyber-cyan);
+}
+
+.workspace-pane,
+.workspace-stage,
+.management-body,
+.settings-content,
+.photo-library {
+  color: var(--text);
+  background:
+    linear-gradient(120deg, rgb(255 0 60 / 3%), transparent 40%),
+    var(--zos-hud-grid),
+    var(--channel-bg);
+  background-size: auto, 28px 28px, auto;
+}
+
+.workspace-panel-tab {
+  border-color: transparent;
+  color: var(--muted-2);
+  background: transparent;
+}
+
+.workspace-panel-tab:hover {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-cyan);
+  background: var(--zos-hud-cyan-wash);
+}
+
+.workspace-panel-tab.is-active {
+  border-color: var(--cyber-yellow);
+  border-left-color: var(--cyber-red);
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: 3px 3px 0 rgb(255 0 60 / 55%);
+}
+
+.settings-backdrop,
+.editor-backdrop,
+.management-modal-backdrop,
+.preview-backdrop,
+.notification-drawer-backdrop {
+  background: var(--modal-backdrop);
+}
+
+.settings-modal,
+.editor-modal,
+.management-dialog,
+.management-modal,
+.preview-dialog,
+.file-preview-dialog,
+.notification-drawer {
+  border-color: var(--zos-hud-line);
+  color: var(--text);
+  background: var(--dialog-bg);
+  box-shadow: 8px 8px 0 rgb(255 0 60 / 28%);
+}
+
+.settings-nav button {
+  color: var(--muted);
+}
+
+.settings-nav button:hover {
+  color: var(--cyber-cyan);
+  background: var(--zos-hud-cyan-wash);
+}
+
+.settings-nav button.is-active {
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: inset 5px 0 0 var(--cyber-red);
+}
+
+.settings-search input,
+.settings-field input,
+.settings-field textarea,
+.settings-field select {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--input-bg);
+}
+
+.management-dashboard-widget,
+.management-section,
+.management-metric,
+.management-command-panel,
+.download-task,
+.settings-section-card,
+.settings-policy-row,
+.monitoring-alert-table-wrap,
+.monitoring-incident-list article,
+.monitoring-incident-detail-section,
+.settings-alerts-section,
+.activity-popover,
+.notification-item,
+.workspace-empty-state,
+.preview-empty {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 rgb(255 0 60 / 22%);
+}
+
+.management-dashboard-widget:hover,
+.download-task:hover,
+.monitoring-incident-list article:hover,
+.notification-item:hover {
+  border-color: var(--cyber-cyan);
+  background: var(--surface-hover);
+}
+
+.management-command-panel,
+.management-section,
+.settings-section-card,
+.monitoring-incident-detail-section,
+.settings-alerts-section {
+  box-shadow: none;
+}
+
+.management-widget-content > .management-command-panel,
+.management-widget-content > .management-section,
+.management-widget-content > .management-metric {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.management-emblem {
+  border-radius: 0;
+  border-color: var(--cyber-red);
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+  box-shadow: 3px 3px 0 var(--cyber-red);
+}
+
+.management-fact-list div {
+  padding-inline: 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.management-table,
+.management-data-table,
+.monitoring-alert-table,
+.file-table {
+  color: var(--text);
+  background: transparent;
+}
+
+.management-table th,
+.management-data-table th,
+.monitoring-alert-table th,
+.file-row-head {
+  border-color: var(--zos-hud-line);
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.management-table td,
+.management-data-table td,
+.monitoring-alert-table td,
+.file-row {
+  border-color: var(--line);
+}
+
+.management-table tbody tr:hover,
+.management-data-table tbody tr:hover,
+.monitoring-alert-table tbody tr:hover {
+  background: var(--zos-hud-cyan-wash);
+  box-shadow: inset 3px 0 0 var(--cyber-cyan);
+}
+
+.management-status-pill,
+.management-row-status,
+.editor-status,
+.preview-kind,
+.risk-pill,
+.settings-area-list em {
+  border: 1px solid currentColor;
+  color: var(--muted);
+  background: rgb(244 236 231 / 4%);
+  font-family: var(--font-mono);
+}
+
+.management-status-pill[data-state="ready"],
+.management-row-status[data-state="ready"],
+.editor-status[data-state="saved"] {
+  color: var(--success-text);
+}
+
+.management-status-pill[data-state="warning"],
+.management-row-status[data-state="warning"] {
+  color: var(--warning-text);
+}
+
+.management-status-pill[data-state="error"],
+.management-row-status[data-state="error"],
+.editor-status[data-state="error"] {
+  color: var(--danger-text);
+}
+
+.photo-library,
+.photo-query-panel,
+.photo-toolbar,
+.photo-map-toolbar {
+  border-color: var(--zos-hud-line);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.photo-query-panel {
+  box-shadow: inset 0 -3px 0 rgb(255 0 60 / 10%);
+}
+
+.photo-view-switch,
+.photo-condition-mode,
+.photo-search-field,
+.photo-common-filters .photo-location-filter,
+.photo-sort-field > button,
+.photo-common-filters input,
+.photo-condition-row input {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--input-bg);
+}
+
+.photo-view-switch button[aria-selected="true"],
+.photo-condition-mode button[aria-pressed="true"],
+.photo-keyword-facets button[aria-pressed="true"] {
+  border-color: var(--cyber-red);
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: inset 4px 0 0 var(--cyber-red);
+}
+
+.photo-timeline,
+.photo-map-view,
+.photo-map-canvas,
+.photo-coordinate-canvas,
+.photo-lightbox,
+.photo-lightbox-media,
+.preview-surface,
+.editor-code-surface,
+.terminal-surface,
+.local-terminal-frame,
+.workspace-terminal-frame {
+  color: var(--preview-text);
+  background: var(--cyber-ink);
+}
+
+.photo-lightbox-meta,
+.photo-metadata-inspector,
+.preview-sidebar {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.notification-drawer {
+  border-left-color: var(--cyber-red);
+}
+
+.notification-item[data-unread="true"] {
+  background: var(--zos-hud-red-wash);
+  box-shadow: inset 4px 0 0 var(--cyber-red);
+}
+
+.notification-unread-dot,
+.activity-unread-dot {
+  border-color: var(--cyber-ink);
+  background: var(--cyber-red);
+  box-shadow: 0 0 8px rgb(255 0 60 / 48%);
+}
+
+.activity-popover::before {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.activity-popover li,
+.activity-upload-item {
+  border-color: var(--line) !important;
+  color: var(--muted);
+  background: var(--subtle-bg) !important;
+}
+
+.app-notification {
+  border-color: var(--danger-border);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 5px 5px 0 rgb(255 0 60 / 38%), inset 4px 0 0 var(--red);
+}
+
+.editor-modal,
+.editor-header,
+.editor-footer {
+  background-color: var(--surface);
+}
+
+.editor-code-surface {
+  box-shadow: inset 4px 0 0 rgb(0 240 255 / 18%);
+}
+
+.editor-code-surface:focus-within {
+  box-shadow: inset 4px 0 0 var(--cyber-cyan);
+}
+
+.editor-textarea::selection {
+  background: var(--selection-bg);
+}
+
+.app-shell :where(
+  .settings-modal,
+  .editor-modal,
+  .management-dialog,
+  .management-modal,
+  .preview-dialog,
+  .file-preview-dialog,
+  .activity-popover,
+  .management-dashboard-widget,
+  .management-section,
+  .management-metric,
+  .management-command-panel,
+  .download-task,
+  .settings-section-card,
+  .settings-policy-row,
+  .monitoring-alert-table-wrap,
+  .monitoring-incident-list article,
+  .monitoring-incident-detail-section,
+  .settings-alerts-section,
+  .photo-query-panel,
+  .photo-search-field,
+  .photo-view-switch,
+  .photo-condition-mode,
+  .photo-lightbox-meta,
+  .photo-metadata-inspector,
+  .photo-lightbox,
+  .photo-lightbox-media,
+  .preview-sidebar,
+  .preview-surface,
+  .editor-code-surface,
+  .terminal-surface,
+  .local-terminal-frame,
+  .workspace-terminal-frame,
+  .notification-status-icon,
+  .activity-upload-icon,
+  .app-notification
+) {
+  border-radius: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after {
+    scroll-behavior: auto !important;
+  }
+}

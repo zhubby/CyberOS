@@ -146,6 +146,10 @@ export interface FileStoragePoolOption {
   status: "ready" | "warning" | "offline" | "unknown";
 }
 
+export function storagePoolStateKey(status: FileStoragePoolOption["status"]): `workspace.storagePoolStates.${FileStoragePoolOption["status"]}` {
+  return `workspace.storagePoolStates.${status}`;
+}
+
 export interface WorkspaceSearchOptions {
   categories: IndexSearchCategory[];
   extractionSources: NonNullable<IndexSearchRequest["extractionSources"]>;
@@ -597,6 +601,7 @@ export function WorkspacePane({
   const previewScopeRef = useRef(`${selectedRootId}\0${selectedStoragePoolId}\0${currentPath}`);
   const dragDepthRef = useRef(0);
   const selectedStoragePool = storagePools.find((pool) => pool.id === selectedStoragePoolId);
+  const selectedStoragePoolState = selectedStoragePool?.status ?? "unknown";
   const hasStoragePool = Boolean(selectedStoragePool);
   const storagePoolPathDepth = selectedStoragePool?.path.split("/").filter(Boolean).length ?? 0;
   const visibleBreadcrumbs = selectedStoragePool ? breadcrumbs.slice(storagePoolPathDepth) : breadcrumbs;
@@ -1234,6 +1239,16 @@ export function WorkspacePane({
                 icon={<Files aria-hidden="true" size={20} />}
                 title={t("workspace.files")}
                 subtitle={t("workspace.filesManagementDescription")}
+                meta={(
+                  <span
+                    className="files-header-state"
+                    data-state={selectedStoragePoolState}
+                    role="status"
+                  >
+                    <span aria-hidden="true" />
+                    <span>{t(storagePoolStateKey(selectedStoragePoolState))}</span>
+                  </span>
+                )}
                 actions={<PanelHeaderActions label={t("workspace.management.actions.label")} className="files-header-actions">
                   <PanelHeaderAction
                     className="files-header-button"

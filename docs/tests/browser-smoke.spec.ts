@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 test("serves the documentation site under /docs with navigation, search, and diagrams", async ({ page }) => {
   await page.goto("/docs/");
   await expect(page).toHaveTitle(/ZOS/);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator("starlight-theme-select")).toHaveCount(0);
   await expect(page.locator("a[href='/docs/architecture/system-overview/']").first()).toBeVisible();
   await expect(page.locator("input[placeholder*='搜索'], button[aria-label*='搜索']").first()).toBeVisible();
 
