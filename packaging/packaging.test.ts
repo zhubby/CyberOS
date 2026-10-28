@@ -123,7 +123,8 @@ describe("native packaging artifacts", () => {
     expect(vodPlayerUnit).toContain("WatchdogSec=20s");
     expect(vodPlayerUnit).toContain("TimeoutStopSec=30s");
     expect(vodPlayerUnit).toContain("ProtectSystem=strict");
-    expect(vodPlayerUnit).toContain("/cyberos/state/cyberos.sqlite-wal");
+    expect(vodPlayerUnit).toContain("ReadWritePaths=/run/cyberos /cyberos/state");
+    expect(vodPlayerUnit).not.toMatch(/cyberos\.sqlite-(?:shm|wal)/u);
     expect(vodPlayerUnit).toContain("Wants=cyberos-api.service bluetooth.service bluealsa.service");
     expect(vodPlayerUnit).toContain("Environment=CYBEROS_ENVIRONMENT=production");
     expect(vodPlayerUnit).not.toContain("RequiresMountsFor=/cyberos/data");
@@ -196,7 +197,8 @@ describe("native packaging artifacts", () => {
     expect(bluetoothUnit).toContain("ExecStart=/usr/bin/dbus-run-session -- /usr/lib/cyberos/bin/cyberos-bluetoothd");
     expect(bluetoothUnit).toContain("RequiresMountsFor=/cyberos/data");
     expect(bluetoothUnit).toContain("Environment=CYBEROS_ENVIRONMENT=production");
-    expect(bluetoothUnit).toContain("ReadWritePaths=/cyberos/state/bluetooth");
+    expect(bluetoothUnit).toContain("ReadWritePaths=/cyberos/state");
+    expect(bluetoothUnit).not.toMatch(/cyberos\.sqlite-(?:shm|wal)/u);
     expect(bluetoothUnit).toContain("ReadOnlyPaths=/cyberos/data");
     expect(bluetoothUnit).not.toMatch(/ReadWritePaths=.*(?:^|\s)\/cyberos\/data(?:\s|$)/mu);
     expect(bluetoothUnit).toContain("RestrictAddressFamilies=AF_UNIX AF_BLUETOOTH");
