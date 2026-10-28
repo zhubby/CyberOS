@@ -487,8 +487,7 @@ textarea {
 .management-dashboard-widget,
 .management-section,
 .management-metric,
-.download-task,
-.photo-runtime-status {
+.download-task {
   border-color: var(--line-soft);
   border-radius: 8px;
   background: var(--channel-bg);

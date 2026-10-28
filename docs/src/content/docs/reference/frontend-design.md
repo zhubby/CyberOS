@@ -19,6 +19,7 @@ sourceOfTruth:
   - packages/web/src/components/workspace/PanelHeader.tsx
   - packages/web/src/components/workspace/WorkspacePane.tsx
   - packages/web/src/components/workspace/PhotoLibraryPanel.tsx
+  - packages/web/src/components/workspace/PhotoSearchFilterMenu.tsx
   - packages/web/src/components/settings/SettingsIndexerPage.tsx
   - packages/web/public/zos-icon.svg
   - docs/src/styles/custom.css
@@ -72,7 +73,7 @@ ZOS 是运行在个人 Linux NAS 上的本地运维工作台，不是营销页�
 | `1040px` | 切换为单列；顶部只保留“聊天 / 工作区”主视图切换；Agent 底部的通知和设置仍是唯一入口。 |
 | `860px` | 设置弹窗切为上下结构，设置导航变为横向滚动。 |
 | `620px` | 管理区和文件区进一步收窄；文件导航、搜索和批量操作可堆叠，但页头保持单行 `64px`。 |
-| `520px` | 预览模式下隐藏次要文件列，保持文件名和核心操作可用。 |
+| `520px` | 预览模式下隐藏次要文件列，保持文件名和核心操作可用；Photo 瀑布墙固定为两列。 |
 | `360px` | Composer 的主次按钮收窄为图标按钮，不能让输入区或发送操作溢出。 |
 
 窄屏验收必须覆盖 `820/560/390/320px`。顶部主视图切换不是第二套导航，不能再放通知、设置等已存在于 Agent 底部的重复入口。
@@ -179,6 +180,10 @@ Workspace 是操作工作区，不是装饰性资源卡片。文件列表、预�
 - 文件列表使用稳定的网格列：名称、操作、大小、修改时间；排序按钮是可访问的真实按钮。
 - 文件搜索默认保持紧凑单行；高级筛选从 `SlidersHorizontal` 图标按钮打开，菜单承载类别、MIME、时间、大小、提取来源/状态和排序，不在主工具栏长期占据多行空间。Escape 关闭菜单并恢复焦点。
 - 搜索结果正文只渲染纯文本和结构化高亮范围，不注入服务端 HTML；snippet 最多显示两行。分页使用稳定的“加载更多”操作追加结果，不改变当前筛选、排序或已有行的位置。
+- Photo 面板沿用紧凑单行搜索和 `SlidersHorizontal` 筛选入口；类型、相机、镜头、日期、曝光、评分、位置、关键词和高级元数据条件全部在可滚动弹层内编辑，并通过“应用”一次提交。关闭弹层不提交草稿，重置筛选时保留文本搜索。
+- Photo 的 storage pool、媒体路径和正常运行状态不占用常驻信息栏。只有降级、离线、Worker 异常或稳定错误码存在时，才在查询工具栏显示可聚焦的异常图标，并通过悬停、焦点和辅助技术提供状态详情；阻断首次加载的错误仍使用带重试操作的正文空状态。
+- Photo 时间线保留日期分组，组内按 API 提供且已处理 EXIF 方向的真实宽高比使用 CSS 多列瀑布墙。DOM、键盘和灯箱顺序保持 API 顺序，不使用会重排节点的 dense 布局。
+- Photo 首次和后续查询均按稳定游标分页。时间线底部进入视口附近时自动追加一页，缩略图继续延迟加载和异步解码；分页失败后暂停自动请求并显示紧凑重试，地图视图不启用时间线分页观察器。
 - 文件操作集中在操作列，按钮组右侧保留可感知间距，不能贴住 `SIZE` 或时间列。
 - 行 hover、选中、禁用和键盘 focus 必须有区别；危险操作使用危险语义而不是单纯改变图标。
 - 文件名、路径、端口、镜像名等长内容使用省略、title 或安全换行，不能造成布局抖动。

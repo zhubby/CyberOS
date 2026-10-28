@@ -1,19 +1,34 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { PhotoAsset, PhotoMapSettingsResponse } from "../../api.js";
+import type {
+  PhotoAsset,
+  PhotoLibraryStatus,
+  PhotoMapSettingsResponse,
+  PhotoQueryAsset,
+  PhotoWorkerHealth
+} from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
 import {
   groupPhotosByDate,
   isPhotoBusy,
+  mergePhotos,
+  photoAspectRatio,
   photoMediaKindForAsset,
   PhotoLibraryPanel,
   photoLibraryLoadMode,
+  photoRuntimeAlert,
   PHOTO_ACCEPT,
   readyPhotoQueryFilters,
   retryCountdown,
-  togglePhotoFacetValue
+  shouldAutoLoadPhotos
 } from "./PhotoLibraryPanel.js";
+import {
+  mergePhotoFilterDraft,
+  photoFilterMenuIsActive,
+  photoFiltersWithTextOnly,
+  togglePhotoFacetValue
+} from "./PhotoSearchFilterMenu.js";
 import {
   configureMapLibreWorker,
   mapArchiveReady,
@@ -110,7 +125,7 @@ describe("photo timeline grouping", () => {
     }));
 
     expect(html).toContain('aria-busy="true"');
-    expect(html).toContain("photo-library-bar-skeleton");
+    expect(html).not.toContain("photo-library-bar-skeleton");
     expect(html).toContain("photo-query-panel-skeleton");
     expect(html).toContain("photo-timeline-skeleton");
     expect(html).toContain('role="status"');
@@ -146,6 +161,59 @@ describe("photo timeline grouping", () => {
     expect(togglePhotoFacetValue(["Alpha 1"], "Alpha 7")).toEqual(["Alpha 1", "Alpha 7"]);
     expect(togglePhotoFacetValue(["Alpha 1", "Alpha 7"], "Alpha 1")).toEqual(["Alpha 7"]);
     expect(togglePhotoFacetValue(["Alpha 1"], "Alpha 1")).toBeUndefined();
+  });
+
+  it("keeps search text outside filter drafts and marks only menu filters active", () => {
+    expect(photoFilterMenuIsActive({ text: "coast" })).toBe(false);
+    expect(photoFilterMenuIsActive({ text: "coast", cameraModels: ["Alpha 1"] })).toBe(true);
+    expect(photoFiltersWithTextOnly({ text: "coast", rating: { min: 4 } })).toEqual({ text: "coast" });
+    expect(mergePhotoFilterDraft({ text: "stale", rating: { min: 4 } }, { text: "coast" })).toEqual({
+      text: "coast",
+      rating: { min: 4 }
+    });
+  });
+
+  it("shows runtime alerts only for degraded service, worker, or coded errors", () => {
+    expect(photoRuntimeAlert(libraryStatus(), workerHealth())).toBeNull();
+    expect(photoRuntimeAlert(libraryStatus({ state: "degraded", errorCode: "DATABASE" }), workerHealth())).toEqual({
+      tone: "warning",
+      state: "degraded",
+      workerStatus: "ready",
+      errorCode: "DATABASE",
+      nextRetryAt: null
+    });
+    expect(photoRuntimeAlert(libraryStatus(), workerHealth({ status: "stale" }))).toMatchObject({
+      tone: "warning",
+      workerStatus: "stale"
+    });
+    expect(photoRuntimeAlert(libraryStatus(), workerHealth({ status: "unavailable" }))).toMatchObject({
+      tone: "danger",
+      workerStatus: "unavailable"
+    });
+  });
+
+  it("uses real photo dimensions with a square fallback", () => {
+    expect(photoAspectRatio(4000, 3000)).toBeCloseTo(4 / 3);
+    expect(photoAspectRatio(3000, 4000)).toBeCloseTo(3 / 4);
+    expect(photoAspectRatio(null, 4000)).toBe(1);
+    expect(photoAspectRatio(0, 4000)).toBe(1);
+    expect(photoAspectRatio(Number.NaN, 4000)).toBe(1);
+  });
+
+  it("gates infinite loading by view, cursor, request state, and pagination errors", () => {
+    const ready = { view: "timeline" as const, nextCursor: "cursor", loadingMore: false, paginationError: null };
+    expect(shouldAutoLoadPhotos(ready)).toBe(true);
+    expect(shouldAutoLoadPhotos({ ...ready, view: "map" })).toBe(false);
+    expect(shouldAutoLoadPhotos({ ...ready, nextCursor: null })).toBe(false);
+    expect(shouldAutoLoadPhotos({ ...ready, loadingMore: true })).toBe(false);
+    expect(shouldAutoLoadPhotos({ ...ready, paginationError: "Unavailable" })).toBe(false);
+  });
+
+  it("appends cursor pages without duplicating already loaded photos", () => {
+    const first = queryPhoto("first");
+    const second = queryPhoto("second");
+    const replacement = { ...first, name: "replacement.jpg" };
+    expect(mergePhotos([first], [replacement, second])).toEqual([first, second]);
   });
 
   it("classifies video and RAW assets for timeline presentation", () => {
@@ -291,5 +359,44 @@ function photo(id: string, takenAt: string, name = `${id}.jpg`, mimeType = "imag
     errorRetryable: false,
     derivativeSchemaVersion: 1,
     indexedAt: "2026-09-22T12:00:00.000Z"
+  };
+}
+
+function queryPhoto(id: string): PhotoQueryAsset {
+  return {
+    ...photo(id, "2026-09-22T12:00:00.000Z"),
+    metadata: null,
+    keywords: [],
+    distanceMeters: null
+  };
+}
+
+function libraryStatus(overrides: Partial<PhotoLibraryStatus> = {}): PhotoLibraryStatus {
+  return {
+    state: "ready",
+    total: 1,
+    failed: 0,
+    scanned: 1,
+    processed: 1,
+    currentPath: null,
+    phase: null,
+    error: null,
+    errorCode: null,
+    retryCount: 0,
+    nextRetryAt: null,
+    updatedAt: "2026-09-22T12:00:00.000Z",
+    ...overrides
+  };
+}
+
+function workerHealth(overrides: Partial<PhotoWorkerHealth> = {}): PhotoWorkerHealth {
+  return {
+    status: "ready",
+    freshWorkers: 1,
+    lastHeartbeatAt: "2026-09-22T12:00:00.000Z",
+    activeJobs: 0,
+    queuedJobs: 0,
+    retryingJobs: 0,
+    ...overrides
   };
 }

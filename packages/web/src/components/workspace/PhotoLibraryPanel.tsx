@@ -3,6 +3,7 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   Download,
   FolderInput,
   List,
@@ -31,6 +32,7 @@ import {
   useState,
   type ChangeEvent,
   type DragEvent,
+  type FormEvent,
   type KeyboardEvent
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -76,6 +78,7 @@ import {
   type StorageFilePickerPool
 } from "./StorageFilePickerDialog.js";
 import { PhotoMapView } from "./PhotoMapView.js";
+import { PhotoSearchFilterMenu } from "./PhotoSearchFilterMenu.js";
 
 export const PHOTO_ACCEPT = PHOTOSTAFF_UPLOAD_EXTENSIONS.join(",");
 
@@ -113,10 +116,10 @@ export function PhotoLibraryPanel({
   const [total, setTotal] = useState(0);
   const [facets, setFacets] = useState<PhotoQueryFacets | null>(null);
   const [filters, setFilters] = useState<PhotoQueryFilters>({});
+  const [searchText, setSearchText] = useState("");
   const [sortField, setSortField] = useState<PhotoQuerySortField>("captured_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [view, setView] = useState<"timeline" | "map">("timeline");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [metadataFields, setMetadataFields] = useState<PhotoMetadataField[]>([]);
   const [metadata, setMetadata] = useState<PhotoMetadataDetail | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
@@ -125,6 +128,7 @@ export function PhotoLibraryPanel({
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [hasLoadedSnapshot, setHasLoadedSnapshot] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [paginationError, setPaginationError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [picker, setPicker] = useState<"move" | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -134,6 +138,9 @@ export function PhotoLibraryPanel({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const libraryRef = useRef<HTMLElement | null>(null);
+  const libraryContentRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const lightboxRef = useRef<HTMLDivElement | null>(null);
   const lightboxTriggerRef = useRef<HTMLElement | null>(null);
   const deleteDialogRef = useRef<HTMLDivElement | null>(null);
@@ -141,6 +148,10 @@ export function PhotoLibraryPanel({
   const dragDepthRef = useRef(0);
   const libraryRequestRef = useRef(0);
   const timelineRequestRef = useRef(0);
+  const timelineLoadRef = useRef<((cursor?: string | null) => Promise<void>) | null>(null);
+  const loadedQueryKeyRef = useRef<string | null>(null);
+  const queryKeyRef = useRef("");
+  const loadingMoreRef = useRef(false);
   const metadataRequestRef = useRef(0);
 
   const configuredPool = pools.find((pool) => pool.id === settings?.storagePoolId) ?? null;
@@ -152,6 +163,16 @@ export function PhotoLibraryPanel({
   const canPropose = settings?.rootId === selectedRootId;
   const statusBusy = isPhotoBusy(status?.state);
   const queryFilters = useMemo(() => readyPhotoQueryFilters(filters, metadataFields), [filters, metadataFields]);
+  const queryKey = useMemo(() => JSON.stringify({ filters: queryFilters, sortField, sortDirection }), [queryFilters, sortDirection, sortField]);
+  const runtimeAlert = photoRuntimeAlert(status, workerHealth);
+  const runtimeAlertLabel = runtimeAlert
+    ? [
+        t(`settings.photos.states.${runtimeAlert.state}`),
+        t(`settings.photos.workerStates.${runtimeAlert.workerStatus}`),
+        runtimeAlert.errorCode,
+        runtimeAlert.nextRetryAt ? t("workspace.photos.retryIn", { value: retryCountdown(runtimeAlert.nextRetryAt, clock) }) : null
+      ].filter(Boolean).join(" · ")
+    : null;
 
   const loadTimeline = useCallback(async (cursor: string | null = null) => {
     const requestId = cursor ? timelineRequestRef.current : ++timelineRequestRef.current;
@@ -168,6 +189,8 @@ export function PhotoLibraryPanel({
     setTotal(page.total);
     if (!cursor) setFacets(page.facets);
   }, [queryFilters, sortDirection, sortField]);
+  timelineLoadRef.current = loadTimeline;
+  queryKeyRef.current = queryKey;
 
   const loadLibrary = useCallback(async () => {
     const requestId = ++libraryRequestRef.current;
@@ -183,11 +206,16 @@ export function PhotoLibraryPanel({
       setStatus(snapshot.status);
       setWorkerHealth(snapshot.workerHealth);
       if (nextSettings) {
-        const [, fields] = await Promise.all([loadTimeline(), getPhotoMetadataFields()]);
+        loadedQueryKeyRef.current = queryKeyRef.current;
+        const [, fields] = await Promise.all([
+          timelineLoadRef.current?.() ?? Promise.resolve(),
+          getPhotoMetadataFields()
+        ]);
         if (requestId !== libraryRequestRef.current) return;
         setMetadataFields((current) => samePhotoMetadataFields(current, fields) ? current : fields);
       }
       else {
+        loadedQueryKeyRef.current = null;
         setPhotos([]);
         setNextCursor(null);
         setTotal(0);
@@ -205,11 +233,22 @@ export function PhotoLibraryPanel({
         setInitialLoadComplete(true);
       }
     }
-  }, [loadTimeline, onNotifyError]);
+  }, [onNotifyError]);
 
   useEffect(() => {
     void loadLibrary();
   }, [loadLibrary]);
+
+  useEffect(() => {
+    if (!settings || loading || loadedQueryKeyRef.current === queryKey) return;
+    loadedQueryKeyRef.current = queryKey;
+    setPaginationError(null);
+    void loadTimeline().catch((error) => {
+      if (queryKeyRef.current !== queryKey) return;
+      loadedQueryKeyRef.current = null;
+      onNotifyError(errorMessage(error));
+    });
+  }, [loadTimeline, loading, onNotifyError, queryKey, settings]);
 
   useEffect(() => () => {
     libraryRequestRef.current += 1;
@@ -309,17 +348,40 @@ export function PhotoLibraryPanel({
     }
   }
 
-  async function loadMore() {
-    if (!nextCursor || loadingMore) return;
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMoreRef.current) return;
+    const loadQueryKey = queryKeyRef.current;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
+    setPaginationError(null);
     try {
       await loadTimeline(nextCursor);
     } catch (error) {
-      onNotifyError(errorMessage(error));
+      if (queryKeyRef.current !== loadQueryKey) return;
+      const message = errorMessage(error);
+      setPaginationError(message);
+      onNotifyError(message);
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }
+  }, [loadTimeline, nextCursor, onNotifyError]);
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel || typeof IntersectionObserver === "undefined" || !shouldAutoLoadPhotos({
+      view,
+      nextCursor,
+      loadingMore,
+      paginationError
+    })) return undefined;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { root: null, rootMargin: "320px 0px", threshold: 0.01 });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadMore, loadingMore, nextCursor, paginationError, view]);
 
   async function uploadFiles(files: File[]) {
     if (!settings || !files.length || busyAction) return;
@@ -446,27 +508,43 @@ export function PhotoLibraryPanel({
       if (value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) delete next[key];
       return next;
     });
+    resetQueryUi();
+  }
+
+  function applyFilters(nextFilters: PhotoQueryFilters) {
+    setFilters(nextFilters);
+    resetQueryUi();
+  }
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = searchText.trim();
+    if ((filters.text ?? "") === text) return;
+    setFilters((current) => {
+      if (text) return { ...current, text };
+      const { text: _text, ...rest } = current;
+      return rest;
+    });
+    resetQueryUi();
+  }
+
+  function updateSortField(field: PhotoQuerySortField) {
+    if (field === sortField) return;
+    setSortField(field);
+    resetQueryUi();
+  }
+
+  function reverseSortDirection() {
+    setSortDirection((current) => current === "asc" ? "desc" : "asc");
+    resetQueryUi();
+  }
+
+  function resetQueryUi() {
     setSelectedIds(new Set());
-  }
-
-  function updateAdvancedCondition(index: number, patch: Partial<PhotoMetadataCondition>) {
-    const advanced = filters.advanced ?? { mode: "all" as const, conditions: [] };
-    updateFilter("advanced", {
-      ...advanced,
-      conditions: advanced.conditions.map((condition, conditionIndex) => conditionIndex === index
-        ? { ...condition, ...patch }
-        : condition)
-    });
-  }
-
-  function addAdvancedCondition() {
-    const advanced = filters.advanced ?? { mode: "all" as const, conditions: [] };
-    const firstField = metadataFields[0]?.key ?? "exif.ISO";
-    updateFilter("advanced", {
-      ...advanced,
-      conditions: [...advanced.conditions, { key: firstField, operator: "eq", value: "" }]
-    });
-    setAdvancedOpen(true);
+    setNextCursor(null);
+    setPaginationError(null);
+    libraryContentRef.current?.scrollTo({ top: 0 });
+    libraryRef.current?.scrollTo({ top: 0 });
   }
 
   function showAdjacent(offset: number) {
@@ -543,6 +621,7 @@ export function PhotoLibraryPanel({
 
   return (
     <section
+      ref={libraryRef}
       className={`photo-library${dropActive ? " is-drop-active" : ""}`}
       aria-label={t("workspace.photos.title")}
       aria-busy={loading || undefined}
@@ -594,69 +673,22 @@ export function PhotoLibraryPanel({
       {loadMode === "loading" ? <span className="visually-hidden" role="status">{t("common.states.loading")}</span> : null}
 
       {loadMode === "loading" ? (
-        <PhotoLibraryBarSkeleton />
-      ) : settings ? (
-        <div className="photo-library-bar">
-          <div className="photo-library-location" title={settings.path}>
-            <FolderInput aria-hidden="true" size={15} />
-            <strong>{configuredPool?.name ?? settings.storagePoolId}</strong>
-            <span>{settings.path}</span>
-          </div>
-          <div className="photo-runtime-status" data-state={workerHealth?.status ?? "unavailable"}>
-            {statusBusy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={13} /> : null}
-            <strong>{t(`settings.photos.states.${status?.state ?? "offline"}`)}</strong>
-            {status?.phase ? <span>{t(`settings.photos.phases.${status.phase}`)}</span> : null}
-            <span>{t(`settings.photos.workerStates.${workerHealth?.status ?? "unavailable"}`)}</span>
-            {status?.nextRetryAt ? <span>{t("workspace.photos.retryIn", { value: retryCountdown(status.nextRetryAt, clock) })}</span> : null}
-            {status?.errorCode ? <code>{status.errorCode}</code> : null}
-          </div>
-          {selected.length ? (
-            <div className="photo-selection-actions" aria-label={t("workspace.photos.selectionActions")}>
-              <span>{t("workspace.photos.selected", { count: selected.length })}</span>
-              <button type="button" onClick={selectAllLoaded} aria-pressed={selectedIds.size === photos.length} title={t("workspace.photos.selectAll")} aria-label={t("workspace.photos.selectAll")}>
-                {selectedIds.size === photos.length ? <CheckSquare aria-hidden="true" size={15} /> : <Square aria-hidden="true" size={15} />}
-                <span>{t("workspace.photos.selectAll")}</span>
-              </button>
-              <button type="button" onClick={() => void downloadSelection()} disabled={Boolean(busyAction)} title={t("workspace.photos.downloadSelected")} aria-label={t("workspace.photos.downloadSelected")}>
-                <Download aria-hidden="true" size={15} />
-                <span>{t("workspace.photos.downloadSelected")}</span>
-              </button>
-              <button type="button" onClick={() => canPropose ? setPicker("move") : onNotifyWarning(t("workspace.photos.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photos.moveSelected")} aria-label={t("workspace.photos.moveSelected")}>
-                <FolderInput aria-hidden="true" size={15} />
-                <span>{t("workspace.photos.moveSelected")}</span>
-              </button>
-              <button ref={deleteTriggerRef} className="is-danger" type="button" onClick={() => canPropose ? setDeleteOpen(true) : onNotifyWarning(t("workspace.photos.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photos.deleteSelected")} aria-label={t("workspace.photos.deleteSelected")}>
-                <Trash2 aria-hidden="true" size={15} />
-                <span>{t("workspace.photos.deleteSelected")}</span>
-              </button>
-              <button type="button" onClick={() => setSelectedIds(new Set())} title={t("workspace.photos.clearSelection")} aria-label={t("workspace.photos.clearSelection")}>
-                <X aria-hidden="true" size={15} />
-              </button>
-            </div>
-          ) : photos.length ? (
-            <button className="photo-select-all" type="button" onClick={selectAllLoaded} aria-label={t("workspace.photos.selectAll")} title={t("workspace.photos.selectAll")}>
-              <Square aria-hidden="true" size={15} />
-              <span>{t("workspace.photos.selectAll")}</span>
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {loadMode === "loading" ? (
         <PhotoQuerySkeleton />
       ) : settings ? (
         <div className="photo-query-panel">
           <div className="photo-query-toolbar">
-            <label className="photo-search-field">
-              <Search aria-hidden="true" size={15} />
+            <form className="photo-search-field" role="search" onSubmit={submitSearch}>
+              <button type="submit" title={t("workspace.photos.search")} aria-label={t("workspace.photos.search")}>
+                <Search aria-hidden="true" size={15} />
+              </button>
               <input
                 type="search"
-                value={filters.text ?? ""}
-                onChange={(event) => updateFilter("text", event.target.value)}
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
                 placeholder={t("workspace.photos.searchPlaceholder")}
                 aria-label={t("workspace.photos.searchPlaceholder")}
               />
-            </label>
+            </form>
             <div className="photo-view-switch" role="tablist" aria-label={t("workspace.photos.views")}>
               <button type="button" role="tab" aria-selected={view === "timeline"} onClick={() => setView("timeline")} title={t("workspace.photos.timelineView")}>
                 <List aria-hidden="true" size={15} /><span>{t("workspace.photos.timelineView")}</span>
@@ -677,114 +709,67 @@ export function PhotoLibraryPanel({
                   { value: "rating", label: t("workspace.photos.sortRating") },
                   ...(filters.location?.kind === "near" ? [{ value: "distance", label: t("workspace.photos.sortDistance") }] : [])
                 ] as CustomSelectOption<PhotoQuerySortField>[]}
-                onChange={setSortField}
+                onChange={updateSortField}
                 ariaLabel={t("workspace.photos.sort")}
                 className="photo-sort-select"
               />
-              <button type="button" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} title={t("workspace.photos.sortDirection")} aria-label={t("workspace.photos.sortDirection")}>
+              <button type="button" onClick={reverseSortDirection} title={t("workspace.photos.sortDirection")} aria-label={t("workspace.photos.sortDirection")}>
                 {sortDirection === "asc" ? "↑" : "↓"}
               </button>
             </label>
-            <button type="button" className="photo-advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((current) => !current)}>
-              <SlidersHorizontal aria-hidden="true" size={15} />{t("workspace.photos.advanced")}
-            </button>
+            {runtimeAlert && runtimeAlertLabel ? (
+              <span
+                className="photo-runtime-alert"
+                data-tone={runtimeAlert.tone}
+                role="status"
+                tabIndex={0}
+                title={runtimeAlertLabel}
+                aria-label={t("workspace.photos.runtimeAlert", { details: runtimeAlertLabel })}
+              >
+                <CircleAlert aria-hidden="true" size={15} />
+              </span>
+            ) : null}
+            <PhotoSearchFilterMenu
+              filters={filters}
+              facets={facets}
+              metadataFields={metadataFields}
+              onApply={applyFilters}
+            />
+            {photos.length ? (
+              <button
+                type="button"
+                className="photo-select-loaded"
+                onClick={selectAllLoaded}
+                aria-pressed={selectedIds.size === photos.length}
+                title={t("workspace.photos.selectLoaded")}
+                aria-label={t("workspace.photos.selectLoaded")}
+              >
+                {selectedIds.size === photos.length ? <CheckSquare aria-hidden="true" size={15} /> : <Square aria-hidden="true" size={15} />}
+              </button>
+            ) : null}
           </div>
-          <div className="photo-common-filters">
-            <PhotoFacetSelect
-              label={t("workspace.photos.mediaType")}
-              options={facets?.mediaKinds ?? []}
-              selected={filters.mediaKinds ?? []}
-              allLabel={t("workspace.photos.allValues")}
-              selectedLabel={(count) => t("workspace.photos.selectedValues", { count })}
-              onChange={(value) => updateFilter("mediaKinds", value as PhotoMediaKind[])}
-            />
-            <PhotoFacetSelect
-              label={t("workspace.photos.camera")}
-              options={facets?.cameraModels ?? []}
-              selected={filters.cameraModels ?? []}
-              allLabel={t("workspace.photos.allValues")}
-              selectedLabel={(count) => t("workspace.photos.selectedValues", { count })}
-              onChange={(value) => updateFilter("cameraModels", value)}
-            />
-            <PhotoFacetSelect
-              label={t("workspace.photos.lens")}
-              options={facets?.lensModels ?? []}
-              selected={filters.lensModels ?? []}
-              allLabel={t("workspace.photos.allValues")}
-              selectedLabel={(count) => t("workspace.photos.selectedValues", { count })}
-              onChange={(value) => updateFilter("lensModels", value)}
-            />
-            <label><span>{t("workspace.photos.takenAt")}</span><div className="photo-range-inputs"><input type="date" value={filters.capturedAt?.from?.slice(0, 10) ?? ""} aria-label={t("workspace.photos.min")} onChange={(event) => updateFilter("capturedAt", dateRange(event.target.value, filters.capturedAt?.to))} /><input type="date" value={filters.capturedAt?.to?.slice(0, 10) ?? ""} aria-label={t("workspace.photos.max")} onChange={(event) => updateFilter("capturedAt", dateRange(filters.capturedAt?.from, event.target.value))} /></div></label>
-            <label><span>ISO</span><div className="photo-range-inputs"><input type="number" min="0" value={filters.iso?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("iso", numberRange(event.target.value, filters.iso?.max))} /><input type="number" min="0" value={filters.iso?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("iso", numberRange(filters.iso?.min, event.target.value))} /></div></label>
-            <label><span>{t("workspace.photos.aperture")}</span><div className="photo-range-inputs"><input type="number" min="0" step="0.1" value={filters.aperture?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("aperture", numberRange(event.target.value, filters.aperture?.max))} /><input type="number" min="0" step="0.1" value={filters.aperture?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("aperture", numberRange(filters.aperture?.min, event.target.value))} /></div></label>
-            <label><span>{t("workspace.photos.shutter")}</span><div className="photo-range-inputs"><input type="number" min="0" step="any" value={filters.exposureTimeSeconds?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("exposureTimeSeconds", numberRange(event.target.value, filters.exposureTimeSeconds?.max))} /><input type="number" min="0" step="any" value={filters.exposureTimeSeconds?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("exposureTimeSeconds", numberRange(filters.exposureTimeSeconds?.min, event.target.value))} /></div></label>
-            <label><span>{t("workspace.photos.focalLength")}</span><div className="photo-range-inputs"><input type="number" min="0" value={filters.focalLengthMm?.min ?? ""} placeholder={t("workspace.photos.min")} onChange={(event) => updateFilter("focalLengthMm", numberRange(event.target.value, filters.focalLengthMm?.max))} /><input type="number" min="0" value={filters.focalLengthMm?.max ?? ""} placeholder={t("workspace.photos.max")} onChange={(event) => updateFilter("focalLengthMm", numberRange(filters.focalLengthMm?.min, event.target.value))} /></div></label>
-            <label>
-              <span>{t("workspace.photos.rating")}</span>
-              <CustomSelect
-                value={filters.rating?.min?.toString() ?? ""}
-                options={[
-                  { value: "", label: t("workspace.photos.allValues") },
-                  ...[1, 2, 3, 4, 5].map((rating) => ({
-                    value: String(rating),
-                    label: `${rating}+ (${facets?.ratings.find((item) => Number(item.value) === rating)?.count ?? 0})`
-                  }))
-                ]}
-                onChange={(value) => updateFilter("rating", value ? { min: Number(value) } : undefined)}
-                ariaLabel={t("workspace.photos.rating")}
-                className="photo-filter-select"
-              />
-            </label>
-            <label className="photo-location-filter"><input type="checkbox" checked={filters.hasLocation === true} onChange={(event) => updateFilter("hasLocation", event.target.checked ? true : undefined)} /><span>{t("workspace.photos.hasLocation")}</span></label>
-          </div>
-          {facets?.keywords.length ? (
-            <div className="photo-keyword-facets" aria-label={t("workspace.photos.keywords")}>
-              {facets.keywords.slice(0, 12).map((item) => {
-                const active = filters.keywords?.includes(item.value) ?? false;
-                return <button key={item.value} type="button" aria-pressed={active} onClick={() => updateFilter("keywords", active ? filters.keywords?.filter((value) => value !== item.value) : [...(filters.keywords ?? []), item.value])}>{item.value}<span>{item.count}</span></button>;
-              })}
-            </div>
-          ) : null}
-          {advancedOpen ? (
-            <div className="photo-advanced-builder">
-              <div className="photo-advanced-heading">
-                <div className="photo-condition-mode" role="group" aria-label={t("workspace.photos.conditionMode")}>
-                  <button type="button" aria-pressed={(filters.advanced?.mode ?? "all") === "all"} onClick={() => updateFilter("advanced", { mode: "all", conditions: filters.advanced?.conditions ?? [] })}>{t("workspace.photos.matchAll")}</button>
-                  <button type="button" aria-pressed={filters.advanced?.mode === "any"} onClick={() => updateFilter("advanced", { mode: "any", conditions: filters.advanced?.conditions ?? [] })}>{t("workspace.photos.matchAny")}</button>
-                </div>
-                <button type="button" onClick={addAdvancedCondition} disabled={!metadataFields.length || (filters.advanced?.conditions.length ?? 0) >= 25}><Plus aria-hidden="true" size={14} />{t("workspace.photos.addCondition")}</button>
-              </div>
-              {(filters.advanced?.conditions ?? []).map((condition, index) => (
-                <div className="photo-condition-row" key={`${index}:${condition.key}`}>
-                  <CustomSelect
-                    className="photo-condition-field"
-                    value={condition.key}
-                    options={metadataFields.map((field) => ({ value: field.key, label: `${field.key} (${field.count})` }))}
-                    onChange={(value) => updateAdvancedCondition(index, { key: value })}
-                    ariaLabel={t("workspace.photos.metadataField")}
-                  />
-                  <CustomSelect
-                    className="photo-condition-operator"
-                    value={condition.operator}
-                    options={metadataOperatorOptions(t)}
-                    onChange={(value) => updateAdvancedCondition(index, { operator: value })}
-                    ariaLabel={t("workspace.photos.operator")}
-                  />
-                  {condition.operator !== "exists" && condition.operator !== "not_exists" ? <input className="photo-condition-value" value={String(Array.isArray(condition.value) ? condition.value.join(",") : condition.value ?? "")} onChange={(event) => updateAdvancedCondition(index, { value: condition.operator === "in" ? event.target.value.split(",").map((value) => value.trim()).filter(Boolean) : event.target.value })} aria-label={t("workspace.photos.value")} /> : <span className="photo-condition-value" />}
-                  {condition.operator === "between" ? <input className="photo-condition-value-to" value={String(condition.valueTo ?? "")} onChange={(event) => updateAdvancedCondition(index, { valueTo: event.target.value })} aria-label={t("workspace.photos.max")} /> : <span className="photo-condition-value-to" />}
-                  <button type="button" onClick={() => {
-                    const remaining = filters.advanced?.conditions.filter((_, conditionIndex) => conditionIndex !== index) ?? [];
-                    updateFilter("advanced", remaining.length ? { mode: filters.advanced?.mode ?? "all", conditions: remaining } : undefined);
-                  }} title={t("workspace.photos.removeCondition")} aria-label={t("workspace.photos.removeCondition")}><X aria-hidden="true" size={14} /></button>
-                </div>
-              ))}
+          {selected.length ? (
+            <div className="photo-selection-actions" aria-label={t("workspace.photos.selectionActions")}>
+              <span>{t("workspace.photos.selected", { count: selected.length })}</span>
+              <button type="button" onClick={() => void downloadSelection()} disabled={Boolean(busyAction)} title={t("workspace.photos.downloadSelected")} aria-label={t("workspace.photos.downloadSelected")}>
+                <Download aria-hidden="true" size={15} /><span>{t("workspace.photos.downloadSelected")}</span>
+              </button>
+              <button type="button" onClick={() => canPropose ? setPicker("move") : onNotifyWarning(t("workspace.photos.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photos.moveSelected")} aria-label={t("workspace.photos.moveSelected")}>
+                <FolderInput aria-hidden="true" size={15} /><span>{t("workspace.photos.moveSelected")}</span>
+              </button>
+              <button ref={deleteTriggerRef} className="is-danger" type="button" onClick={() => canPropose ? setDeleteOpen(true) : onNotifyWarning(t("workspace.photos.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photos.deleteSelected")} aria-label={t("workspace.photos.deleteSelected")}>
+                <Trash2 aria-hidden="true" size={15} /><span>{t("workspace.photos.deleteSelected")}</span>
+              </button>
+              <button type="button" onClick={() => setSelectedIds(new Set())} title={t("workspace.photos.clearSelection")} aria-label={t("workspace.photos.clearSelection")}>
+                <X aria-hidden="true" size={15} />
+              </button>
             </div>
           ) : null}
           <div className="photo-query-summary"><span>{t("workspace.photos.resultCount", { count: total })}</span>{status?.metadataIndex?.pending ? <span>{t("workspace.photos.metadataProgress", { indexed: status.metadataIndex.indexed, total: status.metadataIndex.total })}</span> : null}</div>
         </div>
       ) : null}
 
-      <div className="photo-library-content">
+      <div ref={libraryContentRef} className="photo-library-content">
         {dropActive ? (
           <div className="workspace-drop-overlay" role="presentation" aria-hidden="true">
             <div className="workspace-drop-panel">
@@ -823,10 +808,18 @@ export function PhotoLibraryPanel({
                   {group.photos.map((photo) => {
                     const isSelected = selectedIds.has(photo.id);
                     const mediaKind = photoMediaKindForAsset(photo);
+                    const aspectRatio = photoAspectRatio(photo.width, photo.height);
                     return (
-                      <article className={`photo-tile${isSelected ? " is-selected" : ""}`} key={photo.id}>
+                      <article className={`photo-tile${isSelected ? " is-selected" : ""}`} key={photo.id} style={{ aspectRatio }}>
                         <button className="photo-open" type="button" onClick={(event) => openLightbox(photo, event.currentTarget)} aria-label={t("workspace.photos.openPhoto", { name: photo.name })}>
-                          <img src={`/api/photos/${encodeURIComponent(photo.id)}/thumbnail`} alt="" loading="lazy" />
+                          <img
+                            src={`/api/photos/${encodeURIComponent(photo.id)}/thumbnail`}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            width={photo.width && photo.width > 0 ? photo.width : 1}
+                            height={photo.height && photo.height > 0 ? photo.height : 1}
+                          />
                           {mediaKind === "video" ? <span className="photo-media-badge is-video" aria-hidden="true"><Play size={13} fill="currentColor" /></span> : null}
                           {mediaKind === "raw" ? <span className="photo-media-badge is-raw" aria-hidden="true">RAW</span> : null}
                           <span className="photo-name">{photo.name}</span>
@@ -840,7 +833,18 @@ export function PhotoLibraryPanel({
                 </div>
               </section>
             ))}
-            {nextCursor ? <button className="photo-load-more secondary-button" type="button" onClick={() => void loadMore()} disabled={loadingMore} aria-busy={loadingMore || undefined}>{loadingMore ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : null}{t("workspace.photos.loadMore")}</button> : null}
+            {nextCursor || paginationError ? (
+              <div ref={loadMoreSentinelRef} className="photo-pagination-sentinel" aria-live="polite">
+                {paginationError ? (
+                  <div className="photo-pagination-error" role="alert">
+                    <span title={paginationError}>{t("workspace.photos.loadMoreFailed")}</span>
+                    <button className="secondary-button" type="button" onClick={() => void loadMore()}>{t("workspace.photos.retryLoadMore")}</button>
+                  </div>
+                ) : loadingMore ? (
+                  <span role="status"><LoaderCircle className="is-spinning" aria-hidden="true" size={15} />{t("workspace.photos.loadingMore")}</span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -967,22 +971,6 @@ export function photoLibraryLoadMode(
   return "content";
 }
 
-function PhotoLibraryBarSkeleton() {
-  return (
-    <div className="photo-library-bar photo-library-bar-skeleton" aria-hidden="true">
-      <div className="photo-library-location photo-library-location-skeleton">
-        <SkeletonBlock className="photo-skeleton-icon" />
-        <SkeletonBlock width="92px" />
-        <SkeletonBlock width="min(260px, 42vw)" />
-      </div>
-      <div className="photo-runtime-status photo-runtime-status-skeleton">
-        <SkeletonBlock width="58px" />
-        <SkeletonBlock width="76px" />
-      </div>
-    </div>
-  );
-}
-
 function PhotoQuerySkeleton() {
   return (
     <div className="photo-query-panel photo-query-panel-skeleton" aria-hidden="true">
@@ -991,14 +979,6 @@ function PhotoQuerySkeleton() {
         <SkeletonBlock className="photo-skeleton-view" />
         <SkeletonBlock className="photo-skeleton-sort" />
         <SkeletonBlock className="photo-skeleton-advanced" />
-      </div>
-      <div className="photo-common-filters photo-common-filters-skeleton">
-        {["wide", "wide", "wide", "date", "range", "range", "range", "rating"].map((kind, index) => (
-          <div className={`photo-skeleton-filter is-${kind}`} key={`${kind}-${index}`}>
-            <SkeletonBlock width={index % 2 ? "42%" : "56%"} />
-            <SkeletonBlock className="photo-skeleton-input" />
-          </div>
-        ))}
       </div>
       <div className="photo-query-summary photo-query-summary-skeleton">
         <SkeletonBlock width="72px" />
@@ -1050,6 +1030,50 @@ export function isPhotoBusy(state: PhotoLibraryStatus["state"] | undefined): boo
   return state === "queued" || state === "discovering" || state === "processing" || state === "retrying";
 }
 
+export function photoRuntimeAlert(
+  status: PhotoLibraryStatus | null,
+  workerHealth: PhotoWorkerHealth | null
+): {
+  tone: "warning" | "danger";
+  state: PhotoLibraryStatus["state"];
+  workerStatus: PhotoWorkerHealth["status"];
+  errorCode: PhotoLibraryStatus["errorCode"];
+  nextRetryAt: string | null;
+} | null {
+  const hasRuntimeProblem = status?.state === "degraded" || status?.state === "offline" ||
+    Boolean(status?.errorCode) || (workerHealth !== null && workerHealth.status !== "ready");
+  if (!hasRuntimeProblem) return null;
+  const state = status?.state ?? "offline";
+  const workerStatus = workerHealth?.status ?? "unavailable";
+  return {
+    tone: state === "offline" || workerStatus === "unavailable" ? "danger" : "warning",
+    state,
+    workerStatus,
+    errorCode: status?.errorCode ?? null,
+    nextRetryAt: status?.nextRetryAt ?? null
+  };
+}
+
+export function photoAspectRatio(width: number | null, height: number | null): number {
+  return width !== null && height !== null && Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+    ? width / height
+    : 1;
+}
+
+export function shouldAutoLoadPhotos({
+  view,
+  nextCursor,
+  loadingMore,
+  paginationError
+}: {
+  view: "timeline" | "map";
+  nextCursor: string | null;
+  loadingMore: boolean;
+  paginationError: string | null;
+}): boolean {
+  return view === "timeline" && Boolean(nextCursor) && !loadingMore && !paginationError;
+}
+
 export function retryCountdown(nextRetryAt: string, now = Date.now()): string {
   const seconds = Math.max(0, Math.ceil((Date.parse(nextRetryAt) - now) / 1_000));
   const minutes = Math.floor(seconds / 60);
@@ -1068,56 +1092,6 @@ function localCalendarDate(value: string | null | undefined): Date | null {
 
 export function photoMediaKindForAsset(photo: Pick<PhotoAsset, "name" | "mimeType">): PhotoMediaKind {
   return photoMediaKind(photo.name) ?? (photo.mimeType.startsWith("video/") ? "video" : "image");
-}
-
-function PhotoFacetSelect({
-  label,
-  options,
-  selected,
-  allLabel,
-  selectedLabel,
-  onChange
-}: {
-  label: string;
-  options: Array<{ value: string; count: number }>;
-  selected: string[];
-  allLabel: string;
-  selectedLabel: (count: number) => string;
-  onChange: (value: string[] | undefined) => void;
-}) {
-  const summary = selected.length === 0
-    ? allLabel
-    : selected.length === 1
-      ? selected[0]!
-      : selectedLabel(selected.length);
-  return (
-    <label className="photo-facet-filter">
-      <span>{label}</span>
-      <CustomSelect
-        value=""
-        selectedValues={selected}
-        placeholder={summary}
-        ariaLabel={`${label}: ${summary}`}
-        className="photo-filter-select"
-        options={[
-          ...(selected.length ? [{ value: "__clear__", label: allLabel }] : []),
-          ...options.map((item) => ({ value: item.value, label: `${item.value} (${item.count})` }))
-        ]}
-        onChange={(value) => {
-          if (value === "__clear__") onChange(undefined);
-          else if (value) onChange(togglePhotoFacetValue(selected, value));
-        }}
-      />
-    </label>
-  );
-}
-
-export function togglePhotoFacetValue<T extends string>(selected: T[] | undefined, value: T): T[] | undefined {
-  const current = selected ?? [];
-  const next = current.includes(value)
-    ? current.filter((entry) => entry !== value)
-    : [...current, value];
-  return next.length ? next : undefined;
 }
 
 function samePhotoMetadataFields(left: PhotoMetadataField[], right: PhotoMetadataField[]): boolean {
@@ -1182,49 +1156,9 @@ function coerceMetadataScalar(
   return value;
 }
 
-function mergePhotos(current: PhotoQueryAsset[], incoming: PhotoQueryAsset[]): PhotoQueryAsset[] {
+export function mergePhotos(current: PhotoQueryAsset[], incoming: PhotoQueryAsset[]): PhotoQueryAsset[] {
   const ids = new Set(current.map((photo) => photo.id));
   return [...current, ...incoming.filter((photo) => !ids.has(photo.id))];
-}
-
-function numberRange(
-  min: string | number | undefined,
-  max: string | number | undefined
-): { min?: number; max?: number } | undefined {
-  const minValue = min === "" || min === undefined ? undefined : Number(min);
-  const maxValue = max === "" || max === undefined ? undefined : Number(max);
-  if (minValue === undefined && maxValue === undefined) return undefined;
-  return {
-    ...(minValue !== undefined && Number.isFinite(minValue) ? { min: minValue } : {}),
-    ...(maxValue !== undefined && Number.isFinite(maxValue) ? { max: maxValue } : {})
-  };
-}
-
-function dateRange(
-  from: string | undefined,
-  to: string | undefined
-): { from?: string; to?: string } | undefined {
-  const fromDate = from?.slice(0, 10) || undefined;
-  const toDate = to?.slice(0, 10) || undefined;
-  if (!fromDate && !toDate) return undefined;
-  return {
-    ...(fromDate ? { from: `${fromDate}T00:00:00` } : {}),
-    ...(toDate ? { to: `${toDate}T23:59:59.999` } : {})
-  };
-}
-
-function metadataOperatorOptions(translate: (key: string) => string): Array<{
-  value: PhotoMetadataCondition["operator"];
-  label: string;
-}> {
-  return [
-    ["eq", "equals"], ["contains", "contains"], ["prefix", "prefix"], ["in", "oneOf"],
-    ["exists", "exists"], ["not_exists", "notExists"], ["lt", "lessThan"],
-    ["lte", "lessOrEqual"], ["gt", "greaterThan"], ["gte", "greaterOrEqual"], ["between", "between"]
-  ].map(([value, label]) => ({
-    value: value as PhotoMetadataCondition["operator"],
-    label: translate(`workspace.photos.operators.${label}`)
-  }));
 }
 
 function formatExposure(seconds: number): string {

@@ -5,13 +5,14 @@
 .photo-library {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   background: var(--footer-bg);
 }
 
 .photo-query-panel {
+  position: relative;
   display: grid;
   gap: 8px;
   padding: 9px 14px;
@@ -44,6 +45,25 @@
   background: var(--input-bg);
 }
 
+.photo-search-field > button {
+  display: grid;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 3px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.photo-search-field > button:hover,
+.photo-search-field > button:focus-visible {
+  color: var(--text);
+  background: var(--surface);
+}
+
 .photo-search-field input {
   width: 100%;
   min-width: 0;
@@ -66,7 +86,6 @@
 
 .photo-view-switch button,
 .photo-condition-mode button,
-.photo-advanced-toggle,
 .photo-advanced-heading > button,
 .photo-map-toolbar button,
 .photo-reveal-sensitive {
@@ -87,8 +106,7 @@
 }
 
 .photo-view-switch button[aria-selected="true"],
-.photo-condition-mode button[aria-pressed="true"],
-.photo-advanced-toggle[aria-expanded="true"] {
+.photo-condition-mode button[aria-pressed="true"] {
   border-color: var(--line-soft);
   color: var(--text);
   background: var(--surface);
@@ -296,6 +314,92 @@
   font-weight: 800;
 }
 
+.photo-filter-popover {
+  flex: 0 0 auto;
+}
+
+.photo-filter-trigger,
+.photo-runtime-alert,
+.photo-select-loaded {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.photo-filter-trigger.is-active {
+  border-color: var(--accent);
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.photo-runtime-alert {
+  cursor: help;
+}
+
+.photo-runtime-alert[data-tone="warning"] {
+  border-color: var(--warning-border, var(--line-soft));
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.photo-runtime-alert[data-tone="danger"] {
+  border-color: var(--danger-border, var(--line-soft));
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.photo-filter-trigger:focus-visible,
+.photo-runtime-alert:focus-visible,
+.photo-select-loaded:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent));
+  outline-offset: 2px;
+}
+
+.photo-filter-menu {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 6px);
+  right: 8px;
+  display: grid;
+  width: min(720px, calc(100% - 16px), calc(100vw - 24px));
+  max-height: min(680px, calc(100dvh - 170px));
+  gap: 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--dialog-bg, var(--modal-bg));
+  box-shadow: 0 18px 44px rgb(0 0 0 / 32%);
+}
+
+.photo-filter-actions {
+  position: sticky;
+  bottom: -11px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin: 0 -11px -11px;
+  padding: 9px 11px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--dialog-bg, var(--modal-bg));
+}
+
+.photo-filter-actions button {
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
 .photo-map-view {
   display: grid;
   grid-template-rows: auto minmax(300px, 1fr) auto;
@@ -458,77 +562,12 @@
   font-size: 10px;
 }
 
-.photo-library-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 44px;
-  padding: 6px 14px;
-  border-bottom: 1px solid var(--line-soft);
-  background: var(--subtle-bg);
-}
-
-.photo-library-location {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.photo-library-location svg,
-.photo-library-location strong {
-  flex: 0 0 auto;
-  color: var(--text);
-}
-
-.photo-library-location span {
-  min-width: 0;
-  overflow: hidden;
-  font-family: var(--code-font-family);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.photo-runtime-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.photo-runtime-status strong {
-  color: var(--text);
-}
-
-.photo-runtime-status[data-state="stale"] strong {
-  color: var(--yellow);
-}
-
-.photo-runtime-status[data-state="unavailable"] strong,
-.photo-runtime-status code {
-  color: var(--red);
-}
-
-.photo-runtime-status code {
-  max-width: 190px;
-  overflow: hidden;
-  font-family: var(--code-font-family);
-  text-overflow: ellipsis;
-}
-
 .photo-selection-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 5px;
   min-width: 0;
-  margin-left: auto;
 }
 
 .photo-selection-actions > span {
@@ -540,8 +579,7 @@
   font-weight: 800;
 }
 
-.photo-selection-actions button,
-.photo-select-all {
+.photo-selection-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -568,11 +606,6 @@
   background: var(--danger-bg);
 }
 
-.photo-select-all {
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
 .photo-library-content {
   position: relative;
   min-width: 0;
@@ -580,28 +613,10 @@
   overflow: auto;
 }
 
-.photo-library-bar-skeleton,
 .photo-query-panel-skeleton,
 .photo-timeline-skeleton {
   pointer-events: none;
   animation: management-skeleton-enter 280ms cubic-bezier(.2, .72, .2, 1) both;
-}
-
-.photo-library-location-skeleton,
-.photo-runtime-status-skeleton {
-  display: flex;
-  align-items: center;
-}
-
-.photo-library-location-skeleton .management-skeleton-block,
-.photo-runtime-status-skeleton .management-skeleton-block {
-  flex: 0 0 auto;
-}
-
-.photo-skeleton-icon {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
 }
 
 .photo-query-toolbar-skeleton .management-skeleton-block {
@@ -618,30 +633,6 @@
 .photo-skeleton-view { width: 122px; }
 .photo-skeleton-sort { width: 128px; }
 .photo-skeleton-advanced { width: 78px; }
-
-.photo-common-filters-skeleton {
-  align-items: start;
-}
-
-.photo-skeleton-filter {
-  display: grid;
-  flex: 1 1 116px;
-  gap: 4px;
-  min-width: 108px;
-}
-
-.photo-skeleton-filter.is-wide { flex-basis: 150px; }
-.photo-skeleton-filter.is-date { flex-basis: 232px; }
-
-.photo-skeleton-filter > .management-skeleton-block:first-child {
-  height: 8px;
-}
-
-.photo-skeleton-input {
-  width: 100%;
-  height: 29px;
-  border-radius: 4px;
-}
 
 .photo-query-summary-skeleton .management-skeleton-block {
   height: 8px;
@@ -660,12 +651,17 @@
 }
 
 .photo-skeleton-tile {
-  display: block;
+  display: inline-block;
   width: 100%;
   height: auto;
   aspect-ratio: 1;
+  margin: 0 0 6px;
+  break-inside: avoid;
   border-radius: 5px;
 }
+
+.photo-skeleton-tile:nth-child(3n + 1) { aspect-ratio: 4 / 5; }
+.photo-skeleton-tile:nth-child(3n + 2) { aspect-ratio: 3 / 2; }
 
 .photo-library-empty .primary-button,
 .photo-library-empty .secondary-button {
@@ -716,16 +712,19 @@
 }
 
 .photo-wall {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: 6px;
+  column-width: 128px;
+  column-gap: 6px;
 }
 
 .photo-tile {
   position: relative;
+  display: inline-block;
+  width: 100%;
   min-width: 0;
-  aspect-ratio: 1;
+  margin: 0 0 6px;
   overflow: hidden;
+  vertical-align: top;
+  break-inside: avoid;
   border: 1px solid var(--line-soft);
   border-radius: 5px;
   background: var(--surface);
@@ -843,19 +842,30 @@
   background: var(--accent);
 }
 
-.photo-load-more {
+.photo-pagination-sentinel {
+  display: grid;
+  min-height: 40px;
+  place-items: center;
+}
+
+.photo-pagination-sentinel > span,
+.photo-pagination-error {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  justify-self: center;
-  min-height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  color: var(--muted);
   font-size: 11px;
   font-family: var(--font-emphasis);
   font-weight: 800;
+}
+
+.photo-pagination-error .secondary-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  font-size: 10.5px;
 }
 
 .photo-lightbox-backdrop {
@@ -1110,29 +1120,8 @@
     grid-template-columns: minmax(0, 1.3fr) minmax(100px, .8fr) 29px;
   }
 
-  .photo-library-bar {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .photo-library-location {
-    flex: 1 1 240px;
-  }
-
-  .photo-runtime-status {
-    flex: 1 1 100%;
-    margin-left: 0;
-    overflow-x: auto;
-  }
-
   .photo-selection-actions {
-    flex: 1 1 100%;
-    margin-left: 0;
     overflow-x: auto;
-  }
-
-  .photo-wall {
-    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
   }
 
   .photo-lightbox-body {
@@ -1159,7 +1148,7 @@
 
 @container workspace-stage (max-width: 520px) {
   .photo-library {
-    grid-template-rows: max-content max-content max-content minmax(320px, max-content);
+    grid-template-rows: max-content max-content minmax(320px, max-content);
     align-content: start;
     overflow: auto;
   }
@@ -1173,14 +1162,13 @@
     padding: 8px;
   }
 
-  .photo-view-switch button span,
-  .photo-sort-field > span,
-  .photo-advanced-toggle {
-    font-size: 0;
+  .photo-filter-menu {
+    max-height: max(220px, calc(100dvh - 300px));
   }
 
-  .photo-advanced-toggle svg {
-    margin: 0;
+  .photo-view-switch button span,
+  .photo-sort-field > span {
+    font-size: 0;
   }
 
   .photo-sort-field {
@@ -1193,7 +1181,12 @@
   }
 
   .photo-condition-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 29px;
+    grid-template-areas:
+      "field remove"
+      "operator operator"
+      "value value"
+      "value-to value-to";
+    grid-template-columns: minmax(0, 1fr) 29px;
   }
 
   .photo-map-toolbar {
@@ -1206,8 +1199,7 @@
     justify-content: flex-end;
   }
 
-  .photo-selection-actions button span,
-  .photo-select-all span {
+  .photo-selection-actions button span {
     display: none;
   }
 
@@ -1226,7 +1218,8 @@
   }
 
   .photo-wall {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-width: auto;
+    column-count: 2;
   }
 
   .photo-name {
@@ -1274,7 +1267,6 @@
 @media (prefers-reduced-motion: reduce) {
   .photo-open img,
   .photo-name,
-  .photo-library-bar-skeleton,
   .photo-query-panel-skeleton,
   .photo-timeline-skeleton,
   .photo-timeline-skeleton .photo-day {
