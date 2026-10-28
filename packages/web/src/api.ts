@@ -1952,19 +1952,13 @@ export async function getTerminalTabs(): Promise<TerminalTabState> {
 }
 
 export async function initializeTerminalTabs(): Promise<TerminalTabState> {
-  const response = await fetch("/api/terminal/tabs/initialize", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" }
-  });
+  const response = await fetch("/api/terminal/tabs/initialize", { method: "POST" });
   await ensureOk(response);
   return (await response.json()) as TerminalTabState;
 }
 
 export async function createTerminalTab(): Promise<TerminalTabState> {
-  const response = await fetch("/api/terminal/tabs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" }
-  });
+  const response = await fetch("/api/terminal/tabs", { method: "POST" });
   await ensureOk(response);
   return (await response.json()) as TerminalTabState;
 }
