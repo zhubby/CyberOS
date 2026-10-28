@@ -61,6 +61,8 @@ sudo CYBEROS_ENABLE_NGINX=1 \
 
 脚本会安装 Node.js 22 和 Rust 1.95.0、构建并安装本架构 `.deb`，然后仅在新安装时执行 `cyberos-first-boot.sh`。首次初始化会创建 `/cyberos/config/config.toml`、`/cyberos/state`、`/cyberos/home/terminal`、`/cyberos/state/vod-player`、`/cyberos/data`、`/cyberos/backup`、`/cyberos/iso` 和本地管理员记录，但不会创建存储池。它不会探测或迁移 CyberOS 之前的目录、配置、数据库或服务。
 
+安装器默认通过 `sparse+https://rsproxy.cn/index/` 下载 Rust crate；可用 `CYBEROS_CARGO_REGISTRY` 指向其他以 `/` 结尾的 sparse HTTPS registry。该设置只写入一次性 Debian 构建副本，不覆盖 root 用户已有的 Cargo 配置。源码 checkout 和 `.cyberos/deb-build` 必须位于有足够空间的持久文件系统；不要在容量较小的 `/tmp` tmpfs 中执行完整构建。
+
 核心服务会被 `enable --now`：
 
 ```bash

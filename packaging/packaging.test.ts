@@ -458,6 +458,8 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("mirrors.aliyun.com/nodejs-release");
     expect(installer).toContain("SHASUMS256.txt");
     expect(installer).toContain("CYBEROS_NPM_REGISTRY");
+    expect(installer).toContain("CYBEROS_CARGO_REGISTRY");
+    expect(installer).toContain("sparse+https://rsproxy.cn/index/");
     expect(installer).toContain("CYBEROS_RUSTUP_INIT_URL");
     expect(installer).toContain("RUST_VERSION_REQUIRED=1.95.0");
     expect(installer).toContain('rustup" set auto-self-update disable');
@@ -507,6 +509,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("===== CyberOS service journal =====");
     expect(deployWorkflow).toContain("-u cyberos-alerter.service");
     expect(buildDeb).toContain("registry.npmmirror.com");
+    expect(buildDeb).toContain("CYBEROS_CARGO_REGISTRY");
+    expect(buildDeb).toContain('[source.crates-io]');
+    expect(buildDeb).toContain('replace-with = "cyberos-mirror"');
     expect(buildDeb).toContain("CYBEROS_BUILD_COMMIT_SHA");
     expect(buildDeb).toContain("CYBEROS_BUILD_DIRTY");
     expect(buildDeb).toContain("CYBEROS_BUILD_SOURCE");

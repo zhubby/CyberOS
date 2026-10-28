@@ -6,6 +6,15 @@ BUILD_DIR="$ROOT_DIR/.cyberos/deb-build"
 CYBEROS_NPM_REGISTRY=${CYBEROS_NPM_REGISTRY:-https://registry.npmmirror.com}
 export CYBEROS_NPM_REGISTRY
 
+if [ -n "${CYBEROS_CARGO_REGISTRY:-}" ]; then
+  printf '%s\n' "$CYBEROS_CARGO_REGISTRY" \
+    | grep -Eq '^sparse\+https://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+/$' \
+    || {
+      printf 'build-deb: CYBEROS_CARGO_REGISTRY must be a safe sparse HTTPS registry URL ending in /\n' >&2
+      exit 1
+    }
+fi
+
 git_value() {
   git -C "$ROOT_DIR" "$@" 2>/dev/null || true
 }
@@ -58,6 +67,17 @@ rm -rf "$BUILD_DIR"
 install -d "$BUILD_DIR"
 rsync -a --exclude node_modules --exclude target --exclude .git --exclude .cyberos "$ROOT_DIR/" "$BUILD_DIR/"
 cd "$BUILD_DIR"
+
+if [ -n "${CYBEROS_CARGO_REGISTRY:-}" ]; then
+  install -d .cargo
+  {
+    printf '%s\n' '[source.crates-io]'
+    printf '%s\n\n' 'replace-with = "cyberos-mirror"'
+    printf '%s\n' '[source.cyberos-mirror]'
+    printf 'registry = "%s"\n' "$CYBEROS_CARGO_REGISTRY"
+  } > .cargo/config.toml
+fi
+
 cp -R packaging/debian debian
 dpkg-buildpackage -us -uc -b
 

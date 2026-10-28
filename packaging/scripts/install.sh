@@ -11,6 +11,7 @@ CYBEROS_RPI_MIRROR=${CYBEROS_RPI_MIRROR:-https://mirrors.aliyun.com/raspberrypi}
 CYBEROS_NODE_MIRROR=${CYBEROS_NODE_MIRROR:-https://mirrors.aliyun.com/nodejs-release}
 CYBEROS_NODE_VERSION=${CYBEROS_NODE_VERSION:-22.23.2}
 CYBEROS_NPM_REGISTRY=${CYBEROS_NPM_REGISTRY:-https://registry.npmmirror.com}
+CYBEROS_CARGO_REGISTRY=${CYBEROS_CARGO_REGISTRY:-sparse+https://rsproxy.cn/index/}
 CYBEROS_RUSTUP_INIT_URL=${CYBEROS_RUSTUP_INIT_URL:-https://sh.rustup.rs}
 CYBEROS_CARGO_HOME=${CYBEROS_CARGO_HOME:-/root/.cargo}
 CYBEROS_RUSTUP_HOME=${CYBEROS_RUSTUP_HOME:-/root/.rustup}
@@ -117,12 +118,17 @@ esac
 [ -n "$CYBEROS_NODE_MIRROR" ] || die "CYBEROS_NODE_MIRROR must not be empty"
 [ -n "$CYBEROS_NODE_VERSION" ] || die "CYBEROS_NODE_VERSION must not be empty"
 [ -n "$CYBEROS_NPM_REGISTRY" ] || die "CYBEROS_NPM_REGISTRY must not be empty"
+[ -n "$CYBEROS_CARGO_REGISTRY" ] || die "CYBEROS_CARGO_REGISTRY must not be empty"
 [ -n "$CYBEROS_RUSTUP_INIT_URL" ] || die "CYBEROS_RUSTUP_INIT_URL must not be empty"
 [ -n "$CYBEROS_CARGO_HOME" ] || die "CYBEROS_CARGO_HOME must not be empty"
 [ -n "$CYBEROS_RUSTUP_HOME" ] || die "CYBEROS_RUSTUP_HOME must not be empty"
 [ -n "$CYBEROS_APT_BACKUP_DIR" ] || die "CYBEROS_APT_BACKUP_DIR must not be empty"
 [ -n "$CYBEROS_LOCALE" ] || die "CYBEROS_LOCALE must not be empty"
 [ "$TERMINAL_USER" = cyberos ] || die "CYBEROS_TERMINALD_USER must be cyberos"
+
+printf '%s\n' "$CYBEROS_CARGO_REGISTRY" \
+  | grep -Eq '^sparse\+https://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+/$' \
+  || die "CYBEROS_CARGO_REGISTRY must be a safe sparse HTTPS registry URL ending in /"
 
 CYBEROS_APT_BACKUP_DIR=$(realpath -m -- "$CYBEROS_APT_BACKUP_DIR")
 case "$CYBEROS_APT_BACKUP_DIR" in
@@ -290,7 +296,8 @@ if [ -e /cyberos/config/config.toml ]; then
 fi
 
 log "building the native ${ARCH} Debian package"
-"$ROOT_DIR/packaging/scripts/build-deb.sh"
+CYBEROS_CARGO_REGISTRY="$CYBEROS_CARGO_REGISTRY" \
+  "$ROOT_DIR/packaging/scripts/build-deb.sh"
 
 DEB_PATH=$(find "$ROOT_DIR/.cyberos" -maxdepth 1 -type f \
   -name "cyberos_*_${ARCH}.deb" ! -name '*dbgsym*' -print | sort | tail -n 1)

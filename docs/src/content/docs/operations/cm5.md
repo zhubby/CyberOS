@@ -16,9 +16,9 @@ CM5 必须在目标 arm64 主机上构建 Debian 包，以匹配 `better-sqlite3
 - 运行 Debian 12/bookworm 或兼容的 arm64 系统（Debian 13/trixie 也需在目标主机验收）；
 - 确认包管理的非 root `cyberos` 用户可以使用 `/cyberos/home/terminal` 和配置的 storage pools；
 - 将 NAS 数据盘挂载到 `/cyberos/data/pool-1`，需要备份时将仓库放在与 NAS、`/cyberos/state` 不重叠的 `/cyberos/backup`；
-- 确保构建阶段可以访问 APT、Node.js release 和 npm registry，或传入内部镜像；
+- 确保构建阶段可以访问 APT、Node.js release、npm registry 和 Cargo sparse registry，或传入内部镜像；
 - Wi-Fi 管理要求 NetworkManager、wpa_supplicant、dnsmasq-base、wireless-regdb 和 iw；Debian 包会声明这些依赖，但不会自动把现有 networkd 主机迁移到 NetworkManager；
-- 预留足够空间用于 `.cyberos/deb-build`、`docs/node_modules` 和 Debian 产物。
+- 在根盘或其他持久文件系统预留足够空间用于 checkout、`.cyberos/deb-build`、`docs/node_modules` 和 Debian 产物；不要在容量较小的 `/tmp` tmpfs 中构建。
 
 ## 原生构建与安装
 
@@ -40,7 +40,7 @@ sudo CYBEROS_ENABLE_NGINX=1 \
   ./packaging/scripts/install.sh
 ```
 
-安装脚本支持 `CYBEROS_APT_MIRROR`、`CYBEROS_APT_SECURITY_MIRROR`、`CYBEROS_RPI_MIRROR`、`CYBEROS_NODE_MIRROR` 和 `CYBEROS_NPM_REGISTRY`。它会先备份并修改已知源，再构建当前 checkout 的 Debian 包；在生产主机上应保存脚本输出和 `.cyberos` 产物。
+安装脚本支持 `CYBEROS_APT_MIRROR`、`CYBEROS_APT_SECURITY_MIRROR`、`CYBEROS_RPI_MIRROR`、`CYBEROS_NODE_MIRROR`、`CYBEROS_NPM_REGISTRY` 和 `CYBEROS_CARGO_REGISTRY`。Cargo 默认使用 `sparse+https://rsproxy.cn/index/`；该值必须是以 `/` 结尾的 sparse HTTPS registry URL。它会先备份并修改已知源，再构建当前 checkout 的 Debian 包；Cargo mirror 只写入一次性构建副本，不修改管理员配置。在生产主机上应保存脚本输出和 `.cyberos` 产物。
 
 ## HDMI 电视模式
 
