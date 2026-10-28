@@ -35,10 +35,10 @@ it("starts the production API bundle", async () => {
   let stdout = "";
   let stderr = "";
   let exited = false;
-  const exitPromise = new Promise<void>((resolve) => {
-    child.once("exit", () => {
+  const exitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+    child.once("exit", (code, signal) => {
       exited = true;
-      resolve();
+      resolve({ code, signal });
     });
   });
   child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
@@ -51,13 +51,29 @@ it("starts the production API bundle", async () => {
   try {
     const response = await waitForHealth(port, () => exited);
     await expect(response.json()).resolves.toMatchObject({ ok: true, service: "cyberos-api" });
+
+    const streamController = new AbortController();
+    try {
+      const streamResponse = await fetch(`http://127.0.0.1:${port}/api/monitoring/events`, {
+        signal: streamController.signal
+      });
+      expect(streamResponse.status).toBe(200);
+      const firstChunk = await streamResponse.body?.getReader().read();
+      expect(new TextDecoder().decode(firstChunk?.value)).toContain(": connected");
+
+      child.kill("SIGTERM");
+      await expect(withTimeout(exitPromise, 2_000, "API did not stop while an SSE connection was active"))
+        .resolves.toEqual({ code: 0, signal: null });
+    } finally {
+      streamController.abort();
+    }
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\nstdout:\n${stdout}\nstderr:\n${stderr}`
     );
   } finally {
     if (!exited) {
-      child.kill("SIGTERM");
+      child.kill("SIGKILL");
       await exitPromise;
     }
     await rm(tempDir, { recursive: true, force: true });
@@ -77,6 +93,20 @@ async function reservePort(): Promise<number> {
   }
   await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   return address.port;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function waitForHealth(port: number, hasExited: () => boolean): Promise<Response> {

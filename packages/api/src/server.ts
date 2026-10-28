@@ -53,6 +53,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     throw new Error("CyberOS API must bind to a loopback host");
   }
   const server = Fastify({
+    forceCloseConnections: true,
     logger: {
       level: process.env.LOG_LEVEL ?? "info"
     }
