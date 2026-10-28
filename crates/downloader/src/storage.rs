@@ -355,7 +355,7 @@ fn require_exact_mountpoint(_path: &Path, required: bool) -> Result<Option<u64>,
     ))
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(test)]
 fn has_exact_mountpoint(mountinfo: &str, path: &Path) -> bool {
     exact_mount_id(mountinfo, path).is_some()
 }

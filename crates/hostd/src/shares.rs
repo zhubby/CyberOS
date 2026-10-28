@@ -315,7 +315,8 @@ mod tests {
                 htpasswd: etc.join("cyberos/shares.htpasswd"),
                 ftp_pam: etc.join("pam/vsftpd-cyberos"),
             },
-            credential_group: "cyberos".to_owned(),
+            // Source-package tests run before the cyberos group is installed.
+            credential_group: "root".to_owned(),
             managed_roots: vec![etc],
             acl_script: temp.path().join("share-acl.mjs"),
             acl_state: temp.path().join("share-acl.json"),
