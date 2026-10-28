@@ -184,7 +184,10 @@ install_rust_toolchain() {
     rm -f "$rustup_init"
   fi
   "$CARGO_HOME/bin/rustup" set auto-self-update disable
-  "$CARGO_HOME/bin/rustup" toolchain install "$RUST_VERSION_REQUIRED" --profile minimal
+  if ! "$CARGO_HOME/bin/rustup" run "$RUST_VERSION_REQUIRED" rustc --version 2>/dev/null \
+    | grep -Eq "^rustc ${RUST_VERSION_REQUIRED} "; then
+    "$CARGO_HOME/bin/rustup" toolchain install "$RUST_VERSION_REQUIRED" --profile minimal
+  fi
   "$CARGO_HOME/bin/rustup" default "$RUST_VERSION_REQUIRED"
   rustc --version | grep -Eq "^rustc ${RUST_VERSION_REQUIRED} " \
     || die "Rust ${RUST_VERSION_REQUIRED} is required; found $(rustc --version 2>/dev/null || printf 'none')"
