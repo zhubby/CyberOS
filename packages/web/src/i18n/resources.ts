@@ -732,7 +732,7 @@ export const en = {
     photos: {
       eyebrow: "Photo library",
       title: "Photos",
-      description: "The system-configured directory is the single photo and media library.",
+      description: "Media library",
       summary: "{{count}} media items · chronological timeline",
       actions: "Photo library actions",
       moveDestination: "Move destination",
@@ -3570,7 +3570,7 @@ export const zhCN = {
     photos: {
       eyebrow: "照片库",
       title: "相册",
-      description: "照片目录由系统配置指定，并作为唯一照片和媒体库。",
+      description: "照片与媒体库",
       summary: "{{count}} 个媒体项 · 按时间排列",
       actions: "照片库操作",
       moveDestination: "移动目标",
