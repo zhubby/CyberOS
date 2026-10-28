@@ -566,12 +566,12 @@
   background: #292c35;
 }
 
-.office-document-preview .zos-docx-wrapper {
+.office-document-preview .cyberos-docx-wrapper {
   padding: 16px 0;
   background: transparent;
 }
 
-.office-document-preview .zos-docx-wrapper > section.zos-docx {
+.office-document-preview .cyberos-docx-wrapper > section.cyberos-docx {
   margin: 0 auto 14px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
 }

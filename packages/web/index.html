@@ -2,15 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/zos-icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/cyberos-icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ZOS</title>
+    <title>CyberOS</title>
     <script>
       (() => {
         const root = document.documentElement;
         let language = navigator.language?.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
         try {
-          const storedLanguage = localStorage.getItem("zos:language");
+          const storedLanguage = localStorage.getItem("cyberos:language");
           language = storedLanguage === "zh-CN"
             ? "zh-CN"
             : storedLanguage === "en"
@@ -46,7 +46,7 @@
         background: var(--boot-bg);
       }
 
-      #zos-boot {
+      #cyberos-boot {
         position: fixed;
         inset: 0;
         z-index: 9999;
@@ -62,13 +62,13 @@
         transition: opacity 260ms cubic-bezier(.2, .72, .2, 1), visibility 260ms linear;
       }
 
-      #zos-boot.is-exiting {
+      #cyberos-boot.is-exiting {
         visibility: hidden;
         opacity: 0;
         pointer-events: none;
       }
 
-      .zos-boot-shell {
+      .cyberos-boot-shell {
         position: relative;
         display: grid;
         justify-items: stretch;
@@ -81,10 +81,10 @@
         box-shadow: 8px 8px 0 var(--boot-accent);
         clip-path: polygon(0 0, calc(100% - 34px) 0, 100% 34px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
         text-align: left;
-        animation: zos-boot-arrive 320ms cubic-bezier(.2, .72, .2, 1) both;
+        animation: cyberos-boot-arrive 320ms cubic-bezier(.2, .72, .2, 1) both;
       }
 
-      .zos-boot-shell::before {
+      .cyberos-boot-shell::before {
         position: absolute;
         top: 8px;
         right: 42px;
@@ -94,7 +94,7 @@
         content: "";
       }
 
-      .zos-boot-brand {
+      .cyberos-boot-brand {
         display: inline-flex;
         align-items: center;
         gap: 9px;
@@ -103,13 +103,13 @@
         letter-spacing: 0;
       }
 
-      .zos-boot-brand img {
+      .cyberos-boot-brand img {
         width: 38px;
         height: 38px;
         filter: invert(1);
       }
 
-      .zos-boot-copy {
+      .cyberos-boot-copy {
         display: grid;
         gap: 6px;
         margin-top: 38px;
@@ -117,20 +117,20 @@
         border-top: 1px solid rgb(252 238 10 / 42%);
       }
 
-      .zos-boot-copy strong {
+      .cyberos-boot-copy strong {
         color: var(--boot-inverse);
         font: 700 28px/1.05 Rajdhani, sans-serif;
         text-transform: uppercase;
         letter-spacing: 0;
       }
 
-      .zos-boot-copy span {
+      .cyberos-boot-copy span {
         color: var(--boot-info);
         font: 600 12px/1.5 Rajdhani, sans-serif;
         text-transform: uppercase;
       }
 
-      .zos-boot-sequence {
+      .cyberos-boot-sequence {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 1px;
@@ -138,14 +138,14 @@
         background: rgb(252 238 10 / 28%);
       }
 
-      .zos-boot-sequence span {
+      .cyberos-boot-sequence span {
         padding: 7px 8px;
         color: var(--boot-inverse);
         background: var(--boot-panel);
         font: 600 10px/1.2 Rajdhani, sans-serif;
       }
 
-      .zos-boot-sequence span::before {
+      .cyberos-boot-sequence span::before {
         display: inline-block;
         width: 5px;
         height: 5px;
@@ -154,7 +154,7 @@
         content: "";
       }
 
-      .zos-boot-progress {
+      .cyberos-boot-progress {
         width: 100%;
         height: 3px;
         margin-top: 24px;
@@ -162,15 +162,15 @@
         background: rgb(252 238 10 / 22%);
       }
 
-      .zos-boot-progress span {
+      .cyberos-boot-progress span {
         display: block;
         width: 42%;
         height: 100%;
         background: var(--boot-info);
-        animation: zos-boot-progress 1.35s ease-in-out infinite;
+        animation: cyberos-boot-progress 1.35s ease-in-out infinite;
       }
 
-      .zos-boot-footer {
+      .cyberos-boot-footer {
         margin-top: 16px;
         color: rgb(252 238 10 / 64%);
         font: 600 10px/1.4 Rajdhani, sans-serif;
@@ -178,15 +178,15 @@
         text-transform: uppercase;
       }
 
-      #zos-boot[data-state="error"] .zos-boot-brand {
+      #cyberos-boot[data-state="error"] .cyberos-boot-brand {
         color: var(--boot-danger);
       }
 
-      #zos-boot[data-state="error"] .zos-boot-progress {
+      #cyberos-boot[data-state="error"] .cyberos-boot-progress {
         display: none;
       }
 
-      .zos-boot-retry {
+      .cyberos-boot-retry {
         display: none;
         min-height: 38px;
         margin-top: 22px;
@@ -200,41 +200,41 @@
         clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
       }
 
-      .zos-boot-retry:hover {
+      .cyberos-boot-retry:hover {
         border-color: var(--boot-accent);
         background: var(--boot-accent);
       }
 
-      #zos-boot[data-state="error"] .zos-boot-retry {
+      #cyberos-boot[data-state="error"] .cyberos-boot-retry {
         display: inline-flex;
         align-items: center;
       }
 
-      @keyframes zos-boot-arrive {
+      @keyframes cyberos-boot-arrive {
         from { opacity: 0; transform: translateY(8px) skewX(-1deg); }
         to { opacity: 1; transform: translateY(0); }
       }
 
-      @keyframes zos-boot-progress {
+      @keyframes cyberos-boot-progress {
         0% { transform: translateX(-120%); }
         60%, 100% { transform: translateX(245%); }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        #zos-boot,
-        .zos-boot-shell,
-        .zos-boot-progress span {
+        #cyberos-boot,
+        .cyberos-boot-shell,
+        .cyberos-boot-progress span {
           animation: none;
           transition: none;
         }
       }
 
       @media (max-width: 480px) {
-        .zos-boot-shell {
+        .cyberos-boot-shell {
           padding: 24px 20px 22px;
         }
 
-        .zos-boot-sequence {
+        .cyberos-boot-sequence {
           grid-template-columns: 1fr;
         }
       }
@@ -242,29 +242,29 @@
   </head>
   <body>
     <div id="root"></div>
-    <div id="zos-boot" role="status" aria-live="polite" aria-busy="true">
-      <div class="zos-boot-shell">
-        <div class="zos-boot-brand">
-          <img src="/zos-icon.svg" alt="" width="38" height="38" />
-          <span>ZOS</span>
+    <div id="cyberos-boot" role="status" aria-live="polite" aria-busy="true">
+      <div class="cyberos-boot-shell">
+        <div class="cyberos-boot-brand">
+          <img src="/cyberos-icon.svg" alt="" width="38" height="38" />
+          <span>CyberOS</span>
         </div>
-        <div class="zos-boot-copy">
+        <div class="cyberos-boot-copy">
           <strong data-boot-title>Preparing workspace</strong>
           <span data-boot-detail>Connecting to local services</span>
         </div>
-        <div class="zos-boot-sequence" aria-hidden="true">
+        <div class="cyberos-boot-sequence" aria-hidden="true">
           <span>SYS.01</span><span>NAS LINK</span><span>INDEX BUS</span>
         </div>
-        <div class="zos-boot-progress" aria-hidden="true"><span></span></div>
-        <div class="zos-boot-footer">
+        <div class="cyberos-boot-progress" aria-hidden="true"><span></span></div>
+        <div class="cyberos-boot-footer">
           <span data-boot-system>Local system</span>
         </div>
-        <button class="zos-boot-retry" type="button" data-boot-retry>Reload</button>
+        <button class="cyberos-boot-retry" type="button" data-boot-retry>Reload</button>
       </div>
     </div>
     <script>
       (() => {
-        const bootScreen = document.getElementById("zos-boot");
+        const bootScreen = document.getElementById("cyberos-boot");
         if (!bootScreen) return;
 
         const bootTitle = bootScreen.querySelector("[data-boot-title]");
@@ -277,7 +277,7 @@
           if (ready) return;
           bootScreen.dataset.state = "error";
           bootScreen.setAttribute("aria-busy", "false");
-          if (bootTitle) bootTitle.textContent = isChinese ? "ZOS 启动失败" : "ZOS could not start";
+          if (bootTitle) bootTitle.textContent = isChinese ? "CyberOS 启动失败" : "CyberOS could not start";
           if (bootDetail) bootDetail.textContent = isChinese ? "请重新加载页面后再试" : "Reload the page to try again";
         };
 
@@ -292,10 +292,10 @@
 
         window.addEventListener("error", handleError, true);
         window.addEventListener("unhandledrejection", handleError);
-        window.addEventListener("zos:ready", handleReady, { once: true });
+        window.addEventListener("cyberos:ready", handleReady, { once: true });
         bootRetry?.addEventListener("click", () => {
           const url = new URL(window.location.href);
-          url.searchParams.set("_zos_reload", Date.now().toString());
+          url.searchParams.set("_cyberos_reload", Date.now().toString());
           window.location.replace(url.toString());
         });
       })();

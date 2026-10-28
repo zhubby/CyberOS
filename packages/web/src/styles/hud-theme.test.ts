@@ -9,11 +9,11 @@ describe("shared HUD theme", () => {
       readFile(new URL("./hud-workspaces.css", import.meta.url), "utf8")
     ]);
 
-    expect(base).toContain('@import "@zos/shared/hud-tokens.css"');
+    expect(base).toContain('@import "@cyberos/shared/hud-tokens.css"');
     expect(base).toContain("color-scheme: dark");
-    expect(base).toContain("--app-bg: var(--zos-color-canvas)");
+    expect(base).toContain("--app-bg: var(--cyberos-color-canvas)");
     expect(imports).toContain('./styles/hud-workspaces.css');
     expect(imports).not.toContain("hud-sample.css");
-    expect(workspaces).toContain("--hud-void: var(--zos-hud-void)");
+    expect(workspaces).toContain("--hud-void: var(--cyberos-hud-void)");
   });
 });

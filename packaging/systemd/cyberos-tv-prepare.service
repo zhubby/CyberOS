@@ -1,0 +1,20 @@
+[Unit]
+Description=Prepare the CyberOS TV runtime
+ConditionPathExists=/cyberos/config/tv-mode/enabled
+PartOf=cyberos-tv.target
+Before=cyberos-tv-weston.service cyberos-tv-chromium.service cyberos-tv-cec.service cyberos-tv-gamepad.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/cyberos/scripts/cyberos-tv-prepare start
+ExecStop=/usr/lib/cyberos/scripts/cyberos-tv-prepare stop
+RemainAfterExit=yes
+RuntimeDirectory=cyberos-tv
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=restart
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/cyberos-tv /sys/class/drm
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER

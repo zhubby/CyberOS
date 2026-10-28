@@ -448,58 +448,58 @@ export type CapabilityMutationRequest =
   | VodControlRequest;
 
 export interface PlannedCapabilityRequestMap {
-  "zos.files.grep": FileGrepRequest;
-  "zos.files.find": FileFindRequest;
-  "zos.files.git": { rootId: string; path?: string };
-  "zos.files.archive-inspect": { rootId: string; path: string; cursor?: string | null; limit?: number };
-  "zos.photos.media": { assetId: string; variant: "thumbnail" | "preview" | "original" | "video"; maxWidth?: number };
-  "zos.files.export-propose": CapabilityProposalRequest<FileExportRequest>;
-  "zos.files.edit": CapabilityProposalRequest<FileEditRequest>;
-  "zos.files.write": CapabilityProposalRequest<FileWriteRequest>;
-  "zos.files.rollback-propose": CapabilityProposalRequest<FileRollbackRequest>;
-  "zos.system.power-propose": CapabilityProposalRequest<PowerRequest>;
-  "zos.operations.run-propose": CapabilityProposalRequest<OperationsRunRequest>;
-  "zos.index.reindex-propose": CapabilityProposalRequest<ReindexRequest>;
-  "zos.photos.manage-propose": CapabilityProposalRequest<PhotoManageRequest>;
-  "zos.downloads.manage-propose": CapabilityProposalRequest<DownloadManageRequest>;
-  "zos.backup.run-propose": CapabilityProposalRequest<BackupRunRequest>;
-  "zos.alerts.manage-propose": CapabilityProposalRequest<AlertManageRequest>;
-  "zos.notifications.read-state-propose": CapabilityProposalRequest<Operation<"set_read", { notificationId: string }> | Operation<"read_all">>;
-  "zos.docker.manage-propose": CapabilityProposalRequest<DockerManageRequest>;
-  "zos.docker.console-propose": CapabilityProposalRequest<Operation<"console", { containerId: string; shell: "/bin/sh" | "/bin/bash" | "/bin/ash" }>>;
-  "zos.vm.manage-propose": CapabilityProposalRequest<VmManageRequest>;
-  "zos.vm.console-propose": CapabilityProposalRequest<Operation<"console", { domainName: string }>>;
-  "zos.network.manage-propose": CapabilityProposalRequest<NetworkManageRequest>;
-  "zos.storage.manage-propose": CapabilityProposalRequest<StorageManageRequest>;
-  "zos.settings.update-propose": CapabilityProposalRequest<SettingsUpdateRequest>;
-  "zos.terminal.manage-propose": CapabilityProposalRequest<TerminalManageRequest>;
-  "zos.vod.control-propose": CapabilityProposalRequest<VodControlRequest>;
-  "zos.shell.run": ShellRunRequest;
+  "cyberos.files.grep": FileGrepRequest;
+  "cyberos.files.find": FileFindRequest;
+  "cyberos.files.git": { rootId: string; path?: string };
+  "cyberos.files.archive-inspect": { rootId: string; path: string; cursor?: string | null; limit?: number };
+  "cyberos.photos.media": { assetId: string; variant: "thumbnail" | "preview" | "original" | "video"; maxWidth?: number };
+  "cyberos.files.export-propose": CapabilityProposalRequest<FileExportRequest>;
+  "cyberos.files.edit": CapabilityProposalRequest<FileEditRequest>;
+  "cyberos.files.write": CapabilityProposalRequest<FileWriteRequest>;
+  "cyberos.files.rollback-propose": CapabilityProposalRequest<FileRollbackRequest>;
+  "cyberos.system.power-propose": CapabilityProposalRequest<PowerRequest>;
+  "cyberos.operations.run-propose": CapabilityProposalRequest<OperationsRunRequest>;
+  "cyberos.index.reindex-propose": CapabilityProposalRequest<ReindexRequest>;
+  "cyberos.photos.manage-propose": CapabilityProposalRequest<PhotoManageRequest>;
+  "cyberos.downloads.manage-propose": CapabilityProposalRequest<DownloadManageRequest>;
+  "cyberos.backup.run-propose": CapabilityProposalRequest<BackupRunRequest>;
+  "cyberos.alerts.manage-propose": CapabilityProposalRequest<AlertManageRequest>;
+  "cyberos.notifications.read-state-propose": CapabilityProposalRequest<Operation<"set_read", { notificationId: string }> | Operation<"read_all">>;
+  "cyberos.docker.manage-propose": CapabilityProposalRequest<DockerManageRequest>;
+  "cyberos.docker.console-propose": CapabilityProposalRequest<Operation<"console", { containerId: string; shell: "/bin/sh" | "/bin/bash" | "/bin/ash" }>>;
+  "cyberos.vm.manage-propose": CapabilityProposalRequest<VmManageRequest>;
+  "cyberos.vm.console-propose": CapabilityProposalRequest<Operation<"console", { domainName: string }>>;
+  "cyberos.network.manage-propose": CapabilityProposalRequest<NetworkManageRequest>;
+  "cyberos.storage.manage-propose": CapabilityProposalRequest<StorageManageRequest>;
+  "cyberos.settings.update-propose": CapabilityProposalRequest<SettingsUpdateRequest>;
+  "cyberos.terminal.manage-propose": CapabilityProposalRequest<TerminalManageRequest>;
+  "cyberos.vod.control-propose": CapabilityProposalRequest<VodControlRequest>;
+  "cyberos.shell.run": ShellRunRequest;
 }
 
 const schemas: Record<string, JsonSchema> = {
-  "zos.catalog.get": EMPTY_OBJECT_SCHEMA,
-  "zos.system.status": EMPTY_OBJECT_SCHEMA,
-  "zos.system.power-propose": proposal(operationUnion(
+  "cyberos.catalog.get": EMPTY_OBJECT_SCHEMA,
+  "cyberos.system.status": EMPTY_OBJECT_SCHEMA,
+  "cyberos.system.power-propose": proposal(operationUnion(
     operation("reboot"),
     operation("shutdown")
   )),
-  "zos.operations.list": strictObject({ task: stringEnum(["health", "maintenance"]), limit: limit(100) }),
-  "zos.operations.run-propose": proposal(operationUnion(
+  "cyberos.operations.list": strictObject({ task: stringEnum(["health", "maintenance"]), limit: limit(100) }),
+  "cyberos.operations.run-propose": proposal(operationUnion(
     operation("health"),
     operation("maintenance")
   )),
-  "zos.roots.list": strictObject({ rootId }),
-  "zos.files.list": strictObject({ ...rootPath, ...pagination }, ["rootId"]),
-  "zos.files.stat": strictObject(rootPath, ["rootId", "path"]),
-  "zos.files.read": strictObject({ ...rootPath, maxBytes: integer(1, 131_072) }, ["rootId", "path"]),
-  "zos.files.resource-link": strictObject(rootPath, ["rootId", "path"]),
-  "zos.files.search": strictObject({
+  "cyberos.roots.list": strictObject({ rootId }),
+  "cyberos.files.list": strictObject({ ...rootPath, ...pagination }, ["rootId"]),
+  "cyberos.files.stat": strictObject(rootPath, ["rootId", "path"]),
+  "cyberos.files.read": strictObject({ ...rootPath, maxBytes: integer(1, 131_072) }, ["rootId", "path"]),
+  "cyberos.files.resource-link": strictObject(rootPath, ["rootId", "path"]),
+  "cyberos.files.search": strictObject({
     ...rootPath,
     query: nonEmptyText(500),
     ...pagination
   }, ["rootId", "query"]),
-  "zos.files.grep": strictObject({
+  "cyberos.files.grep": strictObject({
     ...rootPath,
     pattern: nonEmptyText(500),
     mode: stringEnum(["literal", "regex"]),
@@ -511,7 +511,7 @@ const schemas: Record<string, JsonSchema> = {
     maxBytes: integer(1, 268_435_456),
     timeoutMs: integer(100, 30_000)
   }, ["rootId", "pattern"]),
-  "zos.files.find": strictObject({
+  "cyberos.files.find": strictObject({
     ...rootPath,
     glob: nonEmptyText(500),
     kind: stringEnum(["any", "file", "directory"]),
@@ -519,21 +519,21 @@ const schemas: Record<string, JsonSchema> = {
     maxEntries: integer(1, 100_000),
     timeoutMs: integer(100, 30_000)
   }, ["rootId"]),
-  "zos.files.git": strictObject(rootPath, ["rootId"]),
-  "zos.files.archive-inspect": strictObject({ ...rootPath, ...pagination }, ["rootId", "path"]),
-  "zos.files.export-propose": proposal(operation("export", {
+  "cyberos.files.git": strictObject(rootPath, ["rootId"]),
+  "cyberos.files.archive-inspect": strictObject({ ...rootPath, ...pagination }, ["rootId", "path"]),
+  "cyberos.files.export-propose": proposal(operation("export", {
     rootId,
     paths: arrayOf(relativePath, 1, 200),
     archiveName: nonEmptyText(255)
   }, ["rootId", "paths"])),
-  "zos.files.mutate": proposal(operationUnion(
+  "cyberos.files.mutate": proposal(operationUnion(
     operation("mkdir", { rootId, targetPath: relativePath }, ["rootId", "targetPath"]),
     operation("move", { rootId, sourcePath: relativePath, targetPath: relativePath }, ["rootId", "sourcePath", "targetPath"]),
     operation("copy", { rootId, sourcePath: relativePath, targetPath: relativePath }, ["rootId", "sourcePath", "targetPath"]),
     operation("rename", { rootId, sourcePath: relativePath, targetPath: relativePath }, ["rootId", "sourcePath", "targetPath"]),
     operation("trash", { rootId, sourcePath: relativePath }, ["rootId", "sourcePath"])
   )),
-  "zos.files.edit": proposal(operation("edit", {
+  "cyberos.files.edit": proposal(operation("edit", {
     rootId,
     path: relativePath,
     find: nonEmptyText(262_144),
@@ -541,28 +541,28 @@ const schemas: Record<string, JsonSchema> = {
     replaceAll: boolean,
     expectedSha256: sha256
   }, ["rootId", "path", "find", "replace"])),
-  "zos.files.write": proposal(operation("write", {
+  "cyberos.files.write": proposal(operation("write", {
     rootId,
     path: relativePath,
     content: text(1_048_576),
     createOnly: boolean,
     expectedSha256: sha256
   }, ["rootId", "path", "content"])),
-  "zos.files.rollback-propose": proposal(operation("rollback", { operationId: id(128) }, ["operationId"])),
-  "zos.index.status": strictObject({ rootId }),
-  "zos.index.reindex-propose": proposal(operation("reindex", {
+  "cyberos.files.rollback-propose": proposal(operation("rollback", { operationId: id(128) }, ["operationId"])),
+  "cyberos.index.status": strictObject({ rootId }),
+  "cyberos.index.reindex-propose": proposal(operation("reindex", {
     rootId,
     path: relativePath,
     recursive: boolean
   }, ["rootId"])),
-  "zos.photos.query": strictObject({ assetId: id(), ...pagination }),
-  "zos.photos.status": EMPTY_OBJECT_SCHEMA,
-  "zos.photos.media": strictObject({
+  "cyberos.photos.query": strictObject({ assetId: id(), ...pagination }),
+  "cyberos.photos.status": EMPTY_OBJECT_SCHEMA,
+  "cyberos.photos.media": strictObject({
     assetId: id(),
     variant: stringEnum(["thumbnail", "preview", "original", "video"]),
     maxWidth: integer(64, 4096)
   }, ["assetId", "variant"]),
-  "zos.photos.manage-propose": proposal(operationUnion(
+  "cyberos.photos.manage-propose": proposal(operationUnion(
     operation("configure", { rootId, storagePoolId: id(128), path: relativePath }, ["rootId", "storagePoolId", "path"]),
     operation("processing", {
       processingConcurrency: integer(1, 4),
@@ -587,11 +587,11 @@ const schemas: Record<string, JsonSchema> = {
     operation("move", { assetIds: arrayOf(id(), 1, 500), targetDirectory: relativePath }, ["assetIds", "targetDirectory"]),
     operation("trash", { assetIds: arrayOf(id(), 1, 500) }, ["assetIds"])
   )),
-  "zos.downloads.list": strictObject({
+  "cyberos.downloads.list": strictObject({
     statuses: arrayOf(stringEnum(["queued", "running", "paused", "completed", "failed", "cancelled"]), 0, 6),
     limit: limit()
   }),
-  "zos.downloads.manage-propose": proposal(operationUnion(
+  "cyberos.downloads.manage-propose": proposal(operationUnion(
     operation("create", {
       url: { type: "string", minLength: 1, maxLength: 8192, format: "uri" },
       rootId,
@@ -620,8 +620,8 @@ const schemas: Record<string, JsonSchema> = {
       maxFileSizeBytes: { type: ["integer", "null"], minimum: 1, maximum: Number.MAX_SAFE_INTEGER }
     })
   )),
-  "zos.backup.status": strictObject({ limit: limit(100) }),
-  "zos.backup.run-propose": proposal(operationUnion(
+  "cyberos.backup.status": strictObject({ limit: limit(100) }),
+  "cyberos.backup.run-propose": proposal(operationUnion(
     operation("validate"),
     operation("init"),
     operation("run", { schedule: stringEnum(["daily", "weekly"]) }, ["schedule"]),
@@ -630,8 +630,8 @@ const schemas: Record<string, JsonSchema> = {
       snapshotId: id(256)
     }, ["snapshotId"])
   )),
-  "zos.monitoring.overview": EMPTY_OBJECT_SCHEMA,
-  "zos.monitoring.query": strictObject({
+  "cyberos.monitoring.overview": EMPTY_OBJECT_SCHEMA,
+  "cyberos.monitoring.query": strictObject({
     start: nonEmptyText(64),
     end: nonEmptyText(64),
     maxPoints: integer(2, 720),
@@ -641,8 +641,8 @@ const schemas: Record<string, JsonSchema> = {
       transform: stringEnum(["value", "rate"])
     }, ["metric"]), 1, 12)
   }, ["start", "end", "selectors"]),
-  "zos.alerts.read": strictObject({ status: stringEnum(["firing", "resolved"]), limit: limit() }),
-  "zos.alerts.manage-propose": proposal(operationUnion(
+  "cyberos.alerts.read": strictObject({ status: stringEnum(["firing", "resolved"]), limit: limit() }),
+  "cyberos.alerts.manage-propose": proposal(operationUnion(
     operation("create_rule", { rule: alertRule }, ["rule"]),
     operation("update_rule", { id: id(128), rule: alertRule, expectedRevision: integer(1, Number.MAX_SAFE_INTEGER) }, ["id", "rule", "expectedRevision"]),
     operation("delete_rule", { id: id(128), expectedRevision: integer(1, Number.MAX_SAFE_INTEGER) }, ["id", "expectedRevision"]),
@@ -667,13 +667,13 @@ const schemas: Record<string, JsonSchema> = {
     operation("delete_policy", { id: id(128), expectedRevision: integer(1, Number.MAX_SAFE_INTEGER) }, ["id", "expectedRevision"]),
     operation("update_health_routing", { warningPolicyId: { type: ["string", "null"], maxLength: 128 }, criticalPolicyId: { type: ["string", "null"], maxLength: 128 }, expectedRevision: integer(1, Number.MAX_SAFE_INTEGER) }, ["warningPolicyId", "criticalPolicyId", "expectedRevision"])
   )),
-  "zos.notifications.list": strictObject({ limit: limit(100) }),
-  "zos.notifications.read-state-propose": proposal(operationUnion(
+  "cyberos.notifications.list": strictObject({ limit: limit(100) }),
+  "cyberos.notifications.read-state-propose": proposal(operationUnion(
     operation("set_read", { notificationId: id(128) }, ["notificationId"]),
     operation("read_all")
   )),
-  "zos.docker.status": EMPTY_OBJECT_SCHEMA,
-  "zos.docker.manage-propose": proposal(operationUnion(
+  "cyberos.docker.status": EMPTY_OBJECT_SCHEMA,
+  "cyberos.docker.manage-propose": proposal(operationUnion(
     operation("create_container", {
       name: nonEmptyText(128), image: nonEmptyText(512), platform: nonEmptyText(128),
       pullPolicy: stringEnum(["missing", "always", "never"]), start: boolean,
@@ -706,21 +706,21 @@ const schemas: Record<string, JsonSchema> = {
     operation("registry_delete", { registryId: id(128) }, ["registryId"]),
     operation("daemon_update", { content: text(262_144), expectedRevision: revision, restart: boolean }, ["content", "expectedRevision", "restart"])
   )),
-  "zos.docker.console-propose": proposal(operation("console", {
+  "cyberos.docker.console-propose": proposal(operation("console", {
     containerId: id(256),
     shell: stringEnum(["/bin/sh", "/bin/bash", "/bin/ash"])
   }, ["containerId", "shell"])),
-  "zos.vm.status": EMPTY_OBJECT_SCHEMA,
-  "zos.vm.manage-propose": proposal(operationUnion(
+  "cyberos.vm.status": EMPTY_OBJECT_SCHEMA,
+  "cyberos.vm.manage-propose": proposal(operationUnion(
     operation("create", { domainName: nonEmptyText(128), vcpu: integer(1, 128), vcpuTopology: strictObject({ sockets: integer(1, 128), cores: integer(1, 128), threads: integer(1, 128) }, ["sockets", "cores", "threads"]), memoryBytes: integer(268_435_456, Number.MAX_SAFE_INTEGER), memoryBacking: stringEnum(["default", "hugepages"]), osVariant: nonEmptyText(128), firmware: stringEnum(["bios", "uefi"]), machineType: nonEmptyText(128), cpuMode: stringEnum(["host-model", "host-passthrough", "custom"]), cpuModel: nonEmptyText(128), diskSizeBytes: integer(1_073_741_824, Number.MAX_SAFE_INTEGER), diskBus: stringEnum(["virtio", "scsi", "sata", "ide"]), diskCache: stringEnum(["none", "writeback", "writethrough", "directsync", "unsafe"]), diskDiscard: stringEnum(["ignore", "unmap"]), isoRootId: rootId, isoStoragePoolId: id(128), isoPath: relativePath, networkName: nonEmptyText(128), networkModel: stringEnum(["virtio", "e1000", "rtl8139"]), macAddress: nonEmptyText(32), graphics: stringEnum(["none", "spice", "vnc"]), videoModel: stringEnum(["none", "virtio", "qxl", "vga"]), bootMenu: boolean, autostart: boolean }, ["domainName", "vcpu", "memoryBytes", "diskSizeBytes", "isoRootId", "isoStoragePoolId", "isoPath"]),
     ...["start", "shutdown", "stop", "restart", "pause", "resume", "reset", "delete"].map((name) => operation(name, { domainName: nonEmptyText(128) }, ["domainName"])),
     operation("snapshot_create", { domainName: nonEmptyText(128), snapshotName: nonEmptyText(128) }, ["domainName", "snapshotName"]),
     operation("snapshot_revert", { domainName: nonEmptyText(128), snapshotName: nonEmptyText(128) }, ["domainName", "snapshotName"]),
     operation("snapshot_delete", { domainName: nonEmptyText(128), snapshotName: nonEmptyText(128) }, ["domainName", "snapshotName"])
   )),
-  "zos.vm.console-propose": proposal(operation("console", { domainName: nonEmptyText(128) }, ["domainName"])),
-  "zos.network.status": EMPTY_OBJECT_SCHEMA,
-  "zos.network.manage-propose": proposal(operationUnion(
+  "cyberos.vm.console-propose": proposal(operation("console", { domainName: nonEmptyText(128) }, ["domainName"])),
+  "cyberos.network.status": EMPTY_OBJECT_SCHEMA,
+  "cyberos.network.manage-propose": proposal(operationUnion(
     operation("ethernet_stage", { deviceId: { type: "string", pattern: "^[0-9a-f]{12}$" }, config: ethernetConfig, expectedRevision: sha256 }, ["deviceId", "config", "expectedRevision"]),
     operation("ethernet_apply"),
     operation("ethernet_confirm", { transactionId: id(256) }, ["transactionId"]),
@@ -735,28 +735,28 @@ const schemas: Record<string, JsonSchema> = {
     operation("hotspot_stop", { device: nonEmptyText(128) }, ["device"]),
     operation("hotspot_delete", { device: nonEmptyText(128) }, ["device"])
   )),
-  "zos.storage.status": EMPTY_OBJECT_SCHEMA,
-  "zos.storage.manage-propose": proposal(operationUnion(
+  "cyberos.storage.status": EMPTY_OBJECT_SCHEMA,
+  "cyberos.storage.manage-propose": proposal(operationUnion(
     operation("pool_create", { name: nonEmptyText(32), level: stringEnum(["0", "1", "5", "6", "10"]), deviceIds: arrayOf(nonEmptyText(512), 1, 32), filesystem: stringEnum(["ext4", "btrfs"]) }, ["name", "level", "deviceIds", "filesystem"]),
     operation("pool_delete", { poolId: id(128), confirmation: nonEmptyText(128) }, ["poolId", "confirmation"]),
     operation("shares_update", { enabled: boolean, shares: arrayOf(shareDefinition, 0, 100) }, ["enabled", "shares"]),
     operation("share_account", { username: nonEmptyText(32), expectedUpdatedAt: timestamp }, ["username", "expectedUpdatedAt"])
   )),
-  "zos.settings.public": EMPTY_OBJECT_SCHEMA,
-  "zos.settings.update-propose": proposal(operationUnion(
+  "cyberos.settings.public": EMPTY_OBJECT_SCHEMA,
+  "cyberos.settings.update-propose": proposal(operationUnion(
     operation("indexer", { scanConcurrency: integer(1, 16), extractionConcurrency: integer(1, 8), reconciliationIntervalMs: integer(60_000, 86_400_000), maxExtractedTextBytes: integer(65_536, 16_777_216), maxSourceDocumentBytes: integer(1_048_576, 2_199_023_255_552), commandTimeoutMs: integer(5_000, 900_000), maxPdfTextPages: integer(1, 5_000), maxOcrPages: integer(1, 100), ocrRootIds: arrayOf(rootId, 0, 100) }),
     operation("model_provider", { providerName: stringEnum(["openai", "anthropic"]), baseUrl: nullableText(2048), model: text(256), replaceApiKey: boolean, clearApiKey: boolean }),
     operation("agent_policy", { policies: { type: "object", additionalProperties: stringEnum(["auto", "approve", "confirm", "disabled"]), maxProperties: 9 } }, ["policies"])
   )),
-  "zos.terminal.tabs": strictObject({ rootId }, ["rootId"]),
-  "zos.terminal.manage-propose": proposal(operationUnion(
+  "cyberos.terminal.tabs": strictObject({ rootId }, ["rootId"]),
+  "cyberos.terminal.manage-propose": proposal(operationUnion(
     operation("create", { rootId }, ["rootId"]),
     operation("rename", { tabId: id(128), customTitle: { type: ["string", "null"], maxLength: 80 } }, ["tabId", "customTitle"]),
     operation("activate", { tabId: id(128) }, ["tabId"]),
     operation("restart", { tabId: id(128) }, ["tabId"]),
     operation("close", { tabId: id(128) }, ["tabId"])
   )),
-  "zos.shell.run": strictObject({
+  "cyberos.shell.run": strictObject({
     rootId,
     command: stringEnum(["git", "rg", "find", "ls", "stat", "du", "df", "file", "sha256sum"]),
     args: arrayOf(text(4096), 0, 128),
@@ -764,8 +764,8 @@ const schemas: Record<string, JsonSchema> = {
     timeoutMs: integer(100, 30_000),
     idempotencyKey
   }, ["rootId", "command"]),
-  "zos.vod.status": EMPTY_OBJECT_SCHEMA,
-  "zos.vod.control-propose": proposal(operationUnion(
+  "cyberos.vod.status": EMPTY_OBJECT_SCHEMA,
+  "cyberos.vod.control-propose": proposal(operationUnion(
     operation("play", { rootId, storagePoolId: id(128), path: relativePath, startPositionSeconds: number(0, Number.MAX_SAFE_INTEGER), audioDeviceId: id(256) }, ["rootId", "storagePoolId", "path"]),
     ...["pause", "resume", "toggle-pause", "stop", "retry", "cycle-audio-track", "cycle-subtitle-track"].map((name) => operation(name, { sessionId: id(256) }, ["sessionId"])),
     operation("seek", { sessionId: id(256), seconds: number(0, Number.MAX_SAFE_INTEGER) }, ["sessionId", "seconds"]),
@@ -774,10 +774,10 @@ const schemas: Record<string, JsonSchema> = {
     operation("set-subtitle-track", { sessionId: id(256), trackId: { type: ["integer", "null"], minimum: 1, maximum: 1_000_000 } }, ["sessionId", "trackId"]),
     operation("set-volume", { sessionId: id(256), volume: number(0, 100) }, ["sessionId", "volume"])
   )),
-  "zos.runs.get": strictObject({ runId: { type: "string", format: "uuid" } }, ["runId"]),
-  "zos.runs.list": strictObject({ ...pagination }),
-  "zos.runs.wait": strictObject({ runId: { type: "string", format: "uuid" }, timeoutMs: integer(0, 20_000) }, ["runId"]),
-  "zos.runs.cancel": strictObject({ runId: { type: "string", format: "uuid" } }, ["runId"])
+  "cyberos.runs.get": strictObject({ runId: { type: "string", format: "uuid" } }, ["runId"]),
+  "cyberos.runs.list": strictObject({ ...pagination }),
+  "cyberos.runs.wait": strictObject({ runId: { type: "string", format: "uuid" }, timeoutMs: integer(0, 20_000) }, ["runId"]),
+  "cyberos.runs.cancel": strictObject({ runId: { type: "string", format: "uuid" } }, ["runId"])
 };
 
 export function capabilityInputSchema(capabilityId: string): JsonSchema {

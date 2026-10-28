@@ -9,7 +9,7 @@ import {
   listVmOperations,
   consumeVmConsoleAuthorization,
   updateVmOperationStatus
-} from "@zos/db";
+} from "@cyberos/db";
 import type {
   VmCpuMode,
   VmDiskBus,
@@ -22,7 +22,7 @@ import type {
   VmOperationAction,
   VmOperationProposal,
   VmVideoModel
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { applyVmOperation, collectVmSummary, safeVmMessage, DEFAULT_VM_CONFIG } from "../lib/vm-service.js";
 import { resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
@@ -62,12 +62,12 @@ export function vmConsoleSpawnSpec(libvirtUri: string, domainName: string) {
     command: "script",
     args: [
       "-q", "-e", "-f", "-c",
-      'exec virsh -c "$ZOS_VM_LIBVIRT_URI" console "$ZOS_VM_DOMAIN"',
+      'exec virsh -c "$CYBEROS_VM_LIBVIRT_URI" console "$CYBEROS_VM_DOMAIN"',
       "/dev/null"
     ],
     env: {
-      ZOS_VM_LIBVIRT_URI: libvirtUri,
-      ZOS_VM_DOMAIN: domainName
+      CYBEROS_VM_LIBVIRT_URI: libvirtUri,
+      CYBEROS_VM_DOMAIN: domainName
     }
   };
 }

@@ -22,8 +22,8 @@ import {
   listTranscriptItems,
   updateSessionPath,
   updateSessionResourceTrust
-} from "@zos/db";
-import { resolveSafeExistingPath } from "@zos/nas-tools";
+} from "@cyberos/db";
+import { resolveSafeExistingPath } from "@cyberos/nas-tools";
 import type { ApiRouteContext } from "../context.js";
 import { getAgentMessageContent, getAgentMessageRole, getFailedJobMessageContent, getInitialEventId } from "../lib/events.js";
 

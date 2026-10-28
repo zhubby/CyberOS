@@ -1,25 +1,25 @@
 <p align="center">
-  <img src="packages/web/public/zos-icon.svg" alt="ZOS logo" width="96" height="96">
+  <img src="packages/web/public/cyberos-icon.svg" alt="CyberOS logo" width="96" height="96">
 </p>
 
-<h1 align="center">ZOS</h1>
+<h1 align="center">CyberOS</h1>
 
 <p align="center">
   A local-first Linux NAS appliance with a web workspace, approval-gated AI operations, search, and host management.
 </p>
 
-ZOS is a single-user control plane for a personal Linux NAS. It combines a responsive file workspace with an AI agent, keeps state in a local SQLite database, and runs as a set of native `systemd` services instead of inside containers.
+CyberOS is a single-user control plane for a personal Linux NAS. It combines a responsive file workspace with an AI agent, keeps state in a local SQLite database, and runs as a set of native `systemd` services instead of inside containers.
 
 The project combines a strict TypeScript npm-workspaces application with Rust storage daemons. Its production target is Node.js 22 and Rust 1.95 on Debian-based systems, with a React/Vite frontend and a Fastify API.
 
 ## Project status
 
-ZOS is under active v1 development. The file and photo workspaces, agent job pipeline, approvals, indexing, Docker controls, share configuration, Debian packaging, and scheduled maintenance paths are implemented.
+CyberOS 2.0.0 is a clean-install release. It does not import earlier product data, configuration, backups, users, paths, or service state. The file and photo workspaces, agent job pipeline, approvals, indexing, Docker controls, share configuration, Debian packaging, and scheduled maintenance paths are implemented.
 
 The following surfaces are intentionally limited today:
 
 - Virtual machine management supports libvirt/QEMU host discovery and approval-gated lifecycle operations when the optional runtime is installed.
-- Network inspection remains available on every supported backend; NetworkManager Wi-Fi/hotspot changes and approved storage-pool operations are applied through `zos-hostd` when their host dependencies are available.
+- Network inspection remains available on every supported backend; NetworkManager Wi-Fi/hotspot changes and approved storage-pool operations are applied through `cyberos-hostd` when their host dependencies are available.
 - OCR is opt-in per NAS root and is limited to scanned PDFs with insufficient embedded text.
 - Local restic backup is opt-in; after explicit repository initialization, daily/weekly services perform encrypted snapshots and staging-only restore.
 - The appliance builder produces a generic root filesystem tarball, not a board-specific boot image.
@@ -59,15 +59,15 @@ The following surfaces are intentionally limited today:
 ### Host management
 
 - Read-only CPU, memory, process, runtime, storage, SMART, RAID, mount, and network reporting.
-- A local PTY terminal over WebSocket using a separately configured non-root host user (the API remains `zos`).
+- A local PTY terminal over WebSocket using a separately configured non-root host user (the API remains `cyberos`).
 - Optional Docker Engine and Compose discovery, metrics, logs, lifecycle actions, direct container/volume/network creation, and one-time approved console sessions.
-- Approval-gated SMB, WebDAV, FTP, NFS, and DLNA share configuration through the privileged Rust `zos-hostd` daemon.
+- Approval-gated SMB, WebDAV, FTP, NFS, and DLNA share configuration through the privileged Rust `cyberos-hostd` daemon.
 - English and Simplified Chinese UI, a unified dark HUD theme, preview limits, and editor font settings.
 
 ### Native appliance services
 
 - Debian package definitions for `amd64` and `arm64` release artifacts.
-- Hardened `systemd` units for the API, Rust monitor/alerter, worker, indexer, one-shot operations, and `zos-hostd`.
+- Hardened `systemd` units for the API, Rust monitor/alerter, worker, indexer, one-shot operations, and `cyberos-hostd`.
 - Timers for daily/weekly restic backups, health evaluation every 15 minutes, and maintenance at 04:30; the resident indexer reconciles internally every 30 minutes.
 - A Debian Bookworm rootfs scaffold built with `mmdebstrap` and `systemd-nspawn`.
 
@@ -84,7 +84,7 @@ flowchart LR
   Agent["Pi agent runtime"]
   Indexer["Filesystem indexer"]
   Ops["Ops health / maintenance"]
-  Monitor["Host and ZOS monitor"]
+  Monitor["Host and CyberOS monitor"]
   Alerter["Alert evaluator and mail outbox"]
   Tools["Path-safe NAS tools"]
   Roots[("Configured NAS roots")]
@@ -113,7 +113,7 @@ flowchart LR
   Alerter <--> DB
   API --> Host
   API -->|Termux Protocol v1 over Unix socket| Termux[termux daemon]
-  Termux -->|PTY as zos user| Host
+  Termux -->|PTY as cyberos user| Host
   API -->|JSONL Unix socket| Hostd
   Hostd --> Host
 ```
@@ -132,7 +132,7 @@ The main runtime components are:
 | `crates/alerter` | Rust alert engine: rule evaluation, incidents, escalation, health synchronization, and mail delivery. |
 | `crates/monitoring-contracts` | Shared Rust metric catalog, schema version, and sampling cadence contract. |
 | `crates/hostd` | Rust host integration daemon for approved shares, storage, Docker daemon, and NetworkManager changes. |
-| `crates/termux` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `zos` account. |
+| `crates/termux` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `cyberos` account. |
 | `packages/agent` | Pi SDK integration, NAS-scoped tools, session persistence, and tool policy enforcement. |
 | `packages/db` | SQLite connection, migrations, repositories, job queue, approvals, operations, and FTS queries. |
 | `packages/monitoring` | Language-neutral metric contracts plus TypeScript read-only metrics queries. |
@@ -152,14 +152,14 @@ File operations proposed through the workspace or agent, Pi tool calls, Docker l
 
 ## Security model
 
-ZOS currently assumes a trusted, single-user appliance. It has no multi-user authentication boundary and binds the API to `127.0.0.1` by default. Do not expose it directly to an untrusted network.
+CyberOS currently assumes a trusted, single-user appliance. It has no multi-user authentication boundary and binds the API to `127.0.0.1` by default. Do not expose it directly to an untrusted network.
 
 - Every NAS file path is resolved relative to a configured root; absolute paths, traversal, and unsafe symlink escapes are rejected.
-- File-oriented agent tools use NAS-root-scoped ZOS wrappers. The `bash` tool is a real service-account shell, is always approval-gated, and is not a filesystem sandbox.
+- File-oriented agent tools use NAS-root-scoped CyberOS wrappers. The `bash` tool is a real service-account shell, is always approval-gated, and is not a filesystem sandbox.
 - Write-capable Pi tools default to approval or disabled policies, configurable from the UI.
-- Approved file changes are audited. Trash uses a ZOS-managed quarantine area, and v1 never permanently deletes it during maintenance.
+- Approved file changes are audited. Trash uses a CyberOS-managed quarantine area and is not permanently deleted during maintenance.
 - Docker management is disabled by default. Access to `/var/run/docker.sock` is effectively root-equivalent.
-- The local terminal is a real interactive login shell running through Rust `crates/termux` as the non-root `zos` user. The API service also runs as `zos`; `NoNewPrivileges` and an empty capability set prevent terminal `sudo` escalation.
+- The local terminal is a real interactive login shell running through Rust `crates/termux` as the non-root `cyberos` user. The API service also runs as `cyberos`; `NoNewPrivileges` and an empty capability set prevent terminal `sudo` escalation.
 - Privileged host changes are isolated in Rust `crates/hostd`, which accepts versioned JSONL requests over an authenticated Unix socket and only performs allowlisted operations.
 
 Always configure at least one explicit NAS root. When no root is provided, the development fallback is the host filesystem root.
@@ -183,7 +183,7 @@ Optional host tools enable additional features:
 | HEIC/HEIF photos | `libheif-examples` (`heif-convert`) |
 | Archive extraction | `gzip`, `unzip`, `tar`, `bsdtar`, or `unrar` as appropriate |
 | Storage and network inspection | `ip`, `lsblk`, `findmnt`, `mdadm`, `smartctl` |
-| Share management | Samba, Apache WebDAV, vsftpd, NFS server, MiniDLNA, and the packaged `zos-hostd` daemon |
+| Share management | Samba, Apache WebDAV, vsftpd, NFS server, MiniDLNA, and the packaged `cyberos-hostd` daemon |
 | Docker management | Docker Engine socket access and the Docker CLI for Compose actions; enable explicitly on an appliance |
 | Virtual machines | `libvirt-daemon-system`, `libvirt-clients`, `qemu-system-arm` and `qemu-efi-aarch64` (arm64) or `qemu-system-x86` (amd64), `qemu-utils`, `virtinst`, and `ipxe-qemu` |
 
@@ -193,9 +193,9 @@ Install dependencies, create an isolated development NAS root, and export the co
 
 ```bash
 npm install
-mkdir -p .zos/dev-root/data/primary
-export ZOS_ROOT="$PWD/.zos/dev-root"
-export ZOS_NAS_ROOTS="dev:Development NAS:$PWD/.zos/dev-root/data/primary"
+mkdir -p .cyberos/dev-root/data/primary
+export CYBEROS_ROOT="$PWD/.cyberos/dev-root"
+export CYBEROS_NAS_ROOTS="dev:Development NAS:$PWD/.cyberos/dev-root/data/primary"
 npm run dev
 ```
 
@@ -211,7 +211,7 @@ npm run maintenance
 
 The Starlight documentation site is built separately with `npm run docs:build` and is served by the production API at `http://127.0.0.1:3010/docs/` when its static output is present. Use `npm run docs:dev` for the standalone documentation development server.
 
-The packaged Rust `zos-indexer.service` is resident: filesystem events and mutation queues normally make changes searchable within seconds, while a full reconciliation runs every 30 minutes. Run `npm run index` for a one-shot development refresh. A failed extraction retains its last successful body, and an incomplete traversal never removes stale entries that could not be verified.
+The packaged Rust `cyberos-indexer.service` is resident: filesystem events and mutation queues normally make changes searchable within seconds, while a full reconciliation runs every 30 minutes. Run `npm run index` for a one-shot development refresh. A failed extraction retains its last successful body, and an incomplete traversal never removes stale entries that could not be verified.
 
 Inspect the latest run for every configured root, or one root, through the read-only status endpoint:
 
@@ -227,19 +227,19 @@ Configure an OpenAI or Anthropic provider, model, and API key in **Settings > Mo
 For a model-free read-only development agent, set this before starting the worker:
 
 ```bash
-export ZOS_ENABLE_LOCAL_AGENT_FALLBACK=1
+export CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK=1
 ```
 
 The backend reads process environment variables directly; `.env.example` is a reference file and is not automatically loaded by the Node.js services.
 
 ## Configuration
 
-Production services read TOML from the fixed path `/zos/config/config.toml`. Development can override the location with `ZOS_CONFIG`. See [`config.example.toml`](config.example.toml) and [`packaging/etc/config.toml`](packaging/etc/config.toml) for the supported baseline.
+Production services read TOML from the fixed path `/cyberos/config/config.toml`. Development can override the location with `CYBEROS_CONFIG`. See [`config.example.toml`](config.example.toml) and [`packaging/etc/config.toml`](packaging/etc/config.toml) for the supported baseline.
 
 A minimal configuration is:
 
 ```toml
-root_dir = "/zos"
+root_dir = "/cyberos"
 environment = "production"
 
 [api]
@@ -259,25 +259,25 @@ operation_timeout_ms = 120000
 console_shells = ["/bin/sh", "/bin/bash"]
 
 [hostd]
-socket_path = "/run/zos/hostd.sock"
+socket_path = "/run/cyberos/hostd.sock"
 
 [shares]
 enabled = false
-account_username = "zos-share"
+account_username = "cyberos-share"
 
 [[nas_roots]]
 id = "primary"
 name = "Primary NAS"
-path = "/zos/data/primary"
+path = "/cyberos/data/primary"
 ```
 
-Environment variables override the corresponding TOML values. The most useful development overrides are `ZOS_ROOT`, `ZOS_API_HOST`, `ZOS_API_PORT`, `ZOS_ALLOWED_ORIGINS`, `ZOS_NAS_ROOTS`, and the `ZOS_DOCKER_*` variables documented in [`.env.example`](.env.example). `ZOS_DATA_DIR` and `ZOS_DATABASE_PATH` are intentionally unsupported because state is derived from the single ZOS root.
+Environment variables override the corresponding TOML values. The most useful development overrides are `CYBEROS_ROOT`, `CYBEROS_API_HOST`, `CYBEROS_API_PORT`, `CYBEROS_ALLOWED_ORIGINS`, `CYBEROS_NAS_ROOTS`, and the `CYBEROS_DOCKER_*` variables documented in [`.env.example`](.env.example). `CYBEROS_DATA_DIR` and `CYBEROS_DATABASE_PATH` are intentionally unsupported because state is derived from the single CyberOS root.
 
 ## Build and verification
 
 ### P0 operations
 
-Production mode requires loopback API binding, the exact root `/zos`, and mounted NAS roots as direct children of `/zos/data`. The indexer records progress, failures and readiness in the main SQLite database. The monitor writes host and ZOS time series only to `/zos/state/metrics.sqlite`; the alerter reads those metrics and stores configuration, incidents, and its mail outbox in `zos.sqlite`. Inspect the system with `/api/indexer/status`, `/api/roots/readiness`, `/api/system/health`, `/api/monitoring/overview`, and `/api/monitoring/alerts/summary`.
+Production mode requires loopback API binding, the exact root `/cyberos`, and mounted NAS roots as direct children of `/cyberos/data`. The indexer records progress, failures and readiness in the main SQLite database. The monitor writes host and CyberOS time series only to `/cyberos/state/metrics.sqlite`; the alerter reads those metrics and stores configuration, incidents, and its mail outbox in `cyberos.sqlite`. Inspect the system with `/api/indexer/status`, `/api/roots/readiness`, `/api/system/health`, `/api/monitoring/overview`, and `/api/monitoring/alerts/summary`.
 
 Local restic backup is opt-in. Configure a repository and protected password file, run `backup validate`, then explicitly run `backup init`. Daily and weekly timers never initialize repositories implicitly. Restore always writes to isolated staging and never promotes over an active NAS root.
 
@@ -288,7 +288,7 @@ npm test
 npm run build
 ```
 
-ZOS uses one SemVer across the root manifest, application and package workspaces, Debian package, and appliance manifest. Prepare a release from a clean worktree with:
+CyberOS uses one SemVer across the root manifest, application and package workspaces, Debian package, and appliance manifest. Prepare a release from a clean worktree with:
 
 ```bash
 npm run release -- patch --note "Describe the operator-visible change"
@@ -296,13 +296,13 @@ npm run release -- patch --note "Describe the operator-visible change"
 
 Use `minor` or `major` when appropriate. The command only updates version sources and the Debian changelog; it does not commit, tag, push, or publish. Review and commit the resulting diff, create the matching `v<version>` tag separately, and use `npm run version:check` to validate consistency. Runtime, configuration, script, and packaging changes require a monotonic version bump relative to the comparison base; documentation, tests, and CI-only changes may share the next product release.
 
-Every build writes `.zos/build-info.json` with the product version, commit SHA, tag or branch, build time, build source, and dirty state. The API exposes the public subset at `/api/system/build-info`, and the web UI shows it under Settings > Version. Debian packages install the immutable metadata at `/usr/lib/zos/build-info.json`.
+Every build writes `.cyberos/build-info.json` with the product version, commit SHA, tag or branch, build time, build source, and dirty state. The API exposes the public subset at `/api/system/build-info`, and the web UI shows it under Settings > Version. Debian packages install the immutable metadata at `/usr/lib/cyberos/build-info.json`.
 
 The equivalent Make targets are available through `make check` and `make ci`. The production API serves `packages/web/dist` when it is present, so a source build can be run with the API and worker in separate shells:
 
 ```bash
-npm run start -w @zos/api
-npm run start -w @zos/worker
+npm run start -w @cyberos/api
+npm run start -w @cyberos/worker
 ```
 
 Nix users can enter the pinned Node.js/Rust development environment and run the same repository checks:
@@ -320,12 +320,12 @@ On a Debian or Ubuntu build host with Node.js 22, `build-essential`, `debhelper`
 make deb
 ```
 
-Package artifacts are written under `.zos/`. The package installs the built applications under `/usr/lib/zos`, configuration under `/zos/config`, persistent state under `/zos/state`, and the service units under `/lib/systemd/system`.
+Package artifacts are written under `.cyberos/`. The package installs the built applications under `/usr/lib/cyberos`, configuration under `/cyberos/config`, persistent state under `/cyberos/state`, and the service units under `/lib/systemd/system`.
 
 To build the generic Debian Bookworm rootfs tarball, install `mmdebstrap`, `systemd-nspawn`, and `tar`, then point the appliance builder at the architecture-matching package:
 
 ```bash
-ZOS_DEB=/absolute/path/to/zos_<version>_arm64.deb make appliance
+CYBEROS_DEB=/absolute/path/to/cyberos_<version>_arm64.deb make appliance
 ```
 
 See [`packaging/appliance/README.md`](packaging/appliance/README.md) for image-builder inputs. Tagged releases are configured to publish `amd64` and `arm64` Debian artifacts with checksums through GitHub Actions.
@@ -336,10 +336,10 @@ The flake exports reproducible Linux packages for `x86_64-linux` and `aarch64-li
 
 ```bash
 nix flake check
-nix build .#zos
+nix build .#cyberos
 ```
 
-The NixOS module runs ZOS as native systemd services and stores mutable state under `/zos`; it does not run the application in a container. Host configuration is intentionally declarative on NixOS. NetworkManager, storage-pool, share-service, and Docker daemon configuration remain visible in ZOS but cannot be changed through the API or Web UI. Configure those resources with NixOS options instead.
+The NixOS module runs CyberOS as native systemd services and stores mutable state under `/cyberos`; it does not run the application in a container. Host configuration is intentionally declarative on NixOS. NetworkManager, storage-pool, share-service, and Docker daemon configuration remain visible in CyberOS but cannot be changed through the API or Web UI. Configure those resources with NixOS options instead.
 
 See [the NixOS deployment guide](docs/src/content/docs/operations/nixos.md) for module options, secret handling, service selection, validation, upgrades, and rollback limits.
 
@@ -348,18 +348,18 @@ See [the NixOS deployment guide](docs/src/content/docs/operations/nixos.md) for 
 For an `arm64` CM5 (or an `amd64` Debian host), run the host installer from a checkout as root:
 
 ```bash
-sudo ZOS_NAS_ROOT_PATH=/zos/data/primary packaging/scripts/install.sh
+sudo CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary packaging/scripts/install.sh
 ```
 
-The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the ZOS API, monitor, alerter, worker, hostd, termux, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
+The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the CyberOS API, monitor, alerter, worker, hostd, termux, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
 
-The mirror defaults can be overridden for a private mirror or restored to another mirror with `ZOS_APT_MIRROR`, `ZOS_APT_SECURITY_MIRROR`, `ZOS_RPI_MIRROR`, `ZOS_NODE_MIRROR`, `ZOS_NODE_VERSION`, and `ZOS_NPM_REGISTRY`. The installer only rewrites known Debian/Raspberry Pi URIs, saves original source files under `/zos/system-backups/apt`, preserves `signed-by`, suites, components, and unrelated sources, and disables any NodeSource entry after switching to the domestic Node.js binary distribution. To restore an original source, copy its backup from `/zos/system-backups/apt` back to `/etc/apt/sources.list.d` (or uncomment the marked NodeSource line) before running the installer again with an explicit `ZOS_NODE_MIRROR`.
+The mirror defaults can be overridden for a private mirror or restored to another mirror with `CYBEROS_APT_MIRROR`, `CYBEROS_APT_SECURITY_MIRROR`, `CYBEROS_RPI_MIRROR`, `CYBEROS_NODE_MIRROR`, `CYBEROS_NODE_VERSION`, and `CYBEROS_NPM_REGISTRY`. The installer only rewrites known Debian/Raspberry Pi URIs, saves original source files under `/cyberos/system-backups/apt`, preserves `signed-by`, suites, components, and unrelated sources, and disables any NodeSource entry after switching to the domestic Node.js binary distribution. To restore an original source, copy its backup from `/cyberos/system-backups/apt` back to `/etc/apt/sources.list.d` (or uncomment the marked NodeSource line) before running the installer again with an explicit `CYBEROS_NODE_MIRROR`.
 
-The installer also normalizes the host locale to `C.UTF-8` by default and stops OpenSSH from accepting invalid wildcard `LC_*` values from clients, such as `LC_CTYPE=UTF-8`. Original locale and SSH configuration files are saved under `/zos/system-backups`; override the default with `ZOS_LOCALE` when a generated locale is available.
+The installer also normalizes the host locale to `C.UTF-8` by default and stops OpenSSH from accepting invalid wildcard `LC_*` values from clients, such as `LC_CTYPE=UTF-8`. Original locale and SSH configuration files are saved under `/cyberos/system-backups`; override the default with `CYBEROS_LOCALE` when a generated locale is available.
 
-Set `ZOS_NGINX_PORT` to choose another listener port, or set `ZOS_ENABLE_NGINX=0` to keep the API loopback-only and skip Nginx installation.
+Set `CYBEROS_NGINX_PORT` to choose another listener port, or set `CYBEROS_ENABLE_NGINX=0` to keep the API loopback-only and skip Nginx installation.
 
-Docker and VM runtimes are opt-in because Docker socket access is root-equivalent. Enable both during installation with `ZOS_ENABLE_DOCKER=1 ZOS_ENABLE_VM=1`; the installer installs the Docker engine, CLI, Compose plugin, and matching QEMU/libvirt packages, writes the feature flags, refreshes API access to the `docker`, `libvirt`, and `kvm` groups, grants the ZOS service account the non-interactive libvirt polkit action, starts the runtime services, and autostarts the standard libvirt `default` NAT network when it is available.
+Docker and VM runtimes are opt-in because Docker socket access is root-equivalent. Enable both during installation with `CYBEROS_ENABLE_DOCKER=1 CYBEROS_ENABLE_VM=1`; the installer installs the Docker engine, CLI, Compose plugin, and matching QEMU/libvirt packages, writes the feature flags, refreshes API access to the `docker`, `libvirt`, and `kvm` groups, grants the CyberOS service account the non-interactive libvirt polkit action, starts the runtime services, and autostarts the standard libvirt `default` NAT network when it is available.
 
 Optional integrations are listed as Debian `Suggests` rather than hard dependencies. The package includes the required `ffmpeg` and `libraw-bin` media tools; install other host tools you need (for example `git`, `restic`, Samba, or NFS) separately. The core package does not enable optional services implicitly.
 
@@ -373,7 +373,7 @@ crates/
   host-accessd/    Restricted Docker host-observation proxy
   hostd/           Privileged host integration daemon
   indexer/         NAS scanner and SQLite FTS indexer
-  monitor/         Host and ZOS metrics collector
+  monitor/         Host and CyberOS metrics collector
   photostaff/      Photo and video indexing worker
   termux/          PTY daemon with tmux-backed terminal persistence
   vod-player/      HDMI/DRM playback daemon

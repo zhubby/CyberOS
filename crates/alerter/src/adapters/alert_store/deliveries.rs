@@ -94,10 +94,10 @@ pub(super) fn queue_resolved_delivery_for_recipients(
             delivery_id,
             incident_id,
             format!("{incident_id}:{key_suffix}"),
-            format!("<zos-alert-{incident_id}-{key_suffix}@localhost>"),
+            format!("<cyberos-alert-{incident_id}-{key_suffix}@localhost>"),
             serde_json::to_string(recipients)?,
             format!("Resolved: {title}"),
-            format!("ZOS alert resolved: {title}"),
+            format!("CyberOS alert resolved: {title}"),
             now,
             now,
             now

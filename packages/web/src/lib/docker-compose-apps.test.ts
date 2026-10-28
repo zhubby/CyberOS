@@ -37,7 +37,7 @@ describe("Docker Compose App form helpers", () => {
       id: "app-1",
       name: "Media",
       projectKey: "media",
-      managedPath: "/zos/apps/media",
+      managedPath: "/cyberos/apps/media",
       composeContent: "services:\n  app:\n    image: alpine\n",
       environment: [{ key: "TOKEN", valueConfigured: true }],
       services: ["app"],

@@ -1,6 +1,6 @@
 import { CapabilityError, type CapabilityContext, type CapabilityDescriptor, type JsonValue } from "./contracts.js";
 
-const CAPABILITY_ID = /^zos\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$/u;
+const CAPABILITY_ID = /^cyberos\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$/u;
 
 export class CapabilityRegistry {
   readonly #descriptors = new Map<string, CapabilityDescriptor>();

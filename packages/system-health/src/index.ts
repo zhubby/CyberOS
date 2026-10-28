@@ -11,18 +11,18 @@ import {
   listRootReadiness,
   reconcileHealthAlerts,
   upsertRootReadiness,
-  type ZosDatabase
-} from "@zos/db";
-import { readMonitoringHealth } from "@zos/monitoring";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import { readMonitoringHealth } from "@cyberos/monitoring";
 import {
   DEFAULT_MONITORING_CONFIG,
   createVodPlayerRuntime,
   type RootReadiness,
-  type ZosConfig,
+  type CyberOsConfig,
   type SystemHealthSummary,
   type VodPlayerRuntime
-} from "@zos/shared";
-import { checkMountReadiness, type MountCommandRunner } from "@zos/nas-tools";
+} from "@cyberos/shared";
+import { checkMountReadiness, type MountCommandRunner } from "@cyberos/nas-tools";
 
 export const HEALTH_OWNED_ALERT_CODES = [
   "mount_not_ready",
@@ -48,8 +48,8 @@ export const HEALTH_OWNED_ALERT_CODES = [
 const HEALTH_OWNED_ALERT_SET = new Set<string>(HEALTH_OWNED_ALERT_CODES);
 
 export interface SystemHealthEvaluationInput {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   now?: Date;
   vodPlayer?: VodPlayerRuntime;
   backupTargetReadiness?: RootReadiness | null;
@@ -302,8 +302,8 @@ export async function runScheduledHealthEvaluation(
 }
 
 export async function refreshRootReadiness(
-  db: ZosDatabase,
-  config: ZosConfig,
+  db: CyberOsDatabase,
+  config: CyberOsConfig,
   now = new Date(),
   commandRunner?: MountCommandRunner
 ): Promise<RootReadiness[]> {
@@ -317,7 +317,7 @@ export async function refreshRootReadiness(
 }
 
 async function inspectBackupTarget(
-  config: ZosConfig,
+  config: CyberOsConfig,
   now: Date,
   commandRunner?: MountCommandRunner
 ): Promise<RootReadiness | null> {
@@ -331,7 +331,7 @@ async function inspectBackupTarget(
 }
 
 async function collectVodPlayerHealth(
-  config: ZosConfig,
+  config: CyberOsConfig,
   now: Date,
   runtime = createVodPlayerRuntime(config.vodPlayer)
 ): Promise<SystemHealthSummary["vodPlayer"]> {

@@ -1,13 +1,13 @@
 {
   "samples": [
-    { "metric": "zos_host_load1", "labels": {}, "timestampMs": 5000, "value": 1 },
-    { "metric": "zos_host_load1", "labels": {}, "timestampMs": 55000, "value": 3 },
-    { "metric": "zos_host_load1", "labels": {}, "timestampMs": 65000, "value": 5 },
-    { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 5000, "value": 100 },
-    { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 55000, "value": 150 },
-    { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 65000, "value": 10 },
-    { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 75000, "value": 30 },
-    { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 125000, "value": 50 }
+    { "metric": "cyberos_host_load1", "labels": {}, "timestampMs": 5000, "value": 1 },
+    { "metric": "cyberos_host_load1", "labels": {}, "timestampMs": 55000, "value": 3 },
+    { "metric": "cyberos_host_load1", "labels": {}, "timestampMs": 65000, "value": 5 },
+    { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 5000, "value": 100 },
+    { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 55000, "value": 150 },
+    { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 65000, "value": 10 },
+    { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 75000, "value": 30 },
+    { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 125000, "value": 50 }
   ],
   "collectorUpdates": [
     { "collector": "fast-host", "state": "error", "attemptedAtMs": 1000, "durationMs": 3.5, "error": "permission denied at /secret/path" },
@@ -15,25 +15,25 @@
   ],
   "expected": {
     "raw": [
-      { "metric": "zos_host_load1", "labels": {}, "timestampMs": 5000, "value": 1 },
-      { "metric": "zos_host_load1", "labels": {}, "timestampMs": 55000, "value": 3 },
-      { "metric": "zos_host_load1", "labels": {}, "timestampMs": 65000, "value": 5 },
-      { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 5000, "value": 100 },
-      { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 55000, "value": 150 },
-      { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 65000, "value": 10 },
-      { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 75000, "value": 30 },
-      { "metric": "zos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 125000, "value": 50 }
+      { "metric": "cyberos_host_load1", "labels": {}, "timestampMs": 5000, "value": 1 },
+      { "metric": "cyberos_host_load1", "labels": {}, "timestampMs": 55000, "value": 3 },
+      { "metric": "cyberos_host_load1", "labels": {}, "timestampMs": 65000, "value": 5 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 5000, "value": 100 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 55000, "value": 150 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 65000, "value": 10 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 75000, "value": 30 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "labels": { "interface": "eth0" }, "timestampMs": 125000, "value": 50 }
     ],
     "rollups1m": [
-      { "metric": "zos_host_load1", "bucketMs": 0, "firstTimestampMs": 5000, "lastTimestampMs": 55000, "firstValue": 1, "lastValue": 3, "minValue": 1, "maxValue": 3, "sumValue": 4, "sampleCount": 2, "increaseValue": 2, "boundaryIncreaseValue": 0 },
-      { "metric": "zos_host_load1", "bucketMs": 60000, "firstTimestampMs": 65000, "lastTimestampMs": 65000, "firstValue": 5, "lastValue": 5, "minValue": 5, "maxValue": 5, "sumValue": 5, "sampleCount": 1, "increaseValue": 0, "boundaryIncreaseValue": 2 },
-      { "metric": "zos_host_network_receive_bytes_total", "bucketMs": 0, "firstTimestampMs": 5000, "lastTimestampMs": 55000, "firstValue": 100, "lastValue": 150, "minValue": 100, "maxValue": 150, "sumValue": 250, "sampleCount": 2, "increaseValue": 50, "boundaryIncreaseValue": 0 },
-      { "metric": "zos_host_network_receive_bytes_total", "bucketMs": 60000, "firstTimestampMs": 65000, "lastTimestampMs": 75000, "firstValue": 10, "lastValue": 30, "minValue": 10, "maxValue": 30, "sumValue": 40, "sampleCount": 2, "increaseValue": 20, "boundaryIncreaseValue": 10 },
-      { "metric": "zos_host_network_receive_bytes_total", "bucketMs": 120000, "firstTimestampMs": 125000, "lastTimestampMs": 125000, "firstValue": 50, "lastValue": 50, "minValue": 50, "maxValue": 50, "sumValue": 50, "sampleCount": 1, "increaseValue": 0, "boundaryIncreaseValue": 20 }
+      { "metric": "cyberos_host_load1", "bucketMs": 0, "firstTimestampMs": 5000, "lastTimestampMs": 55000, "firstValue": 1, "lastValue": 3, "minValue": 1, "maxValue": 3, "sumValue": 4, "sampleCount": 2, "increaseValue": 2, "boundaryIncreaseValue": 0 },
+      { "metric": "cyberos_host_load1", "bucketMs": 60000, "firstTimestampMs": 65000, "lastTimestampMs": 65000, "firstValue": 5, "lastValue": 5, "minValue": 5, "maxValue": 5, "sumValue": 5, "sampleCount": 1, "increaseValue": 0, "boundaryIncreaseValue": 2 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "bucketMs": 0, "firstTimestampMs": 5000, "lastTimestampMs": 55000, "firstValue": 100, "lastValue": 150, "minValue": 100, "maxValue": 150, "sumValue": 250, "sampleCount": 2, "increaseValue": 50, "boundaryIncreaseValue": 0 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "bucketMs": 60000, "firstTimestampMs": 65000, "lastTimestampMs": 75000, "firstValue": 10, "lastValue": 30, "minValue": 10, "maxValue": 30, "sumValue": 40, "sampleCount": 2, "increaseValue": 20, "boundaryIncreaseValue": 10 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "bucketMs": 120000, "firstTimestampMs": 125000, "lastTimestampMs": 125000, "firstValue": 50, "lastValue": 50, "minValue": 50, "maxValue": 50, "sumValue": 50, "sampleCount": 1, "increaseValue": 0, "boundaryIncreaseValue": 20 }
     ],
     "rollups1h": [
-      { "metric": "zos_host_load1", "bucketMs": 0, "firstTimestampMs": 5000, "lastTimestampMs": 65000, "firstValue": 1, "lastValue": 5, "minValue": 1, "maxValue": 5, "sumValue": 9, "sampleCount": 3, "increaseValue": 4, "boundaryIncreaseValue": 0 },
-      { "metric": "zos_host_network_receive_bytes_total", "bucketMs": 0, "firstTimestampMs": 5000, "lastTimestampMs": 125000, "firstValue": 100, "lastValue": 50, "minValue": 10, "maxValue": 150, "sumValue": 340, "sampleCount": 5, "increaseValue": 100, "boundaryIncreaseValue": 0 }
+      { "metric": "cyberos_host_load1", "bucketMs": 0, "firstTimestampMs": 5000, "lastTimestampMs": 65000, "firstValue": 1, "lastValue": 5, "minValue": 1, "maxValue": 5, "sumValue": 9, "sampleCount": 3, "increaseValue": 4, "boundaryIncreaseValue": 0 },
+      { "metric": "cyberos_host_network_receive_bytes_total", "bucketMs": 0, "firstTimestampMs": 5000, "lastTimestampMs": 125000, "firstValue": 100, "lastValue": 50, "minValue": 10, "maxValue": 150, "sumValue": 340, "sampleCount": 5, "increaseValue": 100, "boundaryIncreaseValue": 0 }
     ],
     "collectorStatus": { "collector": "fast-host", "state": "ready", "lastAttemptMs": 3000, "lastSuccessMs": 3000, "durationMs": 2, "consecutiveFailures": 0, "error": null },
     "query": {

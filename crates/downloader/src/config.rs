@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{DownloadError, ErrorCode};
 
-pub const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
+pub const DEFAULT_CONFIG_PATH: &str = "/cyberos/config/config.toml";
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -12,12 +12,12 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, DownloadError> {
-        let config_path = env::var_os("ZOS_CONFIG")
+        let config_path = env::var_os("CYBEROS_CONFIG")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH));
-        let root_dir = resolve_root_dir(&config_path, env::var_os("ZOS_ROOT"))?;
+        let root_dir = resolve_root_dir(&config_path, env::var_os("CYBEROS_ROOT"))?;
         Ok(Self {
-            database_path: root_dir.join("state/zos.sqlite"),
+            database_path: root_dir.join("state/cyberos.sqlite"),
         })
     }
 }
@@ -29,7 +29,7 @@ fn resolve_root_dir(
     match environment_override {
         Some(path) => Ok(PathBuf::from(path)),
         None if config_path.exists() => root_dir_from_file(config_path),
-        None => Ok(PathBuf::from(".zos/dev-root")),
+        None => Ok(PathBuf::from(".cyberos/dev-root")),
     }
 }
 
@@ -38,7 +38,7 @@ fn root_dir_from_file(path: &Path) -> Result<PathBuf, DownloadError> {
     let document = text.parse::<toml_edit::DocumentMut>().map_err(|error| {
         DownloadError::new(
             ErrorCode::Internal,
-            format!("invalid ZOS config: {error}"),
+            format!("invalid CyberOS config: {error}"),
             false,
         )
     })?;
@@ -46,7 +46,7 @@ fn root_dir_from_file(path: &Path) -> Result<PathBuf, DownloadError> {
         .get("root_dir")
         .and_then(toml_edit::Item::as_str)
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".zos/dev-root")))
+        .unwrap_or_else(|| PathBuf::from(".cyberos/dev-root")))
 }
 
 #[cfg(test)]

@@ -1,0 +1,74 @@
+#!/bin/sh
+set -eu
+
+runtime_dir=${CYBEROS_TV_RUNTIME_DIR:-/run/cyberos-tv}
+drm_root=${CYBEROS_TV_DRM_ROOT:-/sys/class/drm}
+status_writer=${CYBEROS_TV_SCRIPT_DIR:-/usr/lib/cyberos/scripts}/cyberos-tv-write-status
+socket_path="$runtime_dir/wayland-0"
+weston_pid=
+
+hdmi_connected() {
+  for connector_status in "$drm_root"/card*-HDMI-A-*/status; do
+    [ -f "$connector_status" ] || continue
+    [ "$(cat "$connector_status")" = connected ] && return 0
+  done
+  return 1
+}
+
+cleanup() {
+  if [ -n "$weston_pid" ]; then
+    kill "$weston_pid" 2>/dev/null || true
+    wait "$weston_pid" 2>/dev/null || true
+    weston_pid=
+  fi
+}
+
+terminate() {
+  cleanup
+  exit 0
+}
+
+trap cleanup EXIT
+trap terminate HUP INT TERM
+
+if ! command -v weston >/dev/null 2>&1; then
+  "$status_writer" weston unavailable "Weston is not installed"
+  exit 127
+fi
+
+while ! hdmi_connected; do
+  "$status_writer" weston degraded "Waiting for HDMI output"
+  sleep 2
+done
+
+"$status_writer" weston degraded "Weston is starting"
+weston --backend=drm-backend.so --shell=kiosk-shell.so --socket=wayland-0 \
+  --config="$runtime_dir/weston.ini" --log="$runtime_dir/weston.log" &
+weston_pid=$!
+
+attempt=0
+while [ "$attempt" -lt 150 ]; do
+  kill -0 "$weston_pid" 2>/dev/null || break
+  if [ -S "$socket_path" ]; then
+    ready_detail=wayland-0
+    if [ -s "$runtime_dir/forced-connectors" ]; then
+      forced_status=$(sed -n '1p' "$runtime_dir/forced-connectors")
+      forced_dir=${forced_status%/status}
+      forced_name=${forced_dir##*/}
+      forced_name=${forced_name#*-}
+      ready_detail="wayland-0 ($forced_name forced)"
+    fi
+    while kill -0 "$weston_pid" 2>/dev/null; do
+      "$status_writer" weston ready "$ready_detail"
+      sleep 5
+    done
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+
+if [ ! -S "$socket_path" ]; then
+  "$status_writer" weston unavailable "Wayland socket was not created"
+fi
+wait "$weston_pid"

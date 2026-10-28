@@ -1,4 +1,4 @@
-import type { MonitoringMetricDefinition } from "@zos/shared";
+import type { MonitoringMetricDefinition } from "@cyberos/shared";
 import catalog from "../contracts/metrics-catalog.json" with { type: "json" };
 
 export const MONITORING_CATALOG: readonly MonitoringMetricDefinition[] = Object.freeze(

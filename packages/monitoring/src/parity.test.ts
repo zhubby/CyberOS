@@ -1,7 +1,7 @@
 import path from "node:path";
 import os from "node:os";
 import { mkdtempSync, rmSync } from "node:fs";
-import { DEFAULT_MONITORING_CONFIG } from "@zos/shared";
+import { DEFAULT_MONITORING_CONFIG } from "@cyberos/shared";
 import { describe, expect, it } from "vitest";
 import fixture from "../contracts/golden/metrics-parity.json" with { type: "json" };
 import { queryMetrics } from "./query.js";
@@ -13,7 +13,7 @@ import {
 
 describe("Rust metrics schema compatibility fixture", () => {
   it("reads the v3 raw, rollup, reset, query, and collector contracts", () => {
-    const directory = mkdtempSync(path.join(os.tmpdir(), "zos-monitor-parity-"));
+    const directory = mkdtempSync(path.join(os.tmpdir(), "cyberos-monitor-parity-"));
     const databasePath = path.join(directory, "metrics.sqlite");
     const metrics = new MetricsFixture(databasePath);
     try {
@@ -40,8 +40,8 @@ describe("Rust metrics schema compatibility fixture", () => {
         end: "1970-01-01T00:03:00.000Z",
         maxPoints: 3,
         selectors: [
-          { metric: "zos_host_load1", transform: "value" },
-          { metric: "zos_host_network_receive_bytes_total", labels: { interface: "eth0" }, transform: "rate" }
+          { metric: "cyberos_host_load1", transform: "value" },
+          { metric: "cyberos_host_network_receive_bytes_total", labels: { interface: "eth0" }, transform: "rate" }
         ]
       }, DEFAULT_MONITORING_CONFIG);
       expect(query.series[0]?.points.map(({ value }) => value)).toEqual(fixture.expected.query.gaugeValues);

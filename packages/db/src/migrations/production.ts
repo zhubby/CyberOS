@@ -1458,16 +1458,16 @@ export const productionMigrations: Migration[] = [
         trigger_duration_seconds, recovery_duration_seconds, severity, no_data_policy,
         revision, created_at, updated_at
       ) VALUES
-        ('builtin-high-cpu', 'High CPU usage', 0, 1, 'zos_host_cpu_usage_ratio', '{}',
+        ('builtin-high-cpu', 'High CPU usage', 0, 1, 'cyberos_host_cpu_usage_ratio', '{}',
           'value', 'avg', 300, '>', 0.90, 0.80, 300, 300, 'warning', 'ignore', 1,
           strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-        ('builtin-filesystem-capacity', 'Filesystem capacity high', 0, 1, 'zos_host_filesystem_used_ratio', '{}',
+        ('builtin-filesystem-capacity', 'Filesystem capacity high', 0, 1, 'cyberos_host_filesystem_used_ratio', '{}',
           'value', 'max', 300, '>', 0.90, 0.85, 300, 300, 'warning', 'ignore', 1,
           strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-        ('builtin-api-service', 'ZOS API service unavailable', 0, 1, 'zos_systemd_unit_active', '{"unit":"zos-api.service"}',
+        ('builtin-api-service', 'CyberOS API service unavailable', 0, 1, 'cyberos_systemd_unit_active', '{"unit":"cyberos-api.service"}',
           'value', 'last', 60, '<', 0.50, 1.00, 60, 60, 'critical', 'firing', 1,
           strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-        ('builtin-monitor-stale', 'Monitoring samples are stale', 1, 1, 'zos_monitor_last_sample_timestamp_seconds', '{}',
+        ('builtin-monitor-stale', 'Monitoring samples are stale', 1, 1, 'cyberos_monitor_last_sample_timestamp_seconds', '{}',
           'value', 'last', 60, '>', 30.00, 15.00, 30, 30, 'critical', 'firing', 1,
           strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 
@@ -2322,7 +2322,7 @@ export const productionMigrations: Migration[] = [
         ON jobs(session_id)
         WHERE kind = 'agent' AND status = 'running' AND lease_owner IS NOT NULL;
 
-      ALTER TABLE agent_events ADD COLUMN source TEXT NOT NULL DEFAULT 'zos';
+      ALTER TABLE agent_events ADD COLUMN source TEXT NOT NULL DEFAULT 'cyberos';
       ALTER TABLE agent_events ADD COLUMN source_id TEXT;
       ALTER TABLE agent_events ADD COLUMN run_id TEXT;
       ALTER TABLE agent_events ADD COLUMN sequence INTEGER;

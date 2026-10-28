@@ -11,25 +11,25 @@ const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 
 it("starts the production API bundle", async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-api-bundle-"));
-  const zosRoot = path.join(tempDir, "root");
-  const nasRoot = path.join(zosRoot, "data", "test");
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-api-bundle-"));
+  const cyberosRoot = path.join(tempDir, "root");
+  const nasRoot = path.join(cyberosRoot, "data", "test");
   const port = await reservePort();
   await mkdir(nasRoot, { recursive: true });
-  await execFileAsync("npm", ["run", "build", "-w", "@zos/api"], { cwd: repoRoot });
+  await execFileAsync("npm", ["run", "build", "-w", "@cyberos/api"], { cwd: repoRoot });
 
   const child = spawn(process.execPath, [path.join(repoRoot, "packages/api/dist/index.js")], {
     cwd: repoRoot,
     env: {
       ...process.env,
-      ZOS_CONFIG: path.join(tempDir, "missing.toml"),
-      ZOS_ENVIRONMENT: "development",
-      ZOS_ROOT: zosRoot,
-      ZOS_NAS_ROOTS: `test:Test NAS:${nasRoot}`,
-      ZOS_API_HOST: "127.0.0.1",
-      ZOS_API_PORT: String(port),
-      ZOS_WEB_DIST: path.join(tempDir, "missing-web"),
-      ZOS_DOCS_DIST: path.join(tempDir, "missing-docs")
+      CYBEROS_CONFIG: path.join(tempDir, "missing.toml"),
+      CYBEROS_ENVIRONMENT: "development",
+      CYBEROS_ROOT: cyberosRoot,
+      CYBEROS_NAS_ROOTS: `test:Test NAS:${nasRoot}`,
+      CYBEROS_API_HOST: "127.0.0.1",
+      CYBEROS_API_PORT: String(port),
+      CYBEROS_WEB_DIST: path.join(tempDir, "missing-web"),
+      CYBEROS_DOCS_DIST: path.join(tempDir, "missing-docs")
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -51,7 +51,7 @@ it("starts the production API bundle", async () => {
 
   try {
     const response = await waitForHealth(port, () => exited);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, service: "zos-api" });
+    await expect(response.json()).resolves.toMatchObject({ ok: true, service: "cyberos-api" });
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\nstdout:\n${stdout}\nstderr:\n${stderr}`

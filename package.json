@@ -1,6 +1,6 @@
 {
-  "name": "zos",
-  "version": "1.7.8",
+  "name": "cyberos",
+  "version": "2.0.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -8,11 +8,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run build:metadata && concurrently -n api,worker,monitor,alerter,photostaff,downloader,vod-player,web -c blue,green,gray,yellow,cyan,white,magenta,blue \"npm run dev -w @zos/api\" \"npm run dev -w @zos/worker\" \"cargo run -p zos-monitor --bin zos-monitor\" \"cargo run -p zos-alerter\" \"cargo run -p zos-photostaff\" \"cargo run -p zos-downloader\" \"cargo run -p zos-vod-player\" \"npm run dev -w @zos/web\"",
-    "index": "cargo run -p zos-indexer -- --once",
-    "backup": "npm run dev -w @zos/backup",
-    "health": "npm run dev -w @zos/ops -- health",
-    "maintenance": "npm run dev -w @zos/ops -- maintenance",
+    "dev": "npm run build:metadata && concurrently -n api,worker,monitor,alerter,photostaff,downloader,vod-player,web -c blue,green,gray,yellow,cyan,white,magenta,blue \"npm run dev -w @cyberos/api\" \"npm run dev -w @cyberos/worker\" \"cargo run -p cyberos-monitor --bin cyberos-monitor\" \"cargo run -p cyberos-alerter\" \"cargo run -p cyberos-photostaff\" \"cargo run -p cyberos-downloader\" \"cargo run -p cyberos-vod-player\" \"npm run dev -w @cyberos/web\"",
+    "index": "cargo run -p cyberos-indexer -- --once",
+    "backup": "npm run dev -w @cyberos/backup",
+    "health": "npm run dev -w @cyberos/ops -- health",
+    "maintenance": "npm run dev -w @cyberos/ops -- maintenance",
     "docs:dev": "npm --prefix docs run dev",
     "docs:check": "npm --prefix docs run check",
     "docs:test": "npm --prefix docs test",

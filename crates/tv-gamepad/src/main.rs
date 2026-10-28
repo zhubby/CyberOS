@@ -6,15 +6,15 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use cyberos_tv_gamepad::{
+    AxisRange, CapabilityDescriptor, Health, InputEvent, InputHub, code, evaluate_health,
+};
 use evdev::{Device, EventSummary};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::{MissedTickBehavior, interval, timeout};
 use tracing_subscriber::EnvFilter;
-use zos_tv_gamepad::{
-    AxisRange, CapabilityDescriptor, Health, InputEvent, InputHub, code, evaluate_health,
-};
 
 const SCAN_INTERVAL: Duration = Duration::from_secs(1);
 const REPEAT_TICK: Duration = Duration::from_millis(20);
@@ -52,7 +52,7 @@ async fn main() -> ExitCode {
         .init();
 
     if env::args_os().nth(1).is_some() {
-        tracing::error!("usage: zos-tv-gamepad");
+        tracing::error!("usage: cyberos-tv-gamepad");
         return ExitCode::from(64);
     }
     match run().await {
@@ -65,13 +65,13 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> io::Result<()> {
-    let input_dir = env::var_os("ZOS_TV_INPUT_DIR")
+    let input_dir = env::var_os("CYBEROS_TV_INPUT_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/dev/input"));
-    let status_writer = env::var_os("ZOS_TV_STATUS_WRITER")
+    let status_writer = env::var_os("CYBEROS_TV_STATUS_WRITER")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/usr/lib/zos/scripts/zos-tv-write-status"));
-    let wtype = env::var_os("ZOS_TV_WTYPE")
+        .unwrap_or_else(|| PathBuf::from("/usr/lib/cyberos/scripts/cyberos-tv-write-status"));
+    let wtype = env::var_os("CYBEROS_TV_WTYPE")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("wtype"));
     let started = Instant::now();

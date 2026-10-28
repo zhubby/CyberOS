@@ -5,9 +5,9 @@ import type {
   DockerOperationProposal,
   DockerOperationRecord,
   DockerSummary,
-  ZosConfig
-} from "@zos/shared";
-import type { DockerRegistryCredentialRecord } from "@zos/db";
+  CyberOsConfig
+} from "@cyberos/shared";
+import type { DockerRegistryCredentialRecord } from "@cyberos/db";
 import type { DockerComposeRuntime } from "./docker-compose.js";
 import { DockerSocketClient, type DockerEngineRuntime } from "./docker-client.js";
 import { SystemDockerDaemonRuntime, type DockerDaemonRuntime } from "./docker-daemon.js";
@@ -37,7 +37,7 @@ export function dockerCompose(config: DockerConfig, dependencies?: DockerRuntime
 }
 
 export async function collectDockerSummary(
-  config: ZosConfig,
+  config: CyberOsConfig,
   dependencies?: DockerRuntimeDependencies
 ): Promise<DockerSummary> {
   const daemon = dependencies?.daemon ?? new SystemDockerDaemonRuntime({ hostdSocketPath: config.hostd.socketPath });
@@ -123,7 +123,7 @@ export function resolveDockerImageOccupancy(
 }
 
 export async function applyDockerOperation(
-  config: ZosConfig,
+  config: CyberOsConfig,
   operation: DockerOperationRecord,
   proposal: DockerOperationProposal,
   dependencies?: DockerRuntimeDependencies,
@@ -230,7 +230,7 @@ export function dockerUnavailableSummary(
   };
 }
 
-function dockerCapabilities(config: ZosConfig): DockerSummary["capabilities"] {
+function dockerCapabilities(config: CyberOsConfig): DockerSummary["capabilities"] {
   const hostMutationPolicy = config.hostd.mutationPolicy ?? "mutable";
   return {
     canUpdateDaemonConfiguration: hostMutationPolicy === "mutable",

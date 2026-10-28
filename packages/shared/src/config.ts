@@ -6,7 +6,7 @@ import {
   TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS
 } from "./termux-protocol.js";
 import { PHOTOSTAFF_BASE_MAP_RELEASE_URL } from "./photostaff-config.js";
-import { resolveZosPaths, type ZosPaths } from "./paths.js";
+import { resolveCyberOsPaths, type CyberOsPaths } from "./paths.js";
 import type {
   DlnaMediaType,
   NasRootConfig,
@@ -14,7 +14,7 @@ import type {
   ShareDefinitionConfig,
   ShareProtocolConfig,
   VodPlayerConfig,
-  ZosConfig,
+  CyberOsConfig,
   TerminalConfig,
   MonitoringConfig,
   VmConfig
@@ -43,7 +43,6 @@ interface TomlConfig {
     enabled?: boolean;
     pi_enabled?: boolean;
     pi_token_file?: string;
-    legacy_pi_tools_enabled?: boolean;
     external_enabled?: boolean;
     shell_enabled?: boolean;
     allowed_hosts?: string[];
@@ -193,24 +192,24 @@ interface TomlConfig {
   };
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): ZosConfig {
-  for (const removedName of ["ZOS_DATA_DIR", "ZOS_DATABASE_PATH"] as const) {
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): CyberOsConfig {
+  for (const removedName of ["CYBEROS_DATA_DIR", "CYBEROS_DATABASE_PATH"] as const) {
     if (env[removedName] !== undefined) {
-      throw new Error(`${removedName} is no longer supported; configure ZOS_ROOT instead`);
+      throw new Error(`${removedName} is no longer supported; configure CYBEROS_ROOT instead`);
     }
   }
-  const configPath = env.ZOS_CONFIG ?? "/zos/config/config.toml";
+  const configPath = env.CYBEROS_CONFIG ?? "/cyberos/config/config.toml";
   const fileConfig = loadTomlConfig(configPath);
   const workspaceRoot = findWorkspaceRoot(cwd);
   const environment = loadEnvironment(env, fileConfig);
   const rootDir = resolveRootDir(env, fileConfig, workspaceRoot, environment);
-  const paths = resolveZosPaths(rootDir);
+  const paths = resolveCyberOsPaths(rootDir);
   const dataDir = paths.stateDir;
   const nasRoots = loadNasRoots(env, fileConfig, workspaceRoot, environment, paths);
   const backup = loadBackupConfig(env, fileConfig, workspaceRoot, dataDir, environment);
   const health = loadHealthConfig(env, fileConfig);
   const monitoring = loadMonitoringConfig(env, fileConfig);
-  const apiHost = env.ZOS_API_HOST ?? fileConfig.api?.host ?? "127.0.0.1";
+  const apiHost = env.CYBEROS_API_HOST ?? fileConfig.api?.host ?? "127.0.0.1";
   const vm = loadVmConfig(env, fileConfig, workspaceRoot, paths);
   const vodPlayer = loadVodPlayerConfig(env, fileConfig, paths);
   validateConfig({ environment, apiHost, configPath, paths, dataDir, nasRoots, backup, vm, vodPlayer });
@@ -230,52 +229,48 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
     metricsDatabasePath: paths.metricsDatabasePath,
     api: {
       host: apiHost,
-      port: toPort(env.ZOS_API_PORT, fileConfig.api?.port ?? 3010),
+      port: toPort(env.CYBEROS_API_PORT, fileConfig.api?.port ?? 3010),
       allowedOrigins: loadAllowedOrigins(env, fileConfig)
     },
     mcp: {
-      enabled: toBoolean(env.ZOS_MCP_ENABLED, fileConfig.mcp?.enabled ?? true),
-      piEnabled: toBoolean(env.ZOS_MCP_PI_ENABLED, fileConfig.mcp?.pi_enabled ?? false),
+      enabled: toBoolean(env.CYBEROS_MCP_ENABLED, fileConfig.mcp?.enabled ?? true),
+      piEnabled: toBoolean(env.CYBEROS_MCP_PI_ENABLED, fileConfig.mcp?.pi_enabled ?? false),
       piTokenFile: loadMcpPiTokenFile(env, fileConfig, paths),
-      legacyPiToolsEnabled: toBoolean(
-        env.ZOS_MCP_LEGACY_PI_TOOLS_ENABLED,
-        fileConfig.mcp?.legacy_pi_tools_enabled ?? false
-      ),
-      externalEnabled: toBoolean(env.ZOS_MCP_EXTERNAL_ENABLED, fileConfig.mcp?.external_enabled ?? false),
-      shellEnabled: toBoolean(env.ZOS_MCP_SHELL_ENABLED, fileConfig.mcp?.shell_enabled ?? false),
-      allowedHosts: csvSetting(env.ZOS_MCP_ALLOWED_HOSTS, fileConfig.mcp?.allowed_hosts, ["localhost", "127.0.0.1", "[::1]"]),
-      allowedOrigins: csvSetting(env.ZOS_MCP_ALLOWED_ORIGINS, fileConfig.mcp?.allowed_origins, ["localhost", "127.0.0.1", "[::1]"]),
+      externalEnabled: toBoolean(env.CYBEROS_MCP_EXTERNAL_ENABLED, fileConfig.mcp?.external_enabled ?? false),
+      shellEnabled: toBoolean(env.CYBEROS_MCP_SHELL_ENABLED, fileConfig.mcp?.shell_enabled ?? false),
+      allowedHosts: csvSetting(env.CYBEROS_MCP_ALLOWED_HOSTS, fileConfig.mcp?.allowed_hosts, ["localhost", "127.0.0.1", "[::1]"]),
+      allowedOrigins: csvSetting(env.CYBEROS_MCP_ALLOWED_ORIGINS, fileConfig.mcp?.allowed_origins, ["localhost", "127.0.0.1", "[::1]"]),
       maxConcurrentPerClient: toPositiveInteger(
-        env.ZOS_MCP_MAX_CONCURRENT_PER_CLIENT,
+        env.CYBEROS_MCP_MAX_CONCURRENT_PER_CLIENT,
         fileConfig.mcp?.max_concurrent_per_client ?? 4
       )
     },
     worker: {
-      pollMs: toPositiveInteger(env.ZOS_WORKER_POLL_MS, fileConfig.worker?.poll_ms ?? 750),
+      pollMs: toPositiveInteger(env.CYBEROS_WORKER_POLL_MS, fileConfig.worker?.poll_ms ?? 750),
       concurrency: toPositiveInteger(
-        env.ZOS_WORKER_CONCURRENCY,
+        env.CYBEROS_WORKER_CONCURRENCY,
         fileConfig.worker?.concurrency ?? 2
       )
     },
     admin: {
-      displayName: env.ZOS_ADMIN_DISPLAY_NAME ?? fileConfig.admin?.display_name ?? "ZOS Admin",
+      displayName: env.CYBEROS_ADMIN_DISPLAY_NAME ?? fileConfig.admin?.display_name ?? "CyberOS Admin",
       authMode: "local-only"
     },
     model: {
-      provider: loadModelProvider(env.ZOS_MODEL_PROVIDER, fileConfig.model?.provider),
-      piCommand: env.ZOS_PI_COMMAND ?? fileConfig.model?.pi_command ?? "pi",
-      localEndpoint: env.ZOS_LOCAL_ENDPOINT ?? fileConfig.model?.local_endpoint ?? null
+      provider: loadModelProvider(env.CYBEROS_MODEL_PROVIDER, fileConfig.model?.provider),
+      piCommand: env.CYBEROS_PI_COMMAND ?? fileConfig.model?.pi_command ?? "pi",
+      localEndpoint: env.CYBEROS_LOCAL_ENDPOINT ?? fileConfig.model?.local_endpoint ?? null
     },
     docker: {
-      enabled: toBoolean(env.ZOS_DOCKER_ENABLED, fileConfig.docker?.enabled ?? false),
+      enabled: toBoolean(env.CYBEROS_DOCKER_ENABLED, fileConfig.docker?.enabled ?? false),
       socketPath:
-        env.ZOS_DOCKER_SOCKET_PATH ?? fileConfig.docker?.socket_path ?? "/var/run/docker.sock",
+        env.CYBEROS_DOCKER_SOCKET_PATH ?? fileConfig.docker?.socket_path ?? "/var/run/docker.sock",
       composeCommand:
-        normalizeText(env.ZOS_DOCKER_COMPOSE_COMMAND) ??
+        normalizeText(env.CYBEROS_DOCKER_COMPOSE_COMMAND) ??
         normalizeText(fileConfig.docker?.compose_command) ??
         "docker",
       operationTimeoutMs: toPositiveInteger(
-        env.ZOS_DOCKER_OPERATION_TIMEOUT_MS,
+        env.CYBEROS_DOCKER_OPERATION_TIMEOUT_MS,
         fileConfig.docker?.operation_timeout_ms ?? 120_000
       ),
       consoleShells: loadDockerConsoleShells(env, fileConfig)
@@ -295,13 +290,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
   };
 }
 
-function loadMcpPiTokenFile(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, paths: ZosPaths): string {
-  const configured = env.ZOS_MCP_PI_TOKEN_FILE ?? fileConfig.mcp?.pi_token_file;
+function loadMcpPiTokenFile(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, paths: CyberOsPaths): string {
+  const configured = env.CYBEROS_MCP_PI_TOKEN_FILE ?? fileConfig.mcp?.pi_token_file;
   const tokenFile = configured
     ? (path.isAbsolute(configured) ? path.resolve(configured) : path.resolve(paths.configDir, configured))
     : path.join(paths.configDir, "mcp", "pi.token");
   if (!tokenFile.startsWith(`${path.resolve(paths.configDir)}${path.sep}`)) {
-    throw new Error("MCP Pi token file must be inside the ZOS config directory");
+    throw new Error("MCP Pi token file must be inside the CyberOS config directory");
   }
   return tokenFile;
 }
@@ -312,39 +307,39 @@ function loadMonitoringConfig(
 ): MonitoringConfig {
   const source = fileConfig.monitoring;
   const config = {
-    enabled: monitoringBoolean(env.ZOS_MONITORING_ENABLED ?? source?.enabled, true, "enabled"),
+    enabled: monitoringBoolean(env.CYBEROS_MONITORING_ENABLED ?? source?.enabled, true, "enabled"),
     fastSampleIntervalMs: monitoringInteger(
-      env.ZOS_MONITORING_FAST_SAMPLE_INTERVAL_MS ?? source?.fast_sample_interval_ms,
+      env.CYBEROS_MONITORING_FAST_SAMPLE_INTERVAL_MS ?? source?.fast_sample_interval_ms,
       DEFAULT_MONITORING_CONFIG.fastSampleIntervalMs,
       "fast_sample_interval_ms"
     ),
     standardSampleIntervalMs: monitoringInteger(
-      env.ZOS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS ?? source?.standard_sample_interval_ms,
+      env.CYBEROS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS ?? source?.standard_sample_interval_ms,
       DEFAULT_MONITORING_CONFIG.standardSampleIntervalMs,
       "standard_sample_interval_ms"
     ),
     temperatureSampleIntervalMs: monitoringInteger(
-      env.ZOS_MONITORING_TEMPERATURE_SAMPLE_INTERVAL_MS ?? source?.temperature_sample_interval_ms,
+      env.CYBEROS_MONITORING_TEMPERATURE_SAMPLE_INTERVAL_MS ?? source?.temperature_sample_interval_ms,
       DEFAULT_MONITORING_CONFIG.temperatureSampleIntervalMs,
       "temperature_sample_interval_ms"
     ),
     rawRetentionMs: monitoringInteger(
-      env.ZOS_MONITORING_RAW_RETENTION_MS ?? source?.raw_retention_ms,
+      env.CYBEROS_MONITORING_RAW_RETENTION_MS ?? source?.raw_retention_ms,
       DEFAULT_MONITORING_CONFIG.rawRetentionMs,
       "raw_retention_ms"
     ),
     minuteRetentionMs: monitoringInteger(
-      env.ZOS_MONITORING_MINUTE_RETENTION_MS ?? source?.minute_retention_ms,
+      env.CYBEROS_MONITORING_MINUTE_RETENTION_MS ?? source?.minute_retention_ms,
       DEFAULT_MONITORING_CONFIG.minuteRetentionMs,
       "minute_retention_ms"
     ),
     hourRetentionMs: monitoringInteger(
-      env.ZOS_MONITORING_HOUR_RETENTION_MS ?? source?.hour_retention_ms,
+      env.CYBEROS_MONITORING_HOUR_RETENTION_MS ?? source?.hour_retention_ms,
       DEFAULT_MONITORING_CONFIG.hourRetentionMs,
       "hour_retention_ms"
     ),
     maxDatabaseBytes: monitoringInteger(
-      env.ZOS_MONITORING_MAX_DATABASE_BYTES ?? source?.max_database_bytes,
+      env.CYBEROS_MONITORING_MAX_DATABASE_BYTES ?? source?.max_database_bytes,
       DEFAULT_MONITORING_CONFIG.maxDatabaseBytes,
       "max_database_bytes"
     )
@@ -409,7 +404,7 @@ function validateMonitoringConfig(config: MonitoringConfig): void {
 }
 
 function loadPhotostaffBaseMapUrl(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string {
-  const value = normalizeText(env.ZOS_PHOTOSTAFF_BASEMAP_URL) ??
+  const value = normalizeText(env.CYBEROS_PHOTOSTAFF_BASEMAP_URL) ??
     normalizeText(fileConfig.photostaff?.basemap_url) ??
     PHOTOSTAFF_BASE_MAP_RELEASE_URL;
   let url: URL;
@@ -424,14 +419,14 @@ function loadPhotostaffBaseMapUrl(env: NodeJS.ProcessEnv, fileConfig: TomlConfig
   return url.toString();
 }
 
-function loadHostdConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ZosConfig["hostd"] {
+function loadHostdConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): CyberOsConfig["hostd"] {
   const socketPath =
-    normalizeText(env.ZOS_HOSTD_SOCKET_PATH) ??
+    normalizeText(env.CYBEROS_HOSTD_SOCKET_PATH) ??
     normalizeText(fileConfig.hostd?.socket_path) ??
-    "/run/zos/hostd.sock";
+    "/run/cyberos/hostd.sock";
   return {
-    socketPath: path.isAbsolute(socketPath) ? socketPath : "/run/zos/hostd.sock",
-    mutationPolicy: parseHostMutationPolicy(env.ZOS_HOST_MUTATION_POLICY)
+    socketPath: path.isAbsolute(socketPath) ? socketPath : "/run/cyberos/hostd.sock",
+    mutationPolicy: parseHostMutationPolicy(env.CYBEROS_HOST_MUTATION_POLICY)
   };
 }
 
@@ -440,22 +435,22 @@ function parseHostMutationPolicy(value: string | undefined): "mutable" | "declar
   if (normalized === "mutable" || normalized === "declarative") {
     return normalized;
   }
-  throw new Error("ZOS_HOST_MUTATION_POLICY must be mutable or declarative");
+  throw new Error("CYBEROS_HOST_MUTATION_POLICY must be mutable or declarative");
 }
 
-function loadVmConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, cwd: string, paths: ZosPaths): VmConfig {
+function loadVmConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, cwd: string, paths: CyberOsPaths): VmConfig {
   const vm = fileConfig.vm;
-  const isoRoots = env.ZOS_VM_ISO_ROOTS
-    ? env.ZOS_VM_ISO_ROOTS.split(",").map((value) => path.resolve(cwd, value.trim())).filter(Boolean)
+  const isoRoots = env.CYBEROS_VM_ISO_ROOTS
+    ? env.CYBEROS_VM_ISO_ROOTS.split(",").map((value) => path.resolve(cwd, value.trim())).filter(Boolean)
     : (vm?.iso_roots ?? [paths.isoRoot]).map((value) => path.resolve(cwd, value));
   return {
-    enabled: toBoolean(env.ZOS_VM_ENABLED, vm?.enabled ?? true),
-    libvirtUri: env.ZOS_VM_LIBVIRT_URI ?? vm?.libvirt_uri ?? "qemu:///system",
-    storagePath: path.resolve(cwd, env.ZOS_VM_STORAGE_PATH ?? vm?.storage_path ?? paths.vmRoot),
-    networkName: env.ZOS_VM_NETWORK_NAME ?? vm?.network_name ?? "default",
+    enabled: toBoolean(env.CYBEROS_VM_ENABLED, vm?.enabled ?? true),
+    libvirtUri: env.CYBEROS_VM_LIBVIRT_URI ?? vm?.libvirt_uri ?? "qemu:///system",
+    storagePath: path.resolve(cwd, env.CYBEROS_VM_STORAGE_PATH ?? vm?.storage_path ?? paths.vmRoot),
+    networkName: env.CYBEROS_VM_NETWORK_NAME ?? vm?.network_name ?? "default",
     isoRoots,
     operationTimeoutMs: toPositiveInteger(
-      env.ZOS_VM_OPERATION_TIMEOUT_MS,
+      env.CYBEROS_VM_OPERATION_TIMEOUT_MS,
       vm?.operation_timeout_ms ?? 120_000
     ),
     consoleMode: "serial"
@@ -476,10 +471,10 @@ function loadNasRoots(
   fileConfig: TomlConfig,
   cwd: string,
   environment: "development" | "production",
-  paths: ZosPaths
+  paths: CyberOsPaths
 ): NasRootConfig[] {
-  if (env.ZOS_NAS_ROOTS) {
-    return env.ZOS_NAS_ROOTS.split(",")
+  if (env.CYBEROS_NAS_ROOTS) {
+    return env.CYBEROS_NAS_ROOTS.split(",")
       .map((entry, index) => parseNasRootEnv(entry.trim(), index, cwd))
       .filter((root): root is NasRootConfig => root !== null)
       .map((root) => ({ ...root, mountPolicy: root.mountPolicy ?? (environment === "production" ? "required" : "optional"), expectedSource: root.expectedSource ?? null, expectedUuid: root.expectedUuid ?? null, expectedFstype: root.expectedFstype ?? null }));
@@ -504,7 +499,7 @@ function loadNasRoots(
 }
 
 function loadEnvironment(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): "development" | "production" {
-  const value = (env.ZOS_ENVIRONMENT ?? fileConfig.environment ?? "development").trim().toLowerCase();
+  const value = (env.CYBEROS_ENVIRONMENT ?? fileConfig.environment ?? "development").trim().toLowerCase();
   return value === "production" ? "production" : "development";
 }
 
@@ -514,22 +509,22 @@ function loadBackupConfig(
   cwd: string,
   dataDir: string,
   environment: "development" | "production"
-): NonNullable<ZosConfig["backup"]> {
+): NonNullable<CyberOsConfig["backup"]> {
   const source = fileConfig.backup;
-  const repositoryRaw = normalizeText(env.ZOS_BACKUP_REPOSITORY ?? env.ZOS_BACKUP_REPOSITORY_PATH ?? source?.repository_path ?? source?.repository);
-  const passwordFileRaw = normalizeText(env.ZOS_BACKUP_PASSWORD_FILE ?? source?.password_file);
-  const stagingRaw = normalizeText(env.ZOS_BACKUP_STAGING_PATH ?? source?.staging_path);
-  const enabled = toBoolean(env.ZOS_BACKUP_ENABLED, source?.enabled ?? Boolean(repositoryRaw));
+  const repositoryRaw = normalizeText(env.CYBEROS_BACKUP_REPOSITORY ?? env.CYBEROS_BACKUP_REPOSITORY_PATH ?? source?.repository_path ?? source?.repository);
+  const passwordFileRaw = normalizeText(env.CYBEROS_BACKUP_PASSWORD_FILE ?? source?.password_file);
+  const stagingRaw = normalizeText(env.CYBEROS_BACKUP_STAGING_PATH ?? source?.staging_path);
+  const enabled = toBoolean(env.CYBEROS_BACKUP_ENABLED, source?.enabled ?? Boolean(repositoryRaw));
   const result = {
     enabled,
     repositoryPath: repositoryRaw ? path.resolve(cwd, repositoryRaw) : null,
     passwordFile: passwordFileRaw ? path.resolve(cwd, passwordFileRaw) : null,
     stagingPath: stagingRaw ? path.resolve(cwd, stagingRaw) : path.join(dataDir, "backup-staging"),
-    requireMount: toBoolean(env.ZOS_BACKUP_REQUIRE_MOUNT, source?.require_mount ?? environment === "production"),
-    retryCount: toPositiveInteger(env.ZOS_BACKUP_RETRY_COUNT, source?.retry_count ?? 2),
-    timeoutMs: toPositiveInteger(env.ZOS_BACKUP_TIMEOUT_MS, source?.timeout_ms ?? 300_000),
-    keepDaily: toPositiveInteger(env.ZOS_BACKUP_KEEP_DAILY, source?.keep_daily ?? 7),
-    keepWeekly: toPositiveInteger(env.ZOS_BACKUP_KEEP_WEEKLY, source?.keep_weekly ?? 4)
+    requireMount: toBoolean(env.CYBEROS_BACKUP_REQUIRE_MOUNT, source?.require_mount ?? environment === "production"),
+    retryCount: toPositiveInteger(env.CYBEROS_BACKUP_RETRY_COUNT, source?.retry_count ?? 2),
+    timeoutMs: toPositiveInteger(env.CYBEROS_BACKUP_TIMEOUT_MS, source?.timeout_ms ?? 300_000),
+    keepDaily: toPositiveInteger(env.CYBEROS_BACKUP_KEEP_DAILY, source?.keep_daily ?? 7),
+    keepWeekly: toPositiveInteger(env.CYBEROS_BACKUP_KEEP_WEEKLY, source?.keep_weekly ?? 4)
   };
   if (result.enabled && result.passwordFile) {
     try {
@@ -541,14 +536,14 @@ function loadBackupConfig(
   return result;
 }
 
-function loadHealthConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): NonNullable<ZosConfig["health"]> {
+function loadHealthConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): NonNullable<CyberOsConfig["health"]> {
   const source = fileConfig.health;
   return {
-    staleIndexWarningMs: toPositiveInteger(env.ZOS_HEALTH_STALE_INDEX_WARNING_MS, source?.stale_index_warning_ms ?? 2 * 60 * 60 * 1000),
-    staleIndexCriticalMs: toPositiveInteger(env.ZOS_HEALTH_STALE_INDEX_CRITICAL_MS, source?.stale_index_critical_ms ?? 6 * 60 * 60 * 1000),
-    stalledRunMs: toPositiveInteger(env.ZOS_HEALTH_STALLED_RUN_MS, source?.stalled_run_ms ?? 15 * 60 * 1000),
-    consecutiveFailureThreshold: toPositiveInteger(env.ZOS_HEALTH_CONSECUTIVE_FAILURE_THRESHOLD, source?.consecutive_failure_threshold ?? 2),
-    backupStaleMs: toPositiveInteger(env.ZOS_HEALTH_BACKUP_STALE_MS, source?.backup_stale_ms ?? 26 * 60 * 60 * 1000)
+    staleIndexWarningMs: toPositiveInteger(env.CYBEROS_HEALTH_STALE_INDEX_WARNING_MS, source?.stale_index_warning_ms ?? 2 * 60 * 60 * 1000),
+    staleIndexCriticalMs: toPositiveInteger(env.CYBEROS_HEALTH_STALE_INDEX_CRITICAL_MS, source?.stale_index_critical_ms ?? 6 * 60 * 60 * 1000),
+    stalledRunMs: toPositiveInteger(env.CYBEROS_HEALTH_STALLED_RUN_MS, source?.stalled_run_ms ?? 15 * 60 * 1000),
+    consecutiveFailureThreshold: toPositiveInteger(env.CYBEROS_HEALTH_CONSECUTIVE_FAILURE_THRESHOLD, source?.consecutive_failure_threshold ?? 2),
+    backupStaleMs: toPositiveInteger(env.CYBEROS_HEALTH_BACKUP_STALE_MS, source?.backup_stale_ms ?? 26 * 60 * 60 * 1000)
   };
 }
 
@@ -556,21 +551,21 @@ function validateConfig(input: {
   environment: "development" | "production";
   apiHost: string;
   configPath: string;
-  paths: ZosPaths;
+  paths: CyberOsPaths;
   dataDir: string;
   nasRoots: NasRootConfig[];
-  backup: NonNullable<ZosConfig["backup"]>;
+  backup: NonNullable<CyberOsConfig["backup"]>;
   vm: VmConfig;
   vodPlayer: VodPlayerConfig;
 }): void {
   if (!isLoopbackHost(input.apiHost)) {
-    throw new Error("ZOS API must bind to a loopback host");
+    throw new Error("CyberOS API must bind to a loopback host");
   }
-  if (input.environment === "production" && input.paths.rootDir !== "/zos") {
-    throw new Error(`Production ZOS root must be /zos: ${input.paths.rootDir}`);
+  if (input.environment === "production" && input.paths.rootDir !== "/cyberos") {
+    throw new Error(`Production CyberOS root must be /cyberos: ${input.paths.rootDir}`);
   }
   if (input.environment === "production" && path.resolve(input.configPath) !== path.join(input.paths.configDir, "config.toml")) {
-    throw new Error(`Production ZOS config must be ${path.join(input.paths.configDir, "config.toml")}`);
+    throw new Error(`Production CyberOS config must be ${path.join(input.paths.configDir, "config.toml")}`);
   }
   for (const root of input.nasRoots) {
     if (isUnder(root.path, input.paths.appsRoot) || isUnder(input.paths.appsRoot, root.path)) {
@@ -631,17 +626,17 @@ function resolveRootDir(
   workspaceRoot: string,
   environment: "development" | "production"
 ): string {
-  const configured = normalizeText(env.ZOS_ROOT) ?? normalizeText(fileConfig.root_dir);
+  const configured = normalizeText(env.CYBEROS_ROOT) ?? normalizeText(fileConfig.root_dir);
   const root = configured
     ? path.resolve(workspaceRoot, configured)
     : environment === "production"
-      ? "/zos"
-      : path.resolve(workspaceRoot, ".zos", "dev-root");
-  if (environment === "production" && root !== "/zos") {
-    throw new Error(`Production ZOS root must be /zos: ${root}`);
+      ? "/cyberos"
+      : path.resolve(workspaceRoot, ".cyberos", "dev-root");
+  if (environment === "production" && root !== "/cyberos") {
+    throw new Error(`Production CyberOS root must be /cyberos: ${root}`);
   }
   if (root === path.parse(root).root) {
-    throw new Error(`ZOS root cannot be the filesystem root: ${root}`);
+    throw new Error(`CyberOS root cannot be the filesystem root: ${root}`);
   }
   return root;
 }
@@ -652,8 +647,8 @@ function isLoopbackHost(host: string): boolean {
 }
 
 function loadDockerConsoleShells(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string[] {
-  const rawShells = env.ZOS_DOCKER_CONSOLE_SHELLS
-    ? env.ZOS_DOCKER_CONSOLE_SHELLS.split(",")
+  const rawShells = env.CYBEROS_DOCKER_CONSOLE_SHELLS
+    ? env.CYBEROS_DOCKER_CONSOLE_SHELLS.split(",")
     : fileConfig.docker?.console_shells;
   const shells = (rawShells ?? [])
     .map((shell) => normalizeText(shell))
@@ -664,12 +659,12 @@ function loadDockerConsoleShells(env: NodeJS.ProcessEnv, fileConfig: TomlConfig)
 function loadShareConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ShareConfig {
   const shares = fileConfig.shares;
   return {
-    enabled: toBoolean(env.ZOS_SHARES_ENABLED, shares?.enabled ?? false),
+    enabled: toBoolean(env.CYBEROS_SHARES_ENABLED, shares?.enabled ?? false),
     account: {
       username:
-        normalizeText(env.ZOS_SHARE_ACCOUNT_USERNAME) ??
+        normalizeText(env.CYBEROS_SHARE_ACCOUNT_USERNAME) ??
         normalizeText(shares?.account_username) ??
-        "zos-share",
+        "cyberos-share",
       password: null
     },
     shares: (shares?.items ?? []).map(normalizeShareItem).filter((item): item is ShareDefinitionConfig => item !== null)
@@ -678,40 +673,40 @@ function loadShareConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ShareC
 
 function loadTerminalConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): TerminalConfig {
   return {
-    user: normalizeText(env.ZOS_TERMUX_USER) ?? normalizeText(fileConfig.terminal?.user),
+    user: normalizeText(env.CYBEROS_TERMUX_USER) ?? normalizeText(fileConfig.terminal?.user),
     termuxSocketPath:
-      normalizeText(env.ZOS_TERMUX_SOCKET_PATH) ??
+      normalizeText(env.CYBEROS_TERMUX_SOCKET_PATH) ??
       normalizeText(fileConfig.terminal?.termux_socket_path) ??
-      "/run/zos/termux.sock",
+      "/run/cyberos/termux.sock",
     sessionIdleTimeoutMs: toPositiveInteger(
-      env.ZOS_TERMUX_SESSION_IDLE_TIMEOUT_MS,
+      env.CYBEROS_TERMUX_SESSION_IDLE_TIMEOUT_MS,
       fileConfig.terminal?.session_idle_timeout_ms ?? TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS
     ),
     connectTimeoutMs: toPositiveInteger(
-      env.ZOS_TERMUX_CONNECT_TIMEOUT_MS,
+      env.CYBEROS_TERMUX_CONNECT_TIMEOUT_MS,
       fileConfig.terminal?.connect_timeout_ms ?? TERMINAL_SESSION_DEFAULT_CONNECT_TIMEOUT_MS
     ),
     maxSessions: toPositiveInteger(
-      env.ZOS_TERMUX_MAX_SESSIONS,
+      env.CYBEROS_TERMUX_MAX_SESSIONS,
       fileConfig.terminal?.max_sessions ?? 32
     )
   };
 }
 
-function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, paths: ZosPaths): VodPlayerConfig {
+function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, paths: CyberOsPaths): VodPlayerConfig {
   const player = fileConfig.vod_player;
-  const videoOutput = env.ZOS_VOD_PLAYER_VIDEO_OUTPUT ?? player?.video_output ?? "drm";
-  const audioOutput = env.ZOS_VOD_PLAYER_AUDIO_OUTPUT ?? player?.audio_output ?? "alsa";
-  const hwdec = env.ZOS_VOD_PLAYER_HWDEC ?? player?.hwdec ?? "auto-safe";
+  const videoOutput = env.CYBEROS_VOD_PLAYER_VIDEO_OUTPUT ?? player?.video_output ?? "drm";
+  const audioOutput = env.CYBEROS_VOD_PLAYER_AUDIO_OUTPUT ?? player?.audio_output ?? "alsa";
+  const hwdec = env.CYBEROS_VOD_PLAYER_HWDEC ?? player?.hwdec ?? "auto-safe";
   const socketPath =
-    normalizeText(env.ZOS_VOD_PLAYER_SOCKET_PATH) ??
+    normalizeText(env.CYBEROS_VOD_PLAYER_SOCKET_PATH) ??
     normalizeText(player?.socket_path) ??
-    "/run/zos/vod-player.sock";
+    "/run/cyberos/vod-player.sock";
   const statePath =
-    normalizeText(env.ZOS_VOD_PLAYER_STATE_PATH) ??
+    normalizeText(env.CYBEROS_VOD_PLAYER_STATE_PATH) ??
     normalizeText(player?.state_path) ??
     path.join(paths.vodPlayerStateDir, "session.json");
-  const playerUser = normalizeText(env.ZOS_VOD_PLAYER_USER) ?? normalizeText(player?.user) ?? "zos";
+  const playerUser = normalizeText(env.CYBEROS_VOD_PLAYER_USER) ?? normalizeText(player?.user) ?? "cyberos";
   if (!path.isAbsolute(socketPath) || !path.isAbsolute(statePath)) {
     throw new Error("VOD Player socket_path and state_path must be absolute");
   }
@@ -722,12 +717,12 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, pat
     throw new Error("VOD Player output configuration is invalid");
   }
   const retryBaseDelayMs = strictPositiveInteger(
-    env.ZOS_VOD_PLAYER_RETRY_BASE_DELAY_MS ?? player?.retry_base_delay_ms,
+    env.CYBEROS_VOD_PLAYER_RETRY_BASE_DELAY_MS ?? player?.retry_base_delay_ms,
     2_000,
     "retry_base_delay_ms"
   );
   const retryMaxDelayMs = strictPositiveInteger(
-    env.ZOS_VOD_PLAYER_RETRY_MAX_DELAY_MS ?? player?.retry_max_delay_ms,
+    env.CYBEROS_VOD_PLAYER_RETRY_MAX_DELAY_MS ?? player?.retry_max_delay_ms,
     60_000,
     "retry_max_delay_ms"
   );
@@ -736,24 +731,24 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, pat
   }
   return {
     enabled: strictBoolean(
-      env.ZOS_VOD_PLAYER_ENABLED ?? player?.enabled,
+      env.CYBEROS_VOD_PLAYER_ENABLED ?? player?.enabled,
       false,
       "enabled"
     ),
     socketPath,
     statePath,
     commandTimeoutMs: strictPositiveInteger(
-      env.ZOS_VOD_PLAYER_COMMAND_TIMEOUT_MS ?? player?.command_timeout_ms,
+      env.CYBEROS_VOD_PLAYER_COMMAND_TIMEOUT_MS ?? player?.command_timeout_ms,
       5_000,
       "command_timeout_ms"
     ),
     startupTimeoutMs: strictPositiveInteger(
-      env.ZOS_VOD_PLAYER_STARTUP_TIMEOUT_MS ?? player?.startup_timeout_ms,
+      env.CYBEROS_VOD_PLAYER_STARTUP_TIMEOUT_MS ?? player?.startup_timeout_ms,
       15_000,
       "startup_timeout_ms"
     ),
     checkpointIntervalMs: strictPositiveInteger(
-      env.ZOS_VOD_PLAYER_CHECKPOINT_INTERVAL_MS ?? player?.checkpoint_interval_ms,
+      env.CYBEROS_VOD_PLAYER_CHECKPOINT_INTERVAL_MS ?? player?.checkpoint_interval_ms,
       5_000,
       "checkpoint_interval_ms"
     ),
@@ -761,12 +756,12 @@ function loadVodPlayerConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig, pat
     retryMaxDelayMs,
     videoOutput: videoOutput as VodPlayerConfig["videoOutput"],
     drmConnector:
-      normalizeText(env.ZOS_VOD_PLAYER_DRM_CONNECTOR) ??
+      normalizeText(env.CYBEROS_VOD_PLAYER_DRM_CONNECTOR) ??
       normalizeText(player?.drm_connector) ??
       null,
     audioOutput: "alsa",
     audioDevice:
-      normalizeText(env.ZOS_VOD_PLAYER_AUDIO_DEVICE) ??
+      normalizeText(env.CYBEROS_VOD_PLAYER_AUDIO_DEVICE) ??
       normalizeText(player?.audio_device) ??
       null,
     hwdec: hwdec as VodPlayerConfig["hwdec"],
@@ -919,8 +914,8 @@ function loadModelProvider(
 }
 
 function loadAllowedOrigins(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string[] {
-  if (env.ZOS_ALLOWED_ORIGINS) {
-    return env.ZOS_ALLOWED_ORIGINS.split(",")
+  if (env.CYBEROS_ALLOWED_ORIGINS) {
+    return env.CYBEROS_ALLOWED_ORIGINS.split(",")
       .map((origin) => origin.trim())
       .filter(Boolean);
   }

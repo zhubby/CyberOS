@@ -16,11 +16,11 @@ import {
   listDockerOperations,
   listDockerRegistryCredentials,
   listVmOperations
-} from "@zos/db";
-import { MonitoringReader } from "@zos/monitoring";
+} from "@cyberos/db";
+import { MonitoringReader } from "@cyberos/monitoring";
 import type { ApiRouteContext, ServerDependencies } from "./context.js";
-import { DEFAULT_MONITORING_CONFIG, type MonitoringQueryRequest } from "@zos/shared";
-import { CapabilityError, type JsonValue } from "@zos/capabilities";
+import { DEFAULT_MONITORING_CONFIG, type MonitoringQueryRequest } from "@cyberos/shared";
+import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
 import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
 import { defaultShareSettings, effectiveDockerConfig } from "./lib/settings.js";
@@ -30,8 +30,8 @@ import { DockerHostAccessPolicy, reconcileRunningDockerHostAccess } from "./lib/
 import { DockerHostAccessControlClient } from "./lib/docker-host-access-control.js";
 import { dockerEngine } from "./lib/docker-service.js";
 import { collectDockerSummary } from "./lib/docker-service.js";
-import { registerMcp, type McpRuntimeDependencies } from "@zos/mcp";
-import { recoverCapabilityRuns } from "@zos/capability-runtime";
+import { registerMcp, type McpRuntimeDependencies } from "@cyberos/mcp";
+import { recoverCapabilityRuns } from "@cyberos/capability-runtime";
 import { collectSystemNetwork, collectSystemNetworkTraffic, collectSystemStorage } from "./lib/system-management.js";
 import { SystemNetworkManagerRuntime } from "./lib/network-manager.js";
 import { SystemEthernetManagerRuntime } from "./lib/ethernet-manager.js";
@@ -51,7 +51,7 @@ export type { ServerDependencies } from "./context.js";
 
 export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, monitoringEvents: monitoringEventsDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photostaffMap, hostAccess }: ServerDependencies): Promise<FastifyInstance> {
   if (!isLoopbackHost(config.api.host)) {
-    throw new Error("ZOS API must bind to a loopback host");
+    throw new Error("CyberOS API must bind to a loopback host");
   }
   const server = Fastify({
     logger: {
@@ -99,9 +99,9 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     config.monitoring ?? DEFAULT_MONITORING_CONFIG
   );
   const monitoringEvents = monitoringEventsDependency ?? new MonitoringEventBroker({
-    socketPath: process.env.ZOS_MONITORING_EVENTS_SOCKET
+    socketPath: process.env.CYBEROS_MONITORING_EVENTS_SOCKET
       ?? (config.environment === "production"
-        ? path.join(config.paths?.runDir ?? "/run/zos", "monitoring-events.sock")
+        ? path.join(config.paths?.runDir ?? "/run/cyberos", "monitoring-events.sock")
         : path.join(config.dataDir, "monitoring-events.sock")),
     log: server.log
   });
@@ -135,15 +135,15 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   const mcpEthernetManager = system?.ethernetManager ?? new SystemEthernetManagerRuntime(config.hostd.socketPath);
   const mcpVodPlayer = vodPlayer ?? createVodPlayerRuntime(config.vodPlayer);
   const readAdapters = {
-    "zos.monitoring.overview": () => asJsonValue({
+    "cyberos.monitoring.overview": () => asJsonValue({
       ...monitoring.overview(),
       catalog: monitoring.catalog(),
       alerts: getMonitoringAlertSummary(db)
     }),
-    "zos.monitoring.query": (input: JsonValue) => asJsonValue(
+    "cyberos.monitoring.query": (input: JsonValue) => asJsonValue(
       monitoring.query(input as unknown as MonitoringQueryRequest)
     ),
-    "zos.network.status": async () => {
+    "cyberos.network.status": async () => {
       const [network, traffic, wifi, ethernet] = await Promise.all([
         collectSystemNetwork({
           ...system,
@@ -157,7 +157,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
       ]);
       return asJsonValue({ network, traffic, wifi, ethernet });
     },
-    "zos.storage.status": async () => {
+    "cyberos.storage.status": async () => {
       const shareSettings = getShareSettings(db) ?? defaultShareSettings(config);
       const [storage, sharesSummary] = await Promise.all([
         collectSystemStorage({
@@ -171,7 +171,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
       ]);
       return asJsonValue({ storage, shares: sharesSummary });
     },
-    "zos.docker.status": async () => {
+    "cyberos.docker.status": async () => {
       const effectiveConfig = effectiveDockerConfig(config, getDockerSettings(db));
       return asJsonValue({
         summary: await collectDockerSummary(effectiveConfig, dockerRuntime),
@@ -188,12 +188,12 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
         hostAccess: hostAccessRuntime.policy.catalog()
       });
     },
-    "zos.vm.status": async () => asJsonValue({
+    "cyberos.vm.status": async () => asJsonValue({
       summary: await collectVmSummary(config, vm),
       operations: listVmOperations(db, { limit: 100 })
     }),
-    "zos.vod.status": async () => asJsonValue({ status: await mcpVodPlayer.getStatus() }),
-    "zos.photos.media": async (input: JsonValue, executionContext, dependencies) => {
+    "cyberos.vod.status": async () => asJsonValue({ status: await mcpVodPlayer.getStatus() }),
+    "cyberos.photos.media": async (input: JsonValue, executionContext, dependencies) => {
       if (!input || typeof input !== "object" || Array.isArray(input)) {
         throw new CapabilityError("INVALID_ARGUMENT", "Photo media request is invalid");
       }

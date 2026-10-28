@@ -4,8 +4,8 @@ import path from "node:path";
 import {
   getRootReadiness,
   listNasRoots,
-  type ZosDatabase
-} from "@zos/db";
+  type CyberOsDatabase
+} from "@cyberos/db";
 import type {
   DockerComposeServiceHostAccess,
   DockerHostAccessAvailability,
@@ -17,15 +17,15 @@ import type {
   DockerHostAccessGrant,
   DockerHostAccessRisk,
   DockerHostAccessValidationIssue
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { DockerEngineRuntime } from "./docker-client.js";
 
 export const DOCKER_HOST_ACCESS_POLICY_VERSION = "2026-10-19.1";
-export const DOCKER_HOST_ACCESS_OVERRIDE_FILE = "zos-host-access.override.yaml";
-export const DOCKER_HOST_ACCESS_LABEL_PREFIX = "io.zos.host-access.";
-export const DOCKER_HOST_ACCESS_NAS_ANCHOR = ".zos-host-access-capacity";
+export const DOCKER_HOST_ACCESS_OVERRIDE_FILE = "cyberos-host-access.override.yaml";
+export const DOCKER_HOST_ACCESS_LABEL_PREFIX = "io.cyberos.host-access.";
+export const DOCKER_HOST_ACCESS_NAS_ANCHOR = ".cyberos-host-access-capacity";
 
-const DEFAULT_RUNTIME_ROOT = "/run/zos/host-access";
+const DEFAULT_RUNTIME_ROOT = "/run/cyberos/host-access";
 const UNSUPPORTED_COVERAGE: DockerHostAccessCoverageId[] = [
   "journald",
   "smart_nvme",
@@ -203,7 +203,7 @@ export class DockerHostAccessPolicy {
   private detectedRootless = false;
   private detectedUserNamespace = false;
 
-  constructor(private readonly db: ZosDatabase, private readonly options: DockerHostAccessPolicyOptions = {}) {
+  constructor(private readonly db: CyberOsDatabase, private readonly options: DockerHostAccessPolicyOptions = {}) {
     this.platform = options.platform ?? process.platform;
     this.runtimeRoot = options.runtimeRoot ?? DEFAULT_RUNTIME_ROOT;
   }
@@ -259,10 +259,10 @@ export class DockerHostAccessPolicy {
 
     const environment: Record<string, string> = {};
     if (grants.some((grant) => grant.capability === "docker_metadata")) {
-      environment.DOCKER_HOST = "unix:///run/zos-host-access/docker.sock";
+      environment.DOCKER_HOST = "unix:///run/cyberos-host-access/docker.sock";
     }
     if (grants.some((grant) => grant.capability === "systemd_status")) {
-      environment.DBUS_SYSTEM_BUS_ADDRESS = "unix:path=/run/zos-host-access/systemd.sock";
+      environment.DBUS_SYSTEM_BUS_ADDRESS = "unix:path=/run/cyberos-host-access/systemd.sock";
     }
     const fingerprinted = {
       policyVersion: DOCKER_HOST_ACCESS_POLICY_VERSION,
@@ -505,7 +505,7 @@ export class DockerHostAccessPolicy {
           if (!proxyDirectoryMounted) {
             mounts.push({
               source: path.join(this.runtimeRoot, "grants", safeSegment(scopeId), safeSegment(service ?? "container")),
-              target: "/run/zos-host-access",
+              target: "/run/cyberos-host-access",
               readOnly: true
             });
             proxyDirectoryMounted = true;
@@ -577,7 +577,7 @@ export async function reconcileRunningDockerHostAccess(
       const details = await engine.getContainerDetails(container.id, container);
       const labels = details.labels;
       if (
-        labels["io.zos.managed"] !== "true" ||
+        labels["io.cyberos.managed"] !== "true" ||
         labels[`${DOCKER_HOST_ACCESS_LABEL_PREFIX}policy`] !== DOCKER_HOST_ACCESS_POLICY_VERSION ||
         !labels[`${DOCKER_HOST_ACCESS_LABEL_PREFIX}fingerprint`]
       ) {

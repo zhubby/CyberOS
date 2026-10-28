@@ -197,15 +197,19 @@ mod tests {
     fn resolves_only_the_requested_pool_beneath_the_nas_root() {
         let mountinfo = concat!(
             "35 25 0:31 / /other rw - ext4 /dev/md0 rw\n",
-            "36 25 0:31 / /zos/data/primary/media rw - ext4 /dev/md0 rw\n",
-            "37 25 0:32 / /zos/data/primary/archive rw - ext4 /dev/md1 rw\n",
+            "36 25 0:31 / /cyberos/data/primary/media rw - ext4 /dev/md0 rw\n",
+            "37 25 0:32 / /cyberos/data/primary/archive rw - ext4 /dev/md1 rw\n",
         );
         assert_eq!(
-            mounted_pool_path_in(mountinfo, "/dev/md0", Path::new("/zos/data/primary")),
-            Some(PathBuf::from("/zos/data/primary/media"))
+            mounted_pool_path_in(mountinfo, "/dev/md0", Path::new("/cyberos/data/primary")),
+            Some(PathBuf::from("/cyberos/data/primary/media"))
         );
         assert_eq!(
-            mounted_pool_path_in(mountinfo, "/dev/missing", Path::new("/zos/data/primary")),
+            mounted_pool_path_in(
+                mountinfo,
+                "/dev/missing",
+                Path::new("/cyberos/data/primary")
+            ),
             None
         );
     }

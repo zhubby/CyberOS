@@ -1,12 +1,12 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import type { TvComponentHealth, TvModeStatus, VodPlayerStatus } from "@zos/shared";
+import type { TvComponentHealth, TvModeStatus, VodPlayerStatus } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { createVodPlayerRuntime } from "../lib/vod-player.js";
 
-const DEFAULT_STATUS_DIRECTORY = "/run/zos-tv/status";
-const DEFAULT_ENABLED_MARKER = "/etc/zos/tv-mode/enabled";
+const DEFAULT_STATUS_DIRECTORY = "/run/cyberos-tv/status";
+const DEFAULT_ENABLED_MARKER = "/cyberos/config/tv-mode/enabled";
 const HEARTBEAT_STALE_MS = 20_000;
 
 interface TvStatusDependencies {

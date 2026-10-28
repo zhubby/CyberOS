@@ -1,0 +1,35 @@
+[Unit]
+Description=CyberOS Photostaff media worker
+Documentation=file:///usr/share/doc/cyberos/README.md
+After=local-fs.target cyberos-api.service
+Wants=cyberos-api.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+WatchdogSec=20s
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ROOT=/cyberos
+Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+WorkingDirectory=/cyberos/state
+ExecStart=/usr/lib/cyberos/bin/cyberos-photostaff
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30s
+KillMode=control-group
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=-/cyberos/data
+ReadWritePaths=/cyberos/state /cyberos/logs
+NoNewPrivileges=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+CapabilityBoundingSet=
+MemoryMax=1G
+CPUQuota=250%
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target

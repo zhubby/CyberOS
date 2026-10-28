@@ -24,8 +24,8 @@ import {
   type DockerComposeAppRecord,
   type DockerComposeAppSummaryRecord,
   type DockerRegistryCredentialRecord,
-  type ZosDatabase
-} from "@zos/db";
+  type CyberOsDatabase
+} from "@cyberos/db";
 import type {
   DockerComposeAppCreateInput,
   DockerComposeAppDeleteInput,
@@ -38,9 +38,9 @@ import type {
   DockerContainerSummary,
   DockerHostAccessValidationIssue,
   DockerOperationProposal
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { DockerEngineRuntime } from "./docker-client.js";
-import { isPathInside } from "@zos/nas-tools";
+import { isPathInside } from "@cyberos/nas-tools";
 import { parseDocument, stringify } from "yaml";
 import {
   dockerConfigAuths,
@@ -58,11 +58,11 @@ import {
   type DockerHostAccessManifest
 } from "./docker-host-access.js";
 
-export const DOCKER_APPS_ROOT = "/zos/apps";
+export const DOCKER_APPS_ROOT = "/cyberos/apps";
 
 const MANAGED_COMPOSE_FILE = "compose.yaml";
 const MANAGED_ENV_FILE = ".env";
-const MANAGED_MARKER_FILE = ".zos-app.json";
+const MANAGED_MARKER_FILE = ".cyberos-app.json";
 const PROJECT_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}$/u;
 const ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const RESERVED_ENVIRONMENT_KEY_PATTERN = /^(?:COMPOSE_|DOCKER_)/u;
@@ -138,7 +138,7 @@ export class DockerComposeService implements DockerComposeRuntime {
 
   constructor(
     private readonly configSource: DockerConfig | (() => DockerConfig),
-    private readonly db: ZosDatabase,
+    private readonly db: CyberOsDatabase,
     private readonly appsRoot = DOCKER_APPS_ROOT,
     private readonly hostAccessPolicy = new DockerHostAccessPolicy(db),
     private readonly hostAccessControl?: DockerHostAccessControlRuntime
@@ -593,7 +593,7 @@ function normalizeEnvironment(
 
 async function validateComposeDefinition(
   config: DockerConfig,
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     projectKey: string;
     composeContent: string;
@@ -614,7 +614,7 @@ async function validateComposeDefinition(
     throw new DockerComposeValidationError("Compose YAML could not be parsed safely");
   }
   if ("include" in root || "name" in root) {
-    throw new DockerComposeValidationError("Compose include and top-level name are managed by ZOS");
+    throw new DockerComposeValidationError("Compose include and top-level name are managed by CyberOS");
   }
   if (root.configs !== undefined || root.secrets !== undefined) {
     throw new DockerComposeValidationError("Local Compose configs and secrets are not supported");
@@ -659,7 +659,7 @@ async function validateComposeDefinition(
     throw hostAccessComposeError(error);
   }
 
-  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-compose-validate-"));
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-compose-validate-"));
   try {
     await writeFile(path.join(tempDirectory, MANAGED_COMPOSE_FILE), input.composeContent, { mode: 0o600 });
     await writeFile(path.join(tempDirectory, MANAGED_ENV_FILE), renderEnvironment(input.environment), { mode: 0o600 });
@@ -747,7 +747,7 @@ async function validateComposeDefinition(
 }
 
 async function validateServiceVolumes(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   serviceName: string,
   value: unknown,
   appsRoot: string,
@@ -779,7 +779,7 @@ async function validateServiceVolumes(
     const resolvedSource = await resolvePotentialPath(source);
     const resolvedAppsRoot = await realpath(appsRoot).catch(() => path.resolve(appsRoot));
     if (isPathInside(resolvedAppsRoot, resolvedSource)) {
-      throw new DockerComposeValidationError("Application data cannot be stored under /zos/apps");
+      throw new DockerComposeValidationError("Application data cannot be stored under /cyberos/apps");
     }
     let allowed = false;
     for (const root of listNasRoots(db)) {
@@ -1271,7 +1271,7 @@ function nonEmptyArray(value: unknown): boolean {
 }
 
 async function createDockerConfig(registryCredentials: DockerRegistryCredentialRecord[]): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "zos-docker-config-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-docker-config-"));
   try {
     await chmod(directory, 0o700);
     await writeFile(

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { CapabilityErrorCode, CapabilityRisk, CapabilityRunState, JsonValue } from "@zos/capabilities";
-import type { ZosDatabase } from "../connection.js";
+import type { CapabilityErrorCode, CapabilityRisk, CapabilityRunState, JsonValue } from "@cyberos/capabilities";
+import type { CyberOsDatabase } from "../connection.js";
 
 export interface CapabilityRunRecord {
   id: string;
@@ -92,7 +92,7 @@ interface CapabilityApprovalRow {
 
 const TERMINAL_STATES: readonly CapabilityRunState[] = ["succeeded", "failed", "cancelled", "expired"];
 
-export function createCapabilityRun(db: ZosDatabase, input: {
+export function createCapabilityRun(db: CyberOsDatabase, input: {
   clientId?: string | null;
   subjectId: string;
   subjectKind: CapabilityRunRecord["subjectKind"];
@@ -155,7 +155,7 @@ export function createCapabilityRun(db: ZosDatabase, input: {
   return run;
 }
 
-export function createCapabilityProposal(db: ZosDatabase, input: {
+export function createCapabilityProposal(db: CyberOsDatabase, input: {
   clientId?: string | null;
   subjectId: string;
   subjectKind: "pi";
@@ -221,17 +221,17 @@ export function createCapabilityProposal(db: ZosDatabase, input: {
   return tx();
 }
 
-export function getCapabilityRun(db: ZosDatabase, runId: string): CapabilityRunRecord | null {
+export function getCapabilityRun(db: CyberOsDatabase, runId: string): CapabilityRunRecord | null {
   const row = db.prepare("SELECT * FROM capability_runs WHERE id = ?").get(runId) as CapabilityRunRow | undefined;
   return row ? mapRun(row) : null;
 }
 
-export function getOwnedCapabilityRun(db: ZosDatabase, clientId: string, runId: string): CapabilityRunRecord | null {
+export function getOwnedCapabilityRun(db: CyberOsDatabase, clientId: string, runId: string): CapabilityRunRecord | null {
   const row = db.prepare("SELECT * FROM capability_runs WHERE id = ? AND client_id = ?").get(runId, clientId) as CapabilityRunRow | undefined;
   return row ? mapRun(row) : null;
 }
 
-export function listOwnedCapabilityRuns(db: ZosDatabase, input: {
+export function listOwnedCapabilityRuns(db: CyberOsDatabase, input: {
   clientId: string;
   limit?: number;
   before?: { createdAt: string; id: string };
@@ -247,7 +247,7 @@ export function listOwnedCapabilityRuns(db: ZosDatabase, input: {
   return (rows as CapabilityRunRow[]).map(mapRun);
 }
 
-export function cancelOwnedCapabilityRun(db: ZosDatabase, clientId: string, runId: string): CapabilityRunRecord | null {
+export function cancelOwnedCapabilityRun(db: CyberOsDatabase, clientId: string, runId: string): CapabilityRunRecord | null {
   const now = new Date().toISOString();
   const tx = db.transaction(() => {
     const result = db.prepare(`
@@ -266,7 +266,7 @@ export function cancelOwnedCapabilityRun(db: ZosDatabase, clientId: string, runI
   return tx();
 }
 
-export function transitionCapabilityRun(db: ZosDatabase, input: {
+export function transitionCapabilityRun(db: CyberOsDatabase, input: {
   runId: string;
   expectedRevision: number;
   from: readonly CapabilityRunState[];
@@ -300,12 +300,12 @@ export function transitionCapabilityRun(db: ZosDatabase, input: {
   return getCapabilityRun(db, input.runId);
 }
 
-export function getCapabilityApprovalByRun(db: ZosDatabase, runId: string): CapabilityApprovalRecord | null {
+export function getCapabilityApprovalByRun(db: CyberOsDatabase, runId: string): CapabilityApprovalRecord | null {
   const row = db.prepare("SELECT * FROM capability_approvals WHERE run_id = ?").get(runId) as CapabilityApprovalRow | undefined;
   return row ? mapApproval(row) : null;
 }
 
-export function listPendingCapabilityApprovals(db: ZosDatabase): Array<CapabilityApprovalRecord & { run: CapabilityRunRecord }> {
+export function listPendingCapabilityApprovals(db: CyberOsDatabase): Array<CapabilityApprovalRecord & { run: CapabilityRunRecord }> {
   const rows = db.prepare("SELECT * FROM capability_approvals WHERE status = 'pending' ORDER BY created_at, id").all() as CapabilityApprovalRow[];
   return rows.flatMap((row) => {
     const run = getCapabilityRun(db, row.run_id);
@@ -314,7 +314,7 @@ export function listPendingCapabilityApprovals(db: ZosDatabase): Array<Capabilit
 }
 
 export function listPendingAgentCapabilityApprovals(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId?: string } = {}
 ): AgentCapabilityApprovalRecord[] {
   const rows = db.prepare(`
@@ -337,7 +337,7 @@ export function listPendingAgentCapabilityApprovals(
 }
 
 export function getAgentCapabilityApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   approvalId: string
 ): AgentCapabilityApprovalRecord | null {
   const row = db.prepare(`
@@ -353,7 +353,7 @@ export function getAgentCapabilityApproval(
   return run ? { ...mapApproval(row), run, jobId: row.job_id, sessionId: row.session_id } : null;
 }
 
-export function saveCapabilityRunPayload(db: ZosDatabase, runId: string, payload: JsonValue): void {
+export function saveCapabilityRunPayload(db: CyberOsDatabase, runId: string, payload: JsonValue): void {
   db.prepare(`
     INSERT INTO capability_run_payloads(run_id, payload_json, created_at)
     VALUES (?, ?, ?)
@@ -361,18 +361,18 @@ export function saveCapabilityRunPayload(db: ZosDatabase, runId: string, payload
   `).run(runId, stableJson(payload), new Date().toISOString());
 }
 
-export function getCapabilityRunPayload(db: ZosDatabase, runId: string): JsonValue | null {
+export function getCapabilityRunPayload(db: CyberOsDatabase, runId: string): JsonValue | null {
   const value = db.prepare("SELECT payload_json FROM capability_run_payloads WHERE run_id = ?")
     .pluck().get(runId) as string | undefined;
   return value ? JSON.parse(value) as JsonValue : null;
 }
 
-export function deleteCapabilityRunPayload(db: ZosDatabase, runId: string): boolean {
+export function deleteCapabilityRunPayload(db: CyberOsDatabase, runId: string): boolean {
   return db.prepare("DELETE FROM capability_run_payloads WHERE run_id = ?").run(runId).changes === 1;
 }
 
 export function cancelAgentCapabilityRunsForJob(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   jobId: string,
   now = new Date().toISOString()
 ): number {
@@ -417,7 +417,7 @@ export function cancelAgentCapabilityRunsForJob(
   return tx.immediate();
 }
 
-export function expireCapabilityApprovals(db: ZosDatabase, now = new Date().toISOString()): number {
+export function expireCapabilityApprovals(db: CyberOsDatabase, now = new Date().toISOString()): number {
   const tx = db.transaction(() => {
     const rows = db.prepare(`
       SELECT a.id, a.run_id FROM capability_approvals a
@@ -454,7 +454,7 @@ export function expireCapabilityApprovals(db: ZosDatabase, now = new Date().toIS
   return tx.immediate();
 }
 
-export function listRunnableCapabilityRuns(db: ZosDatabase, limit = 50): CapabilityRunRecord[] {
+export function listRunnableCapabilityRuns(db: CyberOsDatabase, limit = 50): CapabilityRunRecord[] {
   const rows = db.prepare(`
     SELECT r.* FROM capability_runs r
     JOIN capability_approvals a ON a.run_id = r.id
@@ -464,7 +464,7 @@ export function listRunnableCapabilityRuns(db: ZosDatabase, limit = 50): Capabil
   return rows.map(mapRun);
 }
 
-export function failInterruptedCapabilityRuns(db: ZosDatabase): number {
+export function failInterruptedCapabilityRuns(db: CyberOsDatabase): number {
   const now = new Date().toISOString();
   const rows = db.prepare("SELECT id FROM capability_runs WHERE state = 'running'").all() as Array<{ id: string }>;
   if (rows.length === 0) return 0;
@@ -489,7 +489,7 @@ export function failInterruptedCapabilityRuns(db: ZosDatabase): number {
   return tx();
 }
 
-export function decideCapabilityApproval(db: ZosDatabase, input: {
+export function decideCapabilityApproval(db: CyberOsDatabase, input: {
   approvalId: string;
   expectedRevision: number;
   decision: "approved" | "rejected";
@@ -525,7 +525,7 @@ export function decideCapabilityApproval(db: ZosDatabase, input: {
     } else {
       runResult = db.prepare(`
         UPDATE capability_runs SET state = 'failed', error_code = 'APPROVAL_REJECTED',
-          error_message = 'Rejected in ZOS', cancellable = 0,
+          error_message = 'Rejected in CyberOS', cancellable = 0,
           finished_at = ?, updated_at = ?, revision = revision + 1
         WHERE id = ? AND state = 'waiting_approval'
       `).run(now, now, row.run_id);
@@ -545,7 +545,7 @@ export function decideCapabilityApproval(db: ZosDatabase, input: {
   return tx.immediate();
 }
 
-export function linkAgentJobToCapabilityRun(db: ZosDatabase, input: { jobId: string; runId: string; providerSessionId?: string | null }): void {
+export function linkAgentJobToCapabilityRun(db: CyberOsDatabase, input: { jobId: string; runId: string; providerSessionId?: string | null }): void {
   const eligible = db.prepare(`
     SELECT 1
     FROM jobs j
@@ -560,7 +560,7 @@ export function linkAgentJobToCapabilityRun(db: ZosDatabase, input: { jobId: str
   `).run(input.jobId, input.runId, input.providerSessionId ?? null, new Date().toISOString());
 }
 
-export function getCapabilityRunForAgentJob(db: ZosDatabase, jobId: string): CapabilityRunRecord | null {
+export function getCapabilityRunForAgentJob(db: CyberOsDatabase, jobId: string): CapabilityRunRecord | null {
   const row = db.prepare(`
     SELECT r.* FROM capability_runs r
     JOIN agent_capability_runs a ON a.run_id = r.id
@@ -570,7 +570,7 @@ export function getCapabilityRunForAgentJob(db: ZosDatabase, jobId: string): Cap
 }
 
 export function claimNextCapabilityContinuation(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { workerId: string; leaseMs: number; now?: Date } = { workerId: "legacy-worker", leaseMs: 30_000 }
 ): { jobId: string; runs: CapabilityRunRecord[] } | null {
   const nowDate = input.now ?? new Date();
@@ -630,7 +630,7 @@ export function claimNextCapabilityContinuation(
   return tx.immediate();
 }
 
-export function listCapabilityRunEvents(db: ZosDatabase, runId: string, afterId = 0): Array<{ id: number; type: string; payload: JsonValue; createdAt: string }> {
+export function listCapabilityRunEvents(db: CyberOsDatabase, runId: string, afterId = 0): Array<{ id: number; type: string; payload: JsonValue; createdAt: string }> {
   const rows = db.prepare(`
     SELECT id, type, payload_json, created_at FROM capability_run_events
     WHERE run_id = ? AND id > ? ORDER BY id LIMIT 500
@@ -638,7 +638,7 @@ export function listCapabilityRunEvents(db: ZosDatabase, runId: string, afterId 
   return rows.map((row) => ({ id: row.id, type: row.type, payload: JSON.parse(row.payload_json) as JsonValue, createdAt: row.created_at }));
 }
 
-function appendCapabilityRunEvent(db: ZosDatabase, runId: string, type: string, payload: JsonValue): void {
+function appendCapabilityRunEvent(db: CyberOsDatabase, runId: string, type: string, payload: JsonValue): void {
   db.prepare(`INSERT INTO capability_run_events(run_id, type, payload_json, created_at) VALUES (?, ?, ?, ?)`)
     .run(runId, type, stableJson(payload), new Date().toISOString());
 }

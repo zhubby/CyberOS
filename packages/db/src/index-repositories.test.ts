@@ -10,7 +10,7 @@ import {
   getIndexerSettings,
   getIndexRootStatus,
   listIndexRootStatuses,
-  openZosDb,
+  openCyberOsDb,
   queryIndexAdvanced,
   queryIndexedText,
   recordIndexFailure,
@@ -18,15 +18,15 @@ import {
   finishIndexRun,
   saveIndexerSettings,
   upsertIndexedFile,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-db-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-db-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [
     {
       id: "local",

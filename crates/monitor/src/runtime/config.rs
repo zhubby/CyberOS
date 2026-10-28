@@ -2,13 +2,13 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use cyberos_monitoring_contracts::SamplingIntervals;
 use toml_edit::{DocumentMut, Item};
-use zos_monitoring_contracts::SamplingIntervals;
 
 use crate::domain::config::{MonitorConfig, MonitoringConfig, NasRoot};
 use crate::error::MonitorError;
 
-const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
+const DEFAULT_CONFIG_PATH: &str = "/cyberos/config/config.toml";
 const MIB: u64 = 1024 * 1024;
 
 impl MonitorConfig {
@@ -21,18 +21,18 @@ impl MonitorConfig {
         current_dir: PathBuf,
     ) -> Result<Self, MonitorError> {
         let config_path = environment
-            .get("ZOS_CONFIG")
+            .get("CYBEROS_CONFIG")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH));
         let document = if config_path.exists() {
             std::fs::read_to_string(&config_path)?
                 .parse::<DocumentMut>()
-                .map_err(|error| MonitorError::Config(format!("invalid ZOS config: {error}")))?
+                .map_err(|error| MonitorError::Config(format!("invalid CyberOS config: {error}")))?
         } else {
             DocumentMut::new()
         };
         let root_dir = environment
-            .get("ZOS_ROOT")
+            .get("CYBEROS_ROOT")
             .map(PathBuf::from)
             .or_else(|| {
                 document
@@ -40,13 +40,13 @@ impl MonitorConfig {
                     .and_then(Item::as_str)
                     .map(PathBuf::from)
             })
-            .unwrap_or_else(|| current_dir.join(".zos/dev-root"));
+            .unwrap_or_else(|| current_dir.join(".cyberos/dev-root"));
         let state_dir = root_dir.join("state");
         let monitoring = monitoring_config(environment, &document)?;
         let nas_roots = nas_roots(environment, &document, &root_dir, &current_dir);
         Ok(Self {
             root_dir,
-            database_path: state_dir.join("zos.sqlite"),
+            database_path: state_dir.join("cyberos.sqlite"),
             metrics_database_path: state_dir.join("metrics.sqlite"),
             state_dir,
             nas_roots,
@@ -59,7 +59,7 @@ impl MonitorConfig {
         let state_dir = root.join("state");
         Self {
             root_dir: root.to_path_buf(),
-            database_path: state_dir.join("zos.sqlite"),
+            database_path: state_dir.join("cyberos.sqlite"),
             metrics_database_path: state_dir.join("metrics.sqlite"),
             state_dir,
             nas_roots: Vec::new(),
@@ -77,7 +77,7 @@ fn monitoring_config(
     let config = MonitoringConfig {
         enabled: boolean(
             environment
-                .get("ZOS_MONITORING_ENABLED")
+                .get("CYBEROS_MONITORING_ENABLED")
                 .map(String::as_str),
             table
                 .and_then(|value| value.get("enabled"))
@@ -88,7 +88,7 @@ fn monitoring_config(
         sampling: SamplingIntervals {
             fast: milliseconds(
                 environment
-                    .get("ZOS_MONITORING_FAST_SAMPLE_INTERVAL_MS")
+                    .get("CYBEROS_MONITORING_FAST_SAMPLE_INTERVAL_MS")
                     .map(String::as_str),
                 table
                     .and_then(|value| value.get("fast_sample_interval_ms"))
@@ -98,7 +98,7 @@ fn monitoring_config(
             )?,
             standard: milliseconds(
                 environment
-                    .get("ZOS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS")
+                    .get("CYBEROS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS")
                     .map(String::as_str),
                 table
                     .and_then(|value| value.get("standard_sample_interval_ms"))
@@ -108,7 +108,7 @@ fn monitoring_config(
             )?,
             temperature: milliseconds(
                 environment
-                    .get("ZOS_MONITORING_TEMPERATURE_SAMPLE_INTERVAL_MS")
+                    .get("CYBEROS_MONITORING_TEMPERATURE_SAMPLE_INTERVAL_MS")
                     .map(String::as_str),
                 table
                     .and_then(|value| value.get("temperature_sample_interval_ms"))
@@ -119,7 +119,7 @@ fn monitoring_config(
         },
         raw_retention: milliseconds(
             environment
-                .get("ZOS_MONITORING_RAW_RETENTION_MS")
+                .get("CYBEROS_MONITORING_RAW_RETENTION_MS")
                 .map(String::as_str),
             table
                 .and_then(|value| value.get("raw_retention_ms"))
@@ -129,7 +129,7 @@ fn monitoring_config(
         )?,
         minute_retention: milliseconds(
             environment
-                .get("ZOS_MONITORING_MINUTE_RETENTION_MS")
+                .get("CYBEROS_MONITORING_MINUTE_RETENTION_MS")
                 .map(String::as_str),
             table
                 .and_then(|value| value.get("minute_retention_ms"))
@@ -139,7 +139,7 @@ fn monitoring_config(
         )?,
         hour_retention: milliseconds(
             environment
-                .get("ZOS_MONITORING_HOUR_RETENTION_MS")
+                .get("CYBEROS_MONITORING_HOUR_RETENTION_MS")
                 .map(String::as_str),
             table
                 .and_then(|value| value.get("hour_retention_ms"))
@@ -149,7 +149,7 @@ fn monitoring_config(
         )?,
         max_database_bytes: integer(
             environment
-                .get("ZOS_MONITORING_MAX_DATABASE_BYTES")
+                .get("CYBEROS_MONITORING_MAX_DATABASE_BYTES")
                 .map(String::as_str),
             table
                 .and_then(|value| value.get("max_database_bytes"))
@@ -188,7 +188,7 @@ fn nas_roots(
     root_dir: &Path,
     current_dir: &Path,
 ) -> Vec<NasRoot> {
-    if let Some(value) = environment.get("ZOS_NAS_ROOTS") {
+    if let Some(value) = environment.get("CYBEROS_NAS_ROOTS") {
         let roots: Vec<_> = value
             .split(',')
             .filter_map(|entry| {
@@ -307,18 +307,21 @@ mod tests {
     fn loads_monitoring_overrides_and_paths() {
         let root = tempfile::tempdir().unwrap();
         let mut environment = std::collections::HashMap::new();
-        environment.insert("ZOS_ROOT".to_owned(), root.path().display().to_string());
+        environment.insert("CYBEROS_ROOT".to_owned(), root.path().display().to_string());
         environment.insert(
-            "ZOS_MONITORING_FAST_SAMPLE_INTERVAL_MS".to_owned(),
+            "CYBEROS_MONITORING_FAST_SAMPLE_INTERVAL_MS".to_owned(),
             "5000".to_owned(),
         );
         environment.insert(
-            "ZOS_NAS_ROOTS".to_owned(),
+            "CYBEROS_NAS_ROOTS".to_owned(),
             format!("dev:Development:{}", root.path().join("nas").display()),
         );
         let config = MonitorConfig::load_from(&environment, root.path().to_path_buf()).unwrap();
         assert_eq!(config.monitoring.sampling.fast, Duration::from_secs(5));
-        assert_eq!(config.database_path, root.path().join("state/zos.sqlite"));
+        assert_eq!(
+            config.database_path,
+            root.path().join("state/cyberos.sqlite")
+        );
         assert_eq!(config.nas_roots[0].id, "dev");
     }
 
@@ -326,13 +329,13 @@ mod tests {
     fn rejects_invalid_retention_order() {
         let root = tempfile::tempdir().unwrap();
         let mut environment = std::collections::HashMap::new();
-        environment.insert("ZOS_ROOT".to_owned(), root.path().display().to_string());
+        environment.insert("CYBEROS_ROOT".to_owned(), root.path().display().to_string());
         environment.insert(
-            "ZOS_MONITORING_RAW_RETENTION_MS".to_owned(),
+            "CYBEROS_MONITORING_RAW_RETENTION_MS".to_owned(),
             "7200000".to_owned(),
         );
         environment.insert(
-            "ZOS_MONITORING_MINUTE_RETENTION_MS".to_owned(),
+            "CYBEROS_MONITORING_MINUTE_RETENTION_MS".to_owned(),
             "3600000".to_owned(),
         );
         assert!(MonitorConfig::load_from(&environment, root.path().to_path_buf()).is_err());

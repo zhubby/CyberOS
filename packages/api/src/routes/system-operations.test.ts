@@ -2,8 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { openZosDb, type ZosDatabase } from "@zos/db";
-import type { OpsTask, ZosConfig } from "@zos/shared";
+import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
+import type { OpsTask, CyberOsConfig } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 import {
   SystemOperationsRequestError,
@@ -12,11 +12,11 @@ import {
 } from "../lib/operations-management.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-api-operations-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-api-operations-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
 });
 
 afterEach(async () => {
@@ -121,19 +121,19 @@ class FakeOperationsRuntime implements SystemOperationsRuntime {
   }
 }
 
-function createConfig(dataDir: string): ZosConfig {
+function createConfig(dataDir: string): CyberOsConfig {
   return {
     dataDir,
-    databasePath: path.join(dataDir, "zos.sqlite"),
+    databasePath: path.join(dataDir, "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
     model: { provider: "local", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120_000, consoleShells: ["/bin/sh"] },
-    shares: { enabled: false, account: { username: "zos-share", password: null }, shares: [] },
+    shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
     hostd: { socketPath: path.join(dataDir, "hostd.sock") },
     terminal: { user: "test-user", termuxSocketPath: path.join(dataDir, "termux.sock") },
-    vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
+    vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     nasRoots: []
   };
 }

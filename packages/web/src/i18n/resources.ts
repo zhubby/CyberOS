@@ -1,6 +1,6 @@
 export const en = {
   common: {
-    appName: "ZOS",
+    appName: "CyberOS",
     root: "root",
     dash: "-",
     yes: "Yes",
@@ -64,7 +64,7 @@ export const en = {
     minutes: "{{count}} min",
     loading: "Loading library",
     emptyTitle: "No movies or series yet",
-    emptyBody: "Add a media source from ZOS settings.",
+    emptyBody: "Add a media source from CyberOS settings.",
     unavailableTitle: "Library unavailable",
     unavailableBody: "Check the API and media source, then try again.",
     noResults: "No matching titles",
@@ -146,12 +146,12 @@ export const en = {
     confirm: {
       reboot: {
         title: "Restart this device?",
-        body: "ZOS will ask systemd to stop services and unmount filesystems before restarting.",
+        body: "CyberOS will ask systemd to stop services and unmount filesystems before restarting.",
         action: "Restart now"
       },
       shutdown: {
         title: "Shut down this device?",
-        body: "ZOS will ask systemd to stop services and unmount filesystems before powering off.",
+        body: "CyberOS will ask systemd to stop services and unmount filesystems before powering off.",
         action: "Shut down now"
       },
       safetyNote: "Active work will be interrupted. Wait for important transfers and writes to finish."
@@ -197,10 +197,10 @@ export const en = {
     deleteSessionBusy: "Stop active work before deleting this session.",
     deleteSessionEyebrow: "Session",
     deleteSessionTitle: "Delete this session?",
-    deleteSessionBody: "{{title}} and its chat history will be removed from ZOS.",
+    deleteSessionBody: "{{title}} and its chat history will be removed from CyberOS.",
     confirmDeleteSession: "Delete session",
     transcript: "Transcript",
-    zosAgent: "ZOS Agent",
+    cyberosAgent: "CyberOS Agent",
     you: "You",
     emptyTitle: "Ready for a NAS task.",
     emptyBody: "Ask about the selected folder or request approval-gated file work.",
@@ -217,7 +217,7 @@ export const en = {
     },
     capabilityApproval: {
       kicker: "Agent capability request",
-      detail: "Review the immutable capability proposal before ZOS executes it.",
+      detail: "Review the immutable capability proposal before CyberOS executes it.",
       client: "Client",
       revision: "Revision",
       target: "Target",
@@ -288,7 +288,7 @@ export const en = {
       cwd: "CWD",
       args: "Args"
     },
-    messagePlaceholder: "Message ZOS Agent",
+    messagePlaceholder: "Message CyberOS Agent",
     messageAria: "Agent message",
     modelConfiguration: "Model config",
     streaming: "Streaming",
@@ -431,7 +431,7 @@ export const en = {
       useDestination: "Move here",
       invalidDestination: "Selected items cannot be moved to their current location or inside a selected folder.",
       deleteTitle: "Delete {{count}} selected items?",
-      deleteBody: "{{files}} files and {{directories}} folders will be moved to ZOS trash. Processing continues if an item fails.",
+      deleteBody: "{{files}} files and {{directories}} folders will be moved to CyberOS trash. Processing continues if an item fails.",
       confirmDelete: "Move to trash",
       cancel: "Cancel file operation",
       progress: "{{completed}} / {{total}} processed · {{success}} succeeded · {{failed}} failed",
@@ -589,11 +589,11 @@ export const en = {
       sendPathToAgent: "Send path to Agent",
       sendPathToAgentEntry: "Send {{name}} path to Agent",
       deleteTitle: "Delete this file?",
-      deleteBody: "{{name}} will be moved to ZOS trash.",
+      deleteBody: "{{name}} will be moved to CyberOS trash.",
       deleteFolderTitle: "Delete this folder?",
-      deleteFolderBody: "{{name}} and its contents will be moved to ZOS trash.",
+      deleteFolderBody: "{{name}} and its contents will be moved to CyberOS trash.",
       deleteFolderFinalTitle: "Confirm folder delete",
-      deleteFolderFinalBody: "{{name}} and its contents will be moved to ZOS trash.",
+      deleteFolderFinalBody: "{{name}} and its contents will be moved to CyberOS trash.",
       continueDelete: "Continue",
       requestDelete: "Move to trash",
       noSession: "No active session"
@@ -623,7 +623,7 @@ export const en = {
     },
     monitoring: {
       title: "Monitoring",
-      description: "Host resources, storage, service state, and ZOS workload history.",
+      description: "Host resources, storage, service state, and CyberOS workload history.",
       actions: "Monitoring actions",
       noData: "No samples in this range",
       tabs: { label: "Monitoring views", overview: "Overview", rules: "Rules", incidents: "Incidents" },
@@ -675,7 +675,7 @@ export const en = {
       range: { label: "Time range", "1h": "1h", "6h": "6h", "24h": "24h", "7d": "7d", "30d": "30d", "1y": "1y" },
       states: {
         disabled: "Disabled",
-        disabledDetail: "Monitoring is disabled in ZOS configuration. The service remains idle and no samples are written.",
+        disabledDetail: "Monitoring is disabled in CyberOS configuration. The service remains idle and no samples are written.",
         starting: "Starting",
         startingDetail: "Waiting for the first monitoring sample.",
         ready: "Ready",
@@ -717,12 +717,12 @@ export const en = {
       capacity: {
         title: "Filesystem capacity",
         description: "State and configured NAS filesystem utilization.",
-        state: "ZOS state",
+        state: "CyberOS state",
         nas: "NAS"
       },
       services: {
         title: "Services and collectors",
-        description: "Fixed ZOS units and the latest collector result.",
+        description: "Fixed CyberOS units and the latest collector result.",
         active: "Active",
         inactive: "Inactive",
         collector: "{{name}} collector"
@@ -772,7 +772,7 @@ export const en = {
       deleteSelected: "Delete",
       switchRootForManagement: "Switch the active Agent to the photo library root before moving or deleting photos.",
       deleteTitle: "Delete {{count}} selected items?",
-      deleteBody: "The selected media will move to ZOS trash immediately after confirmation.",
+      deleteBody: "The selected media will move to CyberOS trash immediately after confirmation.",
       requestDelete: "Move to trash",
       loadMore: "Load more media",
       loadingMore: "Loading more media",
@@ -993,7 +993,7 @@ export const en = {
           saveSucceeded: "Docker daemon configuration saved. Restart Docker to apply it.",
           restartSucceeded: "Docker restarted with the new daemon configuration.",
           confirmTitle: "Restart Docker now?",
-          confirmDescription: "Docker containers and active consoles may be interrupted while docker.service restarts. If startup fails, ZOS will restore the last applied configuration and try to start Docker again.",
+          confirmDescription: "Docker containers and active consoles may be interrupted while docker.service restarts. If startup fails, CyberOS will restore the last applied configuration and try to start Docker again.",
           confirmRestart: "Confirm restart",
           restartFailedRolledBack: "Docker could not restart with the new configuration. The last applied configuration was restored and Docker started again.",
           restartFailedRollbackFailed: "Docker restart and automatic rollback both failed. Manual recovery is required.",
@@ -1014,7 +1014,7 @@ export const en = {
           }
         },
         loading: "Loading Docker runtime state.",
-        disabledDetail: "Docker management is disabled in ZOS config.",
+        disabledDetail: "Docker management is disabled in CyberOS config.",
         disabledEmpty: "Enable Docker management to use container actions. Managed Compose Apps remain editable.",
         noContainers: "No Docker containers are visible.",
         noComposeProjects: "No configured Compose projects were found.",
@@ -1150,7 +1150,7 @@ export const en = {
           password: "Password or access token",
           passwordConfigured: "Configured; leave blank to keep",
           passwordKeepNote: "The saved credential stays unchanged while this field is blank.",
-          registryStorageNote: "Credentials are stored unencrypted in the restricted ZOS database and are never returned by the API.",
+          registryStorageNote: "Credentials are stored unencrypted in the restricted CyberOS database and are never returned by the API.",
           registrySaved: "Docker Registry credential saved.",
           registryDeleted: "Docker Registry credential deleted.",
           confirmRegistryDeleteTitle: "Delete this Registry credential?",
@@ -1244,9 +1244,9 @@ export const en = {
           conflict: "This App changed in another request. Your input is preserved; reload the latest revision before editing again.",
           reload: "Reload latest",
           deleteTitle: "Delete this Compose App?",
-          deleteDescription: "{{name}} will be removed from ZOS with its generated definition directory. Images, named volumes, networks, and NAS data are retained.",
+          deleteDescription: "{{name}} will be removed from CyberOS with its generated definition directory. Images, named volumes, networks, and NAS data are retained.",
           deleteBlocked: "Run Down to remove this project's containers before deleting the App.",
-          deleteEngineRequired: "Docker Engine must be available so ZOS can verify that no project containers remain.",
+          deleteEngineRequired: "Docker Engine must be available so CyberOS can verify that no project containers remain.",
           confirmDelete: "Delete App",
           errors: {
             name: "Enter an App name.",
@@ -1261,7 +1261,7 @@ export const en = {
         },
         composeTitle: "Compose projects",
         containerCreating: "Creating",
-        composeDescription: "System-managed Apps stored in ZOS and deployed directly from this panel.",
+        composeDescription: "System-managed Apps stored in CyberOS and deployed directly from this panel.",
         resourcesTitle: "Runtime pressure",
         resourcesDescription: "Aggregated CPU, memory, network, and volume signals from the Docker runtime.",
         pressureTitle: "Runtime pressure",
@@ -1592,9 +1592,9 @@ export const en = {
           fields: { addresses: "Addresses", gateway: "Gateway", speed: "Speed", profile: "Active profile", enabled: "Enable this port", mode: "Address mode", address: "Address", prefix: "Prefix", dnsMode: "DNS mode", dns: "DNS servers", defaultRoute: "Use as default route", metric: "Route metric" },
           modes: { disabled: "Disabled", dhcp: "DHCP", automatic: "Automatic", static: "Static" },
           dns: { automatic: "Automatic", manual: "Custom" },
-          warnings: { noIpv4DefaultRoute: "No IPv4 default route is enabled.", noIpv6DefaultRoute: "No IPv6 default route is enabled.", asymmetricSubnetRoutes: "Multiple ports share a subnet with asymmetric default-route settings. Replies may leave through a different port.", unsupportedProfile: "This profile uses advanced Ethernet settings that ZOS will not overwrite." },
-          confirm: { eyebrow: "Network change", title: "Apply all pending Ethernet changes?", description: "{{count}} port configurations will be activated together. ZOS access may move to another address; unconfirmed changes roll back automatically after 90 seconds.", apply: "Apply changes" },
-          transaction: { eyebrow: "Confirmation window", title: "Is ZOS still reachable?", description: "The new configuration is active on {{count}} ports. Keep it before the timer expires or roll back now.", keep: "Keep configuration", rollback: "Roll back now" },
+          warnings: { noIpv4DefaultRoute: "No IPv4 default route is enabled.", noIpv6DefaultRoute: "No IPv6 default route is enabled.", asymmetricSubnetRoutes: "Multiple ports share a subnet with asymmetric default-route settings. Replies may leave through a different port.", unsupportedProfile: "This profile uses advanced Ethernet settings that CyberOS will not overwrite." },
+          confirm: { eyebrow: "Network change", title: "Apply all pending Ethernet changes?", description: "{{count}} port configurations will be activated together. CyberOS access may move to another address; unconfirmed changes roll back automatically after 90 seconds.", apply: "Apply changes" },
+          transaction: { eyebrow: "Confirmation window", title: "Is CyberOS still reachable?", description: "The new configuration is active on {{count}} ports. Keep it before the timer expires or roll back now.", keep: "Keep configuration", rollback: "Roll back now" },
           messages: { saved: "Ethernet configuration saved and waiting to be applied.", applying: "Ethernet configuration applied; confirm connectivity within 90 seconds.", confirmed: "Ethernet configuration kept.", rolledBack: "Ethernet configuration rolled back." },
           errors: { operation: "The Ethernet operation failed.", metricConflict: "Default routes in the same address family must use different metrics.", invalid: "Correct the invalid address, prefix, DNS, gateway, or metric values before saving." }
         },
@@ -1629,12 +1629,12 @@ export const en = {
           mode: "Mode",
           availableTitle: "Available networks",
           savedTitle: "Saved networks",
-          savedDescription: "External profiles can be used but only ZOS profiles can be edited or forgotten.",
+          savedDescription: "External profiles can be used but only CyberOS profiles can be edited or forgotten.",
           noProfiles: "No saved Wi-Fi networks.",
           current: "Current",
           connect: "Connect",
           disconnect: "Disconnect",
-          managed: "ZOS managed",
+          managed: "CyberOS managed",
           external: "External profile",
           externalReadOnly: "External profiles are read-only",
           autoconnect: "Auto",
@@ -1676,14 +1676,14 @@ export const en = {
           confirm: {
             eyebrow: "Network change",
             continue: "Confirm and continue",
-            managementTitle: "This may interrupt ZOS access",
+            managementTitle: "This may interrupt CyberOS access",
             managementDescription: "The selected wireless interface carries the management path. This change executes immediately and has no timed rollback after a successful switch.",
             disconnectTitle: "Disconnect this wireless device?",
             disconnectDescription: "The active Wi-Fi connection will close immediately.",
             radioTitle: "Disable the Wi-Fi radio?",
             radioDescription: "All wireless client and hotspot connections will stop.",
             forgetTitle: "Forget this network?",
-            forgetDescription: "The ZOS profile for {{ssid}} and its stored password will be removed.",
+            forgetDescription: "The CyberOS profile for {{ssid}} and its stored password will be removed.",
             profileRestartTitle: "Restart the active connection?",
             profileRestartDescription: "Saving changes restarts this active Wi-Fi connection immediately.",
             hotspotRestartTitle: "Restart the active hotspot?",
@@ -1730,7 +1730,7 @@ export const en = {
         creatingDescription: "Creating the RAID array, formatting it, and mounting the pool. This may take a few minutes.",
         directApplyConfirmation: "I understand this permanently erases the selected disks and creates the pool immediately.",
         diskSelectionDescription: "Only unused whole disks can be selected. The system disk and formatted disks are blocked.",
-        eraseWarning: "Creating this pool permanently erases every selected disk, formats it as {{filesystem}}, and mounts it below /zos/data/primary.",
+        eraseWarning: "Creating this pool permanently erases every selected disk, formats it as {{filesystem}}, and mounts it below /cyberos/data/primary.",
         raidMinimum: "{{count}} disks minimum",
         fields: {
           name: "Pool name",
@@ -2109,7 +2109,7 @@ export const en = {
     searchEmpty: "No settings match.",
     localProfile: "Local profile",
     groups: {
-      zos: "ZOS",
+      cyberos: "CyberOS",
       devices: "Devices",
       ai: "AI",
       workspace: "Workspace",
@@ -2307,7 +2307,7 @@ export const en = {
       settingsSaved: "Bluetooth settings saved.",
       audio: {
         title: "Player audio output",
-        description: "Route the next ZOS/VOD playback to a paired headset or speaker.",
+        description: "Route the next CyberOS/VOD playback to a paired headset or speaker.",
         output: "Audio device",
         systemDefault: "System ALSA / HDMI output",
         disconnected: "disconnected",
@@ -2568,7 +2568,7 @@ export const en = {
     },
     docker: {
       runtimeTitle: "Runtime Access",
-      runtimeDescription: "Enable local Docker Engine control and set the Unix socket, Compose command, and console shells. Managed App files always use /zos/apps.",
+      runtimeDescription: "Enable local Docker Engine control and set the Unix socket, Compose command, and console shells. Managed App files always use /cyberos/apps.",
       enabledField: "Enable Docker management",
       socketPath: "Socket path",
       composeCommand: "Compose command",
@@ -2580,8 +2580,8 @@ export const en = {
     toolPolicy: {
       mcp: {
         title: "Agent MCP",
-        description: "Control whether the built-in Agent uses the ZOS capability registry.",
-        label: "Use ZOS MCP",
+        description: "Control whether the built-in Agent uses the CyberOS capability registry.",
+        label: "Use CyberOS MCP",
         status: {
           loading: "Checking pairing status...",
           disabled: "Off. Agent uses compatibility tools.",
@@ -2743,7 +2743,7 @@ export const en = {
       processTitle: "Process",
       processDescription: "Node runtime, memory, working directory, and executable path.",
       pathsTitle: "Paths",
-      pathsDescription: "ZOS data, database, and NAS root paths."
+      pathsDescription: "CyberOS data, database, and NAS root paths."
     }
   },
   preview: {
@@ -2832,7 +2832,7 @@ type LocaleResource<T> = {
 
 export const zhCN = {
   common: {
-    appName: "ZOS",
+    appName: "CyberOS",
     root: "根目录",
     dash: "-",
     yes: "是",
@@ -2896,7 +2896,7 @@ export const zhCN = {
     minutes: "{{count}} 分钟",
     loading: "正在加载媒体库",
     emptyTitle: "还没有电影或剧集",
-    emptyBody: "请在 ZOS 设置中添加媒体来源。",
+    emptyBody: "请在 CyberOS 设置中添加媒体来源。",
     unavailableTitle: "媒体库不可用",
     unavailableBody: "请检查 API 和媒体来源后重试。",
     noResults: "没有匹配的内容",
@@ -2978,12 +2978,12 @@ export const zhCN = {
     confirm: {
       reboot: {
         title: "重启此设备？",
-        body: "ZOS 将请求 systemd 正常停止服务并卸载文件系统，然后重启。",
+        body: "CyberOS 将请求 systemd 正常停止服务并卸载文件系统，然后重启。",
         action: "立即重启"
       },
       shutdown: {
         title: "关闭此设备？",
-        body: "ZOS 将请求 systemd 正常停止服务并卸载文件系统，然后关闭电源。",
+        body: "CyberOS 将请求 systemd 正常停止服务并卸载文件系统，然后关闭电源。",
         action: "立即关机"
       },
       safetyNote: "正在进行的任务会被中断，请先等待重要传输和写入完成。"
@@ -3029,10 +3029,10 @@ export const zhCN = {
     deleteSessionBusy: "请先停止当前任务，再删除这个会话。",
     deleteSessionEyebrow: "会话",
     deleteSessionTitle: "删除这个会话？",
-    deleteSessionBody: "{{title}} 及其聊天记录将从 ZOS 中移除。",
+    deleteSessionBody: "{{title}} 及其聊天记录将从 CyberOS 中移除。",
     confirmDeleteSession: "删除会话",
     transcript: "转录",
-    zosAgent: "ZOS Agent",
+    cyberosAgent: "CyberOS Agent",
     you: "你",
     emptyTitle: "可以处理 NAS 任务。",
     emptyBody: "询问所选文件夹，或请求需要审批的文件操作。",
@@ -3049,7 +3049,7 @@ export const zhCN = {
     },
     capabilityApproval: {
       kicker: "Agent 能力请求",
-      detail: "请在 ZOS 执行前检查这个不可变能力提案。",
+      detail: "请在 CyberOS 执行前检查这个不可变能力提案。",
       client: "客户端",
       revision: "修订版本",
       target: "目标",
@@ -3120,7 +3120,7 @@ export const zhCN = {
       cwd: "工作目录",
       args: "参数"
     },
-    messagePlaceholder: "给 ZOS Agent 发消息",
+    messagePlaceholder: "给 CyberOS Agent 发消息",
     messageAria: "Agent 消息",
     modelConfiguration: "模型配置",
     streaming: "生成中",
@@ -3263,7 +3263,7 @@ export const zhCN = {
       useDestination: "移动到这里",
       invalidDestination: "不能移动到项目当前位置，也不能将文件夹移动到自身或其子目录。",
       deleteTitle: "删除已选择的 {{count}} 项？",
-      deleteBody: "{{files}} 个文件和 {{directories}} 个文件夹将移入 ZOS 回收站；单项失败不会中止后续操作。",
+      deleteBody: "{{files}} 个文件和 {{directories}} 个文件夹将移入 CyberOS 回收站；单项失败不会中止后续操作。",
       confirmDelete: "移入回收站",
       cancel: "取消文件操作",
       progress: "已处理 {{completed}} / {{total}} · 成功 {{success}} · 失败 {{failed}}",
@@ -3421,11 +3421,11 @@ export const zhCN = {
       sendPathToAgent: "发送路径到 Agent",
       sendPathToAgentEntry: "发送 {{name}} 路径到 Agent",
       deleteTitle: "删除这个文件？",
-      deleteBody: "{{name}} 会移动到 ZOS 回收站。",
+      deleteBody: "{{name}} 会移动到 CyberOS 回收站。",
       deleteFolderTitle: "删除这个文件夹？",
-      deleteFolderBody: "{{name}} 及其内容会移动到 ZOS 回收站。",
+      deleteFolderBody: "{{name}} 及其内容会移动到 CyberOS 回收站。",
       deleteFolderFinalTitle: "确认删除文件夹",
-      deleteFolderFinalBody: "{{name}} 及其内容会移动到 ZOS 回收站。",
+      deleteFolderFinalBody: "{{name}} 及其内容会移动到 CyberOS 回收站。",
       continueDelete: "继续",
       requestDelete: "移入回收站",
       noSession: "没有活动会话"
@@ -3455,7 +3455,7 @@ export const zhCN = {
     },
     monitoring: {
       title: "监控",
-      description: "查看主机资源、存储、服务状态和 ZOS 工作负载历史。",
+      description: "查看主机资源、存储、服务状态和 CyberOS 工作负载历史。",
       actions: "监控操作",
       noData: "此时间范围内没有样本",
       tabs: { label: "监控视图", overview: "概览", rules: "规则", incidents: "事件" },
@@ -3507,7 +3507,7 @@ export const zhCN = {
       range: { label: "时间范围", "1h": "1 小时", "6h": "6 小时", "24h": "24 小时", "7d": "7 天", "30d": "30 天", "1y": "1 年" },
       states: {
         disabled: "已停用",
-        disabledDetail: "监控已在 ZOS 配置中关闭。服务保持空闲，且不会写入样本。",
+        disabledDetail: "监控已在 CyberOS 配置中关闭。服务保持空闲，且不会写入样本。",
         starting: "正在启动",
         startingDetail: "正在等待第一批监控样本。",
         ready: "正常",
@@ -3548,13 +3548,13 @@ export const zhCN = {
       },
       capacity: {
         title: "文件系统容量",
-        description: "ZOS 状态目录和已配置 NAS 文件系统的使用率。",
-        state: "ZOS 状态",
+        description: "CyberOS 状态目录和已配置 NAS 文件系统的使用率。",
+        state: "CyberOS 状态",
         nas: "NAS"
       },
       services: {
         title: "服务与采集器",
-        description: "固定 ZOS 服务和最近一次采集结果。",
+        description: "固定 CyberOS 服务和最近一次采集结果。",
         active: "运行中",
         inactive: "未运行",
         collector: "{{name}} 采集器"
@@ -3604,7 +3604,7 @@ export const zhCN = {
       deleteSelected: "删除",
       switchRootForManagement: "请先将当前 Agent 切换到照片库所在的根目录，再移动或删除照片。",
       deleteTitle: "删除所选的 {{count}} 个媒体项？",
-      deleteBody: "确认后，所选媒体会立即移动到 ZOS 回收站。",
+      deleteBody: "确认后，所选媒体会立即移动到 CyberOS 回收站。",
       requestDelete: "移入回收站",
       loadMore: "加载更多媒体",
       loadingMore: "正在加载更多媒体",
@@ -3825,7 +3825,7 @@ export const zhCN = {
           saveSucceeded: "Docker daemon 配置已保存，重启 Docker 后生效。",
           restartSucceeded: "Docker 已使用新的 daemon 配置重新启动。",
           confirmTitle: "现在重启 Docker？",
-          confirmDescription: "docker.service 重启期间，容器和已打开的控制台可能短暂中断。若启动失败，ZOS 会恢复最后已生效的配置并再次启动 Docker。",
+          confirmDescription: "docker.service 重启期间，容器和已打开的控制台可能短暂中断。若启动失败，CyberOS 会恢复最后已生效的配置并再次启动 Docker。",
           confirmRestart: "确认重启",
           restartFailedRolledBack: "Docker 无法使用新配置启动，已恢复最后生效的配置并重新启动 Docker。",
           restartFailedRollbackFailed: "Docker 重启和自动回滚均失败，需要手工恢复。",
@@ -3846,7 +3846,7 @@ export const zhCN = {
           }
         },
         loading: "正在加载 Docker 运行时状态。",
-        disabledDetail: "ZOS 配置中未启用 Docker 管理。",
+        disabledDetail: "CyberOS 配置中未启用 Docker 管理。",
         disabledEmpty: "启用 Docker 管理后可执行容器操作；托管 Compose App 仍可编辑。",
         noContainers: "当前没有可见 Docker 容器。",
         noComposeProjects: "未找到已配置的 Compose 项目。",
@@ -3967,7 +3967,7 @@ export const zhCN = {
           pullSucceeded: "已拉取 Docker 镜像 {{reference}}。",
           registryEyebrow: "凭证",
           registryTitle: "Docker Registry",
-          registryDescription: "ZOS 会根据镜像引用自动选择匹配的凭证。",
+          registryDescription: "CyberOS 会根据镜像引用自动选择匹配的凭证。",
           addRegistry: "添加 Registry",
           loadingRegistries: "正在加载 Registry 凭证...",
           noRegistries: "尚未配置 Registry 凭证。",
@@ -3982,7 +3982,7 @@ export const zhCN = {
           password: "密码或访问令牌",
           passwordConfigured: "已配置；留空则保持不变",
           passwordKeepNote: "此字段留空时，已保存凭证保持不变。",
-          registryStorageNote: "凭证以未加密形式存入权限受限的 ZOS 数据库，API 永远不会回传明文。",
+          registryStorageNote: "凭证以未加密形式存入权限受限的 CyberOS 数据库，API 永远不会回传明文。",
           registrySaved: "Docker Registry 凭证已保存。",
           registryDeleted: "Docker Registry 凭证已删除。",
           confirmRegistryDeleteTitle: "删除这个 Registry 凭证？",
@@ -4076,9 +4076,9 @@ export const zhCN = {
           conflict: "此 App 已被其他请求修改。当前输入会保留；请重新加载最新 revision 后再编辑。",
           reload: "重新加载最新版本",
           deleteTitle: "删除这个 Compose App？",
-          deleteDescription: "将从 ZOS 删除 {{name}} 及其生成的定义目录；镜像、named volume、网络和 NAS 数据会保留。",
+          deleteDescription: "将从 CyberOS 删除 {{name}} 及其生成的定义目录；镜像、named volume、网络和 NAS 数据会保留。",
           deleteBlocked: "请先执行 Down 移除该项目容器，再删除 App。",
-          deleteEngineRequired: "Docker Engine 必须可用，ZOS 才能确认项目容器已经全部移除。",
+          deleteEngineRequired: "Docker Engine 必须可用，CyberOS 才能确认项目容器已经全部移除。",
           confirmDelete: "删除 App",
           errors: {
             name: "请输入 App 名称。",
@@ -4093,7 +4093,7 @@ export const zhCN = {
         },
         composeTitle: "Compose 项目",
         containerCreating: "创建中",
-        composeDescription: "由 ZOS 统一保存和发布的 App，可在此面板直接部署。",
+        composeDescription: "由 CyberOS 统一保存和发布的 App，可在此面板直接部署。",
         resourcesTitle: "运行时压力",
         resourcesDescription: "汇总 Docker 运行时的 CPU、内存、网络和卷信号。",
         pressureTitle: "运行时压力",
@@ -4424,9 +4424,9 @@ export const zhCN = {
           fields: { addresses: "地址", gateway: "网关", speed: "速率", profile: "当前配置", enabled: "启用此网口", mode: "地址模式", address: "地址", prefix: "前缀", dnsMode: "DNS 模式", dns: "DNS 服务器", defaultRoute: "用作默认路由", metric: "路由 Metric" },
           modes: { disabled: "关闭", dhcp: "DHCP", automatic: "自动", static: "静态" },
           dns: { automatic: "自动", manual: "自定义" },
-          warnings: { noIpv4DefaultRoute: "未启用 IPv4 默认路由。", noIpv6DefaultRoute: "未启用 IPv6 默认路由。", asymmetricSubnetRoutes: "多个网口位于同一子网，但默认路由设置不对称，响应流量可能从其他网口发出。", unsupportedProfile: "此配置包含 ZOS 不会覆盖的高级有线网络设置。" },
-          confirm: { eyebrow: "网络变更", title: "应用全部待生效的有线配置？", description: "将同时激活 {{count}} 个网口配置。ZOS 的访问地址可能变化；若 90 秒内未确认，配置会自动回滚。", apply: "应用配置" },
-          transaction: { eyebrow: "确认窗口", title: "ZOS 仍可访问吗？", description: "新配置已在 {{count}} 个网口生效。请在倒计时结束前保留配置，或立即回滚。", keep: "保留配置", rollback: "立即回滚" },
+          warnings: { noIpv4DefaultRoute: "未启用 IPv4 默认路由。", noIpv6DefaultRoute: "未启用 IPv6 默认路由。", asymmetricSubnetRoutes: "多个网口位于同一子网，但默认路由设置不对称，响应流量可能从其他网口发出。", unsupportedProfile: "此配置包含 CyberOS 不会覆盖的高级有线网络设置。" },
+          confirm: { eyebrow: "网络变更", title: "应用全部待生效的有线配置？", description: "将同时激活 {{count}} 个网口配置。CyberOS 的访问地址可能变化；若 90 秒内未确认，配置会自动回滚。", apply: "应用配置" },
+          transaction: { eyebrow: "确认窗口", title: "CyberOS 仍可访问吗？", description: "新配置已在 {{count}} 个网口生效。请在倒计时结束前保留配置，或立即回滚。", keep: "保留配置", rollback: "立即回滚" },
           messages: { saved: "有线配置已保存，等待应用。", applying: "有线配置已应用，请在 90 秒内确认连接。", confirmed: "已保留有线配置。", rolledBack: "有线配置已回滚。" },
           errors: { operation: "有线网络操作失败。", metricConflict: "同一地址族的默认路由必须使用不同的 Metric。", invalid: "请先修正地址、前缀、DNS、网关或 Metric。" }
         },
@@ -4461,12 +4461,12 @@ export const zhCN = {
           mode: "模式",
           availableTitle: "可用网络",
           savedTitle: "已保存网络",
-          savedDescription: "外部配置可以连接使用，但只有 ZOS 配置可以编辑或遗忘。",
+          savedDescription: "外部配置可以连接使用，但只有 CyberOS 配置可以编辑或遗忘。",
           noProfiles: "没有已保存的 Wi-Fi 网络。",
           current: "当前连接",
           connect: "连接",
           disconnect: "断开",
-          managed: "ZOS 管理",
+          managed: "CyberOS 管理",
           external: "外部配置",
           externalReadOnly: "外部配置只读",
           autoconnect: "自动连接",
@@ -4508,14 +4508,14 @@ export const zhCN = {
           confirm: {
             eyebrow: "网络变更",
             continue: "确认并继续",
-            managementTitle: "可能中断 ZOS 访问",
+            managementTitle: "可能中断 CyberOS 访问",
             managementDescription: "所选无线接口承载管理链路。该变更会立即执行，成功切换后不会进行超时自动回滚。",
             disconnectTitle: "断开此无线设备？",
             disconnectDescription: "当前 Wi-Fi 连接会立即断开。",
             radioTitle: "关闭 Wi-Fi 射频？",
             radioDescription: "所有无线客户端连接和热点都会停止。",
             forgetTitle: "遗忘此网络？",
-            forgetDescription: "将删除 {{ssid}} 的 ZOS 配置和已保存密码。",
+            forgetDescription: "将删除 {{ssid}} 的 CyberOS 配置和已保存密码。",
             profileRestartTitle: "重新启动当前连接？",
             profileRestartDescription: "保存变更会立即重启当前 Wi-Fi 连接。",
             hotspotRestartTitle: "重新启动当前热点？",
@@ -4562,7 +4562,7 @@ export const zhCN = {
         creatingDescription: "正在创建 RAID、格式化并挂载存储池，此过程可能需要几分钟。",
         directApplyConfirmation: "我确认这会永久擦除选中的磁盘，并立即创建存储池。",
         diskSelectionDescription: "只能选择未使用的整块磁盘；系统盘和已格式化磁盘会被阻止。",
-        eraseWarning: "创建存储池会永久擦除所有选中磁盘，格式化为 {{filesystem}}，并挂载到 /zos/data/primary 下。",
+        eraseWarning: "创建存储池会永久擦除所有选中磁盘，格式化为 {{filesystem}}，并挂载到 /cyberos/data/primary 下。",
         raidMinimum: "至少 {{count}} 块磁盘",
         fields: {
           name: "池名称",
@@ -4941,7 +4941,7 @@ export const zhCN = {
     searchEmpty: "没有匹配的设置。",
     localProfile: "本地配置",
     groups: {
-      zos: "ZOS",
+      cyberos: "CyberOS",
       devices: "设备",
       ai: "AI",
       workspace: "工作区",
@@ -5139,7 +5139,7 @@ export const zhCN = {
       settingsSaved: "蓝牙设置已保存。",
       audio: {
         title: "播放器音频输出",
-        description: "将下一次 ZOS/VOD 播放输出到已配对的耳机或音箱。",
+        description: "将下一次 CyberOS/VOD 播放输出到已配对的耳机或音箱。",
         output: "音频设备",
         systemDefault: "系统 ALSA / HDMI 输出",
         disconnected: "未连接",
@@ -5400,7 +5400,7 @@ export const zhCN = {
     },
     docker: {
       runtimeTitle: "运行时访问",
-      runtimeDescription: "启用本机 Docker Engine 控制，并设置 Unix socket、Compose 命令和控制台 shell。托管 App 文件固定使用 /zos/apps。",
+      runtimeDescription: "启用本机 Docker Engine 控制，并设置 Unix socket、Compose 命令和控制台 shell。托管 App 文件固定使用 /cyberos/apps。",
       enabledField: "启用 Docker 管理",
       socketPath: "Socket 路径",
       composeCommand: "Compose 命令",
@@ -5412,8 +5412,8 @@ export const zhCN = {
     toolPolicy: {
       mcp: {
         title: "Agent MCP",
-        description: "控制内置 Agent 是否使用 ZOS 能力注册表。",
-        label: "使用 ZOS MCP",
+        description: "控制内置 Agent 是否使用 CyberOS 能力注册表。",
+        label: "使用 CyberOS MCP",
         status: {
           loading: "正在检查配对状态...",
           disabled: "已关闭，Agent 使用兼容工具。",
@@ -5575,7 +5575,7 @@ export const zhCN = {
       processTitle: "进程",
       processDescription: "Node 运行时、内存、工作目录和可执行路径。",
       pathsTitle: "路径",
-      pathsDescription: "ZOS 数据、数据库和 NAS 根目录路径。"
+      pathsDescription: "CyberOS 数据、数据库和 NAS 根目录路径。"
     }
   },
   preview: {

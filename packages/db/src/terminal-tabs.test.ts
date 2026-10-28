@@ -9,20 +9,18 @@ import {
   ensureNasRoots,
   getTerminalTabState,
   initializeTerminalTabs,
-  openZosDb,
+  openCyberOsDb,
   renameTerminalTab,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
-
-const legacySessionId = "11111111-1111-4111-8111-111111111111";
 
 describe("terminal tab repository", () => {
   let tempDir: string;
-  let db: ZosDatabase;
+  let db: CyberOsDatabase;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-terminal-tabs-"));
-    db = openZosDb(path.join(tempDir, "zos.sqlite"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-terminal-tabs-"));
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
     ensureNasRoots(db, [
       { id: "root-a", name: "Root A", path: tempDir },
       { id: "root-b", name: "Root B", path: tempDir }
@@ -34,7 +32,7 @@ describe("terminal tab repository", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("initializes once and imports an existing browser session", () => {
+  it("initializes a new tab set exactly once", () => {
     expect(getTerminalTabState(db, "root-a", 4)).toMatchObject({
       initialized: false,
       tabs: [],
@@ -44,14 +42,13 @@ describe("terminal tab repository", () => {
 
     const initialized = initializeTerminalTabs(db, {
       rootId: "root-a",
-      maxSessions: 4,
-      legacySessionId
+      maxSessions: 4
     });
     expect(initialized.tabs).toEqual([
-      expect.objectContaining({ id: legacySessionId, rootId: "root-a", ordinal: 1, customTitle: null })
+      expect.objectContaining({ rootId: "root-a", ordinal: 1, customTitle: null })
     ]);
-    expect(initialized.activeTabId).toBe(legacySessionId);
-    expect(initializeTerminalTabs(db, { rootId: "root-a", maxSessions: 4, legacySessionId })).toEqual(initialized);
+    expect(initialized.activeTabId).toBe(initialized.tabs[0]?.id);
+    expect(initializeTerminalTabs(db, { rootId: "root-a", maxSessions: 4 })).toEqual(initialized);
   });
 
   it("keeps roots isolated and ordinals monotonic after deletion", () => {

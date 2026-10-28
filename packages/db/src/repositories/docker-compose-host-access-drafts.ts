@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ZosDatabase } from "../connection.js";
+import type { CyberOsDatabase } from "../connection.js";
 
 export interface DockerComposeHostAccessDraftRecord {
   id: string;
@@ -17,7 +17,7 @@ export interface DockerComposeHostAccessDraftRecord {
 }
 
 export function createDockerComposeHostAccessDraft(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     projectId: string;
     composeRevision: string;
@@ -51,7 +51,7 @@ export function createDockerComposeHostAccessDraft(
 }
 
 export function getDockerComposeHostAccessDraft(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string
 ): DockerComposeHostAccessDraftRecord | null {
   const row = db.prepare(`
@@ -64,7 +64,7 @@ export function getDockerComposeHostAccessDraft(
 }
 
 export function getDockerComposeHostAccessDraftByApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   approvalId: string
 ): DockerComposeHostAccessDraftRecord | null {
   const row = db.prepare(`
@@ -77,7 +77,7 @@ export function getDockerComposeHostAccessDraftByApproval(
 }
 
 export function linkDockerComposeHostAccessDraft(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: string,
   links: { approvalId: string; operationId: string; jobId: string }
@@ -89,11 +89,11 @@ export function linkDockerComposeHostAccessDraft(
   `).run(links.approvalId, links.operationId, links.jobId, id, expectedRevision).changes === 1;
 }
 
-export function deleteDockerComposeHostAccessDraft(db: ZosDatabase, id: string): boolean {
+export function deleteDockerComposeHostAccessDraft(db: CyberOsDatabase, id: string): boolean {
   return db.prepare("DELETE FROM docker_compose_host_access_drafts WHERE id = ?").run(id).changes === 1;
 }
 
-export function deleteExpiredDockerComposeHostAccessDrafts(db: ZosDatabase, now = new Date()): number {
+export function deleteExpiredDockerComposeHostAccessDrafts(db: CyberOsDatabase, now = new Date()): number {
   return db.transaction(() => {
     const expired = db.prepare(`
       SELECT approval_id, operation_id, job_id

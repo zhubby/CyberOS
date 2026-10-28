@@ -173,7 +173,7 @@ pub(super) async fn assert_mountpoint_available(
 ) -> Result<bool, HostdError> {
     if mountpoint.parent() != Some(mount_root) {
         return Err(HostdError::validation(
-            "Storage pool mountpoint is outside /zos/data",
+            "Storage pool mountpoint is outside /cyberos/data",
         ));
     }
     match fs::read_dir(mountpoint).await {

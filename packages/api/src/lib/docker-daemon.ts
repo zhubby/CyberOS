@@ -8,7 +8,7 @@ import {
   type DockerDaemonStatus,
   type HostdRequest,
   type HostdResult
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { SystemCommandRunner } from "./system-management.js";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 

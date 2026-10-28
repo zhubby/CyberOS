@@ -1,5 +1,5 @@
-import type { DockerResourceCapabilities } from "@zos/shared";
-import { getDockerResourceCapability } from "@zos/shared/docker-resources";
+import type { DockerResourceCapabilities } from "@cyberos/shared";
+import { getDockerResourceCapability } from "@cyberos/shared/docker-resources";
 import { useTranslation } from "react-i18next";
 
 const capabilityLabels = [

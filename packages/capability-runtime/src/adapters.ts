@@ -3,9 +3,9 @@ import type {
   CapabilityRisk,
   CapabilitySubject,
   JsonValue
-} from "@zos/capabilities";
-import type { ZosDatabase } from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
+} from "@cyberos/capabilities";
+import type { CyberOsDatabase } from "@cyberos/db";
+import type { CyberOsConfig } from "@cyberos/shared";
 
 export interface CapabilitySecretRequirement {
   name: string;
@@ -16,8 +16,8 @@ export interface CapabilitySecretRequirement {
 }
 
 export interface CapabilityAdapterContext {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   capabilityId: string;
   subject: CapabilitySubject;
 }

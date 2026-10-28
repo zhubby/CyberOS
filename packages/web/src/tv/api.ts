@@ -1,4 +1,4 @@
-import type { MediaHome, MediaTitleDetail, MediaTitlePage, TvModeStatus, VodPlayerCommand, VodPlayerStatus } from "@zos/shared";
+import type { MediaHome, MediaTitleDetail, MediaTitlePage, TvModeStatus, VodPlayerCommand, VodPlayerStatus } from "@cyberos/shared";
 
 export async function getMediaHome(): Promise<MediaHome> {
   return fetchJson<MediaHome>("/api/media/home");

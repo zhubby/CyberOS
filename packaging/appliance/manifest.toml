@@ -1,5 +1,5 @@
-name = "zos-appliance"
-version = "1.7.8"
+name = "cyberos-appliance"
+version = "2.0.0"
 base_suite = "bookworm"
 target_arch = "arm64"
 
@@ -7,32 +7,32 @@ target_arch = "arm64"
 node = ">=22"
 database = "sqlite"
 init = "systemd"
-package = "zos.deb"
+package = "cyberos.deb"
 
 [services]
 units = [
-  "zos-api.service",
-  "zos-monitor.service",
-  "zos-alerter.service",
-  "zos-termux.service",
-  "zos-vod-player.service",
-  "zos-tv-prepare.service",
-  "zos-tv-weston.service",
-  "zos-tv-chromium.service",
-  "zos-tv-cec.service",
-  "zos-tv-gamepad.service",
-  "zos-tv.target",
-  "zos-bluetoothd.service",
-  "zos-hostd.service",
-  "zos-host-accessd.service",
-  "zos-worker@1.service",
-  "zos-photostaff.service",
-  "zos-downloader.service",
-  "zos-indexer.service",
-  "zos-maintenance.timer",
-  "zos-backup-daily.timer",
-  "zos-backup-weekly.timer",
-  "zos-health.timer",
+  "cyberos-api.service",
+  "cyberos-monitor.service",
+  "cyberos-alerter.service",
+  "cyberos-termux.service",
+  "cyberos-vod-player.service",
+  "cyberos-tv-prepare.service",
+  "cyberos-tv-weston.service",
+  "cyberos-tv-chromium.service",
+  "cyberos-tv-cec.service",
+  "cyberos-tv-gamepad.service",
+  "cyberos-tv.target",
+  "cyberos-bluetoothd.service",
+  "cyberos-hostd.service",
+  "cyberos-host-accessd.service",
+  "cyberos-worker@1.service",
+  "cyberos-photostaff.service",
+  "cyberos-downloader.service",
+  "cyberos-indexer.service",
+  "cyberos-maintenance.timer",
+  "cyberos-backup-daily.timer",
+  "cyberos-backup-weekly.timer",
+  "cyberos-health.timer",
   "nginx.service",
   "docker.service",
   "libvirtd.service"

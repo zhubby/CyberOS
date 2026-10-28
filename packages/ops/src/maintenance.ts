@@ -8,17 +8,17 @@ import {
   isExecutionLockOwner,
   releaseExecutionLock,
   runOpsMaintenanceRetention,
-  type ZosDatabase
-} from "@zos/db";
-import type { OpsMaintenanceSummary, ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { OpsMaintenanceSummary, CyberOsConfig } from "@cyberos/shared";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAINTENANCE_LOCK = "ops:maintenance";
 const BACKUP_LOCK = "backup";
 
 export async function runMaintenance(input: {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   now?: Date;
 }): Promise<OpsMaintenanceSummary> {
   const now = input.now ?? new Date();
@@ -58,8 +58,8 @@ export async function runMaintenance(input: {
 }
 
 export async function cleanupRestoreStaging(
-  db: ZosDatabase,
-  config: ZosConfig,
+  db: CyberOsDatabase,
+  config: CyberOsConfig,
   now = new Date()
 ): Promise<OpsMaintenanceSummary["restoreStaging"]> {
   const owner = randomUUID();

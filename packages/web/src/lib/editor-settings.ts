@@ -1,4 +1,4 @@
-export const CODE_FONT_SETTINGS_STORAGE_KEY = "zos:code-font-settings";
+export const CODE_FONT_SETTINGS_STORAGE_KEY = "cyberos:code-font-settings";
 export const DEFAULT_CODE_FONT_FAMILY_ID = "system";
 export const DEFAULT_CODE_FONT_SIZE_PX = 12;
 export const MIN_CODE_FONT_SIZE_PX = 10;

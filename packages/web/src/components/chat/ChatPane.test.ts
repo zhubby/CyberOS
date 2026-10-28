@@ -39,8 +39,8 @@ describe("shouldSubmitComposerMessage", () => {
 
 describe("composeAgentMessage", () => {
   it("keeps an attached path as one message-level block", () => {
-    expect(composeAgentMessage("Inspect this", "/zos/data/primary/docs/readme.md")).toBe("/zos/data/primary/docs/readme.md\nInspect this");
-    expect(composeAgentMessage("", "/zos/data/primary/docs/readme.md")).toBe("/zos/data/primary/docs/readme.md");
+    expect(composeAgentMessage("Inspect this", "/cyberos/data/primary/docs/readme.md")).toBe("/cyberos/data/primary/docs/readme.md\nInspect this");
+    expect(composeAgentMessage("", "/cyberos/data/primary/docs/readme.md")).toBe("/cyberos/data/primary/docs/readme.md");
     expect(composeAgentMessage("Inspect this", null)).toBe("Inspect this");
   });
 });
@@ -173,8 +173,8 @@ describe("ChatMessageContent", () => {
     const html = renderToStaticMarkup(
       createElement(ChatMessageContent, {
         role: "user",
-        content: "Open /zos/data/primary/docs/readme.md, not /private/other/private.txt",
-        rootPath: "/zos/data/primary",
+        content: "Open /cyberos/data/primary/docs/readme.md, not /private/other/private.txt",
+        rootPath: "/cyberos/data/primary",
         onOpenWorkspacePath: () => undefined
       })
     );
@@ -189,14 +189,14 @@ describe("ChatMessageContent", () => {
     const html = renderToStaticMarkup(
       createElement(ChatMessageContent, {
         role: "user",
-        content: "/zos/data/primary/My Files/report (1).pdf\n这个文件是什么内容",
-        rootPath: "/zos/data/primary",
+        content: "/cyberos/data/primary/My Files/report (1).pdf\n这个文件是什么内容",
+        rootPath: "/cyberos/data/primary",
         onOpenWorkspacePath: () => undefined
       })
     );
 
     expect(html).toContain('data-workspace-path="My Files/report (1).pdf"');
-    expect(html).toContain("/zos/data/primary/My Files/report (1).pdf");
+    expect(html).toContain("/cyberos/data/primary/My Files/report (1).pdf");
     expect(html).toContain("这个文件是什么内容");
   });
 
@@ -205,17 +205,17 @@ describe("ChatMessageContent", () => {
       createElement(ChatMessageContent, {
         role: "assistant",
         content: [
-          "Open /zos/data/primary/docs/readme.md.",
+          "Open /cyberos/data/primary/docs/readme.md.",
           "",
-          "`/zos/data/primary/My Files/report.pdf`",
+          "`/cyberos/data/primary/My Files/report.pdf`",
           "",
-          "[linked report](/zos/data/primary/reports/latest.pdf)",
+          "[linked report](/cyberos/data/primary/reports/latest.pdf)",
           "",
           "```",
-          "/zos/data/primary/not-interactive.txt",
+          "/cyberos/data/primary/not-interactive.txt",
           "```"
         ].join("\n"),
-        rootPath: "/zos/data/primary",
+        rootPath: "/cyberos/data/primary",
         onOpenWorkspacePath: () => undefined
       })
     );
@@ -224,7 +224,7 @@ describe("ChatMessageContent", () => {
     expect(html).toContain('data-workspace-path="docs/readme.md"');
     expect(html).toContain('data-workspace-path="My Files/report.pdf"');
     expect(html).toContain('data-workspace-path="reports/latest.pdf"');
-    expect(html).toContain('<pre class="message-code-block"><code>/zos/data/primary/not-interactive.txt');
+    expect(html).toContain('<pre class="message-code-block"><code>/cyberos/data/primary/not-interactive.txt');
   });
 });
 
@@ -280,8 +280,8 @@ describe("ChatPane agent rail", () => {
     );
 
     expect(html).toContain('class="agent-brand-logo"');
-    expect(html).toContain('src="/zos-icon.svg"');
-    expect(html).not.toContain("zos-banner");
+    expect(html).toContain('src="/cyberos-icon.svg"');
+    expect(html).not.toContain("cyberos-banner");
     expect(html).toContain('class="session-item is-active"');
     expect(html).toContain('class="session-approval-badge"');
     expect(html).toContain("2 pending approvals");
@@ -392,10 +392,10 @@ describe("ChatPane agent rail", () => {
           expiresAt: "2026-09-17T10:15:00.000Z",
           createdAt: "2026-09-17T10:00:00.000Z",
           updatedAt: "2026-09-17T10:00:00.000Z",
-          client: { id: "client-1", name: "Pi", kind: "pi", tokenPrefix: "zos_mcp_example" },
+          client: { id: "client-1", name: "Pi", kind: "pi", tokenPrefix: "cyberos_mcp_example" },
           run: {
             id: "run-1",
-            capabilityId: "zos.files.mutate",
+            capabilityId: "cyberos.files.mutate",
             state: "waiting_approval",
             subjectId: "client-1",
             subjectKind: "pi",
@@ -431,7 +431,7 @@ describe("ChatPane agent rail", () => {
       })
     );
 
-    expect(html).toContain("zos.files.mutate");
+    expect(html).toContain("cyberos.files.mutate");
     expect(html).toContain("Pi (pi)");
     expect(html).toContain("reports/final.pdf -&gt; Archive/final.pdf");
     expect(html).toContain('data-risk="critical"');

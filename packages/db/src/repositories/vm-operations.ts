@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { PendingApprovalRecord, VmOperationProposal, VmOperationRecord, VmOperationStatus } from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+import type { PendingApprovalRecord, VmOperationProposal, VmOperationRecord, VmOperationStatus } from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import { mapVmOperation } from "./operation-mappers.js";
 import type { DbVmOperationRow } from "./repository-rows.js";
@@ -9,7 +9,7 @@ import { VM_CONSOLE_AUTHORIZATION_TTL_MS } from "./vm-console-authorizations.js"
 const EXPIRED_CONSOLE_ERROR = "VM console approval expired before the console was opened";
 
 export function createVmOperationApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { jobId: string; proposal: VmOperationProposal }
 ): { approval: PendingApprovalRecord; operation: VmOperationRecord } {
   const job = getJob(db, input.jobId);
@@ -39,7 +39,7 @@ export function createVmOperationApproval(
 }
 
 export function createVmOperationRecord(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { proposal: VmOperationProposal }
 ): VmOperationRecord {
   const now = new Date().toISOString();
@@ -55,26 +55,26 @@ export function createVmOperationRecord(
   return operation;
 }
 
-export function getVmOperation(db: ZosDatabase, id: string): VmOperationRecord | null {
+export function getVmOperation(db: CyberOsDatabase, id: string): VmOperationRecord | null {
   const row = db.prepare(`SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
     FROM vm_operations WHERE id = ?`).get(id) as DbVmOperationRow | undefined;
   return row ? mapVmOperation(row) : null;
 }
 
-export function getVmOperationByApproval(db: ZosDatabase, approvalId: string): VmOperationRecord | null {
+export function getVmOperationByApproval(db: CyberOsDatabase, approvalId: string): VmOperationRecord | null {
   const row = db.prepare(`SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
     FROM vm_operations WHERE approval_id = ? ORDER BY created_at DESC LIMIT 1`).get(approvalId) as DbVmOperationRow | undefined;
   return row ? mapVmOperation(row) : null;
 }
 
-export function getProposedVmOperationForTarget(db: ZosDatabase, targetId: string): VmOperationRecord | null {
+export function getProposedVmOperationForTarget(db: CyberOsDatabase, targetId: string): VmOperationRecord | null {
   const row = db.prepare(`SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
     FROM vm_operations WHERE target_id = ? AND status = 'proposed' ORDER BY created_at DESC LIMIT 1`)
     .get(targetId) as DbVmOperationRow | undefined;
   return row ? mapVmOperation(row) : null;
 }
 
-export function expireStaleVmConsoleOperations(db: ZosDatabase, now = new Date()): number {
+export function expireStaleVmConsoleOperations(db: CyberOsDatabase, now = new Date()): number {
   const timestamp = now.toISOString();
   const cutoff = new Date(now.getTime() - VM_CONSOLE_AUTHORIZATION_TTL_MS).toISOString();
   const rows = db.prepare(`SELECT o.id, o.approval_id, a.job_id
@@ -115,7 +115,7 @@ export function expireStaleVmConsoleOperations(db: ZosDatabase, now = new Date()
   return expire();
 }
 
-export function listVmOperations(db: ZosDatabase, input: { limit?: number } = {}): VmOperationRecord[] {
+export function listVmOperations(db: CyberOsDatabase, input: { limit?: number } = {}): VmOperationRecord[] {
   const rows = db.prepare(`SELECT o.id, o.approval_id, o.action, o.target_id, o.status, o.metadata_json, o.created_at, o.updated_at
     FROM vm_operations o ORDER BY o.created_at DESC LIMIT ?`)
     .all(input.limit ?? 100) as DbVmOperationRow[];
@@ -123,7 +123,7 @@ export function listVmOperations(db: ZosDatabase, input: { limit?: number } = {}
 }
 
 export function updateVmOperationStatus(
-  db: ZosDatabase, id: string, status: VmOperationStatus, metadata: Record<string, unknown> = {}
+  db: CyberOsDatabase, id: string, status: VmOperationStatus, metadata: Record<string, unknown> = {}
 ): VmOperationRecord | null {
   const existing = getVmOperation(db, id);
   if (!existing) return null;

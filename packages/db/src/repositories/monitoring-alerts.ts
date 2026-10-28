@@ -22,8 +22,8 @@ import type {
   MonitoringOncallScheduleInput,
   MonitoringSmtpSettings,
   MonitoringSmtpSettingsInput
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 const SMTP_KEY = "monitoring_smtp";
 const HEALTH_ROUTING_KEY = "monitoring_health_routing";
@@ -57,20 +57,20 @@ export class MonitoringSmtpUnavailableError extends Error {
   }
 }
 
-export function listMonitoringAlertRules(db: ZosDatabase): MonitoringAlertRule[] {
+export function listMonitoringAlertRules(db: CyberOsDatabase): MonitoringAlertRule[] {
   return (db.prepare(`
     SELECT * FROM monitoring_alert_rules WHERE deleted_at IS NULL ORDER BY builtin DESC, name, id
   `).all() as AlertRuleRow[]).map(mapRule);
 }
 
-export function getMonitoringAlertRule(db: ZosDatabase, id: string): MonitoringAlertRule | null {
+export function getMonitoringAlertRule(db: CyberOsDatabase, id: string): MonitoringAlertRule | null {
   const row = db.prepare("SELECT * FROM monitoring_alert_rules WHERE id = ? AND deleted_at IS NULL")
     .get(id) as AlertRuleRow | undefined;
   return row ? mapRule(row) : null;
 }
 
 export function createMonitoringAlertRule(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: MonitoringAlertRuleInput
 ): MonitoringAlertRule {
   const id = randomUUID();
@@ -93,7 +93,7 @@ export function createMonitoringAlertRule(
 }
 
 export function updateMonitoringAlertRule(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: number,
   input: MonitoringAlertRuleInput
@@ -131,7 +131,7 @@ export function updateMonitoringAlertRule(
 }
 
 export function deleteMonitoringAlertRule(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: number
 ): boolean {
@@ -154,7 +154,7 @@ export function deleteMonitoringAlertRule(
 }
 
 export function listMonitoringAlertIncidents(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   options: { status?: "firing" | "resolved"; limit?: number; groupHealthEpisodes?: boolean } = {}
 ): MonitoringAlertIncident[] {
   const limit = Math.max(1, Math.min(200, options.limit ?? 100));
@@ -214,7 +214,7 @@ export function listMonitoringAlertIncidents(
   return (rows as AlertIncidentRow[]).map(mapIncident);
 }
 
-export function getMonitoringAlertIncident(db: ZosDatabase, id: string): MonitoringAlertIncident | null {
+export function getMonitoringAlertIncident(db: CyberOsDatabase, id: string): MonitoringAlertIncident | null {
   const row = db.prepare("SELECT * FROM monitoring_alert_incidents WHERE id = ?").get(id) as
     | AlertIncidentRow
     | undefined;
@@ -222,7 +222,7 @@ export function getMonitoringAlertIncident(db: ZosDatabase, id: string): Monitor
 }
 
 export function getMonitoringAlertIncidentDetail(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string
 ): MonitoringAlertIncidentDetail | null {
   const row = db.prepare("SELECT * FROM monitoring_alert_incidents WHERE id = ?")
@@ -242,7 +242,7 @@ export function getMonitoringAlertIncidentDetail(
 }
 
 export function listMonitoringAlertIncidentEvents(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   incidentId: string
 ): MonitoringAlertIncidentEvent[] {
   return (db.prepare(`
@@ -258,13 +258,13 @@ export function listMonitoringAlertIncidentEvents(
 }
 
 export function markMonitoringAlertIncidentRead(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string
 ): MonitoringAlertIncident | null {
   return changeIncident(db, id, "read");
 }
 
-export function markAllMonitoringAlertIncidentsRead(db: ZosDatabase): number {
+export function markAllMonitoringAlertIncidentsRead(db: CyberOsDatabase): number {
   return db.transaction(() => {
     const ids = db.prepare("SELECT id FROM monitoring_alert_incidents WHERE read_at IS NULL")
       .pluck().all() as string[];
@@ -283,19 +283,19 @@ export function markAllMonitoringAlertIncidentsRead(db: ZosDatabase): number {
 }
 
 export function acknowledgeMonitoringAlertIncident(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string
 ): MonitoringAlertIncident | null {
   return changeIncident(db, id, "acknowledged");
 }
 
-export function listMonitoringAlertSilences(db: ZosDatabase): MonitoringAlertSilence[] {
+export function listMonitoringAlertSilences(db: CyberOsDatabase): MonitoringAlertSilence[] {
   return (db.prepare("SELECT * FROM monitoring_alert_silences WHERE cancelled_at IS NULL ORDER BY ends_at DESC")
     .all() as SilenceRow[]).map(mapSilence);
 }
 
 export function createMonitoringAlertSilence(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: MonitoringAlertSilenceInput
 ): MonitoringAlertSilence {
   return db.transaction(() => {
@@ -314,7 +314,7 @@ export function createMonitoringAlertSilence(
 }
 
 export function deleteMonitoringAlertSilence(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: number
 ): boolean {
@@ -342,13 +342,13 @@ export function deleteMonitoringAlertSilence(
   })();
 }
 
-export function listMonitoringAlertContacts(db: ZosDatabase): MonitoringAlertContact[] {
+export function listMonitoringAlertContacts(db: CyberOsDatabase): MonitoringAlertContact[] {
   return (db.prepare("SELECT * FROM monitoring_alert_contacts ORDER BY name, id").all() as ContactRow[])
     .map(mapContact);
 }
 
 export function createMonitoringAlertContact(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: MonitoringAlertContactInput
 ): MonitoringAlertContact {
   const id = randomUUID();
@@ -361,7 +361,7 @@ export function createMonitoringAlertContact(
 }
 
 export function updateMonitoringAlertContact(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: number,
   input: MonitoringAlertContactInput
@@ -381,7 +381,7 @@ export function updateMonitoringAlertContact(
   return mapContact(db.prepare("SELECT * FROM monitoring_alert_contacts WHERE id = ?").get(id) as ContactRow);
 }
 
-export function deleteMonitoringAlertContact(db: ZosDatabase, id: string, expectedRevision: number): boolean {
+export function deleteMonitoringAlertContact(db: CyberOsDatabase, id: string, expectedRevision: number): boolean {
   return deleteRevisioned(db, "monitoring_alert_contacts", id, expectedRevision, "Alert contact", () =>
     referenceExists(db, [
       ["monitoring_alert_group_members", "contact_id"],
@@ -393,7 +393,7 @@ export function deleteMonitoringAlertContact(db: ZosDatabase, id: string, expect
 const ALERTER_STALE_AFTER_MS = 30_000;
 
 export function getMonitoringAlertSummary(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   now = new Date()
 ): MonitoringAlertSummary {
   const counts = db.prepare(`
@@ -434,7 +434,7 @@ export function getMonitoringAlertSummary(
   };
 }
 
-export function getMonitoringAlertDelivery(db: ZosDatabase, id: string): MonitoringAlertDelivery | null {
+export function getMonitoringAlertDelivery(db: CyberOsDatabase, id: string): MonitoringAlertDelivery | null {
   const row = db.prepare(`
     SELECT id, incident_id, kind, status, attempt_count, due_at, sent_at, last_error, created_at, updated_at
     FROM monitoring_alert_deliveries WHERE id = ?
@@ -442,7 +442,7 @@ export function getMonitoringAlertDelivery(db: ZosDatabase, id: string): Monitor
   return row ? mapDelivery(row) : null;
 }
 
-export function getMonitoringSmtpSettings(db: ZosDatabase): MonitoringSmtpSettings {
+export function getMonitoringSmtpSettings(db: CyberOsDatabase): MonitoringSmtpSettings {
   const row = readSetting(db, SMTP_KEY);
   const value = parseObject(row.value_json);
   return {
@@ -459,7 +459,7 @@ export function getMonitoringSmtpSettings(db: ZosDatabase): MonitoringSmtpSettin
 }
 
 export function saveMonitoringSmtpSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   expectedRevision: number,
   input: MonitoringSmtpSettingsInput
 ): MonitoringSmtpSettings {
@@ -481,7 +481,7 @@ export function saveMonitoringSmtpSettings(
   return getMonitoringSmtpSettings(db);
 }
 
-export function getMonitoringHealthRouting(db: ZosDatabase): MonitoringHealthRouting {
+export function getMonitoringHealthRouting(db: CyberOsDatabase): MonitoringHealthRouting {
   const row = readSetting(db, HEALTH_ROUTING_KEY);
   const value = parseObject(row.value_json);
   return {
@@ -493,7 +493,7 @@ export function getMonitoringHealthRouting(db: ZosDatabase): MonitoringHealthRou
 }
 
 export function saveMonitoringHealthRouting(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   expectedRevision: number,
   input: Pick<MonitoringHealthRouting, "warningPolicyId" | "criticalPolicyId">
 ): MonitoringHealthRouting {
@@ -507,7 +507,7 @@ export function saveMonitoringHealthRouting(
   return getMonitoringHealthRouting(db);
 }
 
-export function enqueueMonitoringTestEmail(db: ZosDatabase, recipient: string): MonitoringAlertDelivery {
+export function enqueueMonitoringTestEmail(db: CyberOsDatabase, recipient: string): MonitoringAlertDelivery {
   const smtp = getMonitoringSmtpSettings(db);
   if (!smtp.enabled || !smtp.host || !smtp.from) throw new MonitoringSmtpUnavailableError();
   const pending = db.prepare(`
@@ -521,12 +521,12 @@ export function enqueueMonitoringTestEmail(db: ZosDatabase, recipient: string): 
     INSERT INTO monitoring_alert_deliveries(
       id, incident_id, kind, idempotency_key, message_id, recipients_json, subject, body_text,
       status, attempt_count, due_at, created_at, updated_at
-    ) VALUES (?, NULL, 'test', ?, ?, ?, 'ZOS alert email test',
-      'This is a test message from ZOS monitoring.', 'pending', 0, ?, ?, ?)
+    ) VALUES (?, NULL, 'test', ?, ?, ?, 'CyberOS alert email test',
+      'This is a test message from CyberOS monitoring.', 'pending', 0, ?, ?, ?)
   `).run(
     id,
     `test:${id}`,
-    `<zos-alert-test-${id}@localhost>`,
+    `<cyberos-alert-test-${id}@localhost>`,
     JSON.stringify([recipient.trim().toLowerCase()]),
     now,
     now,
@@ -536,7 +536,7 @@ export function enqueueMonitoringTestEmail(db: ZosDatabase, recipient: string): 
 }
 
 function closeRuleIncidents(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   ruleId: string,
   reason: "rule_changed" | "disabled" | "deleted",
   now: string
@@ -576,13 +576,13 @@ function closeRuleIncidents(
         INSERT OR IGNORE INTO monitoring_alert_deliveries(
           id, incident_id, kind, idempotency_key, message_id, recipients_json,
           subject, body_text, status, attempt_count, due_at, created_at, updated_at
-        ) SELECT ?, id, 'resolved', ?, ?, ?, 'ZOS alert closed: ' || title,
-          'ZOS alert closed because the rule was ${reason}.', 'pending', 0, ?, ?, ?
+        ) SELECT ?, id, 'resolved', ?, ?, ?, 'CyberOS alert closed: ' || title,
+          'CyberOS alert closed because the rule was ${reason}.', 'pending', 0, ?, ?, ?
         FROM monitoring_alert_incidents WHERE id = ?
       `).run(
         deliveryId,
         `${incidentId}:resolved:${reason}`,
-        `<zos-alert-${incidentId}-resolved@localhost>`,
+        `<cyberos-alert-${incidentId}-resolved@localhost>`,
         JSON.stringify([...recipients]),
         now,
         now,
@@ -600,7 +600,7 @@ function closeRuleIncidents(
 }
 
 function changeIncident(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   action: "read" | "acknowledged"
 ): MonitoringAlertIncident | null {
@@ -639,7 +639,7 @@ function changeIncident(
   })();
 }
 
-function cancelSilencedDeliveries(db: ZosDatabase, silenceId: string, now: string): void {
+function cancelSilencedDeliveries(db: CyberOsDatabase, silenceId: string, now: string): void {
   db.prepare(`
     INSERT INTO monitoring_alert_incident_events(incident_id, type, details_json, created_at)
     SELECT incidents.id, 'silenced', json_object('silenceId', silences.id), ?
@@ -677,7 +677,7 @@ function ruleEvaluationKey(rule: MonitoringAlertRuleInput): string {
 }
 
 function deleteRevisioned(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   table: string,
   id: string,
   expectedRevision: number,
@@ -697,7 +697,7 @@ function deleteRevisioned(
 }
 
 function referenceExists(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   references: ReadonlyArray<readonly [table: string, column: string]>,
   id: string
 ): boolean {
@@ -707,7 +707,7 @@ function referenceExists(
 }
 
 function escalationTargetExists(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   targetType: "contact" | "group" | "oncall",
   id: string
 ): boolean {
@@ -717,14 +717,14 @@ function escalationTargetExists(
   `).get(targetType, id));
 }
 
-function readSetting(db: ZosDatabase, key: string): SettingRow {
+function readSetting(db: CyberOsDatabase, key: string): SettingRow {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(key) as SettingRow | undefined;
   if (!row) throw new Error(`Required monitoring setting is missing: ${key}`);
   return row;
 }
 
-function writeSetting(db: ZosDatabase, key: string, value: Record<string, unknown>, updatedAt: string): void {
+function writeSetting(db: CyberOsDatabase, key: string, value: Record<string, unknown>, updatedAt: string): void {
   db.prepare("UPDATE system_settings SET value_json = ?, updated_at = ? WHERE key = ?")
     .run(JSON.stringify(value), updatedAt, key);
 }
@@ -890,7 +890,7 @@ interface DeliveryRow {
 }
 
 // Aggregate-root functions below are kept with the alert repository so child rows are never updated independently.
-export function listMonitoringAlertGroups(db: ZosDatabase): MonitoringAlertContactGroup[] {
+export function listMonitoringAlertGroups(db: CyberOsDatabase): MonitoringAlertContactGroup[] {
   const groups = db.prepare("SELECT * FROM monitoring_alert_contact_groups ORDER BY name, id").all() as GroupRow[];
   const members = db.prepare("SELECT group_id, contact_id FROM monitoring_alert_group_members ORDER BY group_id, ordinal")
     .all() as Array<{ group_id: string; contact_id: string }>;
@@ -905,7 +905,7 @@ export function listMonitoringAlertGroups(db: ZosDatabase): MonitoringAlertConta
 }
 
 export function saveMonitoringAlertGroup(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string | null,
   expectedRevision: number | null,
   input: MonitoringAlertContactGroupInput
@@ -929,12 +929,12 @@ export function saveMonitoringAlertGroup(
   })();
 }
 
-export function deleteMonitoringAlertGroup(db: ZosDatabase, id: string, expectedRevision: number): boolean {
+export function deleteMonitoringAlertGroup(db: CyberOsDatabase, id: string, expectedRevision: number): boolean {
   return deleteRevisioned(db, "monitoring_alert_contact_groups", id, expectedRevision, "Contact group", () =>
     escalationTargetExists(db, "group", id));
 }
 
-export function listMonitoringOncallSchedules(db: ZosDatabase): MonitoringOncallSchedule[] {
+export function listMonitoringOncallSchedules(db: CyberOsDatabase): MonitoringOncallSchedule[] {
   const schedules = db.prepare("SELECT * FROM monitoring_oncall_schedules ORDER BY name, id").all() as ScheduleRow[];
   const members = db.prepare("SELECT schedule_id, contact_id FROM monitoring_oncall_members ORDER BY schedule_id, ordinal")
     .all() as Array<{ schedule_id: string; contact_id: string }>;
@@ -956,7 +956,7 @@ export function listMonitoringOncallSchedules(db: ZosDatabase): MonitoringOncall
 }
 
 export function saveMonitoringOncallSchedule(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string | null,
   expectedRevision: number | null,
   input: MonitoringOncallScheduleInput
@@ -986,7 +986,7 @@ export function saveMonitoringOncallSchedule(
 }
 
 export function createMonitoringOncallOverride(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: Omit<MonitoringOncallOverride, "id" | "revision" | "createdAt" | "updatedAt">
 ): MonitoringOncallOverride {
   const id = randomUUID();
@@ -999,16 +999,16 @@ export function createMonitoringOncallOverride(
   return mapOverride(db.prepare("SELECT * FROM monitoring_oncall_overrides WHERE id = ?").get(id) as OverrideRow);
 }
 
-export function deleteMonitoringOncallSchedule(db: ZosDatabase, id: string, expectedRevision: number): boolean {
+export function deleteMonitoringOncallSchedule(db: CyberOsDatabase, id: string, expectedRevision: number): boolean {
   return deleteRevisioned(db, "monitoring_oncall_schedules", id, expectedRevision, "On-call schedule", () =>
     escalationTargetExists(db, "oncall", id));
 }
 
-export function deleteMonitoringOncallOverride(db: ZosDatabase, id: string, expectedRevision: number): boolean {
+export function deleteMonitoringOncallOverride(db: CyberOsDatabase, id: string, expectedRevision: number): boolean {
   return deleteRevisioned(db, "monitoring_oncall_overrides", id, expectedRevision);
 }
 
-export function listMonitoringEscalationPolicies(db: ZosDatabase): MonitoringEscalationPolicy[] {
+export function listMonitoringEscalationPolicies(db: CyberOsDatabase): MonitoringEscalationPolicy[] {
   const policies = db.prepare("SELECT * FROM monitoring_escalation_policies ORDER BY name, id").all() as PolicyRow[];
   const stages = db.prepare("SELECT * FROM monitoring_escalation_stages ORDER BY policy_id, ordinal").all() as StageRow[];
   const targets = db.prepare("SELECT * FROM monitoring_escalation_targets ORDER BY stage_id, ordinal").all() as TargetRow[];
@@ -1030,7 +1030,7 @@ export function listMonitoringEscalationPolicies(db: ZosDatabase): MonitoringEsc
 }
 
 export function saveMonitoringEscalationPolicy(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string | null,
   expectedRevision: number | null,
   input: MonitoringEscalationPolicyInput
@@ -1066,7 +1066,7 @@ export function saveMonitoringEscalationPolicy(
   })();
 }
 
-export function deleteMonitoringEscalationPolicy(db: ZosDatabase, id: string, expectedRevision: number): boolean {
+export function deleteMonitoringEscalationPolicy(db: CyberOsDatabase, id: string, expectedRevision: number): boolean {
   return deleteRevisioned(db, "monitoring_escalation_policies", id, expectedRevision, "Escalation policy", () =>
     Boolean(db.prepare(`
       SELECT 1 FROM monitoring_alert_rules

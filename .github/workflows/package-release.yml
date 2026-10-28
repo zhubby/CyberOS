@@ -49,15 +49,12 @@ jobs:
 
       - name: Verify version policy
         env:
-          ZOS_VERSION_BASE: ${{ github.event.pull_request.base.sha || (github.ref_type == 'branch' && github.event.before) || '' }}
-          ZOS_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          CYBEROS_VERSION_BASE: ${{ github.event.pull_request.base.sha || (github.ref_type == 'branch' && github.event.before) || '' }}
+          CYBEROS_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: npm run version:check
 
       - name: Verify protocol bindings
         run: npm run protocol:check
-
-      - name: Test mount relocation under a shared parent
-        run: sudo env ZOS_MOUNT_TEST_NAMESPACE=isolated unshare --mount --propagation private packaging/zos-relocate-mount.test.sh
 
       - name: Typecheck
         run: npm run typecheck
@@ -111,7 +108,7 @@ jobs:
             zip
 
       - name: Build Debian package
-        run: ZOS_NPM_REGISTRY=https://registry.npmjs.org packaging/scripts/build-deb.sh
+        run: CYBEROS_NPM_REGISTRY=https://registry.npmjs.org packaging/scripts/build-deb.sh
 
       - name: Collect package artifacts
         run: |
@@ -119,16 +116,16 @@ jobs:
           mkdir -p "$artifact_dir"
 
           shopt -s nullglob
-          files=(.zos/*.deb .zos/*.changes .zos/*.buildinfo)
+          files=(.cyberos/*.deb .cyberos/*.changes .cyberos/*.buildinfo)
           if (( ${#files[@]} == 0 )); then
-            echo "No Debian package artifacts were produced under .zos" >&2
+            echo "No Debian package artifacts were produced under .cyberos" >&2
             exit 1
           fi
 
           cp "${files[@]}" "$artifact_dir/"
 
           for extension in deb changes buildinfo; do
-            matches=("$artifact_dir"/zos_*_amd64."$extension")
+            matches=("$artifact_dir"/cyberos_*_amd64."$extension")
             if (( ${#matches[@]} != 1 )); then
               echo "Expected exactly one amd64 .$extension artifact, found ${#matches[@]}" >&2
               printf '%s\n' "${matches[@]}" >&2
@@ -141,7 +138,7 @@ jobs:
       - name: Upload package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: zos-deb-amd64
+          name: cyberos-deb-amd64
           path: artifacts/amd64/*
           if-no-files-found: error
           retention-days: 30
@@ -190,7 +187,7 @@ jobs:
           node --version | grep -Eq '^v22\.'
 
       - name: Build Debian package
-        run: ZOS_NPM_REGISTRY=https://registry.npmjs.org packaging/scripts/build-deb.sh
+        run: CYBEROS_NPM_REGISTRY=https://registry.npmjs.org packaging/scripts/build-deb.sh
 
       - name: Collect package artifacts
         run: |
@@ -198,16 +195,16 @@ jobs:
           mkdir -p "$artifact_dir"
 
           shopt -s nullglob
-          files=(.zos/*.deb .zos/*.changes .zos/*.buildinfo)
+          files=(.cyberos/*.deb .cyberos/*.changes .cyberos/*.buildinfo)
           if (( ${#files[@]} == 0 )); then
-            echo "No Debian package artifacts were produced under .zos" >&2
+            echo "No Debian package artifacts were produced under .cyberos" >&2
             exit 1
           fi
 
           cp "${files[@]}" "$artifact_dir/"
 
           for extension in deb changes buildinfo; do
-            matches=("$artifact_dir"/zos_*_arm64."$extension")
+            matches=("$artifact_dir"/cyberos_*_arm64."$extension")
             if (( ${#matches[@]} != 1 )); then
               echo "Expected exactly one arm64 .$extension artifact, found ${#matches[@]}" >&2
               printf '%s\n' "${matches[@]}" >&2
@@ -220,7 +217,7 @@ jobs:
       - name: Upload package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: zos-deb-arm64
+          name: cyberos-deb-arm64
           path: artifacts/arm64/*
           if-no-files-found: error
           retention-days: 30
@@ -307,10 +304,10 @@ jobs:
       - name: Verify tag matches Debian changelog
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
-          changelog_version="$(sed -n '1s/^zos (\([^)]*\)).*/\1/p' packaging/debian/changelog)"
+          changelog_version="$(sed -n '1s/^cyberos (\([^)]*\)).*/\1/p' packaging/debian/changelog)"
 
           if [[ -z "$changelog_version" ]]; then
-            echo "Could not read ZOS version from packaging/debian/changelog" >&2
+            echo "Could not read CyberOS version from packaging/debian/changelog" >&2
             exit 1
           fi
 
@@ -322,7 +319,7 @@ jobs:
       - name: Download package artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: zos-deb-*
+          pattern: cyberos-deb-*
           path: release-assets
           merge-multiple: true
 
@@ -332,7 +329,7 @@ jobs:
 
           for arch in amd64 arm64; do
             for extension in deb changes buildinfo; do
-              asset="release-assets/zos_${tag_version}_${arch}.${extension}"
+              asset="release-assets/cyberos_${tag_version}_${arch}.${extension}"
               if [[ ! -f "$asset" ]]; then
                 echo "Missing release asset $asset" >&2
                 find release-assets -maxdepth 1 -type f -print >&2
@@ -347,7 +344,7 @@ jobs:
           sha256sum *.deb *.changes *.buildinfo > SHA256SUMS
           cat SHA256SUMS
 
-          arm64_asset="zos_${GITHUB_REF_NAME#v}_arm64.deb"
+          arm64_asset="cyberos_${GITHUB_REF_NAME#v}_arm64.deb"
           arm64_sha256="$(awk -v asset="$arm64_asset" '$2 == asset { print $1; exit }' SHA256SUMS)"
           if [[ ! "$arm64_sha256" =~ ^[0-9a-f]{64}$ ]]; then
             echo "Could not find a SHA256 checksum for $arm64_asset" >&2

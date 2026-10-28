@@ -1,4 +1,4 @@
-import type { MediaMatchCandidate, MediaTitleKind } from "@zos/shared";
+import type { MediaMatchCandidate, MediaTitleKind } from "@cyberos/shared";
 
 const TMDB_API_ORIGIN = "https://api.themoviedb.org";
 const TMDB_IMAGE_ORIGIN = "https://image.tmdb.org/t/p/w500";

@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 async function makeRoot(): Promise<string> {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-mount-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-mount-"));
   const root = path.join(tempDir, "nas");
   await mkdir(root);
   return root;

@@ -2,54 +2,54 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createCatalogDescriptors } from "@zos/capabilities";
-import type { CapabilityDomainAdapter } from "@zos/capability-runtime";
+import { createCatalogDescriptors } from "@cyberos/capabilities";
+import type { CapabilityDomainAdapter } from "@cyberos/capability-runtime";
 import {
   createMcpClient,
   defaultAgentCapabilityPolicySettings,
-  openZosDb,
+  openCyberOsDb,
   saveAgentCapabilityPolicySettings,
-  type ZosDatabase
-} from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { CyberOsConfig } from "@cyberos/shared";
 import { catalogForClient, createClientRuntime } from "./runtime.js";
 
 const PLANNED_CAPABILITIES = [
-  "zos.files.grep",
-  "zos.files.find",
-  "zos.files.git",
-  "zos.files.archive-inspect",
-  "zos.photos.media",
-  "zos.files.export-propose",
-  "zos.files.edit",
-  "zos.files.write",
-  "zos.files.rollback-propose",
-  "zos.system.power-propose",
-  "zos.operations.run-propose",
-  "zos.index.reindex-propose",
-  "zos.photos.manage-propose",
-  "zos.downloads.manage-propose",
-  "zos.backup.run-propose",
-  "zos.alerts.manage-propose",
-  "zos.notifications.read-state-propose",
-  "zos.docker.manage-propose",
-  "zos.docker.console-propose",
-  "zos.vm.manage-propose",
-  "zos.vm.console-propose",
-  "zos.network.manage-propose",
-  "zos.storage.manage-propose",
-  "zos.settings.update-propose",
-  "zos.terminal.manage-propose",
-  "zos.vod.control-propose",
-  "zos.shell.run"
+  "cyberos.files.grep",
+  "cyberos.files.find",
+  "cyberos.files.git",
+  "cyberos.files.archive-inspect",
+  "cyberos.photos.media",
+  "cyberos.files.export-propose",
+  "cyberos.files.edit",
+  "cyberos.files.write",
+  "cyberos.files.rollback-propose",
+  "cyberos.system.power-propose",
+  "cyberos.operations.run-propose",
+  "cyberos.index.reindex-propose",
+  "cyberos.photos.manage-propose",
+  "cyberos.downloads.manage-propose",
+  "cyberos.backup.run-propose",
+  "cyberos.alerts.manage-propose",
+  "cyberos.notifications.read-state-propose",
+  "cyberos.docker.manage-propose",
+  "cyberos.docker.console-propose",
+  "cyberos.vm.manage-propose",
+  "cyberos.vm.console-propose",
+  "cyberos.network.manage-propose",
+  "cyberos.storage.manage-propose",
+  "cyberos.settings.update-propose",
+  "cyberos.terminal.manage-propose",
+  "cyberos.vod.control-propose",
+  "cyberos.shell.run"
 ] as const;
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-mcp-runtime-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-mcp-runtime-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
 });
 
 afterEach(async () => {
@@ -77,8 +77,8 @@ describe("Pi MCP capability discovery", () => {
 
   it("does not register Shell when the host flag is disabled even with a stale scope", () => {
     const runtime = createRuntime(false);
-    expect(runtime.context.subject.scopes.has("zos:admin:shell")).toBe(true);
-    expect(runtime.registry.get("zos.shell.run")).toBeNull();
+    expect(runtime.context.subject.scopes.has("cyberos:admin:shell")).toBe(true);
+    expect(runtime.registry.get("cyberos.shell.run")).toBeNull();
   });
 
   it("applies the Agent capability policy to newly implemented tools", () => {
@@ -86,15 +86,15 @@ describe("Pi MCP capability discovery", () => {
     saveAgentCapabilityPolicySettings(db, {
       policies: {
         ...defaults.policies,
-        "zos.files.grep": "disabled",
-        "zos.files.edit": "disabled",
-        "zos.shell.run": "disabled"
+        "cyberos.files.grep": "disabled",
+        "cyberos.files.edit": "disabled",
+        "cyberos.shell.run": "disabled"
       }
     });
     const runtime = createRuntime(true);
-    expect(runtime.registry.get("zos.files.grep")).toBeNull();
-    expect(runtime.registry.get("zos.files.edit")).toBeNull();
-    expect(runtime.registry.get("zos.shell.run")).toBeNull();
+    expect(runtime.registry.get("cyberos.files.grep")).toBeNull();
+    expect(runtime.registry.get("cyberos.files.edit")).toBeNull();
+    expect(runtime.registry.get("cyberos.shell.run")).toBeNull();
   });
 
   it("rejects every planned capability before execution when its scope is missing", async () => {
@@ -128,15 +128,15 @@ function createRuntime(shellEnabled: boolean) {
     db,
     config: testConfig(shellEnabled),
     adapters,
-    readAdapters: { "zos.photos.media": async () => ({ ok: true }) }
+    readAdapters: { "cyberos.photos.media": async () => ({ ok: true }) }
   }, client);
 }
 
-function testConfig(shellEnabled: boolean): ZosConfig {
+function testConfig(shellEnabled: boolean): CyberOsConfig {
   return {
     environment: "development",
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "zos.sqlite"),
+    databasePath: path.join(tempDir, "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 100 },
     admin: { displayName: "Admin", authMode: "local-only" },
@@ -145,7 +145,6 @@ function testConfig(shellEnabled: boolean): ZosConfig {
       enabled: true,
       piEnabled: true,
       piTokenFile: path.join(tempDir, "pi.token"),
-      legacyPiToolsEnabled: false,
       externalEnabled: false,
       shellEnabled,
       allowedHosts: ["localhost", "127.0.0.1", "[::1]"],
@@ -156,9 +155,9 @@ function testConfig(shellEnabled: boolean): ZosConfig {
     vm: { enabled: true, libvirtUri: "qemu:///system", storagePath: path.join(tempDir, "vm"), networkName: "default", isoRoots: [tempDir], operationTimeoutMs: 1_000, consoleMode: "serial" },
     backup: { enabled: true, repositoryPath: path.join(tempDir, "backup"), passwordFile: path.join(tempDir, "backup-password"), stagingPath: path.join(tempDir, "staging"), requireMount: false, retryCount: 1, timeoutMs: 1_000, keepDaily: 7, keepWeekly: 4 },
     hostd: { socketPath: path.join(tempDir, "hostd.sock") },
-    shares: { enabled: false, account: { username: "zos", password: null }, shares: [] },
-    terminal: { user: "zos", termuxSocketPath: path.join(tempDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
-    vodPlayer: { enabled: true, socketPath: path.join(tempDir, "vod.sock"), statePath: path.join(tempDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "zos" },
+    shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
+    terminal: { user: "cyberos", termuxSocketPath: path.join(tempDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    vodPlayer: { enabled: true, socketPath: path.join(tempDir, "vod.sock"), statePath: path.join(tempDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
     nasRoots: []
   };
 }

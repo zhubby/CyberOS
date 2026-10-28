@@ -16,44 +16,44 @@ afterEach(async () => {
 
 describe("loadConfig", () => {
   it("loads the fixed Photostaff base map URL and allows only HTTPS mirrors", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-map-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-map-"));
     const missingConfig = path.join(tempDir, "missing.toml");
-    expect(loadConfig({ ZOS_CONFIG: missingConfig } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
+    expect(loadConfig({ CYBEROS_CONFIG: missingConfig } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
       baseMapUrl: PHOTOSTAFF_BASE_MAP_RELEASE_URL
     });
 
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(configPath, `[photostaff]\nbasemap_url = "https://mirror.example.test/from-toml.pmtiles"\n`);
-    expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
+    expect(loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
       baseMapUrl: "https://mirror.example.test/from-toml.pmtiles"
     });
     expect(loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_PHOTOSTAFF_BASEMAP_URL: "https://mirror.example.test/from-env.pmtiles"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_PHOTOSTAFF_BASEMAP_URL: "https://mirror.example.test/from-env.pmtiles"
     } as NodeJS.ProcessEnv, tempDir).photostaff).toEqual({
       baseMapUrl: "https://mirror.example.test/from-env.pmtiles"
     });
     expect(() => loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_PHOTOSTAFF_BASEMAP_URL: "http://mirror.example.test/map.pmtiles"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_PHOTOSTAFF_BASEMAP_URL: "http://mirror.example.test/map.pmtiles"
     } as NodeJS.ProcessEnv, tempDir!)).toThrow("must use HTTPS");
   });
 
-  it("defaults development paths to the isolated ZOS root", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+  it("defaults development paths to the isolated CyberOS root", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const config = loadConfig(
       {
-        ZOS_CONFIG: path.join(tempDir, "missing.toml")
+        CYBEROS_CONFIG: path.join(tempDir, "missing.toml")
       } as NodeJS.ProcessEnv,
       tempDir
     );
 
-    const rootDir = path.join(tempDir, ".zos", "dev-root");
+    const rootDir = path.join(tempDir, ".cyberos", "dev-root");
     expect(config).toMatchObject({
       rootDir,
       stateDir: path.join(rootDir, "state"),
       dataDir: path.join(rootDir, "state"),
-      databasePath: path.join(rootDir, "state", "zos.sqlite"),
+      databasePath: path.join(rootDir, "state", "cyberos.sqlite"),
       metricsDatabasePath: path.join(rootDir, "state", "metrics.sqlite"),
       dataRoot: path.join(rootDir, "data"),
       appsRoot: path.join(rootDir, "apps"),
@@ -88,22 +88,22 @@ describe("loadConfig", () => {
     expect(config.shares).toMatchObject({
       enabled: false,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: null
       },
       shares: []
     });
-    expect(config.hostd).toEqual({ socketPath: "/run/zos/hostd.sock", mutationPolicy: "mutable" });
+    expect(config.hostd).toEqual({ socketPath: "/run/cyberos/hostd.sock", mutationPolicy: "mutable" });
     expect(config.terminal).toEqual({
       user: null,
-      termuxSocketPath: "/run/zos/termux.sock",
+      termuxSocketPath: "/run/cyberos/termux.sock",
       sessionIdleTimeoutMs: 1_800_000,
       connectTimeoutMs: 10_000,
       maxSessions: 32
     });
     expect(config.vodPlayer).toEqual({
       enabled: false,
-      socketPath: "/run/zos/vod-player.sock",
+      socketPath: "/run/cyberos/vod-player.sock",
       statePath: path.join(rootDir, "state", "vod-player", "session.json"),
       commandTimeoutMs: 5_000,
       startupTimeoutMs: 15_000,
@@ -115,12 +115,12 @@ describe("loadConfig", () => {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "zos"
+      user: "cyberos"
     });
   });
 
   it("loads VOD Player settings from TOML and environment overrides", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(
       configPath,
@@ -128,7 +128,7 @@ describe("loadConfig", () => {
         [vod_player]
         enabled = true
         socket_path = "/run/custom/vod-player.sock"
-        state_path = "${path.join(tempDir, ".zos", "dev-root", "state", "vod-player", "session.json")}"
+        state_path = "${path.join(tempDir, ".cyberos", "dev-root", "state", "vod-player", "session.json")}"
         drm_connector = "HDMI-A-1"
         audio_device = "alsa/plughw:1,0"
         hwdec = "auto"
@@ -136,19 +136,19 @@ describe("loadConfig", () => {
       `
     );
 
-    expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).vodPlayer).toMatchObject({
+    expect(loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).vodPlayer).toMatchObject({
       enabled: true,
       socketPath: "/run/custom/vod-player.sock",
-      statePath: path.join(tempDir, ".zos", "dev-root", "state", "vod-player", "session.json"),
+      statePath: path.join(tempDir, ".cyberos", "dev-root", "state", "vod-player", "session.json"),
       drmConnector: "HDMI-A-1",
       audioDevice: "alsa/plughw:1,0",
       hwdec: "auto",
       user: "operator"
     });
     expect(loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_VOD_PLAYER_ENABLED: "0",
-      ZOS_VOD_PLAYER_SOCKET_PATH: "/run/override-vod-player.sock"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_VOD_PLAYER_ENABLED: "0",
+      CYBEROS_VOD_PLAYER_SOCKET_PATH: "/run/override-vod-player.sock"
     } as NodeJS.ProcessEnv, tempDir).vodPlayer).toMatchObject({
       enabled: false,
       socketPath: "/run/override-vod-player.sock"
@@ -156,27 +156,27 @@ describe("loadConfig", () => {
   });
 
   it("rejects unsafe or internally inconsistent VOD Player settings", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-player-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-player-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(configPath, `[vod_player]\nuser = "root"\nsocket_path = "relative.sock"\n`);
-    expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
+    expect(() => loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("socket_path and state_path must be absolute");
     await writeFile(configPath, `[vod_player]\nretry_base_delay_ms = 1000\nretry_max_delay_ms = 500\n`);
-    expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
+    expect(() => loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("retry_max_delay_ms must be at least retry_base_delay_ms");
     await writeFile(configPath, `[vod_player]\nhwdec = "unsafe"\n`);
-    expect(() => loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
+    expect(() => loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("output configuration is invalid");
     expect(() => loadConfig({
-      ZOS_CONFIG: "/zos/config/config.toml",
-      ZOS_ENVIRONMENT: "production",
-      ZOS_VOD_PLAYER_SOCKET_PATH: "/tmp/vod-player.sock"
+      CYBEROS_CONFIG: "/cyberos/config/config.toml",
+      CYBEROS_ENVIRONMENT: "production",
+      CYBEROS_VOD_PLAYER_SOCKET_PATH: "/tmp/vod-player.sock"
     } as NodeJS.ProcessEnv, tempDir!))
       .toThrow("cannot use /tmp or /var/tmp");
   });
 
   it("loads Docker settings from TOML", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(
       configPath,
@@ -190,7 +190,7 @@ describe("loadConfig", () => {
       `
     );
 
-    const config = loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
+    const config = loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
 
     expect(config.docker).toMatchObject({
       enabled: true,
@@ -202,7 +202,7 @@ describe("loadConfig", () => {
   });
 
   it("loads the terminal user and Termux socket from TOML and environment", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(
       configPath,
@@ -213,7 +213,7 @@ describe("loadConfig", () => {
       `
     );
 
-    expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).terminal).toEqual({
+    expect(loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).terminal).toEqual({
       user: "zhubby",
       termuxSocketPath: "/tmp/termux.sock",
       sessionIdleTimeoutMs: 1_800_000,
@@ -221,9 +221,9 @@ describe("loadConfig", () => {
       maxSessions: 32
     });
     expect(loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_TERMUX_USER: "operator",
-      ZOS_TERMUX_SOCKET_PATH: "/run/operator-termux.sock"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_TERMUX_USER: "operator",
+      CYBEROS_TERMUX_SOCKET_PATH: "/run/operator-termux.sock"
     } as NodeJS.ProcessEnv, tempDir).terminal).toEqual({
       user: "operator",
       termuxSocketPath: "/run/operator-termux.sock",
@@ -234,17 +234,17 @@ describe("loadConfig", () => {
   });
 
   it("lets the hostd socket environment override the TOML value", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(configPath, `[hostd]\nsocket_path = "/tmp/toml-hostd.sock"\n`);
 
-    expect(loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).hostd).toEqual({
+    expect(loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir).hostd).toEqual({
       socketPath: "/tmp/toml-hostd.sock",
       mutationPolicy: "mutable"
     });
     expect(loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_HOSTD_SOCKET_PATH: "/run/override-hostd.sock"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_HOSTD_SOCKET_PATH: "/run/override-hostd.sock"
     } as NodeJS.ProcessEnv, tempDir).hostd).toEqual({
       socketPath: "/run/override-hostd.sock",
       mutationPolicy: "mutable"
@@ -252,30 +252,30 @@ describe("loadConfig", () => {
   });
 
   it("loads and validates the host mutation policy", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(configPath, "");
 
     expect(loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_HOST_MUTATION_POLICY: "declarative"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_HOST_MUTATION_POLICY: "declarative"
     } as NodeJS.ProcessEnv, tempDir!).hostd.mutationPolicy).toBe("declarative");
     expect(() => loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_HOST_MUTATION_POLICY: "automatic"
-    } as NodeJS.ProcessEnv, tempDir!)).toThrow("ZOS_HOST_MUTATION_POLICY");
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_HOST_MUTATION_POLICY: "automatic"
+    } as NodeJS.ProcessEnv, tempDir!)).toThrow("CYBEROS_HOST_MUTATION_POLICY");
   });
 
   it("loads Docker settings from environment overrides", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const config = loadConfig(
       {
-        ZOS_CONFIG: path.join(tempDir, "missing.toml"),
-        ZOS_DOCKER_ENABLED: "1",
-        ZOS_DOCKER_SOCKET_PATH: "/tmp/env-docker.sock",
-        ZOS_DOCKER_COMPOSE_COMMAND: "/opt/bin/docker",
-        ZOS_DOCKER_OPERATION_TIMEOUT_MS: "90000",
-        ZOS_DOCKER_CONSOLE_SHELLS: "/bin/sh,/bin/bash"
+        CYBEROS_CONFIG: path.join(tempDir, "missing.toml"),
+        CYBEROS_DOCKER_ENABLED: "1",
+        CYBEROS_DOCKER_SOCKET_PATH: "/tmp/env-docker.sock",
+        CYBEROS_DOCKER_COMPOSE_COMMAND: "/opt/bin/docker",
+        CYBEROS_DOCKER_OPERATION_TIMEOUT_MS: "90000",
+        CYBEROS_DOCKER_CONSOLE_SHELLS: "/bin/sh,/bin/bash"
       } as NodeJS.ProcessEnv,
       tempDir
     );
@@ -290,12 +290,12 @@ describe("loadConfig", () => {
   });
 
   it("defaults environment-configured production roots to required mounts", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const config = loadConfig(
       {
-        ZOS_CONFIG: "/zos/config/config.toml",
-        ZOS_ENVIRONMENT: "production",
-        ZOS_NAS_ROOTS: "primary:Primary:/zos/data/primary"
+        CYBEROS_CONFIG: "/cyberos/config/config.toml",
+        CYBEROS_ENVIRONMENT: "production",
+        CYBEROS_NAS_ROOTS: "primary:Primary:/cyberos/data/primary"
       } as NodeJS.ProcessEnv,
       tempDir
     );
@@ -304,7 +304,7 @@ describe("loadConfig", () => {
       {
         id: "primary",
         name: "Primary",
-        path: "/zos/data/primary",
+        path: "/cyberos/data/primary",
         mountPolicy: "required",
         expectedSource: null,
         expectedUuid: null,
@@ -312,20 +312,20 @@ describe("loadConfig", () => {
       }
     ]);
     expect(config).toMatchObject({
-      rootDir: "/zos",
-      stateDir: "/zos/state",
-      databasePath: "/zos/state/zos.sqlite",
-      metricsDatabasePath: "/zos/state/metrics.sqlite",
-      dataRoot: "/zos/data",
-      appsRoot: "/zos/apps",
-      isoRoot: "/zos/iso",
-      vmRoot: "/zos/vm",
-      backupRoot: "/zos/data/backup"
+      rootDir: "/cyberos",
+      stateDir: "/cyberos/state",
+      databasePath: "/cyberos/state/cyberos.sqlite",
+      metricsDatabasePath: "/cyberos/state/metrics.sqlite",
+      dataRoot: "/cyberos/data",
+      appsRoot: "/cyberos/apps",
+      isoRoot: "/cyberos/iso",
+      vmRoot: "/cyberos/vm",
+      backupRoot: "/cyberos/data/backup"
     });
   });
 
   it("loads and validates monitoring settings", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-monitoring-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-monitoring-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(configPath, `
       [monitoring]
@@ -340,9 +340,9 @@ describe("loadConfig", () => {
     `);
 
     expect(loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_MONITORING_ENABLED: "1",
-      ZOS_MONITORING_FAST_SAMPLE_INTERVAL_MS: "6000"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_MONITORING_ENABLED: "1",
+      CYBEROS_MONITORING_FAST_SAMPLE_INTERVAL_MS: "6000"
     } as NodeJS.ProcessEnv, tempDir).monitoring).toEqual({
       enabled: true,
       fastSampleIntervalMs: 6000,
@@ -355,108 +355,108 @@ describe("loadConfig", () => {
     });
 
     expect(() => loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_MONITORING_MAX_DATABASE_BYTES: "1048576"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_MONITORING_MAX_DATABASE_BYTES: "1048576"
     } as NodeJS.ProcessEnv, tempDir!)).toThrow("max_database_bytes");
     expect(() => loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS: "1000"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_MONITORING_STANDARD_SAMPLE_INTERVAL_MS: "1000"
     } as NodeJS.ProcessEnv, tempDir!)).toThrow("standard_sample_interval_ms");
     expect(() => loadConfig({
-      ZOS_CONFIG: configPath,
-      ZOS_MONITORING_MINUTE_RETENTION_MS: "3600000"
+      CYBEROS_CONFIG: configPath,
+      CYBEROS_MONITORING_MINUTE_RETENTION_MS: "3600000"
     } as NodeJS.ProcessEnv, tempDir!)).toThrow("minute_retention_ms");
   });
 
   it("rejects noncanonical production root and config paths", () => {
     expect(() => loadConfig({
-      ZOS_CONFIG: "/zos/config/config.toml",
-      ZOS_ENVIRONMENT: "production",
-      ZOS_ROOT: "/opt/zos"
-    } as NodeJS.ProcessEnv, process.cwd())).toThrow("Production ZOS root must be /zos");
+      CYBEROS_CONFIG: "/cyberos/config/config.toml",
+      CYBEROS_ENVIRONMENT: "production",
+      CYBEROS_ROOT: "/opt/cyberos"
+    } as NodeJS.ProcessEnv, process.cwd())).toThrow("Production CyberOS root must be /cyberos");
     expect(() => loadConfig({
-      ZOS_CONFIG: "/tmp/zos-config.toml",
-      ZOS_ENVIRONMENT: "production"
-    } as NodeJS.ProcessEnv, process.cwd())).toThrow("Production ZOS config must be /zos/config/config.toml");
+      CYBEROS_CONFIG: "/tmp/cyberos-config.toml",
+      CYBEROS_ENVIRONMENT: "production"
+    } as NodeJS.ProcessEnv, process.cwd())).toThrow("Production CyberOS config must be /cyberos/config/config.toml");
   });
 
-  it("rejects production NAS roots outside direct /zos/data children", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+  it("rejects production NAS roots outside direct /cyberos/data children", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const configDir = tempDir;
     const environment = {
-      ZOS_CONFIG: "/zos/config/config.toml",
-      ZOS_ENVIRONMENT: "production"
+      CYBEROS_CONFIG: "/cyberos/config/config.toml",
+      CYBEROS_ENVIRONMENT: "production"
     } as NodeJS.ProcessEnv;
 
     expect(() => loadConfig({
       ...environment,
-      ZOS_NAS_ROOTS: "system:System:/outside"
-    }, configDir)).toThrow("must be direct children of /zos/data");
+      CYBEROS_NAS_ROOTS: "system:System:/outside"
+    }, configDir)).toThrow("must be direct children of /cyberos/data");
     expect(() => loadConfig({
       ...environment,
-      ZOS_NAS_ROOTS: "nested:Nested:/zos/data/primary/nested"
-    }, configDir)).toThrow("must be direct children of /zos/data");
+      CYBEROS_NAS_ROOTS: "nested:Nested:/cyberos/data/primary/nested"
+    }, configDir)).toThrow("must be direct children of /cyberos/data");
     expect(() => loadConfig({
       ...environment,
-      ZOS_NAS_ROOTS: "backup:Backup:/zos/data/backup"
-    }, configDir)).toThrow("must be direct children of /zos/data");
+      CYBEROS_NAS_ROOTS: "backup:Backup:/cyberos/data/backup"
+    }, configDir)).toThrow("must be direct children of /cyberos/data");
     expect(() => loadConfig({
       ...environment,
-      ZOS_NAS_ROOTS: "apps:Apps:/zos/apps/data"
-    }, configDir)).toThrow("must not overlap /zos/apps");
+      CYBEROS_NAS_ROOTS: "apps:Apps:/cyberos/apps/data"
+    }, configDir)).toThrow("must not overlap /cyberos/apps");
   });
 
-  it("rejects production VM, VOD Player, and backup paths outside their ZOS directories", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-paths-"));
+  it("rejects production VM, VOD Player, and backup paths outside their CyberOS directories", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-paths-"));
     const base = {
-      ZOS_CONFIG: "/zos/config/config.toml",
-      ZOS_ENVIRONMENT: "production",
-      ZOS_NAS_ROOTS: "primary:Primary:/zos/data/primary"
+      CYBEROS_CONFIG: "/cyberos/config/config.toml",
+      CYBEROS_ENVIRONMENT: "production",
+      CYBEROS_NAS_ROOTS: "primary:Primary:/cyberos/data/primary"
     } as NodeJS.ProcessEnv;
 
-    expect(() => loadConfig({ ...base, ZOS_VM_STORAGE_PATH: "/zos/state/vms" }, tempDir!))
-      .toThrow("VM storage must be under /zos/vm");
-    expect(() => loadConfig({ ...base, ZOS_VM_ISO_ROOTS: "/zos/data/primary/iso" }, tempDir!))
-      .toThrow("VM ISO roots must be under /zos/iso");
-    expect(() => loadConfig({ ...base, ZOS_VOD_PLAYER_STATE_PATH: "/zos/state/player.json" }, tempDir!))
-      .toThrow("VOD Player state must be under /zos/state/vod-player");
+    expect(() => loadConfig({ ...base, CYBEROS_VM_STORAGE_PATH: "/cyberos/state/vms" }, tempDir!))
+      .toThrow("VM storage must be under /cyberos/vm");
+    expect(() => loadConfig({ ...base, CYBEROS_VM_ISO_ROOTS: "/cyberos/data/primary/iso" }, tempDir!))
+      .toThrow("VM ISO roots must be under /cyberos/iso");
+    expect(() => loadConfig({ ...base, CYBEROS_VOD_PLAYER_STATE_PATH: "/cyberos/state/player.json" }, tempDir!))
+      .toThrow("VOD Player state must be under /cyberos/state/vod-player");
     expect(() => loadConfig({
       ...base,
-      ZOS_BACKUP_ENABLED: "1",
-      ZOS_BACKUP_REPOSITORY: "/zos/data/primary/backups"
-    }, tempDir!)).toThrow("Production backup repository must be configured under /zos/data/backup");
+      CYBEROS_BACKUP_ENABLED: "1",
+      CYBEROS_BACKUP_REPOSITORY: "/cyberos/data/primary/backups"
+    }, tempDir!)).toThrow("Production backup repository must be configured under /cyberos/data/backup");
     expect(() => loadConfig({
       ...base,
-      ZOS_BACKUP_ENABLED: "1",
-      ZOS_BACKUP_REPOSITORY: "/zos/data/backup/restic",
-      ZOS_BACKUP_STAGING_PATH: "/zos/logs/backup-staging"
-    }, tempDir!)).toThrow("Backup staging must be under /zos/state");
+      CYBEROS_BACKUP_ENABLED: "1",
+      CYBEROS_BACKUP_REPOSITORY: "/cyberos/data/backup/restic",
+      CYBEROS_BACKUP_STAGING_PATH: "/cyberos/logs/backup-staging"
+    }, tempDir!)).toThrow("Backup staging must be under /cyberos/state");
 
     const passwordFile = path.join(tempDir, "restic-password");
     await writeFile(passwordFile, "secret\n");
     expect(() => loadConfig({
       ...base,
-      ZOS_BACKUP_ENABLED: "1",
-      ZOS_BACKUP_REPOSITORY: "/zos/data/backup/restic",
-      ZOS_BACKUP_PASSWORD_FILE: passwordFile
-    }, tempDir!)).toThrow("Backup password file must be under /zos/config");
+      CYBEROS_BACKUP_ENABLED: "1",
+      CYBEROS_BACKUP_REPOSITORY: "/cyberos/data/backup/restic",
+      CYBEROS_BACKUP_PASSWORD_FILE: passwordFile
+    }, tempDir!)).toThrow("Backup password file must be under /cyberos/config");
   });
 
   it("rejects removed data and database path overrides", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const cwd = tempDir;
     expect(() => loadConfig({
-      ZOS_ROOT: path.join(cwd, "root"),
-      ZOS_DATA_DIR: path.join(cwd, "state")
-    } as NodeJS.ProcessEnv, cwd)).toThrow("ZOS_DATA_DIR");
+      CYBEROS_ROOT: path.join(cwd, "root"),
+      CYBEROS_DATA_DIR: path.join(cwd, "state")
+    } as NodeJS.ProcessEnv, cwd)).toThrow("CYBEROS_DATA_DIR");
     expect(() => loadConfig({
-      ZOS_ROOT: path.join(cwd, "root"),
-      ZOS_DATABASE_PATH: path.join(cwd, "db.sqlite")
-    } as NodeJS.ProcessEnv, cwd)).toThrow("ZOS_DATABASE_PATH");
+      CYBEROS_ROOT: path.join(cwd, "root"),
+      CYBEROS_DATABASE_PATH: path.join(cwd, "db.sqlite")
+    } as NodeJS.ProcessEnv, cwd)).toThrow("CYBEROS_DATABASE_PATH");
   });
 
   it("loads share settings from TOML", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-config-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-config-"));
     const configPath = path.join(tempDir, "config.toml");
     await writeFile(
       configPath,
@@ -466,7 +466,7 @@ describe("loadConfig", () => {
 
         [shares]
         enabled = true
-        account_username = "zos-share"
+        account_username = "cyberos-share"
 
         [[shares.items]]
         id = "media"
@@ -499,17 +499,17 @@ describe("loadConfig", () => {
         enabled = true
         media_types = ["audio", "video"]
         bind_interface = "eth0"
-        friendly_name = "ZOS Media"
+        friendly_name = "CyberOS Media"
       `
     );
 
-    const config = loadConfig({ ZOS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
+    const config = loadConfig({ CYBEROS_CONFIG: configPath } as NodeJS.ProcessEnv, tempDir);
 
     expect(config.hostd).toEqual({ socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" });
     expect(config.shares).toMatchObject({
       enabled: true,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: null
       },
       shares: [
@@ -546,7 +546,7 @@ describe("loadConfig", () => {
               enabled: true,
               mediaTypes: ["audio", "video"],
               bindInterface: "eth0",
-              friendlyName: "ZOS Media"
+              friendlyName: "CyberOS Media"
             }
           }
         }

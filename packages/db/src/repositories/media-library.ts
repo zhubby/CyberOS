@@ -18,8 +18,8 @@ import type {
   MediaTitleKind,
   MediaTitleSummary,
   PublicMediaLibrarySettings
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 const MEDIA_LIBRARY_SETTING_KEY = "media_library_settings";
 const DEFAULT_PROFILE_ID = "local-admin";
@@ -206,7 +206,7 @@ export function defaultMediaLibrarySettings(): MediaLibrarySettingsRecord {
   };
 }
 
-export function getMediaLibrarySettings(db: ZosDatabase): MediaLibrarySettingsRecord | null {
+export function getMediaLibrarySettings(db: CyberOsDatabase): MediaLibrarySettingsRecord | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(MEDIA_LIBRARY_SETTING_KEY) as { value_json: string; updated_at: string } | undefined;
   if (!row) return null;
@@ -224,7 +224,7 @@ export function getMediaLibrarySettings(db: ZosDatabase): MediaLibrarySettingsRe
 }
 
 export function saveMediaLibrarySettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: Omit<MediaLibrarySettingsRecord, "updatedAt">,
   now = new Date()
 ): MediaLibrarySettingsRecord {
@@ -251,7 +251,7 @@ export function toPublicMediaLibrarySettings(settings: MediaLibrarySettingsRecor
 }
 
 export function createMediaSource(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     id?: string;
     name: string;
@@ -281,7 +281,7 @@ export function createMediaSource(
 }
 
 export function updateMediaSource(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   input: Partial<Pick<MediaSourceRecord, "name" | "enabled">>,
   now = new Date()
@@ -294,21 +294,21 @@ export function updateMediaSource(
   return getRequiredMediaSource(db, id);
 }
 
-export function deleteMediaSource(db: ZosDatabase, id: string): boolean {
+export function deleteMediaSource(db: CyberOsDatabase, id: string): boolean {
   return db.prepare("DELETE FROM media_sources WHERE id = ?").run(id).changes === 1;
 }
 
-export function getMediaSource(db: ZosDatabase, id: string): MediaSourceRecord | null {
+export function getMediaSource(db: CyberOsDatabase, id: string): MediaSourceRecord | null {
   const row = db.prepare("SELECT * FROM media_sources WHERE id = ?").get(id) as MediaSourceRow | undefined;
   return row ? mapMediaSource(row) : null;
 }
 
-export function listMediaSources(db: ZosDatabase): MediaSourceRecord[] {
+export function listMediaSources(db: CyberOsDatabase): MediaSourceRecord[] {
   const rows = db.prepare("SELECT * FROM media_sources ORDER BY name COLLATE NOCASE, id").all() as MediaSourceRow[];
   return rows.map(mapMediaSource);
 }
 
-export function enqueueMediaScan(db: ZosDatabase, sourceId: string, now = new Date()): MediaScanRunRecord {
+export function enqueueMediaScan(db: CyberOsDatabase, sourceId: string, now = new Date()): MediaScanRunRecord {
   const source = getMediaSource(db, sourceId);
   if (!source) throw new Error("Media source not found");
   const tx = db.transaction(() => {
@@ -330,7 +330,7 @@ export function enqueueMediaScan(db: ZosDatabase, sourceId: string, now = new Da
 }
 
 export function claimNextMediaScan(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { workerId: string; leaseMs: number; now?: Date }
 ): MediaScanRunRecord | null {
   const now = input.now ?? new Date();
@@ -359,7 +359,7 @@ export function claimNextMediaScan(
 }
 
 export function updateMediaScanProgress(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: Pick<MediaScanRunRecord, "id" | "scanned" | "added" | "updated" | "unmatched" | "currentPath"> & {
     workerId: string;
     leaseMs: number;
@@ -386,7 +386,7 @@ export function updateMediaScanProgress(
 }
 
 export function finishMediaScan(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { id: string; workerId: string; now?: Date }
 ): MediaScanRunRecord | null {
   const scan = getMediaScan(db, input.id);
@@ -410,7 +410,7 @@ export function finishMediaScan(
 }
 
 export function failMediaScan(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { id: string; workerId: string; error: string; now?: Date }
 ): MediaScanRunRecord | null {
   const now = (input.now ?? new Date()).toISOString();
@@ -423,12 +423,12 @@ export function failMediaScan(
   return changed === 1 ? getRequiredMediaScan(db, input.id) : null;
 }
 
-export function getMediaScan(db: ZosDatabase, id: string): MediaScanRunRecord | null {
+export function getMediaScan(db: CyberOsDatabase, id: string): MediaScanRunRecord | null {
   const row = db.prepare("SELECT * FROM media_scan_runs WHERE id = ?").get(id) as MediaScanRunRow | undefined;
   return row ? mapMediaScanRun(row) : null;
 }
 
-export function listMediaScans(db: ZosDatabase, sourceId?: string, limit = 20): MediaScanRunRecord[] {
+export function listMediaScans(db: CyberOsDatabase, sourceId?: string, limit = 20): MediaScanRunRecord[] {
   const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
   const rows = sourceId
     ? db.prepare("SELECT * FROM media_scan_runs WHERE source_id = ? ORDER BY created_at DESC LIMIT ?").all(sourceId, safeLimit)
@@ -437,7 +437,7 @@ export function listMediaScans(db: ZosDatabase, sourceId?: string, limit = 20): 
 }
 
 export function upsertMediaCatalogEntry(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: MediaCatalogEntryInput,
   now = new Date()
 ): { title: MediaTitleDetail; file: MediaFileRecord; created: boolean } {
@@ -591,7 +591,7 @@ export function upsertMediaCatalogEntry(
 }
 
 export function replaceMediaArtwork(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     titleId: string;
     seasonId?: string | null;
@@ -639,7 +639,7 @@ export function replaceMediaArtwork(
 }
 
 export function saveMediaProgress(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     fileId: string;
     profileId?: string;
@@ -678,12 +678,12 @@ export function saveMediaProgress(
   };
 }
 
-export function getMediaFile(db: ZosDatabase, id: string): MediaFileRecord | null {
+export function getMediaFile(db: CyberOsDatabase, id: string): MediaFileRecord | null {
   const row = db.prepare("SELECT * FROM media_files WHERE id = ?").get(id) as MediaFileRow | undefined;
   return row ? mapMediaFile(row) : null;
 }
 
-export function getMediaArtwork(db: ZosDatabase, id: string): MediaArtworkRecord | null {
+export function getMediaArtwork(db: CyberOsDatabase, id: string): MediaArtworkRecord | null {
   const row = db.prepare("SELECT * FROM media_artwork WHERE id = ?").get(id) as MediaArtworkRow | undefined;
   if (!row) return null;
   return {
@@ -704,7 +704,7 @@ export function getMediaArtwork(db: ZosDatabase, id: string): MediaArtworkRecord
 }
 
 export function setMediaMatchOverride(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { titleId: string; tmdbId?: number | null; excluded?: boolean; now?: Date }
 ): MediaTitleDetail | null {
   if (!getMediaTitle(db, input.titleId)) return null;
@@ -728,7 +728,7 @@ export function setMediaMatchOverride(
   return getMediaTitle(db, input.titleId);
 }
 
-export function getMediaTitle(db: ZosDatabase, id: string, profileId = DEFAULT_PROFILE_ID): MediaTitleDetail | null {
+export function getMediaTitle(db: CyberOsDatabase, id: string, profileId = DEFAULT_PROFILE_ID): MediaTitleDetail | null {
   const row = db.prepare(`${titleSelect(profileId)} WHERE t.id = ?`).get(id) as MediaTitleRow | undefined;
   if (!row) return null;
   const seasons = (db.prepare("SELECT * FROM media_seasons WHERE title_id = ? ORDER BY season_number")
@@ -749,7 +749,7 @@ export function getMediaTitle(db: ZosDatabase, id: string, profileId = DEFAULT_P
 }
 
 export function listMediaTitles(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     kind?: MediaTitleKind;
     matchStatus?: MediaMatchStatus;
@@ -778,7 +778,7 @@ export function listMediaTitles(
   return rows.map(mapMediaTitle);
 }
 
-export function getMediaHome(db: ZosDatabase, profileId = DEFAULT_PROFILE_ID, limit = 20): MediaHome {
+export function getMediaHome(db: CyberOsDatabase, profileId = DEFAULT_PROFILE_ID, limit = 20): MediaHome {
   const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)));
   const continueRows = db.prepare(`${titleSelect(profileId)}
     WHERE p.completed = 0 AND p.position_seconds >= ?
@@ -796,7 +796,7 @@ export function getMediaHome(db: ZosDatabase, profileId = DEFAULT_PROFILE_ID, li
   };
 }
 
-export function getMediaLibraryStatus(db: ZosDatabase): MediaLibraryStatus {
+export function getMediaLibraryStatus(db: CyberOsDatabase): MediaLibraryStatus {
   const counts = db.prepare(`
     SELECT COUNT(*) AS titles,
       SUM(CASE WHEN kind = 'movie' THEN 1 ELSE 0 END) AS movies,
@@ -849,7 +849,7 @@ function titleSelect(profileId: string): string {
   `;
 }
 
-function listMediaArtwork(db: ZosDatabase, titleId: string): MediaArtworkRecord[] {
+function listMediaArtwork(db: CyberOsDatabase, titleId: string): MediaArtworkRecord[] {
   return (db.prepare(`
     SELECT * FROM media_artwork WHERE title_id = ?
     ORDER BY is_primary DESC, kind, id
@@ -989,13 +989,13 @@ function mapMediaScanRun(row: MediaScanRunRow): MediaScanRunRecord {
   };
 }
 
-function getRequiredMediaSource(db: ZosDatabase, id: string): MediaSourceRecord {
+function getRequiredMediaSource(db: CyberOsDatabase, id: string): MediaSourceRecord {
   const source = getMediaSource(db, id);
   if (!source) throw new Error("Media source not found");
   return source;
 }
 
-function getRequiredMediaScan(db: ZosDatabase, id: string): MediaScanRunRecord {
+function getRequiredMediaScan(db: CyberOsDatabase, id: string): MediaScanRunRecord {
   const scan = getMediaScan(db, id);
   if (!scan) throw new Error("Media scan not found");
   return scan;

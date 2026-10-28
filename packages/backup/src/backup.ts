@@ -11,22 +11,22 @@ import {
   releaseExecutionLock,
   startBackupRun,
   upsertRootReadiness,
-  type ZosDatabase
-} from "@zos/db";
-import type { BackupConfig, BackupRunKind, BackupRunSummary, ZosConfig } from "@zos/shared";
-import { checkMountReadiness, type MountCommandRunner } from "@zos/nas-tools";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { BackupConfig, BackupRunKind, BackupRunSummary, CyberOsConfig } from "@cyberos/shared";
+import { checkMountReadiness, type MountCommandRunner } from "@cyberos/nas-tools";
 import { summarizeResticOutput, SystemResticRunner, type ResticCommandRunner } from "./restic.js";
 
 export interface BackupDependencies {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   restic?: ResticCommandRunner;
   mountCommandRunner?: MountCommandRunner;
 }
 
 const BACKUP_LOCK_NAME = "backup";
 
-export function shouldSkipScheduledBackup(config: ZosConfig, command: string | undefined): boolean {
+export function shouldSkipScheduledBackup(config: CyberOsConfig, command: string | undefined): boolean {
   return command === "run" && !config.backup?.enabled;
 }
 
@@ -155,7 +155,7 @@ export async function runBackup(input: BackupDependencies & { kind?: Exclude<Bac
     await mkdir(config.stagingPath, { recursive: true });
     const runStaging = await mkdtemp(path.join(config.stagingPath, `run-${run.id}-`));
     staging = runStaging;
-    await createSqliteSnapshot(input.db, path.join(runStaging, "zos.sqlite"));
+    await createSqliteSnapshot(input.db, path.join(runStaging, "cyberos.sqlite"));
     const trashPath = path.join(input.config.dataDir, "trash");
     await access(trashPath).then(() => copyTreeNoSymlinks(trashPath, path.join(runStaging, "trash"))).catch(() => undefined);
     const manifest = await createManifest(run.id, input.config.nasRoots, runStaging);
@@ -186,13 +186,13 @@ export async function runBackup(input: BackupDependencies & { kind?: Exclude<Bac
     const stateResult = await runResticWithRetry(runner, ["backup", "--json", "--repo", config.repositoryPath!, "--tag", kind, runStaging], config);
     if (stateResult.code !== 0) {
       const reason = `restic state backup failed: ${summarizeResticOutput(stateResult.stderr || stateResult.stdout)}`;
-      recordBackupFailure(input.db, { runId: run.id, path: "zos-state", code: "STATE_SNAPSHOT_FAILED", reason });
+      recordBackupFailure(input.db, { runId: run.id, path: "cyberos-state", code: "STATE_SNAPSHOT_FAILED", reason });
       throw new Error(reason);
     }
     const stateSnapshotIds = parseSnapshotIds(stateResult.stdout);
     if (!stateSnapshotIds.length) {
       const reason = "restic state backup did not return a snapshot id";
-      recordBackupFailure(input.db, { runId: run.id, path: "zos-state", code: "SNAPSHOT_ID_MISSING", reason });
+      recordBackupFailure(input.db, { runId: run.id, path: "cyberos-state", code: "SNAPSHOT_ID_MISSING", reason });
       throw new Error(reason);
     }
     snapshotIds.push(...stateSnapshotIds);
@@ -348,14 +348,14 @@ export async function restoreBackup(input: BackupDependencies & { snapshot: stri
   }
 }
 
-export function listBackups(db: ZosDatabase): BackupRunSummary[] { return listBackupRuns(db, 30); }
+export function listBackups(db: CyberOsDatabase): BackupRunSummary[] { return listBackupRuns(db, 30); }
 
-function requireBackupConfig(config: ZosConfig): BackupConfig {
+function requireBackupConfig(config: CyberOsConfig): BackupConfig {
   if (!config.backup?.enabled) throw new Error("Backup is disabled");
   return config.backup;
 }
 
-function validateBackupPaths(config: ZosConfig): string[] {
+function validateBackupPaths(config: CyberOsConfig): string[] {
   const backup = config.backup;
   if (!backup?.enabled) return [];
   if (!backup.repositoryPath) return ["repository not configured"];
@@ -376,25 +376,25 @@ function validateBackupPaths(config: ZosConfig): string[] {
 }
 
 interface BackupManifest {
-  version: 1;
+  version: 2;
   runId: string;
   createdAt: string;
   roots: Array<{ rootId: string; path: string }>;
-  database: "zos.sqlite";
+  database: "cyberos.sqlite";
   checksums: Record<string, string>;
 }
 
 async function createManifest(
   runId: string,
-  roots: ZosConfig["nasRoots"],
+  roots: CyberOsConfig["nasRoots"],
   stagingPath: string
 ): Promise<BackupManifest> {
   return {
-    version: 1,
+    version: 2,
     runId,
     createdAt: new Date().toISOString(),
     roots: roots.map((root) => ({ rootId: root.id, path: root.path })),
-    database: "zos.sqlite",
+    database: "cyberos.sqlite",
     checksums: await collectChecksums(stagingPath)
   };
 }
@@ -443,7 +443,7 @@ async function findManifest(rootPath: string): Promise<string | null> {
       if (entry.name === "manifest.json" && entry.isFile()) {
         try {
           const value = JSON.parse(await readFile(absolutePath, "utf8")) as { version?: number; roots?: unknown[]; database?: string };
-          if (value.version === 1 && Array.isArray(value.roots) && value.database === "zos.sqlite") {
+          if (typeof value.version === "number" && Array.isArray(value.roots) && value.database === "cyberos.sqlite") {
             matches.push(absolutePath);
             if (matches.length > 1) return;
           }
@@ -462,8 +462,8 @@ async function findManifest(rootPath: string): Promise<string | null> {
   return matches.length === 1 ? matches[0] ?? null : null;
 }
 
-async function validateManifest(manifest: BackupManifest, manifestRoot: string, config: ZosConfig): Promise<void> {
-  if (manifest.version !== 1 || !manifest.runId || !Array.isArray(manifest.roots) || manifest.database !== "zos.sqlite") {
+async function validateManifest(manifest: BackupManifest, manifestRoot: string, config: CyberOsConfig): Promise<void> {
+  if (manifest.version !== 2 || !manifest.runId || !Array.isArray(manifest.roots) || manifest.database !== "cyberos.sqlite") {
     throw new Error("restore manifest validation failed");
   }
   for (const root of manifest.roots) {
@@ -558,8 +558,8 @@ function snapshotVisible(output: string, expected: string[]): boolean {
     return expected.every((id) => text.includes(id));
   }
 }
-async function createSqliteSnapshot(db: ZosDatabase, destination: string): Promise<void> {
-  const backup = (db as ZosDatabase & { backup?: (destination: string) => Promise<void> }).backup;
+async function createSqliteSnapshot(db: CyberOsDatabase, destination: string): Promise<void> {
+  const backup = (db as CyberOsDatabase & { backup?: (destination: string) => Promise<void> }).backup;
   if (typeof backup === "function") { await backup.call(db, destination); return; }
   throw new Error("SQLite online backup is unavailable");
 }

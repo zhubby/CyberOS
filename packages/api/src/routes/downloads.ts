@@ -11,9 +11,9 @@ import {
   requestDownloadTaskControl,
   transitionDownloadTask,
   getNasRoot,
-  type ZosDatabase
-} from "@zos/db";
-import type { DownloadTaskRecord, DownloadTaskStatus } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { DownloadTaskRecord, DownloadTaskStatus } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   resolveScopedExistingPath,
@@ -290,7 +290,7 @@ export function registerDownloadRoutes(server: FastifyInstance, { db, system }: 
 }
 
 async function transitionTaskStatus(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   system: ApiRouteContext["system"],
   id: string,
   input: { from: DownloadTaskStatus[]; to: DownloadTaskStatus },
@@ -318,7 +318,7 @@ async function transitionTaskStatus(
 }
 
 async function removePartialFile(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   system: ApiRouteContext["system"],
   task: DownloadTaskRecord
 ): Promise<boolean> {

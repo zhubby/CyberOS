@@ -11,7 +11,7 @@ const roots: NasRoot[] = [
   {
     id: "media",
     name: "Media",
-    path: "/zos/data/primary/media",
+    path: "/cyberos/data/primary/media",
     homePath: null
   }
 ];
@@ -21,7 +21,7 @@ describe("share settings form helpers", () => {
     const settings: ShareSettings = {
       enabled: true,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         passwordConfigured: true
       },
       shares: [
@@ -95,7 +95,7 @@ describe("share settings form helpers", () => {
     const input = shareFormToInput({
       enabled: true,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: "new-secret",
         clearPassword: false,
         passwordConfigured: false
@@ -129,7 +129,7 @@ describe("share settings form helpers", () => {
       {
         enabled: true,
         account: {
-          username: "zos-share",
+          username: "cyberos-share",
           password: "",
           clearPassword: false,
           passwordConfigured: false

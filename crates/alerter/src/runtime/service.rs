@@ -38,17 +38,17 @@ impl AlerterService {
 
     pub async fn run(self) -> Result<(), AlerterError> {
         let publisher = AlertEventPublisher::start(
-            env::var_os("ZOS_MONITORING_EVENTS_SOCKET")
+            env::var_os("CYBEROS_MONITORING_EVENTS_SOCKET")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| {
-                    if env::var("ZOS_ENVIRONMENT").as_deref() == Ok("development") {
+                    if env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("development") {
                         self.config
                             .database_path
                             .parent()
                             .unwrap_or_else(|| Path::new("."))
                             .join("monitoring-events.sock")
                     } else {
-                        PathBuf::from("/run/zos/monitoring-events.sock")
+                        PathBuf::from("/run/cyberos/monitoring-events.sock")
                     }
                 }),
         );
@@ -223,7 +223,7 @@ fn evaluate_once(
     database_path: &Path,
     metrics_path: &Path,
     monitoring_enabled: bool,
-    sampling: zos_monitoring_contracts::SamplingIntervals,
+    sampling: cyberos_monitoring_contracts::SamplingIntervals,
     now_ms: i64,
 ) -> Result<crate::ports::AlertSummary, AlerterError> {
     let mut store = AlertStore::open(database_path)?;
@@ -246,13 +246,13 @@ fn iso(now_ms: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zos_monitoring_contracts::SamplingIntervals;
+    use cyberos_monitoring_contracts::SamplingIntervals;
 
     #[tokio::test]
     async fn cancellation_stops_both_runtime_loops() {
         let directory = tempfile::tempdir().unwrap();
         let config = AlerterConfig {
-            database_path: directory.path().join("zos.sqlite"),
+            database_path: directory.path().join("cyberos.sqlite"),
             metrics_database_path: directory.path().join("metrics.sqlite"),
             monitoring_enabled: false,
             sampling: SamplingIntervals::default(),

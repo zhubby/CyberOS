@@ -1,0 +1,31 @@
+[Unit]
+Description=CyberOS TV gamepad input
+ConditionPathExists=/cyberos/config/tv-mode/enabled
+PartOf=cyberos-tv.target
+Requires=cyberos-tv-prepare.service
+After=cyberos-tv-prepare.service cyberos-tv-weston.service
+Wants=cyberos-tv-weston.service
+
+[Service]
+Type=simple
+User=cyberos
+Group=cyberos
+SupplementaryGroups=input
+Environment=XDG_RUNTIME_DIR=/run/cyberos-tv
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStart=/usr/lib/cyberos/bin/cyberos-tv-gamepad
+Restart=always
+RestartSec=3
+TimeoutStopSec=10s
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/cyberos-tv
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=no
+DevicePolicy=closed
+DeviceAllow=char-input r
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=64M
+TasksMax=32

@@ -16,7 +16,7 @@ import {
   saveIndexerSettings,
   saveModelProviderSettings,
   saveAgentCapabilityPolicySettings
-} from "@zos/db";
+} from "@cyberos/db";
 import type {
   AgentCapabilityId,
   AgentCapabilityPolicyMode,
@@ -24,7 +24,7 @@ import type {
   DownloadSettingsRecord,
   IndexerSettingsRecord,
   ModelProviderName
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   defaultDockerSettings,
@@ -183,7 +183,7 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db }: 
       return;
     }
     if (request.body.enabled && !config.mcp?.enabled) {
-      reply.status(409).send({ error: "ZOS MCP is disabled by host configuration" });
+      reply.status(409).send({ error: "CyberOS MCP is disabled by host configuration" });
       return;
     }
     try {

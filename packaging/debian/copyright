@@ -1,9 +1,9 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: zos
-Source: https://zos.local
+Upstream-Name: cyberos
+Source: https://cyberos.local
 
 Files: *
-Copyright: 2026 ZOS Maintainers
+Copyright: 2026 CyberOS Maintainers
 License: MIT
 
 License: MIT

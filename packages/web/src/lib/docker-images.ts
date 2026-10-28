@@ -1,5 +1,5 @@
 import type { DockerImageSummary, DockerRegistryCredential } from "../api.js";
-import { parseDockerImageReference } from "@zos/shared/docker-images";
+import { parseDockerImageReference } from "@cyberos/shared/docker-images";
 
 export function isValidDockerImageReference(value: string): boolean {
   return parseDockerImageReference(value) !== null;

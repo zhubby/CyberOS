@@ -24,9 +24,9 @@ import {
   setMediaMatchOverride,
   toPublicMediaLibrarySettings,
   updateMediaSource
-} from "@zos/db";
-import { inferMimeType } from "@zos/nas-tools";
-import type { MediaMatchCandidate, MediaMatchStatus, MediaSourceKind } from "@zos/shared";
+} from "@cyberos/db";
+import { inferMimeType } from "@cyberos/nas-tools";
+import type { MediaMatchCandidate, MediaMatchStatus, MediaSourceKind } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { searchTmdbCandidates, type TmdbCandidateSearchInput } from "../lib/tmdb-client.js";
 import { createVodPlayerRuntime } from "../lib/vod-player.js";

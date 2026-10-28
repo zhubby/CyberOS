@@ -1,0 +1,40 @@
+[Unit]
+Description=CyberOS restricted container host access proxy
+Documentation=file:///usr/share/doc/cyberos/README.md
+After=docker.service local-fs.target
+Wants=docker.service
+Before=cyberos-api.service
+
+[Service]
+Type=simple
+User=cyberos
+Group=cyberos
+SupplementaryGroups=docker
+RuntimeDirectory=cyberos/host-access
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=restart
+Environment=CYBEROS_HOST_ACCESS_RUNTIME_ROOT=/run/cyberos/host-access
+Environment=CYBEROS_DOCKER_SOCKET=/var/run/docker.sock
+# Enable only after the deployed collector compatibility suite passes.
+Environment=CYBEROS_HOST_ACCESS_DOCKER_COMPATIBLE=0
+ExecStart=/usr/lib/cyberos/bin/cyberos-host-accessd
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+UMask=0027
+MemoryMax=128M
+CPUQuota=50%
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

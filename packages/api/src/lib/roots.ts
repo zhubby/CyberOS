@@ -1,11 +1,11 @@
 import { realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { getNasRoot, listNasRoots, type ZosDatabase } from "@zos/db";
-import { isPathInside } from "@zos/nas-tools";
-import type { NasRootRecord } from "@zos/shared";
+import { getNasRoot, listNasRoots, type CyberOsDatabase } from "@cyberos/db";
+import { isPathInside } from "@cyberos/nas-tools";
+import type { NasRootRecord } from "@cyberos/shared";
 
-export function resolveRoot(db: ZosDatabase, rootId: string | undefined) {
+export function resolveRoot(db: CyberOsDatabase, rootId: string | undefined) {
   if (rootId) {
     return getNasRoot(db, rootId);
   }

@@ -1,7 +1,7 @@
 import type { PhotostaffMediaKind } from "./photostaff-config.js";
 import type { MonitoringHealthStatus } from "./monitoring.js";
 import type { VodPlayerErrorCode, VodPlayerState } from "./vod-player-protocol.js";
-import type { ZosPaths } from "./paths.js";
+import type { CyberOsPaths } from "./paths.js";
 
 export type JobStatus =
   | "queued"
@@ -848,15 +848,15 @@ export type PiToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | 
 export type AgentCapabilityPolicyMode = "auto" | "approve" | "confirm" | "disabled";
 
 export type AgentCapabilityId =
-  | "zos.files.list"
-  | "zos.files.read"
-  | "zos.files.search"
-  | "zos.files.grep"
-  | "zos.files.find"
-  | "zos.files.mutate"
-  | "zos.files.edit"
-  | "zos.files.write"
-  | "zos.shell.run";
+  | "cyberos.files.list"
+  | "cyberos.files.read"
+  | "cyberos.files.search"
+  | "cyberos.files.grep"
+  | "cyberos.files.find"
+  | "cyberos.files.mutate"
+  | "cyberos.files.edit"
+  | "cyberos.files.write"
+  | "cyberos.shell.run";
 
 export type PiToolPolicyMode = AgentCapabilityPolicyMode;
 
@@ -1354,10 +1354,10 @@ export interface PublicShareSettings extends Omit<ShareSettingsRecord, "account"
   account: PublicShareAccountConfig;
 }
 
-export interface ZosConfig {
+export interface CyberOsConfig {
   environment?: DeploymentMode;
   rootDir?: string;
-  paths?: ZosPaths;
+  paths?: CyberOsPaths;
   stateDir?: string;
   dataRoot?: string;
   appsRoot?: string;
@@ -1411,7 +1411,6 @@ export interface McpConfig {
   enabled: boolean;
   piEnabled: boolean;
   piTokenFile: string;
-  legacyPiToolsEnabled: boolean;
   externalEnabled: boolean;
   shellEnabled: boolean;
   allowedHosts: string[];
@@ -1527,7 +1526,7 @@ export interface PublicSystemInfo {
     execPath: string;
     memory: PublicSystemInfoProcessMemory;
   };
-  zos: {
+  cyberos: {
     rootDir: string;
     stateDir: string;
     dataRoot: string;

@@ -1,13 +1,13 @@
 import { stat } from "node:fs/promises";
 import net from "node:net";
-import { resolveSafeExistingPath } from "@zos/nas-tools";
+import { resolveSafeExistingPath } from "@cyberos/nas-tools";
 import type {
   DlnaMediaType,
   NasRootRecord,
   ShareDefinitionConfig,
   ShareProtocolConfig,
   ShareSettingsRecord
-} from "@zos/shared";
+} from "@cyberos/shared";
 
 export type ShareSettingsInput = Partial<Omit<ShareSettingsRecord, "account" | "shares" | "updatedAt">> & {
   account?: {

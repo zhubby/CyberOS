@@ -2,20 +2,20 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openZosDb, type ZosDatabase } from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
+import { ensureNasRoots, openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
+import type { CyberOsConfig } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 import { type TerminalPty, type TerminalRuntime } from "../lib/terminal.js";
 
 let tempDir: string;
 let rootDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-terminal-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-terminal-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
@@ -39,8 +39,8 @@ describe("terminal WebSocket", () => {
       name: "xterm-256color"
     });
 
-    runtime.terminal.emitData("zos$ ");
-    expect(await nextMessage(socket)).toEqual({ type: "output", data: "zos$ " });
+    runtime.terminal.emitData("cyberos$ ");
+    expect(await nextMessage(socket)).toEqual({ type: "output", data: "cyberos$ " });
 
     socket.send(JSON.stringify({ type: "input", data: "pwd\r" }));
     await waitFor(() => runtime.terminal.writes.includes("pwd\r"));
@@ -86,8 +86,8 @@ describe("terminal WebSocket", () => {
     const nextSessionId = "22222222-2222-4222-8222-222222222222";
 
     const resetSocket = await connect(server, "local", nextSessionId, [
-      `zos-reset.${previousSessionId}`,
-      `zos-next.${nextSessionId}`
+      `cyberos-reset.${previousSessionId}`,
+      `cyberos-next.${nextSessionId}`
     ]);
     expect(await nextMessage(resetSocket)).toMatchObject({ type: "ready", sessionId: nextSessionId });
     expect(runtime.spawnCount).toBe(2);
@@ -125,13 +125,13 @@ describe("terminal WebSocket", () => {
   it("marks registered tabs persistent and notifies the previous controller on takeover", async () => {
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const sessionId = "11111111-1111-4111-8111-111111111111";
     const initialized = await server.inject({
       method: "POST",
       url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local", legacySessionId: sessionId }
+      payload: { rootId: "local" }
     });
     expect(initialized.statusCode).toBe(200);
+    const sessionId = String(initialized.json().activeTabId);
 
     const firstSocket = await connect(server, "local", sessionId);
     await nextMessage(firstSocket);
@@ -155,13 +155,13 @@ describe("terminal WebSocket", () => {
     ]);
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const sessionId = "11111111-1111-4111-8111-111111111111";
     const initialized = await server.inject({
       method: "POST",
       url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local", legacySessionId: sessionId }
+      payload: { rootId: "local" }
     });
     expect(initialized.statusCode).toBe(200);
+    const sessionId = String(initialized.json().activeTabId);
 
     const socket = await connect(server, "other", sessionId);
 
@@ -176,20 +176,19 @@ describe("terminal tab routes", () => {
   it("initializes, creates, renames, activates, and deletes persistent tabs", async () => {
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const legacySessionId = "11111111-1111-4111-8111-111111111111";
-
     const empty = await server.inject({ method: "GET", url: "/api/terminal/tabs?rootId=local" });
     expect(empty.json()).toMatchObject({ initialized: false, tabs: [], activeTabId: null, maxSessions: 4 });
 
     const initialized = await server.inject({
       method: "POST",
       url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local", legacySessionId }
+      payload: { rootId: "local" }
     });
+    const firstId = String(initialized.json().activeTabId);
     expect(initialized.json()).toMatchObject({
       initialized: true,
-      activeTabId: legacySessionId,
-      tabs: [{ id: legacySessionId, ordinal: 1, customTitle: null }]
+      activeTabId: firstId,
+      tabs: [{ id: firstId, ordinal: 1, customTitle: null }]
     });
 
     const created = await server.inject({ method: "POST", url: "/api/terminal/tabs", payload: { rootId: "local" } });
@@ -205,13 +204,13 @@ describe("terminal tab routes", () => {
     });
     expect(renamed.json().tabs[1].customTitle).toBe("Build shell");
 
-    const activated = await server.inject({ method: "POST", url: `/api/terminal/tabs/${legacySessionId}/activate` });
-    expect(activated.json().activeTabId).toBe(legacySessionId);
+    const activated = await server.inject({ method: "POST", url: `/api/terminal/tabs/${firstId}/activate` });
+    expect(activated.json().activeTabId).toBe(firstId);
 
     const deleted = await server.inject({ method: "DELETE", url: `/api/terminal/tabs/${secondId}` });
-    expect(deleted.json()).toMatchObject({ activeTabId: legacySessionId });
+    expect(deleted.json()).toMatchObject({ activeTabId: firstId });
     expect(deleted.json().tabs).toHaveLength(1);
-    expect(runtime.destroyedSessionNames).toEqual([expect.stringMatching(/^zos-/u)]);
+    expect(runtime.destroyedSessionNames).toEqual([expect.stringMatching(/^cyberos-/u)]);
     await server.close();
   });
 
@@ -224,12 +223,6 @@ describe("terminal tab routes", () => {
       url: "/api/terminal/tabs/initialize",
       payload: { rootId: "missing" }
     })).statusCode).toBe(404);
-    expect((await server.inject({
-      method: "POST",
-      url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local", legacySessionId: "invalid" }
-    })).statusCode).toBe(400);
-
     const initialized = await server.inject({
       method: "POST",
       url: "/api/terminal/tabs/initialize",
@@ -385,10 +378,10 @@ class FakeTerminal implements TerminalPty {
   }
 }
 
-function testConfig(): ZosConfig {
+function testConfig(): CyberOsConfig {
   return {
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "zos.sqlite"),
+    databasePath: path.join(tempDir, "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
@@ -402,12 +395,12 @@ function testConfig(): ZosConfig {
     },
     shares: {
       enabled: false,
-      account: { username: "zos-share", password: null },
+      account: { username: "cyberos-share", password: null },
       shares: []
     },
     hostd: { socketPath: "/tmp/hostd.sock" },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock", maxSessions: 4 },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }
@@ -427,8 +420,8 @@ async function connect(
   }
   const query = new URLSearchParams({ rootId, ...(sessionId ? { sessionId } : {}) });
   const protocols = sessionId
-    ? ["zos-terminal-v1", `zos-session.${sessionId}`, ...extraProtocols]
-    : ["zos-terminal-v1", ...extraProtocols];
+    ? ["cyberos-terminal-v1", `cyberos-session.${sessionId}`, ...extraProtocols]
+    : ["cyberos-terminal-v1", ...extraProtocols];
   const socket = new WebSocket(`ws://127.0.0.1:${address.port}/api/terminal?${query.toString()}`, protocols);
   messageQueues.set(socket, { queue: [], waiter: null });
   socket.addEventListener("message", (event) => {

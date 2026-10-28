@@ -1,5 +1,5 @@
-import type { DockerRegistryCredentialRecord } from "@zos/db";
-import { normalizeDockerRegistryServerAddress, parseDockerImageReference, type DockerRegistryCredentialSummary } from "@zos/shared";
+import type { DockerRegistryCredentialRecord } from "@cyberos/db";
+import { normalizeDockerRegistryServerAddress, parseDockerImageReference, type DockerRegistryCredentialSummary } from "@cyberos/shared";
 
 const DOCKER_HUB = "docker.io";
 const MAX_IMAGE_REFERENCE_LENGTH = 512;

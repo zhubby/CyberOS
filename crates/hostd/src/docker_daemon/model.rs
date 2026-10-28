@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::error::HostdError;
 
 pub(super) const CONFIG_PATH: &str = "/etc/docker/daemon.json";
-const STATE_DIR: &str = "/zos/state/hostd/docker-daemon";
+const STATE_DIR: &str = "/cyberos/state/hostd/docker-daemon";
 pub(super) const MAX_CONFIG_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone)]

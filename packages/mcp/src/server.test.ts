@@ -11,31 +11,31 @@ import {
   ensureNasRoots,
   getCapabilityApprovalByRun,
   getCapabilityRun,
-  openZosDb,
+  openCyberOsDb,
   saveAgentCapabilityPolicySettings,
   saveModelProviderSettings,
   transitionDownloadTask,
-  type ZosDatabase
-} from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { CyberOsConfig } from "@cyberos/shared";
 import { registerMcp } from "./server.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 let app: ReturnType<typeof Fastify>;
 let token: string;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-mcp-"));
-  await writeFile(path.join(tempDir, "hello.txt"), "hello from ZOS", "utf8");
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-mcp-"));
+  await writeFile(path.join(tempDir, "hello.txt"), "hello from CyberOS", "utf8");
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "primary", name: "Primary", path: tempDir }]);
   const client = createMcpClient(db, {
     name: "MCP test",
     kind: "local",
     scopes: [
-      "zos:catalog:read", "zos:downloads:read", "zos:files:read", "zos:files:propose", "zos:index:read", "zos:photos:read",
-      "zos:roots:read", "zos:settings:read", "zos:system:read", "zos:runs:read"
+      "cyberos:catalog:read", "cyberos:downloads:read", "cyberos:files:read", "cyberos:files:propose", "cyberos:index:read", "cyberos:photos:read",
+      "cyberos:roots:read", "cyberos:settings:read", "cyberos:system:read", "cyberos:runs:read"
     ]
   });
   token = client.token;
@@ -90,7 +90,7 @@ describe("MCP Streamable HTTP", () => {
       url: "/mcp",
       headers: {
         host: "127.0.0.1",
-        "x-zos-mcp-external": "1",
+        "x-cyberos-mcp-external": "1",
         "x-forwarded-proto": "https",
         authorization: `Bearer ${token}`
       },
@@ -106,7 +106,6 @@ describe("MCP Streamable HTTP", () => {
       enabled: true,
       piEnabled: false,
       piTokenFile: path.join(tempDir, "pi.token"),
-      legacyPiToolsEnabled: false,
       externalEnabled: true,
       shellEnabled: false,
       allowedHosts: ["localhost", "127.0.0.1", "[::1]"],
@@ -120,7 +119,7 @@ describe("MCP Streamable HTTP", () => {
       url: "/mcp",
       headers: {
         host: "127.0.0.1",
-        "x-zos-mcp-external": "1",
+        "x-cyberos-mcp-external": "1",
         "x-forwarded-proto": "http",
         authorization: `Bearer ${token}`
       },
@@ -142,7 +141,7 @@ describe("MCP Streamable HTTP", () => {
     expect((await postMcp(initializeRequest("2025-11-25"))).statusCode).toBe(200);
     expect((await postMcp(initializeRequest("2025-11-25"))).statusCode).toBe(429);
 
-    const other = createMcpClient(db, { name: "Other", kind: "local", scopes: ["zos:catalog:read"] });
+    const other = createMcpClient(db, { name: "Other", kind: "local", scopes: ["cyberos:catalog:read"] });
     const independent = await app.inject({
       method: "POST",
       url: "/mcp",
@@ -164,7 +163,7 @@ describe("MCP Streamable HTTP", () => {
       id: 1,
       result: {
         protocolVersion: "2025-11-25",
-        serverInfo: { name: "zos", version: "1.3.2" }
+        serverInfo: { name: "cyberos", version: "2.0.0" }
       }
     });
   });
@@ -182,7 +181,7 @@ describe("MCP Streamable HTTP", () => {
       expect(client.getProtocolEra()).toBe("modern");
       expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28");
       const tools = await client.listTools();
-      expect(tools.tools.some((tool) => tool.name === "zos.files.read")).toBe(true);
+      expect(tools.tools.some((tool) => tool.name === "cyberos.files.read")).toBe(true);
     } finally {
       await client.close();
     }
@@ -192,21 +191,21 @@ describe("MCP Streamable HTTP", () => {
     const list = await postMcp({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }, "2025-11-25");
     expect(list.statusCode).toBe(200);
     const names = (parseMcpResponse(list.body).result.tools as Array<{ name: string }>).map((tool) => tool.name);
-    expect(names).toContain("zos.files.read");
-    expect(names).not.toContain("zos.files.mutate");
-    expect(names).not.toContain("zos.docker.manage-propose");
+    expect(names).toContain("cyberos.files.read");
+    expect(names).not.toContain("cyberos.files.mutate");
+    expect(names).not.toContain("cyberos.docker.manage-propose");
 
     const read = await postMcp({
       jsonrpc: "2.0",
       id: 3,
       method: "tools/call",
-      params: { name: "zos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
+      params: { name: "cyberos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
     }, "2025-11-25");
     expect(read.statusCode).toBe(200);
     const readPayload = parseMcpResponse(read.body);
     expect(readPayload.result.structuredContent).toMatchObject({
       schemaVersion: "1.0",
-      data: { rootId: "primary", preview: { content: "hello from ZOS", truncated: false } }
+      data: { rootId: "primary", preview: { content: "hello from CyberOS", truncated: false } }
     });
     expect(JSON.stringify(readPayload)).not.toContain(tempDir);
   });
@@ -216,7 +215,7 @@ describe("MCP Streamable HTTP", () => {
       jsonrpc: "2.0",
       id: 5,
       method: "tools/call",
-      params: { name: "zos.catalog.get", arguments: {} }
+      params: { name: "cyberos.catalog.get", arguments: {} }
     }, "2025-11-25");
 
     const payload = parseMcpResponse(catalog.body);
@@ -225,8 +224,8 @@ describe("MCP Streamable HTTP", () => {
       available: boolean;
       reason: string | null;
     }> }).data;
-    expect(entries.find((entry) => entry.id === "zos.catalog.get")).toMatchObject({
-      id: "zos.catalog.get",
+    expect(entries.find((entry) => entry.id === "cyberos.catalog.get")).toMatchObject({
+      id: "cyberos.catalog.get",
       available: true,
       reason: null
     });
@@ -236,19 +235,19 @@ describe("MCP Streamable HTTP", () => {
     const pi = createMcpClient(db, {
       name: "Pi",
       kind: "pi",
-      scopes: ["zos:catalog:read", "zos:files:read", "zos:files:propose"]
+      scopes: ["cyberos:catalog:read", "cyberos:files:read", "cyberos:files:propose"]
     });
     token = pi.token;
     const defaults = defaultAgentCapabilityPolicySettings();
     saveAgentCapabilityPolicySettings(db, {
-      policies: { ...defaults.policies, "zos.files.read": "disabled" }
+      policies: { ...defaults.policies, "cyberos.files.read": "disabled" }
     });
 
     const disabled = await postMcp({ jsonrpc: "2.0", id: 20, method: "tools/list", params: {} }, "2025-11-25");
     const disabledNames = (parseMcpResponse(disabled.body).result.tools as Array<{ name: string }>)
       .map((tool) => tool.name);
-    expect(disabledNames).not.toContain("zos.files.read");
-    expect(disabledNames).not.toContain("zos.files.resource-link");
+    expect(disabledNames).not.toContain("cyberos.files.read");
+    expect(disabledNames).not.toContain("cyberos.files.resource-link");
     const disabledResources = await postMcp({
       jsonrpc: "2.0",
       id: 201,
@@ -257,10 +256,10 @@ describe("MCP Streamable HTTP", () => {
     }, "2025-11-25");
     const disabledResourceUris = (parseMcpResponse(disabledResources.body).result.resourceTemplates as Array<{ uriTemplate: string }>)
       .map((resource) => resource.uriTemplate);
-    expect(disabledResourceUris).not.toContain("zos://files/{rootId}/{+path}");
+    expect(disabledResourceUris).not.toContain("cyberos://files/{rootId}/{+path}");
 
     saveAgentCapabilityPolicySettings(db, {
-      policies: { ...defaults.policies, "zos.files.read": "approve" }
+      policies: { ...defaults.policies, "cyberos.files.read": "approve" }
     });
     const approvalTools = await postMcp({
       jsonrpc: "2.0",
@@ -270,13 +269,13 @@ describe("MCP Streamable HTTP", () => {
     }, "2025-11-25");
     const approvalToolNames = (parseMcpResponse(approvalTools.body).result.tools as Array<{ name: string }>)
       .map((tool) => tool.name);
-    expect(approvalToolNames).toContain("zos.files.read");
-    expect(approvalToolNames).not.toContain("zos.files.resource-link");
+    expect(approvalToolNames).toContain("cyberos.files.read");
+    expect(approvalToolNames).not.toContain("cyberos.files.resource-link");
     const read = await postMcp({
       jsonrpc: "2.0",
       id: 21,
       method: "tools/call",
-      params: { name: "zos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
+      params: { name: "cyberos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
     }, "2025-11-25");
     const readResult = parseMcpResponse(read.body).result.structuredContent as {
       data: { state: string };
@@ -286,15 +285,15 @@ describe("MCP Streamable HTTP", () => {
     expect(getCapabilityRun(db, readResult.runId)).toMatchObject({
       clientId: pi.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.read",
+      capabilityId: "cyberos.files.read",
       state: "waiting_approval"
     });
 
     saveAgentCapabilityPolicySettings(db, {
       policies: {
         ...defaults.policies,
-        "zos.files.read": "approve",
-        "zos.files.mutate": "confirm"
+        "cyberos.files.read": "approve",
+        "cyberos.files.mutate": "confirm"
       }
     });
     const mutation = await postMcp({
@@ -302,7 +301,7 @@ describe("MCP Streamable HTTP", () => {
       id: 22,
       method: "tools/call",
       params: {
-        name: "zos.files.mutate",
+        name: "cyberos.files.mutate",
         arguments: { request: { operation: "mkdir", rootId: "primary", targetPath: "Archive" } }
       }
     }, "2025-11-25");
@@ -314,7 +313,7 @@ describe("MCP Streamable HTTP", () => {
     expect(getCapabilityRun(db, mutationResult.runId)).toMatchObject({
       clientId: pi.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       state: "waiting_approval"
     });
     expect(getCapabilityApprovalByRun(db, mutationResult.runId)?.requiresConfirmation).toBe(true);
@@ -326,7 +325,7 @@ describe("MCP Streamable HTTP", () => {
       jsonrpc: "2.0",
       id: 32,
       method: "tools/call",
-      params: { name: "zos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
+      params: { name: "cyberos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
     }, "2025-11-25");
 
     const payload = parseMcpResponse(read.body);
@@ -353,14 +352,14 @@ describe("MCP Streamable HTTP", () => {
     }, "2025-11-25");
     const templateUris = (parseMcpResponse(templates.body).result.resourceTemplates as Array<{ uriTemplate: string }>)
       .map((template) => template.uriTemplate);
-    expect(templateUris).toContain("zos://files/{rootId}/{+path}");
-    expect(templateUris).toContain("zos://photos/{id}");
+    expect(templateUris).toContain("cyberos://files/{rootId}/{+path}");
+    expect(templateUris).toContain("cyberos://photos/{id}");
 
     const settings = await postMcp({
       jsonrpc: "2.0",
       id: 31,
       method: "tools/call",
-      params: { name: "zos.settings.public", arguments: {} }
+      params: { name: "cyberos.settings.public", arguments: {} }
     }, "2025-11-25");
     const payload = parseMcpResponse(settings.body);
     expect(payload.result.structuredContent).toMatchObject({
@@ -397,7 +396,7 @@ describe("MCP Streamable HTTP", () => {
       jsonrpc: "2.0",
       id: 33,
       method: "tools/call",
-      params: { name: "zos.downloads.list", arguments: {} }
+      params: { name: "cyberos.downloads.list", arguments: {} }
     }, "2025-11-25");
     const body = response.body;
     expect(body).not.toMatch(/user:password|token=secret|\/secret\/host\/path/u);
@@ -417,7 +416,7 @@ describe("MCP Streamable HTTP", () => {
       id: 4,
       method: "tools/call",
       params: {
-        name: "zos.files.mutate",
+        name: "cyberos.files.mutate",
         arguments: {
           request: { operation: "move", rootId: "primary", sourcePath: "hello.txt", targetPath: "moved.txt" },
           idempotencyKey: "move-hello-0001"
@@ -426,7 +425,7 @@ describe("MCP Streamable HTTP", () => {
     }, "2025-11-25");
     const payload = parseMcpResponse(proposed.body);
     expect(payload.error).toBeDefined();
-    await expect(readFile(path.join(tempDir, "hello.txt"), "utf8")).resolves.toBe("hello from ZOS");
+    await expect(readFile(path.join(tempDir, "hello.txt"), "utf8")).resolves.toBe("hello from CyberOS");
     expect(db.prepare("SELECT COUNT(*) FROM capability_runs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
   });
@@ -437,7 +436,7 @@ describe("MCP Streamable HTTP", () => {
       id: 40,
       method: "tools/call",
       params: {
-        name: "zos.files.resource-link",
+        name: "cyberos.files.resource-link",
         arguments: { rootId: "primary", path: "hello.txt" }
       }
     }, "2025-11-25");
@@ -447,7 +446,7 @@ describe("MCP Streamable HTTP", () => {
     expect(data).toMatchObject({ mimeType: "text/plain", oneTime: true });
     const pathname = new URL(data.url).pathname;
 
-    const other = createMcpClient(db, { name: "Other", kind: "local", scopes: ["zos:files:read"] });
+    const other = createMcpClient(db, { name: "Other", kind: "local", scopes: ["cyberos:files:read"] });
     const forbidden = await app.inject({
       method: "GET",
       url: pathname,
@@ -461,7 +460,7 @@ describe("MCP Streamable HTTP", () => {
       headers: { host: "127.0.0.1", authorization: `Bearer ${token}` }
     });
     expect(download.statusCode).toBe(200);
-    expect(download.body).toBe("hello from ZOS");
+    expect(download.body).toBe("hello from CyberOS");
     expect(download.headers["cache-control"]).toBe("private, no-store");
 
     const replay = await app.inject({
@@ -478,7 +477,7 @@ describe("MCP Streamable HTTP", () => {
       id: 41,
       method: "tools/call",
       params: {
-        name: "zos.files.resource-link",
+        name: "cyberos.files.resource-link",
         arguments: { rootId: "primary", path: "hello.txt" }
       }
     }, "2025-11-25");
@@ -538,20 +537,20 @@ function parseMcpResponse(body: string): McpTestResponse {
   return JSON.parse(data) as McpTestResponse;
 }
 
-function testConfig(root: string): ZosConfig {
+function testConfig(root: string): CyberOsConfig {
   return {
     environment: "development",
     dataDir: root,
-    databasePath: path.join(root, "zos.sqlite"),
+    databasePath: path.join(root, "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 100 },
     admin: { displayName: "Admin", authMode: "local-only" },
     model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
     hostd: { socketPath: path.join(root, "hostd.sock") },
-    shares: { enabled: false, account: { username: "zos", password: null }, shares: [] },
-    terminal: { user: "zos", termuxSocketPath: path.join(root, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
-    vodPlayer: { enabled: false, socketPath: path.join(root, "vod.sock"), statePath: path.join(root, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "zos" },
+    shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
+    terminal: { user: "cyberos", termuxSocketPath: path.join(root, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    vodPlayer: { enabled: false, socketPath: path.join(root, "vod.sock"), statePath: path.join(root, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
     nasRoots: [{ id: "primary", name: "Primary", path: root }]
   };
 }

@@ -1,6 +1,6 @@
 ---
 title: 快速开始
-description: 从源码启动 ZOS，并完成第一次文件浏览、索引和 agent 对话。
+description: 从源码启动 CyberOS，并完成第一次文件浏览、索引和 agent 对话。
 type: tutorial
 status: current
 audience: [developer, user]
@@ -11,7 +11,7 @@ sidebar:
 
 ## 适用范围
 
-本页面面向开发机或测试机。它使用独立的 `.zos/dev-root` 目录和测试 NAS root，不应直接用于生产数据。生产安装请改读[Debian 与 appliance 部署](/docs/operations/deployment/)。
+本页面面向开发机或测试机。它使用独立的 `.cyberos/dev-root` 目录和测试 NAS root，不应直接用于生产数据。生产安装请改读[Debian 与 appliance 部署](/docs/operations/deployment/)。
 
 ## 准备依赖
 
@@ -35,21 +35,21 @@ npm --prefix docs ci
 ## 创建开发数据目录
 
 ```bash
-mkdir -p .zos/dev-root/data/primary
-printf 'hello ZOS\n' > .zos/dev-root/data/primary/README.txt
+mkdir -p .cyberos/dev-root/data/primary
+printf 'hello CyberOS\n' > .cyberos/dev-root/data/primary/README.txt
 ```
 
 启动时显式指定数据目录和 NAS root，避免开发进程误读系统根目录：
 
 ```bash
-ZOS_ENVIRONMENT=development \
-ZOS_ROOT="$PWD/.zos/dev-root" \
-ZOS_NAS_ROOTS="dev:开发 NAS:$PWD/.zos/dev-root/data/primary" \
-ZOS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
+CYBEROS_ENVIRONMENT=development \
+CYBEROS_ROOT="$PWD/.cyberos/dev-root" \
+CYBEROS_NAS_ROOTS="dev:开发 NAS:$PWD/.cyberos/dev-root/data/primary" \
+CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
 npm run dev
 ```
 
-`ZOS_NAS_ROOTS` 每项可以写成 `id:name:path`，多个 root 使用逗号分隔。fallback 只提供受限的只读 agent turn，不能替代真实 Pi provider。
+`CYBEROS_NAS_ROOTS` 每项可以写成 `id:name:path`，多个 root 使用逗号分隔。fallback 只提供受限的只读 agent turn，不能替代真实 Pi provider。
 
 ## 打开界面
 
@@ -75,7 +75,7 @@ npm run dev
 在运行 `npm run dev` 的终端按 `Ctrl-C`，然后按需删除测试数据：
 
 ```bash
-rm -rf .zos/dev-root
+rm -rf .cyberos/dev-root
 ```
 
-不要把该命令指向 `/zos/data/primary`、`/zos/state` 或其他生产路径。
+不要把该命令指向 `/cyberos/data/primary`、`/cyberos/state` 或其他生产路径。

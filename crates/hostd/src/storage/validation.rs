@@ -68,7 +68,7 @@ pub(super) fn validate_operation(operation: &StorageOperation) -> Result<(), Hos
         || risk != "high"
         || devices.iter().any(|device| !is_device_path(device))
         || unique.len() != devices.len()
-        || mountpoint != &PathBuf::from(format!("/zos/data/{name}"))
+        || mountpoint != &PathBuf::from(format!("/cyberos/data/{name}"))
     {
         return Err(HostdError::validation("Invalid storage operation request"));
     }

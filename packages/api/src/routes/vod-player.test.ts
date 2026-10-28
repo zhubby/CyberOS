@@ -2,14 +2,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, listOperationNotifications, openZosDb, saveBluetoothSettings, type ZosDatabase } from "@zos/db";
-import type { ZosConfig, VodPlayerStatus } from "@zos/shared";
+import { ensureNasRoots, listOperationNotifications, openCyberOsDb, saveBluetoothSettings, type CyberOsDatabase } from "@cyberos/db";
+import type { CyberOsConfig, VodPlayerStatus } from "@cyberos/shared";
 import { VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { buildServer } from "../server.js";
 
 const poolId = "/dev/md/test-pool";
 let tempDir: string | null = null;
-let db: ZosDatabase | null = null;
+let db: CyberOsDatabase | null = null;
 
 afterEach(async () => {
   db?.close();
@@ -207,21 +207,21 @@ describe("VOD Player API", () => {
 });
 
 async function setup(): Promise<{ server: Awaited<ReturnType<typeof buildServer>>; root: string }> {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-vod-player-api-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-vod-player-api-"));
   const root = path.join(tempDir, "root");
   await mkdir(root);
   await writeFile(path.join(root, "clip.mp4"), "video");
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
   const server = await buildServer({ config: testConfig(root, false), db, system: storageSystem(root) });
   return { server, root };
 }
 
-function testConfig(root: string, enabled: boolean): ZosConfig {
+function testConfig(root: string, enabled: boolean): CyberOsConfig {
   return {
     environment: "development",
     dataDir: path.dirname(root),
-    databasePath: path.join(path.dirname(root), "zos.sqlite"),
+    databasePath: path.join(path.dirname(root), "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test", authMode: "local-only" },
@@ -244,7 +244,7 @@ function testConfig(root: string, enabled: boolean): ZosConfig {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "zos"
+      user: "cyberos"
     },
     nasRoots: [{ id: "local", name: "Local", path: root }]
   };

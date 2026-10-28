@@ -1,5 +1,5 @@
-import { ensureNasRoots, openZosDb } from "@zos/db";
-import { loadConfig } from "@zos/shared";
+import { ensureNasRoots, openCyberOsDb } from "@cyberos/db";
+import { loadConfig } from "@cyberos/shared";
 import { runHealthTask, runMaintenanceTask } from "./runner.js";
 
 const [command, ...rest] = process.argv.slice(2);
@@ -8,7 +8,7 @@ if ((command !== "health" && command !== "maintenance") || rest.length > 0) {
   process.exitCode = 2;
 } else {
   const config = loadConfig();
-  const db = openZosDb(config.databasePath);
+  const db = openCyberOsDb(config.databasePath);
   ensureNasRoots(db, config.nasRoots);
   try {
     const summary = command === "health"

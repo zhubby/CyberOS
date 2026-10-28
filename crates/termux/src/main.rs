@@ -1,9 +1,9 @@
 use std::process::ExitCode;
 
+use cyberos_termux::config::TermuxConfig;
+use cyberos_termux::error::{ErrorCode, TermuxError};
+use cyberos_termux::server::TermuxServer;
 use tracing_subscriber::EnvFilter;
-use zos_termux::config::TermuxConfig;
-use zos_termux::error::{ErrorCode, TermuxError};
-use zos_termux::server::TermuxServer;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -28,7 +28,7 @@ async fn run() -> Result<(), TermuxError> {
         return Err(TermuxError::new(
             400,
             ErrorCode::Validation,
-            "usage: zos-termux",
+            "usage: cyberos-termux",
         ));
     }
     TermuxServer::new(TermuxConfig::load()?).run().await

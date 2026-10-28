@@ -51,18 +51,18 @@ type MonitoringRange = (typeof RANGE_OPTIONS)[number]["id"];
 type QuerySeries = MonitoringQueryResponse["series"][number];
 
 const QUERY_SELECTORS = [
-  { metric: "zos_host_cpu_usage_ratio" },
-  { metric: "zos_host_load1" },
-  { metric: "zos_host_memory_used_bytes" },
-  { metric: "zos_host_memory_total_bytes" },
-  { metric: "zos_host_network_receive_bytes_total", transform: "rate" as const },
-  { metric: "zos_host_network_transmit_bytes_total", transform: "rate" as const },
-  { metric: "zos_host_disk_read_bytes_total", transform: "rate" as const },
-  { metric: "zos_host_disk_written_bytes_total", transform: "rate" as const },
-  { metric: "zos_host_filesystem_available_bytes" },
-  { metric: "zos_host_filesystem_size_bytes" },
-  { metric: "zos_host_temperature_celsius" },
-  { metric: "zos_queue_depth" }
+  { metric: "cyberos_host_cpu_usage_ratio" },
+  { metric: "cyberos_host_load1" },
+  { metric: "cyberos_host_memory_used_bytes" },
+  { metric: "cyberos_host_memory_total_bytes" },
+  { metric: "cyberos_host_network_receive_bytes_total", transform: "rate" as const },
+  { metric: "cyberos_host_network_transmit_bytes_total", transform: "rate" as const },
+  { metric: "cyberos_host_disk_read_bytes_total", transform: "rate" as const },
+  { metric: "cyberos_host_disk_written_bytes_total", transform: "rate" as const },
+  { metric: "cyberos_host_filesystem_available_bytes" },
+  { metric: "cyberos_host_filesystem_size_bytes" },
+  { metric: "cyberos_host_temperature_celsius" },
+  { metric: "cyberos_queue_depth" }
 ];
 
 const CHART_COLORS = [
@@ -200,14 +200,14 @@ function MonitoringPanelContent({ locale }: { locale: SupportedLocale }) {
   }, []);
 
   const series = query?.series ?? [];
-  const cpuSeries = selectSeries(series, ["zos_host_cpu_usage_ratio", "zos_host_load1"]);
-  const memorySeries = selectSeries(series, ["zos_host_memory_used_bytes", "zos_host_memory_total_bytes"]);
-  const networkSeries = selectSeries(series, ["zos_host_network_receive_bytes_total", "zos_host_network_transmit_bytes_total"]);
-  const diskSeries = selectSeries(series, ["zos_host_disk_read_bytes_total", "zos_host_disk_written_bytes_total"]);
-  const temperatureSeries = selectSeries(series, ["zos_host_temperature_celsius"]);
-  const currentCpu = latest(overview, "zos_host_cpu_usage_ratio");
-  const memoryUsed = latest(overview, "zos_host_memory_used_bytes");
-  const memoryTotal = latest(overview, "zos_host_memory_total_bytes");
+  const cpuSeries = selectSeries(series, ["cyberos_host_cpu_usage_ratio", "cyberos_host_load1"]);
+  const memorySeries = selectSeries(series, ["cyberos_host_memory_used_bytes", "cyberos_host_memory_total_bytes"]);
+  const networkSeries = selectSeries(series, ["cyberos_host_network_receive_bytes_total", "cyberos_host_network_transmit_bytes_total"]);
+  const diskSeries = selectSeries(series, ["cyberos_host_disk_read_bytes_total", "cyberos_host_disk_written_bytes_total"]);
+  const temperatureSeries = selectSeries(series, ["cyberos_host_temperature_celsius"]);
+  const currentCpu = latest(overview, "cyberos_host_cpu_usage_ratio");
+  const memoryUsed = latest(overview, "cyberos_host_memory_used_bytes");
+  const memoryTotal = latest(overview, "cyberos_host_memory_total_bytes");
   const memoryRatio = memoryUsed !== null && memoryTotal ? memoryUsed / memoryTotal : null;
   const networkRate = latestSeriesSum(networkSeries);
   const diskRate = latestSeriesSum(diskSeries);
@@ -358,12 +358,12 @@ function MonitoringPanelContent({ locale }: { locale: SupportedLocale }) {
 
 function MonitoringOverviewCard({ overview, locale }: { overview: MonitoringOverview | null; locale: SupportedLocale }) {
   const { t } = useTranslation();
-  const load = ["zos_host_load1", "zos_host_load5", "zos_host_load15"]
+  const load = ["cyberos_host_load1", "cyberos_host_load5", "cyberos_host_load15"]
     .map((metric) => latest(overview, metric))
     .map((value) => value === null ? "-" : formatLocaleNumber(value, locale, { maximumFractionDigits: 2 }))
     .join(" / ");
-  const queues = latestValues(overview, "zos_queue_depth").reduce((total, value) => total + value.value, 0);
-  const issues = latestValues(overview, "zos_health_problem_count").reduce((total, value) => total + value.value, 0);
+  const queues = latestValues(overview, "cyberos_queue_depth").reduce((total, value) => total + value.value, 0);
+  const issues = latestValues(overview, "cyberos_health_problem_count").reduce((total, value) => total + value.value, 0);
   return (
     <section className="management-command-panel monitoring-overview">
       <div className="management-emblem" aria-hidden="true"><Activity size={31} /></div>
@@ -453,8 +453,8 @@ function MonitoringChart({
 
 function CapacityPanel({ overview, locale }: { overview: MonitoringOverview | null; locale: SupportedLocale }) {
   const { t } = useTranslation();
-  const totals = latestValues(overview, "zos_host_filesystem_size_bytes");
-  const available = new Map(latestValues(overview, "zos_host_filesystem_available_bytes")
+  const totals = latestValues(overview, "cyberos_host_filesystem_size_bytes");
+  const available = new Map(latestValues(overview, "cyberos_host_filesystem_available_bytes")
     .map((value) => [value.labels.filesystem, value.value]));
   return (
     <section className="management-section monitoring-resource-section">
@@ -479,7 +479,7 @@ function CapacityPanel({ overview, locale }: { overview: MonitoringOverview | nu
 
 function ServicesPanel({ overview, locale }: { overview: MonitoringOverview | null; locale: SupportedLocale }) {
   const { t } = useTranslation();
-  const services = latestValues(overview, "zos_systemd_unit_active");
+  const services = latestValues(overview, "cyberos_systemd_unit_active");
   return (
     <section className="management-section monitoring-services-section">
       <header className="management-section-header"><div><h3>{t("workspace.monitoring.services.title")}</h3><p>{t("workspace.monitoring.services.description")}</p></div></header>
@@ -565,7 +565,7 @@ export function mergeMonitoringSeries(
       };
       row[definition.key] = point.value === null
         ? null
-        : valueKind === "cpu" && definition.item.metric === "zos_host_cpu_usage_ratio"
+        : valueKind === "cpu" && definition.item.metric === "cyberos_host_cpu_usage_ratio"
           ? point.value * 100
           : point.value;
       rows.set(point.timestamp, row);
@@ -728,5 +728,5 @@ function filesystemLabel(value: string, t: (key: string) => unknown): string {
 }
 
 function shortUnit(value: string): string {
-  return value.replace(/^zos-/u, "").replace(/\.service$/u, "");
+  return value.replace(/^cyberos-/u, "").replace(/\.service$/u, "");
 }

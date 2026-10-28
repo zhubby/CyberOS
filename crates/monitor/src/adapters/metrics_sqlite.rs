@@ -3,9 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use cyberos_monitoring_contracts::METRICS_SCHEMA_VERSION;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use tokio::sync::{mpsc, oneshot};
-use zos_monitoring_contracts::METRICS_SCHEMA_VERSION;
 
 use crate::adapters::catalog;
 use crate::adapters::monitoring_events::{CollectionCommitted, MetricsEventPublisher};
@@ -471,29 +471,29 @@ fn record_collection(
         |row| row.get::<_, bool>(0),
     )?;
     let mut self_samples = vec![
-        MetricSample::new("zos_monitor_collector_up", attempted_at_ms, up)
+        MetricSample::new("cyberos_monitor_collector_up", attempted_at_ms, up)
             .with_label("collector", collector),
         MetricSample::new(
-            "zos_monitor_collector_duration_seconds",
+            "cyberos_monitor_collector_duration_seconds",
             attempted_at_ms,
             duration_ms / 1000.0,
         )
         .with_label("collector", collector),
         MetricSample::new(
-            "zos_monitor_collector_consecutive_failures",
+            "cyberos_monitor_collector_consecutive_failures",
             attempted_at_ms,
             failures as f64,
         )
         .with_label("collector", collector),
         MetricSample::new(
-            "zos_monitor_database_size_bytes",
+            "cyberos_monitor_database_size_bytes",
             attempted_at_ms,
             store.database_bytes() as f64,
         ),
     ];
     if actual_state != CollectorState::Error {
         self_samples.push(MetricSample::new(
-            "zos_monitor_last_sample_timestamp_seconds",
+            "cyberos_monitor_last_sample_timestamp_seconds",
             attempted_at_ms,
             attempted_at_ms as f64 / 1000.0,
         ));
@@ -1106,7 +1106,7 @@ mod tests {
         ] {
             store
                 .write_samples(&[MetricSample::new(
-                    "zos_host_network_receive_bytes_total",
+                    "cyberos_host_network_receive_bytes_total",
                     timestamp,
                     value,
                 )
@@ -1156,13 +1156,13 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("metrics.sqlite");
         fs::write(&path, "not sqlite").unwrap();
-        fs::write(directory.path().join("zos.sqlite"), "sentinel").unwrap();
+        fs::write(directory.path().join("cyberos.sqlite"), "sentinel").unwrap();
         let mut store = MetricsStore::open(&path, config()).unwrap();
         store
-            .write_samples(&[MetricSample::new("zos_host_load1", 1_000, 1.0)])
+            .write_samples(&[MetricSample::new("cyberos_host_load1", 1_000, 1.0)])
             .unwrap();
         assert_eq!(
-            fs::read_to_string(directory.path().join("zos.sqlite")).unwrap(),
+            fs::read_to_string(directory.path().join("cyberos.sqlite")).unwrap(),
             "sentinel"
         );
         assert!(fs::read_dir(directory.path()).unwrap().any(|entry| {
@@ -1180,7 +1180,7 @@ mod tests {
         let mut store =
             MetricsStore::open(directory.path().join("metrics.sqlite"), config()).unwrap();
         let error = store
-            .write_samples(&[MetricSample::new("zos_queue_depth", 1, 1.0)])
+            .write_samples(&[MetricSample::new("cyberos_queue_depth", 1, 1.0)])
             .unwrap_err();
         assert!(error.to_string().contains("invalid labels"));
     }
@@ -1199,7 +1199,7 @@ mod tests {
             MetricsStore::open(directory.path().join("metrics.sqlite"), config()).unwrap();
         let old_samples: Vec<_> = (0..MAX_SERIES_PER_METRIC)
             .map(|index| {
-                MetricSample::new("zos_queue_depth", 1_000, index as f64)
+                MetricSample::new("cyberos_queue_depth", 1_000, index as f64)
                     .with_label("queue", format!("old-{index}"))
             })
             .collect();
@@ -1211,10 +1211,10 @@ mod tests {
         let replacement_time = 1_000 + INACTIVE_SERIES_AFTER_MS + 1;
         assert_eq!(
             store
-                .write_samples(
-                    &[MetricSample::new("zos_queue_depth", replacement_time, 1.0)
-                        .with_label("queue", "replacement"),]
-                )
+                .write_samples(&[
+                    MetricSample::new("cyberos_queue_depth", replacement_time, 1.0)
+                        .with_label("queue", "replacement"),
+                ])
                 .unwrap(),
             1
         );
@@ -1222,7 +1222,7 @@ mod tests {
         let count: i64 = store
             .connection
             .query_row(
-                "SELECT COUNT(*) FROM metric_series WHERE metric_name = 'zos_queue_depth'",
+                "SELECT COUNT(*) FROM metric_series WHERE metric_name = 'cyberos_queue_depth'",
                 [],
                 |row| row.get(0),
             )
@@ -1230,7 +1230,7 @@ mod tests {
         let replacement: i64 = store
             .connection
             .query_row(
-                "SELECT COUNT(*) FROM metric_series WHERE metric_name = 'zos_queue_depth' AND labels_json = '{\"queue\":\"replacement\"}'",
+                "SELECT COUNT(*) FROM metric_series WHERE metric_name = 'cyberos_queue_depth' AND labels_json = '{\"queue\":\"replacement\"}'",
                 [],
                 |row| row.get(0),
             )
@@ -1242,7 +1242,7 @@ mod tests {
     #[test]
     fn catalog_marks_counter_metrics() {
         assert_eq!(
-            catalog::metric("zos_host_disk_read_bytes_total")
+            catalog::metric("cyberos_host_disk_read_bytes_total")
                 .unwrap()
                 .kind,
             MetricKind::Counter

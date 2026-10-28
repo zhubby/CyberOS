@@ -1,0 +1,33 @@
+[Unit]
+Description=CyberOS monitoring alert evaluator and delivery worker
+Documentation=file:///usr/share/doc/cyberos/README.md
+After=network-online.target local-fs.target cyberos-api.service cyberos-monitor.service
+Wants=network-online.target cyberos-api.service cyberos-monitor.service
+
+[Service]
+Type=notify
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ROOT=/cyberos
+Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+WorkingDirectory=/cyberos/state
+ExecStart=/usr/lib/cyberos/bin/cyberos-alerter
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillMode=control-group
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=-/cyberos/data
+ReadWritePaths=/run/cyberos /cyberos/state
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=256M
+CPUWeight=20
+IOWeight=20
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

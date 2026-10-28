@@ -1,21 +1,21 @@
-@import "@zos/shared/hud-tokens.css";
+@import "@cyberos/shared/hud-tokens.css";
 
 :root {
   color-scheme: dark;
-  font-family: var(--zos-font-ui);
-  --tv-bg: var(--zos-color-canvas);
-  --tv-surface: var(--zos-color-surface-raised);
-  --tv-surface-strong: var(--zos-color-surface-strong);
-  --tv-text: var(--zos-color-text);
-  --tv-muted: var(--zos-color-text-muted);
-  --tv-dim: var(--zos-color-text-dim);
-  --tv-line: var(--zos-color-border);
-  --tv-line-emphasis: var(--zos-color-border-emphasis);
-  --tv-command: var(--zos-color-command);
-  --tv-focus: var(--zos-color-focus);
-  --tv-danger: var(--zos-color-danger);
+  font-family: var(--cyberos-font-ui);
+  --tv-bg: var(--cyberos-color-canvas);
+  --tv-surface: var(--cyberos-color-surface-raised);
+  --tv-surface-strong: var(--cyberos-color-surface-strong);
+  --tv-text: var(--cyberos-color-text);
+  --tv-muted: var(--cyberos-color-text-muted);
+  --tv-dim: var(--cyberos-color-text-dim);
+  --tv-line: var(--cyberos-color-border);
+  --tv-line-emphasis: var(--cyberos-color-border-emphasis);
+  --tv-command: var(--cyberos-color-command);
+  --tv-focus: var(--cyberos-color-focus);
+  --tv-danger: var(--cyberos-color-danger);
   --tv-accent: var(--tv-command);
-  --tv-accent-contrast: var(--zos-hud-void);
+  --tv-accent-contrast: var(--cyberos-hud-void);
   --tv-poster-width: clamp(176px, 12.5vw, 252px);
   background: var(--tv-bg);
   color: var(--tv-text);
@@ -59,10 +59,10 @@ button {
   overflow: hidden;
   background:
     linear-gradient(115deg, rgb(255 0 60 / 5%), transparent 40%),
-    var(--zos-hud-grid),
+    var(--cyberos-hud-grid),
     var(--tv-bg);
   background-size: auto, 32px 32px, auto;
-  animation: tv-panel-reveal var(--zos-hud-duration-reveal) var(--zos-hud-easing) both;
+  animation: tv-panel-reveal var(--cyberos-hud-duration-reveal) var(--cyberos-hud-easing) both;
 }
 
 .tv-backdrop,
@@ -84,7 +84,7 @@ button {
   content: "";
   pointer-events: none;
   background:
-    var(--zos-hud-scanlines),
+    var(--cyberos-hud-scanlines),
     linear-gradient(90deg, rgb(5 10 14 / 90%) 0 34%, rgb(5 10 14 / 62%) 58%, rgb(5 10 14 / 82%));
 }
 
@@ -99,7 +99,7 @@ button {
   box-shadow: 0 0 16px rgb(0 240 255 / 24%);
   content: "";
   pointer-events: none;
-  animation: tv-scan-once var(--zos-hud-duration-scan) var(--zos-hud-easing) both;
+  animation: tv-scan-once var(--cyberos-hud-duration-scan) var(--cyberos-hud-easing) both;
 }
 
 .tv-header {
@@ -127,7 +127,7 @@ button {
   padding: 0 10px;
   border: 2px solid transparent;
   border-radius: 0;
-  font-family: var(--zos-font-ui);
+  font-family: var(--cyberos-font-ui);
   font-size: 28px;
   font-weight: 700;
   text-transform: uppercase;
@@ -203,7 +203,7 @@ button {
 .tv-detail-kind {
   margin: 0 0 10px;
   color: var(--tv-danger);
-  font-family: var(--zos-font-mono);
+  font-family: var(--cyberos-font-mono);
   font-size: 16px;
   font-weight: 700;
   text-transform: uppercase;
@@ -215,7 +215,7 @@ button {
 .tv-status h1 {
   max-width: 20ch;
   margin: 0;
-  font-family: var(--zos-font-ui);
+  font-family: var(--cyberos-font-ui);
   font-size: 54px;
   line-height: 1.04;
   font-weight: 700;
@@ -287,7 +287,7 @@ button {
 .tv-season h2,
 .tv-search-results h2 {
   margin: 0 0 16px;
-  font-family: var(--zos-font-ui);
+  font-family: var(--cyberos-font-ui);
   font-size: 28px;
   line-height: 1.15;
   font-weight: 700;
@@ -342,7 +342,7 @@ button {
   display: grid;
   place-items: center;
   color: var(--tv-dim);
-  font-family: var(--zos-font-ui);
+  font-family: var(--cyberos-font-ui);
   font-size: 64px;
 }
 
@@ -357,7 +357,7 @@ button {
 
 .tv-poster strong {
   margin-top: 12px;
-  font-family: var(--zos-font-ui);
+  font-family: var(--cyberos-font-ui);
   font-size: 20px;
   line-height: 1.2;
 }
@@ -392,7 +392,7 @@ button {
   border-color: var(--tv-focus);
   outline: none;
   color: var(--tv-focus);
-  background: var(--zos-hud-cyan-wash);
+  background: var(--cyberos-hud-cyan-wash);
   box-shadow: inset 5px 0 0 var(--tv-focus), 5px 5px 0 rgb(255 0 60 / 42%);
 }
 
@@ -464,14 +464,14 @@ button {
 
 .tv-episode > span {
   color: var(--tv-danger);
-  font-family: var(--zos-font-mono);
+  font-family: var(--cyberos-font-mono);
   font-size: 22px;
   font-variant-numeric: tabular-nums;
 }
 
 .tv-episode strong {
   overflow: hidden;
-  font-family: var(--zos-font-ui);
+  font-family: var(--cyberos-font-ui);
   font-size: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -542,7 +542,7 @@ button {
   border: 1px solid var(--tv-line-emphasis);
   border-left: 6px solid var(--tv-focus);
   background:
-    linear-gradient(90deg, var(--zos-hud-cyan-wash), transparent 42%),
+    linear-gradient(90deg, var(--cyberos-hud-cyan-wash), transparent 42%),
     rgb(13 9 13 / 88%);
   box-shadow: 8px 8px 0 rgb(255 0 60 / 22%);
   content: "";
@@ -575,7 +575,7 @@ button {
 .tv-status[data-error]::before {
   border-left-color: var(--tv-danger);
   background:
-    linear-gradient(90deg, var(--zos-hud-red-wash), transparent 42%),
+    linear-gradient(90deg, var(--cyberos-hud-red-wash), transparent 42%),
     rgb(13 9 13 / 88%);
 }
 
@@ -597,7 +597,7 @@ button {
   padding: 5vh 6vw 8vh;
   background:
     linear-gradient(115deg, rgb(255 0 60 / 6%), transparent 42%),
-    var(--zos-hud-grid),
+    var(--cyberos-hud-grid),
     var(--tv-bg);
   background-size: auto, 32px 32px, auto;
 }
@@ -624,7 +624,7 @@ pinyin-ime-editor {
   --pinyin-ime-focus-border: var(--tv-focus);
   --pinyin-ime-popup-bg: var(--tv-surface-strong);
   --pinyin-ime-cursor-color: var(--tv-focus);
-  --pinyin-ime-hover-bg: var(--zos-hud-cyan-wash);
+  --pinyin-ime-hover-bg: var(--cyberos-hud-cyan-wash);
   --pinyin-ime-text-color: var(--tv-text);
   --pinyin-ime-muted-color: var(--tv-muted);
   --pinyin-ime-popup-border: var(--tv-line);
@@ -738,7 +738,7 @@ pinyin-ime-editor::part(candidate-row) {
 }
 
 .tv-search-result strong {
-  font-family: var(--zos-font-ui);
+  font-family: var(--cyberos-font-ui);
   font-size: 20px;
 }
 

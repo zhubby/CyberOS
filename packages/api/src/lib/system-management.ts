@@ -23,7 +23,7 @@ import type {
   SystemStoragePool,
   SystemStorageSummary,
   HostMutationPolicy
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { NetworkManagerRuntime } from "./network-manager.js";
 import type { EthernetManagerRuntime } from "./ethernet-manager.js";
 import type { BluetoothManagerRuntime } from "./bluetooth-manager.js";

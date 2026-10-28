@@ -4,8 +4,8 @@ import type {
   DockerOperationRecord,
   DockerOperationStatus,
   PendingApprovalRecord
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import {
   dockerProposalTargetId,
@@ -14,7 +14,7 @@ import {
 import type { DbDockerOperationRow } from "./repository-rows.js";
 
 export function createDockerOperationApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { jobId: string; proposal: DockerOperationProposal }
 ): { approval: PendingApprovalRecord; operation: DockerOperationRecord } {
   const job = getJob(db, input.jobId);
@@ -69,7 +69,7 @@ export function createDockerOperationApproval(
 }
 
 export function createDockerOperationRecord(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { proposal: DockerOperationProposal }
 ): DockerOperationRecord {
   const now = new Date().toISOString();
@@ -100,7 +100,7 @@ export function createDockerOperationRecord(
   return operation;
 }
 
-export function getDockerOperation(db: ZosDatabase, operationId: string): DockerOperationRecord | null {
+export function getDockerOperation(db: CyberOsDatabase, operationId: string): DockerOperationRecord | null {
   const row = db
     .prepare(`
       SELECT id, approval_id, action, target_type, target_id, status, metadata_json, created_at, updated_at
@@ -112,7 +112,7 @@ export function getDockerOperation(db: ZosDatabase, operationId: string): Docker
 }
 
 export function getDockerOperationByApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   approvalId: string
 ): DockerOperationRecord | null {
   const row = db
@@ -128,7 +128,7 @@ export function getDockerOperationByApproval(
 }
 
 export function listDockerOperations(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { limit?: number } = {}
 ): DockerOperationRecord[] {
   const rows = db
@@ -143,7 +143,7 @@ export function listDockerOperations(
 }
 
 export function updateDockerOperationStatus(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   operationId: string,
   status: DockerOperationStatus,
   metadata: Record<string, unknown> = {}

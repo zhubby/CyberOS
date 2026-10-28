@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,15 +7,15 @@ import {
   acquireExecutionLock,
   ensureNasRoots,
   isExecutionLockOwner,
-  openZosDb,
+  openCyberOsDb,
   releaseExecutionLock,
-  type ZosDatabase
-} from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
-import { initBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { CyberOsConfig } from "@cyberos/shared";
+import { initBackup, restoreBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
 
 let tempDir: string | undefined;
-let db: ZosDatabase | undefined;
+let db: CyberOsDatabase | undefined;
 
 afterEach(async () => {
   db?.close();
@@ -23,11 +24,11 @@ afterEach(async () => {
   tempDir = undefined;
 });
 
-function config(root: string, repository: string, passwordFile: string): ZosConfig {
+function config(root: string, repository: string, passwordFile: string): CyberOsConfig {
   return {
     environment: "development",
     dataDir: path.join(path.dirname(root), "data"),
-    databasePath: path.join(path.dirname(root), "zos.sqlite"),
+    databasePath: path.join(path.dirname(root), "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test", authMode: "local-only" },
@@ -36,7 +37,7 @@ function config(root: string, repository: string, passwordFile: string): ZosConf
     hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     nasRoots: [{ id: "local", name: "Local", path: root, mountPolicy: "optional" }],
     backup: { enabled: true, repositoryPath: repository, passwordFile, stagingPath: path.join(path.dirname(root), "staging"), requireMount: false, retryCount: 1, timeoutMs: 1000, keepDaily: 7, keepWeekly: 4 },
     health: { staleIndexWarningMs: 7200000, staleIndexCriticalMs: 21600000, stalledRunMs: 900000, consecutiveFailureThreshold: 2, backupStaleMs: 93600000 }
@@ -53,26 +54,104 @@ describe("backup workflow", () => {
   });
 
   it("validates credentials and records a completed restic run", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
     const root = path.join(tempDir, "root");
     const repo = path.join(tempDir, "repo");
     await mkdir(root);
     await mkdir(repo);
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openZosDb(path.join(tempDir, "zos.sqlite"));
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
     ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const calls: string[][] = [];
-    const restic = { run: async (args: string[]) => { calls.push(args); if (args[0] === "snapshots") return { stdout: calls.filter((entry) => entry[0] === "backup").length ? '[{"id":"abc123"}]' : "[]", stderr: "", code: 0 }; return { stdout: '{"id":"abc123"}\n', stderr: "", code: 0 }; } };
+    let manifestVersion: number | undefined;
+    const restic = { run: async (args: string[]) => {
+      calls.push(args);
+      if (args[0] === "backup" && args.at(-1)?.includes(`${path.sep}staging${path.sep}run-`)) {
+        const manifest = JSON.parse(await readFile(path.join(args.at(-1)!, "manifest.json"), "utf8")) as { version: number };
+        manifestVersion = manifest.version;
+      }
+      if (args[0] === "snapshots") return { stdout: calls.filter((entry) => entry[0] === "backup").length ? '[{"id":"abc123"}]' : "[]", stderr: "", code: 0 };
+      return { stdout: '{"id":"abc123"}\n', stderr: "", code: 0 };
+    } };
     const cfg = config(root, repo, password);
     await expect(validateBackup({ db, config: cfg, restic })).resolves.toMatchObject({ ok: true });
     const result = await runBackup({ db, config: cfg, restic });
     expect(result).toMatchObject({ status: "completed", snapshotIds: ["abc123"], verified: true });
     expect(calls.some((args) => args[0] === "backup")).toBe(true);
+    expect(manifestVersion).toBe(2);
+  });
+
+  it("restores only CyberOS v2 manifests", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
+    const root = path.join(tempDir, "root");
+    const repo = path.join(tempDir, "repo");
+    await mkdir(root);
+    await mkdir(repo);
+    const password = path.join(tempDir, "password");
+    await writeFile(password, "secret\n");
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
+    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
+    const cfg = config(root, repo, password);
+    const databaseContents = "cyberos-v2-database";
+    const checksum = createHash("sha256").update(databaseContents).digest("hex");
+    const restic = {
+      run: async (args: string[]) => {
+        if (args[0] === "restore" && !args.includes("--dry-run")) {
+          const target = args[args.indexOf("--target") + 1]!;
+          const restored = path.join(target, "state");
+          await mkdir(restored, { recursive: true });
+          await writeFile(path.join(restored, "cyberos.sqlite"), databaseContents);
+          await writeFile(path.join(restored, "manifest.json"), JSON.stringify({
+            version: 2,
+            runId: "run-v2",
+            createdAt: new Date().toISOString(),
+            roots: [{ rootId: "local", path: root }],
+            database: "cyberos.sqlite",
+            checksums: { "cyberos.sqlite": checksum }
+          }));
+        }
+        return { stdout: "", stderr: "", code: 0 };
+      }
+    };
+
+    await expect(restoreBackup({ db, config: cfg, restic, snapshot: "snapshot-v2" }))
+      .resolves.toMatchObject({ verified: true });
+  });
+
+  it("rejects v1 backup manifests", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
+    const root = path.join(tempDir, "root");
+    const repo = path.join(tempDir, "repo");
+    await mkdir(root);
+    await mkdir(repo);
+    const password = path.join(tempDir, "password");
+    await writeFile(password, "secret\n");
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
+    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
+    const cfg = config(root, repo, password);
+    const restic = {
+      run: async (args: string[]) => {
+        if (args[0] === "restore" && !args.includes("--dry-run")) {
+          const target = args[args.indexOf("--target") + 1]!;
+          await writeFile(path.join(target, "manifest.json"), JSON.stringify({
+            version: 1,
+            runId: "old-run",
+            roots: [{ rootId: "local", path: root }],
+            database: "cyberos.sqlite",
+            checksums: {}
+          }));
+        }
+        return { stdout: "", stderr: "", code: 0 };
+      }
+    };
+
+    await expect(restoreBackup({ db, config: cfg, restic, snapshot: "snapshot-v1" }))
+      .rejects.toThrow("restore manifest validation failed");
   });
 
   it("continues backing up ready roots but skips retention when another root is unavailable", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
     const badRoot = path.join(tempDir, "bad-root");
     const goodRoot = path.join(tempDir, "good-root");
     const repo = path.join(tempDir, "repo");
@@ -81,7 +160,7 @@ describe("backup workflow", () => {
     await mkdir(repo);
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openZosDb(path.join(tempDir, "zos.sqlite"));
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
     ensureNasRoots(db, [
       { id: "bad", name: "Bad", path: badRoot, mountPolicy: "required" },
       { id: "good", name: "Good", path: goodRoot, mountPolicy: "optional" }
@@ -95,7 +174,7 @@ describe("backup workflow", () => {
       }
     };
     const base = config(goodRoot, repo, password);
-    const cfg: ZosConfig = {
+    const cfg: CyberOsConfig = {
       ...base,
       nasRoots: [
         { id: "bad", name: "Bad", path: badRoot, mountPolicy: "required" },
@@ -119,14 +198,14 @@ describe("backup workflow", () => {
   });
 
   it("allows explicit init to create a repository directory that does not exist yet", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
     const root = path.join(tempDir, "root");
     const repo = path.join(tempDir, "nested", "repo");
     await mkdir(root);
     await mkdir(path.dirname(repo), { recursive: true });
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openZosDb(path.join(tempDir, "zos.sqlite"));
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
     ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const calls: string[][] = [];
     const restic = {
@@ -141,14 +220,14 @@ describe("backup workflow", () => {
   });
 
   it("serializes init with other backup operations", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
     const root = path.join(tempDir, "root");
     const repo = path.join(tempDir, "repo");
     await mkdir(root);
     await mkdir(repo);
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openZosDb(path.join(tempDir, "zos.sqlite"));
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
     ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     expect(acquireExecutionLock(db, { name: "backup", owner: "active-backup" })).toBe(true);
     const restic = { run: vi.fn(async () => ({ stdout: "", stderr: "", code: 0 })) };
@@ -160,14 +239,14 @@ describe("backup workflow", () => {
   });
 
   it("does not release a replacement lease when init loses ownership", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-backup-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
     const root = path.join(tempDir, "root");
     const repo = path.join(tempDir, "repo");
     await mkdir(root);
     await mkdir(repo);
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
-    db = openZosDb(path.join(tempDir, "zos.sqlite"));
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
     ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const restic = {
       run: vi.fn(async () => {

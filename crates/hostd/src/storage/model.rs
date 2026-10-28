@@ -15,7 +15,7 @@ impl Default for StorageOptions {
     fn default() -> Self {
         Self {
             fstab_path: "/etc/fstab".into(),
-            mount_root: "/zos/data".into(),
+            mount_root: "/cyberos/data".into(),
             md_device_root: "/dev/md".into(),
             mdadm_runtime_path: "/run/mdadm".into(),
             sys_block_path: "/sys/block".into(),

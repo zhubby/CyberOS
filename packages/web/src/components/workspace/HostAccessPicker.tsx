@@ -8,7 +8,7 @@ import type {
   DockerHostAccessCoverageItem,
   DockerHostAccessCoverageReport,
   DockerHostAccessGrant
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { getDockerHostAccessCatalog, type DockerHostAccessCatalog } from "../../api.js";
 
 interface HostAccessPickerProps {

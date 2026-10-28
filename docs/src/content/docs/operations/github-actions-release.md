@@ -4,7 +4,7 @@ description: 使用 tag、GitHub Release、Tailscale OIDC 和受限部署 helper
 type: operation
 status: current
 audience: [developer, operator]
-sourceOfTruth: [.github/workflows/package-release.yml, .github/workflows/deploy-cm5.yml, scripts/release.mjs, packaging/scripts/zos-deploy-bootstrap.sh, packaging/scripts/zos-deploy]
+sourceOfTruth: [.github/workflows/package-release.yml, .github/workflows/deploy-cm5.yml, scripts/release.mjs, packaging/scripts/cyberos-deploy-bootstrap.sh, packaging/scripts/cyberos-deploy]
 sidebar:
   order: 3
 ---
@@ -21,7 +21,7 @@ flowchart LR
   E --> F
   F --> G[Deploy CM5]
   G --> H[Tailscale OIDC 临时节点]
-  H --> I[受限 zos-deploy helper]
+  H --> I[受限 cyberos-deploy helper]
   I --> J[服务与 build-info 验收]
 ```
 
@@ -38,29 +38,29 @@ PR 和 `main` push 也会运行打包，以尽早发现原生依赖或 Debian �
 
 ### 1. 初始化 CM5
 
-CM5 应运行 Debian 12/bookworm arm64 或已在目标机验证的兼容系统，并已经安装当前 ZOS Debian 包和 Tailscale。给设备分配 `tag:zos-cm5`，然后从本地控制台或现有维护连接执行：
+CM5 应运行 Debian 12/bookworm arm64 或已在目标机验证的兼容系统，并已经安装当前 CyberOS Debian 包和 Tailscale。给设备分配 `tag:cyberos-cm5`，然后从本地控制台或现有维护连接执行：
 
 ```bash
 sudo tailscale set --ssh
-sudo /usr/lib/zos/scripts/zos-deploy-bootstrap.sh
+sudo /usr/lib/cyberos/scripts/cyberos-deploy-bootstrap.sh
 ```
 
 bootstrap 会：
 
-- 创建锁定密码的系统用户 `zos-deploy`；
-- 创建组可写但不可列目录的 `/zos/deploy/incoming/`；
+- 创建锁定密码的系统用户 `cyberos-deploy`；
+- 创建组可写但不可列目录的 `/cyberos/deploy/incoming/`；
 - 创建 root-only 的 release 和 backup 目录；
-- 将包内 helper 链接为 `/usr/local/sbin/zos-deploy`；
+- 将包内 helper 链接为 `/usr/local/sbin/cyberos-deploy`；
 - 只允许部署用户免密执行这个固定 helper，不授予通用 root shell。
 
 确认权限：
 
 ```bash
-id zos-deploy
-sudo -l -U zos-deploy
+id cyberos-deploy
+sudo -l -U cyberos-deploy
 sudo stat -c '%U:%G %a %n' \
-  /usr/local/sbin/zos-deploy \
-  /zos/deploy/incoming
+  /usr/local/sbin/cyberos-deploy \
+  /cyberos/deploy/incoming
 ```
 
 ### 2. 限制 Tailnet 访问
@@ -71,21 +71,21 @@ sudo stat -c '%U:%G %a %n' \
 {
   "tagOwners": {
     "tag:github-actions": ["autogroup:admin"],
-    "tag:zos-cm5": ["autogroup:admin"]
+    "tag:cyberos-cm5": ["autogroup:admin"]
   },
   "acls": [
     {
       "action": "accept",
       "src": ["tag:github-actions"],
-      "dst": ["tag:zos-cm5:22"]
+      "dst": ["tag:cyberos-cm5:22"]
     }
   ],
   "ssh": [
     {
       "action": "accept",
       "src": ["tag:github-actions"],
-      "dst": ["tag:zos-cm5"],
-      "users": ["zos-deploy"]
+      "dst": ["tag:cyberos-cm5"],
+      "users": ["cyberos-deploy"]
     }
   ]
 }
@@ -98,7 +98,7 @@ sudo stat -c '%U:%G %a %n' \
 在 Tailscale admin console 创建 GitHub Actions trust credential：
 
 - issuer：`https://token.actions.githubusercontent.com`；
-- subject：`repo:zhubby@9190779/ZOS@1341473177:environment:production`；
+- subject：`repo:zhubby@9190779/CyberOS@1341473177:environment:production`；
 - scope：允许创建 auth key；
 - tag：仅 `tag:github-actions`。
 
@@ -113,7 +113,7 @@ subject 使用 GitHub 返回的稳定 owner/repository ID，而不是可改名�
 | Secret | `TS_OAUTH_CLIENT_ID` | Tailscale trust credential 的 client ID |
 | Secret | `TS_AUDIENCE` | `api.tailscale.com/<TS_OAUTH_CLIENT_ID>` |
 | Variable | `CM5_HOST` | CM5 的 MagicDNS hostname 或 Tailscale IP |
-| Variable | `CM5_DEPLOY_USER` | `zos-deploy` |
+| Variable | `CM5_DEPLOY_USER` | `cyberos-deploy` |
 
 首次上线可以给 environment 配置 required reviewer；稳定后可按发布策略决定是否保留审批。不要添加 SSH 私钥、登录密码或 root 密码。部署 job 只需要 `contents: read`、`actions: read` 和 `id-token: write`。
 
@@ -130,11 +130,11 @@ make ci
 git diff --check
 ```
 
-`npm run release` 会同步根 manifest、workspaces、Debian changelog 和 appliance manifest，但不会提交、打 tag 或推送。检查版本差异后提交并先推送 `main`：
+`npm run release` 会同步根 manifest、workspaces、docs、全部 CyberOS Cargo 包、Debian changelog 和 appliance manifest，但不会提交、打 tag 或推送。检查版本差异后提交并先推送 `main`：
 
 ```bash
 VERSION="$(node -p 'require("./package.json").version')"
-git add package.json package-lock.json crates packages packaging
+git add package.json package-lock.json docs/package.json docs/package-lock.json crates packages packaging
 git commit -m "chore(release): v${VERSION}"
 git push origin main
 ```
@@ -161,12 +161,12 @@ git push origin "v${VERSION}"
 
 ```json
 {
-  "repository": "zhubby/ZOS",
+  "repository": "zhubby/CyberOS",
   "tag": "vX.Y.Z",
   "version": "X.Y.Z",
   "commitSha": "<40-character commit SHA>",
   "architecture": "arm64",
-  "asset": "zos_X.Y.Z_arm64.deb",
+  "asset": "cyberos_X.Y.Z_arm64.deb",
   "sha256": "<64-character SHA256>"
 }
 ```
@@ -182,7 +182,7 @@ git push origin "v${VERSION}"
 1. 进入 `production` environment，并验证 GitHub OIDC claims；
 2. 使用 `tailscale/github-action@v4` 创建带 `tag:github-actions` 的临时节点；
 3. 经 Tailscale SSH 上传 `release-manifest.json`，并用 SFTP 将 package 切成可独立续传的分片；CM5 按顺序拼接并校验完整 SHA256 后，再原子替换 staging 中的 `package.deb`；
-4. 执行 `sudo -n /usr/local/sbin/zos-deploy`；
+4. 执行 `sudo -n /usr/local/sbin/cyberos-deploy`；
 5. 再次检查常驻服务、核心 timers 的启用/运行状态和下一次触发时间、failed units、API liveness、root readiness、Operations Health，以及 build-info 的版本和 commit；
 6. workflow 结束时 logout 并清理临时 Tailscale 节点。
 
@@ -195,12 +195,12 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 目标版本低于已安装版本时拒绝降级。
 - 版本相同但 commit 不同时拒绝覆盖。
 - 版本和 commit 都相同时不重装，只重新验证服务和 build-info，因此可安全重试同一个 tag。
-- 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/zos/config` 和 `/zos/state`，再执行 `dpkg -i`。
+- 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/cyberos/config` 和 `/cyberos/state`，再通过 APT 安装已校验的 `.deb`。
 - 安装后先启动 API，再启动 monitor、立即运行一次 Health，然后恢复后台服务并强制启用 maintenance、health 和 backup 核心 timers。monitor 失败会报告 monitoring degraded，但不会阻断核心 API 部署；其他核心服务及 Operations Health 仍须通过。
 
-成功记录写入 `/zos/deploy/current-release.json`，已验证包保存在 `/zos/deploy/releases/<tag>/`。升级失败时，部署程序会尽力恢复此前的 systemd 状态。迁移状态引用已挂载的冷备份时，升级备份和诊断写入该数据盘的 `.zos/system-backups/deploy/<tag>-<timestamp>/`；否则保留在 `/zos/deploy/backups/<tag>-<timestamp>/`。
+成功记录写入 `/cyberos/deploy/current-release.json`，已验证包保存在 `/cyberos/deploy/releases/<tag>/`。升级失败时，部署程序会尽力恢复此前的 systemd 状态。升级备份和诊断保留在 `/cyberos/deploy/backups/<tag>-<timestamp>/`。
 
-部署成功后 helper 会在部署锁内清理受它管理的临时构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录以及旧 release 包。默认保留当前 release 和一个上一版本 release；升级备份与失败诊断不会自动删除，保留期限和清理动作必须由运维显式决定。旧布局迁移若发现系统盘上的 `state.tgz` 部署归档，会先复制到已映射数据盘的 `.zos/system-backups/deployment-archives/`，核对大小与 SHA-256 后再释放系统盘副本，并在原诊断目录写入 `state.tgz.relocated.json`。该元数据同时记录迁移前后的绝对路径；不要删除归档或定位元数据。helper 不会清理 `/zos/state`、`/zos/config`、Photo 数据、数据库或服务日志。
+部署成功后 helper 会在部署锁内清理受它管理的临时构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录以及旧 release 包。默认保留当前 release 和一个上一版本 release；升级备份与失败诊断不会自动删除，保留期限和清理动作必须由运维显式决定。helper 不会清理 `/cyberos/state`、`/cyberos/config`、Photo 数据、数据库或服务日志。
 
 部署程序不自动回滚 Debian 包或数据库 migration。schema 变化后的回滚必须使用与旧包匹配的状态备份，不能只重新安装旧 `.deb`。
 
@@ -219,19 +219,19 @@ gh run watch <run-id> --exit-status
 ```bash
 sudo systemctl --failed
 sudo systemctl is-active \
-  zos-api.service zos-worker@1.service \
-  zos-monitor.service zos-alerter.service zos-downloader.service zos-hostd.service \
-  zos-termux.service zos-maintenance.timer \
-  zos-health.timer zos-backup-daily.timer \
-  zos-backup-weekly.timer
-sudo systemctl list-timers 'zos-*'
+  cyberos-api.service cyberos-worker@1.service \
+  cyberos-monitor.service cyberos-alerter.service cyberos-downloader.service cyberos-hostd.service \
+  cyberos-termux.service cyberos-maintenance.timer \
+  cyberos-health.timer cyberos-backup-daily.timer \
+  cyberos-backup-weekly.timer
+sudo systemctl list-timers 'cyberos-*'
 curl -fsS http://127.0.0.1:3010/health
 curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
 curl -fsS http://127.0.0.1:3010/api/monitoring/overview
 curl -fsS http://127.0.0.1:3010/api/monitoring/alerts/summary
 curl -fsS http://127.0.0.1:3010/api/system/build-info
-sudo cat /zos/deploy/current-release.json
+sudo cat /cyberos/deploy/current-release.json
 ```
 
 自动部署失败但 Release 正确时，从默认分支上的当前 workflow 实现重试原 tag：

@@ -3,7 +3,7 @@ import type {
   DockerComposeEnvironmentCreateInput,
   DockerComposeEnvironmentUpdateInput,
   DockerComposeServiceHostAccess
-} from "@zos/shared";
+} from "@cyberos/shared";
 
 export interface DockerComposeEnvironmentFormRow {
   key: string;

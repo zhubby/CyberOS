@@ -19,8 +19,10 @@ import {
   getVmOperation,
   listTranscriptItems,
   listOperationNotifications,
+  CYBEROS_DATABASE_FORMAT_VERSION,
   migrations,
-  openZosDb,
+  openCyberOsDb,
+  openCyberOsDbReadOnly,
   updateApprovalStatus,
   updateDockerOperationStatus,
   updateVmOperationStatus
@@ -33,8 +35,8 @@ let tempDir: string;
 
 function startMigrationProcess(databasePath: string, moduleUrl: string): Promise<void> {
   const childCode = [
-    `import { openZosDb } from ${JSON.stringify(moduleUrl)};`,
-    "const db = openZosDb(process.argv[1]);",
+    `import { openCyberOsDb } from ${JSON.stringify(moduleUrl)};`,
+    "const db = openCyberOsDb(process.argv[1]);",
     "db.close();"
   ].join(" ");
   return new Promise((resolve, reject) => {
@@ -59,6 +61,7 @@ function startMigrationProcess(databasePath: string, moduleUrl: string): Promise
 }
 
 function applyMigrationsThrough(db: Database.Database, finalId: string): void {
+  markCyberOsDatabase(db);
   db.exec(`
     CREATE TABLE schema_migrations (
       id TEXT PRIMARY KEY,
@@ -81,8 +84,12 @@ function applyMigrationsThrough(db: Database.Database, finalId: string): void {
   throw new Error(`Unknown migration ${finalId}`);
 }
 
+function markCyberOsDatabase(db: Database.Database): void {
+  db.pragma(`user_version = ${CYBEROS_DATABASE_FORMAT_VERSION}`);
+}
+
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-db-migration-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-db-migration-"));
 });
 
 afterEach(async () => {
@@ -90,6 +97,38 @@ afterEach(async () => {
 });
 
 describe("SQLite schema migrations", () => {
+  it("initializes only blank databases with the CyberOS v2 identity", () => {
+    const databasePath = path.join(tempDir, "cyberos.sqlite");
+    const database = openCyberOsDb(databasePath);
+    try {
+      expect(database.pragma("user_version", { simple: true })).toBe(CYBEROS_DATABASE_FORMAT_VERSION);
+    } finally {
+      database.close();
+    }
+
+    const reopened = openCyberOsDbReadOnly(databasePath);
+    reopened.close();
+  });
+
+  it("rejects an unmarked non-empty database without migrating it", () => {
+    const databasePath = path.join(tempDir, "old.sqlite");
+    const oldDatabase = new Database(databasePath);
+    oldDatabase.exec("CREATE TABLE old_product_data (id TEXT PRIMARY KEY)");
+    oldDatabase.close();
+
+    expect(() => openCyberOsDb(databasePath)).toThrow("does not migrate older databases");
+    expect(() => openCyberOsDbReadOnly(databasePath)).toThrow("expected CyberOS format 2");
+
+    const unchanged = new Database(databasePath, { readonly: true });
+    try {
+      expect(unchanged.prepare(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name"
+      ).pluck().all()).toEqual(["old_product_data"]);
+    } finally {
+      unchanged.close();
+    }
+  });
+
   it("keeps migrations in their established order", () => {
     expect(migrations.map((migration) => migration.id)).toEqual([
       "001_initial",
@@ -165,7 +204,7 @@ describe("SQLite schema migrations", () => {
     `).run(now, now, now, now, now);
     legacy.close();
 
-    const migrated = openZosDb(databasePath);
+    const migrated = openCyberOsDb(databasePath);
     try {
       expect(migrated.prepare("SELECT kind, status, summary FROM operation_notifications WHERE id = ?")
         .get("notification-before-040")).toEqual({
@@ -279,7 +318,7 @@ describe("SQLite schema migrations", () => {
     });
     legacy.close();
 
-    const migrated = openZosDb(databasePath);
+    const migrated = openCyberOsDb(databasePath);
     try {
       expect(getApproval(migrated, legacyApproval.id)).toMatchObject({ status: "expired" });
       expect(getJob(migrated, approvalJob.id)).toMatchObject({
@@ -320,6 +359,7 @@ describe("SQLite schema migrations", () => {
   it("repairs pre-release Host Access draft tables without orphaning approvals", () => {
     const databasePath = path.join(tempDir, "legacy-host-access-drafts.sqlite");
     const legacy = new Database(databasePath);
+    markCyberOsDatabase(legacy);
     legacy.exec(`
       CREATE TABLE schema_migrations (
         id TEXT PRIMARY KEY,
@@ -394,7 +434,7 @@ describe("SQLite schema migrations", () => {
     }
     legacy.close();
 
-    const upgraded = openZosDb(databasePath);
+    const upgraded = openCyberOsDb(databasePath);
     try {
       expect(upgraded.prepare("SELECT status FROM pending_approvals WHERE id = 'approval-1'").pluck().get()).toBe("failed");
       expect(upgraded.prepare("SELECT status FROM docker_operations WHERE id = 'operation-1'").pluck().get()).toBe("failed");
@@ -416,11 +456,11 @@ describe("SQLite schema migrations", () => {
 
   it("upgrades the complete pre-release Host Access schema without adding the deployed column twice", () => {
     const databasePath = path.join(tempDir, "complete-host-access-drafts.sqlite");
-    const database = openZosDb(databasePath);
+    const database = openCyberOsDb(databasePath);
     database.prepare("DELETE FROM schema_migrations WHERE id = '033_docker_host_access_draft_links'").run();
     database.close();
 
-    const upgraded = openZosDb(databasePath);
+    const upgraded = openCyberOsDb(databasePath);
     try {
       const deployedColumns = (upgraded.pragma("table_info(docker_apps)") as Array<{ name: string }>)
         .filter((column) => column.name === "deployed_host_access_json");
@@ -435,7 +475,7 @@ describe("SQLite schema migrations", () => {
   });
 
   it("installs monitoring alert configuration, incident, and outbox tables", () => {
-    const database = openZosDb(path.join(tempDir, "monitoring-alerts.sqlite"));
+    const database = openCyberOsDb(path.join(tempDir, "monitoring-alerts.sqlite"));
     try {
       const tables = database.prepare(`
         SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'monitoring_%'
@@ -484,6 +524,7 @@ describe("SQLite schema migrations", () => {
   it("upgrades the incident event constraint without losing alert history", () => {
     const databasePath = path.join(tempDir, "monitoring-events-upgrade.sqlite");
     const legacy = new Database(databasePath);
+    markCyberOsDatabase(legacy);
     legacy.exec(`
       CREATE TABLE schema_migrations (
         id TEXT PRIMARY KEY,
@@ -513,7 +554,7 @@ describe("SQLite schema migrations", () => {
     }
     legacy.close();
 
-    const upgraded = openZosDb(databasePath);
+    const upgraded = openCyberOsDb(databasePath);
     try {
       expect(upgraded.prepare(`
         SELECT type FROM monitoring_alert_incident_events WHERE incident_id = 'incident-legacy'
@@ -530,7 +571,7 @@ describe("SQLite schema migrations", () => {
 
   it("backfills a deterministic transcript sequence from legacy timestamps", () => {
     const databasePath = path.join(tempDir, "legacy-transcript.sqlite");
-    const initial = openZosDb(databasePath);
+    const initial = openCyberOsDb(databasePath);
     const transcriptMigration = migrations.find((migration) => migration.id === "027_agent_transcript_sequence");
     expect(transcriptMigration?.id).toBe("027_agent_transcript_sequence");
     try {
@@ -567,7 +608,7 @@ describe("SQLite schema migrations", () => {
       initial.close();
     }
 
-    const migrated = openZosDb(databasePath);
+    const migrated = openCyberOsDb(databasePath);
     try {
       expect(listTranscriptItems(migrated, { sessionId: "session-1" }).map((item) => ({
         sequence: item.sequence,
@@ -593,7 +634,7 @@ describe("SQLite schema migrations", () => {
       migrated.close();
     }
 
-    const reopened = openZosDb(databasePath);
+    const reopened = openCyberOsDb(databasePath);
     try {
       expect(listTranscriptItems(reopened, { sessionId: "session-1" })).toHaveLength(5);
       reopened.prepare("DELETE FROM agent_sessions WHERE id = ?").run("session-1");
@@ -604,7 +645,7 @@ describe("SQLite schema migrations", () => {
   });
 
   it("installs operations runner history and lifecycle indexes", () => {
-    const database = openZosDb(path.join(tempDir, "ops-runs.sqlite"));
+    const database = openCyberOsDb(path.join(tempDir, "ops-runs.sqlite"));
     try {
       const columns = database.prepare("PRAGMA table_info(ops_runs)").all()
         .map((column) => (column as { name: string }).name);
@@ -631,7 +672,7 @@ describe("SQLite schema migrations", () => {
   });
 
   it("installs the Rust indexer queue, content state, FTS, worker, and root state", () => {
-    const database = openZosDb(path.join(tempDir, "rust-indexer.sqlite"));
+    const database = openCyberOsDb(path.join(tempDir, "rust-indexer.sqlite"));
     try {
       const tables = database.prepare(`
         SELECT name FROM sqlite_master WHERE name LIKE 'index%'
@@ -664,7 +705,7 @@ describe("SQLite schema migrations", () => {
   });
 
   it("installs downloader reliability state, journals, reservations, workers, and claim index", () => {
-    const database = openZosDb(path.join(tempDir, "downloader-reliability.sqlite"));
+    const database = openCyberOsDb(path.join(tempDir, "downloader-reliability.sqlite"));
     try {
       const columns = database.prepare("PRAGMA table_info(download_tasks)").all()
         .map((column) => (column as { name: string }).name);
@@ -707,7 +748,7 @@ describe("SQLite schema migrations", () => {
       Array.from({ length: 8 }, () => startMigrationProcess(databasePath, moduleUrl))
     );
 
-    const database = openZosDb(databasePath);
+    const database = openCyberOsDb(databasePath);
     try {
       const columns = database.prepare("PRAGMA table_info(index_runs)").all()
         .map((column) => (column as { name: string }).name);
@@ -725,6 +766,7 @@ describe("SQLite schema migrations", () => {
     await mkdir(nasRoot);
     await writeFile(partialPath, "abc");
     const legacy = new Database(databasePath);
+    markCyberOsDatabase(legacy);
     const appliedAt = "2026-01-01T00:00:00.000Z";
     legacy.pragma("foreign_keys = OFF");
     legacy.exec(`
@@ -772,7 +814,7 @@ describe("SQLite schema migrations", () => {
     }
     legacy.close();
 
-    const upgraded = openZosDb(databasePath);
+    const upgraded = openCyberOsDb(databasePath);
     try {
       const rows = upgraded.prepare(`
         SELECT id, status, received_bytes, phase, download_mode, retry_count,
@@ -806,6 +848,7 @@ describe("SQLite schema migrations", () => {
   it("migrates legacy photo data and indexes to photostaff without data loss", () => {
     const databasePath = path.join(tempDir, "legacy-photostaff.sqlite");
     const legacy = new Database(databasePath);
+    markCyberOsDatabase(legacy);
     const appliedAt = "2026-01-01T00:00:00.000Z";
     const libraryUpdatedAt = "2025-12-01T00:00:00.000Z";
     const reliabilityIndex = migrations.findIndex((item) => item.id === "023_photostaff_reliability");
@@ -899,7 +942,7 @@ describe("SQLite schema migrations", () => {
     );
     legacy.close();
 
-    const upgraded = openZosDb(databasePath);
+    const upgraded = openCyberOsDb(databasePath);
     try {
       expect(upgraded.prepare("SELECT id, content_hash FROM photostaff_assets").get())
         .toEqual({ id: "asset-1", content_hash: "legacy-hash" });
@@ -943,7 +986,7 @@ describe("SQLite schema migrations", () => {
 
   it("retires pending VM approvals and preserves console authorizations for direct actions", () => {
     const databasePath = path.join(tempDir, "vm-direct-actions.sqlite");
-    const current = openZosDb(databasePath);
+    const current = openCyberOsDb(databasePath);
     ensureNasRoots(current, [{ id: "local", name: "Local", path: tempDir }]);
     const session = createSession(current, { rootId: "local" });
     const { job } = createActionMessageAndJob(current, {
@@ -991,7 +1034,7 @@ describe("SQLite schema migrations", () => {
     `);
     current.close();
 
-    const migrated = openZosDb(databasePath);
+    const migrated = openCyberOsDb(databasePath);
     try {
       expect(getApproval(migrated, approval.id)?.status).toBe("expired");
       expect(getVmOperation(migrated, operation.id)).toMatchObject({
@@ -1015,7 +1058,7 @@ describe("SQLite schema migrations", () => {
 
   it("adds photostaff metadata, scalar, text, and spatial indexes without replacing photostaff assets", () => {
     const databasePath = path.join(tempDir, "photostaff-metadata.sqlite");
-    const database = openZosDb(databasePath);
+    const database = openCyberOsDb(databasePath);
     try {
       const tables = database.prepare(`
         SELECT name FROM sqlite_master
@@ -1038,7 +1081,7 @@ describe("SQLite schema migrations", () => {
 
   it("adds managed Compose App tables to an existing database without replacing settings", () => {
     const databasePath = path.join(tempDir, "legacy-compose.sqlite");
-    const current = openZosDb(databasePath);
+    const current = openCyberOsDb(databasePath);
     current.prepare(`
       INSERT INTO system_settings (key, value_json, updated_at)
       VALUES ('legacy_test', '{"preserved":true}', ?)
@@ -1050,7 +1093,7 @@ describe("SQLite schema migrations", () => {
     `);
     current.close();
 
-    const migrated = openZosDb(databasePath);
+    const migrated = openCyberOsDb(databasePath);
     try {
       const tables = migrated.prepare(`
         SELECT name FROM sqlite_master
@@ -1067,14 +1110,14 @@ describe("SQLite schema migrations", () => {
 
   it("removes the legacy helper socket from persisted share settings", () => {
     const databasePath = path.join(tempDir, "hostd-config.sqlite");
-    const current = openZosDb(databasePath);
+    const current = openCyberOsDb(databasePath);
     current.prepare(
       `INSERT INTO system_settings (key, value_json, updated_at)
        VALUES ('share_settings', ?, ?)`
     ).run(
       JSON.stringify({
         enabled: true,
-        helperSocketPath: "/run/zos/share-helper.sock",
+        helperSocketPath: "/run/cyberos/share-helper.sock",
         account: { username: "share", password: null },
         shares: []
       }),
@@ -1083,7 +1126,7 @@ describe("SQLite schema migrations", () => {
     current.prepare("DELETE FROM schema_migrations WHERE id = '016_hostd_config'").run();
     current.close();
 
-    const migrated = openZosDb(databasePath);
+    const migrated = openCyberOsDb(databasePath);
     try {
       const value = migrated
         .prepare("SELECT value_json FROM system_settings WHERE key = 'share_settings'")
@@ -1101,7 +1144,7 @@ describe("SQLite schema migrations", () => {
 
   it("preserves Docker operations and console foreign keys when adding resource creation", () => {
     const databasePath = path.join(tempDir, "docker-resource-create.sqlite");
-    const current = openZosDb(databasePath);
+    const current = openCyberOsDb(databasePath);
     ensureNasRoots(current, [{ id: "local", name: "Local", path: tempDir }]);
     const session = createSession(current, { rootId: "local" });
     const { job } = createUserMessageAndJob(current, {
@@ -1152,7 +1195,7 @@ describe("SQLite schema migrations", () => {
     `);
     current.close();
 
-    const migrated = openZosDb(databasePath);
+    const migrated = openCyberOsDb(databasePath);
     try {
       expect(getDockerOperation(migrated, operation.id)).toMatchObject({
         id: operation.id,
@@ -1178,6 +1221,7 @@ describe("SQLite schema migrations", () => {
   it("migrates legacy approvals through the Docker migration with valid foreign keys", () => {
     const databasePath = path.join(tempDir, "legacy.sqlite");
     const legacyDb = new Database(databasePath);
+    markCyberOsDatabase(legacyDb);
     const now = new Date().toISOString();
     legacyDb.pragma("foreign_keys = ON");
     legacyDb.exec(`
@@ -1270,7 +1314,7 @@ describe("SQLite schema migrations", () => {
     `);
     legacyDb.close();
 
-    const migrated = openZosDb(databasePath);
+    const migrated = openCyberOsDb(databasePath);
     try {
       expect(getApproval(migrated, "approval-1")).toMatchObject({
         id: "approval-1",

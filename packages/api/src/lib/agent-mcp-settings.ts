@@ -10,7 +10,7 @@ import {
   writeFileSync
 } from "node:fs";
 import path from "node:path";
-import { createCatalogDescriptors } from "@zos/capabilities";
+import { createCatalogDescriptors } from "@cyberos/capabilities";
 import {
   createMcpClient,
   findMcpClientByToken,
@@ -20,11 +20,11 @@ import {
   rotateMcpClientToken,
   saveAgentMcpSettings,
   updateMcpClientScopes,
-  type ZosDatabase
-} from "@zos/db";
-import type { PublicAgentMcpSettings, ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { PublicAgentMcpSettings, CyberOsConfig } from "@cyberos/shared";
 
-export function publicAgentMcpSettings(db: ZosDatabase, config: ZosConfig): PublicAgentMcpSettings {
+export function publicAgentMcpSettings(db: CyberOsDatabase, config: CyberOsConfig): PublicAgentMcpSettings {
   const stored = getAgentMcpSettings(db);
   const enabled = stored?.enabled ?? config.mcp?.piEnabled ?? false;
   const available = config.mcp?.enabled ?? false;
@@ -38,7 +38,7 @@ export function publicAgentMcpSettings(db: ZosDatabase, config: ZosConfig): Publ
   };
 }
 
-export function configureAgentMcp(db: ZosDatabase, config: ZosConfig, enabled: boolean): PublicAgentMcpSettings {
+export function configureAgentMcp(db: CyberOsDatabase, config: CyberOsConfig, enabled: boolean): PublicAgentMcpSettings {
   if (enabled) {
     ensurePairedPiClient(db, config);
   }
@@ -46,23 +46,23 @@ export function configureAgentMcp(db: ZosDatabase, config: ZosConfig, enabled: b
   return publicAgentMcpSettings(db, config);
 }
 
-export function reconcileAgentMcp(db: ZosDatabase, config: ZosConfig): PublicAgentMcpSettings {
+export function reconcileAgentMcp(db: CyberOsDatabase, config: CyberOsConfig): PublicAgentMcpSettings {
   const stored = getAgentMcpSettings(db);
   const enabled = stored?.enabled ?? config.mcp?.piEnabled ?? false;
   if ((config.mcp?.enabled ?? false) && enabled) ensurePairedPiClient(db, config);
   return publicAgentMcpSettings(db, config);
 }
 
-function hasPairedPiClient(db: ZosDatabase, config: ZosConfig): boolean {
+function hasPairedPiClient(db: CyberOsDatabase, config: CyberOsConfig): boolean {
   const token = readValidPiToken(config.mcp?.piTokenFile);
   if (!token) return false;
   return findMcpClientByToken(db, token)?.kind === "pi";
 }
 
-function ensurePairedPiClient(db: ZosDatabase, config: ZosConfig): void {
+function ensurePairedPiClient(db: CyberOsDatabase, config: CyberOsConfig): void {
   const tokenFile = config.mcp?.piTokenFile;
   if (!tokenFile || !path.isAbsolute(tokenFile)) {
-    throw new Error("ZOS Pi MCP token file is not configured with an absolute path");
+    throw new Error("CyberOS Pi MCP token file is not configured with an absolute path");
   }
 
   const now = new Date().toISOString();
@@ -104,9 +104,9 @@ function ensurePairedPiClient(db: ZosDatabase, config: ZosConfig): void {
   }
 }
 
-function piClientScopes(config: ZosConfig): string[] {
+function piClientScopes(config: CyberOsConfig): string[] {
   return [...new Set(createCatalogDescriptors().flatMap((descriptor) => descriptor.requiredScopes))]
-    .filter((scope) => scope !== "zos:admin:shell" || config.mcp?.shellEnabled === true)
+    .filter((scope) => scope !== "cyberos:admin:shell" || config.mcp?.shellEnabled === true)
     .sort();
 }
 
@@ -120,7 +120,7 @@ function readValidPiToken(tokenFile: string | undefined): string | null {
     const tokenStat = statSync(tokenFile);
     if (!tokenStat.isFile() || (tokenStat.mode & 0o077) !== 0) return null;
     const token = readFileSync(tokenFile, "utf8").trim();
-    return /^zos_mcp_[A-Za-z0-9_-]{43}$/u.test(token) ? token : null;
+    return /^cyberos_mcp_[A-Za-z0-9_-]{43}$/u.test(token) ? token : null;
   } catch {
     return null;
   }

@@ -6,8 +6,8 @@ use nix::unistd::{Uid, User};
 
 use crate::error::TermuxError;
 
-pub const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
-pub const DEFAULT_SOCKET_PATH: &str = "/run/zos/termux.sock";
+pub const DEFAULT_CONFIG_PATH: &str = "/cyberos/config/config.toml";
+pub const DEFAULT_SOCKET_PATH: &str = "/run/cyberos/termux.sock";
 pub const DEFAULT_IDLE_TIMEOUT_MS: u64 = 30 * 60 * 1000;
 pub const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 10 * 1000;
 pub const DEFAULT_MAX_SESSIONS: usize = 32;
@@ -33,32 +33,36 @@ pub struct TermuxConfig {
 
 impl TermuxConfig {
     pub fn load() -> Result<Self, TermuxError> {
-        let terminal_user = env::var("ZOS_TERMUX_USER").unwrap_or_else(|_| "zos".to_owned());
-        if terminal_user != "zos" {
-            return Err(TermuxError::validation("ZOS_TERMUX_USER must be zos"));
+        let terminal_user =
+            env::var("CYBEROS_TERMUX_USER").unwrap_or_else(|_| "cyberos".to_owned());
+        if terminal_user != "cyberos" {
+            return Err(TermuxError::validation(
+                "CYBEROS_TERMUX_USER must be cyberos",
+            ));
         }
         let account = resolve_account(&terminal_user)?;
         if Uid::current().as_raw() != account.uid {
-            return Err(TermuxError::validation("Termux daemon must run as zos"));
+            return Err(TermuxError::validation("Termux daemon must run as cyberos"));
         }
-        let socket_path = absolute_path_from_env("ZOS_TERMUX_SOCKET_PATH", DEFAULT_SOCKET_PATH)?;
-        let tmux_socket_path = match env::var("ZOS_TERMUX_TMUX_SOCKET_PATH") {
+        let socket_path =
+            absolute_path_from_env("CYBEROS_TERMUX_SOCKET_PATH", DEFAULT_SOCKET_PATH)?;
+        let tmux_socket_path = match env::var("CYBEROS_TERMUX_TMUX_SOCKET_PATH") {
             Ok(value) if !value.trim().is_empty() => validate_absolute_path(&value)?,
-            _ => account.home.join(".zos/tmux.sock"),
+            _ => account.home.join(".cyberos/tmux.sock"),
         };
         Ok(Self {
             socket_path,
             tmux_socket_path,
             account,
             idle_timeout_ms: positive_u64_env(
-                "ZOS_TERMUX_SESSION_IDLE_TIMEOUT_MS",
+                "CYBEROS_TERMUX_SESSION_IDLE_TIMEOUT_MS",
                 DEFAULT_IDLE_TIMEOUT_MS,
             ),
             connect_timeout_ms: positive_u64_env(
-                "ZOS_TERMUX_CONNECT_TIMEOUT_MS",
+                "CYBEROS_TERMUX_CONNECT_TIMEOUT_MS",
                 DEFAULT_CONNECT_TIMEOUT_MS,
             ),
-            max_sessions: positive_usize_env("ZOS_TERMUX_MAX_SESSIONS", DEFAULT_MAX_SESSIONS),
+            max_sessions: positive_usize_env("CYBEROS_TERMUX_MAX_SESSIONS", DEFAULT_MAX_SESSIONS),
         })
     }
 }
@@ -124,8 +128,8 @@ mod tests {
     #[test]
     fn validates_absolute_paths() {
         assert_eq!(
-            validate_absolute_path("/run/zos/termux.sock").unwrap(),
-            PathBuf::from("/run/zos/termux.sock")
+            validate_absolute_path("/run/cyberos/termux.sock").unwrap(),
+            PathBuf::from("/run/cyberos/termux.sock")
         );
         assert!(validate_absolute_path("relative.sock").is_err());
     }

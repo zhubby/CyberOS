@@ -1,4 +1,4 @@
-import type { VodPlayerCommand, VodPlayerStatus } from "@zos/shared";
+import type { VodPlayerCommand, VodPlayerStatus } from "@cyberos/shared";
 
 export function isActiveVodPlayback(status: VodPlayerStatus | null): boolean {
   return status?.state === "starting" || status?.state === "playing" ||

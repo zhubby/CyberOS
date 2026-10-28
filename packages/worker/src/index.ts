@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import os from "node:os";
-import { disposePiAgentHosts } from "@zos/agent";
-import { ensureNasRoots, openZosDb, recoverInterruptedAgentSessionCommands } from "@zos/db";
-import { loadConfig } from "@zos/shared";
+import { disposePiAgentHosts } from "@cyberos/agent";
+import { ensureNasRoots, openCyberOsDb, recoverInterruptedAgentSessionCommands } from "@cyberos/db";
+import { loadConfig } from "@cyberos/shared";
 import { AGENT_JOB_LEASE_MS, processNextAgentCommand, processNextJob } from "./processor.js";
 
 const config = loadConfig();
-const db = openZosDb(config.databasePath);
+const db = openCyberOsDb(config.databasePath);
 ensureNasRoots(db, config.nasRoots);
 recoverInterruptedAgentSessionCommands(db);
 

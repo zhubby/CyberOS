@@ -5,13 +5,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ensureNasRoots,
-  openZosDb,
+  openCyberOsDb,
   replaceMediaArtwork,
   saveBluetoothSettings,
   upsertMediaCatalogEntry,
-  type ZosDatabase
-} from "@zos/db";
-import type { VodPlayerStatus, ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { VodPlayerStatus, CyberOsConfig } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import type { VodPlayerRuntime } from "../lib/vod-player.js";
 import { registerMediaRoutes } from "./media.js";
@@ -19,16 +19,16 @@ import { registerMediaRoutes } from "./media.js";
 const poolId = "/dev/md/media-test";
 let temporaryDirectory: string;
 let root: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 let server: FastifyInstance;
 let playerCommands: unknown[];
 let candidateSearches: unknown[];
 
 beforeEach(async () => {
-  temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-media-api-"));
+  temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-media-api-"));
   root = path.join(temporaryDirectory, "root");
   await mkdir(path.join(root, "Movies"), { recursive: true });
-  db = openZosDb(path.join(temporaryDirectory, "zos.sqlite"));
+  db = openCyberOsDb(path.join(temporaryDirectory, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
   playerCommands = [];
   candidateSearches = [];
@@ -291,11 +291,11 @@ function storageSystem() {
   };
 }
 
-function testConfig(): ZosConfig {
+function testConfig(): CyberOsConfig {
   return {
     environment: "development",
     dataDir: temporaryDirectory,
-    databasePath: path.join(temporaryDirectory, "zos.sqlite"),
+    databasePath: path.join(temporaryDirectory, "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test", authMode: "local-only" },
@@ -318,7 +318,7 @@ function testConfig(): ZosConfig {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "zos"
+      user: "cyberos"
     },
     nasRoots: [{ id: "local", name: "Local", path: root }]
   };

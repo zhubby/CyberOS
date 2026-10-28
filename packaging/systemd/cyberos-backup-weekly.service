@@ -1,0 +1,25 @@
+[Unit]
+Description=CyberOS weekly restic check and retention
+After=local-fs.target
+RequiresMountsFor=/cyberos/data /cyberos/data/backup
+ConditionPathExists=/cyberos/config/restic-password
+
+[Service]
+Type=oneshot
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ROOT=/cyberos
+Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+Environment=CYBEROS_BACKUP_PASSWORD_FILE=%d/restic-password
+WorkingDirectory=/cyberos/state
+LoadCredential=restic-password:/cyberos/config/restic-password
+ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/backup/dist/index.js run --kind weekly
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/cyberos/state /cyberos/data /cyberos/data/backup
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+MemoryMax=1G
+CPUQuota=250%
+TasksMax=256

@@ -200,7 +200,7 @@ impl Db {
             .map_err(DownloadError::database)?;
         let (sender, receiver) = mpsc::channel::<DbJob>();
         std::thread::Builder::new()
-            .name("zos-downloader-db".to_owned())
+            .name("cyberos-downloader-db".to_owned())
             .spawn(move || {
                 let mut connection = connection;
                 while let Ok(job) = receiver.recv() {

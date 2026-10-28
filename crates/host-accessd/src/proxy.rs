@@ -632,7 +632,7 @@ fn safe_labels(value: &Value) -> Value {
         "com.docker.compose.project",
         "com.docker.compose.service",
         "com.docker.compose.container-number",
-        "io.zos.managed",
+        "io.cyberos.managed",
     ];
     Value::Object(
         value

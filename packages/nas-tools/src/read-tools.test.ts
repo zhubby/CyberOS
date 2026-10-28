@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { NasRootRecord } from "@zos/shared";
+import type { NasRootRecord } from "@cyberos/shared";
 import { listDir, readText, searchFiles } from "./read-tools.js";
 
 let tempDir: string;
@@ -10,7 +10,7 @@ let rootDir: string;
 let root: NasRootRecord;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-read-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-read-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
   await mkdir(path.join(rootDir, "photos"));

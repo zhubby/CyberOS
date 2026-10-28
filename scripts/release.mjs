@@ -22,7 +22,7 @@ if (status.trim()) {
 
 const target = bumpVersion(state.version, increment);
 const result = await prepareRelease(repoRoot, { increment, note, write: !dryRun });
-console.log(`${dryRun ? "Would prepare" : "Prepared"} ZOS ${state.version} -> ${target}`);
+console.log(`${dryRun ? "Would prepare" : "Prepared"} CyberOS ${state.version} -> ${target}`);
 for (const relativePath of result.files.keys()) {
   console.log(`- ${relativePath}`);
 }

@@ -1,4 +1,4 @@
-import type { OpsTask } from "@zos/shared";
+import type { OpsTask } from "@cyberos/shared";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 
 const HOSTD_OPS_TIMEOUT_MS = 5_000;

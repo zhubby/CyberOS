@@ -9,7 +9,7 @@ let tempDir: string;
 let server: Server | null;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-host-access-control-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-host-access-control-"));
   server = null;
 });
 

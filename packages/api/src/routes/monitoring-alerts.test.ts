@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
-import { openZosDb } from "@zos/db";
+import { openCyberOsDb } from "@cyberos/db";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ApiRouteContext } from "../context.js";
 import { registerMonitoringAlertRoutes } from "./monitoring-alerts.js";
@@ -23,12 +23,12 @@ describe("monitoring alert routes", () => {
       payload: validRule()
     });
     expect(created.statusCode).toBe(201);
-    expect(created.json().rule).toMatchObject({ revision: 1, metric: "zos_host_cpu_usage_ratio" });
+    expect(created.json().rule).toMatchObject({ revision: 1, metric: "cyberos_host_cpu_usage_ratio" });
 
     const invalidCounter = await server.inject({
       method: "POST",
       url: "/api/monitoring/alerts/rules",
-      payload: { ...validRule(), metric: "zos_host_network_receive_bytes_total", transform: "value" }
+      payload: { ...validRule(), metric: "cyberos_host_network_receive_bytes_total", transform: "value" }
     });
     expect(invalidCounter.statusCode).toBe(400);
     await server.close();
@@ -113,9 +113,9 @@ describe("monitoring alert routes", () => {
           host: "smtp.internal",
           port: 587,
           security: "starttls",
-          username: "zos",
+          username: "cyberos",
           password: "secret-value",
-          from: "zos@example.test"
+          from: "cyberos@example.test"
         }
       }
     });
@@ -163,9 +163,9 @@ describe("monitoring alert routes", () => {
           host: "smtp.internal",
           port: 587,
           security: "starttls",
-          username: "zos",
+          username: "cyberos",
           password: "secret-value",
-          from: "zos@example.test"
+          from: "cyberos@example.test"
         }
       }
     });
@@ -528,8 +528,8 @@ async function buildRoutes() {
 }
 
 async function buildRoutesWithDb() {
-  tempDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-monitoring-alerts-"));
-  const db = openZosDb(path.join(tempDirectory, "zos.sqlite"));
+  tempDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-monitoring-alerts-"));
+  const db = openCyberOsDb(path.join(tempDirectory, "cyberos.sqlite"));
   const server = Fastify({ logger: false });
   registerMonitoringAlertRoutes(server, { db } as ApiRouteContext);
   server.addHook("onClose", async () => db.close());
@@ -540,7 +540,7 @@ function validRule() {
   return {
     name: "High CPU",
     enabled: true,
-    metric: "zos_host_cpu_usage_ratio",
+    metric: "cyberos_host_cpu_usage_ratio",
     selector: {},
     transform: "value",
     aggregation: "avg",

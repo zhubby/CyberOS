@@ -1,9 +1,9 @@
 import { lstat, realpath } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
-import { getNasRoot, getRootReadiness } from "@zos/db";
-import { resolveSafeExistingPath } from "@zos/nas-tools";
-import { getUnsupportedDockerResource, parseDockerImageReference } from "@zos/shared";
+import { getNasRoot, getRootReadiness } from "@cyberos/db";
+import { resolveSafeExistingPath } from "@cyberos/nas-tools";
+import { getUnsupportedDockerResource, parseDockerImageReference } from "@cyberos/shared";
 import type {
   DockerContainerCreateInput,
   DockerCreateResult,
@@ -11,7 +11,7 @@ import type {
   DockerOperationProposal,
   DockerSummary,
   DockerVolumeCreateInput
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import type {
   DockerCreateContainerInput as EngineContainerInput,
@@ -115,8 +115,8 @@ export async function executeDockerCreate(
 ): Promise<DockerCreateResult> {
   const managedLabels = {
     ...prepared.engineInput.labels,
-    "io.zos.managed": "true",
-    "io.zos.operation": operationId
+    "io.cyberos.managed": "true",
+    "io.cyberos.operation": operationId
   };
 
   if (prepared.kind === "volume") {
@@ -1104,8 +1104,8 @@ function stringMap(value: unknown, field: string, labels = false): Record<string
     if (!key || key.length > 128 || key.includes("\0") || labels && !LABEL_KEY_PATTERN.test(key)) {
       throw new DockerCreateValidationError(`${field} contains an invalid key`);
     }
-    if (labels && key.toLowerCase().startsWith("io.zos.")) {
-      throw new DockerCreateValidationError("Labels in the io.zos.* namespace are reserved");
+    if (labels && key.toLowerCase().startsWith("io.cyberos.")) {
+      throw new DockerCreateValidationError("Labels in the io.cyberos.* namespace are reserved");
     }
     if (typeof raw !== "string" || raw.length > MAX_STRING || raw.includes("\0")) {
       throw new DockerCreateValidationError(`${field} values must be strings of at most ${MAX_STRING} characters`);

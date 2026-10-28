@@ -2,9 +2,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
-import { MonitoringReader } from "@zos/monitoring";
-import { MetricsFixture } from "@zos/monitoring/test-utils";
-import { DEFAULT_MONITORING_CONFIG } from "@zos/shared";
+import { MonitoringReader } from "@cyberos/monitoring";
+import { MetricsFixture } from "@cyberos/monitoring/test-utils";
+import { DEFAULT_MONITORING_CONFIG } from "@cyberos/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { registerErrorHandler } from "../errors.js";
 import type { ApiRouteContext } from "../context.js";
@@ -43,18 +43,18 @@ describe("monitoring routes", () => {
     const databasePath = await tempDatabase();
     const writer = new MetricsFixture(databasePath);
     const timestampMs = Date.parse("2026-01-01T00:00:10.000Z");
-    writer.insertSamples([{ metric: "zos_host_load1", value: 0.5, timestampMs }]);
+    writer.insertSamples([{ metric: "cyberos_host_load1", value: 0.5, timestampMs }]);
     writer.recordCollectorStatus({ collector: "host", state: "ready", attemptedAtMs: timestampMs, durationMs: 2 });
     writer.close();
 
     const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
     const catalog = (await server.inject({ method: "GET", url: "/api/monitoring/catalog" })).json();
     expect(catalog.metrics).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: "zos_host_load1", kind: "gauge", unit: "load" })
+      expect.objectContaining({ name: "cyberos_host_load1", kind: "gauge", unit: "load" })
     ]));
     expect(catalog.series).toEqual([
       expect.objectContaining({
-        metric: "zos_host_load1",
+        metric: "cyberos_host_load1",
         labels: {},
         active: false,
         lastSampleAt: "2026-01-01T00:00:10.000Z"
@@ -68,7 +68,7 @@ describe("monitoring routes", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().series[0]).toMatchObject({
-      metric: "zos_host_load1",
+      metric: "cyberos_host_load1",
       transform: "value",
       points: expect.any(Array)
     });
@@ -80,13 +80,13 @@ describe("monitoring routes", () => {
     const databasePath = await tempDatabase();
     const writer = new MetricsFixture(databasePath);
     writer.insertSamples(Array.from({ length: 64 }, (_, index) => ({
-      metric: "zos_queue_depth",
+      metric: "cyberos_queue_depth",
       labels: { queue: `stale-${index}` },
       timestampMs: Date.parse("2025-12-01T00:00:00.000Z"),
       value: index
     })));
     writer.insertSamples([{
-      metric: "zos_host_load1",
+      metric: "cyberos_host_load1",
       timestampMs: Date.parse("2026-01-01T00:10:00.000Z"),
       value: 1
     }]);
@@ -98,13 +98,13 @@ describe("monitoring routes", () => {
       url: "/api/monitoring/query",
       payload: {
         ...validQuery(),
-        selectors: [{ metric: "zos_queue_depth" }, { metric: "zos_host_load1" }]
+        selectors: [{ metric: "cyberos_queue_depth" }, { metric: "cyberos_host_load1" }]
       }
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json().series).toEqual([
-      expect.objectContaining({ metric: "zos_host_load1", points: expect.any(Array) })
+      expect.objectContaining({ metric: "cyberos_host_load1", points: expect.any(Array) })
     ]);
     expect(response.json().series[0].points).not.toHaveLength(0);
     await server.close();
@@ -114,13 +114,13 @@ describe("monitoring routes", () => {
     const databasePath = await tempDatabase();
     const writer = new MetricsFixture(databasePath);
     writer.insertSamples(Array.from({ length: 64 }, (_, index) => ({
-      metric: "zos_queue_depth",
+      metric: "cyberos_queue_depth",
       labels: { queue: `queue-${index}` },
       timestampMs: Date.parse("2026-01-01T00:00:00.000Z"),
       value: index
     })));
     writer.insertSamples([{
-      metric: "zos_host_load1",
+      metric: "cyberos_host_load1",
       timestampMs: Date.parse("2026-01-01T00:00:00.000Z"),
       value: 1
     }]);
@@ -130,7 +130,7 @@ describe("monitoring routes", () => {
     const label = await server.inject({
       method: "POST",
       url: "/api/monitoring/query",
-      payload: { ...validQuery(), selectors: [{ metric: "zos_host_load1", labels: { path: "/secret" } }] }
+      payload: { ...validQuery(), selectors: [{ metric: "cyberos_host_load1", labels: { path: "/secret" } }] }
     });
     expect(label.statusCode).toBe(400);
     expect(label.body).not.toContain("/secret");
@@ -145,14 +145,14 @@ describe("monitoring routes", () => {
     const nonObjectLabels = await server.inject({
       method: "POST",
       url: "/api/monitoring/query",
-      payload: { ...validQuery(), selectors: [{ metric: "zos_queue_depth", labels: 42 }] }
+      payload: { ...validQuery(), selectors: [{ metric: "cyberos_queue_depth", labels: 42 }] }
     });
     expect(nonObjectLabels.statusCode).toBe(400);
 
     const selectors = await server.inject({
       method: "POST",
       url: "/api/monitoring/query",
-      payload: { ...validQuery(), selectors: Array.from({ length: 13 }, () => ({ metric: "zos_host_load1" })) }
+      payload: { ...validQuery(), selectors: Array.from({ length: 13 }, () => ({ metric: "cyberos_host_load1" })) }
     });
     expect(selectors.statusCode).toBe(400);
 
@@ -177,7 +177,7 @@ describe("monitoring routes", () => {
       url: "/api/monitoring/query",
       payload: {
         ...validQuery(),
-        selectors: [{ metric: "zos_queue_depth" }]
+        selectors: [{ metric: "cyberos_queue_depth" }]
       }
     });
     expect(budgeted.statusCode).toBe(200);
@@ -193,7 +193,7 @@ describe("monitoring routes", () => {
       payload: {
         ...validQuery(),
         maxPoints: 2,
-        selectors: [{ metric: "zos_queue_depth" }]
+        selectors: [{ metric: "cyberos_queue_depth" }]
       }
     });
     expect(exactlyAtSeriesLimit.statusCode).toBe(200);
@@ -205,7 +205,7 @@ describe("monitoring routes", () => {
       payload: {
         ...validQuery(),
         maxPoints: 2,
-        selectors: [{ metric: "zos_queue_depth" }, { metric: "zos_host_load1" }]
+        selectors: [{ metric: "cyberos_queue_depth" }, { metric: "cyberos_host_load1" }]
       }
     });
     expect(tooManySeries.statusCode).toBe(400);
@@ -229,7 +229,7 @@ describe("monitoring routes", () => {
     const databasePath = await tempDatabase();
     const metrics = new MetricsFixture(databasePath);
     metrics.insertSamples([{
-      metric: "zos_host_load1",
+      metric: "cyberos_host_load1",
       timestampMs: Date.parse("2026-01-01T00:00:00.000Z"),
       value: 1
     }]);
@@ -276,7 +276,7 @@ async function buildRoutes(monitoring: MonitoringReader) {
 }
 
 async function tempDatabase(): Promise<string> {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-monitoring-routes-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-monitoring-routes-"));
   return path.join(tempDir, "metrics.sqlite");
 }
 
@@ -285,6 +285,6 @@ function validQuery() {
     start: "2026-01-01T00:00:00.000Z",
     end: "2026-01-01T01:00:00.000Z",
     maxPoints: 720,
-    selectors: [{ metric: "zos_host_load1" }]
+    selectors: [{ metric: "cyberos_host_load1" }]
   };
 }

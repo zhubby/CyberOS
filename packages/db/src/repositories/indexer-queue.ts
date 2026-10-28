@@ -3,8 +3,8 @@ import type {
   IndexerServiceStatus,
   IndexRunKind,
   IndexWatcherStatus
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 export interface EnqueueIndexTaskInput {
   rootId: string;
@@ -23,7 +23,7 @@ export interface EnqueuedIndexTask {
 }
 
 export function enqueueIndexTask(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: EnqueueIndexTaskInput
 ): EnqueuedIndexTask {
   const path = normalizeIndexPath(input.path ?? ".");
@@ -84,7 +84,7 @@ export function enqueueIndexTask(
 }
 
 export function getIndexerServiceStatus(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   now = new Date()
 ): IndexerServiceStatus {
   const freshCutoff = new Date(now.getTime() - 20_000).toISOString();

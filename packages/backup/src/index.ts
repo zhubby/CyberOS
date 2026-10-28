@@ -1,9 +1,9 @@
-import { ensureNasRoots, openZosDb } from "@zos/db";
-import { loadConfig } from "@zos/shared";
+import { ensureNasRoots, openCyberOsDb } from "@cyberos/db";
+import { loadConfig } from "@cyberos/shared";
 import { checkBackup, initBackup, restoreBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
 
 const config = loadConfig();
-const db = openZosDb(config.databasePath);
+const db = openCyberOsDb(config.databasePath);
 ensureNasRoots(db, config.nasRoots);
 const [command, ...rest] = process.argv.slice(2);
 try {

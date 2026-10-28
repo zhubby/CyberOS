@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@zos/shared";
+import type { AgentSessionRecord } from "@cyberos/shared";
 import { describe, expect, it } from "vitest";
 import { PiResourcePolicy } from "./pi-resource-policy.js";
 

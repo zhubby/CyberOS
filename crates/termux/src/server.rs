@@ -254,7 +254,7 @@ async fn handle_connection(
             }
             let session_name = payload
                 .session_name
-                .unwrap_or_else(|| format!("zos-{}", Uuid::new_v4().simple()));
+                .unwrap_or_else(|| format!("cyberos-{}", Uuid::new_v4().simple()));
             {
                 let mut attachments = state.attachments.lock().await;
                 if !attachments.insert(session_name.clone()) {

@@ -14,8 +14,8 @@ import {
   type PhotostaffQueryFacets,
   type PhotostaffQueryFilters,
   type PhotostaffQueryRequest
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 export interface PhotostaffMetadataValueInput {
   source: string;
@@ -140,7 +140,7 @@ const QUERY_COLUMNS = `
 const CAPTURE_SORT_EXPRESSION = "COALESCE(m.captured_at, m.captured_at_local, a.taken_at)";
 
 export function replacePhotostaffAssetMetadata(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   asset: Pick<PhotostaffAssetRecord, "id" | "name" | "path">,
   input: PhotostaffMetadataWriteInput,
   now = new Date()
@@ -267,7 +267,7 @@ export function replacePhotostaffAssetMetadata(
   }
 }
 
-export function getPhotostaffMetadataState(db: ZosDatabase, assetId: string): PhotostaffMetadataState | null {
+export function getPhotostaffMetadataState(db: CyberOsDatabase, assetId: string): PhotostaffMetadataState | null {
   const row = db.prepare(`
     SELECT schema_version, sidecar_path, sidecar_size_bytes, sidecar_mtime_ms
     FROM photostaff_asset_metadata WHERE asset_id = ?
@@ -285,7 +285,7 @@ export function getPhotostaffMetadataState(db: ZosDatabase, assetId: string): Ph
   } : null;
 }
 
-export function hasStalePhotostaffMetadata(db: ZosDatabase, libraryUpdatedAt: string): boolean {
+export function hasStalePhotostaffMetadata(db: CyberOsDatabase, libraryUpdatedAt: string): boolean {
   return Boolean(db.prepare(`
     SELECT 1
     FROM photostaff_assets a
@@ -297,7 +297,7 @@ export function hasStalePhotostaffMetadata(db: ZosDatabase, libraryUpdatedAt: st
 }
 
 export function getPhotostaffMetadataIndexStatus(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   libraryUpdatedAt: string
 ): PhotostaffMetadataIndexStatus {
   const row = db.prepare(`
@@ -332,7 +332,7 @@ export function photostaffQueryFingerprint(request: Omit<PhotostaffQueryRequest,
 }
 
 export function queryPhotostaffAssets(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     libraryUpdatedAt: string;
     request: PhotostaffQueryRequest;
@@ -368,7 +368,7 @@ export function queryPhotostaffAssets(
 }
 
 export function listPhotostaffMetadataFields(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { libraryUpdatedAt: string; query?: string; limit?: number }
 ): PhotostaffMetadataField[] {
   const limit = Math.max(1, Math.min(input.limit ?? 100, 200));
@@ -397,7 +397,7 @@ export function listPhotostaffMetadataFields(
 }
 
 export function getPhotostaffMetadataDetail(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { assetId: string; libraryUpdatedAt: string; includeSensitive?: boolean }
 ): PhotostaffMetadataDetail | null {
   const row = db.prepare(`
@@ -437,7 +437,7 @@ export function getPhotostaffMetadataDetail(
 }
 
 export function queryPhotostaffMap(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { libraryUpdatedAt: string; request: PhotostaffMapQueryRequest }
 ): PhotostaffMapCluster[] {
   const columns = Math.max(1, Math.min(input.request.columns ?? 64, 64));
@@ -670,7 +670,7 @@ function haversineExpression(): string {
 }
 
 function loadFacets(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   libraryUpdatedAt: string,
   filters: PhotostaffQueryFilters
 ): PhotostaffQueryFacets {
@@ -739,7 +739,7 @@ function loadFacets(
   };
 }
 
-function loadKeywords(db: ZosDatabase, assetIds: string[]): Map<string, string[]> {
+function loadKeywords(db: CyberOsDatabase, assetIds: string[]): Map<string, string[]> {
   const result = new Map<string, string[]>();
   if (!assetIds.length) return result;
   const rows = db.prepare(`

@@ -25,7 +25,7 @@ function source(name: string): VideoCacheSource {
 
 describe("video cache", () => {
   it("deduplicates concurrent transcodes and publishes an atomic result", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-video-cache-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-video-cache-"));
     const transcode = vi.fn(async (_inputPath: string, outputPath: string) => {
       await writeFile(outputPath, "converted");
     });
@@ -41,7 +41,7 @@ describe("video cache", () => {
   });
 
   it("keeps active files during capacity pruning and removes them later", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-video-cache-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-video-cache-"));
     const transcode = vi.fn(async (_inputPath: string, outputPath: string) => {
       await writeFile(outputPath, "12345678");
     });
@@ -61,7 +61,7 @@ describe("video cache", () => {
   });
 
   it("does not leave a final cache file when transcoding fails", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-video-cache-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-video-cache-"));
     const cache = new VideoCache({
       dataDir: tempDir,
       transcoder: {

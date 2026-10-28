@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { listNasRoots } from "@zos/db";
+import { listNasRoots } from "@cyberos/db";
 import type { ApiRouteContext } from "../context.js";
 import { withHomePath } from "../lib/roots.js";
 

@@ -18,18 +18,18 @@ const SECTOR_BYTES: f64 = 512.0;
 const SYSTEMCTL_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub const MONITORED_SYSTEMD_UNITS: &[&str] = &[
-    "zos-api.service",
-    "zos-monitor.service",
-    "zos-alerter.service",
-    "zos-worker@1.service",
-    "zos-indexer.service",
-    "zos-downloader.service",
-    "zos-photostaff.service",
-    "zos-hostd.service",
-    "zos-termux.service",
-    "zos-health.service",
-    "zos-maintenance.service",
-    "zos-backup-daily.service",
+    "cyberos-api.service",
+    "cyberos-monitor.service",
+    "cyberos-alerter.service",
+    "cyberos-worker@1.service",
+    "cyberos-indexer.service",
+    "cyberos-downloader.service",
+    "cyberos-photostaff.service",
+    "cyberos-hostd.service",
+    "cyberos-termux.service",
+    "cyberos-health.service",
+    "cyberos-maintenance.service",
+    "cyberos-backup-daily.service",
 ];
 
 pub fn default_collectors(config: &MonitorConfig) -> Vec<Box<dyn Collector>> {
@@ -41,7 +41,7 @@ pub fn default_collectors(config: &MonitorConfig) -> Vec<Box<dyn Collector>> {
             config.nas_roots.clone(),
         )),
         Box::new(SystemdCollector::new(config.monitoring.sampling.standard)),
-        Box::new(ZosCollector::new(
+        Box::new(CyberOsCollector::new(
             config.monitoring.sampling.standard,
             config.database_path.clone(),
         )),
@@ -94,7 +94,7 @@ impl Collector for HostCollector {
             let idle_delta = current.idle - previous.idle;
             if total_delta > 0.0 && idle_delta >= 0.0 {
                 samples.push(MetricSample::new(
-                    "zos_host_cpu_usage_ratio",
+                    "cyberos_host_cpu_usage_ratio",
                     timestamp_ms,
                     (1.0 - idle_delta / total_delta).clamp(0.0, 1.0),
                 ));
@@ -148,12 +148,12 @@ impl Collector for FilesystemCollector {
                 let size = stats.blocks() as f64 * block_size;
                 let available = stats.blocks_available() as f64 * block_size;
                 samples.push(
-                    MetricSample::new("zos_host_filesystem_size_bytes", timestamp_ms, size)
+                    MetricSample::new("cyberos_host_filesystem_size_bytes", timestamp_ms, size)
                         .with_label("filesystem", label),
                 );
                 samples.push(
                     MetricSample::new(
-                        "zos_host_filesystem_available_bytes",
+                        "cyberos_host_filesystem_available_bytes",
                         timestamp_ms,
                         available,
                     )
@@ -162,7 +162,7 @@ impl Collector for FilesystemCollector {
                 if size > 0.0 {
                     samples.push(
                         MetricSample::new(
-                            "zos_host_filesystem_used_ratio",
+                            "cyberos_host_filesystem_used_ratio",
                             timestamp_ms,
                             ((size - available) / size).clamp(0.0, 1.0),
                         )
@@ -244,7 +244,7 @@ impl Collector for TemperatureCollector {
             }
             let sensor = format!("{}:{index}", sanitize_label(sensor_type.trim()));
             samples.push(
-                MetricSample::new("zos_host_temperature_celsius", timestamp_ms, value)
+                MetricSample::new("cyberos_host_temperature_celsius", timestamp_ms, value)
                     .with_label("sensor", sensor),
             );
         }
@@ -297,8 +297,12 @@ impl Collector for SystemdCollector {
             }
             let active = String::from_utf8_lossy(&output.stdout).trim() == "active";
             samples.push(
-                MetricSample::new("zos_systemd_unit_active", timestamp_ms, f64::from(active))
-                    .with_label("unit", *unit),
+                MetricSample::new(
+                    "cyberos_systemd_unit_active",
+                    timestamp_ms,
+                    f64::from(active),
+                )
+                .with_label("unit", *unit),
             );
         }
         Ok(Collection::ready(samples))
@@ -316,12 +320,12 @@ async fn command_output_with_timeout(
         .map_err(MonitorError::from)
 }
 
-pub struct ZosCollector {
+pub struct CyberOsCollector {
     interval: Duration,
     database_path: PathBuf,
 }
 
-impl ZosCollector {
+impl CyberOsCollector {
     pub fn new(interval: Duration, database_path: PathBuf) -> Self {
         Self {
             interval,
@@ -331,9 +335,9 @@ impl ZosCollector {
 }
 
 #[async_trait]
-impl Collector for ZosCollector {
+impl Collector for CyberOsCollector {
     fn id(&self) -> &'static str {
-        "zos"
+        "cyberos"
     }
 
     fn interval(&self) -> Duration {
@@ -342,14 +346,14 @@ impl Collector for ZosCollector {
 
     async fn collect(&mut self, timestamp_ms: i64) -> Result<Collection, MonitorError> {
         let path = self.database_path.clone();
-        let samples = tokio::task::spawn_blocking(move || collect_zos(&path, timestamp_ms))
+        let samples = tokio::task::spawn_blocking(move || collect_cyberos(&path, timestamp_ms))
             .await
             .map_err(|error| MonitorError::Collector(error.to_string()))??;
         Ok(Collection::ready(samples))
     }
 }
 
-fn collect_zos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, MonitorError> {
+fn collect_cyberos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, MonitorError> {
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     connection.busy_timeout(Duration::from_secs(5))?;
     connection.pragma_update(None, "query_only", "ON")?;
@@ -371,7 +375,7 @@ fn collect_zos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, Moni
     ] {
         let count: i64 = connection.query_row(sql, [], |row| row.get(0))?;
         samples.push(
-            MetricSample::new("zos_queue_depth", timestamp_ms, count as f64)
+            MetricSample::new("cyberos_queue_depth", timestamp_ms, count as f64)
                 .with_label("queue", queue),
         );
     }
@@ -390,7 +394,7 @@ fn collect_zos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, Moni
         if let Some(heartbeat_ms) = heartbeat.as_deref().and_then(parse_iso_ms) {
             samples.push(
                 MetricSample::new(
-                    "zos_worker_heartbeat_age_seconds",
+                    "cyberos_worker_heartbeat_age_seconds",
                     timestamp_ms,
                     (timestamp_ms - heartbeat_ms).max(0) as f64 / 1000.0,
                 )
@@ -410,7 +414,7 @@ fn collect_zos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, Moni
     )?;
     if let Some(finished_ms) = oldest_latest_index.as_deref().and_then(parse_iso_ms) {
         samples.push(MetricSample::new(
-            "zos_index_freshness_seconds",
+            "cyberos_index_freshness_seconds",
             timestamp_ms,
             (timestamp_ms - finished_ms).max(0) as f64 / 1000.0,
         ));
@@ -423,7 +427,7 @@ fn collect_zos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, Moni
     if let Some(finished_ms) = backup.as_deref().and_then(parse_iso_ms) {
         samples.push(
             MetricSample::new(
-                "zos_last_success_timestamp_seconds",
+                "cyberos_last_success_timestamp_seconds",
                 timestamp_ms,
                 finished_ms as f64 / 1000.0,
             )
@@ -442,7 +446,7 @@ fn collect_zos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, Moni
         if let Some(finished_ms) = finished.as_deref().and_then(parse_iso_ms) {
             samples.push(
                 MetricSample::new(
-                    "zos_last_success_timestamp_seconds",
+                    "cyberos_last_success_timestamp_seconds",
                     timestamp_ms,
                     finished_ms as f64 / 1000.0,
                 )
@@ -457,7 +461,7 @@ fn collect_zos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, Moni
             |row| row.get(0),
         )?;
         samples.push(
-            MetricSample::new("zos_health_problem_count", timestamp_ms, count as f64)
+            MetricSample::new("cyberos_health_problem_count", timestamp_ms, count as f64)
                 .with_label("severity", severity),
         );
     }
@@ -500,11 +504,15 @@ fn parse_load(value: &str, timestamp_ms: i64) -> Result<Vec<MetricSample>, Monit
     if values.len() != 3 {
         return Err(MonitorError::Collector("invalid /proc/loadavg".to_owned()));
     }
-    Ok(["zos_host_load1", "zos_host_load5", "zos_host_load15"]
-        .into_iter()
-        .zip(values)
-        .map(|(metric, value)| MetricSample::new(metric, timestamp_ms, value))
-        .collect())
+    Ok([
+        "cyberos_host_load1",
+        "cyberos_host_load5",
+        "cyberos_host_load15",
+    ]
+    .into_iter()
+    .zip(values)
+    .map(|(metric, value)| MetricSample::new(metric, timestamp_ms, value))
+    .collect())
 }
 
 fn parse_memory(value: &str, timestamp_ms: i64) -> Result<Vec<MetricSample>, MonitorError> {
@@ -526,17 +534,21 @@ fn parse_memory(value: &str, timestamp_ms: i64) -> Result<Vec<MetricSample>, Mon
     let swap_total = *values.get("SwapTotal").unwrap_or(&0.0);
     let swap_free = *values.get("SwapFree").unwrap_or(&0.0);
     Ok(vec![
-        MetricSample::new("zos_host_memory_total_bytes", timestamp_ms, total),
-        MetricSample::new("zos_host_memory_available_bytes", timestamp_ms, available),
-        MetricSample::new("zos_host_memory_used_bytes", timestamp_ms, used),
+        MetricSample::new("cyberos_host_memory_total_bytes", timestamp_ms, total),
         MetricSample::new(
-            "zos_host_memory_used_ratio",
+            "cyberos_host_memory_available_bytes",
+            timestamp_ms,
+            available,
+        ),
+        MetricSample::new("cyberos_host_memory_used_bytes", timestamp_ms, used),
+        MetricSample::new(
+            "cyberos_host_memory_used_ratio",
             timestamp_ms,
             if total > 0.0 { used / total } else { 0.0 },
         ),
-        MetricSample::new("zos_host_swap_total_bytes", timestamp_ms, swap_total),
+        MetricSample::new("cyberos_host_swap_total_bytes", timestamp_ms, swap_total),
         MetricSample::new(
-            "zos_host_swap_used_bytes",
+            "cyberos_host_swap_used_bytes",
             timestamp_ms,
             (swap_total - swap_free).max(0.0),
         ),
@@ -560,13 +572,13 @@ fn parse_disks(value: &str, timestamp_ms: i64) -> Vec<MetricSample> {
             };
             vec![
                 MetricSample::new(
-                    "zos_host_disk_read_bytes_total",
+                    "cyberos_host_disk_read_bytes_total",
                     timestamp_ms,
                     read * SECTOR_BYTES,
                 )
                 .with_label("device", device),
                 MetricSample::new(
-                    "zos_host_disk_written_bytes_total",
+                    "cyberos_host_disk_written_bytes_total",
                     timestamp_ms,
                     written * SECTOR_BYTES,
                 )
@@ -597,13 +609,13 @@ fn parse_network(value: &str, timestamp_ms: i64) -> Vec<MetricSample> {
             };
             vec![
                 MetricSample::new(
-                    "zos_host_network_receive_bytes_total",
+                    "cyberos_host_network_receive_bytes_total",
                     timestamp_ms,
                     received,
                 )
                 .with_label("interface", name),
                 MetricSample::new(
-                    "zos_host_network_transmit_bytes_total",
+                    "cyberos_host_network_transmit_bytes_total",
                     timestamp_ms,
                     transmitted,
                 )
@@ -676,7 +688,7 @@ mod tests {
         )
         .unwrap();
         assert!(memory.iter().any(|sample| {
-            sample.metric == "zos_host_memory_used_ratio"
+            sample.metric == "cyberos_host_memory_used_ratio"
                 && (sample.value - 0.6).abs() < f64::EPSILON
         }));
         let disks = parse_disks(

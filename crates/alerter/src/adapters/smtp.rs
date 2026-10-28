@@ -156,18 +156,18 @@ mod tests {
             host: "127.0.0.1".to_owned(),
             port,
             security,
-            username: "zos".to_owned(),
+            username: "cyberos".to_owned(),
             password: "secret".to_owned(),
-            from: "zos@example.test".to_owned(),
+            from: "cyberos@example.test".to_owned(),
         }
     }
 
     fn delivery() -> ClaimedDelivery {
         ClaimedDelivery {
             id: "delivery-1".to_owned(),
-            message_id: "<zos-alert-delivery-1@localhost>".to_owned(),
+            message_id: "<cyberos-alert-delivery-1@localhost>".to_owned(),
             recipients: vec!["operator@example.test".to_owned()],
-            subject: "ZOS alert".to_owned(),
+            subject: "CyberOS alert".to_owned(),
             body: "Alert body".to_owned(),
             attempt: 1,
         }
@@ -250,7 +250,7 @@ mod tests {
             .unwrap();
         let (authenticated, message) = server.await.unwrap();
         assert!(authenticated);
-        assert!(message.contains("Message-ID: <zos-alert-delivery-1@localhost>"));
+        assert!(message.contains("Message-ID: <cyberos-alert-delivery-1@localhost>"));
         assert!(message.contains("Alert body"));
     }
 

@@ -1,0 +1,123 @@
+#!/bin/sh
+set -eu
+
+runtime_dir=${CYBEROS_TV_RUNTIME_DIR:-/run/cyberos-tv}
+status_writer=${CYBEROS_TV_SCRIPT_DIR:-/usr/lib/cyberos/scripts}/cyberos-tv-write-status
+socket_path="$runtime_dir/wayland-0"
+input_error_file="$runtime_dir/cec-input-error"
+cec_pid=
+heartbeat_pid=
+events_fifo=
+
+cleanup() {
+  if [ -n "$cec_pid" ]; then
+    kill "$cec_pid" 2>/dev/null || true
+    wait "$cec_pid" 2>/dev/null || true
+    cec_pid=
+  fi
+  if [ -n "$heartbeat_pid" ]; then
+    kill "$heartbeat_pid" 2>/dev/null || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+    heartbeat_pid=
+  fi
+  if [ -n "$events_fifo" ]; then
+    rm -f "$events_fifo"
+    events_fifo=
+  fi
+  rm -f "$input_error_file"
+}
+
+terminate() {
+  cleanup
+  exit 0
+}
+
+trap cleanup EXIT
+trap terminate HUP INT TERM
+
+send_key() {
+  [ ! -s "$input_error_file" ] || return 0
+  if ! wtype -k "$1" >/dev/null 2>&1; then
+    printf '%s\n' "Wayland virtual keyboard input is unavailable" > "$input_error_file"
+    "$status_writer" cec degraded "$(sed -n '1p' "$input_error_file")"
+  fi
+}
+
+publish_status() {
+  if [ -s "$input_error_file" ]; then
+    "$status_writer" cec degraded "$(sed -n '1p' "$input_error_file")"
+  else
+    "$status_writer" cec ready "$1"
+  fi
+}
+
+handle_cec_line() {
+  line=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case "$line" in
+    *"ui-cmd: 'up'"*) send_key Up ;;
+    *"ui-cmd: 'down'"*) send_key Down ;;
+    *"ui-cmd: 'left'"*) send_key Left ;;
+    *"ui-cmd: 'right'"*) send_key Right ;;
+    *"ui-cmd: 'select'"*|*"ui-cmd: 'enter'"*) send_key Return ;;
+    *"ui-cmd: 'back'"*|*"ui-cmd: 'exit'"*) send_key Escape ;;
+    *"ui-cmd: 'play'"*|*"ui-cmd: 'pause'"*|*"ui-cmd: 'play function'"*) send_key XF86AudioPlay ;;
+    *"ui-cmd: 'stop'"*) send_key XF86AudioStop ;;
+    *"ui-cmd: 'f1 (blue)'"*) send_key a ;;
+    *"ui-cmd: 'f2 (red)'"*) send_key s ;;
+  esac
+}
+
+if ! command -v cec-ctl >/dev/null 2>&1; then
+  "$status_writer" cec unavailable "cec-ctl is not installed"
+  exit 127
+fi
+
+rm -f "$input_error_file"
+if ! command -v wtype >/dev/null 2>&1; then
+  printf '%s\n' "wtype is not installed; keyboard input remains available" > "$input_error_file"
+else
+  attempt=0
+  while [ "$attempt" -lt 15 ] && [ ! -S "$socket_path" ]; do
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  if [ ! -S "$socket_path" ]; then
+    printf '%s\n' "Wayland display is unavailable; keyboard input remains available" > "$input_error_file"
+  elif ! wtype -k F24 >/dev/null 2>&1; then
+    printf '%s\n' "Wayland virtual keyboard input is unavailable; keyboard input remains available" > "$input_error_file"
+  fi
+fi
+
+while :; do
+  set -- /dev/cec*
+  if [ "$1" = "/dev/cec*" ]; then
+    "$status_writer" cec degraded "No CEC adapter detected; keyboard input remains available"
+    sleep 5
+    continue
+  fi
+  device=$1
+  events_fifo="$runtime_dir/cec-events.$$"
+  rm -f "$events_fifo"
+  mkfifo -m 0600 "$events_fifo"
+  cec-ctl -d "$device" --playback --monitor > "$events_fifo" 2>&1 &
+  cec_pid=$!
+  (
+    while kill -0 "$cec_pid" 2>/dev/null; do
+      publish_status "$device"
+      sleep 5
+    done
+  ) &
+  heartbeat_pid=$!
+  while IFS= read -r event_line; do
+    handle_cec_line "$event_line"
+  done < "$events_fifo"
+  wait "$cec_pid" 2>/dev/null || true
+  kill "$heartbeat_pid" 2>/dev/null || true
+  wait "$heartbeat_pid" 2>/dev/null || true
+  cec_pid=
+  heartbeat_pid=
+  rm -f "$events_fifo"
+  events_fifo=
+  "$status_writer" cec degraded "CEC monitor stopped; retrying"
+  sleep 2
+done

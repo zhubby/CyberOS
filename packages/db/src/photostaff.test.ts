@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PHOTOSTAFF_METADATA_SCHEMA_VERSION, type PhotostaffMetadataCondition } from "@zos/shared";
+import { PHOTOSTAFF_METADATA_SCHEMA_VERSION, type PhotostaffMetadataCondition } from "@cyberos/shared";
 import type { PhotostaffMetadataWriteInput } from "./index.js";
 import {
   claimNextPhotostaffJob,
@@ -18,7 +18,7 @@ import {
   hasCompletedPhotostaffScan,
   listPhotostaffAssets,
   listPhotostaffMetadataFields,
-  openZosDb,
+  openCyberOsDb,
   releasePhotostaffUploadReservation,
   removeStalePhotostaffAssets,
   removeStalePhotostaffUploadReservations,
@@ -28,15 +28,15 @@ import {
   savePhotostaffLibrarySettings,
   updatePhotostaffJobProgress,
   upsertPhotostaffAsset,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-photostaff-db-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-photostaff-db-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 

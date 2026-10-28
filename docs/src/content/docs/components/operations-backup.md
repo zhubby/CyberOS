@@ -4,7 +4,7 @@ description: 运维任务生命周期、健康评估、安全维护和 restic �
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/ops/src/runner.ts, packages/ops/src/maintenance.ts, packages/backup/src/backup.ts, packages/system-health/src/index.ts, packaging/systemd/zos-health.timer, packaging/systemd/zos-maintenance.timer]
+sourceOfTruth: [packages/ops/src/runner.ts, packages/ops/src/maintenance.ts, packages/backup/src/backup.ts, packages/system-health/src/index.ts, packaging/systemd/cyberos-health.timer, packaging/systemd/cyberos-maintenance.timer]
 sidebar:
   order: 5
 ---
@@ -17,4 +17,4 @@ Health 共用 `packages/system-health` 评估 root readiness、Indexer、Downloa
 
 Maintenance 使用独立 `ops:maintenance` lease，执行非阻塞 `wal_checkpoint(PASSIVE)`、`PRAGMA optimize`、历史裁剪和超过 7 天的 `restore-*` staging 清理。清理 staging 前必须取得 `backup` lease 并检查 symlink 与目录边界；backup 正在运行时只记录 deferred。Trash 只统计数据库中未恢复条目，不扫描且不永久删除 NAS 或 trash 文件。
 
-Backup CLI 与 daily/weekly timers 使用 restic，并通过独立 `backup` lease 与 init/check/restore 串行化。旧 scheduler 生成的 `/zos/state/reports/*.json` 在升级时保留为历史文件，但不再读取或更新；重复文件报告能力已移除。
+Backup CLI 与 daily/weekly timers 使用 restic，并通过独立 `backup` lease 与 init/check/restore 串行化。旧 scheduler 生成的 `/cyberos/state/reports/*.json` 在升级时保留为历史文件，但不再读取或更新；重复文件报告能力已移除。

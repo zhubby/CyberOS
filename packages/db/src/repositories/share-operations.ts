@@ -5,14 +5,14 @@ import type {
   ShareOperationRecord,
   ShareOperationStatus,
   ShareSettingsRecord
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import { mapShareOperation } from "./operation-mappers.js";
 import type { DbShareOperationRow } from "./repository-rows.js";
 
 export function createShareOperationApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { jobId: string; proposal: ShareOperationProposal; settings: ShareSettingsRecord }
 ): { approval: PendingApprovalRecord; operation: ShareOperationRecord } {
   const job = getJob(db, input.jobId);
@@ -67,7 +67,7 @@ export function createShareOperationApproval(
 }
 
 export function createShareOperationRecord(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { proposal: ShareOperationProposal; settings: ShareSettingsRecord }
 ): ShareOperationRecord {
   const now = new Date().toISOString();
@@ -89,7 +89,7 @@ export function createShareOperationRecord(
   return operation;
 }
 
-export function getShareOperation(db: ZosDatabase, operationId: string): ShareOperationRecord | null {
+export function getShareOperation(db: CyberOsDatabase, operationId: string): ShareOperationRecord | null {
   const row = db
     .prepare(`
       SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
@@ -101,7 +101,7 @@ export function getShareOperation(db: ZosDatabase, operationId: string): ShareOp
 }
 
 export function getShareOperationByApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   approvalId: string
 ): ShareOperationRecord | null {
   const row = db
@@ -117,7 +117,7 @@ export function getShareOperationByApproval(
 }
 
 export function listShareOperations(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { limit?: number } = {}
 ): ShareOperationRecord[] {
   const rows = db
@@ -132,7 +132,7 @@ export function listShareOperations(
 }
 
 export function updateShareOperationStatus(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   operationId: string,
   status: ShareOperationStatus,
   metadata: Record<string, unknown> = {}

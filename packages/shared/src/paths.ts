@@ -1,7 +1,7 @@
 import path from "node:path";
 
-/** Canonical persistent and volatile locations owned by ZOS. */
-export interface ZosPaths {
+/** Canonical persistent and volatile locations owned by CyberOS. */
+export interface CyberOsPaths {
   rootDir: string;
   configDir: string;
   stateDir: string;
@@ -25,13 +25,13 @@ export interface ZosPaths {
   runDir: string;
 }
 
-export function resolveZosPaths(rootDir: string): ZosPaths {
+export function resolveCyberOsPaths(rootDir: string): CyberOsPaths {
   if (!path.isAbsolute(rootDir)) {
-    throw new Error(`ZOS root must be an absolute non-root directory: ${rootDir}`);
+    throw new Error(`CyberOS root must be an absolute non-root directory: ${rootDir}`);
   }
   const root = path.resolve(rootDir);
   if (root === path.parse(root).root) {
-    throw new Error(`ZOS root must be an absolute non-root directory: ${rootDir}`);
+    throw new Error(`CyberOS root must be an absolute non-root directory: ${rootDir}`);
   }
 
   const stateDir = path.join(root, "state");
@@ -50,7 +50,7 @@ export function resolveZosPaths(rootDir: string): ZosPaths {
     vmRoot: path.join(root, "vm"),
     deployRoot: path.join(root, "deploy"),
     systemBackupsDir: path.join(root, "system-backups"),
-    databasePath: path.join(stateDir, "zos.sqlite"),
+    databasePath: path.join(stateDir, "cyberos.sqlite"),
     metricsDatabasePath: path.join(stateDir, "metrics.sqlite"),
     defaultDataRoot: path.join(dataRoot, "primary"),
     hostdStateDir,
@@ -58,7 +58,7 @@ export function resolveZosPaths(rootDir: string): ZosPaths {
     dockerStateDir: path.join(hostdStateDir, "docker-daemon"),
     termuxHome: path.join(root, "home", "termux"),
     vodPlayerStateDir: path.join(stateDir, "vod-player"),
-    runDir: "/run/zos"
+    runDir: "/run/cyberos"
   };
 }
 

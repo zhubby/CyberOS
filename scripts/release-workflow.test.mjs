@@ -13,5 +13,7 @@ describe("release workflow", () => {
     expect(workflow).toContain(".repository == $repository and");
     expect(workflow).toContain("release-manifest.json >/dev/null");
     expect(workflow).not.toContain("'{repository, tag, version, commitSha, architecture, asset, sha256}'");
+    expect(workflow).not.toContain("relocate-mount");
+    expect(workflow).not.toContain("migration-recovery");
   });
 });

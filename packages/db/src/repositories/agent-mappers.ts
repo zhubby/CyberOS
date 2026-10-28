@@ -3,7 +3,7 @@ import type {
   AgentMessageRecord,
   AgentSessionRecord,
   JobRecord
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { DbEventRow, DbJobRow, DbMessageRow, DbSessionRow } from "./repository-rows.js";
 
 export function mapSession(row: DbSessionRow): AgentSessionRecord {

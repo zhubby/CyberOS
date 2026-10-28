@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { BuildSource, PublicBuildInfo } from "@zos/shared";
+import type { BuildSource, PublicBuildInfo } from "@cyberos/shared";
 
 const BUILD_SOURCES = new Set<BuildSource>(["release", "ci", "local", "nix", "unknown"]);
 
 export async function loadBuildInfo({
-  configuredPath = process.env.ZOS_BUILD_INFO_PATH,
+  configuredPath = process.env.CYBEROS_BUILD_INFO_PATH,
   cwd = process.cwd()
 }: {
   configuredPath?: string;
@@ -13,10 +13,10 @@ export async function loadBuildInfo({
 } = {}): Promise<PublicBuildInfo> {
   const candidates = uniquePaths([
     configuredPath,
-    path.resolve(cwd, ".zos/build-info.json"),
-    path.resolve(cwd, "../../.zos/build-info.json"),
+    path.resolve(cwd, ".cyberos/build-info.json"),
+    path.resolve(cwd, "../../.cyberos/build-info.json"),
     path.resolve(cwd, "build-info.json"),
-    "/usr/lib/zos/build-info.json"
+    "/usr/lib/cyberos/build-info.json"
   ]);
 
   for (const candidate of candidates) {
@@ -80,7 +80,7 @@ async function readFallbackVersion(cwd: string): Promise<string> {
   const packagePaths = uniquePaths([
     path.resolve(cwd, "package.json"),
     path.resolve(cwd, "../../package.json"),
-    "/usr/lib/zos/package.json"
+    "/usr/lib/cyberos/package.json"
   ]);
   for (const packagePath of packagePaths) {
     try {

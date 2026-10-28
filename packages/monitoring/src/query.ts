@@ -8,7 +8,7 @@ import type {
   MonitoringResolution,
   MonitoringSeriesDescriptor,
   MonitoringTransform
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { getMetricDefinition } from "./catalog.js";
 import { filterSeriesWithDataInRange, listMetricSeries, parseLabels } from "./database.js";
 

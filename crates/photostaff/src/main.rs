@@ -1,9 +1,9 @@
 use std::process::ExitCode;
 
+use cyberos_photostaff::Photostaff;
+use cyberos_photostaff::config::Config;
+use cyberos_photostaff::error::PhotostaffError;
 use tracing_subscriber::EnvFilter;
-use zos_photostaff::Photostaff;
-use zos_photostaff::config::Config;
-use zos_photostaff::error::PhotostaffError;
 
 #[tokio::main]
 async fn main() -> ExitCode {

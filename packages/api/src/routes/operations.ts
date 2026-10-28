@@ -5,7 +5,7 @@ import {
   listFileOperations,
   markFileOperationRolledBack,
   recordAppliedOperation
-} from "@zos/db";
+} from "@cyberos/db";
 import type { ApiRouteContext } from "../context.js";
 import { restoreTrashEntry, rollbackRegularOperation, rollbackTrashOperation } from "../lib/operations.js";
 

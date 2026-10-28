@@ -172,7 +172,7 @@ async fn validate_content(
         .parent()
         .ok_or_else(|| HostdError::validation("Docker config path has no parent"))?;
     fs::create_dir_all(parent).await?;
-    let validation_path = parent.join(format!(".zos-daemon-{}.json", Uuid::new_v4()));
+    let validation_path = parent.join(format!(".cyberos-daemon-{}.json", Uuid::new_v4()));
     let result = async {
         atomic_write(&validation_path, content.as_bytes(), 0o600).await?;
         run_checked(

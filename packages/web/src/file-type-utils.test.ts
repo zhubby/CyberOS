@@ -31,7 +31,7 @@ describe("file type utilities", () => {
     expect(describeFileVisual({ name: "photostaff.webp", kind: "file", isSafe: true })).toMatchObject({ kind: "image" });
     expect(describeFileVisual({ name: "clip.mov", kind: "file", isSafe: true })).toMatchObject({ kind: "video" });
     expect(describeFileVisual({ name: "mix.flac", kind: "file", isSafe: true })).toMatchObject({ kind: "audio" });
-    expect(describeFileVisual({ name: "zos.sqlite", kind: "file", isSafe: true })).toMatchObject({ kind: "database" });
+    expect(describeFileVisual({ name: "cyberos.sqlite", kind: "file", isSafe: true })).toMatchObject({ kind: "database" });
     expect(describeFileVisual({ name: "backup.tar", kind: "file", isSafe: true })).toMatchObject({ kind: "archive" });
     expect(describeFileVisual({ name: "server.key", kind: "file", isSafe: true })).toMatchObject({ kind: "secure" });
   });

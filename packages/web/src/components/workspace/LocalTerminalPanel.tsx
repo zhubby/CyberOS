@@ -25,10 +25,6 @@ import {
 } from "../../api.js";
 import type { CodeFontSettings } from "../../lib/editor-settings.js";
 import {
-  clearStoredTerminalSessionId,
-  readStoredTerminalSessionId
-} from "../../lib/terminal-session.js";
-import {
   shouldInitializeTerminalTabs,
   terminalTabLabel,
   terminalTabNavigationTarget,
@@ -98,14 +94,8 @@ export function LocalTerminalPanel({
     }
     try {
       let nextState = await getTerminalTabs(targetRootId);
-      const legacySessionId = readStoredTerminalSessionId(targetRootId);
-      if (shouldInitializeTerminalTabs(nextState, legacySessionId)) {
-        nextState = await initializeTerminalTabs(targetRootId, legacySessionId ?? undefined);
-        if (legacySessionId) {
-          clearStoredTerminalSessionId(targetRootId);
-        }
-      } else if (legacySessionId) {
-        clearStoredTerminalSessionId(targetRootId);
+      if (shouldInitializeTerminalTabs(nextState)) {
+        nextState = await initializeTerminalTabs(targetRootId);
       }
       if (requestVersion === requestVersionRef.current && currentRootIdRef.current === targetRootId) {
         applyState(nextState);
@@ -870,7 +860,7 @@ function terminalWebSocketUrl(rootId: string): string {
 }
 
 function terminalWebSocketProtocols(sessionId: string): string[] {
-  return ["zos-terminal-v1", `zos-session.${sessionId}`];
+  return ["cyberos-terminal-v1", `cyberos-session.${sessionId}`];
 }
 
 function parseTerminalMessage(raw: unknown): TerminalMessage | null {

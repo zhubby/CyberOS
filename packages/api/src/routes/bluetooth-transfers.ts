@@ -16,13 +16,13 @@ import {
   reserveBluetoothReceiveFinalization,
   requestBluetoothTransferCancellation,
   saveBluetoothSettings
-} from "@zos/db";
+} from "@cyberos/db";
 import type {
   BluetoothAudioDevice,
   BluetoothInboxStatus,
   BluetoothSettingsRecord,
   BluetoothStatus
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   HostdBluetoothManagerClient,
@@ -231,7 +231,7 @@ export async function finalizeBluetoothReceives(
         }
         const destinationName = validateBluetoothReceivePath(inbox.relativePath, finalizationRelativePath);
         const destinationPath = path.join(inbox.realPath, destinationName);
-        const temporaryPath = path.join(inbox.realPath, `.zos-bluetooth-${transfer.id}.part`);
+        const temporaryPath = path.join(inbox.realPath, `.cyberos-bluetooth-${transfer.id}.part`);
         const result = await publishReceivedFile(source, temporaryPath, destinationPath);
         if (result === "collision") {
           const replacement = await nextBluetoothReceivePath(

@@ -9,7 +9,7 @@ sidebar:
   order: 4
 ---
 
-ZOS 使用两个职责分离的 SQLite 数据库。主库 `zos.sqlite` 开启 WAL、foreign keys 和 busy timeout，表按身份与 roots、sessions/jobs/events、approvals/operations、indexed files/FTS/trash、Photos 资源/任务/扫描断点/发布 journal、readiness/index history、backup、health alerts、monitoring alert 配置/incident/outbox 和 execution locks 分组。
+CyberOS 使用两个职责分离的 SQLite 数据库。主库 `cyberos.sqlite` 开启 WAL、foreign keys 和 busy timeout，表按身份与 roots、sessions/jobs/events、approvals/operations、indexed files/FTS/trash、Photos 资源/任务/扫描断点/发布 journal、readiness/index history、backup、health alerts、monitoring alert 配置/incident/outbox 和 execution locks 分组。
 
 迁移由有序 ID 驱动，首次打开数据库时逐个事务执行并记录到 `schema_migrations`。TypeScript migration catalog 是主库 schema 权威；内部 Rust 服务只等待各自要求的 migration 就绪，不迁移主库。告警 API 使用 revision 乐观并发，alerter 以聚合根事务维护 instance、incident、事件和 outbox。Photos job 使用独立租约与 worker heartbeat，其他周期任务通过 execution lock 和 systemd 调度避免互相覆盖。
 

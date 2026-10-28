@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import {
   createStorageOperationRecord,
   updateStorageOperationStatus
-} from "@zos/db";
-import type { StorageOperationProposal } from "@zos/shared";
+} from "@cyberos/db";
+import type { StorageOperationProposal } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   applyStoragePoolOperation,

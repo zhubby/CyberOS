@@ -1,4 +1,4 @@
-import type { DockerDaemonStatus } from "@zos/shared";
+import type { DockerDaemonStatus } from "@cyberos/shared";
 
 export type DockerDaemonTone = "ready" | "warning" | "offline" | "neutral";
 

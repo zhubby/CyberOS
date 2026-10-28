@@ -1,7 +1,7 @@
-import type { ZosDatabase } from "@zos/db";
-import type { CapabilityRuntimeDependencies } from "@zos/capability-runtime";
-import type { MonitoringReader } from "@zos/monitoring";
-import type { PublicBuildInfo, ZosConfig } from "@zos/shared";
+import type { CyberOsDatabase } from "@cyberos/db";
+import type { CapabilityRuntimeDependencies } from "@cyberos/capability-runtime";
+import type { MonitoringReader } from "@cyberos/monitoring";
+import type { PublicBuildInfo, CyberOsConfig } from "@cyberos/shared";
 import type { DockerComposeRuntime } from "./lib/docker-compose.js";
 import type { DockerEngineRuntime } from "./lib/docker-client.js";
 import type { DockerDaemonRuntime } from "./lib/docker-daemon.js";
@@ -19,8 +19,8 @@ import type { DockerHostAccessRuntime } from "./lib/docker-host-access.js";
 import type { MonitoringEventBroker } from "./lib/monitoring-events.js";
 
 export interface ApiRouteContext {
-  config: ZosConfig;
-  db: ZosDatabase;
+  config: CyberOsConfig;
+  db: CyberOsDatabase;
   monitoring: MonitoringReader;
   monitoringEvents?: MonitoringEventBroker;
   buildInfo?: PublicBuildInfo;

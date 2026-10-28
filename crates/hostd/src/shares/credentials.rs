@@ -65,7 +65,7 @@ pub(super) async fn apply_credentials(
                 "--system",
                 "--no-create-home",
                 "--home-dir",
-                "/zos/home/share",
+                "/cyberos/home/share",
                 "--shell",
                 "/usr/sbin/nologin",
                 &settings.account.username,

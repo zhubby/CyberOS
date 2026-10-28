@@ -359,7 +359,7 @@ fn hash_segment(value: &str) -> String {
 impl Config {
     fn from_env() -> Self {
         let current_uid = Uid::current().as_raw();
-        let allowed_uids = env::var("ZOS_HOST_ACCESS_ALLOWED_UIDS")
+        let allowed_uids = env::var("CYBEROS_HOST_ACCESS_ALLOWED_UIDS")
             .ok()
             .map(|value| {
                 value
@@ -370,14 +370,15 @@ impl Config {
             .filter(|values: &Vec<u32>| !values.is_empty())
             .unwrap_or_else(|| vec![0, current_uid]);
         Self {
-            runtime_root: env::var_os("ZOS_HOST_ACCESS_RUNTIME_ROOT")
+            runtime_root: env::var_os("CYBEROS_HOST_ACCESS_RUNTIME_ROOT")
                 .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("/run/zos/host-access")),
-            docker_socket: env::var_os("ZOS_DOCKER_SOCKET")
+                .unwrap_or_else(|| PathBuf::from("/run/cyberos/host-access")),
+            docker_socket: env::var_os("CYBEROS_DOCKER_SOCKET")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("/var/run/docker.sock")),
             allowed_uids,
-            docker_compatible: env::var("ZOS_HOST_ACCESS_DOCKER_COMPATIBLE").as_deref() == Ok("1"),
+            docker_compatible: env::var("CYBEROS_HOST_ACCESS_DOCKER_COMPATIBLE").as_deref()
+                == Ok("1"),
         }
     }
 }

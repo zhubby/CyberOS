@@ -7,7 +7,7 @@ import {
   type CapabilityExecution,
   type CapabilitySubject,
   type JsonValue
-} from "@zos/capabilities";
+} from "@cyberos/capabilities";
 import {
   createCapabilityProposal,
   createTrashEntry,
@@ -28,8 +28,8 @@ import {
   recordAppliedOperation,
   transitionCapabilityRun,
   type CapabilityRunRecord,
-  type ZosDatabase
-} from "@zos/db";
+  type CyberOsDatabase
+} from "@cyberos/db";
 import {
   applyFileMutation,
   isPathInside,
@@ -39,8 +39,8 @@ import {
   resolveSafeTargetPath,
   statPath,
   toRootRelative
-} from "@zos/nas-tools";
-import type { AgentCapabilityId, FileMutationOperation, FileOperationProposal, NasRootRecord, ZosConfig } from "@zos/shared";
+} from "@cyberos/nas-tools";
+import type { AgentCapabilityId, FileMutationOperation, FileOperationProposal, NasRootRecord, CyberOsConfig } from "@cyberos/shared";
 import {
   isStoredCapabilityAdapterPayload,
   parseStoredCapabilityAdapterProposal,
@@ -53,16 +53,16 @@ import {
 } from "./adapters.js";
 import { executeExtendedFileReadCapability } from "./file-read.js";
 
-const FILE_MUTATION_CAPABILITY = "zos.files.mutate";
+const FILE_MUTATION_CAPABILITY = "cyberos.files.mutate";
 const PI_MCP_FILE_CAPABILITIES = [
-  "zos.files.list",
-  "zos.files.stat",
-  "zos.files.read",
-  "zos.files.search",
-  "zos.files.grep",
-  "zos.files.find",
-  "zos.files.git",
-  "zos.files.archive-inspect"
+  "cyberos.files.list",
+  "cyberos.files.stat",
+  "cyberos.files.read",
+  "cyberos.files.search",
+  "cyberos.files.grep",
+  "cyberos.files.find",
+  "cyberos.files.git",
+  "cyberos.files.archive-inspect"
 ] as const;
 const FILE_PROPOSAL_TTL_MS = 15 * 60_000;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
@@ -83,8 +83,8 @@ interface StoredFileMutationProposal {
 }
 
 export interface CapabilityRuntimeDependencies {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   adapters?: Readonly<Record<string, CapabilityDomainAdapter>>;
 }
 
@@ -102,13 +102,13 @@ export interface PiToolCapabilityRequest {
 }
 
 const PI_TOOL_CAPABILITIES: Record<PiToolCapabilityName, string> = {
-  read: "zos.files.read",
-  grep: "zos.files.grep",
-  find: "zos.files.find",
-  ls: "zos.files.list",
-  bash: "zos.shell.run",
-  edit: "zos.files.edit",
-  write: "zos.files.write"
+  read: "cyberos.files.read",
+  grep: "cyberos.files.grep",
+  find: "cyberos.files.find",
+  ls: "cyberos.files.list",
+  bash: "cyberos.shell.run",
+  edit: "cyberos.files.edit",
+  write: "cyberos.files.write"
 };
 
 interface StoredPiToolPayload {
@@ -756,7 +756,7 @@ function rejectSecretLikeFields(value: JsonValue, pathSegments: string[] = []): 
 }
 
 function requiredScopeForCapability(capabilityId: string, payload: JsonValue | null): string | null {
-  if (isStoredPiMcpFilePayload(payload)) return "zos:files:read";
+  if (isStoredPiMcpFilePayload(payload)) return "cyberos:files:read";
   return createCatalogDescriptors().find((descriptor) => descriptor.id === capabilityId)?.requiredScopes[0] ?? null;
 }
 
@@ -773,7 +773,7 @@ export async function executeFileReadCapability(
   const rootId = requiredText(input.rootId, "rootId");
   const root = requireReadyRoot(dependencies.db, rootId);
   switch (capabilityId) {
-    case "zos.files.list": {
+    case "cyberos.files.list": {
       const requestedPath = optionalText(input.path) ?? ".";
       const entries = await mapPathError(() => listDir(root, requestedPath));
       const limit = strictBoundedInteger(input.limit, 50, 1, 200);
@@ -790,16 +790,16 @@ export async function executeFileReadCapability(
         }
       };
     }
-    case "zos.files.stat": {
+    case "cyberos.files.stat": {
       const metadata = await mapPathError(() => statPath(root, requiredText(input.path, "path")));
       return { data: { rootId, stat: toJsonValue(metadata) } };
     }
-    case "zos.files.read": {
+    case "cyberos.files.read": {
       const maxBytes = strictBoundedInteger(input.maxBytes, 64 * 1024, 1, 128 * 1024);
       const preview = await mapPathError(() => readText(root, requiredText(input.path, "path"), maxBytes));
       return { data: { rootId, maxBytes, preview: toJsonValue(preview) } };
     }
-    case "zos.files.search": {
+    case "cyberos.files.search": {
       const limit = strictBoundedInteger(input.limit, 50, 1, 100);
       try {
         const page = queryIndexAdvanced(dependencies.db, {
@@ -819,10 +819,10 @@ export async function executeFileReadCapability(
         throw new CapabilityError("INVALID_ARGUMENT", "File search request is invalid", { cause: error });
       }
     }
-    case "zos.files.grep":
-    case "zos.files.find":
-    case "zos.files.git":
-    case "zos.files.archive-inspect":
+    case "cyberos.files.grep":
+    case "cyberos.files.find":
+    case "cyberos.files.git":
+    case "cyberos.files.archive-inspect":
       return executeExtendedFileReadCapability(dependencies, capabilityId, input);
   }
 }
@@ -891,7 +891,7 @@ function optionalRelativePath(value: JsonValue | undefined, field: string): stri
   return normalized;
 }
 
-function requireReadyRoot(db: ZosDatabase, rootId: string): NasRootRecord {
+function requireReadyRoot(db: CyberOsDatabase, rootId: string): NasRootRecord {
   const root = getNasRoot(db, rootId);
   if (!root || !root.enabled) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
   if (root.mountPolicy === "required") {
@@ -943,7 +943,7 @@ async function fileMutationRevision(root: NasRootRecord, request: FileMutationRe
 function fileMutationSummary(request: FileMutationRequest): string {
   switch (request.operation) {
     case "mkdir": return `Create folder ${request.targetPath}`;
-    case "trash": return `Move ${request.sourcePath} to ZOS trash`;
+    case "trash": return `Move ${request.sourcePath} to CyberOS trash`;
     case "move": return `Move ${request.sourcePath} to ${request.targetPath}`;
     case "copy": return `Copy ${request.sourcePath} to ${request.targetPath}`;
     case "rename": return `Rename ${request.sourcePath} to ${request.targetPath}`;
@@ -1116,34 +1116,34 @@ async function validatePiMcpFileCapability(
 ): Promise<void> {
   const root = requireReadyRoot(dependencies.db, requiredText(input.rootId, "rootId"));
   switch (capabilityId) {
-    case "zos.files.list":
+    case "cyberos.files.list":
       strictBoundedInteger(input.limit, 50, 1, 200);
       decodeFileOffsetCursor(optionalText(input.cursor), `${root.id}\0${optionalText(input.path) ?? "."}`);
       await mapPathError(() => resolveSafeExistingPath(root.path, optionalText(input.path) ?? "."));
       return;
-    case "zos.files.stat":
+    case "cyberos.files.stat":
       await mapPathError(() => resolveSafeExistingPath(root.path, requiredText(input.path, "path")));
       return;
-    case "zos.files.read":
+    case "cyberos.files.read":
       strictBoundedInteger(input.maxBytes, 64 * 1024, 1, 128 * 1024);
       await mapPathError(() => resolveSafeExistingPath(root.path, requiredText(input.path, "path")));
       return;
-    case "zos.files.search":
+    case "cyberos.files.search":
       requiredText(input.query, "query");
       strictBoundedInteger(input.limit, 50, 1, 100);
       if (optionalText(input.path)) {
         await mapPathError(() => resolveSafeExistingPath(root.path, optionalText(input.path)!));
       }
       return;
-    case "zos.files.grep":
+    case "cyberos.files.grep":
       requiredText(input.pattern, "pattern");
       await executeExtendedFileReadCapability(dependencies, capabilityId, { ...input, limit: 1, maxFiles: 1, maxBytes: 1 });
       return;
-    case "zos.files.find":
+    case "cyberos.files.find":
       await executeExtendedFileReadCapability(dependencies, capabilityId, { ...input, limit: 1, maxEntries: 1 });
       return;
-    case "zos.files.git":
-    case "zos.files.archive-inspect":
+    case "cyberos.files.git":
+    case "cyberos.files.archive-inspect":
       await executeExtendedFileReadCapability(dependencies, capabilityId, input);
       return;
   }
@@ -1152,29 +1152,29 @@ async function validatePiMcpFileCapability(
 function piMcpFileSummary(capabilityId: PiMcpFileCapabilityId, input: Record<string, JsonValue>): string {
   const requestedPath = optionalText(input.path) ?? ".";
   switch (capabilityId) {
-    case "zos.files.list": return `List ${requestedPath}`;
-    case "zos.files.stat": return `Inspect ${requestedPath}`;
-    case "zos.files.read": return `Read ${requestedPath}`;
-    case "zos.files.search": return `Search ${requestedPath}`;
-    case "zos.files.grep": return `Search file contents below ${requestedPath}`;
-    case "zos.files.find": return `Find files below ${requestedPath}`;
-    case "zos.files.git": return `Inspect Git state at ${requestedPath}`;
-    case "zos.files.archive-inspect": return `Inspect archive ${requestedPath}`;
+    case "cyberos.files.list": return `List ${requestedPath}`;
+    case "cyberos.files.stat": return `Inspect ${requestedPath}`;
+    case "cyberos.files.read": return `Read ${requestedPath}`;
+    case "cyberos.files.search": return `Search ${requestedPath}`;
+    case "cyberos.files.grep": return `Search file contents below ${requestedPath}`;
+    case "cyberos.files.find": return `Find files below ${requestedPath}`;
+    case "cyberos.files.git": return `Inspect Git state at ${requestedPath}`;
+    case "cyberos.files.archive-inspect": return `Inspect archive ${requestedPath}`;
   }
 }
 
 function agentPolicyCapabilityId(capabilityId: string): AgentCapabilityId | null {
   switch (capabilityId) {
-    case "zos.files.list": return "zos.files.list";
-    case "zos.files.stat":
-    case "zos.files.read": return "zos.files.read";
-    case "zos.files.search": return "zos.files.search";
-    case "zos.files.grep": return "zos.files.grep";
-    case "zos.files.find": return "zos.files.find";
+    case "cyberos.files.list": return "cyberos.files.list";
+    case "cyberos.files.stat":
+    case "cyberos.files.read": return "cyberos.files.read";
+    case "cyberos.files.search": return "cyberos.files.search";
+    case "cyberos.files.grep": return "cyberos.files.grep";
+    case "cyberos.files.find": return "cyberos.files.find";
     case FILE_MUTATION_CAPABILITY: return FILE_MUTATION_CAPABILITY;
-    case "zos.files.edit": return "zos.files.edit";
-    case "zos.files.write": return "zos.files.write";
-    case "zos.shell.run": return "zos.shell.run";
+    case "cyberos.files.edit": return "cyberos.files.edit";
+    case "cyberos.files.write": return "cyberos.files.write";
+    case "cyberos.shell.run": return "cyberos.shell.run";
     default: return null;
   }
 }
@@ -1193,7 +1193,7 @@ async function validatePiToolRequest(
       return null;
     }
     case "bash": {
-      throw new CapabilityError("INVALID_ARGUMENT", "Legacy bash execution is disabled; use zos.shell.run with structured argv");
+      throw new CapabilityError("INVALID_ARGUMENT", "Legacy bash execution is disabled; use cyberos.shell.run with structured argv");
     }
     case "edit": {
       const edits = parseEdits(args.edits);
@@ -1244,7 +1244,7 @@ async function executePiTool(
       return { text: truncateText(matches.join("\n") || "No matches."), truncated: matches.length >= limit };
     }
     case "bash": {
-      throw new CapabilityError("INVALID_ARGUMENT", "Legacy bash execution is disabled; use zos.shell.run with structured argv");
+      throw new CapabilityError("INVALID_ARGUMENT", "Legacy bash execution is disabled; use cyberos.shell.run with structured argv");
     }
     case "edit": {
       const requestedPath = requiredText(args.path, "path");
@@ -1450,7 +1450,7 @@ function truncateText(text: string): string {
 }
 
 function failQueuedRun(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   run: CapabilityRunRecord,
   errorCode: "INVALID_ARGUMENT" | "FORBIDDEN" | "NOT_READY" | "CONFLICT" | "INTERNAL",
   errorMessage: string
@@ -1469,7 +1469,7 @@ function failQueuedRun(
 }
 
 function failRunningRun(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   run: CapabilityRunRecord,
   errorCode: "INVALID_ARGUMENT" | "FORBIDDEN" | "NOT_READY" | "CONFLICT" | "INTERNAL",
   errorMessage: string
@@ -1502,7 +1502,7 @@ function safeFailureMessage(error: unknown, dependencies: CapabilityRuntimeDepen
   const raw = error instanceof Error ? error.message : "Capability execution failed";
   return raw
     .replaceAll(dependencies.config.dataDir, "[state]")
-    .replaceAll(dependencies.config.rootDir ?? "__no_root__", "[zos]")
+    .replaceAll(dependencies.config.rootDir ?? "__no_root__", "[cyberos]")
     .replaceAll(/\/(?:[^\s/]+\/)+[^\s]*/gu, "[path]")
     .slice(0, 500);
 }

@@ -4,11 +4,11 @@ import type {
   IndexSearchRequest,
   IndexSearchResult,
   IndexSearchSortField
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 export function queryIndexedText(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { rootId: string; query: string; path?: string; limit?: number }
 ): Array<{
   fileId: string;
@@ -109,7 +109,7 @@ const HIGHLIGHT_END = "\u0002";
 const MAX_FTS_CANDIDATES = 200;
 const MAX_SNIPPET_MATCHES = 10;
 
-export function queryIndexAdvanced(db: ZosDatabase, request: IndexSearchRequest): IndexSearchPage {
+export function queryIndexAdvanced(db: CyberOsDatabase, request: IndexSearchRequest): IndexSearchPage {
   const normalized = normalizeAdvancedRequest(request);
   const signature = createHash("sha256").update(JSON.stringify(normalized.signature)).digest("base64url");
   const cursor = decodeSearchCursor(normalized.cursor, signature);
@@ -319,7 +319,7 @@ function literalFtsQuery(query: string, columns: string[]): string {
 }
 
 function queryMarkedSnippets(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   rootId: string,
   currentQuery: string | null,
   legacyQuery: string | null,

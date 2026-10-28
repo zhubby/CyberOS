@@ -1,6 +1,6 @@
 {
-  "name": "@zos/shared",
-  "version": "1.7.8",
+  "name": "@cyberos/shared",
+  "version": "2.0.0",
   "type": "module",
   "exports": {
     ".": {

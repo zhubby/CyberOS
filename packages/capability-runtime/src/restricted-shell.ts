@@ -3,10 +3,10 @@ import { execFile } from "node:child_process";
 import { access, lstat, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { CapabilityError, type JsonValue } from "@zos/capabilities";
-import { getNasRoot, getRootReadiness } from "@zos/db";
-import { resolveSafeExistingPath } from "@zos/nas-tools";
-import type { NasRootRecord } from "@zos/shared";
+import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
+import { getNasRoot, getRootReadiness } from "@cyberos/db";
+import { resolveSafeExistingPath } from "@cyberos/nas-tools";
+import type { NasRootRecord } from "@cyberos/shared";
 import type { CapabilityDomainAdapter, PreparedCapabilityAction } from "./adapters.js";
 
 const execFileAsync = promisify(execFile);

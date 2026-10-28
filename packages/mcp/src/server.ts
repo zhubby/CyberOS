@@ -5,15 +5,15 @@ import { hostHeaderValidation, originValidation } from "@modelcontextprotocol/fa
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { CapabilityError, capabilityErrorShape, capabilityResult, type JsonValue } from "@zos/capabilities";
+import { CapabilityError, capabilityErrorShape, capabilityResult, type JsonValue } from "@cyberos/capabilities";
 import {
   authenticateMcpClient,
   consumeMcpResourceToken,
   consumeMcpTransferToken,
   getNasRoot,
   type McpResourceRecord
-} from "@zos/db";
-import { assertNoSymlinkPathSegments, resolveSafeExistingPath } from "@zos/nas-tools";
+} from "@cyberos/db";
+import { assertNoSymlinkPathSegments, resolveSafeExistingPath } from "@cyberos/nas-tools";
 import { catalogForClient, createClientRuntime, invokeCapability, type ClientRuntime, type McpRuntimeDependencies } from "./runtime.js";
 
 export interface McpRegistrationOptions {
@@ -54,7 +54,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
     preHandler: guards,
     config: { rateLimit: { max: 120, timeWindow: "1 minute" } }
   }, async (request, reply) => {
-    if (request.headers["x-zos-mcp-external"] === "1") {
+    if (request.headers["x-cyberos-mcp-external"] === "1") {
       if (dependencies.config.mcp?.externalEnabled !== true) {
         reply.status(403).send({ error: "external_mcp_disabled" });
         return;
@@ -86,7 +86,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
       return;
     }
     active.set(client.id, count + 1);
-    const external = request.headers["x-zos-mcp-external"] === "1";
+    const external = request.headers["x-cyberos-mcp-external"] === "1";
     const forwardedHost = request.headers["x-forwarded-host"];
     const externalHost = typeof forwardedHost === "string" ? forwardedHost : Array.isArray(forwardedHost) ? forwardedHost[0] : undefined;
     const transferBaseUrl = external
@@ -134,7 +134,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
   server.delete("/mcp", { preHandler: guards }, methodNotAllowed);
 
   server.get<{ Params: { token: string } }>("/mcp-transfer/:token", { preHandler: guards }, async (request, reply) => {
-    const external = request.headers["x-zos-mcp-external"] === "1";
+    const external = request.headers["x-cyberos-mcp-external"] === "1";
     if (external && (dependencies.config.mcp?.externalEnabled !== true || request.headers["x-forwarded-proto"] !== "https")) {
       reply.status(403).send({ error: "https_required" });
       return;
@@ -183,7 +183,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
   });
 
   server.get<{ Params: { token: string } }>("/mcp-resource/:token", { preHandler: guards }, async (request, reply) => {
-    const external = request.headers["x-zos-mcp-external"] === "1";
+    const external = request.headers["x-cyberos-mcp-external"] === "1";
     if (external && (dependencies.config.mcp?.externalEnabled !== true || request.headers["x-forwarded-proto"] !== "https")) {
       reply.status(403).send({ error: "https_required" });
       return;
@@ -220,21 +220,21 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
 }
 
 function createMcpServer(runtime: ClientRuntime): McpServer {
-  const server = new McpServer({ name: "zos", version: "1.3.2" }, {
+  const server = new McpServer({ name: "cyberos", version: "2.0.0" }, {
     maxToolInputElements: 2_000,
-    instructions: "Use rootId and root-relative paths. Mutations require approval in the first-party ZOS UI. Secrets must be entered in ZOS, never in tool arguments."
+    instructions: "Use rootId and root-relative paths. Mutations require approval in the first-party CyberOS UI. Secrets must be entered in CyberOS, never in tool arguments."
   });
 
-  server.registerTool("zos.catalog.get", {
-    title: "List ZOS capabilities",
+  server.registerTool("cyberos.catalog.get", {
+    title: "List CyberOS capabilities",
     description: "Return the scoped capability catalog and runtime availability.",
-    inputSchema: z.fromJSONSchema(runtime.registry.get("zos.catalog.get")!.inputSchema as Parameters<typeof z.fromJSONSchema>[0]),
+    inputSchema: z.fromJSONSchema(runtime.registry.get("cyberos.catalog.get")!.inputSchema as Parameters<typeof z.fromJSONSchema>[0]),
     outputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }, async () => wrapTool(async (traceId) => capabilityResult({ data: await catalogForClient(runtime) }, traceId)));
 
   for (const descriptor of runtime.registry.listForScopes(runtime.context.subject.scopes)) {
-    if (descriptor.id === "zos.catalog.get") continue;
+    if (descriptor.id === "cyberos.catalog.get") continue;
     server.registerTool(descriptor.id, {
       title: descriptor.title,
       description: `${descriptor.description} Approval: ${descriptor.approval}.`,
@@ -242,9 +242,9 @@ function createMcpServer(runtime: ClientRuntime): McpServer {
       outputSchema,
       annotations: descriptor.annotations,
       _meta: {
-        "zos/risk": descriptor.risk,
-        "zos/approval": descriptor.approval,
-        "zos/scopes": descriptor.requiredScopes
+        "cyberos/risk": descriptor.risk,
+        "cyberos/approval": descriptor.approval,
+        "cyberos/scopes": descriptor.requiredScopes
       }
     }, async (input) => wrapTool(async () => invokeCapability(runtime, descriptor.id, input as JsonValue)));
   }
@@ -255,65 +255,65 @@ function createMcpServer(runtime: ClientRuntime): McpServer {
 }
 
 function registerResources(server: McpServer, runtime: ClientRuntime): void {
-  server.registerResource("ZOS capability catalog", "zos://catalog", {
-    title: "ZOS capability catalog",
+  server.registerResource("CyberOS capability catalog", "cyberos://catalog", {
+    title: "CyberOS capability catalog",
     description: "Scoped capabilities and runtime availability",
     mimeType: "application/json"
   }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(await catalogForClient(runtime)) }] }));
 
-  if (runtime.context.subject.scopes.has("zos:system:read")) {
-    server.registerResource("ZOS system status", "zos://system/status", {
-      title: "ZOS system status",
+  if (runtime.context.subject.scopes.has("cyberos:system:read")) {
+    server.registerResource("CyberOS system status", "cyberos://system/status", {
+      title: "CyberOS system status",
       mimeType: "application/json"
-    }, async (uri) => resourceFromCapability(uri, runtime, "zos.system.status", {}));
+    }, async (uri) => resourceFromCapability(uri, runtime, "cyberos.system.status", {}));
   }
-  if (runtime.context.subject.scopes.has("zos:roots:read")) {
-    server.registerResource("ZOS NAS root", new ResourceTemplate("zos://roots/{id}", { list: undefined }), {
-      title: "ZOS NAS root",
+  if (runtime.context.subject.scopes.has("cyberos:roots:read")) {
+    server.registerResource("CyberOS NAS root", new ResourceTemplate("cyberos://roots/{id}", { list: undefined }), {
+      title: "CyberOS NAS root",
       mimeType: "application/json"
-    }, async (uri, variables) => resourceFromCapability(uri, runtime, "zos.roots.list", { rootId: String(variables.id) }));
+    }, async (uri, variables) => resourceFromCapability(uri, runtime, "cyberos.roots.list", { rootId: String(variables.id) }));
   }
-  if (runtime.context.subject.scopes.has("zos:runs:read")) {
-    server.registerResource("ZOS capability run", new ResourceTemplate("zos://runs/{id}", { list: undefined }), {
-      title: "ZOS capability run",
+  if (runtime.context.subject.scopes.has("cyberos:runs:read")) {
+    server.registerResource("CyberOS capability run", new ResourceTemplate("cyberos://runs/{id}", { list: undefined }), {
+      title: "CyberOS capability run",
       mimeType: "application/json"
-    }, async (uri, variables) => resourceFromCapability(uri, runtime, "zos.runs.get", { runId: String(variables.id) }));
+    }, async (uri, variables) => resourceFromCapability(uri, runtime, "cyberos.runs.get", { runId: String(variables.id) }));
   }
   if (
-    runtime.context.subject.scopes.has("zos:files:read")
-    && runtime.registry.get("zos.files.read")?.approval === "none"
+    runtime.context.subject.scopes.has("cyberos:files:read")
+    && runtime.registry.get("cyberos.files.read")?.approval === "none"
   ) {
-    server.registerResource("ZOS bounded text file", new ResourceTemplate("zos://files/{rootId}/{+path}", { list: undefined }), {
-      title: "ZOS bounded text file",
+    server.registerResource("CyberOS bounded text file", new ResourceTemplate("cyberos://files/{rootId}/{+path}", { list: undefined }), {
+      title: "CyberOS bounded text file",
       description: "A bounded UTF-8 preview addressed by NAS root and root-relative path",
       mimeType: "text/plain"
-    }, async (uri, variables) => resourceFromCapability(uri, runtime, "zos.files.read", {
+    }, async (uri, variables) => resourceFromCapability(uri, runtime, "cyberos.files.read", {
       rootId: String(variables.rootId),
       path: String(variables.path),
       maxBytes: 128 * 1024
     }));
   }
-  if (runtime.context.subject.scopes.has("zos:photos:read")) {
-    server.registerResource("ZOS photo record", new ResourceTemplate("zos://photos/{id}", { list: undefined }), {
-      title: "ZOS photo record",
+  if (runtime.context.subject.scopes.has("cyberos:photos:read")) {
+    server.registerResource("CyberOS photo record", new ResourceTemplate("cyberos://photos/{id}", { list: undefined }), {
+      title: "CyberOS photo record",
       description: "A non-sensitive photo catalog record; media bytes are not embedded",
       mimeType: "application/json"
-    }, async (uri, variables) => resourceFromCapability(uri, runtime, "zos.photos.query", {
+    }, async (uri, variables) => resourceFromCapability(uri, runtime, "cyberos.photos.query", {
       assetId: String(variables.id)
     }));
   }
 }
 
 function registerPrompts(server: McpServer): void {
-  server.registerPrompt("zos.diagnose", {
-    title: "Diagnose ZOS",
+  server.registerPrompt("cyberos.diagnose", {
+    title: "Diagnose CyberOS",
     description: "Inspect status, readiness, monitoring, and recent runs without changing the NAS."
-  }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Diagnose the current ZOS state. Start with zos.system.status and zos.roots.list, then inspect only the relevant read capabilities. Report evidence and do not propose changes until the cause is clear." } }] }));
-  server.registerPrompt("zos.organize", {
+  }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Diagnose the current CyberOS state. Start with cyberos.system.status and cyberos.roots.list, then inspect only the relevant read capabilities. Report evidence and do not propose changes until the cause is clear." } }] }));
+  server.registerPrompt("cyberos.organize", {
     title: "Organize NAS files",
     description: "Plan a reversible file organization workflow."
-  }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Inspect the selected NAS root using bounded reads and search. Produce a proposed organization with an explicit diff. Submit mutations only through approval-gated ZOS proposal tools." } }] }));
-  server.registerPrompt("zos.restore", {
+  }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Inspect the selected NAS root using bounded reads and search. Produce a proposed organization with an explicit diff. Submit mutations only through approval-gated CyberOS proposal tools." } }] }));
+  server.registerPrompt("cyberos.restore", {
     title: "Restore from backup",
     description: "Guide a staged restore workflow."
   }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Inspect backup status and select a snapshot. Restore only to staging through an approval-gated proposal, verify the staged result, and never overwrite the live destination directly." } }] }));

@@ -1,5 +1,5 @@
-import type { NasRootConfig, NasRootRecord } from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+import type { NasRootConfig, NasRootRecord } from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { mapNasRoot } from "./operation-mappers.js";
 import type { DbNasRootRow } from "./repository-rows.js";
 
@@ -8,7 +8,7 @@ type DbNasRootConfigRow = Pick<
   "id" | "name" | "path" | "enabled" | "mount_policy" | "expected_source" | "expected_uuid" | "expected_fstype"
 >;
 
-export function ensureNasRoots(db: ZosDatabase, roots: NasRootConfig[]): void {
+export function ensureNasRoots(db: CyberOsDatabase, roots: NasRootConfig[]): void {
   const storedRoots = db.prepare(`
     SELECT id, name, path, enabled, mount_policy, expected_source, expected_uuid, expected_fstype
     FROM nas_roots
@@ -106,14 +106,14 @@ function nasRootsMatchConfig(storedRoots: DbNasRootConfigRow[], roots: NasRootCo
   });
 }
 
-export function listNasRoots(db: ZosDatabase): NasRootRecord[] {
+export function listNasRoots(db: CyberOsDatabase): NasRootRecord[] {
     const rows = db
     .prepare("SELECT id, name, path, enabled, mount_policy, expected_source, expected_uuid, expected_fstype, created_at, updated_at FROM nas_roots WHERE enabled = 1 ORDER BY name")
     .all() as DbNasRootRow[];
   return rows.map(mapNasRoot);
 }
 
-export function getNasRoot(db: ZosDatabase, rootId: string): NasRootRecord | null {
+export function getNasRoot(db: CyberOsDatabase, rootId: string): NasRootRecord | null {
   const row = db
     .prepare("SELECT id, name, path, enabled, mount_policy, expected_source, expected_uuid, expected_fstype, created_at, updated_at FROM nas_roots WHERE id = ? AND enabled = 1")
     .get(rootId) as DbNasRootRow | undefined;

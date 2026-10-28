@@ -51,15 +51,15 @@ impl TmuxManager {
     ) -> Result<(), TermuxError> {
         let _guard = self.command_lock.lock().await;
         if self.has_session_unlocked(session_name).await? {
-            self.set_option_unlocked(session_name, "@zos_managed", "1")
+            self.set_option_unlocked(session_name, "@cyberos_managed", "1")
                 .await?;
             self.set_option_unlocked(
                 session_name,
-                "@zos_persistent",
+                "@cyberos_persistent",
                 if persistent { "1" } else { "0" },
             )
             .await?;
-            self.set_option_unlocked(session_name, "@zos_detached_at", "0")
+            self.set_option_unlocked(session_name, "@cyberos_detached_at", "0")
                 .await?;
             return Ok(());
         }
@@ -83,15 +83,15 @@ impl TmuxManager {
         ])
         .await?;
         let initialization = async {
-            self.set_option_unlocked(session_name, "@zos_managed", "1")
+            self.set_option_unlocked(session_name, "@cyberos_managed", "1")
                 .await?;
             self.set_option_unlocked(
                 session_name,
-                "@zos_persistent",
+                "@cyberos_persistent",
                 if persistent { "1" } else { "0" },
             )
             .await?;
-            self.set_option_unlocked(session_name, "@zos_detached_at", "0")
+            self.set_option_unlocked(session_name, "@cyberos_detached_at", "0")
                 .await
         }
         .await;
@@ -110,7 +110,7 @@ impl TmuxManager {
 
     pub async fn mark_attached(&self, session_name: &str) -> Result<(), TermuxError> {
         let _guard = self.command_lock.lock().await;
-        self.set_option_unlocked(session_name, "@zos_detached_at", "0")
+        self.set_option_unlocked(session_name, "@cyberos_detached_at", "0")
             .await
     }
 
@@ -121,7 +121,7 @@ impl TmuxManager {
         }
         self.set_option_unlocked(
             session_name,
-            "@zos_detached_at",
+            "@cyberos_detached_at",
             &current_time_ms().to_string(),
         )
         .await
@@ -220,7 +220,7 @@ impl TmuxManager {
             .run_unlocked([
                 "list-sessions",
                 "-F",
-                "#{session_name}\t#{session_attached}\t#{@zos_managed}\t#{@zos_detached_at}\t#{@zos_persistent}",
+                "#{session_name}\t#{session_attached}\t#{@cyberos_managed}\t#{@cyberos_detached_at}\t#{@cyberos_persistent}",
             ])
             .await?;
         if !output.status.success() {
@@ -306,7 +306,7 @@ fn is_missing_session(stderr: &[u8]) -> bool {
 }
 
 fn is_managed_name(name: &str) -> bool {
-    name.starts_with("zos-")
+    name.starts_with("cyberos-")
         && name.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
         })
@@ -327,9 +327,9 @@ mod tests {
 
     #[test]
     fn recognizes_managed_names_and_missing_sessions() {
-        assert!(is_managed_name("zos-demo_1"));
+        assert!(is_managed_name("cyberos-demo_1"));
         assert!(!is_managed_name("other-demo"));
-        assert!(!is_managed_name("zos-BAD"));
+        assert!(!is_managed_name("cyberos-BAD"));
         assert!(is_missing_session(b"can't find session: demo"));
     }
 }

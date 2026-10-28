@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use cyberos_monitoring_contracts::{METRICS_SCHEMA_VERSION, MetricKind, SamplingIntervals, metric};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
-use zos_monitoring_contracts::{METRICS_SCHEMA_VERSION, MetricKind, SamplingIntervals, metric};
 
 use crate::domain::rule::{Aggregation, AlertRule, MetricTransform, SeriesValue};
 use crate::error::AlerterError;
@@ -120,7 +120,7 @@ fn evaluate_series(
         return Ok(None);
     }
 
-    if rule.metric == "zos_monitor_last_sample_timestamp_seconds" {
+    if rule.metric == "cyberos_monitor_last_sample_timestamp_seconds" {
         let latest: Option<f64> = connection
             .query_row(
                 "SELECT value FROM metric_samples_raw WHERE series_id = ? AND timestamp_ms <= ? ORDER BY timestamp_ms DESC LIMIT 1",
@@ -283,7 +283,12 @@ mod tests {
     fn accepts_schema_v3_and_rejects_a_future_schema() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("metrics.sqlite");
-        write_series(&path, "zos_host_load1", &BTreeMap::new(), &[(10_000, 2.5)]);
+        write_series(
+            &path,
+            "cyberos_host_load1",
+            &BTreeMap::new(),
+            &[(10_000, 2.5)],
+        );
 
         assert!(open_reader(&path).is_ok());
 
@@ -313,7 +318,7 @@ mod tests {
         let labels = BTreeMap::from([("interface".to_owned(), "eth0".to_owned())]);
         let mut points = Vec::new();
         for sample in fixture["samples"].as_array().unwrap() {
-            if sample["metric"] != "zos_host_network_receive_bytes_total" {
+            if sample["metric"] != "cyberos_host_network_receive_bytes_total" {
                 continue;
             }
             points.push((
@@ -323,14 +328,14 @@ mod tests {
         }
         write_series(
             &path,
-            "zos_host_network_receive_bytes_total",
+            "cyberos_host_network_receive_bytes_total",
             &labels,
             &points,
         );
         let rule = AlertRule {
             id: "network-rate".to_owned(),
             name: "Network rate".to_owned(),
-            metric: "zos_host_network_receive_bytes_total".to_owned(),
+            metric: "cyberos_host_network_receive_bytes_total".to_owned(),
             selector: BTreeMap::from([("interface".to_owned(), "eth0".to_owned())]),
             transform: MetricTransform::Rate,
             aggregation: Aggregation::Last,
@@ -361,11 +366,16 @@ mod tests {
             standard: Duration::from_secs(60),
             ..SamplingIntervals::default()
         };
-        write_series(&path, "zos_host_load1", &BTreeMap::new(), &[(10_000, 2.5)]);
+        write_series(
+            &path,
+            "cyberos_host_load1",
+            &BTreeMap::new(),
+            &[(10_000, 2.5)],
+        );
         let mut rule = AlertRule {
             id: "load".to_owned(),
             name: "High load".to_owned(),
-            metric: "zos_host_load1".to_owned(),
+            metric: "cyberos_host_load1".to_owned(),
             selector: BTreeMap::new(),
             transform: MetricTransform::Value,
             aggregation: Aggregation::Last,

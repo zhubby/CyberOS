@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ShareSettingsRecord } from "@zos/shared";
+import type { ShareSettingsRecord } from "@cyberos/shared";
 import { collectShareSummary } from "./share-service.js";
 
 describe("share service status", () => {
@@ -7,7 +7,7 @@ describe("share service status", () => {
     const queried: string[] = [];
     const settings: ShareSettingsRecord = {
       enabled: true,
-      account: { username: "zos-share", password: null },
+      account: { username: "cyberos-share", password: null },
       updatedAt: "2026-09-22T00:00:00.000Z",
       shares: [{
         id: "shares",
@@ -35,10 +35,10 @@ describe("share service status", () => {
       }
     });
 
-    expect(queried).toContain("zos-webdav.service");
+    expect(queried).toContain("cyberos-webdav.service");
     expect(queried).not.toContain("apache2.service");
     expect(summary.protocols.webdav.services).toEqual([
-      { name: "zos-webdav.service", status: "active", error: null }
+      { name: "cyberos-webdav.service", status: "active", error: null }
     ]);
     expect(summary.capabilities).toEqual({
       canApplyConfiguration: true,
@@ -49,7 +49,7 @@ describe("share service status", () => {
   it("reports declarative share configuration as read-only", async () => {
     const summary = await collectShareSummary({
       enabled: false,
-      account: { username: "zos-share", password: null },
+      account: { username: "cyberos-share", password: null },
       updatedAt: "2026-09-22T00:00:00.000Z",
       shares: []
     }, { mutationPolicy: "declarative" });

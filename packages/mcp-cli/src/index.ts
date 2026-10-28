@@ -4,33 +4,33 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readlinkS
 import { isIP } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { createCatalogDescriptors } from "@zos/capabilities";
+import { createCatalogDescriptors } from "@cyberos/capabilities";
 import {
   createMcpClient,
   listMcpClients,
-  openZosDb,
+  openCyberOsDb,
   revokeMcpClient,
   rotateMcpClientToken,
   type McpClientKind,
-  type ZosDatabase
-} from "@zos/db";
-import { loadConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import { loadConfig } from "@cyberos/shared";
 
 const arguments_ = process.argv.slice(2);
 
-if (process.getuid?.() !== 0 && process.env.ZOS_MCP_ALLOW_NON_ROOT !== "1") {
-  fail("zos-mcp must run as root");
+if (process.getuid?.() !== 0 && process.env.CYBEROS_MCP_ALLOW_NON_ROOT !== "1") {
+  fail("cyberos-mcp must run as root");
 }
 
 const config = loadConfig();
-const db = openZosDb(config.databasePath);
+const db = openCyberOsDb(config.databasePath);
 try {
   dispatch(db, arguments_);
 } finally {
   db.close();
 }
 
-function dispatch(database: ZosDatabase, args: string[]): void {
+function dispatch(database: CyberOsDatabase, args: string[]): void {
   const [group, action] = args;
   if (group === "client" && action === "create") return createClient(database, args.slice(2));
   if (group === "client" && action === "list") return listClients(database);
@@ -40,13 +40,13 @@ function dispatch(database: ZosDatabase, args: string[]): void {
   usage();
 }
 
-function createClient(database: ZosDatabase, args: string[]): void {
+function createClient(database: CyberOsDatabase, args: string[]): void {
   const name = option(args, "--name");
   const kind = parseKind(option(args, "--kind") ?? "lan");
   if (kind === "pi" && listMcpClients(database).some((client) => client.kind === "pi" && !client.revokedAt)) {
     fail("an active Pi client already exists; rotate or revoke it first");
   }
-  const defaultScopes = kind === "pi" ? allPiScopes() : ["zos:catalog:read"];
+  const defaultScopes = kind === "pi" ? allPiScopes() : ["cyberos:catalog:read"];
   const scopes = option(args, "--scopes")?.split(",").map((scope) => scope.trim()).filter(Boolean) ?? defaultScopes;
   validateScopes(scopes);
   const expiresAt = parseExpiry(option(args, "--expires"));
@@ -60,7 +60,7 @@ function createClient(database: ZosDatabase, args: string[]): void {
       throw error;
     }
   }
-  const caPath = path.join(config.rootDir ?? "/zos", "config", "mcp-tls", "ca.crt");
+  const caPath = path.join(config.rootDir ?? "/cyberos", "config", "mcp-tls", "ca.crt");
   printJson({
     id: client.id,
     name: client.name,
@@ -75,7 +75,7 @@ function createClient(database: ZosDatabase, args: string[]): void {
   });
 }
 
-function listClients(database: ZosDatabase): void {
+function listClients(database: CyberOsDatabase): void {
   printJson({
     clients: listMcpClients(database).map((client) => ({
       id: client.id,
@@ -91,7 +91,7 @@ function listClients(database: ZosDatabase): void {
   });
 }
 
-function rotateClient(database: ZosDatabase, args: string[]): void {
+function rotateClient(database: CyberOsDatabase, args: string[]): void {
   const clientId = args[0];
   if (!clientId) fail("client rotate requires a client id");
   const existing = listMcpClients(database).find((client) => client.id === clientId && !client.revokedAt);
@@ -120,7 +120,7 @@ function rotateClient(database: ZosDatabase, args: string[]): void {
   });
 }
 
-function revokeClient(database: ZosDatabase, args: string[]): void {
+function revokeClient(database: CyberOsDatabase, args: string[]): void {
   const clientId = args[0];
   if (!clientId) fail("client revoke requires a client id");
   const client = listMcpClients(database).find((candidate) => candidate.id === clientId && !candidate.revokedAt);
@@ -131,7 +131,7 @@ function revokeClient(database: ZosDatabase, args: string[]): void {
   printJson({ id: clientId, revoked: true, pendingRunsExpired: true });
 }
 
-function initializeTls(database: ZosDatabase, args: string[]): void {
+function initializeTls(database: CyberOsDatabase, args: string[]): void {
   const activeLanClient = listMcpClients(database).some((client) => client.kind === "lan" && !client.revokedAt);
   if (!activeLanClient) fail("create at least one LAN client before enabling TLS");
   const hostname = option(args, "--hostname") ?? os.hostname();
@@ -143,7 +143,7 @@ function initializeTls(database: ZosDatabase, args: string[]): void {
   if (Boolean(providedCert) !== Boolean(providedKey)) fail("--cert and --key must be provided together");
   if (providedCa && !providedCert) fail("--ca can only be used with --cert and --key");
   if (providedCert && providedKey) validateProvidedTls(hostname, providedCert, providedKey, providedCa);
-  const rootDir = config.rootDir ?? "/zos";
+  const rootDir = config.rootDir ?? "/cyberos";
   const tlsDir = path.join(rootDir, "config", "mcp-tls");
   mkdirSync(tlsDir, { recursive: true, mode: 0o700 });
   const caKey = path.join(tlsDir, "ca.key");
@@ -166,7 +166,7 @@ function initializeTls(database: ZosDatabase, args: string[]): void {
       copyFileSync(providedKey, serverKey);
       if (providedCa) copyFileSync(providedCa, caCert);
     } else {
-      runOpenSsl(["req", "-x509", "-newkey", "rsa:3072", "-nodes", "-sha256", "-days", "3650", "-subj", "/CN=ZOS MCP Private CA", "-keyout", caKey, "-out", caCert]);
+      runOpenSsl(["req", "-x509", "-newkey", "rsa:3072", "-nodes", "-sha256", "-days", "3650", "-subj", "/CN=CyberOS MCP Private CA", "-keyout", caKey, "-out", caCert]);
       runOpenSsl(["req", "-newkey", "rsa:3072", "-nodes", "-sha256", "-subj", `/CN=${hostname}`, "-keyout", serverKey, "-out", serverCsr]);
       const subjectAltName = isIP(hostname) === 4 ? `IP:${hostname}` : `DNS:${hostname}`;
       writeFileSync(extensionFile, `subjectAltName=${subjectAltName}\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n`, { mode: 0o600 });
@@ -184,11 +184,11 @@ function initializeTls(database: ZosDatabase, args: string[]): void {
       caPath: managedCa ? caCert : null,
       caFingerprint,
       certificateFingerprint: serverFingerprint,
-      certificateSource: privateCa ? "zos-private-ca" : "provided",
+      certificateSource: privateCa ? "cyberos-private-ca" : "provided",
       enabled: config.mcp?.externalEnabled === true,
       nextStep: config.mcp?.externalEnabled === true
-        ? "Restart zos-api.service, then test the paired client."
-        : "Set [mcp].external_enabled = true and restart zos-api.service before using the LAN endpoint."
+        ? "Restart cyberos-api.service, then test the paired client."
+        : "Set [mcp].external_enabled = true and restart cyberos-api.service before using the LAN endpoint."
     };
   } catch (error) {
     removeFiles(createdTargets);
@@ -201,19 +201,19 @@ function initializeTls(database: ZosDatabase, args: string[]): void {
 }
 
 function installNginxMcpSite(input: { hostname: string; port: number; serverCert: string; serverKey: string }): void {
-  const availableDir = process.env.ZOS_NGINX_AVAILABLE_DIR ?? "/etc/nginx/sites-available";
-  const enabledDir = process.env.ZOS_NGINX_ENABLED_DIR ?? "/etc/nginx/sites-enabled";
+  const availableDir = process.env.CYBEROS_NGINX_AVAILABLE_DIR ?? "/etc/nginx/sites-available";
+  const enabledDir = process.env.CYBEROS_NGINX_ENABLED_DIR ?? "/etc/nginx/sites-enabled";
   mkdirSync(availableDir, { recursive: true });
   mkdirSync(enabledDir, { recursive: true });
-  const sitePath = path.join(availableDir, "zos-mcp.conf");
-  const linkPath = path.join(enabledDir, "zos-mcp.conf");
+  const sitePath = path.join(availableDir, "cyberos-mcp.conf");
+  const linkPath = path.join(enabledDir, "cyberos-mcp.conf");
   const previousSite = existsSync(sitePath) ? readFileSync(sitePath) : null;
   const previousLink = existsSync(linkPath) ? readlinkSync(linkPath) : null;
   try {
     writeFileSync(sitePath, nginxMcpConfig(input), { mode: 0o644 });
     if (existsSync(linkPath)) unlinkSync(linkPath);
     symlinkSync(sitePath, linkPath);
-    if (process.env.ZOS_MCP_SKIP_NGINX_TEST !== "1") {
+    if (process.env.CYBEROS_MCP_SKIP_NGINX_TEST !== "1") {
       execFileSync("nginx", ["-t"], { stdio: "inherit" });
       execFileSync("systemctl", ["reload", "nginx"], { stdio: "inherit" });
     }
@@ -241,7 +241,7 @@ function nginxMcpConfig(input: { hostname: string; port: number; serverCert: str
         proxy_pass http://127.0.0.1:${config.api.port}/mcp;
         proxy_http_version 1.1;
         proxy_set_header Host 127.0.0.1;
-        proxy_set_header X-ZOS-MCP-External 1;
+        proxy_set_header X-CyberOS-MCP-External 1;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-Host $host:${input.port};
         proxy_buffering off;
@@ -252,7 +252,7 @@ function nginxMcpConfig(input: { hostname: string; port: number; serverCert: str
         proxy_pass http://127.0.0.1:${config.api.port};
         proxy_http_version 1.1;
         proxy_set_header Host 127.0.0.1;
-        proxy_set_header X-ZOS-MCP-External 1;
+        proxy_set_header X-CyberOS-MCP-External 1;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-Host $host:${input.port};
     }
@@ -270,7 +270,7 @@ function validateScopes(scopes: string[]): void {
 
 function allPiScopes(): string[] {
   return [...new Set(createCatalogDescriptors().flatMap((descriptor) => descriptor.requiredScopes))]
-    .filter((scope) => scope !== "zos:admin:shell")
+    .filter((scope) => scope !== "cyberos:admin:shell")
     .sort();
 }
 
@@ -284,8 +284,8 @@ function installPiToken(token: string): void {
   chmodSync(temporary, 0o600);
   renameSync(temporary, tokenFile);
   chmodSync(tokenFile, 0o600);
-  if (process.getuid?.() === 0 && process.env.ZOS_MCP_SKIP_CHOWN !== "1") {
-    execFileSync("chown", ["zos:zos", tokenDir, tokenFile], { stdio: "ignore" });
+  if (process.getuid?.() === 0 && process.env.CYBEROS_MCP_SKIP_CHOWN !== "1") {
+    execFileSync("chown", ["cyberos:cyberos", tokenDir, tokenFile], { stdio: "ignore" });
     chmodSync(tokenDir, 0o700);
   }
 }
@@ -296,7 +296,7 @@ function readInstalledPiToken(): string {
     fail("the installed Pi token file is missing; refusing a non-atomic rotation");
   }
   const token = readFileSync(tokenFile, "utf8").trim();
-  if (!/^zos_mcp_[A-Za-z0-9_-]{43}$/u.test(token)) {
+  if (!/^cyberos_mcp_[A-Za-z0-9_-]{43}$/u.test(token)) {
     fail("the installed Pi token file is invalid; refusing a non-atomic rotation");
   }
   return token;
@@ -390,10 +390,10 @@ function printJson(value: unknown): void {
 }
 
 function usage(): never {
-  fail("usage: zos-mcp client create|list|rotate|revoke ... | zos-mcp tls init [--hostname HOST] [--port PORT] [--cert FILE --key FILE [--ca FILE]]");
+  fail("usage: cyberos-mcp client create|list|rotate|revoke ... | cyberos-mcp tls init [--hostname HOST] [--port PORT] [--cert FILE --key FILE [--ca FILE]]");
 }
 
 function fail(message: string): never {
-  process.stderr.write(`zos-mcp: ${message}\n`);
+  process.stderr.write(`cyberos-mcp: ${message}\n`);
   process.exit(1);
 }

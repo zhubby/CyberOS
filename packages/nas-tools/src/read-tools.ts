@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { lstat, open, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import type { NasRootRecord } from "@zos/shared";
+import type { NasRootRecord } from "@cyberos/shared";
 import { isPathInside, resolveSafeExistingPath } from "./path-safety.js";
 
 export interface FileEntry {

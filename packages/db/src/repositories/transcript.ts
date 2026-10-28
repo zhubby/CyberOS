@@ -1,5 +1,5 @@
-import type { AgentEventRecord, AgentMessageRecord } from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+import type { AgentEventRecord, AgentMessageRecord } from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { mapEvent, mapMessage } from "./agent-mappers.js";
 import type { DbEventRow, DbMessageRow } from "./repository-rows.js";
 
@@ -30,7 +30,7 @@ type DbTranscriptRow = {
 };
 
 export function listTranscriptItems(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId: string; limit?: number }
 ): AgentTranscriptItemRecord[] {
   const rows = db.prepare(`

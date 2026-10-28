@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
-import type { FileOperationProposal, FileOperationRecord, NasRootRecord } from "@zos/shared";
+import type { FileOperationProposal, FileOperationRecord, NasRootRecord } from "@cyberos/shared";
 import { isPathInside, resolveSafeExistingPath, toRootRelative, PathSafetyError } from "./path-safety.js";
 
 const MAX_ARCHIVE_ENTRIES = 10_000;

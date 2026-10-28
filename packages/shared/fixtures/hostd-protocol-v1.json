@@ -5,14 +5,14 @@
       "request": {
         "settings": {
           "enabled": false,
-          "account": { "username": "zos_share", "password": null },
+          "account": { "username": "cyberos_share", "password": null },
           "shares": []
         },
-        "roots": [{ "id": "primary", "path": "/zos/data/primary" }]
+        "roots": [{ "id": "primary", "path": "/cyberos/data/primary" }]
       },
       "result": {
         "appliedAt": "2026-10-10T00:00:00Z",
-        "files": ["/etc/samba/smb.conf.d/zos-shares.conf"],
+        "files": ["/etc/samba/smb.conf.d/cyberos-shares.conf"],
         "services": []
       }
     },
@@ -29,7 +29,7 @@
         "raidLevel": "1",
         "devices": ["/dev/sda", "/dev/sdb"],
         "filesystem": "ext4",
-        "mountpoint": "/zos/data/",
+        "mountpoint": "/cyberos/data/",
         "risk": "high"
       },
       "result": {
@@ -38,7 +38,7 @@
         "raidLevel": "1",
         "devices": ["/dev/sda", "/dev/sdb"],
         "filesystem": "ext4",
-        "mountpoint": "/zos/data/",
+        "mountpoint": "/cyberos/data/",
         "mdDevice": "/dev/md/media",
         "uuid": "array-uuid"
       }
@@ -50,13 +50,13 @@
         "name": "media",
         "mdDevice": "/dev/md/media",
         "devices": ["/dev/sda", "/dev/sdb"],
-        "mountpoint": "/zos/data/",
+        "mountpoint": "/cyberos/data/",
         "risk": "high"
       },
       "result": {
         "action": "delete_pool",
         "name": "media",
-        "mountpoint": "/zos/data/",
+        "mountpoint": "/cyberos/data/",
         "mdDevice": "/dev/md/media",
         "devices": ["/dev/sda", "/dev/sdb"]
       }
@@ -107,7 +107,7 @@
       "result": {
         "profiles": [{
           "id": "550e8400-e29b-41d4-a716-446655440000",
-          "name": "ZOS Home",
+          "name": "CyberOS Home",
           "ssid": "Home",
           "device": "wlan0",
           "security": "wpa2",
@@ -167,7 +167,7 @@
     },
     {
       "operation": "network.manager",
-      "request": { "action": "update_hotspot", "input": { "device": "wlan0", "ssid": "ZOS", "band": "5", "autostart": true, "confirmed": true } },
+      "request": { "action": "update_hotspot", "input": { "device": "wlan0", "ssid": "CyberOS", "band": "5", "autostart": true, "confirmed": true } },
       "result": { "rollback": "not_required", "message": null }
     },
     {

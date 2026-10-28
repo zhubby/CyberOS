@@ -12,8 +12,8 @@ use crate::error::HostdError;
 
 const BLUEZ: &str = "org.bluez";
 const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
-const DEFAULT_ADAPTER_PATH: &str = "/zos/state/hostd/bluetooth/default-adapter";
-const AGENT_PATH: &str = "/org/zos/BluetoothAgent";
+const DEFAULT_ADAPTER_PATH: &str = "/cyberos/state/hostd/bluetooth/default-adapter";
+const AGENT_PATH: &str = "/org/cyberos/BluetoothAgent";
 const CHALLENGE_TTL: Duration = Duration::from_secs(60);
 const EXPLICIT_CONNECT_AUTHORIZATION_TTL: Duration = Duration::from_secs(30);
 const SCAN_DURATION: Duration = Duration::from_secs(15);
@@ -299,7 +299,7 @@ impl BluetoothRuntime {
         manager
             .call::<_, _, ()>("RegisterAgent", &(path.clone(), "KeyboardDisplay"))
             .await
-            .map_err(|_| HostdError::unavailable("BlueZ rejected the ZOS pairing agent"))?;
+            .map_err(|_| HostdError::unavailable("BlueZ rejected the CyberOS pairing agent"))?;
         let _ = manager
             .call::<_, _, ()>("RequestDefaultAgent", &(path,))
             .await;

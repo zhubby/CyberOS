@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DockerContainerSummary, DockerImageSummary } from "@zos/shared";
+import type { DockerContainerSummary, DockerImageSummary } from "@cyberos/shared";
 import { resolveDockerImageOccupancy } from "./docker-service.js";
 
 const image: DockerImageSummary = {

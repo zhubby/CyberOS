@@ -1,13 +1,13 @@
 mod common;
 
-use zos_indexer::db::Db;
+use cyberos_indexer::db::Db;
 
 #[tokio::test]
 async fn coalesced_queue_tasks_are_claimed_with_a_lease() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().join("root");
     std::fs::create_dir(&root).unwrap();
-    let database = directory.path().join("zos.sqlite");
+    let database = directory.path().join("cyberos.sqlite");
     common::create_schema(&database, &root);
     let db = Db::open(&database).unwrap();
     db.enqueue("local", None, "docs", true, "incremental", 50)

@@ -11,7 +11,7 @@ use crate::safety::{
 };
 
 const OBEX: &str = "org.bluez.obex";
-const AGENT_PATH: &str = "/org/zos/BluetoothObexAgent";
+const AGENT_PATH: &str = "/org/cyberos/BluetoothObexAgent";
 
 pub struct ObexRuntime {
     session: Connection,

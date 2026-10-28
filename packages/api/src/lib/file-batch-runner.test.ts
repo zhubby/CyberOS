@@ -9,23 +9,23 @@ import {
   getFileBatch,
   listFileOperations,
   listPendingApprovals,
-  openZosDb,
+  openCyberOsDb,
   recoverInterruptedFileBatches,
-  type ZosDatabase
-} from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { CyberOsConfig } from "@cyberos/shared";
 import type { SystemCommandRunner } from "./system-management.js";
 import { FileBatchRunner, processNextFileBatchItem } from "./file-batch-runner.js";
 
 let tempDir: string;
 let rootDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-file-runner-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-file-runner-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
@@ -155,10 +155,10 @@ function storageCommandRunner(): SystemCommandRunner {
   };
 }
 
-function testConfig(): ZosConfig {
+function testConfig(): CyberOsConfig {
   return {
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "zos.sqlite"),
+    databasePath: path.join(tempDir, "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
@@ -170,8 +170,8 @@ function testConfig(): ZosConfig {
       operationTimeoutMs: 120_000,
       consoleShells: ["/bin/sh"]
     },
-    hostd: { socketPath: "/run/zos/hostd.sock" },
-    shares: { enabled: false, account: { username: "zos-share", password: null }, shares: [] },
+    hostd: { socketPath: "/run/cyberos/hostd.sock" },
+    shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
     vodPlayer: {
       enabled: false,
@@ -187,7 +187,7 @@ function testConfig(): ZosConfig {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "zos"
+      user: "cyberos"
     },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };

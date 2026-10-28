@@ -1,0 +1,9 @@
+[Unit]
+Description=Run CyberOS weekly restic backup
+
+[Timer]
+OnCalendar=Sun 03:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

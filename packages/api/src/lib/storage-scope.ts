@@ -1,5 +1,5 @@
-import { getNasRoot, type ZosDatabase } from "@zos/db";
-import type { NasRootRecord, SystemStoragePool } from "@zos/shared";
+import { getNasRoot, type CyberOsDatabase } from "@cyberos/db";
+import type { NasRootRecord, SystemStoragePool } from "@cyberos/shared";
 import {
   StorageScopeSafetyError,
   assertNoSymlinkPathSegments,
@@ -9,7 +9,7 @@ import {
   resolveStorageScopeTargetPath,
   type SafeStorageScope,
   type SafePathResult
-} from "@zos/nas-tools";
+} from "@cyberos/nas-tools";
 import type { SystemManagementDependencies } from "./system-management.js";
 import { collectSystemStorage } from "./system-management.js";
 
@@ -38,7 +38,7 @@ export interface StoragePoolScope {
 }
 
 export async function resolveStoragePoolScope(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   system: SystemManagementDependencies | undefined,
   rootId: string | undefined,
   storagePoolId: string | undefined

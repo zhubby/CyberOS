@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { FileBatchItemStatus, FileBatchOperation, FileBatchRecord } from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+import type { FileBatchItemStatus, FileBatchOperation, FileBatchRecord } from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import {
   createOperationNotification,
   updateOperationNotificationForOperation
@@ -70,7 +70,7 @@ const ITEM_COLUMNS = `
 `;
 
 export function createFileBatch(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     rootId: string;
     storagePoolId: string;
@@ -137,13 +137,13 @@ export class FileBatchConflictError extends Error {
   }
 }
 
-export function getFileBatch(db: ZosDatabase, id: string): FileBatchRecord | null {
+export function getFileBatch(db: CyberOsDatabase, id: string): FileBatchRecord | null {
   const row = db.prepare(`SELECT ${BATCH_COLUMNS} FROM file_batches WHERE id = ?`).get(id) as FileBatchRow | undefined;
   return row ? mapFileBatch(db, row) : null;
 }
 
 export function listFileBatches(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { rootId?: string; storagePoolId?: string; limit?: number } = {}
 ): FileBatchRecord[] {
   const clauses: string[] = [];
@@ -159,7 +159,7 @@ export function listFileBatches(
   return rows.map((row) => mapFileBatch(db, row));
 }
 
-export function recoverInterruptedFileBatches(db: ZosDatabase): number {
+export function recoverInterruptedFileBatches(db: CyberOsDatabase): number {
   const now = new Date().toISOString();
   return db.transaction(() => {
     const items = db.prepare(`
@@ -174,7 +174,7 @@ export function recoverInterruptedFileBatches(db: ZosDatabase): number {
   }).immediate();
 }
 
-export function claimNextFileBatchItem(db: ZosDatabase): ClaimedFileBatchItem | null {
+export function claimNextFileBatchItem(db: CyberOsDatabase): ClaimedFileBatchItem | null {
   const now = new Date().toISOString();
   return db.transaction(() => {
     const candidate = db.prepare(`
@@ -203,7 +203,7 @@ export function claimNextFileBatchItem(db: ZosDatabase): ClaimedFileBatchItem | 
 }
 
 export function finishFileBatchItem(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { itemId: string; status: Extract<FileBatchItemStatus, "completed" | "failed">; error?: string | null }
 ): { batch: FileBatchRecord; finalStatus: Extract<FileBatchRecord["status"], "completed" | "failed" | "cancelled"> | null } {
   const now = new Date().toISOString();
@@ -249,7 +249,7 @@ export function finishFileBatchItem(
   }).immediate();
 }
 
-export function cancelFileBatch(db: ZosDatabase, batchId: string): FileBatchRecord | null {
+export function cancelFileBatch(db: CyberOsDatabase, batchId: string): FileBatchRecord | null {
   const now = new Date().toISOString();
   return db.transaction(() => {
     const batch = getFileBatch(db, batchId);
@@ -275,7 +275,7 @@ export function cancelFileBatch(db: ZosDatabase, batchId: string): FileBatchReco
   }).immediate();
 }
 
-function refreshBatchCounts(db: ZosDatabase, batchId: string, now: string): void {
+function refreshBatchCounts(db: CyberOsDatabase, batchId: string, now: string): void {
   db.prepare(`
     UPDATE file_batches
     SET completed_count = (SELECT COUNT(*) FROM file_batch_items WHERE batch_id = ? AND status IN ('completed', 'failed', 'cancelled')),
@@ -287,13 +287,13 @@ function refreshBatchCounts(db: ZosDatabase, batchId: string, now: string): void
   `).run(batchId, batchId, batchId, batchId, now, batchId);
 }
 
-function getRequiredFileBatch(db: ZosDatabase, id: string): FileBatchRecord {
+function getRequiredFileBatch(db: CyberOsDatabase, id: string): FileBatchRecord {
   const batch = getFileBatch(db, id);
   if (!batch) throw new Error("File batch not found");
   return batch;
 }
 
-function mapFileBatch(db: ZosDatabase, row: FileBatchRow): FileBatchRecord {
+function mapFileBatch(db: CyberOsDatabase, row: FileBatchRow): FileBatchRecord {
   const failures = db.prepare(`
     SELECT source_path, error FROM file_batch_items
     WHERE batch_id = ? AND status = 'failed' AND error IS NOT NULL

@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use cyberos_monitoring_contracts::{MetricKind, metric};
 use serde::Serialize;
 use tokio::io::AsyncWriteExt;
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
-use zos_monitoring_contracts::{MetricKind, metric};
 
 use crate::domain::metric::CollectorState;
 use crate::domain::metric::MetricSample;
@@ -218,12 +218,12 @@ mod tests {
             baselines: Arc::new(Mutex::new(BTreeMap::new())),
         };
         let first = publisher.map_sample(MetricSample::new(
-            "zos_host_network_receive_bytes_total",
+            "cyberos_host_network_receive_bytes_total",
             1_000,
             100.0,
         ));
         let second = publisher.map_sample(MetricSample::new(
-            "zos_host_network_receive_bytes_total",
+            "cyberos_host_network_receive_bytes_total",
             2_000,
             10.0,
         ));

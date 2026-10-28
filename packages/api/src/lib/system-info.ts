@@ -6,15 +6,15 @@ import type {
   PublicSystemInfoCpu,
   PublicSystemInfoNetworkAddress,
   PublicSystemInfoStorageVolume,
-  ZosConfig
-} from "@zos/shared";
+  CyberOsConfig
+} from "@cyberos/shared";
 import {
   PHOTOSTAFF_DATA_DIRECTORY_NAME,
   PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
   PHOTOSTAFF_PREVIEW_MAX_EDGE_PX,
   PHOTOSTAFF_SUPPORTED_EXTENSIONS,
   PHOTOSTAFF_THUMBNAIL_SIZE_PX
-} from "@zos/shared";
+} from "@cyberos/shared";
 
 interface StorageCandidate {
   id: string;
@@ -24,7 +24,7 @@ interface StorageCandidate {
   rootId: string | null;
 }
 
-export async function collectSystemInfo(config: ZosConfig): Promise<PublicSystemInfo> {
+export async function collectSystemInfo(config: CyberOsConfig): Promise<PublicSystemInfo> {
   const cpus = os.cpus().map(toPublicCpu);
   const totalMemoryBytes = os.totalmem();
   const freeMemoryBytes = os.freemem();
@@ -85,12 +85,12 @@ export async function collectSystemInfo(config: ZosConfig): Promise<PublicSystem
         arrayBuffersBytes: processMemory.arrayBuffers
       }
     },
-    zos: {
+    cyberos: {
       rootDir: config.paths?.rootDir ?? config.rootDir ?? path.dirname(config.dataDir),
       stateDir: config.paths?.stateDir ?? config.stateDir ?? config.dataDir,
       dataRoot: config.paths?.dataRoot ?? config.dataRoot ?? path.join(path.dirname(config.dataDir), "data"),
-      appsRoot: config.paths?.appsRoot ?? config.appsRoot ?? "/zos/apps",
-      isoRoot: config.paths?.isoRoot ?? config.isoRoot ?? "/zos/iso",
+      appsRoot: config.paths?.appsRoot ?? config.appsRoot ?? "/cyberos/apps",
+      isoRoot: config.paths?.isoRoot ?? config.isoRoot ?? "/cyberos/iso",
       vmRoot: config.paths?.vmRoot ?? config.vmRoot ?? path.join(config.dataDir, "vm"),
       backupRoot: config.paths?.backupRoot ?? config.backupRoot ?? path.join(path.dirname(config.dataDir), "data", "backup"),
       dataDir: config.dataDir,
@@ -128,7 +128,7 @@ function toPublicCpu(cpu: ReturnType<typeof os.cpus>[number]): PublicSystemInfoC
   };
 }
 
-function storageCandidates(config: ZosConfig): StorageCandidate[] {
+function storageCandidates(config: CyberOsConfig): StorageCandidate[] {
   return [
     {
       id: "data-dir",

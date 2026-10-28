@@ -1,5 +1,5 @@
 {
-  description = "ZOS NAS appliance packages and NixOS module";
+  description = "CyberOS NAS appliance packages and NixOS module";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
@@ -29,11 +29,11 @@
       packages = forSystems linuxSystems (system:
         let packages = packageSet system;
         in {
-          default = packages.zos;
-          zos = packages.zos;
-          zos-rust = packages.zos-rust;
-          zos-node = packages.zos-node;
-          zos-docs = packages.zos-docs;
+          default = packages.cyberos;
+          cyberos = packages.cyberos;
+          cyberos-rust = packages.cyberos-rust;
+          cyberos-node = packages.cyberos-node;
+          cyberos-docs = packages.cyberos-docs;
         });
 
       devShells = forSystems developmentSystems (system:
@@ -53,8 +53,8 @@
               acl
               sqlite
             ];
-            ZOS_ENVIRONMENT = "development";
-            ZOS_ENABLE_LOCAL_AGENT_FALLBACK = "1";
+            CYBEROS_ENVIRONMENT = "development";
+            CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK = "1";
           };
         });
 
@@ -63,8 +63,8 @@
           pkgs = pkgsFor system;
           packages = packageSet system;
         in {
-          inherit (packages) zos-rust zos-node zos-docs;
-          workspace-layout = pkgs.runCommand "zos-workspace-layout" { } ''
+          inherit (packages) cyberos-rust cyberos-node cyberos-docs;
+          workspace-layout = pkgs.runCommand "cyberos-workspace-layout" { } ''
             cp -R ${self} source
             chmod -R u+w source
             cd source
@@ -77,7 +77,7 @@
           nixos-module = import ./nix/tests/nixos-module.nix { inherit pkgs self; };
         });
 
-      nixosModules.zos = import ./nix/module.nix { inherit self; };
-      nixosModules.default = self.nixosModules.zos;
+      nixosModules.cyberos = import ./nix/module.nix { inherit self; };
+      nixosModules.default = self.nixosModules.cyberos;
     };
 }

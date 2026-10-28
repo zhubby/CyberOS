@@ -8,7 +8,7 @@ use tokio::fs;
 use crate::config::ConfiguredNasRoot;
 use crate::error::HostdError;
 
-pub const CAPACITY_ANCHOR_NAME: &str = ".zos-host-access-capacity";
+pub const CAPACITY_ANCHOR_NAME: &str = ".cyberos-host-access-capacity";
 
 pub async fn reconcile_capacity_anchors(roots: &[ConfiguredNasRoot]) {
     let mountinfo = match fs::read_to_string("/proc/self/mountinfo").await {
@@ -143,7 +143,7 @@ mod tests {
             mountinfo
         ));
         assert!(!has_non_root_mount(
-            Path::new("/zos/data/primary"),
+            Path::new("/cyberos/data/primary"),
             mountinfo
         ));
         assert!(!has_non_root_mount(Path::new("/"), mountinfo));

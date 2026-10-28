@@ -1,6 +1,6 @@
 ---
 title: Workspace 与服务矩阵
-description: ZOS monorepo、应用、包和运行进程的对应关系。
+description: CyberOS monorepo、应用、包和运行进程的对应关系。
 type: reference
 status: current
 audience: [developer, operator]
@@ -25,4 +25,4 @@ sidebar:
 | `packages/mcp` / `packages/mcp-cli` / `packages/capabilities` / `packages/capability-runtime` | MCP 服务、命令行与能力注册表 |
 | `nix` | Nix packages、NixOS module 与 VM 验收测试 |
 
-源码树不再包含 `apps/`。所有 TypeScript workspace 由根 `package.json` 的 `packages/*` 管理；所有 Rust workspace member 由根 `Cargo.toml` 的 `crates/*` 管理。`/usr/lib/zos/apps/*` 是 Debian/Nix 安装产物的稳定运行时路径，`/zos/apps` 是托管 Compose App 的运行副本目录，两者都不是源码 workspace。
+源码树不再包含 `apps/`。所有 TypeScript workspace 由根 `package.json` 的 `packages/*` 管理；所有 Rust workspace member 由根 `Cargo.toml` 的 `crates/*` 管理。`/usr/lib/cyberos/apps/*` 是 Debian/Nix 安装产物的稳定运行时路径，`/cyberos/apps` 是托管 Compose App 的运行副本目录，两者都不是源码 workspace。

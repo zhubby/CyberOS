@@ -28,7 +28,6 @@ export function terminalTabNavigationTarget(
   return tabs[(currentIndex + offset + tabs.length) % tabs.length]!.id;
 }
 
-export function shouldInitializeTerminalTabs(state: TerminalTabState, legacySessionId: string | null): boolean {
-  return !state.initialized
-    || Boolean(legacySessionId && !state.tabs.some((tab) => tab.id === legacySessionId));
+export function shouldInitializeTerminalTabs(state: TerminalTabState): boolean {
+  return !state.initialized;
 }

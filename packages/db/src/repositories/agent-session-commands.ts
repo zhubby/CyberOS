@@ -3,8 +3,8 @@ import type {
   AgentSessionCommandRecord,
   AgentSessionCommandStatus,
   AgentSessionCommandType
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 type DbCommandRow = {
   id: string;
@@ -44,7 +44,7 @@ export class AgentSessionCommandStateError extends Error {
 }
 
 export function createAgentSessionCommand(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     sessionId: string;
     idempotencyKey: string;
@@ -115,7 +115,7 @@ export function createAgentSessionCommand(
 }
 
 export function getAgentSessionCommand(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   commandId: string
 ): AgentSessionCommandRecord | null {
   const row = db.prepare(`SELECT ${COMMAND_COLUMNS} FROM agent_session_commands WHERE id = ?`)
@@ -124,7 +124,7 @@ export function getAgentSessionCommand(
 }
 
 export function getAgentSessionCommandByKey(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   sessionId: string,
   idempotencyKey: string
 ): AgentSessionCommandRecord | null {
@@ -137,7 +137,7 @@ export function getAgentSessionCommandByKey(
 }
 
 export function listAgentSessionCommands(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId: string; limit?: number }
 ): AgentSessionCommandRecord[] {
   const rows = db.prepare(`
@@ -151,7 +151,7 @@ export function listAgentSessionCommands(
 }
 
 export function claimNextAgentSessionCommand(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { workerId: string; leaseMs?: number; now?: Date }
 ): AgentSessionCommandRecord | null {
   const nowDate = input.now ?? new Date();
@@ -212,7 +212,7 @@ export function claimNextAgentSessionCommand(
 }
 
 export function renewAgentSessionCommandLease(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { commandId: string; workerId: string; leaseMs: number; now?: Date }
 ): boolean {
   const nowDate = input.now ?? new Date();
@@ -226,7 +226,7 @@ export function renewAgentSessionCommandLease(
 }
 
 export function finishAgentSessionCommand(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     commandId: string;
     workerId: string;
@@ -256,7 +256,7 @@ export function finishAgentSessionCommand(
 }
 
 export function requeueAgentSessionCommand(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { commandId: string; workerId: string; now?: Date }
 ): AgentSessionCommandRecord | null {
   const now = (input.now ?? new Date()).toISOString();
@@ -271,7 +271,7 @@ export function requeueAgentSessionCommand(
 }
 
 export function failQueuedActiveTurnCommands(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId: string; jobId: string; error: string; now?: Date }
 ): AgentSessionCommandRecord[] {
   const rows = db.prepare(`
@@ -289,7 +289,7 @@ export function failQueuedActiveTurnCommands(
   return rows.map(mapCommand);
 }
 
-export function recoverInterruptedAgentSessionCommands(db: ZosDatabase, nowDate = new Date()): number {
+export function recoverInterruptedAgentSessionCommands(db: CyberOsDatabase, nowDate = new Date()): number {
   const now = nowDate.toISOString();
   return db.prepare(`
     UPDATE agent_session_commands

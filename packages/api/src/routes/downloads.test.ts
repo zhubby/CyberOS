@@ -2,8 +2,8 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ensureNasRoots, openZosDb, type ZosDatabase } from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
+import { ensureNasRoots, openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
+import type { CyberOsConfig } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -16,7 +16,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 const poolId = "/dev/md/test-pool";
 let tempDir: string | null = null;
-let db: ZosDatabase | null = null;
+let db: CyberOsDatabase | null = null;
 
 afterEach(async () => {
   db?.close();
@@ -317,20 +317,20 @@ async function setup(): Promise<{
   app: Awaited<ReturnType<typeof buildServer>>;
   root: string;
 }> {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-download-api-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-download-api-"));
   const root = path.join(tempDir, "root");
   await mkdir(root);
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
   const app = await buildServer({ config: testConfig(root), db, system: storageSystem() });
   return { app, root };
 }
 
-function testConfig(root: string): ZosConfig {
+function testConfig(root: string): CyberOsConfig {
   return {
     environment: "development",
     dataDir: path.dirname(root),
-    databasePath: path.join(path.dirname(root), "zos.sqlite"),
+    databasePath: path.join(path.dirname(root), "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 50 },
     admin: { displayName: "Test", authMode: "local-only" },
@@ -339,7 +339,7 @@ function testConfig(root: string): ZosConfig {
     hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     nasRoots: [{ id: "local", name: "Local", path: root }]
   };
 }

@@ -5,7 +5,7 @@ import type {
   BluetoothPairingChallengeInput,
   BluetoothStatus,
   HostdRequest
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 
 const HOSTD_TIMEOUT_MS = 35_000;

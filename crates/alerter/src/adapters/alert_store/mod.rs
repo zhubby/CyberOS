@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn open_waits_for_the_latest_alert_migrations() {
         let directory = tempdir().unwrap();
-        let path = directory.path().join("zos.sqlite");
+        let path = directory.path().join("cyberos.sqlite");
         let connection = Connection::open(&path).unwrap();
         connection
             .execute_batch(
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn open_does_not_create_the_main_database_before_api_migration() {
         let directory = tempdir().unwrap();
-        let path = directory.path().join("zos.sqlite");
+        let path = directory.path().join("cyberos.sqlite");
 
         assert!(matches!(
             AlertStore::open(&path),

@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 const CONNECTIONS_DIR: &str = "/etc/NetworkManager/system-connections";
-const STATE_DIR: &str = "/zos/state/hostd/network-manager";
-pub(super) const MANAGED_PREFIX: &str = "zos-";
+const STATE_DIR: &str = "/cyberos/state/hostd/network-manager";
+pub(super) const MANAGED_PREFIX: &str = "cyberos-";
 
 #[derive(Debug, Clone)]
 pub struct NetworkOptions {

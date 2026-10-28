@@ -3,14 +3,14 @@ import type {
   FileOperationProposal,
   PendingApprovalRecord,
   PiToolCallApproval
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import { mapApproval } from "./operation-mappers.js";
 import type { DbApprovalRow } from "./repository-rows.js";
 
 export function createPendingApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { jobId: string; proposal: FileOperationProposal[] }
 ): PendingApprovalRecord {
   const job = getJob(db, input.jobId);
@@ -62,7 +62,7 @@ export function createPendingApproval(
 }
 
 export function createPiToolCallApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { jobId: string; proposal: PiToolCallApproval }
 ): PendingApprovalRecord {
   const job = getJob(db, input.jobId);
@@ -90,7 +90,7 @@ export function createPiToolCallApproval(
   return approval;
 }
 
-export function getApproval(db: ZosDatabase, approvalId: string): PendingApprovalRecord | null {
+export function getApproval(db: CyberOsDatabase, approvalId: string): PendingApprovalRecord | null {
   const row = db
     .prepare(`
       SELECT a.id, a.job_id, a.kind, a.status, a.proposal_json, a.created_at, a.updated_at, j.session_id

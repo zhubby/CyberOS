@@ -3,21 +3,13 @@ import type {
   AgentCapabilityPolicySettingsRecord,
   DockerSettingsRecord,
   ModelProviderName,
-  ModelProviderSettingsRecord,
-  PiDangerousToolPolicyMode,
-  PiToolName,
-  PiToolPolicyMode,
-  PiToolPolicySettingsRecord
-} from "@zos/shared";
-import { isModelProviderName } from "@zos/shared";
+  ModelProviderSettingsRecord
+} from "@cyberos/shared";
+import { isModelProviderName } from "@cyberos/shared";
 import {
   AGENT_CAPABILITY_IDS,
   DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS,
-  DANGEROUS_PI_TOOL_POLICY_MODES,
-  DANGEROUS_PI_TOOLS,
-  DEFAULT_PI_TOOL_POLICY_SETTINGS,
-  PI_TOOL_POLICY_MODES,
-  READ_ONLY_PI_TOOLS
+  PI_TOOL_POLICY_MODES
 } from "./settings-constants.js";
 
 export function mapAgentCapabilityPolicySettings(row: DbSystemSettingRow): AgentCapabilityPolicySettingsRecord {
@@ -34,7 +26,7 @@ export function normalizeAgentCapabilityPolicySettings(
     const mode = settings.policies?.[capabilityId];
     if (mode !== undefined) {
       if (!isAgentCapabilityPolicyMode(mode)) throw new Error(`Invalid policy mode for ${capabilityId}`);
-      policies[capabilityId] = capabilityId === "zos.files.mutate" && mode === "auto" ? "approve" : mode;
+      policies[capabilityId] = capabilityId === "cyberos.files.mutate" && mode === "auto" ? "approve" : mode;
     }
   }
   return { policies, updatedAt };
@@ -56,11 +48,6 @@ export function mapModelProviderSettings(row: DbSystemSettingRow): ModelProvider
   };
 }
 
-export function mapPiToolPolicySettings(row: DbSystemSettingRow): PiToolPolicySettingsRecord {
-  const parsed = JSON.parse(row.value_json) as Partial<PiToolPolicySettingsRecord>;
-  return normalizePiToolPolicySettings(parsed, parsed.updatedAt ?? row.updated_at);
-}
-
 export function mapDockerSettings(row: DbSystemSettingRow): DockerSettingsRecord {
   const parsed = JSON.parse(row.value_json) as Partial<DockerSettingsRecord>;
   return {
@@ -71,39 +58,6 @@ export function mapDockerSettings(row: DbSystemSettingRow): DockerSettingsRecord
     consoleShells: normalizeDockerShells(parsed.consoleShells),
     updatedAt: normalizeString(parsed.updatedAt) ?? row.updated_at
   };
-}
-
-export function normalizePiToolPolicySettings(
-  settings: Partial<PiToolPolicySettingsRecord>,
-  updatedAt: string
-): PiToolPolicySettingsRecord {
-  const normalized: PiToolPolicySettingsRecord = {
-    ...DEFAULT_PI_TOOL_POLICY_SETTINGS,
-    updatedAt
-  };
-
-  for (const tool of READ_ONLY_PI_TOOLS) {
-    const mode = migrateLegacyPolicyMode(settings[tool], tool) ?? DEFAULT_PI_TOOL_POLICY_SETTINGS[tool];
-    if (!isPiToolPolicyMode(mode)) {
-      throw new Error(`Invalid policy mode for ${tool}`);
-    }
-    normalized[tool] = mode;
-  }
-
-  for (const tool of DANGEROUS_PI_TOOLS) {
-    const mode = migrateLegacyPolicyMode(settings[tool], tool) ?? DEFAULT_PI_TOOL_POLICY_SETTINGS[tool];
-    if (!isDangerousPiToolPolicyMode(mode)) {
-      throw new Error(`Dangerous tool ${tool} cannot use policy mode ${String(mode)}`);
-    }
-    normalized[tool] = mode;
-  }
-
-  return normalized;
-}
-
-function migrateLegacyPolicyMode(value: unknown, tool: PiToolName): unknown {
-  if (value === "ask") return tool === "bash" ? "confirm" : "approve";
-  return value;
 }
 
 function normalizeDockerShells(shells: unknown): string[] {
@@ -130,16 +84,8 @@ function normalizePositiveInteger(value: unknown): number | null {
   return value;
 }
 
-function isPiToolPolicyMode(value: unknown): value is PiToolPolicyMode {
-  return typeof value === "string" && PI_TOOL_POLICY_MODES.includes(value as PiToolPolicyMode);
-}
-
 function isAgentCapabilityPolicyMode(value: unknown): value is AgentCapabilityPolicyMode {
   return typeof value === "string" && PI_TOOL_POLICY_MODES.includes(value as AgentCapabilityPolicyMode);
-}
-
-function isDangerousPiToolPolicyMode(value: unknown): value is PiDangerousToolPolicyMode {
-  return typeof value === "string" && DANGEROUS_PI_TOOL_POLICY_MODES.includes(value as PiDangerousToolPolicyMode);
 }
 
 export function normalizeModelProviderName(value: unknown): ModelProviderName {

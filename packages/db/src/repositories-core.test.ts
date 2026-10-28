@@ -47,7 +47,7 @@ import {
   listPendingAgentCapabilityApprovals,
   markAllOperationNotificationsRead,
   markOperationNotificationRead,
-  openZosDb,
+  openCyberOsDb,
   recoverExpiredAgentJobs,
   recoverInterruptedAgentSessionCommands,
   recordAppliedOperation,
@@ -74,17 +74,17 @@ import {
   updateDockerComposeApp,
   updateJobStatus,
   updateOperationNotificationForJob,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
 import { createPiToolCallApproval } from "./repositories/approvals.js";
 import { createDockerOperationApproval } from "./repositories/docker-operations.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-db-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-db-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
@@ -366,7 +366,7 @@ describe("core repositories", () => {
     const proposal = createCapabilityProposal(db, {
       subjectId: session.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.read",
+      capabilityId: "cyberos.files.read",
       risk: "low",
       redactedInput: { path: "." },
       proposal: { summary: "Read current folder" },
@@ -527,7 +527,7 @@ describe("core repositories", () => {
     const proposals = ["first.txt", "second.txt"].map((file) => createCapabilityProposal(db, {
       subjectId: session.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.read",
+      capabilityId: "cyberos.files.read",
       risk: "low",
       redactedInput: { file },
       proposal: { summary: `Read ${file}` },
@@ -654,7 +654,7 @@ describe("core repositories", () => {
     ]);
   });
 
-  it("persists Pi provider sessions by ZOS session id", () => {
+  it("persists Pi provider sessions by CyberOS session id", () => {
     const session = createSession(db, { rootId: "local" });
 
     saveAgentProviderSession(db, {
@@ -726,33 +726,33 @@ describe("core repositories", () => {
     expect(getAgentCapabilityPolicySettings(db)).toBeNull();
     expect(defaultAgentCapabilityPolicySettings()).toMatchObject({
       policies: {
-        "zos.files.read": "auto",
-        "zos.files.mutate": "approve",
-        "zos.shell.run": "confirm"
+        "cyberos.files.read": "auto",
+        "cyberos.files.mutate": "approve",
+        "cyberos.shell.run": "confirm"
       }
     });
 
     const saved = saveAgentCapabilityPolicySettings(db, {
       policies: {
         ...defaultAgentCapabilityPolicySettings().policies,
-        "zos.files.list": "confirm",
-        "zos.files.mutate": "auto",
-        "zos.shell.run": "disabled"
+        "cyberos.files.list": "confirm",
+        "cyberos.files.mutate": "auto",
+        "cyberos.shell.run": "disabled"
       }
     });
 
     expect(saved).toMatchObject({
       policies: {
-        "zos.files.list": "confirm",
-        "zos.files.read": "auto",
-        "zos.files.mutate": "approve",
-        "zos.shell.run": "disabled"
+        "cyberos.files.list": "confirm",
+        "cyberos.files.read": "auto",
+        "cyberos.files.mutate": "approve",
+        "cyberos.shell.run": "disabled"
       }
     });
     expect(() => saveAgentCapabilityPolicySettings(db, {
       policies: {
         ...defaultAgentCapabilityPolicySettings().policies,
-        "zos.shell.run": "invalid" as never
+        "cyberos.shell.run": "invalid" as never
       }
     })).toThrow(/Invalid policy mode/);
   });
@@ -1137,7 +1137,7 @@ describe("core repositories", () => {
       composeContent: created.composeContent,
       environment: [
         { key: "POSTGRES_PASSWORD" },
-        { key: "POSTGRES_USER", value: "zos" }
+        { key: "POSTGRES_USER", value: "cyberos" }
       ],
       services: ["db"],
       warnings: ["Host bind mount"],
@@ -1149,7 +1149,7 @@ describe("core repositories", () => {
       projectKey: "postgres",
       environment: [
         { key: "POSTGRES_PASSWORD", value: "secret" },
-        { key: "POSTGRES_USER", value: "zos" }
+        { key: "POSTGRES_USER", value: "cyberos" }
       ],
       warnings: ["Host bind mount"],
       risk: "high"

@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn loads_the_language_neutral_catalog() {
-        let definition = metric("zos_host_filesystem_used_ratio").unwrap();
+        let definition = metric("cyberos_host_filesystem_used_ratio").unwrap();
         assert_eq!(definition.label_keys, ["filesystem"]);
         assert_eq!(catalog().len(), 29);
     }

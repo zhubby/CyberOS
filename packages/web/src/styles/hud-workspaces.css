@@ -1,23 +1,23 @@
 /* Workspace-specific HUD composition for Agent and Files. */
 
 :root {
-  --hud-void: var(--zos-hud-void);
-  --hud-deep: var(--zos-hud-deep);
-  --hud-panel: var(--zos-hud-panel);
-  --hud-panel-raised: var(--zos-hud-panel-raised);
-  --hud-panel-hover: var(--zos-hud-panel-hover);
-  --hud-text: var(--zos-hud-text);
-  --hud-muted: var(--zos-hud-muted);
-  --hud-dim: var(--zos-hud-dim);
-  --hud-red: var(--zos-hud-red-soft);
-  --hud-red-strong: var(--zos-hud-red);
-  --hud-cyan: var(--zos-hud-cyan-soft);
-  --hud-yellow: var(--zos-hud-yellow);
-  --hud-line: var(--zos-hud-line);
-  --hud-line-soft: var(--zos-hud-line-soft);
-  --hud-cyan-soft: var(--zos-hud-cyan-wash);
-  --hud-yellow-soft: var(--zos-hud-yellow-wash);
-  --hud-grid: var(--zos-hud-grid);
+  --hud-void: var(--cyberos-hud-void);
+  --hud-deep: var(--cyberos-hud-deep);
+  --hud-panel: var(--cyberos-hud-panel);
+  --hud-panel-raised: var(--cyberos-hud-panel-raised);
+  --hud-panel-hover: var(--cyberos-hud-panel-hover);
+  --hud-text: var(--cyberos-hud-text);
+  --hud-muted: var(--cyberos-hud-muted);
+  --hud-dim: var(--cyberos-hud-dim);
+  --hud-red: var(--cyberos-hud-red-soft);
+  --hud-red-strong: var(--cyberos-hud-red);
+  --hud-cyan: var(--cyberos-hud-cyan-soft);
+  --hud-yellow: var(--cyberos-hud-yellow);
+  --hud-line: var(--cyberos-hud-line);
+  --hud-line-soft: var(--cyberos-hud-line-soft);
+  --hud-cyan-soft: var(--cyberos-hud-cyan-wash);
+  --hud-yellow-soft: var(--cyberos-hud-yellow-wash);
+  --hud-grid: var(--cyberos-hud-grid);
 }
 
 .chat-pane,

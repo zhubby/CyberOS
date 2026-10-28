@@ -14,7 +14,7 @@ const status: BluetoothStatus = {
   collectedAt: "2026-10-20T00:00:00Z",
   backend: "BlueZ",
   available: true,
-  adapters: [{ id: "adapter-hci0", address: "00:11:22:33:44:55", name: "hci0", alias: "ZOS", state: "powered", powered: true, discovering: false, defaultAdapter: true }],
+  adapters: [{ id: "adapter-hci0", address: "00:11:22:33:44:55", name: "hci0", alias: "CyberOS", state: "powered", powered: true, discovering: false, defaultAdapter: true }],
   devices: [{ adapterId: "adapter-hci0", address: "AA:BB:CC:DD:EE:FF", name: "Headphones", alias: "Desk Headphones", type: "headset", rssi: -42, paired: true, trusted: false, connected: false, servicesResolved: true, lastSeenAt: "2026-10-20T00:00:00Z" }],
   scan: { active: false, adapterId: null, startedAt: null, endsAt: null },
   challenge: null,

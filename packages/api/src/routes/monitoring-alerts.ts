@@ -38,8 +38,8 @@ import {
   saveMonitoringSmtpSettings,
   updateMonitoringAlertContact,
   updateMonitoringAlertRule
-} from "@zos/db";
-import { getMetricDefinition } from "@zos/monitoring";
+} from "@cyberos/db";
+import { getMetricDefinition } from "@cyberos/monitoring";
 import type {
   MonitoringAlertContactInput,
   MonitoringAlertContactGroupInput,
@@ -50,7 +50,7 @@ import type {
   MonitoringOncallOverride,
   MonitoringOncallScheduleInput,
   MonitoringSmtpSettingsInput
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerMonitoringAlertRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {

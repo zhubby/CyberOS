@@ -8,20 +8,20 @@ import {
   ensureNasRoots,
   finishBackupRun,
   listHealthAlerts,
-  openZosDb,
+  openCyberOsDb,
   resolveHealthAlert,
   runOpsMaintenanceRetention,
   startBackupRun,
   upsertHealthAlert,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-ops-maintenance-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-ops-maintenance-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
 });
 
 afterEach(async () => {

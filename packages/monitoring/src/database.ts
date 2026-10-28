@@ -4,7 +4,7 @@ import type {
   MonitoringCollectorState,
   MonitoringCollectorStatus,
   MonitoringSeriesDescriptor
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { assertSupportedMonitoringSchemaVersion } from "./schema.js";
 
 const SQLITE_BUSY_TIMEOUT_MS = 5_000;

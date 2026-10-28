@@ -28,8 +28,8 @@ import {
   savePhotostaffLibrarySettings,
   savePhotostaffProcessingSettings,
   defaultPhotostaffProcessingSettings
-} from "@zos/db";
-import { applyFileMutation, isPathInside } from "@zos/nas-tools";
+} from "@cyberos/db";
+import { applyFileMutation, isPathInside } from "@cyberos/nas-tools";
 import {
   PHOTOSTAFF_DATA_DIRECTORY_NAME,
   PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
@@ -49,7 +49,7 @@ import {
   type PhotoQueryRequest,
   type PhotoQueryPage,
   type PhotoTimelinePage
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { sendFileStream } from "../lib/files.js";
 import {
@@ -438,7 +438,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         return;
       }
 
-      const temporaryPath = path.join(directory.realPath, `.${randomUUID()}.zos-photostaff-upload`);
+      const temporaryPath = path.join(directory.realPath, `.${randomUUID()}.cyberos-photostaff-upload`);
       const output = createWriteStream(temporaryPath, { flags: "wx" });
       const hash = createHash("sha256");
       let written = 0;
@@ -557,7 +557,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
           sourcePath: item.relativePath,
           risk: "medium",
           reversible: true,
-          summary: `Move ${item.relativePath} to ZOS trash`
+          summary: `Move ${item.relativePath} to CyberOS trash`
         });
       }
     } else {
@@ -684,7 +684,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       archive.file(item.realPath, { name: uniqueArchiveName(item.name, usedNames) });
     }
     reply.header("Content-Type", "application/zip");
-    reply.header("Content-Disposition", contentDisposition("zos-photos.zip"));
+    reply.header("Content-Disposition", contentDisposition("cyberos-photos.zip"));
     reply.send(archive);
     void archive.finalize();
     return reply;

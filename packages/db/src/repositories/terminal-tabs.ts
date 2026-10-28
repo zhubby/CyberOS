@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { TerminalTab, TerminalTabState } from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+import type { TerminalTab, TerminalTabState } from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 interface DbTerminalTabRow {
   id: string;
@@ -19,7 +19,7 @@ interface DbTerminalTabSetRow {
   updated_at: string;
 }
 
-export function getTerminalTab(db: ZosDatabase, id: string): TerminalTab | null {
+export function getTerminalTab(db: CyberOsDatabase, id: string): TerminalTab | null {
   const row = db.prepare(`
     SELECT id, root_id, ordinal, custom_title, created_at, updated_at
     FROM terminal_tabs
@@ -29,7 +29,7 @@ export function getTerminalTab(db: ZosDatabase, id: string): TerminalTab | null 
 }
 
 export function getTerminalTabState(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   rootId: string,
   maxSessions: number
 ): TerminalTabState {
@@ -43,22 +43,14 @@ export function getTerminalTabState(
 }
 
 export function initializeTerminalTabs(
-  db: ZosDatabase,
-  input: { rootId: string; maxSessions: number; legacySessionId?: string }
+  db: CyberOsDatabase,
+  input: { rootId: string; maxSessions: number }
 ): TerminalTabState {
   const initialize = db.transaction(() => {
     const existingSet = getTerminalTabSet(db, input.rootId);
     if (!existingSet) {
       createTerminalTabSet(db, input.rootId);
-      insertTerminalTab(db, input.rootId, input.maxSessions, input.legacySessionId);
-    } else if (input.legacySessionId) {
-      const existingTab = getTerminalTab(db, input.legacySessionId);
-      if (existingTab && existingTab.rootId !== input.rootId) {
-        throw new Error("Terminal session is not available");
-      }
-      if (!existingTab) {
-        insertTerminalTab(db, input.rootId, input.maxSessions, input.legacySessionId);
-      }
+      insertTerminalTab(db, input.rootId, input.maxSessions);
     }
     return getTerminalTabState(db, input.rootId, input.maxSessions);
   });
@@ -66,7 +58,7 @@ export function initializeTerminalTabs(
 }
 
 export function createTerminalTab(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { rootId: string; maxSessions: number }
 ): TerminalTabState {
   const create = db.transaction(() => {
@@ -80,7 +72,7 @@ export function createTerminalTab(
 }
 
 export function activateTerminalTab(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { id: string; maxSessions: number }
 ): TerminalTabState | null {
   const activate = db.transaction(() => {
@@ -100,7 +92,7 @@ export function activateTerminalTab(
 }
 
 export function renameTerminalTab(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { id: string; customTitle: string | null; maxSessions: number }
 ): TerminalTabState | null {
   const rename = db.transaction(() => {
@@ -121,7 +113,7 @@ export function renameTerminalTab(
 }
 
 export function deleteTerminalTab(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { id: string; maxSessions: number }
 ): TerminalTabState | null {
   const remove = db.transaction(() => {
@@ -156,7 +148,7 @@ export function deleteTerminalTab(
 }
 
 function insertTerminalTab(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   rootId: string,
   maxSessions: number,
   requestedId?: string
@@ -190,7 +182,7 @@ function insertTerminalTab(
   return tab;
 }
 
-function createTerminalTabSet(db: ZosDatabase, rootId: string): void {
+function createTerminalTabSet(db: CyberOsDatabase, rootId: string): void {
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO terminal_tab_sets (root_id, active_tab_id, next_ordinal, initialized_at, updated_at)
@@ -198,7 +190,7 @@ function createTerminalTabSet(db: ZosDatabase, rootId: string): void {
   `).run(rootId, now, now);
 }
 
-function listTerminalTabs(db: ZosDatabase, rootId: string): TerminalTab[] {
+function listTerminalTabs(db: CyberOsDatabase, rootId: string): TerminalTab[] {
   const rows = db.prepare(`
     SELECT id, root_id, ordinal, custom_title, created_at, updated_at
     FROM terminal_tabs
@@ -208,7 +200,7 @@ function listTerminalTabs(db: ZosDatabase, rootId: string): TerminalTab[] {
   return rows.map(mapTerminalTab);
 }
 
-function getTerminalTabSet(db: ZosDatabase, rootId: string): DbTerminalTabSetRow | null {
+function getTerminalTabSet(db: CyberOsDatabase, rootId: string): DbTerminalTabSetRow | null {
   return (db.prepare(`
     SELECT root_id, active_tab_id, next_ordinal, initialized_at, updated_at
     FROM terminal_tab_sets

@@ -15,19 +15,19 @@ import {
   listCapabilityRunEvents,
   listOwnedCapabilityRuns,
   listPendingCapabilityApprovals,
-  openZosDb,
+  openCyberOsDb,
   revokeMcpClient,
   rotateMcpClientToken,
   transitionCapabilityRun,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-capability-runs-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-capability-runs-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
 });
 
 afterEach(async () => {
@@ -40,9 +40,9 @@ describe("MCP clients and capability runs", () => {
     const created = createMcpClient(db, {
       name: "Studio Mac",
       kind: "local",
-      scopes: ["zos:files:read", "zos:catalog:read"]
+      scopes: ["cyberos:files:read", "cyberos:catalog:read"]
     });
-    expect(created.token).toMatch(/^zos_mcp_/u);
+    expect(created.token).toMatch(/^cyberos_mcp_/u);
     const stored = db.prepare("SELECT token_digest, token_prefix FROM mcp_clients WHERE id = ?").get(created.id) as {
       token_digest: string;
       token_prefix: string;
@@ -58,12 +58,12 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("deduplicates runs and rejects an idempotency collision", () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
     const first = createCapabilityRun(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", rootId: "primary", path: "Photos" },
       idempotencyKey: "mkdir-photos"
@@ -72,7 +72,7 @@ describe("MCP clients and capability runs", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { path: "Photos", rootId: "primary", operation: "mkdir" },
       idempotencyKey: "mkdir-photos"
@@ -82,7 +82,7 @@ describe("MCP clients and capability runs", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", rootId: "primary", path: "Other" },
       idempotencyKey: "mkdir-photos"
@@ -90,13 +90,13 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("moves immutable proposals through first-party approval", () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
     const pending = createCapabilityProposal(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "critical",
       redactedInput: { device: "wlan0", action: "disconnect" },
       proposal: { target: "wlan0", action: "disconnect", revision: "wifi-r7" },
@@ -135,12 +135,12 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("rejects capability approvals from external MCP subjects", () => {
-    const client = createMcpClient(db, { name: "LAN Agent", kind: "lan", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "LAN Agent", kind: "lan", scopes: ["cyberos:files:propose"] });
     expect(() => createCapabilityProposal(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "lan" as never,
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir" },
       proposal: { target: "Archive" },
@@ -150,12 +150,12 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("expires pending approvals into a durable terminal run", () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
     const pending = createCapabilityProposal(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir" },
       proposal: { target: "Archive", revision: "r1" },
@@ -180,12 +180,12 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("does not decide an approval after its run leaves the approval state", () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
     const pending = createCapabilityProposal(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir" },
       proposal: { target: "Archive", revision: "r1" },
@@ -203,12 +203,12 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("expires pending work when a client is revoked but leaves non-interruptible work running", () => {
-    const client = createMcpClient(db, { name: "LAN Agent", kind: "lan", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "LAN Agent", kind: "lan", scopes: ["cyberos:files:propose"] });
     const pending = createCapabilityRun(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "lan",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: {}
     });
@@ -216,7 +216,7 @@ describe("MCP clients and capability runs", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "lan",
-      capabilityId: "zos.files.export-propose",
+      capabilityId: "cyberos.files.export-propose",
       risk: "medium",
       redactedInput: {},
       state: "running",
@@ -229,13 +229,13 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("only lets the owning client cancel interruptible work", () => {
-    const owner = createMcpClient(db, { name: "Owner", kind: "local", scopes: ["zos:files:propose"] });
-    const other = createMcpClient(db, { name: "Other", kind: "local", scopes: ["zos:files:propose"] });
+    const owner = createMcpClient(db, { name: "Owner", kind: "local", scopes: ["cyberos:files:propose"] });
+    const other = createMcpClient(db, { name: "Other", kind: "local", scopes: ["cyberos:files:propose"] });
     const run = createCapabilityRun(db, {
       clientId: owner.id,
       subjectId: owner.id,
       subjectKind: "local",
-      capabilityId: "zos.files.export-propose",
+      capabilityId: "cyberos.files.export-propose",
       risk: "medium",
       redactedInput: {}
     });
@@ -244,12 +244,12 @@ describe("MCP clients and capability runs", () => {
   });
 
   it("paginates runs without skipping equal timestamps", () => {
-    const client = createMcpClient(db, { name: "Owner", kind: "local", scopes: ["zos:runs:read"] });
+    const client = createMcpClient(db, { name: "Owner", kind: "local", scopes: ["cyberos:runs:read"] });
     const runs = ["first", "second", "third"].map((name) => createCapabilityRun(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "local",
-      capabilityId: "zos.files.read",
+      capabilityId: "cyberos.files.read",
       risk: "read",
       redactedInput: { name }
     }));

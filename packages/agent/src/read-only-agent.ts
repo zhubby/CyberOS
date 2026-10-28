@@ -1,5 +1,5 @@
-import type { AgentSessionRecord, NasRootRecord } from "@zos/shared";
-import { listDir, previewFile, readText, searchFiles, statPath } from "@zos/nas-tools";
+import type { AgentSessionRecord, NasRootRecord } from "@cyberos/shared";
+import { listDir, previewFile, readText, searchFiles, statPath } from "@cyberos/nas-tools";
 import { readOnlySystemPrompt } from "./system-prompt.js";
 
 export interface AgentEmitEvent {

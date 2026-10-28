@@ -15,14 +15,14 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@zos/agent": ["packages/agent/src/index.ts"],
-      "@zos/db": ["packages/db/src/index.ts"],
-      "@zos/nas-tools": ["packages/nas-tools/src/index.ts"],
-      "@zos/monitoring": ["packages/monitoring/src/index.ts"],
-      "@zos/monitoring/test-utils": ["packages/monitoring/src/test-utils.ts"],
-      "@zos/shared": ["packages/shared/src/index.ts"],
-      "@zos/shared/docker-images": ["packages/shared/src/docker-images.ts"],
-      "@zos/shared/photostaff-config": ["packages/shared/src/photostaff-config.ts"]
+      "@cyberos/agent": ["packages/agent/src/index.ts"],
+      "@cyberos/db": ["packages/db/src/index.ts"],
+      "@cyberos/nas-tools": ["packages/nas-tools/src/index.ts"],
+      "@cyberos/monitoring": ["packages/monitoring/src/index.ts"],
+      "@cyberos/monitoring/test-utils": ["packages/monitoring/src/test-utils.ts"],
+      "@cyberos/shared": ["packages/shared/src/index.ts"],
+      "@cyberos/shared/docker-images": ["packages/shared/src/docker-images.ts"],
+      "@cyberos/shared/photostaff-config": ["packages/shared/src/photostaff-config.ts"]
     }
   }
 }

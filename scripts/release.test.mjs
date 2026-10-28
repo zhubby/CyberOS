@@ -13,7 +13,7 @@ import {
 let fixtureRoot;
 
 beforeEach(async () => {
-  fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "zos-release-"));
+  fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "cyberos-release-"));
   await writeFixture(fixtureRoot);
 });
 
@@ -46,12 +46,14 @@ describe("release versioning", () => {
     const state = await readVersionState(fixtureRoot);
     expect(state.version).toBe("0.2.0");
     expect(versionStateErrors(state)).toEqual([]);
-    expect(state.manifests[1].value.dependencies["@zos/shared"]).toBe("0.2.0");
+    expect(state.manifests[1].value.dependencies["@cyberos/shared"]).toBe("0.2.0");
+    expect(state.docsManifest.version).toBe("0.2.0");
+    expect(state.docsLock.packages["../packages/shared"].version).toBe("0.2.0");
     for (const { manifestPath, packageName } of PRODUCT_CARGO_PACKAGES) {
       expect(state.cargoManifests[manifestPath]).toContain('version = "0.2.0"');
       expect(state.cargoLock).toContain(`name = "${packageName}"\nversion = "0.2.0"`);
     }
-    expect(state.debianChangelog).toContain("zos (0.2.0) unstable");
+    expect(state.debianChangelog).toContain("cyberos (0.2.0) unstable");
     expect(state.debianChangelog).toContain("* Add release traceability.");
   });
 
@@ -90,6 +92,18 @@ describe("release versioning", () => {
     );
   });
 
+  it("reports documentation version drift", async () => {
+    const docsPath = path.join(fixtureRoot, "docs/package.json");
+    const docsManifest = JSON.parse(await readFile(docsPath, "utf8"));
+    docsManifest.version = "0.0.9";
+    await writeFile(docsPath, JSON.stringify(docsManifest));
+
+    const state = await readVersionState(fixtureRoot);
+    expect(versionStateErrors(state)).toContain(
+      'docs/package.json has version "0.0.9"; expected 0.1.0'
+    );
+  });
+
   it.each(PRODUCT_CARGO_PACKAGES)("reports $packageName Cargo version drift", async ({ manifestPath, packageName }) => {
     await writeFile(
       path.join(fixtureRoot, manifestPath),
@@ -104,18 +118,18 @@ describe("release versioning", () => {
 });
 
 const PRODUCT_CARGO_PACKAGES = [
-  ["crates/alerter/Cargo.toml", "zos-alerter"],
-  ["crates/bluetoothd/Cargo.toml", "zos-bluetoothd"],
-  ["crates/downloader/Cargo.toml", "zos-downloader"],
-  ["crates/host-accessd/Cargo.toml", "zos-host-accessd"],
-  ["crates/hostd/Cargo.toml", "zos-hostd"],
-  ["crates/indexer/Cargo.toml", "zos-indexer"],
-  ["crates/monitor/Cargo.toml", "zos-monitor"],
-  ["crates/photostaff/Cargo.toml", "zos-photostaff"],
-  ["crates/termux/Cargo.toml", "zos-termux"],
-  ["crates/tv-gamepad/Cargo.toml", "zos-tv-gamepad"],
-  ["crates/vod-player/Cargo.toml", "zos-vod-player"],
-  ["crates/monitoring-contracts/Cargo.toml", "zos-monitoring-contracts"]
+  ["crates/alerter/Cargo.toml", "cyberos-alerter"],
+  ["crates/bluetoothd/Cargo.toml", "cyberos-bluetoothd"],
+  ["crates/downloader/Cargo.toml", "cyberos-downloader"],
+  ["crates/host-accessd/Cargo.toml", "cyberos-host-accessd"],
+  ["crates/hostd/Cargo.toml", "cyberos-hostd"],
+  ["crates/indexer/Cargo.toml", "cyberos-indexer"],
+  ["crates/monitor/Cargo.toml", "cyberos-monitor"],
+  ["crates/photostaff/Cargo.toml", "cyberos-photostaff"],
+  ["crates/termux/Cargo.toml", "cyberos-termux"],
+  ["crates/tv-gamepad/Cargo.toml", "cyberos-tv-gamepad"],
+  ["crates/vod-player/Cargo.toml", "cyberos-vod-player"],
+  ["crates/monitoring-contracts/Cargo.toml", "cyberos-monitoring-contracts"]
 ].map(([manifestPath, packageName]) => ({ manifestPath, packageName }));
 
 async function writeFixture(root) {
@@ -134,29 +148,40 @@ async function writeFixture(root) {
     mkdir(path.join(root, "crates/vod-player"), { recursive: true }),
     mkdir(path.join(root, "crates/monitoring-contracts"), { recursive: true }),
     mkdir(path.join(root, "packages/shared"), { recursive: true }),
+    mkdir(path.join(root, "docs"), { recursive: true }),
     mkdir(path.join(root, "packaging/debian"), { recursive: true }),
     mkdir(path.join(root, "packaging/appliance"), { recursive: true })
   ]);
 
-  const rootManifest = { name: "zos", version: "0.1.0", workspaces: ["packages/*"] };
+  const rootManifest = { name: "cyberos", version: "0.1.0", workspaces: ["packages/*"] };
   const apiManifest = {
-    name: "@zos/api",
+    name: "@cyberos/api",
     version: "0.1.0",
-    dependencies: { "@zos/shared": "0.1.0" }
+    dependencies: { "@cyberos/shared": "0.1.0" }
   };
-  const sharedManifest = { name: "@zos/shared", version: "0.1.0" };
-  const lock = {
-    name: "zos",
+  const sharedManifest = { name: "@cyberos/shared", version: "0.1.0" };
+  const docsManifest = { name: "@cyberos/docs", version: "0.1.0", private: true };
+  const docsLock = {
+    name: "@cyberos/docs",
     version: "0.1.0",
     lockfileVersion: 3,
     packages: {
-      "": { name: "zos", version: "0.1.0", workspaces: ["packages/*"] },
+      "": { name: "@cyberos/docs", version: "0.1.0" },
+      "../packages/shared": { name: "@cyberos/shared", version: "0.1.0" }
+    }
+  };
+  const lock = {
+    name: "cyberos",
+    version: "0.1.0",
+    lockfileVersion: 3,
+    packages: {
+      "": { name: "cyberos", version: "0.1.0", workspaces: ["packages/*"] },
       "packages/api": {
-        name: "@zos/api",
+        name: "@cyberos/api",
         version: "0.1.0",
-        dependencies: { "@zos/shared": "0.1.0" }
+        dependencies: { "@cyberos/shared": "0.1.0" }
       },
-      "packages/shared": { name: "@zos/shared", version: "0.1.0" }
+      "packages/shared": { name: "@cyberos/shared", version: "0.1.0" }
     }
   };
 
@@ -164,6 +189,8 @@ async function writeFixture(root) {
     writeFile(path.join(root, "package.json"), JSON.stringify(rootManifest, null, 2)),
     writeFile(path.join(root, "packages/api/package.json"), JSON.stringify(apiManifest, null, 2)),
     writeFile(path.join(root, "packages/shared/package.json"), JSON.stringify(sharedManifest, null, 2)),
+    writeFile(path.join(root, "docs/package.json"), JSON.stringify(docsManifest, null, 2)),
+    writeFile(path.join(root, "docs/package-lock.json"), JSON.stringify(docsLock, null, 2)),
     writeFile(path.join(root, "package-lock.json"), JSON.stringify(lock, null, 2)),
     ...PRODUCT_CARGO_PACKAGES.map(({ manifestPath, packageName }) =>
       writeFile(
@@ -177,11 +204,11 @@ async function writeFixture(root) {
     ),
     writeFile(
       path.join(root, "packaging/debian/changelog"),
-      "zos (0.1.0) unstable; urgency=medium\n\n  * Initial release.\n\n -- ZOS Maintainers <maintainers@zos.local>  Thu, 20 Aug 2026 10:20:00 +0000\n"
+      "cyberos (0.1.0) unstable; urgency=medium\n\n  * Initial release.\n\n -- CyberOS Maintainers <maintainers@cyberos.local>  Thu, 20 Aug 2026 10:20:00 +0000\n"
     ),
     writeFile(
       path.join(root, "packaging/appliance/manifest.toml"),
-      'name = "zos-appliance"\nversion = "0.1.0"\n'
+      'name = "cyberos-appliance"\nversion = "0.1.0"\n'
     )
   ]);
 }

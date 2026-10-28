@@ -12,7 +12,7 @@ use crate::error::{ErrorCode, IndexerError};
 use crate::extractor::extract_file;
 use crate::storage::{EntryKind, MountIdentity, RootStorage, probe_mount_identity};
 
-const IGNORED_DIRECTORIES: &[&str] = &[".git", ".zos", "node_modules", "dist", "coverage"];
+const IGNORED_DIRECTORIES: &[&str] = &[".git", ".cyberos", "node_modules", "dist", "coverage"];
 
 #[derive(Debug)]
 struct FileOutcome {
@@ -435,14 +435,14 @@ mod tests {
     #[test]
     fn ignore_list_is_fixed() {
         assert!(IGNORED_DIRECTORIES.contains(&".git"));
-        assert!(IGNORED_DIRECTORIES.contains(&".zos"));
+        assert!(IGNORED_DIRECTORIES.contains(&".cyberos"));
         assert!(!IGNORED_DIRECTORIES.contains(&"documents"));
         assert_eq!(
             ignored_ancestor(Path::new("docs/.git/config")),
             Some("docs/.git".to_owned())
         );
         assert_eq!(ignored_ancestor(Path::new("docs/file.txt")), None);
-        assert!(is_ignored_path(Path::new("docs/.zos/state.tar")));
+        assert!(is_ignored_path(Path::new("docs/.cyberos/state.tar")));
         assert!(!is_ignored_path(Path::new("docs/file.txt")));
     }
 

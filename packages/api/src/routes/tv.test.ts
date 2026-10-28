@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { VodPlayerStatus } from "@zos/shared";
+import type { VodPlayerStatus } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { registerTvRoutes } from "./tv.js";
 
@@ -16,7 +16,7 @@ afterEach(async () => {
 
 describe("TV status API", () => {
   it("reports a ready session while keeping missing CEC non-fatal", async () => {
-    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-tv-status-"));
+    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-tv-status-"));
     const statusDirectory = path.join(temporaryDirectory, "status");
     const enabledMarker = path.join(temporaryDirectory, "enabled");
     await mkdir(statusDirectory);
@@ -43,7 +43,7 @@ describe("TV status API", () => {
   });
 
   it("marks stale required heartbeats as degraded", async () => {
-    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-tv-status-"));
+    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-tv-status-"));
     const statusDirectory = path.join(temporaryDirectory, "status");
     const enabledMarker = path.join(temporaryDirectory, "enabled");
     await mkdir(statusDirectory);
@@ -61,7 +61,7 @@ describe("TV status API", () => {
   });
 
   it("keeps unavailable gamepad input non-fatal", async () => {
-    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-tv-status-"));
+    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-tv-status-"));
     const statusDirectory = path.join(temporaryDirectory, "status");
     const enabledMarker = path.join(temporaryDirectory, "enabled");
     await mkdir(statusDirectory);

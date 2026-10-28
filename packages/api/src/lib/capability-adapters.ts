@@ -3,24 +3,24 @@ import { copyFile, link, lstat, readFile, rename, stat, unlink, writeFile } from
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { parseDocument } from "yaml";
-import { checkBackup, initBackup, restoreBackup, runBackup, validateBackup } from "@zos/backup";
-import { CapabilityError, type JsonValue } from "@zos/capabilities";
+import { checkBackup, initBackup, restoreBackup, runBackup, validateBackup } from "@cyberos/backup";
+import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
 import {
   createRestrictedShellAdapter,
   type CapabilityDomainAdapter,
   type CapabilitySecretRequirement,
   type PreparedCapabilityAction
-} from "@zos/capability-runtime";
+} from "@cyberos/capability-runtime";
 import {
   enqueuePhotostaffJob,
   getNasRoot,
   getPhotostaffLibrarySettings,
   getRootReadiness,
   recordAppliedOperation,
-  type ZosDatabase
-} from "@zos/db";
-import { isPathInside, resolveSafeExistingPath, resolveSafeTargetPath } from "@zos/nas-tools";
-import { photostaffMediaKind, type ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import { isPathInside, resolveSafeExistingPath, resolveSafeTargetPath } from "@cyberos/nas-tools";
+import { photostaffMediaKind, type CyberOsConfig } from "@cyberos/shared";
 import {
   createFileExportMcpResource,
   createPhotoExportMcpResource,
@@ -36,27 +36,27 @@ interface InternalRequest {
 }
 
 const MUTATION_CAPABILITIES = [
-  "zos.system.power-propose",
-  "zos.operations.run-propose",
-  "zos.files.export-propose",
-  "zos.files.edit",
-  "zos.files.write",
-  "zos.files.rollback-propose",
-  "zos.index.reindex-propose",
-  "zos.photos.manage-propose",
-  "zos.downloads.manage-propose",
-  "zos.backup.run-propose",
-  "zos.alerts.manage-propose",
-  "zos.notifications.read-state-propose",
-  "zos.docker.manage-propose",
-  "zos.docker.console-propose",
-  "zos.vm.manage-propose",
-  "zos.vm.console-propose",
-  "zos.network.manage-propose",
-  "zos.storage.manage-propose",
-  "zos.settings.update-propose",
-  "zos.terminal.manage-propose",
-  "zos.vod.control-propose"
+  "cyberos.system.power-propose",
+  "cyberos.operations.run-propose",
+  "cyberos.files.export-propose",
+  "cyberos.files.edit",
+  "cyberos.files.write",
+  "cyberos.files.rollback-propose",
+  "cyberos.index.reindex-propose",
+  "cyberos.photos.manage-propose",
+  "cyberos.downloads.manage-propose",
+  "cyberos.backup.run-propose",
+  "cyberos.alerts.manage-propose",
+  "cyberos.notifications.read-state-propose",
+  "cyberos.docker.manage-propose",
+  "cyberos.docker.console-propose",
+  "cyberos.vm.manage-propose",
+  "cyberos.vm.console-propose",
+  "cyberos.network.manage-propose",
+  "cyberos.storage.manage-propose",
+  "cyberos.settings.update-propose",
+  "cyberos.terminal.manage-propose",
+  "cyberos.vod.control-propose"
 ] as const;
 
 export function createCapabilityAdapters(
@@ -64,7 +64,7 @@ export function createCapabilityAdapters(
   options: { resourceBaseUrl: string }
 ): Readonly<Record<string, CapabilityDomainAdapter>> {
   const adapters: Record<string, CapabilityDomainAdapter> = {
-    "zos.shell.run": createRestrictedShellAdapter()
+    "cyberos.shell.run": createRestrictedShellAdapter()
   };
   for (const capabilityId of MUTATION_CAPABILITIES) {
     adapters[capabilityId] = httpDomainAdapter(server, capabilityId, options.resourceBaseUrl);
@@ -122,12 +122,12 @@ async function executeDirectCapability(
   capabilityId: string,
   request: Record<string, JsonValue>,
   secrets: Readonly<Record<string, string>>,
-  db: ZosDatabase,
-  config: ZosConfig,
+  db: CyberOsDatabase,
+  config: CyberOsConfig,
   clientId: string,
   resourceBaseUrl: string
 ): Promise<JsonValue> {
-  if (capabilityId === "zos.files.export-propose") {
+  if (capabilityId === "cyberos.files.export-propose") {
     try {
       return await createFileExportMcpResource({
         db,
@@ -141,9 +141,9 @@ async function executeDirectCapability(
       throw resourceCapabilityError(error);
     }
   }
-  if (capabilityId === "zos.files.edit") return executeFileEdit(server, request);
-  if (capabilityId === "zos.files.write") return executeFileWrite(db, request);
-  if (capabilityId === "zos.photos.manage-propose" && request.operation === "export") {
+  if (capabilityId === "cyberos.files.edit") return executeFileEdit(server, request);
+  if (capabilityId === "cyberos.files.write") return executeFileWrite(db, request);
+  if (capabilityId === "cyberos.photos.manage-propose" && request.operation === "export") {
     try {
       return await createPhotoExportMcpResource({
         db,
@@ -156,11 +156,11 @@ async function executeDirectCapability(
       throw resourceCapabilityError(error);
     }
   }
-  if (capabilityId === "zos.photos.manage-propose" && request.operation === "import") {
+  if (capabilityId === "cyberos.photos.manage-propose" && request.operation === "import") {
     return importPhotosFromNas(db, request);
   }
-  if (capabilityId === "zos.backup.run-propose") return executeBackup(db, config, request);
-  if (capabilityId === "zos.docker.console-propose") {
+  if (capabilityId === "cyberos.backup.run-propose") return executeBackup(db, config, request);
+  if (capabilityId === "cyberos.docker.console-propose") {
     const operationResult = await injectJson(server, internalRequest(capabilityId, request, secrets));
     if (!isRecord(operationResult) || !isRecord(operationResult.operation) || typeof operationResult.operation.id !== "string") {
       throw new CapabilityError("INTERNAL", "Docker console operation did not return an operation ID");
@@ -184,41 +184,41 @@ function internalRequest(
   const operation = requiredString(request.operation, "operation");
   const body = without(request, "operation");
   switch (capabilityId) {
-    case "zos.system.power-propose":
+    case "cyberos.system.power-propose":
       return { method: "POST", url: "/api/system/power", payload: { action: operation, confirmed: true } };
-    case "zos.operations.run-propose":
+    case "cyberos.operations.run-propose":
       return { method: "POST", url: `/api/system/operations/${encodeURIComponent(operation)}/run`, payload: { confirmed: true } };
-    case "zos.files.rollback-propose":
+    case "cyberos.files.rollback-propose":
       return { method: "POST", url: `/api/operations/${encoded(request.operationId)}/rollback` };
-    case "zos.index.reindex-propose":
+    case "cyberos.index.reindex-propose":
       return { method: "POST", url: "/api/indexer/reindex", payload: body };
-    case "zos.photos.manage-propose":
+    case "cyberos.photos.manage-propose":
       return photoRequest(operation, body);
-    case "zos.downloads.manage-propose":
+    case "cyberos.downloads.manage-propose":
       return downloadRequest(operation, request);
-    case "zos.alerts.manage-propose":
+    case "cyberos.alerts.manage-propose":
       return alertRequest(operation, request, secrets);
-    case "zos.notifications.read-state-propose":
+    case "cyberos.notifications.read-state-propose":
       return operation === "read_all"
         ? { method: "POST", url: "/api/notifications/read-all" }
         : { method: "PATCH", url: `/api/notifications/${encoded(request.notificationId)}/read` };
-    case "zos.docker.manage-propose":
+    case "cyberos.docker.manage-propose":
       return dockerRequest(operation, request, secrets);
-    case "zos.docker.console-propose":
+    case "cyberos.docker.console-propose":
       return { method: "POST", url: "/api/docker/actions", payload: { action: "console", targetType: "console", containerId: request.containerId, shell: request.shell } };
-    case "zos.vm.manage-propose":
+    case "cyberos.vm.manage-propose":
       return vmRequest(operation, request);
-    case "zos.vm.console-propose":
+    case "cyberos.vm.console-propose":
       return { method: "POST", url: "/api/vms/actions", payload: { action: "console", domainName: request.domainName } };
-    case "zos.network.manage-propose":
+    case "cyberos.network.manage-propose":
       return networkRequest(operation, request, secrets);
-    case "zos.storage.manage-propose":
+    case "cyberos.storage.manage-propose":
       return storageRequest(operation, request, secrets);
-    case "zos.settings.update-propose":
+    case "cyberos.settings.update-propose":
       return settingsRequest(operation, request, secrets);
-    case "zos.terminal.manage-propose":
+    case "cyberos.terminal.manage-propose":
       return terminalRequest(operation, request);
-    case "zos.vod.control-propose":
+    case "cyberos.vod.control-propose":
       return { method: "POST", url: "/api/vod-player/command", payload: { type: operation, ...body } };
     default:
       throw new CapabilityError("NOT_READY", "Capability execution adapter is not installed", { retryable: true });
@@ -409,7 +409,7 @@ async function executeFileEdit(server: FastifyInstance, request: Record<string, 
   return injectJson(server, { method: "PUT", url: "/api/files/edit-text", payload: { rootId, path: filePath, content, expectedModifiedAt: current.modifiedAt ?? null } });
 }
 
-async function executeFileWrite(db: ZosDatabase, request: Record<string, JsonValue>): Promise<JsonValue> {
+async function executeFileWrite(db: CyberOsDatabase, request: Record<string, JsonValue>): Promise<JsonValue> {
   const root = requireReadyRoot(db, requiredString(request.rootId, "rootId"));
   const requestedPath = requiredString(request.path, "path");
   const content = typeof request.content === "string" ? request.content : null;
@@ -455,7 +455,7 @@ async function executeFileWrite(db: ZosDatabase, request: Record<string, JsonVal
   return toJson({ path: target.relativePath, created: !existed, sizeBytes: Buffer.byteLength(content, "utf8"), operation });
 }
 
-async function importPhotosFromNas(db: ZosDatabase, request: Record<string, JsonValue>): Promise<JsonValue> {
+async function importPhotosFromNas(db: CyberOsDatabase, request: Record<string, JsonValue>): Promise<JsonValue> {
   const plan = await resolvePhotoImportPlan(db, request);
   const imported: JsonValue[] = [];
   for (const item of plan.items) {
@@ -480,7 +480,7 @@ async function importPhotosFromNas(db: ZosDatabase, request: Record<string, Json
   return toJson({ imported, job });
 }
 
-async function resolvePhotoImportPlan(db: ZosDatabase, request: Record<string, JsonValue>) {
+async function resolvePhotoImportPlan(db: CyberOsDatabase, request: Record<string, JsonValue>) {
   const settings = getPhotostaffLibrarySettings(db);
   if (!settings) throw new CapabilityError("NOT_READY", "Photo library is not configured", { retryable: true });
   const sourceRoot = requireReadyRoot(db, requiredString(request.sourceRootId, "sourceRootId"));
@@ -524,7 +524,7 @@ async function resolvePhotoImportPlan(db: ZosDatabase, request: Record<string, J
   return { settings, sourceRoot, libraryRoot, destinationDirectory, items };
 }
 
-async function executeBackup(db: ZosDatabase, config: ZosConfig, request: Record<string, JsonValue>): Promise<JsonValue> {
+async function executeBackup(db: CyberOsDatabase, config: CyberOsConfig, request: Record<string, JsonValue>): Promise<JsonValue> {
   const operation = requiredString(request.operation, "operation");
   if (operation === "validate") return toJson(await validateBackup({ db, config }));
   if (operation === "init") {
@@ -569,32 +569,32 @@ function resourceCapabilityError(error: unknown): CapabilityError {
   return new CapabilityError("INVALID_ARGUMENT", error.message, { cause: error });
 }
 
-function capabilityAvailability(capabilityId: string, config: ZosConfig) {
-  if (capabilityId.startsWith("zos.docker.")) return config.docker.enabled
+function capabilityAvailability(capabilityId: string, config: CyberOsConfig) {
+  if (capabilityId.startsWith("cyberos.docker.")) return config.docker.enabled
     ? { available: true }
     : { available: false, reason: "Docker management is disabled" };
-  if (capabilityId.startsWith("zos.vm.")) return config.vm?.enabled
+  if (capabilityId.startsWith("cyberos.vm.")) return config.vm?.enabled
     ? { available: true }
     : { available: false, reason: "Virtual machine management is disabled" };
-  if (capabilityId === "zos.vod.control-propose") return config.vodPlayer.enabled
+  if (capabilityId === "cyberos.vod.control-propose") return config.vodPlayer.enabled
     ? { available: true }
     : { available: false, reason: "VOD Player is disabled" };
-  if (capabilityId === "zos.backup.run-propose") return config.backup?.enabled
+  if (capabilityId === "cyberos.backup.run-propose") return config.backup?.enabled
     ? { available: true }
     : { available: false, reason: "Backup is disabled" };
   if (
-    (capabilityId === "zos.network.manage-propose" || capabilityId === "zos.storage.manage-propose") &&
+    (capabilityId === "cyberos.network.manage-propose" || capabilityId === "cyberos.storage.manage-propose") &&
     config.hostd.mutationPolicy === "declarative"
   ) return { available: false, reason: "Host configuration is managed declaratively" };
   return { available: true };
 }
 
-async function validateHostPolicy(capabilityId: string, request: Record<string, JsonValue>, config: ZosConfig): Promise<void> {
+async function validateHostPolicy(capabilityId: string, request: Record<string, JsonValue>, config: CyberOsConfig): Promise<void> {
   if (config.hostd.mutationPolicy !== "declarative") return;
-  if (capabilityId === "zos.network.manage-propose" || capabilityId === "zos.storage.manage-propose") {
+  if (capabilityId === "cyberos.network.manage-propose" || capabilityId === "cyberos.storage.manage-propose") {
     throw new CapabilityError("NOT_READY", "Host configuration is managed declaratively");
   }
-  if (capabilityId === "zos.docker.manage-propose" && request.operation === "daemon_update") {
+  if (capabilityId === "cyberos.docker.manage-propose" && request.operation === "daemon_update") {
     throw new CapabilityError("NOT_READY", "Docker daemon configuration is managed declaratively");
   }
 }
@@ -644,13 +644,13 @@ function rejectComposeCredentials(value: unknown, pathSegments: string[] = []): 
   }
 }
 
-async function validateRootReferences(request: Record<string, JsonValue>, db: ZosDatabase): Promise<void> {
+async function validateRootReferences(request: Record<string, JsonValue>, db: CyberOsDatabase): Promise<void> {
   for (const reference of rootReferences(request)) requireReadyRoot(db, reference.rootId);
 }
 
 async function capabilityRevision(
-  db: ZosDatabase,
-  config: ZosConfig,
+  db: CyberOsDatabase,
+  config: CyberOsConfig,
   capabilityId: string,
   request: Record<string, JsonValue>
 ): Promise<string> {
@@ -693,19 +693,19 @@ function rootReferences(value: JsonValue, prefix = "request"): Array<{ field: st
 }
 
 async function capabilityResourceState(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   capabilityId: string,
   request: Record<string, JsonValue>
 ): Promise<JsonValue> {
-  if (capabilityId === "zos.files.edit" || capabilityId === "zos.files.write") {
+  if (capabilityId === "cyberos.files.edit" || capabilityId === "cyberos.files.write") {
     const root = requireReadyRoot(db, requiredString(request.rootId, "rootId"));
     return toJson(await fileTargetState(
       root.path,
       requiredString(request.path, "path"),
-      capabilityId === "zos.files.write"
+      capabilityId === "cyberos.files.write"
     ));
   }
-  if (capabilityId === "zos.files.export-propose") {
+  if (capabilityId === "cyberos.files.export-propose") {
     try {
       return await fileExportResourceRevision(
         db,
@@ -716,14 +716,14 @@ async function capabilityResourceState(
       throw resourceCapabilityError(error);
     }
   }
-  if (capabilityId === "zos.photos.manage-propose" && request.operation === "export") {
+  if (capabilityId === "cyberos.photos.manage-propose" && request.operation === "export") {
     try {
       return await photoExportResourceRevision(db, stringArray(request.assetIds, "assetIds"));
     } catch (error) {
       throw resourceCapabilityError(error);
     }
   }
-  if (capabilityId === "zos.photos.manage-propose" && request.operation === "import") {
+  if (capabilityId === "cyberos.photos.manage-propose" && request.operation === "import") {
     const plan = await resolvePhotoImportPlan(db, request);
     return toJson({
       settingsUpdatedAt: plan.settings.updatedAt,
@@ -776,38 +776,38 @@ async function fileSystemState(filePath: string): Promise<Record<string, JsonVal
 }
 
 function revisionTables(capabilityId: string): string[] {
-  if (capabilityId.startsWith("zos.files.")) return ["file_operations", "trash_entries"];
-  if (capabilityId.startsWith("zos.photos.")) return ["photostaff_assets", "photostaff_jobs", "system_settings"];
-  if (capabilityId.startsWith("zos.downloads.")) return ["download_tasks", "system_settings"];
-  if (capabilityId.startsWith("zos.alerts.")) return ["monitoring_alert_rules", "monitoring_alert_incidents", "system_settings"];
-  if (capabilityId.startsWith("zos.notifications.")) return ["operation_notifications"];
-  if (capabilityId.startsWith("zos.docker.")) return ["docker_operations", "docker_compose_apps", "docker_registry_credentials", "system_settings"];
-  if (capabilityId.startsWith("zos.vm.")) return ["vm_operations"];
-  if (capabilityId.startsWith("zos.settings.")) return ["system_settings"];
-  if (capabilityId.startsWith("zos.terminal.")) return ["terminal_tabs"];
+  if (capabilityId.startsWith("cyberos.files.")) return ["file_operations", "trash_entries"];
+  if (capabilityId.startsWith("cyberos.photos.")) return ["photostaff_assets", "photostaff_jobs", "system_settings"];
+  if (capabilityId.startsWith("cyberos.downloads.")) return ["download_tasks", "system_settings"];
+  if (capabilityId.startsWith("cyberos.alerts.")) return ["monitoring_alert_rules", "monitoring_alert_incidents", "system_settings"];
+  if (capabilityId.startsWith("cyberos.notifications.")) return ["operation_notifications"];
+  if (capabilityId.startsWith("cyberos.docker.")) return ["docker_operations", "docker_compose_apps", "docker_registry_credentials", "system_settings"];
+  if (capabilityId.startsWith("cyberos.vm.")) return ["vm_operations"];
+  if (capabilityId.startsWith("cyberos.settings.")) return ["system_settings"];
+  if (capabilityId.startsWith("cyberos.terminal.")) return ["terminal_tabs"];
   return [];
 }
 
 function secretRequirements(capabilityId: string, request: Record<string, JsonValue>): CapabilitySecretRequirement[] {
   const operation = request.operation;
-  if (capabilityId === "zos.network.manage-propose" && (
+  if (capabilityId === "cyberos.network.manage-propose" && (
     (operation === "wifi_connect" && request.profileId === undefined && request.security !== "open") ||
     (operation === "wifi_profile" && request.replacePassword === true && request.security !== "open") ||
     (operation === "hotspot" && request.replacePassword === true)
   )) return [{ name: "wifiPassword", label: "Wi-Fi password", minLength: 8, maxLength: 63 }];
-  if (capabilityId === "zos.alerts.manage-propose" && operation === "update_smtp" && request.replacePassword === true) {
+  if (capabilityId === "cyberos.alerts.manage-propose" && operation === "update_smtp" && request.replacePassword === true) {
     return [{ name: "smtpPassword", label: "SMTP password", maxLength: 1024 }];
   }
-  if (capabilityId === "zos.docker.manage-propose" && operation === "registry_create") {
+  if (capabilityId === "cyberos.docker.manage-propose" && operation === "registry_create") {
     return [{ name: "registryPassword", label: "Registry password", maxLength: 4096 }];
   }
-  if (capabilityId === "zos.docker.manage-propose" && operation === "registry_update" && request.replacePassword === true) {
+  if (capabilityId === "cyberos.docker.manage-propose" && operation === "registry_update" && request.replacePassword === true) {
     return [{ name: "registryPassword", label: "Registry password", maxLength: 4096 }];
   }
-  if (capabilityId === "zos.settings.update-propose" && operation === "model_provider" && request.replaceApiKey === true) {
+  if (capabilityId === "cyberos.settings.update-propose" && operation === "model_provider" && request.replaceApiKey === true) {
     return [{ name: "apiKey", label: "Model API key", maxLength: 4096 }];
   }
-  if (capabilityId === "zos.storage.manage-propose" && operation === "share_account") {
+  if (capabilityId === "cyberos.storage.manage-propose" && operation === "share_account") {
     return [{ name: "sharePassword", label: "Share account password", maxLength: 256 }];
   }
   return [];
@@ -817,7 +817,7 @@ function capabilitySummary(capabilityId: string, request: Record<string, JsonVal
   const operation = requiredString(request.operation, "operation");
   const target = [request.path, request.taskId, request.containerId, request.appId, request.domainName, request.connectionId, request.poolId, request.tabId, request.id]
     .find((value): value is string => typeof value === "string" && value.length > 0);
-  const title = capabilityId.replace(/^zos\./u, "").replace(/-propose$/u, "").replaceAll(".", " ");
+  const title = capabilityId.replace(/^cyberos\./u, "").replace(/-propose$/u, "").replaceAll(".", " ");
   return `${title}: ${operation.replaceAll("_", " ")}${target ? ` (${target})` : ""}`;
 }
 
@@ -865,7 +865,7 @@ function requestObject(value: JsonValue): Record<string, JsonValue> {
   return value;
 }
 
-function requireReadyRoot(db: ZosDatabase, rootId: string) {
+function requireReadyRoot(db: CyberOsDatabase, rootId: string) {
   const root = getNasRoot(db, rootId);
   if (!root || !root.enabled) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
   if (root.mountPolicy === "required" && getRootReadiness(db, root.id)?.status !== "ready") {

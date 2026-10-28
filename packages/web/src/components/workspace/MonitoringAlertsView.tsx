@@ -43,7 +43,7 @@ type IncidentFilter = "all" | "firing" | "resolved";
 const DEFAULT_RULE: MonitoringAlertRuleInput = {
   name: "",
   enabled: false,
-  metric: "zos_host_cpu_usage_ratio",
+  metric: "cyberos_host_cpu_usage_ratio",
   selector: {},
   transform: "value",
   aggregation: "avg",

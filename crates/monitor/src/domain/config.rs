@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use zos_monitoring_contracts::SamplingIntervals;
+use cyberos_monitoring_contracts::SamplingIntervals;
 
 const MIB: u64 = 1024 * 1024;
 

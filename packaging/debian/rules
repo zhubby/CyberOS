@@ -4,8 +4,8 @@
 	dh $@
 
 override_dh_auto_build:
-	npm ci --registry="$${ZOS_NPM_REGISTRY:-https://registry.npmmirror.com}"
-	npm --prefix docs ci --registry="$${ZOS_NPM_REGISTRY:-https://registry.npmmirror.com}"
+	npm ci --registry="$${CYBEROS_NPM_REGISTRY:-https://registry.npmmirror.com}"
+	npm --prefix docs ci --registry="$${CYBEROS_NPM_REGISTRY:-https://registry.npmmirror.com}"
 	npm run build
 
 override_dh_auto_test:
@@ -17,11 +17,11 @@ override_dh_auto_install:
 	:
 
 # Workspace packages are bundled into the compiled applications. npm leaves
-# development-only @zos links that point back into the source tree; remove
+# development-only @cyberos links that point back into the source tree; remove
 # them from the staged runtime so the package contains no dangling symlinks.
 override_dh_install:
 	dh_install
-	rm -rf debian/zos/usr/lib/zos/node_modules/@zos
+	rm -rf debian/cyberos/usr/lib/cyberos/node_modules/@cyberos
 
 # npm dependencies bundle prebuilt native artifacts for several platforms. The
 # foreign .bare and .node files are already stripped and cannot be processed by

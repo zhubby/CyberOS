@@ -14,7 +14,7 @@ const mountedPool: HttpDownloaderPool = {
   id: "pool-1",
   rootId: "nas",
   name: "Data",
-  path: "/zos/data/data",
+  path: "/cyberos/data/data",
   filesystem: "ext4",
   status: "ready"
 };
@@ -166,10 +166,10 @@ const baseTask: DownloadTask = {
   url: "https://example.com/archive.zip",
   rootId: "nas",
   storagePoolId: "pool-1",
-  targetDirectory: "/zos/data/data",
+  targetDirectory: "/cyberos/data/data",
   targetFileName: "archive.zip",
-  targetPath: "/zos/data/data/archive.zip",
-  partialPath: "/zos/data/data/.task-1.zos-download.part",
+  targetPath: "/cyberos/data/data/archive.zip",
+  partialPath: "/cyberos/data/data/.task-1.cyberos-download.part",
   status: "running",
   receivedBytes: 25,
   totalBytes: 100,

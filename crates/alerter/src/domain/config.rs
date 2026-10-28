@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use zos_monitoring_contracts::SamplingIntervals;
+use cyberos_monitoring_contracts::SamplingIntervals;
 
 #[derive(Debug, Clone)]
 pub struct AlerterConfig {

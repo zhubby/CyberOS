@@ -28,7 +28,7 @@ const MPV_MEDIA_FD: RawFd = 4;
 const CHILD_FD_DUPLICATE_MINIMUM: RawFd = 200;
 const TEXT_FILE_BUSY_RETRIES: usize = 5;
 const TEXT_FILE_BUSY_RETRY_DELAY: Duration = Duration::from_millis(10);
-const TV_INPUT_CONFIG_PATH: &str = "/usr/share/zos/mpv-input.conf";
+const TV_INPUT_CONFIG_PATH: &str = "/usr/share/cyberos/mpv-input.conf";
 
 pub struct CapabilityProbe {
     pub capabilities: Capabilities,
@@ -443,7 +443,7 @@ fn append_video_output_args(args: &mut Vec<String>, config: &VodPlayerConfig) {
             "--fullscreen=yes".to_owned(),
             "--border=no".to_owned(),
             "--ontop=yes".to_owned(),
-            "--wayland-app-id=zos-vod-player".to_owned(),
+            "--wayland-app-id=cyberos-vod-player".to_owned(),
             "--osd-level=1".to_owned(),
             "--osd-on-seek=bar".to_owned(),
             format!("--input-conf={TV_INPUT_CONFIG_PATH}"),
@@ -804,7 +804,7 @@ mod tests {
             enabled: true,
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
-            database_path: directory.join("zos.sqlite"),
+            database_path: directory.join("cyberos.sqlite"),
             command_timeout_ms: 250,
             startup_timeout_ms: 5_000,
             checkpoint_interval_ms: 5_000,
@@ -915,7 +915,7 @@ done
     #[test]
     fn redacts_paths_from_diagnostics() {
         let message = sanitize_diagnostic(
-            "failed '/zos/data/primary/private/movie.mkv' source=/zos/data/primary/private path='/private/secret' fdclose://9",
+            "failed '/cyberos/data/primary/private/movie.mkv' source=/cyberos/data/primary/private path='/private/secret' fdclose://9",
         );
         assert_eq!(message, "failed [path] [path] [path] [path]");
     }
@@ -976,7 +976,7 @@ done
         let mut args = Vec::new();
         append_video_output_args(&mut args, &test_config);
         assert!(args.contains(&"--fullscreen=yes".to_owned()));
-        assert!(args.contains(&"--wayland-app-id=zos-vod-player".to_owned()));
+        assert!(args.contains(&"--wayland-app-id=cyberos-vod-player".to_owned()));
         assert!(args.contains(&format!("--input-conf={TV_INPUT_CONFIG_PATH}")));
         assert!(
             !args

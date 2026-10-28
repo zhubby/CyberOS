@@ -16,7 +16,7 @@ import {
   getMediaTitle,
   listMediaSources,
   listMediaTitles,
-  openZosDb,
+  openCyberOsDb,
   saveMediaLibrarySettings,
   saveMediaProgress,
   toPublicMediaLibrarySettings,
@@ -24,15 +24,15 @@ import {
   updateMediaSource,
   upsertMediaCatalogEntry,
   type MediaCatalogEntryInput,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
 
 let directory: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  directory = await mkdtemp(path.join(os.tmpdir(), "zos-media-db-"));
-  db = openZosDb(path.join(directory, "state.sqlite"));
+  directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-media-db-"));
+  db = openCyberOsDb(path.join(directory, "state.sqlite"));
   ensureNasRoots(db, [{ id: "root", name: "Root", path: directory }]);
 });
 

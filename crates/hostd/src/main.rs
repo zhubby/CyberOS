@@ -1,9 +1,9 @@
 use std::process::ExitCode;
 
+use cyberos_hostd::config::HostdConfig;
+use cyberos_hostd::error::{ErrorCode, HostdError};
+use cyberos_hostd::server::HostdServer;
 use tracing_subscriber::EnvFilter;
-use zos_hostd::config::HostdConfig;
-use zos_hostd::error::{ErrorCode, HostdError};
-use zos_hostd::server::HostdServer;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -29,7 +29,7 @@ async fn run() -> Result<(), HostdError> {
         return Err(HostdError::new(
             400,
             ErrorCode::Validation,
-            "usage: zos-hostd",
+            "usage: cyberos-hostd",
         ));
     }
     let config = HostdConfig::load()?;

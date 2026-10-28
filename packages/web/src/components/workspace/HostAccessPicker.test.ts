@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DockerHostAccessCatalog, DockerHostAccessGrant } from "@zos/shared";
+import type { DockerHostAccessCatalog, DockerHostAccessGrant } from "@cyberos/shared";
 import { hostAccessPickerBlocked, validContainerTarget } from "./HostAccessPicker.js";
 
 describe("HostAccessPicker", () => {

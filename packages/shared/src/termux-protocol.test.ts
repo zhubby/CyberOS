@@ -17,10 +17,10 @@ const STREAM_ID = "550e8400-e29b-41d4-a716-446655440000";
 describe("Termux Protocol v1", () => {
   it("round-trips strict request and command envelopes", () => {
     const open = termuxRequest(REQUEST_ID, "session.open", {
-      user: "zos",
+      user: "cyberos",
       cols: 120,
       rows: 32,
-      sessionName: "zos-demo",
+      sessionName: "cyberos-demo",
       persistent: true
     });
     expect(parseTermuxClientFrame(encodeTermuxFrame(open).trim())).toEqual(open);
@@ -33,26 +33,26 @@ describe("Termux Protocol v1", () => {
 
   it("rejects unknown fields, versions, invalid dimensions, ids, and base64", () => {
     expect(parseTermuxClientFrame("not json")).toBeNull();
-    expect(parseTermuxClientFrame(`{"version":2,"kind":"request","id":"${REQUEST_ID}","operation":"session.open","payload":{"user":"zos","cols":120,"rows":32}}`)).toBeNull();
-    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"bad","operation":"session.open","payload":{"user":"zos","cols":120,"rows":32}}`)).toBeNull();
-    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"${REQUEST_ID}","operation":"session.open","payload":{"user":"zos","cols":1,"rows":32}}`)).toBeNull();
+    expect(parseTermuxClientFrame(`{"version":2,"kind":"request","id":"${REQUEST_ID}","operation":"session.open","payload":{"user":"cyberos","cols":120,"rows":32}}`)).toBeNull();
+    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"bad","operation":"session.open","payload":{"user":"cyberos","cols":120,"rows":32}}`)).toBeNull();
+    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"${REQUEST_ID}","operation":"session.open","payload":{"user":"cyberos","cols":1,"rows":32}}`)).toBeNull();
     expect(parseTermuxClientFrame(`{"version":1,"kind":"command","streamId":"${STREAM_ID}","operation":"terminal.input","payload":{"data":"***"}}`)).toBeNull();
     expect(parseTermuxClientFrame(`{"version":1,"kind":"command","streamId":"${STREAM_ID}","operation":"terminal.input","payload":{"data":"Zh=="}}`)).toBeNull();
     expect(parseTermuxClientFrame(`{"version":1,"kind":"command","streamId":"${STREAM_ID}","operation":"terminal.input","payload":{"data":"Zg"}}`)).toBeNull();
-    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"${REQUEST_ID.replaceAll("-", "")}","operation":"session.open","payload":{"user":"zos","cols":120,"rows":32}}`)).toBeNull();
-    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"67e55044-10b1-026f-9247-bb680e5fe0c8","operation":"session.open","payload":{"user":"zos","cols":120,"rows":32}}`)).toBeNull();
-    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"67e55044-10b1-426f-7247-bb680e5fe0c8","operation":"session.open","payload":{"user":"zos","cols":120,"rows":32}}`)).toBeNull();
-    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"${REQUEST_ID}","operation":"session.destroy","payload":{"user":"zos","sessionName":"zos-demo"},"extra":true}`)).toBeNull();
+    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"${REQUEST_ID.replaceAll("-", "")}","operation":"session.open","payload":{"user":"cyberos","cols":120,"rows":32}}`)).toBeNull();
+    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"67e55044-10b1-026f-9247-bb680e5fe0c8","operation":"session.open","payload":{"user":"cyberos","cols":120,"rows":32}}`)).toBeNull();
+    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"67e55044-10b1-426f-7247-bb680e5fe0c8","operation":"session.open","payload":{"user":"cyberos","cols":120,"rows":32}}`)).toBeNull();
+    expect(parseTermuxClientFrame(`{"version":1,"kind":"request","id":"${REQUEST_ID}","operation":"session.destroy","payload":{"user":"cyberos","sessionName":"cyberos-demo"},"extra":true}`)).toBeNull();
   });
 
   it("parses success, error, output, exit, and stream error frames", () => {
-    const ready = parseTermuxServerFrame(`{"version":1,"kind":"response","id":"${REQUEST_ID}","ok":true,"result":{"streamId":"${STREAM_ID}","user":"zos","cwd":"/zos/home/termux","shell":"/bin/bash"}}`);
+    const ready = parseTermuxServerFrame(`{"version":1,"kind":"response","id":"${REQUEST_ID}","ok":true,"result":{"streamId":"${STREAM_ID}","user":"cyberos","cwd":"/cyberos/home/termux","shell":"/bin/bash"}}`);
     expect(ready?.kind).toBe("response");
     if (ready?.kind !== "response" || !ready.ok) throw new Error("expected ready response");
     expect(parseTermuxOpenResult(ready.result)).toEqual({
       streamId: STREAM_ID,
-      user: "zos",
-      cwd: "/zos/home/termux",
+      user: "cyberos",
+      cwd: "/cyberos/home/termux",
       shell: "/bin/bash"
     });
     expect(parseTermuxServerFrame(`{"version":1,"kind":"response","id":"${REQUEST_ID}","ok":false,"error":{"status":409,"code":"conflict","message":"busy","retryable":true}}`)).not.toBeNull();

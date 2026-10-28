@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-pub use zos_monitoring_contracts::{MetricCadence, MetricDefinition, MetricKind};
+pub use cyberos_monitoring_contracts::{MetricCadence, MetricDefinition, MetricKind};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MetricSample {

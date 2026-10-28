@@ -7,18 +7,18 @@ import {
   createDownloadTask,
   ensureNasRoots,
   getDownloadWorkerHealth,
-  openZosDb,
+  openCyberOsDb,
   renewDownloadTaskLease,
   requestDownloadTaskControl,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "../index.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-download-repository-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-download-repository-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 

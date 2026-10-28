@@ -1,0 +1,25 @@
+[Unit]
+Description=CyberOS dedicated WebDAV server
+After=network-online.target local-fs.target
+Wants=network-online.target
+RequiresMountsFor=/cyberos/data
+
+[Service]
+Type=exec
+User=www-data
+Group=www-data
+RuntimeDirectory=cyberos-webdav
+RuntimeDirectoryMode=0700
+ExecStart=/usr/sbin/apache2 -DFOREGROUND -f /etc/apache2/sites-available/cyberos-webdav.conf
+ExecReload=/usr/sbin/apache2 -k graceful -f /etc/apache2/sites-available/cyberos-webdav.conf
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/cyberos-webdav /cyberos/data
+PrivateTmp=yes
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

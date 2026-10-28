@@ -1,6 +1,6 @@
 # Pi compatibility
 
-ZOS embeds Pi as an in-process SDK inside the systemd worker. Pi JSONL is the
+CyberOS embeds Pi as an in-process SDK inside the systemd worker. Pi JSONL is the
 conversation truth; SQLite owns durable scheduling, approvals, event
 projection, and UI queries.
 
@@ -9,13 +9,13 @@ projection, and UI queries.
 | Pi package | `@earendil-works/pi-coding-agent` |
 | Supported Pi version | `1.1.0` (exactly pinned) |
 | Runtime | Node.js 22.12+ native process |
-| Session ownership | One worker-hosted `AgentSession` per ZOS session |
+| Session ownership | One worker-hosted `AgentSession` per CyberOS session |
 
 ## SDK construction
 
-ZOS calls `createAgentSession()` with an explicit `cwd`, `agentDir`,
+CyberOS calls `createAgentSession()` with an explicit `cwd`, `agentDir`,
 `ModelRuntime`, `SessionManager`, `SettingsManager`, `DefaultResourceLoader`,
-tool allowlist, and custom ZOS file tools. Existing sessions reopen their
+tool allowlist, and custom CyberOS file tools. Existing sessions reopen their
 persisted JSONL with `SessionManager.open()`; new sessions use
 `SessionManager.create()`.
 
@@ -26,13 +26,13 @@ The host depends on these `AgentSession` methods and properties:
 - `subscribe`, `bindExtensions`, `dispose`, `sessionId`, `sessionFile`,
   `isIdle`, and `isStreaming`
 
-`session.dispose()` is the terminal cleanup operation. ZOS unsubscribes first,
+`session.dispose()` is the terminal cleanup operation. CyberOS unsubscribes first,
 aborts an active run, then disposes the session. Extensions must treat
 `session_shutdown` as idempotent and release session-scoped resources there.
 
 ## Event projection
 
-The host consumes Pi session events and projects these stable ZOS event types:
+The host consumes Pi session events and projects these stable CyberOS event types:
 
 - `turn_start`, `turn_end`, and `agent_end`
 - `message_start`, `message_update`, and `message_end`
@@ -57,7 +57,7 @@ stable entry id.
 
 ## Model runtime and sessions
 
-One `ModelRuntime` is cached per persisted settings generation. A new ZOS
+One `ModelRuntime` is cached per persisted settings generation. A new CyberOS
 session binds to the current generation. A restored session retains its saved
 provider, model, and generation; credentials from a newer generation are not
 silently borrowed. Explicit `set_model` is the only operation that rebinds an
@@ -66,19 +66,20 @@ existing session to the current generation.
 ## MCP and tools
 
 MCP is loaded through static extension factories for codemode, tool search,
-and the single internal `zos` server. Direct and deferred tool names are
-allowlisted. ZOS does not create Pi's local bash tool and `bash` must never be
+and the single internal `cyberos` server. Direct and deferred tool names are
+allowlisted. CyberOS does not create Pi's local bash tool and `bash` must never be
 present in the active tool list. Shell execution is available only through the
-approval-gated `zos.shell.run` capability; disabling MCP removes shell access.
+approval-gated `cyberos.shell.run` capability; disabling MCP removes shell access.
 
-Legacy ZOS file tools, when enabled, are root-scoped implementations using the
-NAS safety layer. They do not invoke a command shell.
+CyberOS exposes file, photo, and system capabilities only through the internal
+`cyberos` MCP server. Disabling MCP removes those tools instead of enabling a
+direct-tool fallback.
 
 ## Resource policy
 
 `DefaultResourceLoader` is configured with `noExtensions: true`; only bundled
 extension factories can execute. Project skills, prompt templates, and context
-files are disabled until the ZOS session is explicitly trusted. User and
+files are disabled until the CyberOS session is explicitly trusted. User and
 project npm/binary extensions remain disabled even for trusted sessions.
 Resource loader failures are projected as sanitized `resource_error` events.
 

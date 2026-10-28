@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { JsonValue } from "@zos/capabilities";
-import type { ZosDatabase } from "../connection.js";
+import type { JsonValue } from "@cyberos/capabilities";
+import type { CyberOsDatabase } from "../connection.js";
 
 const MAX_DESCRIPTOR_BYTES = 64 * 1024;
 
@@ -32,7 +32,7 @@ interface McpResourceRow {
   created_at: string;
 }
 
-export function createMcpResourceToken(db: ZosDatabase, input: {
+export function createMcpResourceToken(db: CyberOsDatabase, input: {
   clientId: string;
   kind: McpResourceKind;
   descriptor: JsonValue;
@@ -57,7 +57,7 @@ export function createMcpResourceToken(db: ZosDatabase, input: {
   if (Buffer.byteLength(descriptorJson, "utf8") > MAX_DESCRIPTOR_BYTES) {
     throw new Error("Resource descriptor is too large");
   }
-  const token = `zos_resource_${randomBytes(32).toString("base64url")}`;
+  const token = `cyberos_resource_${randomBytes(32).toString("base64url")}`;
   db.prepare(`
     INSERT INTO mcp_resource_tokens(
       token_digest, client_id, kind, descriptor_json, revision, mime_type,
@@ -85,7 +85,7 @@ export function createMcpResourceToken(db: ZosDatabase, input: {
 }
 
 export function consumeMcpResourceToken(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { token: string; clientId: string; now?: string }
 ): McpResourceRecord | null {
   const now = input.now ?? new Date().toISOString();
@@ -99,7 +99,7 @@ export function consumeMcpResourceToken(
   return row ? mapResource(row) : null;
 }
 
-export function deleteExpiredMcpResourceTokens(db: ZosDatabase, now = new Date().toISOString()): number {
+export function deleteExpiredMcpResourceTokens(db: CyberOsDatabase, now = new Date().toISOString()): number {
   return db.prepare("DELETE FROM mcp_resource_tokens WHERE expires_at <= ? OR used_at IS NOT NULL").run(now).changes;
 }
 

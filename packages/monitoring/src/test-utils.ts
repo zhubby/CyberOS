@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
-import type { MonitoringCollectorState } from "@zos/shared";
+import type { MonitoringCollectorState } from "@cyberos/shared";
 import { assertSupportedMonitoringSchemaVersion } from "./schema.js";
 
 const MIGRATIONS = [
@@ -42,7 +42,7 @@ export interface MetricsFixtureCollectorStatus {
   error?: string | null;
 }
 
-/** Test-only database fixture. Production metrics are written exclusively by zos-monitor. */
+/** Test-only database fixture. Production metrics are written exclusively by cyberos-monitor. */
 export class MetricsFixture {
   readonly db: Database.Database;
 

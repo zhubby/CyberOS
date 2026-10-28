@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { VodPlayerStatus } from "@zos/shared";
+import type { VodPlayerStatus } from "@cyberos/shared";
 import { gamepadConnectionTransition, playbackCommandForKey, vodPlayerPollDelay } from "./player-controls.js";
 
 const status = {

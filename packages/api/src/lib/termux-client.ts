@@ -15,7 +15,7 @@ import {
   type TerminalConfig,
   type TermuxEvent,
   type TermuxServerFrame
-} from "@zos/shared";
+} from "@cyberos/shared";
 import {
   DEFAULT_TERMINAL_COLS,
   DEFAULT_TERMINAL_ROWS,

@@ -4,23 +4,23 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openZosDb, type ZosDatabase } from "@zos/db";
+import { ensureNasRoots, openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
 import { executeExtendedFileReadCapability } from "./file-read.js";
 
 const execFileAsync = promisify(execFile);
 
 let tempDir: string;
 let rootDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-file-read-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-file-read-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(path.join(rootDir, "nested"), { recursive: true });
   await writeFile(path.join(rootDir, "alpha.txt"), "Needle one\nneedle two\n", "utf8");
   await writeFile(path.join(rootDir, "nested", "beta.md"), "prefix NEEDLE suffix\n", "utf8");
   await writeFile(path.join(rootDir, "nested", "binary.bin"), Buffer.from([0, 1, 2, 3]));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir }]);
 });
 
@@ -31,7 +31,7 @@ afterEach(async () => {
 
 describe("extended file read capabilities", () => {
   it("supports literal and regular-expression grep with case and path filters", async () => {
-    const literal = await run("zos.files.grep", {
+    const literal = await run("cyberos.files.grep", {
       rootId: "primary",
       pattern: "needle",
       mode: "literal",
@@ -41,7 +41,7 @@ describe("extended file read capabilities", () => {
     expect(literal.data).toMatchObject({ scannedFiles: 1, truncated: false });
     expect((literal.data as { matches: unknown[] }).matches).toHaveLength(2);
 
-    const regex = await run("zos.files.grep", {
+    const regex = await run("cyberos.files.grep", {
       rootId: "primary",
       path: "nested",
       pattern: "^prefix\\s+NEEDLE",
@@ -54,20 +54,20 @@ describe("extended file read capabilities", () => {
   });
 
   it("paginates grep results with request-bound cursors", async () => {
-    const first = await run("zos.files.grep", { rootId: "primary", pattern: "needle", limit: 1 });
+    const first = await run("cyberos.files.grep", { rootId: "primary", pattern: "needle", limit: 1 });
     const cursor = first.page?.nextCursor;
     expect(cursor).toEqual(expect.any(String));
     if (!cursor) throw new Error("Expected a grep cursor");
     expect((first.data as { matches: unknown[] }).matches).toHaveLength(1);
 
-    const second = await run("zos.files.grep", {
+    const second = await run("cyberos.files.grep", {
       rootId: "primary",
       pattern: "needle",
       limit: 1,
       cursor
     });
     expect((second.data as { matches: Array<{ line: number }> }).matches[0]?.line).toBe(2);
-    await expect(run("zos.files.grep", {
+    await expect(run("cyberos.files.grep", {
       rootId: "primary",
       pattern: "different",
       cursor
@@ -75,7 +75,7 @@ describe("extended file read capabilities", () => {
   });
 
   it("filters and paginates find results", async () => {
-    const first = await run("zos.files.find", {
+    const first = await run("cyberos.files.find", {
       rootId: "primary",
       glob: "*.*",
       kind: "file",
@@ -87,7 +87,7 @@ describe("extended file read capabilities", () => {
     expect(cursor).toEqual(expect.any(String));
     if (!cursor) throw new Error("Expected a find cursor");
 
-    const second = await run("zos.files.find", {
+    const second = await run("cyberos.files.find", {
       rootId: "primary",
       glob: "*.*",
       kind: "file",
@@ -99,25 +99,25 @@ describe("extended file read capabilities", () => {
 
   it("skips discovered symbolic links and rejects symlink or traversal start paths", async () => {
     await symlink(path.join(rootDir, "nested"), path.join(rootDir, "linked"));
-    const result = await run("zos.files.find", { rootId: "primary" });
+    const result = await run("cyberos.files.find", { rootId: "primary" });
     expect(result.warnings).toContain("Skipped 1 symbolic link(s)");
     expect(JSON.stringify(result.data)).not.toContain("linked");
 
-    await expect(run("zos.files.find", { rootId: "primary", path: "linked" }))
+    await expect(run("cyberos.files.find", { rootId: "primary", path: "linked" }))
       .rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
-    await expect(run("zos.files.find", { rootId: "primary", path: "../outside" }))
+    await expect(run("cyberos.files.find", { rootId: "primary", path: "../outside" }))
       .rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
   });
 
   it("rejects archives containing traversal entries", async () => {
     await writeFile(path.join(rootDir, "unsafe.tar"), tarWithEmptyEntry("../escape.txt"));
-    await expect(run("zos.files.archive-inspect", { rootId: "primary", path: "unsafe.tar" }))
+    await expect(run("cyberos.files.archive-inspect", { rootId: "primary", path: "unsafe.tar" }))
       .rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
   });
 
   it("rejects a Git repository whose top level escapes the configured root", async () => {
     await execFileAsync("git", ["init", "--quiet", tempDir]);
-    await expect(run("zos.files.git", { rootId: "primary" }))
+    await expect(run("cyberos.files.git", { rootId: "primary" }))
       .rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
   });
 });

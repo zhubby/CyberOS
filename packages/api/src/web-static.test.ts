@@ -10,13 +10,13 @@ let webDist: string;
 let docsDist: string;
 
 beforeEach(async () => {
-  webDist = await mkdtemp(path.join(os.tmpdir(), "zos-web-static-"));
-  docsDist = await mkdtemp(path.join(os.tmpdir(), "zos-docs-static-"));
+  webDist = await mkdtemp(path.join(os.tmpdir(), "cyberos-web-static-"));
+  docsDist = await mkdtemp(path.join(os.tmpdir(), "cyberos-docs-static-"));
   await mkdir(path.join(webDist, "assets"));
   await mkdir(path.join(docsDist, "_astro"));
-  await writeFile(path.join(webDist, "index.html"), "<!doctype html><title>ZOS current</title>");
+  await writeFile(path.join(webDist, "index.html"), "<!doctype html><title>CyberOS current</title>");
   await writeFile(path.join(webDist, "assets", "index-current.js"), "console.log('current');");
-  await writeFile(path.join(docsDist, "index.html"), "<!doctype html><title>ZOS docs</title>");
+  await writeFile(path.join(docsDist, "index.html"), "<!doctype html><title>CyberOS docs</title>");
   await mkdir(path.join(docsDist, "architecture", "system-overview"), { recursive: true });
   await writeFile(path.join(docsDist, "architecture", "system-overview", "index.html"), "<title>System overview</title>");
   await writeFile(path.join(docsDist, "_astro", "docs-current.js"), "console.log('docs');");
@@ -39,7 +39,7 @@ describe("web static delivery", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("ZOS current");
+    expect(response.body).toContain("CyberOS current");
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(response.headers.etag).toBeUndefined();
     expect(response.headers["last-modified"]).toBeUndefined();
@@ -53,7 +53,7 @@ describe("web static delivery", () => {
     expect(current.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
     expect(stale.statusCode).toBe(404);
     expect(stale.headers["content-type"]).toContain("application/json");
-    expect(stale.body).not.toContain("ZOS current");
+    expect(stale.body).not.toContain("CyberOS current");
   });
 
   it("serves the HTML shell only for browser navigation requests", async () => {
@@ -69,7 +69,7 @@ describe("web static delivery", () => {
     });
 
     expect(navigation.statusCode).toBe(200);
-    expect(navigation.body).toContain("ZOS current");
+    expect(navigation.body).toContain("CyberOS current");
     expect(navigation.headers["cache-control"]).toBe("no-store");
     expect(missingApi.statusCode).toBe(404);
     expect(missingApi.headers["content-type"]).toContain("application/json");
@@ -85,13 +85,13 @@ describe("web static delivery", () => {
     expect(redirect.statusCode).toBe(308);
     expect(redirect.headers.location).toBe("/docs/");
     expect(home.statusCode).toBe(200);
-    expect(home.body).toContain("ZOS docs");
+    expect(home.body).toContain("CyberOS docs");
     expect(home.headers["cache-control"]).toBe("no-store");
     expect(page.statusCode).toBe(200);
     expect(page.body).toContain("System overview");
     expect(asset.statusCode).toBe(200);
     expect(asset.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
     expect(missing.statusCode).toBe(404);
-    expect(missing.body).not.toContain("ZOS current");
+    expect(missing.body).not.toContain("CyberOS current");
   });
 });

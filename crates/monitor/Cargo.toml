@@ -1,17 +1,17 @@
 [package]
-name = "zos-monitor"
-version = "1.7.8"
+name = "cyberos-monitor"
+version = "2.0.0"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "zos_monitor"
+name = "cyberos_monitor"
 path = "src/lib.rs"
 
 [[bin]]
-name = "zos-monitor"
-path = "src/bin/zos-monitor.rs"
+name = "cyberos-monitor"
+path = "src/bin/cyberos-monitor.rs"
 
 [dependencies]
 async-trait.workspace = true
@@ -27,7 +27,7 @@ tokio-util.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-zos-monitoring-contracts.workspace = true
+cyberos-monitoring-contracts.workspace = true
 
 [dev-dependencies]
 serde.workspace = true

@@ -1,0 +1,33 @@
+[Unit]
+Description=CyberOS NAS indexer
+Documentation=file:///usr/share/doc/cyberos/README.md
+After=local-fs.target cyberos-api.service
+RequiresMountsFor=/cyberos/data
+
+[Service]
+Type=notify
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ROOT=/cyberos
+Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+WorkingDirectory=/cyberos/state
+ExecStart=/usr/lib/cyberos/bin/cyberos-indexer
+Restart=on-failure
+RestartSec=5s
+WatchdogSec=20s
+TimeoutStopSec=30s
+KillMode=control-group
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/cyberos/state /cyberos/logs
+ReadOnlyPaths=/cyberos/data
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+MemoryMax=1G
+CPUQuota=250%
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target

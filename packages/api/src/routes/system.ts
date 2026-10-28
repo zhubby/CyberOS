@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { saveBluetoothSettings } from "@zos/db";
+import { saveBluetoothSettings } from "@cyberos/db";
 import type {
   BluetoothAdapterInput,
   BluetoothDeviceInput,
@@ -14,7 +14,7 @@ import type {
   SystemWifiProfileUpdateInput,
   SystemWifiRadioInput,
   SystemWifiStatus
-} from "@zos/shared";
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { unknownBuildInfo } from "../lib/build-info.js";
 import {

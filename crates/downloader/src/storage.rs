@@ -573,8 +573,8 @@ mod tests {
     fn converts_root_relative_paths_to_mount_relative_paths() {
         assert_eq!(
             relative_directory_within_mount(
-                Path::new("/zos/data/primary"),
-                Path::new("/zos/data/primary/pool-a"),
+                Path::new("/cyberos/data/primary"),
+                Path::new("/cyberos/data/primary/pool-a"),
                 Path::new("pool-a/downloads"),
             )
             .unwrap(),
@@ -582,8 +582,8 @@ mod tests {
         );
         assert_eq!(
             relative_directory_within_mount(
-                Path::new("/zos/data/primary"),
-                Path::new("/zos/data/primary"),
+                Path::new("/cyberos/data/primary"),
+                Path::new("/cyberos/data/primary"),
                 Path::new("downloads"),
             )
             .unwrap(),
@@ -591,8 +591,8 @@ mod tests {
         );
         assert!(
             relative_directory_within_mount(
-                Path::new("/zos/data/primary"),
-                Path::new("/zos/data/primary/pool-a"),
+                Path::new("/cyberos/data/primary"),
+                Path::new("/cyberos/data/primary/pool-a"),
                 Path::new("pool-b/downloads"),
             )
             .is_err()

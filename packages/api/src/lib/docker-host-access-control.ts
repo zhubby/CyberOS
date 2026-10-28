@@ -1,5 +1,5 @@
 import net from "node:net";
-import type { DockerHostAccessCapabilityId } from "@zos/shared";
+import type { DockerHostAccessCapabilityId } from "@cyberos/shared";
 import type { DockerHostAccessControlRuntime } from "./docker-host-access.js";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -13,7 +13,7 @@ export class DockerHostAccessControlError extends Error {
 
 export class DockerHostAccessControlClient implements DockerHostAccessControlRuntime {
   constructor(
-    private readonly socketPath = "/run/zos/host-access/control.sock",
+    private readonly socketPath = "/run/cyberos/host-access/control.sock",
     private readonly timeoutMs = 5_000
   ) {}
 

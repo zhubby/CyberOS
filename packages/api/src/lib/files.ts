@@ -2,13 +2,13 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyReply } from "fastify";
-import { queryIndexedText, type ZosDatabase } from "@zos/db";
+import { queryIndexedText, type CyberOsDatabase } from "@cyberos/db";
 import {
   inferMimeType,
   inferPreviewKind,
   resolveSafeExistingPath,
   type FileEntry
-} from "@zos/nas-tools";
+} from "@cyberos/nas-tools";
 
 export async function getFilePreviewMeta(rootPath: string, requestedPath: string) {
   const safe = await resolveSafeExistingPath(rootPath, requestedPath);
@@ -120,7 +120,7 @@ export async function sendFileStream(
   return reply.send(stream);
 }
 
-export function safeQueryIndex(db: ZosDatabase, rootId: string, query: string, searchPath = ".") {
+export function safeQueryIndex(db: CyberOsDatabase, rootId: string, query: string, searchPath = ".") {
   try {
     return queryIndexedText(db, {
       rootId,

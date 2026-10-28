@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { ShareProtocol } from "@zos/shared";
+import type { ShareProtocol } from "@cyberos/shared";
 import {
   CircleAlert,
   Database,
@@ -1064,7 +1064,7 @@ function newShareValidationIssue(
       enabled: false,
       account: {
         ...form.account,
-        username: "zos-share"
+        username: "cyberos-share"
       },
       shares: [share]
     },

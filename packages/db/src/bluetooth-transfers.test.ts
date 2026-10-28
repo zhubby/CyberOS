@@ -12,18 +12,18 @@ import {
   listBluetoothTransfers,
   markAllBluetoothTransfersRead,
   markBluetoothTransferRead,
-  openZosDb,
+  openCyberOsDb,
   requestBluetoothTransferCancellation,
   saveBluetoothSettings,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
 
 let directory: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  directory = await mkdtemp(path.join(os.tmpdir(), "zos-bluetooth-db-"));
-  db = openZosDb(path.join(directory, "state.sqlite"));
+  directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-bluetooth-db-"));
+  db = openCyberOsDb(path.join(directory, "state.sqlite"));
   ensureNasRoots(db, [{ id: "root", name: "Root", path: directory }]);
 });
 

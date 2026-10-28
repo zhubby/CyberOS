@@ -9,8 +9,8 @@ import type {
   JobStatus,
   OperationNotificationKind,
   OperationNotificationStatus
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { mapEvent, mapJob, mapMessage } from "./agent-mappers.js";
 import type { DbEventRow, DbJobRow, DbMessageRow } from "./repository-rows.js";
 import {
@@ -36,7 +36,7 @@ export interface ClaimAgentJobInput {
 }
 
 export function createUserMessageAndJob(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     sessionId: string;
     content: string;
@@ -141,7 +141,7 @@ export function createUserMessageAndJob(
 }
 
 export function createActionMessageAndJob(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     sessionId: string;
     content: string;
@@ -199,21 +199,21 @@ export function createActionMessageAndJob(
   return { message, job, notification: tx() };
 }
 
-export function getMessage(db: ZosDatabase, messageId: string): AgentMessageRecord | null {
+export function getMessage(db: CyberOsDatabase, messageId: string): AgentMessageRecord | null {
   const row = db
     .prepare("SELECT id, session_id, role, content, created_at FROM agent_messages WHERE id = ?")
     .get(messageId) as DbMessageRow | undefined;
   return row ? mapMessage(row) : null;
 }
 
-export function getJob(db: ZosDatabase, jobId: string): JobRecord | null {
+export function getJob(db: CyberOsDatabase, jobId: string): JobRecord | null {
   const row = db
     .prepare(`SELECT ${selectJobColumns(db)} FROM jobs WHERE id = ?`)
     .get(jobId) as DbJobRow | undefined;
   return row ? mapJob(row) : null;
 }
 
-export function getActiveAgentJobForSession(db: ZosDatabase, sessionId: string): JobRecord | null {
+export function getActiveAgentJobForSession(db: CyberOsDatabase, sessionId: string): JobRecord | null {
   const row = db.prepare(`
     SELECT ${selectJobColumns(db)}
     FROM jobs
@@ -229,7 +229,7 @@ export function getActiveAgentJobForSession(db: ZosDatabase, sessionId: string):
   return row ? mapJob(row) : null;
 }
 
-export function getCurrentAgentJobForSession(db: ZosDatabase, sessionId: string): JobRecord | null {
+export function getCurrentAgentJobForSession(db: CyberOsDatabase, sessionId: string): JobRecord | null {
   const row = db.prepare(`
     SELECT ${selectJobColumns(db)}
     FROM jobs
@@ -248,7 +248,7 @@ export function getCurrentAgentJobForSession(db: ZosDatabase, sessionId: string)
   return row ? mapJob(row) : null;
 }
 
-function selectJobColumns(db: ZosDatabase): string {
+function selectJobColumns(db: CyberOsDatabase): string {
   const hasLeaseColumns = db.prepare(`
     SELECT 1 FROM pragma_table_info('jobs') WHERE name = 'lease_owner'
   `).pluck().get();
@@ -261,7 +261,7 @@ function selectJobColumns(db: ZosDatabase): string {
 }
 
 export function claimNextJob(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: ClaimAgentJobInput = { workerId: "legacy-worker", leaseMs: 30_000 }
 ): JobRecord | null {
   const nowDate = input.now ?? new Date();
@@ -315,7 +315,7 @@ export function claimNextJob(
 }
 
 export function renewAgentJobLease(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { jobId: string; workerId: string; leaseMs: number; now?: Date }
 ): boolean {
   const nowDate = input.now ?? new Date();
@@ -330,7 +330,7 @@ export function renewAgentJobLease(
 }
 
 export function ownsAgentJobLease(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { jobId: string; workerId: string; now?: Date }
 ): boolean {
   const marker = db.prepare(`
@@ -342,7 +342,7 @@ export function ownsAgentJobLease(
   return Boolean(marker);
 }
 
-export function recoverExpiredAgentJobs(db: ZosDatabase, nowDate = new Date()): number {
+export function recoverExpiredAgentJobs(db: CyberOsDatabase, nowDate = new Date()): number {
   const now = nowDate.toISOString();
   const tx = db.transaction(() => {
     const rows = db.prepare(`
@@ -390,7 +390,7 @@ export function recoverExpiredAgentJobs(db: ZosDatabase, nowDate = new Date()): 
 }
 
 export function updateJobStatus(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   jobId: string,
   status: JobStatus,
   error: string | null = null,
@@ -450,7 +450,7 @@ export function updateJobStatus(
 }
 
 function failPendingActiveTurnCommands(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId: string; jobId: string; error: string; now: Date }
 ): void {
   const commands = failQueuedActiveTurnCommands(db, input);
@@ -471,7 +471,7 @@ function failPendingActiveTurnCommands(
 }
 
 export function appendEvent<TPayload>(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     sessionId: string;
     jobId?: string | null;
@@ -486,7 +486,7 @@ export function appendEvent<TPayload>(
   const createdAt = new Date().toISOString();
   const jobId = input.jobId ?? null;
   const audience = eventAudience(db, jobId);
-  const source = input.source ?? "zos";
+  const source = input.source ?? "cyberos";
   const sourceId = input.sourceId ?? null;
   const runId = input.runId ?? (jobId ? `job:${jobId}` : `session:${input.sessionId}`);
   const tx = db.transaction(() => {
@@ -556,7 +556,7 @@ export function appendEvent<TPayload>(
 }
 
 export function listEvents(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId: string; afterId?: number; limit?: number }
 ): AgentEventRecord[] {
   const rows = db
@@ -596,7 +596,7 @@ function notificationStatusForJob(status: JobStatus): OperationNotificationStatu
   return null;
 }
 
-function eventAudience(db: ZosDatabase, jobId: string | null): AgentEventAudience {
+function eventAudience(db: CyberOsDatabase, jobId: string | null): AgentEventAudience {
   if (!jobId) return "chat";
   const role = db.prepare(`
     SELECT agent_messages.role

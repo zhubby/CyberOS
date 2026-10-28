@@ -19,28 +19,27 @@ import {
   listEvents,
   listPendingAgentCapabilityApprovals,
   listPendingApprovals,
-  openZosDb,
+  openCyberOsDb,
   recoverInterruptedAgentSessionCommands,
   saveAgentProviderSession,
   saveAgentMcpSettings,
-  savePhotostaffLibrarySettings,
   upsertIndexedFile,
-  type ZosDatabase
-} from "@zos/db";
-import { PiActiveTurnUnavailableError, type PiAgentRunner } from "@zos/agent";
-import type { ZosConfig } from "@zos/shared";
-import { photostaffAgentTools, processNextAgentCommand, processNextJob } from "./processor.js";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import { PiActiveTurnUnavailableError, type PiAgentRunner } from "@cyberos/agent";
+import type { CyberOsConfig } from "@cyberos/shared";
+import { processNextAgentCommand, processNextJob } from "./processor.js";
 
 let tempDir: string;
 let rootDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-worker-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-worker-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
   await writeFile(path.join(rootDir, "alpha.txt"), "alpha");
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
@@ -261,13 +260,12 @@ describe("worker processor", () => {
 
   it("applies the persisted Agent MCP switch to new jobs without a worker restart", async () => {
     const session = createSession(db, { rootId: "local" });
-    const config: ZosConfig = {
+    const config: CyberOsConfig = {
       ...testConfig(),
       mcp: {
         enabled: true,
         piEnabled: false,
         piTokenFile: path.join(tempDir, "pi.token"),
-        legacyPiToolsEnabled: false,
         externalEnabled: false,
         shellEnabled: false,
         allowedHosts: ["localhost", "127.0.0.1", "[::1]"],
@@ -553,7 +551,7 @@ describe("worker processor", () => {
     });
   });
 
-  it("passes the saved Pi provider session back into the next job for the same ZOS session", async () => {
+  it("passes the saved Pi provider session back into the next job for the same CyberOS session", async () => {
     const session = createSession(db, { rootId: "local" });
     createUserMessageAndJob(db, {
       sessionId: session.id,
@@ -592,12 +590,12 @@ describe("worker processor", () => {
       sessionId: session.id,
       content: "Move alpha.txt"
     });
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
     const pending = createCapabilityProposal(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate-propose",
+      capabilityId: "cyberos.files.mutate-propose",
       risk: "high",
       redactedInput: { operation: "move", rootId: "local" },
       proposal: { target: "beta.txt", revision: "r1" },
@@ -637,7 +635,7 @@ describe("worker processor", () => {
 
     expect(getJob(db, job.id)?.status).toBe("completed");
     expect(messages[0]).toBe("Move alpha.txt");
-    expect(messages[1]).toContain("Internal ZOS continuation");
+    expect(messages[1]).toContain("Internal CyberOS continuation");
     expect(messages[1]).toContain(pending.run.id);
     expect(messages[1]).toContain("APPROVAL_REJECTED");
     expect(messages[1]).not.toContain("Move alpha.txt");
@@ -653,7 +651,7 @@ describe("worker processor", () => {
     const pending = createCapabilityProposal(db, {
       subjectId: session.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate-propose",
+      capabilityId: "cyberos.files.mutate-propose",
       risk: "high",
       redactedInput: { operation: "move", rootId: "local" },
       proposal: { target: "beta.txt", revision: "r1" },
@@ -713,7 +711,7 @@ describe("worker processor", () => {
     const proposals = ["alpha.txt", "beta.txt"].map((pathValue) => createCapabilityProposal(db, {
       subjectId: session.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.read",
+      capabilityId: "cyberos.files.read",
       risk: "low",
       redactedInput: { path: pathValue },
       proposal: { summary: `Read ${pathValue}` },
@@ -759,25 +757,12 @@ describe("worker processor", () => {
     expect(messages[1]?.match(/APPROVAL_REJECTED/gu)).toHaveLength(2);
   });
 
-  it("only injects photostaff tools for sessions on the configured photostaff root", async () => {
-    savePhotostaffLibrarySettings(db, {
-      rootId: "local",
-      storagePoolId: "pool-a",
-      path: "Photostaff"
-    });
-
-    expect(photostaffAgentTools(db, "other")).toEqual({});
-    expect(photostaffAgentTools(db, "local").photostaffTools).toMatchObject({
-      searchPhotostaff: expect.any(Function),
-      getPhotostaffMetadata: expect.any(Function)
-    });
-  });
 });
 
-function testConfig(): ZosConfig {
+function testConfig(): CyberOsConfig {
   return {
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "zos.sqlite"),
+    databasePath: path.join(tempDir, "cyberos.sqlite"),
     api: {
       host: "127.0.0.1",
       port: 0,
@@ -805,14 +790,14 @@ function testConfig(): ZosConfig {
     shares: {
       enabled: false,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: null
       },
       shares: []
     },
     hostd: { socketPath: "/tmp/hostd.sock" },
     terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
-    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "zos" },
+    vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }

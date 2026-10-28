@@ -49,25 +49,24 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
   build native modules on the target architecture and keep `.deb`, `.changes`,
   and `.buildinfo` artifacts.
 - `packaging/scripts/install.sh` mutates a Debian host. It requires root and
-  `amd64`/`arm64`; the terminal always runs as the internal `zos` user. Review
+  `amd64`/`arm64`; the terminal always runs as the internal `cyberos` user. Review
   mirror settings before it changes APT sources. Nginx defaults on; Docker and
   VM support default off.
 - `packaging/appliance/build-image.sh` consumes an already built `.deb` and
   emits a systemd rootfs tarball, not a bootable board image. It requires
-  `mmdebstrap` and `systemd-nspawn`; pass `ZOS_DEB` explicitly when the
+  `mmdebstrap` and `systemd-nspawn`; pass `CYBEROS_DEB` explicitly when the
   artifact is not at the default path.
 - `flake.nix` exports Linux packages, development shells, and a NixOS module.
-  NixOS runs with `ZOS_HOST_MUTATION_POLICY=declarative`; host configuration
+  NixOS runs with `CYBEROS_HOST_MUTATION_POLICY=declarative`; host configuration
   writes are rejected and must be expressed through NixOS options.
 - After installation, check the resident services, timers, and journald. Verify
   `/health`, `/api/roots/readiness`, and `/api/system/health`; liveness alone is
   not NAS or backup readiness. Oneshot jobs normally become `inactive (dead)`
   after success, so inspect their exit status and journal.
-- The managed CM5 workflow supports a one-time pre-ZOS migration only when
-  `allow_legacy_migration` is explicitly enabled. Preserve the legacy layout
-  and `/zos/system-backups` until migration status is `committed` and the
-  read-only verification run passes. Future ZOS database migrations do not
-  have a generic downgrade path.
+- CyberOS 2.0 is clean-install only. Do not add discovery, import, aliases, or
+  recovery paths for earlier products. The CM5 workflow accepts only the
+  current `/cyberos` layout. Future CyberOS database migrations do not have a
+  generic downgrade path.
 
 ## Safety And UI Reminders
 

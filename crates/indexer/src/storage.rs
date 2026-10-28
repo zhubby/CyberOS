@@ -383,10 +383,10 @@ mod tests {
 
     #[test]
     fn parses_findmnt_json_identity() {
-        let row = parse_findmnt(r#"{"filesystems":[{"source":"/dev/sda1","uuid":"abc","fstype":"ext4","target":"/zos/data/primary"}]}"#).unwrap();
+        let row = parse_findmnt(r#"{"filesystems":[{"source":"/dev/sda1","uuid":"abc","fstype":"ext4","target":"/cyberos/data/primary"}]}"#).unwrap();
         assert_eq!(row.source.as_deref(), Some("/dev/sda1"));
         assert_eq!(row.uuid.as_deref(), Some("abc"));
         assert_eq!(row.fstype.as_deref(), Some("ext4"));
-        assert_eq!(row.target.as_deref(), Some("/zos/data/primary"));
+        assert_eq!(row.target.as_deref(), Some("/cyberos/data/primary"));
     }
 }

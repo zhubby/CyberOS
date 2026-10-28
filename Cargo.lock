@@ -2649,8 +2649,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-alerter"
-version = "1.7.8"
+name = "cyberos-alerter"
+version = "2.0.0"
 dependencies = [
  "async-trait",
  "jiff",
@@ -2668,12 +2668,12 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
- "zos-monitoring-contracts",
+ "cyberos-monitoring-contracts",
 ]
 
 [[package]]
-name = "zos-bluetoothd"
-version = "1.7.8"
+name = "cyberos-bluetoothd"
+version = "2.0.0"
 dependencies = [
  "nix 0.30.1",
  "rusqlite",
@@ -2691,8 +2691,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-downloader"
-version = "1.7.8"
+name = "cyberos-downloader"
+version = "2.0.0"
 dependencies = [
  "futures-util",
  "httpdate",
@@ -2717,8 +2717,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-host-accessd"
-version = "1.7.8"
+name = "cyberos-host-accessd"
+version = "2.0.0"
 dependencies = [
  "nix 0.30.1",
  "serde",
@@ -2732,8 +2732,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-hostd"
-version = "1.7.8"
+name = "cyberos-hostd"
+version = "2.0.0"
 dependencies = [
  "async-trait",
  "nix 0.30.1",
@@ -2753,8 +2753,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-indexer"
-version = "1.7.8"
+name = "cyberos-indexer"
+version = "2.0.0"
 dependencies = [
  "futures-util",
  "nix 0.30.1",
@@ -2782,8 +2782,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-monitor"
-version = "1.7.8"
+name = "cyberos-monitor"
+version = "2.0.0"
 dependencies = [
  "async-trait",
  "nix 0.30.1",
@@ -2799,20 +2799,20 @@ dependencies = [
  "toml_edit",
  "tracing",
  "tracing-subscriber",
- "zos-monitoring-contracts",
+ "cyberos-monitoring-contracts",
 ]
 
 [[package]]
-name = "zos-monitoring-contracts"
-version = "1.7.8"
+name = "cyberos-monitoring-contracts"
+version = "2.0.0"
 dependencies = [
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "zos-photostaff"
-version = "1.7.8"
+name = "cyberos-photostaff"
+version = "2.0.0"
 dependencies = [
  "futures-util",
  "nix 0.30.1",
@@ -2834,8 +2834,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-termux"
-version = "1.7.8"
+name = "cyberos-termux"
+version = "2.0.0"
 dependencies = [
  "base64 0.22.1",
  "nix 0.30.1",
@@ -2852,8 +2852,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-tv-gamepad"
-version = "1.7.8"
+name = "cyberos-tv-gamepad"
+version = "2.0.0"
 dependencies = [
  "evdev",
  "tempfile",
@@ -2863,8 +2863,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "zos-vod-player"
-version = "1.7.8"
+name = "cyberos-vod-player"
+version = "2.0.0"
 dependencies = [
  "nix 0.30.1",
  "rusqlite",

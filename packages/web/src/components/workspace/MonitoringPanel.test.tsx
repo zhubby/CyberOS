@@ -44,8 +44,8 @@ describe("MonitoringPanel", () => {
 
   it("keeps missing points null so charts render collection gaps", () => {
     const series = [
-      metricSeries("zos_host_memory_used_bytes", [1, null, 3]),
-      metricSeries("zos_host_memory_total_bytes", [4, 4, null])
+      metricSeries("cyberos_host_memory_used_bytes", [1, null, 3]),
+      metricSeries("cyberos_host_memory_total_bytes", [4, 4, null])
     ];
     const rows = mergeMonitoringSeries(series.map((item, index) => ({
       item,
@@ -65,7 +65,7 @@ describe("MonitoringPanel", () => {
       start: "2026-01-01T00:00:00.000Z",
       end: "2026-01-01T00:01:00.000Z",
       series: [{
-        metric: "zos_host_cpu_usage_ratio",
+        metric: "cyberos_host_cpu_usage_ratio",
         labels: {},
         transform: "value",
         resolution: "raw",
@@ -85,7 +85,7 @@ describe("MonitoringPanel", () => {
       status: "ready",
       collectors: [],
       samples: [{
-        metric: "zos_host_cpu_usage_ratio",
+        metric: "cyberos_host_cpu_usage_ratio",
         labels: {},
         timestamp: "2026-01-01T00:00:20.000Z",
         value: 0.4,

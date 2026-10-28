@@ -9,7 +9,7 @@ import {
   type PhotoMapSettingsResponse,
   type PhotoQueryRequest
 } from "../../api.js";
-import type { PhotoLocationBounds } from "@zos/shared";
+import type { PhotoLocationBounds } from "@cyberos/shared";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 

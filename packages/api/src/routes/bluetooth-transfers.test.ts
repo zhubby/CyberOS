@@ -2,8 +2,8 @@ import { link, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
-import { ensureNasRoots, openZosDb, saveBluetoothSettings, type ZosDatabase } from "@zos/db";
-import type { BluetoothOperationResult, BluetoothStatus } from "@zos/shared";
+import { ensureNasRoots, openCyberOsDb, saveBluetoothSettings, type CyberOsDatabase } from "@cyberos/db";
+import type { BluetoothOperationResult, BluetoothStatus } from "@cyberos/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ApiRouteContext } from "../context.js";
 import type { BluetoothManagerRuntime } from "../lib/bluetooth-manager.js";
@@ -11,7 +11,7 @@ import { finalizeBluetoothReceives, registerBluetoothTransferRoutes, streamBluet
 
 const poolId = "/dev/md/test-pool";
 let temporaryDirectory: string | null = null;
-let database: ZosDatabase | null = null;
+let database: CyberOsDatabase | null = null;
 
 afterEach(async () => {
   database?.close();
@@ -247,7 +247,7 @@ describe("Bluetooth transfer routes", () => {
     let findmntCalls = 0;
 
     await finalizeBluetoothReceives({
-      config: { databasePath: path.join(temporaryDirectory!, "zos.sqlite") },
+      config: { databasePath: path.join(temporaryDirectory!, "cyberos.sqlite") },
       db: database,
       system: {
         commandRunner: {
@@ -281,7 +281,7 @@ describe("Bluetooth transfer routes", () => {
     const incoming = path.join(temporaryDirectory!, "bluetooth", "incoming");
     const id = "33333333-3333-4333-8333-333333333333";
     const finalName = "report-recovered.txt";
-    const temporaryName = `.zos-bluetooth-${id}.part`;
+    const temporaryName = `.cyberos-bluetooth-${id}.part`;
     await mkdir(incoming, { recursive: true });
     const now = new Date().toISOString();
     database!.prepare(`
@@ -302,7 +302,7 @@ describe("Bluetooth transfer routes", () => {
     );
 
     await finalizeBluetoothReceives({
-      config: { databasePath: path.join(temporaryDirectory!, "zos.sqlite") },
+      config: { databasePath: path.join(temporaryDirectory!, "cyberos.sqlite") },
       db: database,
       system: {
         commandRunner: {
@@ -334,12 +334,12 @@ async function setup(): Promise<{
   bluetooth: FakeBluetoothManager;
   storage: { online: boolean };
 }> {
-  temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "zos-bluetooth-transfers-"));
+  temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-bluetooth-transfers-"));
   const root = path.join(temporaryDirectory, "root");
   await mkdir(root);
   await mkdir(path.join(root, "inbox"));
   await writeFile(path.join(root, "clip.bin"), "video");
-  database = openZosDb(path.join(temporaryDirectory, "zos.sqlite"));
+  database = openCyberOsDb(path.join(temporaryDirectory, "cyberos.sqlite"));
   ensureNasRoots(database, [{ id: "local", name: "Local", path: root }]);
   const bluetooth = new FakeBluetoothManager();
   const storage = { online: true };

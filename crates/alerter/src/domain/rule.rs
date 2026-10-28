@@ -247,7 +247,7 @@ mod tests {
         AlertRule {
             id: "cpu".to_owned(),
             name: "High CPU".to_owned(),
-            metric: "zos_host_cpu_usage_ratio".to_owned(),
+            metric: "cyberos_host_cpu_usage_ratio".to_owned(),
             selector: BTreeMap::new(),
             transform: MetricTransform::Value,
             aggregation: Aggregation::Avg,

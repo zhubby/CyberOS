@@ -8,13 +8,13 @@ import {
   ensureNasRoots,
   getDockerComposeApp,
   listDockerComposeApps,
-  openZosDb,
+  openCyberOsDb,
   updateDockerComposeApp,
   upsertRootReadiness,
   type DockerRegistryCredentialRecord,
-  type ZosDatabase
-} from "@zos/db";
-import type { DockerConfig, DockerContainerDetails } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { DockerConfig, DockerContainerDetails } from "@cyberos/shared";
 import { DockerComposeService } from "./docker-compose.js";
 import type { DockerEngineRuntime } from "./docker-client.js";
 import { DockerHostAccessPolicy } from "./docker-host-access.js";
@@ -23,15 +23,15 @@ let tempDir: string;
 let appsRoot: string;
 let nasRoot: string;
 let dockerShim: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-docker-compose-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-docker-compose-"));
   appsRoot = path.join(tempDir, "apps");
   nasRoot = path.join(tempDir, "nas");
   dockerShim = path.join(tempDir, "docker");
   await mkdir(nasRoot, { recursive: true });
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "nas", name: "NAS", path: nasRoot }]);
   upsertRootReadiness(db, {
     rootId: "nas",
@@ -41,7 +41,7 @@ beforeEach(async () => {
     uuid: null,
     fstype: null
   });
-  vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "success");
+  vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "success");
   await writeDockerShim();
 });
 
@@ -136,13 +136,13 @@ describe("DockerComposeService", () => {
     });
     expect(validation).toMatchObject({ risk: "high", warnings: [expect.stringContaining("NAS bind mount")] });
 
-    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "resolved-safe-bind");
+    vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "resolved-safe-bind");
     await expect(service.validateApp({
       projectKey: "interpolated-safe",
       composeContent: "services:\n  app:\n    image: alpine\n    volumes:\n      - ${HOST_PATH}/data:/data\n",
       environment: [{ key: "HOST_PATH", value: nasRoot }]
     })).resolves.toMatchObject({ risk: "high", warnings: [expect.stringContaining("NAS bind mount")] });
-    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "success");
+    vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "success");
 
     await expect(service.validateApp({
       projectKey: "outside",
@@ -165,14 +165,14 @@ describe("DockerComposeService", () => {
       environment: []
     })).rejects.toThrow(/unsupported driver options/);
 
-    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "resolved-escape");
+    vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "resolved-escape");
     await expect(service.validateApp({
       projectKey: "interpolated-escape",
       composeContent: "services:\n  app:\n    image: alpine\n    volumes:\n      - ${HOST_PATH}:/data\n",
       environment: [{ key: "HOST_PATH", value: "/etc" }]
     })).rejects.toThrow(/outside a ready NAS root/);
 
-    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "resolved-elevated");
+    vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "resolved-elevated");
     await expect(service.validateApp({
       projectKey: "interpolated-risk",
       composeContent: "services:\n  app:\n    image: alpine\n    privileged: ${PRIVILEGED}\n",
@@ -239,9 +239,9 @@ describe("DockerComposeService", () => {
   });
 
   it("materializes Host Access last and forces a full project recreation", async () => {
-    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "host-access");
+    vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "host-access");
     const policy = new DockerHostAccessPolicy(db, { platform: "linux" });
-    vi.stubEnv("ZOS_TEST_HOST_ACCESS_LABELS", JSON.stringify(policy.resolveCompose({
+    vi.stubEnv("CYBEROS_TEST_HOST_ACCESS_LABELS", JSON.stringify(policy.resolveCompose({
       hostAccess: [{
         service: "collector",
         grants: [{ capability: "host_processes" }, { capability: "host_sys" }]
@@ -267,7 +267,7 @@ describe("DockerComposeService", () => {
       hostAccessState: "pending_apply",
       hostAccess: [{ service: "collector" }]
     });
-    const override = await readFile(path.join(appsRoot, "collector", "zos-host-access.override.yaml"), "utf8");
+    const override = await readFile(path.join(appsRoot, "collector", "cyberos-host-access.override.yaml"), "utf8");
     expect(override).toContain("/proc");
     expect(override).toContain("/host/proc");
     expect(override).toContain("cap_drop");
@@ -293,13 +293,13 @@ describe("DockerComposeService", () => {
       "-f",
       "compose.yaml",
       "-f",
-      "zos-host-access.override.yaml",
+      "cyberos-host-access.override.yaml",
       "up",
       "-d",
       "--force-recreate"
     ]));
     const appliedOverride = parse(
-      await readFile(path.join(appsRoot, "collector", "zos-host-access.override.yaml"), "utf8")
+      await readFile(path.join(appsRoot, "collector", "cyberos-host-access.override.yaml"), "utf8")
     ) as { services: { collector: { image: string; labels: Record<string, string> } } };
     expect(appliedOverride.services.collector.image).toBe("sha256:collector");
     expect(getDockerComposeApp(db, created.id)?.deployedHostAccess).toEqual([
@@ -349,7 +349,7 @@ describe("DockerComposeService", () => {
       ...runtimeContainer,
       labels: {
         ...runtimeContainer.labels,
-        "io.zos.host-access.fingerprint": "drifted"
+        "io.cyberos.host-access.fingerprint": "drifted"
       }
     };
     expect(await service.getApp(created.id, [driftedContainer])).toMatchObject({ hostAccessState: "needs_repair" });
@@ -396,7 +396,7 @@ describe("DockerComposeService", () => {
       composeContent: "services:\n  app:\n    image: alpine\n",
       environment: [{ key: "TOKEN", value: "secret" }]
     });
-    await writeFile(path.join(appsRoot, "stable", ".zos-app.json"), '{"id":"other"}\n');
+    await writeFile(path.join(appsRoot, "stable", ".cyberos-app.json"), '{"id":"other"}\n');
 
     await expect(service.updateApp(created.id, {
       name: "Changed",
@@ -472,7 +472,7 @@ describe("DockerComposeService", () => {
       composeContent: "services:\n  app:\n    image: alpine\n",
       environment: []
     });
-    await writeFile(path.join(appsRoot, "protected", ".zos-app.json"), '{"id":"other"}\n');
+    await writeFile(path.join(appsRoot, "protected", ".cyberos-app.json"), '{"id":"other"}\n');
 
     await expect(service.deleteApp(created.id, {
       expectedRevision: created.revision,
@@ -502,7 +502,7 @@ describe("DockerComposeService", () => {
 
   it("redacts short and overlapping environment secrets from Compose validation errors", async () => {
     const service = composeService();
-    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "validation-error");
+    vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "validation-error");
     await expect(service.validateApp({
       projectKey: "redacted",
       composeContent: "services:\n  app:\n    image: alpine\n",
@@ -516,7 +516,7 @@ describe("DockerComposeService", () => {
 
   it("reports a missing Docker Compose plugin as unavailable", async () => {
     const service = composeService();
-    vi.stubEnv("ZOS_TEST_COMPOSE_OUTCOME", "plugin-missing");
+    vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "plugin-missing");
     await expect(service.validateApp({
       projectKey: "missing-plugin",
       composeContent: "services:\n  app:\n    image: alpine\n",
@@ -564,23 +564,23 @@ const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
 if (args.includes("config")) {
-  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "validation-error") {
+  if (process.env.CYBEROS_TEST_COMPOSE_OUTCOME === "validation-error") {
     process.stderr.write("invalid " + fs.readFileSync(path.join(process.cwd(), ".env"), "utf8"));
     process.exit(1);
   }
-  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "plugin-missing") {
+  if (process.env.CYBEROS_TEST_COMPOSE_OUTCOME === "plugin-missing") {
     process.stderr.write("docker: 'compose' is not a docker command.\\n");
     process.exit(1);
   }
-  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "resolved-escape") {
+  if (process.env.CYBEROS_TEST_COMPOSE_OUTCOME === "resolved-escape") {
     console.log(JSON.stringify({ services: { app: { volumes: [{ type: "bind", source: "/etc", target: "/data" }] } } }));
     process.exit(0);
   }
-  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "resolved-elevated") {
+  if (process.env.CYBEROS_TEST_COMPOSE_OUTCOME === "resolved-elevated") {
     console.log(JSON.stringify({ services: { app: { image: "alpine", privileged: true } } }));
     process.exit(0);
   }
-  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "resolved-safe-bind") {
+  if (process.env.CYBEROS_TEST_COMPOSE_OUTCOME === "resolved-safe-bind") {
     console.log(JSON.stringify({ services: { app: { image: "alpine", volumes: [{
       type: "bind",
       source: path.join(${JSON.stringify(nasRoot)}, "data"),
@@ -588,14 +588,14 @@ if (args.includes("config")) {
     }] } } }));
     process.exit(0);
   }
-  if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "host-access") {
+  if (process.env.CYBEROS_TEST_COMPOSE_OUTCOME === "host-access") {
     const final = args.filter((arg) => arg === "-f").length > 1;
     console.log(JSON.stringify({ services: { collector: {
       image: "collector:latest",
       ...(final ? {
         cap_drop: ["ALL"],
         security_opt: ["no-new-privileges:true"],
-        labels: JSON.parse(process.env.ZOS_TEST_HOST_ACCESS_LABELS || "{}"),
+        labels: JSON.parse(process.env.CYBEROS_TEST_HOST_ACCESS_LABELS || "{}"),
         volumes: [
           { type: "bind", source: "/proc", target: "/host/proc", read_only: true },
           { type: "bind", source: "/sys", target: "/host/sys", read_only: true }
@@ -609,7 +609,7 @@ if (args.includes("config")) {
 }
 const directory = process.env.DOCKER_CONFIG || "";
 fs.writeFileSync(${JSON.stringify(path.join(tempDir, "captured-config-directory"))}, directory);
-if (process.env.ZOS_TEST_COMPOSE_OUTCOME === "timeout") {
+if (process.env.CYBEROS_TEST_COMPOSE_OUTCOME === "timeout") {
   process.on("SIGTERM", () => process.exit(0));
   setInterval(() => {}, 1000);
 } else {

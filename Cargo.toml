@@ -29,7 +29,7 @@ uuid = { version = "1.18.1", features = ["v4"] }
 zbus = { version = "6.0.0", default-features = false, features = ["tokio", "proxy", "object-manager"] }
 unicode-normalization = "0.1.25"
 zip = { version = "7.0.0", default-features = false, features = ["deflate"] }
-zos-monitoring-contracts = { path = "crates/monitoring-contracts" }
+cyberos-monitoring-contracts = { path = "crates/monitoring-contracts" }
 sd-notify = "0.5.0"
 futures-util = "0.3.31"
 httpdate = "1.0.3"

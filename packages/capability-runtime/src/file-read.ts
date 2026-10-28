@@ -3,20 +3,20 @@ import { execFile } from "node:child_process";
 import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { CapabilityError, type CapabilityExecution, type JsonValue } from "@zos/capabilities";
-import { getNasRoot, getRootReadiness, type ZosDatabase } from "@zos/db";
-import { isPathInside, resolveSafeExistingPath, toRootRelative } from "@zos/nas-tools";
-import type { NasRootRecord } from "@zos/shared";
+import { CapabilityError, type CapabilityExecution, type JsonValue } from "@cyberos/capabilities";
+import { getNasRoot, getRootReadiness, type CyberOsDatabase } from "@cyberos/db";
+import { isPathInside, resolveSafeExistingPath, toRootRelative } from "@cyberos/nas-tools";
+import type { NasRootRecord } from "@cyberos/shared";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_OUTPUT_BYTES = 128 * 1024;
 
 export type ExtendedFileReadCapabilityId =
-  | "zos.files.grep"
-  | "zos.files.find"
-  | "zos.files.git"
-  | "zos.files.archive-inspect";
+  | "cyberos.files.grep"
+  | "cyberos.files.find"
+  | "cyberos.files.git"
+  | "cyberos.files.archive-inspect";
 
 interface WalkEntry {
   absolutePath: string;
@@ -27,16 +27,16 @@ interface WalkEntry {
 }
 
 export async function executeExtendedFileReadCapability(
-  dependencies: { db: ZosDatabase },
+  dependencies: { db: CyberOsDatabase },
   capabilityId: ExtendedFileReadCapabilityId,
   input: Record<string, JsonValue>
 ): Promise<CapabilityExecution> {
   const root = requireReadyRoot(dependencies.db, requiredString(input.rootId, "rootId"));
   switch (capabilityId) {
-    case "zos.files.grep": return grepFiles(root, input);
-    case "zos.files.find": return findFiles(root, input);
-    case "zos.files.git": return inspectGit(root, input);
-    case "zos.files.archive-inspect": return inspectArchive(root, input);
+    case "cyberos.files.grep": return grepFiles(root, input);
+    case "cyberos.files.find": return findFiles(root, input);
+    case "cyberos.files.git": return inspectGit(root, input);
+    case "cyberos.files.archive-inspect": return inspectArchive(root, input);
   }
 }
 
@@ -344,7 +344,7 @@ async function safeExisting(root: NasRootRecord, requestedPath: string) {
   }
 }
 
-function requireReadyRoot(db: ZosDatabase, rootId: string): NasRootRecord {
+function requireReadyRoot(db: CyberOsDatabase, rootId: string): NasRootRecord {
   const root = getNasRoot(db, rootId);
   if (!root || !root.enabled) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
   if (root.mountPolicy === "required" && getRootReadiness(db, root.id)?.status !== "ready") {

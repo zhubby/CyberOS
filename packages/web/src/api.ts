@@ -166,7 +166,7 @@ import type {
   MediaTitleSummary as SharedMediaTitleSummary,
   PublicMediaLibrarySettings as SharedPublicMediaLibrarySettings,
   TvModeStatus as SharedTvModeStatus
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { createClientId } from "./lib/client-id.js";
 
 export interface NasRoot {
@@ -1976,11 +1976,11 @@ export async function getTerminalTabs(rootId: string): Promise<TerminalTabState>
   return (await response.json()) as TerminalTabState;
 }
 
-export async function initializeTerminalTabs(rootId: string, legacySessionId?: string): Promise<TerminalTabState> {
+export async function initializeTerminalTabs(rootId: string): Promise<TerminalTabState> {
   const response = await fetch("/api/terminal/tabs/initialize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rootId, ...(legacySessionId ? { legacySessionId } : {}) })
+    body: JSON.stringify({ rootId })
   });
   await ensureOk(response);
   return (await response.json()) as TerminalTabState;

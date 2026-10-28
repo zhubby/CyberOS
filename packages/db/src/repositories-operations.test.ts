@@ -9,19 +9,19 @@ import {
   getApproval,
   getShareOperation,
   getShareSettings,
-  openZosDb,
+  openCyberOsDb,
   saveShareSettings,
   updateShareOperationStatus,
-  type ZosDatabase
+  type CyberOsDatabase
 } from "./index.js";
 import { createShareOperationApproval } from "./repositories/share-operations.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-db-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-db-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
@@ -37,7 +37,7 @@ describe("operation repositories", () => {
     const saved = saveShareSettings(db, {
       enabled: true,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: "secret"
       },
       shares: [
@@ -90,7 +90,7 @@ describe("operation repositories", () => {
     expect(saved).toMatchObject({
       enabled: true,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: "secret"
       },
       shares: [
@@ -113,7 +113,7 @@ describe("operation repositories", () => {
       JSON.stringify({
         enabled: true,
         account: {
-          username: "zos-share"
+          username: "cyberos-share"
         },
         shares: [
           {
@@ -130,7 +130,7 @@ describe("operation repositories", () => {
     expect(getShareSettings(db)).toMatchObject({
       enabled: true,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: null
       },
       shares: [
@@ -162,7 +162,7 @@ describe("operation repositories", () => {
     const settings = {
       enabled: true,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: "secret"
       },
       shares: [],
@@ -179,7 +179,7 @@ describe("operation repositories", () => {
         settings: {
           ...settings,
           account: {
-            username: "zos-share",
+            username: "cyberos-share",
             passwordConfigured: true
           }
         }
@@ -193,7 +193,7 @@ describe("operation repositories", () => {
           action: "apply_settings",
           settings: {
             account: {
-              username: "zos-share",
+              username: "cyberos-share",
               passwordConfigured: true
             }
           }

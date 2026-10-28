@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openZosDb, upsertRootReadiness, type ZosDatabase } from "@zos/db";
+import { ensureNasRoots, openCyberOsDb, upsertRootReadiness, type CyberOsDatabase } from "@cyberos/db";
 import type { DockerEngineRuntime } from "./docker-client.js";
 import {
   DOCKER_HOST_ACCESS_POLICY_VERSION,
@@ -12,14 +12,14 @@ import {
 } from "./docker-host-access.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-host-access-policy-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-host-access-policy-"));
   const nasPath = path.join(tempDir, "nas");
   await mkdir(nasPath);
-  await mkdir(path.join(nasPath, ".zos-host-access-capacity"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  await mkdir(path.join(nasPath, ".cyberos-host-access-capacity"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "primary", name: "Primary", path: nasPath }]);
   upsertRootReadiness(db, {
     rootId: "primary",
@@ -85,8 +85,8 @@ describe("DockerHostAccessPolicy", () => {
       "/etc/passwd",
       "/etc/group"
     ]));
-    expect(first.mounts.some((mount) => mount.source.endsWith("/nas/.zos-host-access-capacity"))).toBe(true);
-    expect(first.environment).toEqual({ DOCKER_HOST: "unix:///run/zos-host-access/docker.sock" });
+    expect(first.mounts.some((mount) => mount.source.endsWith("/nas/.cyberos-host-access-capacity"))).toBe(true);
+    expect(first.environment).toEqual({ DOCKER_HOST: "unix:///run/cyberos-host-access/docker.sock" });
     expect(first.capDrop).toEqual(["ALL"]);
     expect(first.securityOpt).toEqual(["no-new-privileges:true"]);
     expect(first.coverage.items).toEqual(expect.arrayContaining([
@@ -187,13 +187,13 @@ describe("DockerHostAccessPolicy", () => {
         hostname: null,
         workingDir: null,
         labels: id === "container-1" ? {
-          "io.zos.managed": "true",
-          "io.zos.host-access.policy": DOCKER_HOST_ACCESS_POLICY_VERSION,
-          "io.zos.host-access.fingerprint": "fingerprint",
-          "io.zos.host-access.grants": "host_processes,docker_metadata"
+          "io.cyberos.managed": "true",
+          "io.cyberos.host-access.policy": DOCKER_HOST_ACCESS_POLICY_VERSION,
+          "io.cyberos.host-access.fingerprint": "fingerprint",
+          "io.cyberos.host-access.grants": "host_processes,docker_metadata"
         } : {
-          "io.zos.managed": "true",
-          "io.zos.host-access.grants": "docker_metadata"
+          "io.cyberos.managed": "true",
+          "io.cyberos.host-access.grants": "docker_metadata"
         }
       })
     } as unknown as DockerEngineRuntime;

@@ -3,7 +3,7 @@ import { lstat, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { ZipArchive } from "archiver";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { JsonValue } from "@zos/capabilities";
+import type { JsonValue } from "@cyberos/capabilities";
 import {
   createMcpResourceToken,
   getNasRoot,
@@ -11,21 +11,21 @@ import {
   getPhotostaffLibrarySettings,
   getRootReadiness,
   type McpResourceRecord,
-  type ZosDatabase
-} from "@zos/db";
+  type CyberOsDatabase
+} from "@cyberos/db";
 import {
   assertNoSymlinkPathSegments,
   inferMimeType,
   isPathInside,
   resolveSafeExistingPath,
   StorageScopeSafetyError
-} from "@zos/nas-tools";
+} from "@cyberos/nas-tools";
 import {
   PHOTOSTAFF_DATA_DIRECTORY_NAME,
   photostaffMediaKind,
   type PhotostaffAssetRecord,
-  type ZosConfig
-} from "@zos/shared";
+  type CyberOsConfig
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { sendFileStream } from "./files.js";
 import { ffmpegVideoTranscoder, VideoCache } from "./video-cache.js";
@@ -78,7 +78,7 @@ export class McpResourceError extends Error {
 }
 
 export async function createFileMcpResource(input: {
-  db: ZosDatabase;
+  db: CyberOsDatabase;
   clientId: string;
   baseUrl: string;
   rootId: string;
@@ -104,7 +104,7 @@ export async function createFileMcpResource(input: {
 }
 
 export async function createFileExportMcpResource(input: {
-  db: ZosDatabase;
+  db: CyberOsDatabase;
   clientId: string;
   baseUrl: string;
   rootId: string;
@@ -120,7 +120,7 @@ export async function createFileExportMcpResource(input: {
     descriptor: { rootId: root.id, paths: snapshot.paths },
     revision: snapshot.revision,
     mimeType: "application/zip",
-    fileName: zipName(input.archiveName ?? "zos-files.zip"),
+    fileName: zipName(input.archiveName ?? "cyberos-files.zip"),
     sizeBytes: null,
     expiresAt
   });
@@ -128,7 +128,7 @@ export async function createFileExportMcpResource(input: {
 }
 
 export async function fileExportResourceRevision(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   rootId: string,
   paths: string[]
 ): Promise<string> {
@@ -137,8 +137,8 @@ export async function fileExportResourceRevision(
 }
 
 export async function createPhotoMediaMcpResource(input: {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   clientId: string;
   baseUrl: string;
   assetId: string;
@@ -161,7 +161,7 @@ export async function createPhotoMediaMcpResource(input: {
 }
 
 export async function createPhotoExportMcpResource(input: {
-  db: ZosDatabase;
+  db: CyberOsDatabase;
   clientId: string;
   baseUrl: string;
   assetIds: string[];
@@ -175,14 +175,14 @@ export async function createPhotoExportMcpResource(input: {
     descriptor: { assetIds: snapshot.assetIds },
     revision: snapshot.revision,
     mimeType: "application/zip",
-    fileName: zipName(input.archiveName ?? "zos-photos.zip"),
+    fileName: zipName(input.archiveName ?? "cyberos-photos.zip"),
     sizeBytes: null,
     expiresAt
   });
   return resourceLink(input.baseUrl, created.token, created.resource);
 }
 
-export async function photoExportResourceRevision(db: ZosDatabase, assetIds: string[]): Promise<string> {
+export async function photoExportResourceRevision(db: CyberOsDatabase, assetIds: string[]): Promise<string> {
   return (await snapshotPhotoExport(db, assetIds)).revision;
 }
 
@@ -208,7 +208,7 @@ export function createMcpResourceResponder(
 }
 
 async function serveFileResource(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   resource: McpResourceRecord,
   request: FastifyRequest,
   reply: FastifyReply
@@ -227,7 +227,7 @@ async function serveFileResource(
 }
 
 async function serveFileExportResource(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   resource: McpResourceRecord,
   reply: FastifyReply
 ): Promise<unknown> {
@@ -241,8 +241,8 @@ async function serveFileExportResource(
 }
 
 async function servePhotoMediaResource(
-  db: ZosDatabase,
-  config: ZosConfig,
+  db: CyberOsDatabase,
+  config: CyberOsConfig,
   videoCache: VideoCache,
   resource: McpResourceRecord,
   request: FastifyRequest,
@@ -284,7 +284,7 @@ async function servePhotoMediaResource(
 }
 
 async function servePhotoExportResource(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   resource: McpResourceRecord,
   reply: FastifyReply
 ): Promise<unknown> {
@@ -352,7 +352,7 @@ async function collectArchiveEntries(realPathValue: string, archiveName: string,
   }
 }
 
-async function snapshotPhotoExport(db: ZosDatabase, assetIds: string[]): Promise<{
+async function snapshotPhotoExport(db: CyberOsDatabase, assetIds: string[]): Promise<{
   assetIds: string[];
   entries: ArchiveEntry[];
   revision: string;
@@ -392,7 +392,7 @@ async function snapshotPhotoExport(db: ZosDatabase, assetIds: string[]): Promise
   };
 }
 
-async function resolvePhotoAsset(db: ZosDatabase, assetId: string): Promise<ResolvedPhotoAsset> {
+async function resolvePhotoAsset(db: CyberOsDatabase, assetId: string): Promise<ResolvedPhotoAsset> {
   const settings = getPhotostaffLibrarySettings(db);
   if (!settings) throw new McpResourceError(409, "not_ready", "Photo library is not configured");
   const asset = getPhotostaffAsset(db, assetId, settings.updatedAt);
@@ -419,7 +419,7 @@ async function resolvePhotoAsset(db: ZosDatabase, assetId: string): Promise<Reso
   };
 }
 
-async function resolvePhotoMedia(config: ZosConfig, resolved: ResolvedPhotoAsset, variant: PhotoVariant): Promise<{
+async function resolvePhotoMedia(config: CyberOsConfig, resolved: ResolvedPhotoAsset, variant: PhotoVariant): Promise<{
   realPath: string;
   mimeType: string;
   fileName: string;
@@ -540,7 +540,7 @@ function resourceExpiry(): string {
   return new Date(Date.now() + RESOURCE_TTL_MS).toISOString();
 }
 
-function requireReadyRoot(db: ZosDatabase, rootId: string) {
+function requireReadyRoot(db: CyberOsDatabase, rootId: string) {
   const root = getNasRoot(db, rootId);
   if (!root || !root.enabled) throw new McpResourceError(404, "root_not_found", "NAS root was not found");
   if (root.mountPolicy === "required" && getRootReadiness(db, root.id)?.status !== "ready") {

@@ -5,8 +5,8 @@ import {
   listNasRoots,
   saveShareSettings,
   updateShareOperationStatus
-} from "@zos/db";
-import type { ShareOperationProposal } from "@zos/shared";
+} from "@cyberos/db";
+import type { ShareOperationProposal } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { HostdRequestError } from "../lib/hostd-client.js";
 import { normalizeShareSettingsInput, type ShareSettingsInput } from "../lib/share-settings.js";

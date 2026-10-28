@@ -4,11 +4,11 @@ import type {
   StorageFilesystem,
   StorageRaidLevel,
   SystemStorageSummary
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { HostdClient } from "./hostd-client.js";
 
 const HOSTD_TIMEOUT_MS = 120_000;
-const STORAGE_MOUNT_ROOT = "/zos/data";
+const STORAGE_MOUNT_ROOT = "/cyberos/data";
 const POOL_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/u;
 const RAID_MINIMUMS: Record<StorageRaidLevel, number> = {
   "0": 2,
@@ -106,7 +106,7 @@ export function buildStoragePoolDeleteProposal(
   if (!pool) {
     throw new Error("Storage pool is no longer available; refresh the inventory");
   }
-  if (!pool.mountpoint || !/^\/zos\/data\/[a-z][a-z0-9_-]{0,31}$/u.test(pool.mountpoint) || pool.mountpoint === "/zos/data/backup") {
+  if (!pool.mountpoint || !/^\/cyberos\/data\/[a-z][a-z0-9_-]{0,31}$/u.test(pool.mountpoint) || pool.mountpoint === "/cyberos/data/backup") {
     throw new Error("Storage pool mountpoint is invalid");
   }
   if (!/^\/dev\/md(?:\/[A-Za-z0-9._-]+|\d+)$/u.test(pool.raidPath)) {

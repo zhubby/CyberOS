@@ -9,7 +9,7 @@ const status = {
     id: "adapter-hci0",
     address: "00:11:22:33:44:55",
     name: "hci0",
-    alias: "ZOS",
+    alias: "CyberOS",
     state: "powered",
     powered: true,
     discovering: false,

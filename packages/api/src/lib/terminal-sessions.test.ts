@@ -89,7 +89,7 @@ describe("TerminalSessionManager", () => {
 
     await manager.destroy("root", firstSessionId, true);
 
-    expect(runtime.destroyedSessionNames).toEqual([expect.stringMatching(/^zos-/u)]);
+    expect(runtime.destroyedSessionNames).toEqual([expect.stringMatching(/^cyberos-/u)]);
     expect(runtime.spawnCount).toBe(0);
   });
 

@@ -4,11 +4,10 @@ import {
   runPiAgentCommand,
   runPiAgentTurn,
   runReadOnlyAgentTurn,
-  type PhotostaffAgentToolService,
   type PiAgentCommand,
   type PiAgentRunner
-} from "@zos/agent";
-import { proposePiToolCapability } from "@zos/capability-runtime";
+} from "@cyberos/agent";
+import { proposePiToolCapability } from "@cyberos/capability-runtime";
 import {
   appendEvent,
   claimNextAgentSessionCommand,
@@ -23,28 +22,24 @@ import {
   getMessage,
   getModelProviderSettings,
   getNasRoot,
-  getPhotostaffLibrarySettings,
-  getPhotostaffMetadataDetail,
-  getPhotostaffMetadataIndexStatus,
   getAgentCapabilityPolicySettings,
   getAgentMcpSettings,
   getSession,
   finishAgentSessionCommand,
   linkAgentJobToCapabilityRun,
   queryIndexedText,
-  queryPhotostaffAssets,
   requeueAgentSessionCommand,
   renewAgentJobLease,
   renewAgentSessionCommandLease,
   saveAgentProviderSession,
   updateJobStatus,
-  type ZosDatabase
-} from "@zos/db";
-import type { ModelProviderSettingsRecord, ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { ModelProviderSettingsRecord, CyberOsConfig } from "@cyberos/shared";
 
 export interface ProcessNextJobDependencies {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   agentRunner?: PiAgentRunner;
   allowLocalFallback?: boolean;
   workerId?: string;
@@ -58,8 +53,8 @@ export const AGENT_COMMAND_LEASE_MS = 30_000;
 export const AGENT_COMMAND_HEARTBEAT_MS = 10_000;
 
 export interface ProcessNextAgentCommandDependencies {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   workerId: string;
   commandRunner?: typeof runPiAgentCommand;
   leaseMs?: number;
@@ -199,11 +194,9 @@ export async function processNextAgentCommand({
         mcp: {
           enabled: true,
           url: `http://127.0.0.1:${config.api.port}/mcp`,
-          tokenFile: config.mcp.piTokenFile,
-          legacyToolsEnabled: config.mcp.legacyPiToolsEnabled
+          tokenFile: config.mcp.piTokenFile
         }
-      } : {}),
-      ...photostaffAgentTools(db, root.id)
+      } : {})
     }, {
       type: command.type as PiAgentCommand["type"],
       payload: command.payload
@@ -336,7 +329,7 @@ export async function processNextJob({
   try {
     const turnSession = { ...session, currentPath: job.workingPath };
     const shouldUseLocalFallback =
-      allowLocalFallback === true || process.env.ZOS_ENABLE_LOCAL_AGENT_FALLBACK === "1";
+      allowLocalFallback === true || process.env.CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK === "1";
     const turnMessage = continuation ? capabilityContinuationMessage(continuation.runs) : message.content;
     const result = shouldUseLocalFallback
       ? await runReadOnlyAgentTurn({
@@ -426,11 +419,9 @@ export async function processNextJob({
             mcp: {
               enabled: true,
               url: `http://127.0.0.1:${config.api.port}/mcp`,
-              tokenFile: config.mcp.piTokenFile,
-              legacyToolsEnabled: config.mcp.legacyPiToolsEnabled
+              tokenFile: config.mcp.piTokenFile
             }
-          } : {}),
-          ...photostaffAgentTools(db, root.id)
+          } : {})
         });
 
     if (result.status === "cancelled" || getJob(db, job.id)?.status === "cancelled") {
@@ -507,7 +498,7 @@ export async function processNextJob({
 }
 
 function clearUnpersistedProviderSession(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   sessionId: string,
   providerSessionId: string
 ): void {
@@ -523,7 +514,7 @@ function clearUnpersistedProviderSession(
 }
 
 export function startAgentJobHeartbeat(input: {
-  db: ZosDatabase;
+  db: CyberOsDatabase;
   jobId: string;
   workerId: string;
   leaseMs: number;
@@ -552,7 +543,7 @@ export function startAgentJobHeartbeat(input: {
 }
 
 export function startAgentSessionCommandHeartbeat(input: {
-  db: ZosDatabase;
+  db: CyberOsDatabase;
   commandId: string;
   workerId: string;
   leaseMs: number;
@@ -590,47 +581,14 @@ function capabilityContinuationMessage(
       : { state: run.state, error: { code: run.errorCode, message: run.errorMessage } })
   }));
   return [
-    "Internal ZOS continuation. Do not repeat the user's original request.",
+    "Internal CyberOS continuation. Do not repeat the user's original request.",
     "All capability runs requested by the previous turn reached terminal states:",
     JSON.stringify(outcomes),
     "Continue the same conversation using these results. Explain the outcomes briefly and only propose another change if it is still required."
   ].join("\n");
 }
 
-export function photostaffAgentTools(db: ZosDatabase, sessionRootId: string): { photostaffTools?: PhotostaffAgentToolService } {
-  const settings = getPhotostaffLibrarySettings(db);
-  if (!settings || settings.rootId !== sessionRootId) return {};
-  return {
-    photostaffTools: {
-      searchPhotostaff: async (request) => {
-        const safeRequest = {
-          ...request,
-          cursor: null,
-          limit: Math.max(1, Math.min(request.limit ?? 25, 25)),
-          includeFacets: false
-        };
-        const result = queryPhotostaffAssets(db, {
-          libraryUpdatedAt: settings.updatedAt,
-          request: safeRequest
-        });
-        return {
-          photostaff: result.photostaff,
-          nextCursor: null,
-          total: result.total,
-          facets: null,
-          metadataIndex: getPhotostaffMetadataIndexStatus(db, settings.updatedAt)
-        };
-      },
-      getPhotostaffMetadata: async (assetId) => getPhotostaffMetadataDetail(db, {
-        assetId,
-        libraryUpdatedAt: settings.updatedAt,
-        includeSensitive: false
-      })
-    }
-  };
-}
-
-function defaultModelProviderSettings(config: ZosConfig): ModelProviderSettingsRecord {
+function defaultModelProviderSettings(config: CyberOsConfig): ModelProviderSettingsRecord {
   return {
     generation: 1,
     providerName: "openai",

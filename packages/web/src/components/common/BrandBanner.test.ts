@@ -5,12 +5,12 @@ import { BrandBanner } from "./BrandBanner.js";
 
 describe("BrandBanner", () => {
   it("renders the shared mark and text wordmark with one accessible name", () => {
-    const html = renderToStaticMarkup(createElement(BrandBanner, { alt: "ZOS" }));
+    const html = renderToStaticMarkup(createElement(BrandBanner, { alt: "CyberOS" }));
 
     expect(html).toContain('role="img"');
-    expect(html).toContain('aria-label="ZOS"');
-    expect(html).toContain('src="/zos-icon.svg"');
-    expect(html).toContain("ZOS");
+    expect(html).toContain('aria-label="CyberOS"');
+    expect(html).toContain('src="/cyberos-icon.svg"');
+    expect(html).toContain("CyberOS");
     expect(html.match(/alt=""/g)).toHaveLength(1);
   });
 

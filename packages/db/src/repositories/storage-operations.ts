@@ -4,14 +4,14 @@ import type {
   StorageOperationProposal,
   StorageOperationRecord,
   StorageOperationStatus
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { getJob } from "./jobs.js";
 import { mapStorageOperation } from "./operation-mappers.js";
 import type { DbStorageOperationRow } from "./repository-rows.js";
 
 export function createStorageOperationRecord(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { proposal: StorageOperationProposal }
 ): StorageOperationRecord {
   const now = new Date().toISOString();
@@ -40,7 +40,7 @@ export function createStorageOperationRecord(
 }
 
 export function createStorageOperationApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { jobId: string; proposal: StorageOperationProposal }
 ): { approval: PendingApprovalRecord; operation: StorageOperationRecord } {
   const job = getJob(db, input.jobId);
@@ -91,7 +91,7 @@ export function createStorageOperationApproval(
   return { approval, operation };
 }
 
-export function getStorageOperation(db: ZosDatabase, operationId: string): StorageOperationRecord | null {
+export function getStorageOperation(db: CyberOsDatabase, operationId: string): StorageOperationRecord | null {
   const row = db
     .prepare(`
       SELECT id, approval_id, action, target_id, status, metadata_json, created_at, updated_at
@@ -103,7 +103,7 @@ export function getStorageOperation(db: ZosDatabase, operationId: string): Stora
 }
 
 export function getStorageOperationByApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   approvalId: string
 ): StorageOperationRecord | null {
   const row = db
@@ -119,7 +119,7 @@ export function getStorageOperationByApproval(
 }
 
 export function listStorageOperations(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { limit?: number } = {}
 ): StorageOperationRecord[] {
   const rows = db
@@ -134,7 +134,7 @@ export function listStorageOperations(
 }
 
 export function updateStorageOperationStatus(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   operationId: string,
   status: StorageOperationStatus,
   metadata: Record<string, unknown> = {}

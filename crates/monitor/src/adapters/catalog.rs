@@ -1,1 +1,1 @@
-pub use zos_monitoring_contracts::{catalog, metric};
+pub use cyberos_monitoring_contracts::{catalog, metric};

@@ -1,0 +1,10 @@
+[Unit]
+Description=CyberOS TV appliance session
+Requires=cyberos-tv-prepare.service cyberos-tv-weston.service cyberos-tv-chromium.service cyberos-vod-player.service
+Wants=cyberos-tv-cec.service cyberos-tv-gamepad.service
+Conflicts=display-manager.service
+After=cyberos-api.service cyberos-vod-player.service cyberos-tv-weston.service cyberos-tv-chromium.service
+AllowIsolate=yes
+
+[Install]
+WantedBy=multi-user.target

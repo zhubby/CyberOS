@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PHOTOSTAFF_SUPPORTED_EXTENSIONS, resolveZosPaths } from "@zos/shared";
+import { PHOTOSTAFF_SUPPORTED_EXTENSIONS, resolveCyberOsPaths } from "@cyberos/shared";
 import {
   appendEvent,
   claimNextJob,
@@ -42,7 +42,7 @@ import {
   listOperationNotifications,
   listShareOperations,
   linkAgentJobToCapabilityRun,
-  openZosDb,
+  openCyberOsDb,
   recoverExpiredAgentJobs,
   recordIndexFailure,
   saveDockerSettings,
@@ -55,8 +55,8 @@ import {
   updateJobStatus,
   updateDockerRegistryCredential,
   type DockerRegistryCredentialRecord,
-  type ZosDatabase
-} from "@zos/db";
+  type CyberOsDatabase
+} from "@cyberos/db";
 import type {
   DockerComposeProjectSummary,
   DockerContainerSummary,
@@ -72,7 +72,7 @@ import type {
   ShareApplyRequest,
   ShareApplyResult,
   ShareSettingsRecord,
-  ZosConfig,
+  CyberOsConfig,
   SystemEthernetApplyTransaction,
   SystemEthernetStatus,
   SystemEthernetUpdateInput,
@@ -88,7 +88,7 @@ import type {
   SystemWifiSummary,
   BluetoothStatus,
   StorageOperationProposal
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { DockerComposeService, type DockerComposeRuntime } from "./lib/docker-compose.js";
 import { DockerRequestError, type DockerEngineRuntime, type DockerExecStream } from "./lib/docker-client.js";
 import { DockerDaemonRequestError, type DockerDaemonRuntime } from "./lib/docker-daemon.js";
@@ -108,7 +108,7 @@ const TEST_WIFI_PROFILE_ID = "12345678-1234-4123-8123-123456789abc";
 
 let tempDir: string;
 let rootDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 async function buildServer(dependencies: ServerDependencies) {
   return await buildApiServer({
@@ -163,11 +163,11 @@ function testStorageCommandRunnerFor(target: string, poolId = TEST_STORAGE_POOL_
 }
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-api-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-api-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
   await writeFile(path.join(rootDir, "hello.txt"), "hello");
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
@@ -894,7 +894,7 @@ describe("API server", () => {
 
   it("keeps file listing available when Git metadata is invalid", async () => {
     await mkdir(path.join(rootDir, "broken"));
-    await writeFile(path.join(rootDir, "broken", ".git"), "gitdir: /missing/zos/repo");
+    await writeFile(path.join(rootDir, "broken", ".git"), "gitdir: /missing/cyberos/repo");
     await writeFile(path.join(rootDir, "broken", "visible.txt"), "visible");
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
@@ -1010,7 +1010,7 @@ describe("API server", () => {
   });
 
   it("returns detailed system information without exposing environment values", async () => {
-    process.env.ZOS_TEST_SECRET = "do-not-leak-from-system-info";
+    process.env.CYBEROS_TEST_SECRET = "do-not-leak-from-system-info";
     const server = await buildServer({ config: testConfig(tempDir), db });
     try {
       const response = await server.inject({
@@ -1036,9 +1036,9 @@ describe("API server", () => {
               totalBytes: expect.any(Number)
             }
           },
-          zos: {
+          cyberos: {
             dataDir: tempDir,
-            databasePath: path.join(tempDir, "zos.sqlite"),
+            databasePath: path.join(tempDir, "cyberos.sqlite"),
             photostaff: {
               dataDir: path.join(tempDir, "photostaff"),
               maxFileSizeBytes: 512 * 1024 * 1024,
@@ -1061,13 +1061,13 @@ describe("API server", () => {
       expect(response.json().info.hardware.memory.totalBytes).toBeGreaterThan(0);
       expect(response.payload).not.toContain("do-not-leak-from-system-info");
     } finally {
-      delete process.env.ZOS_TEST_SECRET;
+      delete process.env.CYBEROS_TEST_SECRET;
       await server.close();
     }
   });
 
   it("returns immutable public build information for deployment traceability", async () => {
-    process.env.ZOS_TEST_SECRET = "do-not-leak-from-build-info";
+    process.env.CYBEROS_TEST_SECRET = "do-not-leak-from-build-info";
     const server = await buildServer({
       config: testConfig(tempDir),
       db,
@@ -1102,7 +1102,7 @@ describe("API server", () => {
       });
       expect(response.payload).not.toContain("do-not-leak-from-build-info");
     } finally {
-      delete process.env.ZOS_TEST_SECRET;
+      delete process.env.CYBEROS_TEST_SECRET;
       await server.close();
     }
   });
@@ -1842,7 +1842,7 @@ describe("API server", () => {
         raidLevel: "1",
         devices: ["/dev/sda", "/dev/sdb"],
         filesystem: "ext4",
-        mountpoint: "/zos/data/media",
+        mountpoint: "/cyberos/data/media",
         mdDevice: "/dev/md/media",
         uuid: "11111111-2222-3333-4444-555555555555"
       };
@@ -1927,7 +1927,7 @@ describe("API server", () => {
     const server = await buildServer({
       config,
       db,
-      system: { commandRunner: storageCommandRunner({ mountpoint: "/zos/data/storage" }) }
+      system: { commandRunner: storageCommandRunner({ mountpoint: "/cyberos/data/storage" }) }
     });
 
     const missingConfirmation = await server.inject({
@@ -1991,7 +1991,7 @@ describe("API server", () => {
       action: "delete_pool",
       name: "storage",
       mdDevice: "/dev/md0",
-      mountpoint: "/zos/data/storage"
+      mountpoint: "/cyberos/data/storage"
     });
 
     await server.close();
@@ -2097,7 +2097,7 @@ describe("API server", () => {
       settings: {
         enabled: false,
         account: {
-          username: "zos-share",
+          username: "cyberos-share",
           passwordConfigured: false
         },
         shares: []
@@ -2201,7 +2201,7 @@ describe("API server", () => {
     expect(response.statusCode).toBe(502);
     expect(response.payload).not.toContain("new-secret");
     expect(getShareSettings(db)?.account).toEqual({
-      username: "zos-share",
+      username: "cyberos-share",
       password: "old-secret"
     });
     expect(listPendingApprovals(db)).toEqual([]);
@@ -2233,7 +2233,7 @@ describe("API server", () => {
     expect(proposed.json()).toMatchObject({
       settings: {
         account: {
-          username: "zos-share",
+          username: "cyberos-share",
           passwordConfigured: true
         }
       },
@@ -2249,7 +2249,7 @@ describe("API server", () => {
     expect(getShareSettings(db)).toMatchObject({
       enabled: true,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: "secret"
       },
       shares: [
@@ -2861,7 +2861,7 @@ describe("API server", () => {
 
   it("uses the configured apps directory for the default Compose runtime", async () => {
     const composeCommand = await writeComposeTestCommand();
-    const paths = resolveZosPaths(path.join(tempDir, "configured-zos-root"));
+    const paths = resolveCyberOsPaths(path.join(tempDir, "configured-cyberos-root"));
     const config = {
       ...testConfig(tempDir),
       paths,
@@ -3563,7 +3563,7 @@ describe("API server", () => {
           id: "compose-root:compose.yml",
           name: "media",
           projectKey: "media",
-          managedPath: "/zos/apps/media",
+          managedPath: "/cyberos/apps/media",
           services: ["jellyfin"],
           warnings: [],
           risk: "high",
@@ -3768,8 +3768,8 @@ describe("API server", () => {
       url: "/api/settings/agent-capability-policy",
       payload: {
         policies: {
-          "zos.files.read": "approve",
-          "zos.shell.run": "disabled"
+          "cyberos.files.read": "approve",
+          "cyberos.shell.run": "disabled"
         }
       }
     });
@@ -3778,7 +3778,7 @@ describe("API server", () => {
       url: "/api/settings/agent-capability-policy",
       payload: {
         policies: {
-          "zos.shell.run": "unknown"
+          "cyberos.shell.run": "unknown"
         }
       }
     });
@@ -3787,15 +3787,15 @@ describe("API server", () => {
     expect(defaults.json()).toMatchObject({
       settings: {
         policies: {
-          "zos.files.list": "auto",
-          "zos.files.read": "auto",
-          "zos.files.search": "auto",
-          "zos.files.grep": "auto",
-          "zos.files.find": "auto",
-          "zos.files.mutate": "approve",
-          "zos.files.edit": "approve",
-          "zos.files.write": "approve",
-          "zos.shell.run": "confirm"
+          "cyberos.files.list": "auto",
+          "cyberos.files.read": "auto",
+          "cyberos.files.search": "auto",
+          "cyberos.files.grep": "auto",
+          "cyberos.files.find": "auto",
+          "cyberos.files.mutate": "approve",
+          "cyberos.files.edit": "approve",
+          "cyberos.files.write": "approve",
+          "cyberos.shell.run": "confirm"
         }
       }
     });
@@ -3803,8 +3803,8 @@ describe("API server", () => {
     expect(saved.json()).toMatchObject({
       settings: {
         policies: {
-          "zos.files.read": "approve",
-          "zos.shell.run": "disabled"
+          "cyberos.files.read": "approve",
+          "cyberos.shell.run": "disabled"
         }
       }
     });
@@ -3814,13 +3814,12 @@ describe("API server", () => {
 
   it("pairs and toggles the built-in Agent MCP without exposing its token", async () => {
     const tokenFile = path.join(tempDir, "config", "mcp", "pi.token");
-    const config: ZosConfig = {
+    const config: CyberOsConfig = {
       ...testConfig(tempDir),
       mcp: {
         enabled: true,
         piEnabled: false,
         piTokenFile: tokenFile,
-        legacyPiToolsEnabled: false,
         externalEnabled: false,
         shellEnabled: false,
         allowedHosts: ["localhost", "127.0.0.1", "[::1]"],
@@ -3847,7 +3846,7 @@ describe("API server", () => {
       settings: { enabled: true, available: true, paired: true, status: "ready" }
     });
     expect(enabled.payload).not.toContain(token);
-    expect(token).toMatch(/^zos_mcp_[A-Za-z0-9_-]{43}$/u);
+    expect(token).toMatch(/^cyberos_mcp_[A-Za-z0-9_-]{43}$/u);
     expect(tokenStat.mode & 0o777).toBe(0o600);
     expect(listMcpClients(db)).toEqual([
       expect.objectContaining({ name: "Built-in Pi", kind: "pi", revokedAt: null })
@@ -4118,7 +4117,7 @@ describe("API server", () => {
     const first = createCapabilityProposal(db, {
       subjectId: "pi:first",
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", targetPath: "first" },
       proposal: { summary: "Create first", targetPath: "first" },
@@ -4127,7 +4126,7 @@ describe("API server", () => {
     const second = createCapabilityProposal(db, {
       subjectId: "pi:second",
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", targetPath: "second" },
       proposal: { summary: "Create second", targetPath: "second" },
@@ -4136,7 +4135,7 @@ describe("API server", () => {
     const unlinked = createCapabilityProposal(db, {
       subjectId: "pi:unlinked",
       subjectKind: "pi",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", targetPath: "unlinked" },
       proposal: { summary: "Create unlinked", targetPath: "unlinked" },
@@ -4218,7 +4217,7 @@ describe("API server", () => {
     const proposal = createCapabilityProposal(db, {
       subjectId: session.id,
       subjectKind: "pi",
-      capabilityId: "zos.files.read",
+      capabilityId: "cyberos.files.read",
       risk: "low",
       redactedInput: { path: "hello.txt" },
       proposal: { summary: "Read hello.txt" },
@@ -4261,7 +4260,7 @@ describe("API server", () => {
     const client = createMcpClient(db, {
       name: "Built-in Pi",
       kind: "pi",
-      scopes: ["zos:settings:propose"]
+      scopes: ["cyberos:settings:propose"]
     });
     const requiredSecrets = [{ name: "apiKey", label: "Model API key", minLength: 1, maxLength: 4096 }];
     const prepared = {
@@ -4283,13 +4282,13 @@ describe("API server", () => {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "pi",
-      capabilityId: "zos.settings.update-propose",
+      capabilityId: "cyberos.settings.update-propose",
       risk: "high",
       redactedInput: { request: prepared.privatePayload.request },
       proposal: {
         kind: "domain_adapter",
         version: 1,
-        capabilityId: "zos.settings.update-propose",
+        capabilityId: "cyberos.settings.update-propose",
         title: "Update settings",
         summary: prepared.summary,
         target: null,
@@ -4301,7 +4300,7 @@ describe("API server", () => {
       privatePayload: {
         kind: "domain_adapter",
         version: 1,
-        capabilityId: "zos.settings.update-propose",
+        capabilityId: "cyberos.settings.update-propose",
         prepared
       },
       expiresAt: new Date(Date.now() + 60_000).toISOString()
@@ -5908,7 +5907,7 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("rolls back an applied trash operation by restoring from ZOS trash", async () => {
+  it("rolls back an applied trash operation by restoring from CyberOS trash", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const mutation = await server.inject({
       method: "POST",
@@ -6197,7 +6196,7 @@ class FakeBluetoothManager implements BluetoothManagerRuntime {
     collectedAt: "2026-10-20T00:00:00.000Z",
     backend: "BlueZ",
     available: true,
-    adapters: [{ id: "adapter-hci0", address: "00:11:22:33:44:55", name: "hci0", alias: "ZOS", state: "powered", powered: true, discovering: false, defaultAdapter: true }],
+    adapters: [{ id: "adapter-hci0", address: "00:11:22:33:44:55", name: "hci0", alias: "CyberOS", state: "powered", powered: true, discovering: false, defaultAdapter: true }],
     devices: [{ adapterId: "adapter-hci0", address: "AA:BB:CC:DD:EE:FF", name: "Headphones", alias: null, type: "headset", rssi: -42, paired: true, trusted: false, connected: false, servicesResolved: true, lastSeenAt: null }],
     scan: { active: false, adapterId: null, startedAt: null, endsAt: null },
     challenge: null,
@@ -6396,10 +6395,10 @@ async function closeNetServer(server: net.Server): Promise<void> {
   });
 }
 
-function testConfig(dataDir: string): ZosConfig {
+function testConfig(dataDir: string): CyberOsConfig {
   return {
     dataDir,
-    databasePath: path.join(dataDir, "zos.sqlite"),
+    databasePath: path.join(dataDir, "cyberos.sqlite"),
     api: {
       host: "127.0.0.1",
       port: 3010,
@@ -6425,12 +6424,12 @@ function testConfig(dataDir: string): ZosConfig {
       consoleShells: ["/bin/sh", "/bin/bash"],
     },
     hostd: {
-      socketPath: "/run/zos/hostd.sock"
+      socketPath: "/run/cyberos/hostd.sock"
     },
     shares: {
       enabled: false,
       account: {
-        username: "zos-share",
+        username: "cyberos-share",
         password: null
       },
       shares: []
@@ -6453,7 +6452,7 @@ function testConfig(dataDir: string): ZosConfig {
       audioOutput: "alsa",
       audioDevice: null,
       hwdec: "auto-safe",
-      user: "zos"
+      user: "cyberos"
     },
     nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
@@ -6463,7 +6462,7 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
   return {
     enabled: true,
     account: {
-      username: "zos-share",
+      username: "cyberos-share",
       password
     },
     shares: [
@@ -6514,7 +6513,7 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
   };
 }
 
-function dockerEnabledConfig(dataDir: string, overrides: Partial<ZosConfig["docker"]> = {}): ZosConfig {
+function dockerEnabledConfig(dataDir: string, overrides: Partial<CyberOsConfig["docker"]> = {}): CyberOsConfig {
   const config = testConfig(dataDir);
   return {
     ...config,
@@ -6769,7 +6768,7 @@ class FakeShareHostd {
     }
     return {
       appliedAt: "2026-01-01T00:00:00.000Z",
-      files: ["/etc/samba/smb.conf.d/zos-shares.conf"],
+      files: ["/etc/samba/smb.conf.d/cyberos-shares.conf"],
       services: ["smbd.service", "nmbd.service"]
     };
   }
@@ -6785,7 +6784,7 @@ class FakeDockerCompose implements DockerComposeRuntime {
         id: "compose-root:compose.yml",
         name: "media",
         projectKey: "media",
-        managedPath: "/zos/apps/media",
+        managedPath: "/cyberos/apps/media",
         services: ["jellyfin"],
         warnings: [],
         risk: "medium",
@@ -6864,5 +6863,5 @@ async function git(args: string[], cwd = rootDir): Promise<void> {
 }
 
 async function gitCommit(message: string, cwd = rootDir): Promise<void> {
-  await git(["-c", "user.name=ZOS", "-c", "user.email=zos@example.test", "commit", "-m", message], cwd);
+  await git(["-c", "user.name=CyberOS", "-c", "user.email=cyberos@example.test", "commit", "-m", message], cwd);
 }

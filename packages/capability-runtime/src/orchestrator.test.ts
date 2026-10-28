@@ -2,7 +2,7 @@ import { access, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CapabilityError } from "@zos/capabilities";
+import { CapabilityError } from "@cyberos/capabilities";
 import {
   createCapabilityRun,
   cancelOwnedCapabilityRun,
@@ -17,11 +17,11 @@ import {
   getCapabilityRunPayload,
   listCapabilityRunEvents,
   linkAgentJobToCapabilityRun,
-  openZosDb,
+  openCyberOsDb,
   saveAgentCapabilityPolicySettings,
-  type ZosDatabase
-} from "@zos/db";
-import type { ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import type { CyberOsConfig } from "@cyberos/shared";
 import {
   capabilityRunSecretRequirements,
   executeApprovedCapabilityRun,
@@ -36,14 +36,14 @@ import type { CapabilityDomainAdapter } from "./adapters.js";
 
 let tempDir: string;
 let rootDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-capability-runtime-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-capability-runtime-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
   await writeFile(path.join(rootDir, "source.txt"), "version one", "utf8");
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir }]);
 });
 
@@ -54,11 +54,11 @@ afterEach(async () => {
 
 describe("capability mutation runtime", () => {
   it("executes an approved Pi MCP read and stores its result for continuation", async () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:read"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:read"] });
     const proposed = await proposePiMcpFileCapability({
       dependencies: dependencies(),
       subject: { id: client.id, clientId: client.id, kind: "pi", scopes: new Set(client.scopes) },
-      capabilityId: "zos.files.read",
+      capabilityId: "cyberos.files.read",
       request: { rootId: "primary", path: "source.txt" },
       requiresConfirmation: false
     });
@@ -80,11 +80,11 @@ describe("capability mutation runtime", () => {
   });
 
   it("rechecks Agent policy immediately before an approved capability executes", async () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:read"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:read"] });
     const proposed = await proposePiMcpFileCapability({
       dependencies: dependencies(),
       subject: { id: client.id, clientId: client.id, kind: "pi", scopes: new Set(client.scopes) },
-      capabilityId: "zos.files.read",
+      capabilityId: "cyberos.files.read",
       request: { rootId: "primary", path: "source.txt" },
       requiresConfirmation: false
     });
@@ -98,7 +98,7 @@ describe("capability mutation runtime", () => {
     })).not.toBeNull();
     const defaults = defaultAgentCapabilityPolicySettings();
     saveAgentCapabilityPolicySettings(db, {
-      policies: { ...defaults.policies, "zos.files.read": "disabled" }
+      policies: { ...defaults.policies, "cyberos.files.read": "disabled" }
     });
 
     const run = await executeApprovedCapabilityRun(dependencies(), proposed.runId!);
@@ -108,7 +108,7 @@ describe("capability mutation runtime", () => {
   });
 
   it("rejects an approved proposal when the source revision changed", async () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
     const proposed = await proposeFileMutation({
       dependencies: dependencies(),
       subject: subject(client.id),
@@ -132,7 +132,7 @@ describe("capability mutation runtime", () => {
   });
 
   it("rechecks client scopes immediately before execution", async () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
     const proposed = await proposeFileMutation({
       dependencies: dependencies(),
       subject: subject(client.id),
@@ -156,7 +156,7 @@ describe("capability mutation runtime", () => {
 
   it("rejects proposals while a required NAS root is not ready", async () => {
     ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir, mountPolicy: "required" }]);
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
 
     await expect(proposeFileMutation({
       dependencies: dependencies(),
@@ -169,7 +169,7 @@ describe("capability mutation runtime", () => {
     const outside = path.join(tempDir, "outside.txt");
     await writeFile(outside, "outside", "utf8");
     await symlink(outside, path.join(rootDir, "linked.txt"));
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
 
     await expect(proposeFileMutation({
       dependencies: dependencies(),
@@ -179,12 +179,12 @@ describe("capability mutation runtime", () => {
   });
 
   it("marks interrupted destructive work failed without replaying it", async () => {
-    const client = createMcpClient(db, { name: "Agent", kind: "local", scopes: ["zos:files:propose"] });
+    const client = createMcpClient(db, { name: "Agent", kind: "local", scopes: ["cyberos:files:propose"] });
     const run = createCapabilityRun(db, {
       clientId: client.id,
       subjectId: client.id,
       subjectKind: "local",
-      capabilityId: "zos.files.mutate",
+      capabilityId: "cyberos.files.mutate",
       risk: "high",
       redactedInput: { operation: "mkdir", rootId: "primary", targetPath: "NeverCreate" },
       state: "running",
@@ -213,25 +213,25 @@ describe("capability mutation runtime", () => {
       }
     })).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
-      message: "Legacy bash execution is disabled; use zos.shell.run with structured argv"
+      message: "Legacy bash execution is disabled; use cyberos.shell.run with structured argv"
     });
   });
 
   it("deduplicates identical domain proposals and rejects conflicting idempotency input", async () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:settings:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:settings:propose"] });
     const adapter = recordingAdapter();
-    const runtime = domainDependencies("zos.settings.update-propose", adapter);
+    const runtime = domainDependencies("cyberos.settings.update-propose", adapter);
     const first = await proposeDomainCapability({
       dependencies: runtime,
-      subject: domainSubject(client.id, "zos:settings:propose"),
-      capabilityId: "zos.settings.update-propose",
+      subject: domainSubject(client.id, "cyberos:settings:propose"),
+      capabilityId: "cyberos.settings.update-propose",
       request: { operation: "agent_policy", value: "first" },
       idempotencyKey: "settings-change-0001"
     });
     const repeated = await proposeDomainCapability({
       dependencies: runtime,
-      subject: domainSubject(client.id, "zos:settings:propose"),
-      capabilityId: "zos.settings.update-propose",
+      subject: domainSubject(client.id, "cyberos:settings:propose"),
+      capabilityId: "cyberos.settings.update-propose",
       request: { value: "first", operation: "agent_policy" },
       idempotencyKey: "settings-change-0001"
     });
@@ -239,21 +239,21 @@ describe("capability mutation runtime", () => {
     expect(repeated.runId).toBe(first.runId);
     await expect(proposeDomainCapability({
       dependencies: runtime,
-      subject: domainSubject(client.id, "zos:settings:propose"),
-      capabilityId: "zos.settings.update-propose",
+      subject: domainSubject(client.id, "cyberos:settings:propose"),
+      capabilityId: "cyberos.settings.update-propose",
       request: { operation: "agent_policy", value: "different" },
       idempotencyKey: "settings-change-0001"
     })).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("resumes an approved queued domain run after restart", async () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:notifications:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:notifications:propose"] });
     const adapter = recordingAdapter();
-    const runtime = domainDependencies("zos.notifications.read-state-propose", adapter);
+    const runtime = domainDependencies("cyberos.notifications.read-state-propose", adapter);
     const proposed = await proposeDomainCapability({
       dependencies: runtime,
-      subject: domainSubject(client.id, "zos:notifications:propose"),
-      capabilityId: "zos.notifications.read-state-propose",
+      subject: domainSubject(client.id, "cyberos:notifications:propose"),
+      capabilityId: "cyberos.notifications.read-state-propose",
       request: { operation: "read_all" }
     });
     linkProposalToAgentJob(proposed.runId!);
@@ -277,13 +277,13 @@ describe("capability mutation runtime", () => {
   });
 
   it("executes secret-bearing work from memory without persisting the secret", async () => {
-    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["zos:settings:propose"] });
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:settings:propose"] });
     const adapter = recordingAdapter(true);
-    const runtime = domainDependencies("zos.settings.update-propose", adapter);
+    const runtime = domainDependencies("cyberos.settings.update-propose", adapter);
     const proposed = await proposeDomainCapability({
       dependencies: runtime,
-      subject: domainSubject(client.id, "zos:settings:propose"),
-      capabilityId: "zos.settings.update-propose",
+      subject: domainSubject(client.id, "cyberos:settings:propose"),
+      capabilityId: "cyberos.settings.update-propose",
       request: { operation: "model_provider", replaceApiKey: true }
     });
     linkProposalToAgentJob(proposed.runId!);
@@ -320,7 +320,7 @@ describe("capability mutation runtime", () => {
 });
 
 function subject(clientId: string) {
-  return { id: clientId, clientId, kind: "pi" as const, scopes: new Set(["zos:files:propose"]) };
+  return { id: clientId, clientId, kind: "pi" as const, scopes: new Set(["cyberos:files:propose"]) };
 }
 
 function domainSubject(clientId: string, scope: string) {
@@ -370,20 +370,20 @@ function dependencies() {
   return { db, config: testConfig() };
 }
 
-function testConfig(): ZosConfig {
+function testConfig(): CyberOsConfig {
   return {
     environment: "development",
     dataDir: tempDir,
-    databasePath: path.join(tempDir, "zos.sqlite"),
+    databasePath: path.join(tempDir, "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 100 },
     admin: { displayName: "Admin", authMode: "local-only" },
     model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
     hostd: { socketPath: path.join(tempDir, "hostd.sock") },
-    shares: { enabled: false, account: { username: "zos", password: null }, shares: [] },
-    terminal: { user: "zos", termuxSocketPath: path.join(tempDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
-    vodPlayer: { enabled: false, socketPath: path.join(tempDir, "vod.sock"), statePath: path.join(tempDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "zos" },
+    shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
+    terminal: { user: "cyberos", termuxSocketPath: path.join(tempDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    vodPlayer: { enabled: false, socketPath: path.join(tempDir, "vod.sock"), statePath: path.join(tempDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
     nasRoots: [{ id: "primary", name: "Primary", path: rootDir }]
   };
 }

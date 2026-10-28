@@ -196,7 +196,7 @@ mod tests {
             rules: vec![AlertRule {
                 id: "load".to_owned(),
                 name: "High load".to_owned(),
-                metric: "zos_host_load1".to_owned(),
+                metric: "cyberos_host_load1".to_owned(),
                 selector: BTreeMap::new(),
                 transform: MetricTransform::Value,
                 aggregation: Aggregation::Last,

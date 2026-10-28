@@ -108,8 +108,8 @@ impl AlertStore {
                             key,
                             message_id,
                             serde_json::to_string(&recipients)?,
-                            format!("ZOS alert: {title}"),
-                            format!("ZOS alert is firing: {title}"),
+                            format!("CyberOS alert: {title}"),
+                            format!("CyberOS alert is firing: {title}"),
                             iso(due_ms),
                             now,
                             now
@@ -273,7 +273,7 @@ pub(super) fn escalation_delivery_identity(
     (
         format!("{incident_id}:{restart_epoch_ms}:{stage_ordinal}:{repeat_ordinal}"),
         format!(
-            "<zos-alert-{incident_id}-{restart_epoch_ms}-{stage_ordinal}-{repeat_ordinal}@localhost>"
+            "<cyberos-alert-{incident_id}-{restart_epoch_ms}-{stage_ordinal}-{repeat_ordinal}@localhost>"
         ),
     )
 }

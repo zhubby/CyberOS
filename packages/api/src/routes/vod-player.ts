@@ -5,9 +5,9 @@ import {
   getBluetoothSettings,
   getOperationNotificationByOperation,
   updateOperationNotificationForOperation
-} from "@zos/db";
-import { inferMimeType, inferPreviewKind } from "@zos/nas-tools";
-import type { VodPlayerCommand, VodPlayerErrorCode, VodPlayerStatus } from "@zos/shared";
+} from "@cyberos/db";
+import { inferMimeType, inferPreviewKind } from "@cyberos/nas-tools";
+import type { VodPlayerCommand, VodPlayerErrorCode, VodPlayerStatus } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { createVodPlayerRuntime, VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";

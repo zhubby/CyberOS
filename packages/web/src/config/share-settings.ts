@@ -1,4 +1,4 @@
-import type { DlnaMediaType, ShareProtocol } from "@zos/shared";
+import type { DlnaMediaType, ShareProtocol } from "@cyberos/shared";
 import type { NasRoot, ShareSettings, ShareSettingsInput } from "../api.js";
 
 export const SHARE_PROTOCOLS = ["smb", "webdav", "ftp", "nfs", "dlna"] as const satisfies readonly ShareProtocol[];
@@ -107,7 +107,7 @@ export function shareSettingsToForm(settings: ShareSettings | null, roots: NasRo
   return {
     enabled: settings?.enabled ?? false,
     account: {
-      username: settings?.account.username ?? "zos-share",
+      username: settings?.account.username ?? "cyberos-share",
       password: "",
       clearPassword: false,
       passwordConfigured: settings?.account.passwordConfigured ?? false
@@ -200,7 +200,7 @@ export function defaultShareProtocols(id = "share-1", name = "Share 1"): SharePr
 
 export function shareFormToInput(form: ShareSettingsFormState): ShareSettingsInput {
   const account: ShareSettingsInput["account"] = {
-    username: form.account.username.trim() || "zos-share"
+    username: form.account.username.trim() || "cyberos-share"
   };
   if (form.account.password.length > 0) {
     account.password = form.account.password;

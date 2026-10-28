@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { AgentSessionRecord, NasRootRecord } from "@zos/shared";
+import type { AgentSessionRecord, NasRootRecord } from "@cyberos/shared";
 import { runReadOnlyAgentTurn, type AgentEmitEvent } from "./read-only-agent.js";
 
 let tempDir: string;
@@ -10,7 +10,7 @@ let root: NasRootRecord;
 let session: AgentSessionRecord;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-agent-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-agent-"));
   await mkdir(path.join(tempDir, "docs"));
   await writeFile(path.join(tempDir, "docs", "plan.txt"), "hello");
   root = {

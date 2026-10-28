@@ -1,84 +1,84 @@
-/* ZOS HUD primitives: shared by the Web app, TV shell, and documentation. */
+/* CyberOS HUD primitives: shared by the Web app, TV shell, and documentation. */
 
 :root {
   /* Primitive colors */
-  --zos-hud-void: #050a0e;
-  --zos-hud-deep: #0d090d;
-  --zos-hud-panel: #160d12;
-  --zos-hud-panel-raised: #211016;
-  --zos-hud-panel-hover: #29131b;
-  --zos-hud-text: #f4ece7;
-  --zos-hud-muted: #bda8ad;
-  --zos-hud-dim: #8c747a;
-  --zos-hud-yellow: #fcee0a;
-  --zos-hud-red: #ff003c;
-  --zos-hud-red-soft: #ff335f;
-  --zos-hud-cyan: #00f0ff;
-  --zos-hud-cyan-soft: #33e6f2;
-  --zos-hud-green: #63d69a;
-  --zos-hud-amber: #ffc857;
+  --cyberos-hud-void: #050a0e;
+  --cyberos-hud-deep: #0d090d;
+  --cyberos-hud-panel: #160d12;
+  --cyberos-hud-panel-raised: #211016;
+  --cyberos-hud-panel-hover: #29131b;
+  --cyberos-hud-text: #f4ece7;
+  --cyberos-hud-muted: #bda8ad;
+  --cyberos-hud-dim: #8c747a;
+  --cyberos-hud-yellow: #fcee0a;
+  --cyberos-hud-red: #ff003c;
+  --cyberos-hud-red-soft: #ff335f;
+  --cyberos-hud-cyan: #00f0ff;
+  --cyberos-hud-cyan-soft: #33e6f2;
+  --cyberos-hud-green: #63d69a;
+  --cyberos-hud-amber: #ffc857;
 
   /* Primitive alpha colors */
-  --zos-hud-line: rgb(255 51 95 / 42%);
-  --zos-hud-line-soft: rgb(255 119 145 / 18%);
-  --zos-hud-line-neutral: rgb(244 236 231 / 16%);
-  --zos-hud-red-wash: rgb(255 0 60 / 12%);
-  --zos-hud-cyan-wash: rgb(0 240 255 / 10%);
-  --zos-hud-yellow-wash: rgb(252 238 10 / 10%);
-  --zos-hud-overlay: rgb(5 10 14 / 86%);
+  --cyberos-hud-line: rgb(255 51 95 / 42%);
+  --cyberos-hud-line-soft: rgb(255 119 145 / 18%);
+  --cyberos-hud-line-neutral: rgb(244 236 231 / 16%);
+  --cyberos-hud-red-wash: rgb(255 0 60 / 12%);
+  --cyberos-hud-cyan-wash: rgb(0 240 255 / 10%);
+  --cyberos-hud-yellow-wash: rgb(252 238 10 / 10%);
+  --cyberos-hud-overlay: rgb(5 10 14 / 86%);
 
   /* Primitive type, spacing, motion, and geometry */
-  --zos-font-ui: "Rajdhani", "Noto Sans SC Variable", "Noto Sans SC", sans-serif;
-  --zos-font-body: "Noto Sans SC Variable", "Noto Sans SC", "Rajdhani", sans-serif;
-  --zos-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --zos-hud-space-1: 4px;
-  --zos-hud-space-2: 8px;
-  --zos-hud-space-3: 12px;
-  --zos-hud-space-4: 16px;
-  --zos-hud-space-5: 20px;
-  --zos-hud-space-6: 24px;
-  --zos-hud-duration-state: 140ms;
-  --zos-hud-duration-reveal: 220ms;
-  --zos-hud-duration-scan: 420ms;
-  --zos-hud-easing: cubic-bezier(0.2, 0, 0, 1);
-  --zos-hud-cut-sm: 8px;
-  --zos-hud-cut-md: 12px;
-  --zos-hud-cut-lg: 18px;
+  --cyberos-font-ui: "Rajdhani", "Noto Sans SC Variable", "Noto Sans SC", sans-serif;
+  --cyberos-font-body: "Noto Sans SC Variable", "Noto Sans SC", "Rajdhani", sans-serif;
+  --cyberos-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --cyberos-hud-space-1: 4px;
+  --cyberos-hud-space-2: 8px;
+  --cyberos-hud-space-3: 12px;
+  --cyberos-hud-space-4: 16px;
+  --cyberos-hud-space-5: 20px;
+  --cyberos-hud-space-6: 24px;
+  --cyberos-hud-duration-state: 140ms;
+  --cyberos-hud-duration-reveal: 220ms;
+  --cyberos-hud-duration-scan: 420ms;
+  --cyberos-hud-easing: cubic-bezier(0.2, 0, 0, 1);
+  --cyberos-hud-cut-sm: 8px;
+  --cyberos-hud-cut-md: 12px;
+  --cyberos-hud-cut-lg: 18px;
 
   /* Semantic surface and state roles */
-  --zos-color-canvas: var(--zos-hud-void);
-  --zos-color-surface: var(--zos-hud-deep);
-  --zos-color-surface-raised: var(--zos-hud-panel);
-  --zos-color-surface-strong: var(--zos-hud-panel-raised);
-  --zos-color-surface-hover: var(--zos-hud-panel-hover);
-  --zos-color-text: var(--zos-hud-text);
-  --zos-color-text-muted: var(--zos-hud-muted);
-  --zos-color-text-dim: var(--zos-hud-dim);
-  --zos-color-command: var(--zos-hud-yellow);
-  --zos-color-danger: var(--zos-hud-red);
-  --zos-color-focus: var(--zos-hud-cyan);
-  --zos-color-connected: var(--zos-hud-cyan-soft);
-  --zos-color-success: var(--zos-hud-green);
-  --zos-color-warning: var(--zos-hud-amber);
-  --zos-color-border: var(--zos-hud-line-neutral);
-  --zos-color-border-emphasis: var(--zos-hud-line);
+  --cyberos-color-canvas: var(--cyberos-hud-void);
+  --cyberos-color-surface: var(--cyberos-hud-deep);
+  --cyberos-color-surface-raised: var(--cyberos-hud-panel);
+  --cyberos-color-surface-strong: var(--cyberos-hud-panel-raised);
+  --cyberos-color-surface-hover: var(--cyberos-hud-panel-hover);
+  --cyberos-color-text: var(--cyberos-hud-text);
+  --cyberos-color-text-muted: var(--cyberos-hud-muted);
+  --cyberos-color-text-dim: var(--cyberos-hud-dim);
+  --cyberos-color-command: var(--cyberos-hud-yellow);
+  --cyberos-color-danger: var(--cyberos-hud-red);
+  --cyberos-color-focus: var(--cyberos-hud-cyan);
+  --cyberos-color-connected: var(--cyberos-hud-cyan-soft);
+  --cyberos-color-success: var(--cyberos-hud-green);
+  --cyberos-color-warning: var(--cyberos-hud-amber);
+  --cyberos-color-border: var(--cyberos-hud-line-neutral);
+  --cyberos-color-border-emphasis: var(--cyberos-hud-line);
 
   /* Shared component roles */
-  --zos-control-bg: var(--zos-color-surface-raised);
-  --zos-control-bg-hover: var(--zos-color-surface-hover);
-  --zos-control-fg: var(--zos-color-text);
-  --zos-control-border: var(--zos-color-border);
-  --zos-control-focus: var(--zos-color-focus);
-  --zos-command-bg: var(--zos-color-command);
-  --zos-command-fg: var(--zos-hud-void);
-  --zos-danger-bg: var(--zos-color-danger);
-  --zos-danger-fg: var(--zos-hud-void);
-  --zos-panel-shadow: 6px 6px 0 rgb(255 0 60 / 28%);
-  --zos-focus-ring: 0 0 0 1px var(--zos-hud-void), 0 0 0 3px var(--zos-color-focus);
-  --zos-hud-grid:
+  --cyberos-control-bg: var(--cyberos-color-surface-raised);
+  --cyberos-control-bg-hover: var(--cyberos-color-surface-hover);
+  --cyberos-control-fg: var(--cyberos-color-text);
+  --cyberos-control-border: var(--cyberos-color-border);
+  --cyberos-control-focus: var(--cyberos-color-focus);
+  --cyberos-command-bg: var(--cyberos-color-command);
+  --cyberos-command-fg: var(--cyberos-hud-void);
+  --cyberos-danger-bg: var(--cyberos-color-danger);
+  --cyberos-danger-fg: var(--cyberos-hud-void);
+  --cyberos-panel-shadow: 6px 6px 0 rgb(255 0 60 / 28%);
+  --cyberos-focus-ring: 0 0 0 1px var(--cyberos-hud-void), 0 0 0 3px var(--cyberos-color-focus);
+  --cyberos-hud-grid:
     linear-gradient(90deg, rgb(255 51 95 / 3%) 1px, transparent 1px),
     linear-gradient(rgb(51 230 242 / 2.5%) 1px, transparent 1px);
-  --zos-hud-scanlines: repeating-linear-gradient(
+  --cyberos-hud-scanlines: repeating-linear-gradient(
     180deg,
     rgb(255 255 255 / 1.6%) 0,
     rgb(255 255 255 / 1.6%) 1px,

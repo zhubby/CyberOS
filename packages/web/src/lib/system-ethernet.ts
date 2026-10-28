@@ -1,4 +1,4 @@
-import type { SystemEthernetConfig, SystemEthernetStatus } from "@zos/shared";
+import type { SystemEthernetConfig, SystemEthernetStatus } from "@cyberos/shared";
 
 export type SystemEthernetTone = "ready" | "warning" | "offline" | "neutral";
 

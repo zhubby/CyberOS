@@ -197,7 +197,7 @@ async fn create_pool(
         run_checked(
             runner,
             "chown",
-            &["zos:zos", &actual_mountpoint.to_string_lossy()],
+            &["cyberos:cyberos", &actual_mountpoint.to_string_lossy()],
             None,
         )
         .await?;
@@ -206,7 +206,7 @@ async fn create_pool(
             "setfacl",
             &[
                 "-m",
-                "u:zos:rwx,d:u:zos:rwx",
+                "u:cyberos:rwx,d:u:cyberos:rwx",
                 &actual_mountpoint.to_string_lossy(),
             ],
             None,
@@ -502,7 +502,7 @@ mod tests {
         let invalid = serde_json::from_value::<StorageOperation>(serde_json::json!({
             "action": "create_pool", "name": "data", "raidLevel": "5",
             "devices": ["/dev/sda", "/dev/sdb"], "filesystem": "ext4",
-            "mountpoint": "/zos/data/data", "risk": "high"
+            "mountpoint": "/cyberos/data/data", "risk": "high"
         }))
         .unwrap();
         assert!(validate_operation(&invalid).is_err());
@@ -514,7 +514,7 @@ mod tests {
         assert!(validate_operation(&escape).is_err());
         let non_raid_device = serde_json::from_value::<StorageOperation>(serde_json::json!({
             "action": "delete_pool", "name": "data", "mdDevice": "/dev/sda",
-            "devices": ["/dev/sdb"], "mountpoint": "/zos/data/data", "risk": "high"
+            "devices": ["/dev/sdb"], "mountpoint": "/cyberos/data/data", "risk": "high"
         }))
         .unwrap();
         assert!(validate_operation(&non_raid_device).is_err());
@@ -611,7 +611,7 @@ mod tests {
         let payload = serde_json::json!({
             "action": "create_pool", "name": "data", "raidLevel": "1",
             "devices": ["/dev/sda", "/dev/sdb"], "filesystem": "ext4",
-            "mountpoint": "/zos/data/data", "risk": "high"
+            "mountpoint": "/cyberos/data/data", "risk": "high"
         });
         let runner = FakeRunner::default();
         operation_with_options(payload, &runner, &options)
@@ -621,7 +621,7 @@ mod tests {
             fs::read_to_string(&options.fstab_path)
                 .await
                 .unwrap()
-                .contains("UUID=01234567-89ab-cdef /zos/data/data ext4")
+                .contains("UUID=01234567-89ab-cdef /cyberos/data/data ext4")
         );
         assert_eq!(
             fs::metadata(&options.fstab_path)
@@ -644,7 +644,7 @@ mod tests {
                 command == "chown"
                     && args
                         == &[
-                            "zos:zos",
+                            "cyberos:cyberos",
                             &options.mount_root.join("data").to_string_lossy(),
                         ]
             })
@@ -654,11 +654,13 @@ mod tests {
             calls
                 .iter()
                 .position(|(command, args)| command == "setfacl"
-                    && args.iter().any(|arg| arg == "u:zos:rwx,d:u:zos:rwx"))
+                    && args
+                        .iter()
+                        .any(|arg| arg == "u:cyberos:rwx,d:u:cyberos:rwx"))
                 .is_some_and(|index| index > chown_index)
         );
         assert!(calls.iter().any(|(command, args)| command == "systemctl"
-            && args.contains(&"zos-data-data.mount".to_owned())));
+            && args.contains(&"cyberos-data-data.mount".to_owned())));
     }
 
     #[tokio::test]
@@ -671,7 +673,7 @@ mod tests {
         let payload = serde_json::json!({
             "action": "create_pool", "name": "archive", "raidLevel": "1",
             "devices": ["/dev/sda", "/dev/sdb"], "filesystem": "btrfs",
-            "mountpoint": "/zos/data/archive", "risk": "high"
+            "mountpoint": "/cyberos/data/archive", "risk": "high"
         });
         let runner = FakeRunner::default();
 
@@ -683,7 +685,7 @@ mod tests {
             fs::read_to_string(&options.fstab_path)
                 .await
                 .unwrap()
-                .contains("UUID=01234567-89ab-cdef /zos/data/archive btrfs")
+                .contains("UUID=01234567-89ab-cdef /cyberos/data/archive btrfs")
         );
         assert!(
             runner
@@ -705,7 +707,7 @@ mod tests {
         let payload = serde_json::json!({
             "action": "create_pool", "name": "data", "raidLevel": "1",
             "devices": ["/dev/sda", "/dev/sdb"], "filesystem": "ext4",
-            "mountpoint": "/zos/data/data", "risk": "high"
+            "mountpoint": "/cyberos/data/data", "risk": "high"
         });
         let runner = FakeRunner {
             fail_command: Some("systemctl".to_owned()),
@@ -748,7 +750,7 @@ mod tests {
             let payload = serde_json::json!({
                 "action": "create_pool", "name": "data", "raidLevel": "1",
                 "devices": ["/dev/sda", "/dev/sdb"], "filesystem": "ext4",
-                "mountpoint": "/zos/data/data", "risk": "high"
+                "mountpoint": "/cyberos/data/data", "risk": "high"
             });
 
             assert!(
@@ -786,7 +788,7 @@ mod tests {
         let payload = serde_json::json!({
             "action": "create_pool", "name": "data", "raidLevel": "1",
             "devices": ["/dev/sda", "/dev/sdb"], "filesystem": "ext4",
-            "mountpoint": "/zos/data/data", "risk": "high"
+            "mountpoint": "/cyberos/data/data", "risk": "high"
         });
 
         assert!(
@@ -813,13 +815,13 @@ mod tests {
         let options = options(&temp);
         fs::write(
             &options.fstab_path,
-            "# fstab\nUUID=x /zos/data/data ext4 defaults 0 2\n",
+            "# fstab\nUUID=x /cyberos/data/data ext4 defaults 0 2\n",
         )
         .await
         .unwrap();
         let payload = serde_json::json!({
             "action": "delete_pool", "name": "data", "mdDevice": "/dev/md/data",
-            "devices": ["/dev/sda", "/dev/sdb"], "mountpoint": "/zos/data/data", "risk": "high"
+            "devices": ["/dev/sda", "/dev/sdb"], "mountpoint": "/cyberos/data/data", "risk": "high"
         });
         let runner = FakeRunner::default();
 
@@ -845,7 +847,7 @@ mod tests {
         let options = options(&temp);
         fs::write(
             &options.fstab_path,
-            "UUID=x /zos/data/data ext4 defaults 0 2\n",
+            "UUID=x /cyberos/data/data ext4 defaults 0 2\n",
         )
         .await
         .unwrap();
@@ -855,7 +857,7 @@ mod tests {
         };
         let payload = serde_json::json!({
             "action": "delete_pool", "name": "data", "mdDevice": "/dev/md/data",
-            "devices": ["/dev/sda", "/dev/sdb"], "mountpoint": "/zos/data/data", "risk": "high"
+            "devices": ["/dev/sda", "/dev/sdb"], "mountpoint": "/cyberos/data/data", "risk": "high"
         });
         assert!(
             operation_with_options(payload, &runner, &options)
@@ -864,7 +866,7 @@ mod tests {
         );
         assert_eq!(
             fs::read_to_string(&options.fstab_path).await.unwrap(),
-            "UUID=x /zos/data/data ext4 defaults 0 2\n"
+            "UUID=x /cyberos/data/data ext4 defaults 0 2\n"
         );
     }
 
@@ -872,7 +874,7 @@ mod tests {
     async fn rejects_delete_when_array_members_changed() {
         let temp = TempDir::new().unwrap();
         let options = options(&temp);
-        let original_fstab = "UUID=x /zos/data/data ext4 defaults 0 2\n";
+        let original_fstab = "UUID=x /cyberos/data/data ext4 defaults 0 2\n";
         fs::write(&options.fstab_path, original_fstab)
             .await
             .unwrap();
@@ -882,7 +884,7 @@ mod tests {
         };
         let payload = serde_json::json!({
             "action": "delete_pool", "name": "data", "mdDevice": "/dev/md/data",
-            "devices": ["/dev/sda", "/dev/sdb"], "mountpoint": "/zos/data/data", "risk": "high"
+            "devices": ["/dev/sda", "/dev/sdb"], "mountpoint": "/cyberos/data/data", "risk": "high"
         });
 
         let error = operation_with_options(payload, &runner, &options)

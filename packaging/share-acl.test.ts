@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-const script = fileURLToPath(new URL("scripts/zos-share-acl.mjs", import.meta.url));
+const script = fileURLToPath(new URL("scripts/cyberos-share-acl.mjs", import.meta.url));
 let directory: string | null = null;
 
 afterEach(async () => {
@@ -15,7 +15,7 @@ afterEach(async () => {
 
 describe("share ACL transaction", () => {
   it.skipIf(process.platform !== "linux")("changes only the shared tree and restores ACLs on rollback", async () => {
-    directory = await mkdtemp(path.join(os.tmpdir(), "zos-share-acl-real-"));
+    directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-share-acl-real-"));
     const shared = path.join(directory, "shared");
     const privatePath = path.join(directory, "private");
     const state = path.join(directory, "state.json");
@@ -26,7 +26,7 @@ describe("share ACL transaction", () => {
       process.execPath,
       [script, action, state, ...(transaction ? [transaction] : [])],
       { input: grants ? JSON.stringify({ grants }) : undefined, encoding: "utf8",
-        env: { ...process.env, ZOS_ROOT: directory!, ZOS_ACL_BACKUP_DIR: backup } }
+        env: { ...process.env, CYBEROS_ROOT: directory!, CYBEROS_ACL_BACKUP_DIR: backup } }
     );
     const grant = { path: shared, principal: "nobody", access: "write", scope: "tree" };
     const initial = runReal("prepare", [grant]);
@@ -50,7 +50,7 @@ describe("share ACL transaction", () => {
   });
 
   it.skipIf(process.platform !== "linux")("refuses to broaden another account through an ACL mask", async () => {
-    directory = await mkdtemp(path.join(os.tmpdir(), "zos-share-mask-"));
+    directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-share-mask-"));
     const shared = path.join(directory, "shared");
     const state = path.join(directory, "state.json");
     await mkdir(shared);
@@ -58,7 +58,7 @@ describe("share ACL transaction", () => {
     const result = spawnSync(process.execPath, [script, "prepare", state], {
       input: JSON.stringify({ grants: [{ path: shared, principal: "nobody", access: "write", scope: "tree" }] }),
       encoding: "utf8",
-      env: { ...process.env, ZOS_ROOT: directory, ZOS_ACL_BACKUP_DIR: path.join(directory, "system-backups", "permissions") }
+      env: { ...process.env, CYBEROS_ROOT: directory, CYBEROS_ACL_BACKUP_DIR: path.join(directory, "system-backups", "permissions") }
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Existing ACL mask needs separate review");
@@ -68,7 +68,7 @@ describe("share ACL transaction", () => {
   });
 
   it.skipIf(process.platform !== "linux")("restores write access when a read-only shared file is chmod 0644", async () => {
-    directory = await mkdtemp(path.join(os.tmpdir(), "zos-share-upgrade-"));
+    directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-share-upgrade-"));
     const shared = path.join(directory, "shared");
     const file = path.join(shared, "existing.txt");
     const state = path.join(directory, "state.json");
@@ -78,12 +78,12 @@ describe("share ACL transaction", () => {
     const runReal = (action: string, access: "read" | "write") => spawnSync(process.execPath,
       [script, action, state], {
         input: JSON.stringify({ grants: [{ path: shared, principal: "nobody", access, scope: "tree" }] }),
-        encoding: "utf8", env: { ...process.env, ZOS_ROOT: directory!, ZOS_ACL_BACKUP_DIR: backup }
+        encoding: "utf8", env: { ...process.env, CYBEROS_ROOT: directory!, CYBEROS_ACL_BACKUP_DIR: backup }
       });
     const first = runReal("prepare", "read");
     expect(first.status, first.stderr).toBe(0);
     expect(spawnSync(process.execPath, [script, "commit", state, first.stdout.trim()], {
-      env: { ...process.env, ZOS_ROOT: directory, ZOS_ACL_BACKUP_DIR: backup }
+      env: { ...process.env, CYBEROS_ROOT: directory, CYBEROS_ACL_BACKUP_DIR: backup }
     }).status).toBe(0);
     expect(spawnSync("setfacl", ["-n", "-m", "g::r--", file]).status).toBe(0);
     await chmod(file, 0o644);
@@ -100,7 +100,7 @@ describe("share ACL transaction", () => {
   });
 
   it.skipIf(process.platform !== "linux")("keeps masked execute rights masked on existing regular files", async () => {
-    directory = await mkdtemp(path.join(os.tmpdir(), "zos-share-file-mask-"));
+    directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-share-file-mask-"));
     const shared = path.join(directory, "shared");
     const file = path.join(shared, "existing.txt");
     const state = path.join(directory, "state.json");
@@ -111,7 +111,7 @@ describe("share ACL transaction", () => {
     const result = spawnSync(process.execPath, [script, "prepare", state], {
       input: JSON.stringify({ grants: [{ path: shared, principal: "www-data", access: "write", scope: "tree" }] }),
       encoding: "utf8",
-      env: { ...process.env, ZOS_ROOT: directory, ZOS_ACL_BACKUP_DIR: path.join(directory, "system-backups", "permissions") }
+      env: { ...process.env, CYBEROS_ROOT: directory, CYBEROS_ACL_BACKUP_DIR: path.join(directory, "system-backups", "permissions") }
     });
     expect(result.status, result.stderr).toBe(0);
     const acl = spawnSync("getfacl", ["-c", "-e", file], { encoding: "utf8" }).stdout;
@@ -143,18 +143,18 @@ describe("share ACL transaction", () => {
     const fixture = await setup();
     const prepared = run(fixture, "prepare", JSON.stringify({ grants: [
       { path: fixture.shared, principal: "www-data", access: "write", scope: "tree" }
-    ] }), undefined, { ZOS_FAKE_EXISTING: "1" });
+    ] }), undefined, { CYBEROS_FAKE_EXISTING: "1" });
     expect(prepared.status).not.toBe(0);
     expect(prepared.stderr).toContain("refusing to replace administrator permissions");
   });
 
-  it("rejects an ACL backup directory outside the configured ZOS root", async () => {
+  it("rejects an ACL backup directory outside the configured CyberOS root", async () => {
     const fixture = await setup();
     const result = run(fixture, "prepare", JSON.stringify({ grants: [] }), undefined, {
-      ZOS_ACL_BACKUP_DIR: path.join(os.tmpdir(), "outside-zos-root")
+      CYBEROS_ACL_BACKUP_DIR: path.join(os.tmpdir(), "outside-cyberos-root")
     });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("ZOS_ACL_BACKUP_DIR must be under");
+    expect(result.stderr).toContain("CYBEROS_ACL_BACKUP_DIR must be under");
   });
 
   it("removes stale state when a previously shared directory was deleted", async () => {
@@ -179,27 +179,27 @@ describe("share ACL transaction", () => {
     ]));
     const prepared = run(fixture, "prepare", JSON.stringify({ grants: [
       { path: fixture.shared, principal: "www-data", access: "read", scope: "tree" }
-    ] }), undefined, { ZOS_FAKE_MANAGED_CHILD: child });
+    ] }), undefined, { CYBEROS_FAKE_MANAGED_CHILD: child });
     expect(prepared.status, prepared.stderr).toBe(0);
   });
 });
 
 async function setup() {
-  directory = await mkdtemp(path.join(os.tmpdir(), "zos-share-acl-"));
+  directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-share-acl-"));
   const bin = path.join(directory, "bin");
   const shared = path.join(directory, "shared");
   await mkdir(bin);
   await mkdir(shared);
   const shim = `#!/bin/sh
-printf '%s %s\\n' "$(basename "$0")" "$*" >> "$ZOS_ACL_LOG"
+printf '%s %s\\n' "$(basename "$0")" "$*" >> "$CYBEROS_ACL_LOG"
 case "$(basename "$0")" in
   findmnt) printf '/\\n' ;;
   getfacl)
     for arg do :; done
     printf '# file: %s\\nuser::rwx\\n' "$arg"
-    if [ "$ZOS_FAKE_EXISTING" = 1 ]; then printf 'user:www-data:rwx\\n'; fi
-    if [ -n "$ZOS_FAKE_MANAGED_CHILD" ]; then
-      printf '# file: %s\\nuser:www-data:r-x\\n' "$ZOS_FAKE_MANAGED_CHILD"
+    if [ "$CYBEROS_FAKE_EXISTING" = 1 ]; then printf 'user:www-data:rwx\\n'; fi
+    if [ -n "$CYBEROS_FAKE_MANAGED_CHILD" ]; then
+      printf '# file: %s\\nuser:www-data:r-x\\n' "$CYBEROS_FAKE_MANAGED_CHILD"
     fi ;;
 esac
 `;
@@ -209,7 +209,7 @@ esac
     await chmod(target, 0o755);
   }
   return {
-    zosRoot: directory,
+    cyberosRoot: directory,
     bin,
     shared,
     state: path.join(directory, "state.json"),
@@ -231,9 +231,9 @@ function run(
     env: {
       ...process.env,
       PATH: `${fixture.bin}:${process.env.PATH ?? ""}`,
-      ZOS_ROOT: fixture.zosRoot,
-      ZOS_ACL_BACKUP_DIR: fixture.backups,
-      ZOS_ACL_LOG: fixture.log,
+      CYBEROS_ROOT: fixture.cyberosRoot,
+      CYBEROS_ACL_BACKUP_DIR: fixture.backups,
+      CYBEROS_ACL_LOG: fixture.log,
       ...extraEnv
     }
   });

@@ -63,7 +63,7 @@ export interface CapabilityAnnotations {
 }
 
 export interface CapabilityDescriptor<TInput extends JsonValue = JsonValue, TOutput extends JsonValue = JsonValue> {
-  id: `zos.${string}.${string}`;
+  id: `cyberos.${string}.${string}`;
   domain: string;
   title: string;
   description: string;

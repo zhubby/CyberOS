@@ -5,9 +5,9 @@ import {
   getNasRoot,
   getTrashEntry,
   markTrashEntryRestored,
-  type ZosDatabase
-} from "@zos/db";
-import { rollbackFileMutation, restoreTrashPath } from "@zos/nas-tools";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import { rollbackFileMutation, restoreTrashPath } from "@cyberos/nas-tools";
 import type { SystemManagementDependencies } from "./system-management.js";
 import { resolveScopedTargetPath, resolveStoragePoolScope, validateStoragePoolProposal } from "./storage-scope.js";
 
@@ -24,7 +24,7 @@ export class TrashRestoreError extends Error {
 }
 
 export async function rollbackTrashOperation(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   operation: FileOperationRecord,
   system?: SystemManagementDependencies
 ) {
@@ -50,7 +50,7 @@ export async function rollbackTrashOperation(
 }
 
 export async function restoreTrashEntry(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   trashEntryId: string,
   system?: SystemManagementDependencies
 ) {
@@ -86,7 +86,7 @@ export async function restoreTrashEntry(
 }
 
 export async function rollbackRegularOperation(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   operation: FileOperationRecord,
   trashRootPath: string,
   system?: SystemManagementDependencies

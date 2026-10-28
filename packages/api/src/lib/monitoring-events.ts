@@ -1,8 +1,8 @@
 import { chmod, mkdir, lstat, unlink } from "node:fs/promises";
 import net, { type Server, type Socket } from "node:net";
 import path from "node:path";
-import type { MonitoringStatusStreamEvent, MonitoringStreamEvent } from "@zos/shared";
-import { getMetricDefinition } from "@zos/monitoring";
+import type { MonitoringStatusStreamEvent, MonitoringStreamEvent } from "@cyberos/shared";
+import { getMetricDefinition } from "@cyberos/monitoring";
 
 const MAX_EVENT_BYTES = 256 * 1024;
 
@@ -39,31 +39,38 @@ export class MonitoringEventBroker {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    let server: Server | null = null;
     try {
       await mkdir(path.dirname(this.socketPath), { recursive: true });
       await removeStaleSocket(this.socketPath);
-      const server = net.createServer((socket) => this.acceptProducer(socket));
+      const candidate = net.createServer((socket) => this.acceptProducer(socket));
+      server = candidate;
       await new Promise<void>((resolve, reject) => {
         const onError = (error: Error) => {
-          server.off("listening", onListening);
+          candidate.off("listening", onListening);
           reject(error);
         };
         const onListening = () => {
-          server.off("error", onError);
+          candidate.off("error", onError);
           resolve();
         };
-        server.once("error", onError);
-        server.once("listening", onListening);
-        server.listen(this.socketPath);
+        candidate.once("error", onError);
+        candidate.once("listening", onListening);
+        candidate.listen(this.socketPath);
       });
       await chmod(this.socketPath, 0o660);
-      this.server = server;
-      server.on("error", (error) => {
+      this.server = candidate;
+      candidate.on("error", (error) => {
         this.log?.warn({ err: error, socketPath: this.socketPath }, "Monitoring event broker socket error");
       });
       this.statusTimer = setInterval(() => this.publishStaleStatuses(), 15_000);
       this.statusTimer.unref();
     } catch (error) {
+      const failedServer = server;
+      if (failedServer?.listening) {
+        await new Promise<void>((resolve) => failedServer.close(() => resolve()));
+      }
+      await removeStaleSocket(this.socketPath).catch(() => undefined);
       this.started = false;
       this.log?.warn({ err: error, socketPath: this.socketPath }, "Monitoring event broker unavailable");
     }

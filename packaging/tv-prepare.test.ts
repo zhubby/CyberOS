@@ -4,14 +4,14 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
-const scriptPath = path.resolve("packaging/scripts/zos-tv-prepare");
+const scriptPath = path.resolve("packaging/scripts/cyberos-tv-prepare");
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-describe("zos-tv-prepare", () => {
+describe("cyberos-tv-prepare", () => {
   it("configures connected HDMI outputs and ignores DRM writeback connectors", async () => {
     const fixture = await createFixture();
     await addConnector(fixture, "card1-HDMI-A-1", "connected", "3840x2160\n1920x1080\n");
@@ -51,7 +51,7 @@ describe("zos-tv-prepare", () => {
     const fixture = await createFixture();
     const statusPath = await addConnector(fixture, "card1-HDMI-A-1", "disconnected", "");
 
-    const result = run(fixture, "start", { ZOS_TV_FORCE_HDMI: "never" });
+    const result = run(fixture, "start", { CYBEROS_TV_FORCE_HDMI: "never" });
 
     expect(result.status).toBe(0);
     await expect(readFile(statusPath, "utf8")).resolves.toBe("disconnected\n");
@@ -62,7 +62,7 @@ describe("zos-tv-prepare", () => {
   it("rejects malformed HDMI connector overrides", async () => {
     const fixture = await createFixture();
 
-    const result = run(fixture, "start", { ZOS_TV_HDMI_CONNECTOR: "HDMI-A-1/../../status" });
+    const result = run(fixture, "start", { CYBEROS_TV_HDMI_CONNECTOR: "HDMI-A-1/../../status" });
 
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("must name an HDMI-A connector");
@@ -76,7 +76,7 @@ interface Fixture {
 }
 
 async function createFixture(): Promise<Fixture> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "zos-tv-prepare-test-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "cyberos-tv-prepare-test-"));
   temporaryDirectories.push(root);
   const binDirectory = path.join(root, "bin");
   const drmDirectory = path.join(root, "drm");
@@ -124,8 +124,8 @@ function run(fixture: Fixture, command: "start" | "stop", environment: NodeJS.Pr
       ...process.env,
       ...environment,
       PATH: `${fixture.binDirectory}:${process.env.PATH ?? ""}`,
-      ZOS_TV_DRM_ROOT: fixture.drmDirectory,
-      ZOS_TV_RUNTIME_DIR: fixture.runtimeDirectory
+      CYBEROS_TV_DRM_ROOT: fixture.drmDirectory,
+      CYBEROS_TV_RUNTIME_DIR: fixture.runtimeDirectory
     }
   });
 }

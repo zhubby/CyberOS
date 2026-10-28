@@ -180,10 +180,10 @@ mod tests {
     fn ignores_watcher_errors_below_ignored_directories() {
         let scopes = [(
             "primary".to_owned(),
-            PathBuf::from("/zos/data/primary/pool1"),
+            PathBuf::from("/cyberos/data/primary/pool1"),
         )];
         let error = notify::Error::io(io::Error::from(io::ErrorKind::PermissionDenied))
-            .add_path(PathBuf::from("/zos/data/primary/pool1/.zos"));
+            .add_path(PathBuf::from("/cyberos/data/primary/pool1/.cyberos"));
 
         assert!(degraded_root_ids(&scopes, &error).is_empty());
     }
@@ -193,12 +193,15 @@ mod tests {
         let scopes = [
             (
                 "primary".to_owned(),
-                PathBuf::from("/zos/data/primary/pool1"),
+                PathBuf::from("/cyberos/data/primary/pool1"),
             ),
-            ("backup".to_owned(), PathBuf::from("/zos/data/backup/pool1")),
+            (
+                "backup".to_owned(),
+                PathBuf::from("/cyberos/data/backup/pool1"),
+            ),
         ];
         let error = notify::Error::io(io::Error::from(io::ErrorKind::PermissionDenied))
-            .add_path(PathBuf::from("/zos/data/primary/pool1/private"));
+            .add_path(PathBuf::from("/cyberos/data/primary/pool1/private"));
 
         assert_eq!(degraded_root_ids(&scopes, &error), vec!["primary"]);
     }
@@ -207,20 +210,20 @@ mod tests {
     fn ignores_events_below_ignored_directories() {
         let scopes = [(
             "primary".to_owned(),
-            PathBuf::from("/zos/data/primary/pool1"),
+            PathBuf::from("/cyberos/data/primary/pool1"),
         )];
 
         assert_eq!(
             changed_path(
                 &scopes,
-                Path::new("/zos/data/primary/pool1/.zos/cold-backup.json")
+                Path::new("/cyberos/data/primary/pool1/.cyberos/cold-backup.json")
             ),
             None
         );
         assert_eq!(
             changed_path(
                 &scopes,
-                Path::new("/zos/data/primary/pool1/documents/report.txt")
+                Path::new("/cyberos/data/primary/pool1/documents/report.txt")
             ),
             Some(("primary".to_owned(), "documents/report.txt".to_owned()))
         );

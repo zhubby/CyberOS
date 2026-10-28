@@ -8,8 +8,8 @@ import {
   getTerminalTabState,
   initializeTerminalTabs,
   renameTerminalTab
-} from "@zos/db";
-import { TERMUX_MAX_SESSIONS } from "@zos/shared";
+} from "@cyberos/db";
+import { TERMUX_MAX_SESSIONS } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { terminalMessage } from "../lib/terminal.js";
 import { createTerminalRuntime } from "../lib/termux-client.js";
@@ -44,19 +44,13 @@ export function registerTerminalRoutes(server: FastifyInstance, context: ApiRout
     reply.send(getTerminalTabState(context.db, root.id, maxSessions));
   });
 
-  server.post<{ Body: { rootId?: string; legacySessionId?: string } }>("/api/terminal/tabs/initialize", async (request, reply) => {
+  server.post<{ Body: { rootId?: string } }>("/api/terminal/tabs/initialize", async (request, reply) => {
     const root = terminalRoot(context, request.body?.rootId, reply);
     if (!root) return;
-    const legacySessionId = request.body?.legacySessionId?.trim();
-    if (legacySessionId && !isTerminalSessionId(legacySessionId)) {
-      reply.status(400).send({ error: "Invalid terminal session id" });
-      return;
-    }
     try {
       reply.send(initializeTerminalTabs(context.db, {
         rootId: root.id,
-        maxSessions,
-        ...(legacySessionId ? { legacySessionId } : {})
+        maxSessions
       }));
     } catch (error) {
       sendTerminalTabMutationError(reply, error);
@@ -388,13 +382,13 @@ function parseTerminalProtocol(value: string | string[] | undefined): TerminalPr
   const protocols = Array.isArray(value) ? value : value ? value.split(",") : [];
   const result: TerminalProtocolData = { reset: false };
   for (const protocol of protocols.map((item) => item.trim())) {
-    if (protocol.startsWith("zos-session.")) {
-      result.sessionId = protocol.slice("zos-session.".length);
-    } else if (protocol.startsWith("zos-reset.")) {
-      result.resetSessionId = protocol.slice("zos-reset.".length);
+    if (protocol.startsWith("cyberos-session.")) {
+      result.sessionId = protocol.slice("cyberos-session.".length);
+    } else if (protocol.startsWith("cyberos-reset.")) {
+      result.resetSessionId = protocol.slice("cyberos-reset.".length);
       result.reset = true;
-    } else if (protocol.startsWith("zos-next.")) {
-      result.nextSessionId = protocol.slice("zos-next.".length);
+    } else if (protocol.startsWith("cyberos-next.")) {
+      result.nextSessionId = protocol.slice("cyberos-next.".length);
       result.reset = true;
     }
   }

@@ -29,7 +29,7 @@ export type SettingsSectionId =
   | "appearance"
   | "advanced";
 
-export type SettingsGroupId = "zos" | "devices" | "ai" | "workspace" | "administration";
+export type SettingsGroupId = "cyberos" | "devices" | "ai" | "workspace" | "administration";
 export type SettingsState = "ready" | "missing" | "loading";
 
 type Translate = TFunction<"translation">;
@@ -63,11 +63,11 @@ export const AGENT_CAPABILITY_POLICY_OPTIONS: AgentCapabilityPolicyMode[] = ["au
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "overview",
-    group: "zos"
+    group: "cyberos"
   },
   {
     id: "version",
-    group: "zos"
+    group: "cyberos"
   },
   {
     id: "model-providers",
@@ -119,7 +119,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   },
   {
     id: "appearance",
-    group: "zos"
+    group: "cyberos"
   },
   {
     id: "advanced",
@@ -166,7 +166,7 @@ const SECTION_DESCRIPTION_KEYS = {
 } as const satisfies Record<SettingsSectionId, string>;
 
 const GROUP_LABEL_KEYS = {
-  zos: "settings.groups.zos",
+  cyberos: "settings.groups.cyberos",
   ai: "settings.groups.ai",
   devices: "settings.groups.devices",
   workspace: "settings.groups.workspace",
@@ -261,15 +261,15 @@ export function providerLabel(providerName: ModelProviderName, t: Translate): st
 export function defaultToolPolicyForm(): ToolPolicyFormState {
   return {
     policies: {
-      "zos.files.list": "auto",
-      "zos.files.read": "auto",
-      "zos.files.search": "auto",
-      "zos.files.grep": "auto",
-      "zos.files.find": "auto",
-      "zos.files.mutate": "approve",
-      "zos.files.edit": "approve",
-      "zos.files.write": "approve",
-      "zos.shell.run": "confirm"
+      "cyberos.files.list": "auto",
+      "cyberos.files.read": "auto",
+      "cyberos.files.search": "auto",
+      "cyberos.files.grep": "auto",
+      "cyberos.files.find": "auto",
+      "cyberos.files.mutate": "approve",
+      "cyberos.files.edit": "approve",
+      "cyberos.files.write": "approve",
+      "cyberos.shell.run": "confirm"
     },
     updatedAt: new Date(0).toISOString()
   };

@@ -27,7 +27,7 @@ describe("Pi compatibility contract", () => {
     expect(compatibility).toContain(`Supported Pi version | \`${supportedPiVersion}\` (exactly pinned)`);
   });
 
-  it("exposes every AgentSession method used by the ZOS host", () => {
+  it("exposes every AgentSession method used by the CyberOS host", () => {
     const requiredMethods = [
       "prompt",
       "steer",
@@ -48,12 +48,8 @@ describe("Pi compatibility contract", () => {
     }
   });
 
-  it("never exposes Pi's local bash tool in a ZOS tool allowlist", () => {
-    for (const options of [
-      { mcpEnabled: false, legacyToolsEnabled: false, photostaffToolsEnabled: false },
-      { mcpEnabled: true, legacyToolsEnabled: false, photostaffToolsEnabled: false },
-      { mcpEnabled: false, legacyToolsEnabled: true, photostaffToolsEnabled: true }
-    ]) {
+  it("never exposes Pi's local bash tool in a CyberOS tool allowlist", () => {
+    for (const options of [{ mcpEnabled: false }, { mcpEnabled: true }]) {
       expect(piAgentToolNames(options)).not.toContain("bash");
     }
   });

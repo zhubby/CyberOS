@@ -1,4 +1,4 @@
-import type { ZosDatabase } from "../connection.js";
+import type { CyberOsDatabase } from "../connection.js";
 import type { DbIndexedFileRow } from "./repository-rows.js";
 
 export interface IndexedFileSnapshot {
@@ -14,7 +14,7 @@ export interface IndexedFileSnapshot {
   hasText: boolean;
 }
 
-export function listIndexedFilesForRoot(db: ZosDatabase, rootId: string): IndexedFileSnapshot[] {
+export function listIndexedFilesForRoot(db: CyberOsDatabase, rootId: string): IndexedFileSnapshot[] {
   const textFileIds = new Set(
     (db
       .prepare("SELECT file_id FROM indexed_text WHERE root_id = ?")
@@ -52,7 +52,7 @@ export function listIndexedFilesForRoot(db: ZosDatabase, rootId: string): Indexe
   }));
 }
 
-export function removeIndexedFile(db: ZosDatabase, input: { rootId: string; path: string }): boolean {
+export function removeIndexedFile(db: CyberOsDatabase, input: { rootId: string; path: string }): boolean {
   const row = db
     .prepare("SELECT id FROM indexed_files WHERE root_id = ? AND path = ?")
     .get(input.rootId, input.path) as { id: string } | undefined;

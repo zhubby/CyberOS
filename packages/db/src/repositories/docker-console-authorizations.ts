@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type {
   DockerConsoleAuthorizationRecord
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { mapDockerConsoleAuthorization } from "./operation-mappers.js";
 import type { DbDockerConsoleAuthorizationRow } from "./repository-rows.js";
 
 export function createDockerConsoleAuthorization(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     operationId: string;
     approvalId?: string | null;
@@ -58,7 +58,7 @@ export function createDockerConsoleAuthorization(
 }
 
 export function consumeDockerConsoleAuthorization(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   authorizationId: string
 ): DockerConsoleAuthorizationRecord | null {
   const row = db
@@ -94,7 +94,7 @@ export function consumeDockerConsoleAuthorization(
   return updated ? mapDockerConsoleAuthorization(updated) : null;
 }
 
-export function markDockerConsoleAuthorizationFailed(db: ZosDatabase, authorizationId: string): boolean {
+export function markDockerConsoleAuthorizationFailed(db: CyberOsDatabase, authorizationId: string): boolean {
   const result = db
     .prepare("UPDATE docker_console_authorizations SET status = 'failed' WHERE id = ? AND status IN ('active', 'used')")
     .run(authorizationId);

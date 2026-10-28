@@ -1,4 +1,4 @@
-import type { SystemPowerAction, SystemPowerResult } from "@zos/shared";
+import type { SystemPowerAction, SystemPowerResult } from "@cyberos/shared";
 import { HostdClient, HostdRequestError } from "./hostd-client.js";
 
 const HOSTD_POWER_TIMEOUT_MS = 5_000;

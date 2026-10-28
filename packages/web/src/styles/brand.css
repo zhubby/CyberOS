@@ -1,4 +1,4 @@
-/* ZOS industrial HUD integration layer. Feature stylesheets continue to own layout. */
+/* CyberOS industrial HUD integration layer. Feature stylesheets continue to own layout. */
 
 html {
   font-family: var(--font-ui);
@@ -1399,7 +1399,7 @@ textarea {
   color: var(--text);
   background:
     linear-gradient(115deg, rgb(255 0 60 / 4%), transparent 36%),
-    var(--zos-hud-grid),
+    var(--cyberos-hud-grid),
     var(--app-bg);
   background-size: auto, 28px 28px, auto;
 }
@@ -1423,7 +1423,7 @@ textarea {
 }
 
 .app-shell :where(input, textarea, select, .custom-select-trigger):hover:not(:disabled) {
-  border-color: var(--zos-hud-line);
+  border-color: var(--cyberos-hud-line);
 }
 
 .app-shell :where(input, textarea, select, .custom-select-trigger):focus-visible,
@@ -1450,7 +1450,7 @@ textarea {
   [tabindex]:not([tabindex="-1"])
 ):focus-visible {
   outline-color: var(--cyber-cyan);
-  box-shadow: var(--zos-focus-ring);
+  box-shadow: var(--cyberos-focus-ring);
 }
 
 .app-shell :where(
@@ -1529,7 +1529,7 @@ textarea {
 
 .view-tabs > button:hover {
   color: var(--cyber-cyan);
-  background: var(--zos-hud-cyan-wash);
+  background: var(--cyberos-hud-cyan-wash);
 }
 
 .view-tabs > button[aria-selected="true"] {
@@ -1562,7 +1562,7 @@ textarea {
 .preview-toolbar,
 .editor-header,
 .editor-footer {
-  border-color: var(--zos-hud-line);
+  border-color: var(--cyberos-hud-line);
   color: var(--text);
   background:
     linear-gradient(90deg, rgb(255 0 60 / 8%), transparent 46%),
@@ -1614,7 +1614,7 @@ textarea {
   color: var(--text);
   background:
     linear-gradient(120deg, rgb(255 0 60 / 3%), transparent 40%),
-    var(--zos-hud-grid),
+    var(--cyberos-hud-grid),
     var(--channel-bg);
   background-size: auto, 28px 28px, auto;
 }
@@ -1628,7 +1628,7 @@ textarea {
 .workspace-panel-tab:hover {
   border-color: var(--cyber-cyan);
   color: var(--cyber-cyan);
-  background: var(--zos-hud-cyan-wash);
+  background: var(--cyberos-hud-cyan-wash);
 }
 
 .workspace-panel-tab.is-active {
@@ -1654,7 +1654,7 @@ textarea {
 .preview-dialog,
 .file-preview-dialog,
 .notification-drawer {
-  border-color: var(--zos-hud-line);
+  border-color: var(--cyberos-hud-line);
   color: var(--text);
   background: var(--dialog-bg);
   box-shadow: 8px 8px 0 rgb(255 0 60 / 28%);
@@ -1666,7 +1666,7 @@ textarea {
 
 .settings-nav button:hover {
   color: var(--cyber-cyan);
-  background: var(--zos-hud-cyan-wash);
+  background: var(--cyberos-hud-cyan-wash);
 }
 
 .settings-nav button.is-active {
@@ -1758,7 +1758,7 @@ textarea {
 .management-data-table th,
 .monitoring-alert-table th,
 .file-row-head {
-  border-color: var(--zos-hud-line);
+  border-color: var(--cyberos-hud-line);
   color: var(--cyber-yellow);
   background: var(--cyber-ink);
   font-family: var(--font-mono);
@@ -1775,7 +1775,7 @@ textarea {
 .management-table tbody tr:hover,
 .management-data-table tbody tr:hover,
 .monitoring-alert-table tbody tr:hover {
-  background: var(--zos-hud-cyan-wash);
+  background: var(--cyberos-hud-cyan-wash);
   box-shadow: inset 3px 0 0 var(--cyber-cyan);
 }
 
@@ -1812,7 +1812,7 @@ textarea {
 .photo-query-panel,
 .photo-toolbar,
 .photo-map-toolbar {
-  border-color: var(--zos-hud-line);
+  border-color: var(--cyberos-hud-line);
   color: var(--text);
   background: var(--surface);
 }
@@ -1870,7 +1870,7 @@ textarea {
 }
 
 .notification-item[data-unread="true"] {
-  background: var(--zos-hud-red-wash);
+  background: var(--cyberos-hud-red-wash);
   box-shadow: inset 4px 0 0 var(--cyber-red);
 }
 

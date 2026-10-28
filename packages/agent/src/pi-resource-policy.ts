@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@zos/shared";
+import type { AgentSessionRecord } from "@cyberos/shared";
 
 export interface PiResourcePolicyDecision {
   allowProjectSkills: boolean;

@@ -11,7 +11,7 @@ import { URL, fileURLToPath } from "node:url";
 const verifier = fileURLToPath(new URL("../scripts/verify-search-index.mjs", import.meta.url));
 
 test("rejects missing Pagefind output", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "zos-search-missing-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "cyberos-search-missing-"));
   try {
     const result = await runVerifier(directory);
     assert.notEqual(result.code, 0);
@@ -55,7 +55,7 @@ test("accepts a complete nonempty Pagefind index", async () => {
 });
 
 test("waits for Pagefind entry output to finish writing", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "zos-search-delayed-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "cyberos-search-delayed-"));
   const output = path.join(directory, "dist/pagefind");
   try {
     await mkdir(output, { recursive: true });
@@ -126,7 +126,7 @@ test("prepare removes only the previous Pagefind output", async () => {
 });
 
 async function createFixture() {
-  const directory = await mkdtemp(path.join(tmpdir(), "zos-search-index-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "cyberos-search-index-"));
   const output = path.join(directory, "dist/pagefind");
   await mkdir(output, { recursive: true });
   await writeFile(path.join(output, "pagefind.js"), "// browser bundle");
@@ -144,7 +144,7 @@ function runVerifier(cwd, argument) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [verifier, ...(argument ? [argument] : [])], {
       cwd,
-      env: { ...process.env, ZOS_PAGEFIND_READINESS_TIMEOUT_MS: "500" },
+      env: { ...process.env, CYBEROS_PAGEFIND_READINESS_TIMEOUT_MS: "500" },
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";

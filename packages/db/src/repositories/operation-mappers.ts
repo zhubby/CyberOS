@@ -12,7 +12,7 @@ import type {
   VmConsoleAuthorizationRecord,
   VmOperationRecord,
   TrashEntryRecord
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { normalizeModelProviderName } from "./settings-mappers.js";
 import type {
   DbApprovalRow,

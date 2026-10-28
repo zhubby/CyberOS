@@ -17,7 +17,7 @@ import {
   type RefObject
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { MediaFileRecord, MediaHome, MediaTitleDetail, MediaTitleSummary, VodPlayerCommand, VodPlayerStatus } from "@zos/shared";
+import type { MediaFileRecord, MediaHome, MediaTitleDetail, MediaTitleSummary, VodPlayerCommand, VodPlayerStatus } from "@cyberos/shared";
 import { acceptVodPlayerStatus } from "../lib/vod-player-status.js";
 import {
   getMediaHome,
@@ -288,8 +288,8 @@ export function TvApp() {
       ) : null}
       <header className="tv-header">
         <button className="tv-brand" type="button" data-tv-focusable onClick={returnHome} aria-label={t("tv.library")}>
-          <img src="/zos-icon.svg" alt="" aria-hidden="true" />
-          <span>ZOS</span>
+          <img src="/cyberos-icon.svg" alt="" aria-hidden="true" />
+          <span>CyberOS</span>
         </button>
         <div className="tv-header-actions">
           <button
@@ -611,7 +611,7 @@ function VirtualKeyboard({
 function TvStatus({ label, detail, error = false }: { label: string; detail?: string; error?: boolean }) {
   return (
     <main className="tv-status" data-error={error || undefined}>
-      <img src="/zos-icon.svg" alt="" />
+      <img src="/cyberos-icon.svg" alt="" />
       <h1>{label}</h1>
       {detail ? <p>{detail}</p> : <span className="tv-loader" aria-hidden="true" />}
     </main>

@@ -1,4 +1,4 @@
-import { parseBluetoothStatus } from "@zos/shared";
+import { parseBluetoothStatus } from "@cyberos/shared";
 import type { BluetoothStatus } from "../api.js";
 
 export function parseSystemBluetoothStatus(value: string): BluetoothStatus | null {

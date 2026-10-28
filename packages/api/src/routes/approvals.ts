@@ -4,7 +4,7 @@ import {
   executeApprovedCapabilityRun,
   executeStartedSecretCapabilityRun,
   validateCapabilitySecretInput
-} from "@zos/capability-runtime";
+} from "@cyberos/capability-runtime";
 import {
   appendEvent,
   decideCapabilityApproval,
@@ -12,7 +12,7 @@ import {
   expireCapabilityApprovals,
   getAgentCapabilityApproval,
   listPendingAgentCapabilityApprovals
-} from "@zos/db";
+} from "@cyberos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerApprovalRoutes(server: FastifyInstance, context: ApiRouteContext): void {

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { ZosDatabase } from "../connection.js";
+import type { CyberOsDatabase } from "../connection.js";
 
 export function upsertIndexedFile(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     id?: string;
     rootId: string;
@@ -61,7 +61,7 @@ export function upsertIndexedFile(
 }
 
 export function removeMissingIndexedFiles(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { rootId: string; seenPaths: string[] }
 ): number {
   const existing = db

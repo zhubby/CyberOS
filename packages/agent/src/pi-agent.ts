@@ -1,35 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, lstat, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   createAgentSession,
   createCodemodeExtension,
-  createEditToolDefinition,
-  createFindToolDefinition,
-  createGrepToolDefinition,
-  createLsToolDefinition,
   createMcpExtension,
-  createReadToolDefinition,
   createToolSearchExtension,
-  createWriteToolDefinition,
   DefaultResourceLoader,
   SessionManager,
   SettingsManager,
   type AgentSession,
   type AgentSessionEvent,
   type LoadedMcpConfig,
-  type SessionEntry,
-  type ToolDefinition
+  type SessionEntry
 } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
-import {
-  isPathInside,
-  listDir,
-  readText,
-  resolveSafeExistingPath,
-  resolveSafeTargetPath,
-  toRootRelative
-} from "@zos/nas-tools";
+import { resolveSafeExistingPath } from "@cyberos/nas-tools";
 import type {
   AgentProviderSessionRecord,
   AgentSessionCommandType,
@@ -38,11 +23,8 @@ import type {
   ModelProviderName,
   NasRootRecord,
   PiToolName,
-  PiToolPolicySettingsRecord,
-  PhotostaffMetadataDetail,
-  PhotostaffQueryPage,
-  PhotostaffQueryRequest
-} from "@zos/shared";
+  PiToolPolicySettingsRecord
+} from "@cyberos/shared";
 import {
   ModelRuntimeManager,
   type ModelRuntimeBinding
@@ -53,9 +35,9 @@ import { PiResourcePolicy } from "./pi-resource-policy.js";
 export { registerConfiguredProvider } from "./model-runtime-manager.js";
 
 export interface PiAgentEmitEvent {
-  type: import("@zos/shared").AgentEventType;
+  type: import("@cyberos/shared").AgentEventType;
   payload: Record<string, unknown>;
-  source?: "pi" | "zos";
+  source?: "pi" | "cyberos";
   sourceId?: string;
   runId?: string;
   sequence?: number;
@@ -92,7 +74,6 @@ export interface PiAgentInput {
   }) => void | Promise<void>;
   requestCapability: (request: PiAgentCapabilityRequest) => Promise<PiAgentCapabilityExecution>;
   onCapabilityRunPending?: (runId: string, providerSessionId: string) => void | Promise<void>;
-  photostaffTools?: PhotostaffAgentToolService;
   mcp?: PiMcpRuntimeSettings;
   runner?: PiAgentRunner;
 }
@@ -101,12 +82,6 @@ export interface PiMcpRuntimeSettings {
   enabled: boolean;
   url: string;
   tokenFile: string;
-  legacyToolsEnabled: boolean;
-}
-
-export interface PhotostaffAgentToolService {
-  searchPhotostaff: (request: PhotostaffQueryRequest) => Promise<PhotostaffQueryPage>;
-  getPhotostaffMetadata: (assetId: string) => Promise<PhotostaffMetadataDetail | null>;
 }
 
 export type PiAgentRunner = (input: PiAgentRuntimeInput) => Promise<PiAgentTurnResult>;
@@ -125,7 +100,6 @@ export interface PiAgentRuntimeInput {
   saveProviderSession: PiAgentInput["saveProviderSession"];
   requestCapability: PiAgentInput["requestCapability"];
   onCapabilityRunPending?: PiAgentInput["onCapabilityRunPending"];
-  photostaffTools?: PhotostaffAgentToolService;
   mcp?: PiMcpRuntimeSettings;
 }
 
@@ -145,31 +119,23 @@ export interface PiAgentCapabilityExecution {
   runId?: string;
 }
 
-type TextToolResult = {
-  content: Array<{ type: "text"; text: string }>;
-  details: unknown;
-};
-
-const LEGACY_PI_TOOL_NAMES: PiToolName[] = ["read", "edit", "write", "grep", "find", "ls"];
-const PHOTOSTAFF_TOOL_NAMES = ["search_photostaff", "get_photostaff_metadata"] as const;
 const DIRECT_MCP_TOOLS = [
-  "zos.catalog.get",
-  "zos.system.status",
-  "zos.roots.list",
-  "zos.files.list",
-  "zos.files.stat",
-  "zos.files.read",
-  "zos.files.search",
-  "zos.files.mutate",
-  "zos.runs.get"
+  "cyberos.catalog.get",
+  "cyberos.system.status",
+  "cyberos.roots.list",
+  "cyberos.files.list",
+  "cyberos.files.stat",
+  "cyberos.files.read",
+  "cyberos.files.search",
+  "cyberos.files.mutate",
+  "cyberos.runs.get"
 ] as const;
 const MCP_RESOURCE_TOOL_NAMES = [
   "list_mcp_resources",
   "list_mcp_resource_templates",
   "read_mcp_resource"
 ] as const;
-const ZOS_MCP_SERVER_NAME = "zos";
-const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
+const CYBEROS_MCP_SERVER_NAME = "cyberos";
 const PI_CANCELLATION_POLL_MS = 100;
 const PI_PROJECTION_ROOT = "__root__";
 export async function runPiAgentTurn(input: PiAgentInput): Promise<PiAgentTurnResult> {
@@ -279,7 +245,6 @@ export class PiAgentSessionHost {
       workingPath: workspace.relativePath,
       runtimeGeneration: runtime.generation,
       mcp: input.mcp ?? null,
-      photostaff: Boolean(input.photostaffTools),
       resourcesTrusted: input.session.piResourcesTrusted === true
     });
     return this.sessions.run({
@@ -308,7 +273,6 @@ export class PiAgentSessionHost {
       workingPath: workspace.relativePath,
       runtimeGeneration: runtime.generation,
       mcp: commandInput.mcp ?? null,
-      photostaff: Boolean(commandInput.photostaffTools),
       resourcesTrusted: commandInput.session.piResourcesTrusted === true
     });
     return this.sessions.run({
@@ -342,7 +306,6 @@ export class PiAgentSessionHost {
       defaultProjectTrust: "never"
     });
     const mcpConfig = input.mcp?.enabled ? await loadControlledPiMcpConfig(input.mcp) : null;
-    const legacyToolsEnabled = !input.mcp?.enabled || input.mcp.legacyToolsEnabled;
     const resourcePolicy = this.resourcePolicy.evaluate(input.session);
     const resourceLoader = new DefaultResourceLoader({
       cwd: workspace.realPath,
@@ -363,7 +326,7 @@ export class PiAgentSessionHost {
       noPromptTemplates: !resourcePolicy.allowProjectPrompts,
       noThemes: true,
       noContextFiles: !resourcePolicy.allowProjectContext,
-      appendSystemPrompt: [zosSystemPrompt(workspace.relativePath)]
+      appendSystemPrompt: [cyberosSystemPrompt(workspace.relativePath)]
     });
     try {
       await resourceLoader.reload({
@@ -389,11 +352,9 @@ export class PiAgentSessionHost {
       modelRuntime: runtime.runtime,
       ...(runtime.model ? { model: runtime.model } : {}),
       tools: piAgentToolNames({
-        mcpEnabled: mcpConfig !== null,
-        legacyToolsEnabled,
-        photostaffToolsEnabled: input.photostaffTools !== undefined
+        mcpEnabled: mcpConfig !== null
       }),
-      customTools: legacyToolsEnabled ? createZosPiTools(bridge) : [],
+      customTools: [],
       resourceLoader,
       settingsManager,
       sessionManager
@@ -732,12 +693,12 @@ function providerSessionSnapshot(hosted: HostedPiSession) {
   };
 }
 
-function zosSystemPrompt(workingPath: string): string {
+function cyberosSystemPrompt(workingPath: string): string {
   return [
-    "You are running inside ZOS.",
+    "You are running inside CyberOS.",
     `The current working directory is ${workingPath}.`,
-    "Use the ZOS MCP server for NAS and system capabilities. Paths are always relative to a selected NAS root.",
-    "Mutating capabilities return durable runs and require approval in the first-party ZOS UI.",
+    "Use the CyberOS MCP server for NAS and system capabilities. Paths are always relative to a selected NAS root.",
+    "Mutating capabilities return durable runs and require approval in the first-party CyberOS UI.",
     "Never request or include passwords, API keys, Wi-Fi secrets, registry tokens, or host absolute paths."
   ].join("\n");
 }
@@ -815,8 +776,6 @@ export function startPiCancellationMonitor(input: {
 
 export function piAgentToolNames(options: {
   mcpEnabled: boolean;
-  legacyToolsEnabled: boolean;
-  photostaffToolsEnabled: boolean;
 }): string[] {
   return [
     // Pi requires an MCP allowlist match before direct tools can be declared to the model.
@@ -824,358 +783,42 @@ export function piAgentToolNames(options: {
       ? [
           "codemode",
           "tool_search",
-          `mcp__${ZOS_MCP_SERVER_NAME}__*`,
+          `mcp__${CYBEROS_MCP_SERVER_NAME}__*`,
           ...MCP_RESOURCE_TOOL_NAMES
         ]
-      : []),
-    ...(options.legacyToolsEnabled ? LEGACY_PI_TOOL_NAMES : []),
-    ...(options.legacyToolsEnabled && options.photostaffToolsEnabled ? PHOTOSTAFF_TOOL_NAMES : [])
+      : [])
   ];
 }
 
 export async function loadControlledPiMcpConfig(settings: PiMcpRuntimeSettings): Promise<LoadedMcpConfig> {
   const tokenStat = await stat(settings.tokenFile);
   if (!tokenStat.isFile()) {
-    throw new Error("ZOS Pi MCP token path is not a regular file");
+    throw new Error("CyberOS Pi MCP token path is not a regular file");
   }
   if ((tokenStat.mode & 0o077) !== 0) {
-    throw new Error("ZOS Pi MCP token file permissions must be 0600");
+    throw new Error("CyberOS Pi MCP token file permissions must be 0600");
   }
   const token = (await readFile(settings.tokenFile, "utf8")).trim();
-  if (!/^zos_mcp_[A-Za-z0-9_-]{40,}$/u.test(token)) {
-    throw new Error("ZOS Pi MCP token file is invalid");
+  if (!/^cyberos_mcp_[A-Za-z0-9_-]{40,}$/u.test(token)) {
+    throw new Error("CyberOS Pi MCP token file is invalid");
   }
   return {
     servers: [{
-      name: ZOS_MCP_SERVER_NAME,
-      source: "zos:internal",
+      name: CYBEROS_MCP_SERVER_NAME,
+      source: "cyberos:internal",
       scope: "global",
       config: {
         type: "http",
         url: settings.url,
         headers: { Authorization: `Bearer ${token}` },
         exposure: "codemode",
-        description: "ZOS NAS capabilities, durable runs, resources, and approval-gated proposals.",
+        description: "CyberOS NAS capabilities, durable runs, resources, and approval-gated proposals.",
         toolExposure: Object.fromEntries(DIRECT_MCP_TOOLS.map((name) => [name, "direct" as const]))
       }
     }],
     autoEnableCodemode: true,
     errors: []
   };
-}
-
-export function createZosPiTools(input: PiAgentRuntimeInput): ToolDefinition[] {
-  const read = createReadToolDefinition(input.root.path);
-  const edit = createEditToolDefinition(input.root.path);
-  const write = createWriteToolDefinition(input.root.path);
-  const grep = createGrepToolDefinition(input.root.path);
-  const find = createFindToolDefinition(input.root.path);
-  const ls = createLsToolDefinition(input.root.path);
-
-  const readTool = {
-      ...read,
-      execute: async (toolCallId: string, params: Parameters<typeof read.execute>[1]) =>
-        withReadToolPolicy(input, {
-          toolCallId,
-          toolName: "read",
-          args: { ...params },
-          summary: `Read ${params.path}`,
-          execute: async () => {
-            const preview = await readText(input.root, params.path, MAX_TOOL_OUTPUT_BYTES);
-            const content = sliceLines(preview.content, params.offset, params.limit);
-            return textResult(content + (preview.truncated ? "\n\n[Output truncated]" : ""), {
-              truncation: preview.truncated ? { truncated: true } : undefined
-            });
-          }
-        })
-    } as typeof read;
-  const lsTool = {
-      ...ls,
-      execute: async (toolCallId: string, params: Parameters<typeof ls.execute>[1]) =>
-        withReadToolPolicy(input, {
-          toolCallId,
-          toolName: "ls",
-          args: { ...params },
-          summary: `List ${params.path ?? "."}`,
-          execute: async () => {
-            const entries = await listDir(input.root, params.path ?? ".");
-            const limit = params.limit ?? 100;
-            return textResult(
-              entries
-                .slice(0, limit)
-                .map((entry) => `${entry.kind.padEnd(9)} ${entry.path}`)
-                .join("\n") || "(empty)",
-              {
-                entryLimitReached: entries.length > limit ? limit : undefined
-              }
-            );
-          }
-        })
-    } as typeof ls;
-  const findTool = {
-      ...find,
-      execute: async (toolCallId: string, params: Parameters<typeof find.execute>[1]) =>
-        withReadToolPolicy(input, {
-          toolCallId,
-          toolName: "find",
-          args: { ...params },
-          summary: `Find ${params.pattern} in ${params.path ?? "."}`,
-          execute: async () => {
-            const limit = Math.max(1, Math.min(params.limit ?? 100, 1_000));
-            const matches = await globNasRoot(input.root, params.path ?? ".", params.pattern, limit);
-            return textResult(matches.join("\n") || "No matches.", {
-              resultLimitReached: matches.length >= limit ? limit : undefined
-            });
-          }
-        })
-    } as typeof find;
-  const grepTool = {
-      ...grep,
-      execute: async (toolCallId: string, params: Parameters<typeof grep.execute>[1]) =>
-        withReadToolPolicy(input, {
-          toolCallId,
-          toolName: "grep",
-          args: { ...params },
-          summary: `Search text in ${params.path ?? "."}`,
-          execute: async () => {
-            const matches = await grepNasRoot(input.root, {
-              pattern: params.pattern,
-              path: params.path ?? ".",
-              ignoreCase: Boolean(params.ignoreCase),
-              literal: Boolean(params.literal),
-              limit: params.limit ?? 100
-            });
-            return textResult(matches.join("\n") || "No matches.", {
-              matchLimitReached: matches.length >= (params.limit ?? 100) ? params.limit ?? 100 : undefined
-            });
-          }
-        })
-    } as typeof grep;
-  const editTool = {
-      ...edit,
-      executionMode: "sequential",
-      execute: async (toolCallId: string, params: Parameters<typeof edit.execute>[1]) => {
-        if (!params.edits.length) {
-          return textResult("No edits were provided.");
-        }
-        const preview = await buildEditPreview(input.root, params.path, params.edits);
-        return withApproval(input, {
-          toolCallId,
-          toolName: "edit",
-          args: { ...params },
-          risk: params.edits.length > 3 ? "high" : "medium",
-          summary: `Edit ${preview.relativePath} (${params.edits.length} replacement${params.edits.length === 1 ? "" : "s"})`,
-          execute: async () => {
-            const freshPreview = await buildEditPreview(input.root, params.path, params.edits);
-            await writeFile(freshPreview.absolutePath, freshPreview.content, "utf8");
-            return textResult(`Edited ${freshPreview.relativePath}.`, {
-              diff: `Edited ${freshPreview.relativePath}`,
-              patch: ""
-            });
-          }
-        });
-      }
-    } as typeof edit;
-  const writeTool = {
-      ...write,
-      executionMode: "sequential",
-      execute: async (toolCallId: string, params: Parameters<typeof write.execute>[1]) => {
-        const target = await assertSafeWriteTarget(input.root, params.path);
-        return withApproval(input, {
-          toolCallId,
-          toolName: "write",
-          args: { ...params },
-          risk: "high",
-          summary: `Write ${target.relativePath} (${Buffer.byteLength(params.content, "utf8")} bytes)`,
-          execute: async () => {
-            const freshTarget = await assertSafeWriteTarget(input.root, params.path);
-            await mkdir(path.dirname(freshTarget.absolutePath), { recursive: true });
-            await writeFile(freshTarget.absolutePath, params.content, "utf8");
-            return textResult(`Wrote ${freshTarget.relativePath}.`);
-          }
-        });
-      }
-    } as typeof write;
-
-  const photostaffTools = input.photostaffTools ? createPhotostaffAgentTools(input.photostaffTools) : [];
-  return [readTool, lsTool, findTool, grepTool, ...photostaffTools, editTool, writeTool] as unknown as ToolDefinition[];
-}
-
-const photostaffScalarSchema = Type.Union([Type.String({ maxLength: 65_536 }), Type.Number(), Type.Boolean()]);
-const photostaffRangeSchema = Type.Object({
-  min: Type.Optional(Type.Number()),
-  max: Type.Optional(Type.Number())
-});
-const photostaffConditionSchema = Type.Object({
-  key: Type.String({ minLength: 1, maxLength: 256 }),
-  operator: Type.Union([
-    Type.Literal("eq"), Type.Literal("contains"), Type.Literal("prefix"), Type.Literal("in"),
-    Type.Literal("exists"), Type.Literal("not_exists"), Type.Literal("lt"), Type.Literal("lte"),
-    Type.Literal("gt"), Type.Literal("gte"), Type.Literal("between")
-  ]),
-  value: Type.Optional(Type.Union([photostaffScalarSchema, Type.Array(photostaffScalarSchema, { maxItems: 100 })])),
-  valueTo: Type.Optional(Type.Union([Type.String(), Type.Number()]))
-});
-const photostaffFiltersSchema = Type.Object({
-  text: Type.Optional(Type.String({ maxLength: 512 })),
-  capturedAt: Type.Optional(Type.Object({ from: Type.Optional(Type.String({ maxLength: 64 })), to: Type.Optional(Type.String({ maxLength: 64 })) })),
-  mediaKinds: Type.Optional(Type.Array(Type.Union([Type.Literal("image"), Type.Literal("video"), Type.Literal("raw")]), { maxItems: 3 })),
-  cameraModels: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 512 }), { maxItems: 100 })),
-  lensModels: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 512 }), { maxItems: 100 })),
-  iso: Type.Optional(photostaffRangeSchema),
-  aperture: Type.Optional(photostaffRangeSchema),
-  exposureTimeSeconds: Type.Optional(photostaffRangeSchema),
-  focalLengthMm: Type.Optional(photostaffRangeSchema),
-  rating: Type.Optional(photostaffRangeSchema),
-  keywords: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 512 }), { maxItems: 100 })),
-  hasLocation: Type.Optional(Type.Boolean()),
-  location: Type.Optional(Type.Union([
-    Type.Object({
-      kind: Type.Literal("bounds"),
-      west: Type.Number({ minimum: -180, maximum: 180 }),
-      south: Type.Number({ minimum: -90, maximum: 90 }),
-      east: Type.Number({ minimum: -180, maximum: 180 }),
-      north: Type.Number({ minimum: -90, maximum: 90 })
-    }),
-    Type.Object({
-      kind: Type.Literal("near"),
-      latitude: Type.Number({ minimum: -90, maximum: 90 }),
-      longitude: Type.Number({ minimum: -180, maximum: 180 }),
-      radiusMeters: Type.Number({ exclusiveMinimum: 0, maximum: 40_100_000 })
-    })
-  ])),
-  advanced: Type.Optional(Type.Object({
-    mode: Type.Union([Type.Literal("all"), Type.Literal("any")]),
-    conditions: Type.Array(photostaffConditionSchema, { maxItems: 25 })
-  }))
-});
-
-export function createPhotostaffAgentTools(service: PhotostaffAgentToolService): ToolDefinition[] {
-  const searchPhotostaff = {
-    name: "search_photostaff",
-    label: "Search Photostaff",
-    description: "Search the current ZOS photostaff library by text, camera, exposure, rating, keyword, date, location, or indexed metadata fields. Location filtering is local; results never include exact coordinates or other sensitive metadata.",
-    parameters: Type.Object({
-      filters: Type.Optional(photostaffFiltersSchema),
-      sort: Type.Optional(Type.Object({
-        field: Type.Union([
-          Type.Literal("captured_at"), Type.Literal("indexed_at"), Type.Literal("name"),
-          Type.Literal("size_bytes"), Type.Literal("rating"), Type.Literal("distance")
-        ]),
-        direction: Type.Union([Type.Literal("asc"), Type.Literal("desc")])
-      })),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 25 }))
-    }),
-    execute: async (_toolCallId: string, params: PhotostaffQueryRequest) => {
-      if (params.sort?.field === "distance" && params.filters?.location?.kind !== "near") {
-        return textResult("Distance sorting requires a nearby location filter.");
-      }
-      const result = await service.searchPhotostaff({ ...params, limit: Math.min(params.limit ?? 25, 25), includeFacets: false });
-      return textResult(JSON.stringify(redactPhotostaffSearchResult(result), null, 2));
-    }
-  };
-  const getPhotostaffMetadata = {
-    name: "get_photostaff_metadata",
-    label: "Get photostaff metadata",
-    description: "Get non-sensitive indexed metadata for one photostaff in the current ZOS photostaff library. Exact GPS, serial numbers, contact details, and person regions are always omitted.",
-    parameters: Type.Object({ assetId: Type.String({ minLength: 1, maxLength: 256 }) }),
-    execute: async (_toolCallId: string, params: { assetId: string }) => {
-      const detail = await service.getPhotostaffMetadata(params.assetId);
-      return textResult(detail ? JSON.stringify(redactPhotostaffMetadataDetail(detail), null, 2) : "Photostaff not found.");
-    }
-  };
-  return [searchPhotostaff, getPhotostaffMetadata] as unknown as ToolDefinition[];
-}
-
-function redactPhotostaffSearchResult(result: PhotostaffQueryPage) {
-  return {
-    total: result.total,
-    metadataIndex: result.metadataIndex,
-    photostaff: result.photostaff.map((photostaff) => ({
-      id: photostaff.id,
-      path: photostaff.path,
-      name: photostaff.name,
-      mimeType: photostaff.mimeType,
-      sizeBytes: photostaff.sizeBytes,
-      width: photostaff.width,
-      height: photostaff.height,
-      takenAt: photostaff.takenAt,
-      indexedAt: photostaff.indexedAt,
-      keywords: photostaff.keywords,
-      metadata: photostaff.metadata
-    }))
-  };
-}
-
-function redactPhotostaffMetadataDetail(detail: PhotostaffMetadataDetail): PhotostaffMetadataDetail {
-  return {
-    assetId: detail.assetId,
-    summary: detail.summary,
-    keywords: detail.keywords,
-    groups: redactPhotostaffGroups(detail.groups),
-    sensitiveOmitted: detail.sensitiveOmitted || Boolean(detail.sensitiveGroups),
-    warnings: detail.warnings
-  };
-}
-
-function redactPhotostaffGroups(
-  groups: PhotostaffMetadataDetail["groups"]
-): PhotostaffMetadataDetail["groups"] {
-  const redacted: PhotostaffMetadataDetail["groups"] = {};
-  const sensitiveKey = /(gps|latitude|longitude|serial|contact|email|phone|person|people|face|region)/iu;
-  for (const [source, entries] of Object.entries(groups)) {
-    if (source.toLocaleLowerCase("und") === "gps") continue;
-    for (const [key, values] of Object.entries(entries)) {
-      if (sensitiveKey.test(`${source}.${key}`)) continue;
-      (redacted[source] ??= {})[key] = values;
-    }
-  }
-  return redacted;
-}
-
-async function withApproval(
-  input: PiAgentRuntimeInput,
-  approval: {
-    toolCallId: string;
-    toolName: PiToolName;
-    args: Record<string, unknown>;
-    risk: "low" | "medium" | "high" | "critical";
-    summary: string;
-    execute: () => Promise<TextToolResult>;
-  }
-): Promise<TextToolResult> {
-  const policy = input.toolPolicy[approval.toolName];
-  if (policy === "disabled") {
-    return textResult(`ZOS policy denied ${approval.toolName}.`);
-  }
-  if (policy === "auto") return approval.execute();
-
-  const execution = await input.requestCapability({
-    toolCallId: approval.toolCallId,
-    toolName: approval.toolName,
-    args: approval.args,
-    redactedArgs: redactPiToolArgs(approval.toolName, approval.args),
-    previewArgs: previewPiToolArgs(approval.toolName, approval.args),
-    risk: approval.risk,
-    summary: approval.summary,
-    requiresConfirmation: policy === "confirm"
-  });
-  return textResult(`Waiting for approval: ${approval.summary}`, execution);
-}
-
-async function withReadToolPolicy(
-  input: PiAgentRuntimeInput,
-  operation: {
-    toolCallId: string;
-    toolName: Extract<PiToolName, "read" | "grep" | "find" | "ls">;
-    args: Record<string, unknown>;
-    summary: string;
-    execute: () => Promise<TextToolResult>;
-  }
-): Promise<TextToolResult> {
-  const policy = input.toolPolicy[operation.toolName];
-  if (policy === "disabled") return textResult(`ZOS policy denied ${operation.toolName}.`);
-  return withApproval(input, { ...operation, risk: "low" });
 }
 
 async function mapPiEvent(
@@ -1505,180 +1148,6 @@ function extractAssistantText(message: { content?: unknown }): string {
     .trim();
 }
 
-function textResult(text: string, details: unknown = undefined): TextToolResult {
-  return {
-    content: [{ type: "text", text: truncateText(text) }],
-    details
-  };
-}
-
-function sliceLines(content: string, offset?: number, limit?: number): string {
-  const lines = content.split("\n");
-  const start = offset ? Math.max(0, offset - 1) : 0;
-  const end = limit ? start + Math.max(0, limit) : lines.length;
-  return lines.slice(start, end).join("\n");
-}
-
-async function grepNasRoot(
-  root: NasRootRecord,
-  input: { pattern: string; path: string; ignoreCase: boolean; literal: boolean; limit: number }
-): Promise<string[]> {
-  const safe = await resolveSafeExistingPath(root.path, input.path);
-  const matcher = createLineMatcher(input.pattern, input.ignoreCase, input.literal);
-  const matches: string[] = [];
-
-  async function visit(absolutePath: string): Promise<void> {
-    if (matches.length >= input.limit) {
-      return;
-    }
-    const entryStat = await lstat(absolutePath);
-    if (entryStat.isSymbolicLink()) {
-      return;
-    }
-    if (entryStat.isDirectory()) {
-      const entries = await readdir(absolutePath, { withFileTypes: true });
-      for (const entry of entries) {
-        await visit(path.join(absolutePath, entry.name));
-        if (matches.length >= input.limit) {
-          return;
-        }
-      }
-      return;
-    }
-    if (!entryStat.isFile()) {
-      return;
-    }
-
-    const relativePath = toRootRelative(safe.rootRealPath, absolutePath);
-    const preview = await readText(root, relativePath, 256 * 1024);
-    const lines = preview.content.split("\n");
-    lines.forEach((line, index) => {
-      if (matches.length < input.limit && matcher(line)) {
-        matches.push(`${relativePath}:${index + 1}:${line}`);
-      }
-    });
-  }
-
-  await visit(safe.realPath);
-  return matches;
-}
-
-async function globNasRoot(
-  root: NasRootRecord,
-  requestedPath: string,
-  pattern: string,
-  limit: number
-): Promise<string[]> {
-  if (!pattern.trim() || pattern.includes("\0")) {
-    throw new Error("find pattern must be a non-empty glob");
-  }
-  const safe = await resolveSafeExistingPath(root.path, requestedPath);
-  const matches: string[] = [];
-  const matchesPath = (relativePath: string) => {
-    const normalized = relativePath.split(path.sep).join("/");
-    return path.matchesGlob(normalized, pattern)
-      || (!pattern.includes("/") && path.matchesGlob(path.posix.basename(normalized), pattern));
-  };
-
-  async function visit(absolutePath: string): Promise<void> {
-    if (matches.length >= limit) return;
-    const entryStat = await lstat(absolutePath);
-    if (entryStat.isSymbolicLink()) return;
-    const relativePath = path.relative(safe.realPath, absolutePath);
-    if (relativePath && matchesPath(relativePath)) {
-      matches.push(relativePath.split(path.sep).join("/"));
-    }
-    if (!entryStat.isDirectory()) return;
-    const entries = await readdir(absolutePath, { withFileTypes: true });
-    entries.sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of entries) {
-      if (entry.name === ".git" || entry.name === "node_modules") continue;
-      await visit(path.join(absolutePath, entry.name));
-      if (matches.length >= limit) return;
-    }
-  }
-
-  await visit(safe.realPath);
-  return matches;
-}
-
-function createLineMatcher(pattern: string, ignoreCase: boolean, literal: boolean): (line: string) => boolean {
-  if (literal) {
-    const needle = ignoreCase ? pattern.toLocaleLowerCase() : pattern;
-    return (line) => (ignoreCase ? line.toLocaleLowerCase() : line).includes(needle);
-  }
-  const regex = new RegExp(pattern, ignoreCase ? "i" : undefined);
-  return (line) => regex.test(line);
-}
-
-async function buildEditPreview(
-  root: NasRootRecord,
-  requestedPath: string,
-  edits: Array<{ oldText: string; newText: string }>
-): Promise<{ absolutePath: string; relativePath: string; content: string }> {
-  const safe = await resolveSafeExistingPath(root.path, requestedPath);
-  let content = await readFile(safe.realPath, "utf8");
-  for (const edit of edits) {
-    if (!edit.oldText) {
-      throw new Error("edit oldText cannot be empty");
-    }
-    if (!content.includes(edit.oldText)) {
-      throw new Error(`edit oldText was not found in ${safe.relativePath}`);
-    }
-    content = content.replace(edit.oldText, edit.newText);
-  }
-  return {
-    absolutePath: safe.realPath,
-    relativePath: safe.relativePath,
-    content
-  };
-}
-
-async function assertSafeWriteTarget(
-  root: NasRootRecord,
-  requestedPath: string
-): Promise<{ absolutePath: string; relativePath: string }> {
-  const target = await resolveSafeTargetPath(root.path, requestedPath);
-  await assertClosestExistingParentInside(target.rootRealPath, target.absolutePath);
-  try {
-    const targetStat = await lstat(target.absolutePath);
-    if (targetStat.isSymbolicLink()) {
-      throw new Error("Refusing to write through a symlink");
-    }
-    const targetRealPath = await realpath(target.absolutePath);
-    if (!isPathInside(target.rootRealPath, targetRealPath)) {
-      throw new Error("Mutation target escapes the configured NAS root");
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-  }
-  return {
-    absolutePath: target.absolutePath,
-    relativePath: target.relativePath
-  };
-}
-
-async function assertClosestExistingParentInside(rootRealPath: string, absolutePath: string): Promise<void> {
-  let current = path.dirname(absolutePath);
-  while (current && current !== path.dirname(current)) {
-    try {
-      const currentRealPath = await realpath(current);
-      if (!isPathInside(rootRealPath, currentRealPath)) {
-        throw new Error("Mutation target parent escapes the configured NAS root");
-      }
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
-      }
-      current = path.dirname(current);
-    }
-  }
-  throw new Error("Mutation target parent does not exist inside the NAS root");
-}
-
 export function redactPiToolArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
   const redacted = redactSensitiveValue(args) as Record<string, unknown>;
   if (toolName === "bash" && typeof args.command === "string") {
@@ -1837,11 +1306,4 @@ function compactPiEvent(event: AgentSessionEvent): Record<string, unknown> {
   return {
     type: event.type
   };
-}
-
-function truncateText(text: string): string {
-  if (Buffer.byteLength(text, "utf8") <= MAX_TOOL_OUTPUT_BYTES) {
-    return text;
-  }
-  return `${text.slice(0, MAX_TOOL_OUTPUT_BYTES)}\n\n[Output truncated]`;
 }

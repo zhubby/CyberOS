@@ -1,4 +1,4 @@
-import type { ZosDatabase } from "../connection.js";
+import type { CyberOsDatabase } from "../connection.js";
 
 export interface OpsMaintenanceRetentionResult {
   operationNotificationsRemoved: number;
@@ -7,7 +7,7 @@ export interface OpsMaintenanceRetentionResult {
 }
 
 export function runOpsMaintenanceRetention(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   now = new Date()
 ): OpsMaintenanceRetentionResult {
   const notificationCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -33,7 +33,7 @@ export function runOpsMaintenanceRetention(
   return prune.immediate();
 }
 
-export function countUnrestoredTrashEntries(db: ZosDatabase): number {
+export function countUnrestoredTrashEntries(db: CyberOsDatabase): number {
   return Number(db.prepare(`
     SELECT COUNT(*) FROM trash_entries WHERE restored_at IS NULL
   `).pluck().get() ?? 0);

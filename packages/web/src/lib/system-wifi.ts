@@ -4,7 +4,7 @@ import type {
   SystemWifiDeviceState,
   SystemWifiSecurity,
   SystemWifiStatus
-} from "@zos/shared";
+} from "@cyberos/shared";
 
 export interface SystemWifiNetworkGroup {
   id: string;

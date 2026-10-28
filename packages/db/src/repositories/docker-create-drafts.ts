@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { DockerContainerCreateInput, DockerHostAccessCapabilityId, DockerHostAccessRisk } from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+import type { DockerContainerCreateInput, DockerHostAccessCapabilityId, DockerHostAccessRisk } from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 export interface DockerCreateDraftGrantSummary {
   capability: DockerHostAccessCapabilityId;
@@ -34,7 +34,7 @@ export interface DockerCreateDraftInput {
   expiresAt: Date | string;
 }
 
-export function createDockerCreateDraft(db: ZosDatabase, input: DockerCreateDraftInput): DockerCreateDraftRecord {
+export function createDockerCreateDraft(db: CyberOsDatabase, input: DockerCreateDraftInput): DockerCreateDraftRecord {
   const id = input.id ?? randomUUID();
   const revision = input.revision ?? randomUUID();
   const createdAt = new Date().toISOString();
@@ -58,7 +58,7 @@ export function createDockerCreateDraft(db: ZosDatabase, input: DockerCreateDraf
   return getDockerCreateDraft(db, id)!;
 }
 
-export function getDockerCreateDraft(db: ZosDatabase, id: string): DockerCreateDraftRecord | null {
+export function getDockerCreateDraft(db: CyberOsDatabase, id: string): DockerCreateDraftRecord | null {
   const row = db.prepare(`
     SELECT id, revision, approval_id, operation_id, job_id, input_json, policy_version, grant_summary_json, fingerprint,
            image_digest, created_at, expires_at
@@ -69,7 +69,7 @@ export function getDockerCreateDraft(db: ZosDatabase, id: string): DockerCreateD
 }
 
 export function getDockerCreateDraftByApproval(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   approvalId: string
 ): DockerCreateDraftRecord | null {
   const row = db.prepare(`
@@ -82,7 +82,7 @@ export function getDockerCreateDraftByApproval(
 }
 
 export function linkDockerCreateDraft(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: string,
   links: { approvalId: string; operationId: string; jobId: string }
@@ -95,7 +95,7 @@ export function linkDockerCreateDraft(
 }
 
 export function consumeDockerCreateDraft(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: string,
   now = new Date()
@@ -113,11 +113,11 @@ export function consumeDockerCreateDraft(
   }).immediate();
 }
 
-export function deleteDockerCreateDraft(db: ZosDatabase, id: string): boolean {
+export function deleteDockerCreateDraft(db: CyberOsDatabase, id: string): boolean {
   return db.prepare("DELETE FROM docker_create_drafts WHERE id = ?").run(id).changes === 1;
 }
 
-export function deleteExpiredDockerCreateDrafts(db: ZosDatabase, now = new Date()): number {
+export function deleteExpiredDockerCreateDrafts(db: CyberOsDatabase, now = new Date()): number {
   return db.transaction(() => {
     const expired = db.prepare(`
       SELECT id, approval_id, operation_id, job_id

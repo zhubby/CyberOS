@@ -1,4 +1,4 @@
-use zos_indexer::watcher::merge_ancestor;
+use cyberos_indexer::watcher::merge_ancestor;
 
 #[test]
 fn debounce_path_set_collapses_descendants() {

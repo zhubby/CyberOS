@@ -1,4 +1,4 @@
-root_dir = "/zos"
+root_dir = "/cyberos"
 environment = "production"
 
 [api]
@@ -10,7 +10,6 @@ allowed_origins = []
 enabled = true
 pi_enabled = false
 pi_token_file = "mcp/pi.token"
-legacy_pi_tools_enabled = false
 external_enabled = false
 shell_enabled = false
 allowed_hosts = ["localhost", "127.0.0.1", "[::1]"]
@@ -32,7 +31,7 @@ hour_retention_ms = 31536000000
 max_database_bytes = 536870912
 
 [admin]
-display_name = "ZOS Admin"
+display_name = "CyberOS Admin"
 auth_mode = "local-only"
 
 [model]
@@ -50,30 +49,30 @@ console_shells = ["/bin/sh", "/bin/bash"]
 [vm]
 enabled = false
 libvirt_uri = "qemu:///system"
-storage_path = "/zos/vm"
+storage_path = "/cyberos/vm"
 network_name = "default"
-iso_roots = ["/zos/iso"]
+iso_roots = ["/cyberos/iso"]
 operation_timeout_ms = 120000
 console_mode = "serial"
 
 [hostd]
-socket_path = "/run/zos/hostd.sock"
+socket_path = "/run/cyberos/hostd.sock"
 
 [shares]
 enabled = false
-account_username = "zos-share"
+account_username = "cyberos-share"
 
 [terminal]
-user = "zos"
-termux_socket_path = "/run/zos/termux.sock"
+user = "cyberos"
+termux_socket_path = "/run/cyberos/termux.sock"
 session_idle_timeout_ms = 1800000
 connect_timeout_ms = 10000
 max_sessions = 32
 
 [vod_player]
 enabled = false
-socket_path = "/run/zos/vod-player.sock"
-state_path = "/zos/state/vod-player/session.json"
+socket_path = "/run/cyberos/vod-player.sock"
+state_path = "/cyberos/state/vod-player/session.json"
 command_timeout_ms = 5000
 startup_timeout_ms = 15000
 checkpoint_interval_ms = 5000
@@ -84,19 +83,19 @@ drm_connector = ""
 audio_output = "alsa"
 audio_device = ""
 hwdec = "auto-safe"
-user = "zos"
+user = "cyberos"
 
 [[nas_roots]]
 id = "primary"
 name = "Primary NAS"
-path = "/zos/data/primary"
+path = "/cyberos/data/primary"
 mount_policy = "required"
 
 [backup]
 enabled = false
-repository_path = "/zos/data/backup/restic"
-password_file = "/zos/config/restic-password"
-staging_path = "/zos/state/backup-staging"
+repository_path = "/cyberos/data/backup/restic"
+password_file = "/cyberos/config/restic-password"
+staging_path = "/cyberos/state/backup-staging"
 require_mount = true
 retry_count = 2
 timeout_ms = 300000

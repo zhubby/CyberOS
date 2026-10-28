@@ -50,7 +50,7 @@ describe("settings helpers", () => {
   it("reports the running version in the dedicated settings section", () => {
     const section: SettingsSection = {
       id: "version",
-      group: "zos"
+      group: "cyberos"
     };
     const buildInfo = {
       version: "0.2.0",

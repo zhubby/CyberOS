@@ -10,7 +10,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return {
     ...fs,
     readFile: (...args: Parameters<typeof fs.readFile>) => {
-      if (String(args[0]) === "/usr/lib/zos/build-info.json") {
+      if (String(args[0]) === "/usr/lib/cyberos/build-info.json") {
         return Promise.reject(new Error("Host metadata is outside the test fixture"));
       }
       return fs.readFile(...args);
@@ -21,7 +21,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 let tempDir: string;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-api-build-info-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-api-build-info-"));
 });
 
 afterEach(async () => {

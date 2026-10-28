@@ -2,10 +2,10 @@ mod common;
 
 use std::path::Path;
 
+use cyberos_indexer::db::{Db, IndexerSettings, QueueTask};
+use cyberos_indexer::scanner::run_task;
 use rusqlite::Connection;
 use tokio_util::sync::CancellationToken;
-use zos_indexer::db::{Db, IndexerSettings, QueueTask};
-use zos_indexer::scanner::run_task;
 
 #[tokio::test]
 async fn indexes_text_skips_symlinks_and_cleans_stale_rows() {
@@ -23,7 +23,7 @@ async fn indexes_text_skips_symlinks_and_cleans_stale_rows() {
         root.join("outside.txt"),
     )
     .unwrap();
-    let database_path = directory.path().join("zos.sqlite");
+    let database_path = directory.path().join("cyberos.sqlite");
     common::create_schema(&database_path, &root);
     let db = Db::open(&database_path).unwrap();
     let task = QueueTask {
@@ -119,7 +119,7 @@ async fn non_recursive_and_ignored_incremental_tasks_preserve_rebuild_state() {
     std::fs::write(root.join("docs/direct.txt"), "direct alpha").unwrap();
     std::fs::write(root.join("docs/nested/deep.txt"), "deep alpha").unwrap();
     std::fs::write(root.join(".git/config"), "secret alpha").unwrap();
-    let database_path = directory.path().join("zos.sqlite");
+    let database_path = directory.path().join("cyberos.sqlite");
     common::create_schema(&database_path, &root);
     let connection = Connection::open(&database_path).unwrap();
     connection
@@ -224,7 +224,7 @@ async fn file_failures_skip_stale_cleanup_and_preserve_old_rows() {
     let root = directory.path().join("root");
     std::fs::create_dir(&root).unwrap();
     std::fs::write(root.join("broken.docx"), "not a zip").unwrap();
-    let database_path = directory.path().join("zos.sqlite");
+    let database_path = directory.path().join("cyberos.sqlite");
     common::create_schema(&database_path, &root);
     let connection = Connection::open(&database_path).unwrap();
     connection

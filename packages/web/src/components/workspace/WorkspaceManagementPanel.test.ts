@@ -89,7 +89,7 @@ describe("DockerComposeAppDialog", () => {
     }));
 
     expect(html).toContain("Create Compose App");
-    expect(html).toContain("/zos/apps/...");
+    expect(html).toContain("/cyberos/apps/...");
     expect(html).toContain("Validate");
     expect(html).toContain("Save and deploy");
   });
@@ -106,7 +106,7 @@ describe("VmInstanceDetailsDialog", () => {
       memoryBytes: 4 * 1024 ** 3,
       maxMemoryBytes: 8 * 1024 ** 3,
       os: "Arch Linux",
-      disks: [{ source: "/zos/vm/arch-linux.qcow2", capacityBytes: 20 * 1024 ** 3 }],
+      disks: [{ source: "/cyberos/vm/arch-linux.qcow2", capacityBytes: 20 * 1024 ** 3 }],
       networks: [{ name: "vnet7", source: "default", mac: "52:54:00:12:34:56" }]
     };
     const html = renderToStaticMarkup(createElement(VmInstanceDetailsDialog, {
@@ -125,7 +125,7 @@ describe("VmInstanceDetailsDialog", () => {
     expect(html).toContain("6bf3ae63-a248-4a98-8c30-479e75d06c82");
     expect(html).toContain("Arch Linux");
     expect(html).toContain("arm64");
-    expect(html).toContain("/zos/vm/arch-linux.qcow2");
+    expect(html).toContain("/cyberos/vm/arch-linux.qcow2");
     expect(html).toContain("52:54:00:12:34:56");
     expect(html).toContain("20.0 GB");
     expect(html).toContain("VM actions run immediately");

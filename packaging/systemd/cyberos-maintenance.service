@@ -1,0 +1,26 @@
+[Unit]
+Description=CyberOS SQLite and restore staging maintenance
+Documentation=file:///usr/share/doc/cyberos/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ROOT=/cyberos
+Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+WorkingDirectory=/cyberos/state
+ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/ops/dist/index.js maintenance
+TimeoutStartSec=2h
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/cyberos/state /cyberos/logs /cyberos/data /cyberos/data/backup
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

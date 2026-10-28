@@ -1,6 +1,6 @@
 ---
 title: 前端设计语言
-description: ZOS Web、TV 与文档站的视觉、布局、交互和响应式约束。
+description: CyberOS Web、TV 与文档站的视觉、布局、交互和响应式约束。
 type: reference
 status: current
 audience: [developer]
@@ -23,18 +23,18 @@ sourceOfTruth:
   - packages/web/src/components/settings/SettingsModal.tsx
   - packages/web/src/tv/tv.css
   - docs/src/styles/custom.css
-  - packages/web/public/zos-icon.svg
+  - packages/web/public/cyberos-icon.svg
 sidebar:
   order: 2
 ---
 
-这份文档是 ZOS 主 Web、TV 和文档站的共同设计规范。业务需求可以改变信息和流程，但不能在局部 CSS 中建立另一套颜色、几何或交互语言。三端共享基础令牌和状态语义，并分别适配操作密度、远距离观看与长文阅读。
+这份文档是 CyberOS 主 Web、TV 和文档站的共同设计规范。业务需求可以改变信息和流程，但不能在局部 CSS 中建立另一套颜色、几何或交互语言。三端共享基础令牌和状态语义，并分别适配操作密度、远距离观看与长文阅读。
 
 当前方向参考 Cyberpunk 2077 UI 的工业菜单语言：深黑设备表面、暖红结构层、稀疏黄色命令、红色风险与选择、青色信息焦点、硬切角和编号层级。实现只能借鉴设计方法，不得复制游戏标志、专有字体、Behance 原图或其他受限素材。
 
 ## 1. 产品性格
 
-ZOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设备菜单，而不是营销页或装饰性 dashboard。
+CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设备菜单，而不是营销页或装饰性 dashboard。
 
 - **高密度、可扫描**：优先展示状态、数据和下一步操作，使用稳定列、硬分隔线和清晰对齐。
 - **单一深色 HUD**：不提供浅色、深色或跟随系统选项，也不读取旧的主题本地存储值。
@@ -74,7 +74,7 @@ ZOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设备�
 
 ## 3. 品牌与资产
 
-- ZOS 图标和文字是第一视口的品牌信号。空间受限时只显示图标，设置和启动界面使用“图标 + ZOS”。
+- CyberOS 图标和文字是第一视口的品牌信号。空间受限时只显示图标，设置和启动界面使用“图标 + CyberOS”。
 - 图标保持现有几何和比例；黑色轨上可通过呈现层反白，不建立 Cyberpunk 标志或第三方联名版本。
 - 不引入 Behance 图片、游戏截图、Cyberpunk logo、专有字体或从参考项目提取的图形文件。
 - 图形装饰只由 CSS 结构线、状态轨、编号和短切角构成，不创建仿冒品牌素材。

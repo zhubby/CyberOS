@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-const script = fileURLToPath(new URL("scripts/zos-nas-acl.sh", import.meta.url));
+const script = fileURLToPath(new URL("scripts/cyberos-nas-acl.sh", import.meta.url));
 const hasLinuxAclTools =
   process.platform === "linux" &&
   spawnSync("getfacl", ["--version"]).status === 0 &&
@@ -22,7 +22,7 @@ describe("NAS ACL migration", () => {
     const fixture = await setup();
     const preview = run(fixture, "--check");
     expect(preview.status, preview.stderr).toBe(0);
-    expect(preview.stdout).toContain("planned change: grant zos rwx");
+    expect(preview.stdout).toContain("planned change: grant cyberos rwx");
     await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
     const applied = run(fixture, "--apply");
@@ -30,13 +30,13 @@ describe("NAS ACL migration", () => {
     const [backup] = await readdir(fixture.backups);
     expect(backup).toMatch(/^acl\./u);
     expect(await readFile(path.join(fixture.backups, backup!, "acl.dump"), "utf8")).toContain("# file:");
-    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -m u:zos:rwx -- ${fixture.pool}`);
-    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -m d:u:zos:rwx -- ${fixture.pool}`);
+    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -m u:cyberos:rwx -- ${fixture.pool}`);
+    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -m d:u:cyberos:rwx -- ${fixture.pool}`);
   });
 
   it("refuses an unmounted path before writing any ACL", async () => {
     const fixture = await setup();
-    const result = run(fixture, "--apply", { ZOS_NAS_MOUNTED: "0" });
+    const result = run(fixture, "--apply", { CYBEROS_NAS_MOUNTED: "0" });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("pool is not mounted");
     await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
@@ -44,54 +44,54 @@ describe("NAS ACL migration", () => {
 
   it("reports an ACL masked below the requested permissions", async () => {
     const fixture = await setup();
-    const result = run(fixture, "--apply", { ZOS_ACL_MASKED: "1" });
+    const result = run(fixture, "--apply", { CYBEROS_ACL_MASKED: "1" });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("zos ACL is ineffective");
+    expect(result.stderr).toContain("cyberos ACL is ineffective");
   });
 
   it("widens restrictive directory masks without broadening unrelated accounts", async () => {
     const fixture = await setup();
-    const preview = run(fixture, "--check", { ZOS_EXISTING_MASK: "r-x" });
+    const preview = run(fixture, "--check", { CYBEROS_EXISTING_MASK: "r-x" });
     expect(preview.status, preview.stderr).toBe(0);
     await expect(readFile(fixture.log, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
-    const result = run(fixture, "--apply", { ZOS_EXISTING_MASK: "r-x" });
+    const result = run(fixture, "--apply", { CYBEROS_EXISTING_MASK: "r-x" });
     expect(result.status, result.stderr).toBe(0);
     const log = await readFile(fixture.log, "utf8");
     expect(log).toContain(
-      `setfacl -n -m u:www-data:r-x,g::r-x,g:operators:r-x,u:zos:rwx,m::rwx -- ${fixture.pool}`
+      `setfacl -n -m u:www-data:r-x,g::r-x,g:operators:r-x,u:cyberos:rwx,m::rwx -- ${fixture.pool}`
     );
     expect(log).toContain(
-      `setfacl -n -m d:u:www-data:r-x,d:g::r-x,d:g:operators:r-x,d:u:zos:rwx,d:m::rwx -- ${fixture.pool}`
+      `setfacl -n -m d:u:www-data:r-x,d:g::r-x,d:g:operators:r-x,d:u:cyberos:rwx,d:m::rwx -- ${fixture.pool}`
     );
   });
 
   it("keeps a sufficient existing mask unchanged", async () => {
     const fixture = await setup();
-    const result = run(fixture, "--apply", { ZOS_EXISTING_MASK: "rwx" });
+    const result = run(fixture, "--apply", { CYBEROS_EXISTING_MASK: "rwx" });
     expect(result.status, result.stderr).toBe(0);
-    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:zos:rwx -- ${fixture.pool}`);
+    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:cyberos:rwx -- ${fixture.pool}`);
   });
 
   it("accepts masked group execute rights on a regular file", async () => {
     const fixture = await setup();
     const regularFile = path.join(fixture.pool, "document.txt");
     await writeFile(regularFile, "content");
-    const environment = { ZOS_REGULAR_FILE: regularFile };
+    const environment = { CYBEROS_REGULAR_FILE: regularFile };
 
     const preview = run(fixture, "--check", environment);
     expect(preview.status, preview.stderr).toBe(0);
 
     const result = run(fixture, "--apply", environment);
     expect(result.status, result.stderr).toBe(0);
-    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:zos:rw- -- ${regularFile}`);
+    expect(await readFile(fixture.log, "utf8")).toContain(`setfacl -n -m u:cyberos:rw- -- ${regularFile}`);
   });
 
   it("widens a restrictive file mask while preserving every existing effective permission", async () => {
     const fixture = await setup();
     const restrictedFile = path.join(fixture.pool, ".env");
     await writeFile(restrictedFile, "SECRET=value\n");
-    const environment = { ZOS_RESTRICTIVE_FILE: restrictedFile };
+    const environment = { CYBEROS_RESTRICTIVE_FILE: restrictedFile };
 
     const preview = run(fixture, "--check", environment);
     expect(preview.status, preview.stderr).toBe(0);
@@ -100,7 +100,7 @@ describe("NAS ACL migration", () => {
     const result = run(fixture, "--apply", environment);
     expect(result.status, result.stderr).toBe(0);
     expect(await readFile(fixture.log, "utf8")).toContain(
-      `setfacl -n -m u:sigmaos:r--,g::r--,u:zos:rw-,m::rw- -- ${restrictedFile}`
+      `setfacl -n -m u:archive:r--,g::r--,u:cyberos:rw-,m::rw- -- ${restrictedFile}`
     );
   });
 
@@ -136,27 +136,27 @@ describe("NAS ACL migration", () => {
     expect(after.stdout).toMatch(/^mask::rw-$/mu);
   });
 
-  it("keeps zos-owned private partial files private", async () => {
+  it("keeps cyberos-owned private partial files private", async () => {
     const fixture = await setup();
     const partial = path.join(fixture.pool, ".download.part");
     await writeFile(partial, "partial");
-    const result = run(fixture, "--apply", { ZOS_OWNER_FILE: partial });
+    const result = run(fixture, "--apply", { CYBEROS_OWNER_FILE: partial });
     expect(result.status, result.stderr).toBe(0);
     expect(await readFile(fixture.log, "utf8")).not.toContain(`-- ${partial}`);
   });
 
-  it("rejects an ACL backup directory outside the configured ZOS root", async () => {
+  it("rejects an ACL backup directory outside the configured CyberOS root", async () => {
     const fixture = await setup();
     const result = run(fixture, "--apply", {
-      ZOS_ACL_BACKUP_DIR: path.join(os.tmpdir(), "outside-zos-root")
+      CYBEROS_ACL_BACKUP_DIR: path.join(os.tmpdir(), "outside-cyberos-root")
     });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("ZOS_ACL_BACKUP_DIR must be under");
+    expect(result.stderr).toContain("CYBEROS_ACL_BACKUP_DIR must be under");
   });
 });
 
 async function setup() {
-  directory = await mkdtemp(path.join(os.tmpdir(), "zos-nas-acl-"));
+  directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-nas-acl-"));
   const bin = path.join(directory, "bin");
   const root = path.join(directory, "nas");
   const pool = path.join(root, "pool1");
@@ -167,51 +167,51 @@ case "$(basename "$0")" in
   id) if [ "$1" = -u ] && [ "$#" -eq 1 ]; then printf '0\\n'; else printf '111\\n'; fi ;;
   realpath) for arg do :; done; printf '%s\\n' "$arg" ;;
   findmnt)
-    if [ "$ZOS_NAS_MOUNTED" = 0 ]; then exit 0; fi
-    case " $* " in *' OPTIONS '*) printf 'rw,relatime\\n';; *) printf '%s\\n' "$ZOS_POOL";; esac ;;
+    if [ "$CYBEROS_NAS_MOUNTED" = 0 ]; then exit 0; fi
+    case " $* " in *' OPTIONS '*) printf 'rw,relatime\\n';; *) printf '%s\\n' "$CYBEROS_POOL";; esac ;;
   find)
     case " $* " in
       *' -printf '*) printf '.' ;;
-      *' -print0 '*) printf '%s\\0' "$ZOS_POOL"; if [ -n "$ZOS_OWNER_FILE" ]; then printf '%s\\0' "$ZOS_OWNER_FILE"; fi; if [ -n "$ZOS_REGULAR_FILE" ]; then printf '%s\\0' "$ZOS_REGULAR_FILE"; fi; if [ -n "$ZOS_RESTRICTIVE_FILE" ]; then printf '%s\\0' "$ZOS_RESTRICTIVE_FILE"; fi ;;
-      *' -exec '*) getfacl --absolute-names "$ZOS_POOL" ;;
+      *' -print0 '*) printf '%s\\0' "$CYBEROS_POOL"; if [ -n "$CYBEROS_OWNER_FILE" ]; then printf '%s\\0' "$CYBEROS_OWNER_FILE"; fi; if [ -n "$CYBEROS_REGULAR_FILE" ]; then printf '%s\\0' "$CYBEROS_REGULAR_FILE"; fi; if [ -n "$CYBEROS_RESTRICTIVE_FILE" ]; then printf '%s\\0' "$CYBEROS_RESTRICTIVE_FILE"; fi ;;
+      *' -exec '*) getfacl --absolute-names "$CYBEROS_POOL" ;;
     esac ;;
   getfacl)
     for arg do :; done
-    if [ -n "$ZOS_OWNER_FILE" ] && [ "$arg" = "$ZOS_OWNER_FILE" ]; then
-      printf '# file: %s\\nuser::rw-\\nuser:zos:rw-\\t#effective:---\\ngroup::---\\nmask::---\\nother::---\\n' "$arg"
+    if [ -n "$CYBEROS_OWNER_FILE" ] && [ "$arg" = "$CYBEROS_OWNER_FILE" ]; then
+      printf '# file: %s\\nuser::rw-\\nuser:cyberos:rw-\\t#effective:---\\ngroup::---\\nmask::---\\nother::---\\n' "$arg"
       exit 0
     fi
-    if [ -n "$ZOS_REGULAR_FILE" ] && [ "$arg" = "$ZOS_REGULAR_FILE" ]; then
-      printf '# file: %s\\nuser::rw-\\nuser:sigmaos:rwx\\n' "$arg"
-      if [ -f "$ZOS_ACL_LOG" ] && grep -Fq "setfacl -n -m u:zos:rw- -- $arg" "$ZOS_ACL_LOG"; then
-        printf 'user:zos:rw-\\n'
+    if [ -n "$CYBEROS_REGULAR_FILE" ] && [ "$arg" = "$CYBEROS_REGULAR_FILE" ]; then
+      printf '# file: %s\\nuser::rw-\\nuser:cyberos:rwx\\n' "$arg"
+      if [ -f "$CYBEROS_ACL_LOG" ] && grep -Fq "setfacl -n -m u:cyberos:rw- -- $arg" "$CYBEROS_ACL_LOG"; then
+        printf 'user:cyberos:rw-\\n'
       fi
       printf 'group::r-x\\nmask::rw-\\nother::---\\n'
       exit 0
     fi
-    if [ -n "$ZOS_RESTRICTIVE_FILE" ] && [ "$arg" = "$ZOS_RESTRICTIVE_FILE" ]; then
+    if [ -n "$CYBEROS_RESTRICTIVE_FILE" ] && [ "$arg" = "$CYBEROS_RESTRICTIVE_FILE" ]; then
       printf '# file: %s\\nuser::rw-\\n' "$arg"
-      if [ -f "$ZOS_ACL_LOG" ] && grep -Fq "setfacl -n -m u:sigmaos:r--,g::r--,u:zos:rw-,m::rw- -- $arg" "$ZOS_ACL_LOG"; then
-        printf 'user:sigmaos:r--\\nuser:zos:rw-\\ngroup::r--\\nmask::rw-\\nother::---\\n'
+      if [ -f "$CYBEROS_ACL_LOG" ] && grep -Fq "setfacl -n -m u:archive:r--,g::r--,u:cyberos:rw-,m::rw- -- $arg" "$CYBEROS_ACL_LOG"; then
+        printf 'user:archive:r--\\nuser:cyberos:rw-\\ngroup::r--\\nmask::rw-\\nother::---\\n'
       else
-        printf 'user:sigmaos:rwx\\t#effective:r--\\ngroup::r-x\\t#effective:r--\\nmask::r--\\nother::---\\n'
+        printf 'user:archive:rwx\\t#effective:r--\\ngroup::r-x\\t#effective:r--\\nmask::r--\\nother::---\\n'
       fi
       exit 0
     fi
-    printf '# file: %s\\nuser::rwx\\n' "$ZOS_POOL"
-    if [ -n "$ZOS_EXISTING_MASK" ]; then
-      printf 'user:www-data:rwx\\ngroup::r-x\\ngroup:operators:rwx\\nmask::%s\\ndefault:user::rwx\\ndefault:user:www-data:rwx\\ndefault:group::r-x\\ndefault:group:operators:rwx\\ndefault:mask::%s\\ndefault:other::r-x\\n' "$ZOS_EXISTING_MASK" "$ZOS_EXISTING_MASK"
+    printf '# file: %s\\nuser::rwx\\n' "$CYBEROS_POOL"
+    if [ -n "$CYBEROS_EXISTING_MASK" ]; then
+      printf 'user:www-data:rwx\\ngroup::r-x\\ngroup:operators:rwx\\nmask::%s\\ndefault:user::rwx\\ndefault:user:www-data:rwx\\ndefault:group::r-x\\ndefault:group:operators:rwx\\ndefault:mask::%s\\ndefault:other::r-x\\n' "$CYBEROS_EXISTING_MASK" "$CYBEROS_EXISTING_MASK"
     fi
-    if [ "$ZOS_ACL_MASKED" = 1 ]; then
-      printf 'user:zos:rwx\\t#effective:r-x\\n'
+    if [ "$CYBEROS_ACL_MASKED" = 1 ]; then
+      printf 'user:cyberos:rwx\\t#effective:r-x\\n'
     else
-      printf 'user:zos:rwx\\n'
+      printf 'user:cyberos:rwx\\n'
     fi ;;
   stat)
     for arg do :; done
-    if [ -n "$ZOS_OWNER_FILE" ] && [ "$arg" = "$ZOS_OWNER_FILE" ]; then printf '111\\n'; else printf '999\\n'; fi ;;
+    if [ -n "$CYBEROS_OWNER_FILE" ] && [ "$arg" = "$CYBEROS_OWNER_FILE" ]; then printf '111\\n'; else printf '999\\n'; fi ;;
   chmod) : ;;
-  setfacl) printf 'setfacl %s\\n' "$*" >> "$ZOS_ACL_LOG" ;;
+  setfacl) printf 'setfacl %s\\n' "$*" >> "$CYBEROS_ACL_LOG" ;;
 esac
 `;
   for (const name of ["id", "realpath", "findmnt", "find", "getfacl", "stat", "chmod", "setfacl"]) {
@@ -220,7 +220,7 @@ esac
     await chmod(target, 0o755);
   }
   return {
-    zosRoot: directory,
+    cyberosRoot: directory,
     bin,
     root,
     pool,
@@ -235,11 +235,11 @@ function run(fixture: Awaited<ReturnType<typeof setup>>, mode: string, extraEnv:
     env: {
       ...process.env,
       PATH: `${fixture.bin}:${process.env.PATH ?? ""}`,
-      ZOS_ROOT: fixture.zosRoot,
-      ZOS_NAS_MOUNTED: "1",
-      ZOS_POOL: fixture.pool,
-      ZOS_ACL_BACKUP_DIR: fixture.backups,
-      ZOS_ACL_LOG: fixture.log,
+      CYBEROS_ROOT: fixture.cyberosRoot,
+      CYBEROS_NAS_MOUNTED: "1",
+      CYBEROS_POOL: fixture.pool,
+      CYBEROS_ACL_BACKUP_DIR: fixture.backups,
+      CYBEROS_ACL_LOG: fixture.log,
       ...extraEnv
     }
   });

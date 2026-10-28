@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
-import type { NasRootConfig, RootReadiness } from "@zos/shared";
+import type { NasRootConfig, RootReadiness } from "@cyberos/shared";
 
 export interface MountCommandRunner {
   run(command: string, args: string[]): Promise<string>;

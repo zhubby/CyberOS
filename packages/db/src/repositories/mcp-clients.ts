@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import type { ZosDatabase } from "../connection.js";
+import type { CyberOsDatabase } from "../connection.js";
 
 export type McpClientKind = "pi" | "local" | "lan";
 
@@ -34,11 +34,11 @@ interface McpClientRow {
   updated_at: string;
 }
 
-const TOKEN_PREFIX = "zos_mcp_";
+const TOKEN_PREFIX = "cyberos_mcp_";
 const DISPLAY_PREFIX_LENGTH = 16;
 
 export function createMcpClient(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { name: string; kind: McpClientKind; scopes: readonly string[]; expiresAt?: string | null }
 ): CreatedMcpClient {
   const name = input.name.trim();
@@ -70,24 +70,24 @@ export function createMcpClient(
   };
 }
 
-export function listMcpClients(db: ZosDatabase): McpClientRecord[] {
+export function listMcpClients(db: CyberOsDatabase): McpClientRecord[] {
   const rows = db.prepare("SELECT * FROM mcp_clients ORDER BY created_at DESC, id DESC").all() as McpClientRow[];
   return rows.map(mapClient);
 }
 
-export function getMcpClient(db: ZosDatabase, clientId: string): McpClientRecord | null {
+export function getMcpClient(db: CyberOsDatabase, clientId: string): McpClientRecord | null {
   const row = db.prepare("SELECT * FROM mcp_clients WHERE id = ?").get(clientId) as McpClientRow | undefined;
   return row ? mapClient(row) : null;
 }
 
-export function authenticateMcpClient(db: ZosDatabase, token: string, now = new Date().toISOString()): McpClientRecord | null {
+export function authenticateMcpClient(db: CyberOsDatabase, token: string, now = new Date().toISOString()): McpClientRecord | null {
   const client = findMcpClientByToken(db, token, now);
   if (!client) return null;
   db.prepare("UPDATE mcp_clients SET last_used_at = ?, updated_at = ? WHERE id = ?").run(now, now, client.id);
   return { ...client, lastUsedAt: now, updatedAt: now };
 }
 
-export function findMcpClientByToken(db: ZosDatabase, token: string, now = new Date().toISOString()): McpClientRecord | null {
+export function findMcpClientByToken(db: CyberOsDatabase, token: string, now = new Date().toISOString()): McpClientRecord | null {
   if (!token.startsWith(TOKEN_PREFIX) || token.length < 50) return null;
   const candidateDigest = digestToken(token);
   const rows = db.prepare(`
@@ -99,7 +99,7 @@ export function findMcpClientByToken(db: ZosDatabase, token: string, now = new D
 }
 
 export function rotateMcpClientToken(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   clientId: string,
   replacementToken?: string
 ): { client: McpClientRecord; token: string } {
@@ -117,7 +117,7 @@ export function rotateMcpClientToken(
 }
 
 export function updateMcpClientScopes(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   clientId: string,
   scopes: readonly string[]
 ): McpClientRecord {
@@ -132,7 +132,7 @@ export function updateMcpClientScopes(
   return getMcpClient(db, clientId)!;
 }
 
-export function revokeMcpClient(db: ZosDatabase, clientId: string): boolean {
+export function revokeMcpClient(db: CyberOsDatabase, clientId: string): boolean {
   const now = new Date().toISOString();
   const revoke = db.transaction(() => {
     const result = db.prepare(`
@@ -176,7 +176,7 @@ function generateToken(): string {
 }
 
 function isValidToken(token: string): boolean {
-  return /^zos_mcp_[A-Za-z0-9_-]{43}$/u.test(token);
+  return /^cyberos_mcp_[A-Za-z0-9_-]{43}$/u.test(token);
 }
 
 function safeDigestEqual(stored: string, candidate: string): boolean {

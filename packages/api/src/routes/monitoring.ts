@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { getMonitoringAlertSummary } from "@zos/db";
-import { MonitoringValidationError } from "@zos/monitoring";
-import type { MonitoringQueryRequest } from "@zos/shared";
+import { getMonitoringAlertSummary } from "@cyberos/db";
+import { MonitoringValidationError } from "@cyberos/monitoring";
+import type { MonitoringQueryRequest } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerMonitoringRoutes(server: FastifyInstance, context: ApiRouteContext): void {

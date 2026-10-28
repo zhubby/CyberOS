@@ -11,7 +11,7 @@ import {
   TERMUX_MAX_INPUT_BYTES,
   type TermuxClientFrame,
   type TermuxServerFrame
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { createTerminalRuntime } from "./termux-client.js";
 
 const STREAM_ID = "550e8400-e29b-41d4-a716-446655440000";
@@ -70,7 +70,7 @@ describe("Termux client", () => {
       name: "xterm-256color",
       cols: 120,
       rows: 32,
-      sessionName: "zos-persisted",
+      sessionName: "cyberos-persisted",
       persistent: true,
       env: {}
     });
@@ -88,7 +88,7 @@ describe("Termux client", () => {
         user: "zhubby",
         cols: 120,
         rows: 32,
-        sessionName: "zos-persisted",
+        sessionName: "cyberos-persisted",
         persistent: true
       }
     });
@@ -182,8 +182,8 @@ describe("Termux client", () => {
       }
     });
     const runtime = createTerminalRuntime({ user: "zhubby", termuxSocketPath: server.socketPath });
-    await runtime.destroySession("zos-persisted");
-    expect(requests[0]).toMatchObject({ operation: "session.destroy", payload: { user: "zhubby", sessionName: "zos-persisted" } });
+    await runtime.destroySession("cyberos-persisted");
+    expect(requests[0]).toMatchObject({ operation: "session.destroy", payload: { user: "zhubby", sessionName: "cyberos-persisted" } });
   });
 
   it("propagates structured destroy failures", async () => {
@@ -199,7 +199,7 @@ describe("Termux client", () => {
       }
     });
     const runtime = createTerminalRuntime({ user: "zhubby", termuxSocketPath: server.socketPath });
-    await expect(runtime.destroySession("zos-persisted")).rejects.toThrow("tmux kill failed");
+    await expect(runtime.destroySession("cyberos-persisted")).rejects.toThrow("tmux kill failed");
   });
 
   it("uses explicit and implicit recoverable exit signals", async () => {
@@ -228,9 +228,9 @@ describe("Termux client", () => {
     const runtime = createTerminalRuntime({ user: "zhubby", termuxSocketPath: server.socketPath });
     await expect(runtime.spawn("", [], { name: "xterm-256color", cols: 120, rows: 32, env: {} })).rejects.toBeInstanceOf(Error);
 
-    const disabled = createTerminalRuntime({ user: null, termuxSocketPath: "/run/zos/termux.sock" });
+    const disabled = createTerminalRuntime({ user: null, termuxSocketPath: "/run/cyberos/termux.sock" });
     expect(() => disabled.spawn("", [], { name: "xterm-256color", cols: 120, rows: 32, env: {} })).toThrow("Terminal user is not configured");
-    await expect(disabled.destroySession("zos-persisted")).rejects.toThrow("Terminal user is not configured");
+    await expect(disabled.destroySession("cyberos-persisted")).rejects.toThrow("Terminal user is not configured");
   });
 });
 
@@ -282,7 +282,7 @@ async function createServer(
 }
 
 async function createSocketPath(): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "zos-termux-client-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-termux-client-"));
   tempDirs.push(directory);
   return path.join(directory, "termux.sock");
 }

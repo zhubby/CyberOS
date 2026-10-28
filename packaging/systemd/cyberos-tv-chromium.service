@@ -1,0 +1,31 @@
+[Unit]
+Description=CyberOS TV Chromium shell
+ConditionPathExists=/cyberos/config/tv-mode/enabled
+PartOf=cyberos-tv.target
+Requires=cyberos-tv-weston.service cyberos-api.service
+After=cyberos-tv-weston.service cyberos-api.service
+
+[Service]
+Type=simple
+User=cyberos
+Group=cyberos
+SupplementaryGroups=video render
+Environment=HOME=/cyberos/state/tv
+Environment=XDG_RUNTIME_DIR=/run/cyberos-tv
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStart=/usr/lib/cyberos/scripts/cyberos-tv-chromium
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20s
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/cyberos-tv /cyberos/state/tv
+NoNewPrivileges=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+CapabilityBoundingSet=
+MemoryMax=1G
+CPUQuota=250%
+TasksMax=512

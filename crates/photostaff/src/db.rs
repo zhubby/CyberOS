@@ -174,7 +174,7 @@ impl Db {
             .map_err(PhotostaffError::database)?;
         let (sender, receiver) = mpsc::channel::<DbJob>();
         std::thread::Builder::new()
-            .name("zos-photostaff-db".into())
+            .name("cyberos-photostaff-db".into())
             .spawn(move || {
                 let mut connection = connection;
                 while let Ok(job) = receiver.recv() {
@@ -1490,7 +1490,7 @@ mod tests {
             id: "job-1".into(),
             kind: "full_scan".into(),
             root_id: "root-1".into(),
-            root_path: "/zos/data/primary".into(),
+            root_path: "/cyberos/data/primary".into(),
             storage_pool_id: "pool-1".into(),
             path: "Pictures".into(),
             library_updated_at: "2026-10-11T00:00:00Z".into(),

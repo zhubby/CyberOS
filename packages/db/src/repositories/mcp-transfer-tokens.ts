@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { ZosDatabase } from "../connection.js";
+import type { CyberOsDatabase } from "../connection.js";
 
 export interface McpTransferRecord {
   clientId: string;
@@ -25,7 +25,7 @@ interface McpTransferRow {
   created_at: string;
 }
 
-export function createMcpTransferToken(db: ZosDatabase, input: {
+export function createMcpTransferToken(db: CyberOsDatabase, input: {
   clientId: string;
   rootId: string;
   relativePath: string;
@@ -34,7 +34,7 @@ export function createMcpTransferToken(db: ZosDatabase, input: {
   modifiedAt: string;
   expiresAt: string;
 }): { token: string; transfer: McpTransferRecord } {
-  const token = `zos_transfer_${randomBytes(32).toString("base64url")}`;
+  const token = `cyberos_transfer_${randomBytes(32).toString("base64url")}`;
   const createdAt = new Date().toISOString();
   if (input.expiresAt <= createdAt) throw new Error("Transfer expiry must be in the future");
   db.prepare(`
@@ -62,7 +62,7 @@ export function createMcpTransferToken(db: ZosDatabase, input: {
 }
 
 export function consumeMcpTransferToken(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { token: string; clientId: string; now?: string }
 ): McpTransferRecord | null {
   const now = input.now ?? new Date().toISOString();
@@ -75,7 +75,7 @@ export function consumeMcpTransferToken(
   return row ? mapTransfer(row) : null;
 }
 
-export function deleteExpiredMcpTransferTokens(db: ZosDatabase, now = new Date().toISOString()): number {
+export function deleteExpiredMcpTransferTokens(db: CyberOsDatabase, now = new Date().toISOString()): number {
   return db.prepare("DELETE FROM mcp_transfer_tokens WHERE expires_at <= ? OR used_at IS NOT NULL").run(now).changes;
 }
 

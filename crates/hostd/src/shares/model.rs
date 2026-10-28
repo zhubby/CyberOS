@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 pub(super) const DEFAULT_MANAGED_ROOTS: &[&str] = &[
-    "/zos/config",
+    "/cyberos/config",
     "/etc/samba/smb.conf.d",
     "/etc/apache2/sites-available",
     "/etc/vsftpd.d",
@@ -15,7 +15,7 @@ pub(super) const DEFAULT_MANAGED_ROOTS: &[&str] = &[
 pub(super) const ALL_SERVICES: &[&str] = &[
     "smbd.service",
     "nmbd.service",
-    "zos-webdav.service",
+    "cyberos-webdav.service",
     "vsftpd.service",
     "nfs-server.service",
     "minidlna.service",
@@ -35,13 +35,13 @@ pub struct SharePaths {
 impl Default for SharePaths {
     fn default() -> Self {
         Self {
-            samba_config: "/etc/samba/smb.conf.d/zos-shares.conf".into(),
-            webdav_site: "/etc/apache2/sites-available/zos-webdav.conf".into(),
-            ftp_config: "/etc/vsftpd.d/zos-shares.conf".into(),
-            nfs_exports: "/etc/exports.d/zos.exports".into(),
-            dlna_config: "/etc/minidlna.d/zos.conf".into(),
-            htpasswd: "/zos/config/shares.htpasswd".into(),
-            ftp_pam: "/etc/pam.d/vsftpd-zos".into(),
+            samba_config: "/etc/samba/smb.conf.d/cyberos-shares.conf".into(),
+            webdav_site: "/etc/apache2/sites-available/cyberos-webdav.conf".into(),
+            ftp_config: "/etc/vsftpd.d/cyberos-shares.conf".into(),
+            nfs_exports: "/etc/exports.d/cyberos.exports".into(),
+            dlna_config: "/etc/minidlna.d/cyberos.conf".into(),
+            htpasswd: "/cyberos/config/shares.htpasswd".into(),
+            ftp_pam: "/etc/pam.d/vsftpd-cyberos".into(),
         }
     }
 }
@@ -61,8 +61,8 @@ impl Default for ShareOptions {
             paths: SharePaths::default(),
             credential_group: "www-data".to_owned(),
             managed_roots: DEFAULT_MANAGED_ROOTS.iter().map(PathBuf::from).collect(),
-            acl_script: "/usr/lib/zos/scripts/zos-share-acl.mjs".into(),
-            acl_state: "/zos/config/share-acl.json".into(),
+            acl_script: "/usr/lib/cyberos/scripts/cyberos-share-acl.mjs".into(),
+            acl_state: "/cyberos/config/share-acl.json".into(),
         }
     }
 }

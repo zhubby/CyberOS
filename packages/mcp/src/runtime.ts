@@ -10,7 +10,7 @@ import {
   type CapabilityExecution,
   type CapabilityResult,
   type JsonValue
-} from "@zos/capabilities";
+} from "@cyberos/capabilities";
 import {
   executeFileReadCapability,
   proposeDomainCapability,
@@ -18,7 +18,7 @@ import {
   proposePiMcpFileCapability,
   type CapabilityDomainAdapter,
   type PiMcpFileCapabilityId
-} from "@zos/capability-runtime";
+} from "@cyberos/capability-runtime";
 import {
   cancelOwnedCapabilityRun,
   countUnreadOperationNotifications,
@@ -64,14 +64,14 @@ import {
   listRootReadiness,
   type McpClientRecord,
   type McpResourceRecord,
-  type ZosDatabase
-} from "@zos/db";
-import { inferMimeType, statPath } from "@zos/nas-tools";
-import type { AgentCapabilityId, AgentCapabilityPolicyMode, DownloadTaskStatus, PublicBuildInfo, ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import { inferMimeType, statPath } from "@cyberos/nas-tools";
+import type { AgentCapabilityId, AgentCapabilityPolicyMode, DownloadTaskStatus, PublicBuildInfo, CyberOsConfig } from "@cyberos/shared";
 
 export interface McpRuntimeDependencies {
-  db: ZosDatabase;
-  config: ZosConfig;
+  db: CyberOsDatabase;
+  config: CyberOsConfig;
   buildInfo?: PublicBuildInfo;
   readAdapters?: Readonly<Record<string, (
     input: JsonValue,
@@ -93,47 +93,47 @@ export interface ClientRuntime {
   context: CapabilityContext;
 }
 
-const FILE_MUTATION_CAPABILITY = "zos.files.mutate";
-const FILE_RESOURCE_LINK_CAPABILITY = "zos.files.resource-link";
+const FILE_MUTATION_CAPABILITY = "cyberos.files.mutate";
+const FILE_RESOURCE_LINK_CAPABILITY = "cyberos.files.resource-link";
 const PI_MCP_FILE_CAPABILITIES = new Set<PiMcpFileCapabilityId>([
-  "zos.files.list",
-  "zos.files.stat",
-  "zos.files.read",
-  "zos.files.search",
-  "zos.files.grep",
-  "zos.files.find",
-  "zos.files.git",
-  "zos.files.archive-inspect"
+  "cyberos.files.list",
+  "cyberos.files.stat",
+  "cyberos.files.read",
+  "cyberos.files.search",
+  "cyberos.files.grep",
+  "cyberos.files.find",
+  "cyberos.files.git",
+  "cyberos.files.archive-inspect"
 ]);
 
 const IMPLEMENTED = new Set([
-  "zos.catalog.get",
-  "zos.system.status",
-  "zos.roots.list",
-  "zos.files.list",
-  "zos.files.stat",
-  "zos.files.read",
-  "zos.files.resource-link",
-  "zos.files.search",
-  "zos.files.grep",
-  "zos.files.find",
-  "zos.files.git",
-  "zos.files.archive-inspect",
-  "zos.files.mutate",
-  "zos.index.status",
-  "zos.photos.query",
-  "zos.photos.status",
-  "zos.downloads.list",
-  "zos.operations.list",
-  "zos.backup.status",
-  "zos.alerts.read",
-  "zos.notifications.list",
-  "zos.settings.public",
-  "zos.terminal.tabs",
-  "zos.runs.get",
-  "zos.runs.list",
-  "zos.runs.wait",
-  "zos.runs.cancel"
+  "cyberos.catalog.get",
+  "cyberos.system.status",
+  "cyberos.roots.list",
+  "cyberos.files.list",
+  "cyberos.files.stat",
+  "cyberos.files.read",
+  "cyberos.files.resource-link",
+  "cyberos.files.search",
+  "cyberos.files.grep",
+  "cyberos.files.find",
+  "cyberos.files.git",
+  "cyberos.files.archive-inspect",
+  "cyberos.files.mutate",
+  "cyberos.index.status",
+  "cyberos.photos.query",
+  "cyberos.photos.status",
+  "cyberos.downloads.list",
+  "cyberos.operations.list",
+  "cyberos.backup.status",
+  "cyberos.alerts.read",
+  "cyberos.notifications.list",
+  "cyberos.settings.public",
+  "cyberos.terminal.tabs",
+  "cyberos.runs.get",
+  "cyberos.runs.list",
+  "cyberos.runs.wait",
+  "cyberos.runs.cancel"
 ]);
 
 export function createClientRuntime(dependencies: McpRuntimeDependencies, client: McpClientRecord): ClientRuntime {
@@ -156,11 +156,11 @@ export function createClientRuntime(dependencies: McpRuntimeDependencies, client
       client.kind !== "pi" &&
       (base.approval === "first_party" || base.approval === "first_party_confirm")
     ) continue;
-    if (base.id === "zos.shell.run" && dependencies.config.mcp?.shellEnabled !== true) continue;
+    if (base.id === "cyberos.shell.run" && dependencies.config.mcp?.shellEnabled !== true) continue;
     if (
       base.id === FILE_RESOURCE_LINK_CAPABILITY
       && client.kind === "pi"
-      && policySettings.policies["zos.files.read"] !== "auto"
+      && policySettings.policies["cyberos.files.read"] !== "auto"
     ) continue;
     if (client.kind === "pi" && agentCapabilityId && policySettings.policies[agentCapabilityId] === "disabled") continue;
     const agentPolicy = client.kind === "pi" && agentCapabilityId
@@ -243,7 +243,7 @@ async function executeImplemented(
     if (!descriptor) throw new CapabilityError("INVALID_ARGUMENT", "Capability is not registered");
     if (descriptor.risk !== "read" && descriptor.approval !== "owner_control") {
       const idempotency = optionalString(object.idempotencyKey);
-      const request = id === "zos.shell.run"
+      const request = id === "cyberos.shell.run"
         ? jsonValue(Object.fromEntries(Object.entries(object).filter(([key]) => key !== "idempotencyKey")))
         : object.request ?? null;
       return proposeDomainCapability({
@@ -279,48 +279,48 @@ async function executeImplemented(
     }
   }
   switch (id) {
-    case "zos.system.status":
+    case "cyberos.system.status":
       return { data: systemStatus(dependencies) };
-    case "zos.roots.list":
+    case "cyberos.roots.list":
       return { data: rootsStatus(dependencies, optionalString(object.rootId)) };
-    case "zos.operations.list":
+    case "cyberos.operations.list":
       return { data: jsonValue(getSystemOperations(dependencies.db, { limit: boundedInteger(object.limit, 20, 1, 100) })) };
-    case "zos.backup.status":
+    case "cyberos.backup.status":
       return { data: { enabled: dependencies.config.backup?.enabled ?? false, runs: jsonValue(listBackupRuns(dependencies.db, boundedInteger(object.limit, 20, 1, 100))) } };
-    case "zos.index.status":
+    case "cyberos.index.status":
       return indexStatus(dependencies, object);
-    case "zos.photos.status":
+    case "cyberos.photos.status":
       return photosStatus(dependencies);
-    case "zos.photos.query":
+    case "cyberos.photos.query":
       return queryPhotos(dependencies, object);
-    case "zos.downloads.list":
+    case "cyberos.downloads.list":
       return downloadsStatus(dependencies, object);
-    case "zos.alerts.read":
+    case "cyberos.alerts.read":
       return alertsStatus(dependencies, object);
-    case "zos.notifications.list":
+    case "cyberos.notifications.list":
       return notificationsStatus(dependencies, object);
-    case "zos.settings.public":
+    case "cyberos.settings.public":
       return publicSettings(dependencies);
-    case "zos.terminal.tabs":
+    case "cyberos.terminal.tabs":
       return terminalTabs(dependencies, object);
-    case "zos.files.list":
-    case "zos.files.stat":
-    case "zos.files.read":
-    case "zos.files.search":
-    case "zos.files.grep":
-    case "zos.files.find":
-    case "zos.files.git":
-    case "zos.files.archive-inspect":
+    case "cyberos.files.list":
+    case "cyberos.files.stat":
+    case "cyberos.files.read":
+    case "cyberos.files.search":
+    case "cyberos.files.grep":
+    case "cyberos.files.find":
+    case "cyberos.files.git":
+    case "cyberos.files.archive-inspect":
       return executeFileReadCapability(dependencies, id, object);
-    case "zos.files.resource-link":
+    case "cyberos.files.resource-link":
       return createFileResourceLink(dependencies, context.subject.clientId, object);
-    case "zos.runs.get":
+    case "cyberos.runs.get":
       return getRun(dependencies, context.subject.clientId, object);
-    case "zos.runs.list":
+    case "cyberos.runs.list":
       return listRuns(dependencies, context.subject.clientId, object);
-    case "zos.runs.wait":
+    case "cyberos.runs.wait":
       return waitForRun(dependencies, context.subject.clientId, object, context.signal);
-    case "zos.runs.cancel":
+    case "cyberos.runs.cancel":
       return cancelRun(dependencies, context.subject.clientId, object);
     default:
       throw new CapabilityError("NOT_READY", "Domain adapter is not installed", { retryable: true });
@@ -646,17 +646,17 @@ function piAgentPolicy(
 
 function agentPolicyCapabilityId(capabilityId: string): AgentCapabilityId | null {
   switch (capabilityId) {
-    case "zos.files.list": return "zos.files.list";
-    case "zos.files.stat":
-    case "zos.files.read":
-    case FILE_RESOURCE_LINK_CAPABILITY: return "zos.files.read";
-    case "zos.files.search": return "zos.files.search";
-    case "zos.files.grep": return "zos.files.grep";
-    case "zos.files.find": return "zos.files.find";
+    case "cyberos.files.list": return "cyberos.files.list";
+    case "cyberos.files.stat":
+    case "cyberos.files.read":
+    case FILE_RESOURCE_LINK_CAPABILITY: return "cyberos.files.read";
+    case "cyberos.files.search": return "cyberos.files.search";
+    case "cyberos.files.grep": return "cyberos.files.grep";
+    case "cyberos.files.find": return "cyberos.files.find";
     case FILE_MUTATION_CAPABILITY: return FILE_MUTATION_CAPABILITY;
-    case "zos.files.edit": return "zos.files.edit";
-    case "zos.files.write": return "zos.files.write";
-    case "zos.shell.run": return "zos.shell.run";
+    case "cyberos.files.edit": return "cyberos.files.edit";
+    case "cyberos.files.write": return "cyberos.files.write";
+    case "cyberos.shell.run": return "cyberos.shell.run";
     default: return null;
   }
 }
@@ -670,7 +670,7 @@ function inputObject(input: JsonValue): Record<string, JsonValue> {
   return input;
 }
 
-function requiredRoot(db: ZosDatabase, rootId: string) {
+function requiredRoot(db: CyberOsDatabase, rootId: string) {
   const root = getNasRoot(db, rootId);
   if (!root) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
   if (root.mountPolicy === "required" && getRootReadiness(db, root.id)?.status !== "ready") {

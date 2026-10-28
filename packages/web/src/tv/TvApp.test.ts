@@ -22,10 +22,10 @@ describe("TV display policy", () => {
 
     expect(entry).toContain('@fontsource/rajdhani/700.css');
     expect(entry).not.toContain("Newsreader");
-    expect(styles).toContain('@import "@zos/shared/hud-tokens.css"');
+    expect(styles).toContain('@import "@cyberos/shared/hud-tokens.css"');
     expect(styles).toContain("outline: 3px solid var(--tv-focus)");
     expect(styles).not.toContain("transform: translateY(-6px)");
-    expect(tokens).toContain("--zos-color-command: var(--zos-hud-yellow)");
-    expect(tokens).toContain("--zos-color-focus: var(--zos-hud-cyan)");
+    expect(tokens).toContain("--cyberos-color-command: var(--cyberos-hud-yellow)");
+    expect(tokens).toContain("--cyberos-color-focus: var(--cyberos-hud-cyan)");
   });
 });

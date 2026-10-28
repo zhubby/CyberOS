@@ -9,12 +9,11 @@ import {
   SettingsManager,
   type ToolDefinition
 } from "@earendil-works/pi-coding-agent";
-import type { ModelProviderSettingsRecord, PhotostaffMetadataDetail, PhotostaffQueryPage } from "@zos/shared";
+import type { ModelProviderSettingsRecord } from "@cyberos/shared";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   capabilityPendingRunId,
-  createPhotostaffAgentTools,
   getPiTurnFailure,
   mapPiAssistantMessageEnd,
   piAgentToolNames,
@@ -29,7 +28,7 @@ import {
 let tempDir: string;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-pi-agent-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-pi-agent-"));
 });
 
 afterEach(async () => {
@@ -129,7 +128,7 @@ describe("Pi agent response handling", () => {
   });
 
   it("never exposes the host path of a Pi transcript in public events or stats", () => {
-    expect(publicPiSessionFile("/zos/state/pi-sessions/session-1.jsonl")).toBe("session-1.jsonl");
+    expect(publicPiSessionFile("/cyberos/state/pi-sessions/session-1.jsonl")).toBe("session-1.jsonl");
     expect(publicPiSessionFile(null)).toBeNull();
   });
 
@@ -231,7 +230,7 @@ describe("Pi MCP run continuation", () => {
       path: "notes.txt",
       content: "[15 bytes]"
     });
-    expect(redactPiToolArgs("zos.downloads.manage-propose", {
+    expect(redactPiToolArgs("cyberos.downloads.manage-propose", {
       request: {
         url: "https://user:password@example.test/file?token=secret",
         registryToken: "secret"
@@ -272,7 +271,7 @@ describe("Pi MCP run continuation", () => {
 });
 
 describe("Pi MCP tool selection", () => {
-  it("filters dynamically registered MCP tools to the ZOS server and resource helpers", async () => {
+  it("filters dynamically registered MCP tools to the CyberOS server and resource helpers", async () => {
     const settingsManager = SettingsManager.inMemory({ defaultProjectTrust: "never" });
     const resourceLoader = new DefaultResourceLoader({
       cwd: tempDir,
@@ -283,8 +282,8 @@ describe("Pi MCP tool selection", () => {
         (pi) => {
           pi.on("session_start", () => {
             for (const tool of [
-              stubTool("mcp__zos__zos_files_read", "direct"),
-              stubTool("mcp__zos__zos_apps_inspect", "codemode"),
+              stubTool("mcp__cyberos__cyberos_files_read", "direct"),
+              stubTool("mcp__cyberos__cyberos_apps_inspect", "codemode"),
               stubTool("mcp__external__danger", "direct"),
               stubTool("mcp__external__lookup", "codemode"),
               stubTool("list_mcp_resources", "direct"),
@@ -304,11 +303,7 @@ describe("Pi MCP tool selection", () => {
     await resourceLoader.reload();
     const { session } = await createAgentSession({
       cwd: tempDir,
-      tools: piAgentToolNames({
-        mcpEnabled: true,
-        legacyToolsEnabled: false,
-        photostaffToolsEnabled: false
-      }),
+      tools: piAgentToolNames({ mcpEnabled: true }),
       resourceLoader,
       settingsManager,
       sessionManager: SessionManager.inMemory(tempDir)
@@ -319,9 +314,9 @@ describe("Pi MCP tool selection", () => {
 
       const activeTools = session.getActiveToolNames();
       const callableTools = session.getCallableToolNames();
-      expect(activeTools).toContain("mcp__zos__zos_files_read");
-      expect(activeTools).not.toContain("mcp__zos__zos_apps_inspect");
-      expect(callableTools).toContain("mcp__zos__zos_apps_inspect");
+      expect(activeTools).toContain("mcp__cyberos__cyberos_files_read");
+      expect(activeTools).not.toContain("mcp__cyberos__cyberos_apps_inspect");
+      expect(callableTools).toContain("mcp__cyberos__cyberos_apps_inspect");
       expect(callableTools).not.toContain("mcp__external__danger");
       expect(callableTools).not.toContain("mcp__external__lookup");
       expect(callableTools).toEqual(expect.arrayContaining([
@@ -337,128 +332,17 @@ describe("Pi MCP tool selection", () => {
     }
   });
 
-  it("selects exact tool allowlists for MCP, legacy, and Photostaff modes", () => {
-    expect(piAgentToolNames({
-      mcpEnabled: false,
-      legacyToolsEnabled: false,
-      photostaffToolsEnabled: false
-    })).toEqual([]);
+  it("selects the exact MCP allowlist without a direct-tool fallback", () => {
+    expect(piAgentToolNames({ mcpEnabled: false })).toEqual([]);
 
-    expect(piAgentToolNames({
-      mcpEnabled: true,
-      legacyToolsEnabled: false,
-      photostaffToolsEnabled: false
-    })).toEqual([
+    expect(piAgentToolNames({ mcpEnabled: true })).toEqual([
       "codemode",
       "tool_search",
-      "mcp__zos__*",
+      "mcp__cyberos__*",
       "list_mcp_resources",
       "list_mcp_resource_templates",
       "read_mcp_resource"
     ]);
-
-    expect(piAgentToolNames({
-      mcpEnabled: false,
-      legacyToolsEnabled: true,
-      photostaffToolsEnabled: false
-    })).toEqual(["read", "edit", "write", "grep", "find", "ls"]);
-
-    expect(piAgentToolNames({
-      mcpEnabled: false,
-      legacyToolsEnabled: true,
-      photostaffToolsEnabled: true
-    })).toEqual([
-      "read",
-      "edit",
-      "write",
-      "grep",
-      "find",
-      "ls",
-      "search_photostaff",
-      "get_photostaff_metadata"
-    ]);
-  });
-});
-
-describe("photostaff agent tools", () => {
-  it("exposes structured read-only tools and strips sensitive metadata defensively", async () => {
-    const page: PhotostaffQueryPage = {
-      photostaff: [{
-        id: "photostaff-1",
-        rootId: "root-1",
-        storagePoolId: "pool-1",
-        path: "Photostaff/photostaff-1.jpg",
-        name: "photostaff-1.jpg",
-        mimeType: "image/jpeg",
-        sizeBytes: 100,
-        mtimeMs: 0,
-        contentHash: "hash-1",
-        width: 100,
-        height: 100,
-        orientation: 1,
-        takenAt: "2026-01-01T00:00:00.000Z",
-        takenAtSource: "exif",
-        thumbnailKey: null,
-        previewKey: null,
-        status: "ready",
-        error: null,
-        errorCode: null,
-        errorRetryable: false,
-        derivativeSchemaVersion: 1,
-        indexedAt: "2026-01-01T00:00:00.000Z",
-        metadata: null,
-        keywords: [],
-        distanceMeters: 321.5
-      }],
-      nextCursor: null,
-      total: 1,
-      facets: null,
-      metadataIndex: { schemaVersion: 1, total: 0, indexed: 0, partial: 0, pending: 0 }
-    };
-    const detail: PhotostaffMetadataDetail = {
-      assetId: "photostaff-1",
-      summary: null,
-      keywords: ["Travel"],
-      groups: {
-        exif: { ISO: [800], GPSLatitude: [31.23], BodySerialNumber: ["secret"] },
-        gps: { longitude: [121.47] },
-        xmp: { title: ["Shanghai"], contactEmail: ["private@example.com"] }
-      },
-      sensitiveGroups: { exif: { GPSLongitude: [121.47] } },
-      sensitiveOmitted: false,
-      warnings: []
-    };
-    const searchPhotostaff = vi.fn(async () => page);
-    const tools = createPhotostaffAgentTools({
-      searchPhotostaff,
-      getPhotostaffMetadata: async () => detail
-    }) as unknown as Array<{
-      name: string;
-      execute: (toolCallId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
-    }>;
-
-    expect(tools.map((tool) => tool.name)).toEqual(["search_photostaff", "get_photostaff_metadata"]);
-    const searchOutput = await tools.find((tool) => tool.name === "search_photostaff")!.execute("call-0", {
-      filters: { location: { kind: "near", latitude: 31.23, longitude: 121.47, radiusMeters: 1_000 } },
-      limit: 100
-    });
-    expect(searchPhotostaff).toHaveBeenCalledWith(expect.objectContaining({
-      filters: { location: { kind: "near", latitude: 31.23, longitude: 121.47, radiusMeters: 1_000 } },
-      includeFacets: false,
-      limit: 25
-    }));
-    expect(searchOutput.content[0]?.text).toContain('"total": 1');
-    expect(searchOutput.content[0]?.text).not.toContain("distanceMeters");
-
-    const invalidDistance = await tools.find((tool) => tool.name === "search_photostaff")!.execute("call-distance", {
-      sort: { field: "distance", direction: "asc" }
-    });
-    expect(invalidDistance.content[0]?.text).toContain("nearby location filter");
-    expect(searchPhotostaff).toHaveBeenCalledTimes(1);
-
-    const output = await tools.find((tool) => tool.name === "get_photostaff_metadata")!.execute("call-1", { assetId: "photostaff-1" });
-    expect(output.content[0]?.text).toContain("Shanghai");
-    expect(output.content[0]?.text).not.toMatch(/31\.23|121\.47|secret|private@example/u);
   });
 });
 

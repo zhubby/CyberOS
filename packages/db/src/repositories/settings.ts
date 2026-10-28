@@ -10,7 +10,7 @@ import type {
   PhotostaffProcessingSettingsRecord,
   PiToolPolicySettingsRecord,
   ShareSettingsRecord
-} from "@zos/shared";
+} from "@cyberos/shared";
 import {
   PHOTOSTAFF_DEFAULT_COMMAND_TIMEOUT_MS,
   PHOTOSTAFF_DEFAULT_MAX_AUTO_RETRIES,
@@ -23,23 +23,20 @@ import {
   PHOTOSTAFF_DEFAULT_SCAN_INTERVAL_MS,
   PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
   PHOTOSTAFF_XMP_MAX_FILE_SIZE_BYTES
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import {
   mapDockerSettings,
   mapAgentCapabilityPolicySettings,
   mapModelProviderSettings,
-  mapPiToolPolicySettings,
   normalizeModelProviderName,
-  normalizeAgentCapabilityPolicySettings,
-  normalizePiToolPolicySettings
+  normalizeAgentCapabilityPolicySettings
 } from "./settings-mappers.js";
 import { mapShareSettings, normalizeShareSettings } from "./share-settings-mapper.js";
-import { DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS, DEFAULT_PI_TOOL_POLICY_SETTINGS } from "./settings-constants.js";
+import { DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS } from "./settings-constants.js";
 import type { DbSystemSettingRow } from "./repository-rows.js";
 
 const MODEL_PROVIDER_SETTING_KEY = "model_provider";
-const PI_TOOL_POLICY_SETTING_KEY = "pi_tool_policy";
 const AGENT_CAPABILITY_POLICY_SETTING_KEY = "agent_capability_policy";
 const AGENT_MCP_SETTING_KEY = "agent_mcp";
 const DOCKER_SETTING_KEY = "docker_settings";
@@ -101,16 +98,13 @@ export const DEFAULT_INDEXER_SETTINGS: Omit<IndexerSettingsRecord, "updatedAt"> 
   ocrRootIds: []
 };
 
-export {
-  DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS,
-  DEFAULT_PI_TOOL_POLICY_SETTINGS
-} from "./settings-constants.js";
+export { DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS } from "./settings-constants.js";
 
 export function defaultBluetoothSettings(): BluetoothSettingsRecord {
   return { ...DEFAULT_BLUETOOTH_SETTINGS, updatedAt: new Date(0).toISOString() };
 }
 
-export function getBluetoothSettings(db: ZosDatabase): BluetoothSettingsRecord | null {
+export function getBluetoothSettings(db: CyberOsDatabase): BluetoothSettingsRecord | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(BLUETOOTH_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
@@ -123,7 +117,7 @@ export function getBluetoothSettings(db: ZosDatabase): BluetoothSettingsRecord |
 }
 
 export function saveBluetoothSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Partial<Omit<BluetoothSettingsRecord, "updatedAt">>
 ): BluetoothSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -159,7 +153,7 @@ function normalizeBluetoothSettings(
   };
 }
 
-export function getModelProviderSettings(db: ZosDatabase): ModelProviderSettingsRecord | null {
+export function getModelProviderSettings(db: CyberOsDatabase): ModelProviderSettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(MODEL_PROVIDER_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -168,7 +162,7 @@ export function getModelProviderSettings(db: ZosDatabase): ModelProviderSettings
 }
 
 export function saveModelProviderSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Omit<ModelProviderSettingsRecord, "generation" | "updatedAt">
 ): ModelProviderSettingsRecord {
   return db.transaction(() => {
@@ -195,39 +189,6 @@ export function saveModelProviderSettings(
   }).immediate();
 }
 
-export function defaultPiToolPolicySettings(): PiToolPolicySettingsRecord {
-  return {
-    ...DEFAULT_PI_TOOL_POLICY_SETTINGS,
-    updatedAt: new Date(0).toISOString()
-  };
-}
-
-export function getPiToolPolicySettings(db: ZosDatabase): PiToolPolicySettingsRecord | null {
-  const row = db
-    .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
-    .get(PI_TOOL_POLICY_SETTING_KEY) as DbSystemSettingRow | undefined;
-
-  return row ? mapPiToolPolicySettings(row) : null;
-}
-
-export function savePiToolPolicySettings(
-  db: ZosDatabase,
-  settings: Omit<PiToolPolicySettingsRecord, "updatedAt">
-): PiToolPolicySettingsRecord {
-  const updatedAt = new Date().toISOString();
-  const record = normalizePiToolPolicySettings(settings, updatedAt);
-
-  db.prepare(`
-    INSERT INTO system_settings (key, value_json, updated_at)
-    VALUES (?, ?, ?)
-    ON CONFLICT(key) DO UPDATE SET
-      value_json = excluded.value_json,
-      updated_at = excluded.updated_at
-  `).run(PI_TOOL_POLICY_SETTING_KEY, JSON.stringify(record), updatedAt);
-
-  return record;
-}
-
 export function defaultAgentCapabilityPolicySettings(): AgentCapabilityPolicySettingsRecord {
   return {
     policies: { ...DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS.policies },
@@ -235,30 +196,14 @@ export function defaultAgentCapabilityPolicySettings(): AgentCapabilityPolicySet
   };
 }
 
-export function getAgentCapabilityPolicySettings(db: ZosDatabase): AgentCapabilityPolicySettingsRecord | null {
+export function getAgentCapabilityPolicySettings(db: CyberOsDatabase): AgentCapabilityPolicySettingsRecord | null {
   const row = db.prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(AGENT_CAPABILITY_POLICY_SETTING_KEY) as DbSystemSettingRow | undefined;
-  if (row) return mapAgentCapabilityPolicySettings(row);
-
-  const legacy = getPiToolPolicySettings(db);
-  if (!legacy) return null;
-  return {
-    policies: {
-      ...DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS.policies,
-      "zos.files.list": legacy.ls,
-      "zos.files.read": legacy.read,
-      "zos.files.grep": legacy.grep,
-      "zos.files.find": legacy.find,
-      "zos.files.edit": legacy.edit,
-      "zos.files.write": legacy.write,
-      "zos.shell.run": legacy.bash
-    },
-    updatedAt: legacy.updatedAt
-  };
+  return row ? mapAgentCapabilityPolicySettings(row) : null;
 }
 
 export function saveAgentCapabilityPolicySettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Omit<AgentCapabilityPolicySettingsRecord, "updatedAt">
 ): AgentCapabilityPolicySettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -271,7 +216,7 @@ export function saveAgentCapabilityPolicySettings(
   return record;
 }
 
-export function getAgentMcpSettings(db: ZosDatabase): AgentMcpSettingsRecord | null {
+export function getAgentMcpSettings(db: CyberOsDatabase): AgentMcpSettingsRecord | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(AGENT_MCP_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
@@ -282,7 +227,7 @@ export function getAgentMcpSettings(db: ZosDatabase): AgentMcpSettingsRecord | n
   return { enabled: value.enabled, updatedAt: row.updated_at };
 }
 
-export function saveAgentMcpSettings(db: ZosDatabase, enabled: boolean): AgentMcpSettingsRecord {
+export function saveAgentMcpSettings(db: CyberOsDatabase, enabled: boolean): AgentMcpSettingsRecord {
   const updatedAt = new Date().toISOString();
   const record = { enabled, updatedAt };
   db.prepare(`
@@ -297,18 +242,18 @@ export function agentCapabilityPolicyToPiToolPolicy(
   settings: AgentCapabilityPolicySettingsRecord
 ): PiToolPolicySettingsRecord {
   return {
-    read: settings.policies["zos.files.read"],
-    grep: settings.policies["zos.files.grep"],
-    find: settings.policies["zos.files.find"],
-    ls: settings.policies["zos.files.list"],
-    bash: settings.policies["zos.shell.run"],
-    edit: settings.policies["zos.files.edit"],
-    write: settings.policies["zos.files.write"],
+    read: settings.policies["cyberos.files.read"],
+    grep: settings.policies["cyberos.files.grep"],
+    find: settings.policies["cyberos.files.find"],
+    ls: settings.policies["cyberos.files.list"],
+    bash: settings.policies["cyberos.shell.run"],
+    edit: settings.policies["cyberos.files.edit"],
+    write: settings.policies["cyberos.files.write"],
     updatedAt: settings.updatedAt
   };
 }
 
-export function getDockerSettings(db: ZosDatabase): DockerSettingsRecord | null {
+export function getDockerSettings(db: CyberOsDatabase): DockerSettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(DOCKER_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -317,7 +262,7 @@ export function getDockerSettings(db: ZosDatabase): DockerSettingsRecord | null 
 }
 
 export function saveDockerSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Omit<DockerSettingsRecord, "updatedAt">
 ): DockerSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -341,7 +286,7 @@ export function saveDockerSettings(
   return record;
 }
 
-export function getShareSettings(db: ZosDatabase): ShareSettingsRecord | null {
+export function getShareSettings(db: CyberOsDatabase): ShareSettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(SHARE_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -350,7 +295,7 @@ export function getShareSettings(db: ZosDatabase): ShareSettingsRecord | null {
 }
 
 export function saveShareSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Omit<ShareSettingsRecord, "updatedAt">
 ): ShareSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -367,7 +312,7 @@ export function saveShareSettings(
   return record;
 }
 
-export function getDownloadSettings(db: ZosDatabase): DownloadSettingsRecord | null {
+export function getDownloadSettings(db: CyberOsDatabase): DownloadSettingsRecord | null {
   const row = db
     .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
     .get(DOWNLOAD_SETTING_KEY) as DbSystemSettingRow | undefined;
@@ -383,7 +328,7 @@ export function defaultDownloadSettings(): DownloadSettingsRecord {
 }
 
 export function saveDownloadSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Partial<Omit<DownloadSettingsRecord, "updatedAt">>
 ): DownloadSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -398,7 +343,7 @@ export function saveDownloadSettings(
   return record;
 }
 
-export function getIndexerSettings(db: ZosDatabase): IndexerSettingsRecord | null {
+export function getIndexerSettings(db: CyberOsDatabase): IndexerSettingsRecord | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(INDEXER_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
@@ -418,7 +363,7 @@ export function defaultIndexerSettings(): IndexerSettingsRecord {
 }
 
 export function saveIndexerSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Partial<Omit<IndexerSettingsRecord, "updatedAt">>
 ): IndexerSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -431,7 +376,7 @@ export function saveIndexerSettings(
   return record;
 }
 
-export function getPhotostaffMapSettings(db: ZosDatabase): PhotostaffMapSettingsRecord | null {
+export function getPhotostaffMapSettings(db: CyberOsDatabase): PhotostaffMapSettingsRecord | null {
   const row = db
     .prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(PHOTOSTAFF_MAP_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
@@ -461,7 +406,7 @@ export function getPhotostaffMapSettings(db: ZosDatabase): PhotostaffMapSettings
 }
 
 export function savePhotostaffMapSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Omit<PhotostaffMapSettingsRecord, "updatedAt">
 ): PhotostaffMapSettingsRecord {
   const updatedAt = new Date().toISOString();
@@ -476,7 +421,7 @@ export function savePhotostaffMapSettings(
   return record;
 }
 
-export function getPhotostaffProcessingSettings(db: ZosDatabase): PhotostaffProcessingSettingsRecord | null {
+export function getPhotostaffProcessingSettings(db: CyberOsDatabase): PhotostaffProcessingSettingsRecord | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(PHOTOSTAFF_PROCESSING_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
@@ -493,7 +438,7 @@ export function defaultPhotostaffProcessingSettings(): PhotostaffProcessingSetti
 }
 
 export function savePhotostaffProcessingSettings(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   settings: Partial<Omit<PhotostaffProcessingSettingsRecord, "updatedAt">>
 ): PhotostaffProcessingSettingsRecord {
   const updatedAt = new Date().toISOString();

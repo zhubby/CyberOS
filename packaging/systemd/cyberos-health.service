@@ -1,0 +1,22 @@
+[Unit]
+Description=CyberOS health evaluator
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ROOT=/cyberos
+Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+WorkingDirectory=/cyberos/state
+ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/ops/dist/index.js health
+TimeoutStartSec=2min
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/cyberos/state /cyberos/logs /cyberos/data /cyberos/data/backup
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=128

@@ -10,7 +10,7 @@ import {
   markAllOperationNotificationsRead,
   markBluetoothTransferRead,
   markOperationNotificationRead
-} from "@zos/db";
+} from "@cyberos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerNotificationRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {

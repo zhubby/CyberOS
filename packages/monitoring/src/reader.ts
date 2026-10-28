@@ -7,7 +7,7 @@ import type {
   MonitoringOverviewResponse,
   MonitoringQueryRequest,
   MonitoringQueryResponse
-} from "@zos/shared";
+} from "@cyberos/shared";
 import { MONITORING_CATALOG } from "./catalog.js";
 import {
   latestMetricValues,
@@ -77,7 +77,7 @@ export class MonitoringReader {
       const writesPaused = monitoringWritesPaused(db);
       const lastSuccessMs = Math.max(
         ...collectors.flatMap((collector) => collector.lastSuccessAt ? [Date.parse(collector.lastSuccessAt)] : []),
-        ...latest.flatMap((value) => value.metric === "zos_monitor_last_sample_timestamp_seconds"
+        ...latest.flatMap((value) => value.metric === "cyberos_monitor_last_sample_timestamp_seconds"
           ? [value.value * 1_000]
           : [])
       );

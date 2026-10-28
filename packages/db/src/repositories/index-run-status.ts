@@ -1,12 +1,12 @@
-import type { IndexFailure, IndexRootStatus } from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+import type { IndexFailure, IndexRootStatus } from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import type {
   DbIndexFailureRow,
   DbIndexHistoryRow,
   DbIndexRunRow
 } from "./repository-rows.js";
 
-export function listIndexRunHistory(db: ZosDatabase, rootId: string, limit = 30): IndexRootStatus[] {
+export function listIndexRunHistory(db: CyberOsDatabase, rootId: string, limit = 30): IndexRootStatus[] {
   const currentRows = db.prepare(`
     SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
       duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at
@@ -19,11 +19,11 @@ export function listIndexRunHistory(db: ZosDatabase, rootId: string, limit = 30)
   });
 }
 
-export function listIndexRootStatuses(db: ZosDatabase, rootIds: string[]): IndexRootStatus[] {
+export function listIndexRootStatuses(db: CyberOsDatabase, rootIds: string[]): IndexRootStatus[] {
   return rootIds.map((rootId) => getIndexRootStatus(db, rootId));
 }
 
-export function getIndexRootStatus(db: ZosDatabase, rootId: string, now = new Date()): IndexRootStatus {
+export function getIndexRootStatus(db: CyberOsDatabase, rootId: string, now = new Date()): IndexRootStatus {
   const row = db
     .prepare(`
       SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
@@ -78,7 +78,7 @@ export function getIndexRootStatus(db: ZosDatabase, rootId: string, now = new Da
   return status;
 }
 
-function countConsecutiveIndexFailures(db: ZosDatabase, rootId: string): number {
+function countConsecutiveIndexFailures(db: CyberOsDatabase, rootId: string): number {
   const rows = db.prepare("SELECT status, started_at FROM index_runs WHERE root_id = ? AND kind = 'full' UNION ALL SELECT status, started_at FROM index_run_history WHERE root_id = ? AND kind = 'full' ORDER BY started_at DESC LIMIT 30").all(rootId, rootId) as Array<{ status: string; started_at: string }>;
   let count = 0;
   for (const row of rows) {
@@ -88,7 +88,7 @@ function countConsecutiveIndexFailures(db: ZosDatabase, rootId: string): number 
   return count;
 }
 
-function getIndexFreshnessMs(db: ZosDatabase, rootId: string, now = new Date()): number | null {
+function getIndexFreshnessMs(db: CyberOsDatabase, rootId: string, now = new Date()): number | null {
   const row = db
     .prepare(`
       SELECT MAX(finished_at) AS finished_at
@@ -104,7 +104,7 @@ function getIndexFreshnessMs(db: ZosDatabase, rootId: string, now = new Date()):
   return Number.isFinite(timestamp) ? Math.max(0, now.getTime() - timestamp) : null;
 }
 
-function getIndexSizeBytes(db: ZosDatabase): number | null {
+function getIndexSizeBytes(db: CyberOsDatabase): number | null {
   try {
     const pageCount = Number(db.pragma("page_count", { simple: true }));
     const pageSize = Number(db.pragma("page_size", { simple: true }));

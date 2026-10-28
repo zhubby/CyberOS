@@ -7,7 +7,7 @@ import type {
   AgentProviderSessionRecord,
   ModelProviderName,
   ModelProviderSettingsRecord
-} from "@zos/shared";
+} from "@cyberos/shared";
 
 type PiProviderConfig = Parameters<ModelRuntime["registerProvider"]>[1];
 type PiProviderApi = NonNullable<PiProviderConfig["api"]>;

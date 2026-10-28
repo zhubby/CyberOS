@@ -1,21 +1,21 @@
 import { access, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const INTERNAL_PACKAGE_PREFIX = "@zos/";
+const INTERNAL_PACKAGE_PREFIX = "@cyberos/";
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 const PRODUCT_CARGO_PACKAGES = [
-  { manifestPath: "crates/alerter/Cargo.toml", packageName: "zos-alerter" },
-  { manifestPath: "crates/bluetoothd/Cargo.toml", packageName: "zos-bluetoothd" },
-  { manifestPath: "crates/downloader/Cargo.toml", packageName: "zos-downloader" },
-  { manifestPath: "crates/host-accessd/Cargo.toml", packageName: "zos-host-accessd" },
-  { manifestPath: "crates/hostd/Cargo.toml", packageName: "zos-hostd" },
-  { manifestPath: "crates/indexer/Cargo.toml", packageName: "zos-indexer" },
-  { manifestPath: "crates/monitor/Cargo.toml", packageName: "zos-monitor" },
-  { manifestPath: "crates/photostaff/Cargo.toml", packageName: "zos-photostaff" },
-  { manifestPath: "crates/termux/Cargo.toml", packageName: "zos-termux" },
-  { manifestPath: "crates/tv-gamepad/Cargo.toml", packageName: "zos-tv-gamepad" },
-  { manifestPath: "crates/vod-player/Cargo.toml", packageName: "zos-vod-player" },
-  { manifestPath: "crates/monitoring-contracts/Cargo.toml", packageName: "zos-monitoring-contracts" }
+  { manifestPath: "crates/alerter/Cargo.toml", packageName: "cyberos-alerter" },
+  { manifestPath: "crates/bluetoothd/Cargo.toml", packageName: "cyberos-bluetoothd" },
+  { manifestPath: "crates/downloader/Cargo.toml", packageName: "cyberos-downloader" },
+  { manifestPath: "crates/host-accessd/Cargo.toml", packageName: "cyberos-host-accessd" },
+  { manifestPath: "crates/hostd/Cargo.toml", packageName: "cyberos-hostd" },
+  { manifestPath: "crates/indexer/Cargo.toml", packageName: "cyberos-indexer" },
+  { manifestPath: "crates/monitor/Cargo.toml", packageName: "cyberos-monitor" },
+  { manifestPath: "crates/photostaff/Cargo.toml", packageName: "cyberos-photostaff" },
+  { manifestPath: "crates/termux/Cargo.toml", packageName: "cyberos-termux" },
+  { manifestPath: "crates/tv-gamepad/Cargo.toml", packageName: "cyberos-tv-gamepad" },
+  { manifestPath: "crates/vod-player/Cargo.toml", packageName: "cyberos-vod-player" },
+  { manifestPath: "crates/monitoring-contracts/Cargo.toml", packageName: "cyberos-monitoring-contracts" }
 ];
 const STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 
@@ -74,6 +74,8 @@ export async function readVersionState(repoRoot) {
     version: rootManifest.value.version,
     manifests,
     lock: await readJson(path.join(repoRoot, "package-lock.json")),
+    docsManifest: await readJson(path.join(repoRoot, "docs/package.json")),
+    docsLock: await readJson(path.join(repoRoot, "docs/package-lock.json")),
     cargoManifests: Object.fromEntries(
       await Promise.all(
         PRODUCT_CARGO_PACKAGES.map(async ({ manifestPath }) => [
@@ -101,6 +103,24 @@ export function versionStateErrors(state) {
 
   if (state.lock.version !== version) {
     errors.push(`package-lock.json has top-level version ${JSON.stringify(state.lock.version)}; expected ${version}`);
+  }
+
+  if (state.docsManifest.version !== version) {
+    errors.push(`docs/package.json has version ${JSON.stringify(state.docsManifest.version)}; expected ${version}`);
+  }
+  if (state.docsLock.version !== version) {
+    errors.push(`docs/package-lock.json has top-level version ${JSON.stringify(state.docsLock.version)}; expected ${version}`);
+  }
+  if (state.docsLock.packages?.[""]?.version !== version) {
+    errors.push(
+      `docs/package-lock.json root entry has version ${JSON.stringify(state.docsLock.packages?.[""]?.version)}; expected ${version}`
+    );
+  }
+  const docsSharedVersion = state.docsLock.packages?.["../packages/shared"]?.version;
+  if (docsSharedVersion !== version) {
+    errors.push(
+      `docs/package-lock.json linked @cyberos/shared entry has version ${JSON.stringify(docsSharedVersion)}; expected ${version}`
+    );
   }
 
   for (const { manifestPath, packageName } of PRODUCT_CARGO_PACKAGES) {
@@ -173,6 +193,12 @@ export async function prepareRelease(repoRoot, { increment, note, now = new Date
     updateInternalDependencies(lockEntry, nextVersion);
   }
   files.set("package-lock.json", `${JSON.stringify(state.lock, null, 2)}\n`);
+  state.docsManifest.version = nextVersion;
+  state.docsLock.version = nextVersion;
+  state.docsLock.packages[""].version = nextVersion;
+  state.docsLock.packages["../packages/shared"].version = nextVersion;
+  files.set("docs/package.json", `${JSON.stringify(state.docsManifest, null, 2)}\n`);
+  files.set("docs/package-lock.json", `${JSON.stringify(state.docsLock, null, 2)}\n`);
   let cargoLock = state.cargoLock;
   for (const { manifestPath, packageName } of PRODUCT_CARGO_PACKAGES) {
     files.set(
@@ -272,7 +298,7 @@ function updateInternalDependencies(value, nextVersion) {
 }
 
 function readDebianVersion(changelog) {
-  return /^zos \(([^)]+)\)/u.exec(changelog)?.[1] ?? null;
+  return /^cyberos \(([^)]+)\)/u.exec(changelog)?.[1] ?? null;
 }
 
 function readApplianceVersion(manifest) {
@@ -322,11 +348,11 @@ function locateTomlPackageVersion(document, tableHeader, packageName) {
 function prependDebianChangelog(changelog, version, note, now) {
   const timestamp = now.toUTCString().replace("GMT", "+0000");
   return [
-    `zos (${version}) unstable; urgency=medium`,
+    `cyberos (${version}) unstable; urgency=medium`,
     "",
     `  * ${note}`,
     "",
-    ` -- ZOS Maintainers <maintainers@zos.local>  ${timestamp}`,
+    ` -- CyberOS Maintainers <maintainers@cyberos.local>  ${timestamp}`,
     "",
     changelog
   ].join("\n");

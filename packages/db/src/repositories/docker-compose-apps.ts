@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { DockerComposeAppRisk, DockerComposeServiceHostAccess } from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+import type { DockerComposeAppRisk, DockerComposeServiceHostAccess } from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 
 export interface DockerComposeAppEnvironmentRecord {
   key: string;
@@ -51,7 +51,7 @@ export class DockerComposeAppProjectKeyConflictError extends Error {
   }
 }
 
-export function listDockerComposeApps(db: ZosDatabase): DockerComposeAppRecord[] {
+export function listDockerComposeApps(db: CyberOsDatabase): DockerComposeAppRecord[] {
   const rows = db.prepare(`
     SELECT id, name, project_key, compose_content, services_json, warnings_json, risk, host_access_json, deployed_host_access_json,
            revision, deployed_revision, created_at, updated_at
@@ -62,7 +62,7 @@ export function listDockerComposeApps(db: ZosDatabase): DockerComposeAppRecord[]
   return rows.map((row) => mapApp(row, environment.get(row.id) ?? []));
 }
 
-export function listDockerComposeAppSummaries(db: ZosDatabase): DockerComposeAppSummaryRecord[] {
+export function listDockerComposeAppSummaries(db: CyberOsDatabase): DockerComposeAppSummaryRecord[] {
   return (db.prepare(`
     SELECT id, name, project_key, services_json, warnings_json, risk, host_access_json, deployed_host_access_json,
            revision, deployed_revision, created_at, updated_at
@@ -71,7 +71,7 @@ export function listDockerComposeAppSummaries(db: ZosDatabase): DockerComposeApp
   `).all() as DockerComposeAppSummaryRow[]).map(mapAppSummary);
 }
 
-export function getDockerComposeApp(db: ZosDatabase, id: string): DockerComposeAppRecord | null {
+export function getDockerComposeApp(db: CyberOsDatabase, id: string): DockerComposeAppRecord | null {
   const row = db.prepare(`
     SELECT id, name, project_key, compose_content, services_json, warnings_json, risk, host_access_json, deployed_host_access_json,
            revision, deployed_revision, created_at, updated_at
@@ -82,7 +82,7 @@ export function getDockerComposeApp(db: ZosDatabase, id: string): DockerComposeA
 }
 
 export function getDockerComposeAppSummary(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string
 ): DockerComposeAppSummaryRecord | null {
   const row = db.prepare(`
@@ -95,7 +95,7 @@ export function getDockerComposeAppSummary(
 }
 
 export function createDockerComposeApp(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: DockerComposeAppWriteInput
 ): DockerComposeAppRecord {
   return db.transaction(() => {
@@ -131,7 +131,7 @@ export function createDockerComposeApp(
 }
 
 export function updateDockerComposeApp(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: string,
   input: Omit<DockerComposeAppWriteInput, "projectKey" | "environment"> & {
@@ -177,7 +177,7 @@ export function updateDockerComposeApp(
 }
 
 export function markDockerComposeAppDeployed(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   revision: string
 ): DockerComposeAppRecord | null {
@@ -191,7 +191,7 @@ export function markDockerComposeAppDeployed(
 }
 
 export function restoreDockerComposeApp(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   expectedRevision: string,
   app: DockerComposeAppRecord
 ): DockerComposeAppRecord {
@@ -222,7 +222,7 @@ export function restoreDockerComposeApp(
 }
 
 export function deleteDockerComposeApp(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   expectedRevision: string
 ): "deleted" | "not_found" | "conflict" {
@@ -252,7 +252,7 @@ interface DockerComposeAppRow {
 type DockerComposeAppSummaryRow = Omit<DockerComposeAppRow, "compose_content">;
 
 function environmentByApp(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   appIds: string[]
 ): Map<string, DockerComposeAppEnvironmentRecord[]> {
   const result = new Map<string, DockerComposeAppEnvironmentRecord[]>();
@@ -273,7 +273,7 @@ function environmentByApp(
 }
 
 function replaceEnvironment(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   appId: string,
   environment: DockerComposeAppEnvironmentRecord[],
   updatedAt: string

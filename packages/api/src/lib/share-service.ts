@@ -10,11 +10,11 @@ import type {
   ShareProtocolServiceStatus,
   ShareSettingsRecord,
   ShareSummary,
-  ZosConfig,
+  CyberOsConfig,
   SystemCollectionIssue,
   HostMutationPolicy
-} from "@zos/shared";
-import { SHARE_PROTOCOLS } from "@zos/shared";
+} from "@cyberos/shared";
+import { SHARE_PROTOCOLS } from "@cyberos/shared";
 import { HostdClient } from "./hostd-client.js";
 import type { SystemCommandRunner } from "./system-management.js";
 
@@ -26,7 +26,7 @@ let shareMutationTail: Promise<void> = Promise.resolve();
 
 const PROTOCOL_SERVICES = {
   smb: ["smbd.service", "nmbd.service"],
-  webdav: ["zos-webdav.service"],
+  webdav: ["cyberos-webdav.service"],
   ftp: ["vsftpd.service"],
   nfs: ["nfs-server.service"],
   dlna: ["minidlna.service"]
@@ -133,7 +133,7 @@ export async function collectShareSummary(
 }
 
 export async function applyShareOperation(
-  config: ZosConfig,
+  config: CyberOsConfig,
   operation: ShareOperationRecord,
   proposal: ShareOperationProposal,
   dependencies: ShareManagementDependencies = {}
@@ -152,7 +152,7 @@ export async function applyShareOperation(
 }
 
 export async function applyShareSettings(
-  config: ZosConfig,
+  config: CyberOsConfig,
   settings: ShareSettingsRecord,
   roots: NasRootConfig[],
   dependencies: ShareManagementDependencies = {}

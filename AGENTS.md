@@ -5,13 +5,13 @@ short Claude-specific handoff; this file is the project source of truth.
 
 ## Project And Runtime
 
-ZOS is a mixed TypeScript/Rust monorepo for a single-user Linux NAS appliance.
+CyberOS is a mixed TypeScript/Rust monorepo for a single-user Linux NAS appliance.
 It is deployed as native processes and systemd units, not as a Docker
 container. TypeScript workspaces live only under `packages/`; Rust workspace
 members live only under `crates/`. The repository has no source `apps/`
-directory. Installed paths such as `/usr/lib/zos/apps` and the managed Compose
-root `/zos/apps` are runtime compatibility paths and must not be renamed as
-part of source-layout work.
+directory. Installed paths such as `/usr/lib/cyberos/apps` and the managed Compose
+root `/cyberos/apps` are runtime paths and must not be renamed as part of
+source-layout work.
 
 - `packages/web`: React/Vite web UI.
 - `packages/api`: Fastify API, WebSocket/SSE endpoints, and production static files.
@@ -47,7 +47,7 @@ shells on Linux and macOS plus Linux packages for `x86_64` and `aarch64`.
 - Do not rewrite history, reset files, or run destructive commands unless the
   user explicitly asks.
 - Do not commit or push unless asked. Never add generated output such as
-  `node_modules`, `dist`, coverage, logs, `.zos` build artifacts, or
+  `node_modules`, `dist`, coverage, logs, `.cyberos` build artifacts, or
   `docs/.astro`/`docs/test-results`.
 - Keep TypeScript strict; do not weaken compiler settings or use `any` to hide
   type errors.
@@ -71,11 +71,11 @@ Use an isolated development data directory so local processes cannot read or
 mutate production NAS paths:
 
 ```bash
-mkdir -p .zos/dev-root/data/primary
-ZOS_ENVIRONMENT=development \
-ZOS_ROOT="$PWD/.zos/dev-root" \
-ZOS_NAS_ROOTS="dev:Development NAS:$PWD/.zos/dev-root/data/primary" \
-ZOS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
+mkdir -p .cyberos/dev-root/data/primary
+CYBEROS_ENVIRONMENT=development \
+CYBEROS_ROOT="$PWD/.cyberos/dev-root" \
+CYBEROS_NAS_ROOTS="dev:Development NAS:$PWD/.cyberos/dev-root/data/primary" \
+CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
 npm run dev
 ```
 
@@ -145,38 +145,38 @@ The Nix CI matrix additionally runs `nix flake check` on native
 ### Debian package
 
 Build on the target architecture when possible. `build-deb.sh` copies the
-checkout to `.zos/deb-build`, runs the Debian rules (fresh root/docs npm
+checkout to `.cyberos/deb-build`, runs the Debian rules (fresh root/docs npm
 installs, full build, and `npm test`), and writes package artifacts under
-`.zos/`:
+`.cyberos/`:
 
 ```bash
-ZOS_NPM_REGISTRY=https://registry.npmmirror.com \
+CYBEROS_NPM_REGISTRY=https://registry.npmmirror.com \
   ./packaging/scripts/build-deb.sh
 # or: make deb
 ```
 
 The package contains compiled app/docs assets, bundled workspace `node_modules`,
-build metadata, `/zos/config` defaults, and systemd units. It does not start
+build metadata, `/cyberos/config` defaults, and systemd units. It does not start
 services during `dpkg` installation; the host installer performs first boot
 and service activation.
 
 ### Host installer
 
 `packaging/scripts/install.sh` is a host-mutating operation. It must run as
-root on Debian-family `amd64`/`arm64`. The terminal identity is always `zos`:
+root on Debian-family `amd64`/`arm64`. The terminal identity is always `cyberos`:
 
 ```bash
-sudo ZOS_NAS_ROOT_PATH=/zos/data/primary \
+sudo CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary \
   ./packaging/scripts/install.sh
 ```
 
 The script can install/verify Node.js 22, configure and back up known APT
-sources under `/zos/system-backups/apt`, build/install the current checkout,
-initialize `/zos/config/config.toml` and `/zos/state`, and configure
-Nginx. `ZOS_ENABLE_NGINX` defaults to `1`; Docker and VM support default to
-`0` and can be enabled explicitly with `ZOS_ENABLE_DOCKER=1` and
-`ZOS_ENABLE_VM=1`. Review `ZOS_APT_*`, `ZOS_NODE_*`, and
-`ZOS_NPM_REGISTRY` before using internal or domestic mirrors.
+sources under `/cyberos/system-backups/apt`, build/install the current checkout,
+initialize `/cyberos/config/config.toml` and `/cyberos/state`, and configure
+Nginx. `CYBEROS_ENABLE_NGINX` defaults to `1`; Docker and VM support default to
+`0` and can be enabled explicitly with `CYBEROS_ENABLE_DOCKER=1` and
+`CYBEROS_ENABLE_VM=1`. Review `CYBEROS_APT_*`, `CYBEROS_NODE_*`, and
+`CYBEROS_NPM_REGISTRY` before using internal or domestic mirrors.
 
 After installation, core services are enabled and started; maintenance,
 health, and backup timers are enabled but do not all
@@ -190,15 +190,15 @@ flashable SD/eMMC image. It requires `node`, `mmdebstrap`, `systemd-nspawn`,
 `tar`, `curl`, and `sha256sum`, and consumes a previously built `.deb`:
 
 ```bash
-ZOS_DEB="$PWD/.zos/zos_<version>_arm64.deb" \
-ZOS_IMAGE_OUT="$PWD/.zos/appliance" \
-ZOS_TARGET_ARCH=arm64 \
+CYBEROS_DEB="$PWD/.cyberos/cyberos_<version>_arm64.deb" \
+CYBEROS_IMAGE_OUT="$PWD/.cyberos/appliance" \
+CYBEROS_TARGET_ARCH=arm64 \
   ./packaging/appliance/build-image.sh
 # or: make appliance (when the default .deb path is present)
 ```
 
-Defaults are Debian bookworm, `arm64`, and `.zos/appliance`. The output is
-`.zos/appliance/zos-rootfs-<arch>.tar`; board-specific boot, network,
+Defaults are Debian bookworm, `arm64`, and `.cyberos/appliance`. The output is
+`.cyberos/appliance/cyberos-rootfs-<arch>.tar`; board-specific boot, network,
 mount, and first-boot configuration remain outside this script. Docker, VM,
 and backup are disabled by the generated first-boot defaults and must be
 enabled/configured deliberately.
@@ -206,16 +206,16 @@ enabled/configured deliberately.
 ### NixOS module
 
 `flake.nix` exports `nixosModules.default` and packages for `x86_64-linux` and
-`aarch64-linux`. The module creates the `zos` account, `/zos` state layout,
+`aarch64-linux`. The module creates the `cyberos` account, `/cyberos` state layout,
 native systemd services/timers, and an optional Nginx proxy. Non-secret TOML
-may be rendered from `services.zos.settings`; use
-`services.zos.configFile` for secret-bearing configuration so secrets do not
+may be rendered from `services.cyberos.settings`; use
+`services.cyberos.configFile` for secret-bearing configuration so secrets do not
 enter the Nix store.
 
-The module always sets `ZOS_HOST_MUTATION_POLICY=declarative`. Inspection stays
+The module always sets `CYBEROS_HOST_MUTATION_POLICY=declarative`. Inspection stays
 available, but share, storage-pool, NetworkManager, and Docker daemon
 configuration writes return HTTP 501 and hostd protocol error `unsupported`.
-Declare those host resources through NixOS. This policy does not make `/zos`
+Declare those host resources through NixOS. This policy does not make `/cyberos`
 or NAS files immutable and does not disable approved application/file actions.
 See `docs/src/content/docs/operations/nixos.md` for configuration and rollback
 details.
@@ -226,10 +226,10 @@ Use service status and journald, not only a single liveness request:
 
 ```bash
 sudo systemctl --failed
-sudo systemctl is-active zos-api.service zos-worker@1.service \
-  zos-termux.service zos-hostd.service
-sudo systemctl list-timers 'zos-*'
-sudo journalctl -u zos-api.service -u zos-worker@1.service -n 100 --no-pager
+sudo systemctl is-active cyberos-api.service cyberos-worker@1.service \
+  cyberos-termux.service cyberos-hostd.service
+sudo systemctl list-timers 'cyberos-*'
+sudo journalctl -u cyberos-api.service -u cyberos-worker@1.service -n 100 --no-pager
 curl -fsS http://127.0.0.1:3010/health
 curl -fsS http://127.0.0.1:3010/api/roots/readiness
 curl -fsS http://127.0.0.1:3010/api/system/health
@@ -238,23 +238,21 @@ curl -fsS http://127.0.0.1:3010/api/system/health
 `/health` is API liveness only; it does not prove NAS mounts, indexing, or
 backup readiness. Oneshot units normally return to `inactive (dead)` after
 success, so inspect their exit code and journal. Manually run a task with its
-service, for example `sudo systemctl start zos-indexer.service`, rather
+service, for example `sudo systemctl start cyberos-indexer.service`, rather
 than invoking a timer directly. After changing units or configuration, run
 `sudo systemctl daemon-reload` and restart affected resident services.
 
 For upgrades, stop the indexer and all maintenance/health/backup timers,
-save the current `.deb`, `/zos/config`, `/zos/state` and SQLite state,
+save the current `.deb`, `/cyberos/config`, `/cyberos/state` and SQLite state,
 install the new package, and re-run the API, readiness, index, health, and
 backup acceptance checks before re-enabling timers. Database migrations have no
 general reverse migration; a downgrade may require restoring a matching state
 backup as well as the old package.
 
-The managed CM5 deployment workflow can perform a one-time migration from the
-pre-ZOS product when `allow_legacy_migration` is explicitly enabled. It takes a
-cold backup, migrates configuration, SQLite state, managed paths, NAS mounts,
-and libvirt definitions, then commits only after runtime verification. Keep the
-legacy layout and `/zos/system-backups` intact until the migration reports
-`committed` and the follow-up read-only deployment verification passes.
+CyberOS 2.0 supports clean installation only. Do not discover, import, or
+translate databases, configuration, paths, users, backups, or service state
+from earlier products. The CM5 deployment workflow accepts only an existing
+CyberOS installation created with the current `/cyberos` layout.
 
 ## Safety Boundaries
 

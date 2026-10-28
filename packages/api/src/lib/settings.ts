@@ -5,12 +5,12 @@ import type {
   PublicShareSettings,
   ShareConfig,
   ShareSettingsRecord,
-  ZosConfig
-} from "@zos/shared";
-import { isModelProviderName as sharedIsModelProviderName } from "@zos/shared";
-import { defaultAgentCapabilityPolicySettings } from "@zos/db";
+  CyberOsConfig
+} from "@cyberos/shared";
+import { isModelProviderName as sharedIsModelProviderName } from "@cyberos/shared";
+import { defaultAgentCapabilityPolicySettings } from "@cyberos/db";
 
-export function defaultModelProviderSettings(config: ZosConfig): ModelProviderSettingsRecord {
+export function defaultModelProviderSettings(config: CyberOsConfig): ModelProviderSettingsRecord {
   return {
     generation: 1,
     providerName: "openai",
@@ -48,7 +48,7 @@ export function toPublicAgentCapabilityPolicySettings(settings = defaultAgentCap
   return settings;
 }
 
-export function defaultDockerSettings(config: ZosConfig): DockerSettingsRecord {
+export function defaultDockerSettings(config: CyberOsConfig): DockerSettingsRecord {
   return {
     ...config.docker,
     updatedAt: new Date(0).toISOString()
@@ -59,7 +59,7 @@ export function toPublicDockerSettings(settings: DockerSettingsRecord): DockerSe
   return settings;
 }
 
-export function defaultShareSettings(config: ZosConfig): ShareSettingsRecord {
+export function defaultShareSettings(config: CyberOsConfig): ShareSettingsRecord {
   return {
     ...config.shares,
     updatedAt: new Date(0).toISOString()
@@ -96,14 +96,14 @@ export function dockerSettingsToConfig(settings: DockerSettingsRecord): DockerCo
   };
 }
 
-export function effectiveDockerConfig(config: ZosConfig, settings: DockerSettingsRecord | null): ZosConfig {
+export function effectiveDockerConfig(config: CyberOsConfig, settings: DockerSettingsRecord | null): CyberOsConfig {
   return {
     ...config,
     docker: settings ? dockerSettingsToConfig(settings) : config.docker
   };
 }
 
-export function effectiveShareConfig(config: ZosConfig, settings: ShareSettingsRecord | null): ZosConfig {
+export function effectiveShareConfig(config: CyberOsConfig, settings: ShareSettingsRecord | null): CyberOsConfig {
   return {
     ...config,
     shares: settings ? shareSettingsToConfig(settings) : config.shares

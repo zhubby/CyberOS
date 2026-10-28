@@ -331,7 +331,7 @@ export function SystemWifiManagement({
     if (!canManageHotspot || !selectedDevice) return;
     setHotspotDialog({
       existing: hotspot,
-      ssid: hotspot?.ssid ?? "ZOS",
+      ssid: hotspot?.ssid ?? "CyberOS",
       password: "",
       band: hotspot?.band ?? "auto",
       channel: hotspot?.channel ? String(hotspot.channel) : "",

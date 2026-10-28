@@ -15,7 +15,7 @@ describe("share account dialog", () => {
     const html = renderToStaticMarkup(createElement(ShareAccountDialog, {
       settings: {
         account: {
-          username: "zos-share",
+          username: "cyberos-share",
           passwordConfigured: true
         },
         updatedAt: "2026-10-13T00:00:00.000Z"
@@ -24,7 +24,7 @@ describe("share account dialog", () => {
       onSaved: () => undefined
     }));
 
-    expect(html).toContain("zos-share");
+    expect(html).toContain("cyberos-share");
     expect(html).toContain("autoComplete=\"new-password\"");
     expect(html).toContain("data-configured=\"true\"");
     expect(html).not.toContain("current-password");

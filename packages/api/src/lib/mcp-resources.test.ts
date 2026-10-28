@@ -7,13 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createMcpClient,
   ensureNasRoots,
-  openZosDb,
+  openCyberOsDb,
   savePhotostaffLibrarySettings,
   upsertPhotostaffAsset,
-  type ZosDatabase
-} from "@zos/db";
-import { registerMcp } from "@zos/mcp";
-import { PHOTOSTAFF_DATA_DIRECTORY_NAME, type ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import { registerMcp } from "@cyberos/mcp";
+import { PHOTOSTAFF_DATA_DIRECTORY_NAME, type CyberOsConfig } from "@cyberos/shared";
 import {
   createFileExportMcpResource,
   createMcpResourceResponder,
@@ -24,18 +24,18 @@ import {
 
 let tempDir: string;
 let rootDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 let app: ReturnType<typeof Fastify>;
-let config: ZosConfig;
+let config: CyberOsConfig;
 let client: ReturnType<typeof createMcpClient>;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-mcp-resources-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-mcp-resources-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir, { recursive: true });
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir }]);
-  client = createMcpClient(db, { name: "Resource client", kind: "local", scopes: ["zos:files:read", "zos:photos:read"] });
+  client = createMcpClient(db, { name: "Resource client", kind: "local", scopes: ["cyberos:files:read", "cyberos:photos:read"] });
   config = testConfig(tempDir, rootDir);
   app = Fastify();
   registerMcp(app, {
@@ -181,20 +181,20 @@ async function downloadResource(url: string) {
   });
 }
 
-function testConfig(dataDir: string, root: string): ZosConfig {
+function testConfig(dataDir: string, root: string): CyberOsConfig {
   return {
     environment: "development",
     dataDir,
-    databasePath: path.join(dataDir, "zos.sqlite"),
+    databasePath: path.join(dataDir, "cyberos.sqlite"),
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
     worker: { pollMs: 100 },
     admin: { displayName: "Admin", authMode: "local-only" },
     model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
     hostd: { socketPath: path.join(dataDir, "hostd.sock") },
-    shares: { enabled: false, account: { username: "zos", password: null }, shares: [] },
-    terminal: { user: "zos", termuxSocketPath: path.join(dataDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
-    vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "zos" },
+    shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
+    terminal: { user: "cyberos", termuxSocketPath: path.join(dataDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
     nasRoots: [{ id: "primary", name: "Primary", path: root }]
   };
 }

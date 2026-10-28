@@ -9,10 +9,10 @@ import {
   recordAppliedOperation,
   recoverInterruptedFileBatches,
   type ClaimedFileBatchItem,
-  type ZosDatabase
-} from "@zos/db";
-import { applyFileMutation, trashPathFor } from "@zos/nas-tools";
-import type { FileBatchRecord, FileOperationProposal, ZosConfig } from "@zos/shared";
+  type CyberOsDatabase
+} from "@cyberos/db";
+import { applyFileMutation, trashPathFor } from "@cyberos/nas-tools";
+import type { FileBatchRecord, FileOperationProposal, CyberOsConfig } from "@cyberos/shared";
 import type { SystemManagementDependencies } from "./system-management.js";
 import {
   resolveScopedExistingPath,
@@ -32,8 +32,8 @@ export class FileBatchRunner implements FileBatchRuntime {
 
   constructor(
     private readonly dependencies: {
-      db: ZosDatabase;
-      config: ZosConfig;
+      db: CyberOsDatabase;
+      config: CyberOsConfig;
       system?: SystemManagementDependencies;
       log?: { error: (input: unknown, message?: string) => void };
     }
@@ -83,8 +83,8 @@ interface ProcessedFileBatchItem {
 
 export async function processNextFileBatchItem(
   dependencies: {
-    db: ZosDatabase;
-    config: ZosConfig;
+    db: CyberOsDatabase;
+    config: CyberOsConfig;
     system?: SystemManagementDependencies;
   },
   onStarted?: (batch: FileBatchRecord) => void
@@ -110,8 +110,8 @@ export async function processNextFileBatchItem(
 
 async function applyClaimedItem(
   { db, config, system }: {
-    db: ZosDatabase;
-    config: ZosConfig;
+    db: CyberOsDatabase;
+    config: CyberOsConfig;
     system?: SystemManagementDependencies;
   },
   { batch, item }: ClaimedFileBatchItem
@@ -145,7 +145,7 @@ async function applyClaimedItem(
         trashEntryId: item.trashEntryId!,
         risk: "medium",
         reversible: true,
-        summary: `Move ${item.sourcePath} to ZOS trash`
+        summary: `Move ${item.sourcePath} to CyberOS trash`
       };
 
   const recovered = await recoverAppliedMutation(scope, proposal, trashRoot);

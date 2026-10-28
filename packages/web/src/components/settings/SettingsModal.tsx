@@ -135,21 +135,21 @@ interface SettingsModalProps {
 
 const PROVIDER_OPTIONS = ["openai", "anthropic"] as const;
 const READ_ONLY_CAPABILITIES: AgentCapabilityId[] = [
-  "zos.files.list", "zos.files.read", "zos.files.search", "zos.files.grep", "zos.files.find"
+  "cyberos.files.list", "cyberos.files.read", "cyberos.files.search", "cyberos.files.grep", "cyberos.files.find"
 ];
 const MUTATING_CAPABILITIES: AgentCapabilityId[] = [
-  "zos.files.mutate", "zos.files.edit", "zos.files.write", "zos.shell.run"
+  "cyberos.files.mutate", "cyberos.files.edit", "cyberos.files.write", "cyberos.shell.run"
 ];
 const CAPABILITY_DESCRIPTION_KEY = {
-  "zos.files.list": "list",
-  "zos.files.read": "read",
-  "zos.files.search": "search",
-  "zos.files.grep": "grep",
-  "zos.files.find": "find",
-  "zos.files.mutate": "mutate",
-  "zos.files.edit": "edit",
-  "zos.files.write": "write",
-  "zos.shell.run": "shell"
+  "cyberos.files.list": "list",
+  "cyberos.files.read": "read",
+  "cyberos.files.search": "search",
+  "cyberos.files.grep": "grep",
+  "cyberos.files.find": "find",
+  "cyberos.files.mutate": "mutate",
+  "cyberos.files.edit": "edit",
+  "cyberos.files.write": "write",
+  "cyberos.shell.run": "shell"
 } as const satisfies Record<AgentCapabilityId, string>;
 type Translate = (key: string, options?: Record<string, unknown>) => unknown;
 
@@ -294,7 +294,7 @@ export function SettingsModal({
       >
         <aside className="settings-rail" aria-label={t("settings.sectionsLabel")}>
           <div className="settings-rail-brand">
-            <img className="settings-brand-logo" src="/zos-icon.svg" alt={t("common.appName")} />
+            <img className="settings-brand-logo" src="/cyberos-icon.svg" alt={t("common.appName")} />
           </div>
 
           <label className="settings-search">
@@ -683,7 +683,7 @@ function SettingsOverview({
     },
     {
       value: systemInfo
-        ? formatLocaleNumber(systemInfo.zos.nasRoots.length, locale)
+        ? formatLocaleNumber(systemInfo.cyberos.nasRoots.length, locale)
         : String(t("common.dash")),
       label: t("settings.system.metrics.nasRoots")
     }
@@ -1450,7 +1450,7 @@ function SettingsToolPolicyPage({
                   <CustomSelect
                     id={`capability-policy-${capabilityId}`}
                     value={form.policies[capabilityId]}
-                    options={capabilityId === "zos.files.mutate" ? approvalRequiredPolicyOptions : policyOptions}
+                    options={capabilityId === "cyberos.files.mutate" ? approvalRequiredPolicyOptions : policyOptions}
                     ariaLabel={`${capabilityId}: ${toolPolicyModeLabel(form.policies[capabilityId], t)}`}
                     onChange={(mode) =>
                       onChange({
@@ -1683,16 +1683,16 @@ function SettingsAdvancedPage({
   const serviceRows: SettingsInfoRow[] = [
     {
       label: t("settings.system.labels.apiBind"),
-      value: `${systemInfo.zos.apiHost}:${systemInfo.zos.apiPort}`
+      value: `${systemInfo.cyberos.apiHost}:${systemInfo.cyberos.apiPort}`
     },
     {
       label: t("settings.system.labels.allowedOrigins"),
-      value: formatLocaleNumber(systemInfo.zos.allowedOriginCount, locale)
+      value: formatLocaleNumber(systemInfo.cyberos.allowedOriginCount, locale)
     },
     {
       label: t("settings.system.labels.workerPoll"),
       value: t("settings.system.values.milliseconds", {
-        value: formatLocaleNumber(systemInfo.zos.workerPollMs, locale)
+        value: formatLocaleNumber(systemInfo.cyberos.workerPollMs, locale)
       })
     },
     {
@@ -1701,11 +1701,11 @@ function SettingsAdvancedPage({
     },
     {
       label: t("settings.system.labels.modelMode"),
-      value: systemInfo.zos.modelProvider
+      value: systemInfo.cyberos.modelProvider
     },
     {
       label: t("settings.system.labels.localEndpoint"),
-      value: systemInfo.zos.localEndpointConfigured
+      value: systemInfo.cyberos.localEndpointConfigured
         ? t("settings.system.values.configured")
         : t("settings.system.values.notConfigured")
     }
@@ -1745,17 +1745,17 @@ function SettingsAdvancedPage({
   const pathRows: SettingsInfoRow[] = [
     {
       label: t("settings.system.labels.dataDir"),
-      value: systemInfo.zos.dataDir,
+      value: systemInfo.cyberos.dataDir,
       mono: true
     },
     {
       label: t("settings.system.labels.databasePath"),
-      value: systemInfo.zos.databasePath,
+      value: systemInfo.cyberos.databasePath,
       mono: true
     },
     {
       label: t("settings.system.labels.nasRoots"),
-      value: formatLocaleNumber(systemInfo.zos.nasRoots.length, locale)
+      value: formatLocaleNumber(systemInfo.cyberos.nasRoots.length, locale)
     }
   ];
 
@@ -1783,7 +1783,7 @@ function SettingsAdvancedPage({
           rows={pathRows}
         >
           <div className="settings-root-list" aria-label={t("settings.system.labels.nasRoots")}>
-            {systemInfo.zos.nasRoots.map((root) => (
+            {systemInfo.cyberos.nasRoots.map((root) => (
               <div key={root.id}>
                 <strong>{root.name}</strong>
                 <span>{root.id}</span>

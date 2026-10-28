@@ -45,13 +45,13 @@ impl MonitorService {
         }
 
         let publisher = MetricsEventPublisher::start(
-            env::var_os("ZOS_MONITORING_EVENTS_SOCKET")
+            env::var_os("CYBEROS_MONITORING_EVENTS_SOCKET")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| {
-                    if env::var("ZOS_ENVIRONMENT").as_deref() == Ok("development") {
+                    if env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("development") {
                         self.config.state_dir.join("monitoring-events.sock")
                     } else {
-                        PathBuf::from("/run/zos/monitoring-events.sock")
+                        PathBuf::from("/run/cyberos/monitoring-events.sock")
                     }
                 }),
         );

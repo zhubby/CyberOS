@@ -1,4 +1,4 @@
-import type { DockerCreateInput, DockerHostAccessGrant } from "@zos/shared";
+import type { DockerCreateInput, DockerHostAccessGrant } from "@cyberos/shared";
 
 export type DockerCreateKind = "container" | "volume" | "network";
 

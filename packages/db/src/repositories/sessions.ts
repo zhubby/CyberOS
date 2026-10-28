@@ -4,8 +4,8 @@ import type {
   AgentProviderSessionRecord,
   AgentSessionRecord,
   ModelProviderName
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import {
   mapMessage,
   mapSession
@@ -17,14 +17,14 @@ import type {
   DbSessionRow
 } from "./repository-rows.js";
 
-function hasSessionResourceTrust(db: ZosDatabase): boolean {
+function hasSessionResourceTrust(db: CyberOsDatabase): boolean {
   return Boolean(db.prepare(`
     SELECT 1 FROM pragma_table_info('agent_sessions')
     WHERE name = 'pi_resources_trusted'
   `).get());
 }
 
-function sessionColumns(db: ZosDatabase): string {
+function sessionColumns(db: CyberOsDatabase): string {
   const trustColumn = hasSessionResourceTrust(db)
     ? "pi_resources_trusted"
     : "0 AS pi_resources_trusted";
@@ -32,7 +32,7 @@ function sessionColumns(db: ZosDatabase): string {
 }
 
 export function createSession(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { rootId: string; currentPath?: string }
 ): AgentSessionRecord {
   const now = new Date().toISOString();
@@ -62,7 +62,7 @@ export function createSession(
   return session;
 }
 
-export function getSession(db: ZosDatabase, sessionId: string): AgentSessionRecord | null {
+export function getSession(db: CyberOsDatabase, sessionId: string): AgentSessionRecord | null {
   const row = db
     .prepare(`
       SELECT ${sessionColumns(db)}
@@ -73,7 +73,7 @@ export function getSession(db: ZosDatabase, sessionId: string): AgentSessionReco
 }
 
 export function listSessions(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { rootId?: string; limit?: number } = {}
 ): AgentSessionRecord[] {
   const limit = input.limit ?? 50;
@@ -100,7 +100,7 @@ export function listSessions(
 }
 
 export function updateSessionPath(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId: string; currentPath: string }
 ): AgentSessionRecord | null {
   const now = new Date().toISOString();
@@ -118,7 +118,7 @@ export function updateSessionPath(
 }
 
 export function updateSessionResourceTrust(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId: string; trusted: boolean }
 ): AgentSessionRecord | null {
   if (!hasSessionResourceTrust(db)) return getSession(db, input.sessionId);
@@ -132,7 +132,7 @@ export function updateSessionResourceTrust(
   return row ? mapSession(row) : null;
 }
 
-export function hasActiveJobsForSession(db: ZosDatabase, sessionId: string): boolean {
+export function hasActiveJobsForSession(db: CyberOsDatabase, sessionId: string): boolean {
   const row = db
     .prepare(`
       SELECT 1 AS marker
@@ -150,13 +150,13 @@ export function hasActiveJobsForSession(db: ZosDatabase, sessionId: string): boo
   return Boolean(row);
 }
 
-export function deleteSession(db: ZosDatabase, sessionId: string): boolean {
+export function deleteSession(db: CyberOsDatabase, sessionId: string): boolean {
   const result = db.prepare("DELETE FROM agent_sessions WHERE id = ?").run(sessionId);
   return result.changes === 1;
 }
 
 export function getAgentProviderSession(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   sessionId: string
 ): AgentProviderSessionRecord | null {
   const row = db
@@ -172,7 +172,7 @@ export function getAgentProviderSession(
 }
 
 export function saveAgentProviderSession(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     sessionId: string;
     providerSessionId: string;
@@ -234,7 +234,7 @@ export function saveAgentProviderSession(
 }
 
 export function clearAgentProviderSession(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   sessionId: string,
   providerSessionId: string
 ): boolean {
@@ -245,7 +245,7 @@ export function clearAgentProviderSession(
 }
 
 export function listMessages(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { sessionId: string; limit?: number }
 ): AgentMessageRecord[] {
   const rows = db

@@ -1,9 +1,9 @@
 use std::process::ExitCode;
 
+use cyberos_vod_player::config::VodPlayerConfig;
+use cyberos_vod_player::error::{ErrorCode, VodError};
+use cyberos_vod_player::server::VodPlayerServer;
 use tracing_subscriber::EnvFilter;
-use zos_vod_player::config::VodPlayerConfig;
-use zos_vod_player::error::{ErrorCode, VodError};
-use zos_vod_player::server::VodPlayerServer;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -26,7 +26,7 @@ async fn run() -> Result<(), VodError> {
     if std::env::args_os().nth(1).is_some() {
         return Err(VodError::new(
             ErrorCode::InvalidCommand,
-            "usage: zos-vod-player",
+            "usage: cyberos-vod-player",
             400,
         ));
     }

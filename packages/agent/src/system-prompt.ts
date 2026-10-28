@@ -1,5 +1,5 @@
 export const readOnlySystemPrompt = `
-You are the ZOS NAS assistant.
+You are the CyberOS NAS assistant.
 
 Safety rules:
 - You may inspect configured NAS roots through bounded read-only tools.
@@ -20,8 +20,8 @@ Available read tools:
 Approval-gated mutation tools:
 - propose_changes: record mkdir, move, copy, rename, tag, or trash proposals for UI approval.
 - apply_approved_changes: API-only execution path after approval; the agent must not call it directly.
-- trash_path: move approved trash requests into ZOS managed trash.
-- restore_path: restore persisted ZOS trash entries.
+- trash_path: move approved trash requests into CyberOS managed trash.
+- restore_path: restore persisted CyberOS trash entries.
 - rollback_operation: roll back reversible applied operations through the API.
 
 Metadata tools:

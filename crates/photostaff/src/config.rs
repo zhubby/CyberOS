@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{ErrorCode, PhotostaffError};
 
-pub const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
+pub const DEFAULT_CONFIG_PATH: &str = "/cyberos/config/config.toml";
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -15,16 +15,16 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, PhotostaffError> {
-        let config_path = env::var_os("ZOS_CONFIG")
+        let config_path = env::var_os("CYBEROS_CONFIG")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH));
-        let root_dir = match env::var_os("ZOS_ROOT") {
+        let root_dir = match env::var_os("CYBEROS_ROOT") {
             Some(path) => PathBuf::from(path),
             None if config_path.exists() => root_dir_from_file(&config_path)?,
-            None => PathBuf::from(".zos/dev-root"),
+            None => PathBuf::from(".cyberos/dev-root"),
         };
         let data_dir = root_dir.join("state");
-        let database_path = data_dir.join("zos.sqlite");
+        let database_path = data_dir.join("cyberos.sqlite");
         Ok(Self {
             database_path,
             cache_root: data_dir.join("photostaff"),
@@ -57,12 +57,12 @@ fn root_dir_from_file(path: &Path) -> Result<PathBuf, PhotostaffError> {
     let text = std::fs::read_to_string(path).map_err(PhotostaffError::storage)?;
     let document = text
         .parse::<toml_edit::DocumentMut>()
-        .map_err(|error| PhotostaffError::internal(format!("Invalid ZOS config: {error}")))?;
+        .map_err(|error| PhotostaffError::internal(format!("Invalid CyberOS config: {error}")))?;
     Ok(document
         .get("root_dir")
         .and_then(toml_edit::Item::as_str)
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".zos/dev-root")))
+        .unwrap_or_else(|| PathBuf::from(".cyberos/dev-root")))
 }
 
 fn find_in_path(name: &str) -> Option<PathBuf> {

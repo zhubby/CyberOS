@@ -6,8 +6,8 @@ use serde::Deserialize;
 
 use crate::error::HostdError;
 
-pub const DEFAULT_SOCKET_PATH: &str = "/run/zos/hostd.sock";
-pub const DEFAULT_CONFIG_PATH: &str = "/zos/config/config.toml";
+pub const DEFAULT_SOCKET_PATH: &str = "/run/cyberos/hostd.sock";
+pub const DEFAULT_CONFIG_PATH: &str = "/cyberos/config/config.toml";
 
 #[derive(Debug, Clone)]
 pub struct HostdConfig {
@@ -30,7 +30,7 @@ impl HostMutationPolicy {
             "mutable" => Ok(Self::Mutable),
             "declarative" => Ok(Self::Declarative),
             _ => Err(HostdError::validation(
-                "ZOS_HOST_MUTATION_POLICY must be mutable or declarative",
+                "CYBEROS_HOST_MUTATION_POLICY must be mutable or declarative",
             )),
         }
     }
@@ -66,29 +66,30 @@ struct FileNasRoot {
 
 impl HostdConfig {
     pub fn load() -> Result<Self, HostdError> {
-        let config_path = env::var("ZOS_CONFIG").unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_owned());
+        let config_path =
+            env::var("CYBEROS_CONFIG").unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_owned());
         let file_config = load_file_config(Path::new(&config_path))?;
         let socket_path = resolve_socket_path(
-            env::var("ZOS_HOSTD_SOCKET_PATH").ok(),
+            env::var("CYBEROS_HOSTD_SOCKET_PATH").ok(),
             file_config.hostd.and_then(|config| config.socket_path),
         )?;
         let current_directory = env::current_dir()?;
         let nas_roots = resolve_nas_roots(
-            env::var("ZOS_NAS_ROOTS").ok(),
+            env::var("CYBEROS_NAS_ROOTS").ok(),
             file_config.nas_roots,
             &current_directory,
         )?;
-        let zos_uid = nix::unistd::User::from_name("zos")
+        let cyberos_uid = nix::unistd::User::from_name("cyberos")
             .map_err(|error| HostdError::unavailable(error.to_string()))?
             .map(|user| user.uid.as_raw())
             .unwrap_or_else(|| nix::unistd::Uid::current().as_raw());
         Ok(Self {
             socket_path,
-            socket_group: env::var("ZOS_HOSTD_GROUP").unwrap_or_else(|_| "zos".to_owned()),
-            allowed_uids: vec![0, zos_uid],
+            socket_group: env::var("CYBEROS_HOSTD_GROUP").unwrap_or_else(|_| "cyberos".to_owned()),
+            allowed_uids: vec![0, cyberos_uid],
             nas_roots,
             mutation_policy: HostMutationPolicy::from_environment(
-                env::var("ZOS_HOST_MUTATION_POLICY").ok(),
+                env::var("CYBEROS_HOST_MUTATION_POLICY").ok(),
             )?,
         })
     }
@@ -112,7 +113,7 @@ fn resolve_socket_path(
 fn load_file_config(path: &Path) -> Result<FileConfig, HostdError> {
     match std::fs::read_to_string(path) {
         Ok(content) => toml_edit::de::from_str(&content)
-            .map_err(|_| HostdError::validation("ZOS configuration is invalid TOML")),
+            .map_err(|_| HostdError::validation("CyberOS configuration is invalid TOML")),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(FileConfig::default()),
         Err(error) => Err(error.into()),
     }

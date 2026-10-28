@@ -113,7 +113,7 @@ mod tests {
     #[test]
     fn verifies_identity_and_persists_completion_threshold() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("zos.sqlite");
+        let path = directory.path().join("cyberos.sqlite");
         database(&path);
         let store = ProgressStore::new(path.clone());
         store

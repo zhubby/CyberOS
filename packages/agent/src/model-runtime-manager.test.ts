@@ -1,5 +1,5 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { AgentProviderSessionRecord, ModelProviderSettingsRecord } from "@zos/shared";
+import type { AgentProviderSessionRecord, ModelProviderSettingsRecord } from "@cyberos/shared";
 import { describe, expect, it, vi } from "vitest";
 import { ModelRuntimeManager, resolveRuntimeSettings } from "./model-runtime-manager.js";
 
@@ -7,7 +7,7 @@ describe("ModelRuntimeManager", () => {
   it("creates at most one runtime for a generation and applies the current credential", async () => {
     const runtime = fakeRuntime({ authenticated: true });
     const createRuntime = vi.fn(async () => runtime);
-    const manager = new ModelRuntimeManager("/tmp/zos-agent", createRuntime);
+    const manager = new ModelRuntimeManager("/tmp/cyberos-agent", createRuntime);
     const settings = modelSettings({ generation: 3, apiKey: "current-secret", model: "model-3" });
 
     const [first, second] = await Promise.all([
@@ -24,7 +24,7 @@ describe("ModelRuntimeManager", () => {
 
   it("keeps an existing session on its saved generation without borrowing new credentials", async () => {
     const runtime = fakeRuntime({ authenticated: false });
-    const manager = new ModelRuntimeManager("/tmp/zos-agent", async () => runtime);
+    const manager = new ModelRuntimeManager("/tmp/cyberos-agent", async () => runtime);
     const current = modelSettings({ generation: 4, apiKey: "new-secret", model: "current-model" });
     const providerSession = savedSession({
       runtimeGeneration: 2,
@@ -53,7 +53,7 @@ describe("ModelRuntimeManager", () => {
     const runtimes = [fakeRuntime({ authenticated: true }), fakeRuntime({ authenticated: true })];
     let runtimeIndex = 0;
     const createRuntime = vi.fn(async () => runtimes[runtimeIndex++] as ModelRuntime);
-    const manager = new ModelRuntimeManager("/tmp/zos-agent", createRuntime);
+    const manager = new ModelRuntimeManager("/tmp/cyberos-agent", createRuntime);
     const current = modelSettings({ generation: 2, model: "current-model" });
 
     const first = await manager.get(current, savedSession({

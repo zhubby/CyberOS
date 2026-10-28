@@ -7,16 +7,16 @@ import {
   createMcpClient,
   createMcpResourceToken,
   deleteExpiredMcpResourceTokens,
-  openZosDb,
-  type ZosDatabase
+  openCyberOsDb,
+  type CyberOsDatabase
 } from "./index.js";
 
 let tempDir: string;
-let db: ZosDatabase;
+let db: CyberOsDatabase;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-mcp-resource-token-"));
-  db = openZosDb(path.join(tempDir, "zos.sqlite"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-mcp-resource-token-"));
+  db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
 });
 
 afterEach(async () => {
@@ -26,8 +26,8 @@ afterEach(async () => {
 
 describe("MCP resource tokens", () => {
   it("stores only a token digest and consumes the token once for its client", () => {
-    const owner = createMcpClient(db, { name: "Owner", kind: "local", scopes: ["zos:files:read"] });
-    const other = createMcpClient(db, { name: "Other", kind: "local", scopes: ["zos:files:read"] });
+    const owner = createMcpClient(db, { name: "Owner", kind: "local", scopes: ["cyberos:files:read"] });
+    const other = createMcpClient(db, { name: "Other", kind: "local", scopes: ["cyberos:files:read"] });
     const created = createMcpResourceToken(db, {
       clientId: owner.id,
       kind: "file",
@@ -56,7 +56,7 @@ describe("MCP resource tokens", () => {
   });
 
   it("rejects expired tokens and deletes terminal token rows", () => {
-    const owner = createMcpClient(db, { name: "Owner", kind: "local", scopes: ["zos:files:read"] });
+    const owner = createMcpClient(db, { name: "Owner", kind: "local", scopes: ["cyberos:files:read"] });
     const created = createMcpResourceToken(db, {
       clientId: owner.id,
       kind: "file_export",

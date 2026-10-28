@@ -5,8 +5,8 @@ import {
   type OpsTask,
   type OpsTaskOverview,
   type SystemOperationsResponse
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import type { DbOpsRunRow } from "./repository-rows.js";
 
 const OPS_RUN_COLUMNS = `
@@ -19,7 +19,7 @@ const SUCCESS_MAX_AGE_MS: Record<OpsTask, number> = {
 };
 
 export function recoverStaleOpsRuns(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { now?: Date; staleAfterMs?: number } = {}
 ): number {
   const now = input.now ?? new Date();
@@ -33,7 +33,7 @@ export function recoverStaleOpsRuns(
 }
 
 export function startOpsRun(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { task: OpsTask; now?: Date }
 ): OpsRunRecord {
   const now = input.now ?? new Date();
@@ -58,7 +58,7 @@ export function startOpsRun(
 }
 
 export function heartbeatOpsRun(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { runId: string; now?: Date }
 ): boolean {
   return db.prepare(`
@@ -67,7 +67,7 @@ export function heartbeatOpsRun(
 }
 
 export function finishOpsRun(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     runId: string;
     status: "completed" | "failed";
@@ -100,7 +100,7 @@ export function finishOpsRun(
 }
 
 export function listOpsRuns(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { task?: OpsTask; limit?: number } = {}
 ): OpsRunRecord[] {
   const limit = Math.min(Math.max(Math.trunc(input.limit ?? 50), 1), 100);
@@ -117,7 +117,7 @@ export function listOpsRuns(
 }
 
 export function getOpsTaskOverview(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   task: OpsTask,
   now = new Date()
 ): OpsTaskOverview {
@@ -155,7 +155,7 @@ export function getOpsTaskOverview(
 }
 
 export function getSystemOperations(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { task?: OpsTask; limit?: number; now?: Date } = {}
 ): SystemOperationsResponse {
   const now = input.now ?? new Date();
@@ -168,7 +168,7 @@ export function getSystemOperations(
   };
 }
 
-function retainOpsRuns(db: ZosDatabase, task: OpsTask): void {
+function retainOpsRuns(db: CyberOsDatabase, task: OpsTask): void {
   db.prepare(`
     DELETE FROM ops_runs
     WHERE task = ? AND id IN (

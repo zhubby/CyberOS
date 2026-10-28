@@ -105,7 +105,7 @@ pub(super) fn grants_for(
         }
         if protocols.nfs.enabled {
             identities.push((
-                "zos-nfs",
+                "cyberos-nfs",
                 if protocols.nfs.read_only {
                     "read"
                 } else {

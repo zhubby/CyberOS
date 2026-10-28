@@ -1,4 +1,4 @@
-root_dir = ".zos/dev-root"
+root_dir = ".cyberos/dev-root"
 environment = "development"
 
 [api]
@@ -10,7 +10,6 @@ allowed_origins = []
 enabled = true
 pi_enabled = false
 pi_token_file = "mcp/pi.token"
-legacy_pi_tools_enabled = false
 external_enabled = false
 shell_enabled = false
 allowed_hosts = ["localhost", "127.0.0.1", "[::1]"]
@@ -32,10 +31,10 @@ max_database_bytes = 536870912
 
 # Optional byte-identical HTTPS mirror for the managed offline map.
 # [photostaff]
-# basemap_url = "https://mirror.example.com/zos/natural-earth-ii-3.2.0-raster.pmtiles"
+# basemap_url = "https://mirror.example.com/cyberos/natural-earth-ii-3.2.0-raster.pmtiles"
 
 [admin]
-display_name = "ZOS Admin"
+display_name = "CyberOS Admin"
 auth_mode = "local-only"
 
 [model]
@@ -51,28 +50,28 @@ operation_timeout_ms = 120000
 console_shells = ["/bin/sh", "/bin/bash"]
 
 # Docker socket access is root-equivalent. Only enable this on a trusted
-# single-user appliance, and grant the zos service access deliberately.
-# Managed Compose Apps always use /zos/apps; this path is not configurable.
+# single-user appliance, and grant the cyberos service access deliberately.
+# Managed Compose Apps always use /cyberos/apps; this path is not configurable.
 
 [vm]
 enabled = true
 libvirt_uri = "qemu:///system"
-storage_path = ".zos/dev-root/vm"
+storage_path = ".cyberos/dev-root/vm"
 network_name = "default"
-iso_roots = [".zos/dev-root/iso"]
+iso_roots = [".cyberos/dev-root/iso"]
 operation_timeout_ms = 120000
 console_mode = "serial"
 
 [[nas_roots]]
 id = "primary"
 name = "Primary NAS"
-path = ".zos/dev-root/data/primary"
+path = ".cyberos/dev-root/data/primary"
 
 [backup]
 enabled = false
-repository_path = ".zos/dev-root/data/backup/restic"
-password_file = ".zos/dev-root/config/restic-password"
-staging_path = ".zos/dev-root/state/backup-staging"
+repository_path = ".cyberos/dev-root/data/backup/restic"
+password_file = ".cyberos/dev-root/config/restic-password"
+staging_path = ".cyberos/dev-root/state/backup-staging"
 require_mount = false
 retry_count = 2
 timeout_ms = 300000

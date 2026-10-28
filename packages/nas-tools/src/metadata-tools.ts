@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import type { NasRootRecord } from "@zos/shared";
+import type { NasRootRecord } from "@cyberos/shared";
 import { resolveSafeExistingPath } from "./path-safety.js";
 
 export interface FileMetadata {

@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NasRootRecord } from "@zos/shared";
+import type { NasRootRecord } from "@cyberos/shared";
 import {
   applyFileMutation,
   archiveKindForPath,
@@ -31,7 +31,7 @@ let trashDir: string;
 let root: NasRootRecord;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "zos-mutate-"));
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-mutate-"));
   rootDir = path.join(tempDir, "root");
   trashDir = path.join(tempDir, "trash");
   await mkdir(rootDir);
@@ -236,7 +236,7 @@ describe("approval-gated mutation tools", () => {
     ).rejects.toThrow("Cannot transfer a folder into itself");
   });
 
-  it("moves trash requests into ZOS trash", async () => {
+  it("moves trash requests into CyberOS trash", async () => {
     const result = await applyFileMutation(
       root,
       {

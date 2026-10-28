@@ -5,43 +5,43 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 ARCH=$(dpkg --print-architecture 2>/dev/null || true)
 NODE_MAJOR_REQUIRED=22
 RUST_VERSION_REQUIRED=1.95.0
-ZOS_APT_MIRROR=${ZOS_APT_MIRROR:-https://mirrors.aliyun.com/debian}
-ZOS_APT_SECURITY_MIRROR=${ZOS_APT_SECURITY_MIRROR:-https://mirrors.aliyun.com/debian-security}
-ZOS_RPI_MIRROR=${ZOS_RPI_MIRROR:-https://mirrors.aliyun.com/raspberrypi}
-ZOS_NODE_MIRROR=${ZOS_NODE_MIRROR:-https://mirrors.aliyun.com/nodejs-release}
-ZOS_NODE_VERSION=${ZOS_NODE_VERSION:-22.23.2}
-ZOS_NPM_REGISTRY=${ZOS_NPM_REGISTRY:-https://registry.npmmirror.com}
-ZOS_RUSTUP_INIT_URL=${ZOS_RUSTUP_INIT_URL:-https://sh.rustup.rs}
-ZOS_CARGO_HOME=${ZOS_CARGO_HOME:-/root/.cargo}
-ZOS_RUSTUP_HOME=${ZOS_RUSTUP_HOME:-/root/.rustup}
-ZOS_APT_BACKUP_DIR=${ZOS_APT_BACKUP_DIR:-/zos/system-backups/apt}
-ZOS_LOCALE=${ZOS_LOCALE:-C.UTF-8}
-NGINX_ENABLED=${ZOS_ENABLE_NGINX:-1}
-DOCKER_ENABLED=${ZOS_ENABLE_DOCKER:-0}
-VM_ENABLED=${ZOS_ENABLE_VM:-0}
-VOD_PLAYER_ENABLED=${ZOS_ENABLE_VOD_PLAYER:-0}
-TV_MODE_ENABLED=${ZOS_ENABLE_TV_MODE:-0}
-VOD_PLAYER_USER=${ZOS_VOD_PLAYER_USER:-zos}
-TERMINAL_USER=${ZOS_TERMUX_USER:-zos}
+CYBEROS_APT_MIRROR=${CYBEROS_APT_MIRROR:-https://mirrors.aliyun.com/debian}
+CYBEROS_APT_SECURITY_MIRROR=${CYBEROS_APT_SECURITY_MIRROR:-https://mirrors.aliyun.com/debian-security}
+CYBEROS_RPI_MIRROR=${CYBEROS_RPI_MIRROR:-https://mirrors.aliyun.com/raspberrypi}
+CYBEROS_NODE_MIRROR=${CYBEROS_NODE_MIRROR:-https://mirrors.aliyun.com/nodejs-release}
+CYBEROS_NODE_VERSION=${CYBEROS_NODE_VERSION:-22.23.2}
+CYBEROS_NPM_REGISTRY=${CYBEROS_NPM_REGISTRY:-https://registry.npmmirror.com}
+CYBEROS_RUSTUP_INIT_URL=${CYBEROS_RUSTUP_INIT_URL:-https://sh.rustup.rs}
+CYBEROS_CARGO_HOME=${CYBEROS_CARGO_HOME:-/root/.cargo}
+CYBEROS_RUSTUP_HOME=${CYBEROS_RUSTUP_HOME:-/root/.rustup}
+CYBEROS_APT_BACKUP_DIR=${CYBEROS_APT_BACKUP_DIR:-/cyberos/system-backups/apt}
+CYBEROS_LOCALE=${CYBEROS_LOCALE:-C.UTF-8}
+NGINX_ENABLED=${CYBEROS_ENABLE_NGINX:-1}
+DOCKER_ENABLED=${CYBEROS_ENABLE_DOCKER:-0}
+VM_ENABLED=${CYBEROS_ENABLE_VM:-0}
+VOD_PLAYER_ENABLED=${CYBEROS_ENABLE_VOD_PLAYER:-0}
+TV_MODE_ENABLED=${CYBEROS_ENABLE_TV_MODE:-0}
+VOD_PLAYER_USER=${CYBEROS_VOD_PLAYER_USER:-cyberos}
+TERMINAL_USER=${CYBEROS_TERMUX_USER:-cyberos}
 DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND
-export CARGO_HOME="$ZOS_CARGO_HOME"
-export RUSTUP_HOME="$ZOS_RUSTUP_HOME"
+export CARGO_HOME="$CYBEROS_CARGO_HOME"
+export RUSTUP_HOME="$CYBEROS_RUSTUP_HOME"
 PATH="$CARGO_HOME/bin:$PATH"
 export PATH
 
-ZOS_APT_MIRROR=${ZOS_APT_MIRROR%/}
-ZOS_APT_SECURITY_MIRROR=${ZOS_APT_SECURITY_MIRROR%/}
-ZOS_RPI_MIRROR=${ZOS_RPI_MIRROR%/}
-ZOS_NODE_MIRROR=${ZOS_NODE_MIRROR%/}
-ZOS_NPM_REGISTRY=${ZOS_NPM_REGISTRY%/}
+CYBEROS_APT_MIRROR=${CYBEROS_APT_MIRROR%/}
+CYBEROS_APT_SECURITY_MIRROR=${CYBEROS_APT_SECURITY_MIRROR%/}
+CYBEROS_RPI_MIRROR=${CYBEROS_RPI_MIRROR%/}
+CYBEROS_NODE_MIRROR=${CYBEROS_NODE_MIRROR%/}
+CYBEROS_NPM_REGISTRY=${CYBEROS_NPM_REGISTRY%/}
 
 log() {
-  printf 'zos-install: %s\n' "$*"
+  printf 'cyberos-install: %s\n' "$*"
 }
 
 die() {
-  printf 'zos-install: error: %s\n' "$*" >&2
+  printf 'cyberos-install: error: %s\n' "$*" >&2
   exit 1
 }
 
@@ -53,8 +53,8 @@ apt_install() {
 
 backup_apt_source() {
   source=$1
-  install -d -m 0755 "$ZOS_APT_BACKUP_DIR"
-  backup="$ZOS_APT_BACKUP_DIR/$(basename "$source")"
+  install -d -m 0755 "$CYBEROS_APT_BACKUP_DIR"
+  backup="$CYBEROS_APT_BACKUP_DIR/$(basename "$source")"
   [ -e "$backup" ] || cp -p "$source" "$backup"
 }
 
@@ -78,12 +78,12 @@ disable_nodesource_sources() {
     case "$source" in
       *.list)
         backup_apt_source "$source"
-        sed -i '/deb\.nodesource\.com/s/^/# zos disabled NodeSource: /' "$source"
+        sed -i '/deb\.nodesource\.com/s/^/# cyberos disabled NodeSource: /' "$source"
         log "disabled NodeSource entry in $source"
         ;;
       *.sources)
         backup_apt_source "$source"
-        mv "$source" "$ZOS_APT_BACKUP_DIR/$(basename "$source").zos-disabled"
+        mv "$source" "$CYBEROS_APT_BACKUP_DIR/$(basename "$source").cyberos-disabled"
         log "disabled NodeSource source file $source"
         ;;
     esac
@@ -94,12 +94,12 @@ configure_domestic_apt_mirrors() {
   log "configuring domestic APT mirrors"
   # Replace only known upstream URIs. Signed-By, suites, components, and any
   # unrelated administrator-managed sources remain unchanged.
-  rewrite_apt_uri 'http://deb.debian.org/debian-security' "$ZOS_APT_SECURITY_MIRROR"
-  rewrite_apt_uri 'https://deb.debian.org/debian-security' "$ZOS_APT_SECURITY_MIRROR"
-  rewrite_apt_uri 'http://deb.debian.org/debian' "$ZOS_APT_MIRROR"
-  rewrite_apt_uri 'https://deb.debian.org/debian' "$ZOS_APT_MIRROR"
-  rewrite_apt_uri 'http://archive.raspberrypi.com/debian' "$ZOS_RPI_MIRROR"
-  rewrite_apt_uri 'https://archive.raspberrypi.com/debian' "$ZOS_RPI_MIRROR"
+  rewrite_apt_uri 'http://deb.debian.org/debian-security' "$CYBEROS_APT_SECURITY_MIRROR"
+  rewrite_apt_uri 'https://deb.debian.org/debian-security' "$CYBEROS_APT_SECURITY_MIRROR"
+  rewrite_apt_uri 'http://deb.debian.org/debian' "$CYBEROS_APT_MIRROR"
+  rewrite_apt_uri 'https://deb.debian.org/debian' "$CYBEROS_APT_MIRROR"
+  rewrite_apt_uri 'http://archive.raspberrypi.com/debian' "$CYBEROS_RPI_MIRROR"
+  rewrite_apt_uri 'https://archive.raspberrypi.com/debian' "$CYBEROS_RPI_MIRROR"
   disable_nodesource_sources
 }
 
@@ -111,50 +111,50 @@ case "$ARCH" in
   *) die "unsupported Debian architecture: ${ARCH:-unknown}; use arm64 or amd64" ;;
 esac
 
-[ -n "$ZOS_APT_MIRROR" ] || die "ZOS_APT_MIRROR must not be empty"
-[ -n "$ZOS_APT_SECURITY_MIRROR" ] || die "ZOS_APT_SECURITY_MIRROR must not be empty"
-[ -n "$ZOS_RPI_MIRROR" ] || die "ZOS_RPI_MIRROR must not be empty"
-[ -n "$ZOS_NODE_MIRROR" ] || die "ZOS_NODE_MIRROR must not be empty"
-[ -n "$ZOS_NODE_VERSION" ] || die "ZOS_NODE_VERSION must not be empty"
-[ -n "$ZOS_NPM_REGISTRY" ] || die "ZOS_NPM_REGISTRY must not be empty"
-[ -n "$ZOS_RUSTUP_INIT_URL" ] || die "ZOS_RUSTUP_INIT_URL must not be empty"
-[ -n "$ZOS_CARGO_HOME" ] || die "ZOS_CARGO_HOME must not be empty"
-[ -n "$ZOS_RUSTUP_HOME" ] || die "ZOS_RUSTUP_HOME must not be empty"
-[ -n "$ZOS_APT_BACKUP_DIR" ] || die "ZOS_APT_BACKUP_DIR must not be empty"
-[ -n "$ZOS_LOCALE" ] || die "ZOS_LOCALE must not be empty"
-[ "$TERMINAL_USER" = zos ] || die "ZOS_TERMUX_USER must be zos"
+[ -n "$CYBEROS_APT_MIRROR" ] || die "CYBEROS_APT_MIRROR must not be empty"
+[ -n "$CYBEROS_APT_SECURITY_MIRROR" ] || die "CYBEROS_APT_SECURITY_MIRROR must not be empty"
+[ -n "$CYBEROS_RPI_MIRROR" ] || die "CYBEROS_RPI_MIRROR must not be empty"
+[ -n "$CYBEROS_NODE_MIRROR" ] || die "CYBEROS_NODE_MIRROR must not be empty"
+[ -n "$CYBEROS_NODE_VERSION" ] || die "CYBEROS_NODE_VERSION must not be empty"
+[ -n "$CYBEROS_NPM_REGISTRY" ] || die "CYBEROS_NPM_REGISTRY must not be empty"
+[ -n "$CYBEROS_RUSTUP_INIT_URL" ] || die "CYBEROS_RUSTUP_INIT_URL must not be empty"
+[ -n "$CYBEROS_CARGO_HOME" ] || die "CYBEROS_CARGO_HOME must not be empty"
+[ -n "$CYBEROS_RUSTUP_HOME" ] || die "CYBEROS_RUSTUP_HOME must not be empty"
+[ -n "$CYBEROS_APT_BACKUP_DIR" ] || die "CYBEROS_APT_BACKUP_DIR must not be empty"
+[ -n "$CYBEROS_LOCALE" ] || die "CYBEROS_LOCALE must not be empty"
+[ "$TERMINAL_USER" = cyberos ] || die "CYBEROS_TERMUX_USER must be cyberos"
 
-ZOS_APT_BACKUP_DIR=$(realpath -m -- "$ZOS_APT_BACKUP_DIR")
-case "$ZOS_APT_BACKUP_DIR" in
-  /zos/system-backups|/zos/system-backups/*) ;;
-  *) die "ZOS_APT_BACKUP_DIR must be under /zos/system-backups" ;;
+CYBEROS_APT_BACKUP_DIR=$(realpath -m -- "$CYBEROS_APT_BACKUP_DIR")
+case "$CYBEROS_APT_BACKUP_DIR" in
+  /cyberos/system-backups|/cyberos/system-backups/*) ;;
+  *) die "CYBEROS_APT_BACKUP_DIR must be under /cyberos/system-backups" ;;
 esac
 
 case "$NGINX_ENABLED" in
   0|1) ;;
-  *) die "ZOS_ENABLE_NGINX must be 0 or 1" ;;
+  *) die "CYBEROS_ENABLE_NGINX must be 0 or 1" ;;
 esac
 case "$DOCKER_ENABLED" in
   0|1) ;;
-  *) die "ZOS_ENABLE_DOCKER must be 0 or 1" ;;
+  *) die "CYBEROS_ENABLE_DOCKER must be 0 or 1" ;;
 esac
 case "$VM_ENABLED" in
   0|1) ;;
-  *) die "ZOS_ENABLE_VM must be 0 or 1" ;;
+  *) die "CYBEROS_ENABLE_VM must be 0 or 1" ;;
 esac
 case "$VOD_PLAYER_ENABLED" in
   0|1) ;;
-  *) die "ZOS_ENABLE_VOD_PLAYER must be 0 or 1" ;;
+  *) die "CYBEROS_ENABLE_VOD_PLAYER must be 0 or 1" ;;
 esac
 case "$TV_MODE_ENABLED" in
   0|1) ;;
-  *) die "ZOS_ENABLE_TV_MODE must be 0 or 1" ;;
+  *) die "CYBEROS_ENABLE_TV_MODE must be 0 or 1" ;;
 esac
 if [ "$TV_MODE_ENABLED" = "1" ]; then
   VOD_PLAYER_ENABLED=1
 fi
 case "$VOD_PLAYER_USER" in
-  *[!a-zA-Z0-9._-]*|root) die "ZOS_VOD_PLAYER_USER must name a non-root local user" ;;
+  *[!a-zA-Z0-9._-]*|root) die "CYBEROS_VOD_PLAYER_USER must name a non-root local user" ;;
 esac
 
 install_build_dependencies() {
@@ -173,7 +173,7 @@ install_rust_toolchain() {
   if [ ! -x "$CARGO_HOME/bin/rustup" ]; then
     log "installing rustup"
     rustup_init=$(mktemp)
-    curl -fsSL "$ZOS_RUSTUP_INIT_URL" -o "$rustup_init"
+    curl -fsSL "$CYBEROS_RUSTUP_INIT_URL" -o "$rustup_init"
     sh "$rustup_init" -y --profile minimal --default-toolchain "$RUST_VERSION_REQUIRED"
     rm -f "$rustup_init"
   fi
@@ -248,20 +248,20 @@ install_node_22() {
     arm64) node_arch=arm64 ;;
     amd64) node_arch=x64 ;;
   esac
-  node_filename="node-v${ZOS_NODE_VERSION}-linux-${node_arch}.tar.xz"
-  node_dir="/opt/zos/node/node-v${ZOS_NODE_VERSION}-linux-${node_arch}"
+  node_filename="node-v${CYBEROS_NODE_VERSION}-linux-${node_arch}.tar.xz"
+  node_dir="/opt/cyberos/node/node-v${CYBEROS_NODE_VERSION}-linux-${node_arch}"
   node_tmp=$(mktemp -d)
   trap 'rm -rf "$node_tmp"' EXIT HUP INT TERM
-  curl -fsSL "$ZOS_NODE_MIRROR/v${ZOS_NODE_VERSION}/$node_filename" \
+  curl -fsSL "$CYBEROS_NODE_MIRROR/v${CYBEROS_NODE_VERSION}/$node_filename" \
     -o "$node_tmp/$node_filename"
-  curl -fsSL "$ZOS_NODE_MIRROR/v${ZOS_NODE_VERSION}/SHASUMS256.txt" \
+  curl -fsSL "$CYBEROS_NODE_MIRROR/v${CYBEROS_NODE_VERSION}/SHASUMS256.txt" \
     -o "$node_tmp/SHASUMS256.txt"
   node_sha256=$(awk -v filename="$node_filename" '$2 == filename { print $1; exit }' "$node_tmp/SHASUMS256.txt")
   [ -n "$node_sha256" ] || die "Node.js checksum is missing for $node_filename"
   printf '%s  %s\n' "$node_sha256" "$node_tmp/$node_filename" | sha256sum -c - \
     || die "Node.js archive checksum did not match"
-  install -d -m 0755 /opt/zos/node
-  tar -xJf "$node_tmp/$node_filename" -C /opt/zos/node
+  install -d -m 0755 /opt/cyberos/node
+  tar -xJf "$node_tmp/$node_filename" -C /opt/cyberos/node
   [ -x "$node_dir/bin/node" ] || die "Node.js archive did not contain $node_dir/bin/node"
   ln -sfn "$node_dir/bin/node" /usr/local/bin/node
   ln -sfn "$node_dir/bin/npm" /usr/local/bin/npm
@@ -270,8 +270,8 @@ install_node_22() {
 
 configure_domestic_apt_mirrors
 
-ZOS_LOCALE="$ZOS_LOCALE" \
-  "$ROOT_DIR/packaging/scripts/zos-configure-locale.sh"
+CYBEROS_LOCALE="$CYBEROS_LOCALE" \
+  "$ROOT_DIR/packaging/scripts/cyberos-configure-locale.sh"
 
 if [ "$(node_major)" -lt "$NODE_MAJOR_REQUIRED" ] 2>/dev/null || nodejs_from_nodesource || [ ! -x /usr/local/bin/node ]; then
   install_node_22
@@ -280,19 +280,19 @@ fi
 node --version | grep -Eq '^v22\.' || die "Node.js 22 is required; found $(node --version 2>/dev/null || printf 'none')"
 install_build_dependencies
 install_rust_toolchain
-npm config set registry "$ZOS_NPM_REGISTRY" --global
+npm config set registry "$CYBEROS_NPM_REGISTRY" --global
 install_optional_runtime
 
-ZOS_CONFIG_EXISTS=0
-if [ -e /zos/config/config.toml ]; then
-  ZOS_CONFIG_EXISTS=1
+CYBEROS_CONFIG_EXISTS=0
+if [ -e /cyberos/config/config.toml ]; then
+  CYBEROS_CONFIG_EXISTS=1
 fi
 
 log "building the native ${ARCH} Debian package"
 "$ROOT_DIR/packaging/scripts/build-deb.sh"
 
-DEB_PATH=$(find "$ROOT_DIR/.zos" -maxdepth 1 -type f \
-  -name "zos_*_${ARCH}.deb" ! -name '*dbgsym*' -print | sort | tail -n 1)
+DEB_PATH=$(find "$ROOT_DIR/.cyberos" -maxdepth 1 -type f \
+  -name "cyberos_*_${ARCH}.deb" ! -name '*dbgsym*' -print | sort | tail -n 1)
 [ -n "$DEB_PATH" ] || die "could not find the ${ARCH} Debian package"
 
 log "installing $DEB_PATH"
@@ -300,29 +300,29 @@ log "installing $DEB_PATH"
 # to replace an already-installed package from an earlier checkout revision.
 apt_install install -y --no-install-recommends --reinstall "$DEB_PATH"
 
-if [ "$ZOS_CONFIG_EXISTS" = "0" ]; then
-  log "initializing ZOS configuration"
-  ZOS_FIRST_BOOT_FORCE=1 \
-  ZOS_ADMIN_DISPLAY_NAME=${ZOS_ADMIN_DISPLAY_NAME:-ZOS Admin} \
-  ZOS_NAS_ROOT_PATH=${ZOS_NAS_ROOT_PATH:-/zos/data/primary} \
-  ZOS_DOCKER_ENABLED="$DOCKER_ENABLED" \
-  ZOS_VM_ENABLED="$VM_ENABLED" \
-  ZOS_VOD_PLAYER_ENABLED="$VOD_PLAYER_ENABLED" \
-  ZOS_VOD_PLAYER_USER="$VOD_PLAYER_USER" \
-  ZOS_TERMUX_USER="$TERMINAL_USER" \
-    /usr/lib/zos/scripts/zos-first-boot.sh
+if [ "$CYBEROS_CONFIG_EXISTS" = "0" ]; then
+  log "initializing CyberOS configuration"
+  CYBEROS_FIRST_BOOT_FORCE=1 \
+  CYBEROS_ADMIN_DISPLAY_NAME=${CYBEROS_ADMIN_DISPLAY_NAME:-CyberOS Admin} \
+  CYBEROS_NAS_ROOT_PATH=${CYBEROS_NAS_ROOT_PATH:-/cyberos/data/primary} \
+  CYBEROS_DOCKER_ENABLED="$DOCKER_ENABLED" \
+  CYBEROS_VM_ENABLED="$VM_ENABLED" \
+  CYBEROS_VOD_PLAYER_ENABLED="$VOD_PLAYER_ENABLED" \
+  CYBEROS_VOD_PLAYER_USER="$VOD_PLAYER_USER" \
+  CYBEROS_TERMUX_USER="$TERMINAL_USER" \
+    /usr/lib/cyberos/scripts/cyberos-first-boot.sh
 else
-  log "preserving existing ZOS configuration"
+  log "preserving existing CyberOS configuration"
 fi
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload
-  /usr/lib/zos/scripts/zos-refresh-groups.sh
-  /usr/lib/zos/scripts/zos-refresh-termux.sh
-  ZOS_VOD_PLAYER_USER="$VOD_PLAYER_USER" /usr/lib/zos/scripts/zos-refresh-vod-player.sh
+  /usr/lib/cyberos/scripts/cyberos-refresh-groups.sh
+  /usr/lib/cyberos/scripts/cyberos-refresh-termux.sh
+  CYBEROS_VOD_PLAYER_USER="$VOD_PLAYER_USER" /usr/lib/cyberos/scripts/cyberos-refresh-vod-player.sh
   if [ "$DOCKER_ENABLED" = "1" ]; then
     systemctl enable --now docker.service
-    systemctl enable zos-host-accessd.service
+    systemctl enable cyberos-host-accessd.service
   fi
   if [ "$VM_ENABLED" = "1" ]; then
     for vm_unit in libvirtd.service virtqemud.socket; do
@@ -333,50 +333,50 @@ if command -v systemctl >/dev/null 2>&1; then
     ensure_vm_network
   fi
   systemctl enable \
-    zos-hostd.service \
-    zos-termux.service \
-    zos-api.service \
-    zos-monitor.service \
-    zos-alerter.service \
-    zos-worker@1.service \
-    zos-photostaff.service \
-    zos-downloader.service \
-    zos-bluetoothd.service \
-    zos-indexer.service
-  systemctl restart zos-hostd.service zos-termux.service
+    cyberos-hostd.service \
+    cyberos-termux.service \
+    cyberos-api.service \
+    cyberos-monitor.service \
+    cyberos-alerter.service \
+    cyberos-worker@1.service \
+    cyberos-photostaff.service \
+    cyberos-downloader.service \
+    cyberos-bluetoothd.service \
+    cyberos-indexer.service
+  systemctl restart cyberos-hostd.service cyberos-termux.service
   if [ "$DOCKER_ENABLED" = "1" ]; then
-    systemctl restart zos-host-accessd.service
+    systemctl restart cyberos-host-accessd.service
   fi
-  systemctl restart zos-api.service
-  if ! systemctl restart zos-monitor.service; then
+  systemctl restart cyberos-api.service
+  if ! systemctl restart cyberos-monitor.service; then
     log "warning: monitoring service failed to start; core services remain available"
   fi
-  if ! systemctl restart zos-alerter.service; then
+  if ! systemctl restart cyberos-alerter.service; then
     log "warning: alerting service failed to start; core services remain available"
   fi
-  systemctl start zos-health.service || \
+  systemctl start cyberos-health.service || \
     log "warning: initial health evaluation failed; the health timer will retry"
-  systemctl restart zos-worker@1.service zos-photostaff.service zos-downloader.service zos-bluetoothd.service zos-indexer.service
+  systemctl restart cyberos-worker@1.service cyberos-photostaff.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service
   if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
-    systemctl enable --now zos-vod-player.service
+    systemctl enable --now cyberos-vod-player.service
   fi
   systemctl enable \
-    zos-maintenance.timer \
-    zos-backup-daily.timer \
-    zos-backup-weekly.timer \
-    zos-health.timer
+    cyberos-maintenance.timer \
+    cyberos-backup-daily.timer \
+    cyberos-backup-weekly.timer \
+    cyberos-health.timer
 fi
 
 if [ "$NGINX_ENABLED" = "1" ]; then
   log "installing Nginx reverse proxy"
   apt_install install -y --no-install-recommends nginx
-  ZOS_NGINX_PORT=${ZOS_NGINX_PORT:-80} \
-    /usr/lib/zos/scripts/zos-nginx.sh
+  CYBEROS_NGINX_PORT=${CYBEROS_NGINX_PORT:-80} \
+    /usr/lib/cyberos/scripts/cyberos-nginx.sh
   if command -v systemctl >/dev/null 2>&1; then
     systemctl enable nginx
     systemctl restart nginx
   fi
-  log "installed successfully; web UI is available on http://<host>:${ZOS_NGINX_PORT:-80}"
+  log "installed successfully; web UI is available on http://<host>:${CYBEROS_NGINX_PORT:-80}"
 else
   log "installed successfully; Nginx reverse proxy disabled"
   log "API listens on http://127.0.0.1:3010"
@@ -384,5 +384,5 @@ fi
 
 if [ "$TV_MODE_ENABLED" = "1" ]; then
   log "enabling the local HDMI TV shell"
-  /usr/local/sbin/zos-tv-mode enable
+  /usr/local/sbin/cyberos-tv-mode enable
 fi

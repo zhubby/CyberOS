@@ -34,18 +34,18 @@ describe("hostd protocol", () => {
     const sharesRequest: HostdRequest<"shares.apply"> = {
       settings: {
         enabled: false,
-        account: { username: "zos_share", password: null },
+        account: { username: "cyberos_share", password: null },
         shares: []
       },
-      roots: [{ id: "primary", path: "/zos/data/mediaprimary" }]
+      roots: [{ id: "primary", path: "/cyberos/data/mediaprimary" }]
     };
     expect(parseHostdResult("shares.apply", sharesRequest, {
       appliedAt: "2026-10-10T00:00:00Z",
-      files: ["/etc/samba/smb.conf.d/zos-shares.conf"],
+      files: ["/etc/samba/smb.conf.d/cyberos-shares.conf"],
       services: ["smbd.service"]
     })).toEqual({
       appliedAt: "2026-10-10T00:00:00Z",
-      files: ["/etc/samba/smb.conf.d/zos-shares.conf"],
+      files: ["/etc/samba/smb.conf.d/cyberos-shares.conf"],
       services: ["smbd.service"]
     });
 
@@ -66,7 +66,7 @@ describe("hostd protocol", () => {
         id: "adapter-hci0",
         address: "00:11:22:33:44:55",
         name: "hci0",
-        alias: "ZOS",
+        alias: "CyberOS",
         state: "powered",
         powered: true,
         discovering: false,
@@ -110,7 +110,7 @@ describe("hostd protocol", () => {
       raidLevel: "1",
       devices: ["/dev/sda", "/dev/sdb"],
       filesystem: "ext4",
-      mountpoint: "/zos/data/media",
+      mountpoint: "/cyberos/data/media",
       risk: "high"
     } satisfies HostdRequest<"storage.operation">;
     const createResult = {
@@ -119,7 +119,7 @@ describe("hostd protocol", () => {
       raidLevel: "1",
       devices: ["/dev/sda", "/dev/sdb"],
       filesystem: "ext4",
-      mountpoint: "/zos/data/media",
+      mountpoint: "/cyberos/data/media",
       mdDevice: "/dev/md/media",
       uuid: "array-uuid"
     } as const;
@@ -130,13 +130,13 @@ describe("hostd protocol", () => {
       name: "media",
       mdDevice: "/dev/md/media",
       devices: ["/dev/sda", "/dev/sdb"],
-      mountpoint: "/zos/data/media",
+      mountpoint: "/cyberos/data/media",
       risk: "high"
     } satisfies HostdRequest<"storage.operation">;
     const deleteResult = {
       action: "delete_pool",
       name: "media",
-      mountpoint: "/zos/data/media",
+      mountpoint: "/cyberos/data/media",
       mdDevice: "/dev/md/media",
       devices: ["/dev/sda", "/dev/sdb"]
     } as const;
@@ -173,7 +173,7 @@ describe("hostd protocol", () => {
     const inspection = {
       profiles: [{
         id: "550e8400-e29b-41d4-a716-446655440000",
-        name: "ZOS Home",
+        name: "CyberOS Home",
         ssid: "Home",
         device: "wlan0",
         security: "wpa2",
@@ -217,7 +217,7 @@ describe("hostd protocol", () => {
       { action: "radio", input: { enabled: true, confirmed: true } },
       { action: "update_profile", profileId: "profile", input: { expectedRevision: "revision", confirmed: true } },
       { action: "delete_profile", profileId: "profile", confirmed: true },
-      { action: "update_hotspot", input: { device: "wlan0", ssid: "ZOS", band: "5", autostart: true, confirmed: true } },
+      { action: "update_hotspot", input: { device: "wlan0", ssid: "CyberOS", band: "5", autostart: true, confirmed: true } },
       { action: "start_hotspot", input: { device: "wlan0", confirmed: true } },
       { action: "stop_hotspot", input: { device: "wlan0", confirmed: true } },
       { action: "delete_hotspot", input: { device: "wlan0", confirmed: true } }
@@ -240,7 +240,7 @@ describe("hostd protocol", () => {
 
   it("rejects mismatched, out-of-range, and non-exact result shapes", () => {
     expect(parseHostdResult("shares.apply", {
-      settings: { enabled: false, account: { username: "zos_share", password: null }, shares: [] },
+      settings: { enabled: false, account: { username: "cyberos_share", password: null }, shares: [] },
       roots: []
     }, {
       appliedAt: "2026-10-10T00:00:00Z",

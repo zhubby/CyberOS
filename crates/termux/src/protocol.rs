@@ -491,7 +491,7 @@ mod tests {
     #[test]
     fn parses_open_and_binary_input_frames() {
         let frame = format!(
-            r#"{{"version":1,"kind":"request","id":"{ID}","operation":"session.open","payload":{{"user":"zos","cols":120,"rows":32,"sessionName":"zos-demo","persistent":true}}}}"#
+            r#"{{"version":1,"kind":"request","id":"{ID}","operation":"session.open","payload":{{"user":"cyberos","cols":120,"rows":32,"sessionName":"cyberos-demo","persistent":true}}}}"#
         );
         let Request::Open { payload, .. } = ClientFrame::parse(frame.as_bytes())
             .unwrap()
@@ -500,7 +500,7 @@ mod tests {
         else {
             panic!("expected open request");
         };
-        assert_eq!(payload.session_name.as_deref(), Some("zos-demo"));
+        assert_eq!(payload.session_name.as_deref(), Some("cyberos-demo"));
 
         let frame = format!(
             r#"{{"version":1,"kind":"command","streamId":"{ID}","operation":"terminal.input","payload":{{"data":"cHdkDQ=="}}}}"#
@@ -518,15 +518,15 @@ mod tests {
     #[test]
     fn rejects_unknown_fields_versions_and_invalid_bounds() {
         let unknown = format!(
-            r#"{{"version":1,"kind":"request","id":"{ID}","operation":"session.open","payload":{{"user":"zos","cols":120,"rows":32}},"extra":true}}"#
+            r#"{{"version":1,"kind":"request","id":"{ID}","operation":"session.open","payload":{{"user":"cyberos","cols":120,"rows":32}},"extra":true}}"#
         );
         assert!(ClientFrame::parse(unknown.as_bytes()).is_err());
         let version = format!(
-            r#"{{"version":2,"kind":"request","id":"{ID}","operation":"session.open","payload":{{"user":"zos","cols":120,"rows":32}}}}"#
+            r#"{{"version":2,"kind":"request","id":"{ID}","operation":"session.open","payload":{{"user":"cyberos","cols":120,"rows":32}}}}"#
         );
         assert!(ClientFrame::parse(version.as_bytes()).is_err());
         let dimensions = format!(
-            r#"{{"version":1,"kind":"request","id":"{ID}","operation":"session.open","payload":{{"user":"zos","cols":1,"rows":32}}}}"#
+            r#"{{"version":1,"kind":"request","id":"{ID}","operation":"session.open","payload":{{"user":"cyberos","cols":1,"rows":32}}}}"#
         );
         assert!(
             ClientFrame::parse(dimensions.as_bytes())

@@ -2,10 +2,10 @@ mod common;
 
 use std::path::Path;
 
+use cyberos_indexer::db::Db;
+use cyberos_indexer::media::run_media_scan;
 use rusqlite::{Connection, params};
 use tokio_util::sync::CancellationToken;
-use zos_indexer::db::Db;
-use zos_indexer::media::run_media_scan;
 
 fn queue_scan(database: &Path, source_path: &str, scan_id: &str, generation: &str) {
     let connection = Connection::open(database).unwrap();
@@ -24,7 +24,7 @@ fn queue_scan(database: &Path, source_path: &str, scan_id: &str, generation: &st
     ).unwrap();
 }
 
-async fn claim_and_run(db: &Db, worker: &str) -> Result<(), zos_indexer::error::IndexerError> {
+async fn claim_and_run(db: &Db, worker: &str) -> Result<(), cyberos_indexer::error::IndexerError> {
     let task = db.claim_media_scan(worker).await.unwrap().unwrap();
     run_media_scan(db, &task, worker, &CancellationToken::new()).await
 }
@@ -47,7 +47,7 @@ async fn scan_prefers_nfo_and_ignores_symlinked_media() {
     std::fs::write(&outside, b"outside").unwrap();
     symlink(&outside, movies.join("linked.mkv")).unwrap();
 
-    let database = directory.path().join("zos.sqlite");
+    let database = directory.path().join("cyberos.sqlite");
     common::create_schema(&database, &root);
     queue_scan(&database, "Movies", "scan-1", "generation-1");
     let db = Db::open(&database).unwrap();
@@ -109,7 +109,7 @@ async fn successful_generation_removes_stale_files() {
     std::fs::create_dir_all(&movies).unwrap();
     std::fs::write(movies.join("First.2020.mkv"), b"first").unwrap();
     std::fs::write(movies.join("Second.2021.mkv"), b"second").unwrap();
-    let database = directory.path().join("zos.sqlite");
+    let database = directory.path().join("cyberos.sqlite");
     common::create_schema(&database, &root);
     queue_scan(&database, "Movies", "scan-1", "generation-1");
     let db = Db::open(&database).unwrap();
@@ -146,7 +146,7 @@ async fn failed_scan_preserves_the_previous_catalog() {
     let movies = root.join("Movies");
     std::fs::create_dir_all(&movies).unwrap();
     std::fs::write(movies.join("Stable.2022.mkv"), b"stable").unwrap();
-    let database = directory.path().join("zos.sqlite");
+    let database = directory.path().join("cyberos.sqlite");
     common::create_schema(&database, &root);
     queue_scan(&database, "Movies", "scan-1", "generation-1");
     let db = Db::open(&database).unwrap();

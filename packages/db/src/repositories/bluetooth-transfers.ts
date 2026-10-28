@@ -3,8 +3,8 @@ import type {
   BluetoothTransferRecord,
   BluetoothTransferServiceHealth,
   BluetoothTransferStatus
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import type { DbBluetoothTransferRow } from "./repository-rows.js";
 
 const COLUMNS = `
@@ -15,7 +15,7 @@ const COLUMNS = `
 `;
 
 export function createBluetoothSendTransfers(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     adapterId: string;
     deviceAddress: string;
@@ -50,7 +50,7 @@ export function createBluetoothSendTransfers(
   }))();
 }
 
-export function getBluetoothTransfer(db: ZosDatabase, id: string): BluetoothTransferRecord | null {
+export function getBluetoothTransfer(db: CyberOsDatabase, id: string): BluetoothTransferRecord | null {
   const row = db.prepare(`SELECT ${COLUMNS} FROM bluetooth_transfers WHERE id = ?`)
     .get(id) as DbBluetoothTransferRow | undefined;
   return row ? mapTransfer(row) : null;
@@ -60,7 +60,7 @@ export type BluetoothReceiveFinalization = BluetoothTransferRecord & {
   finalizationRelativePath: string | null;
 };
 
-export function listBluetoothReceiveFinalizations(db: ZosDatabase): BluetoothReceiveFinalization[] {
+export function listBluetoothReceiveFinalizations(db: CyberOsDatabase): BluetoothReceiveFinalization[] {
   const rows = db.prepare(`
     SELECT ${COLUMNS}
     FROM bluetooth_transfers
@@ -75,7 +75,7 @@ export function listBluetoothReceiveFinalizations(db: ZosDatabase): BluetoothRec
 }
 
 export function reserveBluetoothReceiveFinalization(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     id: string;
     previousRelativePath: string | null;
@@ -97,7 +97,7 @@ export function reserveBluetoothReceiveFinalization(
 }
 
 export function completeBluetoothReceiveFinalization(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     id: string;
     rootId: string;
@@ -130,7 +130,7 @@ export function completeBluetoothReceiveFinalization(
 }
 
 export function failBluetoothReceiveFinalization(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   error: string,
   now = new Date()
@@ -147,7 +147,7 @@ export function failBluetoothReceiveFinalization(
 }
 
 export function noteBluetoothReceiveFinalizationError(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   error: string,
   now = new Date()
@@ -163,7 +163,7 @@ export function noteBluetoothReceiveFinalizationError(
 }
 
 export function listBluetoothTransfers(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { statuses?: BluetoothTransferStatus[]; limit?: number } = {}
 ): BluetoothTransferRecord[] {
   const statuses = input.statuses?.length ? [...new Set(input.statuses)] : null;
@@ -178,7 +178,7 @@ export function listBluetoothTransfers(
   return rows.map(mapTransfer);
 }
 
-export function requestBluetoothTransferCancellation(db: ZosDatabase, id: string): BluetoothTransferRecord | null {
+export function requestBluetoothTransferCancellation(db: CyberOsDatabase, id: string): BluetoothTransferRecord | null {
   const timestamp = new Date().toISOString();
   const row = db.prepare(`
     UPDATE bluetooth_transfers
@@ -193,7 +193,7 @@ export function requestBluetoothTransferCancellation(db: ZosDatabase, id: string
   return row ? mapTransfer(row) : null;
 }
 
-export function markBluetoothTransferRead(db: ZosDatabase, id: string, now = new Date()): BluetoothTransferRecord | null {
+export function markBluetoothTransferRead(db: CyberOsDatabase, id: string, now = new Date()): BluetoothTransferRecord | null {
   const row = db.prepare(`
     UPDATE bluetooth_transfers SET read_at = COALESCE(read_at, ?)
     WHERE id = ? RETURNING ${COLUMNS}
@@ -201,16 +201,16 @@ export function markBluetoothTransferRead(db: ZosDatabase, id: string, now = new
   return row ? mapTransfer(row) : null;
 }
 
-export function markAllBluetoothTransfersRead(db: ZosDatabase, now = new Date()): number {
+export function markAllBluetoothTransfersRead(db: CyberOsDatabase, now = new Date()): number {
   return db.prepare("UPDATE bluetooth_transfers SET read_at = ? WHERE read_at IS NULL")
     .run(now.toISOString()).changes;
 }
 
-export function countUnreadBluetoothTransfers(db: ZosDatabase): number {
+export function countUnreadBluetoothTransfers(db: CyberOsDatabase): number {
   return Number(db.prepare("SELECT COUNT(*) FROM bluetooth_transfers WHERE read_at IS NULL").pluck().get() ?? 0);
 }
 
-export function getBluetoothTransferServiceHealth(db: ZosDatabase, now = new Date()): BluetoothTransferServiceHealth {
+export function getBluetoothTransferServiceHealth(db: CyberOsDatabase, now = new Date()): BluetoothTransferServiceHealth {
   const row = db.prepare("SELECT heartbeat_at, error FROM bluetooth_transfer_service_state WHERE id = 'primary'")
     .get() as { heartbeat_at: string; error: string | null } | undefined;
   const counts = db.prepare(`
@@ -232,7 +232,7 @@ export function getBluetoothTransferServiceHealth(db: ZosDatabase, now = new Dat
   };
 }
 
-function getRequiredBluetoothTransfer(db: ZosDatabase, id: string): BluetoothTransferRecord {
+function getRequiredBluetoothTransfer(db: CyberOsDatabase, id: string): BluetoothTransferRecord {
   const transfer = getBluetoothTransfer(db, id);
   if (!transfer) throw new Error("Bluetooth transfer was not persisted");
   return transfer;

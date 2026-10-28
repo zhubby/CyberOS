@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { appendEvent, createUserMessageAndJob, getJob, updateJobStatus } from "@zos/db";
+import { appendEvent, createUserMessageAndJob, getJob, updateJobStatus } from "@cyberos/db";
 import type { ApiRouteContext } from "../context.js";
 
 export function registerJobRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {

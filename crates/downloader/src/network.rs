@@ -173,7 +173,7 @@ async fn send_once(
         .map_err(classify_reqwest_error)?;
     let mut request = client
         .get(url.clone())
-        .header(USER_AGENT, "ZOS Downloader")
+        .header(USER_AGENT, "CyberOS Downloader")
         .header(ACCEPT_ENCODING, "identity")
         .header(HOST, host_header(url));
     if let Some(start) = range.start {

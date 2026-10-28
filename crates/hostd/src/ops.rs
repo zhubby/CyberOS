@@ -50,8 +50,8 @@ pub(crate) async fn command(
         ));
     }
     let unit = match request.task {
-        OpsTask::Health => "zos-health.service",
-        OpsTask::Maintenance => "zos-maintenance.service",
+        OpsTask::Health => "cyberos-health.service",
+        OpsTask::Maintenance => "cyberos-maintenance.service",
     };
     run_checked(runner, "systemctl", &["start", "--no-block", unit], None).await?;
     Ok(OpsResult {
@@ -128,7 +128,7 @@ mod tests {
                     vec![
                         "start".to_owned(),
                         "--no-block".to_owned(),
-                        "zos-health.service".to_owned()
+                        "cyberos-health.service".to_owned()
                     ]
                 ),
                 (
@@ -136,7 +136,7 @@ mod tests {
                     vec![
                         "start".to_owned(),
                         "--no-block".to_owned(),
-                        "zos-maintenance.service".to_owned()
+                        "cyberos-maintenance.service".to_owned()
                     ]
                 )
             ]

@@ -6,11 +6,11 @@ import { GENERIC_OBJECT_SCHEMA } from "./schemas.js";
 const DEFAULT_OUTPUT_LIMIT = 256 * 1024;
 
 function scopeFor(domain: string, risk: CapabilityRisk, approval: CapabilityApprovalPolicy): string {
-  if (domain === "catalog") return "zos:catalog:read";
-  if (domain === "shell") return "zos:admin:shell";
-  if (domain === "system" && risk === "critical") return "zos:admin:power";
-  if (approval === "owner_control") return `zos:${domain}:read`;
-  return `zos:${domain}:${risk === "read" ? "read" : "propose"}`;
+  if (domain === "catalog") return "cyberos:catalog:read";
+  if (domain === "shell") return "cyberos:admin:shell";
+  if (domain === "system" && risk === "critical") return "cyberos:admin:power";
+  if (approval === "owner_control") return `cyberos:${domain}:read`;
+  return `cyberos:${domain}:${risk === "read" ? "read" : "propose"}`;
 }
 
 export function createCatalogDescriptors(): CapabilityDescriptor[] {

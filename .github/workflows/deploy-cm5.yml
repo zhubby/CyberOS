@@ -9,16 +9,11 @@ name: Deploy CM5
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to deploy, for example v0.5.0
+        description: Release tag to deploy, for example v2.0.0
         required: true
         type: string
       verify_only:
         description: Verify the currently installed release without reinstalling it
-        required: false
-        default: false
-        type: boolean
-      allow_legacy_migration:
-        description: Allow the one-time SigmaOS to ZOS production data migration
         required: false
         default: false
         type: boolean
@@ -117,10 +112,10 @@ jobs:
              (.version | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
              (.commitSha | type == "string" and test("^[0-9a-f]{40}$")) and
              (.architecture == "arm64") and
-             (.asset | type == "string" and test("^zos_[0-9]+\\.[0-9]+\\.[0-9]+_arm64\\.deb$")) and
+             (.asset | type == "string" and test("^cyberos_[0-9]+\\.[0-9]+\\.[0-9]+_arm64\\.deb$")) and
              (.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
              (.tag == ("v" + .version)) and
-             (.asset == ("zos_" + .version + "_arm64.deb")) and
+             (.asset == ("cyberos_" + .version + "_arm64.deb")) and
              ($expected_commit_sha == "" or .commitSha == $expected_commit_sha) and
              .tag == $expected_tag' \
             "$manifest_path"; then
@@ -232,7 +227,7 @@ jobs:
           set -euo pipefail
           : "${CM5_HOST:?production variable CM5_HOST is required}"
           [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
           [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$CM5_DEPLOY_USER" != root ]]
 
@@ -310,7 +305,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -327,92 +322,23 @@ jobs:
             v22.*) ;;
             *) printf 'CM5 runtime requires Node.js 22; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
           esac
-          if [ "$(dpkg-query -W -f='${Status}' zos 2>/dev/null || true)" = "install ok installed" ] && \
-              [ -x /usr/local/sbin/zos-deploy ]; then
-            layout=zos
-            package_name=zos
-            config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
-            migration_payload="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
-            migration_metadata="$(node - "$migration_payload" "$config_sha256" <<'NODE'
-          const [serializedPayload, currentConfigSha256] = process.argv.slice(2);
-          const payload = JSON.parse(serializedPayload);
-          if (!["none", "pending", "committed", "rolled_back"].includes(payload.status)) {
-            throw new Error(`unsupported migration state: ${serializedPayload}`);
-          }
-          const sourceConfigSha256 = payload.status === "none"
-            ? currentConfigSha256
-            : payload.sourceConfigSha256;
-          if (!/^[0-9a-f]{64}$/u.test(sourceConfigSha256 ?? "")) {
-            throw new Error(`invalid migration source config checksum: ${serializedPayload}`);
-          }
-          process.stdout.write(`${payload.status}:${sourceConfigSha256}`);
-          NODE
-            )"
-            migration_status="${migration_metadata%%:*}"
-            migration_source_config_sha256="${migration_metadata#*:}"
-            if [ -d /zos/deploy/incoming ] && [ -w /zos/deploy/incoming ]; then
-              staging_channel=zos
-            else
-              staging_channel=legacy
-              [ -x /usr/local/sbin/sigmaos-deploy ] || {
-                echo "ZOS staging recovery requires the legacy deployment helper" >&2
-                exit 1
-              }
-              [ -d /var/lib/sigmaos-deploy/incoming ] && [ -w /var/lib/sigmaos-deploy/incoming ] || {
-                echo "ZOS staging recovery requires the writable legacy staging directory" >&2
-                exit 1
-              }
-              [ "$(systemctl is-enabled sigmaos-hostd.service 2>/dev/null || true)" = masked ] || {
-                echo "ZOS staging recovery requires legacy services to remain masked" >&2
-                exit 1
-              }
-            fi
-          elif [ -f /etc/sigmaos/config.toml ] && [ -r /etc/sigmaos/config.toml ] && \
-              [ "$(dpkg-query -W -f='${Status}' sigmaos 2>/dev/null || true)" = "install ok installed" ]; then
-            layout=sigmaos
-            package_name=sigmaos
-            config_sha256="$(sha256sum /etc/sigmaos/config.toml | awk '{print $1}')"
-            migration_status=none
-            migration_source_config_sha256="$config_sha256"
-            staging_channel=legacy
-          else
-            printf 'CM5 has neither a valid ZOS nor a migratable SigmaOS installation\n' >&2
+          package_status="$(dpkg-query -W -f='${Status}' cyberos 2>/dev/null || true)"
+          [ "$package_status" = "install ok installed" ] || {
+            printf 'CM5 does not have a valid CyberOS installation\n' >&2
             exit 1
-          fi
-          package_version="$(dpkg-query -W -f='${Version}' "$package_name")"
-          package_status="$(dpkg-query -W -f='${Status}' "$package_name")"
-          printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
-            "$layout" "$config_sha256" "$package_version" "$package_status" \
-            "$runtime_node_version" "$migration_status" "$staging_channel" \
-            "$migration_source_config_sha256"
+          }
+          [ -x /usr/local/sbin/cyberos-deploy ]
+          [ -d /cyberos/deploy/incoming ] && [ -w /cyberos/deploy/incoming ]
+          config_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --config-sha256)"
+          package_version="$(dpkg-query -W -f='${Version}' cyberos)"
+          printf '%s\n%s\n%s\n%s\n' \
+            "$config_sha256" "$package_version" "$package_status" "$runtime_node_version"
           REMOTE
           )
-          [[ "${baseline[0]:-}" == zos || "${baseline[0]:-}" == sigmaos ]]
-          [[ "${baseline[1]:-}" =~ ^[0-9a-f]{64}$ ]]
-          [[ "${baseline[5]:-}" == none || "${baseline[5]:-}" == pending || \
-             "${baseline[5]:-}" == committed || "${baseline[5]:-}" == rolled_back ]]
-          [[ "${baseline[6]:-}" == zos || "${baseline[6]:-}" == legacy ]]
-          [[ "${baseline[7]:-}" =~ ^[0-9a-f]{64}$ ]]
-          if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || \
-                "${baseline[5]}" == rolled_back || "${baseline[6]}" == legacy ]] && \
-              [[ "${{ github.event_name }}" != workflow_dispatch ]]; then
-            echo "Legacy migration recovery requires an explicit workflow_dispatch with allow_legacy_migration=true" >&2
-            exit 1
-          fi
-          if [[ "${baseline[0]}" == sigmaos || "${baseline[5]}" == pending || \
-                "${baseline[5]}" == rolled_back || "${baseline[6]}" == legacy ]] && \
-              [[ "${{ inputs.allow_legacy_migration }}" != true ]]; then
-            echo "Legacy migration recovery was not explicitly authorized" >&2
-            exit 1
-          fi
-          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-layout"
-          printf '%s\n' "${baseline[1]}" > "$RUNNER_TEMP/cm5-config.sha256"
-          printf '%s\n' "${baseline[5]}" > "$RUNNER_TEMP/cm5-migration-status"
-          printf '%s\n' "${baseline[6]}" > "$RUNNER_TEMP/cm5-staging-channel"
-          printf '%s\n' "${baseline[7]}" > "$RUNNER_TEMP/cm5-migration-source-config.sha256"
-          printf 'CM5 upgrade baseline: layout=%s version=%s status=%s node=%s migration=%s staging=%s\n' \
-            "${baseline[0]}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}" \
-            "${baseline[4]:-unknown}" "${baseline[5]}" "${baseline[6]}"
+          [[ "${baseline[0]:-}" =~ ^[0-9a-f]{64}$ ]]
+          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-config.sha256"
+          printf 'CM5 upgrade baseline: version=%s status=%s node=%s\n' \
+            "${baseline[1]:-unknown}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}"
 
       - name: Stage and deploy release on CM5
         if: inputs.verify_only != true
@@ -421,7 +347,7 @@ jobs:
           set -euo pipefail
 
           : "${CM5_HOST:?production variable CM5_HOST is required}"
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
           [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
           [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$CM5_DEPLOY_USER" != root ]]
@@ -434,10 +360,6 @@ jobs:
             -o StrictHostKeyChecking=accept-new
           )
           release_dir="$RUNNER_TEMP/cm5-release"
-          layout="$(<"$RUNNER_TEMP/cm5-layout")"
-          migration_status="$(<"$RUNNER_TEMP/cm5-migration-status")"
-          migration_source_config_sha256="$(<"$RUNNER_TEMP/cm5-migration-source-config.sha256")"
-          staging_channel="$(<"$RUNNER_TEMP/cm5-staging-channel")"
 
           stage_release() {
             local incoming_dir=$1
@@ -596,73 +518,16 @@ jobs:
           REMOTE
           }
 
-          if [[ "$staging_channel" == legacy ]]; then
-            legacy_manifest="$release_dir/legacy-release-manifest.json"
-            jq --arg repository "zhubby/SigmaOS" \
-              --arg asset "sigmaos_${RELEASE_VERSION}_arm64.deb" \
-              '.repository = $repository | .asset = $asset' \
-              "$release_dir/release-manifest.json" > "$legacy_manifest"
-            stage_release /var/lib/sigmaos-deploy/incoming "$legacy_manifest" legacy
-
-            legacy_status=0
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
-              "printf 'N\\n' | sudo -n /usr/local/sbin/sigmaos-deploy" || legacy_status=$?
-            if ((legacy_status == 0)); then
-              echo "Legacy helper unexpectedly reported completed ZOS activation" >&2
-              exit 1
-            fi
-
-            expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-              "$RELEASE_VERSION" "$expected_config_sha256" "$layout" "$migration_status" \
-              "$migration_source_config_sha256" <<'REMOTE'
-          set -eu
-          expected_version=$1
-          expected_config_sha256=$2
-          previous_layout=$3
-          expected_migration_status=$4
-          expected_migration_source_config_sha256=$5
-          if [ "$previous_layout" = sigmaos ]; then
-            expected_migration_status=pending
-          fi
-          [ "$(dpkg-query -W -f='${Status}' zos)" = "install ok installed" ]
-          [ "$(dpkg-query -W -f='${Version}' zos)" = "$expected_version" ]
-          [ -x /usr/local/sbin/zos-deploy ]
-          if [ "$previous_layout" = zos ]; then
-            actual_config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
-            [ "$actual_config_sha256" = "$expected_config_sha256" ]
-          fi
-          migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
-          node - "$migration_status" "$expected_migration_status" \
-            "$expected_migration_source_config_sha256" <<'NODE'
-          const [payload, expectedStatus, expectedMigrationSourceConfigSha256] = process.argv.slice(2);
-          const status = JSON.parse(payload);
-          if (status.status !== expectedStatus ||
-              (expectedStatus === "pending" &&
-               status.sourceConfigSha256 !== expectedMigrationSourceConfigSha256)) {
-            throw new Error(`unexpected migration state: ${payload}`);
-          }
-          NODE
-          if findmnt --fstab -rn -o TARGET | grep -Eq '^/srv/(nas|backup|apps|iso)(/|$)'; then
-            echo "Legacy mount targets remain in /etc/fstab" >&2
-            exit 1
-          fi
-          for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do
-            ! systemctl is-active --quiet "$unit"
-          done
-          REMOTE
-          fi
-
-          stage_release /zos/deploy/incoming "$release_dir/release-manifest.json" zos
+          stage_release /cyberos/deploy/incoming "$release_dir/release-manifest.json" cyberos
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
-            "printf 'N\\n' | sudo -n /usr/local/sbin/zos-deploy --no-upgrade-backup"
+            "printf 'N\\n' | sudo -n /usr/local/sbin/cyberos-deploy --no-upgrade-backup"
 
       - name: Verify CM5 services and build metadata
         timeout-minutes: 20
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -670,54 +535,22 @@ jobs:
             -o ServerAliveCountMax=4
             -o StrictHostKeyChecking=accept-new
           )
-          layout="$(<"$RUNNER_TEMP/cm5-layout")"
-          previous_migration_status="$(<"$RUNNER_TEMP/cm5-migration-status")"
-          expected_migration_source_config_sha256="$(<"$RUNNER_TEMP/cm5-migration-source-config.sha256")"
           expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_config_sha256" \
-            "$layout" "$previous_migration_status" "$expected_migration_source_config_sha256" <<'REMOTE'
+            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_config_sha256" <<'REMOTE'
           set -eu
           expected_version=$1
           expected_commit_sha=$2
           expected_config_sha256=$3
-          previous_layout=$4
-          previous_migration_status=$5
-          expected_migration_source_config_sha256=$6
-          check_dir="$(mktemp -d /tmp/zos-deploy-check.XXXXXX)"
+          check_dir="$(mktemp -d /tmp/cyberos-deploy-check.XXXXXX)"
           trap 'rm -rf "$check_dir"' EXIT HUP INT TERM
 
-          installed_status="$(dpkg-query -W -f='${Status}' zos)"
-          installed_version="$(dpkg-query -W -f='${Version}' zos)"
+          installed_status="$(dpkg-query -W -f='${Status}' cyberos)"
+          installed_version="$(dpkg-query -W -f='${Version}' cyberos)"
           [ "$installed_status" = "install ok installed" ]
           [ "$installed_version" = "$expected_version" ]
-          actual_config_sha256="$(sudo -n /usr/local/sbin/zos-deploy --config-sha256)"
-          if [ "$previous_layout" = zos ]; then
-            [ "$actual_config_sha256" = "$expected_config_sha256" ]
-          fi
-          if [ "$previous_layout" = sigmaos ] || [ "$previous_migration_status" = pending ] || \
-              [ "$previous_migration_status" = rolled_back ]; then
-            migration_status="$(sudo -n /usr/local/sbin/zos-deploy --migration-status)"
-            node - "$migration_status" "$expected_migration_source_config_sha256" <<'NODE'
-          const [payload, expectedMigrationSourceConfigSha256] = process.argv.slice(2);
-          const status = JSON.parse(payload);
-          if (status.status !== "committed" ||
-              status.sourceConfigSha256 !== expectedMigrationSourceConfigSha256 ||
-              typeof status.backupPath !== "string" ||
-              !status.backupPath.startsWith("/zos/system-backups/legacy-sigmaos-")) {
-            throw new Error(`unexpected committed migration state: ${payload}`);
-          }
-          NODE
-            [ "$(sudo -n /usr/local/sbin/zos-deploy --migration-backup-check)" = ok ]
-            if findmnt --fstab -rn -o TARGET | grep -Eq '^/srv/(nas|backup|apps|iso)(/|$)'; then
-              echo "Legacy mount targets remain in /etc/fstab" >&2
-              exit 1
-            fi
-            findmnt -rn --mountpoint /zos/data/primary/pool1 >/dev/null
-            for unit in sigmaos-api.service sigmaos-worker@1.service sigmaos-indexer.service sigmaos-hostd.service sigmaos-termux.service; do
-              ! systemctl is-active --quiet "$unit"
-            done
-          fi
+          actual_config_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --config-sha256)"
+          [ "$actual_config_sha256" = "$expected_config_sha256" ]
 
           check_active_unit() {
             unit=$1
@@ -739,15 +572,15 @@ jobs:
 
           runtime_fingerprint() {
             for unit in \
-              zos-api.service \
-              zos-monitor.service \
-              zos-alerter.service \
-              zos-worker@1.service \
-              zos-photostaff.service \
-              zos-downloader.service \
-              zos-indexer.service \
-              zos-hostd.service \
-              zos-termux.service; do
+              cyberos-api.service \
+              cyberos-monitor.service \
+              cyberos-alerter.service \
+              cyberos-worker@1.service \
+              cyberos-photostaff.service \
+              cyberos-downloader.service \
+              cyberos-indexer.service \
+              cyberos-hostd.service \
+              cyberos-termux.service; do
               main_pid="$(systemctl show --property=MainPID --value "$unit")"
               restart_count="$(systemctl show --property=NRestarts --value "$unit")"
               printf '%s:%s:%s\n' "$unit" "$main_pid" "$restart_count"
@@ -804,23 +637,23 @@ jobs:
           }
 
           for unit in \
-            zos-api.service \
-            zos-monitor.service \
-            zos-alerter.service \
-            zos-worker@1.service \
-            zos-photostaff.service \
-            zos-downloader.service \
-            zos-indexer.service \
-            zos-hostd.service \
-            zos-termux.service; do
+            cyberos-api.service \
+            cyberos-monitor.service \
+            cyberos-alerter.service \
+            cyberos-worker@1.service \
+            cyberos-photostaff.service \
+            cyberos-downloader.service \
+            cyberos-indexer.service \
+            cyberos-hostd.service \
+            cyberos-termux.service; do
             systemctl is-enabled --quiet "$unit"
             check_active_unit "$unit"
           done
           for unit in \
-            zos-maintenance.timer \
-            zos-health.timer \
-            zos-backup-daily.timer \
-            zos-backup-weekly.timer; do
+            cyberos-maintenance.timer \
+            cyberos-health.timer \
+            cyberos-backup-daily.timer \
+            cyberos-backup-weekly.timer; do
             systemctl is-enabled --quiet "$unit"
             check_active_unit "$unit"
             timer_schedule="$(systemctl show \
@@ -834,15 +667,15 @@ jobs:
           runtime_before="$(runtime_fingerprint)"
           sleep 30
           for unit in \
-            zos-api.service \
-            zos-monitor.service \
-            zos-alerter.service \
-            zos-worker@1.service \
-            zos-photostaff.service \
-            zos-downloader.service \
-            zos-indexer.service \
-            zos-hostd.service \
-            zos-termux.service; do
+            cyberos-api.service \
+            cyberos-monitor.service \
+            cyberos-alerter.service \
+            cyberos-worker@1.service \
+            cyberos-photostaff.service \
+            cyberos-downloader.service \
+            cyberos-indexer.service \
+            cyberos-hostd.service \
+            cyberos-termux.service; do
             check_active_unit "$unit"
           done
           runtime_after="$(runtime_fingerprint)"
@@ -851,9 +684,9 @@ jobs:
               "$runtime_before" "$runtime_after" >&2
             exit 1
           fi
-          systemctl show --property ExecStart --value zos-termux.service | \
-            grep -Fq /usr/lib/zos/bin/zos-termux
-          failed_units="$(systemctl --failed --no-legend --plain | awk '$1 ~ /^zos-/ { print }' || true)"
+          systemctl show --property ExecStart --value cyberos-termux.service | \
+            grep -Fq /usr/lib/cyberos/bin/cyberos-termux
+          failed_units="$(systemctl --failed --no-legend --plain | awk '$1 ~ /^cyberos-/ { print }' || true)"
           if [ -n "$failed_units" ]; then
             printf '%s\n' "$failed_units" >&2
             exit 1
@@ -865,7 +698,7 @@ jobs:
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
           wait_for_indexer_ready
 
-          database_check="$(sudo -n /usr/local/sbin/zos-deploy --database-check)"
+          database_check="$(sudo -n /usr/local/sbin/cyberos-deploy --database-check)"
           [ "$database_check" = ok ]
           # Database verification can take long enough to make an earlier overview
           # snapshot stale even while the alerter is healthy. Capture it last.
@@ -917,18 +750,18 @@ jobs:
               end: end.toISOString(),
               maxPoints: 720,
               selectors: [
-                { metric: "zos_host_cpu_usage_ratio" },
-                { metric: "zos_host_load1" },
-                { metric: "zos_host_memory_used_bytes" },
-                { metric: "zos_host_memory_total_bytes" },
-                { metric: "zos_host_network_receive_bytes_total", transform: "rate" },
-                { metric: "zos_host_network_transmit_bytes_total", transform: "rate" },
-                { metric: "zos_host_disk_read_bytes_total", transform: "rate" },
-                { metric: "zos_host_disk_written_bytes_total", transform: "rate" },
-                { metric: "zos_host_filesystem_available_bytes" },
-                { metric: "zos_host_filesystem_size_bytes" },
-                { metric: "zos_host_temperature_celsius" },
-                { metric: "zos_queue_depth" }
+                { metric: "cyberos_host_cpu_usage_ratio" },
+                { metric: "cyberos_host_load1" },
+                { metric: "cyberos_host_memory_used_bytes" },
+                { metric: "cyberos_host_memory_total_bytes" },
+                { metric: "cyberos_host_network_receive_bytes_total", transform: "rate" },
+                { metric: "cyberos_host_network_transmit_bytes_total", transform: "rate" },
+                { metric: "cyberos_host_disk_read_bytes_total", transform: "rate" },
+                { metric: "cyberos_host_disk_written_bytes_total", transform: "rate" },
+                { metric: "cyberos_host_filesystem_available_bytes" },
+                { metric: "cyberos_host_filesystem_size_bytes" },
+                { metric: "cyberos_host_temperature_celsius" },
+                { metric: "cyberos_queue_depth" }
               ]
             };
             const latencySamplesMs = [];
@@ -970,7 +803,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-sigmaos-deploy}"
+          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -995,47 +828,47 @@ jobs:
               "http://127.0.0.1:3010$endpoint" || true
             printf '\n'
           done
-          printf '\n===== ZOS service state =====\n'
+          printf '\n===== CyberOS service state =====\n'
           systemctl show \
-            zos-api.service \
-            zos-monitor.service \
-            zos-alerter.service \
-            zos-worker@1.service \
-            zos-indexer.service \
-            zos-photostaff.service \
-            zos-downloader.service \
-            zos-hostd.service \
-            zos-termux.service \
+            cyberos-api.service \
+            cyberos-monitor.service \
+            cyberos-alerter.service \
+            cyberos-worker@1.service \
+            cyberos-indexer.service \
+            cyberos-photostaff.service \
+            cyberos-downloader.service \
+            cyberos-hostd.service \
+            cyberos-termux.service \
             --property=Id,ActiveState,SubState,MainPID,NRestarts,ExecMainStatus || true
-          printf '\n===== ZOS service status =====\n'
+          printf '\n===== CyberOS service status =====\n'
           systemctl status \
-            zos-api.service \
-            zos-monitor.service \
-            zos-alerter.service \
-            zos-worker@1.service \
-            zos-indexer.service \
-            zos-photostaff.service \
-            zos-downloader.service \
-            zos-hostd.service \
-            zos-termux.service \
+            cyberos-api.service \
+            cyberos-monitor.service \
+            cyberos-alerter.service \
+            cyberos-worker@1.service \
+            cyberos-indexer.service \
+            cyberos-photostaff.service \
+            cyberos-downloader.service \
+            cyberos-hostd.service \
+            cyberos-termux.service \
             --no-pager --full || true
-          printf '\n===== ZOS service journal =====\n'
+          printf '\n===== CyberOS service journal =====\n'
           journalctl \
-            -u zos-api.service \
-            -u zos-monitor.service \
-            -u zos-alerter.service \
-            -u zos-worker@1.service \
-            -u zos-indexer.service \
-            -u zos-photostaff.service \
-            -u zos-downloader.service \
-            -u zos-hostd.service \
-            -u zos-termux.service \
+            -u cyberos-api.service \
+            -u cyberos-monitor.service \
+            -u cyberos-alerter.service \
+            -u cyberos-worker@1.service \
+            -u cyberos-indexer.service \
+            -u cyberos-photostaff.service \
+            -u cyberos-downloader.service \
+            -u cyberos-hostd.service \
+            -u cyberos-termux.service \
             -n 300 --no-pager || true
           printf '\n===== share service status =====\n'
           systemctl status \
             smbd.service \
             nmbd.service \
-            zos-webdav.service \
+            cyberos-webdav.service \
             vsftpd.service \
             nfs-server.service \
             minidlna.service \
@@ -1044,7 +877,7 @@ jobs:
           journalctl \
             -u smbd.service \
             -u nmbd.service \
-            -u zos-webdav.service \
+            -u cyberos-webdav.service \
             -u vsftpd.service \
             -u nfs-server.service \
             -u minidlna.service \

@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe("MonitoringEventBroker", () => {
   it("validates producer events and fans out accepted samples", async () => {
-    directory = await mkdtemp(path.join(os.tmpdir(), "zos-monitoring-events-"));
+    directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-monitoring-events-"));
     const socketPath = path.join(directory, "events.sock");
     const broker = new MonitoringEventBroker({ socketPath });
     await broker.start();
@@ -37,7 +37,7 @@ describe("MonitoringEventBroker", () => {
       status: "ready",
       collectors: [],
       samples: [{
-        metric: "zos_host_cpu_usage_ratio",
+        metric: "cyberos_host_cpu_usage_ratio",
         labels: {},
         timestamp: "2026-01-01T00:00:10.000Z",
         value: 0.25,

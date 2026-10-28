@@ -3,8 +3,8 @@ import type {
   OperationNotificationKind,
   OperationNotificationRecord,
   OperationNotificationStatus
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import type { DbOperationNotificationRow } from "./repository-rows.js";
 
 const NOTIFICATION_COLUMNS = `
@@ -12,7 +12,7 @@ const NOTIFICATION_COLUMNS = `
 `;
 
 export function createOperationNotification(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     jobId?: string | null;
     sessionId?: string | null;
@@ -50,7 +50,7 @@ export function createOperationNotification(
 }
 
 export function getOperationNotificationByOperation(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   operationId: string
 ): OperationNotificationRecord | null {
   const row = db.prepare(`SELECT ${NOTIFICATION_COLUMNS} FROM operation_notifications WHERE operation_id = ?`)
@@ -59,7 +59,7 @@ export function getOperationNotificationByOperation(
 }
 
 export function getOperationNotificationByJob(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   jobId: string
 ): OperationNotificationRecord | null {
   const row = db.prepare(`SELECT ${NOTIFICATION_COLUMNS} FROM operation_notifications WHERE job_id = ?`)
@@ -68,7 +68,7 @@ export function getOperationNotificationByJob(
 }
 
 export function listOperationNotifications(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { limit?: number; now?: Date } = {}
 ): OperationNotificationRecord[] {
   const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
@@ -83,7 +83,7 @@ export function listOperationNotifications(
   return rows.map(mapOperationNotification);
 }
 
-export function countUnreadOperationNotifications(db: ZosDatabase, now = new Date()): number {
+export function countUnreadOperationNotifications(db: CyberOsDatabase, now = new Date()): number {
   const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   return Number(db.prepare(`
     SELECT COUNT(*)
@@ -93,7 +93,7 @@ export function countUnreadOperationNotifications(db: ZosDatabase, now = new Dat
 }
 
 export function markOperationNotificationRead(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   id: string,
   now = new Date()
 ): OperationNotificationRecord | null {
@@ -106,7 +106,7 @@ export function markOperationNotificationRead(
   return row ? mapOperationNotification(row) : null;
 }
 
-export function markAllOperationNotificationsRead(db: ZosDatabase, now = new Date()): number {
+export function markAllOperationNotificationsRead(db: CyberOsDatabase, now = new Date()): number {
   const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   return db.prepare(`
     UPDATE operation_notifications
@@ -116,7 +116,7 @@ export function markAllOperationNotificationsRead(db: ZosDatabase, now = new Dat
 }
 
 export function updateOperationNotificationForJob(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     jobId: string;
     status: OperationNotificationStatus;
@@ -139,7 +139,7 @@ export function updateOperationNotificationForJob(
 }
 
 export function updateOperationNotificationForOperation(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     operationId: string;
     status: OperationNotificationStatus;
@@ -158,7 +158,7 @@ export function updateOperationNotificationForOperation(
   return row ? mapOperationNotification(row) : null;
 }
 
-export function pruneOperationNotifications(db: ZosDatabase, now = new Date()): number {
+export function pruneOperationNotifications(db: CyberOsDatabase, now = new Date()): number {
   const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   return db.prepare("DELETE FROM operation_notifications WHERE updated_at < ?").run(cutoff).changes;
 }

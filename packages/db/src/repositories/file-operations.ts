@@ -4,14 +4,14 @@ import type {
   FileOperationRecord,
   FileOperationStatus,
   TrashEntryRecord
-} from "@zos/shared";
-import type { ZosDatabase } from "../connection.js";
+} from "@cyberos/shared";
+import type { CyberOsDatabase } from "../connection.js";
 import { mapOperation, mapTrashEntry } from "./operation-mappers.js";
 import type { DbOperationRow, DbTrashEntryRow } from "./repository-rows.js";
 import { enqueueIndexTask } from "./indexer-queue.js";
 
 export function recordAppliedOperation(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     id?: string;
     approvalId: string | null;
@@ -52,7 +52,7 @@ export function recordAppliedOperation(
   return operation;
 }
 
-function enqueueAppliedOperationPaths(db: ZosDatabase, operation: FileOperationRecord): void {
+function enqueueAppliedOperationPaths(db: CyberOsDatabase, operation: FileOperationRecord): void {
   const rootId = typeof operation.metadata.rootId === "string" ? operation.metadata.rootId : null;
   if (!rootId) return;
   const storagePoolId = typeof operation.metadata.storagePoolId === "string"
@@ -112,7 +112,7 @@ function indexableOperationPaths(operation: FileOperationRecord): string[] {
   return [...new Set(candidates.filter((value): value is string => Boolean(value)))];
 }
 
-export function getFileOperation(db: ZosDatabase, operationId: string): FileOperationRecord | null {
+export function getFileOperation(db: CyberOsDatabase, operationId: string): FileOperationRecord | null {
   const row = db
     .prepare(`
       SELECT id, approval_id, operation, source_path, target_path, status, metadata_json, created_at, updated_at
@@ -124,7 +124,7 @@ export function getFileOperation(db: ZosDatabase, operationId: string): FileOper
 }
 
 export function markFileOperationRolledBack(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   operationId: string,
   metadata: Record<string, unknown>
 ): boolean {
@@ -151,7 +151,7 @@ export function markFileOperationRolledBack(
 }
 
 export function createTrashEntry(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: {
     id?: string;
     rootId: string;
@@ -184,7 +184,7 @@ export function createTrashEntry(
   return entry;
 }
 
-export function getTrashEntry(db: ZosDatabase, trashEntryId: string): TrashEntryRecord | null {
+export function getTrashEntry(db: CyberOsDatabase, trashEntryId: string): TrashEntryRecord | null {
   const row = db
     .prepare(`
       SELECT id, root_id, original_path, trash_path, metadata_json, created_at, restored_at
@@ -195,7 +195,7 @@ export function getTrashEntry(db: ZosDatabase, trashEntryId: string): TrashEntry
   return row ? mapTrashEntry(row) : null;
 }
 
-export function markTrashEntryRestored(db: ZosDatabase, trashEntryId: string): boolean {
+export function markTrashEntryRestored(db: CyberOsDatabase, trashEntryId: string): boolean {
   const result = db
     .prepare("UPDATE trash_entries SET restored_at = ? WHERE id = ? AND restored_at IS NULL")
     .run(new Date().toISOString(), trashEntryId);
@@ -203,7 +203,7 @@ export function markTrashEntryRestored(db: ZosDatabase, trashEntryId: string): b
 }
 
 export function listFileOperations(
-  db: ZosDatabase,
+  db: CyberOsDatabase,
   input: { limit?: number; approvalId?: string } = {}
 ): FileOperationRecord[] {
   const limit = input.limit ?? 100;

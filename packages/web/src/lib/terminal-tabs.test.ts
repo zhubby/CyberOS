@@ -22,12 +22,10 @@ describe("terminal tab helpers", () => {
     expect(terminalTabNavigationTarget(tabs, "second", "End")).toBe("third");
   });
 
-  it("initializes a new root and imports an unregistered legacy session once", () => {
+  it("initializes only roots without a persisted tab set", () => {
     const state: TerminalTabState = { initialized: true, tabs, activeTabId: "first", maxSessions: 32 };
-    expect(shouldInitializeTerminalTabs({ ...state, initialized: false }, null)).toBe(true);
-    expect(shouldInitializeTerminalTabs(state, "legacy")).toBe(true);
-    expect(shouldInitializeTerminalTabs(state, "first")).toBe(false);
-    expect(shouldInitializeTerminalTabs(state, null)).toBe(false);
+    expect(shouldInitializeTerminalTabs({ ...state, initialized: false })).toBe(true);
+    expect(shouldInitializeTerminalTabs(state)).toBe(false);
   });
 });
 

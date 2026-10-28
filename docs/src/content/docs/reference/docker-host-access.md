@@ -10,7 +10,7 @@ sourceOfTruth:
   - crates/host-accessd/src/main.rs
   - crates/host-accessd/src/proxy.rs
   - crates/hostd/src/host_access.rs
-  - packaging/systemd/zos-host-accessd.service
+  - packaging/systemd/cyberos-host-accessd.service
 sidebar:
   order: 7
 ---
@@ -24,7 +24,7 @@ Host Access 为 Compose App 和单容器提供同一套宿主观测授权。它�
 | `host_os_identity` | `/etc/os-release`、`/etc/localtime`、`/etc/machine-id` | `/host/etc` | 可用，只读 |
 | `host_processes` | `/proc` | `/host/proc` | rootful Docker 可用；不启用 host PID namespace |
 | `host_sys` | `/sys` | `/host/sys` | rootful Docker 可用；userns 下标记降级 |
-| `nas_capacity` | NAS root 内空的 `.zos-host-access-capacity` | `/host/nas/<rootId>` | root ready 且锚点身份有效时可用 |
+| `nas_capacity` | NAS root 内空的 `.cyberos-host-access-capacity` | `/host/nas/<rootId>` | root ready 且锚点身份有效时可用 |
 | `account_map` | `/etc/passwd`、`/etc/group` | `/host/etc` | 可用，只读 |
 | `docker_metadata` | 字段白名单 Docker HTTP 代理 | `DOCKER_HOST` | 代码已实现，兼容测试通过前保持不可用 |
 | `systemd_status` | 计划中的只读 D-Bus facade | `DBUS_SYSTEM_BUS_ADDRESS` | 尚未实现，保持不可用 |
@@ -39,24 +39,24 @@ Host Access 为 Compose App 和单容器提供同一套宿主观测授权。它�
 
 Compose 沿用 `revision`、`deployedRevision` 和 `needsDeploy`。授权变化只能执行全项目 `up --force-recreate`，不能只应用一个 service。界面只显示“待应用”“已生效”“需修复”；运行态会 inspect Compose 容器并核对策略版本、授权摘要、完整指纹、实际 image ID 和代理 socket。旧运行态仍完整匹配时显示“待应用”，部分重建、标签漂移或依赖不确定时显示“需修复”。展开详情和 coverage report 才显示 service 差异、降级原因与永久不支持项。单容器授权不可原地修改，撤销需删除并重新创建容器。
 
-API 启动时会清理过期 draft，运行期间也会每分钟清理一次，并从运行中、由 ZOS 管理且策略版本匹配的容器标签恢复代理 grant 目录。标签缺少 fingerprint、策略过期或不是 `io.zos.managed=true` 时不会触发恢复。
+API 启动时会清理过期 draft，运行期间也会每分钟清理一次，并从运行中、由 CyberOS 管理且策略版本匹配的容器标签恢复代理 grant 目录。标签缺少 fingerprint、策略过期或不是 `io.cyberos.managed=true` 时不会触发恢复。
 
 ## 代理启用与验收
 
-`zos-host-accessd.service` 以非 root `zos` 用户运行，只加入 `docker` 组，通过 Unix peer credential 接受 API 控制请求。容器挂载授权目录而不是原始 Docker socket inode；systemd 在服务 restart 期间保留该目录，daemon 启动时只扫描两层哈希授权目录并重建其中已有的代理 socket。代理只允许 `_ping`、version/info、容器与网络 list/inspect，重建响应 JSON 并删除环境、命令、敏感 labels 和宿主 mount source，同时限制方法、查询参数、并发、响应大小与超时。
+`cyberos-host-accessd.service` 以非 root `cyberos` 用户运行，只加入 `docker` 组，通过 Unix peer credential 接受 API 控制请求。容器挂载授权目录而不是原始 Docker socket inode；systemd 在服务 restart 期间保留该目录，daemon 启动时只扫描两层哈希授权目录并重建其中已有的代理 socket。代理只允许 `_ping`、version/info、容器与网络 list/inspect，重建响应 JSON 并删除环境、命令、敏感 labels 和宿主 mount source，同时限制方法、查询参数、并发、响应大小与超时。
 
-包内 unit 默认设置 `ZOS_HOST_ACCESS_DOCKER_COMPATIBLE=0`。只有在目标机上用真实采集器通过 allow/deny、字段脱敏、重连和负载测试后，才能用 systemd drop-in 设置为 `1` 并重启服务：
+包内 unit 默认设置 `CYBEROS_HOST_ACCESS_DOCKER_COMPATIBLE=0`。只有在目标机上用真实采集器通过 allow/deny、字段脱敏、重连和负载测试后，才能用 systemd drop-in 设置为 `1` 并重启服务：
 
 ```ini
 [Service]
-Environment=ZOS_HOST_ACCESS_DOCKER_COMPATIBLE=1
+Environment=CYBEROS_HOST_ACCESS_DOCKER_COMPATIBLE=1
 ```
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl restart zos-host-accessd.service zos-api.service
-sudo systemctl status zos-host-accessd.service --no-pager
-sudo journalctl -u zos-host-accessd.service -u zos-api.service -n 200 --no-pager
+sudo systemctl restart cyberos-host-accessd.service cyberos-api.service
+sudo systemctl status cyberos-host-accessd.service --no-pager
+sudo journalctl -u cyberos-host-accessd.service -u cyberos-api.service -n 200 --no-pager
 curl -fsS http://127.0.0.1:3010/api/docker/host-access
 ```
 
@@ -71,7 +71,7 @@ curl -fsS http://127.0.0.1:3010/api/docker/host-access
 1. systemd 状态：实现独立 facade，只允许 `ListUnits`、`ListUnitsByPatterns`、`GetUnit`、`GetUnitFileState` 和安全 Properties；加入 destination、method、property 与 signal 拒绝测试后再启用。
 2. SMART/NVMe：先建立 `/dev/disk/by-id + major/minor + serial` 的稳定设备身份、热插拔漂移检测和只读 host helper 协议；不开放原始设备节点或 `SYS_RAWIO`。
 3. journald：如有明确产品需求，新增字段白名单、unit 范围、时间窗、响应上限和敏感值过滤的查询代理；不挂载 journal 目录。
-4. rootfs 容量：继续由 ZOS 原生监控提供，不加入容器授权目录。NAS 只通过空容量锚点暴露文件系统容量，不暴露 NAS 文件。
+4. rootfs 容量：继续由 CyberOS 原生监控提供，不加入容器授权目录。NAS 只通过空容量锚点暴露文件系统容量，不暴露 NAS 文件。
 5. 低层内核指标：只有在无需 debugfs/perf/额外 capability 的受控接口存在且经过采集器兼容测试时再单独立项；否则 coverage 永久显示不支持。
 
 每次增强都要更新 catalog reason code、coverage、审批指纹、代理 allow/deny 测试、打包验收和本文，且必须保留 `400` 非法配置、`409` 漂移、`503` 宿主依赖不可用的错误语义。

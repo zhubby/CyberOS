@@ -3,7 +3,7 @@
 let
   commonSettings = {
     environment = "production";
-    root_dir = "/zos";
+    root_dir = "/cyberos";
     api = {
       host = "127.0.0.1";
       port = 3010;
@@ -31,12 +31,12 @@ let
     maintenance.enable = false;
   };
 in pkgs.testers.runNixOSTest {
-  name = "zos-nixos-module";
+  name = "cyberos-nixos-module";
 
   nodes = {
     generated = { ... }: {
-      imports = [ self.nixosModules.zos ];
-      services.zos = {
+      imports = [ self.nixosModules.cyberos ];
+      services.cyberos = {
         enable = true;
         package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
         settings = commonSettings;
@@ -48,10 +48,10 @@ in pkgs.testers.runNixOSTest {
     };
 
     external = { ... }: {
-      imports = [ self.nixosModules.zos ];
-      environment.etc."zos-external.toml".text = ''
+      imports = [ self.nixosModules.cyberos ];
+      environment.etc."cyberos-external.toml".text = ''
         environment = "production"
-        root_dir = "/zos"
+        root_dir = "/cyberos"
         nas_roots = []
         [api]
         host = "127.0.0.1"
@@ -66,10 +66,10 @@ in pkgs.testers.runNixOSTest {
         [monitoring]
         enabled = false
       '';
-      services.zos = {
+      services.cyberos = {
         enable = true;
         package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
-        configFile = "/etc/zos-external.toml";
+        configFile = "/etc/cyberos-external.toml";
         components = minimalComponents;
         timers.maintenance.enable = false;
         nginx = { enable = true; port = 8080; };
@@ -78,8 +78,8 @@ in pkgs.testers.runNixOSTest {
     };
 
     tv = { lib, ... }: {
-      imports = [ self.nixosModules.zos ];
-      services.zos = {
+      imports = [ self.nixosModules.cyberos ];
+      services.cyberos = {
         enable = true;
         package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
         settings = commonSettings;
@@ -92,8 +92,8 @@ in pkgs.testers.runNixOSTest {
         nginx.enable = false;
       };
       # The VM validates the declarative graph without requiring virtual DRM/CEC hardware.
-      systemd.targets.zos-tv.wantedBy = lib.mkForce [ ];
-      systemd.services.zos-vod-player.wantedBy = lib.mkForce [ ];
+      systemd.targets.cyberos-tv.wantedBy = lib.mkForce [ ];
+      systemd.services.cyberos-vod-player.wantedBy = lib.mkForce [ ];
       environment.systemPackages = [ pkgs.curl ];
     };
   };
@@ -105,27 +105,27 @@ in pkgs.testers.runNixOSTest {
     start_all()
 
     for machine in (generated, external):
-        machine.wait_for_unit("zos-hostd.service")
-        machine.wait_for_unit("zos-api.service")
-        machine.wait_for_unit("zos-worker@1.service")
-        machine.wait_for_unit("zos-health.timer")
+        machine.wait_for_unit("cyberos-hostd.service")
+        machine.wait_for_unit("cyberos-api.service")
+        machine.wait_for_unit("cyberos-worker@1.service")
+        machine.wait_for_unit("cyberos-health.timer")
         machine.wait_until_succeeds("curl -fsS http://127.0.0.1:3010/health")
         machine.wait_until_succeeds("curl -fsS http://127.0.0.1:8080/health")
         machine.wait_until_succeeds("curl -fsS http://127.0.0.1:8080/docs/")
-        machine.succeed("test $(stat -c '%U:%G:%a' /zos/state) = root:zos:1770")
-        machine.succeed("test $(stat -c '%U:%G:%a' /zos/state/hostd) = root:root:755")
-        machine.succeed("test $(stat -c '%U:%G:%a' /zos/state/hostd/bluetooth) = root:root:700")
-        machine.succeed("test $(stat -c '%U:%G:%a' /zos/config/mcp) = zos:zos:700")
-        machine.succeed("test -f /zos/state/zos.sqlite")
+        machine.succeed("test $(stat -c '%U:%G:%a' /cyberos/state) = root:cyberos:1770")
+        machine.succeed("test $(stat -c '%U:%G:%a' /cyberos/state/hostd) = root:root:755")
+        machine.succeed("test $(stat -c '%U:%G:%a' /cyberos/state/hostd/bluetooth) = root:root:700")
+        machine.succeed("test $(stat -c '%U:%G:%a' /cyberos/config/mcp) = cyberos:cyberos:700")
+        machine.succeed("test -f /cyberos/state/cyberos.sqlite")
         machine.succeed("curl -fsS http://127.0.0.1:3010/api/settings/system-info | grep -F 'Nix Admin'")
-        machine.succeed("getent passwd zos | grep -F ':/zos/home/termux:'")
-        machine.succeed("systemctl show zos-api.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /zos/state")
-        machine.succeed("systemctl show zos-api.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /zos/config/mcp")
-        machine.fail("systemctl show zos-api.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /zos")
-        machine.succeed("systemctl show zos-hostd.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /zos/data")
-        machine.fail("systemctl show zos-hostd.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /etc")
-        machine.succeed("systemctl show zos-hostd.service -p Requires --value | tr ' ' '\\n' | grep -Fx systemd-tmpfiles-setup.service")
-        machine.succeed("systemctl show zos-hostd.service -p CapabilityBoundingSet --value | grep -Fi CAP_SYS_ADMIN")
+        machine.succeed("getent passwd cyberos | grep -F ':/cyberos/home/termux:'")
+        machine.succeed("systemctl show cyberos-api.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /cyberos/state")
+        machine.succeed("systemctl show cyberos-api.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /cyberos/config/mcp")
+        machine.fail("systemctl show cyberos-api.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /cyberos")
+        machine.succeed("systemctl show cyberos-hostd.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /cyberos/data")
+        machine.fail("systemctl show cyberos-hostd.service -p ReadWritePaths --value | tr ' ' '\\n' | grep -Fx /etc")
+        machine.succeed("systemctl show cyberos-hostd.service -p Requires --value | tr ' ' '\\n' | grep -Fx systemd-tmpfiles-setup.service")
+        machine.succeed("systemctl show cyberos-hostd.service -p CapabilityBoundingSet --value | grep -Fi CAP_SYS_ADMIN")
 
         request = json.dumps({
             "version": 1,
@@ -138,7 +138,7 @@ in pkgs.testers.runNixOSTest {
             "import json, socket\n"
             "request = %s\n"
             "client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n"
-            "client.connect('/run/zos/hostd.sock')\n"
+            "client.connect('/run/cyberos/hostd.sock')\n"
             "client.sendall((request + '\\n').encode())\n"
             "client.shutdown(socket.SHUT_WR)\n"
             "response = json.loads(client.makefile().readline())\n"
@@ -147,26 +147,26 @@ in pkgs.testers.runNixOSTest {
             "PY"
         ) % repr(request)
         machine.succeed(command)
-        machine.succeed("test ! -e /zos/state/hostd/network-manager")
+        machine.succeed("test ! -e /cyberos/state/hostd/network-manager")
 
-    generated.succeed("readlink /zos/config/config.toml | grep -F /nix/store/")
-    external.succeed("test $(readlink /zos/config/config.toml) = /etc/zos-external.toml")
+    generated.succeed("readlink /cyberos/config/config.toml | grep -F /nix/store/")
+    external.succeed("test $(readlink /cyberos/config/config.toml) = /etc/cyberos-external.toml")
 
-    tv.wait_for_unit("zos-api.service")
-    tv.succeed("test $(cat /etc/zos/host-mutation-policy) = declarative")
-    tv.succeed("test $(cat /etc/zos/tv-mode/enabled) = declarative")
-    tv.succeed("systemctl show zos-tv.target -p Requires --value | grep -F zos-tv-weston.service")
-    tv.succeed("systemctl show zos-tv-prepare.service -p RuntimeDirectoryMode --value | grep -Fx 0700")
-    tv.succeed("systemctl show zos-tv-prepare.service -p ExecStop --value | grep -F 'zos-tv-prepare stop'")
-    tv.succeed("systemctl show zos-tv-weston.service -p PartOf --value | grep -F zos-tv.target")
-    tv.succeed("systemctl show zos-tv-chromium.service -p PartOf --value | grep -F zos-tv.target")
-    tv.succeed("systemctl show zos-tv-chromium.service -p User --value | grep -Fx zos")
-    tv.succeed("systemctl show zos-tv.target -p Wants --value | grep -F zos-tv-gamepad.service")
-    tv.succeed("systemctl show zos-tv-gamepad.service -p SupplementaryGroups --value | grep -Fx input")
-    tv.succeed("systemctl show zos-tv-gamepad.service -p DeviceAllow --value | grep -F 'char-input r'")
-    tv.succeed("systemctl show zos-tv-gamepad.service -p RestrictAddressFamilies --value | grep -Fx AF_UNIX")
-    tv.succeed("systemctl show zos-vod-player.service -p Environment --value | grep -F ZOS_VOD_PLAYER_VIDEO_OUTPUT=wayland")
-    tv.succeed("systemctl show zos-api.service -p Environment --value | grep -F ZOS_VOD_PLAYER_ENABLED=1")
-    tv.fail("${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/zos-tv-mode enable")
+    tv.wait_for_unit("cyberos-api.service")
+    tv.succeed("test $(cat /cyberos/config/host-mutation-policy) = declarative")
+    tv.succeed("test $(cat /cyberos/config/tv-mode/enabled) = declarative")
+    tv.succeed("systemctl show cyberos-tv.target -p Requires --value | grep -F cyberos-tv-weston.service")
+    tv.succeed("systemctl show cyberos-tv-prepare.service -p RuntimeDirectoryMode --value | grep -Fx 0700")
+    tv.succeed("systemctl show cyberos-tv-prepare.service -p ExecStop --value | grep -F 'cyberos-tv-prepare stop'")
+    tv.succeed("systemctl show cyberos-tv-weston.service -p PartOf --value | grep -F cyberos-tv.target")
+    tv.succeed("systemctl show cyberos-tv-chromium.service -p PartOf --value | grep -F cyberos-tv.target")
+    tv.succeed("systemctl show cyberos-tv-chromium.service -p User --value | grep -Fx cyberos")
+    tv.succeed("systemctl show cyberos-tv.target -p Wants --value | grep -F cyberos-tv-gamepad.service")
+    tv.succeed("systemctl show cyberos-tv-gamepad.service -p SupplementaryGroups --value | grep -Fx input")
+    tv.succeed("systemctl show cyberos-tv-gamepad.service -p DeviceAllow --value | grep -F 'char-input r'")
+    tv.succeed("systemctl show cyberos-tv-gamepad.service -p RestrictAddressFamilies --value | grep -Fx AF_UNIX")
+    tv.succeed("systemctl show cyberos-vod-player.service -p Environment --value | grep -F CYBEROS_VOD_PLAYER_VIDEO_OUTPUT=wayland")
+    tv.succeed("systemctl show cyberos-api.service -p Environment --value | grep -F CYBEROS_VOD_PLAYER_ENABLED=1")
+    tv.fail("${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/cyberos-tv-mode enable")
   '';
 }

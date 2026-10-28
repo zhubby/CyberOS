@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SystemEthernetConfig } from "@zos/shared";
+import type { SystemEthernetConfig } from "@cyberos/shared";
 import {
   ethernetTransactionSeconds,
   hasSystemEthernetMetricConflict,

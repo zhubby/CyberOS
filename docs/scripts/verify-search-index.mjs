@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const outputDirectory = path.resolve("dist/pagefind");
 const readinessTimeoutMs = parseReadinessTimeout(
-  process.env.ZOS_PAGEFIND_READINESS_TIMEOUT_MS ?? "30000"
+  process.env.CYBEROS_PAGEFIND_READINESS_TIMEOUT_MS ?? "30000"
 );
 const readinessPollMs = 50;
 
@@ -119,11 +119,11 @@ function isReadinessError(error) {
 
 function parseReadinessTimeout(value) {
   if (!/^\d+$/.test(value)) {
-    throw new Error("ZOS_PAGEFIND_READINESS_TIMEOUT_MS must be an integer");
+    throw new Error("CYBEROS_PAGEFIND_READINESS_TIMEOUT_MS must be an integer");
   }
   const timeout = Number(value);
   if (timeout < 100 || timeout > 60_000) {
-    throw new Error("ZOS_PAGEFIND_READINESS_TIMEOUT_MS must be between 100 and 60000");
+    throw new Error("CYBEROS_PAGEFIND_READINESS_TIMEOUT_MS must be between 100 and 60000");
   }
   return timeout;
 }

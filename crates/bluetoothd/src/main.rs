@@ -1,8 +1,8 @@
 use std::process::ExitCode;
 
+use cyberos_bluetoothd::BluetoothTransferService;
+use cyberos_bluetoothd::config::Config;
 use tracing_subscriber::EnvFilter;
-use zos_bluetoothd::BluetoothTransferService;
-use zos_bluetoothd::config::Config;
 
 #[tokio::main]
 async fn main() -> ExitCode {
