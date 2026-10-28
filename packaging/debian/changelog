@@ -1,3 +1,9 @@
+cyberos (2.0.1) unstable; urgency=medium
+
+  * Add photo library setup, repair terminal initialization, and ensure SMART telemetry tooling is installed.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Wed, 28 Oct 2026 22:54:51 +0000
+
 cyberos (2.0.0) unstable; urgency=medium
 
   * Introduce CyberOS as a clean-install-only 2.0 platform with new runtime,
