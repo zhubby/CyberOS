@@ -15,6 +15,7 @@ import {
   mergePhotos,
   photoAspectRatio,
   photoMediaKindForAsset,
+  PhotoLibraryEmptyState,
   PhotoLibraryPanel,
   photoLibraryLoadMode,
   photoRuntimeAlert,
@@ -120,7 +121,9 @@ describe("photo timeline grouping", () => {
       onWorkQueuesChanged: () => undefined,
       onNotifyError: () => undefined,
       onNotifySuccess: () => undefined,
-      onNotifyWarning: () => undefined
+      onNotifyWarning: () => undefined,
+      onOpenSettings: () => undefined,
+      configurationUpdatedAt: null
     }));
 
     expect(html).toContain('aria-busy="true"');
@@ -145,7 +148,9 @@ describe("photo timeline grouping", () => {
       onWorkQueuesChanged: () => undefined,
       onNotifyError: () => undefined,
       onNotifySuccess: () => undefined,
-      onNotifyWarning: () => undefined
+      onNotifyWarning: () => undefined,
+      onOpenSettings: () => undefined,
+      configurationUpdatedAt: null
     }));
 
     expect(html).toMatch(/<input(?=[^>]*type="file")(?=[^>]*multiple="")[^>]*>/u);
@@ -153,6 +158,16 @@ describe("photo timeline grouping", () => {
 
   it("uses the shared media and XMP extension list for upload filtering", () => {
     expect(PHOTO_ACCEPT.split(",")).toEqual([...PHOTOS_UPLOAD_EXTENSIONS]);
+  });
+
+  it("offers a direct configuration action when the library is unconfigured", () => {
+    const html = renderToStaticMarkup(createElement(PhotoLibraryEmptyState, {
+      onConfigure: () => undefined
+    }));
+
+    expect(html).toContain("Photo library is not configured");
+    expect(html).toContain("Configure photo library");
+    expect(html).toContain('class="primary-button"');
   });
 
   it("toggles multiple values within one facet as an OR set", () => {

@@ -32,12 +32,19 @@ describe("SettingsPhotosPage", () => {
         updatedAt: "2026-09-24T06:10:00.000Z"
       },
       processingSettings: processingSettings(),
+      storagePools: [storagePool()],
+      locale: "en",
       loading: false,
+      onLibrarySettingsChange: async (input) => ({ ...input, updatedAt: new Date(0).toISOString() }),
       onSettingsChange: async () => undefined,
+      onRequestCreateFolder: async () => undefined,
       onClose: () => undefined
     }));
 
     expect(html).toContain("Pictures/Library");
+    expect(html).toContain("Storage pool");
+    expect(html).toContain("Main storage");
+    expect(html).toContain("Change directory");
     expect(html).toContain("Processing concurrency");
     expect(html).toContain("Retry Policy");
     expect(html).toContain("Resource Limits");
@@ -66,12 +73,17 @@ describe("SettingsPhotosPage", () => {
         updatedAt: null
       },
       processingSettings: null,
+      storagePools: [storagePool()],
+      locale: "en",
       loading: false,
+      onLibrarySettingsChange: async (input) => ({ ...input, updatedAt: new Date(0).toISOString() }),
       onSettingsChange: async () => undefined,
+      onRequestCreateFolder: async () => undefined,
       onClose: () => undefined
     }));
 
     expect(html).toContain("Not configured");
+    expect(html).toContain("Choose directory");
     expect(html).toContain("Unavailable");
     expect(html).not.toContain("undefined");
   });
@@ -85,8 +97,12 @@ describe("SettingsPhotosPage", () => {
       },
       status: null,
       processingSettings: null,
+      storagePools: [storagePool()],
+      locale: "en",
       loading: false,
+      onLibrarySettingsChange: async (input) => ({ ...input, updatedAt: new Date(0).toISOString() }),
       onSettingsChange: async () => undefined,
+      onRequestCreateFolder: async () => undefined,
       onClose: () => undefined
     }));
 
@@ -94,6 +110,16 @@ describe("SettingsPhotosPage", () => {
     expect(html).not.toContain(">0<");
   });
 });
+
+function storagePool() {
+  return {
+    id: "pool-a",
+    name: "Main storage",
+    path: ".",
+    filesystem: "ext4",
+    status: "ready" as const
+  };
+}
 
 function processingSettings() {
   return {

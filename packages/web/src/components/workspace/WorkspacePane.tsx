@@ -428,6 +428,7 @@ export function WorkspacePane({
   selectedStoragePoolId,
   storagePools,
   storageSummaryLoading,
+  photoLibrarySettingsUpdatedAt,
   currentPath,
   breadcrumbs,
   entries,
@@ -489,6 +490,7 @@ export function WorkspacePane({
   onNotifySuccess,
   onNotifyWarning,
   onOpenDeviceSettings,
+  onOpenPhotoSettings,
   onClosePreview,
   onRollback
 }: {
@@ -496,6 +498,7 @@ export function WorkspacePane({
   selectedStoragePoolId: string;
   storagePools: StoragePool[];
   storageSummaryLoading: boolean;
+  photoLibrarySettingsUpdatedAt: string | null;
   currentPath: string;
   breadcrumbs: string[];
   entries: FileEntry[];
@@ -561,6 +564,7 @@ export function WorkspacePane({
   onNotifySuccess: (message: string | null) => void;
   onNotifyWarning: (message: string | null) => void;
   onOpenDeviceSettings: (section: "wireless" | "bluetooth") => void;
+  onOpenPhotoSettings: () => void;
   onClosePreview: () => void;
   onRollback: (operation: FileOperation) => void;
 }) {
@@ -1732,6 +1736,8 @@ export function WorkspacePane({
               onNotifyError={onNotifyError}
               onNotifySuccess={onNotifySuccess}
               onNotifyWarning={onNotifyWarning}
+              onOpenSettings={onOpenPhotoSettings}
+              configurationUpdatedAt={photoLibrarySettingsUpdatedAt}
             />
           ) : activePanel === "monitoring" ? (
             <MonitoringPanel locale={locale} visible={workspaceVisible} />

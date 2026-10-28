@@ -77,6 +77,11 @@ import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
 import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
 import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
 import { SettingsMediaPage } from "./SettingsMediaPage.js";
+import {
+  StorageFilePickerDialog,
+  type StorageFilePickerPool,
+  type StorageFileSelection
+} from "../workspace/StorageFilePickerDialog.js";
 
 interface SettingsModalProps {
   activeSection: SettingsSectionId;
@@ -114,9 +119,18 @@ interface SettingsModalProps {
     patch: Partial<Omit<IndexerSettings, "updatedAt">>
   ) => Promise<void>;
   onIndexerReindex: (storagePoolId: string) => Promise<void>;
+  onPhotoLibrarySettingsChange: (input: {
+    storagePoolId: string;
+    path: string;
+  }) => Promise<PhotoLibrarySettings>;
   onPhotoProcessingSettingsChange: (
     patch: Partial<Omit<PhotoProcessingSettings, "updatedAt">>
   ) => Promise<void>;
+  onRequestCreateFolder: (input: {
+    storagePoolId: string;
+    parentPath: string;
+    name: string;
+  }) => Promise<void>;
   onToolPolicyFormChange: (form: ToolPolicyFormState) => void;
   onAgentMcpEnabledChange: (enabled: boolean) => Promise<void>;
   onLanguagePreferenceChange: (preference: LanguagePreference) => void;
@@ -183,7 +197,9 @@ export function SettingsModal({
   onDownloadSettingsChange,
   onIndexerSettingsChange,
   onIndexerReindex,
+  onPhotoLibrarySettingsChange,
   onPhotoProcessingSettingsChange,
+  onRequestCreateFolder,
   onToolPolicyFormChange,
   onAgentMcpEnabledChange,
   onLanguagePreferenceChange,
@@ -593,8 +609,12 @@ export function SettingsModal({
               settings={photoSettings}
               status={photoStatus}
               processingSettings={photoProcessingSettings}
+              storagePools={storagePools}
+              locale={resolvedLocale}
               loading={loading}
+              onLibrarySettingsChange={onPhotoLibrarySettingsChange}
               onSettingsChange={onPhotoProcessingSettingsChange}
+              onRequestCreateFolder={onRequestCreateFolder}
               onClose={onClose}
             />
           ) : null}
@@ -982,26 +1002,46 @@ export function SettingsPhotosPage({
   settings,
   status,
   processingSettings,
+  storagePools,
+  locale,
   loading,
+  onLibrarySettingsChange,
   onSettingsChange,
+  onRequestCreateFolder,
   onClose
 }: {
   settings: PhotoLibrarySettings | null;
   status: PhotoLibraryStatus | null;
   processingSettings: PhotoProcessingSettings | null;
+  storagePools: StorageFilePickerPool[];
+  locale: SupportedLocale;
   loading: boolean;
+  onLibrarySettingsChange: (input: PhotoLibraryDraft) => Promise<PhotoLibrarySettings>;
   onSettingsChange: (patch: Partial<PhotoSettingsDraft>) => Promise<void>;
+  onRequestCreateFolder?: (input: {
+    storagePoolId: string;
+    parentPath: string;
+    name: string;
+  }) => Promise<void>;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<PhotoSettingsDraft>(() => photoSettingsDraft(processingSettings));
+  const [libraryDraft, setLibraryDraft] = useState<PhotoLibraryDraft | null>(() => photoLibraryDraft(settings));
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(photoSettingsDraft(processingSettings));
     setSaved(false);
   }, [processingSettings]);
+
+  useEffect(() => {
+    setLibraryDraft(photoLibraryDraft(settings));
+    setSaved(false);
+  }, [settings]);
 
   const stateLabel = String(loading && !status
     ? t("common.states.loading")
@@ -1010,24 +1050,43 @@ export function SettingsPhotosPage({
       : t("common.states.unavailable"));
   const hasStatusProblem = !settings || Boolean(status?.error) ||
     status?.state === "degraded" || status?.state === "offline" || status?.state === "unconfigured";
+  const selectedPool = storagePools.find((pool) => pool.id === libraryDraft?.storagePoolId) ?? null;
+  const libraryChanged = Boolean(libraryDraft && (
+    libraryDraft.storagePoolId !== settings?.storagePoolId || libraryDraft.path !== settings?.path
+  ));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || loading || !processingSettings) return;
+    if (saving || loading || (!processingSettings && !libraryChanged)) return;
     setSaving(true);
     setSaved(false);
+    setSaveError(null);
     try {
-      await onSettingsChange(draft);
+      if (libraryDraft && libraryChanged) {
+        const nextSettings = await onLibrarySettingsChange(libraryDraft);
+        setLibraryDraft(photoLibraryDraft(nextSettings));
+      }
+      if (processingSettings) await onSettingsChange(draft);
       setSaved(true);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
   }
 
+  function chooseLibrary(selection: StorageFileSelection) {
+    setLibraryDraft({ storagePoolId: selection.storagePoolId, path: selection.path });
+    setPickerOpen(false);
+    setSaved(false);
+    setSaveError(null);
+  }
+
   return (
-    <form className="settings-form" onSubmit={(event) => void submit(event)}>
-      <div className="settings-content-body">
-        <div className="settings-page-grid">
+    <>
+      <form className="settings-form" onSubmit={(event) => void submit(event)}>
+        <div className="settings-content-body">
+          <div className="settings-page-grid">
           <section className="settings-section-card">
             <header>
               <div>
@@ -1037,13 +1096,39 @@ export function SettingsPhotosPage({
             </header>
             <dl className="settings-summary-list settings-photo-context">
               <div>
+                <dt>{t("settings.photos.storagePool")}</dt>
+                <dd>{selectedPool?.name ?? libraryDraft?.storagePoolId ?? t("settings.photos.notConfigured")}</dd>
+              </div>
+              <div>
                 <dt>{t("settings.photos.libraryPath")}</dt>
-                <dd className={settings ? "is-mono" : undefined}>
-                  {settings?.path ?? t("settings.photos.notConfigured")}
+                <dd className={libraryDraft ? "is-mono" : undefined}>
+                  {libraryDraft?.path ?? t("settings.photos.notConfigured")}
                 </dd>
               </div>
             </dl>
-            {hasStatusProblem ? (
+            <div className="settings-photo-library-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                disabled={loading || saving || storagePools.length === 0}
+              >
+                <Folder aria-hidden="true" size={15} />
+                <span>{settings ? t("settings.photos.changeDirectory") : t("settings.photos.chooseDirectory")}</span>
+              </button>
+            </div>
+            {storagePools.length === 0 && !loading ? (
+              <p className="settings-inline-alert" role="alert">
+                <AlertTriangle aria-hidden="true" size={15} />
+                <span>{t("settings.photos.noStoragePools")}</span>
+              </p>
+            ) : null}
+            {libraryChanged ? (
+              <p className="settings-photo-pending" role="status">
+                <Check aria-hidden="true" size={15} />
+                <span>{t("settings.photos.pendingSave")}</span>
+              </p>
+            ) : hasStatusProblem ? (
               <p className="settings-inline-alert" role="alert">
                 <AlertTriangle aria-hidden="true" size={15} />
                 <span>{status?.error ?? stateLabel}</span>
@@ -1094,31 +1179,52 @@ export function SettingsPhotosPage({
               <DownloadNumberField label={t("settings.photos.maxDecodedPixels")} value={draft.maxDecodedPixels} min={1_000_000} max={268_402_689} step={1_000_000} onChange={(value) => setDraft((current) => ({ ...current, maxDecodedPixels: value ?? 1_000_000 }))} />
             </fieldset>
           </section>
+          </div>
         </div>
-      </div>
 
-      <footer className="settings-actions">
-        <span role="status">
-          {saving
-            ? t("common.actions.saving")
-            : saved
-              ? t("settings.photos.saved")
-              : !loading && !processingSettings
-                ? t("common.states.unavailable")
-                : null}
-        </span>
-        <div>
-          <button className="secondary-button" type="button" onClick={onClose} disabled={saving}>{t("common.actions.cancel")}</button>
-          <button className="primary-button" type="submit" disabled={loading || saving || !processingSettings} aria-busy={saving || undefined}>
-            {saving ? t("common.actions.saving") : saved ? <><Check aria-hidden="true" size={14} />{t("settings.photos.saved")}</> : t("common.actions.saveChanges")}
-          </button>
-        </div>
-      </footer>
-    </form>
+        <footer className="settings-actions">
+          <span role={saveError ? "alert" : "status"}>
+            {saving
+              ? t("common.actions.saving")
+              : saveError
+                ? saveError
+                : saved
+                  ? t("settings.photos.saved")
+                  : !loading && !processingSettings && !libraryChanged
+                    ? t("common.states.unavailable")
+                    : null}
+          </span>
+          <div>
+            <button className="secondary-button" type="button" onClick={onClose} disabled={saving}>{t("common.actions.cancel")}</button>
+            <button className="primary-button" type="submit" disabled={loading || saving || (!processingSettings && !libraryChanged)} aria-busy={saving || undefined}>
+              {saving ? t("common.actions.saving") : saved ? <><Check aria-hidden="true" size={14} />{t("settings.photos.saved")}</> : t("common.actions.saveChanges")}
+            </button>
+          </div>
+        </footer>
+      </form>
+      {pickerOpen ? (
+        <StorageFilePickerDialog
+          pools={storagePools}
+          initialPoolId={selectedPool?.id ?? storagePools[0]?.id ?? ""}
+          locale={locale}
+          mode="directory"
+          directoryPurpose="photoLibrary"
+          {...(selectedPool && libraryDraft?.path ? { initialPath: libraryDraft.path } : {})}
+          onCancel={() => setPickerOpen(false)}
+          onSelect={chooseLibrary}
+          {...(onRequestCreateFolder ? { onRequestCreateFolder } : {})}
+        />
+      ) : null}
+    </>
   );
 }
 
+type PhotoLibraryDraft = Pick<PhotoLibrarySettings, "storagePoolId" | "path">;
 type PhotoSettingsDraft = Omit<PhotoProcessingSettings, "updatedAt">;
+
+function photoLibraryDraft(settings: PhotoLibrarySettings | null): PhotoLibraryDraft | null {
+  return settings ? { storagePoolId: settings.storagePoolId, path: settings.path } : null;
+}
 
 function photoSettingsDraft(settings: PhotoProcessingSettings | null): PhotoSettingsDraft {
   if (settings) {

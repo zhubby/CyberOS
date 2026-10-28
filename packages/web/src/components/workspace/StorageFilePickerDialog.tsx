@@ -50,7 +50,7 @@ export function StorageFilePickerDialog({
   initialPoolId: string;
   locale: SupportedLocale;
   mode?: "iso" | "directory" | "files";
-  directoryPurpose?: "downloads" | "photoMove" | "fileMove" | "bluetoothInbox" | "mediaLibrary";
+  directoryPurpose?: "downloads" | "photoLibrary" | "photoMove" | "fileMove" | "bluetoothInbox" | "mediaLibrary";
   initialPath?: string;
   boundaryPath?: string;
   directorySelectionDisabled?: (path: string) => boolean;
@@ -97,6 +97,15 @@ export function StorageFilePickerDialog({
           list: t("settings.media.pickerList"),
           empty: t("settings.media.pickerEmpty"),
           select: t("settings.media.useDirectory")
+        }
+    : directoryPurpose === "photoLibrary"
+      ? {
+          eyebrow: t("settings.photos.libraryTitle"),
+          title: t("settings.photos.pickerTitle"),
+          description: t("settings.photos.pickerDescription"),
+          list: t("settings.photos.pickerList"),
+          empty: t("settings.photos.pickerEmpty"),
+          select: t("settings.photos.useDirectory")
         }
     : directoryPurpose === "photoMove"
     ? {
@@ -246,6 +255,12 @@ export function StorageFilePickerDialog({
   }
 
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
+      return;
+    }
     if (event.key !== "Tab") return;
     const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
       'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'

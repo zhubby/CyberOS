@@ -112,7 +112,12 @@ function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>>
     onDownloadSettingsChange: vi.fn(async () => undefined),
     onIndexerSettingsChange: vi.fn(async () => undefined),
     onIndexerReindex: vi.fn(async () => undefined),
+    onPhotoLibrarySettingsChange: vi.fn(async (input) => ({
+      ...input,
+      updatedAt: new Date(0).toISOString()
+    })),
     onPhotoProcessingSettingsChange: vi.fn(async () => undefined),
+    onRequestCreateFolder: vi.fn(async () => undefined),
     onToolPolicyFormChange: vi.fn(),
     onAgentMcpEnabledChange: vi.fn(async () => undefined),
     onLanguagePreferenceChange: vi.fn(),

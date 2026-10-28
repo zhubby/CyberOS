@@ -89,7 +89,9 @@ export function PhotoLibraryPanel({
   onWorkQueuesChanged,
   onNotifyError,
   onNotifySuccess,
-  onNotifyWarning
+  onNotifyWarning,
+  onOpenSettings,
+  configurationUpdatedAt
 }: {
   pools: StorageFilePickerPool[];
   locale: SupportedLocale;
@@ -102,6 +104,8 @@ export function PhotoLibraryPanel({
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
   onNotifyWarning: (message: string | null) => void;
+  onOpenSettings: () => void;
+  configurationUpdatedAt: string | null;
 }) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<PhotoLibrarySettings | null>(null);
@@ -144,6 +148,7 @@ export function PhotoLibraryPanel({
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dragDepthRef = useRef(0);
   const libraryRequestRef = useRef(0);
+  const configurationUpdatedAtRef = useRef(configurationUpdatedAt);
   const timelineRequestRef = useRef(0);
   const timelineLoadRef = useRef<((cursor?: string | null) => Promise<void>) | null>(null);
   const loadedQueryKeyRef = useRef<string | null>(null);
@@ -234,6 +239,12 @@ export function PhotoLibraryPanel({
   useEffect(() => {
     void loadLibrary();
   }, [loadLibrary]);
+
+  useEffect(() => {
+    if (configurationUpdatedAtRef.current === configurationUpdatedAt) return;
+    configurationUpdatedAtRef.current = configurationUpdatedAt;
+    if (configurationUpdatedAt) void loadLibrary();
+  }, [configurationUpdatedAt, loadLibrary]);
 
   useEffect(() => {
     if (!settings || loading || loadedQueryKeyRef.current === queryKey) return;
@@ -781,7 +792,7 @@ export function PhotoLibraryPanel({
         ) : loadMode === "error" ? (
           <div className="workspace-empty-state" role="alert"><ImageOff aria-hidden="true" size={28} /><strong>{t("workspace.photos.loadFailed")}</strong><p>{loadError}</p><button className="secondary-button" type="button" onClick={() => void loadLibrary()}>{t("common.actions.refresh")}</button></div>
         ) : !settings ? (
-          <div className="workspace-empty-state photo-library-empty"><Images aria-hidden="true" size={34} /><strong>{t("workspace.photos.unconfiguredTitle")}</strong><p>{t("workspace.photos.unconfiguredBody")}</p></div>
+          <PhotoLibraryEmptyState onConfigure={onOpenSettings} />
         ) : view === "map" ? (
           <PhotoMapView
             filters={queryFilters}
@@ -954,6 +965,21 @@ export function PhotoLibraryPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+export function PhotoLibraryEmptyState({ onConfigure }: { onConfigure: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="workspace-empty-state photo-library-empty" role="status">
+      <Images aria-hidden="true" size={34} />
+      <strong>{t("workspace.photos.unconfiguredTitle")}</strong>
+      <p>{t("workspace.photos.unconfiguredBody")}</p>
+      <button className="primary-button" type="button" onClick={onConfigure}>
+        <SlidersHorizontal aria-hidden="true" size={15} />
+        <span>{t("workspace.photos.configure")}</span>
+      </button>
+    </div>
   );
 }
 

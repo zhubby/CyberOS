@@ -52,6 +52,7 @@ import {
   rollbackOperation,
   requestReindex,
   saveDockerSettings,
+  savePhotoLibrarySettings,
   saveModelProviderSettings,
   saveAgentCapabilityPolicySettings,
   saveAgentMcpSettings,
@@ -1328,6 +1329,25 @@ export function App() {
     setError(null);
     try {
       setPhotoProcessingSettings(await updatePhotoProcessingSettings(patch));
+    } catch (nextError) {
+      setError(toErrorMessage(nextError));
+      throw nextError;
+    }
+  }
+
+  async function changePhotoLibrarySettings(input: {
+    storagePoolId: string;
+    path: string;
+  }): Promise<PhotoLibrarySettings> {
+    setError(null);
+    try {
+      const result = await savePhotoLibrarySettings(input);
+      setPhotoSettings(result.settings);
+      void getPhotoStatus()
+        .then((snapshot) => setPhotoStatus(snapshot.status))
+        .catch((nextError: unknown) => setError(toErrorMessage(nextError)));
+      void refreshWorkQueues();
+      return result.settings;
     } catch (nextError) {
       setError(toErrorMessage(nextError));
       throw nextError;
@@ -2688,6 +2708,7 @@ export function App() {
         active={mobileView === "workspace"}
         storagePools={storagePoolOptions}
         storageSummaryLoading={storageSummaryLoading}
+        photoLibrarySettingsUpdatedAt={photoSettings?.updatedAt ?? null}
         selectedStoragePoolId={selectedStoragePoolId}
         currentPath={currentPath}
         breadcrumbs={breadcrumbs}
@@ -2753,6 +2774,7 @@ export function App() {
         onNotifySuccess={setSuccessNotice}
         onNotifyWarning={setWarningNotice}
         onOpenDeviceSettings={(section) => void openSettings(section)}
+        onOpenPhotoSettings={() => void openSettings("photos")}
         onClosePreview={() => setSelectedFilePath(null)}
         onRollback={(operation) => void handleRollback(operation)}
       />
@@ -2822,7 +2844,9 @@ export function App() {
           onDownloadSettingsChange={changeDownloadSettings}
           onIndexerSettingsChange={changeIndexerSettings}
           onIndexerReindex={reindexRoot}
+          onPhotoLibrarySettingsChange={changePhotoLibrarySettings}
           onPhotoProcessingSettingsChange={changePhotoProcessingSettings}
+          onRequestCreateFolder={requestFolderCreateAt}
           onToolPolicyFormChange={setToolPolicyForm}
           onAgentMcpEnabledChange={changeAgentMcpEnabled}
           onLanguagePreferenceChange={changeLanguagePreference}

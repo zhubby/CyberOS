@@ -1464,6 +1464,35 @@
   font-size: 11.5px;
 }
 
+.settings-photo-library-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.settings-photo-library-actions .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-section-card .settings-photo-pending {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--focus-ring-soft);
+  color: var(--cyber-cyan);
+  background: var(--teal-bg);
+  overflow-wrap: anywhere;
+}
+
+.settings-photo-pending svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .settings-indexer-status-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 20px;
