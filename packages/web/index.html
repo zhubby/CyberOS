@@ -8,56 +8,30 @@
     <script>
       (() => {
         const root = document.documentElement;
-        let theme = "light";
-        let themePreference = "light";
         let language = navigator.language?.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
         try {
-          const storedTheme = localStorage.getItem("zos:theme");
           const storedLanguage = localStorage.getItem("zos:language");
-          themePreference = storedTheme === "light" || storedTheme === "dark" || storedTheme === "system"
-            ? storedTheme
-            : "light";
-          theme = themePreference === "system"
-            ? window.matchMedia?.("(prefers-color-scheme: dark)").matches
-              ? "dark"
-              : "light"
-            : themePreference;
           language = storedLanguage === "zh-CN"
             ? "zh-CN"
             : storedLanguage === "en"
               ? "en"
               : language;
-        } catch {
-          theme = "light";
-          themePreference = "light";
-        }
-        root.dataset.theme = theme;
-        root.dataset.themePreference = themePreference;
+        } catch {}
         root.lang = language;
       })();
     </script>
     <style>
-      :root,
-      :root[data-theme="light"] {
-        --boot-bg: #faf9f5;
-        --boot-panel: #fffdfa;
-        --boot-line: #d1cfc5;
-        --boot-text: #141413;
-        --boot-muted: #5e5d59;
-        --boot-muted-2: #6b6964;
-        --boot-accent: #d97757;
-        --boot-danger: #953f3f;
-      }
-
-      :root[data-theme="dark"] {
-        --boot-bg: #1c1b19;
-        --boot-panel: #292723;
-        --boot-line: #4a463f;
-        --boot-text: #f4f1e8;
-        --boot-muted: #c2bcb1;
-        --boot-muted-2: #aaa49a;
-        --boot-accent: #e58a6c;
-        --boot-danger: #eca0a0;
+      :root {
+        --boot-bg: #fcee0a;
+        --boot-panel: #050a0e;
+        --boot-line: #050a0e;
+        --boot-text: #050a0e;
+        --boot-inverse: #fcee0a;
+        --boot-muted: #3f3e00;
+        --boot-muted-2: #5a5700;
+        --boot-accent: #ff003c;
+        --boot-info: #00f0ff;
+        --boot-danger: #ff003c;
       }
 
       html,
@@ -79,7 +53,11 @@
         display: grid;
         place-items: center;
         color: var(--boot-text);
-        background: var(--boot-bg);
+        background:
+          linear-gradient(90deg, rgb(5 10 14 / 8%) 1px, transparent 1px),
+          linear-gradient(rgb(5 10 14 / 6%) 1px, transparent 1px),
+          var(--boot-bg);
+        background-size: 32px 32px;
         opacity: 1;
         transition: opacity 260ms cubic-bezier(.2, .72, .2, 1), visibility 260ms linear;
       }
@@ -91,71 +69,113 @@
       }
 
       .zos-boot-shell {
+        position: relative;
         display: grid;
-        justify-items: center;
-        width: min(340px, calc(100vw - 40px));
+        justify-items: stretch;
+        width: min(560px, calc(100vw - 32px));
         box-sizing: border-box;
-        padding: 28px;
-        text-align: center;
+        padding: 30px 34px 26px;
+        border: 2px solid var(--boot-line);
+        color: var(--boot-inverse);
+        background: var(--boot-panel);
+        box-shadow: 8px 8px 0 var(--boot-accent);
+        clip-path: polygon(0 0, calc(100% - 34px) 0, 100% 34px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+        text-align: left;
         animation: zos-boot-arrive 320ms cubic-bezier(.2, .72, .2, 1) both;
+      }
+
+      .zos-boot-shell::before {
+        position: absolute;
+        top: 8px;
+        right: 42px;
+        width: 72px;
+        height: 3px;
+        background: var(--boot-info);
+        content: "";
       }
 
       .zos-boot-brand {
         display: inline-flex;
         align-items: center;
         gap: 9px;
-        color: var(--boot-text);
-        font: 600 24px/1 Newsreader, Georgia, serif;
+        color: var(--boot-inverse);
+        font: 700 32px/1 Rajdhani, sans-serif;
         letter-spacing: 0;
       }
 
       .zos-boot-brand img {
         width: 38px;
         height: 38px;
-        filter: none;
-      }
-
-      :root[data-theme="dark"] .zos-boot-brand img {
         filter: invert(1);
       }
 
       .zos-boot-copy {
         display: grid;
         gap: 6px;
-        margin-top: 30px;
+        margin-top: 38px;
+        padding-top: 14px;
+        border-top: 1px solid rgb(252 238 10 / 42%);
       }
 
       .zos-boot-copy strong {
-        color: var(--boot-text);
-        font: 500 22px/1.2 Newsreader, Georgia, serif;
+        color: var(--boot-inverse);
+        font: 700 28px/1.05 Rajdhani, sans-serif;
+        text-transform: uppercase;
         letter-spacing: 0;
       }
 
       .zos-boot-copy span {
-        color: var(--boot-muted);
-        font: 400 12px/1.5 Inter, system-ui, sans-serif;
+        color: var(--boot-info);
+        font: 600 12px/1.5 Rajdhani, sans-serif;
+        text-transform: uppercase;
+      }
+
+      .zos-boot-sequence {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+        margin-top: 20px;
+        background: rgb(252 238 10 / 28%);
+      }
+
+      .zos-boot-sequence span {
+        padding: 7px 8px;
+        color: var(--boot-inverse);
+        background: var(--boot-panel);
+        font: 600 10px/1.2 Rajdhani, sans-serif;
+      }
+
+      .zos-boot-sequence span::before {
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        margin-right: 6px;
+        background: var(--boot-info);
+        content: "";
       }
 
       .zos-boot-progress {
-        width: 96px;
-        height: 2px;
+        width: 100%;
+        height: 3px;
         margin-top: 24px;
         overflow: hidden;
-        background: color-mix(in srgb, var(--boot-line) 70%, transparent);
+        background: rgb(252 238 10 / 22%);
       }
 
       .zos-boot-progress span {
         display: block;
         width: 42%;
         height: 100%;
-        background: var(--boot-accent);
+        background: var(--boot-info);
         animation: zos-boot-progress 1.35s ease-in-out infinite;
       }
 
       .zos-boot-footer {
         margin-top: 16px;
-        color: var(--boot-muted-2);
-        font: 500 10px/1.4 Inter, system-ui, sans-serif;
+        color: rgb(252 238 10 / 64%);
+        font: 600 10px/1.4 Rajdhani, sans-serif;
+        text-align: right;
+        text-transform: uppercase;
       }
 
       #zos-boot[data-state="error"] .zos-boot-brand {
@@ -171,12 +191,13 @@
         min-height: 38px;
         margin-top: 22px;
         padding: 0 16px;
-        border: 1px solid var(--boot-text);
-        border-radius: 7px;
-        color: var(--boot-bg);
-        background: var(--boot-text);
+        border: 1px solid var(--boot-accent);
+        border-radius: 0;
+        color: var(--boot-panel);
+        background: var(--boot-accent);
         cursor: pointer;
-        font: 600 12px/1 Inter, system-ui, sans-serif;
+        font: 700 12px/1 Rajdhani, sans-serif;
+        clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
       }
 
       .zos-boot-retry:hover {
@@ -190,7 +211,7 @@
       }
 
       @keyframes zos-boot-arrive {
-        from { opacity: 0; transform: translateY(8px); }
+        from { opacity: 0; transform: translateY(8px) skewX(-1deg); }
         to { opacity: 1; transform: translateY(0); }
       }
 
@@ -207,6 +228,16 @@
           transition: none;
         }
       }
+
+      @media (max-width: 480px) {
+        .zos-boot-shell {
+          padding: 24px 20px 22px;
+        }
+
+        .zos-boot-sequence {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
@@ -220,6 +251,9 @@
         <div class="zos-boot-copy">
           <strong data-boot-title>Preparing workspace</strong>
           <span data-boot-detail>Connecting to local services</span>
+        </div>
+        <div class="zos-boot-sequence" aria-hidden="true">
+          <span>SYS.01</span><span>NAS LINK</span><span>INDEX BUS</span>
         </div>
         <div class="zos-boot-progress" aria-hidden="true"><span></span></div>
         <div class="zos-boot-footer">

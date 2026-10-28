@@ -62,6 +62,15 @@ describe("SettingsModal", () => {
     expect(html).toContain("Enabled, but the protected credential needs repair");
     expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/u);
   });
+
+  it("keeps language preferences without rendering a theme selector", () => {
+    const html = renderSettings({ activeSection: "appearance" });
+
+    expect(html).toContain("Interface language");
+    expect(html).toContain('id="language-select"');
+    expect(html).not.toContain('id="theme-select"');
+    expect(html).not.toContain("Interface theme");
+  });
 });
 
 function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>> = {}): string {
@@ -93,7 +102,6 @@ function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>>
       updatedAt: new Date(0).toISOString()
     },
     languagePreference: "system",
-    themePreference: "system",
     previewFileSizeLimitBytes: 10 * 1024 * 1024,
     codeFontSettings: { familyId: "system", fontSizePx: 12 },
     networkSummary: null,
@@ -109,7 +117,6 @@ function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>>
     onToolPolicyFormChange: vi.fn(),
     onAgentMcpEnabledChange: vi.fn(async () => undefined),
     onLanguagePreferenceChange: vi.fn(),
-    onThemePreferenceChange: vi.fn(),
     onPreviewFileSizeLimitChange: vi.fn(),
     onCodeFontSettingsChange: vi.fn(),
     onWifiStatus: vi.fn(),

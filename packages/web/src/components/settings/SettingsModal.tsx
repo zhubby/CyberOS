@@ -69,7 +69,6 @@ import {
   previewFileSizeLimitBytesToMiB,
   previewFileSizeLimitMiBToBytes
 } from "../../lib/preview-settings.js";
-import type { ThemePreference } from "../../lib/theme-settings.js";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { VersionSettingsPage } from "./VersionSettingsPage.js";
 import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
@@ -102,7 +101,6 @@ interface SettingsModalProps {
   toolPolicyForm: ToolPolicyFormState;
   agentMcpSettings: AgentMcpSettings | null;
   languagePreference: LanguagePreference;
-  themePreference: ThemePreference;
   previewFileSizeLimitBytes: number;
   codeFontSettings: CodeFontSettings;
   networkSummary: NetworkSummary | null;
@@ -124,7 +122,6 @@ interface SettingsModalProps {
   onToolPolicyFormChange: (form: ToolPolicyFormState) => void;
   onAgentMcpEnabledChange: (enabled: boolean) => Promise<void>;
   onLanguagePreferenceChange: (preference: LanguagePreference) => void;
-  onThemePreferenceChange: (preference: ThemePreference) => void;
   onPreviewFileSizeLimitChange: (bytes: number) => void;
   onCodeFontSettingsChange: (settings: CodeFontSettings) => void;
   onWifiStatus: (status: WifiStatus) => void;
@@ -178,7 +175,6 @@ export function SettingsModal({
   toolPolicyForm,
   agentMcpSettings,
   languagePreference,
-  themePreference,
   previewFileSizeLimitBytes,
   codeFontSettings,
   networkSummary,
@@ -194,7 +190,6 @@ export function SettingsModal({
   onToolPolicyFormChange,
   onAgentMcpEnabledChange,
   onLanguagePreferenceChange,
-  onThemePreferenceChange,
   onPreviewFileSizeLimitChange,
   onCodeFontSettingsChange,
   onWifiStatus,
@@ -508,9 +503,7 @@ export function SettingsModal({
           {activeSection === "appearance" ? (
             <SettingsAppearancePage
               languagePreference={languagePreference}
-              themePreference={themePreference}
               onLanguagePreferenceChange={onLanguagePreferenceChange}
-              onThemePreferenceChange={onThemePreferenceChange}
             />
           ) : null}
 
@@ -803,54 +796,23 @@ function SettingsInfoList({ rows }: { rows: SettingsInfoRow[] }) {
 
 function SettingsAppearancePage({
   languagePreference,
-  themePreference,
-  onLanguagePreferenceChange,
-  onThemePreferenceChange
+  onLanguagePreferenceChange
 }: {
   languagePreference: LanguagePreference;
-  themePreference: ThemePreference;
   onLanguagePreferenceChange: (preference: LanguagePreference) => void;
-  onThemePreferenceChange: (preference: ThemePreference) => void;
 }) {
   const { t } = useTranslation();
-  const themeOptions: { value: ThemePreference; label: string }[] = [
-    { value: "system", label: t("settings.appearance.systemTheme") },
-    { value: "light", label: t("settings.appearance.lightTheme") },
-    { value: "dark", label: t("settings.appearance.darkTheme") }
-  ];
   const languageOptions: { value: LanguagePreference; label: string }[] = [
     { value: "system", label: t("common.language.system") },
     { value: "en", label: t("common.language.english") },
     { value: "zh-CN", label: t("common.language.chineseSimplified") }
   ];
-  const selectedThemeLabel =
-    themeOptions.find((option) => option.value === themePreference)?.label ?? themePreference;
   const selectedLanguageLabel =
     languageOptions.find((option) => option.value === languagePreference)?.label ?? languagePreference;
 
   return (
     <div className="settings-content-body">
       <div className="settings-page-grid">
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.appearance.themeTitle")}</h3>
-              <p>{t("settings.appearance.themeDescription")}</p>
-            </div>
-          </header>
-          <div className="settings-preference-field">
-            <span>{t("settings.appearance.themeField")}</span>
-            <CustomSelect
-              id="theme-select"
-              value={themePreference}
-              options={themeOptions}
-              ariaLabel={`${t("settings.appearance.themeField")}: ${selectedThemeLabel}`}
-              onChange={onThemePreferenceChange}
-            />
-            <small>{t("settings.appearance.themeHelp")}</small>
-          </div>
-        </section>
-
         <section className="settings-section-card">
           <header>
             <div>

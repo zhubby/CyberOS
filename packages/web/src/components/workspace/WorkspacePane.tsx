@@ -63,7 +63,6 @@ import { PhotoLibraryPanel } from "./PhotoLibraryPanel.js";
 import { FileListSkeleton, SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
 import type { CodeFontSettings } from "../../lib/editor-settings.js";
-import type { ResolvedTheme } from "../../lib/theme-settings.js";
 import { StorageFilePickerDialog } from "./StorageFilePickerDialog.js";
 import { FilePreviewDialog } from "./FilePreviewDialog.js";
 import { MonitoringPanel } from "./MonitoringPanel.js";
@@ -456,7 +455,6 @@ export function WorkspacePane({
   operationsReady,
   locale,
   codeFontSettings,
-  resolvedTheme,
   filesPanelActivationId,
   onSelectStoragePool,
   onOpenDownloadedDirectory,
@@ -528,7 +526,6 @@ export function WorkspacePane({
   operationsReady: boolean;
   locale: SupportedLocale;
   codeFontSettings: CodeFontSettings;
-  resolvedTheme: ResolvedTheme;
   filesPanelActivationId: number;
   onSelectStoragePool: (poolId: string) => void;
   onOpenDownloadedDirectory: (rootId: string, storagePoolId: string, path: string) => void;
@@ -1754,7 +1751,6 @@ export function WorkspacePane({
               active={activePanel === "terminal" && workspaceVisible}
               root={selectedRoot}
               codeFontSettings={codeFontSettings}
-              resolvedTheme={resolvedTheme}
             />
           ) : null}
         </div>

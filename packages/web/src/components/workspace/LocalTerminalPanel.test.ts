@@ -51,8 +51,7 @@ describe("LocalTerminalPanel", () => {
     const html = renderToStaticMarkup(createElement(LocalTerminalPanel, {
       active: true,
       root: undefined,
-      codeFontSettings: { familyId: "system", fontSizePx: 12 },
-      resolvedTheme: "dark"
+      codeFontSettings: { familyId: "system", fontSizePx: 12 }
     }));
 
     expect(html).toContain('class="management-header workspace-terminal-overview"');
@@ -70,8 +69,7 @@ describe("LocalTerminalPanel", () => {
     const html = renderToStaticMarkup(createElement(LocalTerminalPanel, {
       active: true,
       root: { id: "local", name: "Primary NAS", path: "/zos/data/primary", homePath: null },
-      codeFontSettings: { familyId: "system", fontSizePx: 12 },
-      resolvedTheme: "dark"
+      codeFontSettings: { familyId: "system", fontSizePx: 12 }
     }));
 
     expect(html).toContain('aria-busy="true"');

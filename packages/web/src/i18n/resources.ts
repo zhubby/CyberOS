@@ -2169,7 +2169,7 @@ export const en = {
       },
       appearance: {
         title: "Appearance",
-        description: "Language and theme preferences."
+        description: "Language preference for this browser."
       },
       downloads: {
         title: "Downloads",
@@ -2672,14 +2672,7 @@ export const en = {
       languageTitle: "Language",
       languageDescription: "Choose the interface language for this browser.",
       languageField: "Interface language",
-      languageHelp: "System default follows your browser preference.",
-      themeTitle: "Theme",
-      themeDescription: "Choose the interface palette for this browser.",
-      themeField: "Interface theme",
-      themeHelp: "System default follows the operating system color scheme.",
-      systemTheme: "System default",
-      lightTheme: "Light",
-      darkTheme: "Dark"
+      languageHelp: "System default follows your browser preference."
     },
     files: {
       editorTitle: "Editor Typography",
@@ -5007,7 +5000,7 @@ export const zhCN = {
       },
       appearance: {
         title: "外观",
-        description: "语言与主题偏好。"
+        description: "当前浏览器的语言偏好。"
       },
       downloads: {
         title: "下载",
@@ -5510,14 +5503,7 @@ export const zhCN = {
       languageTitle: "语言",
       languageDescription: "选择此浏览器的界面语言。",
       languageField: "界面语言",
-      languageHelp: "跟随系统会使用浏览器语言偏好。",
-      themeTitle: "主题",
-      themeDescription: "选择此浏览器使用的界面配色。",
-      themeField: "界面主题",
-      themeHelp: "跟随系统会使用操作系统的明暗模式。",
-      systemTheme: "跟随系统",
-      lightTheme: "明亮",
-      darkTheme: "深色"
+      languageHelp: "跟随系统会使用浏览器语言偏好。"
     },
     files: {
       editorTitle: "编辑器字体",

@@ -2088,10 +2088,6 @@ function DockerConsoleDialog({ session, onClose, kind = "docker" }: { session: D
       };
       const appShell = terminalRef.current.closest(".app-shell");
       appearanceObserver = new MutationObserver(syncAppearance);
-      appearanceObserver.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ["data-theme"]
-      });
       if (appShell) {
         appearanceObserver.observe(appShell, {
           attributes: true,

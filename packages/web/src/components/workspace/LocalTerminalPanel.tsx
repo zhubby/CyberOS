@@ -34,7 +34,6 @@ import {
   terminalTabNavigationTarget,
   type TerminalTabNavigationKey
 } from "../../lib/terminal-tabs.js";
-import type { ResolvedTheme } from "../../lib/theme-settings.js";
 import { applyTerminalOptions, terminalOptions } from "../../lib/terminal-theme.js";
 import { SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
@@ -59,13 +58,11 @@ interface TerminalViewState {
 export function LocalTerminalPanel({
   active,
   root,
-  codeFontSettings,
-  resolvedTheme
+  codeFontSettings
 }: {
   active: boolean;
   root: NasRoot | undefined;
   codeFontSettings: CodeFontSettings;
-  resolvedTheme: ResolvedTheme;
 }) {
   const { t } = useTranslation();
   const rootId = root?.id;
@@ -440,7 +437,6 @@ export function LocalTerminalPanel({
               label={terminalTabLabel(tab, t)}
               active={active && tab.id === tabState?.activeTabId}
               codeFontSettings={codeFontSettings}
-              resolvedTheme={resolvedTheme}
               connectionVersion={connectionVersions[tab.id] ?? 0}
               connectionError={String(t("workspace.terminal.connectionError"))}
               disconnectedError={String(t("workspace.terminal.disconnectedError"))}
@@ -618,7 +614,6 @@ function TerminalSessionView({
   label,
   active,
   codeFontSettings,
-  resolvedTheme,
   connectionVersion,
   connectionError,
   disconnectedError,
@@ -629,7 +624,6 @@ function TerminalSessionView({
   label: string;
   active: boolean;
   codeFontSettings: CodeFontSettings;
-  resolvedTheme: ResolvedTheme;
   connectionVersion: number;
   connectionError: string;
   disconnectedError: string;
@@ -706,7 +700,7 @@ function TerminalSessionView({
         terminal.focus();
       }, 0);
     }
-  }, [active, codeFontSettings.familyId, codeFontSettings.fontSizePx, resolvedTheme]);
+  }, [active, codeFontSettings.familyId, codeFontSettings.fontSizePx]);
 
   useEffect(() => {
     if (!active) {

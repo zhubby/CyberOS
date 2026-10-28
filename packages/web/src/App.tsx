@@ -173,14 +173,6 @@ import {
   readStoredPreviewFileSizeLimitBytes,
   writeStoredPreviewFileSizeLimitBytes
 } from "./lib/preview-settings.js";
-import {
-  readStoredThemePreference,
-  readSystemTheme,
-  resolveThemePreference,
-  writeStoredThemePreference,
-  type ResolvedTheme,
-  type ThemePreference
-} from "./lib/theme-settings.js";
 import { loadFileListingForView } from "./lib/session.js";
 import { readStoredStoragePoolId, writeStoredStoragePoolId } from "./lib/storage-pool-settings.js";
 import { scheduleToastDismissal } from "./lib/toast.js";
@@ -327,8 +319,6 @@ export function App() {
   const [settingsNetwork, setSettingsNetwork] = useState<NetworkSummary | null>(null);
   const [settingsBluetooth, setSettingsBluetooth] = useState<BluetoothStatus | null>(null);
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(() => readStoredLanguagePreference());
-  const [themePreference, setThemePreference] = useState<ThemePreference>(() => readStoredThemePreference());
-  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => readSystemTheme());
   const [previewFileSizeLimitBytes, setPreviewFileSizeLimitBytes] = useState(() =>
     readStoredPreviewFileSizeLimitBytes()
   );
@@ -423,7 +413,6 @@ export function App() {
     ? getFileVideoUrl(selectedRootId, selectedFilePath, selectedStoragePoolId)
     : "";
   const resolvedLocale = resolveSupportedLocale(i18n.resolvedLanguage ?? i18n.language);
-  const resolvedTheme = resolveThemePreference(themePreference, systemTheme);
   const breadcrumbs = useMemo(() => (currentPath === "." ? [] : currentPath.split("/").filter(Boolean)), [currentPath]);
   const appStyle = useMemo(
     () =>
@@ -988,27 +977,6 @@ export function App() {
     pendingDownloadedDirectoryRef.current = null;
     void openDirectory(pending.path);
   }, [selectedRootId, selectedStoragePoolId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function" || themePreference !== "system") {
-      return;
-    }
-
-    const media = window.matchMedia("(prefers-color-scheme: light)");
-    const syncSystemTheme = () => setSystemTheme(media.matches ? "light" : "dark");
-    syncSystemTheme();
-    media.addEventListener("change", syncSystemTheme);
-    return () => media.removeEventListener("change", syncSystemTheme);
-  }, [themePreference]);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = resolvedTheme;
-    document.documentElement.dataset.themePreference = themePreference;
-    return () => {
-      delete document.documentElement.dataset.theme;
-      delete document.documentElement.dataset.themePreference;
-    };
-  }, [resolvedTheme, themePreference]);
 
   useEffect(() => {
     return () => {
@@ -2125,12 +2093,6 @@ export function App() {
     void i18n.changeLanguage(preference === "system" ? resolveBrowserLocale() : preference);
   }
 
-  function changeThemePreference(preference: ThemePreference) {
-    writeStoredThemePreference(preference);
-    setSystemTheme(readSystemTheme());
-    setThemePreference(preference);
-  }
-
   function changePreviewFileSizeLimit(bytes: number) {
     const nextLimit = clampPreviewFileSizeLimitBytes(bytes);
     writeStoredPreviewFileSizeLimitBytes(nextLimit);
@@ -2692,8 +2654,6 @@ export function App() {
   return (
     <main
       className={`app-shell${resizing ? " is-resizing" : ""}`}
-      data-theme={resolvedTheme}
-      data-theme-preference={themePreference}
       style={appStyle}
     >
       <div className="mobile-tabs">
@@ -2858,7 +2818,6 @@ export function App() {
         operationsReady={operationsReady}
         locale={resolvedLocale}
         codeFontSettings={codeFontSettings}
-        resolvedTheme={resolvedTheme}
         filesPanelActivationId={filesPanelActivationId}
         onSelectStoragePool={selectStoragePool}
         onOpenDownloadedDirectory={openDownloadedDirectory}
@@ -2956,7 +2915,6 @@ export function App() {
           toolPolicyForm={toolPolicyForm}
           agentMcpSettings={agentMcpSettings}
           languagePreference={languagePreference}
-          themePreference={themePreference}
           previewFileSizeLimitBytes={previewFileSizeLimitBytes}
           codeFontSettings={codeFontSettings}
           networkSummary={settingsNetwork}
@@ -2972,7 +2930,6 @@ export function App() {
           onToolPolicyFormChange={setToolPolicyForm}
           onAgentMcpEnabledChange={changeAgentMcpEnabled}
           onLanguagePreferenceChange={changeLanguagePreference}
-          onThemePreferenceChange={changeThemePreference}
           onPreviewFileSizeLimitChange={changePreviewFileSizeLimit}
           onCodeFontSettingsChange={changeCodeFontSettings}
           onWifiStatus={handleSettingsWifiStatus}
