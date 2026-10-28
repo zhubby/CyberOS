@@ -13,7 +13,6 @@ export type VmCreateForm = {
   diskGiB: string;
   mediaMode: "iso" | "disk";
   isoPath: string;
-  isoRootId: string;
   isoStoragePoolId: string;
   diskPath: string;
   diskBus: "virtio" | "scsi" | "sata" | "ide";
@@ -41,7 +40,7 @@ export function initialVmCreateForm(network = "default", architecture = "x64"): 
   return {
     name: "", osVariant: "", vcpu: "2", memoryGiB: "2", cpuMode: isArm ? "host-passthrough" : "host-model", cpuModel: "",
     customTopology: false, sockets: "1", cores: "2", threads: "1", memoryBacking: "default",
-    diskGiB: "20", mediaMode: "iso", isoPath: "", isoRootId: "", isoStoragePoolId: "", diskPath: "",
+    diskGiB: "20", mediaMode: "iso", isoPath: "", isoStoragePoolId: "", diskPath: "",
     diskBus: "virtio", diskCache: "none", diskDiscard: "ignore", network, networkModel: "virtio", macAddress: "",
     firmware: isArm ? "uefi" : "bios", machineType: "", graphics: "none", videoModel: "none", bootMenu: false, autostart: false
   };

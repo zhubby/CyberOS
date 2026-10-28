@@ -87,7 +87,7 @@ describe("TerminalSessionManager", () => {
     const runtime = new FakeRuntime();
     const manager = new TerminalSessionManager(runtime, 60_000, 4);
 
-    await manager.destroy("root", firstSessionId, true);
+    await manager.destroy("root", firstSessionId);
 
     expect(runtime.destroyedSessionNames).toEqual([expect.stringMatching(/^cyberos-/u)]);
     expect(runtime.spawnCount).toBe(0);
@@ -98,13 +98,13 @@ describe("TerminalSessionManager", () => {
     const manager = new TerminalSessionManager(runtime, 60_000, 4);
     runtime.destroyError = new Error("Unable to destroy tmux session");
 
-    await expect(manager.destroy("root", firstSessionId, true)).rejects.toThrow("Unable to destroy tmux session");
+    await expect(manager.destroy("root", firstSessionId)).rejects.toThrow("Unable to destroy tmux session");
   });
 
   it("notifies the previous socket before a new controller takes over", async () => {
     const runtime = new FakeRuntime();
     const manager = new TerminalSessionManager(runtime, 60_000, 4);
-    const lease = await manager.acquire("root", firstSessionId, true);
+    const lease = await manager.acquire("root", firstSessionId);
     const firstSocket = new FakeSocket();
     const firstMessages: Array<Record<string, unknown>> = [];
     const secondSocket = new FakeSocket();
@@ -121,7 +121,7 @@ describe("TerminalSessionManager", () => {
   it("reconnects after a recoverable broker transport failure without reporting shell exit", async () => {
     const runtime = new FakeRuntime();
     const manager = new TerminalSessionManager(runtime, 60_000, 4);
-    const lease = await manager.acquire("root", firstSessionId, true);
+    const lease = await manager.acquire("root", firstSessionId);
     const socket = new FakeSocket();
     const messages: Array<Record<string, unknown>> = [];
     expect(lease.session.attach(socket, collect(messages))).toBe(true);
@@ -131,7 +131,7 @@ describe("TerminalSessionManager", () => {
 
     expect(socket.closed).toBe(true);
     expect(messages).toEqual([{ type: "ready", cwd: os.homedir(), sessionId: firstSessionId }]);
-    const reconnect = await manager.acquire("root", firstSessionId, true);
+    const reconnect = await manager.acquire("root", firstSessionId);
     expect(runtime.spawnCount).toBe(2);
     reconnect.release();
     manager.disconnectAll();

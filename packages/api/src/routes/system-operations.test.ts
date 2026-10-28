@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
-import type { OpsTask, CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type OpsTask, type CyberOsConfig } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 import {
   SystemOperationsRequestError,
@@ -122,18 +122,17 @@ class FakeOperationsRuntime implements SystemOperationsRuntime {
 }
 
 function createConfig(dataDir: string): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(dataDir, "missing.toml"), CYBEROS_ROOT: dataDir }, dataDir);
   return {
-    dataDir,
-    databasePath: path.join(dataDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, databasePath: path.join(dataDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
-    model: { provider: "local", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120_000, consoleShells: ["/bin/sh"] },
     shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
-    hostd: { socketPath: path.join(dataDir, "hostd.sock") },
-    terminal: { user: "test-user", termuxSocketPath: path.join(dataDir, "termux.sock") },
+    hostd: { socketPath: path.join(dataDir, "hostd.sock"), mutationPolicy: "mutable" },
+    terminal: { user: "test-user", socketPath: path.join(dataDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: []
   };
 }

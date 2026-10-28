@@ -84,7 +84,6 @@ function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>>
     downloadSettings: null,
     indexerSettings: null,
     indexerStatus: null,
-    roots: [],
     storagePools: [],
     photoSettings: null,
     photoStatus: null,

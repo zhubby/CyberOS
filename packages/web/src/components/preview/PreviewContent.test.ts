@@ -27,7 +27,7 @@ describe("PreviewContent Markdown links", () => {
       createElement(PreviewContent, {
         blobUrl: "",
         videoUrl: "",
-        rootId: "root-1",
+        storagePoolId: "root-1",
         loading: false,
         meta: markdownMeta,
         error: null,
@@ -54,7 +54,7 @@ describe("PreviewContent Office files", () => {
       createElement(PreviewContent, {
         blobUrl: `/api/files/blob?path=${name}`,
         videoUrl: "",
-        rootId: "root-1",
+        storagePoolId: "root-1",
         loading: false,
         meta: {
           ...markdownMeta,

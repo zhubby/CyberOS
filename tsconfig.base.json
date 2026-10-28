@@ -5,6 +5,8 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "esModuleInterop": true,
@@ -17,12 +19,12 @@
     "paths": {
       "@cyberos/agent": ["packages/agent/src/index.ts"],
       "@cyberos/db": ["packages/db/src/index.ts"],
-      "@cyberos/nas-tools": ["packages/nas-tools/src/index.ts"],
+      "@cyberos/storage-tools": ["packages/storage-tools/src/index.ts"],
       "@cyberos/monitoring": ["packages/monitoring/src/index.ts"],
       "@cyberos/monitoring/test-utils": ["packages/monitoring/src/test-utils.ts"],
       "@cyberos/shared": ["packages/shared/src/index.ts"],
       "@cyberos/shared/docker-images": ["packages/shared/src/docker-images.ts"],
-      "@cyberos/shared/photostaff-config": ["packages/shared/src/photostaff-config.ts"]
+      "@cyberos/shared/photos-config": ["packages/shared/src/photos-config.ts"]
     }
   }
 }

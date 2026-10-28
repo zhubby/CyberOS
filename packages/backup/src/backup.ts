@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { access, constants as fsConstants, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, constants as fsConstants, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   acquireExecutionLock,
@@ -10,29 +10,32 @@ import {
   recordBackupFailure,
   releaseExecutionLock,
   startBackupRun,
-  upsertRootReadiness,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { BackupConfig, BackupRunKind, BackupRunSummary, CyberOsConfig } from "@cyberos/shared";
-import { checkMountReadiness, type MountCommandRunner } from "@cyberos/nas-tools";
+import {
+  type BackupConfig,
+  type BackupRunKind,
+  type BackupRunSummary,
+  type CyberOsConfig
+} from "@cyberos/shared";
 import { summarizeResticOutput, SystemResticRunner, type ResticCommandRunner } from "./restic.js";
 
 export interface BackupDependencies {
   db: CyberOsDatabase;
   config: CyberOsConfig;
   restic?: ResticCommandRunner;
-  mountCommandRunner?: MountCommandRunner;
+  mountInfo?: string;
 }
 
 const BACKUP_LOCK_NAME = "backup";
 
 export function shouldSkipScheduledBackup(config: CyberOsConfig, command: string | undefined): boolean {
-  return command === "run" && !config.backup?.enabled;
+  return command === "run" && !config.backup.enabled;
 }
 
 export async function validateBackup(input: BackupDependencies): Promise<{ ok: boolean; issues: string[] }> {
   const config = input.config.backup;
-  if (!config?.enabled) return { ok: true, issues: [] };
+  if (!config.enabled) return { ok: true, issues: [] };
   const issues: string[] = [];
   issues.push(...validateBackupPaths(input.config));
   if (!config.repositoryPath) issues.push("repository not configured");
@@ -48,8 +51,9 @@ export async function validateBackup(input: BackupDependencies): Promise<{ ok: b
   }
   if (config.repositoryPath) {
     await access(config.repositoryPath, fsConstants.R_OK | fsConstants.W_OK).catch(() => issues.push("repository not accessible or writable"));
-    const readiness = await checkMountReadiness({ id: "backup-target", name: "Backup target", path: config.repositoryPath, mountPolicy: config.requireMount ? "required" : "optional" }, input.mountCommandRunner ? { commandRunner: input.mountCommandRunner } : {});
-    if (readiness.status !== "ready") issues.push(`backup target ${readiness.reason ?? readiness.status}`);
+    await assertBackupMountsReady(input).catch((error: unknown) => {
+      issues.push(error instanceof Error ? error.message : "backup mounts are unavailable");
+    });
   }
   if (issues.length > 0) return { ok: false, issues };
   const runner = input.restic ?? new SystemResticRunner();
@@ -70,16 +74,7 @@ export async function initBackup(input: BackupDependencies): Promise<void> {
   const repositoryExists = await stat(config.repositoryPath).then(() => true).catch(() => false);
   const repositoryParent = path.dirname(config.repositoryPath);
   await access(repositoryExists ? config.repositoryPath : repositoryParent, fsConstants.R_OK | fsConstants.W_OK);
-  const readiness = await checkMountReadiness(
-    {
-      id: "backup-target",
-      name: "Backup target",
-      path: repositoryExists ? config.repositoryPath : repositoryParent,
-      mountPolicy: config.requireMount ? "required" : "optional"
-    },
-    input.mountCommandRunner ? { commandRunner: input.mountCommandRunner } : {}
-  );
-  if (readiness.status !== "ready") throw new Error(`Backup target is not ready: ${readiness.reason ?? readiness.status}`);
+  await assertBackupMountsReady(input, false);
   const runner = input.restic ?? new SystemResticRunner();
   const owner = randomUUID();
   if (!acquireExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner })) throw new Error("backup already running");
@@ -111,7 +106,7 @@ export async function runBackup(input: BackupDependencies & { kind?: Exclude<Bac
   if (!acquireExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner })) throw new Error("backup already running");
   const run = startBackupRun(input.db, input.now ? { kind, now: input.now } : { kind });
   console.log(JSON.stringify({ event: "backup.run.started", runId: run.id, kind }));
-  const failures: Array<{ rootId: string; reason: string }> = [];
+  const failures: Array<{ storagePoolId: string; reason: string }> = [];
   const runner = input.restic ?? new SystemResticRunner();
   let staging: string | null = null;
   const heartbeat = setInterval(() => {
@@ -125,63 +120,40 @@ export async function runBackup(input: BackupDependencies & { kind?: Exclude<Bac
   };
   try {
     ensureLease();
-    const roots = input.config.nasRoots;
-    const readyRoots = [] as typeof roots;
-    const backupTarget = await checkMountReadiness(
-      {
-        id: "backup-target",
-        name: "Backup target",
-        path: config.repositoryPath ?? "",
-        mountPolicy: config.requireMount ? "required" : "optional"
-      },
-      input.mountCommandRunner ? { commandRunner: input.mountCommandRunner } : {}
-    );
-    if (backupTarget.status !== "ready") {
-      const reason = backupTarget.reason ?? backupTarget.status;
-      recordBackupFailure(input.db, { runId: run.id, path: "repository", code: "BACKUP_TARGET_NOT_READY", reason });
-      throw new Error(`Backup target is not ready: ${reason}`);
-    }
-    for (const root of roots) {
-      const readiness = await checkMountReadiness(root, input.mountCommandRunner ? { commandRunner: input.mountCommandRunner } : {});
-      upsertRootReadiness(input.db, readiness);
-      if (readiness.status !== "ready") {
-        const reason = readiness.reason ?? readiness.status;
-        failures.push({ rootId: root.id, reason });
-        recordBackupFailure(input.db, { runId: run.id, rootId: root.id, path: ".", reason, code: "ROOT_NOT_READY" });
-      } else {
-        readyRoots.push(root);
-      }
-    }
+    const dataRoot = input.config.paths.dataRoot;
+    await assertBackupMountsReady(input);
+    const dataRootStat = await stat(dataRoot);
+    if (!dataRootStat.isDirectory()) throw new Error("CyberOS data root is not a directory");
     await mkdir(config.stagingPath, { recursive: true });
     const runStaging = await mkdtemp(path.join(config.stagingPath, `run-${run.id}-`));
     staging = runStaging;
     await createSqliteSnapshot(input.db, path.join(runStaging, "cyberos.sqlite"));
-    const trashPath = path.join(input.config.dataDir, "trash");
+    const trashPath = path.join(input.config.paths.stateDir, "trash");
     await access(trashPath).then(() => copyTreeNoSymlinks(trashPath, path.join(runStaging, "trash"))).catch(() => undefined);
-    const manifest = await createManifest(run.id, input.config.nasRoots, runStaging);
+    const manifest = await createManifest(run.id, dataRoot, runStaging);
     await writeFile(path.join(runStaging, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
     const snapshotIds: string[] = [];
     let backupStats = { files: 0, bytes: 0 };
-    for (const root of readyRoots) {
-      ensureLease();
-      const result = await runResticWithRetry(runner, ["backup", "--json", "--repo", config.repositoryPath!, "--tag", kind, root.path], config);
-      if (result.code !== 0) {
-        const reason = summarizeResticOutput(result.stderr || result.stdout) || "restic backup failed";
-        failures.push({ rootId: root.id, reason });
-        recordBackupFailure(input.db, { runId: run.id, rootId: root.id, path: ".", code: "RESTIC_BACKUP_FAILED", reason });
-        continue;
-      }
-      const rootSnapshotIds = parseSnapshotIds(result.stdout);
-      if (!rootSnapshotIds.length) {
-        const reason = "restic backup did not return a snapshot id";
-        failures.push({ rootId: root.id, reason });
-        recordBackupFailure(input.db, { runId: run.id, rootId: root.id, path: ".", code: "SNAPSHOT_ID_MISSING", reason });
-        continue;
-      }
-      snapshotIds.push(...rootSnapshotIds);
-      const stats = parseBackupStats(result.stdout);
-      backupStats = { files: backupStats.files + stats.files, bytes: backupStats.bytes + stats.bytes };
+    ensureLease();
+    const dataResult = await runResticWithRetry(
+      runner,
+      ["backup", "--json", "--repo", config.repositoryPath!, "--tag", kind, dataRoot],
+      config
+    );
+    if (dataResult.code !== 0) {
+      const reason = summarizeResticOutput(dataResult.stderr || dataResult.stdout) || "restic data backup failed";
+      recordBackupFailure(input.db, { runId: run.id, path: dataRoot, code: "RESTIC_BACKUP_FAILED", reason });
+      throw new Error(reason);
     }
+    const dataSnapshotIds = parseSnapshotIds(dataResult.stdout);
+    if (!dataSnapshotIds.length) {
+      const reason = "restic data backup did not return a snapshot id";
+      recordBackupFailure(input.db, { runId: run.id, path: dataRoot, code: "SNAPSHOT_ID_MISSING", reason });
+      throw new Error(reason);
+    }
+    snapshotIds.push(...dataSnapshotIds);
+    const dataStats = parseBackupStats(dataResult.stdout);
+    backupStats = { files: dataStats.files, bytes: dataStats.bytes };
     ensureLease();
     const stateResult = await runResticWithRetry(runner, ["backup", "--json", "--repo", config.repositoryPath!, "--tag", kind, runStaging], config);
     if (stateResult.code !== 0) {
@@ -203,12 +175,6 @@ export async function runBackup(input: BackupDependencies & { kind?: Exclude<Bac
     ensureLease();
     const visible = await runResticWithRetry(runner, ["snapshots", "--json", "--repo", config.repositoryPath!], config);
     if (visible.code !== 0 || !snapshotVisible(visible.stdout, uniqueSnapshotIds)) throw new Error("restic snapshot is not visible after backup");
-    if (failures.length > 0) {
-      const failed = finishBackupRun(input.db, { runId: run.id, status: "failed", snapshotIds: uniqueSnapshotIds, files: backupStats.files, bytes: backupStats.bytes, error: "one or more roots failed" });
-      const summary = failed ?? { ...run, status: "failed" as const, finishedAt: new Date().toISOString(), snapshotIds: uniqueSnapshotIds, error: "one or more roots failed", failures };
-      console.log(JSON.stringify({ event: "backup.run.failed", runId: run.id, kind, error: summary.error }));
-      return summary;
-    }
     if (kind === "weekly") {
       ensureLease();
       const checked = await runResticWithRetry(runner, ["check", "--repo", config.repositoryPath!], config);
@@ -261,21 +227,8 @@ export async function checkBackup(input: BackupDependencies): Promise<BackupRunS
   };
   try {
     ensureLease();
-    const backupTarget = await checkMountReadiness(
-      {
-        id: "backup-target",
-        name: "Backup target",
-        path: config.repositoryPath ?? "",
-        mountPolicy: config.requireMount ? "required" : "optional"
-      },
-      input.mountCommandRunner ? { commandRunner: input.mountCommandRunner } : {}
-    );
-    if (backupTarget.status !== "ready") {
-      const reason = backupTarget.reason ?? backupTarget.status;
-      recordBackupFailure(input.db, { runId: run.id, path: "repository", code: "BACKUP_TARGET_NOT_READY", reason });
-      const finished = finishBackupRun(input.db, { runId: run.id, status: "failed", error: `Backup target is not ready: ${reason}` });
-      return finished;
-    }
+    await assertBackupMountsReady(input, false);
+    await access(config.repositoryPath ?? "", fsConstants.R_OK | fsConstants.W_OK);
     ensureLease();
     const result = await runResticWithRetry(runner, ["check", "--repo", config.repositoryPath ?? ""], config);
     if (result.code !== 0) {
@@ -310,6 +263,7 @@ export async function restoreBackup(input: BackupDependencies & { snapshot: stri
   };
   try {
     ensureLease();
+    await assertBackupMountsReady(input, false);
     const check = await runResticWithRetry(runner, ["check", "--repo", config.repositoryPath ?? ""], config);
     if (check.code !== 0) {
       const reason = `repository check failed: ${summarizeResticOutput(check.stderr || check.stdout)}`;
@@ -351,49 +305,109 @@ export async function restoreBackup(input: BackupDependencies & { snapshot: stri
 export function listBackups(db: CyberOsDatabase): BackupRunSummary[] { return listBackupRuns(db, 30); }
 
 function requireBackupConfig(config: CyberOsConfig): BackupConfig {
-  if (!config.backup?.enabled) throw new Error("Backup is disabled");
+  if (!config.backup.enabled) throw new Error("Backup is disabled");
   return config.backup;
 }
 
 function validateBackupPaths(config: CyberOsConfig): string[] {
   const backup = config.backup;
-  if (!backup?.enabled) return [];
+  if (!backup.enabled) return [];
   if (!backup.repositoryPath) return ["repository not configured"];
   const repositoryPath = path.resolve(backup.repositoryPath);
   const stagingPath = path.resolve(backup.stagingPath);
-  const dataDir = path.resolve(config.dataDir);
+  const dataDir = path.resolve(config.paths.stateDir);
+  const dataRoot = path.resolve(config.paths.dataRoot);
   const overlaps = (first: string, second: string): boolean =>
     first === second || first.startsWith(`${second}${path.sep}`) || second.startsWith(`${first}${path.sep}`);
   const issues: string[] = [];
   if (overlaps(repositoryPath, dataDir)) issues.push("backup repository must not overlap dataDir");
   if (overlaps(repositoryPath, stagingPath)) issues.push("backup repository must not overlap staging path");
-  for (const root of config.nasRoots) {
-    const rootPath = path.resolve(root.path);
-    if (overlaps(repositoryPath, rootPath)) issues.push(`backup repository must not overlap NAS root ${root.id}`);
-    if (overlaps(stagingPath, rootPath)) issues.push(`backup staging path must not overlap NAS root ${root.id}`);
-  }
+  if (overlaps(repositoryPath, dataRoot)) issues.push("backup repository must not overlap data root");
+  if (overlaps(stagingPath, dataRoot)) issues.push("backup staging path must not overlap data root");
   return issues;
+}
+
+async function assertBackupMountsReady(
+  input: BackupDependencies,
+  includeStoragePools = true
+): Promise<void> {
+  const backup = requireBackupConfig(input.config);
+  if (!backup.requireMount) return;
+  if (!backup.repositoryPath) throw new Error("Backup repository is not configured");
+
+  const mountInfo = input.mountInfo ?? await readLinuxMountInfo();
+  const mounted = parseMountedPaths(mountInfo);
+  await assertExactMount(backup.repositoryPath, mounted, "Backup repository");
+  if (!includeStoragePools) return;
+
+  const dataRoot = input.config.paths.dataRoot;
+  const entries = await readdir(dataRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      throw new Error(`Storage pool must be a real directory: ${entry.name}`);
+    }
+    if (!entry.isDirectory()) continue;
+    await assertExactMount(path.join(dataRoot, entry.name), mounted, `Storage pool ${entry.name}`);
+  }
+}
+
+async function readLinuxMountInfo(): Promise<string> {
+  if (process.platform !== "linux") {
+    throw new Error("Production backup mount verification requires Linux");
+  }
+  return readFile("/proc/self/mountinfo", "utf8");
+}
+
+function parseMountedPaths(mountInfo: string): Set<string> {
+  return new Set(mountInfo.split("\n").flatMap((line) => {
+    const mountpoint = line.split(" ")[4];
+    return mountpoint ? [path.resolve(unescapeMountInfo(mountpoint))] : [];
+  }));
+}
+
+async function assertExactMount(
+  target: string,
+  mounted: ReadonlySet<string>,
+  label: string
+): Promise<void> {
+  const metadata = await lstat(target).catch(() => null);
+  if (!metadata?.isDirectory() || metadata.isSymbolicLink()) {
+    throw new Error(`${label} must be a real directory`);
+  }
+  const resolved = await realpath(target);
+  if (!mounted.has(resolved) && !mounted.has(path.resolve(target))) {
+    throw new Error(`${label} is not mounted`);
+  }
+}
+
+function unescapeMountInfo(value: string): string {
+  return value.replace(/\\(040|011|012|134)/gu, (_match, code: string) => ({
+    "040": " ",
+    "011": "\t",
+    "012": "\n",
+    "134": "\\"
+  })[code]!);
 }
 
 interface BackupManifest {
   version: 2;
   runId: string;
   createdAt: string;
-  roots: Array<{ rootId: string; path: string }>;
+  dataRoot: string;
   database: "cyberos.sqlite";
   checksums: Record<string, string>;
 }
 
 async function createManifest(
   runId: string,
-  roots: CyberOsConfig["nasRoots"],
+  dataRoot: string,
   stagingPath: string
 ): Promise<BackupManifest> {
   return {
     version: 2,
     runId,
     createdAt: new Date().toISOString(),
-    roots: roots.map((root) => ({ rootId: root.id, path: root.path })),
+    dataRoot: path.resolve(dataRoot),
     database: "cyberos.sqlite",
     checksums: await collectChecksums(stagingPath)
   };
@@ -442,8 +456,8 @@ async function findManifest(rootPath: string): Promise<string | null> {
       const absolutePath = path.join(directoryPath, entry.name);
       if (entry.name === "manifest.json" && entry.isFile()) {
         try {
-          const value = JSON.parse(await readFile(absolutePath, "utf8")) as { version?: number; roots?: unknown[]; database?: string };
-          if (typeof value.version === "number" && Array.isArray(value.roots) && value.database === "cyberos.sqlite") {
+          const value = JSON.parse(await readFile(absolutePath, "utf8")) as { version?: number; dataRoot?: string; database?: string };
+          if (typeof value.version === "number" && value.database === "cyberos.sqlite") {
             matches.push(absolutePath);
             if (matches.length > 1) return;
           }
@@ -463,20 +477,11 @@ async function findManifest(rootPath: string): Promise<string | null> {
 }
 
 async function validateManifest(manifest: BackupManifest, manifestRoot: string, config: CyberOsConfig): Promise<void> {
-  if (manifest.version !== 2 || !manifest.runId || !Array.isArray(manifest.roots) || manifest.database !== "cyberos.sqlite") {
+  if (manifest.version !== 2 || !manifest.runId || typeof manifest.dataRoot !== "string" || manifest.database !== "cyberos.sqlite") {
     throw new Error("restore manifest validation failed");
   }
-  for (const root of manifest.roots) {
-    if (!root || typeof root.rootId !== "string" || typeof root.path !== "string") {
-      throw new Error("restore manifest root validation failed");
-    }
-    const configuredRoot = config.nasRoots.find((item) => item.id === root.rootId);
-    if (!configuredRoot) {
-      throw new Error(`restore manifest references unknown root: ${root.rootId}`);
-    }
-    if (path.resolve(configuredRoot.path) !== path.resolve(root.path)) {
-      throw new Error(`restore manifest root path mismatch: ${root.rootId}`);
-    }
+  if (path.resolve(manifest.dataRoot) !== path.resolve(config.paths.dataRoot)) {
+    throw new Error("restore manifest data root mismatch");
   }
   if (!manifest.checksums || typeof manifest.checksums !== "object") {
     throw new Error("restore manifest checksums missing");

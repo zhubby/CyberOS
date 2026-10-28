@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use cyberos_monitoring_contracts::{METRICS_SCHEMA_VERSION, MetricKind, SamplingIntervals, metric};
+use cyberos_monitoring_contracts::{
+    METRICS_SCHEMA_IDENTITY, METRICS_SCHEMA_VERSION, MetricKind, SamplingIntervals, metric,
+};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::domain::rule::{Aggregation, AlertRule, MetricTransform, SeriesValue};
@@ -96,6 +98,16 @@ fn open_reader(path: &Path) -> Result<Connection, AlerterError> {
         .unwrap_or_default();
     if version > METRICS_SCHEMA_VERSION {
         return Err(AlerterError::FutureMetricsSchema(version));
+    }
+    let identity = connection
+        .query_row(
+            "SELECT value FROM monitoring_metadata WHERE key = 'schema_identity'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    if identity.as_deref() != Some(METRICS_SCHEMA_IDENTITY) {
+        return Err(AlerterError::IncompatibleMetricsSchema);
     }
     Ok(connection)
 }
@@ -223,21 +235,16 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        let migrations = [
-            include_str!("../../../../packages/monitoring/contracts/migrations/001_initial.sql"),
-            include_str!(
-                "../../../../packages/monitoring/contracts/migrations/002_counter_increase.sql"
-            ),
-            include_str!(
-                "../../../../packages/monitoring/contracts/migrations/003_counter_boundary.sql"
-            ),
-        ];
-        for (index, sql) in migrations.iter().enumerate().skip(version as usize) {
-            connection.execute_batch(sql).unwrap();
+        if version == 0 {
+            connection
+                .execute_batch(include_str!(
+                    "../../../../packages/monitoring/contracts/migrations/001_cyberos_2_0.sql"
+                ))
+                .unwrap();
             connection
                 .execute(
                     "INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, 'test')",
-                    [i64::try_from(index + 1).unwrap()],
+                    [METRICS_SCHEMA_VERSION],
                 )
                 .unwrap();
         }
@@ -280,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_schema_v3_and_rejects_a_future_schema() {
+    fn accepts_the_cyberos_2_0_schema_and_rejects_a_future_schema() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("metrics.sqlite");
         write_series(
@@ -295,7 +302,32 @@ mod tests {
         let connection = Connection::open(&path).unwrap();
         connection
             .execute(
-                "INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (4, 'test')",
+                "INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, 'test')",
+                [METRICS_SCHEMA_VERSION + 1],
+            )
+            .unwrap();
+        drop(connection);
+
+        assert!(matches!(
+            open_reader(&path),
+            Err(AlerterError::FutureMetricsSchema(version)) if version == METRICS_SCHEMA_VERSION + 1
+        ));
+    }
+
+    #[test]
+    fn rejects_a_pre_2_0_metrics_schema() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("metrics.sqlite");
+        write_series(
+            &path,
+            "cyberos_host_load1",
+            &BTreeMap::new(),
+            &[(10_000, 2.5)],
+        );
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute(
+                "DELETE FROM monitoring_metadata WHERE key = 'schema_identity'",
                 [],
             )
             .unwrap();
@@ -303,7 +335,7 @@ mod tests {
 
         assert!(matches!(
             open_reader(&path),
-            Err(AlerterError::FutureMetricsSchema(4))
+            Err(AlerterError::IncompatibleMetricsSchema)
         ));
     }
 

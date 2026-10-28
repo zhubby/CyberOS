@@ -6,7 +6,6 @@ import {
   countUnreadBluetoothTransfers,
   createBluetoothSendTransfers,
   defaultBluetoothSettings,
-  ensureNasRoots,
   getBluetoothSettings,
   getBluetoothTransferServiceHealth,
   listBluetoothTransfers,
@@ -24,7 +23,6 @@ let db: CyberOsDatabase;
 beforeEach(async () => {
   directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-bluetooth-db-"));
   db = openCyberOsDb(path.join(directory, "state.sqlite"));
-  ensureNasRoots(db, [{ id: "root", name: "Root", path: directory }]);
 });
 
 afterEach(async () => {
@@ -35,14 +33,13 @@ afterEach(async () => {
 describe("Bluetooth persistence", () => {
   it("normalizes settings and does not enable an incomplete inbox", () => {
     expect(defaultBluetoothSettings()).toMatchObject({ receiveEnabled: false, inboxPath: null });
-    const incomplete = saveBluetoothSettings(db, { receiveEnabled: true, inboxRootId: "root" });
+    const incomplete = saveBluetoothSettings(db, { receiveEnabled: true, inboxStoragePoolId: "pool" });
     expect(incomplete.receiveEnabled).toBe(false);
 
     const saved = saveBluetoothSettings(db, {
       defaultAdapterId: " adapter-hci0 ",
       defaultAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
       receiveEnabled: true,
-      inboxRootId: "root",
       inboxStoragePoolId: "pool",
       inboxPath: "incoming"
     });
@@ -52,14 +49,18 @@ describe("Bluetooth persistence", () => {
       inboxPath: "incoming"
     });
     expect(getBluetoothSettings(db)).toEqual(saved);
+
+    const { updatedAt: _updatedAt, ...incompleteRecord } = saved;
+    db.prepare("UPDATE system_settings SET value_json = ? WHERE key = 'bluetooth_settings'")
+      .run(JSON.stringify(incompleteRecord));
+    expect(getBluetoothSettings(db)).toBeNull();
   });
 
   it("persists a batch, cancellation, read state, and worker health", () => {
     const transfers = createBluetoothSendTransfers(db, {
       adapterId: "adapter-hci0",
       deviceAddress: "AA:BB:CC:DD:EE:FF",
-      rootId: "root",
-      storagePoolId: "pool",
+            storagePoolId: "pool",
       files: [
         { relativePath: "media/a.mp3", displayName: "a.mp3", totalBytes: 10 },
         { relativePath: "media/b.mp3", displayName: "b.mp3", totalBytes: 20 }

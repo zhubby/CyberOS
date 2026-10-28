@@ -3,32 +3,24 @@ import {
   activateTerminalTab,
   createTerminalTab,
   deleteTerminalTab,
-  getNasRoot,
   getTerminalTab,
   getTerminalTabState,
   initializeTerminalTabs,
   renameTerminalTab
 } from "@cyberos/db";
-import { TERMUX_MAX_SESSIONS } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { terminalMessage } from "../lib/terminal.js";
-import { createTerminalRuntime } from "../lib/termux-client.js";
+import { createTerminalRuntime } from "../lib/terminal-client.js";
 import {
   TerminalSessionManager,
   type TerminalSession,
   type TerminalSessionLease
 } from "../lib/terminal-sessions.js";
 
-interface TerminalQuery {
-  rootId?: string;
-  sessionId?: string;
-  nextSessionId?: string;
-  reset?: string;
-}
-
 export function registerTerminalRoutes(server: FastifyInstance, context: ApiRouteContext): void {
+  const dataRoot = context.config.paths.dataRoot;
   const runtime = context.terminal ?? createTerminalRuntime(context.config.terminal);
-  const maxSessions = context.config.terminal.maxSessions ?? TERMUX_MAX_SESSIONS;
+  const maxSessions = context.config.terminal.maxSessions;
   const sessions = new TerminalSessionManager(
     runtime,
     context.config.terminal.sessionIdleTimeoutMs,
@@ -38,30 +30,21 @@ export function registerTerminalRoutes(server: FastifyInstance, context: ApiRout
     sessions.disconnectAll();
   });
 
-  server.get<{ Querystring: { rootId?: string } }>("/api/terminal/tabs", async (request, reply) => {
-    const root = terminalRoot(context, request.query.rootId, reply);
-    if (!root) return;
-    reply.send(getTerminalTabState(context.db, root.id, maxSessions));
+  server.get("/api/terminal/tabs", async (_request, reply) => {
+    reply.send(getTerminalTabState(context.db, maxSessions));
   });
 
-  server.post<{ Body: { rootId?: string } }>("/api/terminal/tabs/initialize", async (request, reply) => {
-    const root = terminalRoot(context, request.body?.rootId, reply);
-    if (!root) return;
+  server.post("/api/terminal/tabs/initialize", async (_request, reply) => {
     try {
-      reply.send(initializeTerminalTabs(context.db, {
-        rootId: root.id,
-        maxSessions
-      }));
+      reply.send(initializeTerminalTabs(context.db, { maxSessions }));
     } catch (error) {
       sendTerminalTabMutationError(reply, error);
     }
   });
 
-  server.post<{ Body: { rootId?: string } }>("/api/terminal/tabs", async (request, reply) => {
-    const root = terminalRoot(context, request.body?.rootId, reply);
-    if (!root) return;
+  server.post("/api/terminal/tabs", async (_request, reply) => {
     try {
-      reply.status(201).send(createTerminalTab(context.db, { rootId: root.id, maxSessions }));
+      reply.status(201).send(createTerminalTab(context.db, { maxSessions }));
     } catch (error) {
       sendTerminalTabMutationError(reply, error);
     }
@@ -106,8 +89,8 @@ export function registerTerminalRoutes(server: FastifyInstance, context: ApiRout
     const tab = terminalTab(context, request.params.id, reply);
     if (!tab) return;
     try {
-      await sessions.destroy(tab.rootId, tab.id, true);
-      reply.send(getTerminalTabState(context.db, tab.rootId, maxSessions));
+      await sessions.destroy(dataRoot, tab.id);
+      reply.send(getTerminalTabState(context.db, maxSessions));
     } catch (error) {
       reply.status(503).send({ error: terminalErrorMessage(error) });
     }
@@ -117,7 +100,7 @@ export function registerTerminalRoutes(server: FastifyInstance, context: ApiRout
     const tab = terminalTab(context, request.params.id, reply);
     if (!tab) return;
     try {
-      await sessions.destroy(tab.rootId, tab.id, true);
+      await sessions.destroy(dataRoot, tab.id);
     } catch (error) {
       reply.status(503).send({ error: terminalErrorMessage(error) });
       return;
@@ -130,28 +113,19 @@ export function registerTerminalRoutes(server: FastifyInstance, context: ApiRout
     reply.send(state);
   });
 
-  server.get<{ Querystring: TerminalQuery }>("/api/terminal", { websocket: true }, async (socket, request) => {
+  server.get("/api/terminal", { websocket: true }, async (socket, request) => {
     const protocol = parseTerminalProtocol(request.headers["sec-websocket-protocol"]);
-    const requestedSessionId = protocol.sessionId ?? request.query.sessionId;
-    const resetSessionId = protocol.resetSessionId ?? request.query.sessionId;
-    const nextSessionId = protocol.nextSessionId ?? request.query.nextSessionId;
-    const shouldReset = protocol.reset || request.query.reset === "1";
-    const root = request.query.rootId ? getNasRoot(context.db, request.query.rootId) : null;
-    if (!root) {
-      closeWithError(socket, "NAS root not found");
-      return;
-    }
-    const requestedTab = requestedSessionId ? getTerminalTab(context.db, requestedSessionId) : null;
-    const nextTab = nextSessionId ? getTerminalTab(context.db, nextSessionId) : null;
-    if ((requestedTab && requestedTab.rootId !== root.id) || (nextTab && nextTab.rootId !== root.id)) {
-      closeWithError(socket, "Terminal session is not available");
-      return;
-    }
-    const persistent = shouldReset
-      ? nextTab?.rootId === root.id
-      : requestedTab?.rootId === root.id;
     if (!isAllowedWebSocketOrigin(request.headers.origin, request.headers.host, context.config.api.allowedOrigins)) {
       closeWithError(socket, "Terminal origin is not allowed");
+      return;
+    }
+    if (!protocol) {
+      closeWithError(socket, "Terminal requires the current WebSocket protocol and a registered tab");
+      return;
+    }
+    const requestedTab = getTerminalTab(context.db, protocol.sessionId);
+    if (!requestedTab) {
+      closeWithError(socket, "Terminal tab is not registered");
       return;
     }
 
@@ -194,9 +168,7 @@ export function registerTerminalRoutes(server: FastifyInstance, context: ApiRout
     };
 
     try {
-      lease = shouldReset
-        ? await sessions.reset(root.id, resetSessionId, nextSessionId, persistent)
-        : await sessions.acquire(root.id, requestedSessionId, persistent);
+      lease = await sessions.acquire(dataRoot, requestedTab.id);
       const session = lease.session;
       if (closed) {
         lease.release();
@@ -248,23 +220,6 @@ export function registerTerminalRoutes(server: FastifyInstance, context: ApiRout
       socket.close();
     }
   });
-}
-
-function terminalRoot(
-  context: ApiRouteContext,
-  rootId: string | undefined,
-  reply: FastifyReply
-): ReturnType<typeof getNasRoot> {
-  if (!rootId?.trim()) {
-    reply.status(400).send({ error: "NAS root is required" });
-    return null;
-  }
-  const root = getNasRoot(context.db, rootId.trim());
-  if (!root) {
-    reply.status(404).send({ error: "NAS root not found" });
-    return null;
-  }
-  return root;
 }
 
 function terminalTab(context: ApiRouteContext, id: string, reply: FastifyReply) {
@@ -371,28 +326,16 @@ function terminateSocket(socket: unknown): void {
   ws.terminate?.();
 }
 
-interface TerminalProtocolData {
-  sessionId?: string;
-  resetSessionId?: string;
-  nextSessionId?: string;
-  reset: boolean;
-}
-
-function parseTerminalProtocol(value: string | string[] | undefined): TerminalProtocolData {
+function parseTerminalProtocol(value: string | string[] | undefined): { sessionId: string } | null {
   const protocols = Array.isArray(value) ? value : value ? value.split(",") : [];
-  const result: TerminalProtocolData = { reset: false };
-  for (const protocol of protocols.map((item) => item.trim())) {
-    if (protocol.startsWith("cyberos-session.")) {
-      result.sessionId = protocol.slice("cyberos-session.".length);
-    } else if (protocol.startsWith("cyberos-reset.")) {
-      result.resetSessionId = protocol.slice("cyberos-reset.".length);
-      result.reset = true;
-    } else if (protocol.startsWith("cyberos-next.")) {
-      result.nextSessionId = protocol.slice("cyberos-next.".length);
-      result.reset = true;
-    }
-  }
-  return result;
+  const normalized = protocols.map((item) => item.trim()).filter(Boolean);
+  if (!normalized.includes("cyberos-terminal-v1")) return null;
+  const sessionProtocols = normalized.filter((protocol) => protocol.startsWith("cyberos-session."));
+  if (sessionProtocols.length !== 1 || normalized.some((protocol) =>
+    protocol !== "cyberos-terminal-v1" && !protocol.startsWith("cyberos-session.")
+  )) return null;
+  const sessionId = sessionProtocols[0]!.slice("cyberos-session.".length);
+  return isTerminalSessionId(sessionId) ? { sessionId: sessionId.toLowerCase() } : null;
 }
 
 function socketDataToString(raw: unknown): string {

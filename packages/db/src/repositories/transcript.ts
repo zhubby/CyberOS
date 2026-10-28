@@ -80,8 +80,8 @@ export function listTranscriptItems(
       created_at: row.event_created_at as string,
       source: row.event_source as string,
       source_id: row.event_source_id,
-      run_id: row.event_run_id,
-      sequence: row.event_sequence,
+      run_id: row.event_run_id as string,
+      sequence: row.event_sequence as number,
       message_role: row.event_message_role,
       transcript_sequence: row.sequence
     } satisfies DbEventRow)

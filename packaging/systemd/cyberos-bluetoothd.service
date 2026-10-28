@@ -12,6 +12,7 @@ User=cyberos
 Group=cyberos
 Environment=CYBEROS_ROOT=/cyberos
 Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+Environment=CYBEROS_ENVIRONMENT=production
 Environment=HOME=/cyberos/state/bluetooth
 Environment=XDG_CACHE_HOME=/cyberos/state/bluetooth/cache
 WorkingDirectory=/cyberos/state/bluetooth

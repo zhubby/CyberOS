@@ -14,15 +14,14 @@ import {
   type LoadedMcpConfig,
   type SessionEntry
 } from "@earendil-works/pi-coding-agent";
-import { resolveSafeExistingPath } from "@cyberos/nas-tools";
+import { resolveSafeExistingPath } from "@cyberos/storage-tools";
 import type {
   AgentProviderSessionRecord,
   AgentSessionCommandType,
   AgentSessionRecord,
   ModelProviderSettingsRecord,
   ModelProviderName,
-  NasRootRecord,
-  PiToolName,
+  StorageWorkspace,
   PiToolPolicySettingsRecord
 } from "@cyberos/shared";
 import {
@@ -39,9 +38,14 @@ export interface PiAgentEmitEvent {
   payload: Record<string, unknown>;
   source?: "pi" | "cyberos";
   sourceId?: string;
+  runId: string;
+  sequence: number;
+}
+
+type PiAgentTurnEvent = Omit<PiAgentEmitEvent, "runId" | "sequence"> & {
   runId?: string;
   sequence?: number;
-}
+};
 
 export interface PiAgentTurnResult {
   status: "completed" | "failed" | "cancelled" | "waiting_approval";
@@ -52,7 +56,7 @@ export interface PiAgentTurnResult {
 
 export interface PiAgentInput {
   session: AgentSessionRecord;
-  root: NasRootRecord;
+  root: StorageWorkspace;
   message: string;
   workingPath: string;
   dataDir: string;
@@ -72,7 +76,6 @@ export interface PiAgentInput {
     runtimeModel?: string;
     projectionCursor?: string | null;
   }) => void | Promise<void>;
-  requestCapability: (request: PiAgentCapabilityRequest) => Promise<PiAgentCapabilityExecution>;
   onCapabilityRunPending?: (runId: string, providerSessionId: string) => void | Promise<void>;
   mcp?: PiMcpRuntimeSettings;
   runner?: PiAgentRunner;
@@ -88,7 +91,7 @@ export type PiAgentRunner = (input: PiAgentRuntimeInput) => Promise<PiAgentTurnR
 
 export interface PiAgentRuntimeInput {
   session: AgentSessionRecord;
-  root: NasRootRecord;
+  root: StorageWorkspace;
   message: string;
   workingPath: string;
   dataDir: string;
@@ -98,31 +101,14 @@ export interface PiAgentRuntimeInput {
   emit: (event: PiAgentEmitEvent) => void | Promise<void>;
   isCancelled: () => boolean;
   saveProviderSession: PiAgentInput["saveProviderSession"];
-  requestCapability: PiAgentInput["requestCapability"];
   onCapabilityRunPending?: PiAgentInput["onCapabilityRunPending"];
   mcp?: PiMcpRuntimeSettings;
-}
-
-export interface PiAgentCapabilityRequest {
-  toolCallId: string;
-  toolName: PiToolName;
-  args: Record<string, unknown>;
-  redactedArgs: Record<string, unknown>;
-  previewArgs: Record<string, unknown>;
-  risk: "low" | "medium" | "high" | "critical";
-  summary: string;
-  requiresConfirmation: boolean;
-}
-
-export interface PiAgentCapabilityExecution {
-  data: unknown;
-  runId?: string;
 }
 
 const DIRECT_MCP_TOOLS = [
   "cyberos.catalog.get",
   "cyberos.system.status",
-  "cyberos.roots.list",
+  "cyberos.storage_pools.list",
   "cyberos.files.list",
   "cyberos.files.stat",
   "cyberos.files.read",
@@ -226,7 +212,7 @@ export class PiAgentSessionHost {
   private readonly piAgentDir: string;
   private readonly resourcePolicy = new PiResourcePolicy();
 
-  constructor(private readonly dataDir: string) {
+  constructor(dataDir: string) {
     this.piSessionDir = path.join(dataDir, "pi-sessions");
     this.piAgentDir = path.join(dataDir, "pi-agent");
     this.runtimes = new ModelRuntimeManager(this.piAgentDir);
@@ -402,6 +388,7 @@ export class PiAgentSessionHost {
         source: "pi",
         sourceId: `projection:${input.session.id}:cursor-missing`,
         runId: `projection:${input.session.id}`,
+        sequence: 1,
         payload: {
           resourceType: "session_projection",
           error: "Pi projection cursor is not on the active session branch"
@@ -648,7 +635,7 @@ export class PiAgentSessionHost {
       });
   }
 
-  private emitTurnEvent(turn: HostedTurn, event: PiAgentEmitEvent): void | Promise<void> {
+  private emitTurnEvent(turn: HostedTurn, event: PiAgentTurnEvent): void | Promise<void> {
     const sequence = event.sequence ?? ++turn.sequence;
     return turn.input.emit({
       ...event,
@@ -697,7 +684,7 @@ function cyberosSystemPrompt(workingPath: string): string {
   return [
     "You are running inside CyberOS.",
     `The current working directory is ${workingPath}.`,
-    "Use the CyberOS MCP server for NAS and system capabilities. Paths are always relative to a selected NAS root.",
+    "Use the CyberOS MCP server for NAS and system capabilities. Paths are always relative to a selected storage pool.",
     "Mutating capabilities return durable runs and require approval in the first-party CyberOS UI.",
     "Never request or include passwords, API keys, Wi-Fi secrets, registry tokens, or host absolute paths."
   ].join("\n");
@@ -823,7 +810,7 @@ export async function loadControlledPiMcpConfig(settings: PiMcpRuntimeSettings):
 
 async function mapPiEvent(
   event: AgentSessionEvent,
-  emit: PiAgentRuntimeInput["emit"],
+  emit: (event: PiAgentTurnEvent) => void | Promise<void>,
   callbacks: {
     onStarted: () => void;
     onAssistantMessage: (content: string) => void;
@@ -898,7 +885,7 @@ async function mapPiEvent(
       payload: {
         id: event.toolCallId,
         name: event.toolName,
-        input: redactPiToolArgs(event.toolName, event.args),
+        input: redactPiToolArgs(event.args),
         debug: compactPiEvent(event)
       }
     });
@@ -910,7 +897,7 @@ async function mapPiEvent(
       payload: {
         id: event.toolCallId,
         name: event.toolName,
-        input: redactPiToolArgs(event.toolName, event.args),
+        input: redactPiToolArgs(event.args),
         output: redactSensitiveValue(event.partialResult)
       }
     });
@@ -972,6 +959,7 @@ export async function projectPiSessionEntry(
   emit: PiAgentRuntimeInput["emit"]
 ): Promise<void> {
   const runId = `pi-entry:${entry.id}`;
+  let sequence = 1;
   if (entry.type === "message" && entry.message.role === "assistant") {
     for (const item of entry.message.content) {
       if (item.type !== "toolCall") continue;
@@ -980,10 +968,11 @@ export async function projectPiSessionEntry(
         source: "pi",
         sourceId: `tool:${item.id}:start`,
         runId,
+        sequence: sequence++,
         payload: {
           id: item.id,
           name: item.name,
-          input: redactPiToolArgs(item.name, item.arguments)
+          input: redactPiToolArgs(item.arguments)
         }
       });
     }
@@ -994,6 +983,7 @@ export async function projectPiSessionEntry(
         source: "pi",
         sourceId: `entry:${entry.id}:assistant`,
         runId,
+        sequence: sequence++,
         payload: {
           role: "assistant",
           content,
@@ -1008,6 +998,7 @@ export async function projectPiSessionEntry(
         source: "pi",
         sourceId: `entry:${entry.id}:failure`,
         runId,
+        sequence: sequence++,
         payload: {
           provider: "pi",
           error: entry.message.errorMessage ?? `Pi run ${entry.message.stopReason}`,
@@ -1023,6 +1014,7 @@ export async function projectPiSessionEntry(
       source: "pi",
       sourceId: `tool:${entry.message.toolCallId}:end`,
       runId,
+      sequence: sequence++,
       payload: {
         id: entry.message.toolCallId,
         name: entry.message.toolName,
@@ -1039,6 +1031,7 @@ export async function projectPiSessionEntry(
       source: "pi",
       sourceId: `entry:${entry.id}`,
       runId,
+      sequence: sequence++,
       payload: {
         reason: "persisted",
         aborted: false,
@@ -1055,6 +1048,7 @@ export async function projectPiSessionEntry(
       source: "pi",
       sourceId: `entry:${entry.id}`,
       runId,
+      sequence: sequence++,
       payload: { provider: entry.provider, model: entry.modelId }
     });
     return;
@@ -1065,6 +1059,7 @@ export async function projectPiSessionEntry(
       source: "pi",
       sourceId: `entry:${entry.id}`,
       runId,
+      sequence,
       payload: { level: entry.thinkingLevel }
     });
   }
@@ -1148,106 +1143,8 @@ function extractAssistantText(message: { content?: unknown }): string {
     .trim();
 }
 
-export function redactPiToolArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
-  const redacted = redactSensitiveValue(args) as Record<string, unknown>;
-  if (toolName === "bash" && typeof args.command === "string") {
-    return {
-      ...redacted,
-      command: `[${Buffer.byteLength(args.command, "utf8")} byte command redacted]`
-    };
-  }
-  if (toolName === "write" && typeof args.content === "string") {
-    return {
-      ...redacted,
-      content: `[${Buffer.byteLength(args.content, "utf8")} bytes]`
-    };
-  }
-  if (toolName === "edit" && Array.isArray(args.edits)) {
-    return {
-      ...redacted,
-      edits: `[${args.edits.length} edit${args.edits.length === 1 ? "" : "s"} redacted]`
-    };
-  }
-  return redacted;
-}
-
-const MAX_APPROVAL_PREVIEW_BYTES = 32 * 1024;
-const MAX_APPROVAL_SNIPPET_BYTES = 8 * 1024;
-
-export function previewPiToolArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
-  const redacted = redactSensitiveValue(args) as Record<string, unknown>;
-  let preview: Record<string, unknown> = redacted;
-  if (toolName === "bash" && typeof args.command === "string") {
-    preview = {
-      ...redacted,
-      command: truncateApprovalPreview(redactShellPreviewText(args.command), MAX_APPROVAL_PREVIEW_BYTES)
-    };
-  } else if (toolName === "write" && typeof args.content === "string") {
-    preview = {
-      ...redacted,
-      content: truncateApprovalPreview(redactPreviewText(args.content), MAX_APPROVAL_PREVIEW_BYTES),
-      contentBytes: Buffer.byteLength(args.content, "utf8")
-    };
-  } else if (toolName === "edit" && Array.isArray(args.edits)) {
-    preview = {
-      ...redacted,
-      edits: args.edits.slice(0, 20).map((edit) => {
-        if (!edit || typeof edit !== "object") return "[invalid edit]";
-        const record = edit as Record<string, unknown>;
-        return {
-          oldText: typeof record.oldText === "string"
-            ? truncateApprovalPreview(redactPreviewText(record.oldText), MAX_APPROVAL_SNIPPET_BYTES)
-            : record.oldText,
-          newText: typeof record.newText === "string"
-            ? truncateApprovalPreview(redactPreviewText(record.newText), MAX_APPROVAL_SNIPPET_BYTES)
-            : record.newText
-        };
-      }),
-      editCount: args.edits.length
-    };
-  }
-  return boundApprovalPreview(preview);
-}
-
-function redactPreviewText(value: string): string {
-  return value
-    .replace(/(authorization\s*:\s*(?:bearer|basic)\s+)[^\s'"\\]+/giu, "$1[redacted]")
-    .replace(/\b([A-Za-z_][A-Za-z0-9_]*(?:PASSWORD|PASSWD|PASSPHRASE|SECRET|TOKEN|API_KEY|PRIVATE_KEY|PSK))=(?:'[^']*'|"[^"]*"|[^\s]+)/giu, "$1=[redacted]")
-    .replace(/(--(?:password|passphrase|secret|token|api[-_]?key|private[-_]?key|psk)(?:=|\s+))(?:'[^']*'|"[^"]*"|[^\s]+)/giu, "$1[redacted]")
-    .replace(/(["']?(?:password|passphrase|secret|token|api[_-]?key|private[_-]?key|psk)["']?\s*[:=]\s*)(?:'[^']*'|"[^"]*"|[^\s,}\]]+)/giu, "$1[redacted]")
-    .replace(/https?:\/\/[^\s'"<>]+/giu, (url) => redactAuditUrl(url));
-}
-
-function redactShellPreviewText(value: string): string {
-  const redacted = value
-    .replace(/(authorization\s*:\s*(?:bearer|basic)\s+)[^\s'"\\;|&()<>]+/giu, "$1[redacted]")
-    .replace(/\b([A-Za-z_][A-Za-z0-9_]*(?:PASSWORD|PASSWD|PASSPHRASE|SECRET|TOKEN|API_KEY|PRIVATE_KEY|PSK))=(?:'[^']*'|"[^"]*"|[^\s;|&()<>]+)/giu, "$1=[redacted]")
-    .replace(/(--(?:password|passphrase|secret|token|api[-_]?key|private[-_]?key|psk)(?:=|\s+))(?:'[^']*'|"[^"]*"|[^\s;|&()<>]+)/giu, "$1[redacted]")
-    .replace(/(["']?(?:password|passphrase|secret|token|api[_-]?key|private[_-]?key|psk)["']?\s*[:=]\s*)(?:'[^']*'|"[^"]*"|[^\s,}\];|&()<>]+)/giu, "$1[redacted]");
-  return redactShellPreviewUrls(redacted);
-}
-
-function redactShellPreviewUrls(value: string): string {
-  return value
-    .replace(/"(https?:\/\/[^"\s<>]+)"/giu, (_match, url: string) => `"${redactAuditUrl(url)}"`)
-    .replace(/'(https?:\/\/[^'\s<>]+)'/giu, (_match, url: string) => `'${redactAuditUrl(url)}'`)
-    .replace(/https?:\/\/[^\s'"<>;|&()]+/giu, (url) => redactAuditUrl(url));
-}
-
-function boundApprovalPreview(value: Record<string, unknown>): Record<string, unknown> {
-  const formatted = JSON.stringify(value, null, 2);
-  if (Buffer.byteLength(formatted, "utf8") <= MAX_APPROVAL_PREVIEW_BYTES) return value;
-  return {
-    preview: truncateApprovalPreview(formatted, MAX_APPROVAL_PREVIEW_BYTES),
-    truncated: true
-  };
-}
-
-function truncateApprovalPreview(value: string, maxBytes: number): string {
-  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
-  const suffix = "\n[preview truncated]";
-  const bytes = Buffer.from(value, "utf8");
-  return `${bytes.subarray(0, Math.max(0, maxBytes - Buffer.byteLength(suffix))).toString("utf8")}${suffix}`;
+export function redactPiToolArgs(args: Record<string, unknown>): Record<string, unknown> {
+  return redactSensitiveValue(args) as Record<string, unknown>;
 }
 
 function redactSensitiveValue(value: unknown, seen = new WeakSet<object>(), depth = 0): unknown {

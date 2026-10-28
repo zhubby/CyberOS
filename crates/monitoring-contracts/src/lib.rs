@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-pub const METRICS_SCHEMA_VERSION: i64 = 3;
+pub const METRICS_SCHEMA_VERSION: i64 = 1;
+pub const METRICS_SCHEMA_IDENTITY: &str = "cyberos-2.0";
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]

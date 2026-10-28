@@ -4,20 +4,20 @@ description: Job、approval、operation、index、backup 和可用能力的当�
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/shared/src/types.ts, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, packages/api/src/lib/bluetooth-manager.ts, packages/api/src/routes/bluetooth-transfers.ts, crates/bluetoothd/src/lib.rs, packages/db/src/repositories/approval-status.ts, packages/db/src/repositories/index-run-status.ts, packages/db/src/repositories/backup-runs.ts]
+sourceOfTruth: [packages/shared/src/types.ts, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, packages/api/src/lib/bluetooth-manager.ts, packages/api/src/routes/bluetooth-transfers.ts, crates/bluetoothd/src/lib.rs, packages/db/src/repositories/capability-runs.ts, packages/db/src/repositories/index-run-status.ts, packages/db/src/repositories/backup-runs.ts]
 sidebar:
   order: 4
 ---
 
-Job 状态包括 `queued`、`running`、`waiting_approval`、`completed`、`failed`、`cancelled`；approval 包括 `pending`、`approved`、`rejected`、`expired`、`applied`、`failed`；文件 operation 记录 proposed、applied、rolled_back、failed。
+Job 状态包括 `queued`、`running`、`waiting_approval`、`completed`、`failed`、`cancelled`。Agent/MCP mutation 的 capability approval 包括 `pending`、`approved`、`rejected`、`expired`、`failed`；文件领域 operation 记录 `proposed`、`applied`、`rolled_back`、`failed`。
 
-当前已实现文件浏览、预览、上传、编辑、归档检查、搜索、照片完整标量元数据索引与多维查询、一键下载的 Natural Earth II 栅格 PMTiles 地图、视频播放、RAW 预览、XMP sidecar 联动、agent 只读照片查询、approval、trash/restore、Docker/VM/share/terminal 控制、NetworkManager 物理 Ethernet/Wi-Fi/热点控制、indexer、restic backup 和健康 API。
+当前已实现文件浏览、预览、上传、编辑、归档检查、搜索、照片完整标量元数据索引与多维查询、一键下载的 Natural Earth II 栅格 PMTiles 地图、视频播放、RAW 预览、XMP sidecar 联动、Agent 照片查询、capability approval、trash/restore、Docker/VM/share/terminal 控制、NetworkManager 物理 Ethernet/Wi-Fi/热点控制、indexer、restic backup 和健康 API。
 
 ## 宿主机变更策略
 
 网络、存储、共享和 Docker summary 的 `capabilities.hostMutationPolicy` 为 `mutable` 或 `declarative`。声明式模式下，对应的 `canApplyConfiguration`、`canCreatePool`、`canDeletePool`、`canManageEthernet`、`canManageWifi`、`canManageHotspot`、`canUpdateDaemonConfiguration` 会变为 `false`；Web 控件进入只读状态。服务端仍独立拒绝写请求并返回 HTTP 501，不能把 UI 禁用当作安全边界。
 
-该策略不覆盖 NAS 文件操作、agent approval、Compose App 运行副本、终端或电源控制。它表达的是宿主机持久配置的所有权，不是全局只读模式。NixOS module 固定使用 `declarative`；Debian 默认使用 `mutable`。
+该策略不覆盖 storage pool 文件操作、agent approval、Compose App 运行副本、终端或电源控制。它表达的是宿主机持久配置的所有权，不是全局只读模式。Debian 默认使用 `mutable`。
 
 照片能力不支持在线地图、矢量 PMTiles、地理编码、人物识别、语义图像搜索、手动相册、分享链接、媒体编辑或元数据写回。原媒体与 sidecar 不被修改，WebP 衍生图不保留元数据；“完整元数据”指防御性限额内的全部标量标签，不包含 MakerNote、嵌入缩略图和二进制负载。Agent 可按位置筛选，但结果不会向云模型返回精确 GPS、序列号、联系信息或人物区域。
 
@@ -41,9 +41,9 @@ Wi-Fi 的射频、连接、已保存网络和热点操作统一位于“设置 >
 
 蓝牙设备管理依赖 Debian `bluez`；音频和文件传输还依赖 `bluez-obexd`、`bluez-alsa-utils`、`libasound2-plugin-bluez`、用户会话 D-Bus 和非 root `cyberos-bluetoothd`。`cyberos-bluetoothd` 负责 OBEX 会话、逐文件队列、进度和持久传输记录，hostd 仍只负责需要系统权限的 BlueZ 控制。传输状态通过独立 SSE 发布并进入通知中心，不写入聊天流。接收内容先写入 `/cyberos/state/bluetooth/incoming`；传输服务对 `/cyberos/data` 只有读权限，API 在重新校验接收授权时选定的收件目录、挂载和文件名后完成最终落盘。
 
-音频只改变 CyberOS/VOD 播放输出，不改变系统 UI 音频，也不支持手机向 CyberOS 输入音频。设置只保存枚举产生的稳定 `bluetooth:<adapter-id>/<MAC>` ID；API 和 VOD 都不接受任意 ALSA 设备字符串，旧的 `bluetooth:<MAC>` 会在唯一匹配时自动迁移。选择从下一次播放生效；设备断开或 BlueALSA 打开失败时，VOD 立即回退到原有 ALSA/HDMI 输出，在播放器状态中保留原因，并按播放会话写入一条持久通知。
+音频只改变 CyberOS/VOD 播放输出，不改变系统 UI 音频，也不支持手机向 CyberOS 输入音频。设置只保存枚举产生的稳定 `bluetooth:<adapter-id>/<MAC>` ID；API 和 VOD 都不接受任意 ALSA 设备字符串。选择从下一次播放生效；设备断开或 BlueALSA 打开失败时，VOD 立即回退到原有 ALSA/HDMI 输出，在播放器状态中保留原因，并按播放会话写入一条持久通知。
 
-文件发送只接受已挂载 NAS 存储池内经安全解析的普通文件，批量任务逐文件记录 `queued`、`running`、`completed`、`failed` 或 `cancelled`。文件接收是用户明确开启的系统托管收件箱特例，不进入 Agent approval；只有已配对且手动标记为 Trusted 的设备可以发送。每次接收都会重新验证 NAS root、存储池挂载源、目录可写性、符号链接/防穿越和可用空间；离线或空间不足时拒绝新传输。同名文件追加时间戳和序号，绝不覆盖现有文件。
+文件发送只接受已挂载 storage pool 内经安全解析的普通文件，批量任务逐文件记录 `queued`、`running`、`completed`、`failed` 或 `cancelled`。文件接收是用户明确开启的系统托管收件箱特例，不进入 Agent approval；只有已配对且手动标记为 Trusted 的设备可以发送。每次接收都会重新验证 storage pool、挂载源、目录可写性、符号链接/防穿越和可用空间；离线或空间不足时拒绝新传输。同名文件追加时间戳和序号，绝不覆盖现有文件。
 
 ## Docker 的两个状态信号
 
@@ -51,11 +51,11 @@ Docker daemon 状态来自 systemd 的 `LoadState`、`ActiveState`、`SubState` 
 
 Docker Engine readiness 独立来自配置的 Unix socket。daemon 可以是 `running`，但 socket 因路径、权限或 API 协商问题不可访问；此时界面继续显示 daemon 为 Running，同时展示 Engine 异常并禁用容器、Compose 和控制台操作。不要用 `/api/docker/summary` 中的 Engine `ready` 代替 systemd service 状态，也不要用 daemon Running 推断容器 API 一定可用。
 
-镜像列表、拉取和删除同样依赖 Engine readiness；Engine 不可用时界面保留镜像区域的错误状态并禁用这些操作。Registry 凭证是 CyberOS 本地设置，不依赖 daemon 或 Engine，可在 Docker 管理关闭时继续新增、轮换和删除。镜像删除是直接管理操作，需要 UI 二次确认和服务端 `confirmed: true`，但不进入 approval；容器生命周期与 Compose 动作仍保持原有 approval 规则。
+镜像列表、拉取和删除同样依赖 Engine readiness；Engine 不可用时界面保留镜像区域的错误状态并禁用这些操作。Registry 凭证是 CyberOS 本地设置，不依赖 daemon 或 Engine，可在 Docker 管理关闭时继续新增、轮换和删除。镜像删除需要 UI 二次确认和服务端 `confirmed: true`。容器生命周期与 Compose 动作也是第一方直接管理流程，使用页面确认、服务端校验和 Docker operation 审计，不创建 capability approval。
 
 Registry 凭证会自动用于手动拉取、容器创建时的 `always/missing` 拉取，以及 Compose `pull/up`。首期不支持 push、tag、prune、导入导出、credential helper、自定义 CA、客户端证书、identity token 或逐层拉取进度。
 
-托管 Compose App 的配置状态与 Engine readiness 也应分开判断。数据库和 Compose CLI 可用时，即使 Engine 离线或 Docker 管理关闭，仍可查看、创建、验证和编辑 App；部署、Down、Restart、Pull 及删除前容器检查需要 Engine。`needsDeploy` 比较当前 revision 与最近成功完成的全项目 Compose Up revision；Pull、Restart 和 Down 不会清除它。审批等待期间 revision 变化会让旧审批失败，必须重新发起。
+托管 Compose App 的配置状态与 Engine readiness 也应分开判断。数据库和 Compose CLI 可用时，即使 Engine 离线或 Docker 管理关闭，仍可查看、创建、验证和编辑 App；部署、Down、Restart、Pull 及删除前容器检查需要 Engine。`needsDeploy` 比较当前 revision 与最近成功完成的全项目 Compose Up revision；Pull、Restart 和 Down 不会清除它。每次 action 都携带当前 revision，执行前发生漂移会返回 `409`，必须刷新后重试。
 
 ## Docker 资源与镜像占用
 

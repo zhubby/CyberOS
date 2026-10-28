@@ -9,11 +9,11 @@ import type {
   CyberOsConfig
 } from "@cyberos/shared";
 import {
-  PHOTOSTAFF_DATA_DIRECTORY_NAME,
-  PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
-  PHOTOSTAFF_PREVIEW_MAX_EDGE_PX,
-  PHOTOSTAFF_SUPPORTED_EXTENSIONS,
-  PHOTOSTAFF_THUMBNAIL_SIZE_PX
+  PHOTOS_DATA_DIRECTORY_NAME,
+  PHOTOS_MAX_FILE_SIZE_BYTES,
+  PHOTOS_PREVIEW_MAX_EDGE_PX,
+  PHOTOS_SUPPORTED_EXTENSIONS,
+  PHOTOS_THUMBNAIL_SIZE_PX
 } from "@cyberos/shared";
 
 interface StorageCandidate {
@@ -21,7 +21,7 @@ interface StorageCandidate {
   label: string;
   kind: PublicSystemInfoStorageVolume["kind"];
   path: string;
-  rootId: string | null;
+  storagePoolId: string | null;
 }
 
 export async function collectSystemInfo(config: CyberOsConfig): Promise<PublicSystemInfo> {
@@ -86,30 +86,26 @@ export async function collectSystemInfo(config: CyberOsConfig): Promise<PublicSy
       }
     },
     cyberos: {
-      rootDir: config.paths?.rootDir ?? config.rootDir ?? path.dirname(config.dataDir),
-      stateDir: config.paths?.stateDir ?? config.stateDir ?? config.dataDir,
-      dataRoot: config.paths?.dataRoot ?? config.dataRoot ?? path.join(path.dirname(config.dataDir), "data"),
-      appsRoot: config.paths?.appsRoot ?? config.appsRoot ?? "/cyberos/apps",
-      isoRoot: config.paths?.isoRoot ?? config.isoRoot ?? "/cyberos/iso",
-      vmRoot: config.paths?.vmRoot ?? config.vmRoot ?? path.join(config.dataDir, "vm"),
-      backupRoot: config.paths?.backupRoot ?? config.backupRoot ?? path.join(path.dirname(config.dataDir), "data", "backup"),
-      dataDir: config.dataDir,
-      databasePath: config.databasePath,
+      rootDir: config.paths.rootDir,
+      stateDir: config.paths.stateDir,
+      dataRoot: config.paths.dataRoot,
+      appsRoot: config.paths.appsRoot,
+      isoRoot: config.paths.isoRoot,
+      vmRoot: config.paths.vmRoot,
+      backupRoot: config.paths.backupRoot,
+      databasePath: config.paths.databasePath,
       apiHost: config.api.host,
       apiPort: config.api.port,
       allowedOriginCount: config.api.allowedOrigins.length,
       workerPollMs: config.worker.pollMs,
-      modelProvider: config.model.provider,
-      localEndpointConfigured: Boolean(config.model.localEndpoint),
       dockerEnabled: config.docker.enabled,
-      photostaff: {
-        dataDir: path.join(config.dataDir, PHOTOSTAFF_DATA_DIRECTORY_NAME),
-        maxFileSizeBytes: PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
-        thumbnailSizePx: PHOTOSTAFF_THUMBNAIL_SIZE_PX,
-        previewMaxEdgePx: PHOTOSTAFF_PREVIEW_MAX_EDGE_PX,
-        supportedExtensions: [...PHOTOSTAFF_SUPPORTED_EXTENSIONS]
-      },
-      nasRoots: config.nasRoots
+      photos: {
+        dataDir: path.join(config.paths.stateDir, PHOTOS_DATA_DIRECTORY_NAME),
+        maxFileSizeBytes: PHOTOS_MAX_FILE_SIZE_BYTES,
+        thumbnailSizePx: PHOTOS_THUMBNAIL_SIZE_PX,
+        previewMaxEdgePx: PHOTOS_PREVIEW_MAX_EDGE_PX,
+        supportedExtensions: [...PHOTOS_SUPPORTED_EXTENSIONS]
+      }
     }
   };
 }
@@ -131,26 +127,19 @@ function toPublicCpu(cpu: ReturnType<typeof os.cpus>[number]): PublicSystemInfoC
 function storageCandidates(config: CyberOsConfig): StorageCandidate[] {
   return [
     {
-      id: "data-dir",
-      label: "data-dir",
+      id: "data-root",
+      label: "data-root",
       kind: "data",
-      path: config.dataDir,
-      rootId: null
+      path: config.paths.dataRoot,
+      storagePoolId: null
     },
     {
       id: "database",
       label: "database",
       kind: "database",
-      path: path.dirname(config.databasePath),
-      rootId: null
-    },
-    ...config.nasRoots.map((root) => ({
-      id: `nas-root-${root.id}`,
-      label: root.name,
-      kind: "nas-root" as const,
-      path: root.path,
-      rootId: root.id
-    }))
+      path: path.dirname(config.paths.databasePath),
+      storagePoolId: null
+    }
   ];
 }
 
@@ -176,7 +165,7 @@ async function collectStorageVolume(candidate: StorageCandidate): Promise<Public
       availableBytes,
       usedBytes,
       usedPercent: ratio(usedBytes, totalBytes),
-      rootId: candidate.rootId,
+      storagePoolId: candidate.storagePoolId,
       error: null
     };
   } catch (error) {
@@ -192,7 +181,7 @@ async function collectStorageVolume(candidate: StorageCandidate): Promise<Public
       availableBytes: null,
       usedBytes: null,
       usedPercent: null,
-      rootId: candidate.rootId,
+      storagePoolId: candidate.storagePoolId,
       error: error instanceof Error ? error.message : String(error)
     };
   }

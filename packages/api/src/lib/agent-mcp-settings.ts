@@ -26,8 +26,8 @@ import type { PublicAgentMcpSettings, CyberOsConfig } from "@cyberos/shared";
 
 export function publicAgentMcpSettings(db: CyberOsDatabase, config: CyberOsConfig): PublicAgentMcpSettings {
   const stored = getAgentMcpSettings(db);
-  const enabled = stored?.enabled ?? config.mcp?.piEnabled ?? false;
-  const available = config.mcp?.enabled ?? false;
+  const enabled = stored?.enabled ?? config.mcp.piEnabled;
+  const available = config.mcp.enabled;
   const paired = available ? hasPairedPiClient(db, config) : false;
   return {
     enabled,
@@ -48,20 +48,20 @@ export function configureAgentMcp(db: CyberOsDatabase, config: CyberOsConfig, en
 
 export function reconcileAgentMcp(db: CyberOsDatabase, config: CyberOsConfig): PublicAgentMcpSettings {
   const stored = getAgentMcpSettings(db);
-  const enabled = stored?.enabled ?? config.mcp?.piEnabled ?? false;
-  if ((config.mcp?.enabled ?? false) && enabled) ensurePairedPiClient(db, config);
+  const enabled = stored?.enabled ?? config.mcp.piEnabled;
+  if (config.mcp.enabled && enabled) ensurePairedPiClient(db, config);
   return publicAgentMcpSettings(db, config);
 }
 
 function hasPairedPiClient(db: CyberOsDatabase, config: CyberOsConfig): boolean {
-  const token = readValidPiToken(config.mcp?.piTokenFile);
+  const token = readValidPiToken(config.mcp.piTokenFile);
   if (!token) return false;
   return findMcpClientByToken(db, token)?.kind === "pi";
 }
 
 function ensurePairedPiClient(db: CyberOsDatabase, config: CyberOsConfig): void {
-  const tokenFile = config.mcp?.piTokenFile;
-  if (!tokenFile || !path.isAbsolute(tokenFile)) {
+  const tokenFile = config.mcp.piTokenFile;
+  if (!path.isAbsolute(tokenFile)) {
     throw new Error("CyberOS Pi MCP token file is not configured with an absolute path");
   }
 
@@ -106,7 +106,7 @@ function ensurePairedPiClient(db: CyberOsDatabase, config: CyberOsConfig): void 
 
 function piClientScopes(config: CyberOsConfig): string[] {
   return [...new Set(createCatalogDescriptors().flatMap((descriptor) => descriptor.requiredScopes))]
-    .filter((scope) => scope !== "cyberos:admin:shell" || config.mcp?.shellEnabled === true)
+    .filter((scope) => scope !== "cyberos:admin:shell" || config.mcp.shellEnabled)
     .sort();
 }
 

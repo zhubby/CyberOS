@@ -12,7 +12,6 @@ import {
 
 const mountedPool: HttpDownloaderPool = {
   id: "pool-1",
-  rootId: "nas",
   name: "Data",
   path: "/cyberos/data/data",
   filesystem: "ext4",
@@ -164,8 +163,7 @@ function visibleButtonText(button: string): string {
 const baseTask: DownloadTask = {
   id: "task-1",
   url: "https://example.com/archive.zip",
-  rootId: "nas",
-  storagePoolId: "pool-1",
+    storagePoolId: "pool-1",
   targetDirectory: "/cyberos/data/data",
   targetFileName: "archive.zip",
   targetPath: "/cyberos/data/data/archive.zip",

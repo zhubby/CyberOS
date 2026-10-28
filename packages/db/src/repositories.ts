@@ -1,16 +1,12 @@
-export { getApproval } from "./repositories/approvals.js";
-export * from "./repositories/approval-status.js";
 export * from "./repositories/agent-session-commands.js";
 export * from "./repositories/bluetooth-transfers.js";
 export * from "./repositories/capability-runs.js";
 export * from "./repositories/docker-console-authorizations.js";
 export * from "./repositories/docker-compose-apps.js";
 export * from "./repositories/docker-compose-host-access-drafts.js";
-export * from "./repositories/docker-create-drafts.js";
 export {
   createDockerOperationRecord,
   getDockerOperation,
-  getDockerOperationByApproval,
   listDockerOperations,
   updateDockerOperationStatus
 } from "./repositories/docker-operations.js";
@@ -29,33 +25,27 @@ export * from "./repositories/mcp-clients.js";
 export * from "./repositories/mcp-resource-tokens.js";
 export * from "./repositories/mcp-transfer-tokens.js";
 export * from "./repositories/monitoring-alerts.js";
-export * from "./repositories/nas-roots.js";
-export * from "./repositories/root-readiness.js";
 export * from "./repositories/operation-notifications.js";
-export * from "./repositories/photostaff.js";
-export * from "./repositories/photostaff-metadata.js";
+export * from "./repositories/photos.js";
+export * from "./repositories/photos-metadata.js";
 export * from "./repositories/sessions.js";
 export * from "./repositories/settings.js";
 export {
   createShareOperationRecord,
   getShareOperation,
-  getShareOperationByApproval,
   listShareOperations,
   updateShareOperationStatus
 } from "./repositories/share-operations.js";
 export {
   createStorageOperationRecord,
   getStorageOperation,
-  getStorageOperationByApproval,
   listStorageOperations,
   updateStorageOperationStatus
 } from "./repositories/storage-operations.js";
 export {
   createVmOperationRecord,
-  expireStaleVmConsoleOperations,
   getProposedVmOperationForTarget,
   getVmOperation,
-  getVmOperationByApproval,
   listVmOperations,
   updateVmOperationStatus
 } from "./repositories/vm-operations.js";

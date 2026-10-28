@@ -28,9 +28,8 @@ async fn indexes_text_skips_symlinks_and_cleans_stale_rows() {
     let db = Db::open(&database_path).unwrap();
     let task = QueueTask {
         id: "task-1".to_owned(),
-        root_id: "local".to_owned(),
-        root_path: root.to_string_lossy().into_owned(),
-        storage_pool_id: None,
+        storage_pool_id: "local".to_owned(),
+        storage_pool_path: root.to_string_lossy().into_owned(),
         path: ".".to_owned(),
         recursive: true,
         kind: "full".to_owned(),
@@ -76,7 +75,7 @@ async fn indexes_text_skips_symlinks_and_cleans_stale_rows() {
     assert_eq!(matches, 1);
 
     reader.execute(
-        "INSERT INTO index_queue (id, root_id, path, recursive, kind, generation, priority, status, created_at, updated_at)
+        "INSERT INTO index_queue (id, storage_pool_id, path, recursive, kind, generation, priority, status, created_at, updated_at)
          VALUES ('failed-child', 'local', 'docs/failed.txt', 0, 'incremental', 1, 50, 'failed', 'now', 'now')",
         [],
     ).unwrap();
@@ -95,13 +94,13 @@ async fn indexes_text_skips_symlinks_and_cleans_stale_rows() {
     .unwrap();
     assert_eq!(second.removed, 1);
     let stale: i64 = reader.query_row(
-        "SELECT COUNT(*) FROM indexed_files WHERE root_id = 'local' AND path = 'docs/alpha.txt'",
+        "SELECT COUNT(*) FROM indexed_files WHERE storage_pool_id = 'local' AND path = 'docs/alpha.txt'",
         [], |row| row.get(0),
     ).unwrap();
     assert_eq!(stale, 0);
     let failed_tasks: i64 = reader
         .query_row(
-            "SELECT COUNT(*) FROM index_queue WHERE root_id = 'local' AND status = 'failed'",
+            "SELECT COUNT(*) FROM index_queue WHERE storage_pool_id = 'local' AND status = 'failed'",
             [],
             |row| row.get(0),
         )
@@ -124,25 +123,24 @@ async fn non_recursive_and_ignored_incremental_tasks_preserve_rebuild_state() {
     let connection = Connection::open(&database_path).unwrap();
     connection
         .execute(
-            "UPDATE index_content_state SET status = 'copying' WHERE root_id = 'local'",
+            "UPDATE index_content_state SET status = 'rebuilding' WHERE storage_pool_id = 'local'",
             [],
         )
         .unwrap();
     connection.execute(
-        "INSERT INTO indexed_files (id, root_id, path, name, indexed_at) VALUES ('ignored', 'local', '.git/config', 'config', 'now')",
+        "INSERT INTO indexed_files (id, storage_pool_id, path, name, indexed_at) VALUES ('ignored', 'local', '.git/config', 'config', 'now')",
         [],
     ).unwrap();
     connection.execute(
-        "INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms) VALUES ('ignored', 'local', '.git/config', 'config', 'secret', 'secret')",
+        "INSERT INTO indexed_content_fts (file_id, storage_pool_id, path, name, body, terms) VALUES ('ignored', 'local', '.git/config', 'config', 'secret', 'secret')",
         [],
     ).unwrap();
     drop(connection);
     let db = Db::open(&database_path).unwrap();
     let base_task = QueueTask {
         id: "task-incremental".to_owned(),
-        root_id: "local".to_owned(),
-        root_path: root.to_string_lossy().into_owned(),
-        storage_pool_id: None,
+        storage_pool_id: "local".to_owned(),
+        storage_pool_path: root.to_string_lossy().into_owned(),
         path: "docs".to_owned(),
         recursive: false,
         kind: "incremental".to_owned(),
@@ -211,11 +209,11 @@ async fn non_recursive_and_ignored_incremental_tasks_preserve_rebuild_state() {
         .unwrap();
     assert_eq!(paths, vec!["docs/direct.txt", "docs/nested/deep.txt"]);
     let state: (String, Option<String>, i64) = connection.query_row(
-        "SELECT c.status, r.active_scan_generation, r.reconcile_requested FROM index_content_state c JOIN index_root_state r USING (root_id) WHERE c.root_id = 'local'",
+        "SELECT c.status, r.active_scan_generation, r.reconcile_requested FROM index_content_state c JOIN index_storage_pool_state r USING (storage_pool_id) WHERE c.storage_pool_id = 'local'",
         [],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     ).unwrap();
-    assert_eq!(state, ("copying".to_owned(), None, 1));
+    assert_eq!(state, ("rebuilding".to_owned(), None, 1));
 }
 
 #[tokio::test]
@@ -229,14 +227,14 @@ async fn file_failures_skip_stale_cleanup_and_preserve_old_rows() {
     let connection = Connection::open(&database_path).unwrap();
     connection
         .execute(
-            "INSERT INTO indexed_files (id, root_id, path, name, indexed_at, scan_generation)
+            "INSERT INTO indexed_files (id, storage_pool_id, path, name, indexed_at, scan_generation)
          VALUES ('old', 'local', 'gone.txt', 'gone.txt', 'now', 'old-generation')",
             [],
         )
         .unwrap();
     connection
         .execute(
-            "INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms)
+            "INSERT INTO indexed_content_fts (file_id, storage_pool_id, path, name, body, terms)
          VALUES ('old', 'local', 'gone.txt', 'gone.txt', 'old body', 'old body')",
             [],
         )
@@ -245,9 +243,8 @@ async fn file_failures_skip_stale_cleanup_and_preserve_old_rows() {
     let db = Db::open(&database_path).unwrap();
     let task = QueueTask {
         id: "task-failure".to_owned(),
-        root_id: "local".to_owned(),
-        root_path: root.to_string_lossy().into_owned(),
-        storage_pool_id: None,
+        storage_pool_id: "local".to_owned(),
+        storage_pool_path: root.to_string_lossy().into_owned(),
         path: ".".to_owned(),
         recursive: true,
         kind: "full".to_owned(),
@@ -280,7 +277,7 @@ async fn file_failures_skip_stale_cleanup_and_preserve_old_rows() {
         .unwrap();
     assert_eq!(old_rows, 1);
     let state: (String, Option<String>) = connection.query_row(
-        "SELECT c.status, r.last_reconcile_at FROM index_content_state c JOIN index_root_state r USING (root_id) WHERE c.root_id = 'local'",
+        "SELECT c.status, r.last_reconcile_at FROM index_content_state c JOIN index_storage_pool_state r USING (storage_pool_id) WHERE c.storage_pool_id = 'local'",
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     ).unwrap();

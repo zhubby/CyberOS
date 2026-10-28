@@ -5,23 +5,23 @@ import type { DbIndexFailureRow, DbIndexRunRow } from "./repository-rows.js";
 
 export function recoverInterruptedIndexRuns(
   db: CyberOsDatabase,
-  input: { rootId?: string; now?: Date } = {}
+  input: { storagePoolId?: string; now?: Date } = {}
 ): number {
   const now = (input.now ?? new Date()).toISOString();
   const tx = db.transaction(() => {
-    const rootRows = input.rootId
-      ? ([{ root_id: input.rootId }] as Array<{ root_id: string }>)
-      : (db.prepare("SELECT DISTINCT root_id FROM index_runs").all() as Array<{
-          root_id: string;
+    const rootRows = input.storagePoolId
+      ? ([{ storage_pool_id: input.storagePoolId }] as Array<{ storage_pool_id: string }>)
+      : (db.prepare("SELECT DISTINCT storage_pool_id FROM index_runs").all() as Array<{
+          storage_pool_id: string;
         }>);
-    const result = input.rootId
+    const result = input.storagePoolId
       ? db
           .prepare(`
             UPDATE index_runs
             SET status = 'failed', finished_at = ?, error = 'interrupted/superseded'
-            WHERE root_id = ? AND status = 'running'
+            WHERE storage_pool_id = ? AND status = 'running'
           `)
-          .run(now, input.rootId)
+          .run(now, input.storagePoolId)
       : db
           .prepare(`
             UPDATE index_runs
@@ -31,22 +31,22 @@ export function recoverInterruptedIndexRuns(
           .run(now);
 
     for (const row of rootRows) {
-      retainLatestFinalizedIndexRun(db, row.root_id);
+      retainLatestFinalizedIndexRun(db, row.storage_pool_id);
     }
     return result.changes;
   });
   return tx();
 }
 
-function retainLatestFinalizedIndexRun(db: CyberOsDatabase, rootId: string): void {
+function retainLatestFinalizedIndexRun(db: CyberOsDatabase, storagePoolId: string): void {
   const runs = db
     .prepare(`
       SELECT id, kind
       FROM index_runs
-      WHERE root_id = ? AND status <> 'running'
+      WHERE storage_pool_id = ? AND status <> 'running'
       ORDER BY COALESCE(finished_at, started_at) DESC, started_at DESC, rowid DESC
     `)
-    .all(rootId) as Array<{ id: string; kind: IndexRunKind }>;
+    .all(storagePoolId) as Array<{ id: string; kind: IndexRunKind }>;
   const retained = new Set([
     runs[0]?.id,
     runs.find((run) => run.kind === "full")?.id
@@ -58,32 +58,32 @@ function retainLatestFinalizedIndexRun(db: CyberOsDatabase, rootId: string): voi
     db.prepare(`DELETE FROM index_failures WHERE run_id IN (${placeholders})`).run(...staleRunIds);
     db.prepare(`DELETE FROM index_runs WHERE id IN (${placeholders})`).run(...staleRunIds);
   }
-  const archivedStale = db.prepare("SELECT id FROM index_run_history WHERE root_id = ? ORDER BY started_at DESC LIMIT -1 OFFSET 29").all(rootId) as Array<{ id: string }>;
+  const archivedStale = db.prepare("SELECT id FROM index_run_history WHERE storage_pool_id = ? ORDER BY started_at DESC LIMIT -1 OFFSET 29").all(storagePoolId) as Array<{ id: string }>;
   for (const { id } of archivedStale) db.prepare("DELETE FROM index_run_history WHERE id = ?").run(id);
 }
 
 function archiveIndexRun(db: CyberOsDatabase, runId: string): void {
-  const row = db.prepare(`SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error, duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at, kind FROM index_runs WHERE id = ? AND status <> 'running'`).get(runId) as (DbIndexRunRow & { kind: IndexRunKind }) | undefined;
+  const row = db.prepare(`SELECT id, storage_pool_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error, duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at, kind FROM index_runs WHERE id = ? AND status <> 'running'`).get(runId) as (DbIndexRunRow & { kind: IndexRunKind }) | undefined;
   if (!row) return;
   const failures = db.prepare("SELECT path, reason FROM index_failures WHERE run_id = ? ORDER BY created_at ASC, id ASC").all(runId) as DbIndexFailureRow[];
-  db.prepare(`INSERT OR REPLACE INTO index_run_history (id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error, duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at, failures_json, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(row.id, row.root_id, row.status, row.started_at, row.finished_at, row.scanned, row.indexed, row.unchanged, row.removed, row.skipped, row.failed, row.error, row.duration_ms, row.bytes, row.file_count, row.text_file_count, row.phase, row.current_path, row.last_progress_at, JSON.stringify(failures), row.kind);
+  db.prepare(`INSERT OR REPLACE INTO index_run_history (id, storage_pool_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error, duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at, failures_json, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(row.id, row.storage_pool_id, row.status, row.started_at, row.finished_at, row.scanned, row.indexed, row.unchanged, row.removed, row.skipped, row.failed, row.error, row.duration_ms, row.bytes, row.file_count, row.text_file_count, row.phase, row.current_path, row.last_progress_at, JSON.stringify(failures), row.kind);
 }
 
 export function startIndexRun(
   db: CyberOsDatabase,
-  input: { rootId: string; kind?: IndexRunKind; now?: Date }
-): { id: string; rootId: string; startedAt: string } {
+  input: { storagePoolId: string; kind?: IndexRunKind; now?: Date }
+): { id: string; storagePoolId: string; startedAt: string } {
   recoverInterruptedIndexRuns(db, {
-    rootId: input.rootId,
+    storagePoolId: input.storagePoolId,
     ...(input.now ? { now: input.now } : {})
   });
   const id = randomUUID();
   const startedAt = (input.now ?? new Date()).toISOString();
   db.prepare(`
-    INSERT INTO index_runs (id, root_id, status, started_at, kind)
+    INSERT INTO index_runs (id, storage_pool_id, status, started_at, kind)
     VALUES (?, ?, 'running', ?, ?)
-  `).run(id, input.rootId, startedAt, input.kind ?? "full");
-  return { id, rootId: input.rootId, startedAt };
+  `).run(id, input.storagePoolId, startedAt, input.kind ?? "full");
+  return { id, storagePoolId: input.storagePoolId, startedAt };
 }
 
 export function isIndexRunRunning(db: CyberOsDatabase, runId: string): boolean {
@@ -96,21 +96,21 @@ export function isIndexRunRunning(db: CyberOsDatabase, runId: string): boolean {
 
 export function recordIndexFailure(
   db: CyberOsDatabase,
-  input: { runId: string; rootId?: string; path: string; reason: string; now?: Date }
+  input: { runId: string; storagePoolId?: string; path: string; reason: string; now?: Date }
 ): void {
   const run = db
-    .prepare("SELECT root_id FROM index_runs WHERE id = ?")
-    .get(input.runId) as { root_id: string } | undefined;
+    .prepare("SELECT storage_pool_id FROM index_runs WHERE id = ?")
+    .get(input.runId) as { storage_pool_id: string } | undefined;
   if (!run) {
     throw new Error("Index run not found");
   }
-  if (input.rootId !== undefined && run.root_id !== input.rootId) {
-    throw new Error("Index failure root does not match index run");
+  if (input.storagePoolId !== undefined && run.storage_pool_id !== input.storagePoolId) {
+    throw new Error("Index failure storage pool does not match index run");
   }
   db.prepare(`
-    INSERT INTO index_failures (id, run_id, root_id, path, reason, created_at)
+    INSERT INTO index_failures (id, run_id, storage_pool_id, path, reason, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(randomUUID(), input.runId, run.root_id, input.path, input.reason, (input.now ?? new Date()).toISOString());
+  `).run(randomUUID(), input.runId, run.storage_pool_id, input.path, input.reason, (input.now ?? new Date()).toISOString());
 }
 
 export function finishIndexRun(
@@ -138,8 +138,8 @@ export function finishIndexRun(
   const finishedAt = (input.finishedAt ?? new Date()).toISOString();
   const tx = db.transaction(() => {
     const run = db
-      .prepare("SELECT root_id FROM index_runs WHERE id = ?")
-      .get(input.runId) as { root_id: string } | undefined;
+      .prepare("SELECT storage_pool_id FROM index_runs WHERE id = ?")
+      .get(input.runId) as { storage_pool_id: string } | undefined;
     if (!run) {
       // A superseded run may be cleaned up by the newer run before it reaches
       // its finalization point. Treat that as an already-finalized no-op so an
@@ -175,7 +175,7 @@ export function finishIndexRun(
       return false;
     }
 
-    retainLatestFinalizedIndexRun(db, run.root_id);
+    retainLatestFinalizedIndexRun(db, run.storage_pool_id);
     return true;
   });
   return tx();

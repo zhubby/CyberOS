@@ -31,7 +31,7 @@ describe("MCP resource tokens", () => {
     const created = createMcpResourceToken(db, {
       clientId: owner.id,
       kind: "file",
-      descriptor: { rootId: "primary", path: "hello.txt" },
+      descriptor: { storagePoolId: "pool-1", path: "hello.txt" },
       revision: "revision-1",
       mimeType: "text/plain",
       fileName: "hello.txt",
@@ -45,7 +45,7 @@ describe("MCP resource tokens", () => {
     };
     expect(stored.token_digest).toHaveLength(64);
     expect(stored.token_digest).not.toContain(created.token);
-    expect(stored.descriptor_json).toBe('{"rootId":"primary","path":"hello.txt"}');
+    expect(stored.descriptor_json).toBe('{"storagePoolId":"pool-1","path":"hello.txt"}');
     expect(consumeMcpResourceToken(db, { token: created.token, clientId: other.id })).toBeNull();
     expect(consumeMcpResourceToken(db, { token: created.token, clientId: owner.id })).toMatchObject({
       clientId: owner.id,
@@ -60,7 +60,7 @@ describe("MCP resource tokens", () => {
     const created = createMcpResourceToken(db, {
       clientId: owner.id,
       kind: "file_export",
-      descriptor: { rootId: "primary", paths: ["hello.txt"] },
+      descriptor: { storagePoolId: "pool-1", paths: ["hello.txt"] },
       revision: "revision-2",
       mimeType: "application/zip",
       fileName: "files.zip",

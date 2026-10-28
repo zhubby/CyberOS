@@ -39,8 +39,8 @@ describe("shouldSubmitComposerMessage", () => {
 
 describe("composeAgentMessage", () => {
   it("keeps an attached path as one message-level block", () => {
-    expect(composeAgentMessage("Inspect this", "/cyberos/data/primary/docs/readme.md")).toBe("/cyberos/data/primary/docs/readme.md\nInspect this");
-    expect(composeAgentMessage("", "/cyberos/data/primary/docs/readme.md")).toBe("/cyberos/data/primary/docs/readme.md");
+    expect(composeAgentMessage("Inspect this", "/cyberos/data/pool-1/docs/readme.md")).toBe("/cyberos/data/pool-1/docs/readme.md\nInspect this");
+    expect(composeAgentMessage("", "/cyberos/data/pool-1/docs/readme.md")).toBe("/cyberos/data/pool-1/docs/readme.md");
     expect(composeAgentMessage("Inspect this", null)).toBe("Inspect this");
   });
 });
@@ -48,7 +48,7 @@ describe("composeAgentMessage", () => {
 describe("agentSessionHeaderTitle", () => {
   const session = {
     id: "session-1",
-    rootId: "root-1",
+    storagePoolId: "root-1",
     currentPath: ".",
     createdAt: "2026-09-17T10:00:00.000Z",
     updatedAt: "2026-09-17T10:00:00.000Z",
@@ -58,12 +58,12 @@ describe("agentSessionHeaderTitle", () => {
   };
 
   it("uses a fixed title before a session has any messages", () => {
-    expect(agentSessionHeaderTitle(undefined, "New session", "Root agent")).toBe("New session");
-    expect(agentSessionHeaderTitle(session, "New session", "Root agent")).toBe("New session");
+    expect(agentSessionHeaderTitle(undefined, "New session", "Workspace agent")).toBe("New session");
+    expect(agentSessionHeaderTitle(session, "New session", "Workspace agent")).toBe("New session");
   });
 
   it("uses the API session title after the conversation starts", () => {
-    expect(agentSessionHeaderTitle({ ...session, firstMessage: "Inspect storage health" }, "New session", "Root agent")).toBe(
+    expect(agentSessionHeaderTitle({ ...session, firstMessage: "Inspect storage health" }, "New session", "Workspace agent")).toBe(
       "Inspect storage health"
     );
   });
@@ -173,8 +173,8 @@ describe("ChatMessageContent", () => {
     const html = renderToStaticMarkup(
       createElement(ChatMessageContent, {
         role: "user",
-        content: "Open /cyberos/data/primary/docs/readme.md, not /private/other/private.txt",
-        rootPath: "/cyberos/data/primary",
+        content: "Open /cyberos/data/pool-1/docs/readme.md, not /private/other/private.txt",
+        rootPath: "/cyberos/data/pool-1",
         onOpenWorkspacePath: () => undefined
       })
     );
@@ -189,14 +189,14 @@ describe("ChatMessageContent", () => {
     const html = renderToStaticMarkup(
       createElement(ChatMessageContent, {
         role: "user",
-        content: "/cyberos/data/primary/My Files/report (1).pdf\n这个文件是什么内容",
-        rootPath: "/cyberos/data/primary",
+        content: "/cyberos/data/pool-1/My Files/report (1).pdf\n这个文件是什么内容",
+        rootPath: "/cyberos/data/pool-1",
         onOpenWorkspacePath: () => undefined
       })
     );
 
     expect(html).toContain('data-workspace-path="My Files/report (1).pdf"');
-    expect(html).toContain("/cyberos/data/primary/My Files/report (1).pdf");
+    expect(html).toContain("/cyberos/data/pool-1/My Files/report (1).pdf");
     expect(html).toContain("这个文件是什么内容");
   });
 
@@ -205,17 +205,17 @@ describe("ChatMessageContent", () => {
       createElement(ChatMessageContent, {
         role: "assistant",
         content: [
-          "Open /cyberos/data/primary/docs/readme.md.",
+          "Open /cyberos/data/pool-1/docs/readme.md.",
           "",
-          "`/cyberos/data/primary/My Files/report.pdf`",
+          "`/cyberos/data/pool-1/My Files/report.pdf`",
           "",
-          "[linked report](/cyberos/data/primary/reports/latest.pdf)",
+          "[linked report](/cyberos/data/pool-1/reports/latest.pdf)",
           "",
           "```",
-          "/cyberos/data/primary/not-interactive.txt",
+          "/cyberos/data/pool-1/not-interactive.txt",
           "```"
         ].join("\n"),
-        rootPath: "/cyberos/data/primary",
+        rootPath: "/cyberos/data/pool-1",
         onOpenWorkspacePath: () => undefined
       })
     );
@@ -224,7 +224,7 @@ describe("ChatMessageContent", () => {
     expect(html).toContain('data-workspace-path="docs/readme.md"');
     expect(html).toContain('data-workspace-path="My Files/report.pdf"');
     expect(html).toContain('data-workspace-path="reports/latest.pdf"');
-    expect(html).toContain('<pre class="message-code-block"><code>/cyberos/data/primary/not-interactive.txt');
+    expect(html).toContain('<pre class="message-code-block"><code>/cyberos/data/pool-1/not-interactive.txt');
   });
 });
 
@@ -233,7 +233,7 @@ describe("ChatPane agent rail", () => {
     await initI18n();
     const session = {
       id: "session-1",
-      rootId: "root-1",
+      storagePoolId: "root-1",
       currentPath: ".",
       createdAt: "2026-09-17T10:00:00.000Z",
       updatedAt: "2026-09-17T10:00:00.000Z",
@@ -308,7 +308,7 @@ describe("ChatPane agent rail", () => {
     await initI18n();
     const session = {
       id: "session-1",
-      rootId: "root-1",
+      storagePoolId: "root-1",
       currentPath: ".",
       createdAt: "2026-09-17T10:00:00.000Z",
       updatedAt: "2026-09-17T10:00:00.000Z",
@@ -382,7 +382,7 @@ describe("ChatPane agent rail", () => {
           status: "pending",
           proposal: {
             summary: "Move reports/final.pdf to Archive/final.pdf",
-            request: { rootId: "primary", sourcePath: "reports/final.pdf", targetPath: "Archive/final.pdf" },
+            request: { storagePoolId: "pool-1", sourcePath: "reports/final.pdf", targetPath: "Archive/final.pdf" },
             args: { command: "mkdir -p Archive && mv reports/final.pdf Archive/final.pdf" },
             requiredSecrets: [{ name: "localPassword", label: "Local approval password", minLength: 8 }]
           },

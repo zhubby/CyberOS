@@ -11,11 +11,11 @@ sidebar:
 
 ## 适用范围
 
-本页面面向开发机或测试机。它使用独立的 `.cyberos/dev-root` 目录和测试 NAS root，不应直接用于生产数据。生产安装请改读[Debian 与 appliance 部署](/docs/operations/deployment/)。
+本页面面向开发机或测试机。它使用独立的 `.cyberos/dev-root` 目录和测试 storage pool，不应直接用于生产数据。生产安装请改读[Debian 部署](/docs/operations/deployment/)。
 
 ## 准备依赖
 
-需要 Node.js 22.12 或更高版本、npm 和 Git。若要让 agent 使用 Pi provider，还需要在主机上安装并配置 `pi`；没有 provider 时可以启用只读 fallback 验证文件浏览和搜索流程。
+需要 Node.js 22.12 或更高版本、npm 和 Git。Agent turn 还需要在设置中配置 OpenAI 或 Anthropic provider、model 和 API key。
 
 ```bash
 node --version
@@ -35,21 +35,19 @@ npm --prefix docs ci
 ## 创建开发数据目录
 
 ```bash
-mkdir -p .cyberos/dev-root/data/primary
-printf 'hello CyberOS\n' > .cyberos/dev-root/data/primary/README.txt
+mkdir -p .cyberos/dev-root/data/pool-1
+printf 'hello CyberOS\n' > .cyberos/dev-root/data/pool-1/README.txt
 ```
 
-启动时显式指定数据目录和 NAS root，避免开发进程误读系统根目录：
+启动时显式指定数据目录和 storage pool，避免开发进程误读系统根目录：
 
 ```bash
 CYBEROS_ENVIRONMENT=development \
 CYBEROS_ROOT="$PWD/.cyberos/dev-root" \
-CYBEROS_NAS_ROOTS="dev:开发 NAS:$PWD/.cyberos/dev-root/data/primary" \
-CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
 npm run dev
 ```
 
-`CYBEROS_NAS_ROOTS` 每项可以写成 `id:name:path`，多个 root 使用逗号分隔。fallback 只提供受限的只读 agent turn，不能替代真实 Pi provider。
+CyberOS 将 `data` 的一级真实目录作为存储池，目录名就是 `storagePoolId`。
 
 ## 打开界面
 
@@ -64,11 +62,11 @@ npm run dev
 
 ## 第一次验收
 
-1. 在左侧选择测试 NAS root 和可用 storage pool，确认能看到 `README.txt`。
-2. 点击文件查看 metadata 和文本预览；文件列表中的搜索只在当前 root/path 范围内执行。
+1. 在左侧选择 `pool-1`，确认能看到 `README.txt`。
+2. 点击文件查看 metadata 和文本预览；文件列表中的搜索只在当前存储池路径范围内执行。
 3. 新建一个 agent session，询问当前目录内容，观察消息从 queued 到 running 再到 completed 的状态变化。
 4. 执行 `npm run index` 触发一次索引，再访问 `/api/indexer/status` 查看运行结果。
-5. 修改或移动文件时先检查 approval 卡片；审批前文件系统不应发生变化。
+5. 在 Workspace 修改或移动文件时核对确认对话框与目标路径；Agent mutation 则检查 capability approval 卡片，批准前目标资源不应发生变化。
 
 ## 停止与清理
 
@@ -78,4 +76,4 @@ npm run dev
 rm -rf .cyberos/dev-root
 ```
 
-不要把该命令指向 `/cyberos/data/primary`、`/cyberos/state` 或其他生产路径。
+不要把该命令指向 `/cyberos/data/pool-1`、`/cyberos/state` 或其他生产路径。

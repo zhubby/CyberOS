@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 use tokio::process::Command;
 
-use crate::domain::config::{MonitorConfig, NasRoot};
+use crate::domain::config::MonitorConfig;
 use crate::domain::metric::{Collection, CollectorState, MetricSample};
 use crate::error::MonitorError;
 use crate::ports::Collector;
@@ -24,9 +24,9 @@ pub const MONITORED_SYSTEMD_UNITS: &[&str] = &[
     "cyberos-worker@1.service",
     "cyberos-indexer.service",
     "cyberos-downloader.service",
-    "cyberos-photostaff.service",
+    "cyberos-photos.service",
     "cyberos-hostd.service",
-    "cyberos-termux.service",
+    "cyberos-terminald.service",
     "cyberos-health.service",
     "cyberos-maintenance.service",
     "cyberos-backup-daily.service",
@@ -38,7 +38,7 @@ pub fn default_collectors(config: &MonitorConfig) -> Vec<Box<dyn Collector>> {
         Box::new(FilesystemCollector::new(
             config.monitoring.sampling.standard,
             config.state_dir.clone(),
-            config.nas_roots.clone(),
+            config.data_root.clone(),
         )),
         Box::new(SystemdCollector::new(config.monitoring.sampling.standard)),
         Box::new(CyberOsCollector::new(
@@ -108,17 +108,36 @@ impl Collector for HostCollector {
 pub struct FilesystemCollector {
     interval: Duration,
     state_dir: PathBuf,
-    roots: Vec<NasRoot>,
+    data_root: PathBuf,
 }
 
 impl FilesystemCollector {
-    pub fn new(interval: Duration, state_dir: PathBuf, roots: Vec<NasRoot>) -> Self {
+    pub fn new(interval: Duration, state_dir: PathBuf, data_root: PathBuf) -> Self {
         Self {
             interval,
             state_dir,
-            roots,
+            data_root,
         }
     }
+}
+
+fn discover_storage_pools(data_root: &Path) -> Vec<(String, PathBuf)> {
+    let Ok(entries) = std::fs::read_dir(data_root) else {
+        return Vec::new();
+    };
+    let mut pools = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let metadata = std::fs::symlink_metadata(entry.path()).ok()?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return None;
+            }
+            let id = entry.file_name().into_string().ok()?;
+            Some((format!("storage_pool:{id}"), entry.path()))
+        })
+        .collect::<Vec<_>>();
+    pools.sort_by(|left, right| left.0.cmp(&right.0));
+    pools
 }
 
 #[async_trait]
@@ -133,11 +152,7 @@ impl Collector for FilesystemCollector {
 
     async fn collect(&mut self, timestamp_ms: i64) -> Result<Collection, MonitorError> {
         let mut targets = vec![("state".to_owned(), self.state_dir.clone())];
-        targets.extend(
-            self.roots
-                .iter()
-                .map(|root| (format!("nas:{}", root.id), root.path.clone())),
-        );
+        targets.extend(discover_storage_pools(&self.data_root));
         let samples = tokio::task::spawn_blocking(move || {
             let mut samples = Vec::new();
             for (label, path) in &targets {
@@ -368,8 +383,8 @@ fn collect_cyberos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, 
             "SELECT COUNT(*) FROM download_tasks WHERE status = 'queued'",
         ),
         (
-            "photostaff",
-            "SELECT COUNT(*) FROM photostaff_jobs WHERE status IN ('queued', 'retrying')",
+            "photos",
+            "SELECT COUNT(*) FROM photos_jobs WHERE status IN ('queued', 'retrying')",
         ),
         ("agent", "SELECT COUNT(*) FROM jobs WHERE status = 'queued'"),
     ] {
@@ -385,10 +400,7 @@ fn collect_cyberos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, 
             "downloader",
             "SELECT MAX(heartbeat_at) FROM download_workers",
         ),
-        (
-            "photostaff",
-            "SELECT MAX(heartbeat_at) FROM photostaff_workers",
-        ),
+        ("photos", "SELECT MAX(heartbeat_at) FROM photos_workers"),
     ] {
         let heartbeat: Option<String> = connection.query_row(sql, [], |row| row.get(0))?;
         if let Some(heartbeat_ms) = heartbeat.as_deref().and_then(parse_iso_ms) {
@@ -404,10 +416,10 @@ fn collect_cyberos(path: &Path, timestamp_ms: i64) -> Result<Vec<MetricSample>, 
     }
     let oldest_latest_index: Option<String> = connection.query_row(
         "SELECT MIN(finished_at) FROM (\
-           SELECT root_id, MAX(finished_at) AS finished_at FROM (\
-             SELECT root_id, finished_at FROM index_runs WHERE kind='full' AND status='completed' \
-             UNION ALL SELECT root_id, finished_at FROM index_run_history WHERE kind='full' AND status='completed'\
-           ) GROUP BY root_id\
+           SELECT storage_pool_id, MAX(finished_at) AS finished_at FROM (\
+             SELECT storage_pool_id, finished_at FROM index_runs WHERE kind='full' AND status='completed' \
+             UNION ALL SELECT storage_pool_id, finished_at FROM index_run_history WHERE kind='full' AND status='completed'\
+           ) GROUP BY storage_pool_id\
          )",
         [],
         |row| row.get(0),

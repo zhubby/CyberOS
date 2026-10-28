@@ -1,4 +1,4 @@
-import type { PhotostaffMediaKind } from "./photostaff-config.js";
+import type { PhotosMediaKind } from "./photos-config.js";
 import type { MonitoringHealthStatus } from "./monitoring.js";
 import type { VodPlayerErrorCode, VodPlayerState } from "./vod-player-protocol.js";
 import type { CyberOsPaths } from "./paths.js";
@@ -24,14 +24,6 @@ export type OperationNotificationStatus =
   | "failed"
   | "rejected"
   | "cancelled";
-
-export type ApprovalStatus =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "expired"
-  | "applied"
-  | "failed";
 
 export type FileOperationStatus = "proposed" | "applied" | "rolled_back" | "failed";
 
@@ -87,7 +79,6 @@ export type DownloadErrorCode =
 export interface DownloadTaskRecord {
   id: string;
   url: string;
-  rootId: string;
   storagePoolId: string;
   targetDirectory: string;
   targetFileName: string;
@@ -122,7 +113,6 @@ export interface DownloadTaskRecord {
 
 export interface DownloadTaskCreateInput {
   url: string;
-  rootId: string;
   storagePoolId: string;
   targetDirectory: string;
   targetFileName: string;
@@ -160,7 +150,6 @@ export interface BluetoothSettingsRecord {
   defaultAdapterId: string | null;
   defaultAudioDeviceId: string | null;
   receiveEnabled: boolean;
-  inboxRootId: string | null;
   inboxStoragePoolId: string | null;
   inboxPath: string | null;
   updatedAt: string;
@@ -188,7 +177,6 @@ export interface BluetoothTransferRecord {
   direction: BluetoothTransferDirection;
   adapterId: string | null;
   deviceAddress: string;
-  rootId: string;
   storagePoolId: string;
   relativePath: string;
   displayName: string;
@@ -239,7 +227,6 @@ export interface MediaSourceRecord {
   id: string;
   name: string;
   kind: MediaSourceKind;
-  rootId: string;
   storagePoolId: string;
   path: string;
   enabled: boolean;
@@ -299,7 +286,6 @@ export interface MediaFileRecord {
   sourceId: string;
   titleId: string;
   episodeId: string | null;
-  rootId: string;
   storagePoolId: string;
   relativePath: string;
   name: string;
@@ -418,13 +404,13 @@ export interface TvModeStatus {
   updatedAt: string;
 }
 
-export type PhotostaffTakenAtSource = "exif" | "file_mtime";
-export type PhotostaffAssetStatus = "ready" | "failed";
-export type PhotostaffJobKind = "full_scan" | "path_refresh";
-export type PhotostaffJobStatus = "queued" | "running" | "retrying" | "completed" | "failed";
-export type PhotostaffJobPhase = "discovering" | "processing" | "publishing" | "cleanup" | "retry_wait";
-export type PhotostaffErrorCode =
-  | "PHOTOSTAFF_STORAGE_UNAVAILABLE"
+export type PhotosTakenAtSource = "exif" | "file_mtime";
+export type PhotosAssetStatus = "ready" | "failed";
+export type PhotosJobKind = "full_scan" | "path_refresh";
+export type PhotosJobStatus = "queued" | "running" | "retrying" | "completed" | "failed";
+export type PhotosJobPhase = "discovering" | "processing" | "publishing" | "cleanup" | "retry_wait";
+export type PhotosErrorCode =
+  | "PHOTOS_STORAGE_UNAVAILABLE"
   | "SOURCE_CHANGED"
   | "INVALID_PATH"
   | "UNSUPPORTED_MEDIA"
@@ -439,16 +425,14 @@ export type PhotostaffErrorCode =
   | "DATABASE"
   | "INTERNAL";
 
-export interface PhotostaffLibrarySettingsRecord {
-  rootId: string;
+export interface PhotosLibrarySettingsRecord {
   storagePoolId: string;
   path: string;
   updatedAt: string;
 }
 
-export interface PhotostaffAssetRecord {
+export interface PhotosAssetRecord {
   id: string;
-  rootId: string;
   storagePoolId: string;
   path: string;
   name: string;
@@ -460,18 +444,18 @@ export interface PhotostaffAssetRecord {
   height: number | null;
   orientation: number | null;
   takenAt: string;
-  takenAtSource: PhotostaffTakenAtSource;
+  takenAtSource: PhotosTakenAtSource;
   thumbnailKey: string | null;
   previewKey: string | null;
-  status: PhotostaffAssetStatus;
+  status: PhotosAssetStatus;
   error: string | null;
-  errorCode: PhotostaffErrorCode | null;
+  errorCode: PhotosErrorCode | null;
   errorRetryable: boolean;
   derivativeSchemaVersion: number;
   indexedAt: string;
 }
 
-export interface PhotostaffProcessingSettingsRecord {
+export interface PhotosProcessingSettingsRecord {
   processingConcurrency: number;
   scanIntervalMs: number;
   maxAutoRetries: number;
@@ -486,30 +470,30 @@ export interface PhotostaffProcessingSettingsRecord {
   updatedAt: string;
 }
 
-export interface PhotostaffTimelinePage {
-  photostaff: PhotostaffAssetRecord[];
+export interface PhotosTimelinePage {
+  photos: PhotosAssetRecord[];
   nextCursor: string | null;
 }
 
 /** Public Photos API timeline response. */
 export interface PhotoTimelinePage {
-  photos: PhotostaffAssetRecord[];
+  photos: PhotosAssetRecord[];
   nextCursor: string | null;
 }
 
-export type PhotostaffMetadataStatus = "ready" | "partial";
-export type PhotostaffMetadataScalar = string | number | boolean;
-export type PhotostaffMetadataValueType = "text" | "number" | "date" | "boolean";
-export type PhotostaffMetadataCaptureSource = "sidecar_xmp" | "embedded_xmp" | "iptc" | "exif" | "video" | "file_mtime";
+export type PhotosMetadataStatus = "ready" | "partial";
+export type PhotosMetadataScalar = string | number | boolean;
+export type PhotosMetadataValueType = "text" | "number" | "date" | "boolean";
+export type PhotosMetadataCaptureSource = "sidecar_xmp" | "embedded_xmp" | "iptc" | "exif" | "video" | "file_mtime";
 
-export interface PhotostaffMetadataSummary {
+export interface PhotosMetadataSummary {
   schemaVersion: number;
-  status: PhotostaffMetadataStatus;
-  mediaKind: PhotostaffMediaKind;
+  status: PhotosMetadataStatus;
+  mediaKind: PhotosMediaKind;
   capturedAt: string | null;
   capturedAtLocal: string | null;
   captureOffsetMinutes: number | null;
-  captureSource: PhotostaffMetadataCaptureSource;
+  captureSource: PhotosMetadataCaptureSource;
   durationMs: number | null;
   container: string | null;
   videoCodec: string | null;
@@ -538,7 +522,7 @@ export interface PhotostaffMetadataSummary {
   hasSensitiveMetadata: boolean;
 }
 
-export interface PhotostaffMetadataIndexStatus {
+export interface PhotosMetadataIndexStatus {
   schemaVersion: number;
   total: number;
   indexed: number;
@@ -546,7 +530,7 @@ export interface PhotostaffMetadataIndexStatus {
   pending: number;
 }
 
-export type PhotostaffMetadataOperator =
+export type PhotosMetadataOperator =
   | "eq"
   | "contains"
   | "prefix"
@@ -559,24 +543,24 @@ export type PhotostaffMetadataOperator =
   | "gte"
   | "between";
 
-export interface PhotostaffMetadataCondition {
+export interface PhotosMetadataCondition {
   key: string;
-  operator: PhotostaffMetadataOperator;
-  value?: PhotostaffMetadataScalar | PhotostaffMetadataScalar[];
+  operator: PhotosMetadataOperator;
+  value?: PhotosMetadataScalar | PhotosMetadataScalar[];
   valueTo?: string | number;
 }
 
-export interface PhotostaffNumberRange {
+export interface PhotosNumberRange {
   min?: number;
   max?: number;
 }
 
-export interface PhotostaffDateRange {
+export interface PhotosDateRange {
   from?: string;
   to?: string;
 }
 
-export interface PhotostaffLocationBounds {
+export interface PhotosLocationBounds {
   kind: "bounds";
   west: number;
   south: number;
@@ -584,136 +568,124 @@ export interface PhotostaffLocationBounds {
   north: number;
 }
 
-export interface PhotostaffLocationNear {
+export interface PhotosLocationNear {
   kind: "near";
   latitude: number;
   longitude: number;
   radiusMeters: number;
 }
 
-export interface PhotostaffQueryFilters {
+export interface PhotosQueryFilters {
   text?: string;
-  capturedAt?: PhotostaffDateRange;
-  mediaKinds?: PhotostaffMediaKind[];
+  capturedAt?: PhotosDateRange;
+  mediaKinds?: PhotosMediaKind[];
   cameraModels?: string[];
   lensModels?: string[];
-  iso?: PhotostaffNumberRange;
-  aperture?: PhotostaffNumberRange;
-  exposureTimeSeconds?: PhotostaffNumberRange;
-  focalLengthMm?: PhotostaffNumberRange;
-  rating?: PhotostaffNumberRange;
+  iso?: PhotosNumberRange;
+  aperture?: PhotosNumberRange;
+  exposureTimeSeconds?: PhotosNumberRange;
+  focalLengthMm?: PhotosNumberRange;
+  rating?: PhotosNumberRange;
   keywords?: string[];
   hasLocation?: boolean;
-  location?: PhotostaffLocationBounds | PhotostaffLocationNear;
+  location?: PhotosLocationBounds | PhotosLocationNear;
   advanced?: {
     mode: "all" | "any";
-    conditions: PhotostaffMetadataCondition[];
+    conditions: PhotosMetadataCondition[];
   };
 }
 
-export type PhotostaffQuerySortField = "captured_at" | "indexed_at" | "name" | "size_bytes" | "rating" | "distance";
+export type PhotosQuerySortField = "captured_at" | "indexed_at" | "name" | "size_bytes" | "rating" | "distance";
 
-export interface PhotostaffQueryRequest {
-  filters?: PhotostaffQueryFilters;
-  sort?: { field: PhotostaffQuerySortField; direction: "asc" | "desc" };
+export interface PhotosQueryRequest {
+  filters?: PhotosQueryFilters;
+  sort?: { field: PhotosQuerySortField; direction: "asc" | "desc" };
   cursor?: string | null;
   limit?: number;
   includeFacets?: boolean;
 }
 
-export interface PhotostaffQueryAsset extends PhotostaffAssetRecord {
-  metadata: PhotostaffMetadataSummary | null;
+export interface PhotosQueryAsset extends PhotosAssetRecord {
+  metadata: PhotosMetadataSummary | null;
   keywords: string[];
   distanceMeters: number | null;
 }
 
-export interface PhotostaffFacetValue {
+export interface PhotosFacetValue {
   value: string;
   count: number;
 }
 
-export interface PhotostaffQueryFacets {
-  mediaKinds: PhotostaffFacetValue[];
-  cameraModels: PhotostaffFacetValue[];
-  lensModels: PhotostaffFacetValue[];
-  ratings: PhotostaffFacetValue[];
-  keywords: PhotostaffFacetValue[];
+export interface PhotosQueryFacets {
+  mediaKinds: PhotosFacetValue[];
+  cameraModels: PhotosFacetValue[];
+  lensModels: PhotosFacetValue[];
+  ratings: PhotosFacetValue[];
+  keywords: PhotosFacetValue[];
   numeric: Record<string, { min: number | null; max: number | null }>;
 }
 
-export interface PhotostaffQueryPage {
-  photostaff: PhotostaffQueryAsset[];
+export interface PhotosQueryPage {
+  photos: PhotosQueryAsset[];
   nextCursor: string | null;
   total: number;
-  facets: PhotostaffQueryFacets | null;
-  metadataIndex: PhotostaffMetadataIndexStatus;
+  facets: PhotosQueryFacets | null;
+  metadataIndex: PhotosMetadataIndexStatus;
 }
 
 /** Public Photos API query response. */
 export interface PhotoQueryPage {
-  photos: PhotostaffQueryAsset[];
+  photos: PhotosQueryAsset[];
   nextCursor: string | null;
   total: number;
-  facets: PhotostaffQueryFacets | null;
-  metadataIndex: PhotostaffMetadataIndexStatus;
+  facets: PhotosQueryFacets | null;
+  metadataIndex: PhotosMetadataIndexStatus;
 }
 
-export interface PhotostaffMetadataField {
+export interface PhotosMetadataField {
   key: string;
-  valueType: PhotostaffMetadataValueType;
+  valueType: PhotosMetadataValueType;
   count: number;
   sensitive: boolean;
 }
 
-export interface PhotostaffMetadataDetail {
+export interface PhotosMetadataDetail {
   assetId: string;
-  summary: PhotostaffMetadataSummary | null;
+  summary: PhotosMetadataSummary | null;
   keywords: string[];
-  groups: Record<string, Record<string, PhotostaffMetadataScalar[]>>;
-  sensitiveGroups?: Record<string, Record<string, PhotostaffMetadataScalar[]>>;
+  groups: Record<string, Record<string, PhotosMetadataScalar[]>>;
+  sensitiveGroups?: Record<string, Record<string, PhotosMetadataScalar[]>>;
   sensitiveOmitted: boolean;
   warnings: string[];
 }
 
-export interface PhotostaffMapQueryRequest {
-  filters?: PhotostaffQueryFilters;
-  bounds: PhotostaffLocationBounds;
+export interface PhotosMapQueryRequest {
+  filters?: PhotosQueryFilters;
+  bounds: PhotosLocationBounds;
   columns?: number;
   rows?: number;
 }
 
-export interface PhotostaffMapCluster {
+export interface PhotosMapCluster {
   latitude: number;
   longitude: number;
   count: number;
   assetId: string | null;
 }
 
-export interface PhotostaffMapQueryResult {
-  clusters: PhotostaffMapCluster[];
-  metadataIndex: PhotostaffMetadataIndexStatus;
+export interface PhotosMapQueryResult {
+  clusters: PhotosMapCluster[];
+  metadataIndex: PhotosMetadataIndexStatus;
 }
 
-export interface PhotostaffMapSettingsRecord {
-  rootId: string;
-  storagePoolId: string;
-  path: string;
-  tileType: "png" | "jpeg" | "webp";
-  minZoom: number;
-  maxZoom: number;
-  bounds: [number, number, number, number] | null;
-  attribution: string | null;
-  updatedAt: string;
-}
-
-export interface PhotostaffManagedMapInfo {
+export interface PhotosManagedMapInfo {
   name: string;
   version: string;
   attribution: string | null;
   sizeBytes: number;
 }
 
-export interface PhotostaffManagedMapSettings extends PhotostaffManagedMapInfo {
+export interface PhotosManagedMapSettings extends PhotosManagedMapInfo {
   tileType: "png" | "jpeg" | "webp";
   minZoom: number;
   maxZoom: number;
@@ -721,26 +693,25 @@ export interface PhotostaffManagedMapSettings extends PhotostaffManagedMapInfo {
   updatedAt: string;
 }
 
-export type PhotostaffMapDownloadState = "not_downloaded" | "downloading" | "ready" | "failed";
+export type PhotosMapDownloadState = "not_downloaded" | "downloading" | "ready" | "failed";
 
-export interface PhotostaffMapDownloadStatus {
-  state: PhotostaffMapDownloadState;
+export interface PhotosMapDownloadStatus {
+  state: PhotosMapDownloadState;
   receivedBytes: number;
   totalBytes: number;
   error: string | null;
 }
 
-export interface PhotostaffMapSettingsResponse {
-  map: PhotostaffManagedMapInfo;
-  settings: PhotostaffManagedMapSettings | null;
-  download: PhotostaffMapDownloadStatus;
+export interface PhotosMapSettingsResponse {
+  map: PhotosManagedMapInfo;
+  settings: PhotosManagedMapSettings | null;
+  download: PhotosMapDownloadStatus;
 }
 
-export interface PhotostaffJobRecord {
+export interface PhotosJobRecord {
   id: string;
-  kind: PhotostaffJobKind;
-  status: PhotostaffJobStatus;
-  rootId: string;
+  kind: PhotosJobKind;
+  status: PhotosJobStatus;
   storagePoolId: string;
   path: string;
   libraryUpdatedAt: string;
@@ -748,9 +719,9 @@ export interface PhotostaffJobRecord {
   processed: number;
   failed: number;
   currentPath: string | null;
-  phase: PhotostaffJobPhase | null;
+  phase: PhotosJobPhase | null;
   error: string | null;
-  errorCode: PhotostaffErrorCode | null;
+  errorCode: PhotosErrorCode | null;
   errorRetryable: boolean;
   retryCount: number;
   nextRetryAt: string | null;
@@ -763,23 +734,23 @@ export interface PhotostaffJobRecord {
   finishedAt: string | null;
 }
 
-export interface PhotostaffLibraryStatus {
+export interface PhotosLibraryStatus {
   state: "unconfigured" | "queued" | "discovering" | "processing" | "retrying" | "ready" | "degraded" | "offline";
   total: number;
-  metadataIndex?: PhotostaffMetadataIndexStatus;
+  metadataIndex?: PhotosMetadataIndexStatus;
   failed: number;
   scanned: number;
   processed: number;
   currentPath: string | null;
-  phase: PhotostaffJobPhase | null;
+  phase: PhotosJobPhase | null;
   error: string | null;
-  errorCode: PhotostaffErrorCode | null;
+  errorCode: PhotosErrorCode | null;
   retryCount: number;
   nextRetryAt: string | null;
   updatedAt: string | null;
 }
 
-export interface PhotostaffWorkerHealth {
+export interface PhotosWorkerHealth {
   status: "ready" | "stale" | "unavailable";
   freshWorkers: number;
   lastHeartbeatAt: string | null;
@@ -789,27 +760,27 @@ export interface PhotostaffWorkerHealth {
 }
 
 // Public Photos API and Web names. The underlying records remain owned by the
-// internal Photostaff service and database implementation.
-export type PhotoAssetRecord = PhotostaffAssetRecord;
-export type PhotoJobRecord = PhotostaffJobRecord;
-export type PhotoLibrarySettingsRecord = PhotostaffLibrarySettingsRecord;
-export type PhotoLibraryStatus = PhotostaffLibraryStatus;
-export type PhotoProcessingSettingsRecord = PhotostaffProcessingSettingsRecord;
-export type PhotoWorkerHealth = PhotostaffWorkerHealth;
-export type PhotoLocationBounds = PhotostaffLocationBounds;
-export type PhotoLocationNear = PhotostaffLocationNear;
-export type PhotoMetadataCondition = PhotostaffMetadataCondition;
-export type PhotoMetadataDetail = PhotostaffMetadataDetail;
-export type PhotoMetadataField = PhotostaffMetadataField;
-export type PhotoQueryAsset = PhotostaffQueryAsset;
-export type PhotoQueryFacets = PhotostaffQueryFacets;
-export type PhotoQueryFilters = PhotostaffQueryFilters;
-export type PhotoQueryRequest = PhotostaffQueryRequest;
-export type PhotoQuerySortField = PhotostaffQuerySortField;
-export type PhotoMapQueryRequest = PhotostaffMapQueryRequest;
-export type PhotoMapQueryResult = PhotostaffMapQueryResult;
-export type PhotoManagedMapSettings = PhotostaffManagedMapSettings;
-export type PhotoMapSettingsResponse = PhotostaffMapSettingsResponse;
+// internal Photos service and database implementation.
+export type PhotoAssetRecord = PhotosAssetRecord;
+export type PhotoJobRecord = PhotosJobRecord;
+export type PhotoLibrarySettingsRecord = PhotosLibrarySettingsRecord;
+export type PhotoLibraryStatus = PhotosLibraryStatus;
+export type PhotoProcessingSettingsRecord = PhotosProcessingSettingsRecord;
+export type PhotoWorkerHealth = PhotosWorkerHealth;
+export type PhotoLocationBounds = PhotosLocationBounds;
+export type PhotoLocationNear = PhotosLocationNear;
+export type PhotoMetadataCondition = PhotosMetadataCondition;
+export type PhotoMetadataDetail = PhotosMetadataDetail;
+export type PhotoMetadataField = PhotosMetadataField;
+export type PhotoQueryAsset = PhotosQueryAsset;
+export type PhotoQueryFacets = PhotosQueryFacets;
+export type PhotoQueryFilters = PhotosQueryFilters;
+export type PhotoQueryRequest = PhotosQueryRequest;
+export type PhotoQuerySortField = PhotosQuerySortField;
+export type PhotoMapQueryRequest = PhotosMapQueryRequest;
+export type PhotoMapQueryResult = PhotosMapQueryResult;
+export type PhotoManagedMapSettings = PhotosManagedMapSettings;
+export type PhotoMapSettingsResponse = PhotosMapSettingsResponse;
 
 export type GitFileStatus = "tracked" | "staged" | "modified" | "untracked" | "conflicted";
 
@@ -834,16 +805,6 @@ export interface GitDirectoryStatus {
   dirty: boolean;
   summary: GitStatusSummary;
 }
-
-export type PendingApprovalKind =
-  | "file_operation"
-  | "pi_tool_call"
-  | "docker_operation"
-  | "vm_operation"
-  | "share_operation"
-  | "storage_operation";
-
-export type PiToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls";
 
 export type AgentCapabilityPolicyMode = "auto" | "approve" | "confirm" | "disabled";
 
@@ -921,23 +882,13 @@ export interface AgentSessionCommandRecord {
   updatedAt: string;
 }
 
-export interface NasRootConfig {
-  id: string;
-  name: string;
-  path: string;
-  mountPolicy?: MountPolicy;
-  expectedSource?: string | null;
-  expectedUuid?: string | null;
-  expectedFstype?: string | null;
-}
-
 export type DeploymentMode = "development" | "production";
 export type MountPolicy = "required" | "optional";
-export type RootReadinessStatus = "ready" | "not_ready" | "unknown" | "config_invalid";
+export type StoragePoolReadinessStatus = "ready" | "not_ready" | "unknown" | "config_invalid";
 
-export interface RootReadiness {
-  rootId: string;
-  status: RootReadinessStatus;
+export interface StoragePoolReadiness {
+  storagePoolId: string;
+  status: StoragePoolReadinessStatus;
   checkedAt: string | null;
   reason: string | null;
   source: string | null;
@@ -961,7 +912,7 @@ export type BackupRunKind = "daily" | "weekly" | "check" | "restore";
 export type BackupRunStatus = "never_run" | "validating" | "running" | "completed" | "failed" | "interrupted";
 
 export interface BackupFailure {
-  rootId?: string;
+  storagePoolId?: string;
   path?: string;
   reason: string;
   code?: string;
@@ -1056,7 +1007,7 @@ export interface IndexerProgress {
 export interface IndexerAlert {
   id: string;
   code: string;
-  rootId: string | null;
+  storagePoolId: string | null;
   severity: HealthAlertSeverity;
   status: HealthAlertStatus;
   firstSeenAt: string;
@@ -1070,7 +1021,7 @@ export type IndexQueueStatus = "queued" | "running" | "retrying" | "failed";
 export type IndexExtractionSource = "plain_text" | "pdftotext" | "docx" | "xlsx" | "pptx" | "ocr";
 export type IndexExtractionStatus = "pending" | "ready" | "stale" | "error" | "skipped";
 export type IndexWatcherStatus = "starting" | "ready" | "degraded" | "unsupported";
-export type IndexRebuildStatus = "legacy" | "copying" | "rebuilding" | "ready" | "failed";
+export type IndexRebuildStatus = "rebuilding" | "ready" | "failed";
 
 export interface IndexerSettingsRecord {
   scanConcurrency: number;
@@ -1081,7 +1032,7 @@ export interface IndexerSettingsRecord {
   commandTimeoutMs: number;
   maxPdfTextPages: number;
   maxOcrPages: number;
-  ocrRootIds: string[];
+  ocrStoragePoolIds: string[];
   updatedAt: string;
 }
 
@@ -1093,7 +1044,7 @@ export interface IndexerWorkerHealth {
 
 export interface IndexerWatcherHealth {
   status: IndexWatcherStatus;
-  degradedRoots: string[];
+  degradedStoragePools: string[];
   reason: string | null;
 }
 
@@ -1108,10 +1059,8 @@ export interface IndexerQueueHealth {
 
 export interface IndexerRebuildHealth {
   status: IndexRebuildStatus;
-  copied: number;
-  total: number;
-  rootsReady: number;
-  rootsTotal: number;
+  storagePoolsReady: number;
+  storagePoolsTotal: number;
 }
 
 export interface IndexerServiceStatus {
@@ -1125,7 +1074,6 @@ export type IndexSearchCategory = "text" | "document" | "spreadsheet" | "present
 export type IndexSearchSortField = "relevance" | "name" | "mtime" | "size";
 
 export interface IndexSearchRequest {
-  rootId: string;
   storagePoolId: string;
   path?: string;
   query?: string;
@@ -1149,7 +1097,7 @@ export interface IndexSearchHighlightRange {
 
 export interface IndexSearchResult {
   fileId: string;
-  rootId: string;
+  storagePoolId: string;
   path: string;
   name: string;
   mimeType: string | null;
@@ -1168,7 +1116,7 @@ export interface IndexSearchPage {
 }
 
 export interface IndexReindexRequest {
-  rootId: string;
+  storagePoolId: string;
   path?: string;
   recursive?: boolean;
 }
@@ -1179,15 +1127,15 @@ export interface SystemHealthSummary {
   issues: Array<{
     code: string;
     severity: HealthAlertSeverity;
-    rootId?: string;
+    storagePoolId?: string;
     message: string;
   }>;
-  roots: RootReadiness[];
+  storagePools: StoragePoolReadiness[];
   indexerFreshnessMs: number | null;
   backupFreshnessMs: number | null;
   downloader: DownloadWorkerHealth;
   indexer?: IndexerServiceStatus;
-  photostaff: PhotostaffWorkerHealth;
+  photos: PhotosWorkerHealth;
   vodPlayer: VodPlayerHealth;
   operations: Record<OpsTask, OpsTaskOverview>;
   monitoring?: MonitoringHealthStatus;
@@ -1286,7 +1234,7 @@ export interface ShareProtocolConfig {
 export interface ShareDefinitionConfig {
   id: string;
   name: string;
-  rootId: string;
+  storagePoolId: string;
   path: string;
   description: string;
   protocols: ShareProtocolConfig;
@@ -1302,20 +1250,19 @@ export type HostMutationPolicy = "mutable" | "declarative";
 
 export interface HostdConfig {
   socketPath: string;
-  mutationPolicy?: HostMutationPolicy;
+  mutationPolicy: HostMutationPolicy;
 }
 
 export interface TerminalConfig {
-  user: string | null;
-  termuxSocketPath: string;
-  sessionIdleTimeoutMs?: number;
-  connectTimeoutMs?: number;
-  maxSessions?: number;
+  user: string;
+  socketPath: string;
+  sessionIdleTimeoutMs: number;
+  connectTimeoutMs: number;
+  maxSessions: number;
 }
 
 export interface TerminalTab {
   id: string;
-  rootId: string;
   ordinal: number;
   customTitle: string | null;
   createdAt: string;
@@ -1355,56 +1302,40 @@ export interface PublicShareSettings extends Omit<ShareSettingsRecord, "account"
 }
 
 export interface CyberOsConfig {
-  environment?: DeploymentMode;
-  rootDir?: string;
-  paths?: CyberOsPaths;
-  stateDir?: string;
-  dataRoot?: string;
-  appsRoot?: string;
-  isoRoot?: string;
-  vmRoot?: string;
-  backupRoot?: string;
-  dataDir: string;
-  databasePath: string;
-  metricsDatabasePath?: string;
+  environment: DeploymentMode;
+  paths: CyberOsPaths;
   api: {
     host: string;
     port: number;
     allowedOrigins: string[];
   };
-  mcp?: McpConfig;
+  mcp: McpConfig;
   worker: {
     pollMs: number;
-    concurrency?: number;
+    concurrency: number;
   };
   admin: {
     displayName: string;
     authMode: "local-only";
   };
-  model: {
-    provider: "pi" | "cloud" | "local";
-    piCommand: string;
-    localEndpoint: string | null;
-  };
   docker: DockerConfig;
-  vm?: VmConfig;
+  vm: VmConfig;
   hostd: HostdConfig;
   shares: ShareConfig;
   terminal: TerminalConfig;
   vodPlayer: VodPlayerConfig;
-  photostaff?: {
+  photos: {
     baseMapUrl: string;
   };
-  nasRoots: NasRootConfig[];
-  backup?: BackupConfig;
-  health?: {
+  backup: BackupConfig;
+  health: {
     staleIndexWarningMs: number;
     staleIndexCriticalMs: number;
     stalledRunMs: number;
     consecutiveFailureThreshold: number;
     backupStaleMs: number;
   };
-  monitoring?: MonitoringConfig;
+  monitoring: MonitoringConfig;
 }
 
 export interface McpConfig {
@@ -1470,7 +1401,7 @@ export function isModelProviderName(value: unknown): value is ModelProviderName 
   );
 }
 
-export type BuildSource = "release" | "ci" | "local" | "nix" | "unknown";
+export type BuildSource = "release" | "ci" | "local" | "unknown";
 
 export interface PublicBuildInfo {
   version: string;
@@ -1534,23 +1465,19 @@ export interface PublicSystemInfo {
     isoRoot: string;
     vmRoot: string;
     backupRoot: string;
-    dataDir: string;
     databasePath: string;
     apiHost: string;
     apiPort: number;
     allowedOriginCount: number;
     workerPollMs: number;
-    modelProvider: "pi" | "cloud" | "local";
-    localEndpointConfigured: boolean;
     dockerEnabled: boolean;
-    photostaff: {
+    photos: {
       dataDir: string;
       maxFileSizeBytes: number;
       thumbnailSizePx: number;
       previewMaxEdgePx: number;
       supportedExtensions: string[];
     };
-    nasRoots: NasRootConfig[];
   };
 }
 
@@ -1584,7 +1511,7 @@ export interface PublicSystemInfoProcessMemory {
 export interface PublicSystemInfoStorageVolume {
   id: string;
   label: string;
-  kind: "data" | "database" | "nas-root";
+  kind: "data" | "database" | "storage-pool";
   path: string;
   status: "ready" | "error";
   blockSizeBytes: number | null;
@@ -1593,7 +1520,7 @@ export interface PublicSystemInfoStorageVolume {
   availableBytes: number | null;
   usedBytes: number | null;
   usedPercent: number | null;
-  rootId: string | null;
+  storagePoolId: string | null;
   error: string | null;
 }
 
@@ -2145,6 +2072,11 @@ export interface SystemStoragePool {
   memberDevices: string[];
 }
 
+/** Canonical filesystem boundary for CyberOS-managed storage. */
+export interface StorageWorkspace {
+  path: string;
+}
+
 export interface SystemStorageSummary {
   collectedAt: string;
   status: SystemCollectionStatus;
@@ -2206,7 +2138,6 @@ export type PublicPiToolPolicySettings = PiToolPolicySettingsRecord;
 
 export interface AgentSessionRecord {
   id: string;
-  rootId: string;
   currentPath: string;
   piResourcesTrusted?: boolean;
   createdAt: string;
@@ -2263,7 +2194,6 @@ export interface FileBatchFailure {
 
 export interface FileBatchRecord {
   id: string;
-  rootId: string;
   storagePoolId: string;
   operation: FileBatchOperation;
   targetDirectory: string | null;
@@ -2311,19 +2241,6 @@ export interface OperationNotificationRecord {
   updatedAt: string;
 }
 
-export interface NasRootRecord {
-  id: string;
-  name: string;
-  path: string;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-  mountPolicy?: MountPolicy;
-  expectedSource?: string | null;
-  expectedUuid?: string | null;
-  expectedFstype?: string | null;
-}
-
 export type IndexRunStatus = "running" | "completed" | "failed" | "never_run";
 
 export interface IndexFailure {
@@ -2331,8 +2248,8 @@ export interface IndexFailure {
   reason: string;
 }
 
-export interface IndexRootRunSummary {
-  rootId: string;
+export interface IndexStoragePoolRunSummary {
+  storagePoolId: string;
   status: IndexRunStatus;
   startedAt: string | null;
   finishedAt: string | null;
@@ -2345,12 +2262,12 @@ export interface IndexRootRunSummary {
   failures: IndexFailure[];
   progress?: IndexerProgress;
   metrics?: IndexerMetrics;
-  history?: IndexRootRunSummary[];
-  readiness?: RootReadiness;
+  history?: IndexStoragePoolRunSummary[];
+  readiness?: StoragePoolReadiness;
   alerts?: IndexerAlert[];
 }
 
-export type IndexRootStatus = IndexRootRunSummary;
+export type IndexStoragePoolStatus = IndexStoragePoolRunSummary;
 
 export interface ToolResult<T = unknown> {
   success: boolean;
@@ -2361,23 +2278,13 @@ export interface ToolResult<T = unknown> {
 
 export interface FileOperationProposal {
   operation: FileMutationOperation;
-  rootId: string;
-  storagePoolId?: string;
+  storagePoolId: string;
   sourcePath?: string;
   targetPath?: string;
   tag?: string;
   trashEntryId?: string;
   risk: "low" | "medium" | "high";
   reversible: boolean;
-  summary: string;
-}
-
-export interface PiToolCallApproval {
-  toolCallId: string;
-  toolName: PiToolName;
-  args: Record<string, unknown>;
-  cwd: string;
-  risk: "low" | "medium" | "high";
   summary: string;
 }
 
@@ -2523,7 +2430,7 @@ export interface DockerContainerSummary {
   shortId: string;
   name: string;
   image: string;
-  imageId?: string | null;
+  imageId: string | null;
   state: DockerContainerState;
   status: string;
   ports: string[];
@@ -2627,8 +2534,8 @@ export type DockerHostAccessReasonCode =
   | "not_linux"
   | "rootless_docker"
   | "user_namespace_enabled"
-  | "no_ready_nas_root"
-  | "nas_root_not_ready"
+  | "no_ready_storage_pool"
+  | "storage_pool_not_ready"
   | "resource_identity_changed"
   | "runtime_dependency_unavailable";
 
@@ -2670,7 +2577,7 @@ export interface DockerHostAccessCapability {
 export type DockerHostAccessGrant =
   | {
       capability: "nas_capacity";
-      rootId: string;
+      storagePoolId: string;
       target?: string;
     }
   | {
@@ -2683,8 +2590,8 @@ export interface DockerComposeServiceHostAccess {
   grants: DockerHostAccessGrant[];
 }
 
-export interface DockerHostAccessNasRoot {
-  rootId: string;
+export interface DockerHostAccessStoragePool {
+  storagePoolId: string;
   name: string;
   availability: DockerHostAccessAvailability;
 }
@@ -2692,7 +2599,7 @@ export interface DockerHostAccessNasRoot {
 export interface DockerHostAccessCatalog {
   policyVersion: string;
   capabilities: DockerHostAccessCapability[];
-  nasRoots: DockerHostAccessNasRoot[];
+  storagePools: DockerHostAccessStoragePool[];
 }
 
 export type DockerHostAccessCoverageState =
@@ -2721,8 +2628,8 @@ export interface DockerHostAccessValidationIssue {
     | "duplicate_target"
     | "unknown_service"
     | "duplicate_capability"
-    | "missing_root"
-    | "root_unavailable"
+    | "missing_storage_pool"
+    | "storage_pool_unavailable"
     | "capability_unavailable"
     | "conflicting_compose_field"
     | "managed_mount_conflict"
@@ -2856,7 +2763,7 @@ export type DockerRestartPolicy = "no" | "always" | "unless-stopped" | "on-failu
 export type DockerContainerMount =
   | {
       type: "bind";
-      rootId: string;
+      storagePoolId: string;
       sourcePath: string;
       target: string;
       readOnly?: boolean;
@@ -3012,13 +2919,13 @@ export interface DockerOperationProposal {
     added: Array<{
       service?: string;
       capability: DockerHostAccessCapabilityId;
-      rootId?: string;
+      storagePoolId?: string;
       risk: DockerHostAccessRisk;
     }>;
     removed: Array<{
       service?: string;
       capability: DockerHostAccessCapabilityId;
-      rootId?: string;
+      storagePoolId?: string;
       risk: DockerHostAccessRisk;
     }>;
     imageDigests: Array<{ service?: string; digest: string }>;
@@ -3027,7 +2934,6 @@ export interface DockerOperationProposal {
 
 export interface DockerOperationRecord {
   id: string;
-  approvalId: string | null;
   action: DockerOperationAction;
   targetType: DockerOperationTargetType;
   targetId: string;
@@ -3139,7 +3045,6 @@ export interface VmOperationProposal {
   diskCache?: VmDiskCache;
   diskDiscard?: VmDiskDiscard;
   isoPath?: string;
-  isoRootId?: string;
   isoStoragePoolId?: string;
   isoSourcePath?: string;
   diskPath?: string;
@@ -3156,7 +3061,6 @@ export interface VmOperationProposal {
 
 export interface VmOperationRecord {
   id: string;
-  approvalId: string | null;
   action: VmOperationAction;
   targetId: string;
   status: VmOperationStatus;
@@ -3168,7 +3072,6 @@ export interface VmOperationRecord {
 export interface VmConsoleAuthorizationRecord {
   id: string;
   operationId: string;
-  approvalId: string | null;
   domainName: string;
   status: "active" | "used" | "expired" | "failed";
   createdAt: string;
@@ -3191,7 +3094,7 @@ export interface ShareProtocolSummary {
 export interface ShareSummaryItem {
   id: string;
   name: string;
-  rootId: string;
+  storagePoolId: string;
   path: string;
   enabledProtocols: ShareProtocol[];
 }
@@ -3216,7 +3119,7 @@ export interface ShareSummary {
 
 export interface ShareApplyRequest {
   settings: ShareSettingsRecord;
-  roots: NasRootConfig[];
+  dataRoot: string;
 }
 
 export interface ShareApplyResult {
@@ -3234,7 +3137,6 @@ export interface ShareOperationProposal {
 
 export interface ShareOperationRecord {
   id: string;
-  approvalId: string | null;
   action: ShareOperationAction;
   targetId: string;
   status: ShareOperationStatus;
@@ -3272,7 +3174,6 @@ export type StorageOperationProposal = StoragePoolCreateProposal | StoragePoolDe
 
 export interface StorageOperationRecord {
   id: string;
-  approvalId: string | null;
   action: StorageOperationAction;
   targetId: string;
   status: StorageOperationStatus;
@@ -3284,7 +3185,6 @@ export interface StorageOperationRecord {
 export interface DockerConsoleAuthorizationRecord {
   id: string;
   operationId: string;
-  approvalId: string | null;
   containerId: string;
   shell: string;
   status: "active" | "used" | "expired" | "failed";
@@ -3293,28 +3193,8 @@ export interface DockerConsoleAuthorizationRecord {
   usedAt: string | null;
 }
 
-export type PendingApprovalProposal =
-  | FileOperationProposal
-  | PiToolCallApproval
-  | DockerOperationProposal
-  | VmOperationProposal
-  | ShareOperationProposal
-  | StorageOperationProposal;
-
-export interface PendingApprovalRecord {
-  id: string;
-  jobId: string;
-  sessionId: string;
-  kind: PendingApprovalKind;
-  status: ApprovalStatus;
-  proposal: PendingApprovalProposal[];
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface FileOperationRecord {
   id: string;
-  approvalId: string | null;
   operation: FileMutationOperation;
   sourcePath: string | null;
   targetPath: string | null;
@@ -3326,7 +3206,7 @@ export interface FileOperationRecord {
 
 export interface TrashEntryRecord {
   id: string;
-  rootId: string;
+  storagePoolId: string;
   originalPath: string;
   trashPath: string;
   metadata: Record<string, unknown>;

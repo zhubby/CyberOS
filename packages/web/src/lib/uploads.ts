@@ -19,7 +19,6 @@ export interface UploadItemState {
 
 export interface UploadBatchState {
   id: string;
-  rootId: string;
   storagePoolId: string;
   targetPath: string;
   createdAt: string;
@@ -120,7 +119,6 @@ export async function collectUploadSourcesFromDataTransfer(dataTransfer: DataTra
 
 export function createUploadBatch(input: {
   id: string;
-  rootId: string;
   storagePoolId: string;
   currentPath: string;
   sources: UploadSource[];
@@ -132,7 +130,6 @@ export function createUploadBatch(input: {
   const targetPath = normalizeNasPath(input.currentPath);
   return {
     id: input.id,
-    rootId: input.rootId,
     storagePoolId: input.storagePoolId,
     targetPath,
     createdAt: new Date().toISOString(),

@@ -13,8 +13,7 @@ const status: VodPlayerStatus = {
   sessionId: "session-1",
   serviceInstanceId: "instance-1",
   revision: 7,
-  rootId: "primary",
-  storagePoolId: "/dev/md/media",
+  storagePoolId: "media",
   relativePath: "movies/clip.mp4",
   fileName: "clip.mp4",
   mediaFileId: "file-1",
@@ -51,8 +50,7 @@ describe("VOD player broker protocol", () => {
         id: "request-1",
         command: {
           type: "play",
-          rootId: "primary",
-          storagePoolId: "/dev/md/media",
+          storagePoolId: "media",
           relativePath: "movies/clip.mp4",
           startPositionSeconds: 4,
           audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
@@ -62,8 +60,7 @@ describe("VOD player broker protocol", () => {
     );
     expect(request?.command).toEqual({
       type: "play",
-      rootId: "primary",
-      storagePoolId: "/dev/md/media",
+      storagePoolId: "media",
       relativePath: "movies/clip.mp4",
       startPositionSeconds: 4,
       audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
@@ -74,8 +71,7 @@ describe("VOD player broker protocol", () => {
       id: "request-2",
       command: {
         type: "play",
-        rootId: "primary",
-        storagePoolId: "/dev/md/media",
+        storagePoolId: "media",
         relativePath: "movies/clip.mp4",
         audioDeviceId: "bluetooth:adapter-hci1/AA:BB:CC:DD:EE:FF"
       }
@@ -94,12 +90,12 @@ describe("VOD player broker protocol", () => {
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
       version: 2,
       id: "request-1",
-      command: { type: "play", rootId: "primary", storagePoolId: "pool", relativePath: "../video.mp4" }
+      command: { type: "play", storagePoolId: "pool", relativePath: "../video.mp4" }
     }))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
       version: 2,
       id: "request-1",
-      command: { type: "play", rootId: "primary", storagePoolId: "pool", relativePath: "video.mp4", audioDeviceId: "alsa/arbitrary" }
+      command: { type: "play", storagePoolId: "pool", relativePath: "video.mp4", audioDeviceId: "alsa/arbitrary" }
     }))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
       version: 2,

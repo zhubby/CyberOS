@@ -8,7 +8,7 @@
           "account": { "username": "cyberos_share", "password": null },
           "shares": []
         },
-        "roots": [{ "id": "primary", "path": "/cyberos/data/primary" }]
+        "dataRoot": "/cyberos/data"
       },
       "result": {
         "appliedAt": "2026-10-10T00:00:00Z",

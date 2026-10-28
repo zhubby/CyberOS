@@ -22,7 +22,7 @@ import {
   getShareSettings,
   getShareSummary,
   applyShareSettings,
-  type NasRoot,
+  type StoragePool,
   type ShareSummary
 } from "../../api.js";
 import {
@@ -62,13 +62,13 @@ const PROTOCOL_ICONS = {
 } as const satisfies Record<ShareProtocol, LucideIcon>;
 
 export function ShareManagementPanel({
-  roots,
+  storagePools,
   locale,
   onWorkQueuesChanged,
   onNotifyError,
   onNotifySuccess
 }: {
-  roots: NasRoot[];
+  storagePools: StoragePool[];
   locale: SupportedLocale;
   onWorkQueuesChanged: () => void | Promise<void>;
   onNotifyError: (message: string | null) => void;
@@ -76,7 +76,7 @@ export function ShareManagementPanel({
 }) {
   const { t } = useTranslation();
   const dashboard = useManagementDashboard("shares");
-  const [form, setForm] = useState<ShareSettingsFormState>(() => shareSettingsToForm(null, roots));
+  const [form, setForm] = useState<ShareSettingsFormState>(() => shareSettingsToForm(null, storagePools));
   const [summary, setSummary] = useState<ShareSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,7 +86,7 @@ export function ShareManagementPanel({
   const [newShareError, setNewShareError] = useState<string | null>(null);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const reportedIssueSignature = useRef<string | null>(null);
-  const validationIssues = useMemo(() => validateShareForm(form, roots), [form, roots]);
+  const validationIssues = useMemo(() => validateShareForm(form, storagePools), [form, storagePools]);
   const canApplyConfiguration = summary?.capabilities.canApplyConfiguration === true;
   const submitDisabled = loading || submitting || !canApplyConfiguration;
   const statusTone = shareStatusTone(summary, loading, error);
@@ -118,7 +118,7 @@ export function ShareManagementPanel({
         if (!active) {
           return;
         }
-        setForm(shareSettingsToForm(settings, roots));
+        setForm(shareSettingsToForm(settings, storagePools));
         setSummary(nextSummary);
         notifySummaryIssues(nextSummary.issues, onNotifyError, reportedIssueSignature);
       } catch (nextError) {
@@ -129,7 +129,7 @@ export function ShareManagementPanel({
         }
       }
     }
-  }, [roots]);
+  }, [storagePools]);
 
   useEffect(() => {
     if (!addShareOpen) {
@@ -150,7 +150,7 @@ export function ShareManagementPanel({
     setError(null);
     try {
       const [settings, nextSummary] = await Promise.all([getShareSettings(), getShareSummary()]);
-      setForm(shareSettingsToForm(settings, roots));
+      setForm(shareSettingsToForm(settings, storagePools));
       setSummary(nextSummary);
       notifySummaryIssues(nextSummary.issues, onNotifyError, reportedIssueSignature);
     } catch (nextError) {
@@ -248,7 +248,7 @@ export function ShareManagementPanel({
   }
 
   function openAddShare() {
-    setNewShare(createShareFormState(roots, form.shares));
+    setNewShare(createShareFormState(storagePools, form.shares));
     setNewShareError(null);
   }
 
@@ -261,7 +261,7 @@ export function ShareManagementPanel({
     if (!newShare) {
       return;
     }
-    const issue = newShareValidationIssue(form, newShare, roots);
+    const issue = newShareValidationIssue(form, newShare, storagePools);
     if (issue) {
       setNewShareError(validationIssueText(issue, t));
       return;
@@ -492,7 +492,7 @@ export function ShareManagementPanel({
               type="button"
               className="management-row-action"
               onClick={openAddShare}
-              disabled={roots.length === 0 || loading || submitting}
+              disabled={storagePools.length === 0 || loading || submitting}
               title={t("workspace.management.shares.addShare")}
               aria-label={t("workspace.management.shares.addShare")}
             >
@@ -513,7 +513,7 @@ export function ShareManagementPanel({
                       <span>
                         <strong>{share.name || share.id || t("workspace.management.shares.untitledShare")}</strong>
                         <small>
-                          {rootDisplayName(share.rootId, roots)} / {share.path || "."}
+                          {storagePoolDisplayName(share.storagePoolId, storagePools)} / {share.path || "."}
                         </small>
                       </span>
                     </div>
@@ -543,11 +543,11 @@ export function ShareManagementPanel({
                     </label>
                     <label>
                       <span>{t("workspace.management.shares.fields.root")}</span>
-                      <select value={share.rootId} onChange={(event) => updateShare(index, { rootId: event.target.value })}>
-                        {roots.length ? null : <option value="">{t("workspace.management.shares.noRoots")}</option>}
-                        {roots.map((root) => (
-                          <option key={root.id} value={root.id}>
-                            {root.name}
+                      <select value={share.storagePoolId} onChange={(event) => updateShare(index, { storagePoolId: event.target.value })}>
+                        {storagePools.length ? null : <option value="">{t("workspace.management.shares.noStoragePools")}</option>}
+                        {storagePools.map((pool) => (
+                          <option key={pool.id} value={pool.id}>
+                            {pool.name}
                           </option>
                         ))}
                       </select>
@@ -1049,14 +1049,14 @@ function settingsUpdatedAtLabel(updatedAt: string, locale: SupportedLocale, t: T
   return formatDate(updatedAt, locale);
 }
 
-function rootDisplayName(rootId: string, roots: NasRoot[]): string {
-  return roots.find((root) => root.id === rootId)?.name ?? (rootId || "-");
+function storagePoolDisplayName(storagePoolId: string, storagePools: StoragePool[]): string {
+  return storagePools.find((pool) => pool.id === storagePoolId)?.name ?? (storagePoolId || "-");
 }
 
 function newShareValidationIssue(
   form: ShareSettingsFormState,
   share: ShareDefinitionFormState,
-  roots: NasRoot[]
+  storagePools: StoragePool[]
 ): ShareFormValidationIssue | null {
   const [shareIssue] = validateShareForm(
     {
@@ -1068,7 +1068,7 @@ function newShareValidationIssue(
       },
       shares: [share]
     },
-    roots
+    storagePools
   );
   if (shareIssue) {
     return shareIssue;

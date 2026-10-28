@@ -1,4 +1,4 @@
-import type { IndexFailure, IndexRootStatus } from "@cyberos/shared";
+import type { IndexFailure, IndexStoragePoolStatus } from "@cyberos/shared";
 import type { CyberOsDatabase } from "../connection.js";
 import type {
   DbIndexFailureRow,
@@ -6,45 +6,45 @@ import type {
   DbIndexRunRow
 } from "./repository-rows.js";
 
-export function listIndexRunHistory(db: CyberOsDatabase, rootId: string, limit = 30): IndexRootStatus[] {
+export function listIndexRunHistory(db: CyberOsDatabase, storagePoolId: string, limit = 30): IndexStoragePoolStatus[] {
   const currentRows = db.prepare(`
-    SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
+    SELECT id, storage_pool_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
       duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at
-    FROM index_runs WHERE root_id = ?
-  `).all(rootId) as DbIndexRunRow[];
-  const archivedRows = db.prepare(`SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error, duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at, failures_json FROM index_run_history WHERE root_id = ? ORDER BY started_at DESC LIMIT ?`).all(rootId, limit) as DbIndexHistoryRow[];
+    FROM index_runs WHERE storage_pool_id = ?
+  `).all(storagePoolId) as DbIndexRunRow[];
+  const archivedRows = db.prepare(`SELECT id, storage_pool_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error, duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at, failures_json FROM index_run_history WHERE storage_pool_id = ? ORDER BY started_at DESC LIMIT ?`).all(storagePoolId, limit) as DbIndexHistoryRow[];
   const rows = [...currentRows.map((row) => ({ row, failures: db.prepare("SELECT path, reason FROM index_failures WHERE run_id = ? ORDER BY created_at ASC, id ASC").all(row.id) as DbIndexFailureRow[] })), ...archivedRows.map((row) => ({ row, failures: JSON.parse(row.failures_json) as DbIndexFailureRow[] }))].sort((a, b) => b.row.started_at.localeCompare(a.row.started_at)).slice(0, limit);
   return rows.map(({ row, failures }) => {
     return mapIndexRun(row, failures);
   });
 }
 
-export function listIndexRootStatuses(db: CyberOsDatabase, rootIds: string[]): IndexRootStatus[] {
-  return rootIds.map((rootId) => getIndexRootStatus(db, rootId));
+export function listIndexStoragePoolStatuses(db: CyberOsDatabase, storagePoolIds: string[]): IndexStoragePoolStatus[] {
+  return storagePoolIds.map((storagePoolId) => getIndexStoragePoolStatus(db, storagePoolId));
 }
 
-export function getIndexRootStatus(db: CyberOsDatabase, rootId: string, now = new Date()): IndexRootStatus {
+export function getIndexStoragePoolStatus(db: CyberOsDatabase, storagePoolId: string, now = new Date()): IndexStoragePoolStatus {
   const row = db
     .prepare(`
-      SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
+      SELECT id, storage_pool_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
         duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at,
         NULL AS failures_json, 0 AS archived
       FROM index_runs
-      WHERE root_id = ? AND kind = 'full'
+      WHERE storage_pool_id = ? AND kind = 'full'
       UNION ALL
-      SELECT id, root_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
+      SELECT id, storage_pool_id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
         duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at,
         failures_json, 1 AS archived
       FROM index_run_history
-      WHERE root_id = ? AND kind = 'full'
+      WHERE storage_pool_id = ? AND kind = 'full'
       ORDER BY started_at DESC
       LIMIT 1
     `)
-    .get(rootId, rootId) as (DbIndexRunRow & { failures_json: string | null; archived: number }) | undefined;
+    .get(storagePoolId, storagePoolId) as (DbIndexRunRow & { failures_json: string | null; archived: number }) | undefined;
 
   if (!row) {
     return {
-      rootId,
+      storagePoolId,
       status: "never_run",
       startedAt: null,
       finishedAt: null,
@@ -72,14 +72,14 @@ export function getIndexRootStatus(db: CyberOsDatabase, rootId: string, now = ne
   const status = mapIndexRun(row, failures);
   if (status.metrics) {
     status.metrics.indexSizeBytes = getIndexSizeBytes(db);
-    status.metrics.consecutiveFailures = countConsecutiveIndexFailures(db, rootId);
-    status.metrics.freshnessMs = getIndexFreshnessMs(db, rootId, now);
+    status.metrics.consecutiveFailures = countConsecutiveIndexFailures(db, storagePoolId);
+    status.metrics.freshnessMs = getIndexFreshnessMs(db, storagePoolId, now);
   }
   return status;
 }
 
-function countConsecutiveIndexFailures(db: CyberOsDatabase, rootId: string): number {
-  const rows = db.prepare("SELECT status, started_at FROM index_runs WHERE root_id = ? AND kind = 'full' UNION ALL SELECT status, started_at FROM index_run_history WHERE root_id = ? AND kind = 'full' ORDER BY started_at DESC LIMIT 30").all(rootId, rootId) as Array<{ status: string; started_at: string }>;
+function countConsecutiveIndexFailures(db: CyberOsDatabase, storagePoolId: string): number {
+  const rows = db.prepare("SELECT status, started_at FROM index_runs WHERE storage_pool_id = ? AND kind = 'full' UNION ALL SELECT status, started_at FROM index_run_history WHERE storage_pool_id = ? AND kind = 'full' ORDER BY started_at DESC LIMIT 30").all(storagePoolId, storagePoolId) as Array<{ status: string; started_at: string }>;
   let count = 0;
   for (const row of rows) {
     if (row.status !== "failed") break;
@@ -88,17 +88,17 @@ function countConsecutiveIndexFailures(db: CyberOsDatabase, rootId: string): num
   return count;
 }
 
-function getIndexFreshnessMs(db: CyberOsDatabase, rootId: string, now = new Date()): number | null {
+function getIndexFreshnessMs(db: CyberOsDatabase, storagePoolId: string, now = new Date()): number | null {
   const row = db
     .prepare(`
       SELECT MAX(finished_at) AS finished_at
       FROM (
-        SELECT finished_at FROM index_runs WHERE root_id = ? AND kind = 'full' AND status = 'completed'
+        SELECT finished_at FROM index_runs WHERE storage_pool_id = ? AND kind = 'full' AND status = 'completed'
         UNION ALL
-        SELECT finished_at FROM index_run_history WHERE root_id = ? AND kind = 'full' AND status = 'completed'
+        SELECT finished_at FROM index_run_history WHERE storage_pool_id = ? AND kind = 'full' AND status = 'completed'
       )
     `)
-    .get(rootId, rootId) as { finished_at: string | null } | undefined;
+    .get(storagePoolId, storagePoolId) as { finished_at: string | null } | undefined;
   if (!row?.finished_at) return null;
   const timestamp = Date.parse(row.finished_at);
   return Number.isFinite(timestamp) ? Math.max(0, now.getTime() - timestamp) : null;
@@ -115,11 +115,11 @@ function getIndexSizeBytes(db: CyberOsDatabase): number | null {
   }
 }
 
-function mapIndexRun(row: DbIndexRunRow, failures: DbIndexFailureRow[]): IndexRootStatus {
+function mapIndexRun(row: DbIndexRunRow, failures: DbIndexFailureRow[]): IndexStoragePoolStatus {
   const durationMs = row.duration_ms ?? (row.finished_at ? Math.max(0, Date.parse(row.finished_at) - Date.parse(row.started_at)) : null);
   const freshnessMs = row.finished_at ? Math.max(0, Date.now() - Date.parse(row.finished_at)) : null;
   return {
-    rootId: row.root_id,
+    storagePoolId: row.storage_pool_id,
     status: row.status,
     startedAt: row.started_at,
     finishedAt: row.finished_at,

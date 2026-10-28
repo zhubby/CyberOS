@@ -9,9 +9,9 @@ sidebar:
   order: 2
 ---
 
-REST 路由按 roots、files/search、photos、sessions/jobs/events、approvals/operations、indexer/readiness/health、monitoring、backup、settings、system、storage、shares、Docker、VM 和 terminal 分组。
+REST 路由按 storage pools、files/search、Photos、sessions/jobs/events、capability approvals/operations、indexer/health、monitoring、backup、settings、system、shares、Docker、VM、media、downloads、Bluetooth transfers 和 terminal 分组。
 
-Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM console 使用 WebSocket。写操作的 approval 要求以 route 实现和 `packages/shared/src/types.ts` 为准；本页不复制易漂移的完整 JSON schema。
+Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM console 使用 WebSocket。Agent/MCP mutation 统一走 capability run/approval；第一方 Web mutation 使用页面确认、服务端校验和领域 operation 审计，不创建 capability approval。本页不复制易漂移的完整 JSON schema。
 
 ## Agent 设置
 
@@ -39,22 +39,22 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 
 ## Photos
 
-- `GET/PUT /api/photos/settings` 读取或设置唯一照片库。设置请求必须携带 `rootId`、`storagePoolId` 和池内现有目录；变更后旧索引失效并排队完整扫描。
+- `GET/PUT /api/photos/settings` 读取或设置唯一照片库。设置请求必须携带 `storagePoolId` 和池内现有目录；变更后旧索引失效并排队完整扫描。
 - `GET/PATCH /api/settings/photos` 读取或更新处理并发、扫描周期、自动重试、命令超时、大小/像素限制、scratch 上限和最低剩余空间。
 - `GET /api/photos` 使用不透明 cursor 返回按 `takenAt DESC, id DESC` 稳定排序的页面；`GET /api/photos/status` 返回 `unconfigured/queued/discovering/processing/retrying/ready/degraded/offline` 状态与 worker health，`POST /api/photos/scans` 排队手动扫描。
 - `POST /api/photos/query` 接收最多 64 KiB、25 个高级条件，支持文本、日期、媒体类型、相机、镜头、曝光、评分、关键词、位置和任意标量字段。排序 cursor 绑定查询指纹；响应包含精确总数、元数据升级进度、排除自身条件的分类分面和当前结果的数值范围。
 - `GET /api/photos/metadata/fields` 返回可查询字段目录；`GET /api/photos/:id/metadata` 默认排除 GPS、设备/镜头序列号、联系信息和人物区域，只有显式 `includeSensitive=1` 才返回敏感组。
 - `POST /api/photos/map/query` 在视口内返回最多 4096 个本地聚合点。地理查询先用 RTree 缩小候选，再用规范坐标或 Haversine 精确计算，支持反经线；距离排序必须提供附近查询中心。
 - `GET /api/photos/map/settings` 返回固定 Natural Earth II 3.2.0 资产信息及 `not_downloaded/downloading/ready/failed`、已下载字节、总字节和错误；`POST /api/photos/map/download` 无请求体，幂等启动或返回当前下载任务。客户端不能提交 URL 或文件路径，旧 `PUT /api/photos/map/settings` 不再存在。
-- `GET /api/photos/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${CYBEROS_ROOT}/state/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。
+- `GET /api/photos/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${CYBEROS_ROOT}/state/photos/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。
 - `GET /api/photos/:id/thumbnail|preview|original` 只解析当前照片库中的资源。缩略图和预览来自 data directory 的 hash-addressed WebP cache；GIF preview 保留动画原文件，视频 preview 是首帧海报。
 - `GET /api/photos/:id/video` 为视频资源提供带 Range 的播放流；MP4/WebM 直接流式返回，其他支持容器通过 FFmpeg 缓存为 MP4。
 - `PUT /api/photos/upload` 使用 `application/octet-stream`，查询参数传文件名和可选目录。媒体限制 512 MiB、原子发布并按 SHA-256 拒绝当前库中的重复内容；XMP sidecar 限制 16 MiB。
 - Photos 支持图片 `.jpg`、`.jpeg`、`.png`、`.webp`、`.gif`、`.heic`、`.heif`，视频 `.mp4`、`.mov`、`.m4v`、`.avi`、`.mkv`、`.webm`、`.mpeg`、`.mpg`，以及 RAW `.cr2`、`.cr3`、`.crw`、`.nef`、`.nrw`、`.arw`、`.srf`、`.sr2`、`.dng`、`.raf`、`.orf`、`.rw2`、`.pef`、`.rwl`、`.3fr`、`.x3f`、`.erf`、`.kdc`、`.mos`、`.mrw`、`.bay`。
 - `POST /api/photos/exports` 为单张原图或最多 100 张照片的短时 ZIP 创建下载地址；ZIP 会去重并包含关联 XMP，单张 original 仍只返回原媒体字节，token 使用一次后失效。
-- `POST /api/photos/proposals` 为最多 100 张照片创建一组 move 或 trash 文件提案，并去重加入关联 XMP。目标必须仍在照片库内，执行前继续走现有 approval，不提供绕过入口。
+- `POST /api/photos/actions` 对最多 100 张照片执行 move 或 trash，并去重加入关联 XMP。目标必须仍在照片库内；第一方页面先完成显式确认，API 重新校验资源与路径并为每个结果写入文件 operation。
 
-JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `photostaff` 服务处理；`photostaff` 仅是模块和进程标识，公开产品与 HTTP 契约统一使用 Photos。ExifTool 提取 EXIF/IPTC/XMP/ICC/JFIF/RAW 标量，视频使用 `ffprobe`，libvips CLI 生成 WebP；同目录精确媒体名和同 stem XMP 按确定性规则关联，大小写冲突标记为 ambiguous。源文件由 storage-pool dirfd 与 `openat2` 打开后以继承 fd 交给子工具，发布使用空间预留、文件/目录 sync 和 journal。原图、视频流和文件变更每次访问都重新经过 root、storage pool、挂载、遍历和 symlink 校验；当前配置版本的缓存 WebP 缩略图与预览可以在存储池离线时继续读取。不要把索引记录当成原文件存在性的授权依据。
+JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `photos` 服务处理；`photos` 仅是模块和进程标识，公开产品与 HTTP 契约统一使用 Photos。ExifTool 提取 EXIF/IPTC/XMP/ICC/JFIF/RAW 标量，视频使用 `ffprobe`，libvips CLI 生成 WebP；同目录精确媒体名和同 stem XMP 按确定性规则关联，大小写冲突标记为 ambiguous。源文件由 storage-pool dirfd 与 `openat2` 打开后以继承 fd 交给子工具，发布使用空间预留、文件/目录 sync 和 journal。原图、视频流和文件变更每次访问都重新经过 storage pool、挂载、遍历和 symlink 校验；当前配置版本的缓存 WebP 缩略图与预览可以在存储池离线时继续读取。不要把索引记录当成原文件存在性的授权依据。
 
 ## 系统电源
 
@@ -84,33 +84,33 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 
 ## Terminal 标签与 WebSocket
 
-- `GET /api/terminal/tabs?rootId=...` 返回指定 NAS root 的初始化状态、按创建顺序排列的标签、活动标签 ID 和整机会话上限。
-- `POST /api/terminal/tabs/initialize` 接收 `rootId`，事务性地完成首次 tab 创建；重复请求不会创建额外 tab。
+- `GET /api/terminal/tabs` 返回全局终端工作区的初始化状态、按创建顺序排列的标签、活动标签 ID 和整机会话上限。
+- `POST /api/terminal/tabs/initialize` 事务性地完成首次 tab 创建；重复请求不会创建额外 tab。
 - `POST /api/terminal/tabs` 新建并激活标签；`PATCH /api/terminal/tabs/:id` 更新可空自定义名称；`POST /api/terminal/tabs/:id/activate` 更新整机共享的活动项。
 - `POST /api/terminal/tabs/:id/restart` 销毁对应 tmux shell 但保留标签；`DELETE /api/terminal/tabs/:id` 先销毁 shell，再删除标签。销毁失败返回 `503` 且不修改标签元数据，客户端可以重试。
 
-标签 ID 和旧会话 ID 必须是 UUID；名称去除首尾空格后为 1–64 个字符，也可传 `null` 恢复默认名称。无效 root、ID 或名称返回 `400/404`，会话上限或旧 ID 冲突返回 `409`。删除活动标签时优先激活右侧标签，其次左侧；删除最后一个标签后活动项为 `null`。
+标签 ID 必须是已登记的 UUID；名称去除首尾空格后为 1–64 个字符，也可传 `null` 恢复默认名称。无效 ID 或名称返回 `400/404`，会话上限返回 `409`。删除活动标签时优先激活右侧标签，其次左侧；删除最后一个标签后活动项为 `null`。
 
-`GET /api/terminal?rootId=...` 使用 `cyberos-terminal-v1` 和 `cyberos-session.<uuid>` WebSocket subprotocol。已登记标签通过 Termux Protocol v1 以 persistent 模式打开；未登记 ID 保持旧客户端兼容并按空闲策略回收。一个标签只允许一个控制连接，新连接建立后旧连接收到 `{ "type": "taken_over" }`。内部 `session.open` 请求的 `persistent` 字段可选，省略时等同旧版非持久会话。
+`GET /api/terminal` 只接受 `cyberos-terminal-v1` 和 `cyberos-session.<registered-tab-uuid>` WebSocket subprotocol，并以 `/cyberos/data` 作为全局工作区。不接受 query 参数、临时 session 或未登记 UUID。Terminal Protocol v1 始终以 persistent 模式打开；一个标签只允许一个控制连接，新连接建立后旧连接收到 `{ "type": "taken_over" }`。
 
 ## 共享账号
 
 - `PUT /api/shares/account` 直接更新 SMB、WebDAV 和 FTP 共用账号，不创建 approval、job 或 operation。请求包含 `username`、可选的新 `password` 和当前 `expectedUpdatedAt`；省略密码或传空字符串表示保留已有密码。
 - API 串行执行所有共享配置写入，先通过受限 hostd 应用完整当前配置，成功后才更新数据库。revision 不匹配返回 `409`，输入错误返回 `400`，hostd 不可用返回 `503`，宿主应用失败返回脱敏后的 `502`。
-- 响应只返回公开共享设置和 hostd 应用时间，密码永不回传。共享目录、协议、权限和全局启停仍通过 `POST /api/shares/proposals` 进入原有审批流程；审批执行时使用数据库中的最新账号，不能覆盖之后直接修改的凭证。
+- 响应只返回公开共享设置和 hostd 应用时间，密码永不回传。共享目录、协议、权限和全局启停通过 `POST /api/shares/settings` 直接应用，并写入 share operation；Agent/MCP 发起同类变更时仍由 capability run/approval 调用相同领域校验。
 
 ## HTTP 下载
 
-- `POST /api/downloads` 接收 HTTP/HTTPS 地址、`rootId`、`storagePoolId`、目标目录、文件名和可选的 64 位 `sha256`；SHA-256 会归一化为小写。只接受无凭据的公网下载地址，目标同名或重复任务返回 `409`。
+- `POST /api/downloads` 接收 HTTP/HTTPS 地址、`storagePoolId`、目标目录、文件名和可选的 64 位 `sha256`；SHA-256 会归一化为小写。只接受无凭据的公网下载地址，目标同名或重复任务返回 `409`。
 - `GET /api/downloads` 返回全局历史和 downloader worker health；任务记录包含 phase、单流/分段模式、checksum、稳定错误码、重试计数/时间、控制请求和分段数。`GET /api/downloads/events` 用 SSE 推送相同快照。
 - `POST /api/downloads/:id/pause|cancel` 对运行任务写入协作式控制请求；`resume|retry` 按状态重新排队。发布已完成原子 rename 时最终状态始终为 `completed`。`DELETE /api/downloads/:id` 只移除非运行任务。
-- `GET/PATCH /api/settings/downloads` 管理任务并发、每任务 Range 并发、分段阈值、自动重试/退避、连接/响应头/空闲读取超时、最低剩余空间和可选最大文件大小。旧的 `{ concurrency }` 设置会自动补齐默认值。
+- `GET/PATCH /api/settings/downloads` 管理任务并发、每任务 Range 并发、分段阈值、自动重试/退避、连接/响应头/空闲读取超时、最低剩余空间和可选最大文件大小。持久化记录必须包含完整 CyberOS 2.0 字段。
 - Rust `cyberos-downloader.service` 从 SQLite 领取带 30 秒租约的任务，每 5 秒写 worker/任务心跳。服务使用逐跳 DNS 公网校验、固定地址、最多五次安全重定向、持久化分段、空间预留、dirfd/`openat2` 路径边界、SHA-256 和 publish journal；崩溃或掉电后不会覆盖 identity 不匹配的用户文件。
 
 ## Docker daemon
 
-- `GET /api/docker/host-access` 返回固定 Host Access 策略版本、能力目录、coverage、运行环境 availability 和可选 NAS roots，不返回受管宿主路径或审批指纹。非法目标与冲突返回 `400`，revision/image/resource 漂移返回 `409`，受限代理或宿主依赖不可用返回 `503`。
-- Compose validate/create/update 与单容器 create 可选接收 `hostAccess`；省略字段保持旧行为。包含授权的单容器改为私有 15 分钟 draft 加审批，公开 Docker proposal 只包含新增/移除授权、风险和 image digest。
+- `GET /api/docker/host-access` 返回固定 Host Access 策略版本、能力目录、coverage、运行环境 availability 和可选 storage pools，不返回受管宿主路径或审批指纹。非法目标与冲突返回 `400`，revision/image/resource 漂移返回 `409`，受限代理或宿主依赖不可用返回 `503`。
+- Compose validate/create/update 与单容器 create 可选接收 `hostAccess`；省略表示不请求宿主观测授权。单容器创建会在执行前解析不可变 image ID 并重新校验授权策略；Compose action 使用短时私有 draft 固定 image 与资源指纹，不创建 capability approval。
 
 - `GET /api/docker/daemon/config` 返回固定路径、正文、内容 revision、文件是否存在和是否等待重启。
 - `PUT /api/docker/daemon/config` 接收 `content`、`expectedRevision`、`restart` 和 `confirmed`。正文最多 256 KiB；revision 冲突返回 `409`，JSON 或 dockerd 校验失败返回 `400`，hostd 不可用返回 `503`，重启或回滚异常返回 `502` 并携带回滚结果。
@@ -120,7 +120,7 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 
 ## Docker 镜像与 Registry
 
-- `GET /api/docker/summary` 的 `images` 来自与镜像计数相同的一次 Engine 查询，包含 ID、tags、digests、创建时间、大小、共享大小和容器引用数。容器列表包含 `imageId`；元数据完整时，引用数按 ImageID 汇总全部容器（包括已停止容器），不按可变 tag 匹配。旧 Engine/适配器未提供完整 ImageID 时保留 Engine 计数，未知为 `null`，不是零。
+- `GET /api/docker/summary` 的 `images` 来自与镜像计数相同的一次 Engine 查询，包含 ID、tags、digests、创建时间、大小、共享大小和容器引用数。容器列表始终包含可空 `imageId`；存在 ImageID 时按其汇总全部容器（包括已停止容器），不按可变 tag 匹配。Engine 不能提供可靠计数时返回 `null`，不是零。
 - `POST /api/docker/images/pull` 接收 `reference`，同步等待 Engine 完成拉取。CyberOS 按镜像引用选择匹配凭证，没有匹配项时匿名拉取。
 - `POST /api/docker/images/remove` 接收 `reference` 和 `confirmed: true`。删除固定使用 `force=false`、`noprune=true`；被容器引用或存在多引用冲突时返回 `409`，不创建 approval 或 Docker operation。
 - `GET /api/docker/registries` 返回凭证摘要；`POST /api/docker/registries`、`PATCH /api/docker/registries/:id`、`DELETE /api/docker/registries/:id` 管理单条记录。创建/更新正文最多 64 KiB，所有响应只包含 `credentialConfigured`，不会返回密码或 access token。
@@ -134,7 +134,7 @@ Registry 地址只接受 hostname/IP 和可选端口；Docker Hub 别名归一�
 - `POST /api/docker/apps`、`PUT /api/docker/apps/:id` 分别创建和更新 App；更新必须提供 `expectedRevision`。`projectKey` 创建后不可修改，托管路径固定为 `/cyberos/apps/<project-key>`。
 - `DELETE /api/docker/apps/:id` 要求 `expectedRevision` 和 `confirmed: true`。Engine 不可查询或仍存在相同 Compose project label 的容器时拒绝删除；删除不会移除 images、named volumes、networks 或 NAS 数据。
 
-App 请求正文最多 512 KiB。非法 YAML、保留环境变量、本地 `build/env_file/include` 等额外文件依赖、相对 bind mount 或越过在线 NAS root 的绝对 bind mount 返回 `400`；revision/project key 冲突返回 `409`，Compose CLI 不可用返回 `503`，运行副本发布失败返回 `502`。创建和编辑不依赖 Engine readiness；部署仍通过 `/api/docker/proposals` 的 Compose Up approval。proposal 只保存 App ID、名称、revision、服务与风险，不保存 YAML、托管路径或秘密。
+App 请求正文最多 512 KiB。非法 YAML、保留环境变量、本地 `build/env_file/include` 等额外文件依赖、相对 bind mount 或越过在线 storage pool 的绝对 bind mount 返回 `400`；revision/project key 冲突返回 `409`，Compose CLI 不可用返回 `503`，运行副本发布失败返回 `502`。创建和编辑不依赖 Engine readiness；Up、Down、Restart 和 Pull 由第一方页面确认后直接执行，写入 Docker operation，秘密不进入公开响应或审计 metadata。
 
 ## Docker 资源限制
 

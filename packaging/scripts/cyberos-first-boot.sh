@@ -6,17 +6,11 @@ ROOT_DIR="${CYBEROS_ROOT:-/cyberos}"
 STATE_DIR="$ROOT_DIR/state"
 DATABASE_PATH="$STATE_DIR/cyberos.sqlite"
 ADMIN_DISPLAY_NAME="${CYBEROS_ADMIN_DISPLAY_NAME:-}"
-NAS_ROOT_ID="${CYBEROS_NAS_ROOT_ID:-primary}"
-NAS_ROOT_NAME="${CYBEROS_NAS_ROOT_NAME:-Primary NAS}"
-NAS_ROOT_PATH="${CYBEROS_NAS_ROOT_PATH:-}"
-MODEL_PROVIDER="${CYBEROS_MODEL_PROVIDER:-pi}"
-PI_COMMAND="${CYBEROS_PI_COMMAND:-pi}"
-LOCAL_ENDPOINT="${CYBEROS_LOCAL_ENDPOINT:-}"
 DOCKER_ENABLED="${CYBEROS_DOCKER_ENABLED:-0}"
 VM_ENABLED="${CYBEROS_VM_ENABLED:-0}"
 VOD_PLAYER_ENABLED="${CYBEROS_VOD_PLAYER_ENABLED:-${CYBEROS_ENABLE_VOD_PLAYER:-0}}"
 VOD_PLAYER_USER="${CYBEROS_VOD_PLAYER_USER:-cyberos}"
-TERMINAL_USER="${CYBEROS_TERMUX_USER:-cyberos}"
+TERMINAL_USER="${CYBEROS_TERMINALD_USER:-cyberos}"
 
 if [ -e "$CONFIG_PATH" ] && [ "${CYBEROS_FIRST_BOOT_FORCE:-0}" != "1" ]; then
   printf "CyberOS configuration already exists at %s; preserving it\n" "$CONFIG_PATH"
@@ -37,7 +31,7 @@ fi
 }
 
 [ "$TERMINAL_USER" = cyberos ] || {
-  printf "CYBEROS_TERMUX_USER must be cyberos\n" >&2
+  printf "CYBEROS_TERMINALD_USER must be cyberos\n" >&2
   exit 1
 }
 
@@ -86,25 +80,12 @@ if [ -z "$ADMIN_DISPLAY_NAME" ]; then
   ADMIN_DISPLAY_NAME="$(ask_default "Admin display name" "CyberOS Admin")"
 fi
 
-if [ -z "$NAS_ROOT_PATH" ]; then
-  NAS_ROOT_PATH="$(ask_default "NAS root path" "/cyberos/data/primary")"
-fi
-
-[ "$(dirname "$NAS_ROOT_PATH")" = "$ROOT_DIR/data" ] || {
-  printf "CYBEROS_NAS_ROOT_PATH must be a direct child of /cyberos/data\n" >&2
-  exit 1
-}
-[ "$NAS_ROOT_PATH" != "$ROOT_DIR/data/backup" ] || {
-  printf "CYBEROS_NAS_ROOT_PATH must not use the reserved backup directory\n" >&2
-  exit 1
-}
-
 install -d -m 0750 "$ROOT_DIR" "$ROOT_DIR/config" "$STATE_DIR" "$STATE_DIR/trash" \
   "$STATE_DIR/reports" "$STATE_DIR/pi-sessions" "$STATE_DIR/pi-agent" \
-  "$STATE_DIR/photostaff" "$STATE_DIR/media-cache" "$STATE_DIR/backup-staging" \
+  "$STATE_DIR/photos" "$STATE_DIR/media-cache" "$STATE_DIR/backup-staging" \
   "$STATE_DIR/vod-player" "$STATE_DIR/bluetooth" "$ROOT_DIR/logs" "$ROOT_DIR/home" \
-  "$ROOT_DIR/home/termux" "$ROOT_DIR/apps" "$ROOT_DIR/deploy" \
-  "$ROOT_DIR/system-backups" "$ROOT_DIR/data" "$ROOT_DIR/data/backup" "$NAS_ROOT_PATH"
+  "$ROOT_DIR/home/terminal" "$ROOT_DIR/apps" "$ROOT_DIR/deploy" \
+  "$ROOT_DIR/system-backups" "$ROOT_DIR/data" "$ROOT_DIR/backup"
 install -d -m 0700 "$ROOT_DIR/config/mcp"
 install -d -m 0711 "$ROOT_DIR/vm" "$ROOT_DIR/iso"
 install -d -m 0755 "$ROOT_DIR/home/share" "$STATE_DIR/hostd"
@@ -149,11 +130,6 @@ max_database_bytes = 536870912
 display_name = "$ADMIN_DISPLAY_NAME"
 auth_mode = "local-only"
 
-[model]
-provider = "$MODEL_PROVIDER"
-pi_command = "$PI_COMMAND"
-local_endpoint = "$LOCAL_ENDPOINT"
-
 [docker]
 enabled = $DOCKER_ENABLED_BOOL
 socket_path = "/var/run/docker.sock"
@@ -179,7 +155,7 @@ account_username = "cyberos-share"
 
 [terminal]
 user = "$TERMINAL_USER"
-termux_socket_path = "/run/cyberos/termux.sock"
+socket_path = "/run/cyberos/terminald.sock"
 session_idle_timeout_ms = 1800000
 connect_timeout_ms = 10000
 max_sessions = 32
@@ -200,15 +176,9 @@ audio_device = ""
 hwdec = "auto-safe"
 user = "$VOD_PLAYER_USER"
 
-[[nas_roots]]
-id = "$NAS_ROOT_ID"
-name = "$NAS_ROOT_NAME"
-path = "$NAS_ROOT_PATH"
-mount_policy = "required"
-
 [backup]
 enabled = false
-repository_path = "$ROOT_DIR/data/backup/restic"
+repository = "$ROOT_DIR/backup"
 password_file = "$ROOT_DIR/config/restic-password"
 staging_path = "$STATE_DIR/backup-staging"
 require_mount = true
@@ -229,31 +199,15 @@ if id cyberos >/dev/null 2>&1; then
   chown root:cyberos "$ROOT_DIR" "$ROOT_DIR/config"
   chown cyberos:cyberos "$ROOT_DIR/config/mcp"
   chown cyberos:cyberos "$STATE_DIR" "$STATE_DIR/trash" "$STATE_DIR/reports" \
-    "$STATE_DIR/pi-sessions" "$STATE_DIR/pi-agent" "$STATE_DIR/photostaff" \
+    "$STATE_DIR/pi-sessions" "$STATE_DIR/pi-agent" "$STATE_DIR/photos" \
     "$STATE_DIR/media-cache" "$STATE_DIR/backup-staging" "$STATE_DIR/vod-player" "$STATE_DIR/bluetooth" \
     "$ROOT_DIR/logs" \
-    "$ROOT_DIR/home" "$ROOT_DIR/home/termux" "$ROOT_DIR/apps" "$ROOT_DIR/deploy" \
-    "$ROOT_DIR/system-backups" "$ROOT_DIR/data" "$ROOT_DIR/data/backup" \
-    "$ROOT_DIR/vm" "$ROOT_DIR/iso" "$NAS_ROOT_PATH"
+    "$ROOT_DIR/home" "$ROOT_DIR/home/terminal" "$ROOT_DIR/apps" "$ROOT_DIR/deploy" \
+    "$ROOT_DIR/system-backups" "$ROOT_DIR/data" "$ROOT_DIR/backup" \
+    "$ROOT_DIR/vm" "$ROOT_DIR/iso"
   chown root:cyberos "$CONFIG_PATH"
 fi
 chown -R root:root "$STATE_DIR/hostd" "$ROOT_DIR/system-backups/permissions"
 chmod 0640 "$CONFIG_PATH"
 
-if command -v sqlite3 >/dev/null 2>&1; then
-  sqlite3 "$DATABASE_PATH" <<EOF_SQL
-PRAGMA user_version = 2;
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  display_name TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-INSERT OR IGNORE INTO users (id, display_name, created_at)
-VALUES ('local-admin', '$ADMIN_DISPLAY_NAME', datetime('now'));
-EOF_SQL
-  if id cyberos >/dev/null 2>&1; then
-    chown cyberos:cyberos "$DATABASE_PATH" "$DATABASE_PATH"-* 2>/dev/null || true
-  fi
-fi
-
-printf "CyberOS first boot initialized %s with NAS root %s\n" "$CONFIG_PATH" "$NAS_ROOT_PATH"
+printf "CyberOS first boot initialized %s with data namespace %s\n" "$CONFIG_PATH" "$ROOT_DIR/data"

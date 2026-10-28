@@ -34,7 +34,7 @@ import type {
   IndexerOverview,
   IndexerSettings,
   NetworkSummary,
-  NasRoot,
+  StoragePool,
   ModelProviderSettings,
   PhotoLibrarySettings,
   PhotoLibraryStatus,
@@ -77,7 +77,6 @@ import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
 import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
 import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
 import { SettingsMediaPage } from "./SettingsMediaPage.js";
-import type { StorageFilePickerPool } from "../workspace/StorageFilePickerDialog.js";
 
 interface SettingsModalProps {
   activeSection: SettingsSectionId;
@@ -89,8 +88,7 @@ interface SettingsModalProps {
   downloadSettings: DownloadSettings | null;
   indexerSettings: IndexerSettings | null;
   indexerStatus: IndexerOverview | null;
-  roots: NasRoot[];
-  storagePools: StorageFilePickerPool[];
+  storagePools: StoragePool[];
   photoSettings: PhotoLibrarySettings | null;
   photoStatus: PhotoLibraryStatus | null;
   photoProcessingSettings: PhotoProcessingSettings | null;
@@ -115,7 +113,7 @@ interface SettingsModalProps {
   onIndexerSettingsChange: (
     patch: Partial<Omit<IndexerSettings, "updatedAt">>
   ) => Promise<void>;
-  onIndexerReindex: (rootId: string) => Promise<void>;
+  onIndexerReindex: (storagePoolId: string) => Promise<void>;
   onPhotoProcessingSettingsChange: (
     patch: Partial<Omit<PhotoProcessingSettings, "updatedAt">>
   ) => Promise<void>;
@@ -163,7 +161,6 @@ export function SettingsModal({
   downloadSettings,
   indexerSettings,
   indexerStatus,
-  roots,
   storagePools,
   photoSettings,
   photoStatus,
@@ -575,7 +572,7 @@ export function SettingsModal({
             <SettingsIndexerPage
               settings={indexerSettings}
               status={indexerStatus}
-              roots={roots}
+              storagePools={storagePools}
               loading={loading}
               onSettingsChange={onIndexerSettingsChange}
               onReindex={onIndexerReindex}
@@ -683,9 +680,9 @@ function SettingsOverview({
     },
     {
       value: systemInfo
-        ? formatLocaleNumber(systemInfo.cyberos.nasRoots.length, locale)
+        ? systemInfo.cyberos.dataRoot
         : String(t("common.dash")),
-      label: t("settings.system.metrics.nasRoots")
+      label: t("settings.system.labels.storagePoolNamespace")
     }
   ];
 
@@ -1699,16 +1696,6 @@ function SettingsAdvancedPage({
       label: t("settings.system.labels.authMode"),
       value: systemInfo.identity.authMode
     },
-    {
-      label: t("settings.system.labels.modelMode"),
-      value: systemInfo.cyberos.modelProvider
-    },
-    {
-      label: t("settings.system.labels.localEndpoint"),
-      value: systemInfo.cyberos.localEndpointConfigured
-        ? t("settings.system.values.configured")
-        : t("settings.system.values.notConfigured")
-    }
   ];
   const processRows: SettingsInfoRow[] = [
     {
@@ -1744,18 +1731,14 @@ function SettingsAdvancedPage({
   ];
   const pathRows: SettingsInfoRow[] = [
     {
-      label: t("settings.system.labels.dataDir"),
-      value: systemInfo.cyberos.dataDir,
+      label: t("settings.system.labels.stateDir"),
+      value: systemInfo.cyberos.stateDir,
       mono: true
     },
     {
       label: t("settings.system.labels.databasePath"),
       value: systemInfo.cyberos.databasePath,
       mono: true
-    },
-    {
-      label: t("settings.system.labels.nasRoots"),
-      value: formatLocaleNumber(systemInfo.cyberos.nasRoots.length, locale)
     }
   ];
 
@@ -1781,17 +1764,7 @@ function SettingsAdvancedPage({
           title={t("settings.advanced.pathsTitle")}
           description={t("settings.advanced.pathsDescription")}
           rows={pathRows}
-        >
-          <div className="settings-root-list" aria-label={t("settings.system.labels.nasRoots")}>
-            {systemInfo.cyberos.nasRoots.map((root) => (
-              <div key={root.id}>
-                <strong>{root.name}</strong>
-                <span>{root.id}</span>
-                <small title={root.path}>{root.path}</small>
-              </div>
-            ))}
-          </div>
-        </SettingsInfoCard>
+        />
       </div>
     </div>
   );

@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  ensureNasRoots,
   finishIndexRun,
   finishOpsRun,
   listHealthAlerts,
@@ -11,11 +10,10 @@ import {
   startIndexRun,
   startOpsRun,
   upsertHealthAlert,
-  upsertRootReadiness,
   type CyberOsDatabase
 } from "@cyberos/db";
 import { MetricsFixture } from "@cyberos/monitoring/test-utils";
-import { DEFAULT_MONITORING_CONFIG, type CyberOsConfig } from "@cyberos/shared";
+import { DEFAULT_MONITORING_CONFIG, loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { evaluateSystemHealth, runScheduledHealthEvaluation } from "./index.js";
 
 let tempDir: string;
@@ -25,11 +23,10 @@ let config: CyberOsConfig;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-system-health-"));
-  rootDir = path.join(tempDir, "root");
-  await mkdir(rootDir);
+  rootDir = path.join(tempDir, "data", "local");
+  await mkdir(rootDir, { recursive: true });
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
-  config = createConfig(tempDir, rootDir);
+  config = createConfig(tempDir, path.dirname(rootDir));
 });
 
 afterEach(async () => {
@@ -38,32 +35,23 @@ afterEach(async () => {
 });
 
 describe("shared system health evaluator", () => {
-  it("uses cached readiness for API evaluations without running findmnt", async () => {
-    upsertRootReadiness(db, {
-      rootId: "local",
-      status: "ready",
-      checkedAt: "2026-01-01T00:00:00.000Z",
-      reason: null,
-      source: null,
-      uuid: null,
-      fstype: null
-    });
+  it("discovers storage pools from the data namespace", async () => {
     const summary = await evaluateSystemHealth({
       db,
       config,
       now: new Date("2026-01-01T00:01:00.000Z")
     });
-    expect(summary.roots).toMatchObject([{ rootId: "local", status: "ready" }]);
+    expect(summary.storagePools).toMatchObject([{ storagePoolId: "local", status: "ready" }]);
     expect(summary.issues).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "mount_not_ready" })
+      expect.objectContaining({ code: "storage_pool_not_ready" })
     ]));
   });
 
-  it("refreshes roots and atomically preserves alerts owned by other producers", async () => {
+  it("refreshes storage pools and atomically preserves alerts owned by other producers", async () => {
     upsertHealthAlert(db, {
-      code: "mount_not_ready",
+      code: "storage_pool_not_ready",
       scope: "local",
-      rootId: "local",
+      storagePoolId: "local",
       severity: "critical",
       details: "previous mount failure",
       now: new Date("2026-01-01T00:00:00.000Z")
@@ -79,29 +67,20 @@ describe("shared system health evaluator", () => {
       config,
       now: new Date("2026-01-01T00:01:00.000Z")
     });
-    expect(summary.roots).toMatchObject([{ status: "ready" }]);
+    expect(summary.storagePools).toMatchObject([{ status: "ready" }]);
     expect(summary.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "index_enqueue_failed" })
     ]));
     expect(listHealthAlerts(db, { status: "active" })).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "index_enqueue_failed" })
     ]));
-    expect(listHealthAlerts(db).find((alert) => alert.code === "mount_not_ready"))
+    expect(listHealthAlerts(db).find((alert) => alert.code === "storage_pool_not_ready"))
       .toMatchObject({ status: "resolved" });
   });
 
   it("reports consecutive full index failures and clears the alert after recovery", async () => {
-    upsertRootReadiness(db, {
-      rootId: "local",
-      status: "ready",
-      checkedAt: "2026-01-01T00:00:00.000Z",
-      reason: null,
-      source: null,
-      uuid: null,
-      fstype: null
-    });
     for (const hour of [1, 2]) {
-      const run = startIndexRun(db, { rootId: "local", now: new Date(`2026-01-01T0${hour}:00:00.000Z`) });
+      const run = startIndexRun(db, { storagePoolId: "local", now: new Date(`2026-01-01T0${hour}:00:00.000Z`) });
       finishIndexRun(db, {
         runId: run.id,
         status: "failed",
@@ -117,7 +96,7 @@ describe("shared system health evaluator", () => {
     expect((await evaluateSystemHealth({ db, config, now: new Date("2026-01-01T03:00:00.000Z") })).issues)
       .toEqual(expect.arrayContaining([expect.objectContaining({ code: "indexer_failed" })]));
 
-    const recovery = startIndexRun(db, { rootId: "local", now: new Date("2026-01-01T03:01:00.000Z") });
+    const recovery = startIndexRun(db, { storagePoolId: "local", now: new Date("2026-01-01T03:01:00.000Z") });
     finishIndexRun(db, {
       runId: recovery.id,
       status: "completed",
@@ -157,7 +136,7 @@ describe("shared system health evaluator", () => {
 
   it("adds a warning when enabled monitoring has stopped sampling", async () => {
     const sampledAt = Date.parse("2026-01-01T00:00:00.000Z");
-    const writer = new MetricsFixture(config.metricsDatabasePath!);
+    const writer = new MetricsFixture(config.paths.metricsDatabasePath!);
     writer.recordCollectorStatus({
       collector: "host",
       state: "ready",
@@ -181,22 +160,25 @@ describe("shared system health evaluator", () => {
   });
 });
 
-function createConfig(dataDir: string, rootPath: string): CyberOsConfig {
+function createConfig(dataDir: string, dataRoot: string): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(dataDir, "missing.toml"), CYBEROS_ROOT: dataDir }, dataDir);
   return {
-    dataDir,
-    databasePath: path.join(dataDir, "cyberos.sqlite"),
-    metricsDatabasePath: path.join(dataDir, "metrics.sqlite"),
+    ...base,
+    paths: {
+      ...base.paths,
+      dataRoot,
+      databasePath: path.join(dataDir, "cyberos.sqlite"),
+      metricsDatabasePath: path.join(dataDir, "metrics.sqlite")
+    },
     monitoring: { ...DEFAULT_MONITORING_CONFIG },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
-    model: { provider: "local", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120_000, consoleShells: ["/bin/sh"] },
     shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
-    hostd: { socketPath: path.join(dataDir, "hostd.sock") },
-    terminal: { user: "test-user", termuxSocketPath: path.join(dataDir, "termux.sock") },
+    hostd: { socketPath: path.join(dataDir, "hostd.sock"), mutationPolicy: "mutable" },
+    terminal: { user: "test-user", socketPath: path.join(dataDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     health: { staleIndexWarningMs: 2 * 60 * 60 * 1000, staleIndexCriticalMs: 6 * 60 * 60 * 1000, stalledRunMs: 15 * 60 * 1000, consecutiveFailureThreshold: 2, backupStaleMs: 26 * 60 * 60 * 1000 },
-    nasRoots: [{ id: "local", name: "Local", path: rootPath }]
   };
 }

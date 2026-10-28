@@ -61,7 +61,7 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     ...system,
     networkManager,
     ethernetManager,
-    mutationPolicy: config.hostd.mutationPolicy ?? "mutable" as const
+    mutationPolicy: config.hostd.mutationPolicy
   };
   const power = system?.power ?? new HostdSystemPowerRuntime(config.hostd.socketPath);
   const bluetooth = system?.bluetoothManager ?? new HostdBluetoothManagerClient(config.hostd.socketPath);

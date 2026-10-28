@@ -13,7 +13,7 @@ sidebar:
 
 `cyberos-monitor.service` 是唯一指标写入者。它从 `/proc`、`/sys`、文件系统、固定 systemd unit allowlist 和只读的 CyberOS 主库采集主机及应用状态；单个 collector 失败只留下数据断点并更新 collector 状态，不会停止其他采集器或核心服务。服务使用单调时钟调度且 collector 不重叠执行，同一轮样本共享时间戳。`packages/monitoring` 的生产能力只包含共享 catalog、schema version 检查和只读查询。
 
-指标保存在 `/cyberos/state/metrics.sqlite`，不写入主库 `/cyberos/state/cyberos.sqlite`。指标库使用 WAL、短批量事务、`synchronous=NORMAL`、独立 migration、增量 vacuum 和定期 checkpoint。旧指标库首次打开时会一次性转换为 incremental auto-vacuum，同时保留已有样本；若临时空间不足，服务继续使用旧库并在无法物理回收时暂停超限写入，不会陷入重启循环。schema 升级只执行轻量结构变更，不在启动路径全表回填；旧 rollup 无法可靠重建的 rate 会显示为空点，后续新采样生成完整聚合。高于当前程序支持版本的 schema 会被拒绝，旧程序不会继续写入新格式数据库。raw、1 分钟和 1 小时层默认分别保留 48 小时、30 天和 1 年；容量默认上限 512 MiB。达到上限时依次裁剪 raw、1m、1h 到目标水位，仍不能降到限制内则暂停采样写入并报告 `degraded`。
+指标保存在 `/cyberos/state/metrics.sqlite`，不写入主库 `/cyberos/state/cyberos.sqlite`。指标库使用 WAL、短批量事务、`synchronous=NORMAL`、独立的 CyberOS 2.0 schema、增量 vacuum 和定期 checkpoint。新库在创建时直接启用 incremental auto-vacuum；旧 schema 不转换、不回填，缺少 `cyberos-2.0` identity 或高于当前支持版本的数据库会被拒绝。raw、1 分钟和 1 小时层默认分别保留 48 小时、30 天和 1 年；容量默认上限 512 MiB。达到上限时依次裁剪 raw、1m、1h 到目标水位，仍不能降到限制内则暂停采样写入并报告 `degraded`。
 
 指标目录来自语言无关的 `packages/monitoring/contracts/metrics-catalog.json`，使用固定、低基数的 OpenMetrics 风格名字。它覆盖 CPU/load、内存/Swap、磁盘与网络累计字节、NAS/state 容量、温度、固定 CyberOS 服务、worker heartbeat、队列、索引新鲜度、最近成功任务、Health 问题、monitor 自监控，以及用于阈值规则的内存/文件系统使用率。路径、任务 ID、会话 ID 不允许成为标签；临时容器/虚拟机网卡不进入主机网络序列。每个指标最多保留 64 条序列，全库最多 512 条；达到序列配额时可以回收 24 小时没有 raw 样本的最旧 inactive series，避免已消失设备永久占满配额。counter 在查询和告警层先转换为 reset-aware rate；缺失 bucket 返回 `null`，Web 以断线显示而不插值。
 

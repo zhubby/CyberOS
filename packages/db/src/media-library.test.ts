@@ -7,7 +7,6 @@ import {
   createMediaSource,
   deleteMediaSource,
   enqueueMediaScan,
-  ensureNasRoots,
   failMediaScan,
   finishMediaScan,
   getMediaHome,
@@ -33,7 +32,6 @@ let db: CyberOsDatabase;
 beforeEach(async () => {
   directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-media-db-"));
   db = openCyberOsDb(path.join(directory, "state.sqlite"));
-  ensureNasRoots(db, [{ id: "root", name: "Root", path: directory }]);
 });
 
 afterEach(async () => {
@@ -42,6 +40,16 @@ afterEach(async () => {
 });
 
 describe("media library persistence", () => {
+  it("rejects incomplete scraper settings", () => {
+    db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)").run(
+      "media_library_settings",
+      JSON.stringify({ language: "zh-CN", region: "CN" }),
+      "2026-01-01T00:00:00.000Z"
+    );
+
+    expect(getMediaLibrarySettings(db)).toBeNull();
+  });
+
   it("stores redacted scraper settings and validates source paths", () => {
     expect(getMediaLibrarySettings(db)).toBeNull();
     const saved = saveMediaLibrarySettings(db, {
@@ -59,7 +67,7 @@ describe("media library persistence", () => {
     expect(JSON.stringify(toPublicMediaLibrarySettings(saved))).not.toContain("secret-token");
 
     const source = createMediaSource(db, {
-      name: " Movies ", kind: "movie", rootId: "root", storagePoolId: "pool", path: "Media/Movies/"
+      name: " Movies ", kind: "movie",  storagePoolId: "pool", path: "Media/Movies/"
     });
     expect(source).toMatchObject({ name: "Movies", path: "Media/Movies", enabled: true });
     expect(updateMediaSource(db, source.id, { name: "Cinema", enabled: false })).toMatchObject({
@@ -67,7 +75,7 @@ describe("media library persistence", () => {
     });
     expect(listMediaSources(db)).toHaveLength(1);
     expect(() => createMediaSource(db, {
-      name: "Escape", kind: "series", rootId: "root", storagePoolId: "pool", path: "../outside"
+      name: "Escape", kind: "series",  storagePoolId: "pool", path: "../outside"
     })).toThrow("traversal");
   });
 
@@ -97,7 +105,7 @@ describe("media library persistence", () => {
 
   it("publishes a series hierarchy and keeps the catalog isolated by source", () => {
     const source = createMediaSource(db, {
-      name: "Series", kind: "series", rootId: "root", storagePoolId: "pool", path: "TV"
+      name: "Series", kind: "series",  storagePoolId: "pool", path: "TV"
     });
     const generation = "series-generation";
     const entry = upsertMediaCatalogEntry(db, {
@@ -155,7 +163,7 @@ describe("media library persistence", () => {
 function movieSource() {
   const existing = listMediaSources(db).find((source) => source.kind === "movie");
   return existing ?? createMediaSource(db, {
-    name: "Movies", kind: "movie", rootId: "root", storagePoolId: "pool", path: "Movies"
+    name: "Movies", kind: "movie",  storagePoolId: "pool", path: "Movies"
   });
 }
 

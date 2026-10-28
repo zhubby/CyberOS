@@ -77,9 +77,7 @@ export async function cleanupRestoreStaging(
   };
   try {
     ensureLease();
-    const stagingPath = path.resolve(
-      config.backup?.stagingPath ?? path.join(config.dataDir, "backup-staging")
-    );
+    const stagingPath = path.resolve(config.backup.stagingPath);
     const stagingStat = await lstat(stagingPath).catch(() => null);
     if (!stagingStat) return { status: "completed", removed: 0, reason: null };
     if (!stagingStat.isDirectory() || stagingStat.isSymbolicLink()) {

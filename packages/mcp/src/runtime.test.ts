@@ -11,7 +11,7 @@ import {
   saveAgentCapabilityPolicySettings,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { catalogForClient, createClientRuntime } from "./runtime.js";
 
 const PLANNED_CAPABILITIES = [
@@ -133,14 +133,13 @@ function createRuntime(shellEnabled: boolean) {
 }
 
 function testConfig(shellEnabled: boolean): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
   return {
-    environment: "development",
-    dataDir: tempDir,
-    databasePath: path.join(tempDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, databasePath: path.join(tempDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 100 },
+    worker: { pollMs: 100, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     mcp: {
       enabled: true,
       piEnabled: true,
@@ -154,10 +153,9 @@ function testConfig(shellEnabled: boolean): CyberOsConfig {
     docker: { enabled: true, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
     vm: { enabled: true, libvirtUri: "qemu:///system", storagePath: path.join(tempDir, "vm"), networkName: "default", isoRoots: [tempDir], operationTimeoutMs: 1_000, consoleMode: "serial" },
     backup: { enabled: true, repositoryPath: path.join(tempDir, "backup"), passwordFile: path.join(tempDir, "backup-password"), stagingPath: path.join(tempDir, "staging"), requireMount: false, retryCount: 1, timeoutMs: 1_000, keepDaily: 7, keepWeekly: 4 },
-    hostd: { socketPath: path.join(tempDir, "hostd.sock") },
+    hostd: { socketPath: path.join(tempDir, "hostd.sock"), mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
-    terminal: { user: "cyberos", termuxSocketPath: path.join(tempDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    terminal: { user: "cyberos", socketPath: path.join(tempDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: true, socketPath: path.join(tempDir, "vod.sock"), statePath: path.join(tempDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: []
   };
 }

@@ -19,7 +19,6 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 
 export interface StorageFilePickerPool {
   id: string;
-  rootId: string;
   name: string;
   path: string;
   filesystem: string | null;
@@ -27,7 +26,6 @@ export interface StorageFilePickerPool {
 }
 
 export interface StorageFileSelection {
-  rootId: string;
   storagePoolId: string;
   path: string;
   name: string;
@@ -61,7 +59,6 @@ export function StorageFilePickerDialog({
   onSelect: (selection: StorageFileSelection) => void;
   onSelectMany?: (selections: StorageFileSelection[]) => void;
   onRequestCreateFolder?: (input: {
-    rootId: string;
     storagePoolId: string;
     parentPath: string;
     name: string;
@@ -158,7 +155,7 @@ export function StorageFilePickerDialog({
     setLoading(true);
     setError(null);
     try {
-      const listing = await getFiles(selectedPool.rootId, currentPath, selectedPool.id);
+      const listing = await getFiles(selectedPool.id, currentPath);
       if (requestId !== loadRequestId.current) return;
       setEntries(listing.entries.filter((entry) => mode === "directory"
         ? isDirectoryPickerEntry(entry)
@@ -225,7 +222,6 @@ export function StorageFilePickerDialog({
     if (mode === "directory") {
       if (currentDirectoryDisabled) return;
       onSelect({
-        rootId: selectedPool.rootId,
         storagePoolId: selectedPool.id,
         path: currentPath,
         name: currentPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? selectedPool.name
@@ -235,7 +231,6 @@ export function StorageFilePickerDialog({
     if (mode === "files") {
       if (multiSelection.length === 0 || !onSelectMany) return;
       onSelectMany(multiSelection.map((entry) => ({
-        rootId: selectedPool.rootId,
         storagePoolId: selectedPool.id,
         path: entry.path,
         name: entry.name
@@ -244,7 +239,6 @@ export function StorageFilePickerDialog({
     }
     if (!selection) return;
     onSelect({
-      rootId: selectedPool.rootId,
       storagePoolId: selectedPool.id,
       path: selection.path,
       name: selection.name
@@ -292,7 +286,6 @@ export function StorageFilePickerDialog({
     setError(null);
     try {
       await onRequestCreateFolder({
-        rootId: selectedPool.rootId,
         storagePoolId: selectedPool.id,
         parentPath: currentPath,
         name

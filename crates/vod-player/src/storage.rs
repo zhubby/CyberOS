@@ -9,7 +9,7 @@ use std::path::{Component, Path, PathBuf};
 #[cfg(target_os = "linux")]
 use nix::fcntl::{OFlag, OpenHow, ResolveFlag, openat2};
 
-use crate::config::{NasRoot, VodPlayerConfig};
+use crate::config::VodPlayerConfig;
 use crate::error::{ErrorCode, VodError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -48,49 +48,46 @@ struct MountLocation {
 
 pub fn open_media(
     config: &VodPlayerConfig,
-    root_id: &str,
     storage_pool_id: &str,
     relative_path: &str,
 ) -> Result<OpenedMedia, VodError> {
     validate_relative_path(relative_path)?;
     validate_media_extension(relative_path)?;
-    let root = config
-        .nas_roots
-        .iter()
-        .find(|root| root.id == root_id)
-        .ok_or_else(|| VodError::invalid_path("NAS root not found"))?;
-    open_media_for_root(root, storage_pool_id, relative_path)
-}
-
-fn open_media_for_root(
-    root: &NasRoot,
-    storage_pool_id: &str,
-    relative_path: &str,
-) -> Result<OpenedMedia, VodError> {
-    let root_path = std::fs::canonicalize(&root.path).map_err(|_| {
-        VodError::unavailable(ErrorCode::StorageUnavailable, "NAS root is unavailable")
+    validate_storage_pool_id(storage_pool_id)?;
+    let data_root = std::fs::canonicalize(&config.data_root).map_err(|_| {
+        VodError::unavailable(
+            ErrorCode::StorageUnavailable,
+            "CyberOS data root is unavailable",
+        )
     })?;
-    let mount = find_mountpoint(storage_pool_id, &root_path)?;
+    let pool_path = data_root.join(storage_pool_id);
+    let metadata = std::fs::symlink_metadata(&pool_path).map_err(|_| {
+        VodError::unavailable(ErrorCode::StorageUnavailable, "Storage pool is unavailable")
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(VodError::invalid_path(
+            "Storage pool must be a real directory",
+        ));
+    }
+    let pool_path = std::fs::canonicalize(pool_path).map_err(|_| {
+        VodError::unavailable(ErrorCode::StorageUnavailable, "Storage pool is unavailable")
+    })?;
+    if pool_path != data_root.join(storage_pool_id) {
+        return Err(VodError::invalid_path(
+            "Storage pool is not a direct child of the data root",
+        ));
+    }
+    let mount = find_mountpoint(&pool_path, config.production)?;
     let mountpoint = std::fs::canonicalize(&mount.path).map_err(|_| {
         VodError::unavailable(ErrorCode::StorageUnavailable, "Storage pool is unavailable")
     })?;
-    if !mountpoint.starts_with(&root_path) {
+    if mountpoint != pool_path {
         return Err(VodError::invalid_path(
-            "Storage pool is outside the selected NAS root",
+            "Storage mount does not match the selected pool",
         ));
     }
-    let mount_relative = mountpoint
-        .strip_prefix(&root_path)
-        .map_err(|_| VodError::invalid_path("Invalid storage pool"))?;
     let requested = Path::new(relative_path);
-    let pool_relative = if mount_relative.as_os_str().is_empty() {
-        requested
-    } else {
-        requested.strip_prefix(mount_relative).map_err(|_| {
-            VodError::invalid_path("Media path is outside the selected storage pool")
-        })?
-    };
-    let file = open_beneath(&mountpoint, pool_relative, mount.mount_id)?;
+    let file = open_beneath(&mountpoint, requested, mount.mount_id)?;
     let metadata = file.metadata()?;
     if !metadata.is_file() {
         return Err(VodError::invalid_path(
@@ -106,6 +103,18 @@ fn open_media_for_root(
             .unwrap_or("video")
             .to_owned(),
     })
+}
+
+fn validate_storage_pool_id(value: &str) -> Result<(), VodError> {
+    let path = Path::new(value);
+    if value.is_empty()
+        || path.is_absolute()
+        || path.components().count() != 1
+        || !matches!(path.components().next(), Some(Component::Normal(_)))
+    {
+        return Err(VodError::invalid_path("Invalid storage pool id"));
+    }
+    Ok(())
 }
 
 pub fn identity_matches(file: &File, expected: FileIdentity) -> Result<bool, VodError> {
@@ -237,28 +246,38 @@ fn identity(metadata: &std::fs::Metadata) -> FileIdentity {
 }
 
 #[cfg(target_os = "linux")]
-fn find_mountpoint(storage_pool_id: &str, root: &Path) -> Result<MountLocation, VodError> {
+fn find_mountpoint(pool_path: &Path, required: bool) -> Result<MountLocation, VodError> {
     let mountinfo = std::fs::read_to_string("/proc/self/mountinfo")?;
-    find_mountpoint_in(&mountinfo, storage_pool_id, root).ok_or_else(|| {
-        VodError::unavailable(ErrorCode::StorageUnavailable, "Storage pool is not mounted")
-    })
+    match find_mountpoint_in(&mountinfo, pool_path) {
+        Some(location) => Ok(location),
+        None if required => Err(VodError::unavailable(
+            ErrorCode::StorageUnavailable,
+            "Storage pool is not mounted",
+        )),
+        None => Ok(MountLocation {
+            path: pool_path.to_owned(),
+            mount_id: None,
+        }),
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
-fn find_mountpoint(_storage_pool_id: &str, root: &Path) -> Result<MountLocation, VodError> {
+fn find_mountpoint(pool_path: &Path, required: bool) -> Result<MountLocation, VodError> {
+    if required {
+        return Err(VodError::unavailable(
+            ErrorCode::StorageUnavailable,
+            "Production storage mount verification requires Linux",
+        ));
+    }
     Ok(MountLocation {
-        path: root.to_owned(),
+        path: pool_path.to_owned(),
         mount_id: None,
     })
 }
 
 #[cfg(any(target_os = "linux", test))]
-fn find_mountpoint_in(
-    mountinfo: &str,
-    storage_pool_id: &str,
-    root: &Path,
-) -> Option<MountLocation> {
-    let requested = std::fs::canonicalize(storage_pool_id).ok();
+fn find_mountpoint_in(mountinfo: &str, pool_path: &Path) -> Option<MountLocation> {
+    let requested = std::fs::canonicalize(pool_path).ok()?;
     for line in mountinfo.lines() {
         let Some((left, right)) = line.split_once(" - ") else {
             continue;
@@ -266,19 +285,11 @@ fn find_mountpoint_in(
         let left: Vec<_> = left.split_whitespace().collect();
         let right: Vec<_> = right.split_whitespace().collect();
         if left.len() >= 5 && right.len() >= 2 {
-            let source = unescape_mount_field(right[1]);
-            let source_matches = source == storage_pool_id
-                || requested.as_ref().is_some_and(|requested| {
-                    std::fs::canonicalize(&source).ok().as_ref() == Some(requested)
-                });
-            if !source_matches {
-                continue;
-            }
             let Ok(mount_id) = left[0].parse() else {
                 continue;
             };
             let mountpoint = PathBuf::from(unescape_mount_field(left[4]));
-            if mountpoint == root || mountpoint.starts_with(root) {
+            if std::fs::canonicalize(&mountpoint).ok().as_ref() == Some(&requested) {
                 return Some(MountLocation {
                     path: mountpoint,
                     mount_id: Some(mount_id),
@@ -286,14 +297,7 @@ fn find_mountpoint_in(
             }
         }
     }
-    if requested.as_deref() == Some(root) || Path::new(storage_pool_id) == root {
-        Some(MountLocation {
-            path: root.to_owned(),
-            mount_id: None,
-        })
-    } else {
-        None
-    }
+    None
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -322,41 +326,34 @@ mod tests {
     }
 
     #[test]
-    fn parses_mountinfo_and_escaped_mountpoints() {
-        let mountinfo = concat!(
-            "malformed line\n",
-            "35 25 0:31 / /other rw - ext4 /dev/md0 rw\n",
-            "36 25 0:31 / /mnt/My\\040NAS rw - ext4 /dev/md0 rw\n",
-        );
+    fn parses_mountinfo_for_the_exact_pool_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let pool = directory.path().join("pool-a");
+        std::fs::create_dir(&pool).unwrap();
+        let mountinfo = format!("36 25 0:31 / {} rw - ext4 /dev/md0 rw\n", pool.display());
         assert_eq!(
-            find_mountpoint_in(mountinfo, "/dev/md0", Path::new("/mnt")),
+            find_mountpoint_in(&mountinfo, &pool),
             Some(MountLocation {
-                path: PathBuf::from("/mnt/My NAS"),
+                path: pool,
                 mount_id: Some(36)
             })
         );
     }
 
     #[test]
-    fn matches_canonical_storage_device_aliases() {
+    fn production_requires_the_pool_directory_to_be_a_mountpoint() {
         let directory = tempfile::tempdir().unwrap();
-        let device = directory.path().join("md127");
-        let alias = directory.path().join("media");
-        std::fs::write(&device, b"").unwrap();
-        std::os::unix::fs::symlink(&device, &alias).unwrap();
-        let root = directory.path().join("nas");
-        let mountinfo = format!(
-            "36 25 0:31 / {} rw - ext4 {} rw\n",
-            root.display(),
-            device.display()
-        );
-        assert_eq!(
-            find_mountpoint_in(&mountinfo, alias.to_str().unwrap(), &root),
-            Some(MountLocation {
-                path: root,
-                mount_id: Some(36)
-            })
-        );
+        let pool = directory.path().join("pool-a");
+        std::fs::create_dir(&pool).unwrap();
+        let error = find_mountpoint(&pool, true).unwrap_err();
+        assert_eq!(error.code, ErrorCode::StorageUnavailable);
+    }
+
+    #[test]
+    fn accepts_only_single_component_storage_pool_ids() {
+        assert!(validate_storage_pool_id("media").is_ok());
+        assert!(validate_storage_pool_id("../media").is_err());
+        assert!(validate_storage_pool_id("nested/media").is_err());
     }
 
     #[test]

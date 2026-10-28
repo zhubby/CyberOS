@@ -10,13 +10,17 @@ async fn coalesced_queue_tasks_are_claimed_with_a_lease() {
     let database = directory.path().join("cyberos.sqlite");
     common::create_schema(&database, &root);
     let db = Db::open(&database).unwrap();
-    db.enqueue("local", None, "docs", true, "incremental", 50)
+    db.enqueue("local", "docs", true, "incremental", 50)
         .await
         .unwrap();
-    db.enqueue("local", None, "docs", true, "manual", 100)
+    db.enqueue("local", "docs", true, "manual", 100)
         .await
         .unwrap();
-    let task = db.claim("worker-1").await.unwrap().unwrap();
+    let task = db
+        .claim("worker-1", &[common::storage_pool(&root)])
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(task.kind, "manual");
     assert_eq!(task.generation, 2);
     assert!(

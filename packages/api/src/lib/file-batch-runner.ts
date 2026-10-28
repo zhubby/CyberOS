@@ -11,8 +11,8 @@ import {
   type ClaimedFileBatchItem,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { applyFileMutation, trashPathFor } from "@cyberos/nas-tools";
-import type { FileBatchRecord, FileOperationProposal, CyberOsConfig } from "@cyberos/shared";
+import { applyFileMutation, trashPathFor } from "@cyberos/storage-tools";
+import { type FileBatchRecord, type FileOperationProposal, type CyberOsConfig } from "@cyberos/shared";
 import type { SystemManagementDependencies } from "./system-management.js";
 import {
   resolveScopedExistingPath,
@@ -74,7 +74,6 @@ export class FileBatchRunner implements FileBatchRuntime {
 
 interface ProcessedFileBatchItem {
   batchId: string;
-  rootId: string;
   storagePoolId: string;
   completedCount: number;
   totalCount: number;
@@ -118,8 +117,8 @@ async function applyClaimedItem(
 ): Promise<void> {
   if (getFileOperation(db, item.operationId)) return;
 
-  const scope = await resolveStoragePoolScope(db, system, batch.rootId, batch.storagePoolId);
-  const trashRoot = path.join(config.dataDir, "trash");
+  const scope = await resolveStoragePoolScope(config.paths.dataRoot, system, batch.storagePoolId);
+  const trashRoot = path.join(config.paths.stateDir, "trash");
   if (batch.operation === "move" && !item.targetPath) {
     throw new Error("Move batch item is missing its target path");
   }
@@ -129,7 +128,6 @@ async function applyClaimedItem(
   const proposal: FileOperationProposal = batch.operation === "move"
     ? {
         operation: "move",
-        rootId: batch.rootId,
         storagePoolId: batch.storagePoolId,
         sourcePath: item.sourcePath,
         targetPath: item.targetPath!,
@@ -139,7 +137,6 @@ async function applyClaimedItem(
       }
     : {
         operation: "trash",
-        rootId: batch.rootId,
         storagePoolId: batch.storagePoolId,
         sourcePath: item.sourcePath,
         trashEntryId: item.trashEntryId!,
@@ -151,7 +148,7 @@ async function applyClaimedItem(
   const recovered = await recoverAppliedMutation(scope, proposal, trashRoot);
   const result = recovered ?? await (async () => {
     await validateStoragePoolProposal(scope, proposal);
-    return await applyFileMutation(scope.root, proposal, trashRoot);
+    return await applyFileMutation(scope.workspace, proposal, trashRoot);
   })();
 
   if (result.proposal.operation === "trash" && result.metadata.trashEntryId && result.targetPath) {
@@ -159,7 +156,7 @@ async function applyClaimedItem(
     if (!getTrashEntry(db, trashEntryId)) {
       createTrashEntry(db, {
         id: trashEntryId,
-        rootId: scope.root.id,
+        storagePoolId: scope.pool.id,
         originalPath: result.sourcePath ?? item.sourcePath,
         trashPath: path.join(trashRoot, result.targetPath),
         metadata: {
@@ -173,14 +170,12 @@ async function applyClaimedItem(
 
   recordAppliedOperation(db, {
     id: item.operationId,
-    approvalId: null,
     operation: result.proposal.operation,
     sourcePath: result.sourcePath,
     targetPath: result.targetPath,
     status: "applied",
     metadata: {
       ...result.metadata,
-      rootId: scope.root.id,
       storagePoolId: batch.storagePoolId,
       reversible: true,
       fileBatchId: batch.id,
@@ -207,7 +202,7 @@ async function recoverAppliedMutation(
     };
   }
   if (proposal.operation !== "trash" || !proposal.sourcePath || !proposal.trashEntryId) return null;
-  const trash = trashPathFor(trashRoot, scope.root.id, proposal.sourcePath, proposal.trashEntryId);
+  const trash = trashPathFor(trashRoot, scope.pool.id, proposal.sourcePath, proposal.trashEntryId);
   const trashExists = await pathExists(trash.absoluteTrashPath);
   if (sourceExists && trashExists) {
     throw new Error("Trash recovery found both source and destination; refusing to overwrite either path");
@@ -256,7 +251,6 @@ function processedResult(
 ): ProcessedFileBatchItem {
   return {
     batchId: batch.id,
-    rootId: batch.rootId,
     storagePoolId: batch.storagePoolId,
     completedCount: batch.completedCount,
     totalCount: batch.totalCount,

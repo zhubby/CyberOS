@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { createRestrictedShellAdapter } from "./restricted-shell.js";
 
 let tempDir: string;
@@ -12,11 +12,10 @@ let db: CyberOsDatabase;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-restricted-shell-"));
-  rootDir = path.join(tempDir, "root");
+  rootDir = path.join(tempDir, "pool-1");
   await mkdir(rootDir);
   await writeFile(path.join(rootDir, "visible.txt"), "visible", "utf8");
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir }]);
 });
 
 afterEach(async () => {
@@ -29,7 +28,7 @@ describe("restricted shell adapter", () => {
     const adapter = createRestrictedShellAdapter();
     const context = adapterContext();
     const prepared = await adapter.prepare({
-      rootId: "primary",
+      storagePoolId: "pool-1",
       command: "ls",
       args: ["-1"],
       cwd: ".",
@@ -52,7 +51,7 @@ describe("restricted shell adapter", () => {
     ["ls", ["--hyperlink=always"]]
   ] as const)("rejects indirect reads or external execution through %s", async (command, args) => {
     await expect(createRestrictedShellAdapter().prepare({
-      rootId: "primary",
+      storagePoolId: "pool-1",
       command,
       args: [...args]
     }, adapterContext())).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
@@ -65,7 +64,7 @@ describe("restricted shell adapter", () => {
       reason: "Restricted shell is disabled by host configuration"
     });
     await expect(createRestrictedShellAdapter().prepare({
-      rootId: "primary",
+      storagePoolId: "pool-1",
       command: "ls"
     }, context)).rejects.toMatchObject({ code: "NOT_READY" });
   });
@@ -86,14 +85,13 @@ function adapterContext(shellEnabled = true) {
 }
 
 function testConfig(shellEnabled: boolean): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
   return {
-    environment: "development",
-    dataDir: tempDir,
-    databasePath: path.join(tempDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: tempDir, databasePath: path.join(tempDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 100 },
+    worker: { pollMs: 100, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     mcp: {
       enabled: true,
       piEnabled: true,
@@ -105,10 +103,9 @@ function testConfig(shellEnabled: boolean): CyberOsConfig {
       maxConcurrentPerClient: 4
     },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: path.join(tempDir, "hostd.sock") },
+    hostd: { socketPath: path.join(tempDir, "hostd.sock"), mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
-    terminal: { user: "cyberos", termuxSocketPath: path.join(tempDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    terminal: { user: "cyberos", socketPath: path.join(tempDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(tempDir, "vod.sock"), statePath: path.join(tempDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "primary", name: "Primary", path: rootDir }]
   };
 }

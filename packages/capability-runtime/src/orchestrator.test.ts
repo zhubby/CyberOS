@@ -11,7 +11,6 @@ import {
   createUserMessageAndJob,
   defaultAgentCapabilityPolicySettings,
   decideCapabilityApproval,
-  ensureNasRoots,
   getCapabilityApprovalByRun,
   getCapabilityRun,
   getCapabilityRunPayload,
@@ -21,14 +20,13 @@ import {
   saveAgentCapabilityPolicySettings,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import {
   capabilityRunSecretRequirements,
   executeApprovedCapabilityRun,
   executeStartedSecretCapabilityRun,
   proposeFileMutation,
   proposeDomainCapability,
-  proposePiToolCapability,
   proposePiMcpFileCapability,
   recoverCapabilityRuns
 } from "./orchestrator.js";
@@ -40,11 +38,10 @@ let db: CyberOsDatabase;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-capability-runtime-"));
-  rootDir = path.join(tempDir, "root");
-  await mkdir(rootDir);
+  rootDir = path.join(tempDir, "data", "local");
+  await mkdir(rootDir, { recursive: true });
   await writeFile(path.join(rootDir, "source.txt"), "version one", "utf8");
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir }]);
 });
 
 afterEach(async () => {
@@ -59,7 +56,7 @@ describe("capability mutation runtime", () => {
       dependencies: dependencies(),
       subject: { id: client.id, clientId: client.id, kind: "pi", scopes: new Set(client.scopes) },
       capabilityId: "cyberos.files.read",
-      request: { rootId: "primary", path: "source.txt" },
+      request: { storagePoolId: "local", path: "source.txt" },
       requiresConfirmation: false
     });
     linkProposalToAgentJob(proposed.runId!);
@@ -75,7 +72,7 @@ describe("capability mutation runtime", () => {
 
     expect(run).toMatchObject({
       state: "succeeded",
-      result: { data: { rootId: "primary", preview: { content: "version one", truncated: false } } }
+      result: { data: { storagePoolId: "local", preview: { content: "version one", truncated: false } } }
     });
   });
 
@@ -85,7 +82,7 @@ describe("capability mutation runtime", () => {
       dependencies: dependencies(),
       subject: { id: client.id, clientId: client.id, kind: "pi", scopes: new Set(client.scopes) },
       capabilityId: "cyberos.files.read",
-      request: { rootId: "primary", path: "source.txt" },
+      request: { storagePoolId: "local", path: "source.txt" },
       requiresConfirmation: false
     });
     linkProposalToAgentJob(proposed.runId!);
@@ -112,7 +109,7 @@ describe("capability mutation runtime", () => {
     const proposed = await proposeFileMutation({
       dependencies: dependencies(),
       subject: subject(client.id),
-      request: { operation: "move", rootId: "primary", sourcePath: "source.txt", targetPath: "target.txt" }
+      request: { operation: "move", storagePoolId: "local", sourcePath: "source.txt", targetPath: "target.txt" }
     });
     linkProposalToAgentJob(proposed.runId!);
     const approval = getCapabilityApprovalByRun(db, proposed.runId!)!;
@@ -136,7 +133,7 @@ describe("capability mutation runtime", () => {
     const proposed = await proposeFileMutation({
       dependencies: dependencies(),
       subject: subject(client.id),
-      request: { operation: "mkdir", rootId: "primary", targetPath: "Archive" }
+      request: { operation: "mkdir", storagePoolId: "local", targetPath: "Archive" }
     });
     linkProposalToAgentJob(proposed.runId!);
     const approval = getCapabilityApprovalByRun(db, proposed.runId!)!;
@@ -154,14 +151,14 @@ describe("capability mutation runtime", () => {
     await expect(access(path.join(rootDir, "Archive"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("rejects proposals while a required NAS root is not ready", async () => {
-    ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir, mountPolicy: "required" }]);
+  it("rejects proposals while a required storage pool is unavailable", async () => {
     const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
+    await rm(rootDir, { recursive: true, force: true });
 
     await expect(proposeFileMutation({
       dependencies: dependencies(),
       subject: subject(client.id),
-      request: { operation: "mkdir", rootId: "primary", targetPath: "Archive" }
+      request: { operation: "mkdir", storagePoolId: "local", targetPath: "Archive" }
     })).rejects.toMatchObject({ code: "NOT_READY", retryable: true } satisfies Partial<CapabilityError>);
   });
 
@@ -174,7 +171,7 @@ describe("capability mutation runtime", () => {
     await expect(proposeFileMutation({
       dependencies: dependencies(),
       subject: subject(client.id),
-      request: { operation: "trash", rootId: "primary", sourcePath: "linked.txt" }
+      request: { operation: "trash", storagePoolId: "local", sourcePath: "linked.txt" }
     })).rejects.toMatchObject({ code: "INVALID_ARGUMENT" } satisfies Partial<CapabilityError>);
   });
 
@@ -186,7 +183,7 @@ describe("capability mutation runtime", () => {
       subjectKind: "local",
       capabilityId: "cyberos.files.mutate",
       risk: "high",
-      redactedInput: { operation: "mkdir", rootId: "primary", targetPath: "NeverCreate" },
+      redactedInput: { operation: "mkdir", storagePoolId: "local", targetPath: "NeverCreate" },
       state: "running",
       cancellable: false
     });
@@ -194,27 +191,6 @@ describe("capability mutation runtime", () => {
     await expect(recoverCapabilityRuns(dependencies())).resolves.toEqual({ expired: 0, interrupted: 1, resumed: 0 });
     expect(getCapabilityRun(db, run.id)).toMatchObject({ state: "failed", errorCode: "INTERNAL" });
     await expect(access(path.join(rootDir, "NeverCreate"))).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("rejects the legacy arbitrary bash bridge in favor of structured Shell argv", async () => {
-    await expect(proposePiToolCapability({
-      dependencies: dependencies(),
-      sessionId: "session-1",
-      rootId: "primary",
-      request: {
-        toolCallId: "tool-1",
-        toolName: "bash",
-        args: { command: "cat /etc/passwd" },
-        redactedArgs: { command: "cat /etc/passwd" },
-        previewArgs: { command: "cat /etc/passwd" },
-        risk: "critical",
-        summary: "Run shell command",
-        requiresConfirmation: true
-      }
-    })).rejects.toMatchObject({
-      code: "INVALID_ARGUMENT",
-      message: "Legacy bash execution is disabled; use cyberos.shell.run with structured argv"
-    });
   });
 
   it("deduplicates identical domain proposals and rejects conflicting idempotency input", async () => {
@@ -357,7 +333,7 @@ function recordingAdapter(requiresSecret = false): CapabilityDomainAdapter & { e
 }
 
 function linkProposalToAgentJob(runId: string): void {
-  const session = createSession(db, { rootId: "primary" });
+  const session = createSession(db, { });
   const { job } = createUserMessageAndJob(db, {
     sessionId: session.id,
     content: "Run a file mutation",
@@ -371,19 +347,17 @@ function dependencies() {
 }
 
 function testConfig(): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
   return {
-    environment: "development",
-    dataDir: tempDir,
-    databasePath: path.join(tempDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, databasePath: path.join(tempDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 100 },
+    worker: { pollMs: 100, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: path.join(tempDir, "hostd.sock") },
+    hostd: { socketPath: path.join(tempDir, "hostd.sock"), mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
-    terminal: { user: "cyberos", termuxSocketPath: path.join(tempDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    terminal: { user: "cyberos", socketPath: path.join(tempDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(tempDir, "vod.sock"), statePath: path.join(tempDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "primary", name: "Primary", path: rootDir }]
   };
 }

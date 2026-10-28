@@ -30,17 +30,12 @@ hour_retention_ms = 31536000000
 max_database_bytes = 536870912
 
 # Optional byte-identical HTTPS mirror for the managed offline map.
-# [photostaff]
+# [photos]
 # basemap_url = "https://mirror.example.com/cyberos/natural-earth-ii-3.2.0-raster.pmtiles"
 
 [admin]
 display_name = "CyberOS Admin"
 auth_mode = "local-only"
-
-[model]
-provider = "pi"
-pi_command = "pi"
-local_endpoint = ""
 
 [docker]
 enabled = false
@@ -62,14 +57,9 @@ iso_roots = [".cyberos/dev-root/iso"]
 operation_timeout_ms = 120000
 console_mode = "serial"
 
-[[nas_roots]]
-id = "primary"
-name = "Primary NAS"
-path = ".cyberos/dev-root/data/primary"
-
 [backup]
 enabled = false
-repository_path = ".cyberos/dev-root/data/backup/restic"
+repository = ".cyberos/dev-root/backup"
 password_file = ".cyberos/dev-root/config/restic-password"
 staging_path = ".cyberos/dev-root/state/backup-staging"
 require_mount = false

@@ -65,7 +65,7 @@ describe("MCP clients and capability runs", () => {
       subjectKind: "pi",
       capabilityId: "cyberos.files.mutate",
       risk: "high",
-      redactedInput: { operation: "mkdir", rootId: "primary", path: "Photos" },
+      redactedInput: { operation: "mkdir", storagePoolId: "pool-1", path: "Photos" },
       idempotencyKey: "mkdir-photos"
     });
     const repeated = createCapabilityRun(db, {
@@ -74,7 +74,7 @@ describe("MCP clients and capability runs", () => {
       subjectKind: "pi",
       capabilityId: "cyberos.files.mutate",
       risk: "high",
-      redactedInput: { path: "Photos", rootId: "primary", operation: "mkdir" },
+      redactedInput: { path: "Photos", storagePoolId: "pool-1", operation: "mkdir" },
       idempotencyKey: "mkdir-photos"
     });
     expect(repeated.id).toBe(first.id);
@@ -84,9 +84,49 @@ describe("MCP clients and capability runs", () => {
       subjectKind: "pi",
       capabilityId: "cyberos.files.mutate",
       risk: "high",
-      redactedInput: { operation: "mkdir", rootId: "primary", path: "Other" },
+      redactedInput: { operation: "mkdir", storagePoolId: "pool-1", path: "Other" },
       idempotencyKey: "mkdir-photos"
     })).toThrow("Idempotency key conflicts");
+  });
+
+  it("links each domain operation to exactly one capability run", () => {
+    const client = createMcpClient(db, { name: "Pi", kind: "pi", scopes: ["cyberos:files:propose"] });
+    const runs = ["first", "second"].map((idempotencyKey) => createCapabilityRun(db, {
+      clientId: client.id,
+      subjectId: client.id,
+      subjectKind: "pi",
+      capabilityId: "cyberos.files.mutate",
+      risk: "high",
+      redactedInput: { operation: "mkdir", path: idempotencyKey },
+      idempotencyKey
+    }));
+
+    expect(transitionCapabilityRun(db, {
+      runId: runs[0]!.id,
+      expectedRevision: runs[0]!.revision,
+      from: ["queued"],
+      to: "running",
+      domainOperationType: "file_operation",
+      domainOperationId: "operation-1"
+    })).toMatchObject({
+      domainOperationType: "file_operation",
+      domainOperationId: "operation-1"
+    });
+    expect(() => transitionCapabilityRun(db, {
+      runId: runs[1]!.id,
+      expectedRevision: runs[1]!.revision,
+      from: ["queued"],
+      to: "running",
+      domainOperationType: "file_operation",
+      domainOperationId: "operation-1"
+    })).toThrow();
+    expect(() => transitionCapabilityRun(db, {
+      runId: runs[1]!.id,
+      expectedRevision: runs[1]!.revision,
+      from: ["queued"],
+      to: "running",
+      domainOperationType: "file_operation"
+    })).toThrow();
   });
 
   it("moves immutable proposals through first-party approval", () => {

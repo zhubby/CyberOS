@@ -10,6 +10,7 @@ import type { ApiRouteContext } from "../context.js";
 import { restoreTrashEntry, rollbackRegularOperation, rollbackTrashOperation } from "../lib/operations.js";
 
 export function registerOperationRoutes(server: FastifyInstance, { config, db, system }: ApiRouteContext): void {
+  const dataRoot = config.paths.dataRoot;
   server.get("/api/operations", async () => ({
     operations: listFileOperations(db, { limit: 100 })
   }));
@@ -17,19 +18,15 @@ export function registerOperationRoutes(server: FastifyInstance, { config, db, s
   server.post<{
     Params: { id: string };
   }>("/api/trash/:id/restore", async (request, reply) => {
-    const { entry, root, restored } = await restoreTrashEntry(db, request.params.id, system);
+    const { entry, storagePool, restored } = await restoreTrashEntry(db, dataRoot, request.params.id, system);
     const operation = recordAppliedOperation(db, {
-      approvalId: null,
       operation: "restore",
       sourcePath: entry.trashPath,
       targetPath: restored.targetPath,
       status: "applied",
       metadata: {
         ...restored.metadata,
-        rootId: root.id,
-        ...(typeof entry.metadata.storagePoolId === "string"
-          ? { storagePoolId: entry.metadata.storagePoolId }
-          : {}),
+        storagePoolId: storagePool.id,
         trashEntryId: entry.id,
         reversible: true
       }
@@ -54,15 +51,14 @@ export function registerOperationRoutes(server: FastifyInstance, { config, db, s
       return;
     }
 
-    const trashRootPath = path.join(config.dataDir, "trash");
+    const trashRootPath = path.join(config.paths.stateDir, "trash");
     try {
       const rolledBack =
         operation.operation === "trash"
-          ? await rollbackTrashOperation(db, operation, system)
-          : await rollbackRegularOperation(db, operation, trashRootPath, system);
+          ? await rollbackTrashOperation(db, dataRoot, operation, system)
+          : await rollbackRegularOperation(db, dataRoot, operation, trashRootPath, system);
 
       const rollbackRecord = recordAppliedOperation(db, {
-        approvalId: null,
         operation: rolledBack.operation,
         sourcePath: rolledBack.sourcePath,
         targetPath: rolledBack.targetPath,

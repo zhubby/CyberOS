@@ -38,7 +38,7 @@ export function listDockerRegistryCredentials(db: CyberOsDatabase): DockerRegist
     return [];
   }
   return parsed
-    .map((value) => registryRecord(value, row.updated_at))
+    .map(registryRecord)
     .filter((value): value is DockerRegistryCredentialRecord => value !== null);
 }
 
@@ -117,7 +117,7 @@ function saveRecords(db: CyberOsDatabase, records: DockerRegistryCredentialRecor
   `).run(DOCKER_REGISTRY_CREDENTIALS_KEY, JSON.stringify(records), updatedAt);
 }
 
-function registryRecord(value: unknown, fallbackUpdatedAt: string): DockerRegistryCredentialRecord | null {
+function registryRecord(value: unknown): DockerRegistryCredentialRecord | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
@@ -127,7 +127,9 @@ function registryRecord(value: unknown, fallbackUpdatedAt: string): DockerRegist
     typeof candidate.name !== "string" ||
     typeof candidate.serverAddress !== "string" ||
     typeof candidate.username !== "string" ||
-    typeof candidate.password !== "string"
+    typeof candidate.password !== "string" ||
+    typeof candidate.createdAt !== "string" ||
+    typeof candidate.updatedAt !== "string"
   ) {
     return null;
   }
@@ -137,7 +139,7 @@ function registryRecord(value: unknown, fallbackUpdatedAt: string): DockerRegist
     serverAddress: candidate.serverAddress,
     username: candidate.username,
     password: candidate.password,
-    createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : fallbackUpdatedAt,
-    updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : fallbackUpdatedAt
+    createdAt: candidate.createdAt,
+    updatedAt: candidate.updatedAt
   };
 }

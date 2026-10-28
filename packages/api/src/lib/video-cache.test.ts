@@ -15,7 +15,7 @@ afterEach(async () => {
 
 function source(name: string): VideoCacheSource {
   return {
-    rootId: "local",
+    storagePoolId: "local",
     relativePath: name,
     realPath: path.join(tempDir ?? "", name),
     sizeBytes: 10,

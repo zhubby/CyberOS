@@ -6,7 +6,7 @@ import { runMigrations } from "./schema.js";
 
 export type CyberOsDatabase = Database.Database;
 
-export const CYBEROS_DATABASE_FORMAT_VERSION = 2;
+export const CYBEROS_DATABASE_FORMAT_VERSION = 3;
 
 const SQLITE_BUSY_TIMEOUT_MS = 30_000;
 const WAL_RETRY_INITIAL_DELAY_MS = 10;

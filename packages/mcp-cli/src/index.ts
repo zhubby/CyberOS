@@ -23,7 +23,7 @@ if (process.getuid?.() !== 0 && process.env.CYBEROS_MCP_ALLOW_NON_ROOT !== "1") 
 }
 
 const config = loadConfig();
-const db = openCyberOsDb(config.databasePath);
+const db = openCyberOsDb(config.paths.databasePath);
 try {
   dispatch(db, arguments_);
 } finally {
@@ -60,7 +60,7 @@ function createClient(database: CyberOsDatabase, args: string[]): void {
       throw error;
     }
   }
-  const caPath = path.join(config.rootDir ?? "/cyberos", "config", "mcp-tls", "ca.crt");
+  const caPath = path.join(config.paths.rootDir, "config", "mcp-tls", "ca.crt");
   printJson({
     id: client.id,
     name: client.name,
@@ -71,7 +71,7 @@ function createClient(database: CyberOsDatabase, args: string[]): void {
     scopes: client.scopes,
     expiresAt: client.expiresAt,
     caPath: existsSync(caPath) ? caPath : null,
-    ...(kind === "pi" ? { tokenFile: config.mcp?.piTokenFile } : {})
+    ...(kind === "pi" ? { tokenFile: config.mcp.piTokenFile } : {})
   });
 }
 
@@ -125,7 +125,7 @@ function revokeClient(database: CyberOsDatabase, args: string[]): void {
   if (!clientId) fail("client revoke requires a client id");
   const client = listMcpClients(database).find((candidate) => candidate.id === clientId && !candidate.revokedAt);
   if (!revokeMcpClient(database, clientId)) fail("active MCP client not found");
-  if (client?.kind === "pi" && config.mcp?.piTokenFile && existsSync(config.mcp.piTokenFile)) {
+  if (client?.kind === "pi" && existsSync(config.mcp.piTokenFile)) {
     unlinkSync(config.mcp.piTokenFile);
   }
   printJson({ id: clientId, revoked: true, pendingRunsExpired: true });
@@ -143,7 +143,7 @@ function initializeTls(database: CyberOsDatabase, args: string[]): void {
   if (Boolean(providedCert) !== Boolean(providedKey)) fail("--cert and --key must be provided together");
   if (providedCa && !providedCert) fail("--ca can only be used with --cert and --key");
   if (providedCert && providedKey) validateProvidedTls(hostname, providedCert, providedKey, providedCa);
-  const rootDir = config.rootDir ?? "/cyberos";
+  const rootDir = config.paths.rootDir;
   const tlsDir = path.join(rootDir, "config", "mcp-tls");
   mkdirSync(tlsDir, { recursive: true, mode: 0o700 });
   const caKey = path.join(tlsDir, "ca.key");
@@ -185,8 +185,8 @@ function initializeTls(database: CyberOsDatabase, args: string[]): void {
       caFingerprint,
       certificateFingerprint: serverFingerprint,
       certificateSource: privateCa ? "cyberos-private-ca" : "provided",
-      enabled: config.mcp?.externalEnabled === true,
-      nextStep: config.mcp?.externalEnabled === true
+      enabled: config.mcp.externalEnabled,
+      nextStep: config.mcp.externalEnabled
         ? "Restart cyberos-api.service, then test the paired client."
         : "Set [mcp].external_enabled = true and restart cyberos-api.service before using the LAN endpoint."
     };
@@ -275,7 +275,7 @@ function allPiScopes(): string[] {
 }
 
 function installPiToken(token: string): void {
-  const tokenFile = config.mcp?.piTokenFile;
+  const tokenFile = config.mcp.piTokenFile;
   if (!tokenFile) fail("MCP Pi token file is not configured");
   const tokenDir = path.dirname(tokenFile);
   mkdirSync(tokenDir, { recursive: true, mode: 0o700 });
@@ -291,7 +291,7 @@ function installPiToken(token: string): void {
 }
 
 function readInstalledPiToken(): string {
-  const tokenFile = config.mcp?.piTokenFile;
+  const tokenFile = config.mcp.piTokenFile;
   if (!tokenFile || !existsSync(tokenFile)) {
     fail("the installed Pi token file is missing; refusing a non-atomic rotation");
   }
@@ -303,7 +303,7 @@ function readInstalledPiToken(): string {
 }
 
 function removeInstalledPiToken(): void {
-  const tokenFile = config.mcp?.piTokenFile;
+  const tokenFile = config.mcp.piTokenFile;
   if (!tokenFile || !existsSync(tokenFile)) return;
   try {
     unlinkSync(tokenFile);

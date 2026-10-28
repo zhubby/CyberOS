@@ -4,8 +4,10 @@ use std::io;
 pub enum AlerterError {
     #[error("configuration error: {0}")]
     Config(String),
-    #[error("metrics schema version {0} is newer than supported version 3")]
+    #[error("metrics schema version {0} is newer than the supported CyberOS 2.0 schema")]
     FutureMetricsSchema(i64),
+    #[error("metrics database does not use the CyberOS 2.0 schema")]
+    IncompatibleMetricsSchema,
     #[error("storage error: {0}")]
     Storage(#[from] rusqlite::Error),
     #[error("I/O error: {0}")]
@@ -29,7 +31,8 @@ pub enum AlerterError {
 impl AlerterError {
     pub fn sanitized(&self) -> &'static str {
         match self {
-            Self::FutureMetricsSchema(_) => "Metrics database schema is newer than this monitor",
+            Self::FutureMetricsSchema(_) => "Metrics database schema is newer than this alerter",
+            Self::IncompatibleMetricsSchema => "Metrics database is not a CyberOS 2.0 database",
             Self::Config(_) => "Monitor configuration is invalid",
             Self::Storage(error) if is_full(error) => "Metrics database is full",
             Self::Storage(_) => "Metrics database operation failed",
@@ -63,11 +66,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preserves_legacy_sanitized_messages() {
+    fn preserves_pre_sanitized_messages() {
         let cases = [
             (
-                AlerterError::FutureMetricsSchema(4),
-                "Metrics database schema is newer than this monitor",
+                AlerterError::FutureMetricsSchema(2),
+                "Metrics database schema is newer than this alerter",
             ),
             (
                 AlerterError::Config("invalid".to_owned()),

@@ -11,8 +11,8 @@ const PRODUCT_CARGO_PACKAGES = [
   { manifestPath: "crates/hostd/Cargo.toml", packageName: "cyberos-hostd" },
   { manifestPath: "crates/indexer/Cargo.toml", packageName: "cyberos-indexer" },
   { manifestPath: "crates/monitor/Cargo.toml", packageName: "cyberos-monitor" },
-  { manifestPath: "crates/photostaff/Cargo.toml", packageName: "cyberos-photostaff" },
-  { manifestPath: "crates/termux/Cargo.toml", packageName: "cyberos-termux" },
+  { manifestPath: "crates/photos/Cargo.toml", packageName: "cyberos-photos" },
+  { manifestPath: "crates/terminald/Cargo.toml", packageName: "cyberos-terminald" },
   { manifestPath: "crates/tv-gamepad/Cargo.toml", packageName: "cyberos-tv-gamepad" },
   { manifestPath: "crates/vod-player/Cargo.toml", packageName: "cyberos-vod-player" },
   { manifestPath: "crates/monitoring-contracts/Cargo.toml", packageName: "cyberos-monitoring-contracts" }
@@ -85,8 +85,7 @@ export async function readVersionState(repoRoot) {
       )
     ),
     cargoLock: await readFile(path.join(repoRoot, "Cargo.lock"), "utf8"),
-    debianChangelog: await readFile(path.join(repoRoot, "packaging/debian/changelog"), "utf8"),
-    applianceManifest: await readFile(path.join(repoRoot, "packaging/appliance/manifest.toml"), "utf8")
+    debianChangelog: await readFile(path.join(repoRoot, "packaging/debian/changelog"), "utf8")
   };
 }
 
@@ -158,11 +157,6 @@ export function versionStateErrors(state) {
     errors.push(`packaging/debian/changelog has version ${JSON.stringify(debianVersion)}; expected ${version}`);
   }
 
-  const applianceVersion = readApplianceVersion(state.applianceManifest);
-  if (applianceVersion !== version) {
-    errors.push(`packaging/appliance/manifest.toml has version ${JSON.stringify(applianceVersion)}; expected ${version}`);
-  }
-
   return errors;
 }
 
@@ -215,10 +209,6 @@ export async function prepareRelease(repoRoot, { increment, note, now = new Date
   }
   files.set("Cargo.lock", cargoLock);
   files.set("packaging/debian/changelog", prependDebianChangelog(state.debianChangelog, nextVersion, note, now));
-  files.set(
-    "packaging/appliance/manifest.toml",
-    state.applianceManifest.replace(/^(version\s*=\s*)"[^"]+"/mu, `$1"${nextVersion}"`)
-  );
 
   if (write) {
     await Promise.all(
@@ -299,10 +289,6 @@ function updateInternalDependencies(value, nextVersion) {
 
 function readDebianVersion(changelog) {
   return /^cyberos \(([^)]+)\)/u.exec(changelog)?.[1] ?? null;
-}
-
-function readApplianceVersion(manifest) {
-  return /^version\s*=\s*"([^"]+)"/mu.exec(manifest)?.[1] ?? null;
 }
 
 function readTomlPackageVersion(document, tableHeader, packageName, source) {

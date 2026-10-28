@@ -35,7 +35,7 @@ describe("FilePreviewDialog", () => {
       },
       blobUrl: "/api/files/blob?path=documents%2Freport.txt",
       videoUrl: "",
-      rootId: "local",
+      storagePoolId: "local",
       previewFileSizeLimitBytes: 1024,
       locale: "en",
       onOpenWorkspacePath: vi.fn(),

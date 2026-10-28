@@ -4,8 +4,10 @@ use std::io;
 pub enum MonitorError {
     #[error("configuration error: {0}")]
     Config(String),
-    #[error("metrics schema version {0} is newer than supported version 3")]
+    #[error("metrics schema version {0} is newer than supported version 1")]
     FutureMetricsSchema(i64),
+    #[error("metrics database does not use the CyberOS 2.0 schema")]
+    IncompatibleMetricsSchema,
     #[error("storage error: {0}")]
     Storage(#[from] rusqlite::Error),
     #[error("I/O error: {0}")]
@@ -22,6 +24,7 @@ impl MonitorError {
     pub fn sanitized(&self) -> &'static str {
         match self {
             Self::FutureMetricsSchema(_) => "Metrics database schema is newer than this monitor",
+            Self::IncompatibleMetricsSchema => "Metrics database is not a CyberOS 2.0 database",
             Self::Config(_) => "Monitor configuration is invalid",
             Self::Storage(error) if is_full(error) => "Metrics database is full",
             Self::Storage(_) => "Metrics database operation failed",

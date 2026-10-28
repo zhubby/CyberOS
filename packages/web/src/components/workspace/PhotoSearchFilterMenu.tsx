@@ -1,7 +1,7 @@
 import { Plus, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { PhotoMediaKind } from "@cyberos/shared/photostaff-config";
+import type { PhotoMediaKind } from "@cyberos/shared/photos-config";
 import type {
   PhotoMetadataCondition,
   PhotoQueryFacets,

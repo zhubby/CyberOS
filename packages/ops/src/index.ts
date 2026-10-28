@@ -1,4 +1,4 @@
-import { ensureNasRoots, openCyberOsDb } from "@cyberos/db";
+import { openCyberOsDb } from "@cyberos/db";
 import { loadConfig } from "@cyberos/shared";
 import { runHealthTask, runMaintenanceTask } from "./runner.js";
 
@@ -8,8 +8,7 @@ if ((command !== "health" && command !== "maintenance") || rest.length > 0) {
   process.exitCode = 2;
 } else {
   const config = loadConfig();
-  const db = openCyberOsDb(config.databasePath);
-  ensureNasRoots(db, config.nasRoots);
+  const db = openCyberOsDb(config.paths.databasePath);
   try {
     const summary = command === "health"
       ? await runHealthTask({ db, config })

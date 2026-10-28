@@ -796,7 +796,6 @@ mod tests {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::path::PathBuf;
 
-    use crate::config::NasRoot;
     use crate::storage::FileIdentity;
 
     fn config(directory: &std::path::Path) -> VodPlayerConfig {
@@ -805,6 +804,8 @@ mod tests {
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
             database_path: directory.join("cyberos.sqlite"),
+            data_root: directory.join("data"),
+            production: false,
             command_timeout_ms: 250,
             startup_timeout_ms: 5_000,
             checkpoint_interval_ms: 5_000,
@@ -817,10 +818,6 @@ mod tests {
             hwdec: "auto-safe".to_owned(),
             user: "test".to_owned(),
             peer_uid: nix::unistd::Uid::current().as_raw(),
-            nas_roots: vec![NasRoot {
-                id: "root".to_owned(),
-                path: directory.to_owned(),
-            }],
         }
     }
 
@@ -915,7 +912,7 @@ done
     #[test]
     fn redacts_paths_from_diagnostics() {
         let message = sanitize_diagnostic(
-            "failed '/cyberos/data/primary/private/movie.mkv' source=/cyberos/data/primary/private path='/private/secret' fdclose://9",
+            "failed '/cyberos/data/pool-1/private/movie.mkv' source=/cyberos/data/pool-1/private path='/private/secret' fdclose://9",
         );
         assert_eq!(message, "failed [path] [path] [path] [path]");
     }

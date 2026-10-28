@@ -3,10 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  createSession,
-  createUserMessageAndJob,
-  ensureNasRoots,
-  getApproval,
+  createShareOperationRecord,
   getShareOperation,
   getShareSettings,
   openCyberOsDb,
@@ -14,7 +11,6 @@ import {
   updateShareOperationStatus,
   type CyberOsDatabase
 } from "./index.js";
-import { createShareOperationApproval } from "./repositories/share-operations.js";
 
 let tempDir: string;
 let db: CyberOsDatabase;
@@ -22,7 +18,6 @@ let db: CyberOsDatabase;
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-db-"));
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
 afterEach(async () => {
@@ -44,7 +39,7 @@ describe("operation repositories", () => {
         {
           id: "media",
           name: "Media",
-          rootId: "local",
+          storagePoolId: "local",
           path: "media",
           description: "Media share",
           protocols: {
@@ -117,8 +112,8 @@ describe("operation repositories", () => {
         },
         shares: [
           {
-            id: "legacy",
-            rootId: "local",
+            id: "incomplete",
+            storagePoolId: "local",
             path: "."
           }
         ]
@@ -127,38 +122,10 @@ describe("operation repositories", () => {
       "share_settings"
     );
 
-    expect(getShareSettings(db)).toMatchObject({
-      enabled: true,
-      account: {
-        username: "cyberos-share",
-        password: null
-      },
-      shares: [
-        {
-          id: "legacy",
-          protocols: {
-            smb: {
-              enabled: false,
-              readOnly: true,
-              browseable: true,
-              allowGuest: false
-            },
-            dlna: {
-              mediaTypes: ["audio", "video", "pictures"]
-            }
-          }
-        }
-      ]
-    });
+    expect(() => getShareSettings(db)).toThrow("CyberOS 2.0 format");
   });
 
-  it("creates share operation approvals without exposing the pending password in the proposal", () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "Apply share settings",
-      status: "waiting_approval"
-    });
+  it("keeps the pending password out of the public share proposal", () => {
     const settings = {
       enabled: true,
       account: {
@@ -169,8 +136,7 @@ describe("operation repositories", () => {
       updatedAt: "2026-01-01T00:00:00.000Z"
     };
 
-    const { approval, operation } = createShareOperationApproval(db, {
-      jobId: job.id,
+    const operation = createShareOperationRecord(db, {
       settings,
       proposal: {
         action: "apply_settings",
@@ -186,23 +152,8 @@ describe("operation repositories", () => {
       }
     });
 
-    expect(getApproval(db, approval.id)).toMatchObject({
-      kind: "share_operation",
-      proposal: [
-        {
-          action: "apply_settings",
-          settings: {
-            account: {
-              username: "cyberos-share",
-              passwordConfigured: true
-            }
-          }
-        }
-      ]
-    });
-    expect(JSON.stringify(getApproval(db, approval.id))).not.toContain("secret");
+    expect(JSON.stringify(operation.metadata.proposal)).not.toContain("secret");
     expect(getShareOperation(db, operation.id)).toMatchObject({
-      approvalId: approval.id,
       action: "apply_settings",
       targetId: "share-settings",
       status: "proposed",

@@ -1,16 +1,15 @@
 import { lstat, realpath } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
-import { getNasRoot, getRootReadiness } from "@cyberos/db";
-import { resolveSafeExistingPath } from "@cyberos/nas-tools";
-import { getUnsupportedDockerResource, parseDockerImageReference } from "@cyberos/shared";
-import type {
-  DockerContainerCreateInput,
-  DockerCreateResult,
-  DockerNetworkCreateInput,
-  DockerOperationProposal,
-  DockerSummary,
-  DockerVolumeCreateInput
+import {
+  getUnsupportedDockerResource,
+  parseDockerImageReference,
+  type DockerContainerCreateInput,
+  type DockerCreateResult,
+  type DockerNetworkCreateInput,
+  type DockerOperationProposal,
+  type DockerSummary,
+  type DockerVolumeCreateInput
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import type {
@@ -26,6 +25,7 @@ import {
   hostAccessRisk,
   type DockerHostAccessManifest
 } from "./docker-host-access.js";
+import { resolveScopedExistingPath, resolveStoragePoolScope } from "./storage-scope.js";
 
 const MAX_STRING = 4_096;
 const MAX_ITEMS = 128;
@@ -250,7 +250,7 @@ export function bindPreparedDockerCreateHostAccess(
         policyVersion: manifest.coverage.policyVersion,
         added: manifest.grants.map((grant) => ({
           capability: grant.capability,
-          ...(grant.capability === "nas_capacity" ? { rootId: grant.rootId } : {}),
+          ...(grant.capability === "nas_capacity" ? { storagePoolId: grant.storagePoolId } : {}),
           risk: hostAccessRisk(grant.capability)
         })),
         removed: [],
@@ -396,7 +396,10 @@ async function prepareContainer(
   if (pidsLimit !== undefined) {
     requireApiVersion(summary, "1.23", "PID limit");
   }
-  const hostAccessPolicy = context.hostAccess?.policy ?? new DockerHostAccessPolicy(context.db);
+  const hostAccessPolicy = context.hostAccess?.policy ?? new DockerHostAccessPolicy(context.db, {
+    runtimeRoot: path.join(context.config.paths.runDir, "host-access"),
+    dataRoot: context.config.paths.dataRoot
+  });
   let hostAccessManifest: DockerHostAccessManifest | undefined;
   if (source.hostAccess !== undefined) {
     try {
@@ -539,7 +542,9 @@ function dockerHostAccessCreateError(error: unknown): DockerCreateValidationErro
   if (!(error instanceof DockerHostAccessValidationError)) {
     return new DockerCreateValidationError("Docker Host Access configuration could not be resolved");
   }
-  const unavailable = error.issues.some((issue) => issue.code === "capability_unavailable" || issue.code === "root_unavailable");
+  const unavailable = error.issues.some((issue) =>
+    issue.code === "capability_unavailable" || issue.code === "storage_pool_unavailable"
+  );
   return new DockerCreateValidationError(error.message, unavailable ? 503 : 400);
 }
 
@@ -688,17 +693,15 @@ async function containerMounts(value: unknown, context: ApiRouteContext, summary
     targets.add(target);
     const readOnly = boolean(mount.readOnly, "Mount read-only", type === "bind");
     if (type === "bind") {
-      allowed(mount, ["type", "rootId", "sourcePath", "target", "readOnly"]);
-      const rootId = requiredString(mount.rootId, "Bind root", 128);
+      allowed(mount, ["type", "storagePoolId", "sourcePath", "target", "readOnly"]);
+      const storagePoolId = requiredString(mount.storagePoolId, "Bind storage pool", 128);
       const sourcePath = requiredString(mount.sourcePath, "Bind source path", 4_096);
-      const root = getNasRoot(context.db, rootId);
-      if (!root) {
-        throw new DockerCreateValidationError("Bind source NAS root is unavailable");
-      }
-      if (root.mountPolicy === "required" && getRootReadiness(context.db, root.id)?.status !== "ready") {
-        throw new DockerCreateValidationError("Bind source NAS root is not ready");
-      }
-      const safe = await resolveSafeExistingPath(root.path, sourcePath);
+      const scope = await resolveStoragePoolScope(
+        context.config.paths.dataRoot,
+        context.system,
+        storagePoolId
+      );
+      const safe = await resolveScopedExistingPath(scope, sourcePath);
       const info = await lstat(safe.realPath);
       if (!info.isFile() && !info.isDirectory()) {
         throw new DockerCreateValidationError("Bind source must be a regular file or directory");
@@ -707,7 +710,7 @@ async function containerMounts(value: unknown, context: ApiRouteContext, summary
       if (isDockerSocketPath(safe.realPath, configuredSocket)) {
         throw new DockerCreateValidationError("The Docker socket cannot be mounted into a container");
       }
-      input.push({ type, rootId, sourcePath: safe.relativePath, target, readOnly });
+      input.push({ type, storagePoolId, sourcePath: safe.relativePath, target, readOnly });
       engine.push({ type, source: safe.realPath, target, readOnly });
       continue;
     }

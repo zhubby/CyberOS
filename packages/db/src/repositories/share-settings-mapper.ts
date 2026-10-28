@@ -8,8 +8,11 @@ import { DLNA_MEDIA_TYPES } from "./settings-constants.js";
 import type { DbSystemSettingRow } from "./repository-rows.js";
 
 export function mapShareSettings(row: DbSystemSettingRow): ShareSettingsRecord {
-  const parsed = JSON.parse(row.value_json) as Partial<ShareSettingsRecord>;
-  return normalizeShareSettings(parsed, normalizeString(parsed.updatedAt) ?? row.updated_at);
+  const parsed = JSON.parse(row.value_json) as unknown;
+  if (!isCurrentShareSettings(parsed)) {
+    throw new Error("Share settings do not match the CyberOS 2.0 format");
+  }
+  return normalizeShareSettings(parsed, parsed.updatedAt);
 }
 
 export function normalizeShareSettings(
@@ -40,9 +43,9 @@ function normalizeShareDefinitions(shares: unknown): ShareDefinitionConfig[] {
 
 function normalizeShareDefinition(value: unknown, index: number): ShareDefinitionConfig | null {
   const share = recordFrom(value);
-  const rootId = normalizeString(share.rootId);
+  const storagePoolId = normalizeString(share.storagePoolId);
   const sharePath = normalizeString(share.path);
-  if (!rootId || !sharePath) {
+  if (!storagePoolId || !sharePath) {
     return null;
   }
   const id = normalizeString(share.id) ?? `share-${index + 1}`;
@@ -50,7 +53,7 @@ function normalizeShareDefinition(value: unknown, index: number): ShareDefinitio
   return {
     id,
     name,
-    rootId,
+    storagePoolId,
     path: sharePath,
     description: normalizeString(share.description) ?? "",
     protocols: normalizeShareProtocolConfig(share.protocols, name)
@@ -155,4 +158,68 @@ function normalizePositiveInteger(value: unknown): number | null {
     return null;
   }
   return value;
+}
+
+function isCurrentShareSettings(value: unknown): value is ShareSettingsRecord {
+  if (!isRecord(value) || typeof value.enabled !== "boolean" || !isTimestamp(value.updatedAt)) return false;
+  if (
+    !isRecord(value.account)
+    || normalizeString(value.account.username) === null
+    || !isNullableString(value.account.password)
+  ) {
+    return false;
+  }
+  return Array.isArray(value.shares) && value.shares.every(isCurrentShareDefinition);
+}
+
+function isCurrentShareDefinition(value: unknown): value is ShareDefinitionConfig {
+  if (
+    !isRecord(value)
+    || [value.id, value.name, value.storagePoolId, value.path].some((field) => normalizeString(field) === null)
+    || typeof value.description !== "string"
+    || !isRecord(value.protocols)
+  ) {
+    return false;
+  }
+  const { smb, webdav, ftp, nfs, dlna } = value.protocols;
+  return isRecord(smb)
+    && [smb.enabled, smb.readOnly, smb.browseable, smb.allowGuest].every(isBoolean)
+    && isRecord(webdav)
+    && [webdav.enabled, webdav.readOnly, webdav.allowGuest].every(isBoolean)
+    && normalizePositiveInteger(webdav.port) !== null
+    && normalizeString(webdav.pathPrefix) !== null
+    && isRecord(ftp)
+    && [ftp.enabled, ftp.readOnly, ftp.allowGuest].every(isBoolean)
+    && [ftp.port, ftp.passivePortStart, ftp.passivePortEnd].every((field) => normalizePositiveInteger(field) !== null)
+    && isRecord(nfs)
+    && [nfs.enabled, nfs.readOnly, nfs.rootSquash].every(isBoolean)
+    && isStringArray(nfs.allowedCidrs)
+    && isRecord(dlna)
+    && typeof dlna.enabled === "boolean"
+    && Array.isArray(dlna.mediaTypes)
+    && dlna.mediaTypes.length > 0
+    && dlna.mediaTypes.every((item) => DLNA_MEDIA_TYPES.includes(item as DlnaMediaType))
+    && isNullableString(dlna.bindInterface)
+    && isNullableString(dlna.bindAddress)
+    && normalizeString(dlna.friendlyName) !== null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
 }

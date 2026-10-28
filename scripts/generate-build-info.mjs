@@ -9,7 +9,7 @@ import { fileURLToPath, URL } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const BUILD_SOURCES = new Set(["release", "ci", "local", "nix", "unknown"]);
+const BUILD_SOURCES = new Set(["release", "ci", "local", "unknown"]);
 
 export async function collectBuildInfo({ repoRoot, env = process.env, now = new Date(), runGit = defaultRunGit }) {
   const packageManifest = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
@@ -37,7 +37,7 @@ export async function collectBuildInfo({ repoRoot, env = process.env, now = new 
     builtAt: resolveBuildTime(env, now),
     source,
     dirty,
-    reproducible: resolveReproducibleState(env, source)
+    reproducible: resolveReproducibleState(env)
   };
 }
 
@@ -101,14 +101,14 @@ function resolveBuildSource(env, tag, commitSha) {
   return commitSha ? "local" : "unknown";
 }
 
-function resolveReproducibleState(env, source) {
+function resolveReproducibleState(env) {
   const explicit = optionalText(env.CYBEROS_BUILD_REPRODUCIBLE);
   if (explicit) {
     if (["1", "true"].includes(explicit.toLowerCase())) return true;
     if (["0", "false"].includes(explicit.toLowerCase())) return false;
     throw new Error("CYBEROS_BUILD_REPRODUCIBLE must be true, false, 1, or 0");
   }
-  return source === "nix" && Boolean(optionalText(env.SOURCE_DATE_EPOCH));
+  return false;
 }
 
 function normalizeCommitSha(value) {

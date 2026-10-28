@@ -20,15 +20,14 @@ The following surfaces are intentionally limited today:
 
 - Virtual machine management supports libvirt/QEMU host discovery and approval-gated lifecycle operations when the optional runtime is installed.
 - Network inspection remains available on every supported backend; NetworkManager Wi-Fi/hotspot changes and approved storage-pool operations are applied through `cyberos-hostd` when their host dependencies are available.
-- OCR is opt-in per NAS root and is limited to scanned PDFs with insufficient embedded text.
+- OCR is opt-in per storage pool and is limited to scanned PDFs with insufficient embedded text.
 - Local restic backup is opt-in; after explicit repository initialization, daily/weekly services perform encrypted snapshots and staging-only restore.
-- The appliance builder produces a generic root filesystem tarball, not a board-specific boot image.
 
 ## What is implemented
 
 ### File workspace
 
-- Browse multiple configured NAS roots with breadcrumb navigation and Git status indicators.
+- Browse multiple configured storage pools with breadcrumb navigation and Git status indicators.
 - Search the SQLite FTS index with a filesystem name-search fallback.
 - Incrementally refresh the index from file size and modification time without following symbolic links.
 - Preview text, source code, Markdown, CSV/TSV, images, audio, video, and PDF files.
@@ -41,20 +40,19 @@ The following surfaces are intentionally limited today:
 
 ### AI workspace
 
-- Persistent chat sessions scoped to a NAS root, with independent workspace navigation state.
+- Persistent chat sessions scoped to a storage pool, with independent workspace navigation state.
 - A database-backed job queue processed by a separate worker.
 - Pi agent integration with OpenAI, Anthropic, and compatible custom base URLs.
 - Streaming job and tool activity over Server-Sent Events.
 - Per-tool policy controls for `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`.
 - Approval records for dangerous Pi tool calls before execution.
-- A model-free, read-only local fallback for development and testing.
 
 ### Photos library
 
 - Bind one directory on a mounted storage pool and index common images, videos, and RAW camera files recursively.
 - Build a chronological EXIF-first media timeline with cached WebP thumbnails and previews, plus in-panel video playback.
 - Upload with SHA-256 duplicate detection, view metadata, download originals or ZIP selections, and request approval-gated batch move/trash operations.
-- Run resumable immediate and periodic scans in the non-root internal Rust `photostaff` daemon, with worker heartbeats, bounded media tools, and journaled derivative publication.
+- Run resumable immediate and periodic scans in the non-root internal Rust `photos` daemon, with worker heartbeats, bounded media tools, and journaled derivative publication.
 
 ### Host management
 
@@ -64,12 +62,11 @@ The following surfaces are intentionally limited today:
 - Approval-gated SMB, WebDAV, FTP, NFS, and DLNA share configuration through the privileged Rust `cyberos-hostd` daemon.
 - English and Simplified Chinese UI, a unified dark HUD theme, preview limits, and editor font settings.
 
-### Native appliance services
+### Native services
 
 - Debian package definitions for `amd64` and `arm64` release artifacts.
 - Hardened `systemd` units for the API, Rust monitor/alerter, worker, indexer, one-shot operations, and `cyberos-hostd`.
 - Timers for daily/weekly restic backups, health evaluation every 15 minutes, and maintenance at 04:30; the resident indexer reconciles internally every 30 minutes.
-- A Debian Bookworm rootfs scaffold built with `mmdebstrap` and `systemd-nspawn`.
 
 ## Architecture
 
@@ -80,14 +77,14 @@ flowchart LR
   DB[("SQLite WAL + FTS5")]
   Metrics[("Metrics SQLite raw / 1m / 1h")]
   Worker["Agent worker"]
-  PhotoWorker["Photos worker (photostaff)"]
+  PhotoWorker["Photos worker (photos)"]
   Agent["Pi agent runtime"]
   Indexer["Filesystem indexer"]
   Ops["Ops health / maintenance"]
   Monitor["Host and CyberOS monitor"]
   Alerter["Alert evaluator and mail outbox"]
-  Tools["Path-safe NAS tools"]
-  Roots[("Configured NAS roots")]
+  Tools["Path-safe storage tools"]
+  Roots[("Configured storage pools")]
   Host["Linux, PTY, Docker socket"]
   Hostd["Rust host integration daemon"]
 
@@ -112,8 +109,8 @@ flowchart LR
   Alerter --> Metrics
   Alerter <--> DB
   API --> Host
-  API -->|Termux Protocol v1 over Unix socket| Termux[termux daemon]
-  Termux -->|PTY as cyberos user| Host
+  API -->|Terminal Protocol v1 over Unix socket| Terminal[terminal daemon]
+  Terminal -->|PTY as cyberos user| Host
   API -->|JSONL Unix socket| Hostd
   Hostd --> Host
 ```
@@ -125,25 +122,25 @@ The main runtime components are:
 | `packages/web` | React 19 workspace UI, previews, settings, activity, and management panels. |
 | `packages/api` | REST API, SSE event feed, WebSocket terminals, static production UI, and approved operation execution. |
 | `packages/worker` | Claims queued jobs, runs agent turns, persists events, and pauses work for approvals. |
-| `crates/photostaff` | Rust media worker with resumable scans, metadata extraction, and journaled image derivatives. |
-| `crates/indexer` | Walks NAS roots, hashes files, extracts bounded text, and maintains the FTS index. |
+| `crates/photos` | Rust media worker with resumable scans, metadata extraction, and journaled image derivatives. |
+| `crates/indexer` | Walks storage pools, hashes files, extracts bounded text, and maintains the FTS index. |
 | `packages/ops` | Runs one-shot health evaluation and safe maintenance with persisted lifecycle history. |
 | `crates/monitor` | Rust metrics collector: collection, rollups, retention, and metrics database capacity protection. |
 | `crates/alerter` | Rust alert engine: rule evaluation, incidents, escalation, health synchronization, and mail delivery. |
 | `crates/monitoring-contracts` | Shared Rust metric catalog, schema version, and sampling cadence contract. |
 | `crates/hostd` | Rust host integration daemon for approved shares, storage, Docker daemon, and NetworkManager changes. |
-| `crates/termux` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `cyberos` account. |
-| `packages/agent` | Pi SDK integration, NAS-scoped tools, session persistence, and tool policy enforcement. |
+| `crates/terminal` | Rust terminal daemon for native PTYs and persistent tmux sessions under the non-root `cyberos` account. |
+| `packages/agent` | Pi SDK integration, storage-pool-scoped tools, session persistence, and tool policy enforcement. |
 | `packages/db` | SQLite connection, migrations, repositories, job queue, approvals, operations, and FTS queries. |
 | `packages/monitoring` | Language-neutral metric contracts plus TypeScript read-only metrics queries. |
-| `packages/nas-tools` | Root-relative path validation, symlink escape protection, file reads, metadata, and mutations. |
+| `packages/storage-tools` | Storage-pool-relative path validation, symlink escape protection, file reads, metadata, and mutations. |
 | `packages/shared` | Configuration loading and shared domain/API types. |
 
 ### Agent and approval flow
 
 1. The browser creates a session message through the API.
 2. The API stores the message and a queued job in SQLite.
-3. The worker claims the job and starts a Pi agent turn scoped to the selected NAS root.
+3. The worker claims the job and starts a Pi agent turn scoped to the selected storage pool.
 4. Agent and tool events are appended to SQLite and streamed to the browser over SSE.
 5. A policy-gated tool call or proposed mutation creates a pending approval and pauses execution.
 6. The API applies or rejects the operation after the user acts, then records the outcome for audit and rollback.
@@ -154,15 +151,15 @@ File operations proposed through the workspace or agent, Pi tool calls, Docker l
 
 CyberOS currently assumes a trusted, single-user appliance. It has no multi-user authentication boundary and binds the API to `127.0.0.1` by default. Do not expose it directly to an untrusted network.
 
-- Every NAS file path is resolved relative to a configured root; absolute paths, traversal, and unsafe symlink escapes are rejected.
-- File-oriented agent tools use NAS-root-scoped CyberOS wrappers. The `bash` tool is a real service-account shell, is always approval-gated, and is not a filesystem sandbox.
+- Every NAS file path is resolved relative to a selected storage pool; absolute paths, traversal, and unsafe symlink escapes are rejected.
+- File-oriented agent tools use storage-pool-scoped CyberOS wrappers. The `bash` tool is a real service-account shell, is always approval-gated, and is not a filesystem sandbox.
 - Write-capable Pi tools default to approval or disabled policies, configurable from the UI.
 - Approved file changes are audited. Trash uses a CyberOS-managed quarantine area and is not permanently deleted during maintenance.
 - Docker management is disabled by default. Access to `/var/run/docker.sock` is effectively root-equivalent.
-- The local terminal is a real interactive login shell running through Rust `crates/termux` as the non-root `cyberos` user. The API service also runs as `cyberos`; `NoNewPrivileges` and an empty capability set prevent terminal `sudo` escalation.
+- The local terminal is a real interactive login shell running through Rust `crates/terminal` as the non-root `cyberos` user. The API service also runs as `cyberos`; `NoNewPrivileges` and an empty capability set prevent terminal `sudo` escalation.
 - Privileged host changes are isolated in Rust `crates/hostd`, which accepts versioned JSONL requests over an authenticated Unix socket and only performs allowlisted operations.
 
-Always configure at least one explicit NAS root. When no root is provided, the development fallback is the host filesystem root.
+Storage pools are discovered from real directories directly below `/cyberos/data` (or the development `CYBEROS_ROOT/data`). There is no implicit pool or host-filesystem fallback.
 
 ## Requirements
 
@@ -189,19 +186,18 @@ Optional host tools enable additional features:
 
 ## Local development
 
-Install dependencies, create an isolated development NAS root, and export the configuration read by the Node.js processes:
+Install dependencies, create an isolated development storage pool, and export the configuration read by the Node.js processes:
 
 ```bash
 npm install
-mkdir -p .cyberos/dev-root/data/primary
+mkdir -p .cyberos/dev-root/data/pool-1
 export CYBEROS_ROOT="$PWD/.cyberos/dev-root"
-export CYBEROS_NAS_ROOTS="dev:Development NAS:$PWD/.cyberos/dev-root/data/primary"
 npm run dev
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api`, `/health`, and WebSocket traffic to the API at `127.0.0.1:3010`.
 
-`npm run dev` starts the API, agent worker, internal Rust `photostaff`, Rust downloader, Rust VOD player, and web UI. The Rust services use the API-owned TypeScript migrations and wait for their required schema versions before claiming work. The indexer and one-shot operations remain explicit during development:
+`npm run dev` starts the API, agent worker, internal Rust `photos`, Rust downloader, Rust VOD player, and web UI. The Rust services use the API-owned TypeScript migrations and wait for their required schema versions before claiming work. The indexer and one-shot operations remain explicit during development:
 
 ```bash
 npm run index
@@ -213,22 +209,16 @@ The Starlight documentation site is built separately with `npm run docs:build` a
 
 The packaged Rust `cyberos-indexer.service` is resident: filesystem events and mutation queues normally make changes searchable within seconds, while a full reconciliation runs every 30 minutes. Run `npm run index` for a one-shot development refresh. A failed extraction retains its last successful body, and an incomplete traversal never removes stale entries that could not be verified.
 
-Inspect the latest run for every configured root, or one root, through the read-only status endpoint:
+Inspect the latest run for every storage pool, or one pool, through the read-only status endpoint:
 
 ```bash
 curl http://127.0.0.1:3010/api/indexer/status
-curl "http://127.0.0.1:3010/api/indexer/status?rootId=dev"
+curl "http://127.0.0.1:3010/api/indexer/status?storagePoolId=dev"
 ```
 
-Status responses include scan metrics and root-relative failures plus daemon heartbeat, watcher, durable queue, and compatibility rebuild state. Symbolic links are always skipped. Text, PDF, DOCX, XLSX, PPTX and root-enabled PDF OCR extraction feed the FTS5 search index.
+Status responses include scan metrics and storage-pool-relative failures plus daemon heartbeat, watcher, durable queue, and schema rebuild state. Symbolic links are always skipped. Text, PDF, DOCX, XLSX, PPTX and explicitly enabled per-pool PDF OCR extraction feed the FTS5 search index.
 
 Configure an OpenAI or Anthropic provider, model, and API key in **Settings > Model Providers** before starting an AI turn. Provider secrets are stored in the local SQLite database; API reads only report whether a key is configured.
-
-For a model-free read-only development agent, set this before starting the worker:
-
-```bash
-export CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK=1
-```
 
 The backend reads process environment variables directly; `.env.example` is a reference file and is not automatically loaded by the Node.js services.
 
@@ -265,21 +255,17 @@ socket_path = "/run/cyberos/hostd.sock"
 enabled = false
 account_username = "cyberos-share"
 
-[[nas_roots]]
-id = "primary"
-name = "Primary NAS"
-path = "/cyberos/data/primary"
 ```
 
-Environment variables override the corresponding TOML values. The most useful development overrides are `CYBEROS_ROOT`, `CYBEROS_API_HOST`, `CYBEROS_API_PORT`, `CYBEROS_ALLOWED_ORIGINS`, `CYBEROS_NAS_ROOTS`, and the `CYBEROS_DOCKER_*` variables documented in [`.env.example`](.env.example). `CYBEROS_DATA_DIR` and `CYBEROS_DATABASE_PATH` are intentionally unsupported because state is derived from the single CyberOS root.
+Environment variables override the corresponding TOML values. The most useful development overrides are `CYBEROS_ROOT`, `CYBEROS_API_HOST`, `CYBEROS_API_PORT`, `CYBEROS_ALLOWED_ORIGINS`, and the `CYBEROS_DOCKER_*` variables documented in [`.env.example`](.env.example). `CYBEROS_DATA_DIR` and `CYBEROS_DATABASE_PATH` are intentionally unsupported because state is derived from the single CyberOS root.
 
 ## Build and verification
 
 ### P0 operations
 
-Production mode requires loopback API binding, the exact root `/cyberos`, and mounted NAS roots as direct children of `/cyberos/data`. The indexer records progress, failures and readiness in the main SQLite database. The monitor writes host and CyberOS time series only to `/cyberos/state/metrics.sqlite`; the alerter reads those metrics and stores configuration, incidents, and its mail outbox in `cyberos.sqlite`. Inspect the system with `/api/indexer/status`, `/api/roots/readiness`, `/api/system/health`, `/api/monitoring/overview`, and `/api/monitoring/alerts/summary`.
+Production mode requires loopback API binding, the exact root `/cyberos`, and mounted storage pools as direct children of `/cyberos/data`. The indexer records progress, failures and readiness in the main SQLite database. The monitor writes host and CyberOS time series only to `/cyberos/state/metrics.sqlite`; the alerter reads those metrics and stores configuration, incidents, and its mail outbox in `cyberos.sqlite`. Inspect the system with `/api/indexer/status`, `/api/system/storage`, `/api/system/health`, `/api/monitoring/overview`, and `/api/monitoring/alerts/summary`.
 
-Local restic backup is opt-in. Configure a repository and protected password file, run `backup validate`, then explicitly run `backup init`. Daily and weekly timers never initialize repositories implicitly. Restore always writes to isolated staging and never promotes over an active NAS root.
+Local restic backup is opt-in. Configure a repository and protected password file, run `backup validate`, then explicitly run `backup init`. Daily and weekly timers never initialize repositories implicitly. Restore always writes to isolated staging and never promotes over an active storage pool.
 
 ```bash
 npm run typecheck
@@ -288,7 +274,7 @@ npm test
 npm run build
 ```
 
-CyberOS uses one SemVer across the root manifest, application and package workspaces, Debian package, and appliance manifest. Prepare a release from a clean worktree with:
+CyberOS uses one SemVer across the root manifest, application and package workspaces, Cargo crates, docs, and Debian package. Prepare a release from a clean worktree with:
 
 ```bash
 npm run release -- patch --note "Describe the operator-visible change"
@@ -305,14 +291,7 @@ npm run start -w @cyberos/api
 npm run start -w @cyberos/worker
 ```
 
-Nix users can enter the pinned Node.js/Rust development environment and run the same repository checks:
-
-```bash
-nix develop
-make ci
-```
-
-## Debian package and appliance image
+## Debian package
 
 On a Debian or Ubuntu build host with Node.js 22, `build-essential`, `debhelper`, `dpkg-dev`, `fakeroot`, and `rsync` installed:
 
@@ -322,36 +301,17 @@ make deb
 
 Package artifacts are written under `.cyberos/`. The package installs the built applications under `/usr/lib/cyberos`, configuration under `/cyberos/config`, persistent state under `/cyberos/state`, and the service units under `/lib/systemd/system`.
 
-To build the generic Debian Bookworm rootfs tarball, install `mmdebstrap`, `systemd-nspawn`, and `tar`, then point the appliance builder at the architecture-matching package:
-
-```bash
-CYBEROS_DEB=/absolute/path/to/cyberos_<version>_arm64.deb make appliance
-```
-
-See [`packaging/appliance/README.md`](packaging/appliance/README.md) for image-builder inputs. Tagged releases are configured to publish `amd64` and `arm64` Debian artifacts with checksums through GitHub Actions.
-
-## Nix and NixOS
-
-The flake exports reproducible Linux packages for `x86_64-linux` and `aarch64-linux`, development shells for Linux and macOS, and a NixOS module at `nixosModules.default`:
-
-```bash
-nix flake check
-nix build .#cyberos
-```
-
-The NixOS module runs CyberOS as native systemd services and stores mutable state under `/cyberos`; it does not run the application in a container. Host configuration is intentionally declarative on NixOS. NetworkManager, storage-pool, share-service, and Docker daemon configuration remain visible in CyberOS but cannot be changed through the API or Web UI. Configure those resources with NixOS options instead.
-
-See [the NixOS deployment guide](docs/src/content/docs/operations/nixos.md) for module options, secret handling, service selection, validation, upgrades, and rollback limits.
+Tagged releases publish `amd64` and `arm64` Debian artifacts with checksums through GitHub Actions.
 
 ### Install on a Raspberry Pi OS or Debian host
 
 For an `arm64` CM5 (or an `amd64` Debian host), run the host installer from a checkout as root:
 
 ```bash
-sudo CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary packaging/scripts/install.sh
+sudo packaging/scripts/install.sh
 ```
 
-The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the CyberOS API, monitor, alerter, worker, hostd, termux, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
+The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, and configures npm to use `https://registry.npmmirror.com`. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the CyberOS API, monitor, alerter, worker, hostd, terminal, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
 
 The mirror defaults can be overridden for a private mirror or restored to another mirror with `CYBEROS_APT_MIRROR`, `CYBEROS_APT_SECURITY_MIRROR`, `CYBEROS_RPI_MIRROR`, `CYBEROS_NODE_MIRROR`, `CYBEROS_NODE_VERSION`, and `CYBEROS_NPM_REGISTRY`. The installer only rewrites known Debian/Raspberry Pi URIs, saves original source files under `/cyberos/system-backups/apt`, preserves `signed-by`, suites, components, and unrelated sources, and disables any NodeSource entry after switching to the domestic Node.js binary distribution. To restore an original source, copy its backup from `/cyberos/system-backups/apt` back to `/etc/apt/sources.list.d` (or uncomment the marked NodeSource line) before running the installer again with an explicit `CYBEROS_NODE_MIRROR`.
 
@@ -374,8 +334,8 @@ crates/
   hostd/           Privileged host integration daemon
   indexer/         NAS scanner and SQLite FTS indexer
   monitor/         Host and CyberOS metrics collector
-  photostaff/      Photo and video indexing worker
-  termux/          PTY daemon with tmux-backed terminal persistence
+  photos/      Photo and video indexing worker
+  terminald/        PTY daemon with tmux-backed terminal persistence
   vod-player/      HDMI/DRM playback daemon
 packages/
   api/            Fastify API and host adapters
@@ -383,14 +343,12 @@ packages/
   backup/         Restic validate, backup, check, and staging restore CLI
   db/             SQLite schema and repositories
   mcp*/            MCP server, CLI, capability registry, and runtime
-  nas-tools/      Path-safe NAS operations
+  storage-tools/    Path-safe storage-pool operations
   ops/            One-shot health evaluation and maintenance
   shared/         Configuration and shared types
   web/            React/Vite user interface
   worker/         Agent job processor
-nix/              Nix packages, NixOS module, and VM test
 packaging/
-  appliance/      Rootfs image scaffold
   debian/         Debian package metadata
   systemd/        Runtime services and timers
 docs/             Starlight technical, architecture, and operations documentation

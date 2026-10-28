@@ -3,7 +3,7 @@ import { isPathWithinStoragePool } from "../../App.js";
 import { defaultWorkspaceSearchOptions, hasWorkspaceSearchFilters, storagePoolStateKey } from "./WorkspacePane.js";
 
 describe("isPathWithinStoragePool", () => {
-  it("allows nested paths when the pool is mounted at the NAS root", () => {
+  it("allows nested paths when the pool is mounted at the storage pool", () => {
     expect(isPathWithinStoragePool("docs/readme.txt", ".")).toBe(true);
     expect(isPathWithinStoragePool("../outside.txt", ".")).toBe(false);
   });

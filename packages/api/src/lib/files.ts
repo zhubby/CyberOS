@@ -8,7 +8,7 @@ import {
   inferPreviewKind,
   resolveSafeExistingPath,
   type FileEntry
-} from "@cyberos/nas-tools";
+} from "@cyberos/storage-tools";
 
 export async function getFilePreviewMeta(rootPath: string, requestedPath: string) {
   const safe = await resolveSafeExistingPath(rootPath, requestedPath);
@@ -120,10 +120,10 @@ export async function sendFileStream(
   return reply.send(stream);
 }
 
-export function safeQueryIndex(db: CyberOsDatabase, rootId: string, query: string, searchPath = ".") {
+export function safeQueryIndex(db: CyberOsDatabase, storagePoolId: string, query: string, searchPath = ".") {
   try {
     return queryIndexedText(db, {
-      rootId,
+      storagePoolId,
       query,
       path: searchPath,
       limit: 25

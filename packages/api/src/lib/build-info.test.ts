@@ -77,6 +77,20 @@ describe("build information loading", () => {
     expect(parseBuildInfo({ version: "0.2.0", source: "secret", dirty: "false" })).toBeNull();
   });
 
+  it("rejects removed Nix build metadata", () => {
+    expect(parseBuildInfo({
+      version: "2.0.0",
+      commitSha: "abcdef0123456789",
+      commitShortSha: "abcdef012345",
+      tag: null,
+      branch: "main",
+      builtAt: "2026-10-28T00:00:00.000Z",
+      source: "nix",
+      dirty: false,
+      reproducible: true
+    })).toBeNull();
+  });
+
   it("rejects an invalid build timestamp before it reaches the web formatter", () => {
     expect(parseBuildInfo({
       version: "0.2.0",

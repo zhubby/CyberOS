@@ -576,11 +576,11 @@ jobs:
               cyberos-monitor.service \
               cyberos-alerter.service \
               cyberos-worker@1.service \
-              cyberos-photostaff.service \
+              cyberos-photos.service \
               cyberos-downloader.service \
               cyberos-indexer.service \
               cyberos-hostd.service \
-              cyberos-termux.service; do
+              cyberos-terminald.service; do
               main_pid="$(systemctl show --property=MainPID --value "$unit")"
               restart_count="$(systemctl show --property=NRestarts --value "$unit")"
               printf '%s:%s:%s\n' "$unit" "$main_pid" "$restart_count"
@@ -641,11 +641,11 @@ jobs:
             cyberos-monitor.service \
             cyberos-alerter.service \
             cyberos-worker@1.service \
-            cyberos-photostaff.service \
+            cyberos-photos.service \
             cyberos-downloader.service \
             cyberos-indexer.service \
             cyberos-hostd.service \
-            cyberos-termux.service; do
+            cyberos-terminald.service; do
             systemctl is-enabled --quiet "$unit"
             check_active_unit "$unit"
           done
@@ -671,11 +671,11 @@ jobs:
             cyberos-monitor.service \
             cyberos-alerter.service \
             cyberos-worker@1.service \
-            cyberos-photostaff.service \
+            cyberos-photos.service \
             cyberos-downloader.service \
             cyberos-indexer.service \
             cyberos-hostd.service \
-            cyberos-termux.service; do
+            cyberos-terminald.service; do
             check_active_unit "$unit"
           done
           runtime_after="$(runtime_fingerprint)"
@@ -684,8 +684,8 @@ jobs:
               "$runtime_before" "$runtime_after" >&2
             exit 1
           fi
-          systemctl show --property ExecStart --value cyberos-termux.service | \
-            grep -Fq /usr/lib/cyberos/bin/cyberos-termux
+          systemctl show --property ExecStart --value cyberos-terminald.service | \
+            grep -Fq /usr/lib/cyberos/bin/cyberos-terminald
           failed_units="$(systemctl --failed --no-legend --plain | awk '$1 ~ /^cyberos-/ { print }' || true)"
           if [ -n "$failed_units" ]; then
             printf '%s\n' "$failed_units" >&2
@@ -693,7 +693,7 @@ jobs:
           fi
 
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/health > "$check_dir/health.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/roots/readiness > "$check_dir/readiness.json"
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/storage > "$check_dir/storage.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/health > "$check_dir/system-health.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
           wait_for_indexer_ready
@@ -713,12 +713,11 @@ jobs:
             throw new Error(`build metadata mismatch: ${JSON.stringify(build)}`);
           }
           NODE
-          node - "$check_dir/readiness.json" <<'NODE'
+          node - "$check_dir/storage.json" <<'NODE'
           const fs = require("node:fs");
           const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          if (!Array.isArray(payload?.roots) || payload.roots.length === 0 ||
-              payload.roots.some((root) => root.status !== "ready")) {
-            throw new Error(`one or more NAS roots are not ready: ${JSON.stringify(payload?.roots)}`);
+          if (!payload?.storage || !Array.isArray(payload.storage.pools)) {
+            throw new Error(`storage status is invalid: ${JSON.stringify(payload)}`);
           }
           NODE
           node - "$check_dir/system-health.json" <<'NODE'
@@ -816,12 +815,11 @@ jobs:
           for endpoint in \
             /health \
             /api/system/build-info \
-            /api/roots/readiness \
+            /api/system/storage \
             /api/system/health \
             /api/indexer/status \
             /api/monitoring/overview \
             /api/settings/shares \
-            /api/roots \
             /api/shares/summary; do
             printf '\n===== GET %s =====\n' "$endpoint"
             curl --fail --silent --show-error --max-time 15 \
@@ -835,10 +833,10 @@ jobs:
             cyberos-alerter.service \
             cyberos-worker@1.service \
             cyberos-indexer.service \
-            cyberos-photostaff.service \
+            cyberos-photos.service \
             cyberos-downloader.service \
             cyberos-hostd.service \
-            cyberos-termux.service \
+            cyberos-terminald.service \
             --property=Id,ActiveState,SubState,MainPID,NRestarts,ExecMainStatus || true
           printf '\n===== CyberOS service status =====\n'
           systemctl status \
@@ -847,10 +845,10 @@ jobs:
             cyberos-alerter.service \
             cyberos-worker@1.service \
             cyberos-indexer.service \
-            cyberos-photostaff.service \
+            cyberos-photos.service \
             cyberos-downloader.service \
             cyberos-hostd.service \
-            cyberos-termux.service \
+            cyberos-terminald.service \
             --no-pager --full || true
           printf '\n===== CyberOS service journal =====\n'
           journalctl \
@@ -859,10 +857,10 @@ jobs:
             -u cyberos-alerter.service \
             -u cyberos-worker@1.service \
             -u cyberos-indexer.service \
-            -u cyberos-photostaff.service \
+            -u cyberos-photos.service \
             -u cyberos-downloader.service \
             -u cyberos-hostd.service \
-            -u cyberos-termux.service \
+            -u cyberos-terminald.service \
             -n 300 --no-pager || true
           printf '\n===== share service status =====\n'
           systemctl status \

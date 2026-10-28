@@ -191,7 +191,7 @@ export const en = {
     agentSessions: "Agent sessions",
     agentChat: "Agent chat",
     agent: "Agent",
-    rootAgent: "Root agent",
+    workspaceAgent: "Workspace agent",
     newSessionTitle: "How can I help with your NAS?",
     deleteSession: "Delete session",
     deleteSessionBusy: "Stop active work before deleting this session.",
@@ -770,7 +770,6 @@ export const en = {
       downloadSelected: "Download",
       moveSelected: "Move",
       deleteSelected: "Delete",
-      switchRootForManagement: "Switch the active Agent to the photo library root before moving or deleting photos.",
       deleteTitle: "Delete {{count}} selected items?",
       deleteBody: "The selected media will move to CyberOS trash immediately after confirmation.",
       requestDelete: "Move to trash",
@@ -870,7 +869,7 @@ export const en = {
     terminal: {
       eyebrow: "Local shell",
       title: "Terminal",
-      description: "Direct shell access to the selected NAS root.",
+      description: "Direct shell access to CyberOS.",
       actionsLabel: "Terminal actions",
       tabsLabel: "Terminal sessions",
       defaultTabTitle: "Terminal {{number}}",
@@ -886,7 +885,7 @@ export const en = {
       loadFailed: "Unable to load terminal sessions",
       retry: "Retry",
       emptyTitle: "No terminal sessions",
-      emptyBody: "Create a terminal to start a new shell in this NAS root.",
+      emptyBody: "Create a terminal to start a new shell in this storage pool.",
       limitReached: "The appliance limit of {{count}} terminal sessions has been reached.",
       takenOverTitle: "Session opened elsewhere",
       takenOverBody: "Another browser took control of this terminal. Its shell is still running.",
@@ -895,7 +894,7 @@ export const en = {
       exitedBody: "Restart this terminal to create a new shell.",
       connectionError: "Unable to connect to the local terminal.",
       disconnectedError: "The local terminal connection was closed.",
-      noRoot: "No NAS root selected",
+      noRoot: "No storage pool selected",
       restart: "Restart terminal",
       status: {
         connecting: "Connecting",
@@ -1190,8 +1189,8 @@ export const en = {
             not_linux: "The host is not Linux",
             rootless_docker: "Rootless Docker cannot provide this host view",
             user_namespace_enabled: "User namespaces may hide or remap host data",
-            no_ready_nas_root: "No ready NAS root is available",
-            nas_root_not_ready: "This NAS root is not ready",
+            no_ready_storage_pool: "No ready storage pool is available",
+            storage_pool_not_ready: "This storage pool is not ready",
             resource_identity_changed: "The host resource identity changed",
             runtime_dependency_unavailable: "The required host anchor or runtime dependency is unavailable"
           },
@@ -1346,7 +1345,7 @@ export const en = {
           basics: { detail: "Identity, image policy, and initial state.", name: "Name", image: "Image", imageHint: "Bare references use :latest.", platform: "Platform", pullPolicy: "Pull policy", onlyMissing: "Only if missing", alwaysPull: "Always pull", neverPull: "Never pull", start: "Start after create" },
           process: { detail: "Runtime identity, arguments, environment, and labels.", hostname: "Hostname", user: "User", workingDir: "Working directory", stopSignal: "Stop signal", stopTimeout: "Stop timeout (seconds)", entrypoint: "Entrypoint", command: "Command", environment: "Environment", environmentDetail: "Variables passed to the container process.", labels: "Labels", labelsDetail: "Metadata attached to the container.", tty: "TTY", openStdin: "Keep stdin open", init: "Init process" },
           resources: { detail: "CPU, memory, process, restart, and filesystem limits.", cpuLimit: "CPU limit", cpuShares: "CPU shares", cpuset: "CPU set", memoryLimit: "Memory limit (bytes)", memoryReservation: "Memory reservation (bytes)", memorySwap: "Memory swap (bytes)", pidsLimit: "PID limit", shmSize: "Shared memory (bytes)", restartPolicy: "Restart policy", restartRetries: "Restart retries", readOnlyRootfs: "Read-only root filesystem", autoRemove: "Auto-remove after exit", privileged: "Privileged mode", privilegedAck: "I understand the risk" },
-          storage: { detail: "Named volumes, NAS-safe binds, and tmpfs mounts.", volume: "Volume", bind: "NAS bind", tmpfs: "tmpfs", type: "Type", source: "Source", nasRoot: "NAS root", target: "Container target", options: "Options", selectVolume: "Select volume", addMount: "Add mount", noMounts: "No mounts configured.", relativePath: "relative path", sizeBytes: "size bytes", tmpfsMode: "mode e.g. 1777", containerPath: "/container/path", noCopy: "No copy", readOnly: "RO" },
+          storage: { detail: "Named volumes, storage-pool binds, and tmpfs mounts.", volume: "Volume", bind: "Storage bind", tmpfs: "tmpfs", type: "Type", source: "Source", storagePool: "Storage pool", target: "Container target", options: "Options", selectVolume: "Select volume", addMount: "Add mount", noMounts: "No mounts configured.", relativePath: "relative path", sizeBytes: "size bytes", tmpfsMode: "mode e.g. 1777", containerPath: "/container/path", noCopy: "No copy", readOnly: "RO" },
           network: { detail: "One network endpoint, ports, DNS, and extra hosts.", mode: "Mode", existingNetwork: "Existing network", selectNetwork: "Select network", aliases: "Aliases", staticIpv4: "Static IPv4", staticIpv6: "Static IPv6", endpointMac: "Endpoint MAC", dns: "DNS", dnsSearch: "DNS search", addPort: "Add port", noPorts: "No published ports.", protocol: "Protocol", containerPort: "container", hostIp: "host IP (optional)", hostPort: "host port (optional)", extraHosts: "Extra hosts", extraHostsDetail: "Add host-to-address entries for the container.", noExtraHosts: "No extra hosts.", publishAll: "Publish all exposed ports", hostname: "hostname", hostAddress: "IP or host-gateway" },
           review: { detail: "Final checks and direct execution.", image: "Image", network: "Network", mountsPorts: "Mounts / ports", start: "Start", yes: "yes", no: "no", restart: "Restart", immediate: "Creation runs immediately", hostAccessDetail: "Selected Host Access grants are validated and applied during creation.", failureDetail: "Failures keep the form. If start fails after container creation, the container is kept and marked as partial success." },
           volume: { detail: "Named local volumes stay managed by Docker.", nameHint: "Use letters, numbers, dots, dashes, and underscores.", driver: "Driver", driverHint: "Docker manages this volume with the local driver.", noticeTitle: "Docker-managed persistent storage", noticeDetail: "The volume is created immediately and can be attached to containers from the storage stage.", labelsTitle: "Labels", labelsDetail: "Optional metadata is stored with the volume." },
@@ -1357,7 +1356,7 @@ export const en = {
       shares: {
         eyebrow: "Sharing",
         title: "Shares",
-        description: "Manage SMB, WebDAV, FTP, NFS, and DLNA publishing for directories inside NAS roots.",
+        description: "Manage SMB, WebDAV, FTP, NFS, and DLNA publishing for directories inside storage pools.",
         commandTitle: "Host sharing",
         loading: "Loading share settings and service state.",
         declarativeReadOnly: "Share settings are managed by the system configuration and are read-only here.",
@@ -1365,7 +1364,7 @@ export const en = {
         partialDetail: "Share settings are enabled, but one or more host services need attention.",
         disabledDetail: "Share publishing is disabled; saved directories are kept until sharing is enabled and saved again.",
         notSaved: "Not saved",
-        noRoots: "No NAS roots",
+        noStoragePools: "No storage pools",
         noShares: "No shared directories are configured.",
         untitledShare: "Untitled share",
         addShare: "Add share",
@@ -1389,7 +1388,7 @@ export const en = {
         servicesTitle: "Services",
         servicesDescription: "Host service state for each supported sharing protocol.",
         directoriesTitle: "Shared directories",
-        directoriesDescription: "Each directory stays inside a NAS root and chooses which protocols expose it.",
+        directoriesDescription: "Each directory stays inside a storage pool and chooses which protocols expose it.",
         passwordConfiguredPlaceholder: "Configured; enter a new password to replace",
         passwordPlaceholder: "Set a share password",
         enabledShares: "{{count}} enabled",
@@ -1423,7 +1422,7 @@ export const en = {
           clearPassword: "Clear saved password",
           shareName: "Name",
           shareId: "ID",
-          root: "NAS root",
+          root: "storage pool",
           path: "Relative path",
           description: "Description",
           readOnly: "Read-only",
@@ -1459,14 +1458,14 @@ export const en = {
           noSession: "Open an agent session before requesting share changes."
         },
         validation: {
-          noRoots: "No NAS roots are configured.",
+          noStoragePools: "No storage pools are configured.",
           invalidUsername: "Share account username must be lowercase and system-safe.",
           missingPassword: "Set a password before enabling authenticated SMB, WebDAV, or FTP.",
           invalidId: "{{share}} has an invalid ID.",
           duplicateId: "{{share}} duplicates another share ID.",
-          missingRoot: "{{share}} needs a NAS root.",
+          missingStoragePool: "{{share}} needs a storage pool.",
           missingPath: "{{share}} needs a relative path.",
-          absolutePath: "{{share}} must use a path relative to its NAS root.",
+          absolutePath: "{{share}} must use a path relative to its storage pool.",
           escapingPath: "{{share}} cannot contain parent-directory traversal.",
           invalidWebDavPort: "{{share}} has an invalid WebDAV port.",
           invalidFtpPort: "{{share}} has an invalid FTP port.",
@@ -1730,7 +1729,7 @@ export const en = {
         creatingDescription: "Creating the RAID array, formatting it, and mounting the pool. This may take a few minutes.",
         directApplyConfirmation: "I understand this permanently erases the selected disks and creates the pool immediately.",
         diskSelectionDescription: "Only unused whole disks can be selected. The system disk and formatted disks are blocked.",
-        eraseWarning: "Creating this pool permanently erases every selected disk, formats it as {{filesystem}}, and mounts it below /cyberos/data/primary.",
+        eraseWarning: "Creating this pool permanently erases every selected disk, formats it as {{filesystem}}, and mounts it at /cyberos/data/<pool-id>.",
         raidMinimum: "{{count}} disks minimum",
         fields: {
           name: "Pool name",
@@ -2421,7 +2420,6 @@ export const en = {
         release: "Release",
         ci: "CI",
         local: "Local",
-        nix: "Nix",
         unknown: "Unknown"
       },
       dirty: {
@@ -2465,20 +2463,20 @@ export const en = {
       documentLimitMiB: "Source document limit (MiB)",
       pdfPages: "PDF text pages",
       ocrPages: "OCR pages",
-      rootsTitle: "NAS roots",
-      rootsDescription: "OCR is used only for scanned PDFs with little embedded text.",
+      storagePoolsTitle: "Storage pools",
+      storagePoolsDescription: "OCR is used only for scanned PDFs with little embedded text.",
       ocr: "OCR",
       reindex: "Rebuild",
       reindexing: "Queueing",
       reindexQueued: "Full index rebuild queued.",
       statusTitle: "Indexer status",
-      statusDescription: "Live daemon, watcher, queue, and compatibility rebuild state.",
+      statusDescription: "Live daemon, watcher, queue, and content index state.",
       service: "Service",
       watcher: "Watcher",
       queue: "Queue",
-      rebuild: "Legacy rebuild",
+      contentIndex: "Content index",
       queueSummary: "{{queued}} queued · {{running}} running · {{failed}} failed",
-      rebuildSummary: "{{copied}} / {{total}} copied",
+      contentIndexSummary: "{{ready}} / {{total}} ready",
       notLoaded: "Not loaded",
       saved: "Indexer settings saved",
       states: {
@@ -2584,7 +2582,7 @@ export const en = {
         label: "Use CyberOS MCP",
         status: {
           loading: "Checking pairing status...",
-          disabled: "Off. Agent uses compatibility tools.",
+          disabled: "Off. Agent capabilities are unavailable.",
           ready: "Paired and ready for new Agent tasks.",
           attention: "Enabled, but the protected credential needs repair. Turn it off and on again to repair it.",
           unavailable: "MCP is disabled by host configuration."
@@ -2593,7 +2591,7 @@ export const en = {
         disabledNotice: "Agent MCP disabled."
       },
       readOnlyTitle: "Read-Only Tools",
-      readOnlyDescription: "Tools that can run automatically while staying inside the NAS root.",
+      readOnlyDescription: "Tools that can run automatically while staying inside the storage pool.",
       dangerousTitle: "Approval Tools",
       dangerousDescription: "File mutation proposals always require approval. Edit, write, and shell capabilities may run automatically, require approval or confirmation, or stay disabled.",
       modes: {
@@ -2603,24 +2601,24 @@ export const en = {
         disabled: "Disabled"
       },
       capabilities: {
-        list: "List directory entries inside the selected NAS root.",
+        list: "List directory entries inside the selected storage pool.",
         read: "Read files through NAS path safety.",
         search: "Search the NAS index without changing files.",
-        grep: "Search file contents inside the selected NAS root.",
-        find: "Find matching files and folders inside the NAS root.",
+        grep: "Search file contents inside the selected storage pool.",
+        find: "Find matching files and folders inside the storage pool.",
         mutate: "Create, copy, move, rename, or trash files.",
         edit: "Apply replacements to an existing file.",
-        write: "Write or replace a file inside the NAS root.",
+        write: "Write or replace a file inside the storage pool.",
         shell: "Run a shell command from the safe workspace cwd."
       },
       tools: {
         read: "Read text files through NAS path safety.",
-        grep: "Search file contents inside the selected NAS root.",
-        find: "Find matching files and folders inside the NAS root.",
-        ls: "List directory entries inside the NAS root.",
+        grep: "Search file contents inside the selected storage pool.",
+        find: "Find matching files and folders inside the storage pool.",
+        ls: "List directory entries inside the storage pool.",
         bash: "Run a shell command from the safe workspace cwd.",
         edit: "Apply oldText/newText replacements to an existing file.",
-        write: "Write or replace a file inside the NAS root."
+        write: "Write or replace a file inside the storage pool."
       }
     },
     overview: {
@@ -2635,7 +2633,7 @@ export const en = {
       collectedAt: "Collected {{time}}",
       metrics: {
         uptime: "Uptime",
-        nasRoots: "NAS roots"
+        storagePools: "storage pools"
       },
       labels: {
         hostname: "Hostname",
@@ -2647,15 +2645,14 @@ export const en = {
         execPath: "Node path",
         rss: "RSS",
         heapUsed: "Heap used",
-        dataDir: "Data dir",
+        stateDir: "State directory",
+        storagePoolNamespace: "Storage pool namespace",
         databasePath: "Database",
         apiBind: "API bind",
         allowedOrigins: "Allowed origins",
         workerPoll: "Worker poll",
         authMode: "Auth mode",
-        modelMode: "Model mode",
-        localEndpoint: "Local endpoint",
-        nasRoots: "NAS roots"
+        storagePools: "storage pools"
       },
       values: {
         milliseconds: "{{value}} ms",
@@ -2743,7 +2740,7 @@ export const en = {
       processTitle: "Process",
       processDescription: "Node runtime, memory, working directory, and executable path.",
       pathsTitle: "Paths",
-      pathsDescription: "CyberOS data, database, and NAS root paths."
+      pathsDescription: "CyberOS data, database, and storage pool paths."
     }
   },
   preview: {
@@ -3023,7 +3020,7 @@ export const zhCN = {
     agentSessions: "Agent 会话",
     agentChat: "Agent 聊天",
     agent: "Agent",
-    rootAgent: "根目录 agent",
+    workspaceAgent: "工作区 agent",
     newSessionTitle: "需要我协助管理什么？",
     deleteSession: "删除会话",
     deleteSessionBusy: "请先停止当前任务，再删除这个会话。",
@@ -3602,7 +3599,6 @@ export const zhCN = {
       downloadSelected: "下载",
       moveSelected: "移动",
       deleteSelected: "删除",
-      switchRootForManagement: "请先将当前 Agent 切换到照片库所在的根目录，再移动或删除照片。",
       deleteTitle: "删除所选的 {{count}} 个媒体项？",
       deleteBody: "确认后，所选媒体会立即移动到 CyberOS 回收站。",
       requestDelete: "移入回收站",
@@ -3702,7 +3698,7 @@ export const zhCN = {
     terminal: {
       eyebrow: "本机 Shell",
       title: "终端",
-      description: "直接访问当前 NAS 根目录的本机 Shell。",
+      description: "直接访问当前 存储池的本机 Shell。",
       actionsLabel: "终端操作",
       tabsLabel: "终端会话",
       defaultTabTitle: "终端 {{number}}",
@@ -3718,7 +3714,7 @@ export const zhCN = {
       loadFailed: "无法加载终端会话",
       retry: "重试",
       emptyTitle: "暂无终端会话",
-      emptyBody: "新建终端以在当前 NAS 根目录中启动 Shell。",
+      emptyBody: "新建终端以在当前 存储池中启动 Shell。",
       limitReached: "已达到整机 {{count}} 个终端会话的上限。",
       takenOverTitle: "会话已在其他位置打开",
       takenOverBody: "另一个浏览器已接管此终端，底层 Shell 仍在运行。",
@@ -3727,7 +3723,7 @@ export const zhCN = {
       exitedBody: "重启此终端以创建新的 Shell。",
       connectionError: "无法连接到本机终端。",
       disconnectedError: "本机终端连接已关闭。",
-      noRoot: "未选择 NAS 根目录",
+      noRoot: "未选择 存储池",
       restart: "重启终端",
       status: {
         connecting: "连接中",
@@ -4022,8 +4018,8 @@ export const zhCN = {
             not_linux: "宿主机不是 Linux",
             rootless_docker: "Rootless Docker 无法提供此宿主视图",
             user_namespace_enabled: "用户命名空间可能隐藏或重映射宿主数据",
-            no_ready_nas_root: "没有就绪的 NAS root",
-            nas_root_not_ready: "此 NAS root 尚未就绪",
+            no_ready_storage_pool: "没有就绪的存储池",
+            storage_pool_not_ready: "此存储池尚未就绪",
             resource_identity_changed: "宿主资源身份已经变化",
             runtime_dependency_unavailable: "所需容量锚点或运行时依赖不可用"
           },
@@ -4178,7 +4174,7 @@ export const zhCN = {
           basics: { detail: "身份、镜像策略和初始状态。", name: "名称", image: "镜像", imageHint: "未指定标签的镜像会使用 :latest。", platform: "平台", pullPolicy: "拉取策略", onlyMissing: "仅在缺失时", alwaysPull: "始终拉取", neverPull: "从不拉取", start: "创建后启动" },
           process: { detail: "运行时身份、参数、环境变量和标签。", hostname: "主机名", user: "用户", workingDir: "工作目录", stopSignal: "停止信号", stopTimeout: "停止超时（秒）", entrypoint: "入口点", command: "命令", environment: "环境变量", environmentDetail: "传递给容器进程的变量。", labels: "标签", labelsDetail: "附加到容器的元数据。", tty: "TTY", openStdin: "保持 stdin 打开", init: "Init 进程" },
           resources: { detail: "CPU、内存、进程、重启和文件系统限制。", cpuLimit: "CPU 限制", cpuShares: "CPU 权重", cpuset: "CPU 集", memoryLimit: "内存限制（字节）", memoryReservation: "内存预留（字节）", memorySwap: "内存交换（字节）", pidsLimit: "PID 限制", shmSize: "共享内存（字节）", restartPolicy: "重启策略", restartRetries: "重启次数", readOnlyRootfs: "只读根文件系统", autoRemove: "退出后自动移除", privileged: "特权模式", privilegedAck: "我了解此风险" },
-          storage: { detail: "命名卷、NAS 安全绑定和 tmpfs 挂载。", volume: "卷", bind: "NAS 绑定", tmpfs: "tmpfs", type: "类型", source: "来源", nasRoot: "NAS root", target: "容器目标", options: "选项", selectVolume: "选择卷", addMount: "添加挂载", noMounts: "尚未配置挂载。", relativePath: "相对路径", sizeBytes: "大小（字节）", tmpfsMode: "模式，例如 1777", containerPath: "/容器路径", noCopy: "不复制", readOnly: "只读" },
+          storage: { detail: "命名卷、存储池绑定和 tmpfs 挂载。", volume: "卷", bind: "存储池绑定", tmpfs: "tmpfs", type: "类型", source: "来源", storagePool: "存储池", target: "容器目标", options: "选项", selectVolume: "选择卷", addMount: "添加挂载", noMounts: "尚未配置挂载。", relativePath: "相对路径", sizeBytes: "大小（字节）", tmpfsMode: "模式，例如 1777", containerPath: "/容器路径", noCopy: "不复制", readOnly: "只读" },
           network: { detail: "网络端点、端口、DNS 和额外主机。", mode: "模式", existingNetwork: "现有网络", selectNetwork: "选择网络", aliases: "别名", staticIpv4: "静态 IPv4", staticIpv6: "静态 IPv6", endpointMac: "端点 MAC", dns: "DNS", dnsSearch: "DNS 搜索域", addPort: "添加端口", noPorts: "尚未发布端口。", protocol: "协议", containerPort: "容器端口", hostIp: "宿主 IP（可选）", hostPort: "宿主端口（可选）", extraHosts: "额外主机", extraHostsDetail: "为容器添加主机到地址的映射。", noExtraHosts: "没有额外主机。", publishAll: "发布所有暴露端口", hostname: "主机名", hostAddress: "IP 或 host-gateway" },
           review: { detail: "最后检查并直接执行。", image: "镜像", network: "网络", mountsPorts: "挂载 / 端口", start: "启动", yes: "是", no: "否", restart: "重启", immediate: "创建会立即执行", hostAccessDetail: "所选宿主访问授权会在创建过程中校验并直接应用。", failureDetail: "失败时会保留表单。如果容器已创建但启动失败，容器会保留并标记为部分成功。" },
           volume: { detail: "命名本地卷由 Docker 管理。", nameHint: "使用字母、数字、点、短横线和下划线。", driver: "驱动", driverHint: "Docker 使用 local 驱动管理此卷。", noticeTitle: "Docker 管理的持久化存储", noticeDetail: "卷会立即创建，并可在容器的存储阶段挂载。", labelsTitle: "标签", labelsDetail: "可选的元数据会随卷一起保存。" },
@@ -4189,7 +4185,7 @@ export const zhCN = {
       shares: {
         eyebrow: "共享",
         title: "共享",
-        description: "管理 NAS root 内目录的 SMB、WebDAV、FTP、NFS 和 DLNA 发布。",
+        description: "管理 storage pool 内目录的 SMB、WebDAV、FTP、NFS 和 DLNA 发布。",
         commandTitle: "宿主共享",
         loading: "正在加载共享设置和服务状态。",
         declarativeReadOnly: "共享设置由系统配置声明式管理，此处仅供查看。",
@@ -4197,7 +4193,7 @@ export const zhCN = {
         partialDetail: "共享设置已启用，但一个或多个宿主服务需要处理。",
         disabledDetail: "共享发布已禁用；已保存目录会保留，直到重新启用并保存共享。",
         notSaved: "未保存",
-        noRoots: "没有 NAS root",
+        noStoragePools: "没有 storage pool",
         noShares: "尚未配置共享目录。",
         untitledShare: "未命名共享",
         addShare: "添加共享",
@@ -4221,7 +4217,7 @@ export const zhCN = {
         servicesTitle: "服务",
         servicesDescription: "每个共享协议对应的宿主服务状态。",
         directoriesTitle: "共享目录",
-        directoriesDescription: "每个目录必须位于 NAS root 内，并单独选择要开放的协议。",
+        directoriesDescription: "每个目录必须位于 storage pool 内，并单独选择要开放的协议。",
         passwordConfiguredPlaceholder: "已配置；输入新密码会替换",
         passwordPlaceholder: "设置共享密码",
         enabledShares: "已启用 {{count}} 个",
@@ -4255,7 +4251,7 @@ export const zhCN = {
           clearPassword: "清除已保存密码",
           shareName: "名称",
           shareId: "ID",
-          root: "NAS root",
+          root: "storage pool",
           path: "相对路径",
           description: "描述",
           readOnly: "只读",
@@ -4291,14 +4287,14 @@ export const zhCN = {
           noSession: "请先打开一个 agent 会话，再请求共享变更。"
         },
         validation: {
-          noRoots: "尚未配置 NAS root。",
+          noStoragePools: "尚未配置 storage pool。",
           invalidUsername: "共享账号用户名必须是小写且适合作为系统用户。",
           missingPassword: "启用认证式 SMB、WebDAV 或 FTP 前需要设置密码。",
           invalidId: "{{share}} 的 ID 无效。",
           duplicateId: "{{share}} 与其他共享 ID 重复。",
-          missingRoot: "{{share}} 需要选择 NAS root。",
+          missingStoragePool: "{{share}} 需要选择 storage pool。",
           missingPath: "{{share}} 需要填写相对路径。",
-          absolutePath: "{{share}} 必须使用相对 NAS root 的路径。",
+          absolutePath: "{{share}} 必须使用相对 storage pool 的路径。",
           escapingPath: "{{share}} 不能包含上级目录穿越。",
           invalidWebDavPort: "{{share}} 的 WebDAV 端口无效。",
           invalidFtpPort: "{{share}} 的 FTP 端口无效。",
@@ -4562,7 +4558,7 @@ export const zhCN = {
         creatingDescription: "正在创建 RAID、格式化并挂载存储池，此过程可能需要几分钟。",
         directApplyConfirmation: "我确认这会永久擦除选中的磁盘，并立即创建存储池。",
         diskSelectionDescription: "只能选择未使用的整块磁盘；系统盘和已格式化磁盘会被阻止。",
-        eraseWarning: "创建存储池会永久擦除所有选中磁盘，格式化为 {{filesystem}}，并挂载到 /cyberos/data/primary 下。",
+        eraseWarning: "创建存储池会永久擦除所有选中磁盘，格式化为 {{filesystem}}，并挂载到 /cyberos/data/<pool-id>。",
         raidMinimum: "至少 {{count}} 块磁盘",
         fields: {
           name: "池名称",
@@ -5253,7 +5249,6 @@ export const zhCN = {
         release: "正式发布",
         ci: "CI",
         local: "本地构建",
-        nix: "Nix",
         unknown: "未知"
       },
       dirty: {
@@ -5297,20 +5292,20 @@ export const zhCN = {
       documentLimitMiB: "源文档上限（MiB）",
       pdfPages: "PDF 文本页数",
       ocrPages: "OCR 页数",
-      rootsTitle: "NAS 根目录",
-      rootsDescription: "OCR 仅用于内嵌文本不足的扫描型 PDF。",
+      storagePoolsTitle: "存储池",
+      storagePoolsDescription: "OCR 仅用于内嵌文本不足的扫描型 PDF。",
       ocr: "OCR",
       reindex: "全量重建",
       reindexing: "正在排队",
       reindexQueued: "已加入全量索引重建队列。",
       statusTitle: "索引状态",
-      statusDescription: "常驻服务、文件监控、任务队列和兼容重建状态。",
+      statusDescription: "常驻服务、文件监控、任务队列和正文索引状态。",
       service: "服务",
       watcher: "文件监控",
       queue: "队列",
-      rebuild: "旧索引迁移",
+      contentIndex: "正文索引",
       queueSummary: "{{queued}} 等待 · {{running}} 运行 · {{failed}} 失败",
-      rebuildSummary: "已复制 {{copied}} / {{total}}",
+      contentIndexSummary: "{{ready}} / {{total}} 个存储池就绪",
       notLoaded: "未加载",
       saved: "索引设置已保存",
       states: {
@@ -5416,7 +5411,7 @@ export const zhCN = {
         label: "使用 CyberOS MCP",
         status: {
           loading: "正在检查配对状态...",
-          disabled: "已关闭，Agent 使用兼容工具。",
+          disabled: "已关闭，Agent 能力不可用。",
           ready: "已配对，将对新的 Agent 任务生效。",
           attention: "已开启，但受保护凭据需要修复；关闭后重新开启即可修复。",
           unavailable: "主机配置已禁用 MCP。"
@@ -5425,7 +5420,7 @@ export const zhCN = {
         disabledNotice: "Agent MCP 已关闭。"
       },
       readOnlyTitle: "只读工具",
-      readOnlyDescription: "只读工具可自动运行，但始终受 NAS root 路径保护。",
+      readOnlyDescription: "只读工具可自动运行，但始终受 storage pool 路径保护。",
       dangerousTitle: "审批工具",
       dangerousDescription: "文件变更提案始终需要审批；编辑、写入与 shell 能力可设置为自动执行、审批、二次确认或禁用。",
       modes: {
@@ -5435,24 +5430,24 @@ export const zhCN = {
         disabled: "禁用"
       },
       capabilities: {
-        list: "列出所选 NAS 根目录中的目录项。",
+        list: "列出所选 存储池中的目录项。",
         read: "通过 NAS 路径安全读取文件。",
         search: "搜索 NAS 索引，不修改文件。",
-        grep: "在所选 NAS 根目录中搜索文件内容。",
-        find: "在 NAS 根目录中查找匹配的文件和文件夹。",
+        grep: "在所选 存储池中搜索文件内容。",
+        find: "在 存储池中查找匹配的文件和文件夹。",
         mutate: "创建、复制、移动、重命名或移入回收站。",
         edit: "对已有文件应用内容替换。",
-        write: "在 NAS 根目录内写入或替换文件。",
+        write: "在 存储池内写入或替换文件。",
         shell: "从安全工作目录执行 shell 命令。"
       },
       tools: {
         read: "通过 NAS 路径安全读取文本文件。",
-        grep: "在选中的 NAS root 内搜索文件内容。",
-        find: "在 NAS root 内查找匹配的文件和文件夹。",
-        ls: "列出 NAS root 内的目录项。",
+        grep: "在选中的 storage pool 内搜索文件内容。",
+        find: "在 storage pool 内查找匹配的文件和文件夹。",
+        ls: "列出 storage pool 内的目录项。",
         bash: "从安全工作目录执行 shell 命令。",
         edit: "对已有文件应用 oldText/newText 替换。",
-        write: "在 NAS root 内写入或替换文件。"
+        write: "在 storage pool 内写入或替换文件。"
       }
     },
     overview: {
@@ -5467,7 +5462,7 @@ export const zhCN = {
       collectedAt: "采集于 {{time}}",
       metrics: {
         uptime: "运行时间",
-        nasRoots: "NAS 根目录"
+        storagePools: "存储池"
       },
       labels: {
         hostname: "主机名",
@@ -5479,15 +5474,14 @@ export const zhCN = {
         execPath: "Node 路径",
         rss: "RSS",
         heapUsed: "Heap 已用",
-        dataDir: "数据目录",
+        stateDir: "状态目录",
+        storagePoolNamespace: "Storage pool 命名空间",
         databasePath: "数据库",
         apiBind: "API 绑定",
         allowedOrigins: "允许来源",
         workerPoll: "Worker 轮询",
         authMode: "认证模式",
-        modelMode: "模型模式",
-        localEndpoint: "本地端点",
-        nasRoots: "NAS 根目录"
+        storagePools: "存储池"
       },
       values: {
         milliseconds: "{{value}} ms",
@@ -5575,7 +5569,7 @@ export const zhCN = {
       processTitle: "进程",
       processDescription: "Node 运行时、内存、工作目录和可执行路径。",
       pathsTitle: "路径",
-      pathsDescription: "CyberOS 数据、数据库和 NAS 根目录路径。"
+      pathsDescription: "CyberOS 数据、数据库和 存储池路径。"
     }
   },
   preview: {

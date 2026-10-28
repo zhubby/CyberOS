@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { listDir } from "@cyberos/nas-tools";
-import type { NasRootRecord } from "@cyberos/shared";
+import { listDir } from "@cyberos/storage-tools";
+import type { StorageWorkspace } from "@cyberos/shared";
 import {
   classifyGitStatusCode,
   getDirectoryGitView,
@@ -17,19 +17,14 @@ const execFileAsync = promisify(execFile);
 
 let tempDir: string;
 let rootDir: string;
-let root: NasRootRecord;
+let root: StorageWorkspace;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-git-"));
   rootDir = path.join(tempDir, "root");
   await mkdir(rootDir);
   root = {
-    id: "local",
-    name: "Local",
-    path: rootDir,
-    enabled: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    path: rootDir
   };
 });
 
@@ -165,7 +160,7 @@ describe("Git file status helpers", () => {
     expect(statusFor(priorityView.entries, "untracked.txt")).toBe("untracked");
   });
 
-  it("ignores repositories whose metadata escapes the NAS root", async () => {
+  it("ignores repositories whose metadata escapes the storage pool", async () => {
     const parentRepo = path.join(tempDir, "parent");
     const nestedRoot = path.join(parentRepo, "nas");
     await mkdir(nestedRoot, { recursive: true });
@@ -174,11 +169,11 @@ describe("Git file status helpers", () => {
     await git(["add", "."], parentRepo);
     await gitCommit("initial", parentRepo);
 
-    const nestedNasRoot = {
+    const nestedStoragePool = {
       ...root,
       path: nestedRoot
     };
-    const view = await getDirectoryGitView(nestedNasRoot.path, ".", await listDir(nestedNasRoot, "."));
+    const view = await getDirectoryGitView(nestedStoragePool.path, ".", await listDir(nestedStoragePool, "."));
 
     expect(view.git).toBeNull();
     expect(view.entries).toMatchObject([{ name: "hello.txt" }]);
@@ -202,7 +197,7 @@ describe("Git file status helpers", () => {
     await expect(access(sentinelPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("ignores linked worktrees whose metadata escapes the NAS root", async () => {
+  it("ignores linked worktrees whose metadata escapes the storage pool", async () => {
     const sourceRepo = path.join(tempDir, "source");
     await mkdir(sourceRepo);
     await git(["init", "-b", "main"], sourceRepo);
@@ -212,12 +207,12 @@ describe("Git file status helpers", () => {
 
     const worktreeRoot = path.join(rootDir, "worktree");
     await git(["worktree", "add", "-b", "nas-view", worktreeRoot], sourceRepo);
-    const worktreeNasRoot = {
+    const worktreeStoragePool = {
       ...root,
       path: worktreeRoot
     };
 
-    const view = await getDirectoryGitView(worktreeNasRoot.path, ".", await listDir(worktreeNasRoot, "."));
+    const view = await getDirectoryGitView(worktreeStoragePool.path, ".", await listDir(worktreeStoragePool, "."));
 
     expect(view.git).toBeNull();
     expect(view.entries).toEqual(

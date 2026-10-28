@@ -12,7 +12,7 @@ import type { CyberOsDatabase } from "../connection.js";
 import type { DbDownloadTaskRow } from "./repository-rows.js";
 
 const DOWNLOAD_COLUMNS = `
-  id, url, root_id, storage_pool_id, target_directory, target_file_name,
+  id, url, storage_pool_id, target_directory, target_file_name,
   target_path, partial_path, status, received_bytes, total_bytes,
   speed_bytes_per_second, etag, last_modified, error, worker_id,
   lease_expires_at, created_at, updated_at, started_at, finished_at,
@@ -25,7 +25,6 @@ export function createDownloadTask(
   db: CyberOsDatabase,
   input: {
     url: string;
-    rootId: string;
     storagePoolId: string;
     targetDirectory: string;
     targetFileName: string;
@@ -40,14 +39,13 @@ export function createDownloadTask(
   const partialPath = input.partialPath ?? `${input.targetDirectory}/.${id}.cyberos-download.part`;
   db.prepare(`
     INSERT INTO download_tasks (
-      id, url, root_id, storage_pool_id, target_directory, target_file_name,
+      id, url, storage_pool_id, target_directory, target_file_name,
       target_path, partial_path, status, expected_sha256, created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
   `).run(
     id,
     input.url,
-    input.rootId,
     input.storagePoolId,
     input.targetDirectory,
     input.targetFileName,
@@ -426,7 +424,6 @@ function mapDownloadTask(row: DbDownloadTaskRow): DownloadTaskRecord {
   return {
     id: row.id,
     url: row.url,
-    rootId: row.root_id,
     storagePoolId: row.storage_pool_id,
     targetDirectory: row.target_directory,
     targetFileName: row.target_file_name,

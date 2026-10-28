@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openCyberOsDb, upsertRootReadiness, type CyberOsDatabase } from "@cyberos/db";
+import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
 import type { DockerEngineRuntime } from "./docker-client.js";
 import {
   DOCKER_HOST_ACCESS_POLICY_VERSION,
@@ -20,15 +20,6 @@ beforeEach(async () => {
   await mkdir(nasPath);
   await mkdir(path.join(nasPath, ".cyberos-host-access-capacity"));
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "primary", name: "Primary", path: nasPath }]);
-  upsertRootReadiness(db, {
-    rootId: "primary",
-    status: "ready",
-    reason: null,
-    source: "/dev/sda1",
-    uuid: "volume-uuid",
-    fstype: "ext4"
-  });
 });
 
 afterEach(async () => {
@@ -41,6 +32,7 @@ describe("DockerHostAccessPolicy", () => {
     const catalog = new DockerHostAccessPolicy(db, {
       platform: "linux",
       runtimeRoot: path.join(tempDir, "runtime"),
+      dataRoot: tempDir,
       daemonAvailable: true
     }).catalog();
 
@@ -56,14 +48,14 @@ describe("DockerHostAccessPolicy", () => {
     ]);
     expect(catalog.capabilities.find((capability) => capability.id === "docker_metadata")?.availability)
       .toEqual({ status: "unavailable", reasonCodes: ["docker_proxy_unverified"] });
-    expect(catalog.nasRoots).toMatchObject([{ rootId: "primary", availability: { status: "available" } }]);
+    expect(catalog.storagePools).toMatchObject([{ storagePoolId: "nas", availability: { status: "available" } }]);
   });
 
   it("resolves only fixed host sources and produces a digest-bound deterministic fingerprint", () => {
     const policy = availablePolicy();
     const input = {
       grants: [
-        { capability: "nas_capacity", rootId: "primary" },
+        { capability: "nas_capacity", storagePoolId: "nas" },
         { capability: "host_os_identity" },
         { capability: "account_map" },
         { capability: "docker_metadata" }
@@ -105,7 +97,7 @@ describe("DockerHostAccessPolicy", () => {
       imageDigest: "sha256:image"
     })).toThrow(DockerHostAccessValidationError);
     expect(() => policy.resolve({
-      grants: [{ capability: "nas_capacity", rootId: "missing" }],
+      grants: [{ capability: "nas_capacity", storagePoolId: "missing" }],
       scopeId: "scope",
       revision: "revision",
       imageDigest: "sha256:image"
@@ -145,13 +137,21 @@ describe("DockerHostAccessPolicy", () => {
   });
 
   it("marks namespace-sensitive capabilities degraded or unavailable", () => {
-    const rootless = new DockerHostAccessPolicy(db, { platform: "linux", rootless: true }).catalog();
+    const rootless = new DockerHostAccessPolicy(db, {
+      ...policyPaths(),
+      platform: "linux",
+      rootless: true
+    }).catalog();
     expect(rootless.capabilities.find((capability) => capability.id === "host_processes")?.availability)
       .toEqual({ status: "unavailable", reasonCodes: ["rootless_docker"] });
-    const userns = new DockerHostAccessPolicy(db, { platform: "linux", userNamespace: true }).catalog();
+    const userns = new DockerHostAccessPolicy(db, {
+      ...policyPaths(),
+      platform: "linux",
+      userNamespace: true
+    }).catalog();
     expect(userns.capabilities.find((capability) => capability.id === "host_sys")?.availability)
       .toEqual({ status: "degraded", reasonCodes: ["user_namespace_enabled"] });
-    const detected = new DockerHostAccessPolicy(db, { platform: "linux" });
+    const detected = new DockerHostAccessPolicy(db, { ...policyPaths(), platform: "linux" });
     detected.setRuntimeCompatibility({ rootless: true });
     expect(detected.catalog().capabilities.find((capability) => capability.id === "host_sys")?.availability)
       .toEqual({ status: "unavailable", reasonCodes: ["rootless_docker"] });
@@ -216,8 +216,16 @@ function availablePolicy(): DockerHostAccessPolicy {
   return new DockerHostAccessPolicy(db, {
     platform: "linux",
     runtimeRoot: path.join(tempDir, "runtime"),
+    dataRoot: tempDir,
     daemonAvailable: true,
     dockerProxyCompatible: true,
     systemdProxyCompatible: true
   });
+}
+
+function policyPaths(): { runtimeRoot: string; dataRoot: string } {
+  return {
+    runtimeRoot: path.join(tempDir, "runtime"),
+    dataRoot: tempDir
+  };
 }

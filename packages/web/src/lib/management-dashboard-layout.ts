@@ -25,7 +25,7 @@ export const MANAGEMENT_DASHBOARD_COLUMNS: Record<ManagementDashboardBreakpoint,
 };
 
 export const MANAGEMENT_DASHBOARD_MOBILE_MAX_WIDTH = 620;
-export const MANAGEMENT_DASHBOARD_LAYOUT_VERSION = 1;
+export const MANAGEMENT_DASHBOARD_LAYOUT_VERSION = 2;
 
 const STORAGE_KEY_PREFIX = `cyberos:management-dashboard-layout:v${MANAGEMENT_DASHBOARD_LAYOUT_VERSION}`;
 
@@ -249,12 +249,15 @@ function mergeDashboardLayouts(
 }
 
 function mergeBreakpointLayout(stored: Layout | undefined, defaults: Layout, cols: number): Layout {
-  if (!Array.isArray(stored)) {
+  if (!Array.isArray(stored) || stored.length !== defaults.length) {
     return defaults;
   }
   const storedById = new Map(
     stored.filter(isValidLayoutItem).map((item) => [item.i, item] as const)
   );
+  if (storedById.size !== defaults.length || defaults.some((item) => !storedById.has(item.i))) {
+    return defaults;
+  }
   const merged = defaults.map((fallback) => sanitizeLayoutItem(storedById.get(fallback.i), fallback, cols));
   return verticalCompactor.compact(merged, cols);
 }

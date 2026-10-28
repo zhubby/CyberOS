@@ -7,8 +7,7 @@ import type {
 import type { CyberOsDatabase } from "../connection.js";
 
 export interface EnqueueIndexTaskInput {
-  rootId: string;
-  storagePoolId?: string | null;
+  storagePoolId: string;
   path?: string;
   recursive?: boolean;
   kind?: IndexRunKind;
@@ -34,11 +33,10 @@ export function enqueueIndexTask(
 
   db.prepare(`
     INSERT INTO index_queue (
-      id, root_id, storage_pool_id, path, recursive, kind, generation,
+      id, storage_pool_id, path, recursive, kind, generation,
       priority, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'queued', ?, ?)
-    ON CONFLICT(root_id, path) DO UPDATE SET
-      storage_pool_id = COALESCE(excluded.storage_pool_id, index_queue.storage_pool_id),
+    ) VALUES (?, ?, ?, ?, ?, 1, ?, 'queued', ?, ?)
+    ON CONFLICT(storage_pool_id, path) DO UPDATE SET
       recursive = MAX(index_queue.recursive, excluded.recursive),
       kind = CASE
         WHEN excluded.kind = 'manual' THEN 'manual'
@@ -59,8 +57,7 @@ export function enqueueIndexTask(
       finished_at = NULL
   `).run(
     id,
-    input.rootId,
-    input.storagePoolId ?? null,
+    input.storagePoolId,
     path,
     input.recursive ? 1 : 0,
     kind,
@@ -70,16 +67,16 @@ export function enqueueIndexTask(
   );
 
   db.prepare(`
-    INSERT INTO index_root_state (root_id, reconcile_requested, updated_at)
+    INSERT INTO index_storage_pool_state (storage_pool_id, reconcile_requested, updated_at)
     VALUES (?, ?, ?)
-    ON CONFLICT(root_id) DO UPDATE SET
-      reconcile_requested = MAX(index_root_state.reconcile_requested, excluded.reconcile_requested),
+    ON CONFLICT(storage_pool_id) DO UPDATE SET
+      reconcile_requested = MAX(index_storage_pool_state.reconcile_requested, excluded.reconcile_requested),
       updated_at = excluded.updated_at
-  `).run(input.rootId, kind === "full" ? 1 : 0, now);
+  `).run(input.storagePoolId, kind === "full" ? 1 : 0, now);
 
   const row = db.prepare(`
-    SELECT id, generation FROM index_queue WHERE root_id = ? AND path = ?
-  `).get(input.rootId, path) as { id: string; generation: number };
+    SELECT id, generation FROM index_queue WHERE storage_pool_id = ? AND path = ?
+  `).get(input.storagePoolId, path) as { id: string; generation: number };
   return { ...row, status: "queued" };
 }
 
@@ -109,11 +106,11 @@ export function getIndexerServiceStatus(
     oldest_queued_at: string | null;
   };
   const watcherRows = db.prepare(`
-    SELECT root_id, watcher_status, watcher_error
-    FROM index_root_state
+    SELECT storage_pool_id, watcher_status, watcher_error
+    FROM index_storage_pool_state
     WHERE watcher_status IN ('degraded', 'unsupported')
-    ORDER BY root_id
-  `).all() as Array<{ root_id: string; watcher_status: IndexWatcherStatus; watcher_error: string | null }>;
+    ORDER BY storage_pool_id
+  `).all() as Array<{ storage_pool_id: string; watcher_status: IndexWatcherStatus; watcher_error: string | null }>;
   const watcherStatus: IndexWatcherStatus = watcherRows.some((row) => row.watcher_status === "degraded")
     ? "degraded"
     : watcherRows.some((row) => row.watcher_status === "unsupported")
@@ -123,22 +120,16 @@ export function getIndexerServiceStatus(
         : "starting";
   const rebuild = db.prepare(`
     SELECT
-      COUNT(CASE WHEN status = 'ready' THEN 1 END) AS roots_ready,
-      COUNT(*) AS roots_total,
-      COALESCE(SUM(copied_count), 0) AS copied,
-      COALESCE(SUM(legacy_total), 0) AS total,
+      COUNT(CASE WHEN status = 'ready' THEN 1 END) AS storage_pools_ready,
+      COUNT(*) AS storage_pools_total,
       COUNT(CASE WHEN status = 'failed' THEN 1 END) AS failed,
-      COUNT(CASE WHEN status = 'rebuilding' THEN 1 END) AS rebuilding,
-      COUNT(CASE WHEN status = 'copying' THEN 1 END) AS copying
+      COUNT(CASE WHEN status = 'rebuilding' THEN 1 END) AS rebuilding
     FROM index_content_state
   `).get() as {
-    roots_ready: number;
-    roots_total: number;
-    copied: number;
-    total: number;
+    storage_pools_ready: number;
+    storage_pools_total: number;
     failed: number;
     rebuilding: number;
-    copying: number;
   };
   const oldestQueuedMs = queue.oldest_queued_at ? Date.parse(queue.oldest_queued_at) : Number.NaN;
   return {
@@ -153,7 +144,7 @@ export function getIndexerServiceStatus(
     },
     watcher: {
       status: watcherStatus,
-      degradedRoots: watcherRows.map((row) => row.root_id),
+      degradedStoragePools: watcherRows.map((row) => row.storage_pool_id),
       reason: watcherRows.find((row) => row.watcher_error)?.watcher_error ?? null
     },
     queue: {
@@ -174,15 +165,9 @@ export function getIndexerServiceStatus(
         ? "failed"
         : rebuild.rebuilding > 0
           ? "rebuilding"
-          : rebuild.copying > 0
-            ? "copying"
-            : rebuild.roots_total > 0 && rebuild.roots_ready === rebuild.roots_total
-              ? "ready"
-              : "legacy",
-      copied: rebuild.copied,
-      total: rebuild.total,
-      rootsReady: rebuild.roots_ready,
-      rootsTotal: rebuild.roots_total
+          : "ready",
+      storagePoolsReady: rebuild.storage_pools_ready,
+      storagePoolsTotal: rebuild.storage_pools_total
     }
   };
 }

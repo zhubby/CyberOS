@@ -25,7 +25,6 @@ import {
   getFileBatches,
   getFiles,
   getOperations,
-  getRoots,
   getSessions,
   getSystemInfo,
   getSystemNetwork,
@@ -86,7 +85,7 @@ import {
   type FileListing,
   type ModelProviderSettings,
   type MonitoringAlertIncident,
-  type NasRoot,
+  type StoragePool,
   type OperationNotification,
   type CapabilityApproval,
   type PhotoLibrarySettings,
@@ -224,8 +223,6 @@ function upsertToolActivity(
 
 export function App() {
   const { t } = useTranslation();
-  const [roots, setRoots] = useState<NasRoot[]>([]);
-  const [selectedRootId, setSelectedRootId] = useState("");
   const [selectedStoragePoolId, setSelectedStoragePoolId] = useState("");
   const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null);
   const [storageSummaryLoading, setStorageSummaryLoading] = useState(true);
@@ -330,14 +327,12 @@ export function App() {
   const activeSessionIdRef = useRef(activeSessionId);
   const activeSearchQueryRef = useRef("");
   const currentPathRef = useRef(currentPath);
-  const selectedRootIdRef = useRef(selectedRootId);
   const selectedStoragePoolIdRef = useRef(selectedStoragePoolId);
   const uploadBatchSequenceRef = useRef(0);
   const uploadAbortControllersRef = useRef(new Map<string, Set<AbortController>>());
   const cancelledUploadBatchesRef = useRef(new Set<string>());
   const preferredStoragePoolIdRef = useRef(readStoredStoragePoolId());
   const pendingDownloadedDirectoryRef = useRef<{
-    rootId: string;
     storagePoolId: string;
     path: string;
   } | null>(null);
@@ -366,37 +361,18 @@ export function App() {
   const notificationFileListingRefreshRef = useRef(false);
   const workQueueRefreshRef = useRef<ReturnType<typeof createTrailingSingleFlight> | null>(null);
 
-  const selectedRoot = roots.find((root) => root.id === selectedRootId);
   const storagePoolOptions = useMemo(() => {
-    const options = new Map<string, {
-      id: string;
-      rootId: string;
-      name: string;
-      path: string;
-      filesystem: string | null;
-      status: "ready" | "warning" | "offline" | "unknown";
-    }>();
-    for (const root of roots) {
-      for (const pool of storageSummary?.pools ?? []) {
-        if (pool.status === "offline" || options.has(pool.id)) {
-          continue;
-        }
-        const poolPath = relativeStoragePoolPath(root.path, pool.mountpoint);
-        if (!poolPath) {
-          continue;
-        }
-        options.set(pool.id, {
-          id: pool.id,
-          rootId: root.id,
-          name: pool.mountpoint?.split("/").filter(Boolean).at(-1) ?? pool.name,
-          path: poolPath,
-          filesystem: pool.filesystem,
-          status: pool.status
-        });
-      }
-    }
-    return [...options.values()];
-  }, [roots, storageSummary]);
+    return (storageSummary?.pools ?? [])
+      .filter((pool) => pool.status !== "offline")
+      .map((pool): StoragePool => ({
+        id: pool.id,
+        name: pool.name,
+        mountpoint: pool.mountpoint,
+        path: ".",
+        filesystem: pool.filesystem,
+        status: pool.status
+      }));
+  }, [storageSummary]);
   const selectedStoragePool = useMemo(
     () => storagePoolOptions.find((pool) => pool.id === selectedStoragePoolId),
     [selectedStoragePoolId, storagePoolOptions]
@@ -406,11 +382,11 @@ export function App() {
     () => uploadBatches.filter((batch) => batch.storagePoolId === selectedStoragePoolId),
     [selectedStoragePoolId, uploadBatches]
   );
-  const blobUrl = selectedRootId && selectedStoragePoolId && selectedFilePath
-    ? getFileBlobUrl(selectedRootId, selectedFilePath, selectedStoragePoolId)
+  const blobUrl = selectedStoragePoolId && selectedFilePath
+    ? getFileBlobUrl(selectedStoragePoolId, selectedFilePath)
     : "";
-  const videoUrl = selectedRootId && selectedStoragePoolId && selectedFilePath
-    ? getFileVideoUrl(selectedRootId, selectedFilePath, selectedStoragePoolId)
+  const videoUrl = selectedStoragePoolId && selectedFilePath
+    ? getFileVideoUrl(selectedStoragePoolId, selectedFilePath)
     : "";
   const resolvedLocale = resolveSupportedLocale(i18n.resolvedLanguage ?? i18n.language);
   const breadcrumbs = useMemo(() => (currentPath === "." ? [] : currentPath.split("/").filter(Boolean)), [currentPath]);
@@ -426,22 +402,16 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([getRoots(), getSystemStorage()]).then(([rootsResult, storageResult]) => {
+    getSystemStorage().then((storage) => {
       if (!active) {
         return;
       }
-      if (rootsResult.status === "fulfilled") {
-        setRoots(rootsResult.value);
-        setSelectedRootId(rootsResult.value[0]?.id ?? "");
-      } else {
-        setError(toErrorMessage(rootsResult.reason));
-        setStatus("offline");
-      }
-      if (storageResult.status === "fulfilled") {
-        setStorageSummary(storageResult.value);
-      } else {
-        setError(toErrorMessage(storageResult.reason));
-      }
+      setStorageSummary(storage);
+      setStorageSummaryLoading(false);
+    }).catch((nextError: unknown) => {
+      if (!active) return;
+      setError(toErrorMessage(nextError));
+      setStatus("offline");
       setStorageSummaryLoading(false);
     });
     return () => {
@@ -474,25 +444,20 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!selectedRootId) {
-      return;
-    }
-
     let active = true;
-    const rootId = selectedRootId;
     const sessionRequestId = beginSessionViewRequest();
     let transcriptSessionId: string | null = null;
     dispatchTranscript({ type: "prepare" });
     async function loadRootWorkspace() {
       setStatus("loading");
       setError(null);
-      const nextSessions = await getSessions(rootId);
+      const nextSessions = await getSessions();
       let nextSession: Session | SessionSummary | null = nextSessions[0] ?? null;
       let nextSessionList = nextSessions;
 
       if (!nextSession) {
-        nextSession = await createSession(rootId, ".");
-        nextSessionList = await getSessions(rootId);
+        nextSession = await createSession(".");
+        nextSessionList = await getSessions();
       }
 
       if (!active || !isCurrentSessionViewRequest(sessionRequestId)) {
@@ -530,7 +495,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [selectedRootId]);
+  }, []);
 
   useEffect(() => {
     if (storageSummaryLoading || selectedStoragePoolId || storagePoolOptions.length === 0) {
@@ -579,7 +544,7 @@ export function App() {
     setPreviewError(null);
     setEditorMeta(null);
 
-    getFiles(pool.rootId, pool.path, pool.id)
+    getFiles(pool.id, pool.path)
       .then((listing) => {
         if (!active || !isCurrentFileListingRequest(fileRequestId)) {
           return;
@@ -618,7 +583,7 @@ export function App() {
     let disposed = false;
     const handleEvent = (raw: MessageEvent<string>) => {
       const parsed = JSON.parse(raw.data) as AgentEvent;
-      const eventRunId = parsed.runId ?? `legacy:${parsed.id}`;
+      const eventRunId = parsed.runId;
       if (seenEvents.current.has(parsed.id)) {
         return;
       }
@@ -630,7 +595,6 @@ export function App() {
         if (
           fileBatchId
           && (parsed.type === "job.completed" || parsed.type === "job.failed" || parsed.type === "job.cancelled")
-          && parsed.payload.rootId === selectedRootIdRef.current
           && parsed.payload.storagePoolId === selectedStoragePoolIdRef.current
         ) {
           notificationFileListingRefreshRef.current = true;
@@ -771,16 +735,12 @@ export function App() {
       const expectedConnectionRevision = connectionRevision;
       const expectedEventRevision = eventRevision;
       const expectedSessionId = session.id;
-      const expectedRootId = selectedRootIdRef.current;
-      if (!expectedRootId) return;
-
-      void getSessions(expectedRootId).then((nextSessions) => {
+      void getSessions().then((nextSessions) => {
         if (
           disposed
           || connectionRevision !== expectedConnectionRevision
           || eventRevision !== expectedEventRevision
           || activeSessionIdRef.current !== expectedSessionId
-          || selectedRootIdRef.current !== expectedRootId
         ) {
           return;
         }
@@ -860,7 +820,7 @@ export function App() {
   }, [capabilityApprovals.length, transcript.length]);
 
   useEffect(() => {
-    if (!selectedRootId || !selectedStoragePoolId || !selectedFilePath) {
+    if (!selectedStoragePoolId || !selectedFilePath) {
       setPreviewMeta(null);
       setTextPreview(null);
       setPreviewError(null);
@@ -869,18 +829,17 @@ export function App() {
     }
 
     let active = true;
-    const rootId = selectedRootId;
     const storagePoolId = selectedStoragePoolId;
     const filePath = selectedFilePath;
     async function loadPreview() {
       setPreviewLoading(true);
       setPreviewError(null);
       setTextPreview(null);
-      const meta = await getFileMeta(rootId, filePath, storagePoolId);
+      const meta = await getFileMeta(storagePoolId, filePath);
       const withinPreviewLimit = !isPreviewOverFileSizeLimit(meta, previewFileSizeLimitBytes);
       const nextTextPreview =
         meta.previewKind === "text" && withinPreviewLimit
-          ? await getTextPreview(rootId, filePath, storagePoolId)
+          ? await getTextPreview(storagePoolId, filePath)
           : null;
       if (!active) {
         return;
@@ -901,7 +860,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [previewFileSizeLimitBytes, selectedRootId, selectedStoragePoolId, selectedFilePath]);
+  }, [previewFileSizeLimitBytes, selectedStoragePoolId, selectedFilePath]);
 
   useEffect(() => {
     const vodPlayerAreaVisible = Boolean(
@@ -962,21 +921,17 @@ export function App() {
   }, [currentPath]);
 
   useEffect(() => {
-    selectedRootIdRef.current = selectedRootId;
-  }, [selectedRootId]);
-
-  useEffect(() => {
     selectedStoragePoolIdRef.current = selectedStoragePoolId;
   }, [selectedStoragePoolId]);
 
   useEffect(() => {
     const pending = pendingDownloadedDirectoryRef.current;
-    if (!pending || pending.rootId !== selectedRootId || pending.storagePoolId !== selectedStoragePoolId) {
+    if (!pending || pending.storagePoolId !== selectedStoragePoolId) {
       return;
     }
     pendingDownloadedDirectoryRef.current = null;
     void openDirectory(pending.path);
-  }, [selectedRootId, selectedStoragePoolId]);
+  }, [selectedStoragePoolId]);
 
   useEffect(() => {
     return () => {
@@ -988,14 +943,8 @@ export function App() {
     };
   }, []);
 
-  async function reloadSessions(expectedRootId = selectedRootIdRef.current): Promise<boolean> {
-    if (!expectedRootId || selectedRootIdRef.current !== expectedRootId) {
-      return false;
-    }
-    const nextSessions = await getSessions(expectedRootId);
-    if (selectedRootIdRef.current !== expectedRootId) {
-      return false;
-    }
+  async function reloadSessions(): Promise<boolean> {
+    const nextSessions = await getSessions();
     setSessions(nextSessions);
     return true;
   }
@@ -1361,10 +1310,10 @@ export function App() {
     }
   }
 
-  async function reindexRoot(rootId: string) {
+  async function reindexRoot(storagePoolId: string) {
     setError(null);
     try {
-      await requestReindex({ rootId, path: ".", recursive: true });
+      await requestReindex({ storagePoolId, path: ".", recursive: true });
       setIndexerStatus(await getIndexerOverview());
       setSuccessNotice(String(t("settings.indexer.reindexQueued")));
     } catch (nextError) {
@@ -1419,16 +1368,13 @@ export function App() {
   }
 
   async function createAgent() {
-    if (!selectedRootId) {
-      return;
-    }
     const sessionRequestId = beginSessionViewRequest();
     setStatus("creating-agent");
     setError(null);
     dispatchTranscript({ type: "prepare" });
     let nextSession: Session | null = null;
     try {
-      nextSession = await createSession(selectedRootId, currentPath);
+      nextSession = await createSession(sessionWorkspacePath(selectedStoragePoolId, currentPath));
       const createdSessionId = nextSession.id;
       seenEvents.current.clear();
       activeSessionIdRef.current = nextSession.id;
@@ -1439,7 +1385,7 @@ export function App() {
       setComposerPath(null);
       dispatchTranscript({ type: "begin", sessionId: nextSession.id });
       const [nextSessions, nextTranscript] = await Promise.all([
-        getSessions(selectedRootId),
+        getSessions(),
         getTranscript(nextSession.id)
       ]);
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
@@ -1485,7 +1431,7 @@ export function App() {
   }
 
   async function deleteActiveSession() {
-    if (!activeSessionId || !selectedRootId) {
+    if (!activeSessionId) {
       return;
     }
 
@@ -1493,9 +1439,9 @@ export function App() {
     setError(null);
     try {
       await deleteSession(activeSessionId);
-      const remainingSessions = await getSessions(selectedRootId);
-      const nextSession = remainingSessions[0] ?? (await createSession(selectedRootId, "."));
-      const nextSessions = remainingSessions.length ? remainingSessions : await getSessions(selectedRootId);
+      const remainingSessions = await getSessions();
+      const nextSession = remainingSessions[0] ?? (await createSession("."));
+      const nextSessions = remainingSessions.length ? remainingSessions : await getSessions();
       setSessions(nextSessions);
       commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
       setMessage("");
@@ -1527,19 +1473,18 @@ export function App() {
   }
 
   async function refreshFiles() {
-    if (!selectedRootId || !selectedStoragePoolId) {
+    if (!selectedStoragePoolId) {
       return;
     }
-    const requestRootId = selectedRootId;
     const requestStoragePoolId = selectedStoragePoolId;
     setStatus(activeSearchQueryRef.current ? "searching" : "loading");
     try {
       const committed = await refreshCurrentFileListing(activeSearchQueryRef.current, true);
-      if (committed && selectedRootIdRef.current === requestRootId && selectedStoragePoolIdRef.current === requestStoragePoolId) {
+      if (committed && selectedStoragePoolIdRef.current === requestStoragePoolId) {
         setStatus("ready");
       }
     } catch (nextError) {
-      if (selectedRootIdRef.current !== requestRootId || selectedStoragePoolIdRef.current !== requestStoragePoolId) {
+      if (selectedStoragePoolIdRef.current !== requestStoragePoolId) {
         return;
       }
       setError(toErrorMessage(nextError));
@@ -1551,7 +1496,7 @@ export function App() {
     query = activeSearchQueryRef.current,
     visible = false
   ): Promise<boolean> {
-    if (!selectedRootId || !selectedStoragePoolId) {
+    if (!selectedStoragePoolId) {
       return false;
     }
     if (query) {
@@ -1559,7 +1504,7 @@ export function App() {
     }
     const fileRequestId = beginFileListingRequest(visible);
     try {
-      const listing = await loadFileListingForView(selectedRootId, currentPath, query, selectedStoragePoolId);
+      const listing = await loadFileListingForView(selectedStoragePoolId, currentPath, query);
       return commitFileListing(fileRequestId, listing);
     } catch (error) {
       finishFileListingRequest(fileRequestId);
@@ -1580,7 +1525,7 @@ export function App() {
   ): Promise<boolean> {
     const query = searchQuery.trim();
     const hasFilters = hasWorkspaceSearchFilters(options);
-    if (!selectedRootId || !selectedStoragePoolId) return false;
+    if (!selectedStoragePoolId) return false;
     if (!query && !hasFilters) {
       activeSearchQueryRef.current = "";
       setSearchResults(null);
@@ -1594,7 +1539,6 @@ export function App() {
     const fileRequestId = beginFileListingRequest(visible);
     try {
       const request: IndexSearchRequest = {
-        rootId: selectedRootId,
         storagePoolId: selectedStoragePoolId,
         path: currentPath,
         sort: options.sort,
@@ -1642,10 +1586,9 @@ export function App() {
   }
 
   async function openDirectory(pathname: string) {
-    if (!selectedRootId || !selectedStoragePool) {
+    if (!selectedStoragePoolId || !selectedStoragePool) {
       return;
     }
-    const requestRootId = selectedRootId;
     const requestStoragePoolId = selectedStoragePool.id;
     if (!isPathWithinStoragePool(pathname, selectedStoragePool.path)) {
       setError(String(t("workspace.pathOutsideStoragePool")));
@@ -1662,21 +1605,20 @@ export function App() {
     setTextPreview(null);
     const fileRequestId = beginFileListingRequest(true);
     try {
-      const nextListing = await getFiles(selectedRootId, pathname, selectedStoragePool.id);
+      const nextListing = await getFiles(selectedStoragePool.id, pathname);
       if (
         !isCurrentFileListingRequest(fileRequestId) ||
-        selectedRootIdRef.current !== requestRootId ||
         selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
       }
       commitFileListing(fileRequestId, nextListing);
       setCurrentPath(pathname);
-      const updatedSession =
-        session && session.rootId === requestRootId ? await updateSessionPath(session.id, pathname) : null;
+      const updatedSession = session
+        ? await updateSessionPath(session.id, sessionWorkspacePath(requestStoragePoolId, pathname))
+        : null;
       if (
         !isCurrentFileListingRequest(fileRequestId) ||
-        selectedRootIdRef.current !== requestRootId ||
         selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
@@ -1684,14 +1626,13 @@ export function App() {
       if (updatedSession) {
         setSession((current) => (current?.id === updatedSession.id ? updatedSession : current));
       }
-      if (!(await reloadSessions(requestRootId))) {
+      if (!(await reloadSessions())) {
         return;
       }
       setStatus("ready");
     } catch (nextError) {
       if (
         !isCurrentFileListingRequest(fileRequestId) ||
-        selectedRootIdRef.current !== requestRootId ||
         selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
@@ -1888,16 +1829,14 @@ export function App() {
   }
 
   async function onUploadSources(sources: UploadSource[]) {
-    const rootId = selectedRootIdRef.current;
     const storagePoolId = selectedStoragePoolIdRef.current;
-    if (!rootId || !storagePoolId || !sources.length || !selectedStoragePool) {
+    if (!storagePoolId || !sources.length || !selectedStoragePool) {
       return;
     }
 
     const batchId = nextUploadBatchId();
     const uploadBatch = createUploadBatch({
       id: batchId,
-      rootId,
       storagePoolId,
       currentPath: currentPathRef.current,
       sources
@@ -1928,7 +1867,6 @@ export function App() {
 
         try {
           const result = await uploadFile({
-            rootId,
             storagePoolId,
             path: item.targetPath,
             file: item.file,
@@ -1966,7 +1904,7 @@ export function App() {
         settleUploadBatch(batchId, "failed", encounteredError);
       } else {
         settleUploadBatch(batchId, "completed", null);
-        if (selectedRootIdRef.current === rootId && currentPathRef.current === uploadBatch.targetPath && !activeSearchQueryRef.current) {
+        if (selectedStoragePoolIdRef.current === storagePoolId && currentPathRef.current === uploadBatch.targetPath && !activeSearchQueryRef.current) {
           await refreshCurrentFileListing().catch((nextError: unknown) => {
             setError(toErrorMessage(nextError));
             setStatus("error");
@@ -2004,7 +1942,7 @@ export function App() {
       const [nextApprovals, nextOperations, nextFileBatches, nextDockerOperations, nextVmOperations, nextNotifications] = await Promise.all([
         queueSessionId ? getApprovals(queueSessionId) : Promise.resolve({ capabilityApprovals: [] }),
         getOperations(),
-        getFileBatches({ rootId: selectedRootIdRef.current, storagePoolId: queueStoragePoolId }),
+        getFileBatches({ storagePoolId: queueStoragePoolId }),
         getDockerOperations(),
         getVmOperations(),
         getNotifications()
@@ -2036,20 +1974,17 @@ export function App() {
   }
 
   async function refreshFileBatches() {
-    const queueRootId = selectedRootIdRef.current;
     const queueStoragePoolId = selectedStoragePoolIdRef.current;
-    if (!queueRootId || !queueStoragePoolId) {
+    if (!queueStoragePoolId) {
       setFileBatches([]);
       return;
     }
     try {
       const batches = await getFileBatches({
-        rootId: queueRootId,
         storagePoolId: queueStoragePoolId
       });
       if (
-        queueRootId === selectedRootIdRef.current
-        && queueStoragePoolId === selectedStoragePoolIdRef.current
+        queueStoragePoolId === selectedStoragePoolIdRef.current
       ) {
         setFileBatches(batches);
       }
@@ -2107,8 +2042,8 @@ export function App() {
 
   function handleEditorSaved(result: SaveEditableTextResult) {
     if (
-      result.operation.metadata.rootId &&
-      result.operation.metadata.rootId !== selectedRootIdRef.current
+      result.operation.metadata.storagePoolId &&
+      result.operation.metadata.storagePoolId !== selectedStoragePoolIdRef.current
     ) {
       return;
     }
@@ -2140,24 +2075,21 @@ export function App() {
   }
 
   async function requestFileRename(entry: FileEntry, targetName: string) {
-    if (!selectedRootId || !selectedStoragePoolId) {
+    if (!selectedStoragePoolId) {
       throw new Error(t("workspace.actions.noSession"));
     }
 
-    const requestRootId = selectedRootId;
     const requestStoragePoolId = selectedStoragePoolId;
     setStatus("applying");
     setError(null);
     try {
       const result = await applyFileMutation({
-        rootId: requestRootId,
         storagePoolId: requestStoragePoolId,
         operation: "rename",
         sourcePath: entry.path,
         targetName
       });
       if (
-        selectedRootIdRef.current !== requestRootId ||
         selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
@@ -2193,7 +2125,7 @@ export function App() {
   }
 
   async function requestFileTransfer(entry: FileEntry, operation: "move" | "copy", targetPath: string) {
-    if (!selectedRootId || !selectedStoragePool) {
+    if (!selectedStoragePoolId || !selectedStoragePool) {
       throw new Error(t("workspace.actions.noSession"));
     }
 
@@ -2206,20 +2138,17 @@ export function App() {
       return;
     }
 
-    const requestRootId = selectedRootId;
     const requestStoragePoolId = selectedStoragePool.id;
     setStatus("applying");
     setError(null);
     try {
       const result = await applyFileMutation({
-        rootId: requestRootId,
         storagePoolId: requestStoragePoolId,
         operation: "copy",
         sourcePath: entry.path,
         targetPath: joinNasPath(selectedStoragePool.path, targetPath)
       });
       if (
-        selectedRootIdRef.current !== requestRootId ||
         selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
@@ -2245,14 +2174,13 @@ export function App() {
     operation: "move" | "trash",
     targetDirectory?: string
   ) {
-    if (!selectedRootId || !selectedStoragePoolId) {
+    if (!selectedStoragePoolId) {
       throw new Error(t("workspace.actions.noSession"));
     }
     setStatus("queued");
     setError(null);
     try {
       await createFileBatch({
-        rootId: selectedRootId,
         storagePoolId: selectedStoragePoolId,
         operation,
         sourcePaths: batchEntries.map((entry) => entry.path),
@@ -2278,22 +2206,19 @@ export function App() {
   }
 
   async function requestFileExtract(meta: FileMeta) {
-    if (!selectedRootId || !selectedStoragePoolId) {
+    if (!selectedStoragePoolId) {
       throw new Error(t("workspace.actions.noSession"));
     }
-    const requestRootId = selectedRootId;
     const requestStoragePoolId = selectedStoragePoolId;
 
     setStatus("applying");
     setError(null);
     try {
       const result = await extractFile({
-        rootId: selectedRootId,
         storagePoolId: selectedStoragePoolId,
         path: meta.path
       });
       if (
-        selectedRootIdRef.current !== requestRootId ||
         selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
@@ -2306,7 +2231,6 @@ export function App() {
       setStatus("ready");
     } catch (nextError) {
       if (
-        selectedRootIdRef.current !== requestRootId ||
         selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
@@ -2318,7 +2242,6 @@ export function App() {
   }
 
   async function requestFolderCreateAt(input: {
-    rootId: string;
     storagePoolId: string;
     parentPath: string;
     name: string;
@@ -2327,14 +2250,12 @@ export function App() {
     setError(null);
     try {
       const result = await applyFileMutation({
-        rootId: input.rootId,
         storagePoolId: input.storagePoolId,
         operation: "mkdir",
         targetPath: joinNasPath(input.parentPath, input.name)
       });
       const refreshes: Promise<unknown>[] = [refreshWorkQueues()];
       if (
-        selectedRootIdRef.current === input.rootId &&
         selectedStoragePoolIdRef.current === input.storagePoolId
       ) {
         setOperations((current) => [
@@ -2356,16 +2277,15 @@ export function App() {
   }
 
   async function requestFolderCreate(folderName: string) {
-    if (!selectedRootId || !selectedStoragePool) {
+    if (!selectedStoragePoolId || !selectedStoragePool) {
       throw new Error(t("workspace.actions.noSession"));
     }
 
     await requestFolderCreateAt({
-        rootId: selectedRootId,
-        storagePoolId: selectedStoragePool.id,
-        parentPath: currentPath,
-        name: folderName
-      });
+      storagePoolId: selectedStoragePool.id,
+      parentPath: currentPath,
+      name: folderName
+    });
   }
 
   function selectStoragePool(poolId: string) {
@@ -2378,20 +2298,8 @@ export function App() {
     writeStoredStoragePoolId(pool.id);
 
     beginFileListingRequest(true);
-    selectedRootIdRef.current = pool.rootId;
     selectedStoragePoolIdRef.current = pool.id;
     currentPathRef.current = pool.path;
-    if (pool.rootId !== selectedRootId) {
-      beginSessionViewRequest();
-      seenEvents.current.clear();
-      setSessions([]);
-      activeSessionIdRef.current = "";
-      setCapabilityApprovals([]);
-      setSession(null);
-      setActiveSessionId("");
-      dispatchTranscript({ type: "reset" });
-      commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
-    }
     activeSearchQueryRef.current = "";
     setSearchQuery("");
     setSearchResults(null);
@@ -2406,14 +2314,13 @@ export function App() {
     setEntries([]);
     setGitStatus(null);
     setSelectedStoragePoolId(pool.id);
-    setSelectedRootId(pool.rootId);
     setCurrentPath(pool.path);
   }
 
-  function openDownloadedDirectory(rootId: string, storagePoolId: string, pathname: string) {
+  function openDownloadedDirectory(storagePoolId: string, pathname: string) {
     setMobileView("workspace");
-    if (selectedRootIdRef.current !== rootId || selectedStoragePoolIdRef.current !== storagePoolId) {
-      pendingDownloadedDirectoryRef.current = { rootId, storagePoolId, path: pathname };
+    if (selectedStoragePoolIdRef.current !== storagePoolId) {
+      pendingDownloadedDirectoryRef.current = { storagePoolId, path: pathname };
       selectStoragePool(storagePoolId);
       return;
     }
@@ -2472,14 +2379,13 @@ export function App() {
   }
 
   async function playSelectedOnVodPlayer() {
-    if (!selectedRootId || !selectedStoragePoolId || !selectedFilePath || previewMeta?.previewKind !== "video") {
+    if (!selectedStoragePoolId || !selectedFilePath || previewMeta?.previewKind !== "video") {
       return;
     }
     setVodPlayerBusy(true);
     try {
       const next = await sendVodPlayerCommand({
           type: "play",
-          rootId: selectedRootId,
           storagePoolId: selectedStoragePoolId,
           path: selectedFilePath
         });
@@ -2515,7 +2421,6 @@ export function App() {
       sessionId: current?.sessionId ?? null,
       serviceInstanceId: "client-error",
       revision: 0,
-      rootId: selectedRootId || current?.rootId || null,
       storagePoolId: selectedStoragePoolId || current?.storagePoolId || null,
       relativePath: selectedFilePath || current?.relativePath || null,
       fileName: previewMeta?.name || current?.fileName || selectedFilePath?.split("/").pop() || null,
@@ -2548,15 +2453,15 @@ export function App() {
   }
 
   function insertWorkspacePathInComposer(relativePath: string) {
-    if (!selectedRoot) {
+    if (!selectedStoragePool) {
       return;
     }
-    setComposerPath(workspaceAbsolutePath(selectedRoot.path, relativePath));
+    setComposerPath(workspaceAbsolutePath(selectedStoragePool.mountpoint ?? "/cyberos/data", relativePath));
     setMobileView("chat");
   }
 
   async function openWorkspacePath(pathname: string) {
-    if (!selectedRootId || !selectedStoragePool) {
+    if (!selectedStoragePoolId || !selectedStoragePool) {
       setWarningNotice(t("workspace.selectStoragePoolBody"));
       return;
     }
@@ -2567,13 +2472,11 @@ export function App() {
     setError(null);
     setPreviewError(null);
     const fileRequestId = beginFileListingRequest(true);
-    const requestRootId = selectedRootId;
     const requestStoragePoolId = selectedStoragePool.id;
     const hadActiveSearch = Boolean(activeSearchQueryRef.current);
     try {
-      const linkedMeta = await getFileMeta(selectedRootId, pathname, selectedStoragePool.id);
+      const linkedMeta = await getFileMeta(selectedStoragePool.id, pathname);
       if (
-        selectedRootIdRef.current !== requestRootId ||
         selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
@@ -2591,7 +2494,6 @@ export function App() {
       if (currentPathRef.current !== parentPath || hadActiveSearch) {
         await openDirectory(parentPath);
         if (
-          selectedRootIdRef.current !== requestRootId ||
           selectedStoragePoolIdRef.current !== requestStoragePoolId
         ) {
           return;
@@ -2602,8 +2504,7 @@ export function App() {
       setStatus("ready");
     } catch (nextError) {
       if (
-        selectedRootIdRef.current !== requestRootId ||
-        selectedStoragePoolIdRef.current !== requestStoragePoolId
+          selectedStoragePoolIdRef.current !== requestStoragePoolId
       ) {
         return;
       }
@@ -2681,7 +2582,7 @@ export function App() {
 
       <ChatPane
         active={mobileView === "chat"}
-        selectedRoot={selectedRoot}
+        selectedRoot={selectedStoragePool}
         activeSessionSummary={activeSessionSummary}
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -2785,9 +2686,6 @@ export function App() {
 
       <WorkspacePane
         active={mobileView === "workspace"}
-        roots={roots}
-        selectedRoot={selectedRoot}
-        selectedRootId={selectedRootId}
         storagePools={storagePoolOptions}
         storageSummaryLoading={storageSummaryLoading}
         selectedStoragePoolId={selectedStoragePoolId}
@@ -2882,7 +2780,6 @@ export function App() {
 
       {editorMeta ? (
         <FileEditorModal
-          rootId={selectedRootId}
           storagePoolId={selectedStoragePoolId}
           meta={editorMeta}
           locale={resolvedLocale}
@@ -2903,7 +2800,6 @@ export function App() {
           downloadSettings={downloadSettings}
           indexerSettings={indexerSettings}
           indexerStatus={indexerStatus}
-          roots={roots}
           storagePools={storagePoolOptions}
           photoSettings={photoSettings}
           photoStatus={photoStatus}
@@ -2994,31 +2890,9 @@ function renamedPath(candidatePath: string, sourcePath: string, targetPath: stri
   return null;
 }
 
-function relativeStoragePoolPath(rootPath: string, mountpoint: string | null): string | null {
-  if (!mountpoint) {
-    return null;
-  }
-
-  const normalize = (value: string) => {
-    const normalized = value.replaceAll("\\", "/").replace(/\/+/gu, "/").replace(/\/$/u, "");
-    return normalized || "/";
-  };
-  const normalizedRoot = normalize(rootPath);
-  const normalizedMountpoint = normalize(mountpoint);
-  if (normalizedMountpoint === normalizedRoot) {
-    return ".";
-  }
-
-  const prefix = normalizedRoot === "/" ? "/" : `${normalizedRoot}/`;
-  if (!normalizedMountpoint.startsWith(prefix)) {
-    return null;
-  }
-
-  const relativePath = normalizedMountpoint.slice(prefix.length).replace(/^\/+|\/+$/gu, "");
-  if (!relativePath || relativePath.split("/").some((segment) => segment === "." || segment === "..")) {
-    return null;
-  }
-  return relativePath;
+function sessionWorkspacePath(storagePoolId: string, relativePath: string): string {
+  if (!storagePoolId) return ".";
+  return joinNasPath(storagePoolId, relativePath);
 }
 
 export function isPathWithinStoragePool(pathname: string, poolPath: string): boolean {

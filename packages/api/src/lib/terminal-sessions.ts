@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS } from "@cyberos/shared";
 import {
   DEFAULT_TERMINAL_COLS,
@@ -17,14 +17,14 @@ interface TerminalSocket {
 }
 
 interface TerminalSessionOptions {
-  rootId: string;
+  workspaceKey: string;
   idleTimeoutMs: number;
   onExit: (sessionId: string, terminal: TerminalPty) => void;
 }
 
 interface PendingCreation {
   readonly key: string;
-  readonly rootId: string;
+  readonly workspaceKey: string;
   readonly sessionId: string;
   promise: Promise<TerminalSession>;
   waiters: number;
@@ -34,7 +34,7 @@ interface PendingCreation {
 
 export interface TerminalSession {
   readonly id: string;
-  readonly rootId: string;
+  readonly workspaceKey: string;
   readonly terminal: TerminalPty;
   readonly lastDetachedAt: number;
   attach(socket: TerminalSocket, send: TerminalSend): boolean;
@@ -62,34 +62,35 @@ export class TerminalSessionManager {
     private readonly maxSessions = 32
   ) {}
 
-  async acquire(rootId: string, requestedSessionId?: string, persistent = false): Promise<TerminalSessionLease> {
+  async acquire(workspaceKey: string, requestedSessionId: string): Promise<TerminalSessionLease> {
     if (this.closed) {
       throw new Error("Terminal session manager is closed");
     }
 
-    const sessionId = normalizeSessionId(requestedSessionId) ?? randomUUID();
+    const sessionId = normalizeSessionId(requestedSessionId);
+    if (!sessionId) throw new Error("Terminal session id is invalid");
     const existing = this.sessions.get(sessionId);
     if (existing) {
-      if (existing.rootId !== rootId) {
+      if (existing.workspaceKey !== workspaceKey) {
         throw new Error("Terminal session is not available");
       }
       return { session: existing, release: () => undefined };
     }
 
-    const key = terminalSessionKey(rootId, sessionId);
+    const key = terminalSessionKey(workspaceKey, sessionId);
     let pending = this.pendingByKey.get(key);
     if (!pending) {
       this.ensureCapacity();
       pending = {
         key,
-        rootId,
+        workspaceKey,
         sessionId,
         promise: Promise.resolve(undefined as never),
         waiters: 0,
         session: null,
         cancelled: false
       };
-      const creation = this.createSession(rootId, sessionId, persistent);
+      const creation = this.createSession(workspaceKey, sessionId);
       pending.promise = creation
         .then((session) => {
           pending!.session = session;
@@ -136,38 +137,23 @@ export class TerminalSessionManager {
     }
   }
 
-  async reset(
-    rootId: string,
-    previousSessionId?: string,
-    nextSessionId?: string,
-    persistent = false
-  ): Promise<TerminalSessionLease> {
-    if (previousSessionId) {
-      this.close(previousSessionId, rootId);
-      this.cancelPending(rootId, previousSessionId);
-    } else {
-      this.cancelPending(rootId);
-    }
-    return this.acquire(rootId, nextSessionId, persistent);
-  }
-
-  async destroy(rootId: string, sessionId: string, _persistent = false): Promise<void> {
+  async destroy(workspaceKey: string, sessionId: string): Promise<void> {
     const existing = this.sessions.get(sessionId);
     if (existing) {
-      if (existing.rootId !== rootId) {
+      if (existing.workspaceKey !== workspaceKey) {
         throw new Error("Terminal session is not available");
       }
       existing.disconnect();
       this.sessions.delete(sessionId);
     }
-    const key = terminalSessionKey(rootId, sessionId);
+    const key = terminalSessionKey(workspaceKey, sessionId);
     const pending = this.pendingByKey.get(key);
     if (pending) {
       pending.cancelled = true;
       this.pendingByKey.delete(key);
       await pending.promise.catch(() => undefined);
     }
-    await this.runtime.destroySession(terminalSessionName(rootId, sessionId));
+    await this.runtime.destroySession(terminalSessionName(workspaceKey, sessionId));
   }
 
   detach(sessionId: string, socket: TerminalSocket): void {
@@ -181,10 +167,10 @@ export class TerminalSessionManager {
     }
   }
 
-  close(sessionId: string, rootId?: string): boolean {
+  close(sessionId: string, workspaceKey?: string): boolean {
     const session = this.sessions.get(sessionId);
     if (session) {
-      if (rootId && session.rootId !== rootId) {
+      if (workspaceKey && session.workspaceKey !== workspaceKey) {
         return false;
       }
       session.close();
@@ -194,7 +180,7 @@ export class TerminalSessionManager {
 
     let cancelled = false;
     for (const pending of this.pendingByKey.values()) {
-      if (pending.sessionId === sessionId && (!rootId || pending.rootId === rootId)) {
+      if (pending.sessionId === sessionId && (!workspaceKey || pending.workspaceKey === workspaceKey)) {
         pending.cancelled = true;
         cancelled = true;
       }
@@ -214,20 +200,20 @@ export class TerminalSessionManager {
     this.pendingByKey.clear();
   }
 
-  private async createSession(rootId: string, sessionId: string, persistent: boolean): Promise<TerminalSession> {
+  private async createSession(workspaceKey: string, sessionId: string): Promise<TerminalSession> {
     const terminal = await this.runtime.spawn("", [], {
       name: "xterm-256color",
       cols: DEFAULT_TERMINAL_COLS,
       rows: DEFAULT_TERMINAL_ROWS,
-      sessionName: terminalSessionName(rootId, sessionId),
-      persistent,
+      sessionName: terminalSessionName(workspaceKey, sessionId),
+      persistent: true,
       env: {
         ...process.env,
         TERM: "xterm-256color"
       }
     });
     return createTerminalSession({
-      rootId,
+      workspaceKey,
       idleTimeoutMs: this.idleTimeoutMs,
       onExit: (exitedSessionId, exitedTerminal) => {
         const current = this.sessions.get(exitedSessionId);
@@ -254,14 +240,6 @@ export class TerminalSessionManager {
     }
   }
 
-  private cancelPending(rootId: string, sessionId?: string): void {
-    for (const [key, pending] of this.pendingByKey) {
-      if (pending.rootId === rootId && (!sessionId || pending.sessionId === sessionId)) {
-        pending.cancelled = true;
-        this.pendingByKey.delete(key);
-      }
-    }
-  }
 }
 
 function createTerminalSession(
@@ -321,7 +299,7 @@ function createTerminalSession(
   let exitSubscription: { dispose(): void } | null = null;
   const session: TerminalSession = {
     id,
-    rootId: options.rootId,
+    workspaceKey: options.workspaceKey,
     terminal,
     get lastDetachedAt() {
       return detachedAt;
@@ -480,16 +458,16 @@ function createTerminalSession(
   return session;
 }
 
-export function terminalSessionName(rootId: string, sessionId: string): string {
-  const digest = createHash("sha256").update(rootId).update("\0").update(sessionId).digest("hex");
+export function terminalSessionName(workspaceKey: string, sessionId: string): string {
+  const digest = createHash("sha256").update(workspaceKey).update("\0").update(sessionId).digest("hex");
   return `cyberos-${digest.slice(0, 48)}`;
 }
 
-function terminalSessionKey(rootId: string, sessionId: string): string {
-  return `${rootId}\0${sessionId}`;
+function terminalSessionKey(workspaceKey: string, sessionId: string): string {
+  return `${workspaceKey}\0${sessionId}`;
 }
 
-function normalizeSessionId(value: string | undefined): string | null {
+function normalizeSessionId(value: string): string | null {
   const trimmed = value?.trim();
   return trimmed && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(trimmed)
     ? trimmed.toLowerCase()

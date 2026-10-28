@@ -3,7 +3,7 @@ import type { DbIndexedFileRow } from "./repository-rows.js";
 
 export interface IndexedFileSnapshot {
   id: string;
-  rootId: string;
+  storagePoolId: string;
   path: string;
   name: string;
   mimeType: string | null;
@@ -14,18 +14,18 @@ export interface IndexedFileSnapshot {
   hasText: boolean;
 }
 
-export function listIndexedFilesForRoot(db: CyberOsDatabase, rootId: string): IndexedFileSnapshot[] {
+export function listIndexedFilesForStoragePool(db: CyberOsDatabase, storagePoolId: string): IndexedFileSnapshot[] {
   const textFileIds = new Set(
     (db
-      .prepare("SELECT file_id FROM indexed_text WHERE root_id = ?")
+      .prepare("SELECT file_id FROM indexed_content_fts WHERE storage_pool_id = ?")
       .pluck()
-      .all(rootId) as string[])
+      .all(storagePoolId) as string[])
   );
   const rows = db
     .prepare(`
       SELECT
         f.id,
-        f.root_id,
+        f.storage_pool_id,
         f.path,
         f.name,
         f.mime_type,
@@ -34,13 +34,13 @@ export function listIndexedFilesForRoot(db: CyberOsDatabase, rootId: string): In
         f.hash,
         f.indexed_at
       FROM indexed_files f
-      WHERE f.root_id = ?
+      WHERE f.storage_pool_id = ?
     `)
-    .all(rootId) as DbIndexedFileRow[];
+    .all(storagePoolId) as DbIndexedFileRow[];
 
   return rows.map((row) => ({
     id: row.id,
-    rootId: row.root_id,
+    storagePoolId: row.storage_pool_id,
     path: row.path,
     name: row.name,
     mimeType: row.mime_type,
@@ -52,16 +52,16 @@ export function listIndexedFilesForRoot(db: CyberOsDatabase, rootId: string): In
   }));
 }
 
-export function removeIndexedFile(db: CyberOsDatabase, input: { rootId: string; path: string }): boolean {
+export function removeIndexedFile(db: CyberOsDatabase, input: { storagePoolId: string; path: string }): boolean {
   const row = db
-    .prepare("SELECT id FROM indexed_files WHERE root_id = ? AND path = ?")
-    .get(input.rootId, input.path) as { id: string } | undefined;
+    .prepare("SELECT id FROM indexed_files WHERE storage_pool_id = ? AND path = ?")
+    .get(input.storagePoolId, input.path) as { id: string } | undefined;
   if (!row) {
     return false;
   }
 
   const tx = db.transaction(() => {
-    db.prepare("DELETE FROM indexed_text WHERE file_id = ?").run(row.id);
+    db.prepare("DELETE FROM indexed_content_fts WHERE file_id = ?").run(row.id);
     db.prepare("DELETE FROM indexed_files WHERE id = ?").run(row.id);
   });
   tx();

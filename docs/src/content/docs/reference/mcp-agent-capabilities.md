@@ -105,13 +105,15 @@ Agent capability policy. `auto` returns a bounded structured result;
 `approve` and `confirm` create an immutable durable run in
 `waiting_approval`; `disabled` removes the capability. File resource links are
 available to Pi only when read access is `auto`, so they cannot bypass a read
-approval. Pi file mutations always create an immutable approval proposal.
+approval. Pi file mutations always create an immutable capability approval.
 
 Only capability requests linked to a Pi Agent job appear in the first-party
-Web UI. Workspace REST operations and non-Pi MCP clients do not create
-approval state. The approval card shows the client, capability, target, risk,
+Web UI. The built-in Pi identity is the only MCP identity that receives
+mutation capabilities; external MCP clients remain read-only and therefore do
+not create a second approval state. Workspace REST operations use explicit UI
+confirmation and domain-operation audit instead. The approval card shows the client, capability, target, risk,
 revision, expiry, and a bounded secret-redacted action preview. MCP has no
-approval tool. Approval rechecks the Agent policy, client, scope, NAS
+approval tool. Approval rechecks the Agent policy, client, scope, storage-pool
 readiness, path, and proposal revision before executing once.
 
 Clients can inspect the same run through `cyberos.runs.get`, `cyberos.runs.list`, and

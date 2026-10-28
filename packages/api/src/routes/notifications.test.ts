@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
-import { createBluetoothSendTransfers, ensureNasRoots, openCyberOsDb } from "@cyberos/db";
+import { createBluetoothSendTransfers, openCyberOsDb } from "@cyberos/db";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ApiRouteContext } from "../context.js";
 import { registerNotificationRoutes } from "./notifications.js";
@@ -52,12 +52,10 @@ describe("notification routes", () => {
   it("includes persistent Bluetooth transfers and reads them independently", async () => {
     tempDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-notifications-"));
     const db = openCyberOsDb(path.join(tempDirectory, "cyberos.sqlite"));
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDirectory }]);
     const [transfer] = createBluetoothSendTransfers(db, {
       adapterId: "adapter-hci0",
       deviceAddress: "AA:BB:CC:DD:EE:FF",
-      rootId: "local",
-      storagePoolId: "/dev/md0",
+      storagePoolId: "pool-1",
       files: [{ relativePath: "photo.jpg", displayName: "photo.jpg", totalBytes: 128 }]
     });
     const server = Fastify({ logger: false });

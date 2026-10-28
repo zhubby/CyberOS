@@ -6,23 +6,22 @@ import type {
   DockerSettingsRecord,
   IndexerSettingsRecord,
   ModelProviderSettingsRecord,
-  PhotostaffMapSettingsRecord,
-  PhotostaffProcessingSettingsRecord,
+  PhotosProcessingSettingsRecord,
   PiToolPolicySettingsRecord,
   ShareSettingsRecord
 } from "@cyberos/shared";
 import {
-  PHOTOSTAFF_DEFAULT_COMMAND_TIMEOUT_MS,
-  PHOTOSTAFF_DEFAULT_MAX_AUTO_RETRIES,
-  PHOTOSTAFF_DEFAULT_MAX_DECODED_PIXELS,
-  PHOTOSTAFF_DEFAULT_MAX_INTERMEDIATE_BYTES,
-  PHOTOSTAFF_DEFAULT_MIN_FREE_SPACE_BYTES,
-  PHOTOSTAFF_DEFAULT_PROCESSING_CONCURRENCY,
-  PHOTOSTAFF_DEFAULT_RETRY_BASE_DELAY_MS,
-  PHOTOSTAFF_DEFAULT_RETRY_MAX_DELAY_MS,
-  PHOTOSTAFF_DEFAULT_SCAN_INTERVAL_MS,
-  PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
-  PHOTOSTAFF_XMP_MAX_FILE_SIZE_BYTES
+  PHOTOS_DEFAULT_COMMAND_TIMEOUT_MS,
+  PHOTOS_DEFAULT_MAX_AUTO_RETRIES,
+  PHOTOS_DEFAULT_MAX_DECODED_PIXELS,
+  PHOTOS_DEFAULT_MAX_INTERMEDIATE_BYTES,
+  PHOTOS_DEFAULT_MIN_FREE_SPACE_BYTES,
+  PHOTOS_DEFAULT_PROCESSING_CONCURRENCY,
+  PHOTOS_DEFAULT_RETRY_BASE_DELAY_MS,
+  PHOTOS_DEFAULT_RETRY_MAX_DELAY_MS,
+  PHOTOS_DEFAULT_SCAN_INTERVAL_MS,
+  PHOTOS_MAX_FILE_SIZE_BYTES,
+  PHOTOS_XMP_MAX_FILE_SIZE_BYTES
 } from "@cyberos/shared";
 import type { CyberOsDatabase } from "../connection.js";
 import {
@@ -42,8 +41,7 @@ const AGENT_MCP_SETTING_KEY = "agent_mcp";
 const DOCKER_SETTING_KEY = "docker_settings";
 const SHARE_SETTING_KEY = "share_settings";
 const DOWNLOAD_SETTING_KEY = "download_settings";
-const PHOTOSTAFF_MAP_SETTING_KEY = "photostaff_map_settings";
-const PHOTOSTAFF_PROCESSING_SETTING_KEY = "photostaff_processing_settings";
+const PHOTOS_PROCESSING_SETTING_KEY = "photos_processing_settings";
 const INDEXER_SETTING_KEY = "indexer_settings";
 const BLUETOOTH_SETTING_KEY = "bluetooth_settings";
 
@@ -51,7 +49,6 @@ export const DEFAULT_BLUETOOTH_SETTINGS: Omit<BluetoothSettingsRecord, "updatedA
   defaultAdapterId: null,
   defaultAudioDeviceId: null,
   receiveEnabled: false,
-  inboxRootId: null,
   inboxStoragePoolId: null,
   inboxPath: null
 };
@@ -72,18 +69,18 @@ export const DEFAULT_DOWNLOAD_SETTINGS: Omit<DownloadSettingsRecord, "updatedAt"
   maxFileSizeBytes: null
 };
 
-export const DEFAULT_PHOTOSTAFF_PROCESSING_SETTINGS: Omit<PhotostaffProcessingSettingsRecord, "updatedAt"> = {
-  processingConcurrency: PHOTOSTAFF_DEFAULT_PROCESSING_CONCURRENCY,
-  scanIntervalMs: PHOTOSTAFF_DEFAULT_SCAN_INTERVAL_MS,
-  maxAutoRetries: PHOTOSTAFF_DEFAULT_MAX_AUTO_RETRIES,
-  retryBaseDelayMs: PHOTOSTAFF_DEFAULT_RETRY_BASE_DELAY_MS,
-  retryMaxDelayMs: PHOTOSTAFF_DEFAULT_RETRY_MAX_DELAY_MS,
-  commandTimeoutMs: PHOTOSTAFF_DEFAULT_COMMAND_TIMEOUT_MS,
-  maxFileSizeBytes: PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
-  maxXmpSizeBytes: PHOTOSTAFF_XMP_MAX_FILE_SIZE_BYTES,
-  maxIntermediateBytes: PHOTOSTAFF_DEFAULT_MAX_INTERMEDIATE_BYTES,
-  minFreeSpaceBytes: PHOTOSTAFF_DEFAULT_MIN_FREE_SPACE_BYTES,
-  maxDecodedPixels: PHOTOSTAFF_DEFAULT_MAX_DECODED_PIXELS
+export const DEFAULT_PHOTOS_PROCESSING_SETTINGS: Omit<PhotosProcessingSettingsRecord, "updatedAt"> = {
+  processingConcurrency: PHOTOS_DEFAULT_PROCESSING_CONCURRENCY,
+  scanIntervalMs: PHOTOS_DEFAULT_SCAN_INTERVAL_MS,
+  maxAutoRetries: PHOTOS_DEFAULT_MAX_AUTO_RETRIES,
+  retryBaseDelayMs: PHOTOS_DEFAULT_RETRY_BASE_DELAY_MS,
+  retryMaxDelayMs: PHOTOS_DEFAULT_RETRY_MAX_DELAY_MS,
+  commandTimeoutMs: PHOTOS_DEFAULT_COMMAND_TIMEOUT_MS,
+  maxFileSizeBytes: PHOTOS_MAX_FILE_SIZE_BYTES,
+  maxXmpSizeBytes: PHOTOS_XMP_MAX_FILE_SIZE_BYTES,
+  maxIntermediateBytes: PHOTOS_DEFAULT_MAX_INTERMEDIATE_BYTES,
+  minFreeSpaceBytes: PHOTOS_DEFAULT_MIN_FREE_SPACE_BYTES,
+  maxDecodedPixels: PHOTOS_DEFAULT_MAX_DECODED_PIXELS
 };
 
 export const DEFAULT_INDEXER_SETTINGS: Omit<IndexerSettingsRecord, "updatedAt"> = {
@@ -95,7 +92,7 @@ export const DEFAULT_INDEXER_SETTINGS: Omit<IndexerSettingsRecord, "updatedAt"> 
   commandTimeoutMs: 120 * 1_000,
   maxPdfTextPages: 500,
   maxOcrPages: 20,
-  ocrRootIds: []
+  ocrStoragePoolIds: []
 };
 
 export { DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS } from "./settings-constants.js";
@@ -109,8 +106,27 @@ export function getBluetoothSettings(db: CyberOsDatabase): BluetoothSettingsReco
     .get(BLUETOOTH_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
   try {
-    const parsed = JSON.parse(row.value_json) as Partial<BluetoothSettingsRecord>;
-    return normalizeBluetoothSettings(parsed, typeof parsed.updatedAt === "string" ? parsed.updatedAt : row.updated_at);
+    const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+      "defaultAdapterId",
+      "defaultAudioDeviceId",
+      "receiveEnabled",
+      "inboxStoragePoolId",
+      "inboxPath",
+      "updatedAt"
+    ], "Bluetooth");
+    if (
+      !isNullableString(parsed.defaultAdapterId)
+      || !isNullableString(parsed.defaultAudioDeviceId)
+      || typeof parsed.receiveEnabled !== "boolean"
+      || !isNullableString(parsed.inboxStoragePoolId)
+      || !isNullableString(parsed.inboxPath)
+    ) {
+      throw new Error("Bluetooth settings contain invalid field types");
+    }
+    return normalizeBluetoothSettings(
+      parsed as unknown as BluetoothSettingsRecord,
+      currentSettingsUpdatedAt(parsed, "Bluetooth")
+    );
   } catch {
     return null;
   }
@@ -138,15 +154,13 @@ function normalizeBluetoothSettings(
   const text = (value: unknown, maximum = 4096) => typeof value === "string" && value.trim() && value.length <= maximum
     ? value.trim()
     : null;
-  const inboxRootId = text(input.inboxRootId, 256);
   const inboxStoragePoolId = text(input.inboxStoragePoolId, 256);
   const inboxPath = text(input.inboxPath);
-  const completeInbox = Boolean(inboxRootId && inboxStoragePoolId && inboxPath);
+  const completeInbox = Boolean(inboxStoragePoolId && inboxPath);
   return {
     defaultAdapterId: text(input.defaultAdapterId, 128),
     defaultAudioDeviceId: text(input.defaultAudioDeviceId, 128),
     receiveEnabled: input.receiveEnabled === true && completeInbox,
-    inboxRootId,
     inboxStoragePoolId,
     inboxPath,
     updatedAt
@@ -319,8 +333,29 @@ export function getDownloadSettings(db: CyberOsDatabase): DownloadSettingsRecord
   if (!row) {
     return null;
   }
-  const parsed = JSON.parse(row.value_json) as Partial<DownloadSettingsRecord>;
-  return normalizeDownloadSettings(parsed, typeof parsed.updatedAt === "string" ? parsed.updatedAt : row.updated_at);
+  try {
+    const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+      "concurrency",
+      "parallelRequestsPerTask",
+      "segmentedDownloadMinBytes",
+      "maxAutoRetries",
+      "retryBaseDelayMs",
+      "retryMaxDelayMs",
+      "retryAfterMaxDelayMs",
+      "connectTimeoutMs",
+      "responseHeaderTimeoutMs",
+      "readIdleTimeoutMs",
+      "minFreeSpaceBytes",
+      "maxFileSizeBytes",
+      "updatedAt"
+    ], "Download");
+    return normalizeDownloadSettings(
+      parsed as unknown as Omit<DownloadSettingsRecord, "updatedAt">,
+      currentSettingsUpdatedAt(parsed, "Download")
+    );
+  } catch {
+    return null;
+  }
 }
 
 export function defaultDownloadSettings(): DownloadSettingsRecord {
@@ -329,7 +364,7 @@ export function defaultDownloadSettings(): DownloadSettingsRecord {
 
 export function saveDownloadSettings(
   db: CyberOsDatabase,
-  settings: Partial<Omit<DownloadSettingsRecord, "updatedAt">>
+  settings: Omit<DownloadSettingsRecord, "updatedAt">
 ): DownloadSettingsRecord {
   const updatedAt = new Date().toISOString();
   const record = normalizeDownloadSettings(settings, updatedAt);
@@ -348,10 +383,21 @@ export function getIndexerSettings(db: CyberOsDatabase): IndexerSettingsRecord |
     .get(INDEXER_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
   try {
-    const parsed = JSON.parse(row.value_json) as Partial<IndexerSettingsRecord>;
+    const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+      "scanConcurrency",
+      "extractionConcurrency",
+      "reconciliationIntervalMs",
+      "maxExtractedTextBytes",
+      "maxSourceDocumentBytes",
+      "commandTimeoutMs",
+      "maxPdfTextPages",
+      "maxOcrPages",
+      "ocrStoragePoolIds",
+      "updatedAt"
+    ], "Indexer");
     return normalizeIndexerSettings(
-      parsed,
-      typeof parsed.updatedAt === "string" ? parsed.updatedAt : row.updated_at
+      parsed as Partial<IndexerSettingsRecord>,
+      currentSettingsUpdatedAt(parsed, "Indexer")
     );
   } catch {
     return null;
@@ -359,7 +405,7 @@ export function getIndexerSettings(db: CyberOsDatabase): IndexerSettingsRecord |
 }
 
 export function defaultIndexerSettings(): IndexerSettingsRecord {
-  return { ...DEFAULT_INDEXER_SETTINGS, ocrRootIds: [], updatedAt: new Date(0).toISOString() };
+  return { ...DEFAULT_INDEXER_SETTINGS, ocrStoragePoolIds: [], updatedAt: new Date(0).toISOString() };
 }
 
 export function saveIndexerSettings(
@@ -376,78 +422,49 @@ export function saveIndexerSettings(
   return record;
 }
 
-export function getPhotostaffMapSettings(db: CyberOsDatabase): PhotostaffMapSettingsRecord | null {
-  const row = db
-    .prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
-    .get(PHOTOSTAFF_MAP_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
-  if (!row) return null;
-  const parsed = JSON.parse(row.value_json) as Partial<PhotostaffMapSettingsRecord>;
-  if (
-    typeof parsed.rootId !== "string" ||
-    typeof parsed.storagePoolId !== "string" ||
-    typeof parsed.path !== "string" ||
-    (parsed.tileType !== "png" && parsed.tileType !== "jpeg" && parsed.tileType !== "webp") ||
-    typeof parsed.minZoom !== "number" ||
-    typeof parsed.maxZoom !== "number"
-  ) return null;
-  return {
-    rootId: parsed.rootId,
-    storagePoolId: parsed.storagePoolId,
-    path: parsed.path,
-    tileType: parsed.tileType,
-    minZoom: parsed.minZoom,
-    maxZoom: parsed.maxZoom,
-    bounds: Array.isArray(parsed.bounds) && parsed.bounds.length === 4
-      ? parsed.bounds as [number, number, number, number]
-      : null,
-    attribution: typeof parsed.attribution === "string" ? parsed.attribution : null,
-    updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : row.updated_at
-  };
-}
-
-export function savePhotostaffMapSettings(
-  db: CyberOsDatabase,
-  settings: Omit<PhotostaffMapSettingsRecord, "updatedAt">
-): PhotostaffMapSettingsRecord {
-  const updatedAt = new Date().toISOString();
-  const record: PhotostaffMapSettingsRecord = { ...settings, updatedAt };
-  db.prepare(`
-    INSERT INTO system_settings (key, value_json, updated_at)
-    VALUES (?, ?, ?)
-    ON CONFLICT(key) DO UPDATE SET
-      value_json = excluded.value_json,
-      updated_at = excluded.updated_at
-  `).run(PHOTOSTAFF_MAP_SETTING_KEY, JSON.stringify(record), updatedAt);
-  return record;
-}
-
-export function getPhotostaffProcessingSettings(db: CyberOsDatabase): PhotostaffProcessingSettingsRecord | null {
+export function getPhotosProcessingSettings(db: CyberOsDatabase): PhotosProcessingSettingsRecord | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
-    .get(PHOTOSTAFF_PROCESSING_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
+    .get(PHOTOS_PROCESSING_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
   try {
-    const parsed = JSON.parse(row.value_json) as Partial<PhotostaffProcessingSettingsRecord>;
-    return normalizePhotostaffProcessingSettings(parsed, typeof parsed.updatedAt === "string" ? parsed.updatedAt : row.updated_at);
+    const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+      "processingConcurrency",
+      "scanIntervalMs",
+      "maxAutoRetries",
+      "retryBaseDelayMs",
+      "retryMaxDelayMs",
+      "commandTimeoutMs",
+      "maxFileSizeBytes",
+      "maxXmpSizeBytes",
+      "maxIntermediateBytes",
+      "minFreeSpaceBytes",
+      "maxDecodedPixels",
+      "updatedAt"
+    ], "Photos processing");
+    return normalizePhotosProcessingSettings(
+      parsed as Partial<PhotosProcessingSettingsRecord>,
+      currentSettingsUpdatedAt(parsed, "Photos processing")
+    );
   } catch {
     return null;
   }
 }
 
-export function defaultPhotostaffProcessingSettings(): PhotostaffProcessingSettingsRecord {
-  return { ...DEFAULT_PHOTOSTAFF_PROCESSING_SETTINGS, updatedAt: new Date(0).toISOString() };
+export function defaultPhotosProcessingSettings(): PhotosProcessingSettingsRecord {
+  return { ...DEFAULT_PHOTOS_PROCESSING_SETTINGS, updatedAt: new Date(0).toISOString() };
 }
 
-export function savePhotostaffProcessingSettings(
+export function savePhotosProcessingSettings(
   db: CyberOsDatabase,
-  settings: Partial<Omit<PhotostaffProcessingSettingsRecord, "updatedAt">>
-): PhotostaffProcessingSettingsRecord {
+  settings: Partial<Omit<PhotosProcessingSettingsRecord, "updatedAt">>
+): PhotosProcessingSettingsRecord {
   const updatedAt = new Date().toISOString();
-  const record = normalizePhotostaffProcessingSettings(settings, updatedAt);
+  const record = normalizePhotosProcessingSettings(settings, updatedAt);
   db.prepare(`
     INSERT INTO system_settings (key, value_json, updated_at)
     VALUES (?, ?, ?)
     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
-  `).run(PHOTOSTAFF_PROCESSING_SETTING_KEY, JSON.stringify(record), updatedAt);
+  `).run(PHOTOS_PROCESSING_SETTING_KEY, JSON.stringify(record), updatedAt);
   return record;
 }
 
@@ -459,10 +476,9 @@ function normalizeDownloadConcurrency(value: unknown): number {
 }
 
 function normalizeDownloadSettings(
-  settings: Partial<Omit<DownloadSettingsRecord, "updatedAt">>,
+  value: Omit<DownloadSettingsRecord, "updatedAt">,
   updatedAt: string
 ): DownloadSettingsRecord {
-  const value = { ...DEFAULT_DOWNLOAD_SETTINGS, ...settings };
   const integer = (name: string, candidate: unknown, minimum: number, maximum: number): number => {
     if (typeof candidate !== "number" || !Number.isSafeInteger(candidate) || candidate < minimum || candidate > maximum) {
       throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
@@ -492,31 +508,31 @@ function normalizeDownloadSettings(
   };
 }
 
-function normalizePhotostaffProcessingSettings(
-  settings: Partial<Omit<PhotostaffProcessingSettingsRecord, "updatedAt">>,
+function normalizePhotosProcessingSettings(
+  settings: Partial<Omit<PhotosProcessingSettingsRecord, "updatedAt">>,
   updatedAt: string
-): PhotostaffProcessingSettingsRecord {
-  const value = { ...DEFAULT_PHOTOSTAFF_PROCESSING_SETTINGS, ...settings };
+): PhotosProcessingSettingsRecord {
+  const value = { ...DEFAULT_PHOTOS_PROCESSING_SETTINGS, ...settings };
   const integer = (name: string, candidate: unknown, minimum: number, maximum: number): number => {
     if (typeof candidate !== "number" || !Number.isSafeInteger(candidate) || candidate < minimum || candidate > maximum) {
       throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
     }
     return candidate;
   };
-  const retryBaseDelayMs = integer("Photostaff retry base delay", value.retryBaseDelayMs, 500, 1_800_000);
-  const retryMaxDelayMs = integer("Photostaff retry maximum delay", value.retryMaxDelayMs, retryBaseDelayMs, 1_800_000);
+  const retryBaseDelayMs = integer("Photos retry base delay", value.retryBaseDelayMs, 500, 1_800_000);
+  const retryMaxDelayMs = integer("Photos retry maximum delay", value.retryMaxDelayMs, retryBaseDelayMs, 1_800_000);
   return {
-    processingConcurrency: integer("Photostaff processing concurrency", value.processingConcurrency, 1, 4),
-    scanIntervalMs: integer("Photostaff scan interval", value.scanIntervalMs, 60_000, 86_400_000),
-    maxAutoRetries: integer("Photostaff automatic retries", value.maxAutoRetries, 0, 20),
+    processingConcurrency: integer("Photos processing concurrency", value.processingConcurrency, 1, 4),
+    scanIntervalMs: integer("Photos scan interval", value.scanIntervalMs, 60_000, 86_400_000),
+    maxAutoRetries: integer("Photos automatic retries", value.maxAutoRetries, 0, 20),
     retryBaseDelayMs,
     retryMaxDelayMs,
-    commandTimeoutMs: integer("Photostaff command timeout", value.commandTimeoutMs, 5_000, 900_000),
-    maxFileSizeBytes: integer("Photostaff maximum file size", value.maxFileSizeBytes, 1024 ** 2, 1024 ** 4),
-    maxXmpSizeBytes: integer("Photostaff maximum XMP size", value.maxXmpSizeBytes, 1024, 64 * 1024 ** 2),
-    maxIntermediateBytes: integer("Photostaff maximum intermediate size", value.maxIntermediateBytes, 64 * 1024 ** 2, 8 * 1024 ** 3),
-    minFreeSpaceBytes: integer("Photostaff minimum free space", value.minFreeSpaceBytes, 0, 1024 ** 4),
-    maxDecodedPixels: integer("Photostaff maximum decoded pixels", value.maxDecodedPixels, 1_000_000, 268_402_689),
+    commandTimeoutMs: integer("Photos command timeout", value.commandTimeoutMs, 5_000, 900_000),
+    maxFileSizeBytes: integer("Photos maximum file size", value.maxFileSizeBytes, 1024 ** 2, 1024 ** 4),
+    maxXmpSizeBytes: integer("Photos maximum XMP size", value.maxXmpSizeBytes, 1024, 64 * 1024 ** 2),
+    maxIntermediateBytes: integer("Photos maximum intermediate size", value.maxIntermediateBytes, 64 * 1024 ** 2, 8 * 1024 ** 3),
+    minFreeSpaceBytes: integer("Photos minimum free space", value.minFreeSpaceBytes, 0, 1024 ** 4),
+    maxDecodedPixels: integer("Photos maximum decoded pixels", value.maxDecodedPixels, 1_000_000, 268_402_689),
     updatedAt
   };
 }
@@ -532,8 +548,8 @@ function normalizeIndexerSettings(
     }
     return candidate;
   };
-  if (!Array.isArray(value.ocrRootIds) || value.ocrRootIds.some((rootId) => typeof rootId !== "string" || !rootId.trim())) {
-    throw new Error("Indexer OCR roots must be an array of root IDs");
+  if (!Array.isArray(value.ocrStoragePoolIds) || value.ocrStoragePoolIds.some((storagePoolId) => typeof storagePoolId !== "string" || !storagePoolId.trim())) {
+    throw new Error("Indexer OCR storage pools must be an array of storage pool IDs");
   }
   return {
     scanConcurrency: integer("Indexer scan concurrency", value.scanConcurrency, 1, 16),
@@ -544,7 +560,30 @@ function normalizeIndexerSettings(
     commandTimeoutMs: integer("Indexer command timeout", value.commandTimeoutMs, 5_000, 900_000),
     maxPdfTextPages: integer("Indexer PDF text page limit", value.maxPdfTextPages, 1, 5_000),
     maxOcrPages: integer("Indexer OCR page limit", value.maxOcrPages, 1, 100),
-    ocrRootIds: [...new Set(value.ocrRootIds.map((rootId) => rootId.trim()))].sort(),
+    ocrStoragePoolIds: [...new Set(value.ocrStoragePoolIds.map((storagePoolId) => storagePoolId.trim()))].sort(),
     updatedAt
   };
+}
+
+function currentSettingsObject(value: unknown, keys: readonly string[], label: string): Record<string, unknown> {
+  if (
+    !value
+    || typeof value !== "object"
+    || Array.isArray(value)
+    || keys.some((key) => !Object.hasOwn(value, key))
+  ) {
+    throw new Error(`${label} settings do not match the CyberOS 2.0 format`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function currentSettingsUpdatedAt(value: Record<string, unknown>, label: string): string {
+  if (typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
+    throw new Error(`${label} settings require a valid updatedAt timestamp`);
+  }
+  return value.updatedAt;
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
 }

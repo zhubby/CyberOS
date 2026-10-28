@@ -5,13 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   acquireExecutionLock,
   createTrashEntry,
-  ensureNasRoots,
   getSystemOperations,
   openCyberOsDb,
   releaseExecutionLock,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { cleanupRestoreStaging, runMaintenance } from "./maintenance.js";
 import { runHealthTask } from "./runner.js";
 
@@ -28,7 +27,6 @@ beforeEach(async () => {
   await mkdir(rootDir);
   await mkdir(stagingDir);
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
   config = createConfig(tempDir, rootDir, stagingDir);
 });
 
@@ -53,12 +51,12 @@ describe("operations runner", () => {
 
   it("runs passive SQLite maintenance and counts only unrestored trash rows", async () => {
     const active = createTrashEntry(db, {
-      rootId: "local",
+      storagePoolId: "local",
       originalPath: "one.txt",
       trashPath: ".trash/one.txt"
     });
     createTrashEntry(db, {
-      rootId: "local",
+      storagePoolId: "local",
       originalPath: "two.txt",
       trashPath: ".trash/two.txt"
     });
@@ -106,19 +104,18 @@ describe("operations runner", () => {
 });
 
 function createConfig(dataDir: string, rootPath: string, stagingPath: string): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(dataDir, "missing.toml"), CYBEROS_ROOT: dataDir }, dataDir);
   return {
-    dataDir,
-    databasePath: path.join(dataDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: rootPath, databasePath: path.join(dataDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
-    model: { provider: "local", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120_000, consoleShells: ["/bin/sh"] },
     shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
-    hostd: { socketPath: path.join(dataDir, "hostd.sock") },
-    terminal: { user: "test-user", termuxSocketPath: path.join(dataDir, "termux.sock") },
+    hostd: { socketPath: path.join(dataDir, "hostd.sock"), mutationPolicy: "mutable" },
+    terminal: { user: "test-user", socketPath: path.join(dataDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     backup: { enabled: false, repositoryPath: null, passwordFile: null, stagingPath, requireMount: false, retryCount: 1, timeoutMs: 1000, keepDaily: 7, keepWeekly: 4 },
-    nasRoots: [{ id: "local", name: "Local", path: rootPath }]
   };
 }

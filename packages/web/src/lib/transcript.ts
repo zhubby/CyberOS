@@ -114,8 +114,8 @@ function reduceStreamEvent(state: TranscriptState, event: AgentEvent): Transcrip
     return state;
   }
   if (event.payload.role !== "assistant") return state;
-  const runId = event.runId ?? `legacy:${event.id}`;
-  const sequence = event.sequence ?? event.id;
+  const runId = event.runId;
+  const sequence = event.sequence;
   const previousSequence = state.streamSequences[runId] ?? -1;
   if (sequence <= previousSequence) return state;
   const content = typeof event.payload.content === "string" ? event.payload.content : "";
@@ -150,15 +150,12 @@ export function mergeTranscriptMessages(
   const messagesById = new Map<string, TranscriptMessage>();
   for (const messages of messageGroups) {
     for (const message of messages) {
-      messagesById.set(message.id, {
-        ...message,
-        sequence: message.sequence ?? null
-      });
+      messagesById.set(message.id, message);
     }
   }
-  const merged = [...messagesById.values()];
-  if (merged.some((message) => message.sequence === null)) {
-    return merged;
-  }
-  return merged.sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
+  return [...messagesById.values()].sort((left, right) => {
+    if (left.sequence === null) return right.sequence === null ? 0 : 1;
+    if (right.sequence === null) return -1;
+    return left.sequence - right.sequence;
+  });
 }

@@ -17,11 +17,11 @@ import {
   requestBluetoothTransferCancellation,
   saveBluetoothSettings
 } from "@cyberos/db";
-import type {
-  BluetoothAudioDevice,
-  BluetoothInboxStatus,
-  BluetoothSettingsRecord,
-  BluetoothStatus
+import {
+  type BluetoothAudioDevice,
+  type BluetoothInboxStatus,
+  type BluetoothSettingsRecord,
+  type BluetoothStatus
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
@@ -71,11 +71,7 @@ export function registerBluetoothTransferRoutes(server: FastifyInstance, context
     try {
       const status = await bluetooth.getStatus().catch(() => unavailableBluetoothStatus());
       const audioDevices = bluetoothAudioDevices(status);
-      const settings = migrateLegacyAudioDeviceId(
-        context.db,
-        getBluetoothSettings(context.db) ?? defaultBluetoothSettings(),
-        audioDevices
-      );
+      const settings = getBluetoothSettings(context.db) ?? defaultBluetoothSettings();
       reply.send({
         settings,
         audioDevices,
@@ -105,7 +101,6 @@ export function registerBluetoothTransferRoutes(server: FastifyInstance, context
     Body: {
       adapterId?: string;
       address?: string;
-      rootId?: string;
       storagePoolId?: string;
       paths?: string[];
     };
@@ -117,7 +112,11 @@ export function registerBluetoothTransferRoutes(server: FastifyInstance, context
       const status = await bluetooth.getStatus();
       const device = status.devices.find((candidate) => candidate.adapterId === adapterId && candidate.address === address);
       if (!device?.paired) throw new BluetoothTransferRequestError("Bluetooth device must be paired before sending files", 409);
-      const scope = await resolveStoragePoolScope(context.db, context.system, request.body?.rootId, request.body?.storagePoolId);
+      const scope = await resolveStoragePoolScope(
+        context.config.paths.dataRoot,
+        context.system,
+        request.body?.storagePoolId
+      );
       const files = await Promise.all(paths.map(async (requestedPath) => {
         const safe = await resolveScopedExistingPath(scope, requestedPath);
         const metadata = await stat(safe.realPath);
@@ -131,7 +130,6 @@ export function registerBluetoothTransferRoutes(server: FastifyInstance, context
       const transfers = createBluetoothSendTransfers(context.db, {
         adapterId,
         deviceAddress: address,
-        rootId: scope.root.id,
         storagePoolId: scope.pool.id,
         files
       });
@@ -173,7 +171,7 @@ export async function finalizeBluetoothReceives(
 ): Promise<void> {
   const transfers = listBluetoothReceiveFinalizations(context.db);
   if (transfers.length === 0) return;
-  incomingPath ??= path.join(path.dirname(context.config.databasePath), "bluetooth", "incoming");
+  incomingPath ??= path.join(path.dirname(context.config.paths.databasePath), "bluetooth", "incoming");
   await mkdir(incomingPath, { recursive: true });
   const inboxes = new Map<string, Promise<{
     scope: Awaited<ReturnType<typeof resolveStoragePoolScope>>;
@@ -193,11 +191,10 @@ export async function finalizeBluetoothReceives(
     let published = false;
     try {
       const inboxPath = path.posix.dirname(transfer.relativePath);
-      const inboxKey = JSON.stringify([transfer.rootId, transfer.storagePoolId, inboxPath]);
+      const inboxKey = JSON.stringify([transfer.storagePoolId, inboxPath]);
       let inboxPromise = inboxes.get(inboxKey);
       if (!inboxPromise) {
         inboxPromise = resolveBluetoothFinalizationInbox(context, {
-          rootId: transfer.rootId,
           storagePoolId: transfer.storagePoolId,
           path: inboxPath
         });
@@ -254,7 +251,6 @@ export async function finalizeBluetoothReceives(
         published = true;
         const completed = completeBluetoothReceiveFinalization(context.db, {
           id: transfer.id,
-          rootId: scope.root.id,
           storagePoolId: scope.pool.id,
           relativePath: finalizationRelativePath,
           displayName: destinationName
@@ -284,12 +280,11 @@ export async function finalizeBluetoothReceives(
 
 async function resolveBluetoothFinalizationInbox(
   context: ApiRouteContext,
-  selection: { rootId: string; storagePoolId: string; path: string }
+  selection: { storagePoolId: string; path: string }
 ) {
   const scope = await resolveStoragePoolScope(
-    context.db,
+    context.config.paths.dataRoot,
     context.system,
-    selection.rootId,
     selection.storagePoolId
   );
   return {
@@ -425,14 +420,13 @@ async function getBluetoothInboxStatus(
   context: ApiRouteContext
 ): Promise<BluetoothInboxStatus> {
   if (!settings.receiveEnabled) return { status: "disabled", reason: null };
-  if (!settings.inboxRootId || !settings.inboxStoragePoolId || !settings.inboxPath) {
+  if (!settings.inboxStoragePoolId || !settings.inboxPath) {
     return { status: "unconfigured", reason: null };
   }
   try {
     const scope = await resolveStoragePoolScope(
-      context.db,
+      context.config.paths.dataRoot,
       context.system,
-      settings.inboxRootId,
       settings.inboxStoragePoolId
     );
     if (scope.pool.availableBytes !== null && scope.pool.availableBytes <= 0) {
@@ -480,12 +474,12 @@ async function validateSettingsPatch(
   }
   const allowed = new Set([
     "defaultAdapterId", "defaultAudioDeviceId", "receiveEnabled",
-    "inboxRootId", "inboxStoragePoolId", "inboxPath"
+    "inboxStoragePoolId", "inboxPath"
   ]);
   if (Object.keys(body).some((key) => !allowed.has(key))) {
     throw new BluetoothTransferRequestError("Bluetooth settings contain unknown fields", 400);
   }
-  for (const key of ["defaultAdapterId", "defaultAudioDeviceId", "inboxRootId", "inboxStoragePoolId", "inboxPath"] as const) {
+  for (const key of ["defaultAdapterId", "defaultAudioDeviceId", "inboxStoragePoolId", "inboxPath"] as const) {
     if (key in body && body[key] !== null && typeof body[key] !== "string") {
       throw new BluetoothTransferRequestError(`Bluetooth setting ${key} must be a string or null`, 400);
     }
@@ -503,22 +497,18 @@ async function validateSettingsPatch(
       throw new BluetoothTransferRequestError("Bluetooth default adapter was not found", 404);
     }
     const audioDevices = bluetoothAudioDevices(status);
-    if ("defaultAudioDeviceId" in body && candidate.defaultAudioDeviceId !== null) {
-      candidate.defaultAudioDeviceId = resolveAudioDeviceId(candidate.defaultAudioDeviceId, audioDevices);
-    }
     if ("defaultAudioDeviceId" in body && candidate.defaultAudioDeviceId !== null
       && !audioDevices.some((device) => device.id === candidate.defaultAudioDeviceId)) {
       throw new BluetoothTransferRequestError("Bluetooth audio device was not found", 404);
     }
   }
-  if (candidate.receiveEnabled || body.inboxPath !== undefined || body.inboxRootId !== undefined || body.inboxStoragePoolId !== undefined) {
-    if (!candidate.inboxRootId || !candidate.inboxStoragePoolId || !candidate.inboxPath) {
+  if (candidate.receiveEnabled || body.inboxPath !== undefined || body.inboxStoragePoolId !== undefined) {
+    if (!candidate.inboxStoragePoolId || !candidate.inboxPath) {
       throw new BluetoothTransferRequestError("A mounted Bluetooth inbox directory is required", 400);
     }
     const scope = await resolveStoragePoolScope(
-      context.db,
+      context.config.paths.dataRoot,
       context.system,
-      candidate.inboxRootId,
       candidate.inboxStoragePoolId
     );
     const directory = await resolveScopedExistingPath(scope, candidate.inboxPath);
@@ -529,7 +519,6 @@ async function validateSettingsPatch(
     } catch {
       throw new BluetoothTransferRequestError("Bluetooth inbox is not writable", 403);
     }
-    candidate.inboxRootId = scope.root.id;
     candidate.inboxStoragePoolId = scope.pool.id;
     candidate.inboxPath = directory.relativePath;
   }
@@ -537,8 +526,7 @@ async function validateSettingsPatch(
     ...("defaultAdapterId" in body ? { defaultAdapterId: candidate.defaultAdapterId } : {}),
     ...("defaultAudioDeviceId" in body ? { defaultAudioDeviceId: candidate.defaultAudioDeviceId } : {}),
     ...("receiveEnabled" in body ? { receiveEnabled: candidate.receiveEnabled === true } : {}),
-    ...(body.inboxRootId !== undefined || body.inboxStoragePoolId !== undefined || body.inboxPath !== undefined ? {
-      inboxRootId: candidate.inboxRootId,
+    ...(body.inboxStoragePoolId !== undefined || body.inboxPath !== undefined ? {
       inboxStoragePoolId: candidate.inboxStoragePoolId,
       inboxPath: candidate.inboxPath
     } : {})
@@ -547,25 +535,6 @@ async function validateSettingsPatch(
 
 function bluetoothAudioDeviceId(adapterId: string, address: string): string {
   return `bluetooth:${adapterId}/${address}`;
-}
-
-function resolveAudioDeviceId(value: string, devices: BluetoothAudioDevice[]): string {
-  if (!/^bluetooth:(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/iu.test(value)) return value;
-  const address = value.slice("bluetooth:".length);
-  const matches = devices.filter((device) => device.address.toUpperCase() === address.toUpperCase());
-  return matches.length === 1 ? matches[0]!.id : value;
-}
-
-function migrateLegacyAudioDeviceId(
-  db: ApiRouteContext["db"],
-  settings: BluetoothSettingsRecord,
-  devices: BluetoothAudioDevice[]
-): BluetoothSettingsRecord {
-  if (!settings.defaultAudioDeviceId) return settings;
-  const resolved = resolveAudioDeviceId(settings.defaultAudioDeviceId, devices);
-  return resolved === settings.defaultAudioDeviceId
-    ? settings
-    : saveBluetoothSettings(db, { defaultAudioDeviceId: resolved });
 }
 
 export async function streamBluetoothTransfers(

@@ -8,36 +8,36 @@ import { ZipArchive } from "archiver";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   createTrashEntry,
-  enqueuePhotostaffJob,
-  getPhotostaffAsset,
-  getPhotostaffLibrarySettings,
-  getPhotostaffLibraryStatus,
-  getPhotostaffWorkerHealth,
-  getPhotostaffProcessingSettings,
-  getPhotostaffMetadataDetail,
-  getPhotostaffMetadataIndexStatus,
-  hasCompletedPhotostaffScan,
-  listPhotostaffAssets,
-  listPhotostaffMetadataFields,
-  photostaffQueryFingerprint,
-  queryPhotostaffAssets,
-  queryPhotostaffMap,
+  enqueuePhotosJob,
+  getPhotosAsset,
+  getPhotosLibrarySettings,
+  getPhotosLibraryStatus,
+  getPhotosWorkerHealth,
+  getPhotosProcessingSettings,
+  getPhotosMetadataDetail,
+  getPhotosMetadataIndexStatus,
+  hasCompletedPhotosScan,
+  listPhotosAssets,
+  listPhotosMetadataFields,
+  photosQueryFingerprint,
+  queryPhotosAssets,
+  queryPhotosMap,
   recordAppliedOperation,
-  releasePhotostaffUploadReservation,
-  reservePhotostaffUpload,
-  savePhotostaffLibrarySettings,
-  savePhotostaffProcessingSettings,
-  defaultPhotostaffProcessingSettings
+  releasePhotosUploadReservation,
+  reservePhotosUpload,
+  savePhotosLibrarySettings,
+  savePhotosProcessingSettings,
+  defaultPhotosProcessingSettings
 } from "@cyberos/db";
-import { applyFileMutation, isPathInside } from "@cyberos/nas-tools";
+import { applyFileMutation, isPathInside } from "@cyberos/storage-tools";
 import {
-  PHOTOSTAFF_DATA_DIRECTORY_NAME,
-  PHOTOSTAFF_MAX_FILE_SIZE_BYTES,
-  PHOTOSTAFF_METADATA_SCHEMA_VERSION,
-  PHOTOSTAFF_XMP_EXTENSION,
-  PHOTOSTAFF_XMP_MAX_FILE_SIZE_BYTES,
-  photostaffExtension,
-  photostaffMediaKind,
+  PHOTOS_DATA_DIRECTORY_NAME,
+  PHOTOS_MAX_FILE_SIZE_BYTES,
+  PHOTOS_METADATA_SCHEMA_VERSION,
+  PHOTOS_XMP_EXTENSION,
+  PHOTOS_XMP_MAX_FILE_SIZE_BYTES,
+  photosExtension,
+  photosMediaKind,
   type FileOperationProposal,
   type PhotoAssetRecord,
   type PhotoLocationBounds,
@@ -53,10 +53,10 @@ import {
 import type { ApiRouteContext } from "../context.js";
 import { sendFileStream } from "../lib/files.js";
 import {
-  defaultPhotostaffMapSource,
-  PhotostaffMapArchiveError,
-  PhotostaffMapArchiveManager
-} from "../lib/photostaff-map.js";
+  defaultPhotosMapSource,
+  PhotosMapArchiveError,
+  PhotosMapArchiveManager
+} from "../lib/photos-map.js";
 import { ffmpegVideoTranscoder, VideoCache } from "../lib/video-cache.js";
 import {
   resolveScopedExistingPath,
@@ -77,29 +77,30 @@ interface PhotoExport {
 
 export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   const { db, system } = context;
+  const dataRoot = context.config.paths.dataRoot;
   const exports = new Map<string, PhotoExport>();
   const videoCache = new VideoCache({
-    dataDir: context.config.dataDir,
+    dataDir: context.config.paths.stateDir,
     transcoder: context.videoTranscoder ?? ffmpegVideoTranscoder
   });
-  const mapArchive = context.photostaffMap ?? new PhotostaffMapArchiveManager({
-    dataDir: context.config.dataDir,
-    source: defaultPhotostaffMapSource(context.config.photostaff?.baseMapUrl)
+  const mapArchive = context.photosMap ?? new PhotosMapArchiveManager({
+    dataDir: context.config.paths.stateDir,
+    source: defaultPhotosMapSource(context.config.photos.baseMapUrl)
   });
   server.addHook("onClose", async () => mapArchive.close());
 
-  server.get("/api/photos/settings", async () => ({ settings: getPhotostaffLibrarySettings(db) }));
+  server.get("/api/photos/settings", async () => ({ settings: getPhotosLibrarySettings(db) }));
 
   server.get("/api/settings/photos", async () => ({
-    settings: getPhotostaffProcessingSettings(db) ?? defaultPhotostaffProcessingSettings()
+    settings: getPhotosProcessingSettings(db) ?? defaultPhotosProcessingSettings()
   }));
 
   server.patch<{ Body: Partial<Omit<PhotoProcessingSettingsRecord, "updatedAt">> }>(
     "/api/settings/photos",
     async (request, reply) => {
       try {
-        const current = getPhotostaffProcessingSettings(db) ?? defaultPhotostaffProcessingSettings();
-        const settings = savePhotostaffProcessingSettings(db, { ...current, ...request.body });
+        const current = getPhotosProcessingSettings(db) ?? defaultPhotosProcessingSettings();
+        const settings = savePhotosProcessingSettings(db, { ...current, ...request.body });
         reply.send({ settings });
       } catch (error) {
         reply.status(400).send({ error: error instanceof Error ? error.message : "Photo settings are invalid" });
@@ -108,28 +109,27 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   );
 
   server.put<{
-    Body: { rootId?: string; storagePoolId?: string; path?: string };
+    Body: { storagePoolId?: string; path?: string };
   }>("/api/photos/settings", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.body?.storagePoolId);
     const safe = await resolveScopedExistingPath(scope, request.body?.path ?? scope.mountpointPath);
     const directory = await stat(safe.realPath);
     if (!directory.isDirectory()) {
       reply.status(400).send({ error: "Photo library path must be a directory" });
       return;
     }
-    const settings = savePhotostaffLibrarySettings(db, {
-      rootId: scope.root.id,
+    const settings = savePhotosLibrarySettings(db, {
       storagePoolId: scope.pool.id,
       path: safe.relativePath
     });
-    const job = enqueuePhotostaffJob(db, { settings });
+    const job = enqueuePhotosJob(db, { settings });
     reply.send({ settings, job });
   });
 
   server.get<{
     Querystring: { cursor?: string; limit?: string };
   }>("/api/photos", async (request, reply) => {
-    const settings = getPhotostaffLibrarySettings(db);
+    const settings = getPhotosLibrarySettings(db);
     if (!settings) {
       const empty: PhotoTimelinePage = { photos: [], nextCursor: null };
       reply.send(empty);
@@ -142,10 +142,10 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
     }
     const requestedLimit = Number(request.query.limit ?? "60");
     const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 60;
-    const result = listPhotostaffAssets(db, { libraryUpdatedAt: settings.updatedAt, limit, cursor });
-    const last = result.photostaff.at(-1);
+    const result = listPhotosAssets(db, { libraryUpdatedAt: settings.updatedAt, limit, cursor });
+    const last = result.photos.at(-1);
     reply.send({
-      photos: result.photostaff,
+      photos: result.photos,
       nextCursor: result.hasMore && last ? encodeCursor({ takenAt: last.takenAt, id: last.id }) : null
     } satisfies PhotoTimelinePage);
   });
@@ -154,7 +154,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
     "/api/photos/query",
     { bodyLimit: PHOTO_QUERY_BODY_LIMIT },
     async (request, reply) => {
-      const settings = getPhotostaffLibrarySettings(db);
+      const settings = getPhotosLibrarySettings(db);
       if (!settings) {
         reply.send({
           photos: [],
@@ -171,26 +171,26 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         return;
       }
       const requestWithoutCursor = { ...query.value, cursor: undefined };
-      const fingerprint = photostaffQueryFingerprint(requestWithoutCursor);
+      const fingerprint = photosQueryFingerprint(requestWithoutCursor);
       const cursor = decodePhotoQueryCursor(query.value.cursor);
       if (query.value.cursor && (!cursor || cursor.fingerprint !== fingerprint)) {
         reply.status(400).send({ error: "Photo query cursor is invalid or belongs to another query" });
         return;
       }
-      const result = queryPhotostaffAssets(db, {
+      const result = queryPhotosAssets(db, {
         libraryUpdatedAt: settings.updatedAt,
         request: query.value,
         cursor
       });
-      const last = result.photostaff.at(-1);
+      const last = result.photos.at(-1);
       reply.send({
-        photos: result.photostaff,
+        photos: result.photos,
         nextCursor: result.hasMore && last
           ? encodePhotoQueryCursor({ fingerprint, sortValue: photoSortValue(last, query.value), id: last.id })
           : null,
         total: result.total,
         facets: result.facets,
-        metadataIndex: getPhotostaffMetadataIndexStatus(db, settings.updatedAt)
+        metadataIndex: getPhotosMetadataIndexStatus(db, settings.updatedAt)
       } satisfies PhotoQueryPage);
     }
   );
@@ -198,7 +198,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   server.get<{ Querystring: { q?: string; limit?: string } }>(
     "/api/photos/metadata/fields",
     async (request, reply) => {
-      const settings = getPhotostaffLibrarySettings(db);
+      const settings = getPhotosLibrarySettings(db);
       if (!settings) {
         reply.send({ fields: [] });
         return;
@@ -206,7 +206,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       const requestedLimit = Number(request.query.limit ?? "100");
       const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 200)) : 100;
       reply.send({
-        fields: listPhotostaffMetadataFields(db, {
+        fields: listPhotosMetadataFields(db, {
           libraryUpdatedAt: settings.updatedAt,
           ...(request.query.q !== undefined ? { query: request.query.q } : {}),
           limit
@@ -219,8 +219,8 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
     Params: { id: string };
     Querystring: { includeSensitive?: string };
   }>("/api/photos/:id/metadata", async (request, reply) => {
-    const settings = getPhotostaffLibrarySettings(db);
-    const detail = settings ? getPhotostaffMetadataDetail(db, {
+    const settings = getPhotosLibrarySettings(db);
+    const detail = settings ? getPhotosMetadataDetail(db, {
       assetId: request.params.id,
       libraryUpdatedAt: settings.updatedAt,
       includeSensitive: request.query.includeSensitive === "1"
@@ -233,13 +233,13 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   });
 
   server.get<{ Params: { id: string } }>("/api/photos/:id/record", async (request, reply) => {
-    const settings = getPhotostaffLibrarySettings(db);
-    const asset = settings ? getPhotostaffAsset(db, request.params.id, settings.updatedAt) : null;
+    const settings = getPhotosLibrarySettings(db);
+    const asset = settings ? getPhotosAsset(db, request.params.id, settings.updatedAt) : null;
     if (!settings || !asset) {
       reply.status(404).send({ error: "Photo not found" });
       return;
     }
-    const detail = getPhotostaffMetadataDetail(db, {
+    const detail = getPhotosMetadataDetail(db, {
       assetId: asset.id,
       libraryUpdatedAt: settings.updatedAt,
       includeSensitive: false
@@ -258,7 +258,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
     "/api/photos/map/query",
     { bodyLimit: PHOTO_QUERY_BODY_LIMIT },
     async (request, reply) => {
-      const settings = getPhotostaffLibrarySettings(db);
+      const settings = getPhotosLibrarySettings(db);
       if (!settings) {
         reply.send({ clusters: [], metadataIndex: emptyMetadataIndexStatus() });
         return;
@@ -269,8 +269,8 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         return;
       }
       reply.send({
-        clusters: queryPhotostaffMap(db, { libraryUpdatedAt: settings.updatedAt, request: mapQuery.value }),
-        metadataIndex: getPhotostaffMetadataIndexStatus(db, settings.updatedAt)
+        clusters: queryPhotosMap(db, { libraryUpdatedAt: settings.updatedAt, request: mapQuery.value }),
+        metadataIndex: getPhotosMetadataIndexStatus(db, settings.updatedAt)
       });
     }
   );
@@ -291,7 +291,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       reply.header("ETag", `"${archive.settings.version}-${archive.settings.sizeBytes}"`);
       return sendFileStream(reply, request.headers.range, archive.filePath, "application/vnd.pmtiles");
     } catch (error) {
-      if (error instanceof PhotostaffMapArchiveError) {
+      if (error instanceof PhotosMapArchiveError) {
         reply.status(error.statusCode).send({ error: error.message });
         return;
       }
@@ -300,9 +300,9 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   });
 
   server.get("/api/photos/status", async (_request, reply) => {
-    const settings = getPhotostaffLibrarySettings(db);
-    const status = getPhotostaffLibraryStatus(db, settings);
-    const workerHealth = getPhotostaffWorkerHealth(db);
+    const settings = getPhotosLibrarySettings(db);
+    const status = getPhotosLibraryStatus(db, settings);
+    const workerHealth = getPhotosWorkerHealth(db);
     if (!settings) {
       reply.send({ status, workerHealth });
       return;
@@ -320,13 +320,13 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   });
 
   server.post("/api/photos/scans", async (_request, reply) => {
-    const settings = getPhotostaffLibrarySettings(db);
+    const settings = getPhotosLibrarySettings(db);
     if (!settings) {
       reply.status(409).send({ error: "Photo library is not configured" });
       return;
     }
     await resolveLibraryScope(context, settings);
-    reply.status(202).send({ job: enqueuePhotostaffJob(db, { settings }) });
+    reply.status(202).send({ job: enqueuePhotosJob(db, { settings }) });
   });
 
   server.get<{ Params: { id: string } }>("/api/photos/:id/thumbnail", async (request, reply) => {
@@ -378,7 +378,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
     }
 
     const source = {
-      rootId: resolved.asset.rootId,
+      storagePoolId: resolved.asset.storagePoolId,
       relativePath: resolved.safe.relativePath,
       realPath: resolved.safe.realPath,
       sizeBytes: sourceStat.size,
@@ -404,14 +404,14 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
     Querystring: { name?: string; directory?: string };
   }>(
     "/api/photos/upload",
-    { bodyLimit: PHOTOSTAFF_MAX_FILE_SIZE_BYTES },
+    { bodyLimit: PHOTOS_MAX_FILE_SIZE_BYTES },
     async (request, reply) => {
-      const settings = getPhotostaffLibrarySettings(db);
+      const settings = getPhotosLibrarySettings(db);
       if (!settings) {
         reply.status(409).send({ error: "Photo library is not configured" });
         return;
       }
-      if (!hasCompletedPhotostaffScan(db, settings.updatedAt)) {
+      if (!hasCompletedPhotosScan(db, settings.updatedAt)) {
         reply.status(409).send({ error: "Wait for the initial photo scan to finish before uploading" });
         return;
       }
@@ -420,8 +420,8 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         reply.status(400).send({ error: "A supported media or XMP file name is required" });
         return;
       }
-      const isSidecar = photostaffExtension(fileName) === PHOTOSTAFF_XMP_EXTENSION;
-      const uploadLimit = isSidecar ? PHOTOSTAFF_XMP_MAX_FILE_SIZE_BYTES : PHOTOSTAFF_MAX_FILE_SIZE_BYTES;
+      const isSidecar = photosExtension(fileName) === PHOTOS_XMP_EXTENSION;
+      const uploadLimit = isSidecar ? PHOTOS_XMP_MAX_FILE_SIZE_BYTES : PHOTOS_MAX_FILE_SIZE_BYTES;
       const { scope, library } = await resolveLibraryScope(context, settings);
       const directory = await resolveScopedExistingPath(scope, request.query.directory ?? settings.path);
       if (!isPathInside(library.realPath, directory.realPath) || !(await stat(directory.realPath)).isDirectory()) {
@@ -438,7 +438,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         return;
       }
 
-      const temporaryPath = path.join(directory.realPath, `.${randomUUID()}.cyberos-photostaff-upload`);
+      const temporaryPath = path.join(directory.realPath, `.${randomUUID()}.cyberos-photos-upload`);
       const output = createWriteStream(temporaryPath, { flags: "wx" });
       const hash = createHash("sha256");
       let written = 0;
@@ -461,7 +461,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         await pipeline(request.body as NodeJS.ReadableStream, limiter, output);
         const contentHash = hash.digest("hex");
         if (!isSidecar) {
-          const reserved = reservePhotostaffUpload(db, {
+          const reserved = reservePhotosUpload(db, {
             settings,
             path: target.relativePath,
             contentHash
@@ -481,7 +481,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
           await link(temporaryPath, target.absolutePath);
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-            if (reservation) releasePhotostaffUploadReservation(db, { id: reservation.id, libraryUpdatedAt: settings.updatedAt });
+            if (reservation) releasePhotosUploadReservation(db, { id: reservation.id, libraryUpdatedAt: settings.updatedAt });
             reservation = null;
             await unlink(temporaryPath).catch(() => undefined);
             reply.status(409).send({ error: "Upload target already exists" });
@@ -491,20 +491,18 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         }
         published = true;
         await unlink(temporaryPath).catch(() => undefined);
-        enqueuePhotostaffJob(db, {
+        enqueuePhotosJob(db, {
           settings,
           kind: "path_refresh",
           path: settings.path,
           queueAfterRunning: isSidecar
         });
         const operation = recordAppliedOperation(db, {
-          approvalId: null,
           operation: "upload",
           sourcePath: null,
           targetPath: target.relativePath,
           status: "applied",
           metadata: {
-            rootId: settings.rootId,
             storagePoolId: settings.storagePoolId,
             reversible: true,
             sizeBytes: written,
@@ -515,7 +513,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       } catch (error) {
         await unlink(temporaryPath).catch(() => undefined);
         if (reservation && !published) {
-          releasePhotostaffUploadReservation(db, { id: reservation.id, libraryUpdatedAt: settings.updatedAt });
+          releasePhotosUploadReservation(db, { id: reservation.id, libraryUpdatedAt: settings.updatedAt });
         }
         throw error;
       }
@@ -525,7 +523,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   server.post<{
     Body: { assetIds?: string[]; operation?: "move" | "trash"; targetDirectory?: string };
   }>("/api/photos/actions", async (request, reply) => {
-    const settings = getPhotostaffLibrarySettings(db);
+    const settings = getPhotosLibrarySettings(db);
     if (!settings) {
       reply.status(409).send({ error: "Photo library is not configured" });
       return;
@@ -552,7 +550,6 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       for (const item of operationFiles) {
         proposals.push({
           operation: "trash",
-          rootId: settings.rootId,
           storagePoolId: settings.storagePoolId,
           sourcePath: item.relativePath,
           risk: "medium",
@@ -581,7 +578,6 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         }
         proposals.push({
           operation: "move",
-          rootId: settings.rootId,
           storagePoolId: settings.storagePoolId,
           sourcePath: item.relativePath,
           targetPath: target.relativePath,
@@ -592,30 +588,28 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       }
     }
 
-    const scope = await resolveStoragePoolScope(db, system, settings.rootId, settings.storagePoolId);
+    const scope = await resolveStoragePoolScope(dataRoot, system, settings.storagePoolId);
     const applied: ReturnType<typeof recordAppliedOperation>[] = [];
     try {
       for (const proposal of proposals) {
         await validateStoragePoolProposal(scope, proposal);
-        const result = await applyFileMutation(scope.root, proposal, path.join(context.config.dataDir, "trash"));
+        const result = await applyFileMutation(scope.workspace, proposal, path.join(context.config.paths.stateDir, "trash"));
         if (result.proposal.operation === "trash" && result.metadata.trashEntryId && result.targetPath) {
           createTrashEntry(db, {
             id: String(result.metadata.trashEntryId),
-            rootId: scope.root.id,
+            storagePoolId: scope.pool.id,
             originalPath: result.sourcePath ?? proposal.sourcePath ?? ".",
-            trashPath: path.join(context.config.dataDir, "trash", result.targetPath),
+            trashPath: path.join(context.config.paths.stateDir, "trash", result.targetPath),
             metadata: { ...result.metadata, storagePoolId: settings.storagePoolId }
           });
         }
         applied.push(recordAppliedOperation(db, {
-          approvalId: null,
           operation: result.proposal.operation,
           sourcePath: result.sourcePath,
           targetPath: result.targetPath,
           status: "applied",
           metadata: {
             ...result.metadata,
-            rootId: settings.rootId,
             storagePoolId: settings.storagePoolId,
             reversible: proposal.reversible
           }
@@ -623,13 +617,13 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       }
     } catch (error) {
       if (applied.length) {
-        enqueuePhotostaffJob(db, { settings, kind: "full_scan", path: settings.path });
+        enqueuePhotosJob(db, { settings, kind: "full_scan", path: settings.path });
       }
       const statusCode = error instanceof StorageScopeError ? error.statusCode : 400;
       reply.status(statusCode).send({ error: error instanceof Error ? error.message : String(error), operations: applied });
       return;
     }
-    enqueuePhotostaffJob(db, { settings, kind: "full_scan", path: settings.path });
+    enqueuePhotosJob(db, { settings, kind: "full_scan", path: settings.path });
     reply.send({ operations: applied });
   });
 
@@ -642,7 +636,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       reply.status(400).send({ error: `Select between 1 and ${MAX_BATCH_SIZE} photos` });
       return;
     }
-    const settings = getPhotostaffLibrarySettings(db);
+    const settings = getPhotosLibrarySettings(db);
     if (!settings) {
       reply.status(409).send({ error: "Photo library is not configured" });
       return;
@@ -665,7 +659,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   server.get<{ Params: { token: string } }>("/api/photos/exports/:token", async (request, reply) => {
     pruneExports(exports);
     const photoExport = exports.get(request.params.token);
-    const settings = getPhotostaffLibrarySettings(db);
+    const settings = getPhotosLibrarySettings(db);
     if (!photoExport || !settings || settings.updatedAt !== photoExport.libraryUpdatedAt) {
       reply.status(404).send({ error: "Photo export expired" });
       return;
@@ -691,18 +685,22 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   });
 }
 
-async function resolveLibraryScope(context: ApiRouteContext, settings: NonNullable<ReturnType<typeof getPhotostaffLibrarySettings>>) {
-  const scope = await resolveStoragePoolScope(context.db, context.system, settings.rootId, settings.storagePoolId);
+async function resolveLibraryScope(context: ApiRouteContext, settings: NonNullable<ReturnType<typeof getPhotosLibrarySettings>>) {
+  const scope = await resolveStoragePoolScope(
+    context.config.paths.dataRoot,
+    context.system,
+    settings.storagePoolId
+  );
   const library = await resolveScopedExistingPath(scope, settings.path);
   if (!(await stat(library.realPath)).isDirectory()) throw new StorageScopeError("Photo library is unavailable", 503);
   return { scope, library };
 }
 
 async function resolveCurrentAsset(context: ApiRouteContext, id: string) {
-  const settings = getPhotostaffLibrarySettings(context.db);
+  const settings = getPhotosLibrarySettings(context.db);
   if (!settings) return null;
-  const asset = getPhotostaffAsset(context.db, id, settings.updatedAt);
-  if (!asset || asset.rootId !== settings.rootId || asset.storagePoolId !== settings.storagePoolId) return null;
+  const asset = getPhotosAsset(context.db, id, settings.updatedAt);
+  if (!asset || asset.storagePoolId !== settings.storagePoolId) return null;
   const { scope, library } = await resolveLibraryScope(context, settings);
   const safe = await resolveScopedExistingPath(scope, asset.path);
   if (!isPathInside(library.realPath, safe.realPath)) return null;
@@ -715,15 +713,14 @@ async function sendDerivative(
   kind: "thumbnail" | "preview",
   reply: FastifyReply
 ): Promise<unknown> {
-  const settings = getPhotostaffLibrarySettings(context.db);
+  const settings = getPhotosLibrarySettings(context.db);
   if (!settings) {
     reply.status(404).send({ error: "Photo not found" });
     return;
   }
-  const asset = getPhotostaffAsset(context.db, id, settings.updatedAt);
+  const asset = getPhotosAsset(context.db, id, settings.updatedAt);
   if (
     !asset ||
-    asset.rootId !== settings.rootId ||
     asset.storagePoolId !== settings.storagePoolId ||
     asset.status !== "ready"
   ) {
@@ -745,7 +742,7 @@ async function sendDerivative(
     reply.status(404).send({ error: "Photo derivative is not available" });
     return;
   }
-  const cacheRoot = path.join(context.config.dataDir, PHOTOSTAFF_DATA_DIRECTORY_NAME);
+  const cacheRoot = path.join(context.config.paths.stateDir, PHOTOS_DATA_DIRECTORY_NAME);
   const candidatePath = path.resolve(cacheRoot, key);
   if (!isPathInside(cacheRoot, candidatePath)) {
     reply.status(404).send({ error: "Photo derivative is not available" });
@@ -798,7 +795,7 @@ function normalizeUploadFileName(value: string | undefined): string | null {
   if (!name || name === "." || name === ".." || name.includes("/") || name.includes("\\") || name.includes("\0")) return null;
   if (
     Buffer.byteLength(name, "utf8") > 255 ||
-    (!photostaffMediaKind(name) && photostaffExtension(name) !== PHOTOSTAFF_XMP_EXTENSION)
+    (!photosMediaKind(name) && photosExtension(name) !== PHOTOS_XMP_EXTENSION)
   ) return null;
   return name;
 }
@@ -881,8 +878,8 @@ async function resolveAssociatedSidecar(item: ResolvedPhotoAsset): Promise<{
     const stem = path.parse(item.asset.name).name.toLocaleLowerCase("und");
     const shared = actualByLower.get(`${stem}.xmp`);
     if (shared) {
-      const siblings = names.filter((name) => photostaffMediaKind(name) && path.parse(name).name.toLocaleLowerCase("und") === stem);
-      const rawSiblings = siblings.filter((name) => photostaffMediaKind(name) === "raw");
+      const siblings = names.filter((name) => photosMediaKind(name) && path.parse(name).name.toLocaleLowerCase("und") === stem);
+      const rawSiblings = siblings.filter((name) => photosMediaKind(name) === "raw");
       if (siblings.length === 1 || (rawSiblings.length === 1 && rawSiblings[0] === item.asset.name)) {
         sidecarName = shared;
       }
@@ -898,7 +895,7 @@ async function resolveAssociatedSidecar(item: ResolvedPhotoAsset): Promise<{
 }
 
 function emptyMetadataIndexStatus() {
-  return { schemaVersion: PHOTOSTAFF_METADATA_SCHEMA_VERSION, total: 0, indexed: 0, partial: 0, pending: 0 };
+  return { schemaVersion: PHOTOS_METADATA_SCHEMA_VERSION, total: 0, indexed: 0, partial: 0, pending: 0 };
 }
 
 function encodePhotoQueryCursor(cursor: { fingerprint: string; sortValue: string | number | null; id: string }): string {

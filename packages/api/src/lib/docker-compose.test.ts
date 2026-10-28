@@ -5,12 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import {
   createDockerComposeApp,
-  ensureNasRoots,
   getDockerComposeApp,
   listDockerComposeApps,
   openCyberOsDb,
   updateDockerComposeApp,
-  upsertRootReadiness,
   type DockerRegistryCredentialRecord,
   type CyberOsDatabase
 } from "@cyberos/db";
@@ -21,26 +19,18 @@ import { DockerHostAccessPolicy } from "./docker-host-access.js";
 
 let tempDir: string;
 let appsRoot: string;
-let nasRoot: string;
+let storagePool: string;
 let dockerShim: string;
 let db: CyberOsDatabase;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-docker-compose-"));
   appsRoot = path.join(tempDir, "apps");
-  nasRoot = path.join(tempDir, "nas");
+  storagePool = path.join(tempDir, "nas");
   dockerShim = path.join(tempDir, "docker");
-  await mkdir(nasRoot, { recursive: true });
+  await mkdir(storagePool, { recursive: true });
+  await mkdir(path.join(storagePool, ".cyberos-host-access-capacity"));
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "nas", name: "NAS", path: nasRoot }]);
-  upsertRootReadiness(db, {
-    rootId: "nas",
-    status: "ready",
-    reason: null,
-    source: null,
-    uuid: null,
-    fstype: null
-  });
   vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "success");
   await writeDockerShim();
 });
@@ -115,7 +105,7 @@ describe("DockerComposeService", () => {
     })).rejects.toThrow(/could not be parsed safely/);
 
     await mkdir(appsRoot, { recursive: true });
-    await symlink(nasRoot, path.join(appsRoot, "unsafe"));
+    await symlink(storagePool, path.join(appsRoot, "unsafe"));
     await expect(service.createApp({
       name: "Unsafe",
       projectKey: "unsafe",
@@ -127,37 +117,37 @@ describe("DockerComposeService", () => {
 
   it("classifies NAS bind mounts as high risk and rejects paths outside configured roots", async () => {
     const service = composeService();
-    const dataPath = path.join(nasRoot, "postgres");
+    const dataPath = path.join(storagePool, "postgres");
     await mkdir(dataPath);
     const validation = await service.validateApp({
       projectKey: "postgres",
       composeContent: `services:\n  app:\n    image: postgres:18\n    volumes:\n      - ${dataPath}:/var/lib/postgresql/data\n`,
       environment: []
     });
-    expect(validation).toMatchObject({ risk: "high", warnings: [expect.stringContaining("NAS bind mount")] });
+    expect(validation).toMatchObject({ risk: "high", warnings: [expect.stringContaining("storage pool bind mount")] });
 
     vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "resolved-safe-bind");
     await expect(service.validateApp({
       projectKey: "interpolated-safe",
       composeContent: "services:\n  app:\n    image: alpine\n    volumes:\n      - ${HOST_PATH}/data:/data\n",
-      environment: [{ key: "HOST_PATH", value: nasRoot }]
-    })).resolves.toMatchObject({ risk: "high", warnings: [expect.stringContaining("NAS bind mount")] });
+      environment: [{ key: "HOST_PATH", value: storagePool }]
+    })).resolves.toMatchObject({ risk: "high", warnings: [expect.stringContaining("storage pool bind mount")] });
     vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "success");
 
     await expect(service.validateApp({
       projectKey: "outside",
       composeContent: "services:\n  app:\n    image: alpine\n    volumes:\n      - /etc:/host-etc\n",
       environment: []
-    })).rejects.toThrow(/outside a ready NAS root/);
+    })).rejects.toThrow(/outside a ready storage pool/);
 
     const outsidePath = path.join(tempDir, "outside");
     await mkdir(outsidePath);
-    await symlink(outsidePath, path.join(nasRoot, "escape"));
+    await symlink(outsidePath, path.join(storagePool, "escape"));
     await expect(service.validateApp({
       projectKey: "symlink-escape",
-      composeContent: `services:\n  app:\n    image: alpine\n    volumes:\n      - ${path.join(nasRoot, "escape", "missing")}:/data\n`,
+      composeContent: `services:\n  app:\n    image: alpine\n    volumes:\n      - ${path.join(storagePool, "escape", "missing")}:/data\n`,
       environment: []
-    })).rejects.toThrow(/outside a ready NAS root/);
+    })).rejects.toThrow(/outside a ready storage pool/);
 
     await expect(service.validateApp({
       projectKey: "driver-options",
@@ -170,7 +160,7 @@ describe("DockerComposeService", () => {
       projectKey: "interpolated-escape",
       composeContent: "services:\n  app:\n    image: alpine\n    volumes:\n      - ${HOST_PATH}:/data\n",
       environment: [{ key: "HOST_PATH", value: "/etc" }]
-    })).rejects.toThrow(/outside a ready NAS root/);
+    })).rejects.toThrow(/outside a ready storage pool/);
 
     vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "resolved-elevated");
     await expect(service.validateApp({
@@ -240,7 +230,7 @@ describe("DockerComposeService", () => {
 
   it("materializes Host Access last and forces a full project recreation", async () => {
     vi.stubEnv("CYBEROS_TEST_COMPOSE_OUTCOME", "host-access");
-    const policy = new DockerHostAccessPolicy(db, { platform: "linux" });
+    const policy = hostAccessPolicy("linux");
     vi.stubEnv("CYBEROS_TEST_HOST_ACCESS_LABELS", JSON.stringify(policy.resolveCompose({
       hostAccess: [{
         service: "collector",
@@ -361,7 +351,7 @@ describe("DockerComposeService", () => {
       dockerConfig(),
       db,
       appsRoot,
-      new DockerHostAccessPolicy(db, { platform: "linux" })
+      hostAccessPolicy("linux")
     );
     await expect(service.validateApp({
       projectKey: "unsafe-access",
@@ -378,7 +368,7 @@ describe("DockerComposeService", () => {
       dockerConfig(),
       db,
       appsRoot,
-      new DockerHostAccessPolicy(db, { platform: "darwin" })
+      hostAccessPolicy("darwin")
     );
     await expect(service.validateApp({
       projectKey: "unavailable-access",
@@ -526,7 +516,7 @@ describe("DockerComposeService", () => {
 
   it("fails timed-out Compose commands and cleans temporary authentication", async () => {
     const config = dockerConfig();
-    const service = new DockerComposeService(() => config, db, appsRoot);
+    const service = new DockerComposeService(() => config, db, appsRoot, hostAccessPolicy());
     const created = await service.createApp({
       name: "Slow",
       projectKey: "slow",
@@ -555,7 +545,20 @@ while :; do sleep 1; done
 });
 
 function composeService(operationTimeoutMs = 5_000) {
-  return new DockerComposeService({ ...dockerConfig(), operationTimeoutMs }, db, appsRoot);
+  return new DockerComposeService(
+    { ...dockerConfig(), operationTimeoutMs },
+    db,
+    appsRoot,
+    hostAccessPolicy()
+  );
+}
+
+function hostAccessPolicy(platform: NodeJS.Platform = "linux"): DockerHostAccessPolicy {
+  return new DockerHostAccessPolicy(db, {
+    platform,
+    runtimeRoot: path.join(tempDir, "runtime"),
+    dataRoot: tempDir
+  });
 }
 
 async function writeDockerShim() {
@@ -583,7 +586,7 @@ if (args.includes("config")) {
   if (process.env.CYBEROS_TEST_COMPOSE_OUTCOME === "resolved-safe-bind") {
     console.log(JSON.stringify({ services: { app: { image: "alpine", volumes: [{
       type: "bind",
-      source: path.join(${JSON.stringify(nasRoot)}, "data"),
+      source: path.join(${JSON.stringify(storagePool)}, "data"),
       target: "/data"
     }] } } }));
     process.exit(0);

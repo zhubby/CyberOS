@@ -157,7 +157,7 @@ beforeEach(async () => {
           Labels: { "app.role": "media" }
         },
         HostConfig: { RestartPolicy: { Name: "unless-stopped" } },
-        Mounts: [{ Source: "/cyberos/data/primary/media", Destination: "/media", Mode: "rw", Type: "bind" }],
+        Mounts: [{ Source: "/cyberos/data/pool-1/media", Destination: "/media", Mode: "rw", Type: "bind" }],
         NetworkSettings: { Networks: { bridge: {} } }
       });
       return;
@@ -336,7 +336,7 @@ describe("DockerSocketClient", () => {
       command: "/init",
       entrypoint: ["/sbin/tini"],
       environment: ["TZ"],
-      mounts: [{ source: "/cyberos/data/primary/media", destination: "/media", mode: "rw", type: "bind" }],
+      mounts: [{ source: "/cyberos/data/pool-1/media", destination: "/media", mode: "rw", type: "bind" }],
       networks: ["bridge"],
       restartPolicy: "unless-stopped",
       hostname: "media",
@@ -489,7 +489,7 @@ describe("DockerSocketClient", () => {
       readOnlyRootfs: true,
       privileged: false,
       mounts: [
-        { type: "bind", source: "/cyberos/data/primary/media", target: "/media", readOnly: true },
+        { type: "bind", source: "/cyberos/data/pool-1/media", target: "/media", readOnly: true },
         { type: "volume", source: "config", target: "/config", readOnly: false, noCopy: true },
         { type: "tmpfs", target: "/tmp", readOnly: false, sizeBytes: 16_777_216, mode: 0o1777 }
       ],
@@ -542,7 +542,7 @@ describe("DockerSocketClient", () => {
           ReadonlyRootfs: true,
           Privileged: false,
           Mounts: [
-            { Type: "bind", Source: "/cyberos/data/primary/media", Target: "/media", ReadOnly: true },
+            { Type: "bind", Source: "/cyberos/data/pool-1/media", Target: "/media", ReadOnly: true },
             { Type: "volume", Source: "config", Target: "/config", ReadOnly: false, VolumeOptions: { NoCopy: true } },
             { Type: "tmpfs", Target: "/tmp", ReadOnly: false, TmpfsOptions: { SizeBytes: 16_777_216, Mode: 0o1777 } }
           ],

@@ -6,14 +6,18 @@ import {
   getOperationNotificationByOperation,
   updateOperationNotificationForOperation
 } from "@cyberos/db";
-import { inferMimeType, inferPreviewKind } from "@cyberos/nas-tools";
-import type { VodPlayerCommand, VodPlayerErrorCode, VodPlayerStatus } from "@cyberos/shared";
+import { inferMimeType, inferPreviewKind } from "@cyberos/storage-tools";
+import {
+  type VodPlayerCommand,
+  type VodPlayerErrorCode,
+  type VodPlayerStatus
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { createVodPlayerRuntime, VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 type VodPlayerCommandBody =
-  | { type: "play"; rootId?: string; storagePoolId?: string; path?: string; startPositionSeconds?: number; audioDeviceId?: string }
+  | { type: "play"; storagePoolId?: string; path?: string; startPositionSeconds?: number; audioDeviceId?: string }
   | { type: "pause" | "resume" | "toggle-pause" | "stop" | "retry" | "cycle-audio-track" | "cycle-subtitle-track"; sessionId?: string }
   | { type: "seek"; sessionId?: string; seconds?: number }
   | { type: "seek-relative"; sessionId?: string; seconds?: number }
@@ -69,8 +73,8 @@ async function buildCommand(body: VodPlayerCommandBody | undefined, context: Api
     throw new VodPlayerRuntimeError("VOD Player command is required", 400, "INVALID_COMMAND");
   }
   if (body.type === "play") {
-    if (!body.rootId?.trim() || !body.storagePoolId?.trim() || typeof body.path !== "string" || !body.path) {
-      throw new VodPlayerRuntimeError("A root, storage pool, and path are required", 400, "INVALID_PATH");
+    if (!body.storagePoolId?.trim() || typeof body.path !== "string" || !body.path) {
+      throw new VodPlayerRuntimeError("A storage pool and path are required", 400, "INVALID_PATH");
     }
     if (body.startPositionSeconds !== undefined && (!Number.isFinite(body.startPositionSeconds) || body.startPositionSeconds < 0)) {
       throw new VodPlayerRuntimeError("Start position must be non-negative", 400, "INVALID_COMMAND");
@@ -80,7 +84,7 @@ async function buildCommand(body: VodPlayerCommandBody | undefined, context: Api
       throw new VodPlayerRuntimeError("Bluetooth audio device is not selected in system settings", 400, "INVALID_COMMAND");
     }
     const audioDeviceId = body.audioDeviceId ?? configuredAudioDeviceId;
-    const scope = await resolveStoragePoolScope(context.db, context.system, body.rootId, body.storagePoolId);
+    const scope = await resolveStoragePoolScope(context.config.paths.dataRoot, context.system, body.storagePoolId);
     const safe = await resolveScopedExistingPath(scope, body.path);
     const metadata = await stat(safe.realPath);
     if (!metadata.isFile()) throw new VodPlayerRuntimeError("Selected path is not a file", 400, "INVALID_PATH");
@@ -89,7 +93,6 @@ async function buildCommand(body: VodPlayerCommandBody | undefined, context: Api
     }
     return {
       type: "play",
-      rootId: scope.root.id,
       storagePoolId: scope.pool.id,
       relativePath: safe.relativePath,
       ...(body.startPositionSeconds === undefined ? {} : { startPositionSeconds: body.startPositionSeconds }),

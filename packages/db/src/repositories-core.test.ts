@@ -22,11 +22,8 @@ import {
   defaultDownloadSettings,
   deleteDownloadTask,
   deleteSession,
-  ensureNasRoots,
   getAgentProviderSession,
   getAgentSessionCommand,
-  getApproval,
-  getDockerOperation,
   getDownloadSettings,
   getDownloadTask,
   getJob,
@@ -40,7 +37,6 @@ import {
   listEvents,
   listDockerOperations,
   listDockerRegistryCredentials,
-  listNasRoots,
   listMessages,
   listTranscriptItems,
   listOperationNotifications,
@@ -76,8 +72,6 @@ import {
   updateOperationNotificationForJob,
   type CyberOsDatabase
 } from "./index.js";
-import { createPiToolCallApproval } from "./repositories/approvals.js";
-import { createDockerOperationApproval } from "./repositories/docker-operations.js";
 
 let tempDir: string;
 let db: CyberOsDatabase;
@@ -85,7 +79,6 @@ let db: CyberOsDatabase;
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-db-"));
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
 afterEach(async () => {
@@ -100,7 +93,7 @@ describe("core repositories", () => {
     expect(String(journalMode).toLowerCase()).toBe("wal");
     expect(busyTimeout).toBe(30_000);
 
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List this folder"
@@ -132,8 +125,8 @@ describe("core repositories", () => {
   });
 
   it("serializes Agent jobs per session while allowing different sessions to run", () => {
-    const firstSession = createSession(db, { rootId: "local" });
-    const secondSession = createSession(db, { rootId: "local" });
+    const firstSession = createSession(db, { });
+    const secondSession = createSession(db, { });
     const first = createUserMessageAndJob(db, { sessionId: firstSession.id, content: "First" });
     const blocked = createUserMessageAndJob(db, { sessionId: firstSession.id, content: "Second" });
     const parallel = createUserMessageAndJob(db, { sessionId: secondSession.id, content: "Parallel" });
@@ -146,7 +139,7 @@ describe("core repositories", () => {
   });
 
   it("returns the original prompt job for an idempotency key without duplicating transcript state", () => {
-    const session = createSession(db, { rootId: "local", currentPath: "docs" });
+    const session = createSession(db, { currentPath: "docs" });
     const first = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "First request",
@@ -167,7 +160,7 @@ describe("core repositories", () => {
   });
 
   it("renews owned leases and conservatively fails expired Agent jobs", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Long turn" });
     const claimedAt = new Date("2026-10-27T00:00:00.000Z");
     expect(claimNextJob(db, { workerId: "worker-1", leaseMs: 1_000, now: claimedAt })?.id).toBe(job.id);
@@ -204,7 +197,7 @@ describe("core repositories", () => {
   });
 
   it("keeps session commands idempotent and restricts active commands to the lease owner", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Long turn" });
     const now = new Date();
     expect(claimNextJob(db, { workerId: "worker-1", leaseMs: 30_000, now })?.id).toBe(job.id);
@@ -259,7 +252,7 @@ describe("core repositories", () => {
   });
 
   it("leases one command per session across workers and recovers only expired owners", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const first = createAgentSessionCommand(db, {
       sessionId: session.id,
       idempotencyKey: "stats-first",
@@ -308,7 +301,7 @@ describe("core repositories", () => {
   });
 
   it("does not claim a prompt while a live idle command owns the session", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createAgentSessionCommand(db, {
       sessionId: session.id,
       idempotencyKey: "compact-before-prompt",
@@ -339,7 +332,7 @@ describe("core repositories", () => {
   });
 
   it("does not resume an approval continuation while a live command owns the session", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Inspect this folder"
@@ -396,7 +389,7 @@ describe("core repositories", () => {
   });
 
   it("deduplicates projected Pi events and their transcript entries by source identity", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Hello" });
     const first = appendEvent(db, {
       sessionId: session.id,
@@ -425,7 +418,7 @@ describe("core repositories", () => {
   });
 
   it("persists visible chat items with one monotonic transaction sequence", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const first = createUserMessageAndJob(db, { sessionId: session.id, content: "First" });
     const reply = appendEvent(db, {
       sessionId: session.id,
@@ -479,34 +472,8 @@ describe("core repositories", () => {
     )).toBe(false);
   });
 
-  it("filters roots removed from the current config", () => {
-    ensureNasRoots(db, [
-      { id: "local", name: "Local", path: tempDir },
-      { id: "archive", name: "Archive", path: path.join(tempDir, "archive") }
-    ]);
-    expect(listNasRoots(db).map((root) => root.id)).toEqual(["archive", "local"]);
-
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
-
-    expect(listNasRoots(db).map((root) => root.id)).toEqual(["local"]);
-  });
-
-  it("does not rewrite unchanged NAS root configuration", () => {
-    const sentinel = "2020-01-01T00:00:00.000Z";
-    db.prepare("UPDATE nas_roots SET updated_at = ? WHERE id = ?").run(sentinel, "local");
-
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
-    expect(db.prepare("SELECT updated_at FROM nas_roots WHERE id = ?").pluck().get("local")).toBe(sentinel);
-
-    ensureNasRoots(db, [{ id: "local", name: "Primary", path: tempDir }]);
-    expect(db.prepare("SELECT name, updated_at FROM nas_roots WHERE id = ?").get("local")).toMatchObject({
-      name: "Primary",
-      updated_at: expect.not.stringMatching(/^2020-/u)
-    });
-  });
-
   it("guards terminal job status transitions", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List this folder"
@@ -517,7 +484,7 @@ describe("core repositories", () => {
   });
 
   it("cancels pending capability approvals with their Agent job", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Inspect two files",
@@ -531,7 +498,11 @@ describe("core repositories", () => {
       risk: "low",
       redactedInput: { file },
       proposal: { summary: `Read ${file}` },
-      privatePayload: { kind: "pi_tool", file },
+      privatePayload: {
+        kind: "pi_mcp_file",
+        capabilityId: "cyberos.files.read",
+        input: { storagePoolId: "pool-1", path: file }
+      },
       expiresAt
     }));
     for (const proposal of proposals) {
@@ -551,7 +522,7 @@ describe("core repositories", () => {
   });
 
   it("persists one evolving operation notification for an internal action job", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { message, job, notification } = createActionMessageAndJob(db, {
       sessionId: session.id,
       content: "Move reports into archive",
@@ -609,7 +580,7 @@ describe("core repositories", () => {
   });
 
   it("lists, marks, and prunes operation notifications with a 30-day retention window", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const first = createActionMessageAndJob(db, {
       sessionId: session.id,
       content: "Restart container alpha",
@@ -637,7 +608,7 @@ describe("core repositories", () => {
   });
 
   it("marks action events for the notification audience while chat events stay in chat", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const chat = createUserMessageAndJob(db, { sessionId: session.id, content: "Hello" });
     const action = createActionMessageAndJob(db, {
       sessionId: session.id,
@@ -655,7 +626,7 @@ describe("core repositories", () => {
   });
 
   it("persists Pi provider sessions by CyberOS session id", () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
 
     saveAgentProviderSession(db, {
       sessionId: session.id,
@@ -679,7 +650,7 @@ describe("core repositories", () => {
     });
   });
 
-  it("normalizes legacy model provider settings when loading", () => {
+  it("rejects invalid or obsolete model provider settings", () => {
     const settingsKey = "model_provider";
     db.prepare(
       "INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)"
@@ -687,25 +658,18 @@ describe("core repositories", () => {
       settingsKey,
       JSON.stringify({
         providerName: "openrouter",
-        displayName: "OpenRouter",
         baseUrl: "https://api.example.com/v1",
         model: "gpt-4o",
-        apiKey: "legacy-secret"
+        apiKey: "provider-secret"
       }),
       "2026-01-01T00:00:00.000Z"
     );
 
-    expect(getModelProviderSettings(db)).toMatchObject({
-      providerName: "openai",
-      baseUrl: "https://api.example.com/v1",
-      model: "gpt-4o",
-      apiKey: "legacy-secret"
-    });
-    expect(getModelProviderSettings(db)).not.toHaveProperty("displayName");
+    expect(() => getModelProviderSettings(db)).toThrow("Invalid model provider name");
 
     db.prepare("UPDATE system_settings SET value_json = ?, updated_at = ? WHERE key = ?").run(
       JSON.stringify({
-        provider: "anthropic-compatible",
+        provider: "anthropic",
         baseUrl: "https://api.anthropic.com",
         model: "anthropic/claude-sonnet-4",
         apiKey: null
@@ -714,12 +678,7 @@ describe("core repositories", () => {
       settingsKey
     );
 
-    expect(getModelProviderSettings(db)).toMatchObject({
-      providerName: "anthropic",
-      baseUrl: "https://api.anthropic.com",
-      model: "anthropic/claude-sonnet-4",
-      apiKey: null
-    });
+    expect(() => getModelProviderSettings(db)).toThrow("Invalid model provider name");
   });
 
   it("stores capability policies with read, mutation, and shell defaults", () => {
@@ -766,14 +725,20 @@ describe("core repositories", () => {
 
   it("stores download settings and enforces the supported concurrency range", () => {
     expect(getDownloadSettings(db)).toBeNull();
-    expect(defaultDownloadSettings()).toMatchObject({ concurrency: 1 });
+    const defaults = defaultDownloadSettings();
+    const { updatedAt: _updatedAt, ...defaultValues } = defaults;
+    expect(defaults).toMatchObject({ concurrency: 1 });
 
-    expect(saveDownloadSettings(db, { concurrency: 3 })).toMatchObject({
+    expect(saveDownloadSettings(db, { ...defaultValues, concurrency: 3 })).toMatchObject({
       concurrency: 3
     });
     expect(getDownloadSettings(db)).toMatchObject({ concurrency: 3 });
-    expect(() => saveDownloadSettings(db, { concurrency: 0 })).toThrow(/between 1 and 3/);
-    expect(() => saveDownloadSettings(db, { concurrency: 4 })).toThrow(/between 1 and 3/);
+    expect(() => saveDownloadSettings(db, { ...defaultValues, concurrency: 0 })).toThrow(/between 1 and 3/);
+    expect(() => saveDownloadSettings(db, { ...defaultValues, concurrency: 4 })).toThrow(/between 1 and 3/);
+
+    db.prepare("UPDATE system_settings SET value_json = ? WHERE key = 'download_settings'")
+      .run(JSON.stringify({ concurrency: 2 }));
+    expect(getDownloadSettings(db)).toBeNull();
   });
 
   it("claims download tasks in FIFO order and recovers expired leases", () => {
@@ -781,8 +746,7 @@ describe("core repositories", () => {
     const newer = new Date("2026-01-01T00:00:01.000Z");
     const first = createDownloadTask(db, {
       url: "https://example.com/first.bin",
-      rootId: "local",
-      storagePoolId: "/dev/md0",
+      storagePoolId: "pool-1",
       targetDirectory: "downloads",
       targetFileName: "first.bin",
       targetPath: "downloads/first.bin",
@@ -790,8 +754,7 @@ describe("core repositories", () => {
     });
     const second = createDownloadTask(db, {
       url: "https://example.com/second.bin",
-      rootId: "local",
-      storagePoolId: "/dev/md0",
+      storagePoolId: "pool-1",
       targetDirectory: "downloads",
       targetFileName: "second.bin",
       targetPath: "downloads/second.bin",
@@ -831,8 +794,7 @@ describe("core repositories", () => {
   it("guards download state transitions and progress ownership", () => {
     const task = createDownloadTask(db, {
       url: "https://example.com/archive.zip",
-      rootId: "local",
-      storagePoolId: "/dev/md0",
+      storagePoolId: "pool-1",
       targetDirectory: "downloads",
       targetFileName: "archive.zip",
       targetPath: "downloads/archive.zip"
@@ -888,8 +850,7 @@ describe("core repositories", () => {
   it("marks completed downloads with the associated file operation", () => {
     const task = createDownloadTask(db, {
       url: "https://example.com/video.mp4",
-      rootId: "local",
-      storagePoolId: "/dev/md0",
+      storagePoolId: "pool-1",
       targetDirectory: "media",
       targetFileName: "video.mp4",
       targetPath: "media/video.mp4"
@@ -899,13 +860,11 @@ describe("core repositories", () => {
       leaseMs: 1_000
     })?.id).toBe(task.id);
     const operation = recordAppliedOperation(db, {
-      approvalId: null,
       operation: "download",
       targetPath: "media/video.mp4",
       status: "applied",
       metadata: {
-        rootId: "local",
-        storagePoolId: "/dev/md0",
+        storagePoolId: "pool-1",
         reversible: true
       }
     });
@@ -921,74 +880,6 @@ describe("core repositories", () => {
       receivedBytes: 1024,
       totalBytes: 1024,
       fileOperationId: operation.id
-    });
-  });
-
-  it("creates Pi tool approvals without file operation rows", () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "run ls"
-    });
-
-    const approval = createPiToolCallApproval(db, {
-      jobId: job.id,
-      proposal: {
-        toolCallId: "tool-1",
-        toolName: "bash",
-        args: { command: "ls" },
-        cwd: tempDir,
-        risk: "medium",
-        summary: "Run shell command: ls"
-      }
-    });
-
-    expect(getApproval(db, approval.id)).toMatchObject({
-      kind: "pi_tool_call",
-      proposal: [
-        {
-          toolName: "bash",
-          summary: "Run shell command: ls"
-        }
-      ]
-    });
-  });
-
-  it("creates Docker operation approvals and operation rows", () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "Start media container",
-      status: "waiting_approval"
-    });
-
-    const { approval, operation } = createDockerOperationApproval(db, {
-      jobId: job.id,
-      proposal: {
-        action: "start",
-        targetType: "container",
-        containerId: "container-1",
-        containerName: "media",
-        risk: "medium",
-        summary: "Start Docker container media"
-      }
-    });
-
-    expect(getApproval(db, approval.id)).toMatchObject({
-      kind: "docker_operation",
-      proposal: [
-        {
-          action: "start",
-          containerId: "container-1"
-        }
-      ]
-    });
-    expect(getDockerOperation(db, operation.id)).toMatchObject({
-      approvalId: approval.id,
-      action: "start",
-      targetType: "container",
-      targetId: "container-1",
-      status: "proposed"
     });
   });
 
@@ -1022,16 +913,15 @@ describe("core repositories", () => {
     });
 
     expect(container).toMatchObject({
-      approvalId: null,
       targetId: "media"
     });
-    expect(volume).toMatchObject({ approvalId: null, targetId: "media-data" });
-    expect(network).toMatchObject({ approvalId: null, targetId: "backend" });
+    expect(volume).toMatchObject({ targetId: "media-data" });
+    expect(network).toMatchObject({ targetId: "backend" });
     expect(listDockerOperations(db).map((item) => item.id).sort()).toEqual(
       [container.id, volume.id, network.id].sort()
     );
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
-    expect(db.prepare("SELECT COUNT(*) FROM pending_approvals").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
   });
 
   it("stores multiple Docker registry credentials and preserves secrets on partial updates", () => {
@@ -1083,7 +973,7 @@ describe("core repositories", () => {
     expect(listDockerRegistryCredentials(db)).toEqual([existing]);
   });
 
-  it("ignores malformed and legacy Docker registry setting entries", () => {
+  it("ignores malformed and incomplete Docker registry setting entries", () => {
     db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)").run(
       "docker_registry_credentials",
       "not-json",
@@ -1098,9 +988,17 @@ describe("core repositories", () => {
           name: "Docker Hub",
           serverAddress: "docker.io",
           username: "user",
-          password: "secret"
+          password: "secret",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z"
         },
-        { id: "legacy", name: "Missing password" }
+        {
+          id: "incomplete",
+          name: "Missing timestamps",
+          serverAddress: "registry.example.com",
+          username: "user",
+          password: "secret"
+        }
       ]),
       "docker_registry_credentials"
     );

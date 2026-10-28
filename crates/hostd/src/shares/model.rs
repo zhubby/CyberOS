@@ -73,16 +73,7 @@ impl Default for ShareOptions {
 #[serde(rename_all = "camelCase")]
 pub struct ShareApplyRequest {
     pub settings: ShareSettings,
-    pub roots: Vec<NasRoot>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdNasRoot"))]
-#[serde(rename_all = "camelCase")]
-pub struct NasRoot {
-    pub id: String,
-    pub path: PathBuf,
+    pub data_root: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,7 +103,7 @@ pub struct ShareDefinition {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub root_id: String,
+    pub storage_pool_id: String,
     pub path: PathBuf,
     pub protocols: ShareProtocols,
 }

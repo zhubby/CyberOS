@@ -16,9 +16,9 @@ export function startBackupRun(db: CyberOsDatabase, input: { kind: BackupRunKind
   return { id, kind: input.kind, status: "running", startedAt: now, finishedAt: null, snapshotIds: [], files: 0, bytes: 0, verified: false, error: null, failures: [] };
 }
 
-export function recordBackupFailure(db: CyberOsDatabase, input: { runId: string; rootId?: string | null; path?: string | null; code?: string | null; reason: string; now?: Date }): void {
-  db.prepare("INSERT INTO backup_failures (id, run_id, root_id, path, code, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .run(randomUUID(), input.runId, input.rootId ?? null, input.path ?? null, input.code ?? null, input.reason, (input.now ?? new Date()).toISOString());
+export function recordBackupFailure(db: CyberOsDatabase, input: { runId: string; storagePoolId?: string | null; path?: string | null; code?: string | null; reason: string; now?: Date }): void {
+  db.prepare("INSERT INTO backup_failures (id, run_id, storage_pool_id, path, code, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(randomUUID(), input.runId, input.storagePoolId ?? null, input.path ?? null, input.code ?? null, input.reason, (input.now ?? new Date()).toISOString());
 }
 
 export function finishBackupRun(db: CyberOsDatabase, input: { runId: string; status: Exclude<BackupRunStatus, "never_run" | "validating" | "running">; snapshotIds?: string[]; files?: number; bytes?: number; verified?: boolean; error?: string | null; finishedAt?: Date }): BackupRunSummary | null {
@@ -41,7 +41,7 @@ export function listBackupRuns(db: CyberOsDatabase, limit = 30): BackupRunSummar
 }
 
 function mapBackupRun(db: CyberOsDatabase, row: DbBackupRunRow): BackupRunSummary {
-  const failures = db.prepare("SELECT root_id, path, code, reason FROM backup_failures WHERE run_id = ? ORDER BY created_at ASC, id ASC").all(row.id) as DbBackupFailureRow[];
+  const failures = db.prepare("SELECT storage_pool_id, path, code, reason FROM backup_failures WHERE run_id = ? ORDER BY created_at ASC, id ASC").all(row.id) as DbBackupFailureRow[];
   let snapshotIds: string[] = [];
   try {
     const parsed = JSON.parse(row.snapshot_ids_json) as unknown;
@@ -56,7 +56,7 @@ function mapBackupRun(db: CyberOsDatabase, row: DbBackupRunRow): BackupRunSummar
     snapshotIds, files: row.files, bytes: row.bytes,
     verified: row.verified === 1, error: row.error,
     failures: failures.map((failure): BackupFailure => ({
-      ...(failure.root_id ? { rootId: failure.root_id } : {}),
+      ...(failure.storage_pool_id ? { storagePoolId: failure.storage_pool_id } : {}),
       ...(failure.path ? { path: failure.path } : {}),
       ...(failure.code ? { code: failure.code } : {}),
       reason: failure.reason

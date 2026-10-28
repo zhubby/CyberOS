@@ -12,7 +12,7 @@ describe("share service status", () => {
       shares: [{
         id: "shares",
         name: "Shares",
-        rootId: "primary",
+        storagePoolId: "pool-1",
         path: "pool1/Shares",
         description: "",
         protocols: {

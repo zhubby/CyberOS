@@ -14,13 +14,12 @@ type DbResult<T> = Result<T, DownloadError>;
 type DbJob = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
 
 const TASK_COLUMNS: &str = "
-  d.id, d.url, d.root_id, d.storage_pool_id, d.target_directory,
+  d.id, d.url, d.storage_pool_id, d.target_directory,
   d.target_file_name, d.target_path, d.partial_path, d.status,
   d.received_bytes, d.total_bytes, d.speed_bytes_per_second,
   d.etag, d.last_modified, d.worker_id, d.lease_expires_at,
   d.phase, d.download_mode, d.expected_sha256, d.actual_sha256,
-  d.retry_count, d.next_retry_at, d.control_requested, d.segment_count,
-  r.path
+  d.retry_count, d.next_retry_at, d.control_requested, d.segment_count
 ";
 
 #[derive(Clone)]
@@ -32,7 +31,6 @@ pub struct Db {
 pub struct Task {
     pub id: String,
     pub url: String,
-    pub root_id: String,
     pub storage_pool_id: String,
     pub target_directory: String,
     pub target_file_name: String,
@@ -54,7 +52,6 @@ pub struct Task {
     pub next_retry_at: Option<String>,
     pub control_requested: Option<String>,
     pub segment_count: u32,
-    pub root_path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -243,7 +240,7 @@ impl Db {
                 .call(|connection| {
                     let found: Option<i64> = connection
                         .query_row(
-                            "SELECT 1 FROM schema_migrations WHERE id = '024_rust_indexer'",
+                            "SELECT 1 FROM schema_migrations WHERE id = '001_cyberos_2_0'",
                             [],
                             |row| row.get(0),
                         )
@@ -259,7 +256,7 @@ impl Db {
             if started.elapsed() >= timeout {
                 return Err(DownloadError::new(
                     ErrorCode::Database,
-                    "database migration 024_rust_indexer is not available",
+                    "CyberOS 2.0 database schema is not available",
                     true,
                 ));
             }
@@ -408,7 +405,7 @@ impl Db {
                   AND NOT EXISTS (SELECT 1 FROM download_publish_journal j WHERE j.task_id = download_tasks.id) \
                   ORDER BY COALESCE(next_retry_at, created_at), created_at LIMIT 1) \
                 AND status = 'queued' \
-                RETURNING {}", TASK_COLUMNS.replace("d.", "").replace("r.path", "(SELECT path FROM nas_roots WHERE id = root_id)"));
+                RETURNING {}", TASK_COLUMNS.replace("d.", ""));
             connection.query_row(&sql, params![worker_id, lease_expires, now], map_task)
                 .optional().map_err(DownloadError::database)
         }).await
@@ -417,9 +414,13 @@ impl Db {
     pub async fn get_task(&self, task_id: &str) -> DbResult<Option<Task>> {
         let task_id = task_id.to_owned();
         self.call(move |connection| {
-            let sql = format!("SELECT {TASK_COLUMNS} FROM download_tasks d JOIN nas_roots r ON r.id = d.root_id WHERE d.id = ?");
-            connection.query_row(&sql, [task_id], map_task).optional().map_err(DownloadError::database)
-        }).await
+            let sql = format!("SELECT {TASK_COLUMNS} FROM download_tasks d WHERE d.id = ?");
+            connection
+                .query_row(&sql, [task_id], map_task)
+                .optional()
+                .map_err(DownloadError::database)
+        })
+        .await
     }
 
     pub async fn progress(
@@ -729,7 +730,6 @@ impl Db {
                 ));
             }
             let metadata = serde_json::json!({
-                "rootId": task.root_id,
                 "storagePoolId": task.storage_pool_id,
                 "reversible": true,
                 "url": task.url,
@@ -738,8 +738,8 @@ impl Db {
                 "downloadMode": mode
             });
             transaction.execute(
-                "INSERT OR IGNORE INTO file_operations (id, approval_id, operation, source_path, target_path, status, metadata_json, created_at, updated_at) \
-                 VALUES (?, NULL, 'download', NULL, ?, 'applied', ?, ?, ?)",
+                "INSERT OR IGNORE INTO file_operations (id, operation, source_path, target_path, status, metadata_json, created_at, updated_at) \
+                 VALUES (?, 'download', NULL, ?, 'applied', ?, ?, ?)",
                 params![journal.operation_id, task.target_path, metadata.to_string(), now, now],
             ).map_err(DownloadError::database)?;
             transaction.execute(
@@ -751,13 +751,13 @@ impl Db {
                     journal.operation_id, now, journal.task_id],
             ).map_err(DownloadError::database)?;
             transaction.execute(
-                "INSERT INTO index_queue (id, root_id, storage_pool_id, path, recursive, kind, generation, priority, status, created_at, updated_at) \
-                 VALUES (?, ?, ?, ?, 0, 'incremental', 1, 50, 'queued', ?, ?) \
-                 ON CONFLICT(root_id, path) DO UPDATE SET storage_pool_id = excluded.storage_pool_id, \
+                "INSERT INTO index_queue (id, storage_pool_id, path, recursive, kind, generation, priority, status, created_at, updated_at) \
+                 VALUES (?, ?, ?, 0, 'incremental', 1, 50, 'queued', ?, ?) \
+                 ON CONFLICT(storage_pool_id, path) DO UPDATE SET \
                    generation = index_queue.generation + 1, priority = MAX(index_queue.priority, 50), status = 'queued', \
                    retry_count = 0, next_retry_at = NULL, worker_id = NULL, lease_expires_at = NULL, \
                    error = NULL, error_code = NULL, updated_at = excluded.updated_at, finished_at = NULL",
-                params![format!("{}-index", journal.operation_id), task.root_id, task.storage_pool_id, task.target_path, now, now],
+                params![format!("{}-index", journal.operation_id), task.storage_pool_id, task.target_path, now, now],
             ).map_err(DownloadError::database)?;
             transaction.execute("DELETE FROM download_publish_journal WHERE task_id = ?", [&journal.task_id])
                 .map_err(DownloadError::database)?;
@@ -898,31 +898,29 @@ fn map_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
     Ok(Task {
         id: row.get(0)?,
         url: row.get(1)?,
-        root_id: row.get(2)?,
-        storage_pool_id: row.get(3)?,
-        target_directory: row.get(4)?,
-        target_file_name: row.get(5)?,
-        target_path: row.get(6)?,
-        partial_path: row.get(7)?,
-        status: row.get(8)?,
-        received_bytes: row.get::<_, i64>(9)?.max(0) as u64,
+        storage_pool_id: row.get(2)?,
+        target_directory: row.get(3)?,
+        target_file_name: row.get(4)?,
+        target_path: row.get(5)?,
+        partial_path: row.get(6)?,
+        status: row.get(7)?,
+        received_bytes: row.get::<_, i64>(8)?.max(0) as u64,
         total_bytes: row
-            .get::<_, Option<i64>>(10)?
+            .get::<_, Option<i64>>(9)?
             .map(|value| value.max(0) as u64),
-        speed_bytes_per_second: row.get::<_, i64>(11)?.max(0) as u64,
-        etag: row.get(12)?,
-        last_modified: row.get(13)?,
-        worker_id: row.get(14)?,
-        lease_expires_at: row.get(15)?,
-        phase: row.get(16)?,
-        download_mode: row.get(17)?,
-        expected_sha256: row.get(18)?,
-        actual_sha256: row.get(19)?,
-        retry_count: row.get::<_, i64>(20)?.max(0) as u32,
-        next_retry_at: row.get(21)?,
-        control_requested: row.get(22)?,
-        segment_count: row.get::<_, i64>(23)?.max(0) as u32,
-        root_path: row.get(24)?,
+        speed_bytes_per_second: row.get::<_, i64>(10)?.max(0) as u64,
+        etag: row.get(11)?,
+        last_modified: row.get(12)?,
+        worker_id: row.get(13)?,
+        lease_expires_at: row.get(14)?,
+        phase: row.get(15)?,
+        download_mode: row.get(16)?,
+        expected_sha256: row.get(17)?,
+        actual_sha256: row.get(18)?,
+        retry_count: row.get::<_, i64>(19)?.max(0) as u32,
+        next_retry_at: row.get(20)?,
+        control_requested: row.get(21)?,
+        segment_count: row.get::<_, i64>(22)?.max(0) as u32,
     })
 }
 
@@ -988,14 +986,13 @@ fn invalid_setting(name: &str) -> DownloadError {
 
 #[cfg(test)]
 pub(crate) const TEST_SCHEMA: &str = r#"
-CREATE TABLE nas_roots (id TEXT PRIMARY KEY, path TEXT NOT NULL);
 CREATE TABLE file_operations (
-  id TEXT PRIMARY KEY, approval_id TEXT, operation TEXT NOT NULL, source_path TEXT,
+  id TEXT PRIMARY KEY, operation TEXT NOT NULL, source_path TEXT,
   target_path TEXT, status TEXT NOT NULL, metadata_json TEXT NOT NULL,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE download_tasks (
-  id TEXT PRIMARY KEY, url TEXT NOT NULL, root_id TEXT NOT NULL,
+  id TEXT PRIMARY KEY, url TEXT NOT NULL,
   storage_pool_id TEXT NOT NULL, target_directory TEXT NOT NULL,
   target_file_name TEXT NOT NULL, target_path TEXT NOT NULL, partial_path TEXT NOT NULL,
   status TEXT NOT NULL, received_bytes INTEGER NOT NULL DEFAULT 0, total_bytes INTEGER,
@@ -1025,12 +1022,12 @@ CREATE TABLE download_workers (
   started_at TEXT NOT NULL, heartbeat_at TEXT NOT NULL
 );
 CREATE TABLE index_queue (
-  id TEXT PRIMARY KEY, root_id TEXT NOT NULL, storage_pool_id TEXT, path TEXT NOT NULL,
+  id TEXT PRIMARY KEY, storage_pool_id TEXT NOT NULL, path TEXT NOT NULL,
   recursive INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 1,
   priority INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'queued', retry_count INTEGER NOT NULL DEFAULT 0,
   next_retry_at TEXT, worker_id TEXT, lease_expires_at TEXT, error TEXT, error_code TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
-  UNIQUE(root_id, path)
+  UNIQUE(storage_pool_id, path)
 );
 CREATE TABLE system_settings (
   key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at TEXT NOT NULL
@@ -1049,14 +1046,11 @@ mod tests {
             connection
                 .execute_batch(TEST_SCHEMA)
                 .map_err(DownloadError::database)?;
-            connection
-                .execute("INSERT INTO nas_roots (id, path) VALUES ('root', '/tmp')", [])
-                .map_err(DownloadError::database)?;
             connection.execute(
-                "INSERT INTO download_tasks (id, url, root_id, storage_pool_id, target_directory, \
+                "INSERT INTO download_tasks (id, url, storage_pool_id, target_directory, \
                    target_file_name, target_path, partial_path, status, worker_id, lease_expires_at, \
                    created_at, updated_at) VALUES \
-                   ('task', 'https://example.com/file', 'root', '/tmp', '.', 'file', 'file', '.part', \
+                   ('task', 'https://example.com/file', 'pool-1', '.', 'file', 'file', '.part', \
                     'running', 'owner', ?, ?, ?)",
                 params![future_iso(Duration::from_secs(60)), now_iso(), now_iso()],
             ).map_err(DownloadError::database)?;
@@ -1104,12 +1098,6 @@ mod tests {
         db.test_call(|connection| {
             connection
                 .execute_batch(TEST_SCHEMA)
-                .map_err(DownloadError::database)?;
-            connection
-                .execute(
-                    "INSERT INTO nas_roots (id, path) VALUES ('root', '/tmp')",
-                    [],
-                )
                 .map_err(DownloadError::database)?;
             connection
                 .execute(
@@ -1210,15 +1198,14 @@ mod tests {
             .test_call(|connection| {
                 connection
                     .query_row(
-                        "SELECT root_id, storage_pool_id, path, generation, status FROM index_queue WHERE root_id = 'root' AND path = 'complete.bin'",
+                        "SELECT storage_pool_id, path, generation, status FROM index_queue WHERE storage_pool_id = 'pool-1' AND path = 'complete.bin'",
                         [],
                         |row| {
                             Ok((
                                 row.get::<_, String>(0)?,
                                 row.get::<_, String>(1)?,
-                                row.get::<_, String>(2)?,
-                                row.get::<_, i64>(3)?,
-                                row.get::<_, String>(4)?,
+                                row.get::<_, i64>(2)?,
+                                row.get::<_, String>(3)?,
                             ))
                         },
                     )
@@ -1229,8 +1216,7 @@ mod tests {
         assert_eq!(
             queued_index,
             (
-                "root".to_owned(),
-                "/tmp".to_owned(),
+                "pool-1".to_owned(),
                 "complete.bin".to_owned(),
                 1,
                 "queued".to_owned()
@@ -1298,9 +1284,9 @@ mod tests {
     fn insert_queued_task(connection: &Connection, id: &str) -> DbResult<()> {
         connection
             .execute(
-                "INSERT INTO download_tasks (id, url, root_id, storage_pool_id, target_directory, \
+                "INSERT INTO download_tasks (id, url, storage_pool_id, target_directory, \
                target_file_name, target_path, partial_path, status, created_at, updated_at) \
-             VALUES (?, 'https://example.com/file', 'root', '/tmp', '.', ?, ?, ?, 'queued', ?, ?)",
+             VALUES (?, 'https://example.com/file', 'pool-1', '.', ?, ?, ?, 'queued', ?, ?)",
                 params![
                     id,
                     format!("{id}.bin"),

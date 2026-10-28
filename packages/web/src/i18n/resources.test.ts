@@ -19,13 +19,13 @@ describe("i18n resources", () => {
       }
     });
 
-    expect(instance.t("chat.deleteSessionBody", { title: "Root agent" })).toBe(
-      "Root agent and its chat history will be removed from CyberOS."
+    expect(instance.t("chat.deleteSessionBody", { title: "Workspace agent" })).toBe(
+      "Workspace agent and its chat history will be removed from CyberOS."
     );
 
     await instance.changeLanguage("zh-CN");
-    expect(instance.t("chat.deleteSessionBody", { title: "根目录 agent" })).toBe(
-      "根目录 agent 及其聊天记录将从 CyberOS 中移除。"
+    expect(instance.t("chat.deleteSessionBody", { title: "工作区 agent" })).toBe(
+      "工作区 agent 及其聊天记录将从 CyberOS 中移除。"
     );
     expect(instance.t("preview.cannotPreview", { size: "8 KB" })).toBe("8 KB 无法内联预览。");
   });

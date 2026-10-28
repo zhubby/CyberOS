@@ -22,7 +22,7 @@ const relativePath: JsonSchema = {
   maxLength: 4096,
   pattern: "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
 };
-const rootId = id(128);
+const storagePoolId = id(128);
 const cursor = nullableText(4096);
 const limit = (maximum = 200): JsonSchema => integer(1, maximum);
 const idempotencyKey: JsonSchema = { type: "string", minLength: 8, maxLength: 200 };
@@ -96,21 +96,21 @@ const shareProtocols = strictObject({
 const shareDefinition = strictObject({
   id: id(64),
   name: nonEmptyText(128),
-  rootId,
+  storagePoolId,
   path: relativePath,
   description: text(500),
   protocols: shareProtocols
-}, ["id", "name", "rootId", "path"]);
+}, ["id", "name", "storagePoolId", "path"]);
 
 const dockerMount = {
   oneOf: [
     strictObject({
       type: { const: "bind" },
-      rootId,
+      storagePoolId,
       sourcePath: relativePath,
       target: nonEmptyText(4096),
       readOnly: boolean
-    }, ["type", "rootId", "sourcePath", "target"]),
+    }, ["type", "storagePoolId", "sourcePath", "target"]),
     strictObject({
       type: { const: "volume" },
       source: nonEmptyText(255),
@@ -161,7 +161,7 @@ const dockerHostAccess = strictObject({
     "host_os_identity", "host_processes", "host_sys", "nas_capacity", "account_map",
     "docker_metadata", "systemd_status"
   ]),
-  rootId,
+  storagePoolId,
   target: nonEmptyText(4096)
 }, ["capability"]);
 
@@ -182,10 +182,10 @@ function operationUnion(...operations: JsonSchema[]): JsonSchema {
 }
 
 const pagination = { cursor, limit: limit() };
-const rootPath = { rootId, path: relativePath };
+const rootPath = { storagePoolId, path: relativePath };
 
 export type FileGrepRequest = {
-  rootId: string;
+  storagePoolId: string;
   path?: string;
   pattern: string;
   mode?: "literal" | "regex";
@@ -200,7 +200,7 @@ export type FileGrepRequest = {
 };
 
 export type FileFindRequest = {
-  rootId: string;
+  storagePoolId: string;
   path?: string;
   glob?: string;
   kind?: "any" | "file" | "directory";
@@ -211,7 +211,7 @@ export type FileFindRequest = {
 };
 
 export type ShellRunRequest = {
-  rootId: string;
+  storagePoolId: string;
   command: "git" | "rg" | "find" | "ls" | "stat" | "du" | "df" | "file" | "sha256sum";
   args?: string[];
   cwd?: string;
@@ -230,9 +230,9 @@ type RevisionedIdOperation<Name extends string> = Operation<Name, { id: string; 
 
 type PowerRequest = Operation<"reboot" | "shutdown">;
 type OperationsRunRequest = Operation<"health" | "maintenance">;
-type FileExportRequest = Operation<"export", { rootId: string; paths: string[]; archiveName?: string }>;
+type FileExportRequest = Operation<"export", { storagePoolId: string; paths: string[]; archiveName?: string }>;
 type FileEditRequest = Operation<"edit", {
-  rootId: string;
+  storagePoolId: string;
   path: string;
   find: string;
   replace: string;
@@ -240,24 +240,24 @@ type FileEditRequest = Operation<"edit", {
   expectedSha256?: string;
 }>;
 type FileWriteRequest = Operation<"write", {
-  rootId: string;
+  storagePoolId: string;
   path: string;
   content: string;
   createOnly?: boolean;
   expectedSha256?: string;
 }>;
 type FileRollbackRequest = Operation<"rollback", { operationId: string }>;
-type ReindexRequest = Operation<"reindex", { rootId: string; path?: string; recursive?: boolean }>;
+type ReindexRequest = Operation<"reindex", { storagePoolId: string; path?: string; recursive?: boolean }>;
 
 type PhotoManageRequest =
-  | Operation<"configure", { rootId: string; storagePoolId: string; path: string }>
+  | Operation<"configure", { storagePoolId: string; path: string }>
   | (Operation<"processing"> & OptionalJsonFields<
     "processingConcurrency" | "scanIntervalMs" | "maxAutoRetries" | "retryBaseDelayMs" |
     "retryMaxDelayMs" | "commandTimeoutMs" | "maxFileSizeBytes" | "maxXmpSizeBytes" |
     "maxIntermediateBytes" | "minFreeSpaceBytes" | "maxDecodedPixels"
   >)
   | Operation<"scan">
-  | Operation<"import", { sourceRootId: string; sourcePaths: string[]; targetDirectory?: string }>
+  | Operation<"import", { sourceStoragePoolId: string; sourcePaths: string[]; targetDirectory?: string }>
   | Operation<"export", { assetIds: string[]; archiveName?: string }>
   | Operation<"move", { assetIds: string[]; targetDirectory: string }>
   | Operation<"trash", { assetIds: string[] }>;
@@ -265,7 +265,6 @@ type PhotoManageRequest =
 type DownloadManageRequest =
   | Operation<"create", {
     url: string;
-    rootId: string;
     storagePoolId: string;
     targetDirectory: string;
     fileName: string;
@@ -358,7 +357,6 @@ type VmManageRequest =
     vcpu: number;
     memoryBytes: number;
     diskSizeBytes: number;
-    isoRootId: string;
     isoStoragePoolId: string;
     isoPath: string;
   }> & OptionalJsonFields<
@@ -405,18 +403,18 @@ type StorageManageRequest =
 type SettingsUpdateRequest =
   | (Operation<"indexer"> & OptionalJsonFields<
     "scanConcurrency" | "extractionConcurrency" | "reconciliationIntervalMs" | "maxExtractedTextBytes" |
-    "maxSourceDocumentBytes" | "commandTimeoutMs" | "maxPdfTextPages" | "maxOcrPages" | "ocrRootIds"
+    "maxSourceDocumentBytes" | "commandTimeoutMs" | "maxPdfTextPages" | "maxOcrPages" | "ocrStoragePoolIds"
   >)
   | (Operation<"model_provider"> & OptionalJsonFields<"providerName" | "baseUrl" | "model" | "replaceApiKey" | "clearApiKey">)
   | Operation<"agent_policy", { policies: Record<string, "auto" | "approve" | "confirm" | "disabled"> }>;
 
 type TerminalManageRequest =
-  | Operation<"create", { rootId: string }>
+  | Operation<"create">
   | Operation<"rename", { tabId: string; customTitle: string | null }>
   | Operation<"activate" | "restart" | "close", { tabId: string }>;
 
 type VodControlRequest =
-  | Operation<"play", { rootId: string; storagePoolId: string; path: string; startPositionSeconds?: number; audioDeviceId?: string }>
+  | Operation<"play", { storagePoolId: string; path: string; startPositionSeconds?: number; audioDeviceId?: string }>
   | Operation<"pause" | "resume" | "toggle-pause" | "stop" | "retry" | "cycle-audio-track" | "cycle-subtitle-track", { sessionId: string }>
   | Operation<"seek" | "seek-relative", { sessionId: string; seconds: number }>
   | Operation<"set-audio-track", { sessionId: string; trackId: number }>
@@ -450,8 +448,8 @@ export type CapabilityMutationRequest =
 export interface PlannedCapabilityRequestMap {
   "cyberos.files.grep": FileGrepRequest;
   "cyberos.files.find": FileFindRequest;
-  "cyberos.files.git": { rootId: string; path?: string };
-  "cyberos.files.archive-inspect": { rootId: string; path: string; cursor?: string | null; limit?: number };
+  "cyberos.files.git": { storagePoolId: string; path?: string };
+  "cyberos.files.archive-inspect": { storagePoolId: string; path: string; cursor?: string | null; limit?: number };
   "cyberos.photos.media": { assetId: string; variant: "thumbnail" | "preview" | "original" | "video"; maxWidth?: number };
   "cyberos.files.export-propose": CapabilityProposalRequest<FileExportRequest>;
   "cyberos.files.edit": CapabilityProposalRequest<FileEditRequest>;
@@ -489,16 +487,16 @@ const schemas: Record<string, JsonSchema> = {
     operation("health"),
     operation("maintenance")
   )),
-  "cyberos.roots.list": strictObject({ rootId }),
-  "cyberos.files.list": strictObject({ ...rootPath, ...pagination }, ["rootId"]),
-  "cyberos.files.stat": strictObject(rootPath, ["rootId", "path"]),
-  "cyberos.files.read": strictObject({ ...rootPath, maxBytes: integer(1, 131_072) }, ["rootId", "path"]),
-  "cyberos.files.resource-link": strictObject(rootPath, ["rootId", "path"]),
+  "cyberos.storage-pools.list": strictObject({ storagePoolId }),
+  "cyberos.files.list": strictObject({ ...rootPath, ...pagination }, ["storagePoolId"]),
+  "cyberos.files.stat": strictObject(rootPath, ["storagePoolId", "path"]),
+  "cyberos.files.read": strictObject({ ...rootPath, maxBytes: integer(1, 131_072) }, ["storagePoolId", "path"]),
+  "cyberos.files.resource-link": strictObject(rootPath, ["storagePoolId", "path"]),
   "cyberos.files.search": strictObject({
     ...rootPath,
     query: nonEmptyText(500),
     ...pagination
-  }, ["rootId", "query"]),
+  }, ["storagePoolId", "query"]),
   "cyberos.files.grep": strictObject({
     ...rootPath,
     pattern: nonEmptyText(500),
@@ -510,7 +508,7 @@ const schemas: Record<string, JsonSchema> = {
     maxFiles: integer(1, 20_000),
     maxBytes: integer(1, 268_435_456),
     timeoutMs: integer(100, 30_000)
-  }, ["rootId", "pattern"]),
+  }, ["storagePoolId", "pattern"]),
   "cyberos.files.find": strictObject({
     ...rootPath,
     glob: nonEmptyText(500),
@@ -518,43 +516,43 @@ const schemas: Record<string, JsonSchema> = {
     ...pagination,
     maxEntries: integer(1, 100_000),
     timeoutMs: integer(100, 30_000)
-  }, ["rootId"]),
-  "cyberos.files.git": strictObject(rootPath, ["rootId"]),
-  "cyberos.files.archive-inspect": strictObject({ ...rootPath, ...pagination }, ["rootId", "path"]),
+  }, ["storagePoolId"]),
+  "cyberos.files.git": strictObject(rootPath, ["storagePoolId"]),
+  "cyberos.files.archive-inspect": strictObject({ ...rootPath, ...pagination }, ["storagePoolId", "path"]),
   "cyberos.files.export-propose": proposal(operation("export", {
-    rootId,
+    storagePoolId,
     paths: arrayOf(relativePath, 1, 200),
     archiveName: nonEmptyText(255)
-  }, ["rootId", "paths"])),
+  }, ["storagePoolId", "paths"])),
   "cyberos.files.mutate": proposal(operationUnion(
-    operation("mkdir", { rootId, targetPath: relativePath }, ["rootId", "targetPath"]),
-    operation("move", { rootId, sourcePath: relativePath, targetPath: relativePath }, ["rootId", "sourcePath", "targetPath"]),
-    operation("copy", { rootId, sourcePath: relativePath, targetPath: relativePath }, ["rootId", "sourcePath", "targetPath"]),
-    operation("rename", { rootId, sourcePath: relativePath, targetPath: relativePath }, ["rootId", "sourcePath", "targetPath"]),
-    operation("trash", { rootId, sourcePath: relativePath }, ["rootId", "sourcePath"])
+    operation("mkdir", { storagePoolId, targetPath: relativePath }, ["storagePoolId", "targetPath"]),
+    operation("move", { storagePoolId, sourcePath: relativePath, targetPath: relativePath }, ["storagePoolId", "sourcePath", "targetPath"]),
+    operation("copy", { storagePoolId, sourcePath: relativePath, targetPath: relativePath }, ["storagePoolId", "sourcePath", "targetPath"]),
+    operation("rename", { storagePoolId, sourcePath: relativePath, targetPath: relativePath }, ["storagePoolId", "sourcePath", "targetPath"]),
+    operation("trash", { storagePoolId, sourcePath: relativePath }, ["storagePoolId", "sourcePath"])
   )),
   "cyberos.files.edit": proposal(operation("edit", {
-    rootId,
+    storagePoolId,
     path: relativePath,
     find: nonEmptyText(262_144),
     replace: text(262_144),
     replaceAll: boolean,
     expectedSha256: sha256
-  }, ["rootId", "path", "find", "replace"])),
+  }, ["storagePoolId", "path", "find", "replace"])),
   "cyberos.files.write": proposal(operation("write", {
-    rootId,
+    storagePoolId,
     path: relativePath,
     content: text(1_048_576),
     createOnly: boolean,
     expectedSha256: sha256
-  }, ["rootId", "path", "content"])),
+  }, ["storagePoolId", "path", "content"])),
   "cyberos.files.rollback-propose": proposal(operation("rollback", { operationId: id(128) }, ["operationId"])),
-  "cyberos.index.status": strictObject({ rootId }),
+  "cyberos.index.status": strictObject({ storagePoolId }),
   "cyberos.index.reindex-propose": proposal(operation("reindex", {
-    rootId,
+    storagePoolId,
     path: relativePath,
     recursive: boolean
-  }, ["rootId"])),
+  }, ["storagePoolId"])),
   "cyberos.photos.query": strictObject({ assetId: id(), ...pagination }),
   "cyberos.photos.status": EMPTY_OBJECT_SCHEMA,
   "cyberos.photos.media": strictObject({
@@ -563,7 +561,7 @@ const schemas: Record<string, JsonSchema> = {
     maxWidth: integer(64, 4096)
   }, ["assetId", "variant"]),
   "cyberos.photos.manage-propose": proposal(operationUnion(
-    operation("configure", { rootId, storagePoolId: id(128), path: relativePath }, ["rootId", "storagePoolId", "path"]),
+    operation("configure", { storagePoolId, path: relativePath }, ["storagePoolId", "path"]),
     operation("processing", {
       processingConcurrency: integer(1, 4),
       scanIntervalMs: integer(60_000, 86_400_000),
@@ -579,10 +577,10 @@ const schemas: Record<string, JsonSchema> = {
     }),
     operation("scan"),
     operation("import", {
-      sourceRootId: rootId,
+      sourceStoragePoolId: storagePoolId,
       sourcePaths: arrayOf(relativePath, 1, 200),
       targetDirectory: relativePath
-    }, ["sourceRootId", "sourcePaths"]),
+    }, ["sourceStoragePoolId", "sourcePaths"]),
     operation("export", { assetIds: arrayOf(id(), 1, 500), archiveName: nonEmptyText(255) }, ["assetIds"]),
     operation("move", { assetIds: arrayOf(id(), 1, 500), targetDirectory: relativePath }, ["assetIds", "targetDirectory"]),
     operation("trash", { assetIds: arrayOf(id(), 1, 500) }, ["assetIds"])
@@ -594,12 +592,11 @@ const schemas: Record<string, JsonSchema> = {
   "cyberos.downloads.manage-propose": proposal(operationUnion(
     operation("create", {
       url: { type: "string", minLength: 1, maxLength: 8192, format: "uri" },
-      rootId,
       storagePoolId: id(128),
       targetDirectory: relativePath,
       fileName: nonEmptyText(255),
       sha256
-    }, ["url", "rootId", "storagePoolId", "targetDirectory", "fileName"]),
+    }, ["url", "storagePoolId", "targetDirectory", "fileName"]),
     operation("pause", { taskId: id(128) }, ["taskId"]),
     operation("resume", { taskId: id(128) }, ["taskId"]),
     operation("cancel", { taskId: id(128) }, ["taskId"]),
@@ -712,7 +709,7 @@ const schemas: Record<string, JsonSchema> = {
   }, ["containerId", "shell"])),
   "cyberos.vm.status": EMPTY_OBJECT_SCHEMA,
   "cyberos.vm.manage-propose": proposal(operationUnion(
-    operation("create", { domainName: nonEmptyText(128), vcpu: integer(1, 128), vcpuTopology: strictObject({ sockets: integer(1, 128), cores: integer(1, 128), threads: integer(1, 128) }, ["sockets", "cores", "threads"]), memoryBytes: integer(268_435_456, Number.MAX_SAFE_INTEGER), memoryBacking: stringEnum(["default", "hugepages"]), osVariant: nonEmptyText(128), firmware: stringEnum(["bios", "uefi"]), machineType: nonEmptyText(128), cpuMode: stringEnum(["host-model", "host-passthrough", "custom"]), cpuModel: nonEmptyText(128), diskSizeBytes: integer(1_073_741_824, Number.MAX_SAFE_INTEGER), diskBus: stringEnum(["virtio", "scsi", "sata", "ide"]), diskCache: stringEnum(["none", "writeback", "writethrough", "directsync", "unsafe"]), diskDiscard: stringEnum(["ignore", "unmap"]), isoRootId: rootId, isoStoragePoolId: id(128), isoPath: relativePath, networkName: nonEmptyText(128), networkModel: stringEnum(["virtio", "e1000", "rtl8139"]), macAddress: nonEmptyText(32), graphics: stringEnum(["none", "spice", "vnc"]), videoModel: stringEnum(["none", "virtio", "qxl", "vga"]), bootMenu: boolean, autostart: boolean }, ["domainName", "vcpu", "memoryBytes", "diskSizeBytes", "isoRootId", "isoStoragePoolId", "isoPath"]),
+    operation("create", { domainName: nonEmptyText(128), vcpu: integer(1, 128), vcpuTopology: strictObject({ sockets: integer(1, 128), cores: integer(1, 128), threads: integer(1, 128) }, ["sockets", "cores", "threads"]), memoryBytes: integer(268_435_456, Number.MAX_SAFE_INTEGER), memoryBacking: stringEnum(["default", "hugepages"]), osVariant: nonEmptyText(128), firmware: stringEnum(["bios", "uefi"]), machineType: nonEmptyText(128), cpuMode: stringEnum(["host-model", "host-passthrough", "custom"]), cpuModel: nonEmptyText(128), diskSizeBytes: integer(1_073_741_824, Number.MAX_SAFE_INTEGER), diskBus: stringEnum(["virtio", "scsi", "sata", "ide"]), diskCache: stringEnum(["none", "writeback", "writethrough", "directsync", "unsafe"]), diskDiscard: stringEnum(["ignore", "unmap"]), isoStoragePoolId: id(128), isoPath: relativePath, networkName: nonEmptyText(128), networkModel: stringEnum(["virtio", "e1000", "rtl8139"]), macAddress: nonEmptyText(32), graphics: stringEnum(["none", "spice", "vnc"]), videoModel: stringEnum(["none", "virtio", "qxl", "vga"]), bootMenu: boolean, autostart: boolean }, ["domainName", "vcpu", "memoryBytes", "diskSizeBytes", "isoStoragePoolId", "isoPath"]),
     ...["start", "shutdown", "stop", "restart", "pause", "resume", "reset", "delete"].map((name) => operation(name, { domainName: nonEmptyText(128) }, ["domainName"])),
     operation("snapshot_create", { domainName: nonEmptyText(128), snapshotName: nonEmptyText(128) }, ["domainName", "snapshotName"]),
     operation("snapshot_revert", { domainName: nonEmptyText(128), snapshotName: nonEmptyText(128) }, ["domainName", "snapshotName"]),
@@ -744,29 +741,29 @@ const schemas: Record<string, JsonSchema> = {
   )),
   "cyberos.settings.public": EMPTY_OBJECT_SCHEMA,
   "cyberos.settings.update-propose": proposal(operationUnion(
-    operation("indexer", { scanConcurrency: integer(1, 16), extractionConcurrency: integer(1, 8), reconciliationIntervalMs: integer(60_000, 86_400_000), maxExtractedTextBytes: integer(65_536, 16_777_216), maxSourceDocumentBytes: integer(1_048_576, 2_199_023_255_552), commandTimeoutMs: integer(5_000, 900_000), maxPdfTextPages: integer(1, 5_000), maxOcrPages: integer(1, 100), ocrRootIds: arrayOf(rootId, 0, 100) }),
+    operation("indexer", { scanConcurrency: integer(1, 16), extractionConcurrency: integer(1, 8), reconciliationIntervalMs: integer(60_000, 86_400_000), maxExtractedTextBytes: integer(65_536, 16_777_216), maxSourceDocumentBytes: integer(1_048_576, 2_199_023_255_552), commandTimeoutMs: integer(5_000, 900_000), maxPdfTextPages: integer(1, 5_000), maxOcrPages: integer(1, 100), ocrStoragePoolIds: arrayOf(storagePoolId, 0, 100) }),
     operation("model_provider", { providerName: stringEnum(["openai", "anthropic"]), baseUrl: nullableText(2048), model: text(256), replaceApiKey: boolean, clearApiKey: boolean }),
     operation("agent_policy", { policies: { type: "object", additionalProperties: stringEnum(["auto", "approve", "confirm", "disabled"]), maxProperties: 9 } }, ["policies"])
   )),
-  "cyberos.terminal.tabs": strictObject({ rootId }, ["rootId"]),
+  "cyberos.terminal.tabs": EMPTY_OBJECT_SCHEMA,
   "cyberos.terminal.manage-propose": proposal(operationUnion(
-    operation("create", { rootId }, ["rootId"]),
+    operation("create"),
     operation("rename", { tabId: id(128), customTitle: { type: ["string", "null"], maxLength: 80 } }, ["tabId", "customTitle"]),
     operation("activate", { tabId: id(128) }, ["tabId"]),
     operation("restart", { tabId: id(128) }, ["tabId"]),
     operation("close", { tabId: id(128) }, ["tabId"])
   )),
   "cyberos.shell.run": strictObject({
-    rootId,
+    storagePoolId,
     command: stringEnum(["git", "rg", "find", "ls", "stat", "du", "df", "file", "sha256sum"]),
     args: arrayOf(text(4096), 0, 128),
     cwd: relativePath,
     timeoutMs: integer(100, 30_000),
     idempotencyKey
-  }, ["rootId", "command"]),
+  }, ["storagePoolId", "command"]),
   "cyberos.vod.status": EMPTY_OBJECT_SCHEMA,
   "cyberos.vod.control-propose": proposal(operationUnion(
-    operation("play", { rootId, storagePoolId: id(128), path: relativePath, startPositionSeconds: number(0, Number.MAX_SAFE_INTEGER), audioDeviceId: id(256) }, ["rootId", "storagePoolId", "path"]),
+    operation("play", { storagePoolId, path: relativePath, startPositionSeconds: number(0, Number.MAX_SAFE_INTEGER), audioDeviceId: id(256) }, ["storagePoolId", "path"]),
     ...["pause", "resume", "toggle-pause", "stop", "retry", "cycle-audio-track", "cycle-subtitle-track"].map((name) => operation(name, { sessionId: id(256) }, ["sessionId"])),
     operation("seek", { sessionId: id(256), seconds: number(0, Number.MAX_SAFE_INTEGER) }, ["sessionId", "seconds"]),
     operation("seek-relative", { sessionId: id(256), seconds: number(-3600, 3600) }, ["sessionId", "seconds"]),

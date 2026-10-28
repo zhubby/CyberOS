@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::db::{Db, IndexerSettings, QueueTask};
+use crate::db::{Db, IndexerSettings, QueueTask, StoragePool};
 use crate::error::{ErrorCode, IndexerError};
 use crate::media::{MediaScanTask, run_media_scan};
 use crate::scanner::run_task;
@@ -19,13 +19,15 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct OnceOptions {
-    pub root_id: Option<String>,
+    pub storage_pool_id: Option<String>,
     pub path: Option<String>,
     pub recursive: bool,
 }
 
 pub struct Indexer {
     db: Db,
+    data_root: PathBuf,
+    production: bool,
     worker_id: String,
     shutdown: CancellationToken,
 }
@@ -34,6 +36,8 @@ impl Indexer {
     pub fn new(config: Config) -> Result<Self, IndexerError> {
         Ok(Self {
             db: Db::open(&config.database_path)?,
+            data_root: config.data_root,
+            production: config.production,
             worker_id: Uuid::new_v4().to_string(),
             shutdown: CancellationToken::new(),
         })
@@ -45,33 +49,35 @@ impl Indexer {
 
     pub async fn run(self, once: Option<OnceOptions>) -> Result<(), IndexerError> {
         self.db.wait_for_schema(Duration::from_secs(60)).await?;
-        let roots = self.db.roots().await?;
-        self.db.ensure_root_state(&roots).await?;
+        let storage_pools = discover_storage_pools(&self.data_root, self.production)?;
+        self.db.ensure_storage_pool_state(&storage_pools).await?;
         let settings = Arc::new(Mutex::new(self.db.settings().await?));
         if once.is_none() {
             self.db.heartbeat(&self.worker_id, VERSION).await?;
         }
 
         if let Some(options) = &once {
-            self.enqueue_once(&roots, options).await?;
+            self.enqueue_once(&storage_pools, options).await?;
         }
 
         let (watch_sender, watch_receiver) = mpsc::unbounded_channel();
         let watcher = if once.is_none() {
-            match crate::watcher::start(&roots, watch_sender) {
+            match crate::watcher::start(&storage_pools, watch_sender) {
                 Ok(watcher) => {
-                    for root in &roots {
-                        self.db.set_watcher_status(&root.id, "ready", None).await?;
+                    for storage_pool in &storage_pools {
+                        self.db
+                            .set_watcher_status(&storage_pool.id, "ready", None)
+                            .await?;
                     }
                     Some(watcher)
                 }
                 Err(error) => {
-                    for root in &roots {
+                    for storage_pool in &storage_pools {
                         self.db
-                            .set_watcher_status(&root.id, "degraded", Some(&error.message))
+                            .set_watcher_status(&storage_pool.id, "degraded", Some(&error.message))
                             .await?;
                         self.db
-                            .enqueue(&root.id, None, ".", true, "full", 10)
+                            .enqueue(&storage_pool.id, ".", true, "full", 10)
                             .await?;
                     }
                     None
@@ -123,17 +129,12 @@ impl Indexer {
                     if once.is_none() {
                         self.db.ensure_reconciliation_tasks(Duration::from_millis(snapshot.reconciliation_interval_ms)).await?;
                     }
-                    for root in &roots {
-                        if self.db.copy_legacy_batch(&root.id, 250, snapshot.max_extracted_text_bytes).await? {
-                            self.db.enqueue(&root.id, None, ".", true, "full", 20).await?;
-                        }
-                    }
-                    match self.db.claim(&self.worker_id).await? {
+                    match self.db.claim(&self.worker_id, &storage_pools).await? {
                         Some(task) => {
                             idle_polls = 0;
                             self.process_task(task, &snapshot).await?;
                         }
-                        None if let Some(task) = self.db.claim_media_scan(&self.worker_id).await? => {
+                        None if let Some(task) = self.db.claim_media_scan(&self.worker_id, &storage_pools).await? => {
                             idle_polls = 0;
                             self.process_media_scan(task).await?;
                         }
@@ -167,31 +168,30 @@ impl Indexer {
 
     async fn enqueue_once(
         &self,
-        roots: &[crate::db::Root],
+        storage_pools: &[StoragePool],
         options: &OnceOptions,
     ) -> Result<(), IndexerError> {
-        let selected: Vec<_> = match &options.root_id {
-            Some(root_id) => {
-                let root = roots
+        let selected: Vec<_> = match &options.storage_pool_id {
+            Some(storage_pool_id) => {
+                let storage_pool = storage_pools
                     .iter()
-                    .find(|root| root.id == *root_id)
+                    .find(|storage_pool| storage_pool.id == *storage_pool_id)
                     .ok_or_else(|| {
                         IndexerError::new(
                             ErrorCode::InvalidPath,
-                            format!("Unknown NAS root: {root_id}"),
+                            format!("Unknown storage pool: {storage_pool_id}"),
                             false,
                         )
                     })?;
-                vec![root]
+                vec![storage_pool]
             }
-            None => roots.iter().collect(),
+            None => storage_pools.iter().collect(),
         };
-        for root in selected {
+        for storage_pool in selected {
             let path = normalize_cli_path(options.path.as_deref().unwrap_or("."))?;
             self.db
                 .enqueue(
-                    &root.id,
-                    None,
+                    &storage_pool.id,
                     &path,
                     options.recursive || path == ".",
                     "manual",
@@ -307,25 +307,25 @@ async fn watch_loop(
         tokio::select! {
             _ = shutdown.cancelled() => break,
             message = receiver.recv() => match message {
-                Some(WatchMessage::Changed { root_id, path }) => {
-                    merge_ancestor(pending.entry(root_id).or_default(), path);
+                Some(WatchMessage::Changed { storage_pool_id, path }) => {
+                    merge_ancestor(pending.entry(storage_pool_id).or_default(), path);
                 }
-                Some(WatchMessage::Degraded { root_ids, reason }) => {
-                    for root_id in root_ids {
-                        if let Err(error) = db.set_watcher_status(&root_id, "degraded", Some(&reason)).await {
+                Some(WatchMessage::Degraded { storage_pool_ids, reason }) => {
+                    for storage_pool_id in storage_pool_ids {
+                        if let Err(error) = db.set_watcher_status(&storage_pool_id, "degraded", Some(&reason)).await {
                             tracing::warn!(message = %error.message, "Could not persist watcher degradation");
                         }
-                        let _ = db.enqueue(&root_id, None, ".", true, "full", 10).await;
+                        let _ = db.enqueue(&storage_pool_id, ".", true, "full", 10).await;
                     }
                 }
                 None => break,
             },
             _ = debounce.tick() => {
                 let events = std::mem::take(&mut pending);
-                for (root_id, paths) in events {
+                for (storage_pool_id, paths) in events {
                     for path in paths {
-                        if let Err(error) = db.enqueue(&root_id, None, &path, true, "incremental", 50).await {
-                            tracing::warn!(root_id = %root_id, path = %path, message = %error.message, "Could not enqueue filesystem event");
+                        if let Err(error) = db.enqueue(&storage_pool_id, &path, true, "incremental", 50).await {
+                            tracing::warn!(storage_pool_id = %storage_pool_id, path = %path, message = %error.message, "Could not enqueue filesystem event");
                         }
                     }
                 }
@@ -342,7 +342,7 @@ fn normalize_cli_path(value: &str) -> Result<String, IndexerError> {
     let path = Path::new(&normalized_separators);
     if path.is_absolute() {
         return Err(IndexerError::invalid_path(
-            "--path must stay inside the selected NAS root",
+            "--path must stay inside the selected storage pool",
         ));
     }
     let mut segments = Vec::new();
@@ -352,7 +352,7 @@ fn normalize_cli_path(value: &str) -> Result<String, IndexerError> {
             std::path::Component::Normal(segment) => segments.push(segment.to_string_lossy()),
             _ => {
                 return Err(IndexerError::invalid_path(
-                    "--path must stay inside the selected NAS root",
+                    "--path must stay inside the selected storage pool",
                 ));
             }
         }
@@ -362,6 +362,46 @@ fn normalize_cli_path(value: &str) -> Result<String, IndexerError> {
     } else {
         segments.join("/")
     })
+}
+
+fn discover_storage_pools(
+    data_root: &Path,
+    production: bool,
+) -> Result<Vec<StoragePool>, IndexerError> {
+    let canonical_data_root = std::fs::canonicalize(data_root).map_err(IndexerError::storage)?;
+    let entries = std::fs::read_dir(&canonical_data_root).map_err(IndexerError::storage)?;
+    let mut storage_pools = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(IndexerError::storage)?;
+        let file_type = entry.file_type().map_err(IndexerError::storage)?;
+        if !file_type.is_dir() || file_type.is_symlink() {
+            continue;
+        }
+        let id = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| IndexerError::invalid_path("Storage pool IDs must be valid UTF-8"))?;
+        if id.is_empty() || id == "." || id == ".." || id.contains('/') || id.contains('\\') {
+            continue;
+        }
+        let path = std::fs::canonicalize(entry.path()).map_err(IndexerError::storage)?;
+        if path.parent() != Some(canonical_data_root.as_path()) {
+            continue;
+        }
+        let path = path
+            .to_str()
+            .ok_or_else(|| IndexerError::invalid_path("Storage pool paths must be valid UTF-8"))?;
+        storage_pools.push(StoragePool {
+            id,
+            path: path.to_owned(),
+            mount_policy: if production { "required" } else { "optional" }.to_owned(),
+            expected_source: None,
+            expected_uuid: None,
+            expected_fstype: None,
+        });
+    }
+    storage_pools.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(storage_pools)
 }
 
 #[cfg(test)]

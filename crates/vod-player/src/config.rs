@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -18,6 +17,8 @@ pub struct VodPlayerConfig {
     pub socket_path: PathBuf,
     pub state_path: PathBuf,
     pub database_path: PathBuf,
+    pub data_root: PathBuf,
+    pub production: bool,
     pub command_timeout_ms: u64,
     pub startup_timeout_ms: u64,
     pub checkpoint_interval_ms: u64,
@@ -30,13 +31,6 @@ pub struct VodPlayerConfig {
     pub hwdec: String,
     pub user: String,
     pub peer_uid: u32,
-    pub nas_roots: Vec<NasRoot>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct NasRoot {
-    pub id: String,
-    pub path: PathBuf,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -44,8 +38,6 @@ struct FileConfig {
     root_dir: Option<PathBuf>,
     #[serde(default)]
     vod_player: FileVodPlayer,
-    #[serde(default)]
-    nas_roots: Vec<FileNasRoot>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -64,12 +56,6 @@ struct FileVodPlayer {
     audio_device: Option<String>,
     hwdec: Option<String>,
     user: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct FileNasRoot {
-    id: Option<String>,
-    path: Option<PathBuf>,
 }
 
 impl VodPlayerConfig {
@@ -185,12 +171,13 @@ impl VodPlayerConfig {
                 400,
             ));
         }
-        let nas_roots = resolve_nas_roots(text_env("CYBEROS_NAS_ROOTS"), file.nas_roots)?;
         Ok(Self {
             enabled,
             socket_path,
             state_path,
             database_path: root_path.join("state/cyberos.sqlite"),
+            data_root: root_path.join("data"),
+            production: env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("production"),
             command_timeout_ms: positive_setting(
                 number_env("CYBEROS_VOD_PLAYER_COMMAND_TIMEOUT_MS")?.or(player.command_timeout_ms),
                 5_000,
@@ -220,7 +207,6 @@ impl VodPlayerConfig {
             hwdec,
             user,
             peer_uid,
-            nas_roots,
         })
     }
 }
@@ -292,82 +278,6 @@ fn absolute_path(value: Option<PathBuf>, fallback: &str, name: &str) -> Result<P
     Ok(value)
 }
 
-fn resolve_nas_roots(
-    environment: Option<String>,
-    file_roots: Vec<FileNasRoot>,
-) -> Result<Vec<NasRoot>, VodError> {
-    let current_directory = env::current_dir()?;
-    let roots = if let Some(environment) = environment {
-        environment
-            .split(',')
-            .enumerate()
-            .filter_map(|(index, entry)| {
-                parse_environment_root(entry.trim(), index, &current_directory)
-            })
-            .collect::<Vec<_>>()
-    } else {
-        file_roots
-            .into_iter()
-            .enumerate()
-            .map(|(index, root)| {
-                let id = root.id.unwrap_or_else(|| format!("root-{}", index + 1));
-                let path = root.path.ok_or_else(|| {
-                    VodError::new(
-                        ErrorCode::InvalidCommand,
-                        format!("NAS root {id} has no configured path"),
-                        400,
-                    )
-                })?;
-                Ok(NasRoot {
-                    id,
-                    path: make_absolute(&current_directory, &path),
-                })
-            })
-            .collect::<Result<Vec<_>, VodError>>()?
-    };
-    let mut ids = HashSet::new();
-    for root in &roots {
-        if root.id.is_empty() || !root.path.is_absolute() || !ids.insert(root.id.clone()) {
-            return Err(VodError::new(
-                ErrorCode::InvalidCommand,
-                "VOD player NAS roots must have unique ids and absolute paths",
-                400,
-            ));
-        }
-    }
-    Ok(roots)
-}
-
-fn parse_environment_root(entry: &str, index: usize, current_directory: &Path) -> Option<NasRoot> {
-    if entry.is_empty() {
-        return None;
-    }
-    let parts = entry.split(':').collect::<Vec<_>>();
-    if parts.len() >= 3 {
-        let fallback_id = format!("root-{}", index + 1);
-        return Some(NasRoot {
-            id: if parts[0].is_empty() {
-                fallback_id
-            } else {
-                parts[0].to_owned()
-            },
-            path: make_absolute(current_directory, Path::new(&parts[2..].join(":"))),
-        });
-    }
-    Some(NasRoot {
-        id: format!("root-{}", index + 1),
-        path: make_absolute(current_directory, Path::new(entry)),
-    })
-}
-
-fn make_absolute(current_directory: &Path, path: &Path) -> PathBuf {
-    if path.is_absolute() {
-        path.to_owned()
-    } else {
-        current_directory.join(path)
-    }
-}
-
 fn is_private_temporary_path(path: &Path) -> bool {
     path.starts_with("/tmp") || path.starts_with("/var/tmp")
 }
@@ -404,48 +314,5 @@ mod tests {
         assert!(!is_private_temporary_path(Path::new(
             "/run/cyberos/vod-player.sock"
         )));
-    }
-
-    #[test]
-    fn resolves_environment_nas_roots_with_precedence_and_validation() {
-        let directory = tempfile::tempdir().unwrap();
-        let roots = resolve_nas_roots(
-            Some(format!("media:Media:{}", directory.path().display())),
-            vec![FileNasRoot {
-                id: Some("ignored".to_owned()),
-                path: Some(PathBuf::from("/ignored")),
-            }],
-        )
-        .unwrap();
-        assert_eq!(roots.len(), 1);
-        assert_eq!(roots[0].id, "media");
-        assert_eq!(roots[0].path, directory.path());
-
-        assert!(
-            resolve_nas_roots(
-                None,
-                vec![
-                    FileNasRoot {
-                        id: Some("duplicate".to_owned()),
-                        path: Some(PathBuf::from("/one")),
-                    },
-                    FileNasRoot {
-                        id: Some("duplicate".to_owned()),
-                        path: Some(PathBuf::from("/two")),
-                    },
-                ],
-            )
-            .is_err()
-        );
-        assert!(
-            resolve_nas_roots(
-                None,
-                vec![FileNasRoot {
-                    id: Some("missing".to_owned()),
-                    path: None,
-                }],
-            )
-            .is_err()
-        );
     }
 }

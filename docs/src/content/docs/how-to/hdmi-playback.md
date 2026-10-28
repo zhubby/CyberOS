@@ -16,13 +16,12 @@ sidebar:
 ```bash
 sudo CYBEROS_ENABLE_VOD_PLAYER=1 \
   CYBEROS_VOD_PLAYER_USER=cyberos \
-  CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary \
   ./packaging/scripts/install.sh
 ```
 
-安装脚本会安装 `mpv` 和 `seatd`，生成 `cyberos-vod-player.service` 的权限 drop-in，并启用 VOD Player。服务以非 root 用户运行，只读访问配置的 NAS root。
+安装脚本会安装 `mpv` 和 `seatd`，生成 `cyberos-vod-player.service` 的权限 drop-in，并启用 VOD Player。服务以非 root 用户运行，只读访问配置的 storage pool。
 
-构建 appliance rootfs 时使用 `CYBEROS_ENABLE_VOD_PLAYER=1`，镜像会启用播放器配置和 systemd 服务；默认值为 `0`。
+通过安装器部署时使用 `CYBEROS_ENABLE_VOD_PLAYER=1` 启用播放器配置和 systemd 服务；默认值为 `0`。
 
 如果只是修改配置，可以在 `/cyberos/config/config.toml` 中设置：
 

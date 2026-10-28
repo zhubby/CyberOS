@@ -39,7 +39,11 @@ pub struct FileIdentity {
 }
 
 impl StorageTarget {
-    pub fn resolve(task: &Task) -> Result<Self, DownloadError> {
+    pub fn resolve(
+        task: &Task,
+        data_root: &Path,
+        require_mount: bool,
+    ) -> Result<Self, DownloadError> {
         validate_relative_path(Path::new(&task.target_directory))?;
         validate_relative_path(Path::new(&task.target_path))?;
         validate_relative_path(Path::new(&task.partial_path))?;
@@ -69,18 +73,27 @@ impl StorageTarget {
                 false,
             )
         })?;
-        let root = std::fs::canonicalize(&task.root_path).map_err(DownloadError::storage)?;
-        let mountpoint = find_mountpoint(&task.storage_pool_id, &root)?;
-        let mountpoint = std::fs::canonicalize(mountpoint).map_err(DownloadError::storage)?;
-        if !mountpoint.starts_with(&root) {
+        validate_storage_pool_id(&task.storage_pool_id)?;
+        let root = std::fs::canonicalize(data_root).map_err(DownloadError::storage)?;
+        let pool_path = root.join(&task.storage_pool_id);
+        let metadata = std::fs::symlink_metadata(&pool_path).map_err(DownloadError::storage)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
             return Err(DownloadError::new(
                 ErrorCode::Storage,
-                "storage pool mountpoint is outside the configured NAS root",
+                "storage pool must be a real directory",
                 false,
             ));
         }
-        let directory_relative =
-            relative_directory_within_mount(&root, &mountpoint, Path::new(&task.target_directory))?;
+        let mountpoint = std::fs::canonicalize(pool_path).map_err(DownloadError::storage)?;
+        if mountpoint != root.join(&task.storage_pool_id) {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "storage pool is not a direct child of the CyberOS data root",
+                false,
+            ));
+        }
+        let expected_mount_id = require_exact_mountpoint(&mountpoint, require_mount)?;
+        let directory_relative = normalize_relative(Path::new(&task.target_directory));
         if target_name != OsStr::new(&task.target_file_name) {
             return Err(DownloadError::new(
                 ErrorCode::Storage,
@@ -93,6 +106,7 @@ impl StorageTarget {
             .custom_flags(nix::libc::O_DIRECTORY | nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC)
             .open(&mountpoint)
             .map_err(DownloadError::storage)?;
+        verify_mount_id(&mount, expected_mount_id)?;
         let directory_path = mountpoint.join(&directory_relative);
         let directory = open_directory_beneath(&mount, &directory_relative, &directory_path)?;
         Ok(Self {
@@ -322,6 +336,92 @@ fn validate_relative_path(path: &Path) -> Result<(), DownloadError> {
     Ok(())
 }
 
+fn require_exact_mountpoint(_path: &Path, required: bool) -> Result<Option<u64>, DownloadError> {
+    if !required {
+        return Ok(None);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mountinfo =
+            std::fs::read_to_string("/proc/self/mountinfo").map_err(DownloadError::storage)?;
+        if let Some(mount_id) = exact_mount_id(&mountinfo, _path) {
+            return Ok(Some(mount_id));
+        }
+    }
+    Err(DownloadError::new(
+        ErrorCode::Storage,
+        "storage pool is not mounted",
+        true,
+    ))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn has_exact_mountpoint(mountinfo: &str, path: &Path) -> bool {
+    exact_mount_id(mountinfo, path).is_some()
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn exact_mount_id(mountinfo: &str, path: &Path) -> Option<u64> {
+    mountinfo.lines().find_map(|line| {
+        let mut fields = line.split_whitespace();
+        let mount_id = fields.next()?.parse().ok()?;
+        let mountpoint = fields.nth(3).map(unescape_mount_field)?;
+        (Path::new(&mountpoint) == path).then_some(mount_id)
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn unescape_mount_field(value: &str) -> String {
+    value
+        .replace("\\040", " ")
+        .replace("\\011", "\t")
+        .replace("\\012", "\n")
+        .replace("\\134", "\\")
+}
+
+#[cfg(target_os = "linux")]
+fn verify_mount_id(file: &File, expected: Option<u64>) -> Result<(), DownloadError> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    let fdinfo = std::fs::read_to_string(format!("/proc/self/fdinfo/{}", file.as_raw_fd()))
+        .map_err(DownloadError::storage)?;
+    let actual = fdinfo
+        .lines()
+        .find_map(|line| line.strip_prefix("mnt_id:").map(str::trim))
+        .and_then(|value| value.parse().ok());
+    if actual == Some(expected) {
+        Ok(())
+    } else {
+        Err(DownloadError::new(
+            ErrorCode::Storage,
+            "storage pool mount changed while opening the download target",
+            true,
+        ))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn verify_mount_id(_file: &File, _expected: Option<u64>) -> Result<(), DownloadError> {
+    Ok(())
+}
+
+fn validate_storage_pool_id(storage_pool_id: &str) -> Result<(), DownloadError> {
+    let path = Path::new(storage_pool_id);
+    if storage_pool_id.is_empty()
+        || path.is_absolute()
+        || path.components().count() != 1
+        || !matches!(path.components().next(), Some(Component::Normal(_)))
+    {
+        return Err(DownloadError::new(
+            ErrorCode::Storage,
+            "invalid storage pool id",
+            false,
+        ));
+    }
+    Ok(())
+}
+
 fn normalized_parent(path: &Path) -> PathBuf {
     normalize_relative(path.parent().unwrap_or_else(|| Path::new(".")))
 }
@@ -340,34 +440,6 @@ fn normalize_relative(path: &Path) -> PathBuf {
     } else {
         normalized
     }
-}
-
-fn relative_directory_within_mount(
-    root: &Path,
-    mountpoint: &Path,
-    root_relative_directory: &Path,
-) -> Result<PathBuf, DownloadError> {
-    let mountpoint_relative = mountpoint.strip_prefix(root).map_err(|_| {
-        DownloadError::new(
-            ErrorCode::Storage,
-            "storage pool mountpoint is outside the configured NAS root",
-            false,
-        )
-    })?;
-    let root_relative_directory = normalize_relative(root_relative_directory);
-    if mountpoint_relative.as_os_str().is_empty() {
-        return Ok(root_relative_directory);
-    }
-    root_relative_directory
-        .strip_prefix(mountpoint_relative)
-        .map(normalize_relative)
-        .map_err(|_| {
-            DownloadError::new(
-                ErrorCode::Storage,
-                "download target is outside the selected storage pool",
-                false,
-            )
-        })
 }
 
 #[cfg(target_os = "linux")]
@@ -506,53 +578,6 @@ fn identity(metadata: &std::fs::Metadata) -> FileIdentity {
     }
 }
 
-#[cfg(target_os = "linux")]
-fn find_mountpoint(storage_pool_id: &str, root: &Path) -> Result<PathBuf, DownloadError> {
-    let mountinfo =
-        std::fs::read_to_string("/proc/self/mountinfo").map_err(DownloadError::storage)?;
-    let requested = std::fs::canonicalize(storage_pool_id).ok();
-    for line in mountinfo.lines() {
-        let Some((left, right)) = line.split_once(" - ") else {
-            continue;
-        };
-        let left_fields: Vec<_> = left.split_whitespace().collect();
-        let right_fields: Vec<_> = right.split_whitespace().collect();
-        if left_fields.len() < 5 || right_fields.len() < 2 {
-            continue;
-        }
-        let source = unescape_mount_field(right_fields[1]);
-        let source_matches = source == storage_pool_id
-            || requested.as_ref().is_some_and(|requested| {
-                std::fs::canonicalize(&source).ok().as_ref() == Some(requested)
-            });
-        if source_matches {
-            return Ok(PathBuf::from(unescape_mount_field(left_fields[4])));
-        }
-    }
-    if std::fs::canonicalize(storage_pool_id).ok().as_deref() == Some(root) {
-        return Ok(root.to_owned());
-    }
-    Err(DownloadError::new(
-        ErrorCode::Storage,
-        "storage pool is not mounted",
-        true,
-    ))
-}
-
-#[cfg(not(target_os = "linux"))]
-fn find_mountpoint(_storage_pool_id: &str, root: &Path) -> Result<PathBuf, DownloadError> {
-    Ok(root.to_owned())
-}
-
-#[cfg(any(target_os = "linux", test))]
-fn unescape_mount_field(value: &str) -> String {
-    value
-        .replace("\\040", " ")
-        .replace("\\011", "\t")
-        .replace("\\012", "\n")
-        .replace("\\134", "\\")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,37 +590,26 @@ mod tests {
     }
 
     #[test]
-    fn decodes_mountinfo_paths() {
-        assert_eq!(unescape_mount_field("/mnt/My\\040NAS"), "/mnt/My NAS");
+    fn accepts_only_single_component_storage_pool_ids() {
+        assert!(validate_storage_pool_id("pool-a").is_ok());
+        assert!(validate_storage_pool_id("../pool-a").is_err());
+        assert!(validate_storage_pool_id("nested/pool-a").is_err());
+        assert!(validate_storage_pool_id("").is_err());
     }
 
     #[test]
-    fn converts_root_relative_paths_to_mount_relative_paths() {
-        assert_eq!(
-            relative_directory_within_mount(
-                Path::new("/cyberos/data/primary"),
-                Path::new("/cyberos/data/primary/pool-a"),
-                Path::new("pool-a/downloads"),
-            )
-            .unwrap(),
-            PathBuf::from("downloads")
+    fn recognizes_only_the_exact_pool_mountpoint() {
+        let mountinfo = concat!(
+            "22 1 8:1 / / rw - ext4 /dev/root rw\n",
+            "23 22 8:2 / /cyberos/data/My\\040Pool rw - ext4 /dev/sda1 rw\n",
         );
-        assert_eq!(
-            relative_directory_within_mount(
-                Path::new("/cyberos/data/primary"),
-                Path::new("/cyberos/data/primary"),
-                Path::new("downloads"),
-            )
-            .unwrap(),
-            PathBuf::from("downloads")
-        );
-        assert!(
-            relative_directory_within_mount(
-                Path::new("/cyberos/data/primary"),
-                Path::new("/cyberos/data/primary/pool-a"),
-                Path::new("pool-b/downloads"),
-            )
-            .is_err()
-        );
+        assert!(has_exact_mountpoint(
+            mountinfo,
+            Path::new("/cyberos/data/My Pool")
+        ));
+        assert!(!has_exact_mountpoint(
+            mountinfo,
+            Path::new("/cyberos/data/My Pool/nested")
+        ));
     }
 }

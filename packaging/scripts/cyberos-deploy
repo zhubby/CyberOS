@@ -14,7 +14,7 @@ STATE_PATH="$BASE_DIR/current-release.json"
 LOCK_PATH=/run/lock/cyberos-deploy.lock
 
 TIMERS='cyberos-maintenance.timer cyberos-health.timer cyberos-backup-daily.timer cyberos-backup-weekly.timer'
-CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-termux.service cyberos-api.service cyberos-worker@1.service cyberos-photostaff.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service'
+CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-terminald.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service'
 RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES cyberos-monitor.service cyberos-alerter.service"
 SHARE_SERVICES='smbd.service nmbd.service cyberos-webdav.service vsftpd.service nfs-server.service minidlna.service'
 OPTIONAL_RUNTIME_SERVICES='cyberos-host-accessd.service'
@@ -255,7 +255,7 @@ activate_runtime() {
 
   log "starting CyberOS runtime prerequisites"
   start_service_stably cyberos-hostd.service 1
-  start_service_stably cyberos-termux.service 1
+  start_service_stably cyberos-terminald.service 1
   if [ -f "$state_dir/cyberos-host-accessd.service.enabled" ] || systemctl is-enabled --quiet docker.service 2>/dev/null; then
     systemctl enable cyberos-host-accessd.service
     start_service_stably cyberos-host-accessd.service 1
@@ -269,7 +269,7 @@ activate_runtime() {
 
   # The player opens the shared SQLite database during startup. Restoring it
   # before the API is healthy lets systemd satisfy After=cyberos-api.service while
-  # the API is still running migrations and recovery.
+  # the API is still completing schema initialization and recovery.
   log "restoring the VOD player after API database recovery"
   restore_unit_state cyberos-vod-player.service "$state_dir"
 
@@ -284,7 +284,7 @@ activate_runtime() {
 
   log "starting background database writers sequentially"
   start_service_stably cyberos-worker@1.service
-  start_service_stably cyberos-photostaff.service
+  start_service_stably cyberos-photos.service
   start_service_stably cyberos-downloader.service
   start_service_stably cyberos-bluetoothd.service
   start_service_stably cyberos-indexer.service
@@ -317,7 +317,7 @@ verify_runtime() {
   done
 
   wait_for_url http://127.0.0.1:3010/health || die "API liveness check failed"
-  wait_for_url http://127.0.0.1:3010/api/roots/readiness || die "root readiness check failed"
+  wait_for_url http://127.0.0.1:3010/api/system/storage || die "storage pool status check failed"
   wait_for_url http://127.0.0.1:3010/api/system/health || die "system health endpoint failed"
   wait_for_url http://127.0.0.1:3010/api/system/build-info || die "build-info endpoint failed"
   report_monitoring_status || die "monitoring did not produce a usable sample"
@@ -441,7 +441,7 @@ capture_runtime_diagnostics() {
   target_diagnostics_path=$1
   systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES cyberos-vod-player.service $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
   systemctl --failed --no-legend --plain > "$target_diagnostics_path/failed-units.txt" 2>&1 || true
-  journalctl -u cyberos-api.service -u cyberos-monitor.service -u cyberos-alerter.service -u cyberos-worker@1.service -u cyberos-photostaff.service -u cyberos-downloader.service -u cyberos-indexer.service -u cyberos-hostd.service -u cyberos-host-accessd.service -u cyberos-termux.service -u cyberos-vod-player.service -u smbd.service -u nmbd.service -u cyberos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
+  journalctl -u cyberos-api.service -u cyberos-monitor.service -u cyberos-alerter.service -u cyberos-worker@1.service -u cyberos-photos.service -u cyberos-downloader.service -u cyberos-indexer.service -u cyberos-hostd.service -u cyberos-host-accessd.service -u cyberos-terminald.service -u cyberos-vod-player.service -u smbd.service -u nmbd.service -u cyberos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
 
   log "service status at failure:" >&2
   cat "$target_diagnostics_path/services-status.txt" >&2
@@ -545,7 +545,7 @@ case "${1:-}" in
     [ -f /cyberos/state/cyberos.sqlite ] && [ ! -L /cyberos/state/cyberos.sqlite ] || \
       die "CyberOS database must be a regular file"
     database_format=$(sqlite3 /cyberos/state/cyberos.sqlite 'PRAGMA busy_timeout=5000; PRAGMA user_version;' | tail -n 1)
-    [ "$database_format" = 2 ] || die "CyberOS database format must be 2: $database_format"
+    [ "$database_format" = 3 ] || die "CyberOS database format must be 3: $database_format"
     database_check=$(sqlite3 /cyberos/state/cyberos.sqlite 'PRAGMA busy_timeout=5000; PRAGMA quick_check;' | tail -n 1)
     [ "$database_check" = ok ] || die "CyberOS database quick check failed: $database_check"
     printf '%s\n' "$database_check"

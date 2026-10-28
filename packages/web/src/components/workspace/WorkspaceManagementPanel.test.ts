@@ -20,6 +20,7 @@ const runningDetails: DockerContainerDetails = {
   shortId: "container",
   name: "rustfs",
   image: "rustfs/rustfs:latest",
+  imageId: "sha256:rustfs",
   state: "running",
   status: "Up 10 minutes",
   ports: ["9000/tcp"],

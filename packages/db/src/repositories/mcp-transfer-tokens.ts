@@ -3,7 +3,7 @@ import type { CyberOsDatabase } from "../connection.js";
 
 export interface McpTransferRecord {
   clientId: string;
-  rootId: string;
+  storagePoolId: string;
   relativePath: string;
   mimeType: string;
   sizeBytes: number;
@@ -15,7 +15,7 @@ export interface McpTransferRecord {
 
 interface McpTransferRow {
   client_id: string;
-  root_id: string;
+  storage_pool_id: string;
   relative_path: string;
   mime_type: string;
   size_bytes: number;
@@ -27,7 +27,7 @@ interface McpTransferRow {
 
 export function createMcpTransferToken(db: CyberOsDatabase, input: {
   clientId: string;
-  rootId: string;
+  storagePoolId: string;
   relativePath: string;
   mimeType: string;
   sizeBytes: number;
@@ -39,17 +39,17 @@ export function createMcpTransferToken(db: CyberOsDatabase, input: {
   if (input.expiresAt <= createdAt) throw new Error("Transfer expiry must be in the future");
   db.prepare(`
     INSERT INTO mcp_transfer_tokens(
-      token_digest, client_id, root_id, relative_path, mime_type, size_bytes, modified_at, expires_at, created_at
+      token_digest, client_id, storage_pool_id, relative_path, mime_type, size_bytes, modified_at, expires_at, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    digest(token), input.clientId, input.rootId, input.relativePath, input.mimeType,
+    digest(token), input.clientId, input.storagePoolId, input.relativePath, input.mimeType,
     input.sizeBytes, input.modifiedAt, input.expiresAt, createdAt
   );
   return {
     token,
     transfer: {
       clientId: input.clientId,
-      rootId: input.rootId,
+      storagePoolId: input.storagePoolId,
       relativePath: input.relativePath,
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
@@ -70,7 +70,7 @@ export function consumeMcpTransferToken(
     UPDATE mcp_transfer_tokens
     SET used_at = ?
     WHERE token_digest = ? AND client_id = ? AND used_at IS NULL AND expires_at > ?
-    RETURNING client_id, root_id, relative_path, mime_type, size_bytes, modified_at, expires_at, used_at, created_at
+    RETURNING client_id, storage_pool_id, relative_path, mime_type, size_bytes, modified_at, expires_at, used_at, created_at
   `).get(now, digest(input.token), input.clientId, now) as McpTransferRow | undefined;
   return row ? mapTransfer(row) : null;
 }
@@ -86,7 +86,7 @@ function digest(token: string): string {
 function mapTransfer(row: McpTransferRow): McpTransferRecord {
   return {
     clientId: row.client_id,
-    rootId: row.root_id,
+    storagePoolId: row.storage_pool_id,
     relativePath: row.relative_path,
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,

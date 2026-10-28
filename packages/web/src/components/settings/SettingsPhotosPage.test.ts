@@ -13,8 +13,7 @@ describe("SettingsPhotosPage", () => {
   it("renders the library location and editable processing, retry, and resource controls", () => {
     const html = renderToStaticMarkup(createElement(SettingsPhotosPage, {
       settings: {
-        rootId: "nas",
-        storagePoolId: "pool-a",
+                storagePoolId: "pool-a",
         path: "Pictures/Library",
         updatedAt: "2026-09-24T06:00:00.000Z"
       },
@@ -80,8 +79,7 @@ describe("SettingsPhotosPage", () => {
   it("does not represent an unavailable status endpoint as zero activity", () => {
     const html = renderToStaticMarkup(createElement(SettingsPhotosPage, {
       settings: {
-        rootId: "nas",
-        storagePoolId: "pool-a",
+                storagePoolId: "pool-a",
         path: "Pictures",
         updatedAt: "2026-09-24T06:00:00.000Z"
       },

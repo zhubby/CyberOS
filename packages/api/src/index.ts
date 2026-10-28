@@ -1,20 +1,18 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { ensureNasRoots, openCyberOsDb } from "@cyberos/db";
+import { openCyberOsDb } from "@cyberos/db";
 import { loadConfig } from "@cyberos/shared";
 import { loadBuildInfo } from "./lib/build-info.js";
 import { createSystemCommandRunner } from "./lib/system-management.js";
-import { createTerminalRuntime } from "./lib/termux-client.js";
+import { createTerminalRuntime } from "./lib/terminal-client.js";
 import { createVodPlayerRuntime } from "./lib/vod-player.js";
 import { ffmpegVideoTranscoder } from "./lib/video-cache.js";
 import { buildServer } from "./server.js";
 import { registerWebApp } from "./web-static.js";
 
 const config = loadConfig();
-const db = openCyberOsDb(config.databasePath);
+const db = openCyberOsDb(config.paths.databasePath);
 const buildInfo = await loadBuildInfo();
-ensureNasRoots(db, config.nasRoots);
-
 const server = await buildServer({
   config,
   db,

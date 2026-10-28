@@ -54,7 +54,6 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
         "status" => &["type"],
         "play" => &[
             "type",
-            "rootId",
             "storagePoolId",
             "relativePath",
             "startPositionSeconds",
@@ -95,8 +94,6 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
 pub enum Command {
     Status,
     Play {
-        #[serde(rename = "rootId")]
-        root_id: String,
         #[serde(rename = "storagePoolId")]
         storage_pool_id: String,
         #[serde(rename = "relativePath")]
@@ -173,14 +170,12 @@ impl Command {
         match self {
             Self::Status => Ok(()),
             Self::Play {
-                root_id,
                 storage_pool_id,
                 relative_path,
                 start_position_seconds,
                 audio_device_id,
                 media_file_id,
             } => {
-                validate_id(root_id)?;
                 validate_id(storage_pool_id)?;
                 validate_relative_path(relative_path)?;
                 if start_position_seconds.is_some_and(|value| !value.is_finite() || value < 0.0) {
@@ -308,7 +303,6 @@ pub struct Status {
     pub session_id: Option<String>,
     pub service_instance_id: String,
     pub revision: u64,
-    pub root_id: Option<String>,
     pub storage_pool_id: Option<String>,
     pub relative_path: Option<String>,
     pub file_name: Option<String>,
@@ -501,7 +495,7 @@ mod tests {
     #[test]
     fn parses_strict_versioned_commands() {
         let request = RequestEnvelope::parse(
-            br#"{"version":2,"id":"r1","command":{"type":"play","rootId":"root","storagePoolId":"pool","relativePath":"movies/a.mp4","startPositionSeconds":4,"mediaFileId":"file-1"}}"#,
+            br#"{"version":2,"id":"r1","command":{"type":"play","storagePoolId":"pool","relativePath":"movies/a.mp4","startPositionSeconds":4,"mediaFileId":"file-1"}}"#,
         )
         .unwrap();
         assert!(matches!(request.command, Command::Play { .. }));
@@ -516,7 +510,7 @@ mod tests {
 
     #[test]
     fn rejects_unsafe_paths_and_unbound_controls() {
-        assert!(RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"play","rootId":"root","storagePoolId":"pool","relativePath":"../a.mp4"}}"#).is_err());
+        assert!(RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"play","storagePoolId":"pool","relativePath":"../a.mp4"}}"#).is_err());
         assert!(
             RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"pause"}}"#)
                 .is_err()

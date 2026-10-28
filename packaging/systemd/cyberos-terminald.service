@@ -1,0 +1,37 @@
+[Unit]
+Description=CyberOS Rust terminal daemon
+Documentation=file:///usr/share/doc/cyberos/README.md
+After=local-fs.target systemd-tmpfiles-setup.service
+Wants=local-fs.target
+
+[Service]
+Type=simple
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ROOT=/cyberos
+Environment=CYBEROS_TERMINALD_USER=cyberos
+Environment=CYBEROS_TERMINALD_SOCKET_PATH=/run/cyberos/terminald.sock
+Environment=CYBEROS_TERMINALD_SESSION_IDLE_TIMEOUT_MS=1800000
+Environment=CYBEROS_TERMINALD_CONNECT_TIMEOUT_MS=10000
+Environment=CYBEROS_TERMINALD_MAX_SESSIONS=32
+Environment=HOME=/cyberos/home/terminal
+WorkingDirectory=/cyberos/home/terminal
+KillMode=process
+ExecStart=/usr/lib/cyberos/bin/cyberos-terminald
+Restart=on-failure
+RestartSec=3
+UMask=0007
+ProtectSystem=strict
+ProtectHome=tmpfs
+ReadWritePaths=/run/cyberos /cyberos/data /cyberos/home/terminal
+InaccessiblePaths=/cyberos/config /cyberos/state /cyberos/logs
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+MemoryMax=256M
+CPUQuota=100%
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

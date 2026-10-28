@@ -1,7 +1,7 @@
 [Unit]
 Description=CyberOS daily restic backup
 After=local-fs.target
-RequiresMountsFor=/cyberos/data /cyberos/data/backup
+RequiresMountsFor=/cyberos/data /cyberos/backup
 ConditionPathExists=/cyberos/config/restic-password
 
 [Service]
@@ -16,7 +16,7 @@ LoadCredential=restic-password:/cyberos/config/restic-password
 ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/backup/dist/index.js run --kind daily
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/cyberos/state /cyberos/data /cyberos/data/backup
+ReadWritePaths=/cyberos/state /cyberos/data /cyberos/backup
 NoNewPrivileges=yes
 PrivateTmp=yes
 CapabilityBoundingSet=

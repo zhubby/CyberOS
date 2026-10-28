@@ -4,12 +4,11 @@ import { parse } from "smol-toml";
 import {
   TERMINAL_SESSION_DEFAULT_CONNECT_TIMEOUT_MS,
   TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS
-} from "./termux-protocol.js";
-import { PHOTOSTAFF_BASE_MAP_RELEASE_URL } from "./photostaff-config.js";
+} from "./terminal-protocol.js";
+import { PHOTOS_BASE_MAP_RELEASE_URL } from "./photos-config.js";
 import { resolveCyberOsPaths, type CyberOsPaths } from "./paths.js";
 import type {
   DlnaMediaType,
-  NasRootConfig,
   ShareConfig,
   ShareDefinitionConfig,
   ShareProtocolConfig,
@@ -57,11 +56,6 @@ interface TomlConfig {
     display_name?: string;
     auth_mode?: "local-only";
   };
-  model?: {
-    provider?: "pi" | "cloud" | "local";
-    pi_command?: string;
-    local_endpoint?: string;
-  };
   docker?: {
     enabled?: boolean;
     socket_path?: string;
@@ -87,7 +81,7 @@ interface TomlConfig {
     items?: Array<{
       id?: string;
       name?: string;
-      root_id?: string;
+      storage_pool_id?: string;
       path?: string;
       description?: string;
       smb?: Partial<{
@@ -128,7 +122,7 @@ interface TomlConfig {
   };
   terminal?: {
     user?: string;
-    termux_socket_path?: string;
+    socket_path?: string;
     session_idle_timeout_ms?: number;
     connect_timeout_ms?: number;
     max_sessions?: number;
@@ -149,22 +143,12 @@ interface TomlConfig {
     hwdec?: "auto-safe" | "auto" | "no";
     user?: string;
   };
-  photostaff?: {
+  photos?: {
     basemap_url?: string;
   };
-  nas_roots?: Array<{
-    id?: string;
-    name?: string;
-    path?: string;
-    mount_policy?: "required" | "optional";
-    expected_source?: string;
-    expected_uuid?: string;
-    expected_fstype?: string;
-  }>;
   backup?: {
     enabled?: boolean;
     repository?: string;
-    repository_path?: string;
     password_file?: string;
     staging_path?: string;
     require_mount?: boolean;
@@ -192,6 +176,141 @@ interface TomlConfig {
   };
 }
 
+type TomlScalarRule = "string" | "number" | "boolean" | "string[]";
+type TomlRule =
+  | TomlScalarRule
+  | TomlSchema
+  | { array: TomlSchema }
+  | { enum: readonly (string | number | boolean)[] };
+type TomlSchema = { readonly [key: string]: TomlRule };
+
+const SHARE_PROTOCOL_SCHEMA = {
+  enabled: "boolean",
+  read_only: "boolean",
+  allow_guest: "boolean"
+} as const satisfies TomlSchema;
+
+const TOML_SCHEMA = {
+  environment: { enum: ["development", "production"] },
+  root_dir: "string",
+  api: { host: "string", port: "number", allowed_origins: "string[]" },
+  mcp: {
+    enabled: "boolean",
+    pi_enabled: "boolean",
+    pi_token_file: "string",
+    external_enabled: "boolean",
+    shell_enabled: "boolean",
+    allowed_hosts: "string[]",
+    allowed_origins: "string[]",
+    max_concurrent_per_client: "number"
+  },
+  worker: { poll_ms: "number", concurrency: "number" },
+  admin: { display_name: "string", auth_mode: { enum: ["local-only"] } },
+  docker: {
+    enabled: "boolean",
+    socket_path: "string",
+    compose_command: "string",
+    operation_timeout_ms: "number",
+    console_shells: "string[]"
+  },
+  vm: {
+    enabled: "boolean",
+    libvirt_uri: "string",
+    storage_path: "string",
+    network_name: "string",
+    iso_roots: "string[]",
+    operation_timeout_ms: "number",
+    console_mode: { enum: ["serial"] }
+  },
+  hostd: { socket_path: "string" },
+  shares: {
+    enabled: "boolean",
+    account_username: "string",
+    items: {
+      array: {
+        id: "string",
+        name: "string",
+        storage_pool_id: "string",
+        path: "string",
+        description: "string",
+        smb: { ...SHARE_PROTOCOL_SCHEMA, browseable: "boolean" },
+        webdav: { ...SHARE_PROTOCOL_SCHEMA, port: "number", path_prefix: "string" },
+        ftp: {
+          ...SHARE_PROTOCOL_SCHEMA,
+          port: "number",
+          passive_port_start: "number",
+          passive_port_end: "number"
+        },
+        nfs: {
+          enabled: "boolean",
+          read_only: "boolean",
+          allowed_cidrs: "string[]",
+          root_squash: "boolean"
+        },
+        dlna: {
+          enabled: "boolean",
+          media_types: "string[]",
+          bind_interface: "string",
+          bind_address: "string",
+          friendly_name: "string"
+        }
+      }
+    }
+  },
+  terminal: {
+    user: "string",
+    socket_path: "string",
+    session_idle_timeout_ms: "number",
+    connect_timeout_ms: "number",
+    max_sessions: "number"
+  },
+  vod_player: {
+    enabled: "boolean",
+    socket_path: "string",
+    state_path: "string",
+    command_timeout_ms: "number",
+    startup_timeout_ms: "number",
+    checkpoint_interval_ms: "number",
+    retry_base_delay_ms: "number",
+    retry_max_delay_ms: "number",
+    video_output: { enum: ["drm", "wayland"] },
+    drm_connector: "string",
+    audio_output: { enum: ["alsa"] },
+    audio_device: "string",
+    hwdec: { enum: ["auto-safe", "auto", "no"] },
+    user: "string"
+  },
+  photos: { basemap_url: "string" },
+  backup: {
+    enabled: "boolean",
+    repository: "string",
+    password_file: "string",
+    staging_path: "string",
+    require_mount: "boolean",
+    retry_count: "number",
+    timeout_ms: "number",
+    keep_daily: "number",
+    keep_weekly: "number"
+  },
+  health: {
+    stale_index_warning_ms: "number",
+    stale_index_critical_ms: "number",
+    stalled_run_ms: "number",
+    consecutive_failure_threshold: "number",
+    backup_stale_ms: "number"
+  },
+  monitoring: {
+    enabled: "boolean",
+    fast_sample_interval_ms: "number",
+    standard_sample_interval_ms: "number",
+    temperature_sample_interval_ms: "number",
+    raw_retention_ms: "number",
+    minute_retention_ms: "number",
+    hour_retention_ms: "number",
+    max_database_bytes: "number"
+  }
+} as const satisfies TomlSchema;
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): CyberOsConfig {
   for (const removedName of ["CYBEROS_DATA_DIR", "CYBEROS_DATABASE_PATH"] as const) {
     if (env[removedName] !== undefined) {
@@ -204,29 +323,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
   const environment = loadEnvironment(env, fileConfig);
   const rootDir = resolveRootDir(env, fileConfig, workspaceRoot, environment);
   const paths = resolveCyberOsPaths(rootDir);
-  const dataDir = paths.stateDir;
-  const nasRoots = loadNasRoots(env, fileConfig, workspaceRoot, environment, paths);
-  const backup = loadBackupConfig(env, fileConfig, workspaceRoot, dataDir, environment);
+  const backup = loadBackupConfig(env, fileConfig, workspaceRoot, paths.stateDir, environment);
   const health = loadHealthConfig(env, fileConfig);
   const monitoring = loadMonitoringConfig(env, fileConfig);
   const apiHost = env.CYBEROS_API_HOST ?? fileConfig.api?.host ?? "127.0.0.1";
   const vm = loadVmConfig(env, fileConfig, workspaceRoot, paths);
   const vodPlayer = loadVodPlayerConfig(env, fileConfig, paths);
-  validateConfig({ environment, apiHost, configPath, paths, dataDir, nasRoots, backup, vm, vodPlayer });
+  validateConfig({ environment, apiHost, configPath, paths, backup, vm, vodPlayer });
 
   return {
     environment,
-    rootDir: paths.rootDir,
     paths,
-    stateDir: paths.stateDir,
-    dataRoot: paths.dataRoot,
-    appsRoot: paths.appsRoot,
-    isoRoot: paths.isoRoot,
-    vmRoot: paths.vmRoot,
-    backupRoot: paths.backupRoot,
-    dataDir,
-    databasePath: paths.databasePath,
-    metricsDatabasePath: paths.metricsDatabasePath,
     api: {
       host: apiHost,
       port: toPort(env.CYBEROS_API_PORT, fileConfig.api?.port ?? 3010),
@@ -256,11 +363,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
       displayName: env.CYBEROS_ADMIN_DISPLAY_NAME ?? fileConfig.admin?.display_name ?? "CyberOS Admin",
       authMode: "local-only"
     },
-    model: {
-      provider: loadModelProvider(env.CYBEROS_MODEL_PROVIDER, fileConfig.model?.provider),
-      piCommand: env.CYBEROS_PI_COMMAND ?? fileConfig.model?.pi_command ?? "pi",
-      localEndpoint: env.CYBEROS_LOCAL_ENDPOINT ?? fileConfig.model?.local_endpoint ?? null
-    },
     docker: {
       enabled: toBoolean(env.CYBEROS_DOCKER_ENABLED, fileConfig.docker?.enabled ?? false),
       socketPath:
@@ -280,10 +382,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
     shares: loadShareConfig(env, fileConfig),
     terminal: loadTerminalConfig(env, fileConfig),
     vodPlayer,
-    photostaff: {
-      baseMapUrl: loadPhotostaffBaseMapUrl(env, fileConfig)
+    photos: {
+      baseMapUrl: loadPhotosBaseMapUrl(env, fileConfig)
     },
-    nasRoots,
     backup,
     health,
     monitoring
@@ -403,18 +504,18 @@ function validateMonitoringConfig(config: MonitoringConfig): void {
   }
 }
 
-function loadPhotostaffBaseMapUrl(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string {
-  const value = normalizeText(env.CYBEROS_PHOTOSTAFF_BASEMAP_URL) ??
-    normalizeText(fileConfig.photostaff?.basemap_url) ??
-    PHOTOSTAFF_BASE_MAP_RELEASE_URL;
+function loadPhotosBaseMapUrl(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string {
+  const value = normalizeText(env.CYBEROS_PHOTOS_BASEMAP_URL) ??
+    normalizeText(fileConfig.photos?.basemap_url) ??
+    PHOTOS_BASE_MAP_RELEASE_URL;
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw new Error("Photostaff base map URL must be a valid HTTPS URL");
+    throw new Error("Photos base map URL must be a valid HTTPS URL");
   }
   if (url.protocol !== "https:") {
-    throw new Error("Photostaff base map URL must use HTTPS");
+    throw new Error("Photos base map URL must use HTTPS");
   }
   return url.toString();
 }
@@ -424,8 +525,11 @@ function loadHostdConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): CyberO
     normalizeText(env.CYBEROS_HOSTD_SOCKET_PATH) ??
     normalizeText(fileConfig.hostd?.socket_path) ??
     "/run/cyberos/hostd.sock";
+  if (!path.isAbsolute(socketPath)) {
+    throw new Error("Hostd socket_path must be absolute");
+  }
   return {
-    socketPath: path.isAbsolute(socketPath) ? socketPath : "/run/cyberos/hostd.sock",
+    socketPath,
     mutationPolicy: parseHostMutationPolicy(env.CYBEROS_HOST_MUTATION_POLICY)
   };
 }
@@ -462,45 +566,73 @@ function loadTomlConfig(configPath: string): TomlConfig {
     return {};
   }
 
-  const parsed = parse(readFileSync(configPath, "utf8")) as TomlConfig;
+  const parsed = parse(readFileSync(configPath, "utf8")) as unknown;
+  validateTomlConfig(parsed);
   return parsed;
 }
 
-function loadNasRoots(
-  env: NodeJS.ProcessEnv,
-  fileConfig: TomlConfig,
-  cwd: string,
-  environment: "development" | "production",
-  paths: CyberOsPaths
-): NasRootConfig[] {
-  if (env.CYBEROS_NAS_ROOTS) {
-    return env.CYBEROS_NAS_ROOTS.split(",")
-      .map((entry, index) => parseNasRootEnv(entry.trim(), index, cwd))
-      .filter((root): root is NasRootConfig => root !== null)
-      .map((root) => ({ ...root, mountPolicy: root.mountPolicy ?? (environment === "production" ? "required" : "optional"), expectedSource: root.expectedSource ?? null, expectedUuid: root.expectedUuid ?? null, expectedFstype: root.expectedFstype ?? null }));
+function validateTomlConfig(value: unknown): asserts value is TomlConfig {
+  validateTomlObject(value, TOML_SCHEMA, "config");
+  const config = value as TomlConfig;
+  for (const [index, item] of (config.shares?.items ?? []).entries()) {
+    const mediaTypes = item.dlna?.media_types ?? [];
+    const invalid = mediaTypes.find((mediaType) => !isDlnaMediaType(mediaType));
+    if (invalid) {
+      throw new Error(`Invalid TOML value at shares.items[${index}].dlna.media_types: ${invalid}`);
+    }
   }
+}
 
-  if (fileConfig.nas_roots?.length) {
-    return fileConfig.nas_roots.map((root, index) => ({
-      id: root.id ?? `root-${index + 1}`,
-      name: root.name ?? root.id ?? `Root ${index + 1}`,
-      path: path.resolve(cwd, root.path ?? paths.defaultDataRoot),
-      mountPolicy: root.mount_policy ?? (environment === "production" ? "required" : "optional"),
-      expectedSource: normalizeText(root.expected_source),
-      expectedUuid: normalizeText(root.expected_uuid),
-      expectedFstype: normalizeText(root.expected_fstype)
-    }));
+function validateTomlObject(value: unknown, schema: TomlSchema, location: string): void {
+  if (!isTomlRecord(value)) {
+    throw new Error(`Invalid TOML type at ${location}: expected table`);
   }
+  for (const [key, entry] of Object.entries(value)) {
+    const rule = schema[key];
+    const entryLocation = location === "config" ? key : `${location}.${key}`;
+    if (!rule) {
+      throw new Error(`Unknown TOML key: ${entryLocation}`);
+    }
+    validateTomlValue(entry, rule, entryLocation);
+  }
+}
 
-  const fallback = { id: "primary", name: "Primary data", path: paths.defaultDataRoot };
-  return environment === "production"
-    ? [{ ...fallback, mountPolicy: "required", expectedSource: null, expectedUuid: null, expectedFstype: null }]
-    : [fallback];
+function validateTomlValue(value: unknown, rule: TomlRule, location: string): void {
+  if (typeof rule === "string") {
+    const valid = rule === "string[]"
+      ? Array.isArray(value) && value.every((entry) => typeof entry === "string")
+      : typeof value === rule;
+    if (!valid) {
+      throw new Error(`Invalid TOML type at ${location}: expected ${rule}`);
+    }
+    return;
+  }
+  if (Object.hasOwn(rule, "enum")) {
+    const values = (rule as { enum: readonly (string | number | boolean)[] }).enum;
+    if (!(values as readonly unknown[]).includes(value)) {
+      throw new Error(`Invalid TOML value at ${location}: expected ${values.join(", ")}`);
+    }
+    return;
+  }
+  if (Object.hasOwn(rule, "array")) {
+    const itemSchema = (rule as { array: TomlSchema }).array;
+    if (!Array.isArray(value)) {
+      throw new Error(`Invalid TOML type at ${location}: expected array of tables`);
+    }
+    value.forEach((entry, index) => validateTomlObject(entry, itemSchema, `${location}[${index}]`));
+    return;
+  }
+  validateTomlObject(value, rule as TomlSchema, location);
+}
+
+function isTomlRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function loadEnvironment(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): "development" | "production" {
   const value = (env.CYBEROS_ENVIRONMENT ?? fileConfig.environment ?? "development").trim().toLowerCase();
-  return value === "production" ? "production" : "development";
+  if (value === "development" || value === "production") return value;
+  throw new Error("CYBEROS_ENVIRONMENT must be development or production");
 }
 
 function loadBackupConfig(
@@ -511,7 +643,7 @@ function loadBackupConfig(
   environment: "development" | "production"
 ): NonNullable<CyberOsConfig["backup"]> {
   const source = fileConfig.backup;
-  const repositoryRaw = normalizeText(env.CYBEROS_BACKUP_REPOSITORY ?? env.CYBEROS_BACKUP_REPOSITORY_PATH ?? source?.repository_path ?? source?.repository);
+  const repositoryRaw = normalizeText(env.CYBEROS_BACKUP_REPOSITORY ?? source?.repository);
   const passwordFileRaw = normalizeText(env.CYBEROS_BACKUP_PASSWORD_FILE ?? source?.password_file);
   const stagingRaw = normalizeText(env.CYBEROS_BACKUP_STAGING_PATH ?? source?.staging_path);
   const enabled = toBoolean(env.CYBEROS_BACKUP_ENABLED, source?.enabled ?? Boolean(repositoryRaw));
@@ -520,7 +652,8 @@ function loadBackupConfig(
     repositoryPath: repositoryRaw ? path.resolve(cwd, repositoryRaw) : null,
     passwordFile: passwordFileRaw ? path.resolve(cwd, passwordFileRaw) : null,
     stagingPath: stagingRaw ? path.resolve(cwd, stagingRaw) : path.join(dataDir, "backup-staging"),
-    requireMount: toBoolean(env.CYBEROS_BACKUP_REQUIRE_MOUNT, source?.require_mount ?? environment === "production"),
+    requireMount: environment === "production"
+      || toBoolean(env.CYBEROS_BACKUP_REQUIRE_MOUNT, source?.require_mount ?? false),
     retryCount: toPositiveInteger(env.CYBEROS_BACKUP_RETRY_COUNT, source?.retry_count ?? 2),
     timeoutMs: toPositiveInteger(env.CYBEROS_BACKUP_TIMEOUT_MS, source?.timeout_ms ?? 300_000),
     keepDaily: toPositiveInteger(env.CYBEROS_BACKUP_KEEP_DAILY, source?.keep_daily ?? 7),
@@ -552,8 +685,6 @@ function validateConfig(input: {
   apiHost: string;
   configPath: string;
   paths: CyberOsPaths;
-  dataDir: string;
-  nasRoots: NasRootConfig[];
   backup: NonNullable<CyberOsConfig["backup"]>;
   vm: VmConfig;
   vodPlayer: VodPlayerConfig;
@@ -566,14 +697,6 @@ function validateConfig(input: {
   }
   if (input.environment === "production" && path.resolve(input.configPath) !== path.join(input.paths.configDir, "config.toml")) {
     throw new Error(`Production CyberOS config must be ${path.join(input.paths.configDir, "config.toml")}`);
-  }
-  for (const root of input.nasRoots) {
-    if (isUnder(root.path, input.paths.appsRoot) || isUnder(input.paths.appsRoot, root.path)) {
-      throw new Error(`Production NAS roots must not overlap ${input.paths.appsRoot}`);
-    }
-    if (path.dirname(path.resolve(root.path)) !== input.paths.dataRoot || path.resolve(root.path) === input.paths.backupRoot) {
-      throw new Error(`NAS roots must be direct children of ${input.paths.dataRoot}: ${root.path}`);
-    }
   }
   if (!isUnder(input.vm.storagePath, input.paths.vmRoot)) {
     throw new Error(`VM storage must be under ${input.paths.vmRoot}`);
@@ -592,16 +715,14 @@ function validateConfig(input: {
   }
   const backup = input.backup;
   if (!backup.enabled) return;
-  if (!backup.repositoryPath || !isUnder(backup.repositoryPath, input.paths.backupRoot)) {
-    throw new Error(`Production backup repository must be configured under ${input.paths.backupRoot}`);
+  if (!backup.repositoryPath || path.resolve(backup.repositoryPath) !== input.paths.backupRoot) {
+    throw new Error(`Production backup repository must be ${input.paths.backupRoot}`);
   }
-  if (isUnder(backup.repositoryPath, input.dataDir) || isUnder(input.dataDir, backup.repositoryPath)) {
-    throw new Error("Backup repository must not overlap dataDir");
+  if (isUnder(backup.repositoryPath, input.paths.stateDir) || isUnder(input.paths.stateDir, backup.repositoryPath)) {
+    throw new Error("Backup repository must not overlap the state directory");
   }
-  for (const root of input.nasRoots) {
-    if (isUnder(backup.repositoryPath, root.path) || isUnder(root.path, backup.repositoryPath) || isUnder(backup.stagingPath, root.path) || isUnder(root.path, backup.stagingPath)) {
-      throw new Error("Backup paths must not overlap NAS roots");
-    }
+  if (isUnder(backup.repositoryPath, input.paths.dataRoot) || isUnder(input.paths.dataRoot, backup.repositoryPath)) {
+    throw new Error("Backup repository must not overlap the storage pool namespace");
   }
   if (isUnder(backup.repositoryPath, backup.stagingPath) || isUnder(backup.stagingPath, backup.repositoryPath)) {
     throw new Error("Backup repository and staging paths must not overlap");
@@ -647,13 +768,17 @@ function isLoopbackHost(host: string): boolean {
 }
 
 function loadDockerConsoleShells(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string[] {
-  const rawShells = env.CYBEROS_DOCKER_CONSOLE_SHELLS
+  const rawShells = env.CYBEROS_DOCKER_CONSOLE_SHELLS !== undefined
     ? env.CYBEROS_DOCKER_CONSOLE_SHELLS.split(",")
     : fileConfig.docker?.console_shells;
-  const shells = (rawShells ?? [])
-    .map((shell) => normalizeText(shell))
-    .filter((shell): shell is string => shell !== null && path.isAbsolute(shell));
-  return shells.length ? shells : ["/bin/sh", "/bin/bash"];
+  if (rawShells === undefined) {
+    return ["/bin/sh", "/bin/bash"];
+  }
+  const shells = rawShells.map((shell) => normalizeText(shell));
+  if (shells.length === 0 || shells.some((shell) => shell === null || !path.isAbsolute(shell))) {
+    throw new Error("Docker console_shells must contain absolute paths");
+  }
+  return shells as string[];
 }
 
 function loadShareConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ShareConfig {
@@ -667,27 +792,31 @@ function loadShareConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): ShareC
         "cyberos-share",
       password: null
     },
-    shares: (shares?.items ?? []).map(normalizeShareItem).filter((item): item is ShareDefinitionConfig => item !== null)
+    shares: (shares?.items ?? []).map(normalizeShareItem)
   };
 }
 
 function loadTerminalConfig(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): TerminalConfig {
+  const socketPath =
+    normalizeText(env.CYBEROS_TERMINALD_SOCKET_PATH) ??
+    normalizeText(fileConfig.terminal?.socket_path) ??
+    "/run/cyberos/terminald.sock";
+  if (!path.isAbsolute(socketPath)) {
+    throw new Error("Terminal socket_path must be absolute");
+  }
   return {
-    user: normalizeText(env.CYBEROS_TERMUX_USER) ?? normalizeText(fileConfig.terminal?.user),
-    termuxSocketPath:
-      normalizeText(env.CYBEROS_TERMUX_SOCKET_PATH) ??
-      normalizeText(fileConfig.terminal?.termux_socket_path) ??
-      "/run/cyberos/termux.sock",
+    user: normalizeText(env.CYBEROS_TERMINALD_USER) ?? normalizeText(fileConfig.terminal?.user) ?? "cyberos",
+    socketPath,
     sessionIdleTimeoutMs: toPositiveInteger(
-      env.CYBEROS_TERMUX_SESSION_IDLE_TIMEOUT_MS,
+      env.CYBEROS_TERMINALD_SESSION_IDLE_TIMEOUT_MS,
       fileConfig.terminal?.session_idle_timeout_ms ?? TERMINAL_SESSION_DEFAULT_IDLE_TIMEOUT_MS
     ),
     connectTimeoutMs: toPositiveInteger(
-      env.CYBEROS_TERMUX_CONNECT_TIMEOUT_MS,
+      env.CYBEROS_TERMINALD_CONNECT_TIMEOUT_MS,
       fileConfig.terminal?.connect_timeout_ms ?? TERMINAL_SESSION_DEFAULT_CONNECT_TIMEOUT_MS
     ),
     maxSessions: toPositiveInteger(
-      env.CYBEROS_TERMUX_MAX_SESSIONS,
+      env.CYBEROS_TERMINALD_MAX_SESSIONS,
       fileConfig.terminal?.max_sessions ?? 32
     )
   };
@@ -790,18 +919,18 @@ function strictPositiveInteger(value: string | number | undefined, fallback: num
   return parsed;
 }
 
-function normalizeShareItem(item: NonNullable<NonNullable<TomlConfig["shares"]>["items"]>[number], index: number): ShareDefinitionConfig | null {
-  const rootId = normalizeText(item.root_id);
+function normalizeShareItem(item: NonNullable<NonNullable<TomlConfig["shares"]>["items"]>[number], index: number): ShareDefinitionConfig {
+  const storagePoolId = normalizeText(item.storage_pool_id);
   const sharePath = normalizeText(item.path);
-  if (!rootId || !sharePath) {
-    return null;
+  if (!storagePoolId || !sharePath) {
+    throw new Error(`shares.items[${index}] requires non-empty storage_pool_id and path`);
   }
   const id = normalizeText(item.id) ?? `share-${index + 1}`;
   const name = normalizeText(item.name) ?? id;
   return {
     id,
     name,
-    rootId,
+    storagePoolId,
     path: sharePath,
     description: normalizeText(item.description) ?? "",
     protocols: normalizeShareProtocols(item, name)
@@ -867,50 +996,8 @@ function idPath(value: string): string {
     .replace(/^-|-$/gu, "") || "share";
 }
 
-function parseNasRootEnv(entry: string, index: number, cwd: string): NasRootConfig | null {
-  return parseNamedPathEnv(entry, index, cwd, "root");
-}
-
-function parseNamedPathEnv(
-  entry: string,
-  index: number,
-  cwd: string,
-  fallbackPrefix: string
-): NasRootConfig | null {
-  if (!entry) {
-    return null;
-  }
-
-  const parts = entry.split(":");
-  if (parts.length >= 3) {
-    const [id, name, ...pathParts] = parts;
-    const fallbackId = `${fallbackPrefix}-${index + 1}`;
-    return {
-      id: id || fallbackId,
-      name: name || id || fallbackId,
-      path: path.resolve(cwd, pathParts.join(":"))
-    };
-  }
-
-  const rootPath = path.resolve(cwd, entry);
-  const id = `${fallbackPrefix}-${index + 1}`;
-  return {
-    id,
-    name: path.basename(rootPath) || id,
-    path: rootPath
-  };
-}
-
 function toPort(value: string | undefined, fallback: number): number {
   return toPositiveInteger(value, fallback);
-}
-
-function loadModelProvider(
-  envValue: string | undefined,
-  fileValue: "pi" | "cloud" | "local" | undefined
-): "pi" | "cloud" | "local" {
-  const raw = envValue ?? fileValue ?? "pi";
-  return raw === "cloud" || raw === "local" || raw === "pi" ? raw : "pi";
 }
 
 function loadAllowedOrigins(env: NodeJS.ProcessEnv, fileConfig: TomlConfig): string[] {
@@ -947,7 +1034,7 @@ function toBoolean(value: string | boolean | undefined, fallback: boolean): bool
     case "off":
       return false;
     default:
-      return fallback;
+      throw new Error(`Invalid boolean value: ${value}`);
   }
 }
 
@@ -958,7 +1045,7 @@ function toPositiveInteger(value: string | number | undefined, fallback: number)
 
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    return fallback;
+    throw new Error(`Expected a positive integer: ${value}`);
   }
 
   return parsed;

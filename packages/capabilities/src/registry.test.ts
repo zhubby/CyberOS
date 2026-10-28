@@ -5,10 +5,10 @@ import { CapabilityRegistry } from "./registry.js";
 import { validateParityManifest } from "./parity-manifest.js";
 
 const plannedContractSamples = {
-  "cyberos.files.grep": { rootId: "primary", pattern: "needle" },
-  "cyberos.files.find": { rootId: "primary" },
-  "cyberos.files.git": { rootId: "primary" },
-  "cyberos.files.archive-inspect": { rootId: "primary", path: "archive.zip" },
+  "cyberos.files.grep": { storagePoolId: "pool-1", pattern: "needle" },
+  "cyberos.files.find": { storagePoolId: "pool-1" },
+  "cyberos.files.git": { storagePoolId: "pool-1" },
+  "cyberos.files.archive-inspect": { storagePoolId: "pool-1", path: "archive.zip" },
   "cyberos.photos.media": { assetId: "asset", variant: "preview" },
   "cyberos.system.power-propose": { request: { operation: "reboot" } },
   "cyberos.operations.run-propose": { request: { operation: "health" } },
@@ -21,13 +21,13 @@ const plannedContractSamples = {
   "cyberos.storage.manage-propose": {
     request: { operation: "pool_create", name: "pool", level: "1", deviceIds: ["/dev/sda"], filesystem: "ext4" }
   },
-  "cyberos.terminal.manage-propose": { request: { operation: "create", rootId: "primary" } },
-  "cyberos.shell.run": { rootId: "primary", command: "ls" },
-  "cyberos.files.export-propose": { request: { operation: "export", rootId: "primary", paths: ["file.txt"] } },
-  "cyberos.files.edit": { request: { operation: "edit", rootId: "primary", path: "file.txt", find: "old", replace: "new" } },
-  "cyberos.files.write": { request: { operation: "write", rootId: "primary", path: "file.txt", content: "text" } },
+  "cyberos.terminal.manage-propose": { request: { operation: "create" } },
+  "cyberos.shell.run": { storagePoolId: "pool-1", command: "ls" },
+  "cyberos.files.export-propose": { request: { operation: "export", storagePoolId: "pool-1", paths: ["file.txt"] } },
+  "cyberos.files.edit": { request: { operation: "edit", storagePoolId: "pool-1", path: "file.txt", find: "old", replace: "new" } },
+  "cyberos.files.write": { request: { operation: "write", storagePoolId: "pool-1", path: "file.txt", content: "text" } },
   "cyberos.files.rollback-propose": { request: { operation: "rollback", operationId: "operation" } },
-  "cyberos.index.reindex-propose": { request: { operation: "reindex", rootId: "primary" } },
+  "cyberos.index.reindex-propose": { request: { operation: "reindex", storagePoolId: "pool-1" } },
   "cyberos.photos.manage-propose": { request: { operation: "scan" } },
   "cyberos.downloads.manage-propose": { request: { operation: "pause", taskId: "task" } },
   "cyberos.alerts.manage-propose": { request: { operation: "acknowledge_incident", id: "incident" } },

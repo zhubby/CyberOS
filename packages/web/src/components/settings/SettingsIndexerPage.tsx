@@ -1,14 +1,14 @@
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Database, RefreshCw } from "lucide-react";
-import type { IndexerOverview, IndexerSettings, NasRoot } from "../../api.js";
+import type { IndexerOverview, IndexerSettings, StoragePool } from "../../api.js";
 
 type IndexerSettingsDraft = Omit<IndexerSettings, "updatedAt">;
 
 export function SettingsIndexerPage({
   settings,
   status,
-  roots,
+  storagePools,
   loading,
   onSettingsChange,
   onReindex,
@@ -16,17 +16,17 @@ export function SettingsIndexerPage({
 }: {
   settings: IndexerSettings | null;
   status: IndexerOverview | null;
-  roots: NasRoot[];
+  storagePools: StoragePool[];
   loading: boolean;
   onSettingsChange: (patch: Partial<IndexerSettingsDraft>) => Promise<void>;
-  onReindex: (rootId: string) => Promise<void>;
+  onReindex: (storagePoolId: string) => Promise<void>;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<IndexerSettingsDraft>(() => indexerSettingsDraft(settings));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [reindexingRootId, setReindexingRootId] = useState<string | null>(null);
+  const [reindexingStoragePoolId, setReindexingStoragePoolId] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(indexerSettingsDraft(settings));
@@ -46,13 +46,13 @@ export function SettingsIndexerPage({
     }
   }
 
-  async function reindex(rootId: string) {
-    if (reindexingRootId) return;
-    setReindexingRootId(rootId);
+  async function reindex(storagePoolId: string) {
+    if (reindexingStoragePoolId) return;
+    setReindexingStoragePoolId(storagePoolId);
     try {
-      await onReindex(rootId);
+      await onReindex(storagePoolId);
     } finally {
-      setReindexingRootId(null);
+      setReindexingStoragePoolId(null);
     }
   }
 
@@ -94,19 +94,19 @@ export function SettingsIndexerPage({
             <section className="settings-section-card">
               <header>
                 <div>
-                  <h3>{t("settings.indexer.rootsTitle")}</h3>
-                  <p>{t("settings.indexer.rootsDescription")}</p>
+                  <h3>{t("settings.indexer.storagePoolsTitle")}</h3>
+                  <p>{t("settings.indexer.storagePoolsDescription")}</p>
                 </div>
               </header>
-              <div className="settings-indexer-roots">
-                {roots.map((root) => {
-                  const ocrEnabled = draft.ocrRootIds.includes(root.id);
-                  const rebuilding = reindexingRootId === root.id;
+              <div className="settings-indexer-storage-pools">
+                {storagePools.map((storagePool) => {
+                  const ocrEnabled = draft.ocrStoragePoolIds.includes(storagePool.id);
+                  const rebuilding = reindexingStoragePoolId === storagePool.id;
                   return (
-                    <div key={root.id} className="settings-indexer-root">
+                    <div key={storagePool.id} className="settings-indexer-storage-pool">
                       <span>
-                        <strong>{root.name}</strong>
-                        <small>{root.path}</small>
+                        <strong>{storagePool.name}</strong>
+                        <small>{storagePool.mountpoint ?? storagePool.id}</small>
                       </span>
                       <label className="settings-indexer-ocr">
                         <input
@@ -115,9 +115,9 @@ export function SettingsIndexerPage({
                           disabled={disabled}
                           onChange={(event) => setDraft((current) => ({
                             ...current,
-                            ocrRootIds: event.target.checked
-                              ? [...new Set([...current.ocrRootIds, root.id])]
-                              : current.ocrRootIds.filter((rootId) => rootId !== root.id)
+                            ocrStoragePoolIds: event.target.checked
+                              ? [...new Set([...current.ocrStoragePoolIds, storagePool.id])]
+                              : current.ocrStoragePoolIds.filter((storagePoolId) => storagePoolId !== storagePool.id)
                           }))}
                         />
                         <span>{t("settings.indexer.ocr")}</span>
@@ -125,9 +125,9 @@ export function SettingsIndexerPage({
                       <button
                         type="button"
                         className="secondary-button settings-indexer-rebuild"
-                        disabled={loading || Boolean(reindexingRootId)}
+                        disabled={loading || Boolean(reindexingStoragePoolId)}
                         aria-busy={rebuilding || undefined}
-                        onClick={() => void reindex(root.id)}
+                        onClick={() => void reindex(storagePool.id)}
                       >
                         <RefreshCw aria-hidden="true" size={14} className={rebuilding ? "is-spinning" : undefined} />
                         {rebuilding ? t("settings.indexer.reindexing") : t("settings.indexer.reindex")}
@@ -150,7 +150,7 @@ export function SettingsIndexerPage({
               <StatusRow label={t("settings.indexer.service")} value={status ? t(`settings.indexer.states.${status.service.status}`) : t("common.states.unavailable")} />
               <StatusRow label={t("settings.indexer.watcher")} value={status ? t(`settings.indexer.states.${status.watcher.status}`) : t("common.states.unavailable")} />
               <StatusRow label={t("settings.indexer.queue")} value={status ? t("settings.indexer.queueSummary", { queued: status.queue.queued, running: status.queue.running, failed: status.queue.failed }) : t("common.states.unavailable")} />
-              <StatusRow label={t("settings.indexer.rebuild")} value={status ? t("settings.indexer.rebuildSummary", { copied: status.rebuild.copied, total: status.rebuild.total }) : t("common.states.unavailable")} />
+              <StatusRow label={t("settings.indexer.contentIndex")} value={status ? t("settings.indexer.contentIndexSummary", { ready: status.rebuild.storagePoolsReady, total: status.rebuild.storagePoolsTotal }) : t("common.states.unavailable")} />
             </dl>
           </section>
         </div>
@@ -211,6 +211,6 @@ function indexerSettingsDraft(settings: IndexerSettings | null): IndexerSettings
     commandTimeoutMs: 120_000,
     maxPdfTextPages: 500,
     maxOcrPages: 20,
-    ocrRootIds: []
+    ocrStoragePoolIds: []
   };
 }

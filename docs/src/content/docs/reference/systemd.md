@@ -9,9 +9,9 @@ sidebar:
   order: 3
 ---
 
-核心服务默认以 `cyberos` 身份运行并使用 `ProtectSystem=strict`、`NoNewPrivileges=yes` 和资源上限。`cyberos-hostd` 是唯一的 root daemon；为原子创建可配置的 Unix 共享账号，它显式放行 `/etc`、ACL 备份目录和 Samba 私有密码库。Rust `cyberos-termux` 固定以 `cyberos` 身份启动，使用独立家目录 `/cyberos/home/termux`；`KillMode=process` 使 daemon 重启时 tmux session 保持运行。它对配置、数据库与日志路径的屏蔽仅防误操作，同 UID 终端不是后台服务的安全隔离边界。Rust downloader 与内部 `photostaff` 服务只写 `/cyberos/state`、日志和配置的 NAS roots；两者都在 API 迁移后启动，并在 30 秒 systemd 停止时限内持久化进度、终止子进程和归还租约。Photos 的内部 `photostaff` 服务使用 ExifTool、libvips、`heif-convert`、`dcraw_emu`、`ffmpeg` 和 `ffprobe`，其 unit 不依赖硬编码 `/cyberos/data/primary` mount，因此存储离线时 daemon 仍能报告健康与恢复状态。
+核心服务默认以 `cyberos` 身份运行并使用 `ProtectSystem=strict`、`NoNewPrivileges=yes` 和资源上限。`cyberos-hostd` 是唯一的 root daemon；为原子创建可配置的 Unix 共享账号，它显式放行 `/etc`、ACL 备份目录和 Samba 私有密码库。Rust `cyberos-terminald` 固定以 `cyberos` 身份启动，使用独立家目录 `/cyberos/home/terminal`；`KillMode=process` 使 daemon 重启时 tmux session 保持运行。它对配置、数据库与日志路径的屏蔽仅防误操作，同 UID 终端不是后台服务的安全隔离边界。Rust downloader 与内部 `photos` 服务只写 `/cyberos/state`、日志和配置的 storage pools；两者都在 API 迁移后启动，并在 30 秒 systemd 停止时限内持久化进度、终止子进程和归还租约。Photos 的内部 `photos` 服务使用 ExifTool、libvips、`heif-convert`、`dcraw_emu`、`ffmpeg` 和 `ffprobe`，其 unit 不依赖硬编码 `/cyberos/data/pool-1` mount，因此存储离线时 daemon 仍能报告健康与恢复状态。
 
-hostd 在 `local-fs.target` 和 `NetworkManager.service` 之后启动，并显式依赖 tmpfiles setup 完成，再排在 `network-online.target` 之前，以便先创建 root-only 状态目录并恢复未完成的 Ethernet checkpoint 事务。NixOS 使用 `root:cyberos 1770` 的 `/cyberos/state` 共享根，使 `cyberos` 服务可写而 root-owned hostd 子树不能被替换；Debian 包则由 `postinst` 在启动服务前安全创建子树。hostd 继续使用既有 `/etc` 和 `/cyberos/state/hostd/network-manager` 写边界；API 不获得 root、capability 或 NetworkManager keyfile 写权限。
+hostd 在 `local-fs.target` 和 `NetworkManager.service` 之后启动，并显式依赖 tmpfiles setup 完成，再排在 `network-online.target` 之前，以便先创建 root-only 状态目录并恢复未完成的 Ethernet checkpoint 事务。Debian 包由 `postinst` 在启动服务前安全创建状态子树。hostd 继续使用既有 `/etc` 和 `/cyberos/state/hostd/network-manager` 写边界；API 不获得 root、capability 或 NetworkManager keyfile 写权限。
 
 `cyberos-monitor.service` 在 API 完成主库 migration 后启动，以 `cyberos` 身份运行，只写 `/cyberos/state` 并只读 NAS。unit 使用 `Type=notify`，仅允许 `AF_UNIX`、清空 capabilities、限制 `MemoryMax=256M`，并使用较低 CPU/IO weight。它是指标库唯一写入者；启动失败只令监控与 Health 降级，不应拉停 API、文件、索引或备份服务。
 
@@ -23,7 +23,7 @@ Rust Indexer 是 `Type=notify` 常驻服务，带 watchdog、失败重启、1 Gi
 
 ```bash
 systemctl --no-pager --type=service --type=timer 'cyberos-*'
-journalctl -u cyberos-api.service -u cyberos-monitor.service -u cyberos-alerter.service -u cyberos-worker@1.service -u cyberos-photostaff.service -u cyberos-downloader.service -n 100 --no-pager
+journalctl -u cyberos-api.service -u cyberos-monitor.service -u cyberos-alerter.service -u cyberos-worker@1.service -u cyberos-photos.service -u cyberos-downloader.service -n 100 --no-pager
 journalctl -u cyberos-indexer.service -u cyberos-health.service -n 100 --no-pager
 ```
 

@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::db::Db;
 use crate::error::{ErrorCode, IndexerError};
-use crate::storage::{EntryKind, RootStorage, probe_mount_identity};
+use crate::storage::{EntryKind, StoragePoolStorage, probe_mount_identity};
 
 const MAX_NFO_BYTES: u64 = 1024 * 1024;
 const TMDB_API_BASE: &str = "https://api.themoviedb.org";
@@ -24,10 +24,9 @@ pub struct MediaScanTask {
     pub generation: String,
     pub source_id: String,
     pub kind: String,
-    pub root_id: String,
     pub storage_pool_id: String,
     pub source_path: String,
-    pub root_path: String,
+    pub storage_pool_path: String,
     pub mount_policy: String,
     pub expected_source: Option<String>,
     pub expected_uuid: Option<String>,
@@ -278,7 +277,7 @@ pub async fn run_media_scan(
         .and_then(|json| serde_json::from_str::<MediaSettings>(json).ok())
         .unwrap_or_default();
     let tmdb = TmdbClient::new(&settings)?;
-    let storage = RootStorage::open(Path::new(&task.root_path))?;
+    let storage = StoragePoolStorage::open(Path::new(&task.storage_pool_path))?;
     let source_path = PathBuf::from(&task.source_path);
     let initial_mount = probe_mount_identity(
         storage.path(),
@@ -350,7 +349,7 @@ pub async fn run_media_scan(
 }
 
 fn discover_video_files(
-    storage: &RootStorage,
+    storage: &StoragePoolStorage,
     source_path: &Path,
     shutdown: &CancellationToken,
 ) -> Result<Vec<PathBuf>, IndexerError> {
@@ -378,7 +377,7 @@ fn discover_video_files(
 }
 
 async fn build_entry(
-    storage: &RootStorage,
+    storage: &StoragePoolStorage,
     task: &MediaScanTask,
     relative_path: &Path,
     tmdb: Option<&TmdbClient>,
@@ -694,7 +693,7 @@ fn select_tmdb_match<'a>(
     }
 }
 
-fn read_nfo(storage: &RootStorage, path: &Path) -> Result<NfoMetadata, IndexerError> {
+fn read_nfo(storage: &StoragePoolStorage, path: &Path) -> Result<NfoMetadata, IndexerError> {
     let file = storage.open_file(path)?;
     let mut limited = file.take(MAX_NFO_BYTES + 1);
     let mut bytes = Vec::new();
@@ -782,7 +781,7 @@ fn apply_nfo_value(metadata: &mut NfoMetadata, tag: Option<&str>, value: &str, t
 }
 
 fn find_named_file(
-    storage: &RootStorage,
+    storage: &StoragePoolStorage,
     directory: &Path,
     names: &[&str],
 ) -> Result<Option<PathBuf>, IndexerError> {
@@ -800,7 +799,7 @@ fn find_named_file(
 }
 
 fn discover_local_artwork(
-    storage: &RootStorage,
+    storage: &StoragePoolStorage,
     task: &MediaScanTask,
     media_path: &Path,
     title_path: &Path,

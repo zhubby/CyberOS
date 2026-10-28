@@ -5,15 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   claimNextFileBatchItem,
   createFileBatch,
-  ensureNasRoots,
   getFileBatch,
   listFileOperations,
-  listPendingApprovals,
   openCyberOsDb,
   recoverInterruptedFileBatches,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import type { SystemCommandRunner } from "./system-management.js";
 import { FileBatchRunner, processNextFileBatchItem } from "./file-batch-runner.js";
 
@@ -23,10 +21,9 @@ let db: CyberOsDatabase;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-file-runner-"));
-  rootDir = path.join(tempDir, "root");
-  await mkdir(rootDir);
+  rootDir = path.join(tempDir, "data", "pool-1");
+  await mkdir(rootDir, { recursive: true });
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
 afterEach(async () => {
@@ -40,8 +37,7 @@ describe("file batch runner", () => {
     await writeFile(path.join(rootDir, "a.txt"), "a");
     await writeFile(path.join(rootDir, "b.txt"), "b");
     const batch = createFileBatch(db, {
-      rootId: "local",
-      storagePoolId: "pool-1",
+            storagePoolId: "pool-1",
       operation: "move",
       targetDirectory: "dest",
       summary: "Move two items",
@@ -56,15 +52,14 @@ describe("file batch runner", () => {
     await expect(readFile(path.join(rootDir, "dest/a.txt"), "utf8")).resolves.toBe("a");
     await expect(readFile(path.join(rootDir, "dest/b.txt"), "utf8")).resolves.toBe("b");
     expect(getFileBatch(db, batch.id)).toMatchObject({ status: "completed", successCount: 2, failedCount: 0 });
-    expect(listPendingApprovals(db)).toHaveLength(0);
+    expect(db.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
     expect(listFileOperations(db)).toHaveLength(2);
   });
 
   it("continues after an item fails and reports the failure", async () => {
     await writeFile(path.join(rootDir, "present.txt"), "present");
     const batch = createFileBatch(db, {
-      rootId: "local",
-      storagePoolId: "pool-1",
+            storagePoolId: "pool-1",
       operation: "trash",
       summary: "Trash two items",
       items: [{ sourcePath: "missing.txt" }, { sourcePath: "present.txt" }]
@@ -85,8 +80,7 @@ describe("file batch runner", () => {
     await mkdir(path.join(rootDir, "dest"));
     await writeFile(path.join(rootDir, "recover.txt"), "recover");
     const batch = createFileBatch(db, {
-      rootId: "local",
-      storagePoolId: "pool-1",
+            storagePoolId: "pool-1",
       operation: "move",
       targetDirectory: "dest",
       summary: "Move one item",
@@ -105,8 +99,7 @@ describe("file batch runner", () => {
   it("runs independently without publishing Agent events", async () => {
     await writeFile(path.join(rootDir, "events.txt"), "events");
     const batch = createFileBatch(db, {
-      rootId: "local",
-      storagePoolId: "pool-1",
+            storagePoolId: "pool-1",
       operation: "trash",
       summary: "Trash one item",
       items: [{ sourcePath: "events.txt" }]
@@ -140,14 +133,14 @@ function storageCommandRunner(): SystemCommandRunner {
     async run(command, args) {
       if (command === "findmnt") {
         return JSON.stringify({
-          filesystems: [{ source: "pool-1", target: rootDir, fstype: "ext4", size: 1024, used: 128, avail: 896, "use%": "12.5%" }]
+          filesystems: [{ source: "/dev/md/pool-1", target: rootDir, fstype: "ext4", size: 1024, used: 128, avail: 896, "use%": "12.5%" }]
         });
       }
       if (command === "mdadm" && args[0] === "--detail" && args[1] === "--scan") {
-        return "ARRAY pool-1 name=test-pool UUID=test-pool";
+        return "ARRAY /dev/md/pool-1 name=pool-1 UUID=test-pool";
       }
       if (command === "mdadm" && args[0] === "--detail") {
-        return "Name : test-pool\nRaid Level : raid1\nState : clean\nUUID : test-pool\nArray Size : 1024 KiB";
+        return "Name : pool-1\nRaid Level : raid1\nState : clean\nUUID : test-pool\nArray Size : 1024 KiB";
       }
       if (command === "smartctl") return JSON.stringify({ devices: [] });
       return JSON.stringify({ blockdevices: [] });
@@ -156,13 +149,12 @@ function storageCommandRunner(): SystemCommandRunner {
 }
 
 function testConfig(): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
   return {
-    dataDir: tempDir,
-    databasePath: path.join(tempDir, "cyberos.sqlite"),
+    ...base,
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: {
       enabled: false,
       socketPath: "/var/run/docker.sock",
@@ -170,9 +162,9 @@ function testConfig(): CyberOsConfig {
       operationTimeoutMs: 120_000,
       consoleShells: ["/bin/sh"]
     },
-    hostd: { socketPath: "/run/cyberos/hostd.sock" },
+    hostd: { socketPath: "/run/cyberos/hostd.sock", mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: {
       enabled: false,
       socketPath: "/tmp/vod-player.sock",
@@ -189,6 +181,5 @@ function testConfig(): CyberOsConfig {
       hwdec: "auto-safe",
       user: "cyberos"
     },
-    nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }

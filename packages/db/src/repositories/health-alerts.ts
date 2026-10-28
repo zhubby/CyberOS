@@ -8,17 +8,17 @@ import type {
 import type { CyberOsDatabase } from "../connection.js";
 import type { DbAlertRow } from "./repository-rows.js";
 
-export function upsertHealthAlert(db: CyberOsDatabase, input: { code: string; scope?: string; rootId?: string | null; severity: HealthAlertSeverity; details?: string | null; now?: Date }): IndexerAlert {
+export function upsertHealthAlert(db: CyberOsDatabase, input: { code: string; scope?: string; storagePoolId?: string | null; severity: HealthAlertSeverity; details?: string | null; now?: Date }): IndexerAlert {
   const now = (input.now ?? new Date()).toISOString();
-  const scope = input.scope ?? input.rootId ?? "system";
+  const scope = input.scope ?? input.storagePoolId ?? "system";
   const id = randomUUID();
   db.prepare(`
-    INSERT INTO health_alerts (id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, details)
+    INSERT INTO health_alerts (id, code, scope, storage_pool_id, severity, status, first_seen_at, last_seen_at, details)
     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
     ON CONFLICT(code, scope) DO UPDATE SET status = 'active', severity = excluded.severity,
       last_seen_at = excluded.last_seen_at, resolved_at = NULL, details = excluded.details
-  `).run(id, input.code, scope, input.rootId ?? null, input.severity, now, now, input.details ?? null);
-  const row = db.prepare("SELECT id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts WHERE code = ? AND scope = ?").get(input.code, scope) as DbAlertRow;
+  `).run(id, input.code, scope, input.storagePoolId ?? null, input.severity, now, now, input.details ?? null);
+  const row = db.prepare("SELECT id, code, scope, storage_pool_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts WHERE code = ? AND scope = ?").get(input.code, scope) as DbAlertRow;
   return mapAlert(row);
 }
 
@@ -30,8 +30,8 @@ export function resolveHealthAlert(db: CyberOsDatabase, input: { code: string; s
 
 export function listHealthAlerts(db: CyberOsDatabase, input: { status?: HealthAlertStatus; limit?: number } = {}): IndexerAlert[] {
   const rows = input.status
-    ? db.prepare("SELECT id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts WHERE status = ? ORDER BY last_seen_at DESC LIMIT ?").all(input.status, input.limit ?? 100)
-    : db.prepare("SELECT id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts ORDER BY last_seen_at DESC LIMIT ?").all(input.limit ?? 100);
+    ? db.prepare("SELECT id, code, scope, storage_pool_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts WHERE status = ? ORDER BY last_seen_at DESC LIMIT ?").all(input.status, input.limit ?? 100)
+    : db.prepare("SELECT id, code, scope, storage_pool_id, severity, status, first_seen_at, last_seen_at, resolved_at, details FROM health_alerts ORDER BY last_seen_at DESC LIMIT ?").all(input.limit ?? 100);
   return (rows as DbAlertRow[]).map(mapAlert);
 }
 
@@ -48,15 +48,15 @@ export function reconcileHealthAlerts(
   const current = new Map<string, SystemHealthSummary["issues"][number]>();
   for (const issue of input.issues) {
     if (!ownedCodes.has(issue.code)) continue;
-    current.set(`${issue.code}:${issue.rootId ?? "system"}`, issue);
+    current.set(`${issue.code}:${issue.storagePoolId ?? "system"}`, issue);
   }
 
   const reconcile = db.transaction(() => {
     for (const issue of current.values()) {
       upsertHealthAlert(db, {
         code: issue.code,
-        scope: issue.rootId ?? "system",
-        rootId: issue.rootId ?? null,
+        scope: issue.storagePoolId ?? "system",
+        storagePoolId: issue.storagePoolId ?? null,
         severity: issue.severity,
         details: issue.message,
         now
@@ -79,5 +79,5 @@ export function reconcileHealthAlerts(
 }
 
 function mapAlert(row: DbAlertRow): IndexerAlert {
-  return { id: row.id, code: row.code, rootId: row.root_id, severity: row.severity, status: row.status, firstSeenAt: row.first_seen_at, lastSeenAt: row.last_seen_at, resolvedAt: row.resolved_at, details: row.details };
+  return { id: row.id, code: row.code, storagePoolId: row.storage_pool_id, severity: row.severity, status: row.status, firstSeenAt: row.first_seen_at, lastSeenAt: row.last_seen_at, resolvedAt: row.resolved_at, details: row.details };
 }

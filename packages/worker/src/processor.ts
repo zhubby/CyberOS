@@ -3,11 +3,9 @@ import {
   PiActiveTurnUnavailableError,
   runPiAgentCommand,
   runPiAgentTurn,
-  runReadOnlyAgentTurn,
   type PiAgentCommand,
   type PiAgentRunner
 } from "@cyberos/agent";
-import { proposePiToolCapability } from "@cyberos/capability-runtime";
 import {
   appendEvent,
   claimNextAgentSessionCommand,
@@ -21,13 +19,11 @@ import {
   getJob,
   getMessage,
   getModelProviderSettings,
-  getNasRoot,
   getAgentCapabilityPolicySettings,
   getAgentMcpSettings,
   getSession,
   finishAgentSessionCommand,
   linkAgentJobToCapabilityRun,
-  queryIndexedText,
   requeueAgentSessionCommand,
   renewAgentJobLease,
   renewAgentSessionCommandLease,
@@ -35,13 +31,12 @@ import {
   updateJobStatus,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { ModelProviderSettingsRecord, CyberOsConfig } from "@cyberos/shared";
+import { type ModelProviderSettingsRecord, type CyberOsConfig } from "@cyberos/shared";
 
 export interface ProcessNextJobDependencies {
   db: CyberOsDatabase;
   config: CyberOsConfig;
   agentRunner?: PiAgentRunner;
-  allowLocalFallback?: boolean;
   workerId?: string;
   leaseMs?: number;
   heartbeatMs?: number;
@@ -85,7 +80,7 @@ export async function processNextAgentCommand({
 
   try {
   const session = getSession(db, command.sessionId);
-  const root = session ? getNasRoot(db, session.rootId) : null;
+  const workspace = { path: config.paths.dataRoot };
   const activeJob = command.jobId
     ? getJob(db, command.jobId)
     : getActiveAgentJobForSession(db, command.sessionId);
@@ -99,8 +94,8 @@ export async function processNextAgentCommand({
     payload: { commandId: command.id, type: command.type }
   });
 
-  if (!session || !root) {
-    const error = "Command references a missing session or NAS root";
+  if (!session) {
+    const error = "Command references a missing session";
     const failed = finishAgentSessionCommand(db, {
       commandId: command.id,
       workerId,
@@ -133,10 +128,10 @@ export async function processNextAgentCommand({
     const workingPath = activeJob?.workingPath ?? session.currentPath;
     const result = await commandRunner({
       session: { ...session, currentPath: workingPath },
-      root,
+      root: workspace,
       workingPath,
-      dataDir: config.dataDir,
-      modelSettings: getModelProviderSettings(db) ?? defaultModelProviderSettings(config),
+      dataDir: config.paths.stateDir,
+      modelSettings: getModelProviderSettings(db) ?? defaultModelProviderSettings(),
       toolPolicy: agentCapabilityPolicyToPiToolPolicy(
         getAgentCapabilityPolicySettings(db) ?? defaultAgentCapabilityPolicySettings()
       ),
@@ -149,8 +144,8 @@ export async function processNextAgentCommand({
           payload: event.payload,
           ...(event.source === undefined ? {} : { source: event.source }),
           ...(event.sourceId === undefined ? {} : { sourceId: event.sourceId }),
-          ...(event.runId === undefined ? {} : { runId: event.runId }),
-          ...(event.sequence === undefined ? {} : { sequence: event.sequence })
+          runId: event.runId,
+          sequence: event.sequence
         });
       },
       isCancelled: () => commandLeaseLost,
@@ -176,12 +171,6 @@ export async function processNextAgentCommand({
           })
         });
       },
-      requestCapability: (request) => proposePiToolCapability({
-        dependencies: { db, config },
-        sessionId: session.id,
-        rootId: root.id,
-        request
-      }),
       onCapabilityRunPending: (capabilityRunId, providerSessionId) => {
         if (!activeJob) throw new Error("Idle command cannot wait for a capability approval");
         linkAgentJobToCapabilityRun(db, {
@@ -190,7 +179,7 @@ export async function processNextAgentCommand({
           providerSessionId
         });
       },
-      ...(config.mcp?.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
+      ...(config.mcp.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
         mcp: {
           enabled: true,
           url: `http://127.0.0.1:${config.api.port}/mcp`,
@@ -267,7 +256,6 @@ export async function processNextJob({
   db,
   config,
   agentRunner,
-  allowLocalFallback,
   workerId = `worker-${process.pid}`,
   leaseMs = AGENT_JOB_LEASE_MS,
   heartbeatMs = AGENT_JOB_HEARTBEAT_MS
@@ -281,10 +269,10 @@ export async function processNextJob({
 
   const session = getSession(db, job.sessionId);
   const message = getMessage(db, job.messageId);
-  const root = session ? getNasRoot(db, session.rootId) : null;
+  const workspace = { path: config.paths.dataRoot };
 
-  if (!session || !message || !root) {
-    const error = "Job references missing session, message, or NAS root";
+  if (!session || !message) {
+    const error = "Job references a missing session or message";
     const failed = updateJobStatus(db, job.id, "failed", error, ["running"]);
     if (failed && session) {
       appendEvent(db, {
@@ -328,43 +316,14 @@ export async function processNextJob({
 
   try {
     const turnSession = { ...session, currentPath: job.workingPath };
-    const shouldUseLocalFallback =
-      allowLocalFallback === true || process.env.CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK === "1";
     const turnMessage = continuation ? capabilityContinuationMessage(continuation.runs) : message.content;
-    const result = shouldUseLocalFallback
-      ? await runReadOnlyAgentTurn({
+    const result = await runPiAgentTurn({
           session: turnSession,
-          root,
-          message: turnMessage,
-          emit: (event) => {
-            appendEvent(db, {
-              sessionId: session.id,
-              jobId: job.id,
-              type: event.type,
-              payload: event.payload
-            });
-          },
-          isCancelled,
-          queryIndex: async (query, currentPath) => {
-            try {
-              return queryIndexedText(db, {
-                rootId: root.id,
-                query,
-                path: currentPath,
-                limit: 25
-              });
-            } catch {
-              return [];
-            }
-          },
-        })
-      : await runPiAgentTurn({
-          session: turnSession,
-          root,
+          root: workspace,
           message: turnMessage,
           workingPath: job.workingPath,
-          dataDir: config.dataDir,
-          modelSettings: getModelProviderSettings(db) ?? defaultModelProviderSettings(config),
+          dataDir: config.paths.stateDir,
+          modelSettings: getModelProviderSettings(db) ?? defaultModelProviderSettings(),
           toolPolicy: agentCapabilityPolicyToPiToolPolicy(
             getAgentCapabilityPolicySettings(db) ?? defaultAgentCapabilityPolicySettings()
           ),
@@ -378,8 +337,8 @@ export async function processNextJob({
               payload: event.payload,
               ...(event.source === undefined ? {} : { source: event.source }),
               ...(event.sourceId === undefined ? {} : { sourceId: event.sourceId }),
-              ...(event.runId === undefined ? {} : { runId: event.runId }),
-              ...(event.sequence === undefined ? {} : { sequence: event.sequence })
+              runId: event.runId,
+              sequence: event.sequence
             });
           },
           isCancelled,
@@ -406,23 +365,17 @@ export async function processNextJob({
             });
             providerSessionSavedThisTurn = providerSession.providerSessionId;
           },
-          requestCapability: (request) => proposePiToolCapability({
-            dependencies: { db, config },
-            sessionId: session.id,
-            rootId: root.id,
-            request
-          }),
           onCapabilityRunPending: (runId, providerSessionId) => {
             linkAgentJobToCapabilityRun(db, { jobId: job.id, runId, providerSessionId });
           },
-          ...(config.mcp?.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
+          ...(config.mcp.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
             mcp: {
               enabled: true,
               url: `http://127.0.0.1:${config.api.port}/mcp`,
               tokenFile: config.mcp.piTokenFile
             }
           } : {})
-        });
+    });
 
     if (result.status === "cancelled" || getJob(db, job.id)?.status === "cancelled") {
       return true;
@@ -588,11 +541,11 @@ function capabilityContinuationMessage(
   ].join("\n");
 }
 
-function defaultModelProviderSettings(config: CyberOsConfig): ModelProviderSettingsRecord {
+function defaultModelProviderSettings(): ModelProviderSettingsRecord {
   return {
     generation: 1,
     providerName: "openai",
-    baseUrl: config.model.localEndpoint,
+    baseUrl: null,
     model: "",
     apiKey: null,
     updatedAt: new Date(0).toISOString()

@@ -1,31 +1,29 @@
+import { constants as fsConstants } from "node:fs";
+import { access, lstat, readFile, readdir, realpath } from "node:fs/promises";
+import path from "node:path";
 import {
   getDownloadWorkerHealth,
   getIndexerServiceStatus,
-  getIndexRootStatus,
+  getIndexStoragePoolStatus,
   getOpsTaskOverview,
-  getPhotostaffWorkerHealth,
+  getPhotosWorkerHealth,
   listBackupRuns,
   listHealthAlerts,
   listIndexRunHistory,
-  listNasRoots,
-  listRootReadiness,
   reconcileHealthAlerts,
-  upsertRootReadiness,
   type CyberOsDatabase
 } from "@cyberos/db";
 import { readMonitoringHealth } from "@cyberos/monitoring";
 import {
-  DEFAULT_MONITORING_CONFIG,
   createVodPlayerRuntime,
-  type RootReadiness,
+  type StoragePoolReadiness,
   type CyberOsConfig,
   type SystemHealthSummary,
   type VodPlayerRuntime
 } from "@cyberos/shared";
-import { checkMountReadiness, type MountCommandRunner } from "@cyberos/nas-tools";
 
 export const HEALTH_OWNED_ALERT_CODES = [
-  "mount_not_ready",
+  "storage_pool_not_ready",
   "indexer_failed",
   "stale_index",
   "indexer_stalled",
@@ -33,7 +31,7 @@ export const HEALTH_OWNED_ALERT_CODES = [
   "indexer_queue_stalled",
   "indexer_watcher_degraded",
   "downloader_unavailable",
-  "photostaff_unavailable",
+  "photos_unavailable",
   "vod_player_recovering",
   "vod_player_unavailable",
   "backup_target_not_ready",
@@ -52,30 +50,18 @@ export interface SystemHealthEvaluationInput {
   config: CyberOsConfig;
   now?: Date;
   vodPlayer?: VodPlayerRuntime;
-  backupTargetReadiness?: RootReadiness | null;
+  backupTargetReadiness?: StoragePoolReadiness | null;
 }
 
 export async function evaluateSystemHealth(
   input: SystemHealthEvaluationInput
 ): Promise<SystemHealthSummary> {
   const now = input.now ?? new Date();
-  const roots = listNasRoots(input.db);
-  const readinessById = new Map(
-    listRootReadiness(input.db, roots.map((root) => root.id)).map((item) => [item.rootId, item])
-  );
-  const readiness = roots.map((root) => readinessById.get(root.id) ?? {
-    rootId: root.id,
-    status: "unknown" as const,
-    checkedAt: null,
-    reason: "readiness has not been checked",
-    source: null,
-    uuid: null,
-    fstype: null
-  });
+  const readiness = await inspectStoragePools(input.config, now);
   const issues: SystemHealthSummary["issues"] = [];
   const issueKeys = new Set<string>();
   const addIssue = (issue: SystemHealthSummary["issues"][number]): void => {
-    const key = `${issue.code}:${issue.rootId ?? "system"}`;
+    const key = `${issue.code}:${issue.storagePoolId ?? "system"}`;
     if (issueKeys.has(key)) return;
     issueKeys.add(key);
     issues.push(issue);
@@ -88,58 +74,57 @@ export async function evaluateSystemHealth(
     addIssue({
       code: alert.code,
       severity: alert.severity,
-      ...(alert.rootId ? { rootId: alert.rootId } : {}),
+      ...(alert.storagePoolId ? { storagePoolId: alert.storagePoolId } : {}),
       message: alert.details ?? alert.code
     });
   }
 
   const indexFreshness: number[] = [];
-  for (const root of roots) {
-    const ready = readinessById.get(root.id);
-    if (!ready || ready.status !== "ready") {
-      const message = ready?.reason ?? "readiness has not been checked";
-      const severity = !ready || ready.status === "unknown"
-        ? root.mountPolicy === "required" ? "critical" : "warning"
-        : "critical";
-      addIssue({ code: "mount_not_ready", severity, rootId: root.id, message });
+  for (const storagePool of readiness) {
+    if (storagePool.status !== "ready") {
+      addIssue({
+        code: "storage_pool_not_ready",
+        severity: "critical",
+        storagePoolId: storagePool.storagePoolId,
+        message: storagePool.reason ?? "storage pool is not ready"
+      });
     }
 
-    const status = getIndexRootStatus(input.db, root.id, now);
+    const status = getIndexStoragePoolStatus(input.db, storagePool.storagePoolId, now);
     const freshness = status.metrics?.freshnessMs ?? null;
     if (freshness !== null) indexFreshness.push(freshness);
-    const history = listIndexRunHistory(input.db, root.id, 30);
+    const history = listIndexRunHistory(input.db, storagePool.storagePoolId, 30);
     let consecutiveFailures = 0;
     for (const run of history) {
       if (run.status !== "failed") break;
       consecutiveFailures += 1;
     }
-    const failureThreshold = input.config.health?.consecutiveFailureThreshold ?? 2;
+    const failureThreshold = input.config.health.consecutiveFailureThreshold;
     if (consecutiveFailures >= failureThreshold) {
       addIssue({
         code: "indexer_failed",
         severity: "critical",
-        rootId: root.id,
+        storagePoolId: storagePool.storagePoolId,
         message: `${consecutiveFailures} consecutive failed runs`
       });
     }
 
-    if (freshness !== null && input.config.health) {
+    if (freshness !== null) {
       if (freshness >= input.config.health.staleIndexCriticalMs) {
-        addIssue({ code: "stale_index", severity: "critical", rootId: root.id, message: "index is stale" });
+        addIssue({ code: "stale_index", severity: "critical", storagePoolId: storagePool.storagePoolId, message: "index is stale" });
       } else if (freshness >= input.config.health.staleIndexWarningMs) {
-        addIssue({ code: "stale_index", severity: "warning", rootId: root.id, message: "index is stale" });
+        addIssue({ code: "stale_index", severity: "warning", storagePoolId: storagePool.storagePoolId, message: "index is stale" });
       }
     }
     if (
       status.status === "running"
       && status.progress?.lastProgressAt
-      && input.config.health
       && now.getTime() - Date.parse(status.progress.lastProgressAt) > input.config.health.stalledRunMs
     ) {
       addIssue({
         code: "indexer_stalled",
         severity: "critical",
-        rootId: root.id,
+        storagePoolId: storagePool.storagePoolId,
         message: "indexer progress has stalled"
       });
     }
@@ -151,7 +136,7 @@ export async function evaluateSystemHealth(
     (run.kind === "daily" || run.kind === "weekly") && run.status === "completed"
   );
   const latestCheck = backupRuns.find((run) => run.kind === "check");
-  if (input.config.backup?.enabled) {
+  if (input.config.backup.enabled) {
     if (input.backupTargetReadiness && input.backupTargetReadiness.status !== "ready") {
       addIssue({
         code: "backup_target_not_ready",
@@ -178,8 +163,7 @@ export async function evaluateSystemHealth(
     }
     if (
       !latestBackup
-      || (input.config.health
-        && latestBackup.finishedAt
+      || (latestBackup.finishedAt
         && now.getTime() - Date.parse(latestBackup.finishedAt) > input.config.health.backupStaleMs)
     ) {
       addIssue({ code: "backup_stale", severity: "critical", message: "no recent successful backup" });
@@ -212,12 +196,12 @@ export async function evaluateSystemHealth(
       message: indexer.watcher.reason ?? "Indexer watcher is degraded"
     });
   }
-  const photostaff = getPhotostaffWorkerHealth(input.db, now);
-  if (photostaff.status !== "ready") {
+  const photos = getPhotosWorkerHealth(input.db, now);
+  if (photos.status !== "ready") {
     addIssue({
-      code: "photostaff_unavailable",
-      severity: photostaff.activeJobs + photostaff.queuedJobs + photostaff.retryingJobs > 0 ? "critical" : "warning",
-      message: photostaff.status === "stale" ? "Photostaff heartbeat is stale" : "Photostaff is unavailable"
+      code: "photos_unavailable",
+      severity: photos.activeJobs + photos.queuedJobs + photos.retryingJobs > 0 ? "critical" : "warning",
+      message: photos.status === "stale" ? "Photos heartbeat is stale" : "Photos is unavailable"
     });
   }
 
@@ -248,8 +232,8 @@ export async function evaluateSystemHealth(
   }
 
   const monitoring = readMonitoringHealth(
-    input.config.metricsDatabasePath ?? `${input.config.dataDir}/metrics.sqlite`,
-    input.config.monitoring ?? DEFAULT_MONITORING_CONFIG,
+    input.config.paths.metricsDatabasePath,
+    input.config.monitoring,
     now
   );
   if (monitoring.status === "unavailable") {
@@ -266,14 +250,14 @@ export async function evaluateSystemHealth(
       : issues.length > 0 ? "degraded" : "ready",
     checkedAt: now.toISOString(),
     issues,
-    roots: readiness,
+    storagePools: readiness,
     indexerFreshnessMs: indexFreshness.length > 0 ? Math.max(...indexFreshness) : null,
     backupFreshnessMs: latestBackup?.finishedAt
       ? Math.max(0, now.getTime() - Date.parse(latestBackup.finishedAt))
       : null,
     downloader,
     indexer,
-    photostaff,
+    photos,
     vodPlayer,
     operations,
     monitoring
@@ -281,11 +265,10 @@ export async function evaluateSystemHealth(
 }
 
 export async function runScheduledHealthEvaluation(
-  input: SystemHealthEvaluationInput & { mountCommandRunner?: MountCommandRunner }
+  input: SystemHealthEvaluationInput
 ): Promise<SystemHealthSummary> {
   const now = input.now ?? new Date();
-  await refreshRootReadiness(input.db, input.config, now, input.mountCommandRunner);
-  const backupTargetReadiness = await inspectBackupTarget(input.config, now, input.mountCommandRunner);
+  const backupTargetReadiness = await inspectBackupTarget(input.config, now);
   const summary = await evaluateSystemHealth({
     db: input.db,
     config: input.config,
@@ -301,33 +284,94 @@ export async function runScheduledHealthEvaluation(
   return summary;
 }
 
-export async function refreshRootReadiness(
-  db: CyberOsDatabase,
+export async function inspectStoragePools(
   config: CyberOsConfig,
-  now = new Date(),
-  commandRunner?: MountCommandRunner
-): Promise<RootReadiness[]> {
-  const roots = listNasRoots(db);
-  const results = await mapWithConcurrency(roots, 4, async (root) => checkMountReadiness(
-    root,
-    { now, ...(commandRunner ? { commandRunner } : {}) }
-  ));
-  for (const readiness of results) upsertRootReadiness(db, readiness);
-  return results;
+  now = new Date()
+): Promise<StoragePoolReadiness[]> {
+  const dataRoot = config.paths.dataRoot;
+  let entries;
+  try {
+    entries = await readdir(dataRoot, { withFileTypes: true });
+  } catch (error) {
+    return [{
+      storagePoolId: "data",
+      status: "config_invalid",
+      checkedAt: now.toISOString(),
+      reason: error instanceof Error ? error.message : "data root is unavailable",
+      source: null,
+      uuid: null,
+      fstype: null
+    }];
+  }
+  const mounted = config.environment === "production" ? await mountedPaths() : null;
+  const pools = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
+    const poolPath = path.join(dataRoot, entry.name);
+    const metadata = await lstat(poolPath);
+    const realPath = await realpath(poolPath);
+    const isReady = !metadata.isSymbolicLink() && (!mounted || mounted.has(realPath));
+    return {
+      storagePoolId: entry.name,
+      status: isReady ? "ready" as const : "not_ready" as const,
+      checkedAt: now.toISOString(),
+      reason: isReady ? null : "storage pool is not mounted",
+      source: realPath,
+      uuid: null,
+      fstype: null
+    };
+  }));
+  return pools.sort((left, right) => left.storagePoolId.localeCompare(right.storagePoolId));
 }
 
 async function inspectBackupTarget(
   config: CyberOsConfig,
-  now: Date,
-  commandRunner?: MountCommandRunner
-): Promise<RootReadiness | null> {
-  if (!config.backup?.enabled) return null;
-  return checkMountReadiness({
-    id: "backup-target",
-    name: "Backup target",
-    path: config.backup.repositoryPath ?? "",
-    mountPolicy: config.backup.requireMount ? "required" : "optional"
-  }, { now, ...(commandRunner ? { commandRunner } : {}) });
+  now: Date
+): Promise<StoragePoolReadiness | null> {
+  if (!config.backup.enabled) return null;
+  try {
+    await access(config.backup.repositoryPath ?? "", fsConstants.R_OK | fsConstants.W_OK);
+    return {
+      storagePoolId: "backup",
+      status: "ready",
+      checkedAt: now.toISOString(),
+      reason: null,
+      source: config.backup.repositoryPath,
+      uuid: null,
+      fstype: null
+    };
+  } catch (error) {
+    return {
+      storagePoolId: "backup",
+      status: "not_ready",
+      checkedAt: now.toISOString(),
+      reason: error instanceof Error ? error.message : "backup repository is unavailable",
+      source: config.backup.repositoryPath,
+      uuid: null,
+      fstype: null
+    };
+  }
+}
+
+async function mountedPaths(): Promise<Set<string>> {
+  try {
+    const mountInfo = await readFile("/proc/self/mountinfo", "utf8");
+    const paths = await Promise.all(mountInfo.split("\n").flatMap((line) => {
+      const mountpoint = line.split(" ")[4];
+      if (!mountpoint) return [];
+      return [realpath(unescapeMountInfo(mountpoint)).catch(() => null)];
+    }));
+    return new Set(paths.filter((candidate): candidate is string => candidate !== null));
+  } catch {
+    return new Set();
+  }
+}
+
+function unescapeMountInfo(value: string): string {
+  return value.replace(/\\(040|011|012|134)/gu, (_match, code: string) => ({
+    "040": " ",
+    "011": "\t",
+    "012": "\n",
+    "134": "\\"
+  })[code]!);
 }
 
 async function collectVodPlayerHealth(
@@ -350,21 +394,4 @@ async function collectVodPlayerHealth(
   } catch {
     return { status: "critical", state: null, errorCode: "VOD_PLAYER_UNAVAILABLE", checkedAt };
   }
-}
-
-async function mapWithConcurrency<T, R>(
-  values: readonly T[],
-  concurrency: number,
-  mapper: (value: T) => Promise<R>
-): Promise<R[]> {
-  const results = new Array<R>(values.length);
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
-    while (next < values.length) {
-      const index = next;
-      next += 1;
-      results[index] = await mapper(values[index]!);
-    }
-  }));
-  return results;
 }

@@ -52,15 +52,8 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
   `amd64`/`arm64`; the terminal always runs as the internal `cyberos` user. Review
   mirror settings before it changes APT sources. Nginx defaults on; Docker and
   VM support default off.
-- `packaging/appliance/build-image.sh` consumes an already built `.deb` and
-  emits a systemd rootfs tarball, not a bootable board image. It requires
-  `mmdebstrap` and `systemd-nspawn`; pass `CYBEROS_DEB` explicitly when the
-  artifact is not at the default path.
-- `flake.nix` exports Linux packages, development shells, and a NixOS module.
-  NixOS runs with `CYBEROS_HOST_MUTATION_POLICY=declarative`; host configuration
-  writes are rejected and must be expressed through NixOS options.
 - After installation, check the resident services, timers, and journald. Verify
-  `/health`, `/api/roots/readiness`, and `/api/system/health`; liveness alone is
+  `/health`, `/api/system/storage`, and `/api/system/health`; liveness alone is
   not NAS or backup readiness. Oneshot jobs normally become `inactive (dead)`
   after success, so inspect their exit status and journal.
 - CyberOS 2.0 is clean-install only. Do not add discovery, import, aliases, or
@@ -70,7 +63,7 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
 
 ## Safety And UI Reminders
 
-Preserve NAS root/path traversal and unsafe-symlink protections, approval gates
+Preserve storage pool/path traversal and unsafe-symlink protections, approval gates
 for mutations, and the wire shapes of `/api/files/meta` and `/api/files/text`.
 Keep the production API on loopback and use the packaged Nginx proxy for LAN
 access. For frontend changes, reuse existing components, CSS variables, and

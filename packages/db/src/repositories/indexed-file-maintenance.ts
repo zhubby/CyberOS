@@ -5,7 +5,7 @@ export function upsertIndexedFile(
   db: CyberOsDatabase,
   input: {
     id?: string;
-    rootId: string;
+    storagePoolId: string;
     path: string;
     name: string;
     mimeType?: string | null;
@@ -18,19 +18,19 @@ export function upsertIndexedFile(
   const fileId =
     input.id ??
     (db
-      .prepare("SELECT id FROM indexed_files WHERE root_id = ? AND path = ?")
+      .prepare("SELECT id FROM indexed_files WHERE storage_pool_id = ? AND path = ?")
       .pluck()
-      .get(input.rootId, input.path) as string | undefined) ??
+      .get(input.storagePoolId, input.path) as string | undefined) ??
     randomUUID();
   const indexedAt = new Date().toISOString();
 
   const tx = db.transaction(() => {
     db.prepare(`
       INSERT INTO indexed_files (
-        id, root_id, path, name, mime_type, size_bytes, mtime_ms, hash, indexed_at
+        id, storage_pool_id, path, name, mime_type, size_bytes, mtime_ms, hash, indexed_at
       )
-      VALUES (@id, @rootId, @path, @name, @mimeType, @sizeBytes, @mtimeMs, @hash, @indexedAt)
-      ON CONFLICT(root_id, path) DO UPDATE SET
+      VALUES (@id, @storagePoolId, @path, @name, @mimeType, @sizeBytes, @mtimeMs, @hash, @indexedAt)
+      ON CONFLICT(storage_pool_id, path) DO UPDATE SET
         name = excluded.name,
         mime_type = excluded.mime_type,
         size_bytes = excluded.size_bytes,
@@ -39,7 +39,7 @@ export function upsertIndexedFile(
         indexed_at = excluded.indexed_at
     `).run({
       id: fileId,
-      rootId: input.rootId,
+      storagePoolId: input.storagePoolId,
       path: input.path,
       name: input.name,
       mimeType: input.mimeType ?? null,
@@ -49,11 +49,11 @@ export function upsertIndexedFile(
       indexedAt
     });
 
-    db.prepare("DELETE FROM indexed_text WHERE file_id = ?").run(fileId);
+    db.prepare("DELETE FROM indexed_content_fts WHERE file_id = ?").run(fileId);
     db.prepare(`
-      INSERT INTO indexed_text (file_id, root_id, path, name, body)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(fileId, input.rootId, input.path, input.name, input.body ?? "");
+      INSERT INTO indexed_content_fts (file_id, storage_pool_id, path, name, body, terms)
+      VALUES (?, ?, ?, ?, ?, '')
+    `).run(fileId, input.storagePoolId, input.path, input.name, input.body ?? "");
   });
 
   tx();
@@ -62,15 +62,15 @@ export function upsertIndexedFile(
 
 export function removeMissingIndexedFiles(
   db: CyberOsDatabase,
-  input: { rootId: string; seenPaths: string[] }
+  input: { storagePoolId: string; seenPaths: string[] }
 ): number {
   const existing = db
-    .prepare("SELECT id, path FROM indexed_files WHERE root_id = ?")
-    .all(input.rootId) as Array<{ id: string; path: string }>;
+    .prepare("SELECT id, path FROM indexed_files WHERE storage_pool_id = ?")
+    .all(input.storagePoolId) as Array<{ id: string; path: string }>;
   const seen = new Set(input.seenPaths);
   const stale = existing.filter((row) => !seen.has(row.path));
   const tx = db.transaction(() => {
-    const deleteText = db.prepare("DELETE FROM indexed_text WHERE file_id = ?");
+    const deleteText = db.prepare("DELETE FROM indexed_content_fts WHERE file_id = ?");
     const deleteFile = db.prepare("DELETE FROM indexed_files WHERE id = ?");
     for (const row of stale) {
       deleteText.run(row.id);

@@ -4,10 +4,10 @@ import { access, lstat, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
-import { getNasRoot, getRootReadiness } from "@cyberos/db";
-import { resolveSafeExistingPath } from "@cyberos/nas-tools";
-import type { NasRootRecord } from "@cyberos/shared";
+import { resolveSafeExistingPath } from "@cyberos/storage-tools";
+import type { CyberOsConfig } from "@cyberos/shared";
 import type { CapabilityDomainAdapter, PreparedCapabilityAction } from "./adapters.js";
+import { requireStoragePool, type ResolvedStoragePool } from "./storage-pools.js";
 
 const execFileAsync = promisify(execFile);
 const COMMANDS = ["git", "rg", "find", "ls", "stat", "du", "df", "file", "sha256sum"] as const;
@@ -15,7 +15,7 @@ type RestrictedCommand = typeof COMMANDS[number];
 const OUTPUT_LIMIT = 64 * 1024;
 
 interface RestrictedShellPayload {
-  rootId: string;
+  storagePoolId: string;
   command: RestrictedCommand;
   args: string[];
   cwd: string;
@@ -25,14 +25,14 @@ interface RestrictedShellPayload {
 
 export function createRestrictedShellAdapter(): CapabilityDomainAdapter {
   return {
-    availability: ({ config }) => config.mcp?.shellEnabled === true
+    availability: ({ config }) => config.mcp.shellEnabled
       ? { available: true }
       : { available: false, reason: "Restricted shell is disabled by host configuration" },
     prepare: async (request, context) => {
-      const parsed = await validateRequest(request, context.db, context.config.mcp?.shellEnabled === true);
+      const parsed = await validateRequest(request, context.config, context.config.mcp.shellEnabled);
       return {
         summary: `Run ${parsed.command} in ${parsed.cwd}`,
-        target: { rootId: parsed.rootId, cwd: parsed.cwd },
+        target: { storagePoolId: parsed.storagePoolId, cwd: parsed.cwd },
         changes: { command: parsed.command, args: parsed.args, timeoutMs: parsed.timeoutMs },
         revision: parsed.revision,
         privatePayload: parsed as unknown as JsonValue
@@ -40,14 +40,14 @@ export function createRestrictedShellAdapter(): CapabilityDomainAdapter {
     },
     revalidate: async (prepared, context) => {
       const payload = shellPayload(prepared);
-      const current = await validateRequest(payload as unknown as JsonValue, context.db, context.config.mcp?.shellEnabled === true);
+      const current = await validateRequest(payload as unknown as JsonValue, context.config, context.config.mcp.shellEnabled);
       if (current.revision !== payload.revision) {
         throw new CapabilityError("CONFLICT", "Shell working directory changed after approval was requested");
       }
     },
     execute: async (prepared, context) => {
       const payload = shellPayload(prepared);
-      const root = requireReadyRoot(context.db, payload.rootId);
+      const root = requireStoragePool(context.config, payload.storagePoolId);
       const safe = await safeDirectory(root, payload.cwd);
       const invocation = commandInvocation(payload.command, payload.args);
       let stdout = "";
@@ -89,32 +89,32 @@ export function createRestrictedShellAdapter(): CapabilityDomainAdapter {
   };
 }
 
-async function validateRequest(value: JsonValue, db: Parameters<typeof getNasRoot>[0], enabled: boolean): Promise<RestrictedShellPayload> {
+async function validateRequest(value: JsonValue, config: CyberOsConfig, enabled: boolean): Promise<RestrictedShellPayload> {
   if (!enabled) throw new CapabilityError("NOT_READY", "Restricted shell is disabled by host configuration", { retryable: true });
   if (!isRecord(value)) throw new CapabilityError("INVALID_ARGUMENT", "Shell request must be an object");
-  const allowedKeys = new Set(["rootId", "command", "args", "cwd", "timeoutMs", "revision"]);
+  const allowedKeys = new Set(["storagePoolId", "command", "args", "cwd", "timeoutMs", "revision"]);
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) throw new CapabilityError("INVALID_ARGUMENT", "Shell request contains unsupported fields");
-  const rootId = requiredString(value.rootId, "rootId");
+  const storagePoolId = requiredString(value.storagePoolId, "storagePoolId");
   const command = requiredString(value.command, "command");
   if (!COMMANDS.includes(command as RestrictedCommand)) throw new CapabilityError("INVALID_ARGUMENT", "Command is not in the read-only profile");
   const args = parseArgs(value.args);
   validateArguments(command as RestrictedCommand, args);
   const cwd = optionalString(value.cwd) ?? ".";
   const timeoutMs = boundedInteger(value.timeoutMs, 5_000, 100, 30_000);
-  const root = requireReadyRoot(db, rootId);
+  const root = requireStoragePool(config, storagePoolId);
   const safe = await safeDirectory(root, cwd);
   await validateExistingPathArguments(root, safe.realPath, command as RestrictedCommand, args);
   await requireExecutable(command as RestrictedCommand);
   const metadata = await stat(safe.realPath);
   const revision = createHash("sha256").update(JSON.stringify({
-    rootId,
+    storagePoolId,
     command,
     args,
     cwd: safe.relativePath,
     ino: metadata.ino,
     mtimeMs: metadata.mtimeMs
   })).digest("base64url");
-  return { rootId, command: command as RestrictedCommand, args, cwd: safe.relativePath, timeoutMs, revision };
+  return { storagePoolId, command: command as RestrictedCommand, args, cwd: safe.relativePath, timeoutMs, revision };
 }
 
 function validateArguments(command: RestrictedCommand, args: string[]): void {
@@ -182,7 +182,7 @@ function denyOptions(args: string[], denied: string[]): void {
   }
 }
 
-async function validateExistingPathArguments(root: NasRootRecord, cwd: string, command: RestrictedCommand, args: string[]): Promise<void> {
+async function validateExistingPathArguments(root: ResolvedStoragePool, cwd: string, command: RestrictedCommand, args: string[]): Promise<void> {
   let positionalIndex = 0;
   for (const argument of args) {
     if (argument.startsWith("-")) continue;
@@ -228,13 +228,13 @@ function commandInvocation(command: RestrictedCommand, args: string[]): { comman
 function shellPayload(prepared: PreparedCapabilityAction): RestrictedShellPayload {
   if (!isRecord(prepared.privatePayload)) throw new CapabilityError("INTERNAL", "Stored shell payload is invalid");
   const value = prepared.privatePayload;
-  const rootId = requiredString(value.rootId, "rootId");
+  const storagePoolId = requiredString(value.storagePoolId, "storagePoolId");
   const command = requiredString(value.command, "command");
   const cwd = requiredString(value.cwd, "cwd");
   const revision = requiredString(value.revision, "revision");
   if (!COMMANDS.includes(command as RestrictedCommand)) throw new CapabilityError("INTERNAL", "Stored shell command is invalid");
   return {
-    rootId,
+    storagePoolId,
     command: command as RestrictedCommand,
     args: parseArgs(value.args),
     cwd,
@@ -243,16 +243,7 @@ function shellPayload(prepared: PreparedCapabilityAction): RestrictedShellPayloa
   };
 }
 
-function requireReadyRoot(db: Parameters<typeof getNasRoot>[0], rootId: string): NasRootRecord {
-  const root = getNasRoot(db, rootId);
-  if (!root || !root.enabled) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
-  if (root.mountPolicy === "required" && getRootReadiness(db, root.id)?.status !== "ready") {
-    throw new CapabilityError("NOT_READY", "NAS root is not ready", { retryable: true });
-  }
-  return root;
-}
-
-async function safeDirectory(root: NasRootRecord, requestedPath: string) {
+async function safeDirectory(root: ResolvedStoragePool, requestedPath: string) {
   try {
     const safe = await resolveSafeExistingPath(root.path, requestedPath);
     const metadata = await lstat(safe.absolutePath);

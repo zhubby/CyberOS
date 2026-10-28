@@ -14,10 +14,10 @@ export const GENERIC_OBJECT_SCHEMA: JsonSchema = Object.freeze({
 export const ROOT_PATH_SCHEMA: JsonSchema = Object.freeze({
   type: "object",
   properties: {
-    rootId: { type: "string", minLength: 1, maxLength: 128 },
+    storagePoolId: { type: "string", minLength: 1, maxLength: 128 },
     path: { type: "string", maxLength: 4096, default: "." }
   },
-  required: ["rootId"],
+  required: ["storagePoolId"],
   additionalProperties: false
 });
 

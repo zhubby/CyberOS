@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { PathSafetyError } from "@cyberos/nas-tools";
+import { PathSafetyError } from "@cyberos/storage-tools";
 
 export function registerErrorHandler(server: FastifyInstance): void {
   server.setErrorHandler((error: unknown, _request, reply) => {

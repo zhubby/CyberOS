@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createActionMessageAndJob,
   createSession,
-  ensureNasRoots,
   finishBackupRun,
   listHealthAlerts,
   openCyberOsDb,
@@ -45,8 +44,7 @@ describe("operations maintenance repository", () => {
   });
 
   it("rolls back all retention deletes when a later step fails", () => {
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const action = createActionMessageAndJob(db, {
       sessionId: session.id,
       content: "Old operation",

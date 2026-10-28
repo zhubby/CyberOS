@@ -8,7 +8,7 @@ import type { CyberOsDatabase } from "../connection.js";
 import type { DbBluetoothTransferRow } from "./repository-rows.js";
 
 const COLUMNS = `
-  id, direction, adapter_id, device_address, root_id, storage_pool_id,
+  id, direction, adapter_id, device_address, storage_pool_id,
   relative_path, display_name, finalization_relative_path, status, transferred_bytes, total_bytes,
   error, obex_transfer_path, control_requested, read_at, created_at,
   updated_at, started_at, finished_at, last_progress_at
@@ -19,7 +19,6 @@ export function createBluetoothSendTransfers(
   input: {
     adapterId: string;
     deviceAddress: string;
-    rootId: string;
     storagePoolId: string;
     files: Array<{ relativePath: string; displayName: string; totalBytes: number }>;
     now?: Date;
@@ -28,9 +27,9 @@ export function createBluetoothSendTransfers(
   const timestamp = (input.now ?? new Date()).toISOString();
   const insert = db.prepare(`
     INSERT INTO bluetooth_transfers (
-      id, direction, adapter_id, device_address, root_id, storage_pool_id,
+      id, direction, adapter_id, device_address, storage_pool_id,
       relative_path, display_name, status, total_bytes, created_at, updated_at
-    ) VALUES (?, 'send', ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+    ) VALUES (?, 'send', ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
   `);
   return db.transaction(() => input.files.map((file) => {
     const id = randomUUID();
@@ -38,7 +37,6 @@ export function createBluetoothSendTransfers(
       id,
       input.adapterId,
       input.deviceAddress,
-      input.rootId,
       input.storagePoolId,
       file.relativePath,
       file.displayName,
@@ -100,7 +98,6 @@ export function completeBluetoothReceiveFinalization(
   db: CyberOsDatabase,
   input: {
     id: string;
-    rootId: string;
     storagePoolId: string;
     relativePath: string;
     displayName: string;
@@ -110,14 +107,13 @@ export function completeBluetoothReceiveFinalization(
   const timestamp = (input.now ?? new Date()).toISOString();
   const row = db.prepare(`
     UPDATE bluetooth_transfers
-    SET root_id = ?, storage_pool_id = ?, relative_path = ?, display_name = ?,
+    SET storage_pool_id = ?, relative_path = ?, display_name = ?,
         finalization_relative_path = ?,
         status = 'completed', error = NULL, control_requested = NULL,
         read_at = NULL, finished_at = ?, updated_at = ?
     WHERE id = ? AND direction = 'receive' AND status = 'finalizing'
     RETURNING ${COLUMNS}
   `).get(
-    input.rootId,
     input.storagePoolId,
     input.relativePath,
     input.displayName,
@@ -244,7 +240,6 @@ function mapTransfer(row: DbBluetoothTransferRow): BluetoothTransferRecord {
     direction: row.direction,
     adapterId: row.adapter_id,
     deviceAddress: row.device_address,
-    rootId: row.root_id,
     storagePoolId: row.storage_pool_id,
     relativePath: row.relative_path,
     displayName: row.display_name,

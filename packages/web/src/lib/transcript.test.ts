@@ -152,45 +152,30 @@ describe("transcriptReducer", () => {
     expect(state.messages.map((item) => item.id)).toEqual(["message:1", "message:2"]);
   });
 
-  it("rolls back optimistic messages and preserves legacy arrival order", () => {
+  it("keeps local optimistic messages after ordered persisted messages", () => {
     let state = transcriptReducer(initialTranscriptState, { type: "begin", sessionId: "session-1" });
     state = transcriptReducer(state, {
       type: "snapshot",
       sessionId: "session-1",
-      messages: [message("message:legacy", null), message("event:legacy", null)]
+      messages: [message("event:2", 2), message("message:1", 1)]
     });
     state = transcriptReducer(state, {
       type: "optimistic",
       sessionId: "session-1",
       message: message("local:pending", null)
     });
+    expect(state.messages.map((item) => item.id)).toEqual([
+      "message:1",
+      "event:2",
+      "local:pending"
+    ]);
+
     state = transcriptReducer(state, {
       type: "rollback",
       sessionId: "session-1",
       optimisticId: "local:pending"
     });
-
-    expect(state.messages.map((item) => item.id)).toEqual(["message:legacy", "event:legacy"]);
-  });
-
-  it("keeps arrival order during a rolling upgrade with mixed sequence metadata", () => {
-    let state = transcriptReducer(initialTranscriptState, { type: "begin", sessionId: "session-1" });
-    state = transcriptReducer(state, {
-      type: "snapshot",
-      sessionId: "session-1",
-      messages: [message("message:legacy", null), message("event:legacy", null)]
-    });
-    state = transcriptReducer(state, {
-      type: "event",
-      sessionId: "session-1",
-      message: message("event:new", 1)
-    });
-
-    expect(state.messages.map((item) => item.id)).toEqual([
-      "message:legacy",
-      "event:legacy",
-      "event:new"
-    ]);
+    expect(state.messages.map((item) => item.id)).toEqual(["message:1", "event:2"]);
   });
 
   it("ends loading in an error phase without showing an empty ready state", () => {

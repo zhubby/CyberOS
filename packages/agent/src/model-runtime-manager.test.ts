@@ -49,7 +49,7 @@ describe("ModelRuntimeManager", () => {
     expect(manager.size).toBe(0);
   });
 
-  it("isolates legacy sessions that share a generation but use different models", async () => {
+  it("isolates sessions that share a generation but use different models", async () => {
     const runtimes = [fakeRuntime({ authenticated: true }), fakeRuntime({ authenticated: true })];
     let runtimeIndex = 0;
     const createRuntime = vi.fn(async () => runtimes[runtimeIndex++] as ModelRuntime);
@@ -58,17 +58,17 @@ describe("ModelRuntimeManager", () => {
 
     const first = await manager.get(current, savedSession({
       runtimeGeneration: 1,
-      runtimeModel: "legacy-a"
+      runtimeModel: "model-a"
     }));
     const second = await manager.get(current, savedSession({
       sessionId: "session-2",
       runtimeGeneration: 1,
-      runtimeModel: "legacy-b"
+      runtimeModel: "model-b"
     }));
 
     expect(first).not.toBe(second);
-    expect(first.model).toMatchObject({ id: "legacy-a" });
-    expect(second.model).toMatchObject({ id: "legacy-b" });
+    expect(first.model).toMatchObject({ id: "model-a" });
+    expect(second.model).toMatchObject({ id: "model-b" });
     expect(createRuntime).toHaveBeenCalledTimes(2);
     expect(manager.size).toBe(2);
   });

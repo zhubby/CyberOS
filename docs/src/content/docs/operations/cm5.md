@@ -9,13 +9,13 @@ sidebar:
   order: 2
 ---
 
-CM5 必须在目标 arm64 主机上构建 Debian 包，以匹配 `better-sqlite3` 原生模块和 Rust hostd/termux 二进制。不要在 x64 开发机编译后直接复制 `node_modules` 或 Rust 二进制到 CM5。
+CM5 必须在目标 arm64 主机上构建 Debian 包，以匹配 `better-sqlite3` 原生模块和 Rust hostd/terminal 二进制。不要在 x64 开发机编译后直接复制 `node_modules` 或 Rust 二进制到 CM5。
 
 ## CM5 前置条件
 
 - 运行 Debian 12/bookworm 或兼容的 arm64 系统（Debian 13/trixie 也需在目标主机验收）；
-- 确认包管理的非 root `cyberos` 用户可以使用 `/cyberos/home/termux` 和配置的 NAS roots；
-- 将 NAS 数据盘挂载到 `/cyberos/data/primary`，需要备份时将仓库放在与 NAS、`/cyberos/state` 不重叠的 `/cyberos/data/backup`；
+- 确认包管理的非 root `cyberos` 用户可以使用 `/cyberos/home/terminal` 和配置的 storage pools；
+- 将 NAS 数据盘挂载到 `/cyberos/data/pool-1`，需要备份时将仓库放在与 NAS、`/cyberos/state` 不重叠的 `/cyberos/backup`；
 - 确保构建阶段可以访问 APT、Node.js release 和 npm registry，或传入内部镜像；
 - Wi-Fi 管理要求 NetworkManager、wpa_supplicant、dnsmasq-base、wireless-regdb 和 iw；Debian 包会声明这些依赖，但不会自动把现有 networkd 主机迁移到 NetworkManager；
 - 预留足够空间用于 `.cyberos/deb-build`、`docs/node_modules` 和 Debian 产物。
@@ -36,8 +36,7 @@ CYBEROS_NPM_REGISTRY=https://registry.npmmirror.com \
 若系统 Node.js 版本不满足要求，可让安装脚本下载并校验 Node.js 22.23.2：
 
 ```bash
-sudo CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary \
-  CYBEROS_ENABLE_NGINX=1 \
+sudo CYBEROS_ENABLE_NGINX=1 \
   ./packaging/scripts/install.sh
 ```
 
@@ -50,8 +49,7 @@ sudo CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary \
 新安装时可直接启用；`CYBEROS_ENABLE_TV_MODE=1` 会同时启用 VOD：
 
 ```bash
-sudo CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary \
-  CYBEROS_ENABLE_NGINX=1 \
+sudo CYBEROS_ENABLE_NGINX=1 \
   CYBEROS_ENABLE_TV_MODE=1 \
   ./packaging/scripts/install.sh
 ```
@@ -71,7 +69,7 @@ sudo cyberos-tv-mode status
 sudo cyberos-tv-mode disable
 ```
 
-禁用会停止 TV target、删除 CyberOS 自己的 drop-in，并且仅在桌面启用前处于 active 时重新启动它。不要手动删除 `/cyberos/state/tv/control/desktop-state`；该文件是失败回滚和桌面恢复依据。NixOS 使用 `services.cyberos.integrations.tvMode.enable` 声明拓扑，`cyberos-tv-mode enable|disable` 在 declarative policy 下会拒绝执行。
+禁用会停止 TV target、删除 CyberOS 自己的 drop-in，并且仅在桌面启用前处于 active 时重新启动它。不要手动删除 `/cyberos/state/tv/control/desktop-state`；该文件是失败回滚和桌面恢复依据。`cyberos-tv-mode enable|disable` 在 declarative policy 下会拒绝执行。
 
 ### 健康与输入
 
@@ -113,14 +111,14 @@ sudo dmesg --level=err,warn | tail -n 100
 
 ```bash
 sudo systemctl is-active cyberos-api.service cyberos-worker@1.service
-sudo systemctl is-active cyberos-termux.service cyberos-hostd.service
+sudo systemctl is-active cyberos-terminald.service cyberos-hostd.service
 sudo systemctl list-timers 'cyberos-*'
 curl -fsS http://127.0.0.1:3010/health
-curl -fsS http://127.0.0.1:3010/api/roots/readiness
+curl -fsS http://127.0.0.1:3010/api/system/storage
 curl -fsS http://127.0.0.1:3010/api/system/health
 ```
 
-然后从浏览器验证 Web 和 `/docs/`，选择 NAS root，打开终端，上传一个小文件并确认 `/api/indexer/status` 的队列、watcher 与 heartbeat 正常。Indexer 应持续为 `active`；health、maintenance 等 oneshot 需结合退出码、journal 和运维页中的持久化历史判断。
+然后从浏览器验证 Web 和 `/docs/`，选择 storage pool，打开终端，上传一个小文件并确认 `/api/indexer/status` 的队列、watcher 与 heartbeat 正常。Indexer 应持续为 `active`；health、maintenance 等 oneshot 需结合退出码、journal 和运维页中的持久化历史判断。
 
 hostd 的 root 状态目录应为 `/cyberos/state/hostd/docker-daemon` 和 `/cyberos/state/hostd/network-manager`，不能声明共享父目录或共享 LogsDirectory。父目录和数据库仍由 `cyberos` 使用，两个恢复子目录为 `root:root 0700`。现有相同配置的 host drop-in 可保留，升级后检查实际合并 unit；在维护窗口按两种启动顺序验证，并观察 hostd 重启是否影响 API/worker。详见[目录所有权排查](/docs/operations/troubleshooting/#服务目录所有权与启动顺序)。
 
@@ -175,14 +173,14 @@ sudo systemctl stop cyberos-alerter.service cyberos-monitor.service cyberos-inde
 停止 timer 不会停止正在运行的任务。确认 health、maintenance、backup oneshot 已退出，再停止 API、所有实际启用的 worker 实例和其他状态写入进程，确认 SQLite 没有写入者后才执行以下冷备份。不要对活跃数据库目录直接 tar，也不要只复制 `.sqlite` 而遗漏尚未 checkpoint 的 WAL。在独立备份介质上使用新的受限目录，保留旧包并记录此前启用的服务/timers：
 
 ```bash
-sudo install -d -o root -g root -m 0700 /cyberos/data/backup/cyberos-upgrade
-sudo tar -C /cyberos -czf /cyberos/data/backup/cyberos-upgrade/config-before-upgrade.tgz config
-sudo tar -C /cyberos -czf /cyberos/data/backup/cyberos-upgrade/state-before-upgrade.tgz state home
+sudo install -d -o root -g root -m 0700 /cyberos/system-backups/cyberos-upgrade
+sudo tar -C /cyberos -czf /cyberos/system-backups/cyberos-upgrade/config-before-upgrade.tgz config
+sudo tar -C /cyberos -czf /cyberos/system-backups/cyberos-upgrade/state-before-upgrade.tgz state home
 ```
 
 示例目录必须未被之前升级占用，避免覆盖恢复材料。配置/state 包可能包含未加密秘密，限制权限并转存到加密备份仓库。它不包含默认 Docker volume 数据，容器工作负载需另行备份。
 
-安装新包后先启动 API 完成 migration，再依次启动 `cyberos-monitor.service`、`cyberos-alerter.service` 并检查 `/api/monitoring/overview` 与 `/api/monitoring/alerts/summary`，之后启动 worker、hostd、termux 和 `cyberos-indexer.service`。确认监控、告警求值与 Indexer heartbeat 后再串行运行 `cyberos-health.service`、`cyberos-maintenance.service`，最后重新启用 timers。回滚旧包时先停止 alerter；新增主库表和派生 series 保留但会被旧版本忽略。保留旧 `.deb` 与状态备份，直到浏览器、API、终端身份、root readiness、监控、索引和备份结果全部通过验收。
+安装新包后先启动 API 完成 migration，再依次启动 `cyberos-monitor.service`、`cyberos-alerter.service` 并检查 `/api/monitoring/overview` 与 `/api/monitoring/alerts/summary`，之后启动 worker、hostd、terminal 和 `cyberos-indexer.service`。确认监控、告警求值与 Indexer heartbeat 后再串行运行 `cyberos-health.service`、`cyberos-maintenance.service`，最后重新启用 timers。回滚旧包时先停止 alerter；新增主库表和派生 series 保留但会被旧版本忽略。保留旧 `.deb` 与状态备份，直到浏览器、API、终端身份、存储池挂载状态、监控、索引和备份结果全部通过验收。
 
 降级不会自动回滚主数据库 migration。若新版本已执行 schema migration，使用与旧包匹配的 `cyberos.sqlite`/state 备份恢复，再安装旧包；不要在没有备份的情况下直接覆盖生产数据库。`metrics.sqlite` 是独立可重建数据，旧版本可忽略但应保留，等待再次升级复用。
 
@@ -222,10 +220,10 @@ node -e '
 
 把结果分为“通过”“失败”“未验证”，记录版本、commit、Engine/API 版本、镜像 digest、时间与脱敏证据。一次创建成功和 HTTP `200` 只能作为冒烟通过，不代表生产验收完成。
 
-1. **基础部署**：核对 dpkg/build-info/Web 版本，检查失败 unit、重启计数、NAS readiness、索引、终端身份及 `/docs/`。终端应以部署指定的非 root 用户（例如 `zhubby`）从其 home 启动 passwd shell 的交互登录模式，而不是 `/cyberos/state`。
+1. **基础部署**：核对 dpkg/build-info/Web 版本，检查失败 unit、重启计数、storage pool readiness、索引、终端身份及 `/docs/`。终端应以部署指定的非 root 用户（例如 `zhubby`）从其 home 启动 passwd shell 的交互登录模式，而不是 `/cyberos/state`。
 2. **网络与镜像**：从 CM5 检查 DNS/TLS、mirror `/v2/` 和真实 pull；确认 daemon 已加载 `registry-mirrors`。使用不可变的 `rustfs/rustfs@sha256:<verified-digest>` 并确认 arm64，`latest` 仅用于探索，不作为可重复发布依据。
 3. **功能路径**：使用临时、最小权限 Registry 账号分别验证手动私有 pull、创建容器的 `missing/always`、托管 Compose App 的 `pull/up`；轮换/删除凭证后验证下一次执行使用新状态，并测试拉取失败不泄密。摘要中有镜像不能证明认证成功，匿名可拉取的公开镜像也不能验证凭证集成。
-4. **容器与应用**：通过页面创建独立测试 volume/容器和托管 Compose App，检查 `/cyberos/apps/<project-key>` 的 `0750/0640/0600` 权限、保存后的 `needsDeploy`、Up approval、环境变量轮换、revision 漂移拒绝、Down 后二次确认删除。明确 `/data` 命令、非 root 用户、非 privileged、资源能力与重启策略。使用独立名字和测试端口；仅在 LAN 地址绑定 S3/console，不默认暴露到所有接口。确认 inspect、容器状态、重启数、实际日志、S3 health、浏览器登录与对象上传/下载，而非只检查“创建成功”。
+4. **容器与应用**：通过页面创建独立测试 volume/容器和托管 Compose App，检查 `/cyberos/apps/<project-key>` 的 `0750/0640/0600` 权限、保存后的 `needsDeploy`、确认后的 Up、环境变量轮换、revision 漂移拒绝、Down 后二次确认删除。明确 `/data` 命令、非 root 用户、非 privileged、资源能力与重启策略。使用独立名字和测试端口；仅在 LAN 地址绑定 S3/console，不默认暴露到所有接口。确认 inspect、容器状态、重启数、实际日志、S3 health、浏览器登录与对象上传/下载，而非只检查“创建成功”。
 5. **删除保护与边界**：确认运行和已停止容器的 ImageID 占用都被统计；未知占用禁用 UI 删除，服务端占用冲突为 `409`。用独立未占用的多标签测试镜像检查具体 tag 删除、确认步骤、取消与失败；不要删除 RustFS 生产镜像。
 6. **持久化与恢复**：用隔离对象做 SHA-256 校验，验证测试容器重启、重建后数据保留；执行备份检查并恢复到新 volume，再读回校验。单独安排设备重启窗口，核对服务恢复、数据挂载、volume 与对象可读。执行方法见[Docker 数据备份演练](/docs/how-to/backup-restore/#docker-工作负载的数据)。
 
@@ -239,10 +237,10 @@ CM5 的 0.3.0 初次 RustFS 冒烟中，运行版本为 `1.0.0-rc.6`：S3 `http:
 
 ```bash
 sudo systemctl --failed
-sudo systemctl show cyberos-api.service cyberos-worker@1.service cyberos-hostd.service cyberos-termux.service -p NRestarts -p ExecMainStatus
-sudo journalctl -u cyberos-api.service -u cyberos-worker@1.service -u cyberos-hostd.service -u cyberos-termux.service --since '15 minutes ago' --no-pager
+sudo systemctl show cyberos-api.service cyberos-worker@1.service cyberos-hostd.service cyberos-terminald.service -p NRestarts -p ExecMainStatus
+sudo journalctl -u cyberos-api.service -u cyberos-worker@1.service -u cyberos-hostd.service -u cyberos-terminald.service --since '15 minutes ago' --no-pager
 curl -fsS http://127.0.0.1:3010/api/docker/summary
 curl -fsS http://127.0.0.1:3010/api/backup/status
 ```
 
-健康信号：版本与来源一致、服务重启计数稳定、termux socket 可连接且终端可输入/调整尺寸/重连、无 `Permission denied`/`SQLITE_CANTOPEN`、Engine ready、已知 ImageID 的占用数准确、不可用限制被拒绝、应用 health/登录/对象读取正常。termux 反复重启、socket/PTY 错误、家目录冲突、新出现的目录所有权变化、数据不可读或迁移错误应停止验收和 timers，保留现场并按匹配旧包的状态备份恢复；不要盲目降级数据库或 reset-failed。部署前已存在的 backup 失败单独记录与处理，生产 Go 必须有真实备份与恢复证据。
+健康信号：版本与来源一致、服务重启计数稳定、terminal socket 可连接且终端可输入/调整尺寸/重连、无 `Permission denied`/`SQLITE_CANTOPEN`、Engine ready、已知 ImageID 的占用数准确、不可用限制被拒绝、应用 health/登录/对象读取正常。terminal 反复重启、socket/PTY 错误、家目录冲突、新出现的目录所有权变化、数据不可读或迁移错误应停止验收和 timers，保留现场并按匹配旧包的状态备份恢复；不要盲目降级数据库或 reset-failed。部署前已存在的 backup 失败单独记录与处理，生产 Go 必须有真实备份与恢复证据。

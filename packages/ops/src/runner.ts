@@ -4,7 +4,7 @@ import {
   startOpsRun,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { OpsMaintenanceSummary, CyberOsConfig, SystemHealthSummary } from "@cyberos/shared";
+import { type OpsMaintenanceSummary, type CyberOsConfig, type SystemHealthSummary } from "@cyberos/shared";
 import { runScheduledHealthEvaluation } from "@cyberos/system-health";
 import { runMaintenance } from "./maintenance.js";
 
@@ -65,7 +65,7 @@ async function runTrackedTask<T>(
 
 function sanitizeOpsError(error: unknown, config: CyberOsConfig): string {
   let message = error instanceof Error ? error.message : "operation failed";
-  const privatePaths = [config.dataDir, config.databasePath, ...config.nasRoots.map((root) => root.path)]
+  const privatePaths = [config.paths.dataRoot, config.paths.stateDir, config.paths.databasePath]
     .filter(Boolean)
     .sort((left, right) => right.length - left.length);
   for (const privatePath of privatePaths) message = message.split(privatePath).join("<path>");

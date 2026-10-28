@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import {
-  appendEvent,
   createDockerRegistryCredential,
   createDockerConsoleAuthorization,
   createDockerOperationRecord,
@@ -12,35 +12,32 @@ import {
   DockerComposeAppProjectKeyConflictError,
   DockerRegistryCredentialConflictError,
   getDockerSettings,
-  getApproval,
   getDockerOperation,
   listDockerRegistryCredentials,
   listDockerOperations,
   markDockerConsoleAuthorizationFailed,
   updateDockerRegistryCredential,
-  updateApprovalStatus,
   updateDockerOperationStatus,
-  updateJobStatus,
   type DockerRegistryCredentialRecord
 } from "@cyberos/db";
-import type {
-  DockerDaemonConfigUpdateInput,
-  DockerDaemonStatus,
-  DockerComposeAppCreateInput,
-  DockerComposeAppDeleteInput,
-  DockerComposeAppUpdateInput,
-  DockerComposeAppValidateInput,
-  DockerConsoleAuthorizationRecord,
-  DockerContainerSummary,
-  DockerCreateInput,
-  DockerCreateResult,
-  DockerImagePullInput,
-  DockerImageRemoveInput,
-  DockerOperationAction,
-  DockerOperationProposal,
-  DockerOperationTargetType,
-  DockerRegistryCredentialCreateInput,
-  DockerRegistryCredentialUpdateInput
+import {
+  type DockerDaemonConfigUpdateInput,
+  type DockerDaemonStatus,
+  type DockerComposeAppCreateInput,
+  type DockerComposeAppDeleteInput,
+  type DockerComposeAppUpdateInput,
+  type DockerComposeAppValidateInput,
+  type DockerConsoleAuthorizationRecord,
+  type DockerContainerSummary,
+  type DockerCreateInput,
+  type DockerCreateResult,
+  type DockerImagePullInput,
+  type DockerImageRemoveInput,
+  type DockerOperationAction,
+  type DockerOperationProposal,
+  type DockerOperationTargetType,
+  type DockerRegistryCredentialCreateInput,
+  type DockerRegistryCredentialUpdateInput
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { effectiveDockerConfig } from "../lib/settings.js";
@@ -102,7 +99,10 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
   const currentConfig = () => effectiveDockerConfig(config, getDockerSettings(db));
   const daemon = docker?.daemon ?? new SystemDockerDaemonRuntime({ hostdSocketPath: config.hostd.socketPath });
   const compose = dockerCompose(currentConfig().docker, docker);
-  const hostAccessPolicy = context.hostAccess?.policy ?? new DockerHostAccessPolicy(db);
+  const hostAccessPolicy = context.hostAccess?.policy ?? new DockerHostAccessPolicy(db, {
+    runtimeRoot: path.join(config.paths.runDir, "host-access"),
+    dataRoot: config.paths.dataRoot
+  });
 
   server.get("/api/docker/summary", async () => ({
     summary: await collectDockerSummary(currentConfig(), docker)
@@ -296,7 +296,7 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
   server.put<{
     Body: DockerDaemonConfigUpdateInput;
   }>("/api/docker/daemon/config", { bodyLimit: MAX_DOCKER_DAEMON_BODY_BYTES }, async (request, reply) => {
-    if ((config.hostd.mutationPolicy ?? "mutable") === "declarative") {
+    if (config.hostd.mutationPolicy === "declarative") {
       reply.status(501).send({ error: "Docker daemon configuration is managed declaratively on this host" });
       return;
     }
@@ -654,7 +654,6 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
     try {
       authorization = createDockerConsoleAuthorization(db, {
         operationId: operation.id,
-        approvalId: operation.approvalId,
         containerId: proposal.containerId,
         shell: proposal.shell
       });
@@ -1061,27 +1060,10 @@ function markConsoleStarted(
   authorization: DockerConsoleAuthorizationRecord,
   execId: string
 ) {
-  const applied = updateDockerOperationStatus(db, authorization.operationId, "applied", {
+  updateDockerOperationStatus(db, authorization.operationId, "applied", {
     consoleSessionId: authorization.id,
     execId,
     openedAt: new Date().toISOString()
-  });
-  if (!authorization.approvalId) return;
-  const approval = getApproval(db, authorization.approvalId);
-  if (!approval) {
-    return;
-  }
-  updateApprovalStatus(db, approval.id, "applied", ["approved"]);
-  updateJobStatus(db, approval.jobId, "completed", null, ["waiting_approval", "completed"]);
-  appendEvent(db, {
-    sessionId: approval.sessionId,
-    jobId: approval.jobId,
-    type: "job.completed",
-    payload: {
-      jobId: approval.jobId,
-      approvalId: approval.id,
-      dockerOperation: applied
-    }
   });
 }
 
@@ -1091,26 +1073,9 @@ function markConsoleStartupFailed(
   message: string
 ) {
   markDockerConsoleAuthorizationFailed(db, authorization.id);
-  const failed = updateDockerOperationStatus(db, authorization.operationId, "failed", {
+  updateDockerOperationStatus(db, authorization.operationId, "failed", {
     error: message,
     failedAt: new Date().toISOString()
-  });
-  if (!authorization.approvalId) return;
-  const approval = getApproval(db, authorization.approvalId);
-  if (!approval) {
-    return;
-  }
-  updateApprovalStatus(db, approval.id, "failed", ["approved", "applied"]);
-  updateJobStatus(db, approval.jobId, "failed", message);
-  appendEvent(db, {
-    sessionId: approval.sessionId,
-    jobId: approval.jobId,
-    type: "job.failed",
-    payload: {
-      error: message,
-      approvalId: approval.id,
-      dockerOperation: failed
-    }
   });
 }
 

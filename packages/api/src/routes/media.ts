@@ -25,8 +25,12 @@ import {
   toPublicMediaLibrarySettings,
   updateMediaSource
 } from "@cyberos/db";
-import { inferMimeType } from "@cyberos/nas-tools";
-import type { MediaMatchCandidate, MediaMatchStatus, MediaSourceKind } from "@cyberos/shared";
+import { inferMimeType } from "@cyberos/storage-tools";
+import {
+  type MediaMatchCandidate,
+  type MediaMatchStatus,
+  type MediaSourceKind
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { searchTmdbCandidates, type TmdbCandidateSearchInput } from "../lib/tmdb-client.js";
 import { createVodPlayerRuntime } from "../lib/vod-player.js";
@@ -45,6 +49,7 @@ export function registerMediaRoutes(
   dependencies: MediaRouteDependencies = {}
 ): void {
   const { db } = context;
+  const dataRoot = context.config.paths.dataRoot;
   const vodPlayer = context.vodPlayer ?? createVodPlayerRuntime(context.config.vodPlayer);
   const searchTmdb = dependencies.searchTmdb ?? searchTmdbCandidates;
 
@@ -73,16 +78,15 @@ export function registerMediaRoutes(
   server.get("/api/media/sources", async () => ({ sources: listMediaSources(db) }));
 
   server.post<{
-    Body: { name?: string; kind?: MediaSourceKind; rootId?: string; storagePoolId?: string; path?: string };
+    Body: { name?: string; kind?: MediaSourceKind; storagePoolId?: string; path?: string };
   }>("/api/media/sources", async (request, reply) => {
     try {
-      const scope = await resolveStoragePoolScope(db, context.system, request.body?.rootId, request.body?.storagePoolId);
+      const scope = await resolveStoragePoolScope(dataRoot, context.system, request.body?.storagePoolId);
       const safe = await resolveScopedExistingPath(scope, request.body?.path ?? scope.mountpointPath);
       if (!(await stat(safe.realPath)).isDirectory()) throw new Error("Media source must be a directory");
       const source = createMediaSource(db, {
         name: request.body?.name ?? "",
         kind: request.body?.kind as MediaSourceKind,
-        rootId: scope.root.id,
         storagePoolId: scope.pool.id,
         path: safe.relativePath
       });
@@ -244,13 +248,12 @@ export function registerMediaRoutes(
       if (startPositionSeconds !== undefined && (!Number.isFinite(startPositionSeconds) || startPositionSeconds < 0)) {
         return reply.status(400).send({ error: "Start position must be non-negative" });
       }
-      const scope = await resolveStoragePoolScope(db, context.system, file.rootId, file.storagePoolId);
+      const scope = await resolveStoragePoolScope(dataRoot, context.system, file.storagePoolId);
       const safe = await resolveScopedExistingPath(scope, file.relativePath);
       if (!(await stat(safe.realPath)).isFile()) return reply.status(404).send({ error: "Media file not found" });
       const audioDeviceId = getBluetoothSettings(db)?.defaultAudioDeviceId ?? null;
       const status = await vodPlayer.command({
         type: "play",
-        rootId: file.rootId,
         storagePoolId: file.storagePoolId,
         relativePath: safe.relativePath,
         mediaFileId: file.id,
@@ -313,7 +316,11 @@ async function sendArtwork(context: ApiRouteContext, id: string, reply: FastifyR
     if (source.path !== "." && relativePath !== source.path && !relativePath.startsWith(`${source.path}/`)) {
       return reply.status(404).send({ error: "Artwork path is outside its media source" });
     }
-    const scope = await resolveStoragePoolScope(context.db, context.system, source.rootId, source.storagePoolId);
+    const scope = await resolveStoragePoolScope(
+      context.config.paths.dataRoot,
+      context.system,
+      source.storagePoolId
+    );
     const safe = await resolveScopedExistingPath(scope, relativePath);
     const metadata = await stat(safe.realPath);
     if (!metadata.isFile()) return reply.status(404).send({ error: "Artwork not found" });
@@ -336,7 +343,7 @@ async function cacheTmdbArtwork(context: ApiRouteContext, artworkId: string, sou
   const url = new URL(sourceUrl);
   if (url.protocol !== "https:" || url.hostname !== "image.tmdb.org") throw new Error("TMDB artwork URL is invalid");
   const extension = imageExtension(url.pathname);
-  const directory = path.join(context.config.dataDir, "media-cache", "tv");
+  const directory = path.join(context.config.paths.stateDir, "media-cache", "tv");
   const outputPath = path.join(directory, `${artworkId}${extension}`);
   try {
     if ((await stat(outputPath)).isFile()) return outputPath;

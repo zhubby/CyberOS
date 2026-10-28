@@ -7,7 +7,6 @@ import {
   claimNextFileBatchItem,
   claimNextJob,
   createFileBatch,
-  ensureNasRoots,
   FileBatchConflictError,
   finishFileBatchItem,
   getFileBatch,
@@ -21,7 +20,6 @@ let db: CyberOsDatabase;
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-file-batches-"));
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
 afterEach(async () => {
@@ -31,8 +29,7 @@ afterEach(async () => {
 
 function createBatch(sourcePaths = ["pool/a.txt", "pool/b.txt"]) {
   return createFileBatch(db, {
-    rootId: "local",
-    storagePoolId: "pool-1",
+        storagePoolId: "pool-1",
     operation: "trash",
     summary: "Trash selected items",
     items: sourcePaths.map((sourcePath) => ({ sourcePath }))
@@ -42,7 +39,7 @@ function createBatch(sourcePaths = ["pool/a.txt", "pool/b.txt"]) {
 describe("file batch repository", () => {
   it("keeps file batches out of the agent worker queue and aggregates partial failures", () => {
     createBatch();
-    expect(claimNextJob(db)).toBeNull();
+    expect(claimNextJob(db, { workerId: "test-worker", leaseMs: 30_000 })).toBeNull();
 
     const first = claimNextFileBatchItem(db)!;
     expect(first.batch.status).toBe("running");
@@ -85,6 +82,6 @@ describe("file batch repository", () => {
       cancelledCount: 1,
       completedCount: 2
     });
-    expect(claimNextJob(db)).toBeNull();
+    expect(claimNextJob(db, { workerId: "test-worker", leaseMs: 30_000 })).toBeNull();
   });
 });

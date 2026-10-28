@@ -40,6 +40,8 @@ const MAX_SEGMENTS: u64 = 4096;
 #[derive(Clone)]
 pub struct Downloader {
     db: Db,
+    data_root: Arc<std::path::PathBuf>,
+    require_mount: bool,
     worker_id: String,
     shutdown: CancellationToken,
 }
@@ -99,6 +101,8 @@ impl Downloader {
     pub fn new(config: &Config) -> Result<Self, DownloadError> {
         Ok(Self {
             db: Db::open(&config.database_path)?,
+            data_root: Arc::new(config.data_root.clone()),
+            require_mount: config.production,
             worker_id: Uuid::new_v4().to_string(),
             shutdown: CancellationToken::new(),
         })
@@ -224,7 +228,10 @@ impl Downloader {
         match result {
             Ok(TaskOutcome::Complete) => info!(task_id = %task.id, "download completed"),
             Ok(TaskOutcome::Interrupted { cancelled }) => {
-                if cancelled && let Ok(target) = StorageTarget::resolve(&task) {
+                if cancelled
+                    && let Ok(target) =
+                        StorageTarget::resolve(&task, &self.data_root, self.require_mount)
+                {
                     let _ = target.remove_partial();
                 }
                 let _ = self.db.finish_control(&task, cancelled).await;
@@ -234,7 +241,10 @@ impl Downloader {
                 if let Ok(Some(TaskOutcome::Interrupted { cancelled })) =
                     self.control_outcome(&task).await
                 {
-                    if cancelled && let Ok(target) = StorageTarget::resolve(&task) {
+                    if cancelled
+                        && let Ok(target) =
+                            StorageTarget::resolve(&task, &self.data_root, self.require_mount)
+                    {
                         let _ = target.remove_partial();
                     }
                     let _ = self.db.finish_control(&task, cancelled).await;
@@ -274,7 +284,11 @@ impl Downloader {
         if self.shutdown.is_cancelled() {
             return Ok(TaskOutcome::Shutdown);
         }
-        let target = Arc::new(StorageTarget::resolve(task)?);
+        let target = Arc::new(StorageTarget::resolve(
+            task,
+            &self.data_root,
+            self.require_mount,
+        )?);
         if target.target_identity()?.is_some() {
             return Err(DownloadError::new(
                 ErrorCode::TargetConflict,
@@ -900,7 +914,7 @@ impl Downloader {
                     .await?;
                 continue;
             };
-            let target = match StorageTarget::resolve(&task) {
+            let target = match StorageTarget::resolve(&task, &self.data_root, self.require_mount) {
                 Ok(target) => target,
                 Err(error) => {
                     warn!(task_id = %task.id, %error, "publication recovery is waiting for storage");
@@ -1233,7 +1247,7 @@ mod tests {
     use crate::db::TEST_SCHEMA;
 
     #[test]
-    fn plans_bounded_segments_and_preserves_a_legacy_prefix() {
+    fn plans_bounded_segments_and_preserves_an_existing_prefix() {
         let segments = plan_segments(80 * 1024 * 1024, 8 * 1024 * 1024);
         assert_eq!(segments[0].next, 8 * 1024 * 1024);
         assert!(segments.len() <= 4096);
@@ -1306,7 +1320,7 @@ mod tests {
             data.len() as u64
         );
         assert_eq!(
-            std::fs::read(_directory.path().join("nas/.download.part")).unwrap(),
+            std::fs::read(_directory.path().join("data/pool-1/.download.part")).unwrap(),
             *data
         );
         let persisted = downloader.db.get_task(&task.id).await.unwrap().unwrap();
@@ -1345,7 +1359,7 @@ mod tests {
         let error = downloader.run_task(&task, &settings).await.unwrap_err();
         assert_eq!(error.code, ErrorCode::SizeLimit);
         assert_eq!(
-            std::fs::metadata(_directory.path().join("nas/.download.part"))
+            std::fs::metadata(_directory.path().join("data/pool-1/.download.part"))
                 .unwrap()
                 .len(),
             0
@@ -1402,10 +1416,10 @@ mod tests {
             Some(actual)
         );
         assert_eq!(
-            std::fs::read(directory.path().join("nas/.download.part")).unwrap(),
+            std::fs::read(directory.path().join("data/pool-1/.download.part")).unwrap(),
             *payload
         );
-        assert!(!directory.path().join("nas/download.bin").exists());
+        assert!(!directory.path().join("data/pool-1/download.bin").exists());
     }
 
     #[tokio::test]
@@ -1440,7 +1454,7 @@ mod tests {
                 expected_status
             );
             assert_eq!(
-                directory.path().join("nas/.download.part").exists(),
+                directory.path().join("data/pool-1/.download.part").exists(),
                 partial_remains
             );
         }
@@ -1463,39 +1477,32 @@ mod tests {
         DownloadSettings,
     ) {
         let directory = tempfile::tempdir().unwrap();
-        let root = directory.path().join("nas");
-        std::fs::create_dir(&root).unwrap();
-        let root_text = root.to_string_lossy().into_owned();
+        let data_root = directory.path().join("data");
+        let root = data_root.join("pool-1");
+        std::fs::create_dir_all(&root).unwrap();
         let db = Db::open(&directory.path().join("test.sqlite")).unwrap();
         let url = url.to_owned();
-        db.test_call({
-            let root_text = root_text.clone();
-            move |connection| {
+        db.test_call(move |connection| {
                 connection
                     .execute_batch(TEST_SCHEMA)
                     .map_err(DownloadError::database)?;
-                connection
-                    .execute(
-                        "INSERT INTO nas_roots (id, path) VALUES ('root', ?)",
-                        [&root_text],
-                    )
-                    .map_err(DownloadError::database)?;
                 connection.execute(
-                    "INSERT INTO download_tasks (id, url, root_id, storage_pool_id, target_directory, \
+                    "INSERT INTO download_tasks (id, url, storage_pool_id, target_directory, \
                        target_file_name, target_path, partial_path, status, worker_id, lease_expires_at, \
                        created_at, updated_at) VALUES \
-                       ('task', ?, 'root', ?, '.', 'download.bin', 'download.bin', '.download.part', \
+                       ('task', ?, 'pool-1', '.', 'download.bin', 'download.bin', '.download.part', \
                         'running', 'worker', '2099-01-01T00:00:00Z', \
                         '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-                    params![url, root_text],
+                    params![url],
                 ).map_err(DownloadError::database)?;
                 Ok(())
-            }
         }).await.unwrap();
         let task = db.get_task("task").await.unwrap().unwrap();
-        let target = StorageTarget::resolve(&task).unwrap();
+        let target = StorageTarget::resolve(&task, &data_root, false).unwrap();
         let downloader = Downloader {
             db,
+            data_root: Arc::new(data_root),
+            require_mount: false,
             worker_id: "worker".to_owned(),
             shutdown: CancellationToken::new(),
         };
@@ -1718,29 +1725,22 @@ mod tests {
     #[tokio::test]
     async fn recovers_publication_on_both_sides_of_atomic_rename() {
         let directory = tempfile::tempdir().unwrap();
-        let root = directory.path().join("nas");
-        std::fs::create_dir(&root).unwrap();
+        let data_root = directory.path().join("data");
+        let root = data_root.join("pool-1");
+        std::fs::create_dir_all(&root).unwrap();
         let db = Db::open(&directory.path().join("test.sqlite")).unwrap();
-        let root_text = root.to_string_lossy().into_owned();
-        db.test_call({
-            let root_text = root_text.clone();
-            move |connection| {
-                connection
-                    .execute_batch(TEST_SCHEMA)
-                    .map_err(DownloadError::database)?;
-                connection
-                    .execute(
-                        "INSERT INTO nas_roots (id, path) VALUES ('root', ?)",
-                        [&root_text],
-                    )
-                    .map_err(DownloadError::database)?;
-                Ok(())
-            }
+        db.test_call(move |connection| {
+            connection
+                .execute_batch(TEST_SCHEMA)
+                .map_err(DownloadError::database)?;
+            Ok(())
         })
         .await
         .unwrap();
         let downloader = Downloader {
             db: db.clone(),
+            data_root: Arc::new(data_root.clone()),
+            require_mount: false,
             worker_id: "recovery-worker".to_owned(),
             shutdown: CancellationToken::new(),
         };
@@ -1749,7 +1749,7 @@ mod tests {
         std::fs::write(&partial, b"before").unwrap();
         insert_recovery_fixture(
             &db,
-            &root_text,
+            "pool-1",
             "before",
             "before.bin",
             ".before.part",
@@ -1757,7 +1757,7 @@ mod tests {
         )
         .await;
         let before_task = db.get_task("before").await.unwrap().unwrap();
-        let before_target = StorageTarget::resolve(&before_task).unwrap();
+        let before_target = StorageTarget::resolve(&before_task, &data_root, false).unwrap();
         let before_metadata = std::fs::metadata(&partial).unwrap();
         assert_eq!(before_target.target_identity().unwrap(), None);
         assert_eq!(
@@ -1786,15 +1786,7 @@ mod tests {
 
         let target = root.join("after.bin");
         std::fs::write(&target, b"after").unwrap();
-        insert_recovery_fixture(
-            &db,
-            &root_text,
-            "after",
-            "after.bin",
-            ".after.part",
-            &target,
-        )
-        .await;
+        insert_recovery_fixture(&db, "pool-1", "after", "after.bin", ".after.part", &target).await;
         downloader.recover_publish_journals().await.unwrap();
         let completed = db.get_task("after").await.unwrap().unwrap();
         assert_eq!(completed.status, "completed");
@@ -1831,10 +1823,10 @@ mod tests {
         let partial_name = partial_name.to_owned();
         db.test_call(move |connection| {
             connection.execute(
-                "INSERT INTO download_tasks (id, url, root_id, storage_pool_id, target_directory, \
+                "INSERT INTO download_tasks (id, url, storage_pool_id, target_directory, \
                    target_file_name, target_path, partial_path, status, worker_id, lease_expires_at, \
                    created_at, updated_at, download_mode) VALUES \
-                   (?, 'https://example.com/file', 'root', ?, '.', ?, ?, ?, 'running', 'dead-worker', \
+                   (?, 'https://example.com/file', ?, '.', ?, ?, ?, 'running', 'dead-worker', \
                     '1970-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'single')",
                 params![task_id, storage_pool_id, target_name, target_name, partial_name],
             ).map_err(DownloadError::database)?;

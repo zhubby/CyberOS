@@ -17,7 +17,7 @@ afterEach(async () => {
   directory = null;
 });
 
-describe("NAS ACL migration", () => {
+describe("storage pool ACL configuration", () => {
   it("previews without writing, then saves ACL before changing the mounted pool", async () => {
     const fixture = await setup();
     const preview = run(fixture, "--check");
@@ -158,7 +158,7 @@ describe("NAS ACL migration", () => {
 async function setup() {
   directory = await mkdtemp(path.join(os.tmpdir(), "cyberos-nas-acl-"));
   const bin = path.join(directory, "bin");
-  const root = path.join(directory, "nas");
+  const root = path.join(directory, "data");
   const pool = path.join(root, "pool1");
   await mkdir(bin);
   await mkdir(pool, { recursive: true });
@@ -230,7 +230,7 @@ esac
 }
 
 function run(fixture: Awaited<ReturnType<typeof setup>>, mode: string, extraEnv: NodeJS.ProcessEnv = {}) {
-  return spawnSync("bash", [script, mode, "--pool", fixture.pool, "--root", fixture.root], {
+  return spawnSync("bash", [script, mode, "--pool", fixture.pool], {
     encoding: "utf8",
     env: {
       ...process.env,

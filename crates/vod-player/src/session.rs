@@ -16,7 +16,6 @@ use crate::storage::FileIdentity;
 pub struct PersistedSession {
     pub version: u8,
     pub session_id: String,
-    pub root_id: String,
     pub storage_pool_id: String,
     pub relative_path: String,
     pub position_seconds: f64,
@@ -45,7 +44,7 @@ pub fn load(path: &Path) -> Result<LoadOutcome, VodError> {
         Err(error) => return Err(error.into()),
     };
     match serde_json::from_slice::<PersistedSession>(&bytes) {
-        Ok(session) if matches!(session.version, 1 | 2) && valid_session(&session) => {
+        Ok(session) if session.version == 2 && valid_session(&session) => {
             Ok(LoadOutcome::Session(Box::new(session)))
         }
         _ => {
@@ -122,7 +121,6 @@ fn sync_parent(path: &Path) -> Result<(), VodError> {
 
 fn valid_session(session: &PersistedSession) -> bool {
     !session.session_id.is_empty()
-        && !session.root_id.is_empty()
         && !session.storage_pool_id.is_empty()
         && !session.relative_path.is_empty()
         && session.position_seconds.is_finite()
@@ -141,9 +139,8 @@ mod tests {
 
     fn fixture() -> PersistedSession {
         PersistedSession {
-            version: 1,
+            version: 2,
             session_id: "session-1".to_owned(),
-            root_id: "root".to_owned(),
             storage_pool_id: "pool".to_owned(),
             relative_path: "movies/a.mp4".to_owned(),
             position_seconds: 12.0,

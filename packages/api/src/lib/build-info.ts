@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { BuildSource, PublicBuildInfo } from "@cyberos/shared";
 
-const BUILD_SOURCES = new Set<BuildSource>(["release", "ci", "local", "nix", "unknown"]);
+const BUILD_SOURCES = new Set<BuildSource>(["release", "ci", "local", "unknown"]);
 
 export async function loadBuildInfo({
   configuredPath = process.env.CYBEROS_BUILD_INFO_PATH,

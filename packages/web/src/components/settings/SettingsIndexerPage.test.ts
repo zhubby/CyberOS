@@ -10,7 +10,7 @@ beforeAll(async () => {
 });
 
 describe("SettingsIndexerPage", () => {
-  it("shows worker limits, daemon state, OCR roots, and rebuild controls", () => {
+  it("shows worker limits, daemon state, OCR storage pools, and rebuild controls", () => {
     const html = renderToStaticMarkup(createElement(SettingsIndexerPage, {
       settings: {
         scanConcurrency: 4,
@@ -21,17 +21,24 @@ describe("SettingsIndexerPage", () => {
         commandTimeoutMs: 120_000,
         maxPdfTextPages: 500,
         maxOcrPages: 20,
-        ocrRootIds: ["nas"],
+        ocrStoragePoolIds: ["nas"],
         updatedAt: "2026-10-12T00:00:00.000Z"
       },
       status: {
-        roots: [],
+        storagePools: [],
         service: { status: "ready", freshWorkers: 1, lastHeartbeatAt: "2026-10-12T00:00:00.000Z" },
-        watcher: { status: "ready", degradedRoots: [], reason: null },
+        watcher: { status: "ready", degradedStoragePools: [], reason: null },
         queue: { queued: 2, running: 1, retrying: 0, failed: 0, oldestQueuedAt: null, stalled: false },
-        rebuild: { status: "rebuilding", copied: 75, total: 100, rootsReady: 0, rootsTotal: 1 }
+        rebuild: { status: "rebuilding", storagePoolsReady: 0, storagePoolsTotal: 1 }
       },
-      roots: [{ id: "nas", name: "Primary NAS", path: "/cyberos/data/primary", homePath: null }],
+      storagePools: [{
+        id: "nas",
+        name: "NAS",
+        mountpoint: "/cyberos/data/nas",
+        path: "/cyberos/data/nas",
+        filesystem: "ext4",
+        status: "ready"
+      }],
       loading: false,
       onSettingsChange: vi.fn(),
       onReindex: vi.fn(),
@@ -40,12 +47,12 @@ describe("SettingsIndexerPage", () => {
 
     expect(html).toContain("Scan concurrency");
     expect(html).toContain("Extraction concurrency");
-    expect(html).toContain("Primary NAS");
-    expect(html).toContain("/cyberos/data/primary");
+    expect(html).toContain("NAS");
+    expect(html).toContain("/cyberos/data/nas");
     expect(html).toContain("OCR");
     expect(html).toContain("Rebuild");
     expect(html).toContain("2 queued · 1 running · 0 failed");
-    expect(html).toContain("75 / 100 copied");
+    expect(html).toContain("0 / 1 ready");
     expect(html).not.toContain("2026-10-12");
   });
 });

@@ -1,13 +1,9 @@
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import type { MonitoringCollectorState } from "@cyberos/shared";
-import { assertSupportedMonitoringSchemaVersion } from "./schema.js";
+import { assertSupportedMonitoringSchemaVersion, MONITORING_SCHEMA_VERSION } from "./schema.js";
 
-const MIGRATIONS = [
-  [1, "001_initial.sql"],
-  [2, "002_counter_increase.sql"],
-  [3, "003_counter_boundary.sql"]
-] as const;
+const CYBEROS_2_0_SCHEMA = "001_cyberos_2_0.sql";
 
 export interface MetricsFixtureSample {
   metric: string;
@@ -49,7 +45,7 @@ export class MetricsFixture {
   constructor(databasePath: string) {
     this.db = new Database(databasePath);
     this.db.pragma("foreign_keys = ON");
-    runMonitoringMigrations(this.db);
+    initializeMonitoringSchema(this.db);
   }
 
   close(): void {
@@ -144,7 +140,7 @@ export class MetricsFixture {
   }
 }
 
-export function runMonitoringMigrations(db: Database.Database): void {
+function initializeMonitoringSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS monitoring_schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -152,13 +148,11 @@ export function runMonitoringMigrations(db: Database.Database): void {
     ) STRICT;
   `);
   const currentVersion = assertSupportedMonitoringSchemaVersion(db);
-  for (const [version, filename] of MIGRATIONS) {
-    if (version <= currentVersion) continue;
-    const sql = readFileSync(new URL(`../contracts/migrations/${filename}`, import.meta.url), "utf8");
-    db.transaction(() => {
-      db.exec(sql);
-      db.prepare("INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, ?)")
-        .run(version, new Date().toISOString());
-    })();
-  }
+  if (currentVersion === MONITORING_SCHEMA_VERSION) return;
+  const sql = readFileSync(new URL(`../contracts/migrations/${CYBEROS_2_0_SCHEMA}`, import.meta.url), "utf8");
+  db.transaction(() => {
+    db.exec(sql);
+    db.prepare("INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, ?)")
+      .run(MONITORING_SCHEMA_VERSION, new Date().toISOString());
+  })();
 }

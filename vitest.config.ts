@@ -19,12 +19,12 @@ export default defineConfig({
     alias: {
       "@cyberos/agent": new URL("packages/agent/src/index.ts", `file://${root}`).pathname,
       "@cyberos/db": new URL("packages/db/src/index.ts", `file://${root}`).pathname,
-      "@cyberos/nas-tools": new URL("packages/nas-tools/src/index.ts", `file://${root}`).pathname,
+      "@cyberos/storage-tools": new URL("packages/storage-tools/src/index.ts", `file://${root}`).pathname,
       "@cyberos/monitoring/test-utils": new URL("packages/monitoring/src/test-utils.ts", `file://${root}`).pathname,
       "@cyberos/monitoring": new URL("packages/monitoring/src/index.ts", `file://${root}`).pathname,
       "@cyberos/shared/docker-images": new URL("packages/shared/src/docker-images.ts", `file://${root}`).pathname,
       "@cyberos/shared/docker-resources": new URL("packages/shared/src/docker-resources.ts", `file://${root}`).pathname,
-      "@cyberos/shared/photostaff-config": new URL("packages/shared/src/photostaff-config.ts", `file://${root}`).pathname,
+      "@cyberos/shared/photos-config": new URL("packages/shared/src/photos-config.ts", `file://${root}`).pathname,
       "@cyberos/shared": new URL("packages/shared/src/index.ts", `file://${root}`).pathname
     }
   }

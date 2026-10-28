@@ -30,7 +30,6 @@ type MediaSourceRow = {
   id: string;
   name: string;
   kind: MediaSourceKind;
-  root_id: string;
   storage_pool_id: string;
   path: string;
   enabled: number;
@@ -95,7 +94,6 @@ type MediaFileRow = {
   source_id: string;
   title_id: string;
   episode_id: string | null;
-  root_id: string;
   storage_pool_id: string;
   relative_path: string;
   name: string;
@@ -212,11 +210,20 @@ export function getMediaLibrarySettings(db: CyberOsDatabase): MediaLibrarySettin
   if (!row) return null;
   try {
     const parsed = JSON.parse(row.value_json) as Partial<MediaLibrarySettingsRecord>;
+    if (
+      !isNullableNonEmptyString(parsed.tmdbReadAccessToken)
+      || typeof parsed.language !== "string"
+      || !isNullableNonEmptyString(parsed.region)
+      || typeof parsed.updatedAt !== "string"
+      || !Number.isFinite(Date.parse(parsed.updatedAt))
+    ) {
+      return null;
+    }
     return {
       tmdbReadAccessToken: textOrNull(parsed.tmdbReadAccessToken),
       language: normalizeLanguage(parsed.language),
       region: normalizeRegion(parsed.region),
-      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : row.updated_at
+      updatedAt: parsed.updatedAt
     };
   } catch {
     return null;
@@ -256,7 +263,6 @@ export function createMediaSource(
     id?: string;
     name: string;
     kind: MediaSourceKind;
-    rootId: string;
     storagePoolId: string;
     path: string;
     enabled?: boolean;
@@ -265,18 +271,15 @@ export function createMediaSource(
 ): MediaSourceRecord {
   const id = input.id ?? randomUUID();
   const createdAt = now.toISOString();
-  const rootId = requiredText(input.rootId, "Media source root is required");
   const storagePoolId = requiredText(input.storagePoolId, "Media source storage pool is required");
   const sourcePath = normalizeRelativeMediaPath(input.path);
   const name = requiredText(input.name, "Media source name is required");
   assertMediaKind(input.kind);
-  const rootExists = db.prepare("SELECT 1 FROM nas_roots WHERE id = ? AND enabled = 1").pluck().get(rootId);
-  if (!rootExists) throw new Error("Media source root is not configured");
   db.prepare(`
     INSERT INTO media_sources (
-      id, name, kind, root_id, storage_pool_id, path, enabled, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, input.kind, rootId, storagePoolId, sourcePath, input.enabled === false ? 0 : 1, createdAt, createdAt);
+      id, name, kind, storage_pool_id, path, enabled, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, input.kind, storagePoolId, sourcePath, input.enabled === false ? 0 : 1, createdAt, createdAt);
   return getRequiredMediaSource(db, id);
 }
 
@@ -551,10 +554,10 @@ export function upsertMediaCatalogEntry(
     const fileId = existingFileId ?? input.file.id ?? randomUUID();
     db.prepare(`
       INSERT INTO media_files (
-        id, source_id, title_id, episode_id, root_id, storage_pool_id, relative_path,
+        id, source_id, title_id, episode_id, storage_pool_id, relative_path,
         name, mime_type, size_bytes, mtime_ms, duration_seconds, container,
         video_codec, audio_codec, scan_generation, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, relative_path) DO UPDATE SET
         title_id = excluded.title_id, episode_id = excluded.episode_id,
         name = excluded.name, mime_type = excluded.mime_type, size_bytes = excluded.size_bytes,
@@ -567,7 +570,6 @@ export function upsertMediaCatalogEntry(
       source.id,
       titleId,
       episodeId,
-      source.rootId,
       source.storagePoolId,
       relativePath,
       requiredText(input.file.name, "Media file name is required"),
@@ -875,7 +877,6 @@ function mapMediaSource(row: MediaSourceRow): MediaSourceRecord {
     id: row.id,
     name: row.name,
     kind: row.kind,
-    rootId: row.root_id,
     storagePoolId: row.storage_pool_id,
     path: row.path,
     enabled: row.enabled === 1,
@@ -952,7 +953,6 @@ function mapMediaFile(row: MediaFileRow): MediaFileRecord {
     sourceId: row.source_id,
     titleId: row.title_id,
     episodeId: row.episode_id,
-    rootId: row.root_id,
     storagePoolId: row.storage_pool_id,
     relativePath: row.relative_path,
     name: row.name,
@@ -1054,6 +1054,10 @@ function requiredText(value: unknown, message: string): string {
 
 function textOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isNullableNonEmptyString(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && Boolean(value.trim()));
 }
 
 function assertMediaKind(value: unknown): asserts value is MediaSourceKind {

@@ -9,7 +9,7 @@ sidebar:
   order: 4
 ---
 
-优先查看对应 service 的 journald，再检查 `/health`、`/api/system/health`、`/api/indexer/status`、`/api/roots/readiness` 和 `/api/backup/status`。`/health` 只代表 API liveness，不代表 NAS、索引或 backup 已就绪。
+优先查看对应 service 的 journald，再检查 `/health`、`/api/system/health`、`/api/indexer/status`、`/api/system/storage` 和 `/api/backup/status`。`/health` 只代表 API liveness，不代表 NAS、索引或 backup 已就绪。
 
 `SQLITE_BUSY` 通常表示 oneshot 任务并发；应停止相关 timers，确认任务退出后串行运行。静态页面停在 Loading 时，先确认 API 提供当前 Web asset，且不存在的 `/assets/*` 没有被 SPA fallback 返回。
 
@@ -45,11 +45,11 @@ sudo -u cyberos sqlite3 /cyberos/state/cyberos.sqlite \
 
 ## 媒体扫描与解码
 
-相册面板长时间停在 queued/discovering/processing/retrying 或出现 degraded 时，先检查内部 photostaff worker、图库状态和目录挂载：
+相册面板长时间停在 queued/discovering/processing/retrying 或出现 degraded 时，先检查内部 photos worker、图库状态和目录挂载：
 
 ```bash
-sudo systemctl status cyberos-photostaff.service --no-pager
-sudo journalctl -u cyberos-photostaff.service -n 100 --no-pager
+sudo systemctl status cyberos-photos.service --no-pager
+sudo journalctl -u cyberos-photos.service -n 100 --no-pager
 curl -fsS http://127.0.0.1:3010/api/photos/status
 curl -fsS http://127.0.0.1:3010/api/photos/map/settings
 command -v exiftool
@@ -62,7 +62,7 @@ command -v ffprobe
 
 `offline` 表示照片设置对应的 root、storage pool 或目录当前不可用；先恢复相同挂载，不要把其他目录挂到原路径伪装成照片库。元数据 `pending` 长时间不下降时检查 worker 日志中的 schema/sidecar 解析警告并手动排队一次扫描；单个资源 `partial` 不会阻止浏览。XMP 超过 16 MiB、结构化元数据超过限额或 sidecar 关联有歧义时会记录警告而不猜测。
 
-单个 HEIC/HEIF 失败时确认 `libheif-examples` 已安装；单个 RAW 失败时确认 `libraw-bin`/`dcraw_emu` 可执行并验证源文件；视频海报或播放失败时确认 `ffmpeg` 和 `ffprobe` 已安装。JPEG/PNG 等全部失败时检查 `/cyberos/state/photostaff` 与照片目录对 `cyberos` 用户的读写权限。WebP 衍生图位于 `/cyberos/state/photostaff/thumbnail` 和 `/cyberos/state/photostaff/preview`，视频转码缓存位于 `/cyberos/state/media-cache/videos`。单个文件解码失败只会将该媒体标记为 `failed`，其他媒体继续处理，原文件仍可下载；完整遍历失败不会清理未确认的旧资源。
+单个 HEIC/HEIF 失败时确认 `libheif-examples` 已安装；单个 RAW 失败时确认 `libraw-bin`/`dcraw_emu` 可执行并验证源文件；视频海报或播放失败时确认 `ffmpeg` 和 `ffprobe` 已安装。JPEG/PNG 等全部失败时检查 `/cyberos/state/photos` 与照片目录对 `cyberos` 用户的读写权限。WebP 衍生图位于 `/cyberos/state/photos/thumbnail` 和 `/cyberos/state/photos/preview`，视频转码缓存位于 `/cyberos/state/media-cache/videos`。单个文件解码失败只会将该媒体标记为 `failed`，其他媒体继续处理，原文件仍可下载；完整遍历失败不会清理未确认的旧资源。
 
 ## 离线地图下载
 
@@ -71,14 +71,14 @@ command -v ffprobe
 ```bash
 curl -fsS http://127.0.0.1:3010/api/photos/map/settings
 sudo journalctl -u cyberos-api.service -n 100 --no-pager
-sudo -u cyberos test -w /cyberos/state/photostaff/maps
+sudo -u cyberos test -w /cyberos/state/photos/maps
 df -h /cyberos/state
 curl -fsS -H 'Range: bytes=0-7' http://127.0.0.1:3010/api/photos/map/archive
 ```
 
 `ready` 时最后一个请求应返回 `206`；`not_downloaded` 时归档接口返回 `404`。网络、长度、23,141,432 字节固定大小、SHA-256 或 PMTiles/JPEG 校验失败会进入 `failed`，无效 `.part` 文件会自动删除，界面“重试”从零下载。不要手工放入同名文件来绕过校验；若固定成品损坏，保留 journal 信息后移走该单一文件，再从界面重试。
 
-受限网络可把 `CYBEROS_PHOTOSTAFF_BASEMAP_URL` 或 TOML `[photostaff].basemap_url` 指向 HTTPS 镜像。镜像必须逐字节提供同一资产，内置 SHA-256 不可覆盖；镜像校验失败时修复镜像内容，而不是修改本机校验值。Natural Earth II 最高仅到 `z6`，放大后缺少街道细节是预期行为。
+受限网络可把 `CYBEROS_PHOTOS_BASEMAP_URL` 或 TOML `[photos].basemap_url` 指向 HTTPS 镜像。镜像必须逐字节提供同一资产，内置 SHA-256 不可覆盖；镜像校验失败时修复镜像内容，而不是修改本机校验值。Natural Earth II 最高仅到 `z6`，放大后缺少街道细节是预期行为。
 
 ## 服务目录所有权与启动顺序
 
@@ -90,7 +90,7 @@ sudo stat -c '%U:%G %a %n' /cyberos/state /cyberos/state/hostd/docker-daemon /cy
 sudo systemctl cat cyberos-hostd.service
 ```
 
-Debian 部署的共享父目录保持 `cyberos:cyberos 750`；NixOS module 使用 `root:cyberos 1770`，以便 tmpfiles 可以安全创建 root-owned hostd 子树，同时保留 `cyberos` 的写权限并用 sticky bit 防止替换子树。Docker 与 NetworkManager 恢复子目录在两种部署中都保持 `root:root 700`。升级后检查现有 drop-in 不得重新引入共享父目录声明。CM5 上已有的 `deployment-state.conf` 如设置相同的嵌套目录，可保留；恢复文件无需迁移。修复权限前停止 timers 和所有数据库写入进程，先保存一致备份；仅修复核实错误的目标，不改变恢复材料权限。
+Debian 部署的共享父目录保持 `cyberos:cyberos 750`，Docker 与 NetworkManager 恢复子目录保持 `root:root 700`。升级后检查现有 drop-in 不得重新引入共享父目录声明。CM5 上已有的 `deployment-state.conf` 如设置相同的嵌套目录，可保留。修复权限前停止 timers 和所有数据库写入进程，先保存一致备份；仅修复核实错误的目标，不改变恢复材料权限。
 
 在维护窗口分别验证 hostd→API/worker 和 API/worker→hostd 两种启动顺序，以及 hostd 单独重启后 API 仍可访问数据库。查看 `Permission denied`、`SQLITE_CANTOPEN` 和重启计数；不能只检查一次 `/health`。设备重启验收须另行安排，不能用服务重启代替。
 
@@ -157,8 +157,8 @@ sudo systemctl status cyberos-bluetoothd.service bluetooth.service --no-pager
 sudo journalctl -u cyberos-bluetoothd.service -u bluetooth.service -n 160 --no-pager
 sudo -u cyberos sqlite3 /cyberos/state/cyberos.sqlite \
   'select direction,status,count(*) from bluetooth_transfers group by direction,status;'
-findmnt -T /cyberos/data/primary
-df -h /cyberos/data/primary
+findmnt -T /cyberos/data/pool-1
+df -h /cyberos/data/pool-1
 ```
 
 `cyberos-bluetoothd` 通过自己的用户会话 D-Bus 激活 `bluez-obexd`。服务反复退出时检查 `dbus-run-session`、OBEX D-Bus activation 文件及 `/cyberos/state/bluetooth` 所有权，不要改为 root。收件被拒绝时确认发送设备同时为 Paired 和 Trusted、收件开关已开启、所选 NAS 目录仍属于同一挂载源且 `cyberos` 可写。目录离线、空间不足、出现符号链接或挂载源变化都会拒绝新文件；修复后重新从发送端发起，不要手工把失败记录改为完成。接收完成后会短暂显示“正在保存”，API 从 `/cyberos/state/bluetooth/incoming` 将文件安全落入接收授权时选定的收件目录；长期停留在该状态时同时检查 `cyberos-api` 日志和暂存目录。接收文件重名会自动追加时间戳或序号，不覆盖原文件。
@@ -223,6 +223,6 @@ sudo journalctl -u cyberos-api.service -n 100 --no-pager
 sudo systemctl restart cyberos-api.service
 ```
 
-预期 `/cyberos/apps` 为 `cyberos:cyberos 0750`，API unit 仅新增该路径的写权限。生产环境的 NAS root 不得与 `/cyberos/apps` 上下级重叠，因此该目录不会进入文件面板或普通文件操作。若某项目目录缺少 `.cyberos-app.json`、标记 App ID 不匹配或目录是符号链接，API 会拒绝覆盖；把未知目录移到经确认的隔离位置后再重启 API。不要在日志或工单中粘贴 `.env`、SQLite 行或完整 Compose 解析结果。
+预期 `/cyberos/apps` 为 `cyberos:cyberos 0750`，API unit 仅新增该路径的写权限。生产环境的 storage pool 不得与 `/cyberos/apps` 上下级重叠，因此该目录不会进入文件面板或普通文件操作。若某项目目录缺少 `.cyberos-app.json`、标记 App ID 不匹配或目录是符号链接，API 会拒绝覆盖；把未知目录移到经确认的隔离位置后再重启 API。不要在日志或工单中粘贴 `.env`、SQLite 行或完整 Compose 解析结果。
 
-升级前配置的旧 Compose roots 会被忽略，旧文件和容器不会自动删除。需要重新纳管时在页面使用相同 `projectKey` 创建 App，以重新关联带相同 Compose project label 的容器；先核对 YAML、环境变量和数据挂载，不能把旧目录直接复制进 `/cyberos/apps`。
+CyberOS 2.0 只管理数据库中登记并发布到 `/cyberos/apps/<project-key>` 的 App，不发现或导入其他 Compose 目录。不要把外部目录直接复制进 `/cyberos/apps`；应在页面创建 App，并在部署前重新核对 YAML、环境变量和数据挂载。

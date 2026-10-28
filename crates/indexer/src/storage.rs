@@ -46,7 +46,7 @@ struct FindmntFilesystem {
 }
 
 pub async fn probe_mount_identity(
-    root_path: &Path,
+    storage_pool_path: &Path,
     mount_policy: &str,
     expected_source: Option<&str>,
     expected_uuid: Option<&str>,
@@ -58,7 +58,7 @@ pub async fn probe_mount_identity(
     let mut command = tokio::process::Command::new("findmnt");
     command
         .args(["--json", "--target"])
-        .arg(root_path)
+        .arg(storage_pool_path)
         .args(["--output", "SOURCE,UUID,FSTYPE,TARGET"])
         .kill_on_drop(true);
     let output = tokio::time::timeout(Duration::from_secs(10), command.output())
@@ -99,20 +99,20 @@ pub async fn probe_mount_identity(
             true,
         )
     })?;
-    let root = std::fs::canonicalize(root_path).map_err(IndexerError::storage)?;
+    let root = std::fs::canonicalize(storage_pool_path).map_err(IndexerError::storage)?;
     let target = std::fs::canonicalize(target).map_err(IndexerError::storage)?;
-    let covered = root == target || root.starts_with(&target);
-    let matches = covered
+    let dedicated = root == target;
+    let matches = dedicated
         && expected_source.is_none_or(|value| row.source.as_deref() == Some(value))
         && expected_uuid.is_none_or(|value| row.uuid.as_deref() == Some(value))
         && expected_fstype.is_none_or(|value| row.fstype.as_deref() == Some(value));
     if !matches {
         return Err(IndexerError::new(
             ErrorCode::SourceChanged,
-            if covered {
+            if dedicated {
                 "mount identity mismatch"
             } else {
-                "path is not covered by a dedicated mount"
+                "storage pool is not a dedicated mountpoint"
             },
             true,
         ));
@@ -161,18 +161,18 @@ pub struct DirectoryEntry {
 }
 
 #[derive(Debug)]
-pub struct RootStorage {
+pub struct StoragePoolStorage {
     root: File,
     path: PathBuf,
     identity: FileIdentity,
 }
 
-impl RootStorage {
+impl StoragePoolStorage {
     pub fn open(path: &Path) -> Result<Self, IndexerError> {
         let metadata = std::fs::symlink_metadata(path).map_err(IndexerError::storage)?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
             return Err(IndexerError::invalid_path(
-                "NAS root must be a real directory",
+                "Storage pool must be a real directory",
             ));
         }
         let canonical = std::fs::canonicalize(path).map_err(IndexerError::storage)?;
@@ -297,7 +297,7 @@ impl RootStorage {
             .map_err(IndexerError::storage)?;
         if !resolved.starts_with(&self.path) {
             return Err(IndexerError::invalid_path(
-                "Resolved path escapes the NAS root",
+                "Resolved path escapes the storage pool",
             ));
         }
         Ok(())
@@ -307,7 +307,7 @@ impl RootStorage {
 pub fn validate_relative_path(path: &Path) -> Result<(), IndexerError> {
     if path.as_os_str().is_empty() || path.is_absolute() {
         return Err(IndexerError::invalid_path(
-            "Path must be relative to the NAS root",
+            "Path must be relative to the storage pool",
         ));
     }
     for component in path.components() {
@@ -373,7 +373,7 @@ mod tests {
         std::fs::write(root.join("ok.txt"), "ok").unwrap();
         std::fs::write(directory.path().join("outside.txt"), "secret").unwrap();
         symlink(directory.path().join("outside.txt"), root.join("link.txt")).unwrap();
-        let storage = RootStorage::open(&root).unwrap();
+        let storage = StoragePoolStorage::open(&root).unwrap();
 
         let opened = storage.open_file(Path::new("ok.txt"));
         assert!(opened.is_ok(), "{opened:?}");
@@ -383,10 +383,10 @@ mod tests {
 
     #[test]
     fn parses_findmnt_json_identity() {
-        let row = parse_findmnt(r#"{"filesystems":[{"source":"/dev/sda1","uuid":"abc","fstype":"ext4","target":"/cyberos/data/primary"}]}"#).unwrap();
+        let row = parse_findmnt(r#"{"filesystems":[{"source":"/dev/sda1","uuid":"abc","fstype":"ext4","target":"/cyberos/data/pool-1"}]}"#).unwrap();
         assert_eq!(row.source.as_deref(), Some("/dev/sda1"));
         assert_eq!(row.uuid.as_deref(), Some("abc"));
         assert_eq!(row.fstype.as_deref(), Some("ext4"));
-        assert_eq!(row.target.as_deref(), Some("/cyberos/data/primary"));
+        assert_eq!(row.target.as_deref(), Some("/cyberos/data/pool-1"));
     }
 }

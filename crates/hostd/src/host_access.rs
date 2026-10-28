@@ -5,12 +5,11 @@ use std::path::{Path, PathBuf};
 
 use tokio::fs;
 
-use crate::config::ConfiguredNasRoot;
 use crate::error::HostdError;
 
 pub const CAPACITY_ANCHOR_NAME: &str = ".cyberos-host-access-capacity";
 
-pub async fn reconcile_capacity_anchors(roots: &[ConfiguredNasRoot]) {
+pub async fn reconcile_capacity_anchors(data_root: &Path) {
     let mountinfo = match fs::read_to_string("/proc/self/mountinfo").await {
         Ok(value) => value,
         Err(error) => {
@@ -18,41 +17,56 @@ pub async fn reconcile_capacity_anchors(roots: &[ConfiguredNasRoot]) {
             return;
         }
     };
-    for root in roots {
-        if let Err(error) = reconcile_capacity_anchor(root, &mountinfo).await {
-            tracing::warn!(root_id = %root.id, code = ?error.code, message = %error.message, "Host Access NAS capacity anchor is unavailable");
+    let mut entries = match fs::read_dir(data_root).await {
+        Ok(entries) => entries,
+        Err(error) => {
+            tracing::warn!(data_root = %data_root.display(), message = %error, "could not discover storage pools for Host Access anchors");
+            return;
+        }
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        match fs::symlink_metadata(&path).await {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+            Ok(_) => continue,
+            Err(error) => {
+                tracing::warn!(path = %path.display(), message = %error, "could not inspect storage pool for Host Access anchor");
+                continue;
+            }
+        }
+        let storage_pool_id = entry.file_name().to_string_lossy().into_owned();
+        if let Err(error) = reconcile_capacity_anchor(&storage_pool_id, &path, &mountinfo).await {
+            tracing::warn!(storage_pool_id, code = ?error.code, message = %error.message, "Host Access storage pool capacity anchor is unavailable");
         }
     }
 }
 
 async fn reconcile_capacity_anchor(
-    root: &ConfiguredNasRoot,
+    storage_pool_id: &str,
+    storage_pool_path: &Path,
     mountinfo: &str,
 ) -> Result<(), HostdError> {
-    let metadata = fs::symlink_metadata(&root.path)
-        .await
-        .map_err(|_| HostdError::unavailable(format!("NAS root {} is not available", root.id)))?;
+    let metadata = fs::symlink_metadata(storage_pool_path).await.map_err(|_| {
+        HostdError::unavailable(format!("Storage pool {storage_pool_id} is not available"))
+    })?;
     if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return Err(HostdError::validation(format!(
-            "NAS root {} is not a symlink-free directory",
-            root.id
+            "Storage pool {storage_pool_id} is not a symlink-free directory"
         )));
     }
-    let canonical = fs::canonicalize(&root.path).await?;
-    if canonical != root.path {
+    let canonical = fs::canonicalize(storage_pool_path).await?;
+    if canonical != storage_pool_path {
         return Err(HostdError::validation(format!(
-            "NAS root {} contains a symlink or non-canonical component",
-            root.id
+            "Storage pool {storage_pool_id} contains a symlink or non-canonical component"
         )));
     }
-    if !has_non_root_mount(&root.path, mountinfo) {
+    if !has_exact_mount(storage_pool_path, mountinfo) {
         return Err(HostdError::unavailable(format!(
-            "NAS root {} is not backed by a non-root mount",
-            root.id
+            "Storage pool {storage_pool_id} is not backed by a non-root mount"
         )));
     }
 
-    let anchor = root.path.join(CAPACITY_ANCHOR_NAME);
+    let anchor = storage_pool_path.join(CAPACITY_ANCHOR_NAME);
     secure_capacity_anchor(anchor).await?;
     Ok(())
 }
@@ -76,11 +90,11 @@ fn secure_capacity_anchor_sync(path: &Path) -> Result<(), HostdError> {
         .custom_flags(nix::libc::O_DIRECTORY | nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC)
         .open(path)
         .map_err(|_| {
-            HostdError::validation("NAS capacity anchor is not a symlink-free directory")
+            HostdError::validation("Storage pool capacity anchor is not a symlink-free directory")
         })?;
     if directory.metadata()?.uid() != nix::unistd::Uid::effective().as_raw() {
         return Err(HostdError::validation(
-            "NAS capacity anchor is not owned by hostd",
+            "Storage pool capacity anchor is not owned by hostd",
         ));
     }
     let mut entries =
@@ -89,7 +103,7 @@ fn secure_capacity_anchor_sync(path: &Path) -> Result<(), HostdError> {
         let entry = entry.map_err(nix_io_error)?;
         if !matches!(entry.file_name().to_bytes(), b"." | b"..") {
             return Err(HostdError::validation(
-                "NAS capacity anchor must remain empty",
+                "Storage pool capacity anchor must remain empty",
             ));
         }
     }
@@ -101,13 +115,12 @@ fn nix_io_error(error: nix::errno::Errno) -> std::io::Error {
     std::io::Error::from_raw_os_error(error as i32)
 }
 
-fn has_non_root_mount(root: &Path, mountinfo: &str) -> bool {
-    mountinfo
-        .lines()
-        .filter_map(mount_point)
-        .filter(|mount| mount != Path::new("/") && root.starts_with(mount))
-        .max_by_key(|mount| mount.as_os_str().len())
-        .is_some()
+fn has_exact_mount(root: &Path, mountinfo: &str) -> bool {
+    root != Path::new("/")
+        && mountinfo
+            .lines()
+            .filter_map(mount_point)
+            .any(|mount| mount == root)
 }
 
 fn mount_point(line: &str) -> Option<PathBuf> {
@@ -136,32 +149,29 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn requires_a_non_root_mount_and_decodes_mountinfo_paths() {
+    fn requires_an_exact_pool_mount_and_decodes_mountinfo_paths() {
         let mountinfo = "22 1 8:1 / / rw - ext4 /dev/root rw\n23 22 8:2 / /mnt/My\\040NAS rw - ext4 /dev/sda1 rw\n";
-        assert!(has_non_root_mount(
-            Path::new("/mnt/My NAS/media"),
+        assert!(has_exact_mount(Path::new("/mnt/My NAS"), mountinfo));
+        assert!(!has_exact_mount(Path::new("/mnt/My NAS/media"), mountinfo));
+        assert!(!has_exact_mount(
+            Path::new("/cyberos/data/media"),
             mountinfo
         ));
-        assert!(!has_non_root_mount(
-            Path::new("/cyberos/data/primary"),
-            mountinfo
-        ));
-        assert!(!has_non_root_mount(Path::new("/"), mountinfo));
+        assert!(!has_exact_mount(Path::new("/"), mountinfo));
     }
 
     #[tokio::test]
     async fn creates_only_an_empty_fixed_anchor() {
         let temp = TempDir::new().unwrap();
-        let root = ConfiguredNasRoot {
-            id: "primary".to_owned(),
-            path: std::fs::canonicalize(temp.path()).unwrap(),
-        };
+        let storage_pool_path = std::fs::canonicalize(temp.path()).unwrap();
         let mountinfo = format!(
             "23 22 8:2 / {} rw - ext4 /dev/sda1 rw\n",
-            root.path.display()
+            storage_pool_path.display()
         );
-        reconcile_capacity_anchor(&root, &mountinfo).await.unwrap();
-        let anchor = root.path.join(CAPACITY_ANCHOR_NAME);
+        reconcile_capacity_anchor("media", &storage_pool_path, &mountinfo)
+            .await
+            .unwrap();
+        let anchor = storage_pool_path.join(CAPACITY_ANCHOR_NAME);
         assert!(anchor.is_dir());
         assert_eq!(
             std::fs::metadata(&anchor).unwrap().permissions().mode() & 0o777,
@@ -170,7 +180,11 @@ mod tests {
 
         std::fs::set_permissions(&anchor, std::fs::Permissions::from_mode(0o755)).unwrap();
         std::fs::write(anchor.join("unexpected"), b"data").unwrap();
-        assert!(reconcile_capacity_anchor(&root, &mountinfo).await.is_err());
+        assert!(
+            reconcile_capacity_anchor("media", &storage_pool_path, &mountinfo)
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -182,16 +196,17 @@ mod tests {
         std::fs::create_dir(&target).unwrap();
         std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755)).unwrap();
         std::os::unix::fs::symlink(&target, root_path.join(CAPACITY_ANCHOR_NAME)).unwrap();
-        let root = ConfiguredNasRoot {
-            id: "primary".to_owned(),
-            path: std::fs::canonicalize(&root_path).unwrap(),
-        };
+        let storage_pool_path = std::fs::canonicalize(&root_path).unwrap();
         let mountinfo = format!(
             "23 22 8:2 / {} rw - ext4 /dev/sda1 rw\n",
-            root.path.display()
+            storage_pool_path.display()
         );
 
-        assert!(reconcile_capacity_anchor(&root, &mountinfo).await.is_err());
+        assert!(
+            reconcile_capacity_anchor("media", &storage_pool_path, &mountinfo)
+                .await
+                .is_err()
+        );
         assert_eq!(
             std::fs::metadata(&target).unwrap().permissions().mode() & 0o777,
             0o755

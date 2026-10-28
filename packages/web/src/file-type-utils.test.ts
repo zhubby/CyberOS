@@ -28,7 +28,7 @@ describe("file type utilities", () => {
   });
 
   it("classifies media, database, archive, and secure files", () => {
-    expect(describeFileVisual({ name: "photostaff.webp", kind: "file", isSafe: true })).toMatchObject({ kind: "image" });
+    expect(describeFileVisual({ name: "photos.webp", kind: "file", isSafe: true })).toMatchObject({ kind: "image" });
     expect(describeFileVisual({ name: "clip.mov", kind: "file", isSafe: true })).toMatchObject({ kind: "video" });
     expect(describeFileVisual({ name: "mix.flac", kind: "file", isSafe: true })).toMatchObject({ kind: "audio" });
     expect(describeFileVisual({ name: "cyberos.sqlite", kind: "file", isSafe: true })).toMatchObject({ kind: "database" });

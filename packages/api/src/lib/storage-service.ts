@@ -106,7 +106,7 @@ export function buildStoragePoolDeleteProposal(
   if (!pool) {
     throw new Error("Storage pool is no longer available; refresh the inventory");
   }
-  if (!pool.mountpoint || !/^\/cyberos\/data\/[a-z][a-z0-9_-]{0,31}$/u.test(pool.mountpoint) || pool.mountpoint === "/cyberos/data/backup") {
+  if (!pool.mountpoint || !/^\/cyberos\/data\/[a-z][a-z0-9_-]{0,31}$/u.test(pool.mountpoint)) {
     throw new Error("Storage pool mountpoint is invalid");
   }
   if (!/^\/dev\/md(?:\/[A-Za-z0-9._-]+|\d+)$/u.test(pool.raidPath)) {

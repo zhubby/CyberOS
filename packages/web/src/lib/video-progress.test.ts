@@ -8,7 +8,7 @@ import {
 } from "./video-progress.js";
 
 const identity: VideoProgressIdentity = {
-  rootId: "local",
+  storagePoolId: "local",
   path: "movies/clip one.mkv",
   sizeBytes: 2048,
   modifiedAt: "2026-08-28T00:00:00.000Z"

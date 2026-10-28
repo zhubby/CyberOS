@@ -14,12 +14,12 @@ flowchart LR
   Browser[浏览器] -->|REST / SSE / WebSocket| API[Fastify API]
   API <--> DB[(SQLite WAL + FTS5)]
   API -->|只读查询| Metrics[(metrics.sqlite raw / 1m / 1h)]
-  API --> Tools[Path-safe NAS tools]
+  API --> Tools[Path-safe storage tools]
   Worker[Agent worker] <--> DB
-  Worker --> Agent[Pi agent / local fallback]
+  Worker --> Agent[Pi agent]
   Agent --> Tools
   Downloader[Rust HTTP downloader] <--> DB
-  Downloader -->|dirfd / openat2| NAS
+  Downloader -->|dirfd / openat2| Storage
   Indexer[Indexer] -->|扫描与增量写入| DB
   Ops[Ops health / maintenance] --> DB
   Monitor[cyberos-monitor] -->|唯一写入者| Metrics
@@ -30,8 +30,8 @@ flowchart LR
   Alerter -->|SMTP| Mail[邮件服务器]
   Backup[Backup] --> DB
   API -->|JSONL Unix socket| Hostd[Rust hostd]
-  API -->|Unix socket| Terminal[Terminal helper]
-  Tools --> NAS[Configured NAS roots]
+  API -->|Terminal Protocol over Unix socket| Terminal[terminald]
+  Tools --> Storage[Configured storage pools]
 ```
 
-依赖方向是 `web -> api`，`api -> db/nas-tools/shared/system-health/monitoring`，`worker -> agent/db/shared`。Rust downloader、indexer、monitor 与 alerter 使用由 TypeScript migration catalog 管理的主 SQLite schema；monitor 只读主库并独占写入可重建的指标库，alerter 只读指标库并把规则、incident 和投递 outbox 写入主库。API 不采集指标、不评估规则、不发送邮件。systemd timers 仍是运维任务的唯一周期调度层；指标采样和告警求值由各自常驻进程使用单调时钟调度。CyberOS 是多进程原生服务，不使用 Docker 作为自身部署边界。
+依赖方向是 `web -> api`，`api -> db/storage-tools/shared/system-health/monitoring`，`worker -> agent/db/shared`。Rust downloader、indexer、monitor 与 alerter 使用由 TypeScript migration catalog 管理的主 SQLite schema；monitor 只读主库并独占写入可重建的指标库，alerter 只读指标库并把规则、incident 和投递 outbox 写入主库。API 不采集指标、不评估规则、不发送邮件。systemd timers 仍是运维任务的唯一周期调度层；指标采样和告警求值由各自常驻进程使用单调时钟调度。CyberOS 是多进程原生服务，不使用 Docker 作为自身部署边界。

@@ -261,12 +261,12 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.settings-indexer-roots {
+.settings-indexer-storage-pools {
   display: grid;
   gap: 8px;
 }
 
-.settings-indexer-root {
+.settings-indexer-storage-pool {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
@@ -276,30 +276,30 @@
   border-top: 1px solid var(--line-soft);
 }
 
-.settings-indexer-root:first-child {
+.settings-indexer-storage-pool:first-child {
   padding-top: 0;
   border-top: 0;
 }
 
-.settings-indexer-root > span,
-.settings-indexer-root strong,
-.settings-indexer-root small {
+.settings-indexer-storage-pool > span,
+.settings-indexer-storage-pool strong,
+.settings-indexer-storage-pool small {
   display: block;
   min-width: 0;
 }
 
-.settings-indexer-root strong,
-.settings-indexer-root small {
+.settings-indexer-storage-pool strong,
+.settings-indexer-storage-pool small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.settings-indexer-root strong {
+.settings-indexer-storage-pool strong {
   font-size: 12.5px;
 }
 
-.settings-indexer-root small {
+.settings-indexer-storage-pool small {
   margin-top: 3px;
   color: var(--muted-2);
   font-family: var(--font-mono);
@@ -1537,52 +1537,9 @@
   white-space: nowrap;
 }
 
-.settings-system-list dd.is-mono,
-.settings-root-list small {
+.settings-system-list dd.is-mono {
   font-family: var(--code-font-family);
   font-size: 11.5px;
-}
-
-.settings-root-list {
-  display: grid;
-  gap: 8px;
-}
-
-.settings-root-list div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 10px;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid rgb(255 255 255 / 5%);
-  border-radius: 5px;
-  background: rgb(0 0 0 / 12%);
-}
-
-.settings-root-list strong,
-.settings-root-list span,
-.settings-root-list small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-root-list strong {
-  color: var(--text);
-  font-size: 12.5px;
-}
-
-.settings-root-list span {
-  color: var(--muted-2);
-  font-size: 11.5px;
-  font-family: var(--font-emphasis);
-  font-weight: 800;
-}
-
-.settings-root-list small {
-  grid-column: 1 / -1;
-  color: var(--muted-2);
 }
 
 .settings-area-list,

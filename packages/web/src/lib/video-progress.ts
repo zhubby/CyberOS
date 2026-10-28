@@ -1,7 +1,7 @@
 export const VIDEO_PROGRESS_STORAGE_PREFIX = "cyberos:video-progress:";
 
 export interface VideoProgressIdentity {
-  rootId: string;
+  storagePoolId: string;
   path: string;
   sizeBytes: number;
   modifiedAt: string;
@@ -19,8 +19,8 @@ interface StorageLike {
   removeItem(key: string): void;
 }
 
-export function videoProgressStorageKey(identity: Pick<VideoProgressIdentity, "rootId" | "path">): string {
-  return `${VIDEO_PROGRESS_STORAGE_PREFIX}${encodeURIComponent(identity.rootId)}:${encodeURIComponent(identity.path)}`;
+export function videoProgressStorageKey(identity: Pick<VideoProgressIdentity, "storagePoolId" | "path">): string {
+  return `${VIDEO_PROGRESS_STORAGE_PREFIX}${encodeURIComponent(identity.storagePoolId)}:${encodeURIComponent(identity.path)}`;
 }
 
 export function readVideoProgress(
@@ -81,7 +81,7 @@ export function writeVideoProgress(
 }
 
 export function clearVideoProgress(
-  identity: Pick<VideoProgressIdentity, "rootId" | "path">,
+  identity: Pick<VideoProgressIdentity, "storagePoolId" | "path">,
   storage: StorageLike | null = browserStorage()
 ): void {
   try {

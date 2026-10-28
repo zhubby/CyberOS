@@ -13,7 +13,6 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 use crate::command::{CommandRunner, DEFAULT_COMMAND_TIMEOUT, DEFAULT_OUTPUT_LIMIT, run_checked};
-use crate::config::ConfiguredNasRoot;
 use crate::error::HostdError;
 
 use credentials::apply_credentials;
@@ -21,14 +20,14 @@ use files::{restore_files, snapshot_files, write_managed_file};
 use model::ALL_SERVICES;
 pub(crate) use model::ShareApplyResult;
 pub use model::{
-    DlnaConfig, FtpConfig, NasRoot, NfsConfig, ResolvedShare, ShareAccount, ShareApplyRequest,
+    DlnaConfig, FtpConfig, NfsConfig, ResolvedShare, ShareAccount, ShareApplyRequest,
     ShareDefinition, ShareOptions, SharePaths, ShareProtocols, ShareSettings, SmbConfig,
     WebDavConfig,
 };
 pub use render::{
     render_dlna, render_ftp, render_ftp_pam, render_nfs, render_samba, render_webdav,
 };
-use validation::{resolve_shares, validate_request, validate_requested_roots};
+use validation::{resolve_shares, validate_request, validate_requested_data_root};
 
 #[cfg(test)]
 pub(crate) fn export_protocol_bindings(config: &ts_rs::Config) {
@@ -41,20 +40,26 @@ pub(crate) fn export_protocol_bindings(config: &ts_rs::Config) {
 pub(crate) async fn apply(
     request: ShareApplyRequest,
     runner: &dyn CommandRunner,
-    configured_roots: &[ConfiguredNasRoot],
+    configured_data_root: &std::path::Path,
 ) -> Result<ShareApplyResult, HostdError> {
-    apply_with_options(&request, runner, &ShareOptions::default(), configured_roots).await
+    apply_with_options(
+        &request,
+        runner,
+        &ShareOptions::default(),
+        configured_data_root,
+    )
+    .await
 }
 
 async fn apply_with_options(
     request: &ShareApplyRequest,
     runner: &dyn CommandRunner,
     options: &ShareOptions,
-    configured_roots: &[ConfiguredNasRoot],
+    configured_data_root: &std::path::Path,
 ) -> Result<ShareApplyResult, HostdError> {
     validate_request(request)?;
-    validate_requested_roots(&request.roots, configured_roots)?;
-    let resolved = resolve_shares(&request.settings, configured_roots).await?;
+    validate_requested_data_root(&request.data_root, configured_data_root)?;
+    let resolved = resolve_shares(&request.settings, configured_data_root).await?;
     let files = vec![
         (
             options.paths.samba_config.clone(),
@@ -275,14 +280,15 @@ mod tests {
         }
     }
 
-    fn fixture(root: &Path) -> ShareApplyRequest {
+    fn fixture(data_root: &Path) -> ShareApplyRequest {
+        let data_root = std::fs::canonicalize(data_root).unwrap_or_else(|_| data_root.to_owned());
         serde_json::from_value(serde_json::json!({
             "settings": {
                 "enabled": true,
                 "account": { "username": "cyberos_share", "password": null },
                 "shares": [{
                     "id": "media", "name": "Media", "description": "LAN media",
-                    "rootId": "primary", "path": "media",
+                    "storagePoolId": "pool-1", "path": "media",
                     "protocols": {
                         "smb": { "enabled": true, "readOnly": false, "browseable": true, "allowGuest": false },
                         "webdav": { "enabled": true, "readOnly": true, "allowGuest": false, "port": 8088, "pathPrefix": "/shares/media" },
@@ -292,7 +298,7 @@ mod tests {
                     }
                 }]
             },
-            "roots": [{ "id": "primary", "path": root }]
+            "dataRoot": data_root
         }))
         .unwrap()
     }
@@ -316,27 +322,16 @@ mod tests {
         }
     }
 
-    fn configured_roots(request: &ShareApplyRequest) -> Vec<ConfiguredNasRoot> {
-        request
-            .roots
-            .iter()
-            .map(|root| ConfiguredNasRoot {
-                id: root.id.clone(),
-                path: root.path.clone(),
-            })
-            .collect()
-    }
-
     #[tokio::test]
     async fn renders_configs_and_reloads_only_enabled_services() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let request = fixture(&temp.path().join("nas"));
+        let request = fixture(&temp.path().join("data"));
         let options = test_options(&temp);
         let runner = FakeRunner::default();
-        let result = apply_with_options(&request, &runner, &options, &configured_roots(&request))
+        let result = apply_with_options(&request, &runner, &options, &request.data_root)
             .await
             .unwrap();
         assert_eq!(result.services, ALL_SERVICES);
@@ -431,17 +426,17 @@ mod tests {
     #[tokio::test]
     async fn restarts_ftp_again_after_a_later_service_fails() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let request = fixture(&temp.path().join("nas"));
+        let request = fixture(&temp.path().join("data"));
         let options = test_options(&temp);
         let runner = FakeRunner {
             fail_service: Some("nfs-server.service".to_owned()),
             ..FakeRunner::default()
         };
         assert!(
-            apply_with_options(&request, &runner, &options, &configured_roots(&request))
+            apply_with_options(&request, &runner, &options, &request.data_root)
                 .await
                 .is_err()
         );
@@ -459,10 +454,10 @@ mod tests {
     #[tokio::test]
     async fn restores_files_when_a_reload_fails() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let request = fixture(&temp.path().join("nas"));
+        let request = fixture(&temp.path().join("data"));
         let options = test_options(&temp);
         if let Some(parent) = options.paths.samba_config.parent() {
             fs::create_dir_all(parent).await.unwrap();
@@ -475,7 +470,7 @@ mod tests {
             ..FakeRunner::default()
         };
         assert!(
-            apply_with_options(&request, &runner, &options, &configured_roots(&request))
+            apply_with_options(&request, &runner, &options, &request.data_root)
                 .await
                 .is_err()
         );
@@ -503,10 +498,10 @@ mod tests {
     #[tokio::test]
     async fn restores_the_previous_webdav_mode_after_a_failed_apply() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let request = fixture(&temp.path().join("nas"));
+        let request = fixture(&temp.path().join("data"));
         let options = test_options(&temp);
         fs::create_dir_all(options.paths.webdav_site.parent().unwrap())
             .await
@@ -526,7 +521,7 @@ mod tests {
         };
 
         assert!(
-            apply_with_options(&request, &runner, &options, &configured_roots(&request))
+            apply_with_options(&request, &runner, &options, &request.data_root)
                 .await
                 .is_err()
         );
@@ -550,16 +545,20 @@ mod tests {
     #[tokio::test]
     async fn serves_multiple_webdav_paths_on_a_single_port() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().join("nas");
-        fs::create_dir_all(root.join("media")).await.unwrap();
-        fs::create_dir_all(root.join("second")).await.unwrap();
-        let mut request = fixture(&root);
+        let data_root = temp.path().join("data");
+        fs::create_dir_all(data_root.join("pool-1/media"))
+            .await
+            .unwrap();
+        fs::create_dir_all(data_root.join("pool-1/second"))
+            .await
+            .unwrap();
+        let mut request = fixture(&data_root);
         let mut second = request.settings.shares[0].clone();
         second.id = "second".to_owned();
         second.path = "second".into();
         second.protocols.webdav.path_prefix = "/shares/second".to_owned();
         request.settings.shares.push(second);
-        let resolved = validation::resolve_shares(&request.settings, &configured_roots(&request))
+        let resolved = validation::resolve_shares(&request.settings, &request.data_root)
             .await
             .unwrap();
         let webdav = render_webdav(
@@ -574,7 +573,7 @@ mod tests {
         assert!(webdav.contains("Alias \"/shares/media\""));
         assert!(webdav.contains("Alias \"/shares/second\""));
         request.settings.shares[0].protocols.webdav.allow_guest = true;
-        let resolved = validation::resolve_shares(&request.settings, &configured_roots(&request))
+        let resolved = validation::resolve_shares(&request.settings, &request.data_root)
             .await
             .unwrap();
         assert!(
@@ -591,11 +590,12 @@ mod tests {
     #[tokio::test]
     async fn grants_ftp_guest_access_only_when_enabled_and_respects_read_only() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().join("nas");
-        fs::create_dir_all(root.join("media")).await.unwrap();
-        let mut request = fixture(&root);
-        let roots = configured_roots(&request);
-        let resolved = validation::resolve_shares(&request.settings, &roots)
+        let data_root = temp.path().join("data");
+        fs::create_dir_all(data_root.join("pool-1/media"))
+            .await
+            .unwrap();
+        let mut request = fixture(&data_root);
+        let resolved = validation::resolve_shares(&request.settings, &request.data_root)
             .await
             .unwrap();
         let ftp = render_ftp(
@@ -613,7 +613,7 @@ mod tests {
         );
 
         request.settings.shares[0].protocols.ftp.allow_guest = true;
-        let resolved = validation::resolve_shares(&request.settings, &roots)
+        let resolved = validation::resolve_shares(&request.settings, &request.data_root)
             .await
             .unwrap();
         let ftp = render_ftp(
@@ -632,7 +632,7 @@ mod tests {
         );
 
         request.settings.shares[0].protocols.ftp.read_only = false;
-        let resolved = validation::resolve_shares(&request.settings, &roots)
+        let resolved = validation::resolve_shares(&request.settings, &request.data_root)
             .await
             .unwrap();
         let ftp = render_ftp(
@@ -653,15 +653,15 @@ mod tests {
     #[tokio::test]
     async fn refreshes_running_services_when_a_protocol_is_disabled() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let mut request = fixture(&temp.path().join("nas"));
+        let mut request = fixture(&temp.path().join("data"));
         request.settings.shares[0].protocols.ftp.enabled = false;
         let options = test_options(&temp);
         let runner = FakeRunner::default();
 
-        let result = apply_with_options(&request, &runner, &options, &configured_roots(&request))
+        let result = apply_with_options(&request, &runner, &options, &request.data_root)
             .await
             .unwrap();
 
@@ -681,21 +681,17 @@ mod tests {
     #[tokio::test]
     async fn global_disable_stops_cyberos_owned_protocol_services() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let mut request = fixture(&temp.path().join("nas"));
+        let mut request = fixture(&temp.path().join("data"));
         request.settings.enabled = false;
         let runner = FakeRunner::default();
 
-        let result = apply_with_options(
-            &request,
-            &runner,
-            &test_options(&temp),
-            &configured_roots(&request),
-        )
-        .await
-        .unwrap();
+        let result =
+            apply_with_options(&request, &runner, &test_options(&temp), &request.data_root)
+                .await
+                .unwrap();
 
         assert!(result.services.is_empty());
         let calls = runner.calls.lock().unwrap();
@@ -721,22 +717,17 @@ mod tests {
     #[tokio::test]
     async fn rejects_writable_nfs_without_root_squashing() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let mut request = fixture(&temp.path().join("nas"));
+        let mut request = fixture(&temp.path().join("data"));
         request.settings.shares[0].protocols.nfs.read_only = false;
         request.settings.shares[0].protocols.nfs.root_squash = false;
         let runner = FakeRunner::default();
         assert!(
-            apply_with_options(
-                &request,
-                &runner,
-                &test_options(&temp),
-                &configured_roots(&request)
-            )
-            .await
-            .is_err()
+            apply_with_options(&request, &runner, &test_options(&temp), &request.data_root)
+                .await
+                .is_err()
         );
         assert!(runner.calls.lock().unwrap().is_empty());
     }
@@ -744,13 +735,12 @@ mod tests {
     #[tokio::test]
     async fn maps_writable_nfs_clients_to_a_restricted_identity() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let mut request = fixture(&temp.path().join("nas"));
+        let mut request = fixture(&temp.path().join("data"));
         request.settings.shares[0].protocols.nfs.read_only = false;
-        let roots = configured_roots(&request);
-        let resolved = validation::resolve_shares(&request.settings, &roots)
+        let resolved = validation::resolve_shares(&request.settings, &request.data_root)
             .await
             .unwrap();
         let exports =
@@ -765,10 +755,10 @@ mod tests {
     #[tokio::test]
     async fn keeps_credentials_out_of_command_arguments() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("nas/media"))
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
             .await
             .unwrap();
-        let mut request = fixture(&temp.path().join("nas"));
+        let mut request = fixture(&temp.path().join("data"));
         request.settings.account.password = Some("top-secret".to_owned());
         let options = test_options(&temp);
         fs::create_dir_all(options.paths.htpasswd.parent().unwrap())
@@ -778,7 +768,7 @@ mod tests {
             .await
             .unwrap();
         let runner = FakeRunner::default();
-        apply_with_options(&request, &runner, &options, &configured_roots(&request))
+        apply_with_options(&request, &runner, &options, &request.data_root)
             .await
             .unwrap();
         let calls = runner.calls.lock().unwrap();
@@ -822,29 +812,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_share_paths_that_escape_the_root() {
-        let mut request = fixture(Path::new("/cyberos/data/primary"));
+    async fn rejects_share_paths_that_escape_the_storage_pool() {
+        let mut request = fixture(Path::new("/cyberos/data"));
         request.settings.shares[0].path = "../../etc".into();
         assert!(
-            resolve_shares(&request.settings, &configured_roots(&request))
+            resolve_shares(&request.settings, &request.data_root)
                 .await
                 .is_err()
         );
     }
 
     #[tokio::test]
-    async fn rejects_share_paths_that_resolve_outside_the_root() {
+    async fn rejects_share_paths_that_resolve_outside_the_storage_pool() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().join("nas");
+        let data_root = temp.path().join("data");
+        let storage_pool = data_root.join("pool-1");
         let outside = temp.path().join("outside");
-        fs::create_dir_all(&root).await.unwrap();
+        fs::create_dir_all(&storage_pool).await.unwrap();
         fs::create_dir_all(&outside).await.unwrap();
-        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
-        let mut request = fixture(&root);
+        std::os::unix::fs::symlink(&outside, storage_pool.join("escape")).unwrap();
+        let mut request = fixture(&data_root);
         request.settings.shares[0].path = "escape".into();
 
         assert!(
-            resolve_shares(&request.settings, &configured_roots(&request))
+            resolve_shares(&request.settings, &request.data_root)
                 .await
                 .is_err()
         );
@@ -853,22 +844,17 @@ mod tests {
     #[tokio::test]
     async fn rejects_share_paths_that_cannot_be_embedded_in_service_configs() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().join("nas");
-        fs::create_dir_all(root.join("media\ninclude = /tmp/override"))
+        let data_root = temp.path().join("data");
+        fs::create_dir_all(data_root.join("pool-1/media\ninclude = /tmp/override"))
             .await
             .unwrap();
-        let mut request = fixture(&root);
+        let mut request = fixture(&data_root);
         request.settings.shares[0].path = PathBuf::from("media\ninclude = /tmp/override");
         let runner = FakeRunner::default();
 
-        let error = apply_with_options(
-            &request,
-            &runner,
-            &test_options(&temp),
-            &configured_roots(&request),
-        )
-        .await
-        .unwrap_err();
+        let error = apply_with_options(&request, &runner, &test_options(&temp), &request.data_root)
+            .await
+            .unwrap_err();
 
         assert_eq!(error.code, crate::error::ErrorCode::Validation);
         assert!(runner.calls.lock().unwrap().is_empty());
@@ -876,7 +862,7 @@ mod tests {
 
     #[test]
     fn rejects_nfs_export_injection_in_allowed_cidrs() {
-        let mut request = fixture(Path::new("/cyberos/data/primary"));
+        let mut request = fixture(Path::new("/cyberos/data"));
         request.settings.shares[0].protocols.nfs.allowed_cidrs =
             vec!["*(rw,no_root_squash) 0.0.0.0/0".to_owned()];
 
@@ -887,15 +873,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_client_roots_that_do_not_match_hostd_configuration() {
+    fn rejects_client_data_root_that_does_not_match_hostd_configuration() {
         let request = fixture(Path::new("/"));
-        let configured = vec![ConfiguredNasRoot {
-            id: "primary".to_owned(),
-            path: PathBuf::from("/cyberos/data/primary"),
-        }];
 
         assert_eq!(
-            validate_requested_roots(&request.roots, &configured)
+            validate_requested_data_root(&request.data_root, Path::new("/cyberos/data"))
                 .unwrap_err()
                 .code,
             crate::error::ErrorCode::Validation

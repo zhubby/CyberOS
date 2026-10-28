@@ -34,7 +34,7 @@ import {
   Upload,
   type LucideIcon
 } from "lucide-react";
-import { createFileExport, getFileDownloadUrl, type DockerOperation, type FileBatch, type FileEntry, type FileListing, type FileMeta, type FileOperation, type IndexSearchCategory, type IndexSearchRequest, type IndexSearchResult, type NasRoot, type VodPlayerCommand, type VodPlayerStatus, type TextPreview, type VmOperation } from "../../api.js";
+import { createFileExport, getFileDownloadUrl, type DockerOperation, type FileBatch, type FileEntry, type FileListing, type FileMeta, type FileOperation, type IndexSearchCategory, type IndexSearchRequest, type IndexSearchResult, type StoragePool, type VodPlayerCommand, type VodPlayerStatus, type TextPreview, type VmOperation } from "../../api.js";
 import { describeFileVisual, isHiddenName } from "../../file-type-utils.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -139,7 +139,6 @@ const WORKSPACE_PANELS = [
 
 export interface FileStoragePoolOption {
   id: string;
-  rootId: string;
   name: string;
   path: string;
   filesystem: string | null;
@@ -426,12 +425,9 @@ function StoragePoolSwitcher({
 
 export function WorkspacePane({
   active,
-  roots,
-  selectedRoot,
-  selectedRootId,
+  selectedStoragePoolId,
   storagePools,
   storageSummaryLoading,
-  selectedStoragePoolId,
   currentPath,
   breadcrumbs,
   entries,
@@ -497,12 +493,9 @@ export function WorkspacePane({
   onRollback
 }: {
   active: boolean;
-  roots: NasRoot[];
-  selectedRoot: NasRoot | undefined;
-  selectedRootId: string;
-  storagePools: FileStoragePoolOption[];
-  storageSummaryLoading: boolean;
   selectedStoragePoolId: string;
+  storagePools: StoragePool[];
+  storageSummaryLoading: boolean;
   currentPath: string;
   breadcrumbs: string[];
   entries: FileEntry[];
@@ -532,7 +525,7 @@ export function WorkspacePane({
   codeFontSettings: CodeFontSettings;
   filesPanelActivationId: number;
   onSelectStoragePool: (poolId: string) => void;
-  onOpenDownloadedDirectory: (rootId: string, storagePoolId: string, path: string) => void;
+  onOpenDownloadedDirectory: (storagePoolId: string, path: string) => void;
   onGoUp: () => void;
   onRefreshFiles: () => void;
   onSubmitSearch: (event: FormEvent<HTMLFormElement>) => void;
@@ -551,7 +544,6 @@ export function WorkspacePane({
   onRetryVodPlayer: () => void;
   onRequestCreateFolder: (folderName: string) => Promise<void>;
   onRequestCreateFolderAt?: (input: {
-    rootId: string;
     storagePoolId: string;
     parentPath: string;
     name: string;
@@ -598,7 +590,7 @@ export function WorkspacePane({
   const folderUploadInputRef = useRef<HTMLInputElement | null>(null);
   const rowActionMenuRef = useRef<HTMLDivElement | null>(null);
   const rowActionTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const previewScopeRef = useRef(`${selectedRootId}\0${selectedStoragePoolId}\0${currentPath}`);
+  const previewScopeRef = useRef(`${selectedStoragePoolId}\0${currentPath}`);
   const dragDepthRef = useRef(0);
   const selectedStoragePool = storagePools.find((pool) => pool.id === selectedStoragePoolId);
   const selectedStoragePoolState = selectedStoragePool?.status ?? "unknown";
@@ -744,7 +736,7 @@ export function WorkspacePane({
   useEffect(() => {
     dragDepthRef.current = 0;
     setIsDropActive(false);
-  }, [activePanel, active, selectedRootId, selectedStoragePoolId]);
+  }, [activePanel, active, selectedStoragePoolId]);
 
   useEffect(() => {
     setCreateFolderOpen(false);
@@ -761,15 +753,15 @@ export function WorkspacePane({
     setSelectedPaths(new Set());
     setSelectionAnchorPath(null);
     setRowActionMenu(null);
-  }, [activePanel, currentPath, searchOptions, searchQuery, selectedRootId, selectedStoragePoolId]);
+  }, [activePanel, currentPath, searchOptions, searchQuery, selectedStoragePoolId]);
 
   useEffect(() => {
-    const nextScope = `${selectedRootId}\0${selectedStoragePoolId}\0${currentPath}`;
+    const nextScope = `${selectedStoragePoolId}\0${currentPath}`;
     if (previewScopeRef.current !== nextScope) {
       previewScopeRef.current = nextScope;
       onClosePreview();
     }
-  }, [currentPath, onClosePreview, selectedRootId, selectedStoragePoolId]);
+  }, [currentPath, onClosePreview, selectedStoragePoolId]);
 
   useEffect(() => {
     const availablePaths = new Set(entries.map((entry) => entry.path));
@@ -944,14 +936,13 @@ export function WorkspacePane({
     const key = downloadEntries.map((entry) => entry.path).join("\0");
     if (fileDownloadMode(downloadEntries) === "direct") {
       const entry = downloadEntries[0]!;
-      triggerBrowserDownload(getFileDownloadUrl(selectedRootId, entry.path, selectedStoragePoolId), entry.name);
+      triggerBrowserDownload(getFileDownloadUrl(selectedStoragePoolId, entry.path), entry.name);
       return;
     }
 
     setDownloadKey(key);
     try {
       const result = await createFileExport({
-        rootId: selectedRootId,
         storagePoolId: selectedStoragePoolId,
         sourcePaths: downloadEntries.map((entry) => entry.path)
       });
@@ -1312,7 +1303,7 @@ export function WorkspacePane({
               <div
                 className={`files-navigation-bar${storagePools.length > 0 ? " has-storage-pool-switcher" : ""}${selectedPaths.size > 0 ? " has-batch-selection" : ""}`}
               >
-                  <div className="root-control storage-pool-control">
+                  <div className="storage-pool-control">
                     <label htmlFor="storage-pool-switcher">{t("workspace.storagePoolLabel")}</label>
                     {fileListingLoading ? (
                       <SkeletonBlock className="files-skeleton-select" />
@@ -1669,7 +1660,7 @@ export function WorkspacePane({
                   textPreview={textPreview}
                   blobUrl={blobUrl}
                   videoUrl={videoUrl}
-                  rootId={selectedRootId}
+                  storagePoolId={selectedStoragePoolId}
                   previewFileSizeLimitBytes={previewFileSizeLimitBytes}
                   locale={locale}
                   onOpenWorkspacePath={onOpenWorkspacePath}
@@ -1735,7 +1726,6 @@ export function WorkspacePane({
           ) : activePanel === "photos" ? (
             <PhotoLibraryPanel
               pools={storagePools}
-              selectedRootId={selectedRootId}
               locale={locale}
               {...(onRequestCreateFolderAt ? { onRequestCreateFolder: onRequestCreateFolderAt } : {})}
               onWorkQueuesChanged={onWorkQueuesChanged}
@@ -1748,7 +1738,6 @@ export function WorkspacePane({
           ) : activePanel === "terminal" || !workspaceVisible ? null : (
             <WorkspaceManagementPanel
               panel={activePanel}
-              roots={roots}
               storagePools={storagePools}
               selectedStoragePoolId={selectedStoragePoolId}
               dockerOperations={dockerOperations}
@@ -1764,7 +1753,6 @@ export function WorkspacePane({
           {terminalMounted ? (
             <LocalTerminalPanel
               active={activePanel === "terminal" && workspaceVisible}
-              root={selectedRoot}
               codeFontSettings={codeFontSettings}
             />
           ) : null}

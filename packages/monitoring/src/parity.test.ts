@@ -11,8 +11,8 @@ import {
   type MetricsFixtureRollup
 } from "./test-utils.js";
 
-describe("Rust metrics schema compatibility fixture", () => {
-  it("reads the v3 raw, rollup, reset, query, and collector contracts", () => {
+describe("CyberOS 2.0 metrics schema fixture", () => {
+  it("reads the 2.0 raw, rollup, reset, query, and collector contracts", () => {
     const directory = mkdtempSync(path.join(os.tmpdir(), "cyberos-monitor-parity-"));
     const databasePath = path.join(directory, "metrics.sqlite");
     const metrics = new MetricsFixture(databasePath);

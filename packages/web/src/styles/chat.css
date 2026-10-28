@@ -1257,7 +1257,7 @@
 
 .composer textarea,
 .search input,
-.root-control .custom-select-trigger {
+.storage-pool-control .custom-select-trigger {
   width: 100%;
   border: 1px solid var(--line-soft);
   border-radius: 5px;

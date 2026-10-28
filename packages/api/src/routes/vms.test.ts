@@ -4,17 +4,17 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   consumeVmConsoleAuthorization,
-  ensureNasRoots,
   openCyberOsDb,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 import { vmQemuCommand, type VmCommandRunner } from "../lib/vm-service.js";
 import { vmConsoleSpawnSpec } from "./vms.js";
 import type { SystemCommandRunner } from "../lib/system-management.js";
 
-const TEST_STORAGE_POOL_ID = "/dev/md/test-pool";
+const TEST_STORAGE_POOL_ID = "pool-1";
+const TEST_STORAGE_POOL_DEVICE = `/dev/md/${TEST_STORAGE_POOL_ID}`;
 
 let tempDir: string;
 let rootDir: string;
@@ -22,10 +22,9 @@ let db: CyberOsDatabase;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-vms-"));
-  rootDir = path.join(tempDir, "root");
+  rootDir = path.join(tempDir, "data");
   await mkdir(rootDir);
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
 afterEach(async () => {
@@ -59,16 +58,15 @@ describe("VM routes", () => {
     });
     expect(response.statusCode).toBe(202);
     expect(response.json()).toMatchObject({
-      operation: { action: "console", status: "applied", approvalId: null },
+      operation: { action: "console", status: "applied" },
       consoleSession: {
-        approvalId: null,
         domainName: "guest",
         websocketUrl: expect.stringContaining("/api/vms/console/")
       }
     });
     expectNoAgentSideEffects();
     const authorizationId = response.json().consoleSession.id as string;
-    expect(consumeVmConsoleAuthorization(db, authorizationId)).toMatchObject({ status: "used", approvalId: null });
+    expect(consumeVmConsoleAuthorization(db, authorizationId)).toMatchObject({ status: "used" });
     expect(consumeVmConsoleAuthorization(db, authorizationId)).toBeNull();
     await server.close();
   });
@@ -84,10 +82,10 @@ describe("VM routes", () => {
     });
 
     expect(response.statusCode).toBe(202);
-    expect(response.json()).toMatchObject({ operation: { action: "start", status: "applied", approvalId: null } });
+    expect(response.json()).toMatchObject({ operation: { action: "start", status: "applied" } });
     expect(calls.some((args) => args.includes("start"))).toBe(true);
     expect((await server.inject({ method: "GET", url: "/api/vms/operations" })).json().operations)
-      .toEqual([expect.objectContaining({ action: "start", status: "applied", approvalId: null })]);
+      .toEqual([expect.objectContaining({ action: "start", status: "applied" })]);
     expectNoAgentSideEffects();
     await server.close();
   });
@@ -111,7 +109,7 @@ describe("VM routes", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toContain("start failed");
     expect((await server.inject({ method: "GET", url: "/api/vms/operations" })).json().operations)
-      .toEqual([expect.objectContaining({ action: "start", status: "failed", approvalId: null })]);
+      .toEqual([expect.objectContaining({ action: "start", status: "failed" })]);
     expectNoAgentSideEffects();
     await server.close();
   });
@@ -135,7 +133,7 @@ describe("VM routes", () => {
 
   it("resolves ISO files selected from a mounted storage pool", async () => {
     const calls: string[][] = [];
-    const poolDir = path.join(rootDir, "pool");
+    const poolDir = path.join(rootDir, TEST_STORAGE_POOL_ID);
     const isoDir = path.join(poolDir, "images");
     const isoPath = path.join(isoDir, "installer.iso");
     await mkdir(isoDir, { recursive: true });
@@ -153,8 +151,7 @@ describe("VM routes", () => {
       payload: {
         action: "create",
         domainName: "new-vm",
-        isoPath: "pool/images/installer.iso",
-        isoRootId: "local",
+        isoPath: "images/installer.iso",
         isoStoragePoolId: TEST_STORAGE_POOL_ID
       }
     });
@@ -162,7 +159,7 @@ describe("VM routes", () => {
     expect(response.statusCode, JSON.stringify(response.json())).toBe(202);
     const resolvedIsoPath = await realpath(isoPath);
     expect(response.json()).toMatchObject({
-      operation: { status: "applied", approvalId: null, metadata: { proposal: { isoPath: resolvedIsoPath, isoRootId: "local", isoStoragePoolId: TEST_STORAGE_POOL_ID, isoSourcePath: "pool/images/installer.iso" } } }
+      operation: { status: "applied", metadata: { proposal: { isoPath: resolvedIsoPath, isoStoragePoolId: TEST_STORAGE_POOL_ID, isoSourcePath: "images/installer.iso" } } }
     });
     expect(calls.some((args) => args.includes("--cdrom") && args.includes(resolvedIsoPath))).toBe(true);
     expectNoAgentSideEffects();
@@ -170,7 +167,7 @@ describe("VM routes", () => {
   });
 
   it("rejects non-ISO files selected from a storage pool", async () => {
-    const poolDir = path.join(rootDir, "pool");
+    const poolDir = path.join(rootDir, TEST_STORAGE_POOL_ID);
     await mkdir(poolDir);
     await writeFile(path.join(poolDir, "notes.txt"), "not an image");
     const server = await buildServer({
@@ -186,8 +183,7 @@ describe("VM routes", () => {
       payload: {
         action: "create",
         domainName: "new-vm",
-        isoPath: "pool/notes.txt",
-        isoRootId: "local",
+        isoPath: "notes.txt",
         isoStoragePoolId: TEST_STORAGE_POOL_ID
       }
     });
@@ -198,7 +194,7 @@ describe("VM routes", () => {
   });
 
   it("rejects a storage-pool ISO symlink that escapes the selected pool", async () => {
-    const poolDir = path.join(rootDir, "pool");
+    const poolDir = path.join(rootDir, TEST_STORAGE_POOL_ID);
     const isoPath = path.join(poolDir, "installer.iso");
     const outsideIsoPath = path.join(rootDir, "outside.iso");
     await mkdir(poolDir);
@@ -218,13 +214,12 @@ describe("VM routes", () => {
       payload: {
         action: "create",
         domainName: "new-vm",
-        isoPath: "pool/installer.iso",
-        isoRootId: "local",
+        isoPath: "installer.iso",
         isoStoragePoolId: TEST_STORAGE_POOL_ID
       }
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toContain("outside the selected storage pool");
+    expect(response.json().error).toContain("escapes the storage pool");
     await server.close();
   });
 
@@ -275,11 +270,11 @@ describe("VM routes", () => {
 
     expect(response.statusCode, JSON.stringify(response.json())).toBe(202);
     expect(response.json()).toMatchObject({
-      operation: { status: "applied", approvalId: null, targetId: "custom-vm" }
+      operation: { status: "applied", targetId: "custom-vm" }
     });
     const operations = await server.inject({ method: "GET", url: "/api/vms/operations" });
     expect(operations.json().operations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ status: "applied", approvalId: null, targetId: "custom-vm" })
+      expect.objectContaining({ status: "applied", targetId: "custom-vm" })
     ]));
     const virtInstall = calls.find((call) => call[0] === "virt-install");
     expect(virtInstall).toEqual(expect.arrayContaining([
@@ -357,7 +352,7 @@ describe("VM routes", () => {
     expect(response.json().error).toContain("virt-install failed");
     const operations = await server.inject({ method: "GET", url: "/api/vms/operations" });
     expect(operations.json().operations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ status: "failed", approvalId: null, targetId: "failed-vm" })
+      expect.objectContaining({ status: "failed", targetId: "failed-vm" })
     ]));
     expectNoAgentSideEffects();
     await server.close();
@@ -411,25 +406,24 @@ describe("VM routes", () => {
 function expectNoAgentSideEffects(): void {
   expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
   expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
-  expect(db.prepare("SELECT COUNT(*) FROM pending_approvals").pluck().get()).toBe(0);
+  expect(db.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
   expect(db.prepare("SELECT COUNT(*) FROM operation_notifications").pluck().get()).toBe(0);
 }
 
 function testConfig(): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
   return {
-    dataDir: tempDir,
-    databasePath: path.join(tempDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: rootDir, databasePath: path.join(tempDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
     vm: { enabled: true, libvirtUri: "qemu:///system", storagePath: path.join(tempDir, "vmstore"), networkName: "default", isoRoots: [path.join(tempDir, "iso")], operationTimeoutMs: 1000, consoleMode: "serial" },
-    hostd: { socketPath: "/tmp/hostd.sock" },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }
 
@@ -464,7 +458,7 @@ function storagePoolRunner(target: string): SystemCommandRunner {
       if (command === "findmnt") {
         return JSON.stringify({
           filesystems: [{
-            source: TEST_STORAGE_POOL_ID,
+            source: TEST_STORAGE_POOL_DEVICE,
             target,
             fstype: "ext4",
             size: 1024,
@@ -475,7 +469,7 @@ function storagePoolRunner(target: string): SystemCommandRunner {
         });
       }
       if (command === "mdadm" && args[0] === "--detail" && args[1] === "--scan") {
-        return `ARRAY ${TEST_STORAGE_POOL_ID} name=test-pool UUID=test-pool`;
+        return `ARRAY ${TEST_STORAGE_POOL_DEVICE} name=${TEST_STORAGE_POOL_ID} UUID=test-pool`;
       }
       if (command === "mdadm" && args[0] === "--detail") {
         return ["Name : test-pool", "Raid Level : raid1", "State : clean", "UUID : test-pool"].join("\n");

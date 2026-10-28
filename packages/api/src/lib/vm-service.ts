@@ -30,16 +30,6 @@ export function vmQemuCommand(architecture = process.arch): "qemu-system-aarch64
   return architecture === "arm64" ? "qemu-system-aarch64" : "qemu-system-x86_64";
 }
 
-export const DEFAULT_VM_CONFIG: VmConfig = {
-  enabled: false,
-  libvirtUri: "qemu:///system",
-  storagePath: ".cyberos/vmstore",
-  networkName: "default",
-  isoRoots: [],
-  operationTimeoutMs: 120_000,
-  consoleMode: "serial"
-};
-
 class NodeVmCommandRunner implements VmCommandRunner {
   constructor(
     private readonly timeoutMs: number,
@@ -58,15 +48,15 @@ class NodeVmCommandRunner implements VmCommandRunner {
 }
 
 export function vmCommandRunner(config: CyberOsConfig, dependencies?: VmRuntimeDependencies): VmCommandRunner {
-  const vm = config.vm ?? DEFAULT_VM_CONFIG;
+  const vm = config.vm;
   return dependencies?.commandRunner ?? new NodeVmCommandRunner(
     vm.operationTimeoutMs,
-    path.join(config.dataDir, ".cache")
+    path.join(config.paths.stateDir, ".cache")
   );
 }
 
 export async function collectVmSummary(config: CyberOsConfig, dependencies?: VmRuntimeDependencies): Promise<VmSummary> {
-  const vm = config.vm ?? DEFAULT_VM_CONFIG;
+  const vm = config.vm;
   if (!vm.enabled) return unavailableSummary(vm, "disabled");
   const runner = vmCommandRunner(config, dependencies);
   const architecture = dependencies?.architecture ?? process.arch;
@@ -128,7 +118,7 @@ export async function applyVmOperation(
   proposal: VmOperationProposal,
   dependencies?: VmRuntimeDependencies
 ): Promise<Record<string, unknown>> {
-  const vmConfig = config.vm ?? DEFAULT_VM_CONFIG;
+  const vmConfig = config.vm;
   if (!vmConfig.enabled) throw new Error("Virtual machine management is disabled");
   if (proposal.action !== "console" && proposal.action !== "delete") {
     const summary = await collectVmSummary(config, dependencies);

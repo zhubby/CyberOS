@@ -22,7 +22,7 @@ VM_ENABLED=${CYBEROS_ENABLE_VM:-0}
 VOD_PLAYER_ENABLED=${CYBEROS_ENABLE_VOD_PLAYER:-0}
 TV_MODE_ENABLED=${CYBEROS_ENABLE_TV_MODE:-0}
 VOD_PLAYER_USER=${CYBEROS_VOD_PLAYER_USER:-cyberos}
-TERMINAL_USER=${CYBEROS_TERMUX_USER:-cyberos}
+TERMINAL_USER=${CYBEROS_TERMINALD_USER:-cyberos}
 DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND
 export CARGO_HOME="$CYBEROS_CARGO_HOME"
@@ -122,7 +122,7 @@ esac
 [ -n "$CYBEROS_RUSTUP_HOME" ] || die "CYBEROS_RUSTUP_HOME must not be empty"
 [ -n "$CYBEROS_APT_BACKUP_DIR" ] || die "CYBEROS_APT_BACKUP_DIR must not be empty"
 [ -n "$CYBEROS_LOCALE" ] || die "CYBEROS_LOCALE must not be empty"
-[ "$TERMINAL_USER" = cyberos ] || die "CYBEROS_TERMUX_USER must be cyberos"
+[ "$TERMINAL_USER" = cyberos ] || die "CYBEROS_TERMINALD_USER must be cyberos"
 
 CYBEROS_APT_BACKUP_DIR=$(realpath -m -- "$CYBEROS_APT_BACKUP_DIR")
 case "$CYBEROS_APT_BACKUP_DIR" in
@@ -304,12 +304,11 @@ if [ "$CYBEROS_CONFIG_EXISTS" = "0" ]; then
   log "initializing CyberOS configuration"
   CYBEROS_FIRST_BOOT_FORCE=1 \
   CYBEROS_ADMIN_DISPLAY_NAME=${CYBEROS_ADMIN_DISPLAY_NAME:-CyberOS Admin} \
-  CYBEROS_NAS_ROOT_PATH=${CYBEROS_NAS_ROOT_PATH:-/cyberos/data/primary} \
   CYBEROS_DOCKER_ENABLED="$DOCKER_ENABLED" \
   CYBEROS_VM_ENABLED="$VM_ENABLED" \
   CYBEROS_VOD_PLAYER_ENABLED="$VOD_PLAYER_ENABLED" \
   CYBEROS_VOD_PLAYER_USER="$VOD_PLAYER_USER" \
-  CYBEROS_TERMUX_USER="$TERMINAL_USER" \
+  CYBEROS_TERMINALD_USER="$TERMINAL_USER" \
     /usr/lib/cyberos/scripts/cyberos-first-boot.sh
 else
   log "preserving existing CyberOS configuration"
@@ -318,7 +317,7 @@ fi
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload
   /usr/lib/cyberos/scripts/cyberos-refresh-groups.sh
-  /usr/lib/cyberos/scripts/cyberos-refresh-termux.sh
+  /usr/lib/cyberos/scripts/cyberos-refresh-terminald.sh
   CYBEROS_VOD_PLAYER_USER="$VOD_PLAYER_USER" /usr/lib/cyberos/scripts/cyberos-refresh-vod-player.sh
   if [ "$DOCKER_ENABLED" = "1" ]; then
     systemctl enable --now docker.service
@@ -334,16 +333,16 @@ if command -v systemctl >/dev/null 2>&1; then
   fi
   systemctl enable \
     cyberos-hostd.service \
-    cyberos-termux.service \
+    cyberos-terminald.service \
     cyberos-api.service \
     cyberos-monitor.service \
     cyberos-alerter.service \
     cyberos-worker@1.service \
-    cyberos-photostaff.service \
+    cyberos-photos.service \
     cyberos-downloader.service \
     cyberos-bluetoothd.service \
     cyberos-indexer.service
-  systemctl restart cyberos-hostd.service cyberos-termux.service
+  systemctl restart cyberos-hostd.service cyberos-terminald.service
   if [ "$DOCKER_ENABLED" = "1" ]; then
     systemctl restart cyberos-host-accessd.service
   fi
@@ -356,7 +355,7 @@ if command -v systemctl >/dev/null 2>&1; then
   fi
   systemctl start cyberos-health.service || \
     log "warning: initial health evaluation failed; the health timer will retry"
-  systemctl restart cyberos-worker@1.service cyberos-photostaff.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service
+  systemctl restart cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service
   if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
     systemctl enable --now cyberos-vod-player.service
   fi

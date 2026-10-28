@@ -130,7 +130,7 @@ make ci
 git diff --check
 ```
 
-`npm run release` 会同步根 manifest、workspaces、docs、全部 CyberOS Cargo 包、Debian changelog 和 appliance manifest，但不会提交、打 tag 或推送。检查版本差异后提交并先推送 `main`：
+`npm run release` 会同步根 manifest、workspaces、docs、全部 CyberOS Cargo 包和 Debian changelog，但不会提交、打 tag 或推送。检查版本差异后提交并先推送 `main`：
 
 ```bash
 VERSION="$(node -p 'require("./package.json").version')"
@@ -152,10 +152,9 @@ git push origin "v${VERSION}"
 
 1. `Quality` 使用 Node.js 22 运行版本策略、typecheck、lint、test 和完整 build。
 2. `Package (amd64)` 在 Ubuntu runner 构建并检查 Debian 产物。
-3. `Package (arm64)` 在原生 ARM64 runner 的固定 `node:22-bookworm` 容器中构建，确保 `better-sqlite3` 原生模块和 Rust hostd/termux 二进制匹配 CM5。
+3. `Package (arm64)` 在原生 ARM64 runner 的固定 `node:22-bookworm` 容器中构建，确保 `better-sqlite3` 原生模块和 Rust hostd/terminal 二进制匹配 CM5。
 4. `Documentation browser smoke` 构建文档并用 Chromium 检查导航、搜索与页面渲染。
-5. `Nix` 在原生 `x86_64-linux` 与 `aarch64-linux` runner 上执行 `nix flake check`；x86_64 同时运行 NixOS VM 模块测试。
-6. tag run 在上述 job 全部成功后创建 GitHub Release，包含两个架构的 `.deb`、`.changes`、`.buildinfo`、`SHA256SUMS` 和 `release-manifest.json`。
+5. tag run 在上述 job 全部成功后创建 GitHub Release，包含两个架构的 `.deb`、`.changes`、`.buildinfo`、`SHA256SUMS` 和 `release-manifest.json`。
 
 `release-manifest.json` 是 CM5 部署的最小可信描述：
 
@@ -183,7 +182,7 @@ git push origin "v${VERSION}"
 2. 使用 `tailscale/github-action@v4` 创建带 `tag:github-actions` 的临时节点；
 3. 经 Tailscale SSH 上传 `release-manifest.json`，并用 SFTP 将 package 切成可独立续传的分片；CM5 按顺序拼接并校验完整 SHA256 后，再原子替换 staging 中的 `package.deb`；
 4. 执行 `sudo -n /usr/local/sbin/cyberos-deploy`；
-5. 再次检查常驻服务、核心 timers 的启用/运行状态和下一次触发时间、failed units、API liveness、root readiness、Operations Health，以及 build-info 的版本和 commit；
+5. 再次检查常驻服务、核心 timers 的启用/运行状态和下一次触发时间、failed units、API liveness、存储池挂载状态、Operations Health，以及 build-info 的版本和 commit；
 6. workflow 结束时 logout 并清理临时 Tailscale 节点。
 
 `concurrency: cm5-production` 串行化所有生产部署，且不会取消正在进行的升级。
@@ -221,12 +220,12 @@ sudo systemctl --failed
 sudo systemctl is-active \
   cyberos-api.service cyberos-worker@1.service \
   cyberos-monitor.service cyberos-alerter.service cyberos-downloader.service cyberos-hostd.service \
-  cyberos-termux.service cyberos-maintenance.timer \
+  cyberos-terminald.service cyberos-maintenance.timer \
   cyberos-health.timer cyberos-backup-daily.timer \
   cyberos-backup-weekly.timer
 sudo systemctl list-timers 'cyberos-*'
 curl -fsS http://127.0.0.1:3010/health
-curl -fsS http://127.0.0.1:3010/api/roots/readiness
+curl -fsS http://127.0.0.1:3010/api/system/storage
 curl -fsS http://127.0.0.1:3010/api/system/health
 curl -fsS http://127.0.0.1:3010/api/monitoring/overview
 curl -fsS http://127.0.0.1:3010/api/monitoring/alerts/summary
@@ -252,4 +251,4 @@ gh workflow run deploy-cm5.yml --ref main -f tag=vX.Y.Z
 - **helper 拒绝降级或同版本不同 commit**：发布一个更高的 SemVer；不要移动 tag 或绕过校验。
 - **部署后健康检查失败**：保留 helper backup 和 journal，停止扩大部署；数据库发生 migration 时不要盲目安装旧包。
 
-更通用的安装、冷备份和恢复边界见[Debian 与 appliance 部署](/docs/operations/deployment/)；CM5 硬件与运行时验收见[Raspberry Pi CM5 部署](/docs/operations/cm5/)。
+更通用的安装、冷备份和恢复边界见[Debian 部署](/docs/operations/deployment/)；CM5 硬件与运行时验收见[Raspberry Pi CM5 部署](/docs/operations/cm5/)。

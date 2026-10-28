@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@cyberos/db": "2.0.0",
-    "@cyberos/nas-tools": "2.0.0",
+    "@cyberos/storage-tools": "2.0.0",
     "@cyberos/shared": "2.0.0"
   }
 }

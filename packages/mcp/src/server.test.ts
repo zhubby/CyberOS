@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
@@ -8,7 +8,6 @@ import {
   createDownloadTask,
   createMcpClient,
   defaultAgentCapabilityPolicySettings,
-  ensureNasRoots,
   getCapabilityApprovalByRun,
   getCapabilityRun,
   openCyberOsDb,
@@ -17,7 +16,7 @@ import {
   transitionDownloadTask,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { registerMcp } from "./server.js";
 
 let tempDir: string;
@@ -27,15 +26,15 @@ let token: string;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-mcp-"));
-  await writeFile(path.join(tempDir, "hello.txt"), "hello from CyberOS", "utf8");
+  await mkdir(path.join(tempDir, "pool-1"));
+  await writeFile(path.join(tempDir, "pool-1", "hello.txt"), "hello from CyberOS", "utf8");
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "primary", name: "Primary", path: tempDir }]);
   const client = createMcpClient(db, {
     name: "MCP test",
     kind: "local",
     scopes: [
       "cyberos:catalog:read", "cyberos:downloads:read", "cyberos:files:read", "cyberos:files:propose", "cyberos:index:read", "cyberos:photos:read",
-      "cyberos:roots:read", "cyberos:settings:read", "cyberos:system:read", "cyberos:runs:read"
+      "cyberos:storage-pools:read", "cyberos:settings:read", "cyberos:system:read", "cyberos:runs:read"
     ]
   });
   token = client.token;
@@ -187,7 +186,7 @@ describe("MCP Streamable HTTP", () => {
     }
   });
 
-  it("filters tools by scope and reads root-relative files", async () => {
+  it("filters tools by scope and reads storage-pool-relative files", async () => {
     const list = await postMcp({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }, "2025-11-25");
     expect(list.statusCode).toBe(200);
     const names = (parseMcpResponse(list.body).result.tools as Array<{ name: string }>).map((tool) => tool.name);
@@ -199,13 +198,13 @@ describe("MCP Streamable HTTP", () => {
       jsonrpc: "2.0",
       id: 3,
       method: "tools/call",
-      params: { name: "cyberos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
+      params: { name: "cyberos.files.read", arguments: { storagePoolId: "pool-1", path: "hello.txt" } }
     }, "2025-11-25");
     expect(read.statusCode).toBe(200);
     const readPayload = parseMcpResponse(read.body);
     expect(readPayload.result.structuredContent).toMatchObject({
       schemaVersion: "1.0",
-      data: { rootId: "primary", preview: { content: "hello from CyberOS", truncated: false } }
+      data: { storagePoolId: "pool-1", preview: { content: "hello from CyberOS", truncated: false } }
     });
     expect(JSON.stringify(readPayload)).not.toContain(tempDir);
   });
@@ -256,7 +255,7 @@ describe("MCP Streamable HTTP", () => {
     }, "2025-11-25");
     const disabledResourceUris = (parseMcpResponse(disabledResources.body).result.resourceTemplates as Array<{ uriTemplate: string }>)
       .map((resource) => resource.uriTemplate);
-    expect(disabledResourceUris).not.toContain("cyberos://files/{rootId}/{+path}");
+    expect(disabledResourceUris).not.toContain("cyberos://files/{storagePoolId}/{+path}");
 
     saveAgentCapabilityPolicySettings(db, {
       policies: { ...defaults.policies, "cyberos.files.read": "approve" }
@@ -275,7 +274,7 @@ describe("MCP Streamable HTTP", () => {
       jsonrpc: "2.0",
       id: 21,
       method: "tools/call",
-      params: { name: "cyberos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
+      params: { name: "cyberos.files.read", arguments: { storagePoolId: "pool-1", path: "hello.txt" } }
     }, "2025-11-25");
     const readResult = parseMcpResponse(read.body).result.structuredContent as {
       data: { state: string };
@@ -302,7 +301,7 @@ describe("MCP Streamable HTTP", () => {
       method: "tools/call",
       params: {
         name: "cyberos.files.mutate",
-        arguments: { request: { operation: "mkdir", rootId: "primary", targetPath: "Archive" } }
+        arguments: { request: { operation: "mkdir", storagePoolId: "pool-1", targetPath: "Archive" } }
       }
     }, "2025-11-25");
     const mutationResult = parseMcpResponse(mutation.body).result.structuredContent as {
@@ -319,13 +318,12 @@ describe("MCP Streamable HTTP", () => {
     expect(getCapabilityApprovalByRun(db, mutationResult.runId)?.requiresConfirmation).toBe(true);
   });
 
-  it("refuses NAS reads when a required mount is not ready", async () => {
-    db.prepare("UPDATE nas_roots SET mount_policy = 'required' WHERE id = 'primary'").run();
+  it("refuses reads from an unavailable storage pool", async () => {
     const read = await postMcp({
       jsonrpc: "2.0",
       id: 32,
       method: "tools/call",
-      params: { name: "cyberos.files.read", arguments: { rootId: "primary", path: "hello.txt" } }
+      params: { name: "cyberos.files.read", arguments: { storagePoolId: "missing", path: "hello.txt" } }
     }, "2025-11-25");
 
     const payload = parseMcpResponse(read.body);
@@ -352,7 +350,7 @@ describe("MCP Streamable HTTP", () => {
     }, "2025-11-25");
     const templateUris = (parseMcpResponse(templates.body).result.resourceTemplates as Array<{ uriTemplate: string }>)
       .map((template) => template.uriTemplate);
-    expect(templateUris).toContain("cyberos://files/{rootId}/{+path}");
+    expect(templateUris).toContain("cyberos://files/{storagePoolId}/{+path}");
     expect(templateUris).toContain("cyberos://photos/{id}");
 
     const settings = await postMcp({
@@ -378,8 +376,7 @@ describe("MCP Streamable HTTP", () => {
   it("redacts download credentials and host paths", async () => {
     const task = createDownloadTask(db, {
       url: "https://user:password@example.test/file.iso?token=secret",
-      rootId: "primary",
-      storagePoolId: "pool-1",
+            storagePoolId: "pool-1",
       targetDirectory: "Downloads",
       targetFileName: "file.iso",
       targetPath: "Downloads/file.iso"
@@ -418,14 +415,14 @@ describe("MCP Streamable HTTP", () => {
       params: {
         name: "cyberos.files.mutate",
         arguments: {
-          request: { operation: "move", rootId: "primary", sourcePath: "hello.txt", targetPath: "moved.txt" },
+          request: { operation: "move", storagePoolId: "pool-1", sourcePath: "hello.txt", targetPath: "moved.txt" },
           idempotencyKey: "move-hello-0001"
         }
       }
     }, "2025-11-25");
     const payload = parseMcpResponse(proposed.body);
     expect(payload.error).toBeDefined();
-    await expect(readFile(path.join(tempDir, "hello.txt"), "utf8")).resolves.toBe("hello from CyberOS");
+    await expect(readFile(path.join(tempDir, "pool-1", "hello.txt"), "utf8")).resolves.toBe("hello from CyberOS");
     expect(db.prepare("SELECT COUNT(*) FROM capability_runs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
   });
@@ -437,7 +434,7 @@ describe("MCP Streamable HTTP", () => {
       method: "tools/call",
       params: {
         name: "cyberos.files.resource-link",
-        arguments: { rootId: "primary", path: "hello.txt" }
+        arguments: { storagePoolId: "pool-1", path: "hello.txt" }
       }
     }, "2025-11-25");
     const data = (parseMcpResponse(linked.body).result.structuredContent as {
@@ -478,13 +475,13 @@ describe("MCP Streamable HTTP", () => {
       method: "tools/call",
       params: {
         name: "cyberos.files.resource-link",
-        arguments: { rootId: "primary", path: "hello.txt" }
+        arguments: { storagePoolId: "pool-1", path: "hello.txt" }
       }
     }, "2025-11-25");
     const url = (parseMcpResponse(linked.body).result.structuredContent as {
       data: { url: string };
     }).data.url;
-    await writeFile(path.join(tempDir, "hello.txt"), "replacement content is different", "utf8");
+    await writeFile(path.join(tempDir, "pool-1", "hello.txt"), "replacement content is different", "utf8");
 
     const changed = await app.inject({
       method: "GET",
@@ -538,19 +535,17 @@ function parseMcpResponse(body: string): McpTestResponse {
 }
 
 function testConfig(root: string): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(root, "missing.toml"), CYBEROS_ROOT: root }, root);
   return {
-    environment: "development",
-    dataDir: root,
-    databasePath: path.join(root, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: root, databasePath: path.join(root, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 100 },
+    worker: { pollMs: 100, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: path.join(root, "hostd.sock") },
+    hostd: { socketPath: path.join(root, "hostd.sock"), mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
-    terminal: { user: "cyberos", termuxSocketPath: path.join(root, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    terminal: { user: "cyberos", socketPath: path.join(root, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(root, "vod.sock"), statePath: path.join(root, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "primary", name: "Primary", path: root }]
   };
 }

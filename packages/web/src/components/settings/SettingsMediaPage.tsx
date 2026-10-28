@@ -160,7 +160,6 @@ export function SettingsMediaPage({
       await createMediaSource({
         name: selection.name,
         kind,
-        rootId: selection.rootId,
         storagePoolId: selection.storagePoolId,
         path: selection.path
       });

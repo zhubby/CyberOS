@@ -33,7 +33,7 @@ export type DockerCreateForm = {
   privileged: boolean;
   privilegedAcknowledged: boolean;
   hostAccess: DockerHostAccessGrant[];
-  mounts: Array<{ type: "volume" | "bind" | "tmpfs"; source: string; rootId: string; target: string; readOnly: boolean; noCopy: boolean; sizeBytes: string; mode: string }>;
+  mounts: Array<{ type: "volume" | "bind" | "tmpfs"; source: string; storagePoolId: string; target: string; readOnly: boolean; noCopy: boolean; sizeBytes: string; mode: string }>;
   networkMode: "bridge" | "host" | "none" | "custom";
   networkName: string;
   networkAliases: string;
@@ -109,7 +109,7 @@ export function validateDockerCreateStep(step: number, form: DockerCreateForm): 
   if (step >= 4 && form.mounts.some((mount) => !mount.target.startsWith("/") || mount.target.includes("/../") || mount.target.endsWith("/.."))) return "Mount targets must be normalized absolute paths";
   if (step >= 4 && new Set(form.mounts.map((mount) => mount.target.trim())).size !== form.mounts.length) return "Mount targets must be unique";
   if (step >= 4 && form.mounts.some((mount) => mount.type !== "tmpfs" && !mount.source.trim())) return "Volume and bind mounts require a source";
-  if (step >= 4 && form.mounts.some((mount) => mount.type === "bind" && !mount.rootId)) return "Bind mounts require a NAS root";
+  if (step >= 4 && form.mounts.some((mount) => mount.type === "bind" && !mount.storagePoolId)) return "Bind mounts require a storage pool";
   if (step >= 4 && form.mounts.some((mount) => mount.type === "tmpfs" && (!validInteger(mount.sizeBytes, 1_024) || mount.mode.trim() && !/^[0-7]{1,4}$/u.test(mount.mode.trim())))) return "tmpfs size or mode is invalid";
   if (step >= 5 && form.networkMode === "custom" && !form.networkName.trim()) return "Select a Docker network";
   if (step >= 5 && (form.networkMode === "host" || form.networkMode === "none") && (form.ports.length || form.publishAllPorts)) return "This network mode cannot publish ports";
@@ -138,7 +138,7 @@ export function dockerCreateInput(form: DockerCreateForm): DockerCreateInput {
   const environment = map(form.environment); const labels = map(form.labels);
   const customNetwork = form.networkMode === "custom";
   const mounts = form.mounts.filter((mount) => mount.target.trim()).map((mount) => mount.type === "bind"
-    ? { type: "bind" as const, rootId: mount.rootId, sourcePath: mount.source, target: mount.target.trim(), readOnly: mount.readOnly }
+    ? { type: "bind" as const, storagePoolId: mount.storagePoolId, sourcePath: mount.source, target: mount.target.trim(), readOnly: mount.readOnly }
     : mount.type === "volume" ? { type: "volume" as const, source: mount.source, target: mount.target.trim(), readOnly: mount.readOnly, noCopy: mount.noCopy }
       : { type: "tmpfs" as const, target: mount.target.trim(), readOnly: mount.readOnly, ...(numberOrUndefined(mount.sizeBytes) !== undefined ? { sizeBytes: numberOrUndefined(mount.sizeBytes) } : {}), ...(parseTmpfsMode(mount.mode) !== undefined ? { mode: parseTmpfsMode(mount.mode) } : {}) });
   return {

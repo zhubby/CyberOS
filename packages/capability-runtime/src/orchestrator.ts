@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, lstat, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   CapabilityError,
@@ -21,8 +21,6 @@ import {
   getCapabilityRun,
   getCapabilityRunPayload,
   getMcpClient,
-  getNasRoot,
-  getRootReadiness,
   listRunnableCapabilityRuns,
   queryIndexAdvanced,
   recordAppliedOperation,
@@ -32,15 +30,13 @@ import {
 } from "@cyberos/db";
 import {
   applyFileMutation,
-  isPathInside,
   listDir,
   readText,
   resolveSafeExistingPath,
   resolveSafeTargetPath,
-  statPath,
-  toRootRelative
-} from "@cyberos/nas-tools";
-import type { AgentCapabilityId, FileMutationOperation, FileOperationProposal, NasRootRecord, CyberOsConfig } from "@cyberos/shared";
+  statPath
+} from "@cyberos/storage-tools";
+import type { AgentCapabilityId, FileMutationOperation, FileOperationProposal, CyberOsConfig } from "@cyberos/shared";
 import {
   isStoredCapabilityAdapterPayload,
   parseStoredCapabilityAdapterProposal,
@@ -52,6 +48,10 @@ import {
   type StoredCapabilityAdapterProposal
 } from "./adapters.js";
 import { executeExtendedFileReadCapability } from "./file-read.js";
+import {
+  requireStoragePool,
+  type ResolvedStoragePool
+} from "./storage-pools.js";
 
 const FILE_MUTATION_CAPABILITY = "cyberos.files.mutate";
 const PI_MCP_FILE_CAPABILITIES = [
@@ -65,12 +65,11 @@ const PI_MCP_FILE_CAPABILITIES = [
   "cyberos.files.archive-inspect"
 ] as const;
 const FILE_PROPOSAL_TTL_MS = 15 * 60_000;
-const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 const SUPPORTED_FILE_MUTATIONS = new Set<FileMutationOperation>(["mkdir", "move", "copy", "rename", "trash"]);
 
 interface FileMutationRequest {
   operation: FileMutationOperation;
-  rootId: string;
+  storagePoolId: string;
   sourcePath?: string;
   targetPath?: string;
 }
@@ -88,99 +87,12 @@ export interface CapabilityRuntimeDependencies {
   adapters?: Readonly<Record<string, CapabilityDomainAdapter>>;
 }
 
-export type PiToolCapabilityName = "read" | "grep" | "find" | "ls" | "bash" | "edit" | "write";
-
-export interface PiToolCapabilityRequest {
-  toolCallId: string;
-  toolName: PiToolCapabilityName;
-  args: Record<string, unknown>;
-  redactedArgs: Record<string, unknown>;
-  previewArgs: Record<string, unknown>;
-  risk: "low" | "medium" | "high" | "critical";
-  summary: string;
-  requiresConfirmation: boolean;
-}
-
-const PI_TOOL_CAPABILITIES: Record<PiToolCapabilityName, string> = {
-  read: "cyberos.files.read",
-  grep: "cyberos.files.grep",
-  find: "cyberos.files.find",
-  ls: "cyberos.files.list",
-  bash: "cyberos.shell.run",
-  edit: "cyberos.files.edit",
-  write: "cyberos.files.write"
-};
-
-interface StoredPiToolPayload {
-  kind: "pi_tool";
-  rootId: string;
-  toolCallId: string;
-  toolName: PiToolCapabilityName;
-  args: Record<string, JsonValue>;
-  revision: string | null;
-}
-
 export type PiMcpFileCapabilityId = typeof PI_MCP_FILE_CAPABILITIES[number];
 
 interface StoredPiMcpFilePayload {
   kind: "pi_mcp_file";
   capabilityId: PiMcpFileCapabilityId;
   input: Record<string, JsonValue>;
-}
-
-export async function proposePiToolCapability(input: {
-  dependencies: CapabilityRuntimeDependencies;
-  sessionId: string;
-  rootId: string;
-  request: PiToolCapabilityRequest;
-}): Promise<CapabilityExecution> {
-  const root = requireReadyRoot(input.dependencies.db, input.rootId);
-  const revision = await validatePiToolRequest(root, input.request.toolName, input.request.args);
-  const capabilityId = PI_TOOL_CAPABILITIES[input.request.toolName];
-  const expiresAt = new Date(Date.now() + FILE_PROPOSAL_TTL_MS).toISOString();
-  const payload: StoredPiToolPayload = {
-    kind: "pi_tool",
-    rootId: root.id,
-    toolCallId: input.request.toolCallId,
-    toolName: input.request.toolName,
-    args: toJsonValue(input.request.args) as Record<string, JsonValue>,
-    revision
-  };
-  const created = createCapabilityProposal(input.dependencies.db, {
-    clientId: null,
-    subjectId: input.sessionId,
-    subjectKind: "pi",
-    capabilityId,
-    risk: input.request.risk,
-    redactedInput: toJsonValue({
-      toolCallId: input.request.toolCallId,
-      args: input.request.redactedArgs
-    }),
-    proposal: toJsonValue({
-      kind: "pi_tool",
-      toolName: input.request.toolName,
-      capabilityId,
-      summary: input.request.summary,
-      args: input.request.previewArgs,
-      revision
-    }),
-    privatePayload: toJsonValue(payload),
-    requiresConfirmation: input.request.requiresConfirmation,
-    expiresAt
-  });
-  return {
-    data: {
-      state: created.run.state,
-      approval: {
-        id: created.approval.id,
-        status: created.approval.status,
-        revision: created.approval.revision,
-        expiresAt: created.approval.expiresAt
-      },
-      proposal: { summary: input.request.summary }
-    },
-    runId: created.run.id
-  };
 }
 
 export async function proposePiMcpFileCapability(input: {
@@ -244,7 +156,7 @@ export async function proposeFileMutation(input: {
     throw new CapabilityError("FORBIDDEN", "Only the built-in Pi agent can request mutation approval");
   }
   const request = parseFileMutationRequest(input.request);
-  const root = requireReadyRoot(input.dependencies.db, request.rootId);
+  const root = requireStoragePool(input.dependencies.config, request.storagePoolId);
   await validateFileMutation(root, request);
   const revision = await fileMutationRevision(root, request);
   const summary = fileMutationSummary(request);
@@ -421,9 +333,6 @@ export async function executeApprovedCapabilityRun(
     if (isStoredPiMcpFilePayload(payload)) {
       return executeApprovedPiMcpFileRun(dependencies, initial, payload);
     }
-    if (isStoredPiToolPayload(payload)) {
-      return executeApprovedPiToolRun(dependencies, initial);
-    }
     if (isStoredCapabilityAdapterPayload(payload)) {
       return executeApprovedDomainAdapterRun(dependencies, initial, payload, options.secretInput);
     }
@@ -432,7 +341,7 @@ export async function executeApprovedCapabilityRun(
     }
 
     const proposal = parseStoredFileProposal(approval.proposal);
-    const root = requireReadyRoot(dependencies.db, proposal.request.rootId);
+    const root = requireStoragePool(dependencies.config, proposal.request.storagePoolId);
     await validateFileMutation(root, proposal.request);
     const currentRevision = await fileMutationRevision(root, proposal.request);
     if (currentRevision !== proposal.revision) {
@@ -451,24 +360,23 @@ export async function executeApprovedCapabilityRun(
 
     try {
       const fileProposal = toFileOperationProposal(proposal.request, proposal.summary);
-      const result = await applyFileMutation(root, fileProposal, path.join(dependencies.config.dataDir, "trash"));
+      const result = await applyFileMutation(root, fileProposal, path.join(dependencies.config.paths.stateDir, "trash"));
       if (result.proposal.operation === "trash" && result.metadata.trashEntryId && result.targetPath) {
         createTrashEntry(dependencies.db, {
           id: String(result.metadata.trashEntryId),
-          rootId: root.id,
+          storagePoolId: root.id,
           originalPath: result.sourcePath ?? proposal.request.sourcePath ?? ".",
-          trashPath: path.join(dependencies.config.dataDir, "trash", result.targetPath),
+          trashPath: path.join(dependencies.config.paths.stateDir, "trash", result.targetPath),
           metadata: { capabilityRunId: runId }
         });
       }
       const operation = recordAppliedOperation(dependencies.db, {
-        approvalId: null,
         operation: result.proposal.operation,
         sourcePath: result.sourcePath,
         targetPath: result.targetPath,
         status: "applied",
         metadata: {
-          rootId: root.id,
+          storagePoolId: root.id,
           reversible: fileProposal.reversible,
           capabilityRunId: runId,
           ...(result.metadata.trashEntryId ? { trashEntryId: String(result.metadata.trashEntryId) } : {})
@@ -766,52 +674,51 @@ function adapterError(error: unknown, fallback: string): CapabilityError {
 }
 
 export async function executeFileReadCapability(
-  dependencies: Pick<CapabilityRuntimeDependencies, "db">,
+  dependencies: Pick<CapabilityRuntimeDependencies, "db" | "config">,
   capabilityId: PiMcpFileCapabilityId,
   input: Record<string, JsonValue>
 ): Promise<CapabilityExecution> {
-  const rootId = requiredText(input.rootId, "rootId");
-  const root = requireReadyRoot(dependencies.db, rootId);
+  const storagePoolId = requiredText(input.storagePoolId, "storagePoolId");
+  const root = requireStoragePool(dependencies.config, storagePoolId);
   switch (capabilityId) {
     case "cyberos.files.list": {
       const requestedPath = optionalText(input.path) ?? ".";
       const entries = await mapPathError(() => listDir(root, requestedPath));
       const limit = strictBoundedInteger(input.limit, 50, 1, 200);
-      const offset = decodeFileOffsetCursor(optionalText(input.cursor), `${rootId}\0${requestedPath}`);
+      const offset = decodeFileOffsetCursor(optionalText(input.cursor), `${storagePoolId}\0${requestedPath}`);
       const pageEntries = entries.slice(offset, offset + limit);
       const nextOffset = offset + pageEntries.length;
       return {
-        data: { rootId, path: requestedPath, entries: toJsonValue(pageEntries) },
+        data: { storagePoolId, path: requestedPath, entries: toJsonValue(pageEntries) },
         page: {
           limit,
           nextCursor: nextOffset < entries.length
-            ? encodeFileOffsetCursor(nextOffset, `${rootId}\0${requestedPath}`)
+            ? encodeFileOffsetCursor(nextOffset, `${storagePoolId}\0${requestedPath}`)
             : null
         }
       };
     }
     case "cyberos.files.stat": {
       const metadata = await mapPathError(() => statPath(root, requiredText(input.path, "path")));
-      return { data: { rootId, stat: toJsonValue(metadata) } };
+      return { data: { storagePoolId, stat: toJsonValue(metadata) } };
     }
     case "cyberos.files.read": {
       const maxBytes = strictBoundedInteger(input.maxBytes, 64 * 1024, 1, 128 * 1024);
       const preview = await mapPathError(() => readText(root, requiredText(input.path, "path"), maxBytes));
-      return { data: { rootId, maxBytes, preview: toJsonValue(preview) } };
+      return { data: { storagePoolId, maxBytes, preview: toJsonValue(preview) } };
     }
     case "cyberos.files.search": {
       const limit = strictBoundedInteger(input.limit, 50, 1, 100);
       try {
         const page = queryIndexAdvanced(dependencies.db, {
-          rootId,
-          storagePoolId: rootId,
+          storagePoolId,
           path: optionalText(input.path) ?? ".",
           query: requiredText(input.query, "query"),
           cursor: optionalText(input.cursor) ?? null,
           limit
         });
         return {
-          data: { rootId, files: toJsonValue(page.files) },
+          data: { storagePoolId, files: toJsonValue(page.files) },
           page: { limit, nextCursor: page.nextCursor }
         };
       } catch (error) {
@@ -842,14 +749,14 @@ export async function recoverCapabilityRuns(dependencies: CapabilityRuntimeDepen
 function parseFileMutationRequest(value: JsonValue): FileMutationRequest {
   if (!isRecord(value)) throw new CapabilityError("INVALID_ARGUMENT", "request must be an object");
   const operation = value.operation;
-  const rootId = value.rootId;
+  const storagePoolId = value.storagePoolId;
   if (typeof operation !== "string" || !SUPPORTED_FILE_MUTATIONS.has(operation as FileMutationOperation)) {
     throw new CapabilityError("INVALID_ARGUMENT", "operation must be mkdir, move, copy, rename, or trash");
   }
-  if (typeof rootId !== "string" || !rootId.trim() || rootId.length > 128) {
-    throw new CapabilityError("INVALID_ARGUMENT", "rootId is required");
+  if (typeof storagePoolId !== "string" || !storagePoolId.trim() || storagePoolId.length > 128) {
+    throw new CapabilityError("INVALID_ARGUMENT", "storagePoolId is required");
   }
-  const allowed = new Set(["operation", "rootId", "sourcePath", "targetPath"]);
+  const allowed = new Set(["operation", "storagePoolId", "sourcePath", "targetPath"]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new CapabilityError("INVALID_ARGUMENT", "request contains unsupported fields");
   }
@@ -864,7 +771,7 @@ function parseFileMutationRequest(value: JsonValue): FileMutationRequest {
   if ((operation === "move" || operation === "copy" || operation === "rename") && (!sourcePath || !targetPath)) {
     throw new CapabilityError("INVALID_ARGUMENT", `${operation} requires sourcePath and targetPath`);
   }
-  return { operation: operation as FileMutationOperation, rootId: rootId.trim(), ...(sourcePath ? { sourcePath } : {}), ...(targetPath ? { targetPath } : {}) };
+  return { operation: operation as FileMutationOperation, storagePoolId: storagePoolId.trim(), ...(sourcePath ? { sourcePath } : {}), ...(targetPath ? { targetPath } : {}) };
 }
 
 function parseStoredFileProposal(value: JsonValue): StoredFileMutationProposal {
@@ -882,26 +789,16 @@ function parseStoredFileProposal(value: JsonValue): StoredFileMutationProposal {
 function optionalRelativePath(value: JsonValue | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || !value.trim() || value.length > 4096 || value.includes("\0") || path.isAbsolute(value)) {
-    throw new CapabilityError("INVALID_ARGUMENT", `${field} must be a root-relative path`);
+    throw new CapabilityError("INVALID_ARGUMENT", `${field} must be a storage-pool-relative path`);
   }
   const normalized = path.normalize(value.trim());
   if (normalized === "." || normalized === ".." || normalized.startsWith(`..${path.sep}`)) {
-    throw new CapabilityError("INVALID_ARGUMENT", `${field} must stay below the NAS root`);
+    throw new CapabilityError("INVALID_ARGUMENT", `${field} must stay inside the storage pool`);
   }
   return normalized;
 }
 
-function requireReadyRoot(db: CyberOsDatabase, rootId: string): NasRootRecord {
-  const root = getNasRoot(db, rootId);
-  if (!root || !root.enabled) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
-  if (root.mountPolicy === "required") {
-    const readiness = getRootReadiness(db, root.id);
-    if (readiness?.status !== "ready") throw new CapabilityError("NOT_READY", "NAS root is not ready", { retryable: true });
-  }
-  return root;
-}
-
-async function validateFileMutation(root: NasRootRecord, request: FileMutationRequest): Promise<void> {
+async function validateFileMutation(root: ResolvedStoragePool, request: FileMutationRequest): Promise<void> {
   if (request.sourcePath) {
     const source = await mapPathError(() => resolveSafeExistingPath(root.path, request.sourcePath!));
     const sourceLink = await mapPathError(() => lstat(source.absolutePath));
@@ -924,8 +821,8 @@ async function validateFileMutation(root: NasRootRecord, request: FileMutationRe
   }
 }
 
-async function fileMutationRevision(root: NasRootRecord, request: FileMutationRequest): Promise<string> {
-  const state: Record<string, unknown> = { operation: request.operation, rootId: root.id };
+async function fileMutationRevision(root: ResolvedStoragePool, request: FileMutationRequest): Promise<string> {
+  const state: Record<string, unknown> = { operation: request.operation, storagePoolId: root.id };
   if (request.sourcePath) {
     const source = await mapPathError(() => resolveSafeExistingPath(root.path, request.sourcePath!));
     const sourceStat = await mapPathError(() => stat(source.realPath));
@@ -954,82 +851,13 @@ function fileMutationSummary(request: FileMutationRequest): string {
 function toFileOperationProposal(request: FileMutationRequest, summary: string): FileOperationProposal {
   return {
     operation: request.operation,
-    rootId: request.rootId,
+    storagePoolId: request.storagePoolId,
     ...(request.sourcePath ? { sourcePath: request.sourcePath } : {}),
     ...(request.targetPath ? { targetPath: request.targetPath } : {}),
     risk: request.operation === "mkdir" ? "low" : "medium",
     reversible: true,
     summary
   };
-}
-
-async function executeApprovedPiToolRun(
-  dependencies: CapabilityRuntimeDependencies,
-  initial: CapabilityRunRecord
-): Promise<CapabilityRunRecord> {
-  const payload = parseStoredPiToolPayload(getCapabilityRunPayload(dependencies.db, initial.id));
-  const root = requireReadyRoot(dependencies.db, payload.rootId);
-  const currentRevision = await validatePiToolRequest(root, payload.toolName, payload.args);
-  if (payload.revision !== currentRevision) {
-    deleteCapabilityRunPayload(dependencies.db, initial.id);
-    return failQueuedRun(dependencies.db, initial, "CONFLICT", "File state changed after approval was requested");
-  }
-
-  const running = transitionCapabilityRun(dependencies.db, {
-    runId: initial.id,
-    expectedRevision: initial.revision,
-    from: ["queued"],
-    to: "running",
-    progress: { phase: "executing" },
-    cancellable: false
-  });
-  if (!running) return getCapabilityRun(dependencies.db, initial.id)!;
-
-  try {
-    const result = await executePiTool(root, payload.toolName, payload.args);
-    let operationId: string | null = null;
-    if (payload.toolName === "edit" || payload.toolName === "write") {
-      const requestedPath = requiredText(payload.args.path, "path");
-      const operation = recordAppliedOperation(dependencies.db, {
-        approvalId: null,
-        operation: "edit",
-        sourcePath: requestedPath,
-        targetPath: requestedPath,
-        status: "applied",
-        metadata: {
-          rootId: root.id,
-          capabilityRunId: initial.id,
-          toolName: payload.toolName,
-          reversible: false
-        }
-      });
-      operationId = operation.id;
-    }
-    const completed = transitionCapabilityRun(dependencies.db, {
-      runId: initial.id,
-      expectedRevision: running.revision,
-      from: ["running"],
-      to: "succeeded",
-      progress: { phase: "complete" },
-      result: toJsonValue(result),
-      ...(operationId ? { domainOperationType: "file_operation", domainOperationId: operationId } : {}),
-      cancellable: false
-    })!;
-    deleteCapabilityRunPayload(dependencies.db, initial.id);
-    return completed;
-  } catch (error) {
-    const failed = transitionCapabilityRun(dependencies.db, {
-      runId: initial.id,
-      expectedRevision: running.revision,
-      from: ["running"],
-      to: "failed",
-      errorCode: capabilityFailureCode(error),
-      errorMessage: safeFailureMessage(error, dependencies),
-      cancellable: false
-    })!;
-    deleteCapabilityRunPayload(dependencies.db, initial.id);
-    return failed;
-  }
 }
 
 async function executeApprovedPiMcpFileRun(
@@ -1076,31 +904,6 @@ async function executeApprovedPiMcpFileRun(
   }
 }
 
-function parseStoredPiToolPayload(value: JsonValue | null): StoredPiToolPayload {
-  if (!isRecord(value) || value.kind !== "pi_tool") {
-    throw new CapabilityError("INTERNAL", "Stored Agent capability payload is missing");
-  }
-  const toolName = value.toolName;
-  if (typeof toolName !== "string" || !(toolName in PI_TOOL_CAPABILITIES)) {
-    throw new CapabilityError("INTERNAL", "Stored Agent tool is invalid");
-  }
-  if (typeof value.rootId !== "string" || typeof value.toolCallId !== "string" || !isRecord(value.args)) {
-    throw new CapabilityError("INTERNAL", "Stored Agent capability payload is invalid");
-  }
-  return {
-    kind: "pi_tool",
-    rootId: value.rootId,
-    toolCallId: value.toolCallId,
-    toolName: toolName as PiToolCapabilityName,
-    args: value.args,
-    revision: typeof value.revision === "string" ? value.revision : null
-  };
-}
-
-function isStoredPiToolPayload(value: JsonValue | null): value is JsonValue & StoredPiToolPayload {
-  return isRecord(value) && value.kind === "pi_tool";
-}
-
 function isStoredPiMcpFilePayload(value: JsonValue | null): value is JsonValue & StoredPiMcpFilePayload {
   return isRecord(value)
     && value.kind === "pi_mcp_file"
@@ -1114,7 +917,7 @@ async function validatePiMcpFileCapability(
   capabilityId: PiMcpFileCapabilityId,
   input: Record<string, JsonValue>
 ): Promise<void> {
-  const root = requireReadyRoot(dependencies.db, requiredText(input.rootId, "rootId"));
+  const root = requireStoragePool(dependencies.config, requiredText(input.storagePoolId, "storagePoolId"));
   switch (capabilityId) {
     case "cyberos.files.list":
       strictBoundedInteger(input.limit, 50, 1, 200);
@@ -1179,206 +982,6 @@ function agentPolicyCapabilityId(capabilityId: string): AgentCapabilityId | null
   }
 }
 
-async function validatePiToolRequest(
-  root: NasRootRecord,
-  toolName: PiToolCapabilityName,
-  args: Record<string, unknown>
-): Promise<string | null> {
-  switch (toolName) {
-    case "read":
-    case "grep":
-    case "find":
-    case "ls": {
-      await resolveSafeExistingPath(root.path, optionalText(args.path) ?? ".");
-      return null;
-    }
-    case "bash": {
-      throw new CapabilityError("INVALID_ARGUMENT", "Legacy bash execution is disabled; use cyberos.shell.run with structured argv");
-    }
-    case "edit": {
-      const edits = parseEdits(args.edits);
-      const preview = await buildEditPreview(root, requiredText(args.path, "path"), edits);
-      return createHash("sha256").update(await readFile(preview.absolutePath)).digest("base64url");
-    }
-    case "write": {
-      const target = await assertSafeWriteTarget(root, requiredText(args.path, "path"));
-      requiredText(args.content, "content", true);
-      return targetRevision(target.absolutePath);
-    }
-  }
-}
-
-async function executePiTool(
-  root: NasRootRecord,
-  toolName: PiToolCapabilityName,
-  args: Record<string, JsonValue>
-): Promise<Record<string, JsonValue>> {
-  switch (toolName) {
-    case "read": {
-      const preview = await readText(root, requiredText(args.path, "path"), MAX_TOOL_OUTPUT_BYTES);
-      const content = sliceLines(preview.content, optionalInteger(args.offset), optionalInteger(args.limit));
-      return { text: truncateText(content + (preview.truncated ? "\n\n[Output truncated]" : "")), truncated: preview.truncated };
-    }
-    case "ls": {
-      const entries = await listDir(root, optionalText(args.path) ?? ".");
-      const limit = boundedLimit(args.limit, 100, 1_000);
-      return {
-        text: entries.slice(0, limit).map((entry) => `${entry.kind.padEnd(9)} ${entry.path}`).join("\n") || "(empty)",
-        truncated: entries.length > limit
-      };
-    }
-    case "find": {
-      const limit = boundedLimit(args.limit, 100, 1_000);
-      const matches = await globNasRoot(root, optionalText(args.path) ?? ".", requiredText(args.pattern, "pattern"), limit);
-      return { text: matches.join("\n") || "No matches.", truncated: matches.length >= limit };
-    }
-    case "grep": {
-      const limit = boundedLimit(args.limit, 100, 1_000);
-      const matches = await grepNasRoot(root, {
-        pattern: requiredText(args.pattern, "pattern"),
-        path: optionalText(args.path) ?? ".",
-        ignoreCase: args.ignoreCase === true,
-        literal: args.literal === true,
-        limit
-      });
-      return { text: truncateText(matches.join("\n") || "No matches."), truncated: matches.length >= limit };
-    }
-    case "bash": {
-      throw new CapabilityError("INVALID_ARGUMENT", "Legacy bash execution is disabled; use cyberos.shell.run with structured argv");
-    }
-    case "edit": {
-      const requestedPath = requiredText(args.path, "path");
-      const preview = await buildEditPreview(root, requestedPath, parseEdits(args.edits));
-      await writeFile(preview.absolutePath, preview.content, "utf8");
-      return { text: `Edited ${preview.relativePath}.` };
-    }
-    case "write": {
-      const target = await assertSafeWriteTarget(root, requiredText(args.path, "path"));
-      await mkdir(path.dirname(target.absolutePath), { recursive: true });
-      await writeFile(target.absolutePath, requiredText(args.content, "content", true), "utf8");
-      return { text: `Wrote ${target.relativePath}.` };
-    }
-  }
-}
-
-async function grepNasRoot(
-  root: NasRootRecord,
-  input: { pattern: string; path: string; ignoreCase: boolean; literal: boolean; limit: number }
-): Promise<string[]> {
-  const safe = await resolveSafeExistingPath(root.path, input.path);
-  const matcher = input.literal
-    ? (line: string) => (input.ignoreCase ? line.toLocaleLowerCase() : line)
-        .includes(input.ignoreCase ? input.pattern.toLocaleLowerCase() : input.pattern)
-    : (line: string) => new RegExp(input.pattern, input.ignoreCase ? "i" : undefined).test(line);
-  const matches: string[] = [];
-  async function visit(absolutePath: string): Promise<void> {
-    if (matches.length >= input.limit) return;
-    const entryStat = await lstat(absolutePath);
-    if (entryStat.isSymbolicLink()) return;
-    if (entryStat.isDirectory()) {
-      const entries = await readdir(absolutePath, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.name === ".git" || entry.name === "node_modules") continue;
-        await visit(path.join(absolutePath, entry.name));
-        if (matches.length >= input.limit) return;
-      }
-      return;
-    }
-    if (!entryStat.isFile()) return;
-    const relativePath = toRootRelative(safe.rootRealPath, absolutePath);
-    const preview = await readText(root, relativePath, 256 * 1024);
-    preview.content.split("\n").forEach((line, index) => {
-      if (matches.length < input.limit && matcher(line)) matches.push(`${relativePath}:${index + 1}:${line}`);
-    });
-  }
-  await visit(safe.realPath);
-  return matches;
-}
-
-async function globNasRoot(root: NasRootRecord, requestedPath: string, pattern: string, limit: number): Promise<string[]> {
-  if (!pattern.trim() || pattern.includes("\0")) throw new CapabilityError("INVALID_ARGUMENT", "pattern must be a non-empty glob");
-  const safe = await resolveSafeExistingPath(root.path, requestedPath);
-  const matches: string[] = [];
-  async function visit(absolutePath: string): Promise<void> {
-    if (matches.length >= limit) return;
-    const entryStat = await lstat(absolutePath);
-    if (entryStat.isSymbolicLink()) return;
-    const relativePath = path.relative(safe.realPath, absolutePath).split(path.sep).join("/");
-    if (relativePath && (path.matchesGlob(relativePath, pattern) || (!pattern.includes("/") && path.matchesGlob(path.posix.basename(relativePath), pattern)))) {
-      matches.push(relativePath);
-    }
-    if (!entryStat.isDirectory()) return;
-    const entries = await readdir(absolutePath, { withFileTypes: true });
-    entries.sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of entries) {
-      if (entry.name === ".git" || entry.name === "node_modules") continue;
-      await visit(path.join(absolutePath, entry.name));
-      if (matches.length >= limit) return;
-    }
-  }
-  await visit(safe.realPath);
-  return matches;
-}
-
-async function buildEditPreview(
-  root: NasRootRecord,
-  requestedPath: string,
-  edits: Array<{ oldText: string; newText: string }>
-): Promise<{ absolutePath: string; relativePath: string; content: string }> {
-  const safe = await resolveSafeExistingPath(root.path, requestedPath);
-  let content = await readFile(safe.realPath, "utf8");
-  for (const edit of edits) {
-    if (!edit.oldText) throw new CapabilityError("INVALID_ARGUMENT", "edit oldText cannot be empty");
-    if (!content.includes(edit.oldText)) throw new CapabilityError("CONFLICT", `edit oldText was not found in ${safe.relativePath}`);
-    content = content.replace(edit.oldText, edit.newText);
-  }
-  return { absolutePath: safe.realPath, relativePath: safe.relativePath, content };
-}
-
-async function assertSafeWriteTarget(root: NasRootRecord, requestedPath: string): Promise<{ absolutePath: string; relativePath: string }> {
-  const target = await resolveSafeTargetPath(root.path, requestedPath);
-  let current = path.dirname(target.absolutePath);
-  while (current && current !== path.dirname(current)) {
-    try {
-      const currentRealPath = await realpath(current);
-      if (!isPathInside(target.rootRealPath, currentRealPath)) throw new CapabilityError("INVALID_ARGUMENT", "Mutation target parent escapes the NAS root");
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      current = path.dirname(current);
-    }
-  }
-  try {
-    const targetStat = await lstat(target.absolutePath);
-    if (targetStat.isSymbolicLink()) throw new CapabilityError("INVALID_ARGUMENT", "Refusing to write through a symlink");
-    if (!isPathInside(target.rootRealPath, await realpath(target.absolutePath))) {
-      throw new CapabilityError("INVALID_ARGUMENT", "Mutation target escapes the NAS root");
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  return { absolutePath: target.absolutePath, relativePath: target.relativePath };
-}
-
-async function targetRevision(absolutePath: string): Promise<string> {
-  try {
-    const info = await stat(absolutePath);
-    return createHash("sha256").update(JSON.stringify({ size: info.size, mtimeMs: info.mtimeMs, ino: info.ino })).digest("base64url");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";
-    throw error;
-  }
-}
-
-function parseEdits(value: unknown): Array<{ oldText: string; newText: string }> {
-  if (!Array.isArray(value) || value.length === 0) throw new CapabilityError("INVALID_ARGUMENT", "edits are required");
-  return value.map((entry) => {
-    if (!entry || typeof entry !== "object") throw new CapabilityError("INVALID_ARGUMENT", "edit is invalid");
-    const record = entry as Record<string, unknown>;
-    return { oldText: requiredText(record.oldText, "oldText", true), newText: requiredText(record.newText, "newText", true) };
-  });
-}
-
 function requiredText(value: unknown, field: string, allowEmpty = false): string {
   if (typeof value !== "string" || (!allowEmpty && !value.trim())) throw new CapabilityError("INVALID_ARGUMENT", `${field} is required`);
   return value;
@@ -1386,14 +989,6 @@ function requiredText(value: unknown, field: string, allowEmpty = false): string
 
 function optionalText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function optionalInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) ? value : undefined;
-}
-
-function boundedLimit(value: unknown, fallback: number, maximum: number): number {
-  return Math.max(1, Math.min(optionalInteger(value) ?? fallback, maximum));
 }
 
 function strictBoundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
@@ -1435,18 +1030,6 @@ function decodeFileOffsetCursor(cursor: string | undefined, signatureInput: stri
   } catch {
     throw new CapabilityError("INVALID_ARGUMENT", "Invalid cursor");
   }
-}
-
-function sliceLines(content: string, offset?: number, limit?: number): string {
-  const lines = content.split("\n");
-  const start = offset ? Math.max(0, offset - 1) : 0;
-  return lines.slice(start, limit ? start + Math.max(0, limit) : lines.length).join("\n");
-}
-
-function truncateText(text: string): string {
-  return Buffer.byteLength(text, "utf8") <= MAX_TOOL_OUTPUT_BYTES
-    ? text
-    : `${text.slice(0, MAX_TOOL_OUTPUT_BYTES)}\n\n[Output truncated]`;
 }
 
 function failQueuedRun(
@@ -1501,8 +1084,8 @@ function capabilityFailureCode(error: unknown): "INVALID_ARGUMENT" | "FORBIDDEN"
 function safeFailureMessage(error: unknown, dependencies: CapabilityRuntimeDependencies): string {
   const raw = error instanceof Error ? error.message : "Capability execution failed";
   return raw
-    .replaceAll(dependencies.config.dataDir, "[state]")
-    .replaceAll(dependencies.config.rootDir ?? "__no_root__", "[cyberos]")
+    .replaceAll(dependencies.config.paths.stateDir, "[state]")
+    .replaceAll(dependencies.config.paths.rootDir, "[cyberos]")
     .replaceAll(/\/(?:[^\s/]+\/)+[^\s]*/gu, "[path]")
     .slice(0, 500);
 }

@@ -3,7 +3,7 @@ import type { DockerHostAccessCatalog, DockerHostAccessGrant } from "@cyberos/sh
 import { hostAccessPickerBlocked, validContainerTarget } from "./HostAccessPicker.js";
 
 describe("HostAccessPicker", () => {
-  it("does not block a legacy submission when no grants are selected", () => {
+  it("does not block submission when no grants are selected", () => {
     expect(blocked([], null, true)).toBe(false);
   });
 
@@ -11,26 +11,26 @@ describe("HostAccessPicker", () => {
     expect(blocked([{ capability: "host_processes" }], null, true)).toBe(true);
   });
 
-  it("blocks unavailable capabilities and NAS roots", () => {
+  it("blocks unavailable capabilities and storage pools", () => {
     const unavailableCapability = catalog();
     unavailableCapability.capabilities[0]!.availability = { status: "unavailable", reasonCodes: ["rootless_docker"] };
     expect(blocked([{ capability: "host_processes" }], unavailableCapability)).toBe(true);
 
     const unavailableRoot = catalog();
-    unavailableRoot.nasRoots[0]!.availability = { status: "unavailable", reasonCodes: ["nas_root_not_ready"] };
-    expect(blocked([{ capability: "nas_capacity", rootId: "media" }], unavailableRoot)).toBe(true);
+    unavailableRoot.storagePools[0]!.availability = { status: "unavailable", reasonCodes: ["storage_pool_not_ready"] };
+    expect(blocked([{ capability: "nas_capacity", storagePoolId: "media" }], unavailableRoot)).toBe(true);
   });
 
-  it("requires acknowledgement for degraded capabilities and NAS roots", () => {
+  it("requires acknowledgement for degraded capabilities and storage pools", () => {
     const degradedCapability = catalog();
     degradedCapability.capabilities[0]!.availability = { status: "degraded", reasonCodes: ["user_namespace_enabled"] };
     expect(blocked([{ capability: "host_processes" }], degradedCapability)).toBe(true);
     expect(blocked([{ capability: "host_processes" }], degradedCapability, false, true)).toBe(false);
 
     const degradedRoot = catalog();
-    degradedRoot.nasRoots[0]!.availability = { status: "degraded", reasonCodes: ["resource_identity_changed"] };
-    expect(blocked([{ capability: "nas_capacity", rootId: "media" }], degradedRoot)).toBe(true);
-    expect(blocked([{ capability: "nas_capacity", rootId: "media" }], degradedRoot, false, true)).toBe(false);
+    degradedRoot.storagePools[0]!.availability = { status: "degraded", reasonCodes: ["resource_identity_changed"] };
+    expect(blocked([{ capability: "nas_capacity", storagePoolId: "media" }], degradedRoot)).toBe(true);
+    expect(blocked([{ capability: "nas_capacity", storagePoolId: "media" }], degradedRoot, false, true)).toBe(false);
   });
 
   it("rejects non-normalized container targets", () => {
@@ -78,9 +78,9 @@ function catalog(): DockerHostAccessCatalog {
         availability: { status: "available", reasonCodes: [] }
       }
     ],
-    nasRoots: [
+    storagePools: [
       {
-        rootId: "media",
+        storagePoolId: "media",
         name: "Media",
         availability: { status: "available", reasonCodes: [] }
       }

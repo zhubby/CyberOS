@@ -12,10 +12,8 @@ import {
   getDockerComposeApp,
   getDockerComposeHostAccessDraft,
   getDockerComposeAppSummary,
-  getRootReadiness,
   listDockerComposeApps,
   listDockerComposeAppSummaries,
-  listNasRoots,
   markDockerComposeAppDeployed,
   restoreDockerComposeApp,
   updateDockerComposeApp,
@@ -40,7 +38,7 @@ import type {
   DockerOperationProposal
 } from "@cyberos/shared";
 import type { DockerEngineRuntime } from "./docker-client.js";
-import { isPathInside } from "@cyberos/nas-tools";
+import { isPathInside } from "@cyberos/storage-tools";
 import { parseDocument, stringify } from "yaml";
 import {
   dockerConfigAuths,
@@ -58,7 +56,6 @@ import {
   type DockerHostAccessManifest
 } from "./docker-host-access.js";
 
-export const DOCKER_APPS_ROOT = "/cyberos/apps";
 
 const MANAGED_COMPOSE_FILE = "compose.yaml";
 const MANAGED_ENV_FILE = ".env";
@@ -139,8 +136,8 @@ export class DockerComposeService implements DockerComposeRuntime {
   constructor(
     private readonly configSource: DockerConfig | (() => DockerConfig),
     private readonly db: CyberOsDatabase,
-    private readonly appsRoot = DOCKER_APPS_ROOT,
-    private readonly hostAccessPolicy = new DockerHostAccessPolicy(db),
+    private readonly appsRoot: string,
+    private readonly hostAccessPolicy: DockerHostAccessPolicy,
     private readonly hostAccessControl?: DockerHostAccessControlRuntime
   ) {}
 
@@ -184,7 +181,7 @@ export class DockerComposeService implements DockerComposeRuntime {
         expectedRevision: current.revision,
         ...(input.hostAccess !== undefined ? { hostAccess: input.hostAccess } : {})
       }, current);
-      return validateComposeDefinition(this.currentConfig(), this.db, {
+      return validateComposeDefinition(this.currentConfig(), {
         projectKey: current.projectKey,
         composeContent: normalized.composeContent,
         environment: normalized.resolvedEnvironment,
@@ -193,7 +190,7 @@ export class DockerComposeService implements DockerComposeRuntime {
       }, this.appsRoot, this.hostAccessPolicy);
     }
     const normalized = normalizeCreateInput({ ...input, name: "Validation" } as DockerComposeAppCreateInput);
-    return validateComposeDefinition(this.currentConfig(), this.db, { ...normalized, revision: "validation" }, this.appsRoot, this.hostAccessPolicy);
+    return validateComposeDefinition(this.currentConfig(), { ...normalized, revision: "validation" }, this.appsRoot, this.hostAccessPolicy);
   }
 
   async createApp(input: DockerComposeAppCreateInput): Promise<DockerComposeAppDetail> {
@@ -202,7 +199,6 @@ export class DockerComposeService implements DockerComposeRuntime {
       const normalized = normalizeCreateInput(input);
       const validation = await validateComposeDefinition(
         this.currentConfig(),
-        this.db,
         { ...normalized, revision: "create" },
         this.appsRoot,
         this.hostAccessPolicy
@@ -225,7 +221,7 @@ export class DockerComposeService implements DockerComposeRuntime {
       const current = getDockerComposeApp(this.db, projectId);
       if (!current) return null;
       const normalized = normalizeUpdateInput(input, current);
-      const validation = await validateComposeDefinition(this.currentConfig(), this.db, {
+      const validation = await validateComposeDefinition(this.currentConfig(), {
         projectKey: current.projectKey,
         composeContent: normalized.composeContent,
         environment: normalized.resolvedEnvironment,
@@ -593,7 +589,6 @@ function normalizeEnvironment(
 
 async function validateComposeDefinition(
   config: DockerConfig,
-  db: CyberOsDatabase,
   input: {
     projectKey: string;
     composeContent: string;
@@ -641,7 +636,7 @@ async function validateComposeDefinition(
     if (service.extends && objectValue(service.extends, `Service ${serviceName} extends`).file !== undefined) {
       throw new DockerComposeValidationError(`Service ${serviceName} cannot extend a local file`);
     }
-    await validateServiceVolumes(db, serviceName, service.volumes, appsRoot, warnings);
+    await validateServiceVolumes(hostAccessPolicy, serviceName, service.volumes, appsRoot, warnings);
     collectServiceRisk(serviceName, service, warnings);
   }
   const serviceNames = Object.keys(services);
@@ -690,7 +685,7 @@ async function validateComposeDefinition(
     const resolvedServices = objectValue(resolved.services, "Resolved Compose services");
     for (const [serviceName, value] of Object.entries(resolvedServices)) {
       const service = objectValue(value, `Resolved service ${serviceName}`);
-      await validateServiceVolumes(db, serviceName, service.volumes, appsRoot, warnings);
+      await validateServiceVolumes(hostAccessPolicy, serviceName, service.volumes, appsRoot, warnings);
       collectServiceRisk(serviceName, service, warnings);
     }
     const validatedServices = Object.keys(resolvedServices);
@@ -747,7 +742,7 @@ async function validateComposeDefinition(
 }
 
 async function validateServiceVolumes(
-  db: CyberOsDatabase,
+  hostAccessPolicy: DockerHostAccessPolicy,
   serviceName: string,
   value: unknown,
   appsRoot: string,
@@ -781,17 +776,10 @@ async function validateServiceVolumes(
     if (isPathInside(resolvedAppsRoot, resolvedSource)) {
       throw new DockerComposeValidationError("Application data cannot be stored under /cyberos/apps");
     }
-    let allowed = false;
-    for (const root of listNasRoots(db)) {
-      if (getRootReadiness(db, root.id)?.status !== "ready") continue;
-      const resolvedRoot = await realpath(root.path).catch(() => path.resolve(root.path));
-      if (isPathInside(resolvedRoot, resolvedSource)) {
-        allowed = true;
-        break;
-      }
+    if (!hostAccessPolicy.isStoragePoolPath(resolvedSource)) {
+      throw new DockerComposeValidationError(`Service ${serviceName} bind mount is outside a ready storage pool`);
     }
-    if (!allowed) throw new DockerComposeValidationError(`Service ${serviceName} bind mount is outside a ready NAS root`);
-    warnings.add(`Service ${serviceName} uses a NAS bind mount`);
+    warnings.add(`Service ${serviceName} uses a storage pool bind mount`);
   }
 }
 
@@ -832,9 +820,9 @@ function grantDifference(
     return [{
       service: entry.service,
       capability: grant.capability,
-      ...(grant.capability === "nas_capacity" ? { rootId: grant.rootId } : {})
+      ...(grant.capability === "nas_capacity" ? { storagePoolId: grant.storagePoolId } : {})
     }];
-  })).sort((a, b) => `${a.service}:${a.capability}:${a.rootId ?? ""}`.localeCompare(`${b.service}:${b.capability}:${b.rootId ?? ""}`));
+  })).sort((a, b) => `${a.service}:${a.capability}:${a.storagePoolId ?? ""}`.localeCompare(`${b.service}:${b.capability}:${b.storagePoolId ?? ""}`));
 }
 
 function grantKey(
@@ -844,7 +832,7 @@ function grantKey(
   return JSON.stringify([
     service,
     grant.capability,
-    grant.capability === "nas_capacity" ? grant.rootId : null,
+    grant.capability === "nas_capacity" ? grant.storagePoolId : null,
     grant.target ?? null
   ]);
 }
@@ -1190,7 +1178,7 @@ function validateFinalHostAccessConfig(output: string, manifests: DockerHostAcce
 function hostAccessComposeError(error: unknown): DockerComposeValidationError {
   if (error instanceof DockerHostAccessValidationError) {
     const unavailable = error.issues.some((issue) => (
-      issue.code === "capability_unavailable" || issue.code === "root_unavailable"
+      issue.code === "capability_unavailable" || issue.code === "storage_pool_unavailable"
     ));
     return new DockerComposeValidationError(error.message, error.issues, unavailable ? 503 : 400);
   }

@@ -16,27 +16,75 @@ pub fn open_send_file(root: &Path, relative: &str) -> Result<(File, PathBuf), Tr
     Ok((file, path))
 }
 
-pub fn validate_storage_pool(
-    root: &Path,
+pub fn storage_pool_path(
+    data_root: &Path,
     storage_pool_id: &str,
-    target: &Path,
-) -> Result<(), TransferError> {
-    let root = std::fs::canonicalize(root)
-        .map_err(|_| TransferError("NAS root is unavailable".to_owned()))?;
-    let target = std::fs::canonicalize(target)
-        .map_err(|_| TransferError("Bluetooth transfer path is unavailable".to_owned()))?;
-    if !target.starts_with(&root) {
+    require_mount: bool,
+) -> Result<PathBuf, TransferError> {
+    let id = Path::new(storage_pool_id);
+    if storage_pool_id.is_empty()
+        || id.is_absolute()
+        || id.components().count() != 1
+        || !matches!(id.components().next(), Some(Component::Normal(_)))
+    {
         return Err(TransferError(
-            "Bluetooth transfer path escaped the NAS root".to_owned(),
+            "Invalid Bluetooth storage pool id".to_owned(),
         ));
     }
-    let mountpoint = mounted_pool_path(storage_pool_id, &root)?;
-    if !target.starts_with(&mountpoint) {
+    let data_root = std::fs::canonicalize(data_root)
+        .map_err(|_| TransferError("CyberOS data root is unavailable".to_owned()))?;
+    let requested = data_root.join(id);
+    let metadata = std::fs::symlink_metadata(&requested)
+        .map_err(|_| TransferError("Bluetooth storage pool is unavailable".to_owned()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(TransferError(
-            "Bluetooth transfer path is outside the selected storage pool".to_owned(),
+            "Bluetooth storage pool must be a real directory".to_owned(),
         ));
     }
-    Ok(())
+    let pool = std::fs::canonicalize(&requested)
+        .map_err(|_| TransferError("Bluetooth storage pool is unavailable".to_owned()))?;
+    if pool != requested {
+        return Err(TransferError(
+            "Bluetooth storage pool is not a direct child of the CyberOS data root".to_owned(),
+        ));
+    }
+    require_exact_mountpoint(&pool, require_mount)?;
+    Ok(pool)
+}
+
+fn require_exact_mountpoint(_path: &Path, required: bool) -> Result<(), TransferError> {
+    if !required {
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mountinfo = std::fs::read_to_string("/proc/self/mountinfo")?;
+        if has_exact_mountpoint(&mountinfo, _path) {
+            return Ok(());
+        }
+    }
+    Err(TransferError(
+        "Bluetooth storage pool is not mounted".to_owned(),
+    ))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn has_exact_mountpoint(mountinfo: &str, path: &Path) -> bool {
+    mountinfo.lines().any(|line| {
+        line.split_whitespace()
+            .nth(4)
+            .map(unescape_mount_field)
+            .is_some_and(|mountpoint| Path::new(&mountpoint) == path)
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn unescape_mount_field(value: &str) -> String {
+    value
+        .replace("\\040", " ")
+        .replace("\\011", "\t")
+        .replace("\\012", "\n")
+        .replace("\\134", "\\")
 }
 
 pub fn ensure_available_space(directory: &Path, required: u64) -> Result<(), TransferError> {
@@ -67,14 +115,14 @@ pub fn validate_receive_name(requested_name: &str) -> Result<&str, TransferError
 pub fn safe_existing(root: &Path, relative: &str) -> Result<PathBuf, TransferError> {
     validate_relative(relative)?;
     let root = std::fs::canonicalize(root)
-        .map_err(|_| TransferError("NAS root is unavailable".to_owned()))?;
+        .map_err(|_| TransferError("Storage pool is unavailable".to_owned()))?;
     let requested = root.join(relative);
     reject_symlinks(&root, &requested)?;
     let real = std::fs::canonicalize(&requested)
         .map_err(|_| TransferError("Bluetooth transfer path is unavailable".to_owned()))?;
     if !real.starts_with(&root) {
         return Err(TransferError(
-            "Bluetooth transfer path escaped the NAS root".to_owned(),
+            "Bluetooth transfer path escaped the storage pool".to_owned(),
         ));
     }
     Ok(real)
@@ -90,16 +138,16 @@ fn validate_relative(value: &str) -> Result<(), TransferError> {
             .any(|part| !matches!(part, Component::Normal(_)))
     {
         return Err(TransferError(
-            "Bluetooth transfer path must stay inside the NAS root".to_owned(),
+            "Bluetooth transfer path must stay inside the storage pool".to_owned(),
         ));
     }
     Ok(())
 }
 
 fn reject_symlinks(root: &Path, target: &Path) -> Result<(), TransferError> {
-    let relative = target
-        .strip_prefix(root)
-        .map_err(|_| TransferError("Bluetooth transfer path escaped the NAS root".to_owned()))?;
+    let relative = target.strip_prefix(root).map_err(|_| {
+        TransferError("Bluetooth transfer path escaped the storage pool".to_owned())
+    })?;
     let mut current = root.to_path_buf();
     for component in relative.components() {
         current.push(component);
@@ -115,66 +163,6 @@ fn reject_symlinks(root: &Path, target: &Path) -> Result<(), TransferError> {
         }
     }
     Ok(())
-}
-
-#[cfg(target_os = "linux")]
-fn mounted_pool_path(storage_pool_id: &str, root: &Path) -> Result<PathBuf, TransferError> {
-    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo")?;
-    mounted_pool_path_in(&mountinfo, storage_pool_id, root)
-        .ok_or_else(|| TransferError("Bluetooth storage pool is not mounted".to_owned()))
-}
-
-#[cfg(not(target_os = "linux"))]
-fn mounted_pool_path(_storage_pool_id: &str, root: &Path) -> Result<PathBuf, TransferError> {
-    Ok(root.to_owned())
-}
-
-#[cfg(any(target_os = "linux", test))]
-fn mounted_pool_path_in(mountinfo: &str, storage_pool_id: &str, root: &Path) -> Option<PathBuf> {
-    let requested = std::fs::canonicalize(storage_pool_id).ok();
-    let mut best: Option<PathBuf> = None;
-    for line in mountinfo.lines() {
-        let Some((left, right)) = line.split_once(" - ") else {
-            continue;
-        };
-        let left: Vec<_> = left.split_whitespace().collect();
-        let right: Vec<_> = right.split_whitespace().collect();
-        if left.len() < 5 || right.len() < 2 {
-            continue;
-        }
-        let source = unescape_mount_field(right[1]);
-        let source_matches = source == storage_pool_id
-            || requested.as_ref().is_some_and(|requested| {
-                std::fs::canonicalize(&source).ok().as_ref() == Some(requested)
-            });
-        if !source_matches {
-            continue;
-        }
-        let mountpoint = PathBuf::from(unescape_mount_field(left[4]));
-        if (mountpoint == root || mountpoint.starts_with(root))
-            && best.as_ref().is_none_or(|current| {
-                mountpoint.components().count() > current.components().count()
-            })
-        {
-            best = Some(mountpoint);
-        }
-    }
-    if best.is_some() {
-        best
-    } else if requested.as_deref() == Some(root) || Path::new(storage_pool_id) == root {
-        Some(root.to_owned())
-    } else {
-        None
-    }
-}
-
-#[cfg(any(target_os = "linux", test))]
-fn unescape_mount_field(value: &str) -> String {
-    value
-        .replace("\\040", " ")
-        .replace("\\011", "\t")
-        .replace("\\012", "\n")
-        .replace("\\134", "\\")
 }
 
 #[cfg(test)]
@@ -194,23 +182,32 @@ mod tests {
     }
 
     #[test]
-    fn resolves_only_the_requested_pool_beneath_the_nas_root() {
+    fn resolves_only_single_component_pools_beneath_the_data_root() {
+        let directory = tempfile::tempdir().unwrap();
+        let data_root = directory.path().join("data");
+        let pool = data_root.join("media");
+        std::fs::create_dir_all(&pool).unwrap();
+        assert_eq!(
+            storage_pool_path(&data_root, "media", false).unwrap(),
+            pool.canonicalize().unwrap()
+        );
+        assert!(storage_pool_path(&data_root, "../media", false).is_err());
+        assert!(storage_pool_path(&data_root, "missing", false).is_err());
+    }
+
+    #[test]
+    fn recognizes_only_the_exact_pool_mountpoint() {
         let mountinfo = concat!(
-            "35 25 0:31 / /other rw - ext4 /dev/md0 rw\n",
-            "36 25 0:31 / /cyberos/data/primary/media rw - ext4 /dev/md0 rw\n",
-            "37 25 0:32 / /cyberos/data/primary/archive rw - ext4 /dev/md1 rw\n",
+            "22 1 8:1 / / rw - ext4 /dev/root rw\n",
+            "23 22 8:2 / /cyberos/data/My\\040Pool rw - ext4 /dev/sda1 rw\n",
         );
-        assert_eq!(
-            mounted_pool_path_in(mountinfo, "/dev/md0", Path::new("/cyberos/data/primary")),
-            Some(PathBuf::from("/cyberos/data/primary/media"))
-        );
-        assert_eq!(
-            mounted_pool_path_in(
-                mountinfo,
-                "/dev/missing",
-                Path::new("/cyberos/data/primary")
-            ),
-            None
-        );
+        assert!(has_exact_mountpoint(
+            mountinfo,
+            Path::new("/cyberos/data/My Pool")
+        ));
+        assert!(!has_exact_mountpoint(
+            mountinfo,
+            Path::new("/cyberos/data/My Pool/inbox")
+        ));
     }
 }

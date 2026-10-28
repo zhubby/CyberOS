@@ -1,17 +1,11 @@
 import type Database from "better-sqlite3";
-import { coreMigrations } from "./migrations/core.js";
-import { indexerMigrations } from "./migrations/indexer.js";
-import { operationMigrations } from "./migrations/operations.js";
-import { productionMigrations } from "./migrations/production.js";
+import { currentMigrations } from "./migrations/current.js";
 import type { Migration } from "./migrations/types.js";
 
 export type { Migration } from "./migrations/types.js";
 
 export const migrations: Migration[] = [
-  ...coreMigrations,
-  ...operationMigrations,
-  ...indexerMigrations,
-  ...productionMigrations
+  ...currentMigrations
 ];
 
 export function runMigrations(db: Database.Database): void {
@@ -41,19 +35,7 @@ export function runMigrations(db: Database.Database): void {
 
   for (const migration of migrations) {
     if (!hasMigration.get(migration.id)) {
-      if (migration.disableForeignKeys) {
-        const foreignKeysEnabled = Number(db.pragma("foreign_keys", { simple: true })) === 1;
-        const legacyAlterTableEnabled = Number(db.pragma("legacy_alter_table", { simple: true })) === 1;
-        db.pragma("foreign_keys = OFF");
-        try {
-          apply.immediate(migration);
-        } finally {
-          db.pragma(`legacy_alter_table = ${legacyAlterTableEnabled ? "ON" : "OFF"}`);
-          db.pragma(`foreign_keys = ${foreignKeysEnabled ? "ON" : "OFF"}`);
-        }
-      } else {
-        apply.immediate(migration);
-      }
+      apply.immediate(migration);
     }
   }
 }

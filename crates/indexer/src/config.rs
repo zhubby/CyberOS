@@ -8,6 +8,8 @@ pub const DEFAULT_CONFIG_PATH: &str = "/cyberos/config/config.toml";
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_path: PathBuf,
+    pub data_root: PathBuf,
+    pub production: bool,
 }
 
 impl Config {
@@ -22,6 +24,8 @@ impl Config {
         };
         Ok(Self {
             database_path: root_dir.join("state/cyberos.sqlite"),
+            data_root: root_dir.join("data"),
+            production: env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("production"),
         })
     }
 }

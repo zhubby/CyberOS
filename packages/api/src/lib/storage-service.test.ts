@@ -151,7 +151,7 @@ function summary(): SystemStorageSummary {
     metrics: { pools: 0, arrays: 0, disks: 5, totalBytes: 500, usedBytes: null, availableBytes: null, smartPassed: 0, smartFailed: 0, smartUnknown: 5 },
     pools: [],
     arrays: [{ id: "/dev/md0", name: "old", path: "/dev/md0", level: "raid1", state: "clean", uuid: "old", sizeBytes: 100, activeDevices: 2, totalDevices: 2, failedDevices: 0, spareDevices: 0, memberDevices: ["/dev/sde"] }],
-    disks: [disk("/dev/sda"), disk("/dev/sdb"), disk("/dev/sdc", ["/cyberos/data/primary"]), disk("/dev/sdd", [], "ext4"), disk("/dev/sde")],
+    disks: [disk("/dev/sda"), disk("/dev/sdb"), disk("/dev/sdc", ["/cyberos/data/pool-1"]), disk("/dev/sdd", [], "ext4"), disk("/dev/sde")],
     mounts: [],
     issues: []
   };

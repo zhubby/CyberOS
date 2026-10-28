@@ -76,7 +76,7 @@ export function parseBluetoothTransfersEvent(value: string): BluetoothTransfersR
 
 function isBluetoothTransfer(value: unknown): value is BluetoothTransfer {
   if (!isExactRecord(value, [
-    "id", "direction", "adapterId", "deviceAddress", "rootId", "storagePoolId", "relativePath",
+    "id", "direction", "adapterId", "deviceAddress", "storagePoolId", "relativePath",
     "displayName", "status", "transferredBytes", "totalBytes", "error", "obexTransferPath",
     "controlRequested", "readAt", "createdAt", "updatedAt", "startedAt", "finishedAt", "lastProgressAt"
   ])) return false;
@@ -84,7 +84,6 @@ function isBluetoothTransfer(value: unknown): value is BluetoothTransfer {
     && (value.direction === "send" || value.direction === "receive")
     && isNullableString(value.adapterId)
     && typeof value.deviceAddress === "string" && /^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/iu.test(value.deviceAddress)
-    && isNonEmptyString(value.rootId)
     && isNonEmptyString(value.storagePoolId)
     && typeof value.relativePath === "string"
     && isNonEmptyString(value.displayName)

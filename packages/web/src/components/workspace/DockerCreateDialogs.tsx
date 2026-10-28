@@ -6,13 +6,13 @@ import type { DockerResourceCapabilities } from "@cyberos/shared";
 import { DOCKER_RESOURCE_FIELDS, getDockerResourceCapability, getUnsupportedDockerResource } from "@cyberos/shared/docker-resources";
 import { DockerResourceStatus } from "./DockerResourceStatus.js";
 import { HostAccessPicker } from "./HostAccessPicker.js";
-import { getSystemNetwork, runDockerOperation, type NasRoot } from "../../api.js";
+import { getSystemNetwork, runDockerOperation, type StoragePool } from "../../api.js";
 import { initialDockerCreateForm, dockerCreateInput, validateDockerCreateStep, type DockerCreateForm, type DockerCreateKind } from "../../lib/docker-create-form.js";
 
 type Props = {
   kind: DockerCreateKind;
   summary: DockerSummary;
-  roots: NasRoot[];
+  storagePools: StoragePool[];
   onClose: () => void;
   onComplete: (result: { partialSuccess: boolean; error?: string }) => void | Promise<void>;
   onError: (message: string) => void;
@@ -26,7 +26,7 @@ function useCreateText() {
   return (key: string, options?: Record<string, unknown>) => String(translate(`workspace.management.docker.create.${key}`, options));
 }
 
-export function DockerCreateDialogs({ kind, summary, roots, onClose, onComplete, onError }: Props) {
+export function DockerCreateDialogs({ kind, summary, storagePools, onClose, onComplete, onError }: Props) {
   const createT = useCreateText();
   const [form, setForm] = useState<DockerCreateForm>(() => initialDockerCreateForm(kind));
   const [step, setStep] = useState(1);
@@ -76,7 +76,7 @@ export function DockerCreateDialogs({ kind, summary, roots, onClose, onComplete,
     if (key === "extraHosts") update(key, [...(form[key] as DockerCreateForm["extraHosts"]), { hostname: "", address: "" }] as DockerCreateForm[K]);
     if (key === "ipam") update(key, [...(form[key] as DockerCreateForm["ipam"]), { subnet: "", ipRange: "", gateway: "", auxAddresses: "" }] as DockerCreateForm[K]);
     if (key === "ports") update(key, [...(form[key] as DockerCreateForm["ports"]), { containerPort: "", protocol: "tcp", hostIp: "", hostPort: "" }] as DockerCreateForm[K]);
-    if (key === "mounts") update(key, [...(form[key] as DockerCreateForm["mounts"]), { type: "volume", source: "", rootId: roots[0]?.id ?? "", target: "", readOnly: false, noCopy: false, sizeBytes: "", mode: "" }] as DockerCreateForm[K]);
+    if (key === "mounts") update(key, [...(form[key] as DockerCreateForm["mounts"]), { type: "volume", source: "", storagePoolId: storagePools[0]?.id ?? "", target: "", readOnly: false, noCopy: false, sizeBytes: "", mode: "" }] as DockerCreateForm[K]);
   }
 
   async function submit(event: FormEvent) {
@@ -129,7 +129,7 @@ export function DockerCreateDialogs({ kind, summary, roots, onClose, onComplete,
           {kind === "container" && step === 1 ? <ContainerBasics form={form} update={update} /> : null}
           {kind === "container" && step === 2 ? <ContainerProcess form={form} update={update} onAdd={addRow} submitting={submitting} /> : null}
           {kind === "container" && step === 3 ? <ContainerResources form={form} update={update} capabilities={summary.engine.resourceCapabilities} /> : null}
-          {kind === "container" && step === 4 ? <ContainerStorage form={form} update={update} roots={roots} summary={summary} onAdd={addRow} submitting={submitting} /> : null}
+          {kind === "container" && step === 4 ? <ContainerStorage form={form} update={update} storagePools={storagePools} summary={summary} onAdd={addRow} submitting={submitting} /> : null}
           {kind === "container" && step === 5 ? <ContainerNetwork form={form} update={update} summary={summary} onAdd={addRow} submitting={submitting} /> : null}
           {kind === "container" && step === 6 ? <ContainerReview form={form} update={update} submitting={submitting} onBlockingChange={setHostAccessBlocked} /> : null}
           {error || ((validationVisible || step === 6) && validation) ? <p className="vm-create-error" role="alert"><CircleAlert size={14} />{error ?? validation}</p> : null}
@@ -181,17 +181,17 @@ export function ContainerResources({ form, update, capabilities }: { form: Docke
   </section>;
 }
 
-function ContainerStorage({ form, update, roots, summary, onAdd, submitting }: { form: DockerCreateForm; update: <K extends keyof DockerCreateForm>(key: K, value: DockerCreateForm[K]) => void; roots: NasRoot[]; summary: DockerSummary; onAdd: (key: "mounts") => void; submitting: boolean }) {
+function ContainerStorage({ form, update, storagePools, summary, onAdd, submitting }: { form: DockerCreateForm; update: <K extends keyof DockerCreateForm>(key: K, value: DockerCreateForm[K]) => void; storagePools: StoragePool[]; summary: DockerSummary; onAdd: (key: "mounts") => void; submitting: boolean }) {
   const t = useCreateText();
   const setMount = (index: number, patch: Partial<DockerCreateForm["mounts"][number]>) => update("mounts", form.mounts.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
-  const clearMountTypeFields = (index: number, type: DockerCreateForm["mounts"][number]["type"]) => setMount(index, type === "tmpfs" ? { type, source: "", rootId: "", noCopy: false } : type === "bind" ? { type, source: "", sizeBytes: "", mode: "", noCopy: false } : { type, source: "", rootId: "", sizeBytes: "", mode: "" });
+  const clearMountTypeFields = (index: number, type: DockerCreateForm["mounts"][number]["type"]) => setMount(index, type === "tmpfs" ? { type, source: "", storagePoolId: "", noCopy: false } : type === "bind" ? { type, source: "", sizeBytes: "", mode: "", noCopy: false } : { type, source: "", storagePoolId: "", sizeBytes: "", mode: "" });
   return <section className="vm-create-section vm-create-stage">
     <Heading number="04" title={t("stages.storage")} detail={t("storage.detail")} />
     <div className="docker-create-table docker-create-mount-table">
       <div className="docker-create-column-head docker-create-mount-grid"><span>{t("storage.type")}</span><span>{t("storage.source")}</span><span>{t("storage.target")}</span><span>{t("storage.options")}</span><span /></div>
       {form.mounts.length ? form.mounts.map((mount, index) => <div className="docker-create-row docker-create-mount-row docker-create-mount-grid" key={index}>
         <select aria-label={t("storage.type")} value={mount.type} onChange={(event) => clearMountTypeFields(index, event.target.value as typeof mount.type)} disabled={submitting}><option value="volume">{t("storage.volume")}</option><option value="bind">{t("storage.bind")}</option><option value="tmpfs">{t("storage.tmpfs")}</option></select>
-        {mount.type === "bind" ? <div className="docker-create-mount-source"><select aria-label={t("storage.nasRoot")} value={mount.rootId} onChange={(event) => setMount(index, { rootId: event.target.value })} disabled={submitting}>{roots.map((root) => <option key={root.id} value={root.id}>{root.name}</option>)}</select><input aria-label={t("storage.source")} value={mount.source} placeholder={t("storage.relativePath")} onChange={(event) => setMount(index, { source: event.target.value })} disabled={submitting} /></div> : mount.type === "volume" ? <select aria-label={t("storage.source")} value={mount.source} onChange={(event) => setMount(index, { source: event.target.value })} disabled={submitting}><option value="">{t("storage.selectVolume")}</option>{summary.volumes.map((volume) => <option key={volume.name} value={volume.name}>{volume.name}</option>)}</select> : <div className="docker-create-mount-source"><input type="number" min="1024" aria-label={t("storage.sizeBytes")} value={mount.sizeBytes} placeholder={t("storage.sizeBytes")} onChange={(event) => setMount(index, { sizeBytes: event.target.value })} disabled={submitting} /><input inputMode="numeric" pattern="[0-7]{1,4}" aria-label={t("storage.tmpfsMode")} value={mount.mode} placeholder={t("storage.tmpfsMode")} onChange={(event) => setMount(index, { mode: event.target.value })} disabled={submitting} /></div>}
+        {mount.type === "bind" ? <div className="docker-create-mount-source"><select aria-label={t("storage.storagePool")} value={mount.storagePoolId} onChange={(event) => setMount(index, { storagePoolId: event.target.value })} disabled={submitting}>{storagePools.map((pool) => <option key={pool.id} value={pool.id}>{pool.name}</option>)}</select><input aria-label={t("storage.source")} value={mount.source} placeholder={t("storage.relativePath")} onChange={(event) => setMount(index, { source: event.target.value })} disabled={submitting} /></div> : mount.type === "volume" ? <select aria-label={t("storage.source")} value={mount.source} onChange={(event) => setMount(index, { source: event.target.value })} disabled={submitting}><option value="">{t("storage.selectVolume")}</option>{summary.volumes.map((volume) => <option key={volume.name} value={volume.name}>{volume.name}</option>)}</select> : <div className="docker-create-mount-source"><input type="number" min="1024" aria-label={t("storage.sizeBytes")} value={mount.sizeBytes} placeholder={t("storage.sizeBytes")} onChange={(event) => setMount(index, { sizeBytes: event.target.value })} disabled={submitting} /><input inputMode="numeric" pattern="[0-7]{1,4}" aria-label={t("storage.tmpfsMode")} value={mount.mode} placeholder={t("storage.tmpfsMode")} onChange={(event) => setMount(index, { mode: event.target.value })} disabled={submitting} /></div>}
         <input className="docker-create-mount-target" aria-label={t("storage.target")} value={mount.target} placeholder={t("storage.containerPath")} onChange={(event) => setMount(index, { target: event.target.value })} disabled={submitting} />
         <div className="docker-create-mount-options">{mount.type === "volume" ? <label className="docker-create-inline-check"><input type="checkbox" checked={mount.noCopy} onChange={(event) => setMount(index, { noCopy: event.target.checked })} disabled={submitting} />{t("storage.noCopy")}</label> : null}<label className="docker-create-inline-check"><input type="checkbox" checked={mount.readOnly} onChange={(event) => setMount(index, { readOnly: event.target.checked })} disabled={submitting} />{t("storage.readOnly")}</label></div>
         <RowButton onClick={() => update("mounts", form.mounts.filter((_, itemIndex) => itemIndex !== index))} disabled={submitting} />

@@ -1,5 +1,5 @@
 import type { DlnaMediaType, ShareProtocol } from "@cyberos/shared";
-import type { NasRoot, ShareSettings, ShareSettingsInput } from "../api.js";
+import type { StoragePool, ShareSettings, ShareSettingsInput } from "../api.js";
 
 export const SHARE_PROTOCOLS = ["smb", "webdav", "ftp", "nfs", "dlna"] as const satisfies readonly ShareProtocol[];
 export const DLNA_MEDIA_TYPES = ["audio", "video", "pictures"] as const satisfies readonly DlnaMediaType[];
@@ -61,7 +61,7 @@ export interface ShareProtocolFormState {
 export interface ShareDefinitionFormState {
   id: string;
   name: string;
-  rootId: string;
+  storagePoolId: string;
   path: string;
   description: string;
   protocols: ShareProtocolFormState;
@@ -75,12 +75,12 @@ export interface ShareSettingsFormState {
 }
 
 export type ShareFormValidationCode =
-  | "noRoots"
+  | "noStoragePools"
   | "invalidUsername"
   | "missingPassword"
   | "invalidId"
   | "duplicateId"
-  | "missingRoot"
+  | "missingStoragePool"
   | "missingPath"
   | "absolutePath"
   | "escapingPath"
@@ -103,7 +103,7 @@ const DEFAULT_UPDATED_AT = new Date(0).toISOString();
 const USERNAME_PATTERN = /^[a-z_][a-z0-9_-]{0,31}$/u;
 const SHARE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
 
-export function shareSettingsToForm(settings: ShareSettings | null, roots: NasRoot[] = []): ShareSettingsFormState {
+export function shareSettingsToForm(settings: ShareSettings | null, storagePools: StoragePool[] = []): ShareSettingsFormState {
   return {
     enabled: settings?.enabled ?? false,
     account: {
@@ -115,7 +115,7 @@ export function shareSettingsToForm(settings: ShareSettings | null, roots: NasRo
     shares: (settings?.shares ?? []).map((share) => ({
       id: share.id,
       name: share.name,
-      rootId: share.rootId || roots[0]?.id || "",
+      storagePoolId: share.storagePoolId || storagePools[0]?.id || "",
       path: share.path || ".",
       description: share.description,
       protocols: {
@@ -145,14 +145,14 @@ export function shareSettingsToForm(settings: ShareSettings | null, roots: NasRo
   };
 }
 
-export function createShareFormState(roots: NasRoot[], existingShares: readonly ShareDefinitionFormState[] = []): ShareDefinitionFormState {
+export function createShareFormState(storagePools: StoragePool[], existingShares: readonly ShareDefinitionFormState[] = []): ShareDefinitionFormState {
   const id = nextShareId(existingShares);
   const index = Number(id.match(/\d+$/u)?.[0] ?? existingShares.length + 1);
   const name = `Share ${index}`;
   return {
     id,
     name,
-    rootId: roots[0]?.id ?? "",
+    storagePoolId: storagePools[0]?.id ?? "",
     path: ".",
     description: "",
     protocols: defaultShareProtocols(id, name)
@@ -217,7 +217,7 @@ export function shareFormToInput(form: ShareSettingsFormState): ShareSettingsInp
       return {
         id,
         name,
-        rootId: share.rootId.trim(),
+        storagePoolId: share.storagePoolId.trim(),
         path: share.path.trim() || ".",
         description: share.description.trim(),
         protocols: {
@@ -256,10 +256,10 @@ export function shareFormToInput(form: ShareSettingsFormState): ShareSettingsInp
   };
 }
 
-export function validateShareForm(form: ShareSettingsFormState, roots: NasRoot[]): ShareFormValidationIssue[] {
+export function validateShareForm(form: ShareSettingsFormState, storagePools: StoragePool[]): ShareFormValidationIssue[] {
   const issues: ShareFormValidationIssue[] = [];
-  if (roots.length === 0) {
-    issues.push({ code: "noRoots" });
+  if (storagePools.length === 0) {
+    issues.push({ code: "noStoragePools" });
   }
   if (!USERNAME_PATTERN.test(form.account.username.trim())) {
     issues.push({ code: "invalidUsername", value: form.account.username });
@@ -280,8 +280,8 @@ export function validateShareForm(form: ShareSettingsFormState, roots: NasRoot[]
       issues.push({ code: "duplicateId", shareName, value: id });
     }
     seenIds.add(id);
-    if (!share.rootId || !roots.some((root) => root.id === share.rootId)) {
-      issues.push({ code: "missingRoot", shareName });
+    if (!share.storagePoolId || !storagePools.some((pool) => pool.id === share.storagePoolId)) {
+      issues.push({ code: "missingStoragePool", shareName });
     }
     const sharePath = share.path.trim();
     if (!sharePath) {

@@ -10,12 +10,10 @@ import {
   deleteSession,
   expireCapabilityApprovals,
   getCurrentAgentJobForSession,
-  getNasRoot,
   getSession,
   hasActiveJobsForSession,
   listEvents,
   listMessages,
-  listNasRoots,
   listPendingAgentCapabilityApprovals,
   listAgentSessionCommands,
   listSessions,
@@ -23,19 +21,13 @@ import {
   updateSessionPath,
   updateSessionResourceTrust
 } from "@cyberos/db";
-import { resolveSafeExistingPath } from "@cyberos/nas-tools";
+import { resolveSafeExistingPath } from "@cyberos/storage-tools";
 import type { ApiRouteContext } from "../context.js";
 import { getAgentMessageContent, getAgentMessageRole, getFailedJobMessageContent, getInitialEventId } from "../lib/events.js";
 
-export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteContext): void {
-  server.get<{
-    Querystring: { rootId?: string };
-  }>("/api/sessions", async (request, reply) => {
-    if (request.query.rootId && !getNasRoot(db, request.query.rootId)) {
-      reply.status(404).send({ error: "NAS root not found" });
-      return;
-    }
-
+export function registerSessionRoutes(server: FastifyInstance, { db, config }: ApiRouteContext): void {
+  const dataRoot = config.paths.dataRoot;
+  server.get("/api/sessions", async (_request, reply) => {
     expireCapabilityApprovals(db);
     const pendingApprovalCounts = new Map<string, number>();
     for (const approval of listPendingAgentCapabilityApprovals(db)) {
@@ -45,10 +37,7 @@ export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteC
       );
     }
 
-    const sessions = listSessions(db, {
-      ...(request.query.rootId ? { rootId: request.query.rootId } : {}),
-      limit: 50
-    }).map((session) => {
+    const sessions = listSessions(db, { limit: 50 }).map((session) => {
       const messages = listMessages(db, {
         sessionId: session.id,
         limit: 100
@@ -67,21 +56,11 @@ export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteC
 
   server.post<{
     Body: {
-      rootId?: string;
       path?: string;
     };
   }>("/api/sessions", async (request, reply) => {
-    const roots = listNasRoots(db);
-    const rootId = request.body?.rootId ?? roots[0]?.id;
-    const root = rootId ? getNasRoot(db, rootId) : null;
-    if (!rootId || !root) {
-      reply.status(400).send({ error: "Unknown NAS root" });
-      return;
-    }
-
-    const safePath = await resolveSafeExistingPath(root.path, request.body?.path ?? ".");
+    const safePath = await resolveSafeExistingPath(dataRoot, request.body?.path ?? ".");
     const session = createSession(db, {
-      rootId,
       currentPath: safePath.relativePath
     });
     reply.status(201).send({ session });
@@ -97,13 +76,7 @@ export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteC
       return;
     }
 
-    const root = getNasRoot(db, session.rootId);
-    if (!root) {
-      reply.status(404).send({ error: "NAS root not found" });
-      return;
-    }
-
-    const safePath = await resolveSafeExistingPath(root.path, request.body?.path ?? session.currentPath);
+    const safePath = await resolveSafeExistingPath(dataRoot, request.body?.path ?? session.currentPath);
     const safeStat = await stat(safePath.realPath);
     if (!safeStat.isDirectory()) {
       reply.status(400).send({ error: "Session path must be a directory" });
@@ -197,12 +170,7 @@ export function registerSessionRoutes(server: FastifyInstance, { db }: ApiRouteC
       return;
     }
 
-    const root = getNasRoot(db, session.rootId);
-    if (!root) {
-      reply.status(404).send({ error: "NAS root not found" });
-      return;
-    }
-    const safePath = await resolveSafeExistingPath(root.path, request.body?.path ?? session.currentPath);
+    const safePath = await resolveSafeExistingPath(dataRoot, request.body?.path ?? session.currentPath);
     const safeStat = await stat(safePath.realPath);
     if (!safeStat.isDirectory()) {
       reply.status(400).send({ error: "Session path must be a directory" });

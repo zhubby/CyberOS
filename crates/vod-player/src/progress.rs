@@ -22,15 +22,14 @@ impl ProgressStore {
     pub fn verify_media_file(
         &self,
         file_id: &str,
-        root_id: &str,
         storage_pool_id: &str,
         relative_path: &str,
     ) -> Result<(), VodError> {
         let connection = open_existing(&self.path)?;
         let matches = connection
             .query_row(
-                "SELECT 1 FROM media_files WHERE id = ? AND root_id = ? AND storage_pool_id = ? AND relative_path = ?",
-                params![file_id, root_id, storage_pool_id, relative_path],
+                "SELECT 1 FROM media_files WHERE id = ? AND storage_pool_id = ? AND relative_path = ?",
+                params![file_id, storage_pool_id, relative_path],
                 |_| Ok(()),
             )
             .optional()
@@ -104,9 +103,9 @@ mod tests {
     fn database(path: &Path) {
         let connection = Connection::open(path).unwrap();
         connection.execute_batch(
-            "CREATE TABLE media_files(id TEXT PRIMARY KEY, root_id TEXT NOT NULL, storage_pool_id TEXT NOT NULL, relative_path TEXT NOT NULL);\
+            "CREATE TABLE media_files(id TEXT PRIMARY KEY, storage_pool_id TEXT NOT NULL, relative_path TEXT NOT NULL);\
              CREATE TABLE media_progress(file_id TEXT NOT NULL REFERENCES media_files(id) ON DELETE CASCADE, profile_id TEXT NOT NULL, position_seconds REAL NOT NULL, duration_seconds REAL, completed INTEGER NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(file_id, profile_id));\
-             INSERT INTO media_files VALUES ('file-1', 'root', 'pool', 'movies/a.mkv');",
+             INSERT INTO media_files VALUES ('file-1', 'pool', 'movies/a.mkv');",
         ).unwrap();
     }
 
@@ -117,11 +116,11 @@ mod tests {
         database(&path);
         let store = ProgressStore::new(path.clone());
         store
-            .verify_media_file("file-1", "root", "pool", "movies/a.mkv")
+            .verify_media_file("file-1", "pool", "movies/a.mkv")
             .unwrap();
         assert!(
             store
-                .verify_media_file("file-1", "root", "pool", "movies/b.mkv")
+                .verify_media_file("file-1", "pool", "movies/b.mkv")
                 .is_err()
         );
 

@@ -6,12 +6,6 @@ use cyberos_monitoring_contracts::SamplingIntervals;
 const MIB: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone)]
-pub struct NasRoot {
-    pub id: String,
-    pub path: PathBuf,
-}
-
-#[derive(Debug, Clone)]
 pub struct MonitoringConfig {
     pub enabled: bool,
     pub sampling: SamplingIntervals,
@@ -38,8 +32,8 @@ impl Default for MonitoringConfig {
 pub struct MonitorConfig {
     pub root_dir: PathBuf,
     pub state_dir: PathBuf,
+    pub data_root: PathBuf,
     pub database_path: PathBuf,
     pub metrics_database_path: PathBuf,
-    pub nas_roots: Vec<NasRoot>,
     pub monitoring: MonitoringConfig,
 }

@@ -40,7 +40,7 @@ import { isOfficePreviewKind, OfficePreview } from "./OfficePreview.js";
 export function PreviewContent({
   blobUrl,
   videoUrl,
-  rootId,
+  storagePoolId,
   loading,
   meta,
   error,
@@ -51,7 +51,7 @@ export function PreviewContent({
 }: {
   blobUrl: string;
   videoUrl: string;
-  rootId: string;
+  storagePoolId: string;
   loading: boolean;
   meta: FileMeta | null;
   error: string | null;
@@ -114,7 +114,7 @@ export function PreviewContent({
     );
   }
   if (meta.previewKind === "video") {
-    return <VideoPreview src={videoUrl} identity={{ rootId, path: meta.path, sizeBytes: meta.sizeBytes, modifiedAt: meta.modifiedAt }} />;
+    return <VideoPreview src={videoUrl} identity={{ storagePoolId, path: meta.path, sizeBytes: meta.sizeBytes, modifiedAt: meta.modifiedAt }} />;
   }
   if (meta.previewKind === "pdf") {
     return <iframe className="pdf-preview" title={meta.name} src={blobUrl} />;
@@ -181,7 +181,7 @@ function VideoPreview({ src, identity }: { src: string; identity: VideoProgressI
     lastKnownPositionRef.current = 0;
     hasKnownPositionRef.current = false;
     setStatus("loading");
-  }, [identity.modifiedAt, identity.path, identity.rootId, identity.sizeBytes, src, sourceRevision]);
+  }, [identity.modifiedAt, identity.path, identity.storagePoolId, identity.sizeBytes, src, sourceRevision]);
 
   useEffect(() => {
     const handlePageHide = () => saveProgress(true);

@@ -24,9 +24,7 @@ describe("Docker summary image occupancy", () => {
     expect(resolveDockerImageOccupancy([image], [{ ...container, imageId: "sha256:other" }])[0]?.containerCount).toBe(0);
   });
 
-  it("preserves unknown counts when container identity metadata is incomplete", () => {
-    const { imageId: _imageId, ...legacyContainer } = container;
+  it("preserves unknown counts when the current Docker API omits an image ID", () => {
     expect(resolveDockerImageOccupancy([image], [{ ...container, imageId: null }])[0]?.containerCount).toBeNull();
-    expect(resolveDockerImageOccupancy([{ ...image, containerCount: 3 }], [legacyContainer])[0]?.containerCount).toBe(3);
   });
 });

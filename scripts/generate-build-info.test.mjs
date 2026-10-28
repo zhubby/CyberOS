@@ -92,11 +92,11 @@ describe("build metadata generation", () => {
     expect(info.builtAt).toBe("2026-09-14T00:00:00.000Z");
   });
 
-  it("marks pinned Nix metadata as reproducible", async () => {
+  it("honors explicit reproducible build metadata", async () => {
     const info = await collectBuildInfo({
       repoRoot,
       env: {
-        CYBEROS_BUILD_SOURCE: "nix",
+        CYBEROS_BUILD_SOURCE: "ci",
         CYBEROS_BUILD_COMMIT_SHA: "abcdef0123456789",
         CYBEROS_BUILD_DIRTY: "false",
         CYBEROS_BUILD_REPRODUCIBLE: "true",
@@ -106,7 +106,7 @@ describe("build metadata generation", () => {
     });
 
     expect(info).toMatchObject({
-      source: "nix",
+      source: "ci",
       dirty: false,
       reproducible: true,
       builtAt: "2026-09-14T00:00:00.000Z"

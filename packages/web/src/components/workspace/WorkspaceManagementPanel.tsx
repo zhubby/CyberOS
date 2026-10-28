@@ -66,7 +66,7 @@ import {
   type DockerVolumeDetails,
   type DockerLifecycleProposalInput,
   type DockerDaemonStatus,
-  type NasRoot,
+  type StoragePool,
   type VmSummary
 } from "../../api.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
@@ -302,7 +302,6 @@ const MANAGEMENT_PANELS: Record<Exclude<ManagementPanelId, "docker" | "network" 
 
 export function WorkspaceManagementPanel({
   panel,
-  roots,
   storagePools,
   selectedStoragePoolId,
   dockerOperations,
@@ -315,8 +314,7 @@ export function WorkspaceManagementPanel({
   onOpenDeviceSettings
 }: {
   panel: ManagementPanelId;
-  roots: NasRoot[];
-  storagePools: StorageFilePickerPool[];
+  storagePools: StoragePool[];
   selectedStoragePoolId: string;
   dockerOperations: DockerOperation[];
   vmOperations: VmOperation[];
@@ -330,7 +328,7 @@ export function WorkspaceManagementPanel({
   if (panel === "docker") {
     return (
       <DockerManagementPanel
-        roots={roots}
+        storagePools={storagePools}
         dockerOperations={dockerOperations}
         locale={locale}
         onWorkQueuesChanged={onWorkQueuesChanged}
@@ -343,7 +341,7 @@ export function WorkspaceManagementPanel({
   if (panel === "shares") {
     return (
       <ShareManagementPanel
-        roots={roots}
+        storagePools={storagePools}
         locale={locale}
         onWorkQueuesChanged={onWorkQueuesChanged}
         onNotifyError={onNotifyError}
@@ -575,7 +573,6 @@ function VirtualMachineManagementPanel({
       memoryBacking: form.memoryBacking,
       ...(form.mediaMode === "iso" ? {
         isoPath: mediaPath,
-        isoRootId: form.isoRootId,
         isoStoragePoolId: form.isoStoragePoolId
       } : { diskPath: mediaPath }),
       networkName: form.network,
@@ -628,7 +625,6 @@ function VirtualMachineManagementPanel({
     setForm((current) => ({
       ...current,
       isoPath: selection.path,
-      isoRootId: selection.rootId,
       isoStoragePoolId: selection.storagePoolId
     }));
     setIsoPickerOpen(false);
@@ -1083,7 +1079,7 @@ export function VmInstanceActions({
 }
 
 function DockerManagementPanel({
-  roots,
+  storagePools,
   dockerOperations,
   locale,
   onWorkQueuesChanged,
@@ -1091,7 +1087,7 @@ function DockerManagementPanel({
   onNotifySuccess,
   onNotifyWarning
 }: {
-  roots: NasRoot[];
+  storagePools: StoragePool[];
   dockerOperations: DockerOperation[];
   locale: SupportedLocale;
   onWorkQueuesChanged: () => void | Promise<void>;
@@ -1672,7 +1668,7 @@ function DockerManagementPanel({
           onNotifySuccess={(message) => onNotifySuccess(message)}
         />
       ) : null}
-      {createKind && summary ? <DockerCreateDialogs kind={createKind} summary={summary} roots={roots} onClose={() => setCreateKind(null)} onError={(message) => onNotifyError(message)} onComplete={async (result) => {
+      {createKind && summary ? <DockerCreateDialogs kind={createKind} summary={summary} storagePools={storagePools} onClose={() => setCreateKind(null)} onError={(message) => onNotifyError(message)} onComplete={async (result) => {
         setCreateKind(null);
         if (result.partialSuccess) {
           onNotifyWarning(result.error ?? t("workspace.management.docker.create.partialStartFailure"));

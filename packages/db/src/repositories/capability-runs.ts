@@ -571,7 +571,7 @@ export function getCapabilityRunForAgentJob(db: CyberOsDatabase, jobId: string):
 
 export function claimNextCapabilityContinuation(
   db: CyberOsDatabase,
-  input: { workerId: string; leaseMs: number; now?: Date } = { workerId: "legacy-worker", leaseMs: 30_000 }
+  input: { workerId: string; leaseMs: number; now?: Date }
 ): { jobId: string; runs: CapabilityRunRecord[] } | null {
   const nowDate = input.now ?? new Date();
   const now = nowDate.toISOString();

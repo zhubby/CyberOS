@@ -125,8 +125,8 @@ const PRODUCT_CARGO_PACKAGES = [
   ["crates/hostd/Cargo.toml", "cyberos-hostd"],
   ["crates/indexer/Cargo.toml", "cyberos-indexer"],
   ["crates/monitor/Cargo.toml", "cyberos-monitor"],
-  ["crates/photostaff/Cargo.toml", "cyberos-photostaff"],
-  ["crates/termux/Cargo.toml", "cyberos-termux"],
+  ["crates/photos/Cargo.toml", "cyberos-photos"],
+  ["crates/terminald/Cargo.toml", "cyberos-terminald"],
   ["crates/tv-gamepad/Cargo.toml", "cyberos-tv-gamepad"],
   ["crates/vod-player/Cargo.toml", "cyberos-vod-player"],
   ["crates/monitoring-contracts/Cargo.toml", "cyberos-monitoring-contracts"]
@@ -142,15 +142,14 @@ async function writeFixture(root) {
     mkdir(path.join(root, "crates/hostd"), { recursive: true }),
     mkdir(path.join(root, "crates/indexer"), { recursive: true }),
     mkdir(path.join(root, "crates/monitor"), { recursive: true }),
-    mkdir(path.join(root, "crates/photostaff"), { recursive: true }),
-    mkdir(path.join(root, "crates/termux"), { recursive: true }),
+    mkdir(path.join(root, "crates/photos"), { recursive: true }),
+    mkdir(path.join(root, "crates/terminald"), { recursive: true }),
     mkdir(path.join(root, "crates/tv-gamepad"), { recursive: true }),
     mkdir(path.join(root, "crates/vod-player"), { recursive: true }),
     mkdir(path.join(root, "crates/monitoring-contracts"), { recursive: true }),
     mkdir(path.join(root, "packages/shared"), { recursive: true }),
     mkdir(path.join(root, "docs"), { recursive: true }),
-    mkdir(path.join(root, "packaging/debian"), { recursive: true }),
-    mkdir(path.join(root, "packaging/appliance"), { recursive: true })
+    mkdir(path.join(root, "packaging/debian"), { recursive: true })
   ]);
 
   const rootManifest = { name: "cyberos", version: "0.1.0", workspaces: ["packages/*"] };
@@ -205,10 +204,6 @@ async function writeFixture(root) {
     writeFile(
       path.join(root, "packaging/debian/changelog"),
       "cyberos (0.1.0) unstable; urgency=medium\n\n  * Initial release.\n\n -- CyberOS Maintainers <maintainers@cyberos.local>  Thu, 20 Aug 2026 10:20:00 +0000\n"
-    ),
-    writeFile(
-      path.join(root, "packaging/appliance/manifest.toml"),
-      'name = "cyberos-appliance"\nversion = "0.1.0"\n'
     )
   ]);
 }

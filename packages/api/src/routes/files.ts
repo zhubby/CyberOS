@@ -20,19 +20,23 @@ import {
   resolveSafeTargetPath,
   searchFiles,
   type FileEntry
-} from "@cyberos/nas-tools";
+} from "@cyberos/storage-tools";
 import {
   cancelFileBatch,
   createFileBatch,
   createTrashEntry,
-  enqueuePhotostaffJob,
+  enqueuePhotosJob,
   FileBatchConflictError,
-  getPhotostaffLibrarySettings,
+  getPhotosLibrarySettings,
   listFileBatches,
   queryIndexAdvanced,
   recordAppliedOperation
 } from "@cyberos/db";
-import type { FileOperationProposal, IndexSearchRequest, NasRootRecord } from "@cyberos/shared";
+import {
+  type FileOperationProposal,
+  type IndexSearchRequest,
+  type StorageWorkspace
+} from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   clampPreviewBytes,
@@ -58,7 +62,6 @@ const FILE_EXPORT_BODY_LIMIT = 1024 * 1024;
 const FILE_EXPORT_TTL_MS = 5 * 60 * 1_000;
 
 interface FileExport {
-  rootId: string;
   storagePoolId: string;
   sourcePaths: string[];
   fileName: string;
@@ -66,19 +69,20 @@ interface FileExport {
 }
 
 export function registerFileRoutes(server: FastifyInstance, { config, db, system, videoTranscoder, fileBatches }: ApiRouteContext): void {
+  const dataRoot = config.paths.dataRoot;
   const exports = new Map<string, FileExport>();
   const videoCache = videoTranscoder
-    ? new VideoCache({ dataDir: config.dataDir, transcoder: videoTranscoder })
-    : new VideoCache({ dataDir: config.dataDir });
+    ? new VideoCache({ dataDir: config.paths.stateDir, transcoder: videoTranscoder })
+    : new VideoCache({ dataDir: config.paths.stateDir });
   server.addContentTypeParser("application/octet-stream", (_request, payload, done) => {
     done(null, payload);
   });
 
   server.get<{
-    Querystring: { rootId?: string; storagePoolId?: string; path?: string };
+    Querystring: { storagePoolId?: string; path?: string };
   }>("/api/files", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.query.rootId, request.query.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
+    const root = scope.workspace;
     const safe = await resolveScopedExistingPath(scope, request.query.path ?? scope.mountpointPath);
     const entries = await listDir(root, safe.relativePath);
     const scopedEntries = await Promise.all(
@@ -96,7 +100,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     );
     const gitView = await getDirectoryGitView(root.path, safe.relativePath, scopedEntries, scope.mountpointRealPath);
     reply.send({
-      root,
+      storagePool: scope.pool,
       path: safe.relativePath,
       entries: gitView.entries,
       git: gitView.git
@@ -104,23 +108,23 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
   });
 
   server.get<{
-    Querystring: { rootId?: string; storagePoolId?: string; path?: string };
+    Querystring: { storagePoolId?: string; path?: string };
   }>("/api/files/meta", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.query.rootId, request.query.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
+    const root = scope.workspace;
     const safe = await resolveScopedExistingPath(scope, request.query.path ?? scope.mountpointPath);
     const meta = await getFilePreviewMeta(root.path, safe.relativePath);
     reply.send({
-      root,
+      storagePool: scope.pool,
       meta
     });
   });
 
   server.get<{
-    Querystring: { rootId?: string; storagePoolId?: string; path?: string; maxBytes?: string };
+    Querystring: { storagePoolId?: string; path?: string; maxBytes?: string };
   }>("/api/files/text", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.query.rootId, request.query.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
+    const root = scope.workspace;
     const safe = await resolveScopedExistingPath(scope, request.query.path ?? scope.mountpointPath);
     const meta = await getFilePreviewMeta(root.path, safe.relativePath);
     if (meta.previewKind !== "text") {
@@ -137,10 +141,10 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
   });
 
   server.get<{
-    Querystring: { rootId?: string; storagePoolId?: string; path?: string };
+    Querystring: { storagePoolId?: string; path?: string };
   }>("/api/files/edit-text", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.query.rootId, request.query.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
+    const root = scope.workspace;
     const target = await getEditableTextTarget(root, scope, request.query.path ?? scope.mountpointPath);
     if ("error" in target) {
       reply.status(target.statusCode).send({ error: target.error });
@@ -158,15 +162,14 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
   server.put<{
     Body: {
-      rootId?: string;
       storagePoolId?: string;
       path?: string;
       content?: string;
       expectedModifiedAt?: string | null;
     };
   }>("/api/files/edit-text", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.body?.storagePoolId);
+    const root = scope.workspace;
 
     const content = request.body?.content;
     if (typeof content !== "string") {
@@ -197,12 +200,10 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     const meta = await getFilePreviewMeta(root.path, target.meta.path);
     const preview = await readText(root, meta.path, MAX_EDIT_TEXT_BYTES);
     const operation = recordAppliedOperation(db, {
-      approvalId: null,
       operation: "edit",
       sourcePath: meta.path,
       status: "applied",
       metadata: {
-        rootId: root.id,
         storagePoolId: scope.pool.id,
         reversible: false,
         realtimeSave: true,
@@ -221,15 +222,15 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
   });
 
   server.put<{
-    Querystring: { rootId?: string; storagePoolId?: string; path?: string };
+    Querystring: { storagePoolId?: string; path?: string };
   }>(
     "/api/files/upload",
     {
       bodyLimit: MAX_UPLOAD_BYTES
     },
     async (request, reply) => {
-      const scope = await resolveStoragePoolScope(db, system, request.query.rootId, request.query.storagePoolId);
-      const root = scope.root;
+      const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
+      const root = scope.workspace;
       const requestedPath = request.query.path ?? scope.mountpointPath;
       const target = await prepareUploadTarget(scope, requestedPath);
       if (target.exists) {
@@ -267,13 +268,11 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
       const meta = await getFilePreviewMeta(root.path, target.safe.relativePath);
       const operation = recordAppliedOperation(db, {
-        approvalId: null,
         operation: "upload",
         sourcePath: null,
         targetPath: meta.path,
         status: "applied",
         metadata: {
-          rootId: root.id,
           storagePoolId: scope.pool.id,
           reversible: true,
           sizeBytes: meta.sizeBytes,
@@ -291,7 +290,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
   server.post<{
     Body: {
-      rootId?: string;
       storagePoolId?: string;
       operation?: "mkdir" | "rename" | "trash" | "move" | "copy";
       sourcePath?: string;
@@ -299,8 +297,8 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       targetPath?: string;
     };
   }>("/api/files/mutations", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.body?.storagePoolId);
+    const root = scope.workspace;
 
     const operation = request.body?.operation;
     if (operation !== "mkdir" && operation !== "rename" && operation !== "trash" && operation !== "move" && operation !== "copy") {
@@ -314,7 +312,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     if (operation === "mkdir") {
       proposal = await buildMkdirProposal(root, scope, request.body?.targetPath);
     } else {
-      const source = await getMutableSource(root, scope, request.body?.sourcePath ?? scope.mountpointPath);
+      const source = await getMutableSource(scope, request.body?.sourcePath ?? scope.mountpointPath);
       if ("error" in source) {
         reply.status(source.statusCode).send({ error: source.error });
         return;
@@ -332,13 +330,13 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     proposal.proposal.storagePoolId = scope.pool.id;
 
     try {
-      const result = await applyFileMutation(root, proposal.proposal, path.join(config.dataDir, "trash"));
+      const result = await applyFileMutation(root, proposal.proposal, path.join(config.paths.stateDir, "trash"));
       if (result.proposal.operation === "trash" && result.metadata.trashEntryId && result.targetPath) {
         createTrashEntry(db, {
           id: String(result.metadata.trashEntryId),
-          rootId: root.id,
+          storagePoolId: scope.pool.id,
           originalPath: result.sourcePath ?? proposal.proposal.sourcePath ?? ".",
-          trashPath: path.join(config.dataDir, "trash", result.targetPath),
+          trashPath: path.join(config.paths.stateDir, "trash", result.targetPath),
           metadata: {
             ...result.metadata,
             storagePoolId: scope.pool.id
@@ -346,29 +344,26 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
         });
       }
       const applied = recordAppliedOperation(db, {
-        approvalId: null,
         operation: result.proposal.operation,
         sourcePath: result.sourcePath,
         targetPath: result.targetPath,
         status: "applied",
         metadata: {
           ...result.metadata,
-          rootId: root.id,
           storagePoolId: scope.pool.id,
           reversible: proposal.proposal.reversible
         }
       });
 
-      const photoSettings = getPhotostaffLibrarySettings(db);
+      const photoSettings = getPhotosLibrarySettings(db);
       if (
-        photoSettings?.rootId === root.id &&
-        photoSettings.storagePoolId === scope.pool.id &&
+        photoSettings?.storagePoolId === scope.pool.id &&
         [result.sourcePath, result.targetPath].some((candidate) =>
           candidate ? isPathWithin(photoSettings.path, candidate) : false
         )
       ) {
         try {
-          enqueuePhotostaffJob(db, {
+          enqueuePhotosJob(db, {
             settings: photoSettings,
             kind: "full_scan",
             path: photoSettings.path
@@ -389,7 +384,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
   });
 
   server.get<{
-    Querystring: { rootId?: string; storagePoolId?: string; limit?: string };
+    Querystring: { storagePoolId?: string; limit?: string };
   }>("/api/files/batches", async (request, reply) => {
     const rawLimit = request.query.limit === undefined ? 50 : Number.parseInt(request.query.limit, 10);
     if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
@@ -398,7 +393,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     }
     reply.send({
       batches: listFileBatches(db, {
-        ...(request.query.rootId ? { rootId: request.query.rootId } : {}),
         ...(request.query.storagePoolId ? { storagePoolId: request.query.storagePoolId } : {}),
         limit: rawLimit
       })
@@ -420,7 +414,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
   server.post<{
     Body: {
-      rootId?: string;
       storagePoolId?: string;
       operation?: "move" | "trash";
       sourcePaths?: string[];
@@ -443,7 +436,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       return;
     }
 
-    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.body?.storagePoolId);
 
     let targetDirectory: string | null = null;
     if (operation === "move") {
@@ -459,7 +452,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     const items: Array<{ sourcePath: string; targetPath?: string }> = [];
     const targetPaths = new Set<string>();
     for (const requestedSource of normalizedSources) {
-      const source = await getMutableSource(scope.root, scope, requestedSource);
+      const source = await getMutableSource(scope, requestedSource);
       if ("error" in source) {
         reply.status(source.statusCode).send({ error: source.error, sourcePath: requestedSource });
         return;
@@ -469,7 +462,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
         continue;
       }
       const requestedTarget = path.join(targetDirectory!, path.basename(source.safe.relativePath));
-      const proposal = await buildTransferProposal(scope.root, scope, source.safe, "move", requestedTarget);
+      const proposal = await buildTransferProposal(scope.workspace, scope, source.safe, "move", requestedTarget);
       if ("error" in proposal) {
         reply.status(proposal.statusCode).send({ error: proposal.error, sourcePath: requestedSource });
         return;
@@ -485,7 +478,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
     try {
       const batch = createFileBatch(db, {
-        rootId: scope.root.id,
         storagePoolId: scope.pool.id,
         operation,
         targetDirectory,
@@ -507,13 +499,12 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
   server.post<{
     Body: {
-      rootId?: string;
       storagePoolId?: string;
       path?: string;
     };
   }>("/api/files/extract", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.body?.storagePoolId);
+    const root = scope.workspace;
     const source = await resolveScopedExistingPath(scope, request.body?.path ?? scope.mountpointPath);
     const proposal = await buildExtractProposal(root, scope, source);
     if ("error" in proposal) {
@@ -522,16 +513,14 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     }
 
     try {
-      const result = await applyFileMutation(root, proposal.proposal, path.join(config.dataDir, "trash"));
+      const result = await applyFileMutation(root, proposal.proposal, path.join(config.paths.stateDir, "trash"));
       const operation = recordAppliedOperation(db, {
-        approvalId: null,
         operation: result.proposal.operation,
         sourcePath: result.sourcePath,
         targetPath: result.targetPath,
         status: "applied",
         metadata: {
           ...result.metadata,
-          rootId: root.id,
           storagePoolId: scope.pool.id,
           reversible: proposal.proposal.reversible
         }
@@ -548,9 +537,9 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
   });
 
   server.get<{
-    Querystring: { rootId?: string; storagePoolId?: string; path?: string; download?: string };
+    Querystring: { storagePoolId?: string; path?: string; download?: string };
   }>("/api/files/blob", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.query.rootId, request.query.storagePoolId);
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
     const safe = await resolveScopedExistingPath(scope, request.query.path ?? scope.mountpointPath);
     const safeStat = await stat(safe.realPath);
     if (!safeStat.isFile()) {
@@ -567,7 +556,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
   server.post<{
     Body: {
-      rootId?: string;
       storagePoolId?: string;
       sourcePaths?: string[];
     };
@@ -579,12 +567,12 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       return;
     }
 
-    const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.body?.storagePoolId);
     const sources = [];
     const uniquePaths = new Set<string>();
     for (const requestedPath of sourcePaths) {
       const safe = await resolveScopedExistingPath(scope, requestedPath.trim());
-      await assertNoSymlinkPathSegments(scope.rootRealPath, safe.absolutePath);
+      await assertNoSymlinkPathSegments(scope.dataRootRealPath, safe.absolutePath);
       const sourceStat = await lstat(safe.absolutePath);
       if (!sourceStat.isFile() && !sourceStat.isDirectory()) {
         reply.status(400).send({ error: "Export sources must be files or directories", sourcePath: requestedPath });
@@ -602,7 +590,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     const expiresAt = Date.now() + FILE_EXPORT_TTL_MS;
     const fileName = fileExportName(sources, scope);
     exports.set(token, {
-      rootId: scope.root.id,
       storagePoolId: scope.pool.id,
       sourcePaths: sources.map((source) => source.path),
       fileName,
@@ -624,13 +611,13 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     }
     exports.delete(request.params.token);
 
-    const scope = await resolveStoragePoolScope(db, system, fileExport.rootId, fileExport.storagePoolId);
+    const scope = await resolveStoragePoolScope(dataRoot, system, fileExport.storagePoolId);
     const sources: Array<{ absolutePath: string; archiveName: string }> = [];
     const usedNames = new Set<string>();
     try {
       for (const sourcePath of fileExport.sourcePaths) {
         const safe = await resolveScopedExistingPath(scope, sourcePath);
-        await assertNoSymlinkPathSegments(scope.rootRealPath, safe.absolutePath);
+        await assertNoSymlinkPathSegments(scope.dataRootRealPath, safe.absolutePath);
         const sourceStat = await lstat(safe.absolutePath);
         if (!sourceStat.isFile() && !sourceStat.isDirectory()) {
           reply.status(409).send({ error: "One or more export sources are no longer available" });
@@ -679,10 +666,10 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
   });
 
   server.get<{
-    Querystring: { rootId?: string; storagePoolId?: string; path?: string };
+    Querystring: { storagePoolId?: string; path?: string };
   }>("/api/files/video", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.query.rootId, request.query.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
+    const root = scope.workspace;
     const safe = await resolveScopedExistingPath(scope, request.query.path ?? scope.mountpointPath);
     const sourceStat = await stat(safe.realPath);
     if (!sourceStat.isFile()) {
@@ -702,7 +689,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     }
 
     const source = {
-      rootId: root.id,
+      storagePoolId: root.id,
       relativePath: safe.relativePath,
       realPath: safe.realPath,
       sizeBytes: sourceStat.size,
@@ -727,10 +714,10 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
   });
 
   server.get<{
-    Querystring: { q?: string; rootId?: string; storagePoolId?: string; path?: string };
+    Querystring: { q?: string; storagePoolId?: string; path?: string };
   }>("/api/search", async (request, reply) => {
-    const scope = await resolveStoragePoolScope(db, system, request.query.rootId, request.query.storagePoolId);
-    const root = scope.root;
+    const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
+    const root = scope.workspace;
 
     const query = request.query.q?.trim();
     if (!query) {
@@ -776,7 +763,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     const gitView = await getDirectoryGitView(root.path, safeSearchPath.relativePath, files, scope.mountpointRealPath);
 
     reply.send({
-      root,
+      storagePool: scope.pool,
       query,
       indexed: scopedIndexed,
       files: gitView.entries,
@@ -786,7 +773,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
 
   server.post<{ Body: Partial<IndexSearchRequest> }>("/api/search", async (request, reply) => {
     try {
-      const scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+      const scope = await resolveStoragePoolScope(dataRoot, system, request.body?.storagePoolId);
       const searchPath = request.body?.path ?? scope.mountpointPath;
       const safeSearchPath = await resolveScopedExistingPath(scope, searchPath);
       const searchStat = await stat(safeSearchPath.realPath);
@@ -804,7 +791,6 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       for (let pageNumber = 0; pageNumber < MAX_ADVANCED_SEARCH_SCOPE_PAGES && files.length < requestedLimit; pageNumber += 1) {
         const page = queryIndexAdvanced(db, {
           ...request.body,
-          rootId: scope.root.id,
           storagePoolId: scope.pool.id,
           path: safeSearchPath.relativePath,
           limit: requestedLimit - files.length,
@@ -930,7 +916,7 @@ function isMissingPathError(error: unknown): boolean {
 }
 
 async function buildExtractProposal(
-  root: NasRootRecord,
+  root: StorageWorkspace & { id: string },
   scope: StoragePoolScope,
   source: Awaited<ReturnType<typeof resolveSafeExistingPath>>
 ): Promise<
@@ -974,7 +960,7 @@ async function buildExtractProposal(
   return {
     proposal: {
       operation: "extract",
-      rootId: root.id,
+      storagePoolId: root.id,
       sourcePath: source.relativePath,
       targetPath: target.relativePath,
       risk: "medium",
@@ -999,7 +985,7 @@ function createUploadLimitStream(maxBytes: number): Transform {
 }
 
 async function getEditableTextTarget(
-  root: NasRootRecord,
+  root: StorageWorkspace & { id: string },
   scope: StoragePoolScope,
   requestedPath: string
 ): Promise<
@@ -1030,7 +1016,6 @@ async function getEditableTextTarget(
 }
 
 async function getMutableSource(
-  root: NasRootRecord,
   scope: StoragePoolScope,
   requestedPath: string
 ): Promise<
@@ -1052,7 +1037,7 @@ async function getMutableSource(
 }
 
 async function buildMkdirProposal(
-  root: NasRootRecord,
+  root: StorageWorkspace & { id: string },
   scope: StoragePoolScope,
   rawTargetPath: string | undefined
 ): Promise<
@@ -1087,7 +1072,7 @@ async function buildMkdirProposal(
   return {
     proposal: {
       operation: "mkdir",
-      rootId: root.id,
+      storagePoolId: root.id,
       targetPath: target.relativePath,
       risk: "low",
       reversible: true,
@@ -1097,7 +1082,7 @@ async function buildMkdirProposal(
 }
 
 async function buildRenameProposal(
-  root: NasRootRecord,
+  root: StorageWorkspace & { id: string },
   scope: StoragePoolScope,
   sourcePath: string,
   rawTargetName: string | undefined
@@ -1128,7 +1113,7 @@ async function buildRenameProposal(
   return {
     proposal: {
       operation: "rename",
-      rootId: root.id,
+      storagePoolId: root.id,
       sourcePath,
       targetPath: target.relativePath,
       risk: "medium",
@@ -1139,7 +1124,7 @@ async function buildRenameProposal(
 }
 
 async function buildTransferProposal(
-  root: NasRootRecord,
+  root: StorageWorkspace & { id: string },
   scope: StoragePoolScope,
   source: Awaited<ReturnType<typeof resolveSafeExistingPath>>,
   operation: "move" | "copy",
@@ -1181,7 +1166,7 @@ async function buildTransferProposal(
   return {
     proposal: {
       operation,
-      rootId: root.id,
+      storagePoolId: root.id,
       sourcePath: source.relativePath,
       targetPath: target.relativePath,
       risk: "medium",
@@ -1192,7 +1177,7 @@ async function buildTransferProposal(
 }
 
 function buildTrashProposal(
-  root: NasRootRecord,
+  root: StorageWorkspace & { id: string },
   sourcePath: string
 ): {
   proposal: FileOperationProposal;
@@ -1200,7 +1185,7 @@ function buildTrashProposal(
   return {
     proposal: {
       operation: "trash",
-      rootId: root.id,
+      storagePoolId: root.id,
       sourcePath,
       risk: "medium",
       reversible: true,
@@ -1215,7 +1200,7 @@ function normalizeMkdirTargetPath(rawTargetPath: string | undefined): { path: st
     return { statusCode: 400, error: "New folder path is required" };
   }
   if (targetPath.includes("\0") || path.isAbsolute(targetPath)) {
-    return { statusCode: 400, error: "New folder path must be relative inside the NAS root" };
+    return { statusCode: 400, error: "New folder path must be relative inside the storage pool" };
   }
   return { path: targetPath };
 }
@@ -1239,7 +1224,7 @@ function normalizeTransferTargetPath(
     return { statusCode: 400, error: "Transfer target is required" };
   }
   if (targetPath.includes("\0") || path.isAbsolute(targetPath)) {
-    return { statusCode: 400, error: "Transfer target must be a relative path inside the NAS root" };
+    return { statusCode: 400, error: "Transfer target must be a relative path inside the storage pool" };
   }
   return { path: targetPath };
 }

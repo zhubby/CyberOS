@@ -5,17 +5,19 @@ import type { ApiRouteContext } from "../context.js";
 
 export function registerBackupRoutes(server: FastifyInstance, { db, config }: ApiRouteContext): void {
   server.get("/api/backup/status", async () => {
-    const repositoryAvailable = Boolean(config.backup?.repositoryPath) && await access(config.backup!.repositoryPath!, fsConstants.R_OK | fsConstants.W_OK).then(() => true).catch(() => false);
-    const passwordConfigured = Boolean(config.backup?.passwordFile) && await access(config.backup!.passwordFile!, fsConstants.R_OK).then(() => true).catch(() => false);
+    const repositoryAvailable = config.backup.repositoryPath !== null
+      && await access(config.backup.repositoryPath, fsConstants.R_OK | fsConstants.W_OK).then(() => true).catch(() => false);
+    const passwordConfigured = config.backup.passwordFile !== null
+      && await access(config.backup.passwordFile, fsConstants.R_OK).then(() => true).catch(() => false);
     return {
-    enabled: Boolean(config.backup?.enabled),
-    repositoryConfigured: Boolean(config.backup?.repositoryPath),
-    repositoryAvailable,
-    passwordConfigured,
-    repositoryPath: config.backup?.repositoryPath ?? null,
-    stagingPath: config.backup?.stagingPath ?? null,
-    runs: listBackupRuns(db, 30),
-    alerts: listHealthAlerts(db, { limit: 100 }).filter((alert) => alert.code.startsWith("backup_") || alert.code === "repo_check_failed")
+      enabled: config.backup.enabled,
+      repositoryConfigured: config.backup.repositoryPath !== null,
+      repositoryAvailable,
+      passwordConfigured,
+      repositoryPath: config.backup.repositoryPath,
+      stagingPath: config.backup.stagingPath,
+      runs: listBackupRuns(db, 30),
+      alerts: listHealthAlerts(db, { limit: 100 }).filter((alert) => alert.code.startsWith("backup_") || alert.code === "repo_check_failed")
     };
   });
 }

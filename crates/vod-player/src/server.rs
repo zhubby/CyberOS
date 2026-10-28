@@ -292,14 +292,14 @@ pub fn socket_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::NasRoot;
-
     fn config(directory: &Path) -> VodPlayerConfig {
         VodPlayerConfig {
             enabled: true,
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
             database_path: directory.join("cyberos.sqlite"),
+            data_root: directory.join("data"),
+            production: false,
             command_timeout_ms: 100,
             startup_timeout_ms: 100,
             checkpoint_interval_ms: 5_000,
@@ -312,10 +312,6 @@ mod tests {
             hwdec: "auto-safe".to_owned(),
             user: "test".to_owned(),
             peer_uid: nix::unistd::Uid::current().as_raw(),
-            nas_roots: vec![NasRoot {
-                id: "root".to_owned(),
-                path: directory.to_owned(),
-            }],
         }
     }
 

@@ -10,7 +10,7 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::error::{ErrorCode, IndexerError};
-use crate::extractor::{ExtractedFile, normalized_terms};
+use crate::extractor::ExtractedFile;
 use crate::media::{MediaCatalogEntry, MediaScanTask};
 use crate::storage::{FileIdentity, MountIdentity};
 
@@ -23,7 +23,7 @@ pub struct Db {
 }
 
 #[derive(Debug, Clone)]
-pub struct Root {
+pub struct StoragePool {
     pub id: String,
     pub path: String,
     pub mount_policy: String,
@@ -35,9 +35,8 @@ pub struct Root {
 #[derive(Debug, Clone)]
 pub struct QueueTask {
     pub id: String,
-    pub root_id: String,
-    pub root_path: String,
-    pub storage_pool_id: Option<String>,
+    pub storage_pool_id: String,
+    pub storage_pool_path: String,
     pub path: String,
     pub recursive: bool,
     pub kind: String,
@@ -58,8 +57,7 @@ pub struct ExistingFile {
 
 #[derive(Debug, Clone, Copy)]
 pub struct IndexedFileRecord<'a> {
-    pub root_id: &'a str,
-    pub storage_pool_id: Option<&'a str>,
+    pub storage_pool_id: &'a str,
     pub path: &'a str,
     pub name: &'a str,
     pub identity: FileIdentity,
@@ -77,7 +75,7 @@ pub struct IndexerSettings {
     pub command_timeout_ms: u64,
     pub max_pdf_text_pages: usize,
     pub max_ocr_pages: usize,
-    pub ocr_root_ids: Vec<String>,
+    pub ocr_storage_pool_ids: Vec<String>,
     pub updated_at: String,
 }
 
@@ -92,7 +90,7 @@ impl Default for IndexerSettings {
             command_timeout_ms: 120_000,
             max_pdf_text_pages: 500,
             max_ocr_pages: 20,
-            ocr_root_ids: Vec::new(),
+            ocr_storage_pool_ids: Vec::new(),
             updated_at: String::new(),
         }
     }
@@ -203,7 +201,7 @@ impl Db {
                 .call(|connection| {
                     Ok(connection
                         .query_row(
-                            "SELECT 1 FROM schema_migrations WHERE id = '039_media_library'",
+                            "SELECT 1 FROM schema_migrations WHERE id = '001_cyberos_2_0'",
                             [],
                             |_| Ok(()),
                         )
@@ -219,29 +217,12 @@ impl Db {
             if started.elapsed() >= timeout {
                 return Err(IndexerError::new(
                     ErrorCode::Database,
-                    "Required migration 039_media_library is not applied",
+                    "CyberOS 2.0 database baseline is not applied",
                     true,
                 ));
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-    }
-
-    pub async fn roots(&self) -> DbResult<Vec<Root>> {
-        self.call(|connection| {
-            let mut statement = connection.prepare(
-                "SELECT id, path, mount_policy, expected_source, expected_uuid, expected_fstype FROM nas_roots WHERE enabled = 1 ORDER BY id"
-            ).map_err(IndexerError::database)?;
-            let rows = statement.query_map([], |row| Ok(Root {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                mount_policy: row.get(2)?,
-                expected_source: row.get(3)?,
-                expected_uuid: row.get(4)?,
-                expected_fstype: row.get(5)?,
-            })).map_err(IndexerError::database)?;
-            rows.collect::<Result<Vec<_>, _>>().map_err(IndexerError::database)
-        }).await
     }
 
     pub async fn settings(&self) -> DbResult<IndexerSettings> {
@@ -294,22 +275,20 @@ impl Db {
         .await
     }
 
-    pub async fn ensure_root_state(&self, roots: &[Root]) -> DbResult<()> {
-        let roots = roots.to_vec();
+    pub async fn ensure_storage_pool_state(&self, storage_pools: &[StoragePool]) -> DbResult<()> {
+        let storage_pools = storage_pools.to_vec();
         self.call(move |connection| {
             let transaction = connection.transaction().map_err(IndexerError::database)?;
             let now = now_iso();
-            for root in roots {
+            for storage_pool in storage_pools {
                 transaction.execute(
-                    "INSERT INTO index_root_state (root_id, updated_at) VALUES (?, ?) ON CONFLICT(root_id) DO NOTHING",
-                    params![root.id, now],
+                    "INSERT INTO index_storage_pool_state (storage_pool_id, updated_at) VALUES (?, ?) ON CONFLICT(storage_pool_id) DO NOTHING",
+                    params![storage_pool.id, now],
                 ).map_err(IndexerError::database)?;
                 transaction.execute(
-                    "INSERT INTO index_content_state (root_id, status, legacy_total, updated_at) \
-                     VALUES (?, 'legacy', (SELECT COUNT(*) FROM indexed_text t JOIN indexed_files f \
-                       ON f.id = t.file_id AND f.root_id = t.root_id WHERE t.root_id = ?), ?) \
-                     ON CONFLICT(root_id) DO NOTHING",
-                    params![root.id, root.id, now],
+                    "INSERT INTO index_content_state (storage_pool_id, status, updated_at) \
+                     VALUES (?, 'ready', ?) ON CONFLICT(storage_pool_id) DO NOTHING",
+                    params![storage_pool.id, now],
                 ).map_err(IndexerError::database)?;
             }
             transaction.commit().map_err(IndexerError::database)
@@ -320,16 +299,16 @@ impl Db {
         self.call(move |connection| {
             let cutoff = ago_iso(interval);
             let mut statement = connection.prepare(
-                "SELECT r.id FROM nas_roots r LEFT JOIN index_root_state s ON s.root_id = r.id \
-                 WHERE r.enabled = 1 AND (s.reconcile_requested = 1 OR s.last_reconcile_at IS NULL OR s.last_reconcile_at <= ?)"
+                "SELECT storage_pool_id FROM index_storage_pool_state \
+                 WHERE reconcile_requested = 1 OR last_reconcile_at IS NULL OR last_reconcile_at <= ?"
             ).map_err(IndexerError::database)?;
-            let roots = statement.query_map([cutoff], |row| row.get::<_, String>(0))
+            let storage_pools = statement.query_map([cutoff], |row| row.get::<_, String>(0))
                 .map_err(IndexerError::database)?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(IndexerError::database)?;
             drop(statement);
-            for root_id in roots {
-                enqueue(connection, &root_id, None, ".", true, "full", 10)?;
+            for storage_pool_id in storage_pools {
+                enqueue(connection, &storage_pool_id, ".", true, "full", 10)?;
             }
             Ok(())
         }).await
@@ -337,35 +316,28 @@ impl Db {
 
     pub async fn enqueue(
         &self,
-        root_id: &str,
-        storage_pool_id: Option<&str>,
+        storage_pool_id: &str,
         path: &str,
         recursive: bool,
         kind: &str,
         priority: i64,
     ) -> DbResult<()> {
-        let values = (
-            root_id.to_owned(),
-            storage_pool_id.map(str::to_owned),
-            path.to_owned(),
-            kind.to_owned(),
-        );
+        let values = (storage_pool_id.to_owned(), path.to_owned(), kind.to_owned());
         self.call(move |connection| {
             enqueue(
-                connection,
-                &values.0,
-                values.1.as_deref(),
-                &values.2,
-                recursive,
-                &values.3,
-                priority,
+                connection, &values.0, &values.1, recursive, &values.2, priority,
             )
         })
         .await
     }
 
-    pub async fn claim(&self, worker_id: &str) -> DbResult<Option<QueueTask>> {
+    pub async fn claim(
+        &self,
+        worker_id: &str,
+        storage_pools: &[StoragePool],
+    ) -> DbResult<Option<QueueTask>> {
         let worker_id = worker_id.to_owned();
+        let storage_pools = storage_pools.to_vec();
         self.call(move |connection| {
             let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)
                 .map_err(IndexerError::database)?;
@@ -390,27 +362,41 @@ impl Db {
                  started_at = COALESCE(started_at, ?), next_retry_at = NULL, error = NULL, error_code = NULL, updated_at = ? WHERE id = ?",
                 params![worker_id, future_iso(Duration::from_secs(30)), now, now, id],
             ).map_err(IndexerError::database)?;
-            let task = transaction.query_row(
-                "SELECT q.id, q.root_id, r.path, q.storage_pool_id, q.path, q.recursive, q.kind, q.generation, q.retry_count, \
-                        r.mount_policy, r.expected_source, r.expected_uuid, r.expected_fstype \
-                 FROM index_queue q JOIN nas_roots r ON r.id = q.root_id WHERE q.id = ?",
+            let row = transaction.query_row(
+                "SELECT id, storage_pool_id, path, recursive, kind, generation, retry_count \
+                 FROM index_queue WHERE id = ?",
                 [&id],
-                |row| Ok(QueueTask {
-                    id: row.get(0)?,
-                    root_id: row.get(1)?,
-                    root_path: row.get(2)?,
-                    storage_pool_id: row.get(3)?,
-                    path: row.get(4)?,
-                    recursive: row.get::<_, i64>(5)? != 0,
-                    kind: row.get(6)?,
-                    generation: row.get(7)?,
-                    retry_count: row.get::<_, i64>(8)?.max(0) as u32,
-                    mount_policy: row.get(9)?,
-                    expected_source: row.get(10)?,
-                    expected_uuid: row.get(11)?,
-                    expected_fstype: row.get(12)?,
-                }),
+                |row| Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)? != 0,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?.max(0) as u32,
+                )),
             ).map_err(IndexerError::database)?;
+            let storage_pool = storage_pools.iter().find(|pool| pool.id == row.1).ok_or_else(|| {
+                IndexerError::new(
+                    ErrorCode::StorageUnavailable,
+                    format!("Storage pool {} is unavailable", row.1),
+                    true,
+                )
+            })?;
+            let task = QueueTask {
+                id: row.0,
+                storage_pool_id: row.1,
+                storage_pool_path: storage_pool.path.clone(),
+                path: row.2,
+                recursive: row.3,
+                kind: row.4,
+                generation: row.5,
+                retry_count: row.6,
+                mount_policy: storage_pool.mount_policy.clone(),
+                expected_source: storage_pool.expected_source.clone(),
+                expected_uuid: storage_pool.expected_uuid.clone(),
+                expected_fstype: storage_pool.expected_fstype.clone(),
+            };
             transaction.commit().map_err(IndexerError::database)?;
             Ok(Some(task))
         }).await
@@ -493,13 +479,17 @@ impl Db {
         }).await
     }
 
-    pub async fn existing_file(&self, root_id: &str, path: &str) -> DbResult<Option<ExistingFile>> {
-        let values = (root_id.to_owned(), path.to_owned());
+    pub async fn existing_file(
+        &self,
+        storage_pool_id: &str,
+        path: &str,
+    ) -> DbResult<Option<ExistingFile>> {
+        let values = (storage_pool_id.to_owned(), path.to_owned());
         self.call(move |connection| {
             connection.query_row(
                 "SELECT f.id, f.source_device, f.source_inode, f.source_size_bytes, f.source_mtime_ns, f.source_ctime_ns, \
                    EXISTS(SELECT 1 FROM indexed_content_fts c WHERE c.file_id = f.id) \
-                 FROM indexed_files f WHERE f.root_id = ? AND f.path = ?",
+                 FROM indexed_files f WHERE f.storage_pool_id = ? AND f.path = ?",
                 params![values.0, values.1],
                 |row| {
                     let device: Option<i64> = row.get(1)?;
@@ -529,8 +519,7 @@ impl Db {
         extracted: ExtractedFile,
     ) -> DbResult<()> {
         let values = (
-            file.root_id.to_owned(),
-            file.storage_pool_id.map(str::to_owned),
+            file.storage_pool_id.to_owned(),
             file.path.to_owned(),
             file.name.to_owned(),
             file.scan_generation.map(str::to_owned),
@@ -539,19 +528,18 @@ impl Db {
         self.call(move |connection| {
             let transaction = connection.transaction().map_err(IndexerError::database)?;
             let id = transaction.query_row(
-                "SELECT id FROM indexed_files WHERE root_id = ? AND path = ?",
-                params![values.0, values.2],
+                "SELECT id FROM indexed_files WHERE storage_pool_id = ? AND path = ?",
+                params![values.0, values.1],
                 |row| row.get::<_, String>(0),
             ).optional().map_err(IndexerError::database)?.unwrap_or_else(|| Uuid::new_v4().to_string());
             let now = now_iso();
             transaction.execute(
                 "INSERT INTO indexed_files (
-                   id, root_id, storage_pool_id, path, name, mime_type, size_bytes, mtime_ms, hash, indexed_at,
+                   id, storage_pool_id, path, name, mime_type, size_bytes, mtime_ms, hash, indexed_at,
                    source_device, source_inode, source_size_bytes, source_mtime_ns, source_ctime_ns,
                    scan_generation, extraction_source, extraction_status, extraction_error
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-                 ON CONFLICT(root_id, path) DO UPDATE SET
-                   storage_pool_id = COALESCE(excluded.storage_pool_id, indexed_files.storage_pool_id),
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                 ON CONFLICT(storage_pool_id, path) DO UPDATE SET
                    name = excluded.name, mime_type = excluded.mime_type, size_bytes = excluded.size_bytes,
                    mtime_ms = excluded.mtime_ms, hash = excluded.hash, indexed_at = excluded.indexed_at,
                    source_device = excluded.source_device, source_inode = excluded.source_inode,
@@ -560,18 +548,18 @@ impl Db {
                    extraction_source = excluded.extraction_source, extraction_status = excluded.extraction_status,
                    extraction_error = NULL",
                 params![
-                    id, values.0, values.1, values.2, values.3, extracted.mime_type,
+                    id, values.0, values.1, values.2, extracted.mime_type,
                     i64_from(identity.size)?, identity.mtime_ns / 1_000_000, extracted.hash, now,
                     i64_from(identity.device)?, i64_from(identity.inode)?, i64_from(identity.size)?,
-                    identity.mtime_ns, identity.ctime_ns, values.4,
+                    identity.mtime_ns, identity.ctime_ns, values.3,
                     extracted.source.map(|source| source.as_str()), extracted.status,
                 ],
             ).map_err(IndexerError::database)?;
             transaction.execute("DELETE FROM indexed_content_fts WHERE file_id = ?", [&id])
                 .map_err(IndexerError::database)?;
             transaction.execute(
-                "INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms) VALUES (?, ?, ?, ?, ?, ?)",
-                params![id, values.0, values.2, values.3, extracted.body, extracted.terms],
+                "INSERT INTO indexed_content_fts (file_id, storage_pool_id, path, name, body, terms) VALUES (?, ?, ?, ?, ?, ?)",
+                params![id, values.0, values.1, values.2, extracted.body, extracted.terms],
             ).map_err(IndexerError::database)?;
             transaction.commit().map_err(IndexerError::database)
         }).await
@@ -583,8 +571,7 @@ impl Db {
         error: &IndexerError,
     ) -> DbResult<()> {
         let values = (
-            file.root_id.to_owned(),
-            file.storage_pool_id.map(str::to_owned),
+            file.storage_pool_id.to_owned(),
             file.path.to_owned(),
             file.name.to_owned(),
             file.scan_generation.map(str::to_owned),
@@ -593,8 +580,8 @@ impl Db {
         let identity = file.identity;
         self.call(move |connection| {
             let id = connection.query_row(
-                "SELECT id FROM indexed_files WHERE root_id = ? AND path = ?",
-                params![values.0, values.2], |row| row.get::<_, String>(0),
+                "SELECT id FROM indexed_files WHERE storage_pool_id = ? AND path = ?",
+                params![values.0, values.1], |row| row.get::<_, String>(0),
             ).optional().map_err(IndexerError::database)?;
             if let Some(id) = id {
                 let has_content: bool = connection.query_row(
@@ -602,25 +589,25 @@ impl Db {
                     [&id], |row| row.get(0),
                 ).map_err(IndexerError::database)?;
                 connection.execute(
-                    "UPDATE indexed_files SET storage_pool_id = COALESCE(?, storage_pool_id), name = ?, size_bytes = ?, mtime_ms = ?, source_device = ?, source_inode = ?,
+                    "UPDATE indexed_files SET name = ?, size_bytes = ?, mtime_ms = ?, source_device = ?, source_inode = ?,
                        source_size_bytes = ?, source_mtime_ns = ?, source_ctime_ns = ?, scan_generation = COALESCE(?, scan_generation),
                        extraction_status = ?, extraction_error = ? WHERE id = ?",
-                    params![values.1, values.3, i64_from(identity.size)?, identity.mtime_ns / 1_000_000,
+                    params![values.2, i64_from(identity.size)?, identity.mtime_ns / 1_000_000,
                         i64_from(identity.device)?, i64_from(identity.inode)?, i64_from(identity.size)?,
-                        identity.mtime_ns, identity.ctime_ns, values.4,
-                        if has_content { "stale" } else { "error" }, values.5, id],
+                        identity.mtime_ns, identity.ctime_ns, values.3,
+                        if has_content { "stale" } else { "error" }, values.4, id],
                 ).map_err(IndexerError::database)?;
             } else {
                 connection.execute(
                     "INSERT INTO indexed_files (
-                       id, root_id, storage_pool_id, path, name, size_bytes, mtime_ms, indexed_at,
+                       id, storage_pool_id, path, name, size_bytes, mtime_ms, indexed_at,
                        source_device, source_inode, source_size_bytes, source_mtime_ns, source_ctime_ns,
                        scan_generation, extraction_status, extraction_error
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'error', ?)",
-                    params![Uuid::new_v4().to_string(), values.0, values.1, values.2, values.3,
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'error', ?)",
+                    params![Uuid::new_v4().to_string(), values.0, values.1, values.2,
                         i64_from(identity.size)?, identity.mtime_ns / 1_000_000, now_iso(),
                         i64_from(identity.device)?, i64_from(identity.inode)?, i64_from(identity.size)?,
-                        identity.mtime_ns, identity.ctime_ns, values.4, values.5],
+                        identity.mtime_ns, identity.ctime_ns, values.3, values.4],
                 ).map_err(IndexerError::database)?;
             }
             Ok(())
@@ -629,15 +616,19 @@ impl Db {
 
     pub async fn touch_generation(
         &self,
-        root_id: &str,
+        storage_pool_id: &str,
         path: &str,
         generation: &str,
     ) -> DbResult<()> {
-        let values = (root_id.to_owned(), path.to_owned(), generation.to_owned());
+        let values = (
+            storage_pool_id.to_owned(),
+            path.to_owned(),
+            generation.to_owned(),
+        );
         self.call(move |connection| {
             connection
                 .execute(
-                    "UPDATE indexed_files SET scan_generation = ? WHERE root_id = ? AND path = ?",
+                    "UPDATE indexed_files SET scan_generation = ? WHERE storage_pool_id = ? AND path = ?",
                     params![values.2, values.0, values.1],
                 )
                 .map_err(IndexerError::database)?;
@@ -646,8 +637,13 @@ impl Db {
         .await
     }
 
-    pub async fn remove_path(&self, root_id: &str, path: &str, recursive: bool) -> DbResult<u64> {
-        let values = (root_id.to_owned(), path.to_owned());
+    pub async fn remove_path(
+        &self,
+        storage_pool_id: &str,
+        path: &str,
+        recursive: bool,
+    ) -> DbResult<u64> {
+        let values = (storage_pool_id.to_owned(), path.to_owned());
         self.call(move |connection| {
             let transaction = connection.transaction().map_err(IndexerError::database)?;
             let ids = selected_ids(&transaction, &values.0, &values.1, recursive, None)?;
@@ -660,13 +656,13 @@ impl Db {
 
     pub async fn cleanup_generation(
         &self,
-        root_id: &str,
+        storage_pool_id: &str,
         path: &str,
         generation: &str,
         root_rebuild: bool,
     ) -> DbResult<u64> {
         let values = (
-            root_id.to_owned(),
+            storage_pool_id.to_owned(),
             path.to_owned(),
             generation.to_owned(),
             root_rebuild,
@@ -676,23 +672,23 @@ impl Db {
             let ids = selected_ids(&transaction, &values.0, &values.1, true, Some(&values.2))?;
             delete_ids(&transaction, &ids)?;
             transaction.execute(
-                "DELETE FROM index_queue WHERE root_id = ? AND status = 'failed'
+                "DELETE FROM index_queue WHERE storage_pool_id = ? AND status = 'failed'
                    AND (? = '.' OR path = ? OR substr(path, 1, length(?) + 1) = ? || '/')",
                 params![values.0, values.1, values.1, values.1, values.1],
             ).map_err(IndexerError::database)?;
             if values.3 {
                 transaction.execute(
-                    "UPDATE index_root_state SET active_scan_generation = NULL, completed_scan_generation = ?,
-                       reconcile_requested = 0, last_reconcile_at = ?, updated_at = ? WHERE root_id = ?",
+                    "UPDATE index_storage_pool_state SET active_scan_generation = NULL, completed_scan_generation = ?,
+                       reconcile_requested = 0, last_reconcile_at = ?, updated_at = ? WHERE storage_pool_id = ?",
                     params![values.2, now_iso(), now_iso(), values.0],
                 ).map_err(IndexerError::database)?;
                 transaction.execute(
-                    "UPDATE index_content_state SET status = 'ready', error = NULL, updated_at = ? WHERE root_id = ?",
+                    "UPDATE index_content_state SET status = 'ready', error = NULL, updated_at = ? WHERE storage_pool_id = ?",
                     params![now_iso(), values.0],
                 ).map_err(IndexerError::database)?;
             } else {
                 transaction.execute(
-                    "UPDATE index_root_state SET active_scan_generation = NULL, updated_at = ? WHERE root_id = ?",
+                    "UPDATE index_storage_pool_state SET active_scan_generation = NULL, updated_at = ? WHERE storage_pool_id = ?",
                     params![now_iso(), values.0],
                 ).map_err(IndexerError::database)?;
             }
@@ -703,13 +699,13 @@ impl Db {
 
     pub async fn begin_generation(
         &self,
-        root_id: &str,
+        storage_pool_id: &str,
         generation: &str,
         mount_identity: Option<&MountIdentity>,
         root_rebuild: bool,
     ) -> DbResult<()> {
         let values = (
-            root_id.to_owned(),
+            storage_pool_id.to_owned(),
             generation.to_owned(),
             mount_identity.and_then(|identity| identity.source.clone()),
             mount_identity.and_then(|identity| identity.uuid.clone()),
@@ -718,12 +714,12 @@ impl Db {
         );
         self.call(move |connection| {
             connection.execute(
-                "UPDATE index_root_state SET active_scan_generation = ?, mount_source = ?, mount_uuid = ?, mount_fstype = ?, updated_at = ? WHERE root_id = ?",
+                "UPDATE index_storage_pool_state SET active_scan_generation = ?, mount_source = ?, mount_uuid = ?, mount_fstype = ?, updated_at = ? WHERE storage_pool_id = ?",
                 params![values.1, values.2, values.3, values.4, now_iso(), values.0],
             ).map_err(IndexerError::database)?;
             if values.5 {
                 connection.execute(
-                    "UPDATE index_content_state SET status = 'rebuilding', updated_at = ? WHERE root_id = ? AND status <> 'ready'",
+                    "UPDATE index_content_state SET status = 'rebuilding', updated_at = ? WHERE storage_pool_id = ?",
                     params![now_iso(), values.0],
                 ).map_err(IndexerError::database)?;
             }
@@ -733,96 +729,34 @@ impl Db {
 
     pub async fn set_watcher_status(
         &self,
-        root_id: &str,
+        storage_pool_id: &str,
         status: &str,
         error: Option<&str>,
     ) -> DbResult<()> {
         let values = (
-            root_id.to_owned(),
+            storage_pool_id.to_owned(),
             status.to_owned(),
             error.map(str::to_owned),
         );
         self.call(move |connection| {
             connection.execute(
-                "UPDATE index_root_state SET watcher_status = ?, watcher_error = ?,
+                "UPDATE index_storage_pool_state SET watcher_status = ?, watcher_error = ?,
                    reconcile_requested = CASE WHEN ? = 'degraded' THEN 1 ELSE reconcile_requested END,
-                   updated_at = ? WHERE root_id = ?",
+                   updated_at = ? WHERE storage_pool_id = ?",
                 params![values.1, values.2, values.1, now_iso(), values.0],
             ).map_err(IndexerError::database)?;
             Ok(())
         }).await
     }
 
-    pub async fn copy_legacy_batch(
-        &self,
-        root_id: &str,
-        batch_size: usize,
-        text_limit: usize,
-    ) -> DbResult<bool> {
-        let root_id = root_id.to_owned();
-        self.call(move |connection| {
-            let state = connection.query_row(
-                "SELECT status, legacy_cursor FROM index_content_state WHERE root_id = ?",
-                [&root_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
-            ).optional().map_err(IndexerError::database)?;
-            let Some((status, cursor)) = state else { return Ok(true); };
-            if matches!(status.as_str(), "rebuilding" | "ready") {
-                return Ok(false);
-            }
-            let mut statement = connection.prepare(
-                "SELECT t.rowid, t.file_id, t.path, t.name, t.body FROM indexed_text t
-                 JOIN indexed_files f ON f.id = t.file_id AND f.root_id = t.root_id
-                 WHERE t.root_id = ? AND t.rowid > ? ORDER BY t.rowid LIMIT ?"
-            ).map_err(IndexerError::database)?;
-            let rows = statement.query_map(params![root_id, cursor, batch_size as i64], |row| Ok((
-                row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?, row.get::<_, String>(4)?,
-            ))).map_err(IndexerError::database)?
-                .collect::<Result<Vec<_>, _>>().map_err(IndexerError::database)?;
-            drop(statement);
-            let rows = rows.into_iter().map(|(rowid, file_id, path, name, body)| {
-                let terms = normalized_terms(&body, text_limit);
-                (rowid, file_id, path, name, body, terms)
-            }).collect::<Vec<_>>();
-            let last = rows.last().map(|row| row.0).unwrap_or(cursor);
-            let complete = rows.len() < batch_size;
-
-            let transaction = connection.transaction().map_err(IndexerError::database)?;
-            transaction.execute(
-                "UPDATE index_content_state SET status = 'copying', updated_at = ? WHERE root_id = ?",
-                params![now_iso(), root_id],
-            ).map_err(IndexerError::database)?;
-            let mut copied = 0_i64;
-            for (_, file_id, path, name, body, terms) in &rows {
-                let exists: bool = transaction.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM indexed_content_fts WHERE file_id = ?)",
-                    [file_id], |row| row.get(0),
-                ).map_err(IndexerError::database)?;
-                if !exists {
-                    transaction.execute(
-                        "INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms) VALUES (?, ?, ?, ?, ?, ?)",
-                        params![file_id, root_id, path, name, body, terms],
-                    ).map_err(IndexerError::database)?;
-                    copied += 1;
-                }
-            }
-            transaction.execute(
-                "UPDATE index_content_state SET status = ?, legacy_cursor = ?, copied_count = copied_count + ?, updated_at = ? WHERE root_id = ?",
-                params![if complete { "rebuilding" } else { "copying" }, last, copied, now_iso(), root_id],
-            ).map_err(IndexerError::database)?;
-            transaction.commit().map_err(IndexerError::database)?;
-            Ok(complete)
-        }).await
-    }
-
-    pub async fn start_run(&self, root_id: &str, kind: &str) -> DbResult<String> {
-        let values = (root_id.to_owned(), kind.to_owned());
+    pub async fn start_run(&self, storage_pool_id: &str, kind: &str) -> DbResult<String> {
+        let values = (storage_pool_id.to_owned(), kind.to_owned());
         self.call(move |connection| {
             let transaction = connection.transaction().map_err(IndexerError::database)?;
             archive_previous_runs(&transaction, &values.0)?;
             let id = Uuid::new_v4().to_string();
             transaction.execute(
-                "INSERT INTO index_runs (id, root_id, status, started_at, kind, phase, last_progress_at) \
+                "INSERT INTO index_runs (id, storage_pool_id, status, started_at, kind, phase, last_progress_at) \
                  VALUES (?, ?, 'running', ?, ?, 'scanning', ?)",
                 params![id, values.0, now_iso(), values.1, now_iso()],
             ).map_err(IndexerError::database)?;
@@ -841,12 +775,12 @@ impl Db {
         let stats = stats.clone();
         self.call(move |connection| {
             let transaction = connection.transaction().map_err(IndexerError::database)?;
-            let root_id: String = transaction.query_row("SELECT root_id FROM index_runs WHERE id = ?", [&run_id], |row| row.get(0))
+            let storage_pool_id: String = transaction.query_row("SELECT storage_pool_id FROM index_runs WHERE id = ?", [&run_id], |row| row.get(0))
                 .map_err(IndexerError::database)?;
             for (path, reason) in &stats.failures {
                 transaction.execute(
-                    "INSERT INTO index_failures (id, run_id, root_id, path, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    params![Uuid::new_v4().to_string(), run_id, root_id, path, reason, now_iso()],
+                    "INSERT INTO index_failures (id, run_id, storage_pool_id, path, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    params![Uuid::new_v4().to_string(), run_id, storage_pool_id, path, reason, now_iso()],
                 ).map_err(IndexerError::database)?;
             }
             transaction.execute(
@@ -863,8 +797,13 @@ impl Db {
         }).await
     }
 
-    pub async fn claim_media_scan(&self, worker_id: &str) -> DbResult<Option<MediaScanTask>> {
+    pub async fn claim_media_scan(
+        &self,
+        worker_id: &str,
+        storage_pools: &[StoragePool],
+    ) -> DbResult<Option<MediaScanTask>> {
         let worker_id = worker_id.to_owned();
+        let storage_pools = storage_pools.to_vec();
         self.call(move |connection| {
             let transaction = connection
                 .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -896,30 +835,42 @@ impl Db {
                 [],
                 |row| row.get(0),
             ).optional().map_err(IndexerError::database)?;
-            let task = transaction.query_row(
-                "SELECT r.id, r.generation, s.id, s.kind, s.root_id, s.storage_pool_id, s.path, \
-                        n.path, n.mount_policy, n.expected_source, n.expected_uuid, n.expected_fstype \
+            let row = transaction.query_row(
+                "SELECT r.id, r.generation, s.id, s.kind, s.storage_pool_id, s.path \
                  FROM media_scan_runs r \
                  JOIN media_sources s ON s.id = r.source_id \
-                 JOIN nas_roots n ON n.id = s.root_id \
                  WHERE r.id = ? AND r.status = 'running' AND r.worker_id = ?",
                 params![id, worker_id],
-                |row| Ok(MediaScanTask {
-                    id: row.get(0)?,
-                    generation: row.get(1)?,
-                    source_id: row.get(2)?,
-                    kind: row.get(3)?,
-                    root_id: row.get(4)?,
-                    storage_pool_id: row.get(5)?,
-                    source_path: row.get(6)?,
-                    root_path: row.get(7)?,
-                    mount_policy: row.get(8)?,
-                    expected_source: row.get(9)?,
-                    expected_uuid: row.get(10)?,
-                    expected_fstype: row.get(11)?,
-                    settings_json: settings_json.clone(),
-                }),
+                |row| Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                )),
             ).map_err(IndexerError::database)?;
+            let storage_pool = storage_pools.iter().find(|pool| pool.id == row.4).ok_or_else(|| {
+                IndexerError::new(
+                    ErrorCode::StorageUnavailable,
+                    format!("Storage pool {} is unavailable", row.4),
+                    true,
+                )
+            })?;
+            let task = MediaScanTask {
+                id: row.0,
+                generation: row.1,
+                source_id: row.2,
+                kind: row.3,
+                storage_pool_id: row.4,
+                source_path: row.5,
+                storage_pool_path: storage_pool.path.clone(),
+                mount_policy: storage_pool.mount_policy.clone(),
+                expected_source: storage_pool.expected_source.clone(),
+                expected_uuid: storage_pool.expected_uuid.clone(),
+                expected_fstype: storage_pool.expected_fstype.clone(),
+                settings_json,
+            };
             transaction.commit().map_err(IndexerError::database)?;
             Ok(Some(task))
         }).await
@@ -1105,10 +1056,10 @@ impl Db {
                     .unwrap_or_else(|| Uuid::new_v4().to_string());
                 transaction.execute(
                     "INSERT INTO media_files (
-                       id, source_id, title_id, episode_id, root_id, storage_pool_id, relative_path,
+                       id, source_id, title_id, episode_id, storage_pool_id, relative_path,
                        name, mime_type, size_bytes, mtime_ms, duration_seconds, container,
                        video_codec, audio_codec, scan_generation, created_at, updated_at
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT(source_id, relative_path) DO UPDATE SET
                        title_id = excluded.title_id, episode_id = excluded.episode_id,
                        name = excluded.name, mime_type = excluded.mime_type, size_bytes = excluded.size_bytes,
@@ -1117,8 +1068,8 @@ impl Db {
                        audio_codec = excluded.audio_codec, scan_generation = excluded.scan_generation,
                        updated_at = excluded.updated_at",
                     params![
-                        file_id, task.source_id, title_id, episode_id, task.root_id,
-                        task.storage_pool_id, entry.file.relative_path, entry.file.name,
+                        file_id, task.source_id, title_id, episode_id, task.storage_pool_id,
+                        entry.file.relative_path, entry.file.name,
                         entry.file.mime_type, i64_from(entry.file.size_bytes)?, entry.file.mtime_ms,
                         entry.file.duration_seconds, entry.file.container, entry.file.video_codec,
                         entry.file.audio_codec, task.generation, now, now
@@ -1177,8 +1128,7 @@ impl Db {
 
 fn enqueue(
     connection: &Connection,
-    root_id: &str,
-    storage_pool_id: Option<&str>,
+    storage_pool_id: &str,
     path: &str,
     recursive: bool,
     kind: &str,
@@ -1186,41 +1136,40 @@ fn enqueue(
 ) -> DbResult<()> {
     let now = now_iso();
     connection.execute(
-        "INSERT INTO index_queue (id, root_id, storage_pool_id, path, recursive, kind, generation, priority, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'queued', ?, ?)
-         ON CONFLICT(root_id, path) DO UPDATE SET
-           storage_pool_id = COALESCE(excluded.storage_pool_id, index_queue.storage_pool_id),
+        "INSERT INTO index_queue (id, storage_pool_id, path, recursive, kind, generation, priority, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, 'queued', ?, ?)
+         ON CONFLICT(storage_pool_id, path) DO UPDATE SET
            recursive = MAX(index_queue.recursive, excluded.recursive),
            kind = CASE WHEN excluded.kind = 'manual' THEN 'manual' WHEN index_queue.kind = 'manual' THEN index_queue.kind
              WHEN excluded.kind = 'full' THEN 'full' ELSE index_queue.kind END,
            generation = index_queue.generation + 1, priority = MAX(index_queue.priority, excluded.priority),
            status = 'queued', retry_count = 0, next_retry_at = NULL, worker_id = NULL, lease_expires_at = NULL,
            error = NULL, error_code = NULL, updated_at = excluded.updated_at, finished_at = NULL",
-        params![Uuid::new_v4().to_string(), root_id, storage_pool_id, path, i64::from(recursive), kind, priority, now, now],
+        params![Uuid::new_v4().to_string(), storage_pool_id, path, i64::from(recursive), kind, priority, now, now],
     ).map_err(IndexerError::database)?;
     Ok(())
 }
 
 fn selected_ids(
     transaction: &Transaction<'_>,
-    root_id: &str,
+    storage_pool_id: &str,
     path: &str,
     recursive: bool,
     generation_to_exclude: Option<&str>,
 ) -> DbResult<Vec<String>> {
     let sql = if generation_to_exclude.is_some() {
-        "SELECT id FROM indexed_files WHERE root_id = ? AND (? = '.' OR path = ? OR substr(path, 1, length(?) + 1) = ? || '/')
+        "SELECT id FROM indexed_files WHERE storage_pool_id = ? AND (? = '.' OR path = ? OR substr(path, 1, length(?) + 1) = ? || '/')
          AND COALESCE(scan_generation, '') <> ?"
     } else if recursive {
-        "SELECT id FROM indexed_files WHERE root_id = ? AND (? = '.' OR path = ? OR substr(path, 1, length(?) + 1) = ? || '/')"
+        "SELECT id FROM indexed_files WHERE storage_pool_id = ? AND (? = '.' OR path = ? OR substr(path, 1, length(?) + 1) = ? || '/')"
     } else {
-        "SELECT id FROM indexed_files WHERE root_id = ? AND path = ?"
+        "SELECT id FROM indexed_files WHERE storage_pool_id = ? AND path = ?"
     };
     let mut statement = transaction.prepare(sql).map_err(IndexerError::database)?;
     if let Some(generation) = generation_to_exclude {
         statement
             .query_map(
-                params![root_id, path, path, path, path, generation],
+                params![storage_pool_id, path, path, path, path, generation],
                 |row| row.get(0),
             )
             .map_err(IndexerError::database)?
@@ -1228,13 +1177,15 @@ fn selected_ids(
             .map_err(IndexerError::database)
     } else if recursive {
         statement
-            .query_map(params![root_id, path, path, path, path], |row| row.get(0))
+            .query_map(params![storage_pool_id, path, path, path, path], |row| {
+                row.get(0)
+            })
             .map_err(IndexerError::database)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(IndexerError::database)
     } else {
         statement
-            .query_map(params![root_id, path], |row| row.get(0))
+            .query_map(params![storage_pool_id, path], |row| row.get(0))
             .map_err(IndexerError::database)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(IndexerError::database)
@@ -1253,18 +1204,18 @@ fn delete_ids(transaction: &Transaction<'_>, ids: &[String]) -> DbResult<()> {
     Ok(())
 }
 
-fn archive_previous_runs(transaction: &Transaction<'_>, root_id: &str) -> DbResult<()> {
+fn archive_previous_runs(transaction: &Transaction<'_>, storage_pool_id: &str) -> DbResult<()> {
     transaction.execute(
-        "UPDATE index_runs SET status = 'failed', finished_at = ?, error = 'interrupted/superseded' WHERE root_id = ? AND status = 'running'",
-        params![now_iso(), root_id],
+        "UPDATE index_runs SET status = 'failed', finished_at = ?, error = 'interrupted/superseded' WHERE storage_pool_id = ? AND status = 'running'",
+        params![now_iso(), storage_pool_id],
     ).map_err(IndexerError::database)?;
     let mut statement = transaction.prepare(
         "SELECT id, status, started_at, finished_at, scanned, indexed, unchanged, removed, skipped, failed, error,
            duration_ms, bytes, file_count, text_file_count, phase, current_path, last_progress_at, kind
-         FROM index_runs WHERE root_id = ? AND status <> 'running' ORDER BY COALESCE(finished_at, started_at) DESC"
+         FROM index_runs WHERE storage_pool_id = ? AND status <> 'running' ORDER BY COALESCE(finished_at, started_at) DESC"
     ).map_err(IndexerError::database)?;
     let rows = statement
-        .query_map([root_id], |row| {
+        .query_map([storage_pool_id], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -1315,10 +1266,10 @@ fn archive_previous_runs(transaction: &Transaction<'_>, root_id: &str) -> DbResu
                 .map_err(IndexerError::database)?
         };
         transaction.execute(
-            "INSERT OR REPLACE INTO index_run_history (id, root_id, status, started_at, finished_at, scanned, indexed,
+            "INSERT OR REPLACE INTO index_run_history (id, storage_pool_id, status, started_at, finished_at, scanned, indexed,
                unchanged, removed, skipped, failed, error, duration_ms, bytes, file_count, text_file_count, phase,
                current_path, last_progress_at, failures_json, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![row.0, root_id, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10,
+            params![row.0, storage_pool_id, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10,
                 row.11, row.12, row.13, row.14, row.15, row.16, row.17, serde_json::to_string(&failures).unwrap_or_else(|_| "[]".into()), row.18],
         ).map_err(IndexerError::database)?;
         transaction

@@ -13,7 +13,7 @@
     "@cyberos/capabilities": "2.0.0",
     "@cyberos/capability-runtime": "2.0.0",
     "@cyberos/db": "2.0.0",
-    "@cyberos/nas-tools": "2.0.0",
+    "@cyberos/storage-tools": "2.0.0",
     "@cyberos/shared": "2.0.0",
     "fastify": "^5.12.5",
     "zod": "^4.2.0"

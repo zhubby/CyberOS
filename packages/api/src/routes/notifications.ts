@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import {
   countUnreadBluetoothTransfers,
   countUnreadOperationNotifications,
-  expireStaleVmConsoleOperations,
   getMonitoringAlertSummary,
   listBluetoothTransfers,
   listOperationNotifications,
@@ -33,7 +32,6 @@ export function registerNotificationRoutes(server: FastifyInstance, { db }: ApiR
       reply.status(400).send({ error: "Notification limit must be between 1 and 100" });
       return;
     }
-    expireStaleVmConsoleOperations(db);
     const notifications = listOperationNotifications(db, { limit });
     reply.send({
       notifications,

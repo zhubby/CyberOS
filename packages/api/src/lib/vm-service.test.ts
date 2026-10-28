@@ -2,24 +2,22 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { CyberOsConfig, VmOperationRecord } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig, type VmOperationRecord } from "@cyberos/shared";
 import { applyVmOperation, buildVmCreateArgs, collectVmSummary, safeVmMessage, vmQemuCommand, type VmCommandRunner } from "./vm-service.js";
 
 function config(): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: "/tmp/cyberos-missing.toml", CYBEROS_ROOT: "/tmp/cyberos" }, "/tmp/cyberos");
   return {
-    dataDir: "/tmp/cyberos",
-    databasePath: "/tmp/cyberos/db.sqlite",
+    ...base,
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 750 },
+    worker: { pollMs: 750, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
     vm: { enabled: true, libvirtUri: "qemu:///system", storagePath: "/tmp/vmstore", networkName: "default", isoRoots: ["/tmp/iso"], operationTimeoutMs: 1000, consoleMode: "serial" },
-    hostd: { socketPath: "/tmp/hostd.sock" },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: []
   };
 }
 
@@ -104,7 +102,6 @@ describe("VM service", () => {
     };
     const operation: VmOperationRecord = {
       id: "operation-stop",
-      approvalId: "approval-stop",
       action: "stop",
       targetId: "guest",
       status: "approved",
@@ -142,7 +139,6 @@ describe("VM service", () => {
     };
     const operation: VmOperationRecord = {
       id: "operation-reset",
-      approvalId: "approval-reset",
       action: "reset",
       targetId: "guest",
       status: "approved",
@@ -228,7 +224,6 @@ describe("VM service", () => {
     const nextConfig = { ...config(), vm: { ...config().vm!, storagePath, isoRoots: [tempDir] } };
     const operation: VmOperationRecord = {
       id: "operation-create",
-      approvalId: null,
       action: "create",
       targetId: "guest",
       status: "proposed",
@@ -272,7 +267,6 @@ describe("VM service", () => {
     };
     const operation: VmOperationRecord = {
       id: "operation-1",
-      approvalId: null,
       action: "create",
       targetId: "guest",
       status: "proposed",
@@ -314,7 +308,6 @@ describe("VM service", () => {
     };
     const operation: VmOperationRecord = {
       id: "operation-delete",
-      approvalId: "approval-delete",
       action: "delete",
       targetId: "guest",
       status: "approved",
@@ -368,7 +361,6 @@ describe("VM service", () => {
     const nextConfig = { ...config(), vm: { ...config().vm!, storagePath } };
     const operation: VmOperationRecord = {
       id: "operation-outside",
-      approvalId: "approval-outside",
       action: "delete",
       targetId: "guest",
       status: "approved",
@@ -404,7 +396,6 @@ describe("VM service", () => {
     };
     const operation: VmOperationRecord = {
       id: "operation-snapshot",
-      approvalId: "approval-snapshot",
       action: "snapshot",
       targetId: "guest",
       status: "approved",

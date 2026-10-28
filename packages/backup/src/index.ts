@@ -1,10 +1,9 @@
-import { ensureNasRoots, openCyberOsDb } from "@cyberos/db";
+import { openCyberOsDb } from "@cyberos/db";
 import { loadConfig } from "@cyberos/shared";
 import { checkBackup, initBackup, restoreBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
 
 const config = loadConfig();
-const db = openCyberOsDb(config.databasePath);
-ensureNasRoots(db, config.nasRoots);
+const db = openCyberOsDb(config.paths.databasePath);
 const [command, ...rest] = process.argv.slice(2);
 try {
   if (shouldSkipScheduledBackup(config, command)) {

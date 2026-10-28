@@ -5,13 +5,12 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acquireExecutionLock,
-  ensureNasRoots,
   isExecutionLockOwner,
   openCyberOsDb,
   releaseExecutionLock,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { initBackup, restoreBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
 
 let tempDir: string | undefined;
@@ -25,20 +24,19 @@ afterEach(async () => {
 });
 
 function config(root: string, repository: string, passwordFile: string): CyberOsConfig {
+  const rootDir = path.dirname(root);
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
   return {
-    environment: "development",
-    dataDir: path.join(path.dirname(root), "data"),
-    databasePath: path.join(path.dirname(root), "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: root, databasePath: path.join(rootDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: "/tmp/hostd.sock" },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "local", name: "Local", path: root, mountPolicy: "optional" }],
     backup: { enabled: true, repositoryPath: repository, passwordFile, stagingPath: path.join(path.dirname(root), "staging"), requireMount: false, retryCount: 1, timeoutMs: 1000, keepDaily: 7, keepWeekly: 4 },
     health: { staleIndexWarningMs: 7200000, staleIndexCriticalMs: 21600000, stalledRunMs: 900000, consecutiveFailureThreshold: 2, backupStaleMs: 93600000 }
   };
@@ -62,7 +60,6 @@ describe("backup workflow", () => {
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
     db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const calls: string[][] = [];
     let manifestVersion: number | undefined;
     const restic = { run: async (args: string[]) => {
@@ -82,6 +79,37 @@ describe("backup workflow", () => {
     expect(manifestVersion).toBe(2);
   });
 
+  it("requires exact repository and storage-pool mounts when mount enforcement is enabled", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-mounts-"));
+    const root = path.join(tempDir, "data");
+    const pool = path.join(root, "pool-1");
+    const repo = path.join(tempDir, "backup");
+    await mkdir(pool, { recursive: true });
+    await mkdir(repo);
+    const password = path.join(tempDir, "password");
+    await writeFile(password, "secret\n");
+    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
+    const cfg = config(root, repo, password);
+    cfg.backup = { ...cfg.backup!, requireMount: true };
+    const restic = { run: vi.fn(async () => ({ stdout: "[]", stderr: "", code: 0 })) };
+    const mounted = [
+      `23 22 8:2 / ${repo} rw - ext4 /dev/sdb1 rw`,
+      `24 22 8:3 / ${pool} rw - ext4 /dev/sdc1 rw`
+    ].join("\n");
+
+    await expect(validateBackup({ db, config: cfg, restic, mountInfo: mounted }))
+      .resolves.toMatchObject({ ok: true });
+    await expect(validateBackup({
+      db,
+      config: cfg,
+      restic,
+      mountInfo: `23 22 8:2 / ${repo} rw - ext4 /dev/sdb1 rw`
+    })).resolves.toMatchObject({
+      ok: false,
+      issues: [expect.stringContaining("Storage pool pool-1 is not mounted")]
+    });
+  });
+
   it("restores only CyberOS v2 manifests", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
     const root = path.join(tempDir, "root");
@@ -91,7 +119,6 @@ describe("backup workflow", () => {
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
     db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const cfg = config(root, repo, password);
     const databaseContents = "cyberos-v2-database";
     const checksum = createHash("sha256").update(databaseContents).digest("hex");
@@ -106,7 +133,7 @@ describe("backup workflow", () => {
             version: 2,
             runId: "run-v2",
             createdAt: new Date().toISOString(),
-            roots: [{ rootId: "local", path: root }],
+            dataRoot: root,
             database: "cyberos.sqlite",
             checksums: { "cyberos.sqlite": checksum }
           }));
@@ -128,7 +155,6 @@ describe("backup workflow", () => {
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
     db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const cfg = config(root, repo, password);
     const restic = {
       run: async (args: string[]) => {
@@ -137,7 +163,7 @@ describe("backup workflow", () => {
           await writeFile(path.join(target, "manifest.json"), JSON.stringify({
             version: 1,
             runId: "old-run",
-            roots: [{ rootId: "local", path: root }],
+            roots: [{ storagePoolId: "local", path: root }],
             database: "cyberos.sqlite",
             checksums: {}
           }));
@@ -150,53 +176,6 @@ describe("backup workflow", () => {
       .rejects.toThrow("restore manifest validation failed");
   });
 
-  it("continues backing up ready roots but skips retention when another root is unavailable", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
-    const badRoot = path.join(tempDir, "bad-root");
-    const goodRoot = path.join(tempDir, "good-root");
-    const repo = path.join(tempDir, "repo");
-    await mkdir(badRoot);
-    await mkdir(goodRoot);
-    await mkdir(repo);
-    const password = path.join(tempDir, "password");
-    await writeFile(password, "secret\n");
-    db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-    ensureNasRoots(db, [
-      { id: "bad", name: "Bad", path: badRoot, mountPolicy: "required" },
-      { id: "good", name: "Good", path: goodRoot, mountPolicy: "optional" }
-    ]);
-    const calls: string[][] = [];
-    const restic = {
-      run: async (args: string[]) => {
-        calls.push(args);
-        if (args[0] === "snapshots") return { stdout: '[{"id":"visible"}]', stderr: "", code: 0 };
-        return { stdout: '{"id":"visible"}\n', stderr: "", code: 0 };
-      }
-    };
-    const base = config(goodRoot, repo, password);
-    const cfg: CyberOsConfig = {
-      ...base,
-      nasRoots: [
-        { id: "bad", name: "Bad", path: badRoot, mountPolicy: "required" },
-        { id: "good", name: "Good", path: goodRoot, mountPolicy: "optional" }
-      ]
-    };
-    const result = await runBackup({
-      db,
-      config: cfg,
-      restic,
-      mountCommandRunner: {
-        run: async (_command, args) => JSON.stringify({
-          filesystems: [{ source: "/dev/root", uuid: "root", fstype: "ext4", target: args[2] === badRoot ? "/" : badRoot }]
-        })
-      }
-    });
-    expect(result.status).toBe("failed");
-    expect(result.failures).toEqual(expect.arrayContaining([{ rootId: "bad", path: ".", code: "ROOT_NOT_READY", reason: "path is not covered by a dedicated mount" }]));
-    expect(calls.some((args) => args[0] === "backup" && args.at(-1) === goodRoot)).toBe(true);
-    expect(calls.some((args) => args[0] === "forget")).toBe(false);
-  });
-
   it("allows explicit init to create a repository directory that does not exist yet", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-backup-"));
     const root = path.join(tempDir, "root");
@@ -206,7 +185,6 @@ describe("backup workflow", () => {
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
     db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const calls: string[][] = [];
     const restic = {
       run: async (args: string[]) => {
@@ -228,7 +206,6 @@ describe("backup workflow", () => {
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
     db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     expect(acquireExecutionLock(db, { name: "backup", owner: "active-backup" })).toBe(true);
     const restic = { run: vi.fn(async () => ({ stdout: "", stderr: "", code: 0 })) };
 
@@ -247,7 +224,6 @@ describe("backup workflow", () => {
     const password = path.join(tempDir, "password");
     await writeFile(password, "secret\n");
     db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-    ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
     const restic = {
       run: vi.fn(async () => {
         db!.prepare("UPDATE execution_locks SET owner = ? WHERE name = 'backup'")

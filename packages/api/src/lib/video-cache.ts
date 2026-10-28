@@ -8,7 +8,7 @@ export const VIDEO_TRANSCODE_VERSION = "h264-aac-v1";
 export const VIDEO_TRANSCODE_TIMEOUT_MS = 120_000;
 
 export interface VideoCacheSource {
-  rootId: string;
+  storagePoolId: string;
   relativePath: string;
   realPath: string;
   sizeBytes: number;
@@ -101,7 +101,7 @@ export class VideoCache {
       .update(
         JSON.stringify({
           version: VIDEO_TRANSCODE_VERSION,
-          rootId: source.rootId,
+          storagePoolId: source.storagePoolId,
           path: source.relativePath,
           sizeBytes: source.sizeBytes,
           modifiedAtMs: source.modifiedAtMs

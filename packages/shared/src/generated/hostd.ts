@@ -46,8 +46,6 @@ export type HostdEthernetUpdateInput = { config: HostdEthernetConfig, expectedRe
 
 export type HostdFtpConfig = { enabled: boolean, readOnly: boolean, allowGuest: boolean, port: number, passivePortStart: number, passivePortEnd: number, };
 
-export type HostdNasRoot = { id: string, path: string, };
-
 export type HostdNetworkAccessPoint = { active: boolean, ssid: string, bssid: string, channel: number, frequencyMHz: number, signal: number, band: string, security: string, savedProfileId: string | null, };
 
 export type HostdNetworkConfirmedDeviceInput = { device: string, confirmed: boolean, };
@@ -102,11 +100,11 @@ export type HostdResultContract = { "operation": "shares.apply", "result": Hostd
 
 export type HostdShareAccount = { username: string, password: string | null, };
 
-export type HostdShareApplyRequest = { settings: HostdShareSettings, roots: Array<HostdNasRoot>, };
+export type HostdShareApplyRequest = { settings: HostdShareSettings, dataRoot: string, };
 
 export type HostdShareApplyResult = { appliedAt: string, files: Array<string>, services: Array<string>, };
 
-export type HostdShareDefinition = { id: string, name: string, description: string, rootId: string, path: string, protocols: HostdShareProtocols, };
+export type HostdShareDefinition = { id: string, name: string, description: string, storagePoolId: string, path: string, protocols: HostdShareProtocols, };
 
 export type HostdShareProtocols = { smb: HostdSmbConfig, webdav: HostdWebDavConfig, ftp: HostdFtpConfig, nfs: HostdNfsConfig, dlna: HostdDlnaConfig, };
 

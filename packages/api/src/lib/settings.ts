@@ -10,11 +10,11 @@ import type {
 import { isModelProviderName as sharedIsModelProviderName } from "@cyberos/shared";
 import { defaultAgentCapabilityPolicySettings } from "@cyberos/db";
 
-export function defaultModelProviderSettings(config: CyberOsConfig): ModelProviderSettingsRecord {
+export function defaultModelProviderSettings(): ModelProviderSettingsRecord {
   return {
     generation: 1,
     providerName: "openai",
-    baseUrl: config.model.localEndpoint,
+    baseUrl: null,
     model: "",
     apiKey: null,
     updatedAt: new Date(0).toISOString()

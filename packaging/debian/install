@@ -4,9 +4,9 @@ target/release/cyberos-monitor usr/lib/cyberos/bin/
 target/release/cyberos-alerter usr/lib/cyberos/bin/
 target/release/cyberos-hostd usr/lib/cyberos/bin/
 target/release/cyberos-host-accessd usr/lib/cyberos/bin/
-target/release/cyberos-termux usr/lib/cyberos/bin/
+target/release/cyberos-terminald usr/lib/cyberos/bin/
 packages/worker/dist/* usr/lib/cyberos/apps/worker/dist/
-target/release/cyberos-photostaff usr/lib/cyberos/bin/
+target/release/cyberos-photos usr/lib/cyberos/bin/
 target/release/cyberos-indexer usr/lib/cyberos/bin/
 packages/backup/dist/* usr/lib/cyberos/apps/backup/dist/
 packages/ops/dist/* usr/lib/cyberos/apps/ops/dist/
@@ -30,7 +30,7 @@ packaging/scripts/cyberos-first-boot.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-nginx.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-configure-locale.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-refresh-groups.sh usr/lib/cyberos/scripts/
-packaging/scripts/cyberos-refresh-termux.sh usr/lib/cyberos/scripts/
+packaging/scripts/cyberos-refresh-terminald.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-nas-acl.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-share-acl.mjs usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-refresh-vod-player.sh usr/lib/cyberos/scripts/

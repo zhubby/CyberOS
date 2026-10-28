@@ -56,12 +56,12 @@ import {
   type PhotoWorkerHealth
 } from "../../api.js";
 import {
-  PHOTOSTAFF_UPLOAD_EXTENSIONS,
-  PHOTOSTAFF_XMP_EXTENSION,
+  PHOTOS_UPLOAD_EXTENSIONS,
+  PHOTOS_XMP_EXTENSION,
   photoExtension,
   photoMediaKind,
   type PhotoMediaKind
-} from "@cyberos/shared/photostaff-config";
+} from "@cyberos/shared/photos-config";
 import type {
   PhotoMetadataCondition,
   PhotoQueryFacets,
@@ -80,11 +80,10 @@ import {
 import { PhotoMapView } from "./PhotoMapView.js";
 import { PhotoSearchFilterMenu } from "./PhotoSearchFilterMenu.js";
 
-export const PHOTO_ACCEPT = PHOTOSTAFF_UPLOAD_EXTENSIONS.join(",");
+export const PHOTO_ACCEPT = PHOTOS_UPLOAD_EXTENSIONS.join(",");
 
 export function PhotoLibraryPanel({
   pools,
-  selectedRootId,
   locale,
   onRequestCreateFolder,
   onWorkQueuesChanged,
@@ -93,10 +92,8 @@ export function PhotoLibraryPanel({
   onNotifyWarning
 }: {
   pools: StorageFilePickerPool[];
-  selectedRootId: string;
   locale: SupportedLocale;
   onRequestCreateFolder?: (input: {
-    rootId: string;
     storagePoolId: string;
     parentPath: string;
     name: string;
@@ -160,7 +157,6 @@ export function PhotoLibraryPanel({
   const lightboxIndex = lightboxId ? photos.findIndex((photo) => photo.id === lightboxId) : -1;
   const lightboxPhoto = lightboxIndex >= 0 ? photos[lightboxIndex] ?? null : null;
   const lightboxMediaKind = lightboxPhoto ? photoMediaKindForAsset(lightboxPhoto) : null;
-  const canPropose = settings?.rootId === selectedRootId;
   const statusBusy = isPhotoBusy(status?.state);
   const queryFilters = useMemo(() => readyPhotoQueryFilters(filters, metadataFields), [filters, metadataFields]);
   const queryKey = useMemo(() => JSON.stringify({ filters: queryFilters, sortField, sortDirection }), [queryFilters, sortDirection, sortField]);
@@ -386,8 +382,8 @@ export function PhotoLibraryPanel({
   async function uploadFiles(files: File[]) {
     if (!settings || !files.length || busyAction) return;
     const supported = files
-      .filter((file) => photoMediaKind(file.name) !== null || photoExtension(file.name) === PHOTOSTAFF_XMP_EXTENSION)
-      .sort((left, right) => Number(photoExtension(left.name) === PHOTOSTAFF_XMP_EXTENSION) - Number(photoExtension(right.name) === PHOTOSTAFF_XMP_EXTENSION));
+      .filter((file) => photoMediaKind(file.name) !== null || photoExtension(file.name) === PHOTOS_XMP_EXTENSION)
+      .sort((left, right) => Number(photoExtension(left.name) === PHOTOS_XMP_EXTENSION) - Number(photoExtension(right.name) === PHOTOS_XMP_EXTENSION));
     if (!supported.length) {
       onNotifyWarning(t("workspace.photos.unsupportedUpload"));
       return;
@@ -572,7 +568,7 @@ export function PhotoLibraryPanel({
     }
   }
 
-  async function proposeBatch(operation: "move" | "trash", targetDirectory?: string) {
+  async function applyBatch(operation: "move" | "trash", targetDirectory?: string) {
     if (!selected.length || busyAction) return;
     setBusyAction(operation);
     try {
@@ -754,10 +750,10 @@ export function PhotoLibraryPanel({
               <button type="button" onClick={() => void downloadSelection()} disabled={Boolean(busyAction)} title={t("workspace.photos.downloadSelected")} aria-label={t("workspace.photos.downloadSelected")}>
                 <Download aria-hidden="true" size={15} /><span>{t("workspace.photos.downloadSelected")}</span>
               </button>
-              <button type="button" onClick={() => canPropose ? setPicker("move") : onNotifyWarning(t("workspace.photos.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photos.moveSelected")} aria-label={t("workspace.photos.moveSelected")}>
+              <button type="button" onClick={() => setPicker("move")} disabled={Boolean(busyAction)} title={t("workspace.photos.moveSelected")} aria-label={t("workspace.photos.moveSelected")}>
                 <FolderInput aria-hidden="true" size={15} /><span>{t("workspace.photos.moveSelected")}</span>
               </button>
-              <button ref={deleteTriggerRef} className="is-danger" type="button" onClick={() => canPropose ? setDeleteOpen(true) : onNotifyWarning(t("workspace.photos.switchRootForManagement"))} disabled={Boolean(busyAction)} title={t("workspace.photos.deleteSelected")} aria-label={t("workspace.photos.deleteSelected")}>
+              <button ref={deleteTriggerRef} className="is-danger" type="button" onClick={() => setDeleteOpen(true)} disabled={Boolean(busyAction)} title={t("workspace.photos.deleteSelected")} aria-label={t("workspace.photos.deleteSelected")}>
                 <Trash2 aria-hidden="true" size={15} /><span>{t("workspace.photos.deleteSelected")}</span>
               </button>
               <button type="button" onClick={() => setSelectedIds(new Set())} title={t("workspace.photos.clearSelection")} aria-label={t("workspace.photos.clearSelection")}>
@@ -859,7 +855,7 @@ export function PhotoLibraryPanel({
           mode="directory"
           directoryPurpose="photoMove"
           onCancel={() => setPicker(null)}
-          onSelect={(selection) => void proposeBatch("move", selection.path)}
+          onSelect={(selection) => void applyBatch("move", selection.path)}
           {...(onRequestCreateFolder ? { onRequestCreateFolder } : {})}
         />
       ) : null}
@@ -884,7 +880,7 @@ export function PhotoLibraryPanel({
           >
             <header><span className="eyebrow">{t("workspace.photos.deleteSelected")}</span><h2 id="photo-delete-title">{t("workspace.photos.deleteTitle", { count: selected.length })}</h2></header>
             <p>{t("workspace.photos.deleteBody")}</p>
-            <div className="file-action-actions"><button type="button" onClick={() => setDeleteOpen(false)} disabled={Boolean(busyAction)}>{t("common.actions.cancel")}</button><button className="danger-button" type="button" onClick={() => void proposeBatch("trash")} disabled={Boolean(busyAction)} aria-busy={busyAction === "trash" || undefined}>{t("workspace.photos.requestDelete")}</button></div>
+            <div className="file-action-actions"><button type="button" onClick={() => setDeleteOpen(false)} disabled={Boolean(busyAction)}>{t("common.actions.cancel")}</button><button className="danger-button" type="button" onClick={() => void applyBatch("trash")} disabled={Boolean(busyAction)} aria-busy={busyAction === "trash" || undefined}>{t("workspace.photos.requestDelete")}</button></div>
           </div>
         </div>
       ) : null}

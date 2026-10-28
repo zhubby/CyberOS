@@ -5,7 +5,9 @@ use crate::error::TransferError;
 
 pub struct Config {
     pub database_path: PathBuf,
+    pub data_root: PathBuf,
     pub incoming_path: PathBuf,
+    pub production: bool,
 }
 
 impl Config {
@@ -20,7 +22,9 @@ impl Config {
         };
         Ok(Self {
             database_path: root.join("state/cyberos.sqlite"),
+            data_root: root.join("data"),
             incoming_path: root.join("state/bluetooth/incoming"),
+            production: env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("production"),
         })
     }
 }

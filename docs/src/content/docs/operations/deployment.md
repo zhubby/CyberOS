@@ -1,17 +1,15 @@
 ---
-title: Debian 与 appliance 部署
-description: 原生 Debian 包、systemd 服务、Nginx 和 appliance 构建。
+title: Debian 部署
+description: 原生 Debian 包、systemd 服务、Nginx 和 CM5 部署。
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [packaging/debian/rules, packaging/debian/install, packaging/scripts/cyberos-deploy, packaging/systemd/cyberos-api.service, packaging/systemd/cyberos-host-accessd.service, packaging/systemd/cyberos-monitor.service, packaging/systemd/cyberos-alerter.service, packaging/appliance/manifest.toml]
+sourceOfTruth: [packaging/debian/rules, packaging/debian/install, packaging/scripts/cyberos-deploy, packaging/systemd/cyberos-api.service, packaging/systemd/cyberos-host-accessd.service, packaging/systemd/cyberos-monitor.service, packaging/systemd/cyberos-alerter.service]
 sidebar:
   order: 1
 ---
 
-生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 CyberOS 自身放入 Docker。API、monitor、alerter、worker、downloader、indexer、hostd、termux 是常驻服务；启用 Docker 时还会启动非 root `cyberos-host-accessd`。maintenance、health、backup 由 oneshot service 和 timer 驱动。
-
-NixOS 使用同一组原生进程，但由 flake module 声明 package、用户、目录、systemd、timer 和 Nginx。NixOS 的安装与升级流程、模块选项以及声明式宿主机边界见 [NixOS 部署](/docs/operations/nixos/)；本页其余步骤针对 Debian package 与 appliance。
+生产部署使用 Debian package、Node.js 22 和 Rust 1.95，不把 CyberOS 自身放入 Docker。API、monitor、alerter、worker、downloader、indexer、hostd、terminal 是常驻服务；启用 Docker 时还会启动非 root `cyberos-host-accessd`。maintenance、health、backup 由 oneshot service 和 timer 驱动。
 
 `cyberos-host-accessd` 的 Docker collector 兼容标记默认关闭。部署 helper 会保留并诊断这个可选服务，但不会把未验证代理标为可用。目标机完成真实 Netdata/node-exporter 兼容测试后，才可通过 systemd drop-in 设置 `CYBEROS_HOST_ACCESS_DOCKER_COMPATIBLE=1`；步骤、验收项和回退边界见 [Docker 宿主观测授权](/docs/reference/docker-host-access/)。
 
@@ -19,20 +17,20 @@ Nginx 只反向代理到 loopback API。程序文件位于 `/usr/lib/cyberos`，
 
 ## 安装前检查
 
-安装脚本支持 Debian 系的 `amd64` 和 `arm64`，必须由 root 执行。CyberOS 终端固定使用由包管理的 `cyberos` 身份，不依赖宿主机登录用户。生产 NAS 池必须直接挂载到 `/cyberos/data/<pool-id>`；默认池为 `/cyberos/data/primary`，默认不启用 Docker、VM 和 restic backup。
+安装脚本支持 Debian 系的 `amd64` 和 `arm64`，必须由 root 执行。CyberOS 终端固定使用由包管理的 `cyberos` 身份，不依赖宿主机登录用户。生产存储池必须直接挂载到 `/cyberos/data/<pool-id>`；系统不创建默认池，且默认不启用 Docker、VM 和 restic backup。
 
 确认：
 
 ```bash
 dpkg --print-architecture
-findmnt /cyberos/data/primary
+findmnt /cyberos/data/<pool-id>
 ```
 
 安装脚本会调整已知 Debian、Raspberry Pi 和 NodeSource 源，并把原文件备份到 `/cyberos/system-backups/apt`。在受管控主机上运行前，应先审阅 `CYBEROS_APT_*` 和 `CYBEROS_*_MIRROR` 参数。
 
 ## 从源码构建 Debian 包
 
-在目标架构主机上执行构建，让 Rust hostd/termux 和 `better-sqlite3` 等原生产物与运行环境一致。Rust 版本由 `rust-toolchain.toml` 固定为 1.95.0：
+在目标架构主机上执行构建，让 Rust hostd/terminal 和 `better-sqlite3` 等原生产物与运行环境一致。Rust 版本由 `rust-toolchain.toml` 固定为 1.95.0：
 
 ```bash
 npm ci
@@ -58,24 +56,23 @@ sudo CYBEROS_ENABLE_NGINX=1 \
   CYBEROS_ENABLE_DOCKER=0 \
   CYBEROS_ENABLE_VM=0 \
   CYBEROS_ENABLE_VOD_PLAYER=0 \
-  CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary \
   ./packaging/scripts/install.sh
 ```
 
-脚本会安装 Node.js 22 和 Rust 1.95.0、构建并安装本架构 `.deb`，然后仅在新安装时执行 `cyberos-first-boot.sh`。首次初始化会创建 `/cyberos/config/config.toml`、`/cyberos/state`、`/cyberos/home/termux`、`/cyberos/state/vod-player`、`/cyberos/data/primary`、`/cyberos/iso` 和本地管理员记录。它不会探测或迁移 CyberOS 之前的目录、配置、数据库或服务。
+脚本会安装 Node.js 22 和 Rust 1.95.0、构建并安装本架构 `.deb`，然后仅在新安装时执行 `cyberos-first-boot.sh`。首次初始化会创建 `/cyberos/config/config.toml`、`/cyberos/state`、`/cyberos/home/terminal`、`/cyberos/state/vod-player`、`/cyberos/data`、`/cyberos/backup`、`/cyberos/iso` 和本地管理员记录，但不会创建存储池。它不会探测或迁移 CyberOS 之前的目录、配置、数据库或服务。
 
 核心服务会被 `enable --now`：
 
 ```bash
 sudo systemctl status cyberos-api.service cyberos-monitor.service cyberos-alerter.service cyberos-worker@1.service cyberos-downloader.service cyberos-indexer.service
-sudo systemctl status cyberos-hostd.service cyberos-termux.service
+sudo systemctl status cyberos-hostd.service cyberos-terminald.service
 ```
 
 Indexer 会立即作为常驻服务启动；maintenance、health 和 backup timers 默认只启用。需要立即刷新索引时使用 API，health 仍可从运维设置页或 systemd 手动启动：
 
 ```bash
 curl -X POST http://127.0.0.1:3010/api/indexer/reindex \
-  -H 'content-type: application/json' -d '{"rootId":"local","recursive":true}'
+  -H 'content-type: application/json' -d '{"storagePoolId":"local","recursive":true}'
 sudo systemctl start cyberos-health.service
 ```
 
@@ -87,22 +84,22 @@ sudo systemctl start cyberos-health.service
 curl -fsS http://127.0.0.1:3010/health
 curl -I http://<host>/
 curl -I http://<host>/docs/
-curl -fsS http://127.0.0.1:3010/api/roots/readiness
+curl -fsS http://127.0.0.1:3010/api/system/storage
 curl -fsS http://127.0.0.1:3010/api/system/health
 curl -fsS http://127.0.0.1:3010/api/monitoring/overview
 ```
 
-验收至少包含：Web 首页、`/docs/`、root readiness、文件浏览、终端身份、一次索引、一次 health run，以及监控在启动 30 秒内从 `starting` 进入 `ready` 或明确的 `degraded`。`/health` 返回成功只表示 API liveness，不表示 NAS、监控、索引或 backup 已就绪。
+验收至少包含：Web 首页、`/docs/`、存储池挂载状态、文件浏览、终端身份、一次索引、一次 health run，以及监控在启动 30 秒内从 `starting` 进入 `ready` 或明确的 `degraded`。`/health` 返回成功只表示 API liveness，不表示存储池、监控、索引或 backup 已就绪。
 
 ## 安装与重装
 
-CyberOS 1.0 不提供旧产品配置、数据库、服务或浏览器状态的原地迁移。旧设备必须先备份 NAS 数据，然后全新安装或重新制作镜像；不要把旧配置或 SQLite 文件复制到 `/cyberos`。重装 CyberOS 时，先停止会访问 SQLite 或 NAS 的服务与 timers，并保留需要恢复的用户数据：
+CyberOS 2.0 不提供旧产品配置、数据库、服务或浏览器状态的原地迁移。旧设备必须先备份 NAS 数据，然后全新安装或重新制作镜像；不要把旧配置或 SQLite 文件复制到 `/cyberos`。重装 CyberOS 时，先停止会访问 SQLite 或 NAS 的服务与 timers，并保留需要恢复的用户数据：
 
 ```bash
 sudo systemctl stop cyberos-maintenance.timer cyberos-health.timer \
   cyberos-backup-daily.timer cyberos-backup-weekly.timer
 sudo systemctl stop cyberos-downloader.service cyberos-worker@1.service \
-  cyberos-indexer.service cyberos-alerter.service cyberos-monitor.service cyberos-vod-player.service cyberos-api.service cyberos-termux.service \
+  cyberos-indexer.service cyberos-alerter.service cyberos-monitor.service cyberos-vod-player.service cyberos-api.service cyberos-terminald.service \
   cyberos-hostd.service
 sudo dpkg -i .cyberos/cyberos_<version>_<arch>.deb
 sudo systemctl daemon-reload
@@ -116,18 +113,18 @@ sudo /usr/lib/cyberos/scripts/cyberos-nas-acl.sh --check --pool /cyberos/data/po
 sudo /usr/lib/cyberos/scripts/cyberos-nas-acl.sh --apply --pool /cyberos/data/pool1
 ```
 
-对其他已挂载池分别执行；自定义 NAS root 还需传入 `--root <configured-root>`。工具只处理已挂载、没有嵌套挂载的池，保留现有所有者并为 `cyberos` 增加访问和默认 ACL；属于 `cyberos` 的私有文件无需新增 ACL，仍保持原有 mask。只读快照、ACL 不支持或路径失败会明确报错。预览会检查已有 ACL mask；若新增授权可能放宽其他身份的有效权限，会拒绝整池迁移，须先逐路径审查，不能强行放宽 mask。每次成功进入 `--apply` 阶段都会将原 ACL 保存于输出所示的 `/cyberos/system-backups/permissions/acl.*/acl.dump`，应先查明原因，再在停止写入的状态下以 `setfacl --restore=<exact-backup-path>` 回滚；不要对旧池运行递归 `chown`。
+对其他已挂载池分别执行。工具只接受 `/cyberos/data` 的直接子目录，只处理已挂载、没有嵌套挂载的池，保留现有所有者并为 `cyberos` 增加访问和默认 ACL；属于 `cyberos` 的私有文件无需新增 ACL，仍保持原有 mask。只读快照、ACL 不支持或路径失败会明确报错。预览会检查已有 ACL mask；若新增授权可能放宽其他身份的有效权限，会拒绝整池应用，须先逐路径审查，不能强行放宽 mask。每次成功进入 `--apply` 阶段都会将原 ACL 保存于输出所示的 `/cyberos/system-backups/permissions/acl.*/acl.dump`，应先查明原因，再在停止写入的状态下以 `setfacl --restore=<exact-backup-path>` 回滚；不要对池运行递归 `chown`。
 
 共享服务只在启用的共享路径获得 ACL。hostd 应用共享设置时备份受影响路径的 ACL，服务重载失败会恢复；可写 NFS 客户端被映射为 `cyberos-nfs`，不继承客户端 UID。
 
 完成挂载和 ACL 验证后启动服务：
 
 ```bash
-sudo systemctl start cyberos-hostd.service cyberos-termux.service \
+sudo systemctl start cyberos-hostd.service cyberos-terminald.service \
   cyberos-api.service cyberos-monitor.service cyberos-alerter.service cyberos-worker@1.service cyberos-downloader.service cyberos-indexer.service \
   cyberos-vod-player.service
 sudo systemctl --failed
-sudo journalctl -u cyberos-hostd.service -u cyberos-termux.service -n 100 --no-pager
+sudo journalctl -u cyberos-hostd.service -u cyberos-terminald.service -n 100 --no-pager
 ```
 
 确认新安装通过验收后再重新启用 timers。CyberOS 主数据库迁移没有通用反向迁移；后续 CyberOS 版本如改变 schema，回滚时必须同时恢复与旧包匹配的主库/state 备份。旧版本不认识 `metrics.sqlite` 时应忽略并保留它；指标库可重建，不参与主库反向迁移。
@@ -140,4 +137,4 @@ sudo journalctl -u cyberos-hostd.service -u cyberos-termux.service -n 100 --no-p
 
 构建前先运行 `npm run version:check`。构建过程会在源码复制到 Debian staging 之前冻结 commit、tag/branch、构建时间、来源和 dirty 状态，并将 `/usr/lib/cyberos/build-info.json` 随包安装。运行中的 API 通过 `/api/system/build-info` 暴露可公开的追溯字段，Web 设置的“版本”分类展示同一份信息。
 
-发布 tag 必须严格匹配根 `package.json`、所有 workspace、Debian changelog 和 appliance manifest 中的统一 SemVer。使用 `npm run release -- patch|minor|major --note "..."` 只准备版本差异；commit、tag、push 和发布仍由维护者单独执行。
+发布 tag 必须严格匹配根 `package.json`、所有 workspace、docs、Cargo crates 和 Debian changelog 中的统一 SemVer。使用 `npm run release -- patch|minor|major --note "..."` 只准备版本差异；commit、tag、push 和发布仍由维护者单独执行。

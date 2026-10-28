@@ -16,11 +16,10 @@ export interface CyberOsPaths {
   systemBackupsDir: string;
   databasePath: string;
   metricsDatabasePath: string;
-  defaultDataRoot: string;
   hostdStateDir: string;
   networkManagerStateDir: string;
   dockerStateDir: string;
-  termuxHome: string;
+  terminalHome: string;
   vodPlayerStateDir: string;
   runDir: string;
 }
@@ -44,7 +43,7 @@ export function resolveCyberOsPaths(rootDir: string): CyberOsPaths {
     logsDir: path.join(root, "logs"),
     homeDir: path.join(root, "home"),
     dataRoot,
-    backupRoot: path.join(dataRoot, "backup"),
+    backupRoot: path.join(root, "backup"),
     appsRoot: path.join(root, "apps"),
     isoRoot: path.join(root, "iso"),
     vmRoot: path.join(root, "vm"),
@@ -52,11 +51,10 @@ export function resolveCyberOsPaths(rootDir: string): CyberOsPaths {
     systemBackupsDir: path.join(root, "system-backups"),
     databasePath: path.join(stateDir, "cyberos.sqlite"),
     metricsDatabasePath: path.join(stateDir, "metrics.sqlite"),
-    defaultDataRoot: path.join(dataRoot, "primary"),
     hostdStateDir,
     networkManagerStateDir: path.join(hostdStateDir, "network-manager"),
     dockerStateDir: path.join(hostdStateDir, "docker-daemon"),
-    termuxHome: path.join(root, "home", "termux"),
+    terminalHome: path.join(root, "home", "terminal"),
     vodPlayerStateDir: path.join(stateDir, "vod-player"),
     runDir: "/run/cyberos"
   };

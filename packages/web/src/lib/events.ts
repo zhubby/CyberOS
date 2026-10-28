@@ -10,6 +10,9 @@ export function eventToTranscriptMessage(event: AgentEvent): TranscriptMessage |
   if (event.type !== "agent.message") {
     return null;
   }
+  if (event.transcriptSequence === null) {
+    return null;
+  }
   const content = typeof event.payload.content === "string" ? event.payload.content : "";
   if (!content) {
     return null;
@@ -19,11 +22,14 @@ export function eventToTranscriptMessage(event: AgentEvent): TranscriptMessage |
     role: event.payload.role === "user" ? "user" : "assistant",
     content,
     createdAt: event.createdAt,
-    sequence: event.transcriptSequence ?? null
+    sequence: event.transcriptSequence
   };
 }
 
 function failedJobToTranscriptMessage(event: AgentEvent): TranscriptMessage | null {
+  if (event.transcriptSequence === null) {
+    return null;
+  }
   const error = typeof event.payload.error === "string" ? event.payload.error : "";
   if (!error) {
     return null;
@@ -33,7 +39,7 @@ function failedJobToTranscriptMessage(event: AgentEvent): TranscriptMessage | nu
     role: "assistant",
     content: `Agent failed: ${error}`,
     createdAt: event.createdAt,
-    sequence: event.transcriptSequence ?? null
+    sequence: event.transcriptSequence
   };
 }
 

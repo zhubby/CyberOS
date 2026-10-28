@@ -1,15 +1,19 @@
+import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
   createShareOperationRecord,
   getShareSettings,
-  listNasRoots,
   saveShareSettings,
   updateShareOperationStatus
 } from "@cyberos/db";
-import type { ShareOperationProposal } from "@cyberos/shared";
+import { type ShareOperationProposal } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { HostdRequestError } from "../lib/hostd-client.js";
-import { normalizeShareSettingsInput, type ShareSettingsInput } from "../lib/share-settings.js";
+import {
+  normalizeShareSettingsInput,
+  type ShareSettingsInput,
+  type ShareStoragePool
+} from "../lib/share-settings.js";
 import {
   applyShareSettings,
   collectShareSummary,
@@ -18,6 +22,7 @@ import {
   toPublicShareOperation
 } from "../lib/share-service.js";
 import { defaultShareSettings, toPublicShareSettings } from "../lib/settings.js";
+import { collectSystemStorage } from "../lib/system-management.js";
 
 export function registerShareRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   const { config, db } = context;
@@ -27,7 +32,7 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
     return {
       summary: await collectShareSummary(settings, {
         ...context.shares,
-        mutationPolicy: config.hostd.mutationPolicy ?? "mutable"
+        mutationPolicy: config.hostd.mutationPolicy
       })
     };
   });
@@ -39,7 +44,7 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
       expectedUpdatedAt?: string;
     };
   }>("/api/shares/account", async (request, reply) => {
-    if ((config.hostd.mutationPolicy ?? "mutable") === "declarative") {
+    if (config.hostd.mutationPolicy === "declarative") {
       reply.status(501).send({ error: "Share configuration is managed declaratively on this host" });
       return;
     }
@@ -57,7 +62,7 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
         if (existing.updatedAt !== expectedUpdatedAt) {
           throw new ShareAccountUpdateError(409, "Share settings changed; reload before saving the account");
         }
-        const roots = listNasRoots(db);
+        const storagePools = await listShareStoragePools(context);
         let settings;
         try {
           settings = await normalizeShareSettingsInput({
@@ -65,14 +70,14 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
               username,
               ...(password ? { password } : {})
             }
-          }, existing, roots);
+          }, existing, storagePools);
         } catch (error) {
           throw new ShareAccountUpdateError(400, safeShareMessage(error));
         }
 
         let applied;
         try {
-          applied = await applyShareSettings(config, settings, roots, context.shares);
+          applied = await applyShareSettings(config, settings, context.shares);
         } catch (error) {
           const statusCode = error instanceof HostdRequestError && error.statusCode === 503 ? 503 : 502;
           throw new ShareAccountUpdateError(statusCode, safeShareMessage(error));
@@ -100,14 +105,14 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
       settings?: ShareSettingsInput;
     };
   }>("/api/shares/settings", async (request, reply) => {
-    if ((config.hostd.mutationPolicy ?? "mutable") === "declarative") {
+    if (config.hostd.mutationPolicy === "declarative") {
       reply.status(501).send({ error: "Share configuration is managed declaratively on this host" });
       return;
     }
     const existing = getShareSettings(db) ?? defaultShareSettings(config);
-    const roots = listNasRoots(db);
     try {
-      const settings = await normalizeShareSettingsInput(request.body?.settings, existing, roots);
+      const storagePools = await listShareStoragePools(context);
+      const settings = await normalizeShareSettingsInput(request.body?.settings, existing, storagePools);
       const publicSettings = toPublicShareSettings(settings);
       const proposal: ShareOperationProposal = {
         action: "apply_settings",
@@ -120,7 +125,7 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
         settings
       });
       try {
-        const applied = await applyShareSettings(config, settings, roots, context.shares);
+        const applied = await applyShareSettings(config, settings, context.shares);
         const { updatedAt: _normalizedAt, ...settingsToSave } = settings;
         const saved = saveShareSettings(db, settingsToSave);
         const completed = updateShareOperationStatus(db, operation.id, "applied", {
@@ -143,6 +148,18 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
     } catch (error) {
       reply.status(400).send({ error: safeShareMessage(error) });
     }
+  });
+}
+
+async function listShareStoragePools(context: ApiRouteContext): Promise<ShareStoragePool[]> {
+  if (!context.system) return [];
+  const summary = await collectSystemStorage(context.system);
+  const dataRoot = context.config.paths.dataRoot;
+  return summary.pools.flatMap((pool) => {
+    const expectedPath = path.join(dataRoot, pool.id);
+    return pool.mountpoint && path.resolve(pool.mountpoint) === path.resolve(expectedPath)
+      ? [{ id: pool.id, path: pool.mountpoint }]
+      : [];
   });
 }
 

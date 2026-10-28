@@ -4,25 +4,24 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  claimNextPhotostaffJob,
-  enqueuePhotostaffJob,
-  ensureNasRoots,
-  finishPhotostaffJob,
-  getPhotostaffLibrarySettings,
+  claimNextPhotosJob,
+  enqueuePhotosJob,
+  finishPhotosJob,
+  getPhotosLibrarySettings,
   openCyberOsDb,
-  savePhotostaffMapSettings,
-  upsertPhotostaffAsset,
-  type PhotostaffMetadataWriteInput,
+  upsertPhotosAsset,
+  type PhotosMetadataWriteInput,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { PHOTOSTAFF_METADATA_SCHEMA_VERSION, type PhotostaffLibrarySettingsRecord, type CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, PHOTOS_METADATA_SCHEMA_VERSION, type PhotosLibrarySettingsRecord, type CyberOsConfig } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 import {
-  PhotostaffMapArchiveManager,
-  type PhotostaffMapArchiveSource
-} from "../lib/photostaff-map.js";
+  PhotosMapArchiveManager,
+  type PhotosMapArchiveSource
+} from "../lib/photos-map.js";
 
-const poolId = "/dev/md/test-photostaff";
+const poolId = "pool-1";
+const poolDevice = "/dev/md/pool-1";
 let tempDir: string | null = null;
 let db: CyberOsDatabase | null = null;
 
@@ -34,7 +33,7 @@ afterEach(async () => {
 });
 
 describe("photos API", () => {
-  it("serves and validates processing settings, worker health, and no legacy routes", async () => {
+  it("serves and validates processing settings and worker health", async () => {
     const { app } = await setup();
 
     const defaults = await app.inject({ method: "GET", url: "/api/settings/photos" });
@@ -68,7 +67,7 @@ describe("photos API", () => {
 
     const heartbeatAt = new Date().toISOString();
     db!.prepare(`
-      INSERT INTO photostaff_workers (worker_id, version, started_at, heartbeat_at)
+      INSERT INTO photos_workers (worker_id, version, started_at, heartbeat_at)
       VALUES ('worker-1', 'test', ?, ?)
     `).run(heartbeatAt, heartbeatAt);
     const status = await app.inject({ method: "GET", url: "/api/photos/status" });
@@ -78,20 +77,15 @@ describe("photos API", () => {
       workerHealth: { status: "ready", freshWorkers: 1, lastHeartbeatAt: heartbeatAt }
     });
 
-    expect((await app.inject({ method: "GET", url: "/api/photostaff/status" })).statusCode).toBe(404);
-    expect((await app.inject({ method: "GET", url: "/api/photostaff" })).statusCode).toBe(404);
-    expect((await app.inject({ method: "GET", url: "/api/photostaff/map/settings" })).statusCode).toBe(404);
-    expect((await app.inject({ method: "GET", url: "/api/settings/photostaff" })).statusCode).toBe(404);
-
     await configure(app);
-    db!.prepare("DELETE FROM photostaff_workers").run();
+    db!.prepare("DELETE FROM photos_workers").run();
     const health = await app.inject({ method: "GET", url: "/api/system/health" });
     expect(health.json()).toMatchObject({
       status: "failed",
-      photostaff: { status: "unavailable", queuedJobs: 1 }
+      photos: { status: "unavailable", queuedJobs: 1 }
     });
     expect(health.json().issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "photostaff_unavailable", severity: "critical" })
+      expect.objectContaining({ code: "photos_unavailable", severity: "critical" })
     ]));
     await app.close();
   });
@@ -100,25 +94,24 @@ describe("photos API", () => {
     const { app, root } = await setup();
     const configured = await configure(app);
     expect(configured.statusCode).toBe(200);
-    expect(configured.json().settings.path).toBe("Photostaff");
+    expect(configured.json().settings.path).toBe("Photos");
 
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     completeInitialScan(settings);
-    const firstAsset = await addPhotostaff(root, settings, "one.jpg", "2025-01-02T00:00:00.000Z");
-    await addPhotostaff(root, settings, "two.jpg", "2025-01-01T00:00:00.000Z");
+    const firstAsset = await addPhotos(root, settings, "one.jpg", "2025-01-02T00:00:00.000Z");
+    await addPhotos(root, settings, "two.jpg", "2025-01-01T00:00:00.000Z");
 
     const status = await app.inject({ method: "GET", url: "/api/photos/status" });
     expect(status.json().status).toMatchObject({ state: "ready", total: 2 });
     const first = await app.inject({ method: "GET", url: "/api/photos?limit=1" });
     expect(first.statusCode).toBe(200);
     expect(first.json().photos.map((photo: { name: string }) => photo.name)).toEqual(["one.jpg"]);
-    expect(first.json()).not.toHaveProperty("photostaff");
     expect(first.json().nextCursor).toEqual(expect.any(String));
     const second = await app.inject({ method: "GET", url: `/api/photos?limit=1&cursor=${encodeURIComponent(first.json().nextCursor)}` });
     expect(second.json().photos.map((photo: { name: string }) => photo.name)).toEqual(["two.jpg"]);
     const record = await app.inject({ method: "GET", url: `/api/photos/${firstAsset.id}/record` });
     expect(record.json()).toMatchObject({ photo: { id: firstAsset.id, name: "one.jpg" } });
-    expect(record.json()).not.toHaveProperty("photostaff");
+    expect(record.json()).not.toHaveProperty("photos");
     expect((await app.inject({ method: "GET", url: "/api/photos?cursor=bad" })).statusCode).toBe(400);
     await app.close();
   });
@@ -126,10 +119,10 @@ describe("photos API", () => {
   it("paginates filename sorting with the same SQLite case folding used by the cursor", async () => {
     const { app, root } = await setup();
     await configure(app);
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     completeInitialScan(settings);
-    await addPhotostaff(root, settings, "Ä-first.jpg", "2025-01-02T00:00:00.000Z");
-    await addPhotostaff(root, settings, "Ö-second.jpg", "2025-01-01T00:00:00.000Z");
+    await addPhotos(root, settings, "Ä-first.jpg", "2025-01-02T00:00:00.000Z");
+    await addPhotos(root, settings, "Ö-second.jpg", "2025-01-01T00:00:00.000Z");
 
     const first = await app.inject({
       method: "POST",
@@ -137,7 +130,6 @@ describe("photos API", () => {
       payload: { sort: { field: "name", direction: "asc" }, limit: 1 }
     });
     expect(first.json().photos.map((photo: { name: string }) => photo.name)).toEqual(["Ä-first.jpg"]);
-    expect(first.json()).not.toHaveProperty("photostaff");
     const second = await app.inject({
       method: "POST",
       url: "/api/photos/query",
@@ -154,7 +146,7 @@ describe("photos API", () => {
   it("streams originals and rejects duplicate uploads after the initial scan", async () => {
     const { app, root } = await setup();
     await configure(app);
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     const earlyUpload = await app.inject({
       method: "PUT",
       url: "/api/photos/upload?name=too-early.jpg",
@@ -188,7 +180,7 @@ describe("photos API", () => {
     expect(unsupported.statusCode).toBe(400);
 
     const body = Buffer.from("jpeg-like-test-data");
-    const existing = await addPhotostaff(root, settings, "existing.jpg", "2025-01-01T00:00:00.000Z", body);
+    const existing = await addPhotos(root, settings, "existing.jpg", "2025-01-01T00:00:00.000Z", body);
 
     const original = await app.inject({ method: "GET", url: `/api/photos/${existing.id}/original?download=1` });
     expect(original.statusCode).toBe(200);
@@ -207,39 +199,39 @@ describe("photos API", () => {
       method: "PUT",
       url: "/api/photos/upload?name=new.jpg",
       headers: { "content-type": "application/octet-stream" },
-      payload: Buffer.from("new-photostaff")
+      payload: Buffer.from("new-photos")
     });
     expect(uploaded.statusCode).toBe(201);
-    expect(uploaded.json().path).toBe(path.join("Photostaff", "new.jpg"));
+    expect(uploaded.json().path).toBe(path.join("Photos", "new.jpg"));
     const secondUpload = await app.inject({
       method: "PUT",
       url: "/api/photos/upload?name=second.jpg",
       headers: { "content-type": "application/octet-stream" },
-      payload: Buffer.from("second-photostaff")
+      payload: Buffer.from("second-photos")
     });
     expect(secondUpload.statusCode).toBe(201);
     const pendingDuplicate = await app.inject({
       method: "PUT",
       url: "/api/photos/upload?name=new-copy.jpg",
       headers: { "content-type": "application/octet-stream" },
-      payload: Buffer.from("new-photostaff")
+      payload: Buffer.from("new-photos")
     });
     expect(pendingDuplicate.statusCode).toBe(409);
-    expect(pendingDuplicate.json().duplicate).toMatchObject({ path: path.join("Photostaff", "new.jpg") });
+    expect(pendingDuplicate.json().duplicate).toMatchObject({ path: path.join("Photos", "new.jpg") });
     await app.close();
   });
 
-  it("streams native photostaff videos and reuses the transcode cache for other containers", async () => {
+  it("streams native photos videos and reuses the transcode cache for other containers", async () => {
     const { app, root } = await setup();
     await configure(app);
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     completeInitialScan(settings);
-    const native = await addPhotostaff(root, settings, "native.mp4", "2025-01-01T00:00:00.000Z", Buffer.from("native-video"), "video/mp4");
-    const webm = await addPhotostaff(root, settings, "native.webm", "2025-01-01T00:00:00.000Z", Buffer.from("native-webm"), "video/webm");
-    const converted = await addPhotostaff(root, settings, "converted.mkv", "2025-01-01T00:00:00.000Z", Buffer.from("source-video"), "video/x-matroska");
-    const broken = await addPhotostaff(root, settings, "broken.avi", "2025-01-01T00:00:00.000Z", Buffer.from("broken-video"), "video/x-msvideo");
-    const raw = await addPhotostaff(root, settings, "camera.cr3", "2025-01-01T00:00:00.000Z", Buffer.from("raw-source"), "image/x-canon-cr3");
-    const escaped = await addPhotostaff(root, settings, "../outside.mp4", "2025-01-01T00:00:00.000Z", Buffer.from("outside-video"), "video/mp4");
+    const native = await addPhotos(root, settings, "native.mp4", "2025-01-01T00:00:00.000Z", Buffer.from("native-video"), "video/mp4");
+    const webm = await addPhotos(root, settings, "native.webm", "2025-01-01T00:00:00.000Z", Buffer.from("native-webm"), "video/webm");
+    const converted = await addPhotos(root, settings, "converted.mkv", "2025-01-01T00:00:00.000Z", Buffer.from("source-video"), "video/x-matroska");
+    const broken = await addPhotos(root, settings, "broken.avi", "2025-01-01T00:00:00.000Z", Buffer.from("broken-video"), "video/x-msvideo");
+    const raw = await addPhotos(root, settings, "camera.cr3", "2025-01-01T00:00:00.000Z", Buffer.from("raw-source"), "image/x-canon-cr3");
+    const escaped = await addPhotos(root, settings, "../outside.mp4", "2025-01-01T00:00:00.000Z", Buffer.from("outside-video"), "video/mp4");
     let transcodeCalls = 0;
     const transcode = async (inputPath: string, outputPath: string) => {
       if (inputPath.endsWith("broken.avi")) {
@@ -289,7 +281,7 @@ describe("photos API", () => {
     expect(second.payload).toBe("converted-video-1");
     expect(transcodeCalls).toBe(1);
 
-    await writeFile(path.join(root, "Photostaff", "converted.mkv"), "changed-source-video");
+    await writeFile(path.join(root, "Photos", "converted.mkv"), "changed-source-video");
     const changed = await server.inject({ method: "GET", url: `/api/photos/${converted.id}/video` });
     expect(changed.statusCode).toBe(200);
     expect(changed.payload).toBe("converted-video-2");
@@ -298,7 +290,7 @@ describe("photos API", () => {
     const failed = await server.inject({ method: "GET", url: `/api/photos/${broken.id}/video` });
     expect(failed.statusCode).toBe(503);
     expect(failed.json().error).toBe("Video transcoding failed");
-    const cacheEntries = await readdir(path.join(tempDir!, "media-cache", "videos"));
+    const cacheEntries = await readdir(path.join(tempDir!, "state", "media-cache", "videos"));
     expect(cacheEntries).not.toEqual(expect.arrayContaining([expect.stringMatching(/\.part$/u)]));
     await server.close();
   });
@@ -307,23 +299,23 @@ describe("photos API", () => {
     const storageState = { mounted: true };
     const { app, root } = await setup(storageState);
     await configure(app);
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     completeInitialScan(settings);
-    const photostaff = await addPhotostaff(root, settings, "cached.jpg", "2025-01-01T00:00:00.000Z");
-    const video = await addPhotostaff(root, settings, "offline.mp4", "2025-01-01T00:00:00.000Z", Buffer.from("video"), "video/mp4");
+    const photos = await addPhotos(root, settings, "cached.jpg", "2025-01-01T00:00:00.000Z");
+    const video = await addPhotos(root, settings, "offline.mp4", "2025-01-01T00:00:00.000Z", Buffer.from("video"), "video/mp4");
     const thumbnail = Buffer.from("cached-webp");
-    const thumbnailPath = path.join(tempDir!, "photostaff", "thumbnail", "cached.jpg.webp");
+    const thumbnailPath = path.join(tempDir!, "state", "photos", "thumbnail", "cached.jpg.webp");
     await mkdir(path.dirname(thumbnailPath), { recursive: true });
     await writeFile(thumbnailPath, thumbnail);
 
     storageState.mounted = false;
-    const response = await app.inject({ method: "GET", url: `/api/photos/${photostaff.id}/thumbnail` });
+    const response = await app.inject({ method: "GET", url: `/api/photos/${photos.id}/thumbnail` });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toBe("image/webp");
     expect(response.rawPayload).toEqual(thumbnail);
-    expect((await app.inject({ method: "GET", url: `/api/photos/${photostaff.id}/preview` })).statusCode).toBe(404);
-    expect((await app.inject({ method: "GET", url: `/api/photos/${photostaff.id}/original` })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: `/api/photos/${photos.id}/preview` })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: `/api/photos/${photos.id}/original` })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: `/api/photos/${video.id}/video` })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: "/api/photos/missing/video" })).statusCode).toBe(404);
     await app.close();
@@ -332,11 +324,11 @@ describe("photos API", () => {
   it("moves photo batches directly and streams multi-photo zip exports", async () => {
     const { app, root } = await setup();
     await configure(app);
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     completeInitialScan(settings);
-    const first = await addPhotostaff(root, settings, "one.jpg", "2025-01-02T00:00:00.000Z");
-    const second = await addPhotostaff(root, settings, "two.jpg", "2025-01-01T00:00:00.000Z");
-    await mkdir(path.join(root, "Photostaff", "Archive"));
+    const first = await addPhotos(root, settings, "one.jpg", "2025-01-02T00:00:00.000Z");
+    const second = await addPhotos(root, settings, "two.jpg", "2025-01-01T00:00:00.000Z");
+    await mkdir(path.join(root, "Photos", "Archive"));
     const createExport = await app.inject({
       method: "POST",
       url: "/api/photos/exports",
@@ -355,33 +347,33 @@ describe("photos API", () => {
       payload: {
         assetIds: [first.id, second.id],
         operation: "move",
-        targetDirectory: path.join("Photostaff", "Archive")
+        targetDirectory: path.join("Photos", "Archive")
       }
     });
     expect(moved.statusCode).toBe(200);
     expect(moved.json().operations).toHaveLength(2);
     expect(db!.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db!.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
-    expect(db!.prepare("SELECT COUNT(*) FROM pending_approvals").pluck().get()).toBe(0);
-    expect(claimNextPhotostaffJob(db!, { workerId: "test", leaseMs: 30_000 })).toMatchObject({ kind: "full_scan" });
+    expect(db!.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
+    expect(claimNextPhotosJob(db!, { workerId: "test", leaseMs: 30_000 })).toMatchObject({ kind: "full_scan" });
     await app.close();
   });
 
-  it("rejects a batch move when selected photostaff share the same target name", async () => {
+  it("rejects a batch move when selected photos share the same target name", async () => {
     const { app, root } = await setup();
     await configure(app);
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     completeInitialScan(settings);
-    const first = await addPhotostaff(root, settings, path.join("A", "same.jpg"), "2025-01-02T00:00:00.000Z", Buffer.from("first"));
-    const second = await addPhotostaff(root, settings, path.join("B", "same.jpg"), "2025-01-01T00:00:00.000Z", Buffer.from("second"));
-    await mkdir(path.join(root, "Photostaff", "Archive"));
+    const first = await addPhotos(root, settings, path.join("A", "same.jpg"), "2025-01-02T00:00:00.000Z", Buffer.from("first"));
+    const second = await addPhotos(root, settings, path.join("B", "same.jpg"), "2025-01-01T00:00:00.000Z", Buffer.from("second"));
+    await mkdir(path.join(root, "Photos", "Archive"));
     const response = await app.inject({
       method: "POST",
       url: "/api/photos/actions",
       payload: {
         assetIds: [first.id, second.id],
         operation: "move",
-        targetDirectory: path.join("Photostaff", "Archive")
+        targetDirectory: path.join("Photos", "Archive")
       }
     });
 
@@ -393,9 +385,9 @@ describe("photos API", () => {
   it("queries indexed metadata with stable cursors and redacts sensitive details by default", async () => {
     const { app, root } = await setup();
     await configure(app);
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     completeInitialScan(settings);
-    const first = await addPhotostaff(
+    const first = await addPhotos(
       root,
       settings,
       "metadata-one.jpg",
@@ -404,7 +396,7 @@ describe("photos API", () => {
       "image/jpeg",
       indexedMetadata({ cameraModel: "Alpha 1", iso: 800, gpsLatitude: 31.23, gpsLongitude: 121.47 })
     );
-    await addPhotostaff(
+    await addPhotos(
       root,
       settings,
       "metadata-two.jpg",
@@ -430,7 +422,6 @@ describe("photos API", () => {
       photos: [{ id: first.id, metadata: { cameraModel: "Alpha 1", hasLocation: true } }],
       metadataIndex: { total: 2, indexed: 2, pending: 0 }
     });
-    expect(query.json()).not.toHaveProperty("photostaff");
     const firstPage = await app.inject({
       method: "POST",
       url: "/api/photos/query",
@@ -485,12 +476,12 @@ describe("photos API", () => {
     const mapFixture = pmtilesFixture(2);
     const { app, root, mapManager } = await setup({ mounted: true }, mapFixture);
     await configure(app);
-    const settings = getPhotostaffLibrarySettings(db!)!;
+    const settings = getPhotosLibrarySettings(db!)!;
     completeInitialScan(settings);
-    const first = await addPhotostaff(root, settings, "paired.jpg", "2025-01-02T00:00:00.000Z");
-    const second = await addPhotostaff(root, settings, "other.jpg", "2025-01-01T00:00:00.000Z");
-    const runningRefresh = enqueuePhotostaffJob(db!, { settings, kind: "path_refresh", path: settings.path });
-    expect(claimNextPhotostaffJob(db!, { workerId: "upload-race", leaseMs: 30_000 })?.id).toBe(runningRefresh.id);
+    const first = await addPhotos(root, settings, "paired.jpg", "2025-01-02T00:00:00.000Z");
+    const second = await addPhotos(root, settings, "other.jpg", "2025-01-01T00:00:00.000Z");
+    const runningRefresh = enqueuePhotosJob(db!, { settings, kind: "path_refresh", path: settings.path });
+    expect(claimNextPhotosJob(db!, { workerId: "upload-race", leaseMs: 30_000 })?.id).toBe(runningRefresh.id);
     const sidecarBody = Buffer.from("<x:xmpmeta>paired</x:xmpmeta>");
     const upload = await app.inject({
       method: "PUT",
@@ -499,8 +490,8 @@ describe("photos API", () => {
       payload: sidecarBody
     });
     expect(upload.statusCode).toBe(201);
-    finishPhotostaffJob(db!, { id: runningRefresh.id, workerId: "upload-race" });
-    expect(claimNextPhotostaffJob(db!, { workerId: "follow-up", leaseMs: 30_000 })).toMatchObject({
+    finishPhotosJob(db!, { id: runningRefresh.id, workerId: "upload-race" });
+    expect(claimNextPhotosJob(db!, { workerId: "follow-up", leaseMs: 30_000 })).toMatchObject({
       kind: "path_refresh",
       path: settings.path,
       status: "running"
@@ -521,40 +512,15 @@ describe("photos API", () => {
     });
     expect(trashed.statusCode).toBe(200);
     expect(trashed.json().operations.map((item: { sourcePath: string }) => item.sourcePath)).toEqual([
-      path.join("Photostaff", "paired.jpg"),
-      path.join("Photostaff", "paired.jpg.xmp")
+      path.join("Photos", "paired.jpg"),
+      path.join("Photos", "paired.jpg.xmp")
     ]);
 
-    savePhotostaffMapSettings(db!, {
-      rootId: "local",
-      storagePoolId: poolId,
-      path: path.join("Photostaff", "legacy.pmtiles"),
-      tileType: "png",
-      minZoom: 0,
-      maxZoom: 4,
-      bounds: null,
-      attribution: null
-    });
     expect((await app.inject({ method: "GET", url: "/api/photos/map/settings" })).json()).toMatchObject({
       map: { name: "Test map", version: "1", sizeBytes: mapFixture.length },
       settings: null,
       download: { state: "not_downloaded", receivedBytes: 0, totalBytes: mapFixture.length }
     });
-    expect((await app.inject({
-      method: "PUT",
-      url: "/api/photos/map/settings",
-      payload: { rootId: "local", storagePoolId: poolId, path: path.join("Photostaff", "legacy.pmtiles") }
-    })).statusCode).toBe(404);
-    expect((await app.inject({
-      method: "PATCH",
-      url: "/api/settings/photostaff",
-      payload: { processingConcurrency: 2 }
-    })).statusCode).toBe(404);
-    expect((await app.inject({
-      method: "POST",
-      url: "/api/photostaff/map/download"
-    })).statusCode).toBe(404);
-
     const started = await app.inject({ method: "POST", url: "/api/photos/map/download" });
     expect(started.statusCode).toBe(202);
     expect(started.json().download.state).toBe("downloading");
@@ -575,12 +541,11 @@ describe("photos API", () => {
 });
 
 async function setup(storageState = { mounted: true }, mapFixture?: Buffer) {
-  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-photostaff-api-"));
-  const root = path.join(tempDir, "root");
-  await mkdir(path.join(root, "Photostaff"), { recursive: true });
+  tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-photos-api-"));
+  const root = path.join(tempDir, "data", poolId);
+  await mkdir(path.join(root, "Photos"), { recursive: true });
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
-  const mapManager = mapFixture ? new PhotostaffMapArchiveManager({
+  const mapManager = mapFixture ? new PhotosMapArchiveManager({
     dataDir: tempDir,
     source: testMapSource(mapFixture),
     fetchImpl: async () => new Response(new Uint8Array(mapFixture))
@@ -589,7 +554,7 @@ async function setup(storageState = { mounted: true }, mapFixture?: Buffer) {
     config: testConfig(root),
     db,
     system: storageSystem(root, storageState),
-    ...(mapManager ? { photostaffMap: mapManager } : {})
+    ...(mapManager ? { photosMap: mapManager } : {})
   });
   return { app, root, mapManager };
 }
@@ -598,33 +563,33 @@ async function configure(app: Awaited<ReturnType<typeof buildServer>>) {
   return await app.inject({
     method: "PUT",
     url: "/api/photos/settings",
-    payload: { rootId: "local", storagePoolId: poolId, path: "Photostaff" }
+    payload: {  storagePoolId: poolId, path: "Photos" }
   });
 }
 
-function completeInitialScan(settings: PhotostaffLibrarySettingsRecord) {
-  const job = claimNextPhotostaffJob(db!, { workerId: "test", leaseMs: 30_000 });
+function completeInitialScan(settings: PhotosLibrarySettingsRecord) {
+  const job = claimNextPhotosJob(db!, { workerId: "test", leaseMs: 30_000 });
   expect(job).not.toBeNull();
-  finishPhotostaffJob(db!, { id: job!.id, workerId: "test" });
-  expect(getPhotostaffLibrarySettings(db!)).toEqual(settings);
+  finishPhotosJob(db!, { id: job!.id, workerId: "test" });
+  expect(getPhotosLibrarySettings(db!)).toEqual(settings);
 }
 
-async function addPhotostaff(
+async function addPhotos(
   root: string,
-  settings: PhotostaffLibrarySettingsRecord,
+  settings: PhotosLibrarySettingsRecord,
   name: string,
   takenAt: string,
   body = Buffer.from(name),
   mimeType = "image/jpeg",
-  metadata?: PhotostaffMetadataWriteInput
+  metadata?: PhotosMetadataWriteInput
 ) {
-  const photostaffPath = path.join(root, "Photostaff", name);
-  await mkdir(path.dirname(photostaffPath), { recursive: true });
-  await writeFile(photostaffPath, body);
+  const photosPath = path.join(root, "Photos", name);
+  await mkdir(path.dirname(photosPath), { recursive: true });
+  await writeFile(photosPath, body);
   const fileName = path.basename(name);
-  return upsertPhotostaffAsset(db!, {
+  return upsertPhotosAsset(db!, {
     settings,
-    path: path.join("Photostaff", name),
+    path: path.join("Photos", name),
     name: fileName,
     mimeType,
     sizeBytes: body.length,
@@ -648,11 +613,11 @@ function indexedMetadata(overrides: {
   iso: number;
   gpsLatitude?: number;
   gpsLongitude?: number;
-}): PhotostaffMetadataWriteInput {
+}): PhotosMetadataWriteInput {
   const latitude = overrides.gpsLatitude ?? null;
   const longitude = overrides.gpsLongitude ?? null;
   return {
-    schemaVersion: PHOTOSTAFF_METADATA_SCHEMA_VERSION,
+    schemaVersion: PHOTOS_METADATA_SCHEMA_VERSION,
     status: "ready",
     mediaKind: "image",
     capturedAt: "2025-01-02T00:00:00.000Z",
@@ -740,7 +705,7 @@ function pmtilesFixture(tileType: 1 | 2): Buffer {
   return buffer;
 }
 
-function testMapSource(body: Buffer): PhotostaffMapArchiveSource {
+function testMapSource(body: Buffer): PhotosMapArchiveSource {
   return {
     name: "Test map",
     version: "1",
@@ -753,20 +718,19 @@ function testMapSource(body: Buffer): PhotostaffMapArchiveSource {
 }
 
 function testConfig(root: string): CyberOsConfig {
+  const rootDir = tempDir!;
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
   return {
-    environment: "development",
-    dataDir: path.dirname(root),
-    databasePath: path.join(path.dirname(root), "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: path.dirname(root), databasePath: path.join(rootDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
-    hostd: { socketPath: "/tmp/hostd.sock" },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "local", name: "Local", path: root }]
   };
 }
 
@@ -777,11 +741,11 @@ function storageSystem(root: string, state: { mounted: boolean }) {
         if (command === "findmnt") {
           return JSON.stringify({
             filesystems: state.mounted
-              ? [{ source: poolId, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }]
+              ? [{ source: poolDevice, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }]
               : []
           });
         }
-        if (command === "mdadm") return `ARRAY ${poolId} name=photostaff UUID=photostaff`;
+        if (command === "mdadm") return `ARRAY ${poolDevice} name=${poolId} UUID=photos`;
         if (command === "smartctl") return JSON.stringify({ devices: [] });
         return JSON.stringify({ blockdevices: [] });
       }

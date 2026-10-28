@@ -105,17 +105,12 @@
   background: var(--channel-bg);
 }
 
-.workspace-header.has-root-switcher {
-  grid-template-columns: minmax(170px, 230px) minmax(0, 1fr) auto minmax(190px, 280px);
-  min-height: 70px;
-}
-
-.root-control {
+.storage-pool-control {
   display: grid;
   gap: 5px;
 }
 
-.root-control label {
+.storage-pool-control label {
   color: var(--muted-2);
   font-size: 10.5px;
   font-family: var(--font-emphasis);
@@ -123,7 +118,7 @@
   text-transform: uppercase;
 }
 
-.root-control .custom-select-trigger,
+.storage-pool-control .custom-select-trigger,
 .search input {
   height: 38px;
   padding: 0 10px;
@@ -2683,10 +2678,6 @@
   background: var(--subtle-bg);
 }
 
-.files-navigation-bar.has-root-switcher {
-  grid-template-columns: minmax(170px, 230px) minmax(190px, 1fr);
-}
-
 .files-navigation-bar.has-storage-pool-switcher {
   grid-template-columns: minmax(170px, 230px) minmax(190px, 1fr);
 }
@@ -2695,11 +2686,7 @@
   grid-template-columns: minmax(170px, 230px) minmax(190px, 1fr) auto;
 }
 
-.files-navigation-bar.has-root-switcher.has-storage-pool-switcher.has-multiple-switchers {
-  grid-template-columns: minmax(150px, 200px) minmax(150px, 220px) minmax(0, 1fr) minmax(190px, 280px);
-}
-
-.files-navigation-bar .root-control .custom-select-trigger,
+.files-navigation-bar .storage-pool-control .custom-select-trigger,
 .files-navigation-bar .search input,
 .files-navigation-bar .breadcrumbs {
   height: 42px;
@@ -3116,7 +3103,6 @@
 
 @media (max-width: 700px) {
   .files-navigation-bar,
-  .files-navigation-bar.has-root-switcher,
   .files-navigation-bar.has-storage-pool-switcher,
   .files-navigation-bar.has-batch-selection {
     grid-template-columns: minmax(0, 1fr);

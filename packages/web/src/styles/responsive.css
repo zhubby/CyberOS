@@ -70,7 +70,7 @@
     grid-template-columns: 1fr;
   }
 
-  .settings-indexer-root {
+  .settings-indexer-storage-pool {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -127,10 +127,9 @@
 
 @container workspace-stage (max-width: 520px) {
   .files-navigation-bar,
-  .files-navigation-bar.has-root-switcher,
   .files-navigation-bar.has-storage-pool-switcher,
   .files-navigation-bar.has-batch-selection,
-  .files-navigation-bar.has-root-switcher.has-storage-pool-switcher.has-multiple-switchers {
+  .files-navigation-bar.has-storage-pool-switcher.has-batch-selection {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -630,10 +629,6 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .workspace-header.has-root-switcher {
-    grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) auto;
-  }
-
   .search {
     grid-column: 1 / -1;
   }
@@ -746,14 +741,13 @@
   }
 
   .files-navigation-bar,
-  .files-navigation-bar.has-root-switcher,
   .files-navigation-bar.has-storage-pool-switcher,
   .files-navigation-bar.has-batch-selection,
-  .files-navigation-bar.has-root-switcher.has-storage-pool-switcher.has-multiple-switchers {
+  .files-navigation-bar.has-storage-pool-switcher.has-batch-selection {
     grid-template-columns: 1fr;
   }
 
-  .root-control,
+  .storage-pool-control,
   .breadcrumbs,
   .search {
     grid-column: 1 / -1;
@@ -1019,8 +1013,7 @@
     justify-self: start;
   }
 
-  .settings-system-list dd small,
-  .settings-root-list small {
+  .settings-system-list dd small {
     overflow: visible;
     text-overflow: clip;
     white-space: normal;

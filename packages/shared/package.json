@@ -10,7 +10,7 @@
     "./vod-player-client": "./src/vod-player-client.ts",
     "./docker-images": "./src/docker-images.ts",
     "./docker-resources": "./src/docker-resources.ts",
-    "./photostaff-config": "./src/photostaff-config.ts",
+    "./photos-config": "./src/photos-config.ts",
     "./hud-tokens.css": "./src/hud-tokens.css"
   },
   "types": "./src/index.ts",

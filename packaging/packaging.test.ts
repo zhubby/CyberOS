@@ -10,32 +10,6 @@ const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const execFileAsync = promisify(execFile);
 
 describe("native packaging artifacts", () => {
-  it("uses the offline importNpmLock contract for Nix production builds", async () => {
-    const packages = await readFile(path.join(repoRoot, "nix/packages.nix"), "utf8");
-    const module = await readFile(path.join(repoRoot, "nix/module.nix"), "utf8");
-
-    expect(packages).toContain("rootNpmDeps = pkgs.importNpmLock {");
-    expect(packages).toContain("node22NpmHooks = pkgs.callPackage");
-    expect(packages).toContain('{ nodejs = pkgs.nodejs_22; };');
-    expect(packages).toContain("npmDeps = rootNpmDeps;");
-    expect(packages).toContain("docsNpmDeps = pkgs.importNpmLock {");
-    expect(packages).toContain("importNpmLock.npmConfigHook");
-    expect(packages).toContain("node22NpmHooks.npmConfigHook");
-    expect(packages).not.toContain("importNpmLock.buildNodeModules");
-    expect(packages).toContain("rm -rf $out/lib/cyberos/node_modules/@cyberos");
-    expect(packages).toContain("const Database = require('better-sqlite3')");
-    expect(packages).toContain(
-      "../../packages/agent/node_modules/@earendil-works/pi-coding-agent"
-    );
-    expect(packages).toContain("import.meta.resolve('@earendil-works/pi-coding-agent')");
-    expect(packages).toContain("nativeBuildInputs = [ pkgs.coreutils pkgs.pkg-config ];");
-    expect(packages).toContain("for candidate in target/*/release; do");
-    expect(packages).toContain('SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";');
-    expect(module).toContain('SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";');
-    expect(module).toContain("photostaffRuntimePath = runtimePath ++");
-    expect(module).toContain("path = photostaffRuntimePath;");
-  });
-
   it("builds monitor and alerter as independent Rust applications", async () => {
     const workspace = await readFile(path.join(repoRoot, "Cargo.toml"), "utf8");
     const monitor = await readFile(path.join(repoRoot, "crates/monitor/Cargo.toml"), "utf8");
@@ -129,6 +103,9 @@ describe("native packaging artifacts", () => {
       "Environment=CYBEROS_ROOT=/cyberos"
     );
     await expect(readPackagingFile("systemd", "cyberos-downloader.service")).resolves.toContain(
+      "Environment=CYBEROS_ENVIRONMENT=production"
+    );
+    await expect(readPackagingFile("systemd", "cyberos-downloader.service")).resolves.toContain(
       "ProtectSystem=strict"
     );
     await expect(readPackagingFile("systemd", "cyberos-downloader.service")).resolves.toContain(
@@ -148,6 +125,7 @@ describe("native packaging artifacts", () => {
     expect(vodPlayerUnit).toContain("ProtectSystem=strict");
     expect(vodPlayerUnit).toContain("/cyberos/state/cyberos.sqlite-wal");
     expect(vodPlayerUnit).toContain("Wants=cyberos-api.service bluetooth.service bluealsa.service");
+    expect(vodPlayerUnit).toContain("Environment=CYBEROS_ENVIRONMENT=production");
     expect(vodPlayerUnit).not.toContain("RequiresMountsFor=/cyberos/data");
     const tvTarget = await readPackagingFile("systemd", "cyberos-tv.target");
     expect(tvTarget).toContain("Requires=cyberos-tv-prepare.service cyberos-tv-weston.service cyberos-tv-chromium.service cyberos-vod-player.service");
@@ -217,19 +195,21 @@ describe("native packaging artifacts", () => {
     expect(bluetoothUnit).toContain("User=cyberos");
     expect(bluetoothUnit).toContain("ExecStart=/usr/bin/dbus-run-session -- /usr/lib/cyberos/bin/cyberos-bluetoothd");
     expect(bluetoothUnit).toContain("RequiresMountsFor=/cyberos/data");
+    expect(bluetoothUnit).toContain("Environment=CYBEROS_ENVIRONMENT=production");
     expect(bluetoothUnit).toContain("ReadWritePaths=/cyberos/state/bluetooth");
     expect(bluetoothUnit).toContain("ReadOnlyPaths=/cyberos/data");
     expect(bluetoothUnit).not.toMatch(/ReadWritePaths=.*(?:^|\s)\/cyberos\/data(?:\s|$)/mu);
     expect(bluetoothUnit).toContain("RestrictAddressFamilies=AF_UNIX AF_BLUETOOTH");
     expect(bluetoothUnit).toContain("CapabilityBoundingSet=");
-    const photostaffUnit = await readPackagingFile("systemd", "cyberos-photostaff.service");
-    expect(photostaffUnit).toContain("ExecStart=/usr/lib/cyberos/bin/cyberos-photostaff");
-    expect(photostaffUnit).toContain("Type=notify");
-    expect(photostaffUnit).toContain("WatchdogSec=20s");
-    expect(photostaffUnit).toContain("TimeoutStopSec=30s");
-    expect(photostaffUnit).toContain("KillMode=control-group");
-    expect(photostaffUnit).toContain("RestrictAddressFamilies=AF_UNIX");
-    expect(photostaffUnit).not.toContain("RequiresMountsFor=/cyberos/data");
+    const photosUnit = await readPackagingFile("systemd", "cyberos-photos.service");
+    expect(photosUnit).toContain("ExecStart=/usr/lib/cyberos/bin/cyberos-photos");
+    expect(photosUnit).toContain("Type=notify");
+    expect(photosUnit).toContain("WatchdogSec=20s");
+    expect(photosUnit).toContain("TimeoutStopSec=30s");
+    expect(photosUnit).toContain("KillMode=control-group");
+    expect(photosUnit).toContain("Environment=CYBEROS_ENVIRONMENT=production");
+    expect(photosUnit).toContain("RestrictAddressFamilies=AF_UNIX");
+    expect(photosUnit).not.toContain("RequiresMountsFor=/cyberos/data");
     await expect(readPackagingFile("systemd", "cyberos-photo-worker.service")).rejects.toMatchObject({ code: "ENOENT" });
 
     const maintenanceUnit = await readPackagingFile("systemd", "cyberos-maintenance.service");
@@ -244,6 +224,7 @@ describe("native packaging artifacts", () => {
     expect(indexerUnit).toContain("Type=notify");
     expect(indexerUnit).toContain("WatchdogSec=20s");
     expect(indexerUnit).toContain("Restart=on-failure");
+    expect(indexerUnit).toContain("Environment=CYBEROS_ENVIRONMENT=production");
     expect(indexerUnit).toContain("ReadOnlyPaths=/cyberos/data");
     expect(indexerUnit).toContain("MemoryMax=1G");
     expect(indexerUnit).toContain("KillMode=control-group");
@@ -288,12 +269,12 @@ describe("native packaging artifacts", () => {
     expect(install).not.toContain("crates/monitor/dist/");
     expect(install).toContain("target/release/cyberos-hostd usr/lib/cyberos/bin/");
     expect(install).toContain("target/release/cyberos-host-accessd usr/lib/cyberos/bin/");
-    expect(install).toContain("target/release/cyberos-termux usr/lib/cyberos/bin/");
+    expect(install).toContain("target/release/cyberos-terminald usr/lib/cyberos/bin/");
     expect(install).not.toContain("packages/terminal-helper");
     expect(install).toContain("usr/lib/cyberos/apps/worker/dist/");
-    expect(install).toContain("target/release/cyberos-photostaff usr/lib/cyberos/bin/");
+    expect(install).toContain("target/release/cyberos-photos usr/lib/cyberos/bin/");
     expect(install).not.toContain("packages/photo-worker");
-    expect(install).not.toContain("crates/photostaff/dist/");
+    expect(install).not.toContain("crates/photos/dist/");
     expect(install).toContain("target/release/cyberos-indexer usr/lib/cyberos/bin/");
     expect(install).not.toContain("crates/indexer/dist/");
     expect(install).toContain("usr/lib/cyberos/apps/backup/dist/");
@@ -340,7 +321,7 @@ describe("native packaging artifacts", () => {
     expect(hostAccessUnit).toContain("NoNewPrivileges=yes");
     expect(install).toContain("packaging/scripts/cyberos-nginx.sh usr/lib/cyberos/scripts/");
     expect(install).toContain("packaging/scripts/cyberos-configure-locale.sh usr/lib/cyberos/scripts/");
-    expect(install).toContain("packaging/scripts/cyberos-refresh-termux.sh usr/lib/cyberos/scripts/");
+    expect(install).toContain("packaging/scripts/cyberos-refresh-terminald.sh usr/lib/cyberos/scripts/");
     expect(install).toContain("packaging/scripts/cyberos-nas-acl.sh usr/lib/cyberos/scripts/");
     expect(install).toContain("packaging/scripts/cyberos-share-acl.mjs usr/lib/cyberos/scripts/");
     expect(install).toContain("packaging/etc/samba.conf usr/share/cyberos/");
@@ -408,111 +389,37 @@ describe("native packaging artifacts", () => {
     expect(refreshVodPlayer).toContain("state path must be under /cyberos/state/vod-player");
     expect(refreshVodPlayer).not.toContain("CYBEROS_ENABLE_PLAYER");
     expect(postrm.indexOf("optional-groups.conf")).toBeLessThan(postrm.indexOf("systemctl daemon-reload"));
-    expect(postrm).toContain("cyberos-termux.service.d/identity.conf");
+    expect(postrm).toContain("cyberos-terminald.service.d/identity.conf");
     expect(postrm).toContain("cyberos-vod-player.service.d/identity.conf");
     expect(postrm).toContain("cyberos-vod-player.service.d/50-cyberos-tv-mode.conf");
     await expect(readPackagingFile("debian", "prerm")).resolves.toContain("cyberos-tv-mode disable");
   });
 
-  it("ships first-boot and appliance image scaffolding", async () => {
+  it("ships strict first-boot configuration for clean Debian installs", async () => {
     const firstBoot = await readPackagingFile("scripts", "cyberos-first-boot.sh");
-    const manifest = await readPackagingFile("appliance", "manifest.toml");
-    const buildImage = await readPackagingFile("appliance", "build-image.sh");
 
     expect(firstBoot).toContain("CYBEROS_ADMIN_DISPLAY_NAME");
     expect(firstBoot).toContain("CYBEROS_DOCKER_ENABLED");
     expect(firstBoot).toContain("CYBEROS_VM_ENABLED");
     expect(firstBoot).toContain("CYBEROS_VOD_PLAYER_ENABLED");
     expect(firstBoot).toContain("[vod_player]");
-    expect(firstBoot).toContain("CYBEROS_TERMUX_USER");
+    expect(firstBoot).toContain("CYBEROS_TERMINALD_USER");
     expect(firstBoot).not.toContain("chown -R cyberos:cyberos");
     expect(firstBoot).toContain('environment = "production"');
     expect(firstBoot).toContain('chown -R root:root "$STATE_DIR/hostd"');
-    expect(firstBoot).toContain("[[nas_roots]]");
-    expect(firstBoot).toContain("[model]");
+    expect(firstBoot).toContain('repository = "$ROOT_DIR/backup"');
+    expect(firstBoot).not.toContain("[model]");
     expect(firstBoot).toContain("[hostd]");
     expect(firstBoot).toContain("[monitoring]");
     expect(firstBoot).toContain("[shares]");
     expect(firstBoot).toContain('[ -e "$CONFIG_PATH" ]');
     expect(firstBoot).toContain('CYBEROS_FIRST_BOOT_FORCE:-0');
-    expect(manifest).toContain("nodejs");
-    expect(manifest).toContain("sqlite3");
-    expect(manifest).toContain("tmux");
-    expect(manifest).toContain("nginx");
-    expect(manifest).toContain("docker-cli");
-    expect(manifest).toContain("nginx.service");
-    expect(manifest).toContain("git");
-    expect(manifest).toContain("cyberos-hostd.service");
-    expect(manifest).toContain("cyberos-monitor.service");
-    expect(manifest).toContain("cyberos-alerter.service");
-    expect(manifest).not.toContain("cyberos-share-helper.service");
-    expect(manifest).toContain("cyberos-termux.service");
-    expect(manifest).not.toContain("cyberos-terminal-helper.service");
-    expect(manifest).toContain("cyberos-downloader.service");
-    expect(manifest).toContain("cyberos-photostaff.service");
-    expect(manifest).toContain("cyberos-vod-player.service");
-    expect(manifest).toContain("cyberos-tv.target");
-    expect(manifest).toContain("cyberos-tv-weston.service");
-    expect(manifest).toContain("cyberos-tv-gamepad.service");
-    expect(manifest).toContain("cyberos-bluetoothd.service");
-    expect(manifest).not.toContain("cyberos-player-helper.service");
-    expect(manifest).toContain("mpv");
-    expect(manifest).toContain("chromium");
-    expect(manifest).toContain("weston");
-    expect(manifest).toContain("wtype");
-    expect(manifest).toContain("samba");
-    expect(buildImage).toMatch(/--include=.*(^|,)git(,|\\|\s)/s);
-    expect(buildImage).toMatch(/--include=.*(^|,)samba(,|\\|\s)/s);
-    expect(buildImage).toMatch(/--include=.*(^|,)bluez(,|\\|\s)/s);
-    expect(buildImage).toMatch(/--include=.*(^|,)bluez-obexd(,|\\|\s)/s);
-    expect(buildImage).toContain("bluez-alsa-utils");
-    expect(buildImage).toContain("libasound2-plugin-bluez");
-    expect(buildImage).toContain("dbus-user-session");
-    expect(buildImage).toContain("CYBEROS_ENABLE_TV_MODE");
-    expect(buildImage).toContain("systemctl enable cyberos-tv.target");
-    expect(manifest).toContain("tesseract-ocr");
-    expect(manifest).toContain("tesseract-ocr-chi-sim");
-    expect(manifest).toContain("tesseract-ocr-eng");
-    expect(manifest).toContain("cyberos-indexer.service");
-    expect(manifest).not.toContain("cyberos-indexer.timer");
-    expect(manifest).toContain("libheif-examples");
-    expect(manifest).toContain("libimage-exiftool-perl");
-    expect(manifest).toContain("libvips-tools");
-    expect(manifest).toContain("ffmpeg");
-    expect(manifest).toContain("libraw-bin");
-    expect(buildImage).toContain("libheif-examples");
-    expect(buildImage).toContain("libimage-exiftool-perl");
-    expect(buildImage).toContain("libvips-tools");
-    expect(buildImage).toContain("ffmpeg");
-    expect(buildImage).toContain("libraw-bin");
-    expect(manifest).toContain("mdadm");
-    expect(manifest).toContain("btrfs-progs");
-    expect(manifest).toContain("smartmontools");
-    expect(buildImage).toContain("btrfs-progs");
-    expect(manifest).toContain("unzip");
-    expect(manifest).toContain("unrar-free");
-    expect(manifest).toContain("cyberos-maintenance.timer");
-    expect(manifest).not.toContain("cyberos-scheduler");
-    expect(manifest).toContain("cyberos-backup-daily.timer");
-    expect(manifest).toContain("cyberos-backup-weekly.timer");
-    expect(manifest).toContain("cyberos-health.timer");
-    expect(buildImage).toContain("cyberos-backup-daily.timer");
-    expect(buildImage).toContain("cyberos-backup-weekly.timer");
-    expect(buildImage).toContain("cyberos-health.timer");
-    expect(buildImage).toContain("cyberos-monitor.service");
-    expect(buildImage).toContain("cyberos-alerter.service");
-    expect(buildImage).not.toContain("cyberos-scheduler");
-    expect(buildImage).toContain("cyberos-nginx.sh");
-    expect(buildImage).toContain("CYBEROS_NODE_MIRROR");
-    expect(buildImage).toContain("SHASUMS256.txt");
-    expect(buildImage).toContain("/usr/local/bin/node");
-    expect(buildImage).toContain("PRODUCT_VERSION");
-    expect(buildImage).not.toContain("cyberos_0.1.0");
     expect(firstBoot).toContain('password_file = "$ROOT_DIR/config/restic-password"');
     expect(firstBoot).not.toContain("restic-password\" =");
     expect(firstBoot).toContain('[ ! -e "$DATABASE_PATH" ] && [ ! -L "$DATABASE_PATH" ]');
     expect(firstBoot).toContain("CyberOS first boot requires a new database");
-    expect(firstBoot).toContain("PRAGMA user_version = 2;");
+    expect(firstBoot).not.toContain("PRAGMA user_version");
+    expect(firstBoot).not.toContain('sqlite3 "$DATABASE_PATH"');
     await expect(readPackagingFile("systemd", "cyberos-share-helper.service")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -571,7 +478,7 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("CYBEROS_ENABLE_DOCKER");
     expect(installer).toContain("docker-cli");
     expect(installer).toContain("CYBEROS_ENABLE_VM");
-    expect(installer).toContain("TERMINAL_USER=${CYBEROS_TERMUX_USER:-cyberos}");
+    expect(installer).toContain("TERMINAL_USER=${CYBEROS_TERMINALD_USER:-cyberos}");
     expect(installer).not.toContain("${SUDO_USER:-}");
     expect(installer).toContain("CYBEROS_LOCALE");
     expect(localeScript).toContain("AcceptEnv");
@@ -678,7 +585,7 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('[ "$actual_config_sha256" = "$expected_config_sha256" ]');
     expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/cyberos-deploy --config-sha256");
     expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/cyberos-deploy --database-check");
-    expect(deployWorkflow).toContain("/usr/lib/cyberos/bin/cyberos-termux");
+    expect(deployWorkflow).toContain("/usr/lib/cyberos/bin/cyberos-terminald");
     expect(deployWorkflow).toContain("cyberos-health.timer");
     expect(deployWorkflow).toContain("NextElapseUSecMonotonic");
     expect(deployWorkflow).toContain('payload?.operations?.health?.status !== "ready"');
@@ -790,33 +697,33 @@ describe("native packaging artifacts", () => {
     expect(webdav).not.toContain("/run/cyberos/webdav");
   });
 
-  it("ships an isolated Rust Termux daemon", async () => {
-    const unit = await readPackagingFile("systemd", "cyberos-termux.service");
-    const refresh = await readPackagingFile("scripts", "cyberos-refresh-termux.sh");
+  it("ships an isolated Rust Terminal daemon", async () => {
+    const unit = await readPackagingFile("systemd", "cyberos-terminald.service");
+    const refresh = await readPackagingFile("scripts", "cyberos-refresh-terminald.sh");
 
     expect(unit).toContain("User=cyberos");
     expect(unit).toContain("Environment=CYBEROS_ROOT=/cyberos");
     expect(unit).toContain("ProtectHome=tmpfs");
     expect(unit).toContain("RestrictSUIDSGID=yes");
-    expect(unit).toContain("termux.sock");
+    expect(unit).toContain("terminald.sock");
     expect(unit).toContain("CapabilityBoundingSet=");
     expect(unit).toContain("InaccessiblePaths=/cyberos/config /cyberos/state /cyberos/logs");
-    expect(unit).toContain("ReadWritePaths=/run/cyberos /cyberos/data /cyberos/home/termux");
+    expect(unit).toContain("ReadWritePaths=/run/cyberos /cyberos/data /cyberos/home/terminal");
     expect(unit).toContain("KillMode=process");
-    expect(unit).toContain("ExecStart=/usr/lib/cyberos/bin/cyberos-termux");
+    expect(unit).toContain("ExecStart=/usr/lib/cyberos/bin/cyberos-terminald");
     expect(unit).not.toContain("/node");
     expect(refresh).toContain("User=%s\\n");
     expect(refresh).toContain("WorkingDirectory=%s\\n");
     expect(refresh).not.toContain("BindPaths=%s\\n");
-    expect(refresh).toContain("CYBEROS_TERMUX_SOCKET_PATH");
-    expect(refresh).toContain("CYBEROS_TERMUX_CONNECT_TIMEOUT_MS");
+    expect(refresh).toContain("CYBEROS_TERMINALD_SOCKET_PATH");
+    expect(refresh).toContain("CYBEROS_TERMINALD_CONNECT_TIMEOUT_MS");
     expect(refresh).toContain("terminal user must be cyberos");
     expect(refresh).toContain("escape_systemd_value()");
     expect(refresh).toContain("s/%/%%/g");
     expect(refresh).toContain('ReadWritePaths="%s"\\n');
     const postinst = await readPackagingFile("debian", "postinst");
     expect(postinst).toContain("ln -sfn /usr/lib/cyberos/scripts/cyberos-deploy /usr/local/sbin/cyberos-deploy");
-    expect(postinst).not.toContain("legacy_termux_home");
+    expect(postinst).not.toContain("legacy_terminal_home");
     expect(await readPackagingFile("scripts", "cyberos-nas-acl.sh")).toContain("findmnt -rn --mountpoint");
     expect(await readPackagingFile("scripts", "cyberos-nas-acl.sh")).toContain("getfacl --absolute-names");
   });
@@ -862,7 +769,7 @@ describe("native packaging artifacts", () => {
       "for unit in $STATEFUL_RUNTIME_UNITS; do",
       "systemctl enable $RUNTIME_SERVICES",
       "start_service_stably cyberos-hostd.service",
-      "start_service_stably cyberos-termux.service",
+      "start_service_stably cyberos-terminald.service",
       "start_service_stably cyberos-api.service",
       "wait_for_url http://127.0.0.1:3010/health",
       'restore_unit_state cyberos-vod-player.service "$state_dir"',
@@ -870,7 +777,7 @@ describe("native packaging artifacts", () => {
       "start_service_stably cyberos-alerter.service",
       "systemctl start cyberos-health.service",
       "start_service_stably cyberos-worker@1.service",
-      "start_service_stably cyberos-photostaff.service",
+      "start_service_stably cyberos-photos.service",
       "start_service_stably cyberos-downloader.service",
       "start_service_stably cyberos-bluetoothd.service",
       "start_service_stably cyberos-indexer.service",
@@ -901,7 +808,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
     expect(deploy).toContain("sleep 30");
     expect(deploy).toContain(
-      "CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-termux.service cyberos-api.service cyberos-worker@1.service cyberos-photostaff.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service'"
+      "CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-terminald.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service'"
     );
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
     expect(deploy).toContain('die "one or more services restarted during stabilization"');
@@ -931,7 +838,8 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("--config-sha256");
     expect(deploy).toContain("--database-check");
     expect(deploy).toContain("PRAGMA user_version;");
-    expect(deploy).toContain("CyberOS database format must be 2");
+    expect(deploy).toContain('database_format" = 3');
+    expect(deploy).toContain("CyberOS database format must be 3");
     expect(deploy).toContain("--no-upgrade-backup)");
     expect(deploy).toContain('log "upgrade backups disabled for this deployment"');
     expect(deploy).toContain('if [ "$create_upgrade_backup" -eq 1 ]; then');
@@ -948,9 +856,9 @@ describe("native packaging artifacts", () => {
     expect(deploy).not.toContain("cyberos-player-helper.service");
     expect(deploy).toContain('tar -C /cyberos -czf "$backup_path/config.tgz" config');
     expect(deploy).toContain('tar -C /cyberos -czf "$backup_path/state.tgz" state home');
-    expect(deploy).toContain("cyberos-termux");
+    expect(deploy).toContain("cyberos-terminald");
     expect(deploy).toContain("package.deb must be a regular file");
-    expect(deploy).toContain("/api/roots/readiness");
+    expect(deploy).toContain("/api/system/storage");
     expect(deploy).toContain("/api/indexer/status");
     expect(deploy).toContain('status?.queue?.stalled === false');
     expect(deploy).toContain("/api/system/build-info");

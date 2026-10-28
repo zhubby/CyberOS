@@ -27,7 +27,6 @@ export interface ClaimedFileBatchItem {
 
 interface FileBatchRow {
   id: string;
-  root_id: string;
   storage_pool_id: string;
   operation: FileBatchOperation;
   target_directory: string | null;
@@ -59,7 +58,7 @@ interface FileBatchItemRow {
 }
 
 const BATCH_COLUMNS = `
-  id, root_id, storage_pool_id, operation, target_directory, status,
+  id, storage_pool_id, operation, target_directory, status,
   total_count, completed_count, success_count, failed_count, cancelled_count,
   current_source_path, error, created_at, updated_at, finished_at
 `;
@@ -72,7 +71,6 @@ const ITEM_COLUMNS = `
 export function createFileBatch(
   db: CyberOsDatabase,
   input: {
-    rootId: string;
     storagePoolId: string;
     operation: FileBatchOperation;
     targetDirectory?: string | null;
@@ -86,24 +84,24 @@ export function createFileBatch(
   const duplicateQuery = db.prepare(`
     SELECT i.source_path
     FROM file_batch_items i JOIN file_batches b ON b.id = i.batch_id
-    WHERE b.root_id = ? AND b.storage_pool_id = ? AND i.source_path = ?
+    WHERE b.storage_pool_id = ? AND i.source_path = ?
       AND b.status IN ('queued', 'running')
     LIMIT 1
   `);
 
   db.transaction(() => {
     const duplicatePaths = input.items
-      .map((item) => duplicateQuery.pluck().get(input.rootId, input.storagePoolId, item.sourcePath) as string | undefined)
+      .map((item) => duplicateQuery.pluck().get(input.storagePoolId, item.sourcePath) as string | undefined)
       .filter((sourcePath): sourcePath is string => Boolean(sourcePath));
     if (duplicatePaths.length) throw new FileBatchConflictError([...new Set(duplicatePaths)]);
 
     db.prepare(`
       INSERT INTO file_batches (
-        id, root_id, storage_pool_id, operation, target_directory, status,
+        id, storage_pool_id, operation, target_directory, status,
         total_count, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
     `).run(
-      batchId, input.rootId, input.storagePoolId, input.operation,
+      batchId, input.storagePoolId, input.operation,
       input.targetDirectory ?? null, input.items.length, now, now
     );
     const insertItem = db.prepare(`
@@ -144,11 +142,10 @@ export function getFileBatch(db: CyberOsDatabase, id: string): FileBatchRecord |
 
 export function listFileBatches(
   db: CyberOsDatabase,
-  input: { rootId?: string; storagePoolId?: string; limit?: number } = {}
+  input: { storagePoolId?: string; limit?: number } = {}
 ): FileBatchRecord[] {
   const clauses: string[] = [];
   const values: Array<string | number> = [];
-  if (input.rootId) { clauses.push("root_id = ?"); values.push(input.rootId); }
   if (input.storagePoolId) { clauses.push("storage_pool_id = ?"); values.push(input.storagePoolId); }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
@@ -301,7 +298,6 @@ function mapFileBatch(db: CyberOsDatabase, row: FileBatchRow): FileBatchRecord {
   `).all(row.id) as Array<{ source_path: string; error: string }>;
   return {
     id: row.id,
-    rootId: row.root_id,
     storagePoolId: row.storage_pool_id,
     operation: row.operation,
     targetDirectory: row.target_directory,

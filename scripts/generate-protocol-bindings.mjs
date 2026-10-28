@@ -8,7 +8,7 @@ import { fileURLToPath, URL } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const checkedInDirectory = path.join(root, "packages/shared/src/generated");
-const expectedFiles = ["hostd.ts", "termux.ts", "vod-player.ts"];
+const expectedFiles = ["hostd.ts", "terminal.ts", "vod-player.ts"];
 const check = process.argv.includes("--check");
 const temporaryRoot = check ? await mkdtemp(path.join(os.tmpdir(), "cyberos-protocol-")) : null;
 const outputDirectory = temporaryRoot ?? checkedInDirectory;
@@ -17,7 +17,7 @@ try {
   await rm(outputDirectory, { recursive: true, force: true });
   await mkdir(outputDirectory, { recursive: true });
 
-  for (const packageName of ["cyberos-vod-player", "cyberos-termux", "cyberos-hostd"]) {
+  for (const packageName of ["cyberos-vod-player", "cyberos-terminald", "cyberos-hostd"]) {
     const result = spawnSync(
       "cargo",
       ["test", "--locked", "-p", packageName, "export_protocol_bindings", "--", "--ignored"],

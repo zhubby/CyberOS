@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 use tokio::time::{MissedTickBehavior, interval, timeout};
 
 use crate::command::{CommandRunner, SystemCommandRunner};
-use crate::config::{ConfiguredNasRoot, HostMutationPolicy, HostdConfig};
+use crate::config::{HostMutationPolicy, HostdConfig};
 use crate::error::{ErrorCode, HostdError};
 use crate::protocol::{
     HostdRequest, HostdResult, MAX_FRAME_BYTES, RequestEnvelope, ResponseEnvelope,
@@ -32,7 +32,7 @@ pub struct HostdServer {
 
 struct HostdState {
     runner: Arc<dyn CommandRunner>,
-    nas_roots: Vec<ConfiguredNasRoot>,
+    data_root: std::path::PathBuf,
     mutation_policy: HostMutationPolicy,
     shares_lock: Mutex<()>,
     storage_lock: Mutex<()>,
@@ -49,13 +49,13 @@ impl HostdServer {
     }
 
     pub fn with_runner(config: HostdConfig, runner: Arc<dyn CommandRunner>) -> Self {
-        let nas_roots = config.nas_roots.clone();
+        let data_root = config.data_root.clone();
         let mutation_policy = config.mutation_policy;
         Self {
             config,
             state: Arc::new(HostdState {
                 runner,
-                nas_roots,
+                data_root,
                 mutation_policy,
                 shares_lock: Mutex::new(()),
                 storage_lock: Mutex::new(()),
@@ -79,7 +79,7 @@ impl HostdServer {
             tracing::error!(code = ?error.code, message = %error.message, "could not recover unfinished Ethernet transaction");
             return Err(error);
         }
-        crate::host_access::reconcile_capacity_anchors(&self.state.nas_roots).await;
+        crate::host_access::reconcile_capacity_anchors(&self.state.data_root).await;
         let listener = bind_socket(&self.config.socket_path, &self.config.socket_group).await?;
         tracing::info!(socket = %self.config.socket_path.display(), "hostd listening");
         let allowed_uids = Arc::new(self.config.allowed_uids);
@@ -114,7 +114,7 @@ impl HostdServer {
                     }
                 }
                 _ = host_access_reconciliation.tick() => {
-                    crate::host_access::reconcile_capacity_anchors(&self.state.nas_roots).await;
+                    crate::host_access::reconcile_capacity_anchors(&self.state.data_root).await;
                 }
                 result = shutdown_signal() => {
                     result?;
@@ -308,7 +308,7 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
         HostdRequest::SharesApply(request) => {
             require_mutable_host(state.mutation_policy, "Share configuration")?;
             let _guard = state.shares_lock.lock().await;
-            crate::shares::apply(request, state.runner.as_ref(), &state.nas_roots)
+            crate::shares::apply(request, state.runner.as_ref(), &state.data_root)
                 .await
                 .map(HostdResult::SharesApply)
         }
@@ -457,7 +457,7 @@ mod tests {
     ) -> Arc<HostdState> {
         Arc::new(HostdState {
             runner,
-            nas_roots: Vec::new(),
+            data_root: "/cyberos/data".into(),
             mutation_policy,
             shares_lock: Mutex::new(()),
             storage_lock: Mutex::new(()),

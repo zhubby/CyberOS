@@ -7,11 +7,9 @@ import { registerHealthRoutes } from "./health.js";
 import { registerIndexerRoutes } from "./indexer.js";
 import { registerBackupRoutes } from "./backup.js";
 import { registerHealthStatusRoutes } from "./health-status.js";
-import { registerReadinessRoutes } from "./readiness.js";
 import { registerJobRoutes } from "./jobs.js";
 import { registerOperationRoutes } from "./operations.js";
 import { registerNotificationRoutes } from "./notifications.js";
-import { registerRootRoutes } from "./roots.js";
 import { registerSessionRoutes } from "./sessions.js";
 import { registerSettingsRoutes } from "./settings.js";
 import { registerShareRoutes } from "./shares.js";
@@ -31,9 +29,7 @@ import { registerTvRoutes } from "./tv.js";
 
 export function registerApiRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   registerHealthRoutes(server, context);
-  registerRootRoutes(server, context);
   registerIndexerRoutes(server, context);
-  registerReadinessRoutes(server, context);
   registerBackupRoutes(server, context);
   registerHealthStatusRoutes(server, context);
   registerSettingsRoutes(server, context);

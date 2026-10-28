@@ -2,12 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, listOperationNotifications, openCyberOsDb, saveBluetoothSettings, type CyberOsDatabase } from "@cyberos/db";
-import type { CyberOsConfig, VodPlayerStatus } from "@cyberos/shared";
+import { listOperationNotifications, openCyberOsDb, saveBluetoothSettings, type CyberOsDatabase } from "@cyberos/db";
+import { loadConfig, type CyberOsConfig, type VodPlayerStatus } from "@cyberos/shared";
 import { VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { buildServer } from "../server.js";
 
-const poolId = "/dev/md/test-pool";
+const poolId = "pool-1";
+const poolDevice = "/dev/md/pool-1";
 let tempDir: string | null = null;
 let db: CyberOsDatabase | null = null;
 
@@ -31,16 +32,16 @@ describe("VOD Player API", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/vod-player/command",
-      payload: { type: "play", rootId: "local", storagePoolId: poolId, path: "clip.mp4" }
+      payload: { type: "play",  storagePoolId: poolId, path: "clip.mp4" }
     });
     expect(response.statusCode).toBe(200);
-    expect(calls).toEqual([{ type: "play", rootId: "local", storagePoolId: poolId, relativePath: "clip.mp4" }]);
+    expect(calls).toEqual([{ type: "play",  storagePoolId: poolId, relativePath: "clip.mp4" }]);
     await app.close();
 
     const traversal = await server.inject({
       method: "POST",
       url: "/api/vod-player/command",
-      payload: { type: "play", rootId: "local", storagePoolId: poolId, path: "../clip.mp4" }
+      payload: { type: "play",  storagePoolId: poolId, path: "../clip.mp4" }
     });
     expect(traversal.statusCode).toBe(400);
     await server.close();
@@ -59,7 +60,7 @@ describe("VOD Player API", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/vod-player/command",
-      payload: { type: "play", rootId: "local", storagePoolId: poolId, path: "clip.mp4" }
+      payload: { type: "play",  storagePoolId: poolId, path: "clip.mp4" }
     });
     expect(response.statusCode).toBe(200);
     expect(calls).toEqual([expect.objectContaining({
@@ -72,8 +73,7 @@ describe("VOD Player API", () => {
       url: "/api/vod-player/command",
       payload: {
         type: "play",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         path: "clip.mp4",
         audioDeviceId: "alsa/hw:0"
       }
@@ -104,7 +104,7 @@ describe("VOD Player API", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/vod-player/command",
-      payload: { type: "play", rootId: "local", storagePoolId: poolId, path: "notes.txt" }
+      payload: { type: "play",  storagePoolId: poolId, path: "notes.txt" }
     });
     expect(response.statusCode).toBe(415);
     expect(response.json()).toMatchObject({ code: "UNSUPPORTED_MEDIA" });
@@ -122,7 +122,7 @@ describe("VOD Player API", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/vod-player/command",
-      payload: { type: "play", rootId: "local", storagePoolId: poolId, path: "clip.mp4" }
+      payload: { type: "play",  storagePoolId: poolId, path: "clip.mp4" }
     });
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({ code: "STORAGE_UNAVAILABLE" });
@@ -191,7 +191,6 @@ describe("VOD Player API", () => {
     const app = await buildServer({ config: testConfig(root, true), db: db!, vodPlayer: runtime });
 
     await app.inject({ method: "GET", url: "/api/vod-player/status" });
-    await app.inject({ method: "GET", url: "/api/vod-player/status" });
 
     expect(listOperationNotifications(db!)).toEqual([
       expect.objectContaining({
@@ -208,28 +207,27 @@ describe("VOD Player API", () => {
 
 async function setup(): Promise<{ server: Awaited<ReturnType<typeof buildServer>>; root: string }> {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-vod-player-api-"));
-  const root = path.join(tempDir, "root");
-  await mkdir(root);
+  const root = path.join(tempDir, "data", poolId);
+  await mkdir(root, { recursive: true });
   await writeFile(path.join(root, "clip.mp4"), "video");
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
   const server = await buildServer({ config: testConfig(root, false), db, system: storageSystem(root) });
   return { server, root };
 }
 
 function testConfig(root: string, enabled: boolean): CyberOsConfig {
+  const rootDir = tempDir!;
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
   return {
-    environment: "development",
-    dataDir: path.dirname(root),
-    databasePath: path.join(path.dirname(root), "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: path.dirname(root), databasePath: path.join(rootDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
-    hostd: { socketPath: "/tmp/hostd.sock" },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: {
       enabled,
       socketPath: "/tmp/vod-player.sock",
@@ -246,7 +244,6 @@ function testConfig(root: string, enabled: boolean): CyberOsConfig {
       hwdec: "auto-safe",
       user: "cyberos"
     },
-    nasRoots: [{ id: "local", name: "Local", path: root }]
   };
 }
 
@@ -254,8 +251,8 @@ function storageSystem(root: string) {
   return {
     commandRunner: {
       async run(command: string) {
-        if (command === "findmnt") return JSON.stringify({ filesystems: [{ source: poolId, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
-        if (command === "mdadm") return "ARRAY /dev/md/test-pool name=test UUID=test";
+        if (command === "findmnt") return JSON.stringify({ filesystems: [{ source: poolDevice, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
+        if (command === "mdadm") return `ARRAY ${poolDevice} name=${poolId} UUID=test`;
         if (command === "smartctl") return JSON.stringify({ devices: [] });
         return JSON.stringify({ blockdevices: [] });
       }
@@ -279,8 +276,7 @@ function vodPlayerStatus(): VodPlayerStatus {
     sessionId: "session-1",
     serviceInstanceId: "instance-1",
     revision: 1,
-    rootId: "local",
-    storagePoolId: poolId,
+        storagePoolId: poolId,
     relativePath: "clip.mp4",
     fileName: "clip.mp4",
     mediaFileId: null,

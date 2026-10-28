@@ -1,46 +1,47 @@
-use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::{Component, Path, PathBuf};
 
 use tokio::fs;
 
-use crate::config::ConfiguredNasRoot;
 use crate::error::HostdError;
 
-use super::model::{NasRoot, ResolvedShare, ShareApplyRequest, ShareSettings};
+use super::model::{ResolvedShare, ShareApplyRequest, ShareSettings};
 use super::render::safe_inline;
 
 pub(super) async fn resolve_shares<'a>(
     settings: &'a ShareSettings,
-    roots: &[ConfiguredNasRoot],
+    data_root: &Path,
 ) -> Result<Vec<ResolvedShare<'a>>, HostdError> {
-    let roots = roots
-        .iter()
-        .map(|root| (&root.id, root))
-        .collect::<HashMap<_, _>>();
     let mut resolved = Vec::with_capacity(settings.shares.len());
     for share in &settings.shares {
-        let root = roots.get(&share.root_id).ok_or_else(|| {
-            HostdError::validation(format!("NAS root {} is not configured", share.root_id))
-        })?;
-        let root_path = normalize_path(&root.path);
+        validate_storage_pool_id(&share.storage_pool_id)?;
+        let root_path = normalize_path(&data_root.join(&share.storage_pool_id));
         let candidate_path = normalize_path(&root_path.join(&share.path));
         if !path_inside(&root_path, &candidate_path) {
             return Err(HostdError::validation(format!(
-                "Share {} escapes NAS root {}",
-                share.id, root.id
+                "Share {} escapes storage pool {}",
+                share.id, share.storage_pool_id
             )));
         }
-        let real_root = fs::canonicalize(&root_path)
-            .await
-            .map_err(|_| HostdError::validation(format!("NAS root {} is unavailable", root.id)))?;
+        let real_root = fs::canonicalize(&root_path).await.map_err(|_| {
+            HostdError::validation(format!(
+                "Storage pool {} is unavailable",
+                share.storage_pool_id
+            ))
+        })?;
+        if real_root != root_path {
+            return Err(HostdError::validation(format!(
+                "Storage pool {} contains a symlink or non-canonical component",
+                share.storage_pool_id
+            )));
+        }
         let absolute_path = fs::canonicalize(&candidate_path).await.map_err(|_| {
             HostdError::validation(format!("Share {} path is unavailable", share.id))
         })?;
         if !path_inside(&real_root, &absolute_path) {
             return Err(HostdError::validation(format!(
-                "Share {} resolves outside NAS root {}",
-                share.id, root.id
+                "Share {} resolves outside storage pool {}",
+                share.id, share.storage_pool_id
             )));
         }
         let config_path = absolute_path.to_str().ok_or_else(|| {
@@ -56,28 +57,25 @@ pub(super) async fn resolve_shares<'a>(
     Ok(resolved)
 }
 
-pub(super) fn validate_requested_roots(
-    requested_roots: &[NasRoot],
-    configured_roots: &[ConfiguredNasRoot],
+pub(super) fn validate_requested_data_root(
+    requested_data_root: &Path,
+    configured_data_root: &Path,
 ) -> Result<(), HostdError> {
-    let configured = configured_roots
-        .iter()
-        .map(|root| (root.id.as_str(), normalize_path(&root.path)))
-        .collect::<HashMap<_, _>>();
-    let mut seen = HashSet::new();
-    for root in requested_roots {
-        let Some(configured_path) = configured.get(root.id.as_str()) else {
-            return Err(HostdError::validation(format!(
-                "NAS root {} is not configured by hostd",
-                root.id
-            )));
-        };
-        if !seen.insert(root.id.as_str()) || normalize_path(&root.path) != *configured_path {
-            return Err(HostdError::validation(format!(
-                "NAS root {} does not match hostd configuration",
-                root.id
-            )));
-        }
+    if normalize_path(requested_data_root) != normalize_path(configured_data_root) {
+        return Err(HostdError::validation(
+            "Requested data root does not match hostd configuration",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_storage_pool_id(value: &str) -> Result<(), HostdError> {
+    let mut components = Path::new(value).components();
+    if value.is_empty()
+        || !matches!(components.next(), Some(Component::Normal(_)))
+        || components.next().is_some()
+    {
+        return Err(HostdError::validation("Storage pool id is invalid"));
     }
     Ok(())
 }

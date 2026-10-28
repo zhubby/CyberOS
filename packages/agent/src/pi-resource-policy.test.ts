@@ -31,7 +31,6 @@ describe("PiResourcePolicy", () => {
 function session(overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord {
   return {
     id: "session-1",
-    rootId: "local",
     currentPath: ".",
     createdAt: "2026-10-27T00:00:00.000Z",
     updatedAt: "2026-10-27T00:00:00.000Z",

@@ -21,7 +21,13 @@ impl BluetoothTransferService {
         std::fs::create_dir_all(&config.incoming_path)?;
         let db = Db::open(&config.database_path)?;
         db.recover_interrupted(&config.incoming_path)?;
-        let obex = ObexRuntime::initialize(db.clone(), config.incoming_path.clone()).await?;
+        let obex = ObexRuntime::initialize(
+            db.clone(),
+            config.data_root.clone(),
+            config.incoming_path.clone(),
+            config.production,
+        )
+        .await?;
         Ok(Self { db, obex })
     }
 

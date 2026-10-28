@@ -25,8 +25,7 @@ interface StorageLike {
 export function readStoredWorkspacePanel(storage: StorageLike | null = browserStorage()): WorkspacePanelId {
   try {
     const storedPanel = storage?.getItem(WORKSPACE_PANEL_STORAGE_KEY) ?? null;
-    const panel = storedPanel === "photostaff" ? "photos" : storedPanel;
-    return isWorkspacePanelId(panel) ? panel : DEFAULT_WORKSPACE_PANEL;
+    return isWorkspacePanelId(storedPanel) ? storedPanel : DEFAULT_WORKSPACE_PANEL;
   } catch {
     return DEFAULT_WORKSPACE_PANEL;
   }

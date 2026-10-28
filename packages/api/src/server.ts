@@ -5,7 +5,6 @@ import Fastify, { type FastifyInstance } from "fastify";
 import path from "node:path";
 import {
   deleteExpiredDockerComposeHostAccessDrafts,
-  deleteExpiredDockerCreateDrafts,
   deleteExpiredMcpResourceTokens,
   deleteExpiredMcpTransferTokens,
   expireCapabilityApprovals,
@@ -19,7 +18,7 @@ import {
 } from "@cyberos/db";
 import { MonitoringReader } from "@cyberos/monitoring";
 import type { ApiRouteContext, ServerDependencies } from "./context.js";
-import { DEFAULT_MONITORING_CONFIG, type MonitoringQueryRequest } from "@cyberos/shared";
+import type { MonitoringQueryRequest } from "@cyberos/shared";
 import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
 import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
@@ -49,7 +48,7 @@ import { reconcileAgentMcp } from "./lib/agent-mcp-settings.js";
 
 export type { ServerDependencies } from "./context.js";
 
-export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, monitoringEvents: monitoringEventsDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photostaffMap, hostAccess }: ServerDependencies): Promise<FastifyInstance> {
+export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, monitoringEvents: monitoringEventsDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photosMap, hostAccess }: ServerDependencies): Promise<FastifyInstance> {
   if (!isLoopbackHost(config.api.host)) {
     throw new Error("CyberOS API must bind to a loopback host");
   }
@@ -74,7 +73,6 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   await server.register(fastifyWebsocket);
   reconcileAgentMcp(db, config);
   const expireHostAccessDrafts = () => {
-    deleteExpiredDockerCreateDrafts(db);
     deleteExpiredDockerComposeHostAccessDrafts(db);
     deleteExpiredMcpResourceTokens(db);
     deleteExpiredMcpTransferTokens(db);
@@ -82,32 +80,38 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   };
   expireHostAccessDrafts();
   const hostAccessRuntime = hostAccess ?? {
-    policy: new DockerHostAccessPolicy(db),
+    policy: new DockerHostAccessPolicy(db, {
+      runtimeRoot: path.join(config.paths.runDir, "host-access"),
+      dataRoot: config.paths.dataRoot
+    }),
     control: new DockerHostAccessControlClient()
   };
   const compose = docker?.compose ?? new DockerComposeService(
     () => effectiveDockerConfig(config, getDockerSettings(db)).docker,
     db,
-    config.paths?.appsRoot ?? config.appsRoot,
+    config.paths.appsRoot,
     hostAccessRuntime.policy,
     hostAccessRuntime.control
   );
   const dockerRuntime = { ...docker, compose };
   const fileBatches = new FileBatchRunner({ config, db, ...(system ? { system } : {}), log: server.log });
   const monitoring = monitoringDependency ?? new MonitoringReader(
-    config.metricsDatabasePath ?? path.join(config.dataDir, "metrics.sqlite"),
-    config.monitoring ?? DEFAULT_MONITORING_CONFIG
+    config.paths.metricsDatabasePath,
+    config.monitoring
   );
   const monitoringEvents = monitoringEventsDependency ?? new MonitoringEventBroker({
     socketPath: process.env.CYBEROS_MONITORING_EVENTS_SOCKET
       ?? (config.environment === "production"
-        ? path.join(config.paths?.runDir ?? "/run/cyberos", "monitoring-events.sock")
-        : path.join(config.dataDir, "monitoring-events.sock")),
+        ? path.join(config.paths.runDir, "monitoring-events.sock")
+        : path.join(config.paths.stateDir, "monitoring-events.sock")),
     log: server.log
   });
   await monitoringEvents.start();
   const resourceBaseUrl = `http://127.0.0.1:${config.api.port}`;
-  const capabilityAdapters = createCapabilityAdapters(server, { resourceBaseUrl });
+  const capabilityAdapters = createCapabilityAdapters(server, {
+    resourceBaseUrl,
+    ...(system ? { system } : {})
+  });
   const capabilityRuntime = { db, config, adapters: capabilityAdapters };
   const routeContext: ApiRouteContext = {
     ...(buildInfo ? { buildInfo } : {}),
@@ -122,7 +126,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     ...(terminal ? { terminal } : {}),
     ...(videoTranscoder ? { videoTranscoder } : {}),
     ...(vodPlayer ? { vodPlayer } : {}),
-    ...(photostaffMap ? { photostaffMap } : {}),
+    ...(photosMap ? { photosMap } : {}),
     fileBatches,
     hostAccess: hostAccessRuntime,
     capabilityRuntime
@@ -149,7 +153,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
           ...system,
           networkManager: mcpNetworkManager,
           ethernetManager: mcpEthernetManager,
-          mutationPolicy: config.hostd.mutationPolicy ?? "mutable"
+          mutationPolicy: config.hostd.mutationPolicy
         }),
         collectSystemNetworkTraffic(system),
         mcpNetworkManager.getStatus(),
@@ -162,11 +166,11 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
       const [storage, sharesSummary] = await Promise.all([
         collectSystemStorage({
           ...system,
-          mutationPolicy: config.hostd.mutationPolicy ?? "mutable"
+          mutationPolicy: config.hostd.mutationPolicy
         }),
         collectShareSummary(shareSettings, {
           ...shares,
-          mutationPolicy: config.hostd.mutationPolicy ?? "mutable"
+          mutationPolicy: config.hostd.mutationPolicy
         })
       ]);
       return asJsonValue({ storage, shares: sharesSummary });
@@ -211,6 +215,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
         return await createPhotoMediaMcpResource({
           db,
           config,
+          ...(system ? { system } : {}),
           clientId: executionContext.subject.clientId,
           baseUrl: dependencies.transferBaseUrl,
           assetId: request.assetId,
@@ -232,10 +237,10 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     resourceResponder: createMcpResourceResponder(routeContext),
     ...(buildInfo ? { buildInfo } : {})
   }, {
-    enabled: config.mcp?.enabled ?? false,
-    ...(config.mcp?.allowedHosts ? { allowedHosts: config.mcp.allowedHosts } : {}),
-    ...(config.mcp?.allowedOrigins ? { allowedOrigins: config.mcp.allowedOrigins } : {}),
-    ...(config.mcp?.maxConcurrentPerClient ? { maxConcurrentPerClient: config.mcp.maxConcurrentPerClient } : {})
+    enabled: config.mcp.enabled,
+    allowedHosts: config.mcp.allowedHosts,
+    allowedOrigins: config.mcp.allowedOrigins,
+    maxConcurrentPerClient: config.mcp.maxConcurrentPerClient
   });
   const hostAccessDraftCleanup = setInterval(() => {
     try {

@@ -231,7 +231,7 @@ export function dockerUnavailableSummary(
 }
 
 function dockerCapabilities(config: CyberOsConfig): DockerSummary["capabilities"] {
-  const hostMutationPolicy = config.hostd.mutationPolicy ?? "mutable";
+  const hostMutationPolicy = config.hostd.mutationPolicy;
   return {
     canUpdateDaemonConfiguration: hostMutationPolicy === "mutable",
     hostMutationPolicy

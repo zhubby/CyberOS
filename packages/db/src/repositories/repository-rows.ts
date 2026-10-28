@@ -1,7 +1,6 @@
 import type {
   AgentEventType,
   AgentMessageRecord,
-  ApprovalStatus,
   BackupRunKind,
   BackupRunStatus,
   BluetoothTransferControlRequest,
@@ -27,14 +26,13 @@ import type {
   OperationNotificationStatus,
   OpsRunStatus,
   OpsTask,
-  PendingApprovalKind,
-  RootReadinessStatus,
-  PhotostaffAssetStatus,
-  PhotostaffErrorCode,
-  PhotostaffJobKind,
-  PhotostaffJobPhase,
-  PhotostaffJobStatus,
-  PhotostaffTakenAtSource,
+  StoragePoolReadinessStatus,
+  PhotosAssetStatus,
+  PhotosErrorCode,
+  PhotosJobKind,
+  PhotosJobPhase,
+  PhotosJobStatus,
+  PhotosTakenAtSource,
   ShareOperationAction,
   ShareOperationStatus,
   StorageOperationStatus
@@ -44,7 +42,6 @@ import type {
 
 export type DbSessionRow = {
   id: string;
-  root_id: string;
   current_path: string;
   pi_resources_trusted?: 0 | 1;
   created_at: string;
@@ -85,8 +82,8 @@ export type DbEventRow = {
   created_at: string;
   source: string;
   source_id: string | null;
-  run_id: string | null;
-  sequence: number | null;
+  run_id: string;
+  sequence: number;
   message_role?: AgentMessageRecord["role"] | null;
   transcript_sequence?: number | null;
 };
@@ -105,22 +102,9 @@ export type DbOperationNotificationRow = {
   updated_at: string;
 };
 
-export type DbNasRootRow = {
-  id: string;
-  name: string;
-  path: string;
-  enabled: 0 | 1;
-  created_at: string;
-  updated_at: string;
-  mount_policy: "required" | "optional";
-  expected_source: string | null;
-  expected_uuid: string | null;
-  expected_fstype: string | null;
-};
-
 export type DbIndexedFileRow = {
   id: string;
-  root_id: string;
+  storage_pool_id: string;
   path: string;
   name: string;
   mime_type: string | null;
@@ -132,7 +116,7 @@ export type DbIndexedFileRow = {
 
 export type DbIndexRunRow = {
   id: string;
-  root_id: string;
+  storage_pool_id: string;
   status: Exclude<IndexRunStatus, "never_run">;
   started_at: string;
   finished_at: string | null;
@@ -173,15 +157,15 @@ export type DbBackupRunRow = {
 };
 
 export type DbBackupFailureRow = {
-  root_id: string | null;
+  storage_pool_id: string | null;
   path: string | null;
   code: string | null;
   reason: string;
 };
 
-export type DbReadinessRow = {
-  root_id: string;
-  status: RootReadinessStatus;
+export type DbStoragePoolReadinessRow = {
+  storage_pool_id: string;
+  status: StoragePoolReadinessStatus;
   checked_at: string;
   reason: string | null;
   source: string | null;
@@ -193,7 +177,7 @@ export type DbAlertRow = {
   id: string;
   code: string;
   scope: string;
-  root_id: string | null;
+  storage_pool_id: string | null;
   severity: HealthAlertSeverity;
   status: HealthAlertStatus;
   first_seen_at: string;
@@ -213,17 +197,6 @@ export type DbOpsRunRow = {
   error: string | null;
 };
 
-export type DbApprovalRow = {
-  id: string;
-  job_id: string;
-  kind: PendingApprovalKind;
-  status: ApprovalStatus;
-  proposal_json: string;
-  created_at: string;
-  updated_at: string;
-  session_id: string;
-};
-
 export type DbProviderSessionRow = {
   session_id: string;
   provider_session_id: string;
@@ -241,7 +214,6 @@ export type DbProviderSessionRow = {
 
 export type DbOperationRow = {
   id: string;
-  approval_id: string | null;
   operation: FileMutationOperation;
   source_path: string | null;
   target_path: string | null;
@@ -254,7 +226,6 @@ export type DbOperationRow = {
 export type DbDownloadTaskRow = {
   id: string;
   url: string;
-  root_id: string;
   storage_pool_id: string;
   target_directory: string;
   target_file_name: string;
@@ -292,7 +263,6 @@ export type DbBluetoothTransferRow = {
   direction: BluetoothTransferDirection;
   adapter_id: string | null;
   device_address: string;
-  root_id: string;
   storage_pool_id: string;
   relative_path: string;
   display_name: string;
@@ -311,9 +281,8 @@ export type DbBluetoothTransferRow = {
   last_progress_at: string | null;
 };
 
-export type DbPhotostaffAssetRow = {
+export type DbPhotosAssetRow = {
   id: string;
-  root_id: string;
   storage_pool_id: string;
   path: string;
   name: string;
@@ -325,23 +294,22 @@ export type DbPhotostaffAssetRow = {
   height: number | null;
   orientation: number | null;
   taken_at: string;
-  taken_at_source: PhotostaffTakenAtSource;
+  taken_at_source: PhotosTakenAtSource;
   thumbnail_key: string | null;
   preview_key: string | null;
-  status: PhotostaffAssetStatus;
+  status: PhotosAssetStatus;
   error: string | null;
-  error_code: PhotostaffErrorCode | null;
+  error_code: PhotosErrorCode | null;
   error_retryable: 0 | 1;
   derivative_schema_version: number;
   library_updated_at: string;
   indexed_at: string;
 };
 
-export type DbPhotostaffJobRow = {
+export type DbPhotosJobRow = {
   id: string;
-  kind: PhotostaffJobKind;
-  status: PhotostaffJobStatus;
-  root_id: string;
+  kind: PhotosJobKind;
+  status: PhotosJobStatus;
   storage_pool_id: string;
   path: string;
   library_updated_at: string;
@@ -349,9 +317,9 @@ export type DbPhotostaffJobRow = {
   processed: number;
   failed: number;
   current_path: string | null;
-  phase: PhotostaffJobPhase | null;
+  phase: PhotosJobPhase | null;
   error: string | null;
-  error_code: PhotostaffErrorCode | null;
+  error_code: PhotosErrorCode | null;
   error_retryable: 0 | 1;
   retry_count: number;
   next_retry_at: string | null;
@@ -366,7 +334,6 @@ export type DbPhotostaffJobRow = {
 
 export type DbDockerOperationRow = {
   id: string;
-  approval_id: string | null;
   action: DockerOperationAction;
   target_type: DockerOperationTargetType;
   target_id: string;
@@ -378,7 +345,6 @@ export type DbDockerOperationRow = {
 
 export type DbShareOperationRow = {
   id: string;
-  approval_id: string | null;
   action: ShareOperationAction;
   target_id: string;
   status: ShareOperationStatus;
@@ -389,7 +355,6 @@ export type DbShareOperationRow = {
 
 export type DbStorageOperationRow = {
   id: string;
-  approval_id: string | null;
   action: "create_pool" | "delete_pool";
   target_id: string;
   status: StorageOperationStatus;
@@ -400,7 +365,6 @@ export type DbStorageOperationRow = {
 
 export type DbVmOperationRow = {
   id: string;
-  approval_id: string | null;
   action: VmOperationAction;
   target_id: string;
   status: VmOperationStatus;
@@ -412,7 +376,6 @@ export type DbVmOperationRow = {
 export type DbVmConsoleAuthorizationRow = {
   id: string;
   operation_id: string;
-  approval_id: string | null;
   domain_name: string;
   status: "active" | "used" | "expired" | "failed";
   created_at: string;
@@ -423,7 +386,6 @@ export type DbVmConsoleAuthorizationRow = {
 export type DbDockerConsoleAuthorizationRow = {
   id: string;
   operation_id: string;
-  approval_id: string | null;
   container_id: string;
   shell: string;
   status: DockerConsoleAuthorizationRecord["status"];
@@ -434,7 +396,7 @@ export type DbDockerConsoleAuthorizationRow = {
 
 export type DbTrashEntryRow = {
   id: string;
-  root_id: string;
+  storage_pool_id: string;
   original_path: string;
   trash_path: string;
   metadata_json: string;

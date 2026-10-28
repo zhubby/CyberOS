@@ -6,7 +6,7 @@ if [ "$1" = "configure" ]; then
     addgroup --system cyberos
   fi
   if ! id cyberos >/dev/null 2>&1; then
-    adduser --system --ingroup cyberos --home /cyberos/home/termux --no-create-home --shell /bin/bash cyberos
+    adduser --system --ingroup cyberos --home /cyberos/home/terminal --no-create-home --shell /bin/bash cyberos
   fi
   if ! id cyberos-nfs >/dev/null 2>&1; then
     adduser --system --no-create-home --disabled-login --shell /usr/sbin/nologin cyberos-nfs
@@ -21,11 +21,11 @@ if [ "$1" = "configure" ]; then
   install -d -o cyberos -g cyberos -m 0700 /cyberos/config/mcp
   install -d -o cyberos -g cyberos -m 0750 \
     /cyberos/state /cyberos/state/trash /cyberos/state/reports \
-    /cyberos/state/pi-sessions /cyberos/state/pi-agent /cyberos/state/photostaff \
+    /cyberos/state/pi-sessions /cyberos/state/pi-agent /cyberos/state/photos \
     /cyberos/state/media-cache /cyberos/state/backup-staging /cyberos/state/vod-player /cyberos/state/bluetooth \
     /cyberos/state/tv /cyberos/state/tv/chromium \
-    /cyberos/logs /cyberos/home /cyberos/home/termux /cyberos/apps /cyberos/deploy \
-    /cyberos/system-backups /cyberos/data/backup /cyberos/data/primary
+    /cyberos/logs /cyberos/home /cyberos/home/terminal /cyberos/apps /cyberos/deploy \
+    /cyberos/system-backups /cyberos/data /cyberos/backup
   install -d -o cyberos -g cyberos -m 0711 /cyberos/vm /cyberos/iso
   install -d -o root -g root -m 0755 /cyberos/home/share /cyberos/state/hostd
   install -d -o root -g root -m 0700 \
@@ -37,7 +37,7 @@ if [ "$1" = "configure" ]; then
     chown root:cyberos /cyberos/config/config.toml
     chmod 0640 /cyberos/config/config.toml
   fi
-  usermod --home /cyberos/home/termux --shell /bin/bash cyberos
+  usermod --home /cyberos/home/terminal --shell /bin/bash cyberos
   usermod --home /cyberos/home/share cyberos-share
 
   CYBEROS_LOCALE=${CYBEROS_LOCALE:-C.UTF-8} \
@@ -52,7 +52,7 @@ if [ "$1" = "configure" ]; then
     systemctl daemon-reload || true
     systemd-tmpfiles --create cyberos.conf || true
     /usr/lib/cyberos/scripts/cyberos-refresh-groups.sh
-    /usr/lib/cyberos/scripts/cyberos-refresh-termux.sh || true
+    /usr/lib/cyberos/scripts/cyberos-refresh-terminald.sh || true
     /usr/lib/cyberos/scripts/cyberos-refresh-vod-player.sh || true
   fi
 fi

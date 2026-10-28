@@ -15,7 +15,7 @@ describe("SettingsMediaContent", () => {
       data: {
         settings: { tmdbTokenConfigured: true, language: "zh-CN", region: "CN", updatedAt: "2026-10-21T00:00:00.000Z" },
         sources: [{
-          id: "source-1", name: "Movies", kind: "movie", rootId: "nas", storagePoolId: "pool-1",
+          id: "source-1", name: "Movies", kind: "movie",  storagePoolId: "pool-1",
           path: "Media/Movies", enabled: true, createdAt: "2026-10-21T00:00:00.000Z", updatedAt: "2026-10-21T00:00:00.000Z"
         }],
         status: { state: "ready", sources: 1, titles: 1, movies: 1, series: 0, unmatched: 1, activeScan: null, latestScan: null },

@@ -16,7 +16,7 @@ export function FilePreviewDialog({
   textPreview,
   blobUrl,
   videoUrl,
-  rootId,
+  storagePoolId,
   previewFileSizeLimitBytes,
   locale,
   actions,
@@ -31,7 +31,7 @@ export function FilePreviewDialog({
   textPreview: TextPreview | null;
   blobUrl: string;
   videoUrl: string;
-  rootId: string;
+  storagePoolId: string;
   previewFileSizeLimitBytes: number;
   locale: SupportedLocale;
   actions?: ReactNode;
@@ -106,7 +106,7 @@ export function FilePreviewDialog({
           <PreviewContent
             blobUrl={blobUrl}
             videoUrl={videoUrl}
-            rootId={rootId}
+            storagePoolId={storagePoolId}
             loading={loading}
             meta={meta}
             error={error}

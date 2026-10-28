@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use cyberos_indexer::storage::{RootStorage, validate_relative_path};
+use cyberos_indexer::storage::{StoragePoolStorage, validate_relative_path};
 
 #[test]
 fn rejects_parent_paths_and_root_symlinks() {
@@ -12,5 +12,5 @@ fn rejects_parent_paths_and_root_symlinks() {
     let link = directory.path().join("link");
     std::fs::create_dir(&real).unwrap();
     symlink(&real, &link).unwrap();
-    assert!(RootStorage::open(&link).is_err());
+    assert!(StoragePoolStorage::open(&link).is_err());
 }

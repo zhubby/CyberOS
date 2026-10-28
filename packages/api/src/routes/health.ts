@@ -5,6 +5,6 @@ export function registerHealthRoutes(server: FastifyInstance, { config }: ApiRou
   server.get("/health", async () => ({
     ok: true,
     service: "cyberos-api",
-    dataDir: config.dataDir
+    dataDir: config.paths.stateDir
   }));
 }

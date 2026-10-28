@@ -128,7 +128,6 @@ export function SettingsBluetoothPage({
     setPicker(null);
     await updateSettings({
       receiveEnabled: false,
-      inboxRootId: selection.rootId,
       inboxStoragePoolId: selection.storagePoolId,
       inboxPath: selection.path
     }, "inbox");
@@ -138,7 +137,7 @@ export function SettingsBluetoothPage({
     setPicker(null);
     if (!sendTarget || selections.length === 0) return;
     const scope = selections[0]!;
-    if (selections.some((selection) => selection.rootId !== scope.rootId || selection.storagePoolId !== scope.storagePoolId)) {
+    if (selections.some((selection) => selection.storagePoolId !== scope.storagePoolId)) {
       onNotifyError(String(t("settings.bluetooth.transfers.singlePoolRequired")));
       return;
     }
@@ -147,7 +146,6 @@ export function SettingsBluetoothPage({
       await createBluetoothTransfers({
         adapterId: sendTarget.adapterId,
         address: sendTarget.address,
-        rootId: scope.rootId,
         storagePoolId: scope.storagePoolId,
         paths: selections.map((selection) => selection.path)
       });
@@ -177,7 +175,7 @@ export function SettingsBluetoothPage({
     ? String(t("settings.bluetooth.unavailable"))
     : status?.error
     ?? (!status?.available ? String(t("settings.bluetooth.noAdapters")) : null);
-  const inboxConfigured = Boolean(settings?.inboxRootId && settings.inboxStoragePoolId && settings.inboxPath);
+  const inboxConfigured = Boolean(settings?.inboxStoragePoolId && settings.inboxPath);
   const initialInboxPool = settings?.inboxStoragePoolId ?? pools[0]?.id ?? "";
 
   return (

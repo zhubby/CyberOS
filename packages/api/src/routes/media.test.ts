@@ -4,19 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  ensureNasRoots,
   openCyberOsDb,
   replaceMediaArtwork,
   saveBluetoothSettings,
   upsertMediaCatalogEntry,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { VodPlayerStatus, CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type VodPlayerStatus, type CyberOsConfig } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import type { VodPlayerRuntime } from "../lib/vod-player.js";
 import { registerMediaRoutes } from "./media.js";
 
-const poolId = "/dev/md/media-test";
+const poolId = "pool-1";
+const poolDevice = "/dev/md/pool-1";
 let temporaryDirectory: string;
 let root: string;
 let db: CyberOsDatabase;
@@ -26,10 +26,9 @@ let candidateSearches: unknown[];
 
 beforeEach(async () => {
   temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-media-api-"));
-  root = path.join(temporaryDirectory, "root");
+  root = path.join(temporaryDirectory, "data", poolId);
   await mkdir(path.join(root, "Movies"), { recursive: true });
   db = openCyberOsDb(path.join(temporaryDirectory, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
   playerCommands = [];
   candidateSearches = [];
   server = Fastify();
@@ -79,7 +78,7 @@ describe("Media API", () => {
     const traversal = await server.inject({
       method: "POST",
       url: "/api/media/sources",
-      payload: { name: "Movies", kind: "movie", rootId: "local", storagePoolId: poolId, path: "../outside" }
+      payload: { name: "Movies", kind: "movie",  storagePoolId: poolId, path: "../outside" }
     });
     expect(traversal.statusCode).toBe(400);
 
@@ -171,8 +170,7 @@ describe("Media API", () => {
     expect(played.statusCode).toBe(200);
     expect(playerCommands).toEqual([expect.objectContaining({
       type: "play",
-      rootId: "local",
-      storagePoolId: poolId,
+            storagePoolId: poolId,
       relativePath: "Movies/Arrival.2016.mkv",
       mediaFileId: stored.file.id,
       audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
@@ -229,7 +227,7 @@ async function createSource() {
   return await server.inject({
     method: "POST",
     url: "/api/media/sources",
-    payload: { name: "Movies", kind: "movie", rootId: "local", storagePoolId: poolId, path: "Movies" }
+    payload: { name: "Movies", kind: "movie",  storagePoolId: poolId, path: "Movies" }
   });
 }
 
@@ -251,8 +249,7 @@ function playerStatus(): VodPlayerStatus {
     sessionId: "session-1",
     serviceInstanceId: "instance-1",
     revision: 1,
-    rootId: "local",
-    storagePoolId: poolId,
+        storagePoolId: poolId,
     relativePath: "Movies/Arrival.2016.mkv",
     fileName: "Arrival.2016.mkv",
     mediaFileId: null,
@@ -281,9 +278,9 @@ function storageSystem() {
     commandRunner: {
       async run(command: string) {
         if (command === "findmnt") {
-          return JSON.stringify({ filesystems: [{ source: poolId, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
+          return JSON.stringify({ filesystems: [{ source: poolDevice, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
         }
-        if (command === "mdadm") return `ARRAY ${poolId} name=media-test UUID=test`;
+        if (command === "mdadm") return `ARRAY ${poolDevice} name=${poolId} UUID=test`;
         if (command === "smartctl") return JSON.stringify({ devices: [] });
         return JSON.stringify({ blockdevices: [] });
       }
@@ -292,18 +289,18 @@ function storageSystem() {
 }
 
 function testConfig(): CyberOsConfig {
+  const rootDir = temporaryDirectory;
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
   return {
-    environment: "development",
-    dataDir: temporaryDirectory,
-    databasePath: path.join(temporaryDirectory, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: path.dirname(root), databasePath: path.join(rootDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
-    hostd: { socketPath: "/tmp/hostd.sock" },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: {
       enabled: true,
       socketPath: "/tmp/vod-player.sock",
@@ -320,6 +317,5 @@ function testConfig(): CyberOsConfig {
       hwdec: "auto-safe",
       user: "cyberos"
     },
-    nasRoots: [{ id: "local", name: "Local", path: root }]
   };
 }

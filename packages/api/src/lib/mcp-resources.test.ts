@@ -6,14 +6,13 @@ import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createMcpClient,
-  ensureNasRoots,
   openCyberOsDb,
-  savePhotostaffLibrarySettings,
-  upsertPhotostaffAsset,
+  savePhotosLibrarySettings,
+  upsertPhotosAsset,
   type CyberOsDatabase
 } from "@cyberos/db";
 import { registerMcp } from "@cyberos/mcp";
-import { PHOTOSTAFF_DATA_DIRECTORY_NAME, type CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, PHOTOS_DATA_DIRECTORY_NAME, type CyberOsConfig } from "@cyberos/shared";
 import {
   createFileExportMcpResource,
   createMcpResourceResponder,
@@ -21,6 +20,7 @@ import {
   createPhotoMediaMcpResource,
   McpResourceError
 } from "./mcp-resources.js";
+import type { SystemManagementDependencies } from "./system-management.js";
 
 let tempDir: string;
 let rootDir: string;
@@ -28,20 +28,21 @@ let db: CyberOsDatabase;
 let app: ReturnType<typeof Fastify>;
 let config: CyberOsConfig;
 let client: ReturnType<typeof createMcpClient>;
+let system: SystemManagementDependencies;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-mcp-resources-"));
-  rootDir = path.join(tempDir, "root");
+  rootDir = path.join(tempDir, "data", "pool-1");
   await mkdir(rootDir, { recursive: true });
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "primary", name: "Primary", path: rootDir }]);
   client = createMcpClient(db, { name: "Resource client", kind: "local", scopes: ["cyberos:files:read", "cyberos:photos:read"] });
   config = testConfig(tempDir, rootDir);
+  system = storageSystem();
   app = Fastify();
   registerMcp(app, {
     db,
     config,
-    resourceResponder: createMcpResourceResponder({ db, config })
+    resourceResponder: createMcpResourceResponder({ db, config, system })
   }, { enabled: true });
   await app.ready();
 });
@@ -58,9 +59,11 @@ describe("MCP resource responder", () => {
     await writeFile(path.join(rootDir, "docs", "one.txt"), "one", "utf8");
     const first = await createFileExportMcpResource({
       db,
+      config,
+      system,
       clientId: client.id,
       baseUrl: "http://127.0.0.1:3010",
-      rootId: "primary",
+      storagePoolId: "pool-1",
       paths: ["docs"],
       archiveName: "docs"
     }) as { url: string };
@@ -73,9 +76,11 @@ describe("MCP resource responder", () => {
 
     const changed = await createFileExportMcpResource({
       db,
+      config,
+      system,
       clientId: client.id,
       baseUrl: "http://127.0.0.1:3010",
-      rootId: "primary",
+      storagePoolId: "pool-1",
       paths: ["docs"]
     }) as { url: string };
     await writeFile(path.join(rootDir, "docs", "one.txt"), "changed content", "utf8");
@@ -89,17 +94,18 @@ describe("MCP resource responder", () => {
     await symlink(path.join(rootDir, "source.txt"), path.join(rootDir, "linked.txt"));
     await expect(createFileExportMcpResource({
       db,
+      config,
+      system,
       clientId: client.id,
       baseUrl: "http://127.0.0.1:3010",
-      rootId: "primary",
+      storagePoolId: "pool-1",
       paths: ["linked.txt"]
     })).rejects.toBeInstanceOf(McpResourceError);
   });
 
   it("serves indexed originals, derivatives, compatible video, and photo ZIPs", async () => {
-    const settings = savePhotostaffLibrarySettings(db, {
-      rootId: "primary",
-      storagePoolId: "pool-1",
+    const settings = savePhotosLibrarySettings(db, {
+            storagePoolId: "pool-1",
       path: "Photos"
     });
     await mkdir(path.join(rootDir, "Photos"));
@@ -108,29 +114,31 @@ describe("MCP resource responder", () => {
       previewKey: "preview/image.webp"
     });
     const video = await addAsset(settings, "clip.mp4", Buffer.from("compatible-video"), "video/mp4");
-    const thumbnailPath = path.join(tempDir, PHOTOSTAFF_DATA_DIRECTORY_NAME, "thumbnail", "image.webp");
+    const thumbnailPath = path.join(tempDir, PHOTOS_DATA_DIRECTORY_NAME, "thumbnail", "image.webp");
     await mkdir(path.dirname(thumbnailPath), { recursive: true });
     await writeFile(thumbnailPath, "thumbnail", "utf8");
 
     const original = await createPhotoMediaMcpResource({
-      db, config, clientId: client.id, baseUrl: "http://127.0.0.1:3010", assetId: photo.id, variant: "original"
+      db, config, system, clientId: client.id, baseUrl: "http://127.0.0.1:3010", assetId: photo.id, variant: "original"
     }) as { url: string };
     expect((await downloadResource(original.url)).body).toBe("original-image");
 
     const thumbnail = await createPhotoMediaMcpResource({
-      db, config, clientId: client.id, baseUrl: "http://127.0.0.1:3010", assetId: photo.id, variant: "thumbnail"
+      db, config, system, clientId: client.id, baseUrl: "http://127.0.0.1:3010", assetId: photo.id, variant: "thumbnail"
     }) as { url: string };
     const thumbnailDownload = await downloadResource(thumbnail.url);
     expect(thumbnailDownload.body).toBe("thumbnail");
     expect(thumbnailDownload.headers["content-type"]).toContain("image/webp");
 
     const videoLink = await createPhotoMediaMcpResource({
-      db, config, clientId: client.id, baseUrl: "http://127.0.0.1:3010", assetId: video.id, variant: "video"
+      db, config, system, clientId: client.id, baseUrl: "http://127.0.0.1:3010", assetId: video.id, variant: "video"
     }) as { url: string };
     expect((await downloadResource(videoLink.url)).body).toBe("compatible-video");
 
     const archive = await createPhotoExportMcpResource({
       db,
+      config,
+      system,
       clientId: client.id,
       baseUrl: "http://127.0.0.1:3010",
       assetIds: [photo.id, video.id]
@@ -143,7 +151,7 @@ describe("MCP resource responder", () => {
 });
 
 async function addAsset(
-  settings: ReturnType<typeof savePhotostaffLibrarySettings>,
+  settings: ReturnType<typeof savePhotosLibrarySettings>,
   name: string,
   body: Buffer,
   mimeType: string,
@@ -153,7 +161,7 @@ async function addAsset(
   const absolutePath = path.join(rootDir, relativePath);
   await writeFile(absolutePath, body);
   const metadata = await stat(absolutePath);
-  return upsertPhotostaffAsset(db, {
+  return upsertPhotosAsset(db, {
     settings,
     path: relativePath,
     name,
@@ -182,19 +190,45 @@ async function downloadResource(url: string) {
 }
 
 function testConfig(dataDir: string, root: string): CyberOsConfig {
+  const rootDir = path.dirname(path.dirname(root));
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
   return {
-    environment: "development",
-    dataDir,
-    databasePath: path.join(dataDir, "cyberos.sqlite"),
+    ...base,
+    paths: {
+      ...base.paths,
+      stateDir: dataDir,
+      dataRoot: path.dirname(root),
+      databasePath: path.join(dataDir, "cyberos.sqlite")
+    },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 100 },
+    worker: { pollMs: 100, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: path.join(dataDir, "hostd.sock") },
+    hostd: { socketPath: path.join(dataDir, "hostd.sock"), mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
-    terminal: { user: "cyberos", termuxSocketPath: path.join(dataDir, "termux.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
+    terminal: { user: "cyberos", socketPath: path.join(dataDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "primary", name: "Primary", path: root }]
+  };
+}
+
+function storageSystem(): SystemManagementDependencies {
+  return {
+    commandRunner: {
+      async run(command, args) {
+        if (command === "findmnt") {
+          return JSON.stringify({
+            filesystems: [{ source: "/dev/md/pool-1", target: rootDir, fstype: "ext4", size: 1024, used: 128, avail: 896, "use%": "12.5%" }]
+          });
+        }
+        if (command === "mdadm" && args[0] === "--detail" && args[1] === "--scan") {
+          return "ARRAY /dev/md/pool-1 name=pool-1 UUID=test-pool";
+        }
+        if (command === "mdadm" && args[0] === "--detail") {
+          return "Name : pool-1\nRaid Level : raid1\nState : clean\nUUID : test-pool\nArray Size : 1024 KiB";
+        }
+        if (command === "smartctl") return JSON.stringify({ devices: [] });
+        return JSON.stringify({ blockdevices: [] });
+      }
+    }
   };
 }

@@ -10,10 +10,9 @@ import {
   listDownloadTasks,
   requestDownloadTaskControl,
   transitionDownloadTask,
-  getNasRoot,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { DownloadTaskRecord, DownloadTaskStatus } from "@cyberos/shared";
+import { type DownloadTaskRecord, type DownloadTaskStatus } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import {
   resolveScopedExistingPath,
@@ -27,11 +26,11 @@ const MAX_URL_LENGTH = 8192;
 const MAX_FILE_NAME_LENGTH = 255;
 const MAX_TARGET_DIRECTORY_LENGTH = 4096;
 
-export function registerDownloadRoutes(server: FastifyInstance, { db, system }: ApiRouteContext): void {
+export function registerDownloadRoutes(server: FastifyInstance, { config, db, system }: ApiRouteContext): void {
+  const dataRoot = config.paths.dataRoot;
   server.post<{
     Body: {
       url?: string;
-      rootId?: string;
       storagePoolId?: string;
       targetDirectory?: string;
       fileName?: string;
@@ -61,7 +60,7 @@ export function registerDownloadRoutes(server: FastifyInstance, { db, system }: 
 
     let scope: StoragePoolScope;
     try {
-      scope = await resolveStoragePoolScope(db, system, request.body?.rootId, request.body?.storagePoolId);
+      scope = await resolveStoragePoolScope(dataRoot, system, request.body?.storagePoolId);
     } catch (error) {
       sendDownloadError(reply, error);
       return;
@@ -94,7 +93,6 @@ export function registerDownloadRoutes(server: FastifyInstance, { db, system }: 
 
       const task = createDownloadTask(db, {
         url: url.value,
-        rootId: scope.root.id,
         storagePoolId: scope.pool.id,
         targetDirectory: normalizedDirectory,
         targetFileName: fileName.name,
@@ -129,13 +127,13 @@ export function registerDownloadRoutes(server: FastifyInstance, { db, system }: 
       reply.send({ task: requested ?? task });
       return;
     }
-    await transitionTaskStatus(db, system, request.params.id, { from: ["queued"], to: "paused" }, reply);
+    await transitionTaskStatus(db, dataRoot, system, request.params.id, { from: ["queued"], to: "paused" }, reply);
   });
 
   server.post<{
     Params: { id: string };
   }>("/api/downloads/:id/resume", async (request, reply) => {
-    await transitionTaskStatus(db, system, request.params.id, {
+    await transitionTaskStatus(db, dataRoot, system, request.params.id, {
       from: ["paused"],
       to: "queued"
     }, reply);
@@ -166,7 +164,7 @@ export function registerDownloadRoutes(server: FastifyInstance, { db, system }: 
       return;
     }
     if (!wasRunning) {
-      if (!(await removePartialFile(db, system, cancelled))) {
+      if (!(await removePartialFile(dataRoot, system, cancelled))) {
         reply.status(409).send({ error: "Download partial file could not be removed" });
         return;
       }
@@ -183,7 +181,7 @@ export function registerDownloadRoutes(server: FastifyInstance, { db, system }: 
       return;
     }
     const resetProgress = task.status === "cancelled" || task.errorCode === "checksum_mismatch";
-    if (resetProgress && !(await removePartialFile(db, system, task))) {
+    if (resetProgress && !(await removePartialFile(dataRoot, system, task))) {
       reply.status(409).send({ error: "Download partial file could not be removed" });
       return;
     }
@@ -243,7 +241,7 @@ export function registerDownloadRoutes(server: FastifyInstance, { db, system }: 
         task = isolated;
       }
     }
-    if (task.status !== "completed" && !(await removePartialFile(db, system, task))) {
+    if (task.status !== "completed" && !(await removePartialFile(dataRoot, system, task))) {
       reply.status(409).send({ error: "Download partial file could not be removed" });
       return;
     }
@@ -291,6 +289,7 @@ export function registerDownloadRoutes(server: FastifyInstance, { db, system }: 
 
 async function transitionTaskStatus(
   db: CyberOsDatabase,
+  dataRoot: string,
   system: ApiRouteContext["system"],
   id: string,
   input: { from: DownloadTaskStatus[]; to: DownloadTaskStatus },
@@ -312,22 +311,21 @@ async function transitionTaskStatus(
     return;
   }
   if (input.to === "cancelled") {
-    await removePartialFile(db, system, updated);
+    await removePartialFile(dataRoot, system, updated);
   }
   reply.send({ task: updated });
 }
 
 async function removePartialFile(
-  db: CyberOsDatabase,
+  dataRoot: string,
   system: ApiRouteContext["system"],
   task: DownloadTaskRecord
 ): Promise<boolean> {
-  const root = getNasRoot(db, task.rootId);
-  if (!root || !system) {
+  if (!system) {
     return false;
   }
   try {
-    const scope = await resolveStoragePoolScope(db, system, task.rootId, task.storagePoolId);
+    const scope = await resolveStoragePoolScope(dataRoot, system, task.storagePoolId);
     const partial = await resolveScopedTargetPath(scope, task.partialPath);
     await unlink(partial.absolutePath);
     return true;

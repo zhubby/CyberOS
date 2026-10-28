@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::env;
 use std::path::{Component, Path, PathBuf};
 
@@ -14,7 +13,7 @@ pub struct HostdConfig {
     pub socket_path: PathBuf,
     pub socket_group: String,
     pub allowed_uids: Vec<u32>,
-    pub nas_roots: Vec<ConfiguredNasRoot>,
+    pub data_root: PathBuf,
     pub mutation_policy: HostMutationPolicy,
 }
 
@@ -40,28 +39,15 @@ impl HostMutationPolicy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfiguredNasRoot {
-    pub id: String,
-    pub path: PathBuf,
-}
-
 #[derive(Debug, Default, Deserialize)]
 struct FileConfig {
+    root_dir: Option<String>,
     hostd: Option<FileHostdConfig>,
-    #[serde(default)]
-    nas_roots: Vec<FileNasRoot>,
 }
 
 #[derive(Debug, Deserialize)]
 struct FileHostdConfig {
     socket_path: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct FileNasRoot {
-    id: Option<String>,
-    path: Option<String>,
 }
 
 impl HostdConfig {
@@ -74,9 +60,9 @@ impl HostdConfig {
             file_config.hostd.and_then(|config| config.socket_path),
         )?;
         let current_directory = env::current_dir()?;
-        let nas_roots = resolve_nas_roots(
-            env::var("CYBEROS_NAS_ROOTS").ok(),
-            file_config.nas_roots,
+        let data_root = resolve_data_root(
+            env::var("CYBEROS_ROOT").ok(),
+            file_config.root_dir,
             &current_directory,
         )?;
         let cyberos_uid = nix::unistd::User::from_name("cyberos")
@@ -87,7 +73,7 @@ impl HostdConfig {
             socket_path,
             socket_group: env::var("CYBEROS_HOSTD_GROUP").unwrap_or_else(|_| "cyberos".to_owned()),
             allowed_uids: vec![0, cyberos_uid],
-            nas_roots,
+            data_root,
             mutation_policy: HostMutationPolicy::from_environment(
                 env::var("CYBEROS_HOST_MUTATION_POLICY").ok(),
             )?,
@@ -119,70 +105,20 @@ fn load_file_config(path: &Path) -> Result<FileConfig, HostdError> {
     }
 }
 
-fn resolve_nas_roots(
-    environment_value: Option<String>,
-    file_values: Vec<FileNasRoot>,
+fn resolve_data_root(
+    environment_root: Option<String>,
+    file_root: Option<String>,
     current_directory: &Path,
-) -> Result<Vec<ConfiguredNasRoot>, HostdError> {
-    let roots = if let Some(environment_value) = environment_value {
-        environment_value
-            .split(',')
-            .enumerate()
-            .filter_map(|(index, entry)| {
-                parse_environment_root(entry.trim(), index, current_directory)
-            })
-            .collect::<Vec<_>>()
-    } else {
-        file_values
-            .into_iter()
-            .enumerate()
-            .map(|(index, root)| {
-                let id = root.id.unwrap_or_else(|| format!("root-{}", index + 1));
-                let path = root.path.ok_or_else(|| {
-                    HostdError::validation(format!("NAS root {id} has no configured path"))
-                })?;
-                Ok(ConfiguredNasRoot {
-                    id,
-                    path: absolute_path(current_directory, &path),
-                })
-            })
-            .collect::<Result<Vec<_>, HostdError>>()?
-    };
-    let mut ids = HashSet::new();
-    for root in &roots {
-        if root.id.is_empty() || !root.path.is_absolute() || !ids.insert(root.id.clone()) {
-            return Err(HostdError::validation(
-                "hostd NAS roots must have unique ids and absolute paths",
-            ));
-        }
+) -> Result<PathBuf, HostdError> {
+    let root = environment_root
+        .or(file_root)
+        .unwrap_or_else(|| "/cyberos".to_owned());
+    if root.trim().is_empty() {
+        return Err(HostdError::validation(
+            "CyberOS root path must not be empty",
+        ));
     }
-    Ok(roots)
-}
-
-fn parse_environment_root(
-    entry: &str,
-    index: usize,
-    current_directory: &Path,
-) -> Option<ConfiguredNasRoot> {
-    if entry.is_empty() {
-        return None;
-    }
-    let parts = entry.split(':').collect::<Vec<_>>();
-    if parts.len() >= 3 {
-        let fallback_id = format!("root-{}", index + 1);
-        return Some(ConfiguredNasRoot {
-            id: if parts[0].is_empty() {
-                fallback_id
-            } else {
-                parts[0].to_owned()
-            },
-            path: absolute_path(current_directory, &parts[2..].join(":")),
-        });
-    }
-    Some(ConfiguredNasRoot {
-        id: format!("root-{}", index + 1),
-        path: absolute_path(current_directory, entry),
-    })
+    Ok(absolute_path(current_directory, &root).join("data"))
 }
 
 fn absolute_path(current_directory: &Path, value: &str) -> PathBuf {
@@ -249,61 +185,33 @@ mod tests {
     }
 
     #[test]
-    fn resolves_configured_nas_roots_with_environment_precedence() {
-        let roots = resolve_nas_roots(
-            Some("dev:Development NAS:relative/tmp/../nas,/mnt/archive".to_owned()),
-            vec![FileNasRoot {
-                id: Some("ignored".to_owned()),
-                path: Some("/mnt/ignored".to_owned()),
-            }],
-            Path::new("/workspace"),
-        )
-        .unwrap();
-
+    fn resolves_data_root_with_environment_precedence() {
         assert_eq!(
-            roots,
-            vec![
-                ConfiguredNasRoot {
-                    id: "dev".to_owned(),
-                    path: PathBuf::from("/workspace/relative/nas"),
-                },
-                ConfiguredNasRoot {
-                    id: "root-2".to_owned(),
-                    path: PathBuf::from("/mnt/archive"),
-                },
-            ]
+            resolve_data_root(
+                Some("relative/tmp/../cyberos".to_owned()),
+                Some("/ignored".to_owned()),
+                Path::new("/workspace"),
+            )
+            .unwrap(),
+            PathBuf::from("/workspace/relative/cyberos/data")
+        );
+        assert_eq!(
+            resolve_data_root(
+                None,
+                Some("/srv/cyberos".to_owned()),
+                Path::new("/workspace")
+            )
+            .unwrap(),
+            PathBuf::from("/srv/cyberos/data")
+        );
+        assert_eq!(
+            resolve_data_root(None, None, Path::new("/workspace")).unwrap(),
+            PathBuf::from("/cyberos/data")
         );
     }
 
     #[test]
-    fn rejects_duplicate_or_pathless_nas_roots() {
-        assert!(
-            resolve_nas_roots(
-                None,
-                vec![
-                    FileNasRoot {
-                        id: Some("primary".to_owned()),
-                        path: Some("/mnt/one".to_owned()),
-                    },
-                    FileNasRoot {
-                        id: Some("primary".to_owned()),
-                        path: Some("/mnt/two".to_owned()),
-                    },
-                ],
-                Path::new("/workspace"),
-            )
-            .is_err()
-        );
-        assert!(
-            resolve_nas_roots(
-                None,
-                vec![FileNasRoot {
-                    id: Some("primary".to_owned()),
-                    path: None,
-                }],
-                Path::new("/workspace"),
-            )
-            .is_err()
-        );
+    fn rejects_empty_data_root() {
+        assert!(resolve_data_root(Some("  ".to_owned()), None, Path::new("/workspace"),).is_err());
     }
 }

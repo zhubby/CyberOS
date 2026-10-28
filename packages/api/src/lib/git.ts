@@ -7,7 +7,7 @@ import {
   toRootRelative,
   type FileEntry,
   type SafePathResult
-} from "@cyberos/nas-tools";
+} from "@cyberos/storage-tools";
 import type { GitDirectoryStatus, GitFileStatus, GitStatusSummary } from "@cyberos/shared";
 
 const GIT_TIMEOUT_MS = 2_000;
@@ -237,12 +237,12 @@ async function readGitMarker(rootRealPath: string, repositoryRealPath: string): 
   }
 
   if (!gitDirRealPath) {
-    throw new Error("Git metadata escapes the configured NAS root");
+    throw new Error("Git metadata escapes the storage pool");
   }
 
   const gitCommonDirRealPath = await readGitCommonDir(rootRealPath, gitDirRealPath);
   if (!gitCommonDirRealPath) {
-    throw new Error("Git common metadata escapes the configured NAS root");
+    throw new Error("Git common metadata escapes the storage pool");
   }
 
   return {

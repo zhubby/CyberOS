@@ -9,7 +9,6 @@ import type { DbEventRow, DbJobRow, DbMessageRow, DbSessionRow } from "./reposit
 export function mapSession(row: DbSessionRow): AgentSessionRecord {
   return {
     id: row.id,
-    rootId: row.root_id,
     currentPath: row.current_path,
     piResourcesTrusted: row.pi_resources_trusted === 1,
     createdAt: row.created_at,
@@ -57,8 +56,8 @@ export function mapEvent(row: DbEventRow): AgentEventRecord {
     transcriptSequence: row.transcript_sequence ?? null,
     source: row.source,
     sourceId: row.source_id,
-    runId: row.run_id ?? (row.job_id ? `job:${row.job_id}` : `session:${row.session_id}`),
-    sequence: row.sequence ?? row.id,
+    runId: row.run_id,
+    sequence: row.sequence,
     payload: JSON.parse(row.payload_json) as unknown,
     createdAt: row.created_at
   };

@@ -85,7 +85,7 @@ Resource loader failures are projected as sanitized `resource_error` events.
 
 ## Packaging requirements
 
-The Debian and Nix builds must include the exact Pi package and its transitive
+The Debian build must include the exact Pi package and its transitive
 runtime files under the bundled workspace `node_modules`. No runtime npm
 discovery or installation is allowed. The compiled entry must retain the
 static MCP/codemode/tool-search imports used by `packages/agent`.

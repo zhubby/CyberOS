@@ -208,14 +208,14 @@ export function getMessage(db: CyberOsDatabase, messageId: string): AgentMessage
 
 export function getJob(db: CyberOsDatabase, jobId: string): JobRecord | null {
   const row = db
-    .prepare(`SELECT ${selectJobColumns(db)} FROM jobs WHERE id = ?`)
+    .prepare(`SELECT ${JOB_COLUMNS} FROM jobs WHERE id = ?`)
     .get(jobId) as DbJobRow | undefined;
   return row ? mapJob(row) : null;
 }
 
 export function getActiveAgentJobForSession(db: CyberOsDatabase, sessionId: string): JobRecord | null {
   const row = db.prepare(`
-    SELECT ${selectJobColumns(db)}
+    SELECT ${JOB_COLUMNS}
     FROM jobs
     WHERE jobs.session_id = ? AND jobs.kind = 'agent'
       AND jobs.status = 'running'
@@ -231,7 +231,7 @@ export function getActiveAgentJobForSession(db: CyberOsDatabase, sessionId: stri
 
 export function getCurrentAgentJobForSession(db: CyberOsDatabase, sessionId: string): JobRecord | null {
   const row = db.prepare(`
-    SELECT ${selectJobColumns(db)}
+    SELECT ${JOB_COLUMNS}
     FROM jobs
     WHERE jobs.session_id = ? AND jobs.kind = 'agent'
       AND jobs.status IN ('queued', 'running', 'waiting_approval')
@@ -248,21 +248,9 @@ export function getCurrentAgentJobForSession(db: CyberOsDatabase, sessionId: str
   return row ? mapJob(row) : null;
 }
 
-function selectJobColumns(db: CyberOsDatabase): string {
-  const hasLeaseColumns = db.prepare(`
-    SELECT 1 FROM pragma_table_info('jobs') WHERE name = 'lease_owner'
-  `).pluck().get();
-  if (hasLeaseColumns) return JOB_COLUMNS;
-  return `
-    id, session_id, message_id, kind, status, created_at, updated_at, error,
-    NULL AS error_code, 0 AS attempt, NULL AS lease_owner, NULL AS lease_until,
-    NULL AS heartbeat_at, '.' AS working_path
-  `;
-}
-
 export function claimNextJob(
   db: CyberOsDatabase,
-  input: ClaimAgentJobInput = { workerId: "legacy-worker", leaseMs: 30_000 }
+  input: ClaimAgentJobInput
 ): JobRecord | null {
   const nowDate = input.now ?? new Date();
   recoverExpiredAgentJobs(db, nowDate);
@@ -416,11 +404,6 @@ export function updateJobStatus(
       .run(status, error, updatedAt, status, status, status, jobId, ...(allowedFrom ?? []));
     if (result.changes === 1) {
       if (status === "cancelled") {
-        db.prepare(`
-          UPDATE pending_approvals
-          SET status = 'expired', updated_at = ?
-          WHERE job_id = ? AND status = 'pending'
-        `).run(updatedAt, jobId);
         cancelAgentCapabilityRunsForJob(db, jobId, updatedAt);
       }
       if (
@@ -506,6 +489,11 @@ export function appendEvent<TPayload>(
       `).get(input.sessionId, source, sourceId) as DbEventRow | undefined;
       if (existing) return mapEvent(existing) as AgentEventRecord<TPayload>;
     }
+    const sequence = input.sequence ?? Number(db.prepare(`
+      SELECT COALESCE(MAX(sequence), 0) + 1
+      FROM agent_events
+      WHERE session_id = ? AND run_id = ?
+    `).pluck().get(input.sessionId, runId));
     const result = db
       .prepare(`
         INSERT INTO agent_events (
@@ -520,14 +508,10 @@ export function appendEvent<TPayload>(
         source,
         sourceId,
         runId,
-        input.sequence ?? null,
+        sequence,
         createdAt
       );
     const eventId = Number(result.lastInsertRowid);
-    const sequence = input.sequence ?? eventId;
-    if (input.sequence === undefined) {
-      db.prepare("UPDATE agent_events SET sequence = ? WHERE id = ?").run(sequence, eventId);
-    }
     let transcriptSequence: number | null = null;
     if (audience === "chat" && (input.type === "agent.message" || input.type === "job.failed")) {
       const transcriptResult = db.prepare(`

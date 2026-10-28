@@ -1,11 +1,7 @@
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
-import {
-  getRootReadiness,
-  listNasRoots,
-  type CyberOsDatabase
-} from "@cyberos/db";
+import type { CyberOsDatabase } from "@cyberos/db";
 import type {
   DockerComposeServiceHostAccess,
   DockerHostAccessAvailability,
@@ -23,9 +19,8 @@ import type { DockerEngineRuntime } from "./docker-client.js";
 export const DOCKER_HOST_ACCESS_POLICY_VERSION = "2026-10-19.1";
 export const DOCKER_HOST_ACCESS_OVERRIDE_FILE = "cyberos-host-access.override.yaml";
 export const DOCKER_HOST_ACCESS_LABEL_PREFIX = "io.cyberos.host-access.";
-export const DOCKER_HOST_ACCESS_NAS_ANCHOR = ".cyberos-host-access-capacity";
+export const DOCKER_HOST_ACCESS_STORAGE_POOL_ANCHOR = ".cyberos-host-access-capacity";
 
-const DEFAULT_RUNTIME_ROOT = "/run/cyberos/host-access";
 const UNSUPPORTED_COVERAGE: DockerHostAccessCoverageId[] = [
   "journald",
   "smart_nvme",
@@ -118,8 +113,9 @@ const CAPABILITY_DEFINITIONS: CapabilityDefinition[] = [
 ];
 
 export interface DockerHostAccessPolicyOptions {
+  runtimeRoot: string;
+  dataRoot: string;
   platform?: NodeJS.Platform;
-  runtimeRoot?: string;
   daemonAvailable?: boolean;
   dockerProxyCompatible?: boolean;
   systemdProxyCompatible?: boolean;
@@ -200,12 +196,14 @@ export class DockerHostAccessValidationError extends Error {
 export class DockerHostAccessPolicy {
   private readonly platform: NodeJS.Platform;
   private readonly runtimeRoot: string;
+  private readonly dataRoot: string;
   private detectedRootless = false;
   private detectedUserNamespace = false;
 
-  constructor(private readonly db: CyberOsDatabase, private readonly options: DockerHostAccessPolicyOptions = {}) {
+  constructor(_db: CyberOsDatabase, private readonly options: DockerHostAccessPolicyOptions) {
     this.platform = options.platform ?? process.platform;
-    this.runtimeRoot = options.runtimeRoot ?? DEFAULT_RUNTIME_ROOT;
+    this.runtimeRoot = options.runtimeRoot;
+    this.dataRoot = options.dataRoot;
   }
 
   setRuntimeCompatibility(input: { rootless?: boolean; userNamespace?: boolean }): void {
@@ -213,27 +211,35 @@ export class DockerHostAccessPolicy {
     this.detectedUserNamespace = input.userNamespace === true;
   }
 
+  isStoragePoolPath(candidatePath: string): boolean {
+    const candidate = resolveRealPath(candidatePath);
+    return this.storagePools().some((pool) => {
+      if (!capacityAnchorAvailable(path.join(pool.path, DOCKER_HOST_ACCESS_STORAGE_POOL_ANCHOR))) return false;
+      const poolPath = resolveRealPath(pool.path);
+      return candidate === poolPath || candidate.startsWith(`${poolPath}${path.sep}`);
+    });
+  }
+
   catalog(): DockerHostAccessCatalog {
-    const roots = listNasRoots(this.db).map((root) => {
-      const readiness = getRootReadiness(this.db, root.id);
-      const ready = readiness?.status === "ready";
+    const storagePools = this.storagePools().map((pool) => {
       return {
-        rootId: root.id,
-        name: root.name,
-        availability: !ready
-          ? unavailable("nas_root_not_ready")
-          : capacityAnchorAvailable(path.join(root.path, DOCKER_HOST_ACCESS_NAS_ANCHOR))
-            ? available()
-            : unavailable("runtime_dependency_unavailable")
+        storagePoolId: pool.id,
+        name: pool.id,
+        availability: capacityAnchorAvailable(path.join(pool.path, DOCKER_HOST_ACCESS_STORAGE_POOL_ANCHOR))
+          ? available()
+          : unavailable("runtime_dependency_unavailable")
       };
     });
     return {
       policyVersion: DOCKER_HOST_ACCESS_POLICY_VERSION,
       capabilities: CAPABILITY_DEFINITIONS.map((definition) => ({
         ...definition,
-        availability: this.capabilityAvailability(definition.id, roots.some((root) => root.availability.status !== "unavailable"))
+        availability: this.capabilityAvailability(
+          definition.id,
+          storagePools.some((pool) => pool.availability.status !== "unavailable")
+        )
       })),
-      nasRoots: roots
+      storagePools
     };
   }
 
@@ -278,7 +284,7 @@ export class DockerHostAccessPolicy {
     };
     const fingerprint = createHash("sha256").update(stableStringify(fingerprinted)).digest("base64url");
     const summary = grants.map((grant) => grant.capability === "nas_capacity"
-      ? `${grant.capability}:${grant.rootId}`
+      ? `${grant.capability}:${grant.storagePoolId}`
       : grant.capability).join(",");
     return {
       ...(input.service ? { service: input.service } : {}),
@@ -389,8 +395,8 @@ export class DockerHostAccessPolicy {
         continue;
       }
       const capability = candidate.capability as DockerHostAccessCapabilityId;
-      const rootId = capability === "nas_capacity" && typeof candidate.rootId === "string" ? candidate.rootId.trim() : undefined;
-      const key = `${capability}\0${rootId ?? ""}`;
+      const storagePoolId = capability === "nas_capacity" && typeof candidate.storagePoolId === "string" ? candidate.storagePoolId.trim() : undefined;
+      const key = `${capability}\0${storagePoolId ?? ""}`;
       if (seen.has(key)) {
         issues.push({ code: "duplicate_capability", severity: "error", ...(service ? { service } : {}), capability });
         continue;
@@ -415,26 +421,26 @@ export class DockerHostAccessPolicy {
         });
       }
       if (capability === "nas_capacity") {
-        if (!rootId) {
-          issues.push({ code: "missing_root", severity: "error", ...(service ? { service } : {}), capability });
+        if (!storagePoolId) {
+          issues.push({ code: "missing_storage_pool", severity: "error", ...(service ? { service } : {}), capability });
           continue;
         }
-        const root = catalog.nasRoots.find((entry) => entry.rootId === rootId);
-        if (!root || root.availability.status === "unavailable") {
+        const storagePool = catalog.storagePools.find((entry) => entry.storagePoolId === storagePoolId);
+        if (!storagePool || storagePool.availability.status === "unavailable") {
           issues.push({
-            code: "root_unavailable",
+            code: "storage_pool_unavailable",
             severity: "error",
             ...(service ? { service } : {}),
             capability,
-            reasonCodes: root?.availability.reasonCodes ?? ["nas_root_not_ready"]
+            reasonCodes: storagePool?.availability.reasonCodes ?? ["storage_pool_not_ready"]
           });
           continue;
         }
-      } else if ("rootId" in candidate) {
-        issues.push({ code: "missing_root", severity: "error", ...(service ? { service } : {}), capability });
+      } else if ("storagePoolId" in candidate) {
+        issues.push({ code: "missing_storage_pool", severity: "error", ...(service ? { service } : {}), capability });
       }
       const defaultTarget = capability === "nas_capacity"
-        ? path.posix.join(definition.defaultTarget!, rootId!)
+        ? path.posix.join(definition.defaultTarget!, storagePoolId!)
         : definition.defaultTarget;
       const target = candidate.target === undefined ? defaultTarget : normalizeContainerTarget(candidate.target);
       if (candidate.target !== undefined && target === null) {
@@ -458,7 +464,7 @@ export class DockerHostAccessPolicy {
       }
       if (target) targets.push(target);
       grants.push(capability === "nas_capacity"
-        ? { capability, rootId: rootId!, ...(target !== defaultTarget ? { target: target! } : {}) }
+        ? { capability, storagePoolId: storagePoolId!, ...(target !== defaultTarget ? { target: target! } : {}) }
         : { capability, ...(target !== defaultTarget && target ? { target } : {}) });
     }
     grants.sort(compareGrants);
@@ -471,7 +477,7 @@ export class DockerHostAccessPolicy {
     for (const grant of grants) {
       const definition = CAPABILITY_DEFINITIONS.find((entry) => entry.id === grant.capability)!;
       const target = grant.target ?? (grant.capability === "nas_capacity"
-        ? path.posix.join(definition.defaultTarget!, grant.rootId)
+        ? path.posix.join(definition.defaultTarget!, grant.storagePoolId)
         : definition.defaultTarget);
       switch (grant.capability) {
         case "host_os_identity":
@@ -491,10 +497,16 @@ export class DockerHostAccessPolicy {
           mounts.push({ source: "/sys", target: target!, readOnly: true });
           break;
         case "nas_capacity": {
-          const root = listNasRoots(this.db).find((candidate) => candidate.id === grant.rootId);
-          if (!root) throw new DockerHostAccessValidationError([{ code: "root_unavailable", severity: "error", capability: grant.capability }]);
+          const storagePool = this.storagePools().find((candidate) => candidate.id === grant.storagePoolId);
+          if (!storagePool) {
+            throw new DockerHostAccessValidationError([{
+              code: "storage_pool_unavailable",
+              severity: "error",
+              capability: grant.capability
+            }]);
+          }
           mounts.push({
-            source: path.join(root.path, DOCKER_HOST_ACCESS_NAS_ANCHOR),
+            source: path.join(storagePool.path, DOCKER_HOST_ACCESS_STORAGE_POOL_ANCHOR),
             target: target!,
             readOnly: true
           });
@@ -517,28 +529,27 @@ export class DockerHostAccessPolicy {
   }
 
   private resourceIdentities(grants: DockerHostAccessGrant[]): unknown[] {
-    const roots = new Map(listNasRoots(this.db).map((root) => [root.id, root]));
+    const storagePools = new Map(this.storagePools().map((pool) => [pool.id, pool]));
     return grants.filter((grant) => grant.capability === "nas_capacity").map((grant) => {
-      const root = roots.get(grant.rootId);
-      const readiness = getRootReadiness(this.db, grant.rootId);
+      const storagePool = storagePools.get(grant.storagePoolId);
+      const identity = storagePool ? lstatSync(storagePool.path) : null;
       return {
         capability: grant.capability,
-        rootId: grant.rootId,
-        path: root?.path ?? null,
-        source: readiness?.source ?? null,
-        uuid: readiness?.uuid ?? null,
-        fstype: readiness?.fstype ?? null
+        storagePoolId: grant.storagePoolId,
+        path: storagePool?.path ?? null,
+        device: identity?.dev ?? null,
+        inode: identity?.ino ?? null
       };
     });
   }
 
-  private capabilityAvailability(id: DockerHostAccessCapabilityId, hasReadyRoot: boolean): DockerHostAccessAvailability {
+  private capabilityAvailability(id: DockerHostAccessCapabilityId, hasReadyStoragePool: boolean): DockerHostAccessAvailability {
     if (this.platform !== "linux") return unavailable("not_linux");
     const rootless = this.options.rootless ?? this.detectedRootless;
     const userNamespace = this.options.userNamespace ?? this.detectedUserNamespace;
     if ((id === "host_processes" || id === "host_sys") && rootless) return unavailable("rootless_docker");
     if ((id === "host_processes" || id === "host_sys") && userNamespace) return degraded("user_namespace_enabled");
-    if (id === "nas_capacity") return hasReadyRoot ? available() : unavailable("no_ready_nas_root");
+    if (id === "nas_capacity") return hasReadyStoragePool ? available() : unavailable("no_ready_storage_pool");
     if (id === "docker_metadata") {
       if (!this.daemonIsAvailable()) return unavailable("host_access_daemon_unavailable");
       return this.proxyCompatible("docker") ? available() : unavailable("docker_proxy_unverified");
@@ -550,8 +561,15 @@ export class DockerHostAccessPolicy {
     return available();
   }
 
-  private daemonAvailability(): DockerHostAccessAvailability {
-    return this.daemonIsAvailable() ? available() : unavailable("host_access_daemon_unavailable");
+  private storagePools(): Array<{ id: string; path: string }> {
+    try {
+      return readdirSync(this.dataRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+        .map((entry) => ({ id: entry.name, path: path.join(this.dataRoot, entry.name) }))
+        .sort((left, right) => left.id.localeCompare(right.id));
+    } catch {
+      return [];
+    }
   }
 
   private daemonIsAvailable(): boolean {
@@ -612,6 +630,14 @@ function capacityAnchorAvailable(anchor: string): boolean {
     return metadata.isDirectory() && !metadata.isSymbolicLink() && readdirSync(anchor).length === 0;
   } catch {
     return false;
+  }
+}
+
+function resolveRealPath(candidatePath: string): string {
+  try {
+    return realpathSync(candidatePath);
+  } catch {
+    return path.resolve(candidatePath);
   }
 }
 
@@ -688,7 +714,7 @@ function conflictingServiceIssues(
 
 function compareGrants(left: DockerHostAccessGrant, right: DockerHostAccessGrant): number {
   return left.capability.localeCompare(right.capability)
-    || (left.capability === "nas_capacity" ? left.rootId : "").localeCompare(right.capability === "nas_capacity" ? right.rootId : "")
+    || (left.capability === "nas_capacity" ? left.storagePoolId : "").localeCompare(right.capability === "nas_capacity" ? right.storagePoolId : "")
     || (left.target ?? "").localeCompare(right.target ?? "");
 }
 

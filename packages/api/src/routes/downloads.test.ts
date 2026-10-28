@@ -2,8 +2,8 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ensureNasRoots, openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -14,7 +14,8 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   };
 });
 
-const poolId = "/dev/md/test-pool";
+const poolId = "pool-1";
+const poolDevice = "/dev/md/pool-1";
 let tempDir: string | null = null;
 let db: CyberOsDatabase | null = null;
 
@@ -35,8 +36,7 @@ describe("download API", () => {
       url: "/api/downloads",
       payload: {
         url: "https://example.com/file.zip",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         targetDirectory: ".",
         fileName: "file.zip"
       }
@@ -49,8 +49,7 @@ describe("download API", () => {
       url: "/api/downloads",
       payload: {
         url: "https://example.com/other.zip",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         targetDirectory: ".",
         fileName: "file.zip"
       }
@@ -84,8 +83,7 @@ describe("download API", () => {
       url: "/api/downloads",
       payload: {
         url: "ftp://example.com/file.zip",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         targetDirectory: ".",
         fileName: "file.zip"
       }
@@ -97,8 +95,7 @@ describe("download API", () => {
       url: "/api/downloads",
       payload: {
         url: "https://example.com/file.zip",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         targetDirectory: ".",
         fileName: "../file.zip"
       }
@@ -118,8 +115,7 @@ describe("download API", () => {
       url: "/api/downloads",
       payload: {
         url: "https://example.com/checked.bin",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         targetDirectory: ".",
         fileName: "checked.bin",
         sha256: `  ${checksum}  `
@@ -133,8 +129,7 @@ describe("download API", () => {
       url: "/api/downloads",
       payload: {
         url: "https://example.com/invalid.bin",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         targetDirectory: ".",
         fileName: "invalid.bin",
         sha256: "not-a-checksum"
@@ -153,8 +148,7 @@ describe("download API", () => {
         url: "/api/downloads",
         payload: {
           url: `https://example.com/${fileName}`,
-          rootId: "local",
-          storagePoolId: poolId,
+                    storagePoolId: poolId,
           targetDirectory: ".",
           fileName
         }
@@ -188,7 +182,7 @@ describe("download API", () => {
     await app.close();
   });
 
-  it("persists all reliability settings, validates bounds, and upgrades legacy records", async () => {
+  it("persists all reliability settings and validates bounds", async () => {
     const { app } = await setup();
     const initial = await app.inject({ method: "GET", url: "/api/settings/downloads" });
     expect(initial.statusCode).toBe(200);
@@ -235,16 +229,6 @@ describe("download API", () => {
       maxFileSizeBytes: 4 * 1024 * 1024 * 1024
     });
 
-    db?.prepare(`
-      UPDATE system_settings SET value_json = ?, updated_at = ? WHERE key = 'download_settings'
-    `).run(JSON.stringify({ concurrency: 2 }), new Date().toISOString());
-    const legacy = await app.inject({ method: "GET", url: "/api/settings/downloads" });
-    expect(legacy.json().settings).toMatchObject({
-      concurrency: 2,
-      parallelRequestsPerTask: 4,
-      maxAutoRetries: 5,
-      maxFileSizeBytes: null
-    });
     await app.close();
   });
 
@@ -276,8 +260,7 @@ describe("download API", () => {
       url: "/api/downloads",
       payload: {
         url: "https://example.com/file.zip",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         targetDirectory: ".",
         fileName: "existing.bin"
       }
@@ -297,8 +280,7 @@ describe("download API", () => {
         url: "/api/downloads",
         payload: {
           url: "https://example.com/file.zip",
-          rootId: "local",
-          storagePoolId: poolId,
+                    storagePoolId: poolId,
           targetDirectory: "Downloads",
           fileName: "file.zip"
         }
@@ -318,29 +300,27 @@ async function setup(): Promise<{
   root: string;
 }> {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-download-api-"));
-  const root = path.join(tempDir, "root");
-  await mkdir(root);
+  const root = path.join(tempDir, "data", poolId);
+  await mkdir(root, { recursive: true });
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: root }]);
   const app = await buildServer({ config: testConfig(root), db, system: storageSystem() });
   return { app, root };
 }
 
 function testConfig(root: string): CyberOsConfig {
+  const rootDir = tempDir!;
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
   return {
-    environment: "development",
-    dataDir: path.dirname(root),
-    databasePath: path.join(path.dirname(root), "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: path.dirname(root), databasePath: path.join(rootDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
-    hostd: { socketPath: "/tmp/hostd.sock" },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "local", name: "Local", path: root }]
   };
 }
 
@@ -349,9 +329,9 @@ function storageSystem() {
     commandRunner: {
       async run(command: string) {
         if (command === "findmnt") {
-          return JSON.stringify({ filesystems: [{ source: poolId, target: tempDir ? path.join(tempDir, "root") : ".", fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
+          return JSON.stringify({ filesystems: [{ source: poolDevice, target: tempDir ? path.join(tempDir, "data", poolId) : ".", fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
         }
-        if (command === "mdadm") return "ARRAY /dev/md/test-pool name=test UUID=test";
+        if (command === "mdadm") return `ARRAY ${poolDevice} name=${poolId} UUID=test`;
         if (command === "smartctl") return JSON.stringify({ devices: [] });
         return JSON.stringify({ blockdevices: [] });
       }

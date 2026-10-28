@@ -1,13 +1,17 @@
 import { stat } from "node:fs/promises";
 import net from "node:net";
-import { resolveSafeExistingPath } from "@cyberos/nas-tools";
+import { resolveSafeExistingPath } from "@cyberos/storage-tools";
 import type {
   DlnaMediaType,
-  NasRootRecord,
   ShareDefinitionConfig,
   ShareProtocolConfig,
   ShareSettingsRecord
 } from "@cyberos/shared";
+
+export interface ShareStoragePool {
+  id: string;
+  path: string;
+}
 
 export type ShareSettingsInput = Partial<Omit<ShareSettingsRecord, "account" | "shares" | "updatedAt">> & {
   account?: {
@@ -35,9 +39,9 @@ const SHARE_USERNAME_PATTERN = /^[a-z_][a-z0-9_-]{0,31}$/u;
 export async function normalizeShareSettingsInput(
   input: ShareSettingsInput | undefined,
   existing: ShareSettingsRecord,
-  roots: NasRootRecord[]
+  storagePools: ShareStoragePool[]
 ): Promise<ShareSettingsRecord> {
-  const rootById = new Map(roots.map((root) => [root.id, root]));
+  const storagePoolById = new Map(storagePools.map((pool) => [pool.id, pool]));
   const accountInput = recordFrom(input?.account);
   const username = normalizeText(accountInput.username) ?? existing.account.username;
   validateUsername(username);
@@ -52,7 +56,7 @@ export async function normalizeShareSettingsInput(
   }
 
   const shares = await Promise.all((input?.shares ?? existing.shares).map((share, index) =>
-    normalizeShareDefinition(share, index, rootById)
+    normalizeShareDefinition(share, index, storagePoolById)
   ));
   validateUnique(shares.map((share) => share.id), "Share id must be unique");
   validateAuthCoverage(input?.enabled ?? existing.enabled, shares, password);
@@ -74,24 +78,24 @@ export async function normalizeShareSettingsInput(
 async function normalizeShareDefinition(
   value: ShareDefinitionInput,
   index: number,
-  roots: Map<string, NasRootRecord>
+  storagePools: Map<string, ShareStoragePool>
 ): Promise<ShareDefinitionConfig> {
   const id = normalizeText(value.id) ?? `share-${index + 1}`;
   if (!SHARE_ID_PATTERN.test(id)) {
     throw new Error(`Share id is invalid: ${id}`);
   }
   const name = normalizeDisplayText(value.name) ?? id;
-  const rootId = normalizeText(value.rootId);
-  if (!rootId) {
-    throw new Error(`Share ${id} is missing a NAS root`);
+  const storagePoolId = normalizeText(value.storagePoolId);
+  if (!storagePoolId) {
+    throw new Error(`Share ${id} is missing a storage pool`);
   }
-  const root = roots.get(rootId);
-  if (!root) {
-    throw new Error(`NAS root ${rootId} is not configured`);
+  const storagePool = storagePools.get(storagePoolId);
+  if (!storagePool) {
+    throw new Error(`Storage pool ${storagePoolId} is not mounted`);
   }
 
   const sharePath = normalizeText(value.path) ?? ".";
-  const safe = await resolveSafeExistingPath(root.path, sharePath);
+  const safe = await resolveSafeExistingPath(storagePool.path, sharePath);
   const targetStat = await stat(safe.realPath);
   if (!targetStat.isDirectory()) {
     throw new Error(`Share ${id} path must be a directory`);
@@ -100,7 +104,7 @@ async function normalizeShareDefinition(
   return {
     id,
     name,
-    rootId: root.id,
+    storagePoolId: storagePool.id,
     path: safe.relativePath,
     description: normalizeDisplayText(value.description) ?? "",
     protocols: normalizeProtocols(value.protocols, id, name)

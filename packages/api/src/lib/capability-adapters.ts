@@ -12,15 +12,13 @@ import {
   type PreparedCapabilityAction
 } from "@cyberos/capability-runtime";
 import {
-  enqueuePhotostaffJob,
-  getNasRoot,
-  getPhotostaffLibrarySettings,
-  getRootReadiness,
+  enqueuePhotosJob,
+  getPhotosLibrarySettings,
   recordAppliedOperation,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { isPathInside, resolveSafeExistingPath, resolveSafeTargetPath } from "@cyberos/nas-tools";
-import { photostaffMediaKind, type CyberOsConfig } from "@cyberos/shared";
+import { isPathInside, resolveSafeExistingPath, resolveSafeTargetPath } from "@cyberos/storage-tools";
+import { photosMediaKind, type CyberOsConfig } from "@cyberos/shared";
 import {
   createFileExportMcpResource,
   createPhotoExportMcpResource,
@@ -28,6 +26,11 @@ import {
   McpResourceError,
   photoExportResourceRevision
 } from "./mcp-resources.js";
+import type { SystemManagementDependencies } from "./system-management.js";
+import {
+  resolveStoragePoolScope,
+  StorageScopeError
+} from "./storage-scope.js";
 
 interface InternalRequest {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -61,26 +64,30 @@ const MUTATION_CAPABILITIES = [
 
 export function createCapabilityAdapters(
   server: FastifyInstance,
-  options: { resourceBaseUrl: string }
+  options: { resourceBaseUrl: string; system?: SystemManagementDependencies }
 ): Readonly<Record<string, CapabilityDomainAdapter>> {
   const adapters: Record<string, CapabilityDomainAdapter> = {
     "cyberos.shell.run": createRestrictedShellAdapter()
   };
   for (const capabilityId of MUTATION_CAPABILITIES) {
-    adapters[capabilityId] = httpDomainAdapter(server, capabilityId, options.resourceBaseUrl);
+    adapters[capabilityId] = httpDomainAdapter(server, capabilityId, options);
   }
   return adapters;
 }
 
-function httpDomainAdapter(server: FastifyInstance, capabilityId: string, resourceBaseUrl: string): CapabilityDomainAdapter {
+function httpDomainAdapter(
+  server: FastifyInstance,
+  capabilityId: string,
+  options: { resourceBaseUrl: string; system?: SystemManagementDependencies }
+): CapabilityDomainAdapter {
   return {
     availability: ({ config }) => capabilityAvailability(capabilityId, config),
     prepare: async (request, context) => {
       const parsed = requestObject(request);
       validateMcpRequest(parsed);
       await validateHostPolicy(capabilityId, parsed, context.config);
-      await validateRootReferences(parsed, context.db);
-      const revision = await capabilityRevision(context.db, context.config, capabilityId, parsed);
+      await validateStoragePoolReferences(parsed, context.config, options.system);
+      const revision = await capabilityRevision(context.db, context.config, options.system, capabilityId, parsed);
       return {
         summary: capabilitySummary(capabilityId, parsed),
         target: capabilityTarget(parsed),
@@ -93,8 +100,8 @@ function httpDomainAdapter(server: FastifyInstance, capabilityId: string, resour
     revalidate: async (prepared, context) => {
       const request = adapterRequest(prepared);
       await validateHostPolicy(capabilityId, request, context.config);
-      await validateRootReferences(request, context.db);
-      const current = await capabilityRevision(context.db, context.config, capabilityId, request);
+      await validateStoragePoolReferences(request, context.config, options.system);
+      const current = await capabilityRevision(context.db, context.config, options.system, capabilityId, request);
       if (prepared.revision && prepared.revision !== current) {
         throw new CapabilityError("CONFLICT", "Domain state changed after approval was requested");
       }
@@ -108,8 +115,9 @@ function httpDomainAdapter(server: FastifyInstance, capabilityId: string, resour
         secrets,
         context.db,
         context.config,
+        options.system,
         context.subject.clientId,
-        resourceBaseUrl
+        options.resourceBaseUrl
       );
       const link = domainLink(direct);
       return { data: direct, ...link };
@@ -124,6 +132,7 @@ async function executeDirectCapability(
   secrets: Readonly<Record<string, string>>,
   db: CyberOsDatabase,
   config: CyberOsConfig,
+  system: SystemManagementDependencies | undefined,
   clientId: string,
   resourceBaseUrl: string
 ): Promise<JsonValue> {
@@ -131,9 +140,11 @@ async function executeDirectCapability(
     try {
       return await createFileExportMcpResource({
         db,
+        config,
+        ...(system ? { system } : {}),
         clientId,
         baseUrl: resourceBaseUrl,
-        rootId: requiredString(request.rootId, "rootId"),
+        storagePoolId: requiredString(request.storagePoolId, "storagePoolId"),
         paths: stringArray(request.paths, "paths"),
         ...(typeof request.archiveName === "string" ? { archiveName: request.archiveName } : {})
       });
@@ -142,11 +153,13 @@ async function executeDirectCapability(
     }
   }
   if (capabilityId === "cyberos.files.edit") return executeFileEdit(server, request);
-  if (capabilityId === "cyberos.files.write") return executeFileWrite(db, request);
+  if (capabilityId === "cyberos.files.write") return executeFileWrite(db, config, system, request);
   if (capabilityId === "cyberos.photos.manage-propose" && request.operation === "export") {
     try {
       return await createPhotoExportMcpResource({
         db,
+        config,
+        ...(system ? { system } : {}),
         clientId,
         baseUrl: resourceBaseUrl,
         assetIds: stringArray(request.assetIds, "assetIds"),
@@ -157,7 +170,7 @@ async function executeDirectCapability(
     }
   }
   if (capabilityId === "cyberos.photos.manage-propose" && request.operation === "import") {
-    return importPhotosFromNas(db, request);
+    return importPhotosFromStorage(db, config, system, request);
   }
   if (capabilityId === "cyberos.backup.run-propose") return executeBackup(db, config, request);
   if (capabilityId === "cyberos.docker.console-propose") {
@@ -240,7 +253,6 @@ function downloadRequest(operation: string, request: Record<string, JsonValue>):
   if (operation === "create") {
     return { method: "POST", url: "/api/downloads", payload: {
       url: request.url,
-      rootId: request.rootId,
       storagePoolId: request.storagePoolId,
       targetDirectory: request.targetDirectory,
       fileName: request.fileName,
@@ -342,7 +354,7 @@ function settingsRequest(
 
 function terminalRequest(operation: string, request: Record<string, JsonValue>): InternalRequest {
   switch (operation) {
-    case "create": return { method: "POST", url: "/api/terminal/tabs", payload: { rootId: request.rootId } };
+    case "create": return { method: "POST", url: "/api/terminal/tabs" };
     case "rename": return { method: "PATCH", url: `/api/terminal/tabs/${encoded(request.tabId)}`, payload: { customTitle: request.customTitle } };
     case "activate": return { method: "POST", url: `/api/terminal/tabs/${encoded(request.tabId)}/activate` };
     case "restart": return { method: "POST", url: `/api/terminal/tabs/${encoded(request.tabId)}/restart` };
@@ -387,11 +399,11 @@ function alertRequest(
 }
 
 async function executeFileEdit(server: FastifyInstance, request: Record<string, JsonValue>): Promise<JsonValue> {
-  const rootId = requiredString(request.rootId, "rootId");
+  const storagePoolId = requiredString(request.storagePoolId, "storagePoolId");
   const filePath = requiredString(request.path, "path");
   const current = await injectJson(server, {
     method: "GET",
-    url: `/api/files/edit-text?rootId=${encodeURIComponent(rootId)}&path=${encodeURIComponent(filePath)}`
+    url: `/api/files/edit-text?storagePoolId=${encodeURIComponent(storagePoolId)}&path=${encodeURIComponent(filePath)}`
   });
   if (!isRecord(current) || typeof current.content !== "string") throw new CapabilityError("INVALID_ARGUMENT", "File is not editable text");
   if (typeof request.expectedSha256 === "string") {
@@ -406,20 +418,29 @@ async function executeFileEdit(server: FastifyInstance, request: Record<string, 
   if (occurrences === 0) throw new CapabilityError("CONFLICT", "Edit text no longer exists in the file");
   if (request.replaceAll !== true && occurrences !== 1) throw new CapabilityError("CONFLICT", "Edit text is not unique; set replaceAll to replace every match");
   const content = request.replaceAll === true ? current.content.split(find).join(replacement) : current.content.replace(find, replacement);
-  return injectJson(server, { method: "PUT", url: "/api/files/edit-text", payload: { rootId, path: filePath, content, expectedModifiedAt: current.modifiedAt ?? null } });
+  return injectJson(server, { method: "PUT", url: "/api/files/edit-text", payload: { storagePoolId, path: filePath, content, expectedModifiedAt: current.modifiedAt ?? null } });
 }
 
-async function executeFileWrite(db: CyberOsDatabase, request: Record<string, JsonValue>): Promise<JsonValue> {
-  const root = requireReadyRoot(db, requiredString(request.rootId, "rootId"));
+async function executeFileWrite(
+  db: CyberOsDatabase,
+  config: CyberOsConfig,
+  system: SystemManagementDependencies | undefined,
+  request: Record<string, JsonValue>
+): Promise<JsonValue> {
+  const scope = await resolveCapabilityStoragePool(
+    config,
+    system,
+    requiredString(request.storagePoolId, "storagePoolId")
+  );
   const requestedPath = requiredString(request.path, "path");
   const content = typeof request.content === "string" ? request.content : null;
   if (content === null || Buffer.byteLength(content, "utf8") > 1_048_576) throw new CapabilityError("INVALID_ARGUMENT", "File content exceeds the 1 MiB limit");
-  const target = await resolveSafeTargetPath(root.path, requestedPath);
-  const parent = await resolveSafeExistingPath(root.path, path.dirname(target.relativePath));
+  const target = await resolveSafeTargetPath(scope.workspace.path, requestedPath);
+  const parent = await resolveSafeExistingPath(scope.workspace.path, path.dirname(target.relativePath));
   if (!(await stat(parent.realPath)).isDirectory()) throw new CapabilityError("INVALID_ARGUMENT", "File parent must be a directory");
   let existed = false;
   try {
-    const existing = await resolveSafeExistingPath(root.path, requestedPath);
+    const existing = await resolveSafeExistingPath(scope.workspace.path, requestedPath);
     const metadata = await lstat(existing.absolutePath);
     if (metadata.isSymbolicLink() || !metadata.isFile()) throw new CapabilityError("INVALID_ARGUMENT", "Write target must be a regular file");
     existed = true;
@@ -445,49 +466,60 @@ async function executeFileWrite(db: CyberOsDatabase, request: Record<string, Jso
     throw error;
   }
   const operation = recordAppliedOperation(db, {
-    approvalId: null,
     operation: "edit",
     sourcePath: target.relativePath,
     targetPath: target.relativePath,
     status: "applied",
-    metadata: { rootId: root.id, reversible: false, created: !existed, sizeBytes: Buffer.byteLength(content, "utf8") }
+    metadata: { storagePoolId: scope.pool.id, reversible: false, created: !existed, sizeBytes: Buffer.byteLength(content, "utf8") }
   });
   return toJson({ path: target.relativePath, created: !existed, sizeBytes: Buffer.byteLength(content, "utf8"), operation });
 }
 
-async function importPhotosFromNas(db: CyberOsDatabase, request: Record<string, JsonValue>): Promise<JsonValue> {
-  const plan = await resolvePhotoImportPlan(db, request);
+async function importPhotosFromStorage(
+  db: CyberOsDatabase,
+  config: CyberOsConfig,
+  system: SystemManagementDependencies | undefined,
+  request: Record<string, JsonValue>
+): Promise<JsonValue> {
+  const plan = await resolvePhotoImportPlan(db, config, system, request);
   const imported: JsonValue[] = [];
   for (const item of plan.items) {
     await copyFile(item.source.realPath, item.target.absolutePath, 1);
     const operation = recordAppliedOperation(db, {
-      approvalId: null,
       operation: "copy",
       sourcePath: item.source.relativePath,
       targetPath: item.target.relativePath,
       status: "applied",
       metadata: {
-        rootId: plan.libraryRoot.id,
         storagePoolId: plan.settings.storagePoolId,
-        sourceRootId: plan.sourceRoot.id,
+        sourceStoragePoolId: plan.sourceScope.pool.id,
         reversible: true,
         photoImport: true
       }
     });
     imported.push({ path: item.target.relativePath, operationId: operation.id });
   }
-  const job = enqueuePhotostaffJob(db, { settings: plan.settings, kind: "full_scan", path: plan.settings.path });
+  const job = enqueuePhotosJob(db, { settings: plan.settings, kind: "full_scan", path: plan.settings.path });
   return toJson({ imported, job });
 }
 
-async function resolvePhotoImportPlan(db: CyberOsDatabase, request: Record<string, JsonValue>) {
-  const settings = getPhotostaffLibrarySettings(db);
+async function resolvePhotoImportPlan(
+  db: CyberOsDatabase,
+  config: CyberOsConfig,
+  system: SystemManagementDependencies | undefined,
+  request: Record<string, JsonValue>
+) {
+  const settings = getPhotosLibrarySettings(db);
   if (!settings) throw new CapabilityError("NOT_READY", "Photo library is not configured", { retryable: true });
-  const sourceRoot = requireReadyRoot(db, requiredString(request.sourceRootId, "sourceRootId"));
-  const libraryRoot = requireReadyRoot(db, settings.rootId);
-  const libraryDirectory = await resolveSafeExistingPath(libraryRoot.path, settings.path);
+  const sourceScope = await resolveCapabilityStoragePool(
+    config,
+    system,
+    requiredString(request.sourceStoragePoolId, "sourceStoragePoolId")
+  );
+  const libraryScope = await resolveCapabilityStoragePool(config, system, settings.storagePoolId);
+  const libraryDirectory = await resolveSafeExistingPath(libraryScope.workspace.path, settings.path);
   const destinationDirectory = await resolveSafeExistingPath(
-    libraryRoot.path,
+    libraryScope.workspace.path,
     typeof request.targetDirectory === "string" ? request.targetDirectory : settings.path
   );
   if (
@@ -499,13 +531,13 @@ async function resolvePhotoImportPlan(db: CyberOsDatabase, request: Record<strin
   const targetPaths = new Set<string>();
   const items = [];
   for (const sourcePath of stringArray(request.sourcePaths, "sourcePaths")) {
-    const source = await resolveSafeExistingPath(sourceRoot.path, sourcePath);
+    const source = await resolveSafeExistingPath(sourceScope.workspace.path, sourcePath);
     const sourceStat = await lstat(source.absolutePath);
-    if (sourceStat.isSymbolicLink() || !sourceStat.isFile() || !photostaffMediaKind(source.relativePath)) {
+    if (sourceStat.isSymbolicLink() || !sourceStat.isFile() || !photosMediaKind(source.relativePath)) {
       throw new CapabilityError("INVALID_ARGUMENT", "Photo import sources must be supported regular media files");
     }
     const target = await resolveSafeTargetPath(
-      libraryRoot.path,
+      libraryScope.workspace.path,
       path.join(destinationDirectory.relativePath, path.basename(source.realPath))
     );
     if (!isPathInside(libraryDirectory.realPath, target.absolutePath) || targetPaths.has(target.relativePath)) {
@@ -521,7 +553,7 @@ async function resolvePhotoImportPlan(db: CyberOsDatabase, request: Record<strin
     }
     items.push({ source, target });
   }
-  return { settings, sourceRoot, libraryRoot, destinationDirectory, items };
+  return { settings, sourceScope, libraryScope, destinationDirectory, items };
 }
 
 async function executeBackup(db: CyberOsDatabase, config: CyberOsConfig, request: Record<string, JsonValue>): Promise<JsonValue> {
@@ -573,13 +605,13 @@ function capabilityAvailability(capabilityId: string, config: CyberOsConfig) {
   if (capabilityId.startsWith("cyberos.docker.")) return config.docker.enabled
     ? { available: true }
     : { available: false, reason: "Docker management is disabled" };
-  if (capabilityId.startsWith("cyberos.vm.")) return config.vm?.enabled
+  if (capabilityId.startsWith("cyberos.vm.")) return config.vm.enabled
     ? { available: true }
     : { available: false, reason: "Virtual machine management is disabled" };
   if (capabilityId === "cyberos.vod.control-propose") return config.vodPlayer.enabled
     ? { available: true }
     : { available: false, reason: "VOD Player is disabled" };
-  if (capabilityId === "cyberos.backup.run-propose") return config.backup?.enabled
+  if (capabilityId === "cyberos.backup.run-propose") return config.backup.enabled
     ? { available: true }
     : { available: false, reason: "Backup is disabled" };
   if (
@@ -644,21 +676,33 @@ function rejectComposeCredentials(value: unknown, pathSegments: string[] = []): 
   }
 }
 
-async function validateRootReferences(request: Record<string, JsonValue>, db: CyberOsDatabase): Promise<void> {
-  for (const reference of rootReferences(request)) requireReadyRoot(db, reference.rootId);
+async function validateStoragePoolReferences(
+  request: Record<string, JsonValue>,
+  config: CyberOsConfig,
+  system: SystemManagementDependencies | undefined
+): Promise<void> {
+  for (const reference of storagePoolReferences(request)) {
+    await resolveCapabilityStoragePool(config, system, reference.storagePoolId);
+  }
 }
 
 async function capabilityRevision(
   db: CyberOsDatabase,
   config: CyberOsConfig,
+  system: SystemManagementDependencies | undefined,
   capabilityId: string,
   request: Record<string, JsonValue>
 ): Promise<string> {
-  const rootStates = rootReferences(request).map(({ field, rootId }) => {
-    const root = getNasRoot(db, rootId);
-    const readiness = getRootReadiness(db, rootId);
-    return { field, rootId, enabled: root?.enabled ?? false, readiness: readiness?.status ?? null, checkedAt: readiness?.checkedAt ?? null };
-  });
+  const storagePoolStates = await Promise.all(storagePoolReferences(request).map(async ({ field, storagePoolId }) => {
+    const scope = await resolveCapabilityStoragePool(config, system, storagePoolId);
+    return {
+      field,
+      storagePoolId,
+      status: scope.pool.status,
+      mountpoint: scope.pool.mountpoint,
+      filesystem: scope.pool.filesystem
+    };
+  }));
   const tables = revisionTables(capabilityId);
   const tableStates = tables.map((table) => {
     try {
@@ -667,40 +711,46 @@ async function capabilityRevision(
       return null;
     }
   });
-  const resourceState = await capabilityResourceState(db, capabilityId, request);
+  const resourceState = await capabilityResourceState(db, config, system, capabilityId, request);
   return createHash("sha256").update(JSON.stringify({
     capabilityId,
     operation: request.operation,
-    hostMutationPolicy: config.hostd.mutationPolicy ?? "mutable",
-    rootStates,
+    hostMutationPolicy: config.hostd.mutationPolicy,
+    storagePoolStates,
     tableStates,
     resourceState
   })).digest("base64url");
 }
 
-function rootReferences(value: JsonValue, prefix = "request"): Array<{ field: string; rootId: string }> {
-  if (Array.isArray(value)) return value.flatMap((item, index) => rootReferences(item, `${prefix}[${index}]`));
+function storagePoolReferences(value: JsonValue, prefix = "request"): Array<{ field: string; storagePoolId: string }> {
+  if (Array.isArray(value)) return value.flatMap((item, index) => storagePoolReferences(item, `${prefix}[${index}]`));
   if (!isRecord(value)) return [];
-  const references: Array<{ field: string; rootId: string }> = [];
+  const references: Array<{ field: string; storagePoolId: string }> = [];
   for (const [key, item] of Object.entries(value)) {
     const field = `${prefix}.${key}`;
-    if (["rootId", "sourceRootId", "targetRootId", "isoRootId"].includes(key) && typeof item === "string") {
-      references.push({ field, rootId: item });
+    if (["storagePoolId", "sourceStoragePoolId", "targetStoragePoolId", "isoStoragePoolId", "inboxStoragePoolId"].includes(key) && typeof item === "string") {
+      references.push({ field, storagePoolId: item });
     }
-    if (Array.isArray(item) || isRecord(item)) references.push(...rootReferences(item, field));
+    if (Array.isArray(item) || isRecord(item)) references.push(...storagePoolReferences(item, field));
   }
-  return [...new Map(references.map((reference) => [`${reference.field}\0${reference.rootId}`, reference])).values()];
+  return [...new Map(references.map((reference) => [`${reference.field}\0${reference.storagePoolId}`, reference])).values()];
 }
 
 async function capabilityResourceState(
   db: CyberOsDatabase,
+  config: CyberOsConfig,
+  system: SystemManagementDependencies | undefined,
   capabilityId: string,
   request: Record<string, JsonValue>
 ): Promise<JsonValue> {
   if (capabilityId === "cyberos.files.edit" || capabilityId === "cyberos.files.write") {
-    const root = requireReadyRoot(db, requiredString(request.rootId, "rootId"));
+    const scope = await resolveCapabilityStoragePool(
+      config,
+      system,
+      requiredString(request.storagePoolId, "storagePoolId")
+    );
     return toJson(await fileTargetState(
-      root.path,
+      scope.workspace.path,
       requiredString(request.path, "path"),
       capabilityId === "cyberos.files.write"
     ));
@@ -708,8 +758,9 @@ async function capabilityResourceState(
   if (capabilityId === "cyberos.files.export-propose") {
     try {
       return await fileExportResourceRevision(
-        db,
-        requiredString(request.rootId, "rootId"),
+        config,
+        system,
+        requiredString(request.storagePoolId, "storagePoolId"),
         stringArray(request.paths, "paths")
       );
     } catch (error) {
@@ -718,13 +769,13 @@ async function capabilityResourceState(
   }
   if (capabilityId === "cyberos.photos.manage-propose" && request.operation === "export") {
     try {
-      return await photoExportResourceRevision(db, stringArray(request.assetIds, "assetIds"));
+      return await photoExportResourceRevision(db, config, system, stringArray(request.assetIds, "assetIds"));
     } catch (error) {
       throw resourceCapabilityError(error);
     }
   }
   if (capabilityId === "cyberos.photos.manage-propose" && request.operation === "import") {
-    const plan = await resolvePhotoImportPlan(db, request);
+    const plan = await resolvePhotoImportPlan(db, config, system, request);
     return toJson({
       settingsUpdatedAt: plan.settings.updatedAt,
       destination: await fileSystemState(plan.destinationDirectory.realPath),
@@ -777,7 +828,7 @@ async function fileSystemState(filePath: string): Promise<Record<string, JsonVal
 
 function revisionTables(capabilityId: string): string[] {
   if (capabilityId.startsWith("cyberos.files.")) return ["file_operations", "trash_entries"];
-  if (capabilityId.startsWith("cyberos.photos.")) return ["photostaff_assets", "photostaff_jobs", "system_settings"];
+  if (capabilityId.startsWith("cyberos.photos.")) return ["photos_assets", "photos_jobs", "system_settings"];
   if (capabilityId.startsWith("cyberos.downloads.")) return ["download_tasks", "system_settings"];
   if (capabilityId.startsWith("cyberos.alerts.")) return ["monitoring_alert_rules", "monitoring_alert_incidents", "system_settings"];
   if (capabilityId.startsWith("cyberos.notifications.")) return ["operation_notifications"];
@@ -823,7 +874,7 @@ function capabilitySummary(capabilityId: string, request: Record<string, JsonVal
 
 function capabilityTarget(request: Record<string, JsonValue>): JsonValue {
   return toJson({
-    ...(typeof request.rootId === "string" ? { rootId: request.rootId } : {}),
+    ...(typeof request.storagePoolId === "string" ? { storagePoolId: request.storagePoolId } : {}),
     ...(typeof request.path === "string" ? { path: request.path } : {}),
     ...(typeof request.taskId === "string" ? { taskId: request.taskId } : {}),
     ...(typeof request.containerId === "string" ? { containerId: request.containerId } : {}),
@@ -865,13 +916,22 @@ function requestObject(value: JsonValue): Record<string, JsonValue> {
   return value;
 }
 
-function requireReadyRoot(db: CyberOsDatabase, rootId: string) {
-  const root = getNasRoot(db, rootId);
-  if (!root || !root.enabled) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
-  if (root.mountPolicy === "required" && getRootReadiness(db, root.id)?.status !== "ready") {
-    throw new CapabilityError("NOT_READY", "NAS root is not ready", { retryable: true });
+async function resolveCapabilityStoragePool(
+  config: CyberOsConfig,
+  system: SystemManagementDependencies | undefined,
+  storagePoolId: string
+) {
+  try {
+    return await resolveStoragePoolScope(config.paths.dataRoot, system, storagePoolId);
+  } catch (error) {
+    if (error instanceof StorageScopeError) {
+      if (error.statusCode === 404 || error.statusCode === 400) {
+        throw new CapabilityError("INVALID_ARGUMENT", error.message);
+      }
+      throw new CapabilityError("NOT_READY", error.message, { retryable: true });
+    }
+    throw error;
   }
-  return root;
 }
 
 function without(value: Record<string, JsonValue>, ...keys: string[]): Record<string, JsonValue> {

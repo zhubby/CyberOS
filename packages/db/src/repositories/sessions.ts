@@ -28,17 +28,16 @@ function sessionColumns(db: CyberOsDatabase): string {
   const trustColumn = hasSessionResourceTrust(db)
     ? "pi_resources_trusted"
     : "0 AS pi_resources_trusted";
-  return `id, root_id, current_path, ${trustColumn}, created_at, updated_at`;
+  return `id, current_path, ${trustColumn}, created_at, updated_at`;
 }
 
 export function createSession(
   db: CyberOsDatabase,
-  input: { rootId: string; currentPath?: string }
+  input: { currentPath?: string }
 ): AgentSessionRecord {
   const now = new Date().toISOString();
   const session: AgentSessionRecord = {
     id: randomUUID(),
-    rootId: input.rootId,
     currentPath: input.currentPath ?? ".",
     piResourcesTrusted: false,
     createdAt: now,
@@ -48,14 +47,14 @@ export function createSession(
   if (hasSessionResourceTrust(db)) {
     db.prepare(`
       INSERT INTO agent_sessions (
-        id, root_id, current_path, pi_resources_trusted, created_at, updated_at
-      ) VALUES (@id, @rootId, @currentPath, 0, @createdAt, @updatedAt)
+        id, current_path, pi_resources_trusted, created_at, updated_at
+      ) VALUES (@id, @currentPath, 0, @createdAt, @updatedAt)
     `).run(session);
   } else {
     db.prepare(`
       INSERT INTO agent_sessions (
-        id, root_id, current_path, created_at, updated_at
-      ) VALUES (@id, @rootId, @currentPath, @createdAt, @updatedAt)
+        id, current_path, created_at, updated_at
+      ) VALUES (@id, @currentPath, @createdAt, @updatedAt)
     `).run(session);
   }
 
@@ -74,27 +73,17 @@ export function getSession(db: CyberOsDatabase, sessionId: string): AgentSession
 
 export function listSessions(
   db: CyberOsDatabase,
-  input: { rootId?: string; limit?: number } = {}
+  input: { limit?: number } = {}
 ): AgentSessionRecord[] {
   const limit = input.limit ?? 50;
-  const rows = input.rootId
-    ? (db
-        .prepare(`
-          SELECT ${sessionColumns(db)}
-          FROM agent_sessions
-          WHERE root_id = ?
-          ORDER BY updated_at DESC
-          LIMIT ?
-        `)
-        .all(input.rootId, limit) as DbSessionRow[])
-    : (db
-        .prepare(`
-          SELECT ${sessionColumns(db)}
-          FROM agent_sessions
-          ORDER BY updated_at DESC
-          LIMIT ?
-        `)
-        .all(limit) as DbSessionRow[]);
+  const rows = db
+    .prepare(`
+      SELECT ${sessionColumns(db)}
+      FROM agent_sessions
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `)
+    .all(limit) as DbSessionRow[];
 
   return rows.map(mapSession);
 }
@@ -127,7 +116,7 @@ export function updateSessionResourceTrust(
     UPDATE agent_sessions
     SET pi_resources_trusted = ?, updated_at = ?
     WHERE id = ?
-    RETURNING id, root_id, current_path, pi_resources_trusted, created_at, updated_at
+    RETURNING id, current_path, pi_resources_trusted, created_at, updated_at
   `).get(input.trusted ? 1 : 0, now, input.sessionId) as DbSessionRow | undefined;
   return row ? mapSession(row) : null;
 }

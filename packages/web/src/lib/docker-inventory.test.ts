@@ -14,6 +14,7 @@ function container(name: string, id = name): DockerContainer {
     shortId: id.slice(0, 12),
     name,
     image: "alpine:latest",
+    imageId: "sha256:alpine",
     state: "running",
     status: "Up",
     ports: [],

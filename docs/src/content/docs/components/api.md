@@ -9,7 +9,7 @@ sidebar:
   order: 2
 ---
 
-路由按领域拆分为 health、roots、indexer、readiness、backup、settings、system、storage、sessions、jobs、files、approvals、operations、Docker、shares、terminal 和 VMs。
+路由按领域拆分为 health、indexer、backup、settings、system、storage pools、sessions、jobs、files、capability approvals、operations、notifications、Docker、VMs、shares、terminal、media、Photos、downloads、monitoring 和 Bluetooth transfers。
 
 HTTP 面包含 REST、SSE 和 WebSocket，没有 OpenAPI 生成层。文档只记录端点用途、传输方式、审批要求和源码位置；`/api/files/meta` 与 `/api/files/text` 的响应形状由现有测试保护。
 

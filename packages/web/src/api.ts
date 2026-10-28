@@ -45,7 +45,7 @@ import type {
   DockerRegistryCredentialUpdateInput,
   GitDirectoryStatus,
   GitFileStatus,
-  IndexRootStatus,
+  IndexStoragePoolStatus,
   IndexReindexRequest as SharedIndexReindexRequest,
   IndexSearchCategory as SharedIndexSearchCategory,
   IndexSearchPage as SharedIndexSearchPage,
@@ -86,7 +86,6 @@ import type {
   SystemWifiStatus,
   SystemStorageSummary,
   BackupRunSummary,
-  RootReadiness,
   IndexerAlert,
   SystemHealthSummary,
   DownloadWorkerHealth as SharedDownloadWorkerHealth,
@@ -169,11 +168,13 @@ import type {
 } from "@cyberos/shared";
 import { createClientId } from "./lib/client-id.js";
 
-export interface NasRoot {
+export interface StoragePool {
   id: string;
   name: string;
+  mountpoint: string | null;
   path: string;
-  homePath: string | null;
+  filesystem: string | null;
+  status: SystemStorageSummary["pools"][number]["status"];
 }
 
 export interface FileEntry {
@@ -197,7 +198,7 @@ export interface FileSearchResult {
   git: GitDirectoryStatus | null;
 }
 
-export type IndexerRootStatus = IndexRootStatus;
+export type IndexerStoragePoolStatus = IndexStoragePoolStatus;
 export type IndexReindexRequest = SharedIndexReindexRequest;
 export type IndexSearchCategory = SharedIndexSearchCategory;
 export type IndexSearchPage = SharedIndexSearchPage;
@@ -208,7 +209,7 @@ export type IndexerServiceStatus = SharedIndexerServiceStatus;
 export type IndexerSettings = SharedIndexerSettingsRecord;
 
 export interface IndexerOverview extends IndexerServiceStatus {
-  roots: IndexerRootStatus[];
+  storagePools: IndexerStoragePoolStatus[];
 }
 
 export interface BackupStatus {
@@ -222,7 +223,6 @@ export interface BackupStatus {
   alerts: IndexerAlert[];
 }
 
-export interface ReadinessResponse { roots: RootReadiness[]; }
 export type SystemHealth = SystemHealthSummary;
 export type MonitoringCatalog = SharedMonitoringCatalogResponse;
 export type MonitoringOverview = SharedMonitoringOverviewResponse;
@@ -288,11 +288,10 @@ export type VmSummary = PublicVmSummary;
 export type VmOperation = VmOperationRecord;
 export type VmAction = VmOperationAction;
 export interface VmActionResult { message: AgentMessage; job: Job; approval: null; operation: VmOperation; consoleSession?: VmConsoleSession; }
-export interface VmConsoleSession { id: string; operationId: string; approvalId: string | null; domainName: string; status: string; createdAt: string; expiresAt: string; usedAt: string | null; websocketUrl: string; }
+export interface VmConsoleSession { id: string; operationId: string; domainName: string; status: string; createdAt: string; expiresAt: string; usedAt: string | null; websocketUrl: string; }
 
 export interface Session {
   id: string;
-  rootId: string;
   currentPath: string;
   createdAt?: string;
   updatedAt?: string;
@@ -316,6 +315,8 @@ export interface TranscriptMessage {
   streaming?: boolean;
 }
 
+type PersistedTranscriptMessage = Omit<TranscriptMessage, "sequence"> & { sequence: number };
+
 export interface Job {
   id: string;
   sessionId: string;
@@ -335,8 +336,7 @@ export interface AgentMessage {
 
 export interface FileOperationProposal {
   operation: string;
-  rootId: string;
-  storagePoolId?: string;
+  storagePoolId: string;
   sourcePath?: string;
   targetPath?: string;
   tag?: string;
@@ -399,7 +399,6 @@ export interface ApprovalQueue {
 
 export interface FileOperation {
   id: string;
-  approvalId: string | null;
   operation: string;
   sourcePath: string | null;
   targetPath: string | null;
@@ -422,8 +421,8 @@ export interface AgentEvent {
   transcriptSequence: number | null;
   source?: string;
   sourceId?: string | null;
-  runId?: string;
-  sequence?: number;
+  runId: string;
+  sequence: number;
   payload: Record<string, unknown>;
   createdAt: string;
 }
@@ -570,7 +569,7 @@ export type DockerOperation = DockerOperationRecord;
 export type ShareOperation = ShareOperationRecord;
 export type VodPlayerStatus = SharedVodPlayerStatus;
 export type VodPlayerCommand =
-  | { type: "play"; rootId: string; storagePoolId: string; path: string; startPositionSeconds?: number; audioDeviceId?: string }
+  | { type: "play"; storagePoolId: string; path: string; startPositionSeconds?: number; audioDeviceId?: string }
   | Exclude<SharedVodPlayerCommand, { type: "play" }>;
 
 export interface FileMeta {
@@ -662,13 +661,6 @@ export type DockerSettings = DockerSettingsRecord;
 
 export const MAX_EDIT_TEXT_BYTES = 1024 * 1024;
 
-export async function getRoots(): Promise<NasRoot[]> {
-  const response = await fetch("/api/roots");
-  await ensureOk(response);
-  const body = (await response.json()) as { roots: NasRoot[] };
-  return body.roots;
-}
-
 export async function getModelProviderSettings(): Promise<ModelProviderSettings> {
   const response = await fetch("/api/settings/model-provider");
   await ensureOk(response);
@@ -747,7 +739,6 @@ export async function getBluetoothTransfers(): Promise<BluetoothTransfersRespons
 export async function createBluetoothTransfers(input: {
   adapterId: string;
   address: string;
-  rootId: string;
   storagePoolId: string;
   paths: string[];
 }): Promise<BluetoothTransfer[]> {
@@ -1283,7 +1274,6 @@ export async function executeVmOperation(input: {
   diskCache?: VmDiskCache;
   diskDiscard?: VmDiskDiscard;
   isoPath?: string;
-  isoRootId?: string;
   isoStoragePoolId?: string;
   diskPath?: string;
   networkName?: string;
@@ -1618,27 +1608,20 @@ export async function saveAgentMcpSettings(enabled: boolean): Promise<AgentMcpSe
   return body.settings;
 }
 
-export async function getSessions(rootId?: string): Promise<SessionSummary[]> {
-  const params = new URLSearchParams();
-  if (rootId) {
-    params.set("rootId", rootId);
-  }
-  const response = await fetch(`/api/sessions${params.size ? `?${params.toString()}` : ""}`);
+export async function getSessions(): Promise<SessionSummary[]> {
+  const response = await fetch("/api/sessions");
   await ensureOk(response);
   const body = (await response.json()) as { sessions: SessionSummary[] };
   return body.sessions;
 }
 
-export async function createSession(rootId: string, currentPath: string): Promise<Session> {
+export async function createSession(currentPath: string): Promise<Session> {
   const response = await fetch("/api/sessions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      rootId,
-      path: currentPath
-    })
+    body: JSON.stringify({ path: currentPath })
   });
   await ensureOk(response);
   const body = (await response.json()) as { session: Session };
@@ -1670,18 +1653,14 @@ export async function deleteSession(sessionId: string): Promise<void> {
 export async function getTranscript(sessionId: string): Promise<TranscriptMessage[]> {
   const response = await fetch(`/api/sessions/${sessionId}/transcript`);
   await ensureOk(response);
-  const body = (await response.json()) as { transcript: TranscriptMessage[] };
-  return body.transcript.map((message) => ({
-    ...message,
-    sequence: message.sequence ?? null
-  }));
+  const body = (await response.json()) as { transcript: PersistedTranscriptMessage[] };
+  return body.transcript;
 }
 
-export async function getFiles(rootId: string, currentPath: string, storagePoolId: string): Promise<FileListing> {
+export async function getFiles(storagePoolId: string, currentPath: string): Promise<FileListing> {
   const params = new URLSearchParams({
-    rootId,
-    path: currentPath,
-    storagePoolId
+    storagePoolId,
+    path: currentPath
   });
   const response = await fetch(`/api/files?${params.toString()}`);
   await ensureOk(response);
@@ -1695,7 +1674,6 @@ export async function getPhotoLibrarySettings(): Promise<PhotoLibrarySettings | 
 }
 
 export async function savePhotoLibrarySettings(input: {
-  rootId: string;
   storagePoolId: string;
   path: string;
 }): Promise<{ settings: PhotoLibrarySettings; job: PhotoJob }> {
@@ -1815,7 +1793,6 @@ export async function getMediaSources(): Promise<MediaSource[]> {
 export async function createMediaSource(input: {
   name: string;
   kind: MediaSourceKind;
-  rootId: string;
   storagePoolId: string;
   path: string;
 }): Promise<{ source: MediaSource; scan: MediaScanRun }> {
@@ -1934,7 +1911,6 @@ export async function getDownloads(): Promise<{
 
 export async function createDownload(input: {
   url: string;
-  rootId: string;
   storagePoolId: string;
   targetDirectory: string;
   fileName: string;
@@ -1969,28 +1945,25 @@ export async function deleteDownload(id: string): Promise<void> {
   await ensureOk(response);
 }
 
-export async function getTerminalTabs(rootId: string): Promise<TerminalTabState> {
-  const params = new URLSearchParams({ rootId });
-  const response = await fetch(`/api/terminal/tabs?${params.toString()}`);
+export async function getTerminalTabs(): Promise<TerminalTabState> {
+  const response = await fetch("/api/terminal/tabs");
   await ensureOk(response);
   return (await response.json()) as TerminalTabState;
 }
 
-export async function initializeTerminalTabs(rootId: string): Promise<TerminalTabState> {
+export async function initializeTerminalTabs(): Promise<TerminalTabState> {
   const response = await fetch("/api/terminal/tabs/initialize", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rootId })
+    headers: { "Content-Type": "application/json" }
   });
   await ensureOk(response);
   return (await response.json()) as TerminalTabState;
 }
 
-export async function createTerminalTab(rootId: string): Promise<TerminalTabState> {
+export async function createTerminalTab(): Promise<TerminalTabState> {
   const response = await fetch("/api/terminal/tabs", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rootId })
+    headers: { "Content-Type": "application/json" }
   });
   await ensureOk(response);
   return (await response.json()) as TerminalTabState;
@@ -2059,16 +2032,14 @@ export async function updateDownloadSettings(
 }
 
 export async function searchFiles(
-  rootId: string,
+  storagePoolId: string,
   currentPath: string,
-  query: string,
-  storagePoolId: string
+  query: string
 ): Promise<FileSearchResult> {
   const params = new URLSearchParams({
-    rootId,
+    storagePoolId,
     path: currentPath,
-    q: query,
-    storagePoolId
+    q: query
   });
   const response = await fetch(`/api/search?${params.toString()}`);
   await ensureOk(response);
@@ -2085,21 +2056,21 @@ export async function searchIndex(request: IndexSearchRequest): Promise<IndexSea
   return (await response.json()) as IndexSearchPage;
 }
 
-export async function getIndexerStatus(rootId?: string): Promise<IndexerRootStatus[]> {
+export async function getIndexerStatus(storagePoolId?: string): Promise<IndexerStoragePoolStatus[]> {
   const params = new URLSearchParams();
-  if (rootId) {
-    params.set("rootId", rootId);
+  if (storagePoolId) {
+    params.set("storagePoolId", storagePoolId);
   }
   const query = params.size ? `?${params.toString()}` : "";
   const response = await fetch(`/api/indexer/status${query}`);
   await ensureOk(response);
-  const body = (await response.json()) as { roots: IndexerRootStatus[] };
-  return body.roots;
+  const body = (await response.json()) as { storagePools: IndexerStoragePoolStatus[] };
+  return body.storagePools;
 }
 
-export async function getIndexerOverview(rootId?: string): Promise<IndexerOverview> {
+export async function getIndexerOverview(storagePoolId?: string): Promise<IndexerOverview> {
   const params = new URLSearchParams();
-  if (rootId) params.set("rootId", rootId);
+  if (storagePoolId) params.set("storagePoolId", storagePoolId);
   const query = params.size ? `?${params.toString()}` : "";
   const response = await fetch(`/api/indexer/status${query}`);
   await ensureOk(response);
@@ -2133,16 +2104,6 @@ export async function requestReindex(input: IndexReindexRequest): Promise<void> 
     body: JSON.stringify(input)
   });
   await ensureOk(response);
-}
-
-export async function getRootReadiness(rootId?: string): Promise<RootReadiness[]> {
-  const params = new URLSearchParams();
-  if (rootId) params.set("rootId", rootId);
-  const query = params.size ? `?${params.toString()}` : "";
-  const response = await fetch(`/api/roots/readiness${query}`);
-  await ensureOk(response);
-  const body = (await response.json()) as ReadinessResponse;
-  return body.roots;
 }
 
 export async function getBackupStatus(): Promise<BackupStatus> {
@@ -2182,11 +2143,10 @@ export async function runSystemOperation(
   return body.result;
 }
 
-export async function getFileMeta(rootId: string, currentPath: string, storagePoolId: string): Promise<FileMeta> {
+export async function getFileMeta(storagePoolId: string, currentPath: string): Promise<FileMeta> {
   const params = new URLSearchParams({
-    rootId,
-    path: currentPath,
-    storagePoolId
+    storagePoolId,
+    path: currentPath
   });
   const response = await fetch(`/api/files/meta?${params.toString()}`);
   await ensureOk(response);
@@ -2195,15 +2155,13 @@ export async function getFileMeta(rootId: string, currentPath: string, storagePo
 }
 
 export async function getTextPreview(
-  rootId: string,
-  currentPath: string,
   storagePoolId: string,
+  currentPath: string,
   maxBytes = 64 * 1024
 ): Promise<TextPreview> {
   const params = new URLSearchParams({
-    rootId,
-    path: currentPath,
     storagePoolId,
+    path: currentPath,
     maxBytes: String(maxBytes)
   });
   const response = await fetch(`/api/files/text?${params.toString()}`);
@@ -2211,11 +2169,10 @@ export async function getTextPreview(
   return (await response.json()) as TextPreview;
 }
 
-export async function getEditableText(rootId: string, currentPath: string, storagePoolId: string): Promise<EditableText> {
+export async function getEditableText(storagePoolId: string, currentPath: string): Promise<EditableText> {
   const params = new URLSearchParams({
-    rootId,
-    path: currentPath,
-    storagePoolId
+    storagePoolId,
+    path: currentPath
   });
   const response = await fetch(`/api/files/edit-text?${params.toString()}`);
   await ensureOk(response);
@@ -2223,7 +2180,6 @@ export async function getEditableText(rootId: string, currentPath: string, stora
 }
 
 export async function saveEditableText(input: {
-  rootId: string;
   storagePoolId: string;
   currentPath: string;
   content: string;
@@ -2235,7 +2191,6 @@ export async function saveEditableText(input: {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      rootId: input.rootId,
       storagePoolId: input.storagePoolId,
       path: input.currentPath,
       content: input.content,
@@ -2247,7 +2202,6 @@ export async function saveEditableText(input: {
 }
 
 export async function applyFileMutation(input: {
-  rootId: string;
   storagePoolId: string;
   operation: "mkdir" | "rename" | "copy";
   sourcePath?: string;
@@ -2266,7 +2220,6 @@ export async function applyFileMutation(input: {
 }
 
 export async function createFileBatch(input: {
-  rootId: string;
   storagePoolId: string;
   operation: "move" | "trash";
   sourcePaths: string[];
@@ -2282,12 +2235,10 @@ export async function createFileBatch(input: {
 }
 
 export async function getFileBatches(input: {
-  rootId?: string | null;
   storagePoolId?: string | null;
   limit?: number;
 } = {}): Promise<FileBatch[]> {
   const params = new URLSearchParams();
-  if (input.rootId) params.set("rootId", input.rootId);
   if (input.storagePoolId) params.set("storagePoolId", input.storagePoolId);
   params.set("limit", String(input.limit ?? 50));
   const response = await fetch(`/api/files/batches?${params.toString()}`);
@@ -2301,7 +2252,7 @@ export async function cancelFileBatch(batchId: string): Promise<FileBatch> {
   return ((await response.json()) as { batch: FileBatch }).batch;
 }
 
-export async function extractFile(input: { rootId: string; storagePoolId: string; path: string }): Promise<ExtractFileResult> {
+export async function extractFile(input: { storagePoolId: string; path: string }): Promise<ExtractFileResult> {
   const response = await fetch("/api/files/extract", {
     method: "POST",
     headers: {
@@ -2314,7 +2265,6 @@ export async function extractFile(input: { rootId: string; storagePoolId: string
 }
 
 export async function uploadFile(input: {
-  rootId: string;
   storagePoolId: string;
   path: string;
   file: File;
@@ -2323,7 +2273,6 @@ export async function uploadFile(input: {
 }): Promise<UploadFileResult> {
   return await new Promise<UploadFileResult>((resolve, reject) => {
     const params = new URLSearchParams({
-      rootId: input.rootId,
       storagePoolId: input.storagePoolId,
       path: input.path
     });
@@ -2382,27 +2331,24 @@ export async function uploadFile(input: {
   });
 }
 
-export function getFileBlobUrl(rootId: string, currentPath: string, storagePoolId: string): string {
+export function getFileBlobUrl(storagePoolId: string, currentPath: string): string {
   const params = new URLSearchParams({
-    rootId,
-    path: currentPath,
-    storagePoolId
+    storagePoolId,
+    path: currentPath
   });
   return `/api/files/blob?${params.toString()}`;
 }
 
-export function getFileDownloadUrl(rootId: string, currentPath: string, storagePoolId: string): string {
+export function getFileDownloadUrl(storagePoolId: string, currentPath: string): string {
   const params = new URLSearchParams({
-    rootId,
-    path: currentPath,
     storagePoolId,
+    path: currentPath,
     download: "1"
   });
   return `/api/files/blob?${params.toString()}`;
 }
 
 export async function createFileExport(input: {
-  rootId: string;
   storagePoolId: string;
   sourcePaths: string[];
 }): Promise<FileExportResult> {
@@ -2411,11 +2357,10 @@ export async function createFileExport(input: {
   return (await response.json()) as FileExportResult;
 }
 
-export function getFileVideoUrl(rootId: string, currentPath: string, storagePoolId: string): string {
+export function getFileVideoUrl(storagePoolId: string, currentPath: string): string {
   const params = new URLSearchParams({
-    rootId,
-    path: currentPath,
-    storagePoolId
+    storagePoolId,
+    path: currentPath
   });
   return `/api/files/video?${params.toString()}`;
 }
@@ -2547,31 +2492,10 @@ export async function sendMessage(
   await ensureOk(response);
   const body = (await response.json()) as {
     job: Job;
-    message?: AgentMessage;
-    transcriptMessage?: TranscriptMessage;
+    transcriptMessage?: PersistedTranscriptMessage;
   };
-  if (body.transcriptMessage) {
-    return {
-      job: body.job,
-      transcriptMessage: {
-        ...body.transcriptMessage,
-        sequence: body.transcriptMessage.sequence ?? null
-      }
-    };
-  }
-  if (body.message?.role === "user") {
-    return {
-      job: body.job,
-      transcriptMessage: {
-        id: `message:${body.message.id}`,
-        role: "user",
-        content: body.message.content,
-        createdAt: body.message.createdAt,
-        sequence: null
-      }
-    };
-  }
-  throw new Error("Message response did not include a transcript message");
+  if (!body.transcriptMessage) throw new Error("Message response did not include a transcript message");
+  return { job: body.job, transcriptMessage: body.transcriptMessage };
 }
 
 export async function sendAgentSessionCommand(

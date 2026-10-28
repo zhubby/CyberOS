@@ -3,7 +3,6 @@ import { promisify } from "node:util";
 import type {
   ShareApplyRequest,
   ShareApplyResult,
-  NasRootConfig,
   ShareOperationProposal,
   ShareOperationRecord,
   ShareProtocol,
@@ -124,7 +123,7 @@ export async function collectShareSummary(
     shares: settings.shares.map((share, index) => ({
       id: share.id,
       name: share.name,
-      rootId: share.rootId,
+      storagePoolId: share.storagePoolId,
       path: share.path,
       enabledProtocols: enabledShares[index] ?? []
     })),
@@ -142,7 +141,7 @@ export async function applyShareOperation(
     throw new Error("Unsupported share action");
   }
   const settings = shareSettingsFromOperation(operation);
-  const result = await applyShareSettings(config, settings, config.nasRoots, dependencies);
+  const result = await applyShareSettings(config, settings, dependencies);
   return {
     action: proposal.action,
     files: result.files,
@@ -154,13 +153,12 @@ export async function applyShareOperation(
 export async function applyShareSettings(
   config: CyberOsConfig,
   settings: ShareSettingsRecord,
-  roots: NasRootConfig[],
   dependencies: ShareManagementDependencies = {}
 ): Promise<ShareApplyResult> {
   const hostd = dependencies.hostd ?? new HostdShareClient(config.hostd.socketPath);
   return hostd.apply({
     settings,
-    roots
+    dataRoot: config.paths.dataRoot
   });
 }
 

@@ -13,8 +13,15 @@ import {
 } from "./settings-constants.js";
 
 export function mapAgentCapabilityPolicySettings(row: DbSystemSettingRow): AgentCapabilityPolicySettingsRecord {
-  const parsed = JSON.parse(row.value_json) as Partial<AgentCapabilityPolicySettingsRecord>;
-  return normalizeAgentCapabilityPolicySettings(parsed, parsed.updatedAt ?? row.updated_at);
+  const parsed = currentRecord(JSON.parse(row.value_json), "Agent capability policy");
+  const policies = currentRecord(parsed.policies, "Agent capability policy modes");
+  if (AGENT_CAPABILITY_IDS.some((capabilityId) => !Object.hasOwn(policies, capabilityId))) {
+    throw new Error("Agent capability policy does not match the CyberOS 2.0 format");
+  }
+  return normalizeAgentCapabilityPolicySettings(
+    parsed as unknown as AgentCapabilityPolicySettingsRecord,
+    currentTimestamp(parsed.updatedAt, "Agent capability policy")
+  );
 }
 
 export function normalizeAgentCapabilityPolicySettings(
@@ -34,29 +41,47 @@ export function normalizeAgentCapabilityPolicySettings(
 import type { DbSystemSettingRow } from "./repository-rows.js";
 
 export function mapModelProviderSettings(row: DbSystemSettingRow): ModelProviderSettingsRecord {
-  const parsed = JSON.parse(row.value_json) as Partial<ModelProviderSettingsRecord> & { provider?: string };
-  const providerName = normalizeModelProviderName(parsed.providerName ?? parsed.provider);
+  const parsed = currentRecord(JSON.parse(row.value_json), "Model provider");
+  const providerName = normalizeModelProviderName(parsed.providerName);
+  if (
+    !Number.isSafeInteger(parsed.generation)
+    || Number(parsed.generation) < 1
+    || !isNullableString(parsed.baseUrl)
+    || typeof parsed.model !== "string"
+    || !isNullableString(parsed.apiKey)
+  ) {
+    throw new Error("Model provider settings do not match the CyberOS 2.0 format");
+  }
   return {
-    generation: typeof parsed.generation === "number" && Number.isInteger(parsed.generation) && parsed.generation > 0
-      ? parsed.generation
-      : 1,
+    generation: parsed.generation as number,
     providerName,
-    baseUrl: parsed.baseUrl ?? null,
-    model: parsed.model ?? "",
-    apiKey: parsed.apiKey ?? null,
-    updatedAt: parsed.updatedAt ?? row.updated_at
+    baseUrl: parsed.baseUrl,
+    model: parsed.model,
+    apiKey: parsed.apiKey,
+    updatedAt: currentTimestamp(parsed.updatedAt, "Model provider")
   };
 }
 
 export function mapDockerSettings(row: DbSystemSettingRow): DockerSettingsRecord {
-  const parsed = JSON.parse(row.value_json) as Partial<DockerSettingsRecord>;
+  const parsed = currentRecord(JSON.parse(row.value_json), "Docker");
+  if (
+    typeof parsed.enabled !== "boolean"
+    || normalizeString(parsed.socketPath) === null
+    || normalizeString(parsed.composeCommand) === null
+    || normalizePositiveInteger(parsed.operationTimeoutMs) === null
+    || !Array.isArray(parsed.consoleShells)
+    || parsed.consoleShells.length === 0
+    || parsed.consoleShells.some((shell) => normalizeString(shell) === null)
+  ) {
+    throw new Error("Docker settings do not match the CyberOS 2.0 format");
+  }
   return {
-    enabled: Boolean(parsed.enabled),
-    socketPath: normalizeString(parsed.socketPath) ?? "/var/run/docker.sock",
-    composeCommand: normalizeString(parsed.composeCommand) ?? "docker",
-    operationTimeoutMs: normalizePositiveInteger(parsed.operationTimeoutMs) ?? 120_000,
+    enabled: parsed.enabled,
+    socketPath: normalizeString(parsed.socketPath)!,
+    composeCommand: normalizeString(parsed.composeCommand)!,
+    operationTimeoutMs: normalizePositiveInteger(parsed.operationTimeoutMs)!,
     consoleShells: normalizeDockerShells(parsed.consoleShells),
-    updatedAt: normalizeString(parsed.updatedAt) ?? row.updated_at
+    updatedAt: currentTimestamp(parsed.updatedAt, "Docker")
   };
 }
 
@@ -89,25 +114,27 @@ function isAgentCapabilityPolicyMode(value: unknown): value is AgentCapabilityPo
 }
 
 export function normalizeModelProviderName(value: unknown): ModelProviderName {
-  const providerName = legacyModelProviderName(normalizeString(value) ?? undefined);
-  return isModelProviderName(providerName) ? providerName : "openai";
+  const providerName = normalizeString(value);
+  if (!isModelProviderName(providerName)) {
+    throw new Error("Invalid model provider name");
+  }
+  return providerName;
 }
 
-function legacyModelProviderName(provider: string | undefined): string | undefined {
-  switch (provider) {
-    case "openai-compatible":
-      return "openai";
-    case "anthropic-compatible":
-      return "anthropic";
-    case "local":
-      return "openai";
-    case "pi":
-      return "openai";
-    case "google":
-      return "openai";
-    case "openrouter":
-      return "openai";
-    default:
-      return provider;
+function currentRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} settings do not match the CyberOS 2.0 format`);
   }
+  return value as Record<string, unknown>;
+}
+
+function currentTimestamp(value: unknown, label: string): string {
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) {
+    throw new Error(`${label} settings require a valid updatedAt timestamp`);
+  }
+  return value;
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
 }

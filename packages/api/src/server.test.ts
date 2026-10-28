@@ -2,12 +2,12 @@ import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
 import http from "node:http";
 import net from "node:net";
-import { access, chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PHOTOSTAFF_SUPPORTED_EXTENSIONS, resolveCyberOsPaths } from "@cyberos/shared";
+import { loadConfig, PHOTOS_SUPPORTED_EXTENSIONS, resolveCyberOsPaths } from "@cyberos/shared";
 import {
   appendEvent,
   claimNextJob,
@@ -18,7 +18,6 @@ import {
   createMcpClient,
   createSession,
   createUserMessageAndJob,
-  ensureNasRoots,
   finishBackupRun,
   finishIndexRun,
   getDockerSettings,
@@ -38,7 +37,6 @@ import {
   listFileOperations,
   listMessages,
   listMcpClients,
-  listPendingApprovals,
   listOperationNotifications,
   listShareOperations,
   linkAgentJobToCapabilityRun,
@@ -46,7 +44,7 @@ import {
   recoverExpiredAgentJobs,
   recordIndexFailure,
   saveDockerSettings,
-  savePhotostaffLibrarySettings,
+  savePhotosLibrarySettings,
   saveShareSettings,
   startBackupRun,
   startIndexRun,
@@ -92,7 +90,7 @@ import type {
 import { DockerComposeService, type DockerComposeRuntime } from "./lib/docker-compose.js";
 import { DockerRequestError, type DockerEngineRuntime, type DockerExecStream } from "./lib/docker-client.js";
 import { DockerDaemonRequestError, type DockerDaemonRuntime } from "./lib/docker-daemon.js";
-import { DockerHostAccessPolicy } from "./lib/docker-host-access.js";
+import { DockerHostAccessPolicy, type DockerHostAccessPolicyOptions } from "./lib/docker-host-access.js";
 import type { NetworkManagerRuntime } from "./lib/network-manager.js";
 import type { BluetoothManagerRuntime } from "./lib/bluetooth-manager.js";
 import { EthernetManagerRequestError, type EthernetManagerRuntime } from "./lib/ethernet-manager.js";
@@ -103,7 +101,7 @@ import type { SystemCommandRunner } from "./lib/system-management.js";
 import { buildServer as buildApiServer, type ServerDependencies } from "./server.js";
 
 const execFileAsync = promisify(execFile);
-const TEST_STORAGE_POOL_ID = "/dev/md/test-pool";
+const TEST_STORAGE_POOL_ID = "pool-1";
 const TEST_WIFI_PROFILE_ID = "12345678-1234-4123-8123-123456789abc";
 
 let tempDir: string;
@@ -122,6 +120,7 @@ function testStorageCommandRunner(): SystemCommandRunner {
 }
 
 function testStorageCommandRunnerFor(target: string, poolId = TEST_STORAGE_POOL_ID): SystemCommandRunner {
+  const devicePath = `/dev/md/${poolId}`;
   return {
     async run(command, args) {
       if (command === "lsblk") {
@@ -131,7 +130,7 @@ function testStorageCommandRunnerFor(target: string, poolId = TEST_STORAGE_POOL_
         return JSON.stringify({
           filesystems: [
             {
-              source: poolId,
+              source: devicePath,
               target,
               fstype: "ext4",
               size: 1024,
@@ -143,11 +142,11 @@ function testStorageCommandRunnerFor(target: string, poolId = TEST_STORAGE_POOL_
         });
       }
       if (command === "mdadm" && args[0] === "--detail" && args[1] === "--scan") {
-        return `ARRAY ${poolId} name=test-pool UUID=test-pool`;
+        return `ARRAY ${devicePath} name=${poolId} UUID=test-pool`;
       }
       if (command === "mdadm" && args[0] === "--detail") {
         return [
-          "Name : test-pool",
+          `Name : ${poolId}`,
           "Raid Level : raid1",
           "State : clean",
           "UUID : test-pool",
@@ -164,11 +163,10 @@ function testStorageCommandRunnerFor(target: string, poolId = TEST_STORAGE_POOL_
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-api-"));
-  rootDir = path.join(tempDir, "root");
-  await mkdir(rootDir);
+  rootDir = path.join(tempDir, "data", TEST_STORAGE_POOL_ID);
+  await mkdir(rootDir, { recursive: true });
   await writeFile(path.join(rootDir, "hello.txt"), "hello");
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
 afterEach(async () => {
@@ -205,7 +203,7 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("reports indexer status for configured roots", async () => {
+  it("reports indexer status for discovered storage pools", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const neverRun = await server.inject({
       method: "GET",
@@ -214,9 +212,9 @@ describe("API server", () => {
 
     expect(neverRun.statusCode).toBe(200);
     expect(neverRun.json()).toMatchObject({
-      roots: [
+      storagePools: [
         {
-          rootId: "local",
+          storagePoolId: TEST_STORAGE_POOL_ID,
           status: "never_run",
           startedAt: null,
           finishedAt: null,
@@ -234,10 +232,10 @@ describe("API server", () => {
       service: { status: "unavailable" },
       watcher: { status: "starting" },
       queue: { queued: 0, stalled: false },
-      rebuild: { status: "legacy" }
+      rebuild: { status: "ready" }
     });
 
-    const run = startIndexRun(db, { rootId: "local" });
+    const run = startIndexRun(db, { storagePoolId: TEST_STORAGE_POOL_ID });
     finishIndexRun(db, {
       runId: run.id,
       status: "completed",
@@ -250,14 +248,14 @@ describe("API server", () => {
     });
     const completed = await server.inject({
       method: "GET",
-      url: "/api/indexer/status?rootId=local"
+      url: "/api/indexer/status?storagePoolId=pool-1"
     });
     expect(completed.statusCode).toBe(200);
     expect(completed.json()).toMatchObject({
-      roots: [{ rootId: "local", status: "completed", scanned: 4, unchanged: 3 }]
+      storagePools: [{ storagePoolId: TEST_STORAGE_POOL_ID, status: "completed", scanned: 4, unchanged: 3 }]
     });
 
-    const failedRun = startIndexRun(db, { rootId: "local" });
+    const failedRun = startIndexRun(db, { storagePoolId: TEST_STORAGE_POOL_ID });
     recordIndexFailure(db, {
       runId: failedRun.id,
       path: "docs/private.txt",
@@ -276,13 +274,13 @@ describe("API server", () => {
     });
     const failed = await server.inject({
       method: "GET",
-      url: "/api/indexer/status?rootId=local"
+      url: "/api/indexer/status?storagePoolId=pool-1"
     });
     expect(failed.statusCode).toBe(200);
     expect(failed.json()).toMatchObject({
-      roots: [
+      storagePools: [
         {
-          rootId: "local",
+          storagePoolId: TEST_STORAGE_POOL_ID,
           status: "failed",
           failed: 1,
           failures: [{ path: "docs/private.txt", reason: "permission denied" }]
@@ -292,7 +290,7 @@ describe("API server", () => {
 
     const missing = await server.inject({
       method: "GET",
-      url: "/api/indexer/status?rootId=missing"
+      url: "/api/indexer/status?storagePoolId=missing"
     });
     expect(missing.statusCode).toBe(404);
     await server.close();
@@ -307,19 +305,19 @@ describe("API server", () => {
       scanConcurrency: 4,
       extractionConcurrency: 2,
       reconciliationIntervalMs: 30 * 60 * 1_000,
-      ocrRootIds: []
+      ocrStoragePoolIds: []
     });
 
     const saved = await server.inject({
       method: "PATCH",
       url: "/api/settings/indexer",
-      payload: { scanConcurrency: 6, extractionConcurrency: 3, ocrRootIds: ["local"] }
+      payload: { scanConcurrency: 6, extractionConcurrency: 3, ocrStoragePoolIds: [TEST_STORAGE_POOL_ID] }
     });
     expect(saved.statusCode).toBe(200);
     expect(saved.json().settings).toMatchObject({
       scanConcurrency: 6,
       extractionConcurrency: 3,
-      ocrRootIds: ["local"]
+      ocrStoragePoolIds: [TEST_STORAGE_POOL_ID]
     });
 
     const invalidLimit = await server.inject({
@@ -330,7 +328,7 @@ describe("API server", () => {
     const invalidRoot = await server.inject({
       method: "PATCH",
       url: "/api/settings/indexer",
-      payload: { ocrRootIds: ["missing"] }
+      payload: { ocrStoragePoolIds: ["missing"] }
     });
     expect(invalidLimit.statusCode).toBe(400);
     expect(invalidRoot.statusCode).toBe(400);
@@ -344,14 +342,14 @@ describe("API server", () => {
     const pathRequest = await server.inject({
       method: "POST",
       url: "/api/indexer/reindex",
-      payload: { rootId: "local", path: "docs", recursive: true }
+      payload: { storagePoolId: TEST_STORAGE_POOL_ID, path: "docs", recursive: true }
     });
     expect(pathRequest.statusCode).toBe(202);
     expect(db.prepare(`
-      SELECT root_id, path, recursive, kind, priority, status
+      SELECT storage_pool_id, path, recursive, kind, priority, status
       FROM index_queue WHERE id = ?
     `).get(pathRequest.json().task.id)).toEqual({
-      root_id: "local",
+      storage_pool_id: TEST_STORAGE_POOL_ID,
       path: "docs",
       recursive: 1,
       kind: "manual",
@@ -362,26 +360,26 @@ describe("API server", () => {
     const rootRequest = await server.inject({
       method: "POST",
       url: "/api/indexer/reindex",
-      payload: { rootId: "local" }
+      payload: { storagePoolId: TEST_STORAGE_POOL_ID }
     });
     const traversal = await server.inject({
       method: "POST",
       url: "/api/indexer/reindex",
-      payload: { rootId: "local", path: "../outside" }
+      payload: { storagePoolId: TEST_STORAGE_POOL_ID, path: "../outside" }
     });
     const missingRoot = await server.inject({
       method: "POST",
       url: "/api/indexer/reindex",
-      payload: { rootId: "missing" }
+      payload: { storagePoolId: "missing" }
     });
     expect(rootRequest.statusCode).toBe(202);
     expect(rootRequest.json().task).toMatchObject({ status: "queued" });
     expect(traversal.statusCode).toBe(400);
-    expect(missingRoot.statusCode).toBe(404);
+    expect(missingRoot.statusCode).toBe(400);
     await server.close();
   });
 
-  it("exposes P0 readiness, backup, and aggregate health as read-only status", async () => {
+  it("exposes backup and aggregate health as read-only status", async () => {
     const repositoryPath = path.join(tempDir, "backup-repository");
     const passwordFile = path.join(tempDir, "restic-password");
     await mkdir(repositoryPath);
@@ -418,12 +416,6 @@ describe("API server", () => {
     };
     const server = await buildServer({ config, db });
 
-    const readiness = await server.inject({ method: "GET", url: "/api/roots/readiness" });
-    expect(readiness.statusCode).toBe(200);
-    expect(readiness.json()).toMatchObject({
-      roots: [{ rootId: "local", status: "unknown", reason: "never checked" }]
-    });
-
     const backup = await server.inject({ method: "GET", url: "/api/backup/status" });
     expect(backup.statusCode).toBe(200);
     expect(backup.json()).toMatchObject({
@@ -440,14 +432,14 @@ describe("API server", () => {
     const healthBody = health.json();
     expect(healthBody).toMatchObject({
       status: "failed",
-      roots: [{ rootId: "local", status: "unknown" }],
+      storagePools: [{ storagePoolId: TEST_STORAGE_POOL_ID }],
       downloader: {
         status: "unavailable",
         freshWorkers: 0,
         activeTasks: 0,
         queuedTasks: 0
       },
-      photostaff: {
+      photos: {
         status: "unavailable",
         freshWorkers: 0,
         activeJobs: 0,
@@ -460,12 +452,10 @@ describe("API server", () => {
       expect.arrayContaining([
         expect.objectContaining({ code: "backup_failed", severity: "critical" }),
         expect.objectContaining({ code: "downloader_unavailable", severity: "warning" }),
-        expect.objectContaining({ code: "photostaff_unavailable", severity: "warning" })
+        expect.objectContaining({ code: "photos_unavailable", severity: "warning" })
       ])
     );
 
-    const unknownRoot = await server.inject({ method: "GET", url: "/api/roots/readiness?rootId=missing" });
-    expect(unknownRoot.statusCode).toBe(404);
     await server.close();
   });
 
@@ -504,7 +494,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: "/api/roots",
+      url: "/health",
       headers: {
         origin: "https://example.test"
       }
@@ -514,11 +504,11 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("lists files from a configured NAS root", async () => {
+  it("lists files from a selected storage pool", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
     });
 
     expect(response.statusCode).toBe(200);
@@ -536,16 +526,16 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("requires a mounted storage pool and matching NAS root for file access", async () => {
+  it("requires a known mounted storage pool for file access", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const missingPool = await server.inject({
       method: "GET",
-      url: "/api/files?rootId=local&path=."
+      url: "/api/files?path=."
     });
     const unknownPool = await server.inject({
       method: "GET",
-      url: "/api/files?rootId=local&storagePoolId=missing&path=."
+      url: "/api/files?storagePoolId=missing&path=."
     });
 
     const baseRunner = testStorageCommandRunner();
@@ -565,35 +555,27 @@ describe("API server", () => {
     });
     const unmountedPool = await unmountedServer.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
     });
     await unmountedServer.close();
-
-    const otherRoot = path.join(tempDir, "other-root");
-    await mkdir(otherRoot);
-    ensureNasRoots(db, [{ id: "other", name: "Other", path: otherRoot }]);
-    const mismatchedRoot = await server.inject({
-      method: "GET",
-      url: `/api/files?rootId=other&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
-    });
 
     expect(missingPool.statusCode).toBe(400);
     expect(unknownPool.statusCode).toBe(404);
     expect(unmountedPool.statusCode).toBe(404);
-    expect(mismatchedRoot.statusCode).toBe(403);
     await server.close();
   });
 
   it("isolates listings and mutations to the selected storage pool", async () => {
     const poolDir = path.join(rootDir, "pool");
+    const outsideDir = path.dirname(rootDir);
     await mkdir(poolDir);
     await writeFile(path.join(poolDir, "inside.txt"), "inside");
-    await writeFile(path.join(rootDir, "outside.txt"), "outside");
-    await symlink(path.join(rootDir, "outside.txt"), path.join(poolDir, "escape.txt"));
-    await writeFile(path.join(rootDir, "outside-index.txt"), "match outside");
+    await writeFile(path.join(outsideDir, "outside.txt"), "outside");
+    await symlink(path.join(outsideDir, "outside.txt"), path.join(poolDir, "escape.txt"));
+    await writeFile(path.join(outsideDir, "outside-index.txt"), "match outside");
     upsertIndexedFile(db, {
-      rootId: "local",
-      path: "pool/../outside-index.txt",
+      storagePoolId: TEST_STORAGE_POOL_ID,
+      path: "../outside-index.txt",
       name: "outside-index.txt",
       mimeType: "text/plain",
       sizeBytes: 14,
@@ -604,48 +586,46 @@ describe("API server", () => {
     const server = await buildServer({
       config: testConfig(tempDir),
       db,
-      system: { commandRunner: testStorageCommandRunnerFor(poolDir) }
+      system: { commandRunner: testStorageCommandRunner() }
     });
 
     const listing = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool`
     });
     const traversal = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool/../outside.txt`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=../outside.txt`
     });
     const absolute = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=${encodeURIComponent(path.join(rootDir, "outside.txt"))}`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=${encodeURIComponent(path.join(outsideDir, "outside.txt"))}`
     });
     const symlinkEscape = await server.inject({
       method: "GET",
-      url: `/api/files/meta?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool/escape.txt`
+      url: `/api/files/meta?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool/escape.txt`
     });
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const crossPoolProposal = await server.inject({
       method: "POST",
       url: "/api/files/mutations",
       payload: {
         sessionId: session.id,
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "copy",
         sourcePath: "pool/inside.txt",
-        targetPath: "outside.txt"
+        targetPath: "../outside.txt"
       }
     });
     const scopedSearch = await server.inject({
       method: "GET",
-      url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool&q=match`
+      url: `/api/search?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool&q=match`
     });
     const scopedAdvancedSearch = await server.inject({
       method: "POST",
       url: "/api/search",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "pool",
         query: "match"
       }
@@ -660,8 +640,8 @@ describe("API server", () => {
     );
     expect(traversal.statusCode).toBe(400);
     expect(absolute.statusCode).toBe(400);
-    expect(symlinkEscape.statusCode).toBe(403);
-    expect(crossPoolProposal.statusCode).toBe(403);
+    expect(symlinkEscape.statusCode).toBe(400);
+    expect(crossPoolProposal.statusCode).toBe(400);
     expect(scopedSearch.statusCode).toBe(200);
     expect(scopedSearch.json().files).toEqual([]);
     expect(scopedAdvancedSearch.statusCode).toBe(200);
@@ -670,14 +650,14 @@ describe("API server", () => {
   });
 
   it("does not cross into a nested mounted storage pool", async () => {
-    const parentDir = path.join(rootDir, "parent");
+    const parentDir = rootDir;
     const childDir = path.join(parentDir, "child");
     await mkdir(childDir, { recursive: true });
     await writeFile(path.join(parentDir, "parent.txt"), "parent");
     await writeFile(path.join(childDir, "child.txt"), "child");
 
-    const parentPoolId = "/dev/md/parent-pool";
-    const childPoolId = "/dev/md/child-pool";
+    const parentPoolDevice = `/dev/md/${TEST_STORAGE_POOL_ID}`;
+    const childPoolDevice = "/dev/md/child-pool";
     const nestedRunner: SystemCommandRunner = {
       async run(command, args) {
         if (command === "lsblk") {
@@ -686,16 +666,16 @@ describe("API server", () => {
         if (command === "findmnt") {
           return JSON.stringify({
             filesystems: [
-              { source: parentPoolId, target: parentDir, fstype: "ext4", size: 1024, used: 1, avail: 1023, "use%": "0.1%" },
-              { source: childPoolId, target: childDir, fstype: "btrfs", size: 512, used: 1, avail: 511, "use%": "0.2%" }
+              { source: parentPoolDevice, target: parentDir, fstype: "ext4", size: 1024, used: 1, avail: 1023, "use%": "0.1%" },
+              { source: childPoolDevice, target: childDir, fstype: "btrfs", size: 512, used: 1, avail: 511, "use%": "0.2%" }
             ]
           });
         }
         if (command === "mdadm" && args[0] === "--detail" && args[1] === "--scan") {
-          return `ARRAY ${parentPoolId} name=parent-pool UUID=parent\nARRAY ${childPoolId} name=child-pool UUID=child`;
+          return `ARRAY ${parentPoolDevice} name=${TEST_STORAGE_POOL_ID} UUID=parent\nARRAY ${childPoolDevice} name=child-pool UUID=child`;
         }
         if (command === "mdadm" && args[0] === "--detail") {
-          const isChild = args[1] === childPoolId;
+          const isChild = args[1] === childPoolDevice;
           return [
             `Name : ${isChild ? "child-pool" : "parent-pool"}`,
             "Raid Level : raid1",
@@ -714,15 +694,15 @@ describe("API server", () => {
 
     const parentListing = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(parentPoolId)}&path=parent`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
     });
     const parentSearch = await server.inject({
       method: "GET",
-      url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(parentPoolId)}&path=parent&q=child`
+      url: `/api/search?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.&q=child`
     });
     const childListing = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(childPoolId)}&path=parent/child`
+      url: "/api/files?storagePoolId=child&path=."
     });
 
     expect(parentListing.statusCode).toBe(200);
@@ -734,17 +714,13 @@ describe("API server", () => {
     );
     expect(parentSearch.statusCode).toBe(200);
     expect(parentSearch.json().files).toEqual([]);
-    expect(childListing.statusCode).toBe(200);
-    expect(childListing.json().entries).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "child.txt", isSafe: true })])
-    );
+    expect(childListing.statusCode).toBe(403);
     await server.close();
   });
 
   it("rechecks storage pool boundaries during rollback and trash restore", async () => {
-    const poolDir = path.join(rootDir, "pool");
-    const alternateMount = path.join(rootDir, "alternate");
-    await mkdir(poolDir);
+    const poolDir = rootDir;
+    const alternateMount = path.join(path.dirname(rootDir), "alternate");
     await mkdir(alternateMount);
     await writeFile(path.join(poolDir, "rollback.txt"), "rollback");
     let mountpoint = poolDir;
@@ -755,7 +731,7 @@ describe("API server", () => {
           return JSON.stringify({
             filesystems: [
               {
-                source: TEST_STORAGE_POOL_ID,
+                source: `/dev/md/${TEST_STORAGE_POOL_ID}`,
                 target: mountpoint,
                 fstype: "ext4",
                 size: 1024,
@@ -773,7 +749,7 @@ describe("API server", () => {
 
     const upload = await server.inject({
       method: "PUT",
-      url: `/api/files/upload?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=pool/rollback-upload.txt`,
+      url: `/api/files/upload?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=rollback-upload.txt`,
       headers: { "content-type": "application/octet-stream" },
       payload: "uploaded"
     });
@@ -784,7 +760,7 @@ describe("API server", () => {
       method: "POST",
       url: `/api/operations/${upload.json().operation.id}/rollback`
     });
-    expect(rollback.statusCode).toBe(403);
+    expect(rollback.statusCode).toBe(404);
     await expect(readFile(path.join(poolDir, "rollback-upload.txt"), "utf8")).resolves.toBe("uploaded");
 
     mountpoint = poolDir;
@@ -792,10 +768,9 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "trash",
-        sourcePath: "pool/rollback.txt"
+        sourcePath: "rollback.txt"
       }
     });
     expect(applied.statusCode).toBe(201);
@@ -807,7 +782,7 @@ describe("API server", () => {
       method: "POST",
       url: `/api/trash/${trashEntryId}/restore`
     });
-    expect(restore.statusCode).toBe(403);
+    expect(restore.statusCode).toBe(404);
     await server.close();
   });
 
@@ -823,13 +798,13 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       git: {
-        repositoryName: "root",
+        repositoryName: TEST_STORAGE_POOL_ID,
         repositoryPath: ".",
         currentPath: ".",
         branch: "main",
@@ -868,13 +843,13 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.&q=match`
+      url: `/api/search?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.&q=match`
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       git: {
-        repositoryName: "root",
+        repositoryName: TEST_STORAGE_POOL_ID,
         branch: "main",
         dirty: true,
         summary: {
@@ -899,7 +874,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=broken`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=broken`
     });
 
     expect(response.statusCode).toBe(200);
@@ -933,7 +908,7 @@ describe("API server", () => {
       process.env.PATH = fakeBinPath;
       const response = await server.inject({
         method: "GET",
-        url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
+        url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=.`
       });
 
       expect(response.statusCode).toBe(200);
@@ -955,36 +930,11 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=missing`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=missing`
     });
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: "Path not found" });
-
-    await server.close();
-  });
-
-  it("exposes a user home shortcut path for roots that contain it", async () => {
-    const systemRoot = path.parse(os.homedir()).root;
-    ensureNasRoots(db, [{ id: "local", name: "System root", path: systemRoot }]);
-    const server = await buildServer({ config: testConfig(tempDir), db });
-    const response = await server.inject({
-      method: "GET",
-      url: "/api/roots"
-    });
-    const [rootRealPath, homeRealPath] = await Promise.all([realpath(systemRoot), realpath(os.homedir())]);
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      roots: [
-        {
-          id: "local",
-          name: "System root",
-          path: systemRoot,
-          homePath: path.relative(rootRealPath, homeRealPath) || "."
-        }
-      ]
-    });
 
     await server.close();
   });
@@ -1037,24 +987,22 @@ describe("API server", () => {
             }
           },
           cyberos: {
-            dataDir: tempDir,
+            stateDir: path.join(tempDir, "state"),
             databasePath: path.join(tempDir, "cyberos.sqlite"),
-            photostaff: {
-              dataDir: path.join(tempDir, "photostaff"),
+            photos: {
+              dataDir: path.join(tempDir, "state", "photos"),
               maxFileSizeBytes: 512 * 1024 * 1024,
               thumbnailSizePx: 512,
               previewMaxEdgePx: 2048,
-              supportedExtensions: [...PHOTOSTAFF_SUPPORTED_EXTENSIONS]
+              supportedExtensions: [...PHOTOS_SUPPORTED_EXTENSIONS]
             },
-            nasRoots: [{ id: "local", name: "Local", path: rootDir }]
           }
         }
       });
       expect(response.json().info.storage.volumes).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: "data-dir" }),
-          expect.objectContaining({ id: "database" }),
-          expect.objectContaining({ id: "nas-root-local", rootId: "local" })
+          expect.objectContaining({ id: "data-root" }),
+          expect.objectContaining({ id: "database" })
         ])
       );
       expect(response.json().info.hardware.cpuThreads).toBeGreaterThan(0);
@@ -1886,7 +1834,6 @@ describe("API server", () => {
       }
     });
     expect(hostdProposal).toMatchObject({ action: "create_pool", name: "media" });
-    expect(listPendingApprovals(db)).toHaveLength(0);
     expect(listOperationNotifications(db)).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
@@ -1935,7 +1882,7 @@ describe("API server", () => {
       url: "/api/storage/actions",
       payload: {
         action: "delete_pool",
-        poolId: "/dev/md0",
+        poolId: "storage",
         confirmation: "storage"
       }
     });
@@ -1949,7 +1896,7 @@ describe("API server", () => {
       url: "/api/storage/actions",
       payload: {
         action: "delete_pool",
-        poolId: "/dev/md-missing",
+        poolId: "missing",
         confirmation: "storage",
         confirm: true
       }
@@ -1962,7 +1909,7 @@ describe("API server", () => {
       url: "/api/storage/actions",
       payload: {
         action: "delete_pool",
-        poolId: "/dev/md0",
+        poolId: "storage",
         confirmation: "wrong",
         confirm: true
       }
@@ -1975,7 +1922,7 @@ describe("API server", () => {
       url: "/api/storage/actions",
       payload: {
         action: "delete_pool",
-        poolId: "/dev/md0",
+        poolId: "storage",
         confirmation: "storage",
         confirm: true
       }
@@ -2147,7 +2094,6 @@ describe("API server", () => {
       username: "media-share",
       password: "new-secret"
     });
-    expect(listPendingApprovals(db)).toEqual([]);
 
     const retained = await server.inject({
       method: "PUT",
@@ -2204,7 +2150,6 @@ describe("API server", () => {
       username: "cyberos-share",
       password: "old-secret"
     });
-    expect(listPendingApprovals(db)).toEqual([]);
     await server.close();
   });
 
@@ -2243,9 +2188,7 @@ describe("API server", () => {
       }
     });
     expect(hostd.requests[0]?.settings.account.password).toBe("secret");
-    expect(hostd.requests[0]?.roots).toEqual([
-      expect.objectContaining({ id: "local", name: "Local", path: rootDir })
-    ]);
+    expect(hostd.requests[0]?.dataRoot).toBe(path.dirname(rootDir));
     expect(getShareSettings(db)).toMatchObject({
       enabled: true,
       account: {
@@ -2271,7 +2214,6 @@ describe("API server", () => {
         }
       ]
     });
-    expect(listPendingApprovals(db)).toEqual([]);
     expect(listOperationNotifications(db)).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
@@ -2394,7 +2336,6 @@ describe("API server", () => {
 
     expect(unsafePath.statusCode).toBe(400);
     expect(invalidCidr.statusCode).toBe(400);
-    expect(listPendingApprovals(db)).toEqual([]);
     await server.close();
   });
 
@@ -2432,7 +2373,7 @@ describe("API server", () => {
       config: testConfig(tempDir),
       db,
       hostAccess: {
-        policy: new DockerHostAccessPolicy(db, { platform: "darwin", daemonAvailable: false })
+        policy: testHostAccessPolicy({ platform: "darwin", daemonAvailable: false })
       }
     });
     const catalog = await server.inject({ method: "GET", url: "/api/docker/host-access" });
@@ -2736,7 +2677,7 @@ describe("API server", () => {
       ...testConfig(tempDir),
       docker: { ...testConfig(tempDir).docker, composeCommand }
     };
-    const compose = new DockerComposeService(() => config.docker, db, appsRoot);
+    const compose = new DockerComposeService(() => config.docker, db, appsRoot, testHostAccessPolicy());
     const engine = new FakeDockerEngine();
     const server = await buildServer({ config, db, docker: { compose, engine, daemon: new FakeDockerDaemon() } });
 
@@ -2890,7 +2831,12 @@ describe("API server", () => {
   it("deploys the current Compose App revision directly without exposing secrets", async () => {
     const composeCommand = await writeComposeTestCommand();
     const config = dockerEnabledConfig(tempDir, { composeCommand });
-    const compose = new DockerComposeService(() => config.docker, db, path.join(tempDir, "apps"));
+    const compose = new DockerComposeService(
+      () => config.docker,
+      db,
+      path.join(tempDir, "apps"),
+      testHostAccessPolicy()
+    );
     const server = await buildServer({
       config,
       db,
@@ -2914,7 +2860,6 @@ describe("API server", () => {
     expect(deployed.json()).toMatchObject({ operation: { status: "applied" } });
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
-    expect(listPendingApprovals(db)).toEqual([]);
     await server.close();
   });
 
@@ -2939,7 +2884,8 @@ describe("API server", () => {
     const compose = new DockerComposeService(
       () => ({ ...config.docker, composeCommand: path.join(tempDir, "missing-docker") }),
       db,
-      path.join(tempDir, "apps")
+      path.join(tempDir, "apps"),
+      testHostAccessPolicy()
     );
     const server = await buildServer({
       config,
@@ -3141,7 +3087,7 @@ describe("API server", () => {
         images: [{ id: "sha256:rustfs", containerCount: 2 }, { id: "sha256:unused", containerCount: 0 }],
         metrics: { images: 2, memoryUsageBytes: null }
       } });
-      const session = createSession(db, { rootId: "local" });
+      const session = createSession(db, { });
       for (const limit of [{ memoryLimitBytes: 8_388_608 }, { memoryReservationBytes: 8_388_608 },
         { memorySwapBytes: -1 }, { cpuShares: 512 }, { cpusetCpus: "0-1" }, { pidsLimit: 128 }]) {
         const rejected = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
@@ -3156,7 +3102,6 @@ describe("API server", () => {
       expect(occupied.statusCode).toBe(409);
       expect(mutations).toEqual([]);
       expect(listDockerOperations(db)).toEqual([]);
-      expect(listPendingApprovals(db)).toEqual([]);
       expect(listMessages(db, { sessionId: session.id })).toEqual([]);
       expect(listEvents(db, { sessionId: session.id })).toEqual([]);
     } finally {
@@ -3167,7 +3112,7 @@ describe("API server", () => {
 
   it("allows supported resource limits and rejects unavailable CPU and swap controls", async () => {
     const engine = new FakeDockerEngine();
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const server = await buildServer({ config: dockerEnabledConfig(tempDir), db, docker: {
       engine, daemon: new FakeDockerDaemon(), compose: new FakeDockerCompose()
     } });
@@ -3224,7 +3169,6 @@ describe("API server", () => {
       }
     });
     expect(listOperationNotifications(db)).toEqual([]);
-    expect(listPendingApprovals(db)).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
     await server.close();
@@ -3287,7 +3231,7 @@ describe("API server", () => {
       config: dockerEnabledConfig(tempDir),
       db,
       docker: { engine, compose: new FakeDockerCompose() },
-      hostAccess: { policy: new DockerHostAccessPolicy(db, { platform: "linux" }) }
+      hostAccess: { policy: testHostAccessPolicy({ platform: "linux" }) }
     });
     const proposed = await server.inject({
       method: "POST",
@@ -3314,7 +3258,6 @@ describe("API server", () => {
     expect(JSON.stringify(proposed.json())).not.toContain("fingerprint");
     expect(JSON.stringify(proposed.json())).not.toContain("hostAccessDraft");
 
-    expect(listPendingApprovals(db)).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     await server.close();
   });
@@ -3427,7 +3370,7 @@ describe("API server", () => {
       name: "unsafe-bind",
       image: "nginx",
       start: false,
-      mounts: [{ type: "bind", rootId: "local", sourcePath: ".", target: "/host", readOnly: true }]
+      mounts: [{ type: "bind", storagePoolId: TEST_STORAGE_POOL_ID, sourcePath: ".", target: "/host", readOnly: true }]
     } });
 
     expect(response.statusCode).toBe(400);
@@ -3460,7 +3403,6 @@ describe("API server", () => {
     expect(listDockerOperations(db)).toEqual([expect.objectContaining({
       status: "failed"
     })]);
-    expect(listPendingApprovals(db)).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
     await server.close();
@@ -3640,7 +3582,6 @@ describe("API server", () => {
         consoleSessionId: created.json().consoleSession.id
       })
     })]);
-    expect(listPendingApprovals(db)).toEqual([]);
     await server.close();
   });
 
@@ -3725,6 +3666,21 @@ describe("API server", () => {
     });
 
     expect(response.statusCode).toBe(400);
+    await server.close();
+  });
+
+  it("rejects removed model provider field aliases", async () => {
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const response = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/model-provider",
+      payload: {
+        provider: "anthropic"
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Model provider settings contain unknown fields" });
     await server.close();
   });
 
@@ -3884,7 +3840,11 @@ describe("API server", () => {
   });
 
   it("rejects Agent MCP enablement when the host service is disabled", async () => {
-    const server = await buildServer({ config: testConfig(tempDir), db });
+    const config = testConfig(tempDir);
+    const server = await buildServer({
+      config: { ...config, mcp: { ...config.mcp, enabled: false } },
+      db
+    });
     const response = await server.inject({
       method: "PATCH",
       url: "/api/settings/agent-mcp",
@@ -3901,7 +3861,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=..`
+      url: `/api/files?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=..`
     });
 
     expect(response.statusCode).toBe(400);
@@ -3914,7 +3874,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/sessions",
       payload: {
-        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
         path: ".."
       }
     });
@@ -3923,8 +3883,8 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("lists recent sessions for a root", async () => {
-    const session = createSession(db, { rootId: "local", currentPath: "." });
+  it("lists recent sessions across the data namespace", async () => {
+    const session = createSession(db, { currentPath: "." });
     createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Summarize downloads"
@@ -3933,7 +3893,7 @@ describe("API server", () => {
 
     const response = await server.inject({
       method: "GET",
-      url: "/api/sessions?rootId=local"
+      url: "/api/sessions"
     });
 
     expect(response.statusCode).toBe(200);
@@ -3941,7 +3901,6 @@ describe("API server", () => {
       sessions: [
         {
           id: session.id,
-          rootId: "local",
           currentPath: ".",
           firstMessage: "Summarize downloads",
           lastMessage: "Summarize downloads",
@@ -3957,14 +3916,14 @@ describe("API server", () => {
 
   it("updates session paths through safe directory validation", async () => {
     await mkdir(path.join(rootDir, "docs"));
-    const session = createSession(db, { rootId: "local", currentPath: "." });
+    const session = createSession(db, { currentPath: "." });
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const updated = await server.inject({
       method: "PATCH",
       url: `/api/sessions/${session.id}`,
       payload: {
-        path: "docs"
+        path: `${TEST_STORAGE_POOL_ID}/docs`
       }
     });
     const escaped = await server.inject({
@@ -3979,7 +3938,7 @@ describe("API server", () => {
     expect(updated.json()).toMatchObject({
       session: {
         id: session.id,
-        currentPath: "docs"
+        currentPath: `${TEST_STORAGE_POOL_ID}/docs`
       }
     });
     expect(escaped.statusCode).toBe(400);
@@ -3988,27 +3947,27 @@ describe("API server", () => {
 
   it("atomically snapshots a validated message path into the session and job", async () => {
     await mkdir(path.join(rootDir, "docs"));
-    const session = createSession(db, { rootId: "local", currentPath: "." });
+    const session = createSession(db, { currentPath: "." });
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
       method: "POST",
       url: `/api/sessions/${session.id}/messages`,
       headers: { "idempotency-key": "prompt-docs-1" },
-      payload: { content: "Inspect this directory", path: "docs" }
+      payload: { content: "Inspect this directory", path: `${TEST_STORAGE_POOL_ID}/docs` }
     });
 
     expect(response.statusCode).toBe(202);
     expect(response.json()).toMatchObject({
-      job: { workingPath: "docs" },
+      job: { workingPath: `${TEST_STORAGE_POOL_ID}/docs` },
       command: { type: "prompt", idempotencyKey: "prompt-docs-1", status: "completed" }
     });
-    expect(getSession(db, session.id)).toMatchObject({ currentPath: "docs" });
+    expect(getSession(db, session.id)).toMatchObject({ currentPath: `${TEST_STORAGE_POOL_ID}/docs` });
     await server.close();
   });
 
   it("persists Pi resource trust and only accepts active-turn commands during an active job", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const trusted = await server.inject({
@@ -4063,7 +4022,7 @@ describe("API server", () => {
   });
 
   it("retries interrupted jobs with a new continuation job without replaying the original prompt", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const original = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Delete old artifacts",
@@ -4101,8 +4060,8 @@ describe("API server", () => {
   });
 
   it("isolates Pi capability approvals to their source Agent session", async () => {
-    const firstSession = createSession(db, { rootId: "local" });
-    const secondSession = createSession(db, { rootId: "local" });
+    const firstSession = createSession(db, { });
+    const secondSession = createSession(db, { });
     const firstJob = createUserMessageAndJob(db, {
       sessionId: firstSession.id,
       content: "Create the first folder",
@@ -4161,7 +4120,7 @@ describe("API server", () => {
       expect.objectContaining({ id: second.approval.id, sessionId: secondSession.id })
     ]);
 
-    const sessions = await server.inject({ method: "GET", url: "/api/sessions?rootId=local" });
+    const sessions = await server.inject({ method: "GET", url: "/api/sessions" });
     expect(sessions.json().sessions.find((session: { id: string }) => session.id === firstSession.id))
       .toMatchObject({ pendingApprovalCount: 1 });
     expect(sessions.json().sessions.find((session: { id: string }) => session.id === secondSession.id))
@@ -4199,7 +4158,7 @@ describe("API server", () => {
         })
       })
     );
-    const refreshed = await server.inject({ method: "GET", url: "/api/sessions?rootId=local" });
+    const refreshed = await server.inject({ method: "GET", url: "/api/sessions" });
     expect(refreshed.json().sessions.find((session: { id: string }) => session.id === firstSession.id))
       .toMatchObject({ pendingApprovalCount: 0 });
     expect(refreshed.json().sessions.find((session: { id: string }) => session.id === secondSession.id))
@@ -4208,7 +4167,7 @@ describe("API server", () => {
   });
 
   it("queues approved non-secret capabilities and records background execution failures", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Read a file",
@@ -4251,7 +4210,7 @@ describe("API server", () => {
   });
 
   it("keeps secret approvals pending until local input is supplied and never stores it in capability state", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Configure the model provider",
@@ -4349,7 +4308,7 @@ describe("API server", () => {
   });
 
   it("protects sessions with active Agent work and cascades rows after work completes", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Summarize downloads"
@@ -4371,7 +4330,6 @@ describe("API server", () => {
     expect(activeResponse.statusCode).toBe(409);
     expect(activeResponse.json()).toEqual({ error: "Session has active work" });
     expect(getSession(db, session.id)).toMatchObject({ id: session.id });
-    expect(listPendingApprovals(db)).toEqual([]);
 
     updateJobStatus(db, job.id, "completed");
     const completedResponse = await server.inject({
@@ -4384,13 +4342,12 @@ describe("API server", () => {
     expect(listMessages(db, { sessionId: session.id })).toEqual([]);
     expect(listEvents(db, { sessionId: session.id })).toEqual([]);
     expect(getJob(db, job.id)).toBeNull();
-    expect(listPendingApprovals(db)).toEqual([]);
     expect(listFileOperations(db)).toEqual([]);
     await server.close();
   });
 
   it("rejects deleting sessions with active work", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Summarize downloads"
@@ -4409,7 +4366,7 @@ describe("API server", () => {
   });
 
   it("rejects deleting sessions with queued Agent commands", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createAgentSessionCommand(db, {
       sessionId: session.id,
       idempotencyKey: "stats-before-delete",
@@ -4429,7 +4386,7 @@ describe("API server", () => {
   });
 
   it("reconstructs chat transcripts from user messages and agent events", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const first = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List this folder"
@@ -4499,7 +4456,7 @@ describe("API server", () => {
   });
 
   it("includes failed jobs in chat transcripts without duplicating agent failure events", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "hello"
@@ -4545,7 +4502,7 @@ describe("API server", () => {
   });
 
   it("keeps internal action failures out of chat titles and transcripts", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const action = createActionMessageAndJob(db, {
       sessionId: session.id,
       content: "Restart container alpha",
@@ -4564,7 +4521,7 @@ describe("API server", () => {
       method: "GET",
       url: `/api/sessions/${session.id}/transcript`
     });
-    const sessions = await server.inject({ method: "GET", url: "/api/sessions?rootId=local" });
+    const sessions = await server.inject({ method: "GET", url: "/api/sessions" });
 
     expect(transcript.statusCode).toBe(200);
     expect(transcript.json().transcript).toEqual([]);
@@ -4574,7 +4531,7 @@ describe("API server", () => {
   });
 
   it("persists composer messages as user chat messages", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
@@ -4601,7 +4558,7 @@ describe("API server", () => {
   });
 
   it("streams transcript sequence metadata with chat events", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Hello" });
     const event = appendEvent(db, {
       sessionId: session.id,
@@ -4624,7 +4581,10 @@ describe("API server", () => {
       const reader = response.body?.getReader();
       expect(reader).toBeDefined();
       let streamText = "";
-      while (!streamText.includes(`id: ${event.id}\n`)) {
+      while (
+        !streamText.includes(`id: ${event.id}\n`) ||
+        !streamText.split("\n").some((line) => line.startsWith("data: "))
+      ) {
         const chunk = await reader?.read();
         if (!chunk || chunk.done) break;
         streamText += new TextDecoder().decode(chunk.value, { stream: true });
@@ -4642,7 +4602,7 @@ describe("API server", () => {
   });
 
   it("lists and marks persistent operation notifications", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const first = createActionMessageAndJob(db, {
       sessionId: session.id,
       content: "Move report.txt",
@@ -4679,7 +4639,7 @@ describe("API server", () => {
   });
 
   it("marks a cancelled action notification without creating chat output", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const action = createActionMessageAndJob(db, {
       sessionId: session.id,
       content: "Move archive",
@@ -4695,7 +4655,6 @@ describe("API server", () => {
     expect(listOperationNotifications(db)).toMatchObject([
       { jobId: action.job.id, status: "cancelled", readAt: null }
     ]);
-    expect(listPendingApprovals(db)).toEqual([]);
     expect(transcript.json().transcript).toEqual([]);
     await server.close();
   });
@@ -4704,7 +4663,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/meta?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
+      url: `/api/files/meta?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
     });
 
     expect(response.statusCode).toBe(200);
@@ -4729,7 +4688,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/meta?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=${name}`
+      url: `/api/files/meta?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=${name}`
     });
 
     expect(response.statusCode).toBe(200);
@@ -4742,7 +4701,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/text?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=long.txt&maxBytes=3`
+      url: `/api/files/text?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=long.txt&maxBytes=3`
     });
 
     expect(response.statusCode).toBe(200);
@@ -4760,11 +4719,11 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const metaResponse = await server.inject({
       method: "GET",
-      url: `/api/files/meta?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=payload.bin`
+      url: `/api/files/meta?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=payload.bin`
     });
     const textResponse = await server.inject({
       method: "GET",
-      url: `/api/files/text?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=payload.bin&maxBytes=64`
+      url: `/api/files/text?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=payload.bin&maxBytes=64`
     });
 
     expect(metaResponse.statusCode).toBe(200);
@@ -4788,14 +4747,13 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const editable = await server.inject({
       method: "GET",
-      url: `/api/files/edit-text?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
+      url: `/api/files/edit-text?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
     });
     const save = await server.inject({
       method: "PUT",
       url: "/api/files/edit-text",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "hello.txt",
         content: "changed",
         expectedModifiedAt: editable.json().modifiedAt
@@ -4815,7 +4773,6 @@ describe("API server", () => {
       },
       operation: {
         operation: "edit",
-        approvalId: null,
         status: "applied",
         sourcePath: "hello.txt"
       }
@@ -4823,8 +4780,8 @@ describe("API server", () => {
     await expect(readFile(path.join(rootDir, "hello.txt"), "utf8")).resolves.toBe("changed");
     expect(db.prepare(`
       SELECT storage_pool_id, path, recursive, kind, status
-      FROM index_queue WHERE root_id = 'local' AND path = 'hello.txt'
-    `).get()).toEqual({
+      FROM index_queue WHERE storage_pool_id = ? AND path = 'hello.txt'
+    `).get(TEST_STORAGE_POOL_ID)).toEqual({
       storage_pool_id: TEST_STORAGE_POOL_ID,
       path: "hello.txt",
       recursive: 0,
@@ -4838,7 +4795,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "PUT",
-      url: `/api/files/upload?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=docs/uploads/notes.txt`,
+      url: `/api/files/upload?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=docs/uploads/notes.txt`,
       headers: {
         "content-type": "application/octet-stream"
       },
@@ -4856,7 +4813,7 @@ describe("API server", () => {
         targetPath: "docs/uploads/notes.txt",
         status: "applied",
         metadata: {
-          rootId: "local",
+          storagePoolId: TEST_STORAGE_POOL_ID,
           reversible: true
         }
       }
@@ -4864,8 +4821,8 @@ describe("API server", () => {
     await expect(readFile(path.join(rootDir, "docs", "uploads", "notes.txt"), "utf8")).resolves.toBe("uploaded body");
     expect(db.prepare(`
       SELECT storage_pool_id, path, recursive, kind, status
-      FROM index_queue WHERE root_id = 'local' AND path = 'docs/uploads/notes.txt'
-    `).get()).toEqual({
+      FROM index_queue WHERE storage_pool_id = ? AND path = 'docs/uploads/notes.txt'
+    `).get(TEST_STORAGE_POOL_ID)).toEqual({
       storage_pool_id: TEST_STORAGE_POOL_ID,
       path: "docs/uploads/notes.txt",
       recursive: 0,
@@ -4880,7 +4837,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "PUT",
-      url: `/api/files/upload?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=existing.txt`,
+      url: `/api/files/upload?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=existing.txt`,
       headers: {
         "content-type": "application/octet-stream"
       },
@@ -4899,8 +4856,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "mkdir",
         targetPath: "projects"
       }
@@ -4908,7 +4864,6 @@ describe("API server", () => {
     expect(folder.statusCode).toBe(201);
     expect(folder.json()).toMatchObject({
       operation: {
-        approvalId: null,
         operation: "mkdir",
         targetPath: "projects",
         status: "applied"
@@ -4921,8 +4876,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "rename",
         sourcePath: "hello.txt",
         targetName: "renamed.txt"
@@ -4930,7 +4884,6 @@ describe("API server", () => {
     });
     expect(rename.statusCode).toBe(201);
     expect(rename.json().operation).toMatchObject({
-      approvalId: null,
       operation: "rename",
       sourcePath: "hello.txt",
       targetPath: "renamed.txt",
@@ -4943,8 +4896,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "copy",
         sourcePath: "renamed.txt",
         targetPath: "projects/copied.txt"
@@ -4952,7 +4904,6 @@ describe("API server", () => {
     });
     expect(copy.statusCode).toBe(201);
     expect(copy.json().operation).toMatchObject({
-      approvalId: null,
       operation: "copy",
       sourcePath: "renamed.txt",
       targetPath: "projects/copied.txt",
@@ -4961,7 +4912,6 @@ describe("API server", () => {
     await expect(readFile(path.join(rootDir, "renamed.txt"), "utf8")).resolves.toBe("hello");
     await expect(readFile(path.join(rootDir, "projects", "copied.txt"), "utf8")).resolves.toBe("hello");
 
-    expect(listPendingApprovals(db)).toHaveLength(0);
     expect(listOperationNotifications(db)).toHaveLength(0);
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
@@ -4969,45 +4919,42 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("keeps direct file mutations inside the selected storage pool", async () => {
+  it("rejects direct file mutation traversal outside the selected storage pool", async () => {
     const poolDir = path.join(rootDir, "pool");
     await mkdir(poolDir);
     await writeFile(path.join(poolDir, "inside.txt"), "inside");
     const server = await buildServer({
       config: testConfig(tempDir),
       db,
-      system: { commandRunner: testStorageCommandRunnerFor(poolDir) }
+      system: { commandRunner: testStorageCommandRunner() }
     });
 
     const response = await server.inject({
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "copy",
         sourcePath: "pool/inside.txt",
-        targetPath: "outside.txt"
+        targetPath: "../outside.txt"
       }
     });
 
-    expect(response.statusCode).toBe(403);
-    await expect(stat(path.join(rootDir, "outside.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(response.statusCode).toBe(400);
+    await expect(stat(path.join(path.dirname(rootDir), "outside.txt"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(listFileOperations(db)).toHaveLength(0);
-    expect(listPendingApprovals(db)).toHaveLength(0);
     await server.close();
   });
 
   it("keeps a successful file mutation successful when photo refresh enqueue fails", async () => {
     await mkdir(path.join(rootDir, "photos"));
-    savePhotostaffLibrarySettings(db, {
-      rootId: "local",
-      storagePoolId: TEST_STORAGE_POOL_ID,
+    savePhotosLibrarySettings(db, {
+            storagePoolId: TEST_STORAGE_POOL_ID,
       path: "photos"
     });
     db.exec(`
-      CREATE TRIGGER reject_photostaff_job_insert
-      BEFORE INSERT ON photostaff_jobs
+      CREATE TRIGGER reject_photos_job_insert
+      BEFORE INSERT ON photos_jobs
       BEGIN
         SELECT RAISE(ABORT, 'photo queue unavailable');
       END
@@ -5018,8 +4965,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "mkdir",
         targetPath: "photos/new-album"
       }
@@ -5027,13 +4973,11 @@ describe("API server", () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.json().operation).toMatchObject({
-      approvalId: null,
       operation: "mkdir",
       targetPath: "photos/new-album",
       status: "applied"
     });
     await expect(stat(path.join(rootDir, "photos", "new-album"))).resolves.toMatchObject({});
-    expect(listPendingApprovals(db)).toHaveLength(0);
     await server.close();
   });
 
@@ -5044,8 +4988,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/batches",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "trash",
         sourcePaths: ["hello.txt"]
       }
@@ -5057,7 +5000,6 @@ describe("API server", () => {
       operation: "trash",
       totalCount: 1
     });
-    expect(listPendingApprovals(db)).toHaveLength(0);
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
 
@@ -5066,7 +5008,6 @@ describe("API server", () => {
     });
     await expect(stat(path.join(rootDir, "hello.txt"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(listFileOperations(db).find((operation) => operation.metadata.fileBatchId === batchId)).toMatchObject({
-      approvalId: null,
       operation: "trash",
       status: "applied"
     });
@@ -5081,8 +5022,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/extract",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "bundle.zip"
       }
     });
@@ -5091,14 +5031,12 @@ describe("API server", () => {
     expect(response.json()).toMatchObject({
       operation: {
         operation: "extract",
-        approvalId: null,
         sourcePath: "bundle.zip",
         targetPath: "bundle",
         status: "applied"
       }
     });
     await expect(readFile(path.join(rootDir, "bundle", "hello.txt"), "utf8")).resolves.toBe("hello");
-    expect(listPendingApprovals(db)).toHaveLength(0);
     await server.close();
   });
 
@@ -5109,8 +5047,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "extract",
         sourcePath: "bundle.zip"
       }
@@ -5118,7 +5055,6 @@ describe("API server", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({ error: "Unsupported direct file mutation operation" });
-    expect(listPendingApprovals(db)).toHaveLength(0);
     await server.close();
   });
 
@@ -5130,8 +5066,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "copy",
         sourcePath: "folder",
         targetPath: "folder/child/folder"
@@ -5143,15 +5078,14 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("refuses direct file mutations against the NAS root itself", async () => {
+  it("refuses direct file mutations against the storage pool itself", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "trash",
         sourcePath: "."
       }
@@ -5166,7 +5100,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const editable = await server.inject({
       method: "GET",
-      url: `/api/files/edit-text?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
+      url: `/api/files/edit-text?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
     });
     await writeFile(path.join(rootDir, "hello.txt"), "external");
 
@@ -5174,8 +5108,7 @@ describe("API server", () => {
       method: "PUT",
       url: "/api/files/edit-text",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "hello.txt",
         content: "changed",
         expectedModifiedAt: editable.json().modifiedAt
@@ -5192,7 +5125,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/edit-text?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello-link.txt`
+      url: `/api/files/edit-text?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello-link.txt`
     });
 
     expect(response.statusCode).toBe(400);
@@ -5204,7 +5137,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/blob?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
+      url: `/api/files/blob?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
     });
 
     expect(response.statusCode).toBe(200);
@@ -5219,7 +5152,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/blob?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=${encodeURIComponent(fileName)}&download=1`
+      url: `/api/files/blob?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=${encodeURIComponent(fileName)}&download=1`
     });
 
     expect(response.statusCode).toBe(200);
@@ -5241,15 +5174,14 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/exports",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         sourcePaths: [folderName, "hello.txt"]
       }
     });
 
     expect(created.statusCode).toBe(201);
     expect(created.json()).toMatchObject({
-      fileName: "test-pool-selection.zip"
+      fileName: `${TEST_STORAGE_POOL_ID}-selection.zip`
     });
     expect(created.json().url).toMatch(/^\/api\/files\/exports\//u);
     expect(created.json().expiresAt).toMatch(/Z$/u);
@@ -5258,7 +5190,7 @@ describe("API server", () => {
     expect(archive.statusCode).toBe(200);
     expect(archive.headers["content-type"]).toBe("application/zip");
     expect(archive.headers["cache-control"]).toBe("no-store");
-    expect(archive.headers["content-disposition"]).toContain("test-pool-selection.zip");
+    expect(archive.headers["content-disposition"]).toContain(`${TEST_STORAGE_POOL_ID}-selection.zip`);
     expect(archive.rawPayload.subarray(0, 2).toString()).toBe("PK");
     expect(archive.rawPayload.includes(Buffer.from(`${folderName}/`))).toBe(true);
     expect(archive.rawPayload.includes(Buffer.from(`${folderName}/empty/`))).toBe(true);
@@ -5271,11 +5203,11 @@ describe("API server", () => {
   });
 
   it("names pool-root selections after the visible mountpoint", async () => {
-    const poolDir = path.join(rootDir, "pool1");
+    const poolDir = path.join(path.dirname(rootDir), "pool1");
     await mkdir(poolDir);
     await writeFile(path.join(poolDir, "first.txt"), "first");
     await writeFile(path.join(poolDir, "second.txt"), "second");
-    const poolId = "/dev/md/pool1";
+    const poolId = "pool1";
     const server = await buildServer({
       config: testConfig(tempDir),
       db,
@@ -5286,9 +5218,8 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/exports",
       payload: {
-        rootId: "local",
-        storagePoolId: poolId,
-        sourcePaths: ["pool1/first.txt", "pool1/second.txt"]
+                storagePoolId: poolId,
+        sourcePaths: ["first.txt", "second.txt"]
       }
     });
 
@@ -5307,8 +5238,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/exports",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         sourcePaths: ["photos"]
       }
     });
@@ -5333,8 +5263,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/exports",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         sourcePaths: ["one/report.txt", "two/report.txt"]
       }
     });
@@ -5353,8 +5282,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/exports",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         sourcePaths: ["temporary.txt"]
       }
     });
@@ -5372,7 +5300,7 @@ describe("API server", () => {
   it("rejects empty, duplicate, traversing, and symlink file exports", async () => {
     await symlink(path.join(rootDir, "hello.txt"), path.join(rootDir, "hello-link.txt"));
     const server = await buildServer({ config: testConfig(tempDir), db });
-    const basePayload = { rootId: "local", storagePoolId: TEST_STORAGE_POOL_ID };
+    const basePayload = {  storagePoolId: TEST_STORAGE_POOL_ID };
 
     const empty = await server.inject({
       method: "POST",
@@ -5415,13 +5343,13 @@ describe("API server", () => {
         if (command === "findmnt") {
           return JSON.stringify({
             filesystems: [
-              { source: TEST_STORAGE_POOL_ID, target: rootDir, fstype: "ext4", size: 1024, used: 128, avail: 896, "use%": "12.5%" },
+              { source: `/dev/md/${TEST_STORAGE_POOL_ID}`, target: rootDir, fstype: "ext4", size: 1024, used: 128, avail: 896, "use%": "12.5%" },
               { source: nestedPoolId, target: nestedPool, fstype: "ext4", size: 512, used: 64, avail: 448, "use%": "12.5%" }
             ]
           });
         }
         if (command === "mdadm" && args[0] === "--detail" && args[1] === "--scan") {
-          return `ARRAY ${TEST_STORAGE_POOL_ID} name=test-pool UUID=test-pool\nARRAY ${nestedPoolId} name=nested-pool UUID=nested-pool`;
+          return `ARRAY /dev/md/${TEST_STORAGE_POOL_ID} name=${TEST_STORAGE_POOL_ID} UUID=test-pool\nARRAY ${nestedPoolId} name=nested-pool UUID=nested-pool`;
         }
         if (command === "mdadm" && args[0] === "--detail") {
           const nested = args[1] === nestedPoolId;
@@ -5446,7 +5374,7 @@ describe("API server", () => {
     const created = await server.inject({
       method: "POST",
       url: "/api/files/exports",
-      payload: { rootId: "local", storagePoolId: TEST_STORAGE_POOL_ID, sourcePaths: ["exported"] }
+      payload: {  storagePoolId: TEST_STORAGE_POOL_ID, sourcePaths: ["exported"] }
     });
     expect(created.statusCode).toBe(201);
     const archive = await server.inject({ method: "GET", url: created.json().url });
@@ -5460,7 +5388,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/blob?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`,
+      url: `/api/files/blob?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`,
       headers: {
         range: "bytes=1-3"
       }
@@ -5476,7 +5404,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/blob?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`,
+      url: `/api/files/blob?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`,
       headers: {
         range: "bytes=99-120"
       }
@@ -5492,7 +5420,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/video?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=clip.mp4`,
+      url: `/api/files/video?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=clip.mp4`,
       headers: {
         range: "bytes=1-5"
       }
@@ -5514,8 +5442,8 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db, videoTranscoder: { transcode } });
 
     const [first, second] = await Promise.all([
-      server.inject({ method: "GET", url: `/api/files/video?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=clip.mkv` }),
-      server.inject({ method: "GET", url: `/api/files/video?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=clip.mkv` })
+      server.inject({ method: "GET", url: `/api/files/video?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=clip.mkv` }),
+      server.inject({ method: "GET", url: `/api/files/video?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=clip.mkv` })
     ]);
 
     expect(first.statusCode).toBe(200);
@@ -5525,7 +5453,7 @@ describe("API server", () => {
     expect(transcode).toHaveBeenCalledTimes(1);
 
     await writeFile(path.join(rootDir, "clip.mkv"), "changed-source-video");
-    const changed = await server.inject({ method: "GET", url: `/api/files/video?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=clip.mkv` });
+    const changed = await server.inject({ method: "GET", url: `/api/files/video?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=clip.mkv` });
     expect(changed.statusCode).toBe(200);
     expect(transcode).toHaveBeenCalledTimes(2);
     await server.close();
@@ -5540,12 +5468,14 @@ describe("API server", () => {
 
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/video?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=broken.avi`
+      url: `/api/files/video?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=broken.avi`
     });
 
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ error: "Video transcoding failed" });
-    await expect(readdir(path.join(tempDir, "media-cache", "videos"))).resolves.toEqual([]);
+    await expect(
+      readdir(path.join(testConfig(tempDir).paths.stateDir, "media-cache", "videos"))
+    ).resolves.toEqual([]);
     await server.close();
   });
 
@@ -5553,11 +5483,11 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const nonVideo = await server.inject({
       method: "GET",
-      url: `/api/files/video?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
+      url: `/api/files/video?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt`
     });
     const traversal = await server.inject({
       method: "GET",
-      url: `/api/files/video?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=..`
+      url: `/api/files/video?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=..`
     });
 
     expect(nonVideo.statusCode).toBe(415);
@@ -5569,7 +5499,7 @@ describe("API server", () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/files/blob?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=..`
+      url: `/api/files/blob?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=..`
     });
 
     expect(response.statusCode).toBe(400);
@@ -5578,13 +5508,18 @@ describe("API server", () => {
 
   it("keeps indexed search results visible in the file result shape", async () => {
     db.prepare(`
-      INSERT INTO indexed_text (file_id, root_id, path, name, body)
-      VALUES ('file-1', 'local', 'docs/readme.txt', 'readme.txt', 'alpha beta')
-    `).run();
+      INSERT INTO indexed_files (
+        id, storage_pool_id, path, name, mime_type, size_bytes, mtime_ms, indexed_at
+      ) VALUES ('file-1', ?, 'docs/readme.txt', 'readme.txt', 'text/plain', 0, 0, ?)
+    `).run(TEST_STORAGE_POOL_ID, new Date(0).toISOString());
+    db.prepare(`
+      INSERT INTO indexed_content_fts (file_id, storage_pool_id, path, name, body, terms)
+      VALUES ('file-1', ?, 'docs/readme.txt', 'readme.txt', 'alpha beta', 'alpha beta')
+    `).run(TEST_STORAGE_POOL_ID);
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
-      url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&q=alpha`
+      url: `/api/search?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&q=alpha`
     });
 
     expect(response.statusCode).toBe(200);
@@ -5612,7 +5547,7 @@ describe("API server", () => {
 
     const scoped = await server.inject({
       method: "GET",
-      url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=docs&q=alpha`
+      url: `/api/search?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=docs&q=alpha`
     });
     expect(scoped.statusCode).toBe(200);
     expect(scoped.json()).toMatchObject({
@@ -5622,13 +5557,13 @@ describe("API server", () => {
 
     const traversal = await server.inject({
       method: "GET",
-      url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=..&q=alpha`
+      url: `/api/search?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=..&q=alpha`
     });
     expect(traversal.statusCode).toBe(400);
 
     const filePath = await server.inject({
       method: "GET",
-      url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt&q=alpha`
+      url: `/api/search?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=hello.txt&q=alpha`
     });
     expect(filePath.statusCode).toBe(400);
     await server.close();
@@ -5640,7 +5575,7 @@ describe("API server", () => {
     await writeFile(path.join(rootDir, "docs", "readme.txt"), "alpha docs");
     await writeFile(path.join(rootDir, "docs-old", "readme.txt"), "alpha old docs");
     upsertIndexedFile(db, {
-      rootId: "local",
+      storagePoolId: TEST_STORAGE_POOL_ID,
       path: "docs/readme.txt",
       name: "readme.txt",
       mimeType: "text/plain",
@@ -5650,7 +5585,7 @@ describe("API server", () => {
       body: "alpha docs"
     });
     upsertIndexedFile(db, {
-      rootId: "local",
+      storagePoolId: TEST_STORAGE_POOL_ID,
       path: "docs-old/readme.txt",
       name: "readme.txt",
       mimeType: "text/plain",
@@ -5663,7 +5598,7 @@ describe("API server", () => {
 
     const response = await server.inject({
       method: "GET",
-      url: `/api/search?rootId=local&storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=docs&q=alpha`
+      url: `/api/search?storagePoolId=${encodeURIComponent(TEST_STORAGE_POOL_ID)}&path=docs&q=alpha`
     });
 
     expect(response.statusCode).toBe(200);
@@ -5687,7 +5622,7 @@ describe("API server", () => {
     await writeFile(path.join(rootDir, "docs", "alpha.txt"), "alpha plain body");
     await writeFile(path.join(rootDir, "docs", "report.pdf"), "alpha report body");
     const textId = upsertIndexedFile(db, {
-      rootId: "local",
+      storagePoolId: TEST_STORAGE_POOL_ID,
       path: "docs/alpha.txt",
       name: "alpha.txt",
       mimeType: "text/plain",
@@ -5697,7 +5632,7 @@ describe("API server", () => {
       body: "alpha plain body"
     });
     const pdfId = upsertIndexedFile(db, {
-      rootId: "local",
+      storagePoolId: TEST_STORAGE_POOL_ID,
       path: "docs/report.pdf",
       name: "report.pdf",
       mimeType: "application/pdf",
@@ -5718,8 +5653,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/search",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "docs",
         query: "ＡＬＰＨＡ",
         mimeTypes: ["application/pdf"],
@@ -5751,8 +5685,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/search",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "docs",
         query: "alpha",
         sort: { field: "name", direction: "asc" },
@@ -5768,8 +5701,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/search",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "docs",
         query: "alpha",
         sort: { field: "name", direction: "asc" },
@@ -5784,8 +5716,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/search",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "docs",
         query: "alpha",
         sort: { field: "size", direction: "asc" },
@@ -5797,8 +5728,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/search",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         path: "docs",
         query: "alpha OR nonexistent"
       }
@@ -5817,7 +5747,7 @@ describe("API server", () => {
       ["valid.txt", "z.txt"]
     ] as const) {
       const fileId = upsertIndexedFile(db, {
-        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
         path: indexPath,
         name,
         mimeType: "text/plain",
@@ -5826,23 +5756,22 @@ describe("API server", () => {
         body: "alpha body"
       });
       db.prepare(`
-        INSERT INTO indexed_content_fts (file_id, root_id, path, name, body, terms)
-        VALUES (?, 'local', ?, ?, 'alpha body', 'alpha body')
-      `).run(fileId, indexPath, name);
+        INSERT INTO indexed_content_fts (file_id, storage_pool_id, path, name, body, terms)
+        VALUES (?, ?, ?, ?, 'alpha body', 'alpha body')
+      `).run(fileId, TEST_STORAGE_POOL_ID, indexPath, name);
     }
     db.prepare(`
-      INSERT INTO index_content_state (root_id, status, updated_at)
-      VALUES ('local', 'ready', ?)
-      ON CONFLICT(root_id) DO UPDATE SET status = 'ready', updated_at = excluded.updated_at
-    `).run(new Date().toISOString());
+      INSERT INTO index_content_state (storage_pool_id, status, updated_at)
+      VALUES (?, 'ready', ?)
+      ON CONFLICT(storage_pool_id) DO UPDATE SET status = 'ready', updated_at = excluded.updated_at
+    `).run(TEST_STORAGE_POOL_ID, new Date().toISOString());
     const server = await buildServer({ config: testConfig(tempDir), db });
 
     const response = await server.inject({
       method: "POST",
       url: "/api/search",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         query: "alpha",
         sort: { field: "name", direction: "asc" },
         limit: 1
@@ -5855,7 +5784,7 @@ describe("API server", () => {
   });
 
   it("does not cancel terminal jobs", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List files"
@@ -5878,8 +5807,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "move",
         sourcePath: "hello.txt",
         targetPath: "moved.txt"
@@ -5899,8 +5827,8 @@ describe("API server", () => {
     expect(applied ? getFileOperation(db, applied.id)?.status : null).toBe("rolled_back");
     expect(db.prepare(`
       SELECT path, recursive, generation FROM index_queue
-      WHERE root_id = 'local' AND path IN ('hello.txt', 'moved.txt') ORDER BY path
-    `).all()).toEqual([
+      WHERE storage_pool_id = ? AND path IN ('hello.txt', 'moved.txt') ORDER BY path
+    `).all(TEST_STORAGE_POOL_ID)).toEqual([
       { path: "hello.txt", recursive: 1, generation: 2 },
       { path: "moved.txt", recursive: 1, generation: 2 }
     ]);
@@ -5913,8 +5841,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "trash",
         sourcePath: "hello.txt"
       }
@@ -5940,8 +5867,7 @@ describe("API server", () => {
       method: "POST",
       url: "/api/files/mutations",
       payload: {
-        rootId: "local",
-        storagePoolId: TEST_STORAGE_POOL_ID,
+                storagePoolId: TEST_STORAGE_POOL_ID,
         operation: "trash",
         sourcePath: "hello.txt"
       }
@@ -5978,8 +5904,8 @@ describe("API server", () => {
     ).toBe(true);
     expect(db.prepare(`
       SELECT path, recursive, generation FROM index_queue
-      WHERE root_id = 'local' ORDER BY path
-    `).all()).toEqual([{ path: "hello.txt", recursive: 1, generation: 2 }]);
+      WHERE storage_pool_id = ? ORDER BY path
+    `).all(TEST_STORAGE_POOL_ID)).toEqual([{ path: "hello.txt", recursive: 1, generation: 2 }]);
     await server.close();
   });
 
@@ -6396,25 +6322,22 @@ async function closeNetServer(server: net.Server): Promise<void> {
 }
 
 function testConfig(dataDir: string): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(dataDir, "missing.toml"), CYBEROS_ROOT: dataDir }, dataDir);
   return {
-    dataDir,
-    databasePath: path.join(dataDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, databasePath: path.join(dataDir, "cyberos.sqlite") },
     api: {
       host: "127.0.0.1",
       port: 3010,
       allowedOrigins: []
     },
     worker: {
-      pollMs: 50
+      pollMs: 50,
+      concurrency: 1
     },
     admin: {
       displayName: "Test Admin",
       authMode: "local-only"
-    },
-    model: {
-      provider: "pi",
-      piCommand: "pi",
-      localEndpoint: null
     },
     docker: {
       enabled: false,
@@ -6424,7 +6347,8 @@ function testConfig(dataDir: string): CyberOsConfig {
       consoleShells: ["/bin/sh", "/bin/bash"],
     },
     hostd: {
-      socketPath: "/run/cyberos/hostd.sock"
+      socketPath: "/run/cyberos/hostd.sock",
+      mutationPolicy: "mutable"
     },
     shares: {
       enabled: false,
@@ -6436,7 +6360,10 @@ function testConfig(dataDir: string): CyberOsConfig {
     },
     terminal: {
       user: "test-user",
-      termuxSocketPath: "/tmp/termux.sock"
+      socketPath: "/tmp/terminald.sock",
+      sessionIdleTimeoutMs: 60_000,
+      connectTimeoutMs: 1_000,
+      maxSessions: 4
     },
     vodPlayer: {
       enabled: false,
@@ -6454,7 +6381,6 @@ function testConfig(dataDir: string): CyberOsConfig {
       hwdec: "auto-safe",
       user: "cyberos"
     },
-    nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }
 
@@ -6469,7 +6395,7 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
       {
         id: "media",
         name: "Media",
-        rootId: "local",
+        storagePoolId: TEST_STORAGE_POOL_ID,
         path: "media",
         description: "Media share",
         protocols: {
@@ -6666,6 +6592,7 @@ class FakeDockerEngine implements DockerEngineRuntime {
         shortId: "container-1",
         name: "media",
         image: "jellyfin:latest",
+        imageId: "sha256:image-1",
         state: "running",
         status: "Up",
         ports: ["8096/tcp"],
@@ -6850,6 +6777,17 @@ else process.stdout.write("done\\n");
 `);
   await chmod(command, 0o755);
   return command;
+}
+
+function testHostAccessPolicy(
+  options: Partial<Omit<DockerHostAccessPolicyOptions, "runtimeRoot" | "dataRoot">> = {}
+): DockerHostAccessPolicy {
+  const paths = testConfig(tempDir).paths;
+  return new DockerHostAccessPolicy(db, {
+    runtimeRoot: path.join(paths.runDir, "host-access"),
+    dataRoot: paths.dataRoot,
+    ...options
+  });
 }
 
 async function git(args: string[], cwd = rootDir): Promise<void> {

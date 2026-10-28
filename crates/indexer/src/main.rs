@@ -56,11 +56,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<RunMod
         match argument.as_str() {
             "--once" => once = true,
             "--recursive" => options.recursive = true,
-            "--root" => {
-                options.root_id = Some(
+            "--storage-pool" => {
+                options.storage_pool_id = Some(
                     arguments
                         .next()
-                        .ok_or_else(|| invalid_argument("--root requires a value"))?,
+                        .ok_or_else(|| invalid_argument("--storage-pool requires a value"))?,
                 )
             }
             "--path" => {
@@ -72,16 +72,16 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<RunMod
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: cyberos-indexer [--once [--root ROOT_ID] [--path PATH] [--recursive]]"
+                    "Usage: cyberos-indexer [--once [--storage-pool STORAGE_POOL_ID] [--path PATH] [--recursive]]"
                 );
                 return Ok(RunMode::Help);
             }
             _ => return Err(invalid_argument(format!("Unknown argument: {argument}"))),
         }
     }
-    if !once && (options.root_id.is_some() || options.path.is_some() || options.recursive) {
+    if !once && (options.storage_pool_id.is_some() || options.path.is_some() || options.recursive) {
         return Err(invalid_argument(
-            "--root, --path and --recursive require --once",
+            "--storage-pool, --path and --recursive require --once",
         ));
     }
     Ok(RunMode::Run(once.then_some(options)))
@@ -107,7 +107,7 @@ mod tests {
     fn once_arguments_are_parsed_together() {
         let mode = parse_arguments([
             "--once".to_owned(),
-            "--root".to_owned(),
+            "--storage-pool".to_owned(),
             "local".to_owned(),
             "--path".to_owned(),
             "docs".to_owned(),
@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(
             mode,
             RunMode::Run(Some(OnceOptions {
-                root_id: Some("local".to_owned()),
+                storage_pool_id: Some("local".to_owned()),
                 path: Some("docs".to_owned()),
                 recursive: true,
             }))

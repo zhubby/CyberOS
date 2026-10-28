@@ -168,6 +168,240 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyberos-alerter"
+version = "2.0.0"
+dependencies = [
+ "async-trait",
+ "cyberos-monitoring-contracts",
+ "jiff",
+ "lettre",
+ "rusqlite",
+ "sd-notify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tokio-util",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "cyberos-bluetoothd"
+version = "2.0.0"
+dependencies = [
+ "nix 0.30.1",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zbus",
+]
+
+[[package]]
+name = "cyberos-downloader"
+version = "2.0.0"
+dependencies = [
+ "futures-util",
+ "httpdate",
+ "nix 0.30.1",
+ "rand",
+ "reqwest",
+ "rusqlite",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tokio-util",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "cyberos-host-accessd"
+version = "2.0.0"
+dependencies = [
+ "nix 0.30.1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "cyberos-hostd"
+version = "2.0.0"
+dependencies = [
+ "async-trait",
+ "nix 0.30.1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "ts-rs",
+ "uuid",
+ "zbus",
+]
+
+[[package]]
+name = "cyberos-indexer"
+version = "2.0.0"
+dependencies = [
+ "futures-util",
+ "nix 0.30.1",
+ "notify",
+ "quick-xml",
+ "reqwest",
+ "rusqlite",
+ "rustls",
+ "sd-notify",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tokio-util",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-normalization",
+ "url",
+ "uuid",
+ "zip",
+]
+
+[[package]]
+name = "cyberos-monitor"
+version = "2.0.0"
+dependencies = [
+ "async-trait",
+ "cyberos-monitoring-contracts",
+ "nix 0.30.1",
+ "rusqlite",
+ "sd-notify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tokio-util",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "cyberos-monitoring-contracts"
+version = "2.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cyberos-photos"
+version = "2.0.0"
+dependencies = [
+ "futures-util",
+ "nix 0.30.1",
+ "rand",
+ "rusqlite",
+ "sd-notify",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tokio-util",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "cyberos-terminald"
+version = "2.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "nix 0.30.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "ts-rs",
+ "uuid",
+]
+
+[[package]]
+name = "cyberos-tv-gamepad"
+version = "2.0.0"
+dependencies = [
+ "evdev",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "cyberos-vod-player"
+version = "2.0.0"
+dependencies = [
+ "nix 0.30.1",
+ "rusqlite",
+ "sd-notify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "toml_edit",
+ "tracing",
+ "tracing-subscriber",
+ "ts-rs",
+ "uuid",
+]
+
+[[package]]
 name = "defmt"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2646,240 +2880,6 @@ dependencies = [
  "crc32fast",
  "log",
  "simd-adler32",
-]
-
-[[package]]
-name = "cyberos-alerter"
-version = "2.0.0"
-dependencies = [
- "async-trait",
- "jiff",
- "lettre",
- "rusqlite",
- "sd-notify",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "tokio-util",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "cyberos-monitoring-contracts",
-]
-
-[[package]]
-name = "cyberos-bluetoothd"
-version = "2.0.0"
-dependencies = [
- "nix 0.30.1",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "zbus",
-]
-
-[[package]]
-name = "cyberos-downloader"
-version = "2.0.0"
-dependencies = [
- "futures-util",
- "httpdate",
- "nix 0.30.1",
- "rand",
- "reqwest",
- "rusqlite",
- "rustls",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "tokio-util",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "cyberos-host-accessd"
-version = "2.0.0"
-dependencies = [
- "nix 0.30.1",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "cyberos-hostd"
-version = "2.0.0"
-dependencies = [
- "async-trait",
- "nix 0.30.1",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "ts-rs",
- "uuid",
- "zbus",
-]
-
-[[package]]
-name = "cyberos-indexer"
-version = "2.0.0"
-dependencies = [
- "futures-util",
- "nix 0.30.1",
- "notify",
- "quick-xml",
- "reqwest",
- "rusqlite",
- "rustls",
- "sd-notify",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "tokio-util",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "unicode-normalization",
- "url",
- "uuid",
- "zip",
-]
-
-[[package]]
-name = "cyberos-monitor"
-version = "2.0.0"
-dependencies = [
- "async-trait",
- "nix 0.30.1",
- "rusqlite",
- "sd-notify",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "tokio-util",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "cyberos-monitoring-contracts",
-]
-
-[[package]]
-name = "cyberos-monitoring-contracts"
-version = "2.0.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "cyberos-photostaff"
-version = "2.0.0"
-dependencies = [
- "futures-util",
- "nix 0.30.1",
- "rand",
- "rusqlite",
- "sd-notify",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "tokio-util",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "cyberos-termux"
-version = "2.0.0"
-dependencies = [
- "base64 0.22.1",
- "nix 0.30.1",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "ts-rs",
- "uuid",
-]
-
-[[package]]
-name = "cyberos-tv-gamepad"
-version = "2.0.0"
-dependencies = [
- "evdev",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "cyberos-vod-player"
-version = "2.0.0"
-dependencies = [
- "nix 0.30.1",
- "rusqlite",
- "sd-notify",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "toml_edit",
- "tracing",
- "tracing-subscriber",
- "ts-rs",
- "uuid",
 ]
 
 [[package]]

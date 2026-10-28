@@ -13,9 +13,11 @@ import {
 } from "@cyberos/capabilities";
 import {
   executeFileReadCapability,
+  listStoragePools,
   proposeDomainCapability,
   proposeFileMutation,
   proposePiMcpFileCapability,
+  requireStoragePool,
   type CapabilityDomainAdapter,
   type PiMcpFileCapabilityId
 } from "@cyberos/capability-runtime";
@@ -32,24 +34,21 @@ import {
   getModelProviderSettings,
   getMonitoringAlertSummary,
   getMonitoringHealthRouting,
-  getNasRoot,
   getOwnedCapabilityRun,
-  getPhotostaffAsset,
-  getPhotostaffLibrarySettings,
-  getPhotostaffLibraryStatus,
-  getPhotostaffMapSettings,
-  getPhotostaffProcessingSettings,
-  getPhotostaffWorkerHealth,
+  getPhotosAsset,
+  getPhotosLibrarySettings,
+  getPhotosLibraryStatus,
+  getPhotosProcessingSettings,
+  getPhotosWorkerHealth,
   getAgentCapabilityPolicySettings,
   getAgentMcpSettings,
-  getRootReadiness,
   getShareSettings,
   getTerminalTabState,
   getSystemOperations,
   listBackupRuns,
   listDownloadTasks,
   listHealthAlerts,
-  listIndexRootStatuses,
+  listIndexStoragePoolStatuses,
   listMonitoringAlertContacts,
   listMonitoringAlertGroups,
   listMonitoringAlertIncidents,
@@ -57,16 +56,14 @@ import {
   listMonitoringAlertSilences,
   listMonitoringEscalationPolicies,
   listMonitoringOncallSchedules,
-  listNasRoots,
   listOperationNotifications,
   listOwnedCapabilityRuns,
-  listPhotostaffAssets,
-  listRootReadiness,
+  listPhotosAssets,
   type McpClientRecord,
   type McpResourceRecord,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { inferMimeType, statPath } from "@cyberos/nas-tools";
+import { inferMimeType, statPath } from "@cyberos/storage-tools";
 import type { AgentCapabilityId, AgentCapabilityPolicyMode, DownloadTaskStatus, PublicBuildInfo, CyberOsConfig } from "@cyberos/shared";
 
 export interface McpRuntimeDependencies {
@@ -109,7 +106,7 @@ const PI_MCP_FILE_CAPABILITIES = new Set<PiMcpFileCapabilityId>([
 const IMPLEMENTED = new Set([
   "cyberos.catalog.get",
   "cyberos.system.status",
-  "cyberos.roots.list",
+  "cyberos.storage-pools.list",
   "cyberos.files.list",
   "cyberos.files.stat",
   "cyberos.files.read",
@@ -156,7 +153,7 @@ export function createClientRuntime(dependencies: McpRuntimeDependencies, client
       client.kind !== "pi" &&
       (base.approval === "first_party" || base.approval === "first_party_confirm")
     ) continue;
-    if (base.id === "cyberos.shell.run" && dependencies.config.mcp?.shellEnabled !== true) continue;
+    if (base.id === "cyberos.shell.run" && !dependencies.config.mcp.shellEnabled) continue;
     if (
       base.id === FILE_RESOURCE_LINK_CAPABILITY
       && client.kind === "pi"
@@ -281,12 +278,12 @@ async function executeImplemented(
   switch (id) {
     case "cyberos.system.status":
       return { data: systemStatus(dependencies) };
-    case "cyberos.roots.list":
-      return { data: rootsStatus(dependencies, optionalString(object.rootId)) };
+    case "cyberos.storage-pools.list":
+      return { data: storagePoolsStatus(dependencies, optionalString(object.storagePoolId)) };
     case "cyberos.operations.list":
       return { data: jsonValue(getSystemOperations(dependencies.db, { limit: boundedInteger(object.limit, 20, 1, 100) })) };
     case "cyberos.backup.status":
-      return { data: { enabled: dependencies.config.backup?.enabled ?? false, runs: jsonValue(listBackupRuns(dependencies.db, boundedInteger(object.limit, 20, 1, 100))) } };
+      return { data: { enabled: dependencies.config.backup.enabled, runs: jsonValue(listBackupRuns(dependencies.db, boundedInteger(object.limit, 20, 1, 100))) } };
     case "cyberos.index.status":
       return indexStatus(dependencies, object);
     case "cyberos.photos.status":
@@ -328,50 +325,49 @@ async function executeImplemented(
 }
 
 function indexStatus(dependencies: McpRuntimeDependencies, input: Record<string, JsonValue>): CapabilityExecution {
-  const rootId = optionalString(input.rootId);
-  const roots = listNasRoots(dependencies.db).filter((root) => !rootId || root.id === rootId);
-  if (rootId && roots.length === 0) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
+  const storagePoolId = optionalString(input.storagePoolId);
+  const storagePools = listStoragePools(dependencies.config).filter((pool) => !storagePoolId || pool.id === storagePoolId);
+  if (storagePoolId && storagePools.length === 0) throw new CapabilityError("INVALID_ARGUMENT", "Storage pool not found");
   return {
     data: {
-      roots: jsonValue(listIndexRootStatuses(dependencies.db, roots.map((root) => root.id))),
+      storagePools: jsonValue(listIndexStoragePoolStatuses(dependencies.db, storagePools.map((pool) => pool.id))),
       settings: jsonValue(getIndexerSettings(dependencies.db) ?? defaultIndexerSettings())
     }
   };
 }
 
 function photosStatus(dependencies: McpRuntimeDependencies): CapabilityExecution {
-  const settings = getPhotostaffLibrarySettings(dependencies.db);
+  const settings = getPhotosLibrarySettings(dependencies.db);
   return {
     data: {
       configured: settings !== null,
       library: jsonValue(settings),
-      status: jsonValue(getPhotostaffLibraryStatus(dependencies.db, settings)),
-      worker: jsonValue(getPhotostaffWorkerHealth(dependencies.db)),
-      processing: jsonValue(getPhotostaffProcessingSettings(dependencies.db)),
-      map: jsonValue(getPhotostaffMapSettings(dependencies.db))
+      status: jsonValue(getPhotosLibraryStatus(dependencies.db, settings)),
+      worker: jsonValue(getPhotosWorkerHealth(dependencies.db)),
+      processing: jsonValue(getPhotosProcessingSettings(dependencies.db))
     }
   };
 }
 
 function queryPhotos(dependencies: McpRuntimeDependencies, input: Record<string, JsonValue>): CapabilityExecution {
-  const settings = getPhotostaffLibrarySettings(dependencies.db);
+  const settings = getPhotosLibrarySettings(dependencies.db);
   if (!settings) throw new CapabilityError("NOT_READY", "Photo library is not configured", { retryable: true });
   const assetId = optionalString(input.assetId);
   if (assetId) {
-    const asset = getPhotostaffAsset(dependencies.db, assetId, settings.updatedAt);
+    const asset = getPhotosAsset(dependencies.db, assetId, settings.updatedAt);
     if (!asset) throw new CapabilityError("INVALID_ARGUMENT", "Photo asset not found");
     return { data: { asset: jsonValue(asset) } };
   }
   const limit = boundedInteger(input.limit, 50, 1, 100);
   const cursor = decodePhotoCursor(optionalString(input.cursor));
-  const page = listPhotostaffAssets(dependencies.db, {
+  const page = listPhotosAssets(dependencies.db, {
     libraryUpdatedAt: settings.updatedAt,
     limit,
     ...(cursor ? { cursor } : {})
   });
-  const last = page.photostaff.at(-1);
+  const last = page.photos.at(-1);
   return {
-    data: { photostaff: jsonValue(page.photostaff) },
+    data: { photos: jsonValue(page.photos) },
     page: {
       limit,
       nextCursor: page.hasMore && last ? encodePhotoCursor(last.takenAt, last.id) : null
@@ -448,16 +444,16 @@ function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecuti
   };
   return {
     data: jsonValue({
-      environment: dependencies.config.environment ?? "production",
+      environment: dependencies.config.environment,
       flags: {
-        mcpEnabled: dependencies.config.mcp?.enabled ?? false,
-        mcpPiEnabled: getAgentMcpSettings(dependencies.db)?.enabled ?? dependencies.config.mcp?.piEnabled ?? false,
-        mcpExternalEnabled: dependencies.config.mcp?.externalEnabled ?? false,
-        mcpShellEnabled: dependencies.config.mcp?.shellEnabled ?? false,
+        mcpEnabled: dependencies.config.mcp.enabled,
+        mcpPiEnabled: getAgentMcpSettings(dependencies.db)?.enabled ?? dependencies.config.mcp.piEnabled,
+        mcpExternalEnabled: dependencies.config.mcp.externalEnabled,
+        mcpShellEnabled: dependencies.config.mcp.shellEnabled,
         dockerEnabled: dependencies.config.docker.enabled,
-        vmEnabled: dependencies.config.vm?.enabled ?? false,
-        backupEnabled: dependencies.config.backup?.enabled ?? false,
-        monitoringEnabled: dependencies.config.monitoring?.enabled ?? false
+        vmEnabled: dependencies.config.vm.enabled,
+        backupEnabled: dependencies.config.backup.enabled,
+        monitoringEnabled: dependencies.config.monitoring.enabled
       },
       model: model ? {
         providerName: model.providerName,
@@ -480,23 +476,21 @@ function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecuti
   };
 }
 
-function terminalTabs(dependencies: McpRuntimeDependencies, input: Record<string, JsonValue>): CapabilityExecution {
-  const rootId = requiredString(input.rootId, "rootId");
-  requiredRoot(dependencies.db, rootId);
+function terminalTabs(dependencies: McpRuntimeDependencies, _input: Record<string, JsonValue>): CapabilityExecution {
   return {
-    data: jsonValue(getTerminalTabState(dependencies.db, rootId, dependencies.config.terminal.maxSessions ?? 8))
+    data: jsonValue(getTerminalTabState(dependencies.db, dependencies.config.terminal.maxSessions))
   };
 }
 
 function systemStatus(dependencies: McpRuntimeDependencies): JsonValue {
   return {
     build: dependencies.buildInfo ? jsonValue(dependencies.buildInfo) : null,
-    environment: dependencies.config.environment ?? "production",
+    environment: dependencies.config.environment,
     services: {
       dockerConfigured: dependencies.config.docker.enabled,
-      vmConfigured: dependencies.config.vm?.enabled ?? false,
-      backupConfigured: dependencies.config.backup?.enabled ?? false,
-      monitoringConfigured: dependencies.config.monitoring?.enabled ?? false,
+      vmConfigured: dependencies.config.vm.enabled,
+      backupConfigured: dependencies.config.backup.enabled,
+      monitoringConfigured: dependencies.config.monitoring.enabled,
       vodConfigured: dependencies.config.vodPlayer.enabled
     },
     activeHealthAlerts: jsonValue(listHealthAlerts(dependencies.db, { status: "active", limit: 100 })),
@@ -504,24 +498,25 @@ function systemStatus(dependencies: McpRuntimeDependencies): JsonValue {
   };
 }
 
-function rootsStatus(dependencies: McpRuntimeDependencies, requestedRootId?: string): JsonValue {
-  const roots = listNasRoots(dependencies.db).filter((root) => !requestedRootId || root.id === requestedRootId);
-  if (requestedRootId && roots.length === 0) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
-  const readiness = new Map(listRootReadiness(dependencies.db, roots.map((root) => root.id)).map((item) => [item.rootId, item]));
+function storagePoolsStatus(dependencies: McpRuntimeDependencies, requestedStoragePoolId?: string): JsonValue {
+  const storagePools = listStoragePools(dependencies.config)
+    .filter((pool) => !requestedStoragePoolId || pool.id === requestedStoragePoolId);
+  if (requestedStoragePoolId && storagePools.length === 0) {
+    throw new CapabilityError("INVALID_ARGUMENT", "Storage pool not found");
+  }
   return {
-    roots: roots.map((root) => ({
-      id: root.id,
-      name: root.name,
-      mountPolicy: root.mountPolicy ?? "optional",
-      readiness: jsonValue(readiness.get(root.id) ?? {
-        rootId: root.id,
-        status: "unknown",
-        checkedAt: null,
-        reason: "never checked",
-        source: null,
+    storagePools: storagePools.map((pool) => ({
+      id: pool.id,
+      path: pool.path,
+      readiness: {
+        storagePoolId: pool.id,
+        status: "ready",
+        checkedAt: new Date().toISOString(),
+        reason: null,
+        source: pool.path,
         uuid: null,
         fstype: null
-      })
+      }
     }))
   };
 }
@@ -531,9 +526,9 @@ async function createFileResourceLink(
   clientId: string,
   input: Record<string, JsonValue>
 ): Promise<CapabilityExecution> {
-  const rootId = requiredString(input.rootId, "rootId");
+  const storagePoolId = requiredString(input.storagePoolId, "storagePoolId");
   const requestedPath = requiredString(input.path, "path");
-  const root = requiredRoot(dependencies.db, rootId);
+  const root = requireStoragePool(dependencies.config, storagePoolId);
   const metadata = await mapFsError(() => statPath(root, requestedPath));
   if (metadata.kind !== "file") throw new CapabilityError("INVALID_ARGUMENT", "Resource links require a regular file");
   if (!dependencies.transferBaseUrl) throw new CapabilityError("NOT_READY", "Transfer URL is unavailable", { retryable: true });
@@ -541,7 +536,7 @@ async function createFileResourceLink(
   const created = createMcpResourceToken(dependencies.db, {
     clientId,
     kind: "file",
-    descriptor: { rootId, path: metadata.path },
+    descriptor: { storagePoolId, path: metadata.path },
     revision: createHash("sha256").update(JSON.stringify({
       relativePath: metadata.path,
       sizeBytes: metadata.sizeBytes,
@@ -668,15 +663,6 @@ function isPiMcpFileCapability(capabilityId: string): capabilityId is PiMcpFileC
 function inputObject(input: JsonValue): Record<string, JsonValue> {
   if (!input || Array.isArray(input) || typeof input !== "object") throw new CapabilityError("INVALID_ARGUMENT", "Tool input must be an object");
   return input;
-}
-
-function requiredRoot(db: CyberOsDatabase, rootId: string) {
-  const root = getNasRoot(db, rootId);
-  if (!root) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
-  if (root.mountPolicy === "required" && getRootReadiness(db, root.id)?.status !== "ready") {
-    throw new CapabilityError("NOT_READY", "NAS root is not ready", { retryable: true });
-  }
-  return root;
 }
 
 function requiredString(value: JsonValue | undefined, field: string): string {

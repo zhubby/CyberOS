@@ -35,7 +35,7 @@ import {
   PhotoMapDownloadPanel,
   photoViewportBounds
 } from "./PhotoMapView.js";
-import { PHOTOSTAFF_UPLOAD_EXTENSIONS } from "@cyberos/shared/photostaff-config";
+import { PHOTOS_UPLOAD_EXTENSIONS } from "@cyberos/shared/photos-config";
 
 beforeAll(async () => {
   await initI18n();
@@ -116,7 +116,6 @@ describe("photo timeline grouping", () => {
   it("renders the full library skeleton instead of an initial centered spinner", () => {
     const html = renderToStaticMarkup(createElement(PhotoLibraryPanel, {
       pools: [],
-      selectedRootId: "local",
       locale: "en",
       onWorkQueuesChanged: () => undefined,
       onNotifyError: () => undefined,
@@ -142,7 +141,6 @@ describe("photo timeline grouping", () => {
   it("allows selecting multiple media files for upload", () => {
     const html = renderToStaticMarkup(createElement(PhotoLibraryPanel, {
       pools: [],
-      selectedRootId: "local",
       locale: "en",
       onWorkQueuesChanged: () => undefined,
       onNotifyError: () => undefined,
@@ -154,7 +152,7 @@ describe("photo timeline grouping", () => {
   });
 
   it("uses the shared media and XMP extension list for upload filtering", () => {
-    expect(PHOTO_ACCEPT.split(",")).toEqual([...PHOTOSTAFF_UPLOAD_EXTENSIONS]);
+    expect(PHOTO_ACCEPT.split(",")).toEqual([...PHOTOS_UPLOAD_EXTENSIONS]);
   });
 
   it("toggles multiple values within one facet as an OR set", () => {
@@ -338,8 +336,7 @@ function mapStatus(
 function photo(id: string, takenAt: string, name = `${id}.jpg`, mimeType = "image/jpeg"): PhotoAsset {
   return {
     id,
-    rootId: "local",
-    storagePoolId: "pool-a",
+        storagePoolId: "pool-a",
     path: `Photo/${name}`,
     name,
     mimeType,

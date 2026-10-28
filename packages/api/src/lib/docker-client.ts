@@ -1175,6 +1175,7 @@ function inspectSummary(inspected: DockerContainerInspect, containerId: string):
     shortId: (inspected.Id ?? containerId).slice(0, 12),
     name: (inspected.Name ?? containerId).replace(/^\//u, ""),
     image: inspected.Config?.Image ?? inspected.Image ?? "",
+    imageId: inspected.Image?.trim() || null,
     state: normalizeState(state),
     status: state ?? "unknown",
     ports: [],

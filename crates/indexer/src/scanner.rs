@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::db::{Db, IndexedFileRecord, IndexerSettings, QueueTask, RunStats};
 use crate::error::{ErrorCode, IndexerError};
 use crate::extractor::extract_file;
-use crate::storage::{EntryKind, MountIdentity, RootStorage, probe_mount_identity};
+use crate::storage::{EntryKind, MountIdentity, StoragePoolStorage, probe_mount_identity};
 
 const IGNORED_DIRECTORIES: &[&str] = &[".git", ".cyberos", "node_modules", "dist", "coverage"];
 
@@ -27,7 +27,7 @@ struct ScanContext<'a> {
     db: &'a Db,
     task: &'a QueueTask,
     settings: &'a IndexerSettings,
-    storage: Arc<RootStorage>,
+    storage: Arc<StoragePoolStorage>,
     initial_mount_identity: Option<&'a MountIdentity>,
     generation: Option<&'a str>,
     target_is_directory: bool,
@@ -41,7 +41,9 @@ pub async fn run_task(
     settings: &IndexerSettings,
     shutdown: &CancellationToken,
 ) -> Result<RunStats, IndexerError> {
-    let storage = Arc::new(RootStorage::open(Path::new(&task.root_path))?);
+    let storage = Arc::new(StoragePoolStorage::open(Path::new(
+        &task.storage_pool_path,
+    ))?);
     let mount_identity = mount_identity(task).await?;
     let target = Path::new(&task.path);
     let target_is_directory =
@@ -50,14 +52,14 @@ pub async fn run_task(
     let root_rebuild = task.path == "." && task.recursive && target_is_directory;
     if let Some(generation) = &generation {
         db.begin_generation(
-            &task.root_id,
+            &task.storage_pool_id,
             generation,
             mount_identity.as_ref(),
             root_rebuild,
         )
         .await?;
     }
-    let run_id = db.start_run(&task.root_id, &task.kind).await?;
+    let run_id = db.start_run(&task.storage_pool_id, &task.kind).await?;
     let mut stats = RunStats::default();
     let result = scan(
         ScanContext {
@@ -102,7 +104,9 @@ async fn scan(context: ScanContext<'_>, stats: &mut RunStats) -> Result<(), Inde
     if let Some(ignored) = ignored_ancestor(&target) {
         verify_source_unchanged(&storage, task, initial_mount_identity).await?;
         stats.skipped += 1;
-        stats.removed += db.remove_path(&task.root_id, &ignored, true).await?;
+        stats.removed += db
+            .remove_path(&task.storage_pool_id, &ignored, true)
+            .await?;
         return Ok(());
     }
     if !target_is_directory {
@@ -111,7 +115,6 @@ async fn scan(context: ScanContext<'_>, stats: &mut RunStats) -> Result<(), Inde
                 let outcome = process_file(
                     db.clone(),
                     Arc::clone(&storage),
-                    task.root_id.clone(),
                     task.storage_pool_id.clone(),
                     task.path.clone(),
                     generation.map(str::to_owned),
@@ -133,7 +136,7 @@ async fn scan(context: ScanContext<'_>, stats: &mut RunStats) -> Result<(), Inde
             Err(error) if is_missing(&error) => {
                 verify_source_unchanged(&storage, task, initial_mount_identity).await?;
                 stats.removed += db
-                    .remove_path(&task.root_id, &task.path, task.recursive)
+                    .remove_path(&task.storage_pool_id, &task.path, task.recursive)
                     .await?;
                 return Ok(());
             }
@@ -189,7 +192,6 @@ async fn scan(context: ScanContext<'_>, stats: &mut RunStats) -> Result<(), Inde
                     let future = process_file(
                         db.clone(),
                         Arc::clone(&storage),
-                        task.root_id.clone(),
                         task.storage_pool_id.clone(),
                         relative,
                         generation.map(str::to_owned),
@@ -227,14 +229,14 @@ async fn scan(context: ScanContext<'_>, stats: &mut RunStats) -> Result<(), Inde
     }
     if let Some(generation) = generation {
         stats.removed += db
-            .cleanup_generation(&task.root_id, &task.path, generation, root_rebuild)
+            .cleanup_generation(&task.storage_pool_id, &task.path, generation, root_rebuild)
             .await?;
     }
     Ok(())
 }
 
 async fn verify_source_unchanged(
-    storage: &RootStorage,
+    storage: &StoragePoolStorage,
     task: &QueueTask,
     initial_mount_identity: Option<&MountIdentity>,
 ) -> Result<(), IndexerError> {
@@ -272,7 +274,7 @@ pub(crate) fn is_ignored_path(path: &Path) -> bool {
 
 async fn mount_identity(task: &QueueTask) -> Result<Option<MountIdentity>, IndexerError> {
     probe_mount_identity(
-        Path::new(&task.root_path),
+        Path::new(&task.storage_pool_path),
         &task.mount_policy,
         task.expected_source.as_deref(),
         task.expected_uuid.as_deref(),
@@ -284,9 +286,8 @@ async fn mount_identity(task: &QueueTask) -> Result<Option<MountIdentity>, Index
 #[allow(clippy::too_many_arguments)]
 async fn process_file(
     db: Db,
-    storage: Arc<RootStorage>,
-    root_id: String,
-    storage_pool_id: Option<String>,
+    storage: Arc<StoragePoolStorage>,
+    storage_pool_id: String,
     path: String,
     generation: Option<String>,
     settings: IndexerSettings,
@@ -295,14 +296,15 @@ async fn process_file(
     let result = async {
         let relative = Path::new(&path);
         let file = storage.open_file(relative)?;
-        let identity = RootStorage::file_identity(&file)?;
-        if let Some(existing) = db.existing_file(&root_id, &path).await?
+        let identity = StoragePoolStorage::file_identity(&file)?;
+        if let Some(existing) = db.existing_file(&storage_pool_id, &path).await?
             && existing.identity == Some(identity)
             && existing.has_content
         {
             verify_file_unchanged(&storage, relative, &file, identity)?;
             if let Some(generation) = &generation {
-                db.touch_generation(&root_id, &path, generation).await?;
+                db.touch_generation(&storage_pool_id, &path, generation)
+                    .await?;
             }
             return Ok::<FileOutcome, IndexerError>(FileOutcome {
                 indexed: false,
@@ -322,8 +324,7 @@ async fn process_file(
             .and_then(|value| value.to_str())
             .ok_or_else(|| IndexerError::invalid_path("Indexer paths must be valid UTF-8"))?;
         let indexed_file = IndexedFileRecord {
-            root_id: &root_id,
-            storage_pool_id: storage_pool_id.as_deref(),
+            storage_pool_id: &storage_pool_id,
             path: &path,
             name,
             identity,
@@ -333,7 +334,7 @@ async fn process_file(
             file,
             name,
             &settings,
-            settings.ocr_root_ids.contains(&root_id),
+            settings.ocr_storage_pool_ids.contains(&storage_pool_id),
         )
         .await
         {
@@ -376,12 +377,13 @@ async fn process_file(
 }
 
 fn verify_file_unchanged(
-    storage: &RootStorage,
+    storage: &StoragePoolStorage,
     relative: &Path,
     file: &std::fs::File,
     expected: crate::storage::FileIdentity,
 ) -> Result<(), IndexerError> {
-    if RootStorage::file_identity(file)? != expected || storage.identity_for(relative)? != expected
+    if StoragePoolStorage::file_identity(file)? != expected
+        || storage.identity_for(relative)? != expected
     {
         return Err(IndexerError::new(
             ErrorCode::SourceChanged,

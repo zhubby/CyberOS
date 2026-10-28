@@ -7,7 +7,7 @@ use zbus::{Connection, ObjectPath, OwnedObjectPath, OwnedVariant, Proxy, Variant
 use crate::db::{Db, ReceiveRecord, SendTask};
 use crate::error::TransferError;
 use crate::safety::{
-    ensure_available_space, open_send_file, validate_receive_name, validate_storage_pool,
+    ensure_available_space, open_send_file, storage_pool_path, validate_receive_name,
 };
 
 const OBEX: &str = "org.bluez.obex";
@@ -16,10 +16,17 @@ const AGENT_PATH: &str = "/org/cyberos/BluetoothObexAgent";
 pub struct ObexRuntime {
     session: Connection,
     system: Connection,
+    data_root: PathBuf,
+    require_mount: bool,
 }
 
 impl ObexRuntime {
-    pub async fn initialize(db: Db, incoming_path: PathBuf) -> Result<Self, TransferError> {
+    pub async fn initialize(
+        db: Db,
+        data_root: PathBuf,
+        incoming_path: PathBuf,
+        require_mount: bool,
+    ) -> Result<Self, TransferError> {
         let session = Connection::session().await?;
         let system = Connection::system().await?;
         session
@@ -30,7 +37,9 @@ impl ObexRuntime {
                     db,
                     session: session.clone(),
                     system: system.clone(),
+                    data_root: data_root.clone(),
                     incoming_path,
+                    require_mount,
                 },
             )
             .await?;
@@ -44,12 +53,18 @@ impl ObexRuntime {
         let path =
             ObjectPath::try_from(AGENT_PATH).map_err(|error| TransferError(error.to_string()))?;
         manager.call::<_, _, ()>("RegisterAgent", &(path,)).await?;
-        Ok(Self { session, system })
+        Ok(Self {
+            session,
+            system,
+            data_root,
+            require_mount,
+        })
     }
 
     pub async fn send(&self, db: &Db, task: &SendTask) -> Result<(), TransferError> {
-        let (_file, path) = open_send_file(&task.root_path, &task.relative_path)?;
-        validate_storage_pool(&task.root_path, &task.storage_pool_id, &path)?;
+        let pool_path =
+            storage_pool_path(&self.data_root, &task.storage_pool_id, self.require_mount)?;
+        let (_file, path) = open_send_file(&pool_path, &task.relative_path)?;
         let client = Proxy::new(
             &self.session,
             OBEX,
@@ -129,7 +144,9 @@ struct ObexAgent {
     db: Db,
     session: Connection,
     system: Connection,
+    data_root: PathBuf,
     incoming_path: PathBuf,
+    require_mount: bool,
 }
 
 #[derive(Debug, zbus::DBusError)]
@@ -160,12 +177,11 @@ impl ObexAgent {
         if !settings.receive_enabled {
             return Err(TransferError("Bluetooth receiving is disabled".to_owned()));
         }
-        let (root_id, pool_id, inbox) = match (
-            settings.inbox_root_id.as_deref(),
+        let (pool_id, inbox) = match (
             settings.inbox_storage_pool_id.as_deref(),
             settings.inbox_path.as_deref(),
         ) {
-            (Some(root), Some(pool), Some(path)) => (root, pool, path),
+            (Some(pool), Some(path)) => (pool, path),
             _ => {
                 return Err(TransferError(
                     "Bluetooth inbox is not configured".to_owned(),
@@ -196,9 +212,8 @@ impl ObexAgent {
             .ok_or_else(|| {
                 TransferError("Only trusted paired devices may send files".to_owned())
             })?;
-        let root_path = self.db.root_path(root_id)?;
-        let inbox_path = crate::safety::safe_existing(&root_path, inbox)?;
-        validate_storage_pool(&root_path, pool_id, &inbox_path)?;
+        let pool_path = storage_pool_path(&self.data_root, pool_id, self.require_mount)?;
+        let inbox_path = crate::safety::safe_existing(&pool_path, inbox)?;
         ensure_available_space(&inbox_path, size.unwrap_or(0))?;
         ensure_available_space(&self.incoming_path, size.unwrap_or(0))?;
         let display_name = validate_receive_name(&name)?;
@@ -209,7 +224,6 @@ impl ObexAgent {
         let id = self.db.record_receive(ReceiveRecord {
             adapter_id: &adapter_id,
             address: &address,
-            root_id,
             pool_id,
             relative_path: &relative,
             display_name,

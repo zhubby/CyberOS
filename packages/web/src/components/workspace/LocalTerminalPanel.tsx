@@ -19,7 +19,6 @@ import {
   initializeTerminalTabs,
   renameTerminalTab,
   restartTerminalTab,
-  type NasRoot,
   type TerminalTab,
   type TerminalTabState
 } from "../../api.js";
@@ -53,21 +52,17 @@ interface TerminalViewState {
 
 export function LocalTerminalPanel({
   active,
-  root,
   codeFontSettings
 }: {
   active: boolean;
-  root: NasRoot | undefined;
   codeFontSettings: CodeFontSettings;
 }) {
   const { t } = useTranslation();
-  const rootId = root?.id;
-  const currentRootIdRef = useRef(rootId);
   const requestVersionRef = useRef(0);
   const actionVersionRef = useRef(0);
   const [tabState, setTabState] = useState<TerminalTabState | null>(null);
   const [loading, setLoading] = useState(false);
-  const [settledRootId, setSettledRootId] = useState<string | null>(null);
+  const [settled, setSettled] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -78,8 +73,6 @@ export function LocalTerminalPanel({
   const [renameValue, setRenameValue] = useState("");
   const [closeCandidate, setCloseCandidate] = useState<TerminalTab | null>(null);
 
-  currentRootIdRef.current = rootId;
-
   const applyState = useCallback((nextState: TerminalTabState) => {
     setTabState(nextState);
     if (nextState.activeTabId) {
@@ -87,28 +80,28 @@ export function LocalTerminalPanel({
     }
   }, []);
 
-  const refreshTabs = useCallback(async (targetRootId: string, showLoading: boolean) => {
+  const refreshTabs = useCallback(async (showLoading: boolean) => {
     const requestVersion = ++requestVersionRef.current;
     if (showLoading) {
       setLoading(true);
     }
     try {
-      let nextState = await getTerminalTabs(targetRootId);
+      let nextState = await getTerminalTabs();
       if (shouldInitializeTerminalTabs(nextState)) {
-        nextState = await initializeTerminalTabs(targetRootId);
+        nextState = await initializeTerminalTabs();
       }
-      if (requestVersion === requestVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (requestVersion === requestVersionRef.current) {
         applyState(nextState);
         setLoadError(null);
-        setSettledRootId(targetRootId);
+        setSettled(true);
       }
     } catch (error) {
-      if (requestVersion === requestVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (requestVersion === requestVersionRef.current) {
         setLoadError(errorMessage(error));
-        setSettledRootId(targetRootId);
+        setSettled(true);
       }
     } finally {
-      if (requestVersion === requestVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (requestVersion === requestVersionRef.current) {
         setLoading(false);
       }
     }
@@ -119,7 +112,7 @@ export function LocalTerminalPanel({
     actionVersionRef.current += 1;
     setTabState(null);
     setLoading(false);
-    setSettledRootId(null);
+    setSettled(false);
     setLoadError(null);
     setActionError(null);
     setPendingAction(null);
@@ -128,23 +121,23 @@ export function LocalTerminalPanel({
     setConnectionVersions({});
     setRenameCandidate(null);
     setCloseCandidate(null);
-  }, [rootId]);
+  }, []);
 
   useEffect(() => {
-    if (active && rootId) {
-      void refreshTabs(rootId, true);
+    if (active) {
+      void refreshTabs(true);
     }
-  }, [active, refreshTabs, rootId]);
+  }, [active, refreshTabs]);
 
   useEffect(() => {
     const handleFocus = () => {
-      if (active && rootId) {
-        void refreshTabs(rootId, false);
+      if (active) {
+        void refreshTabs(false);
       }
     };
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [active, refreshTabs, rootId]);
+  }, [active, refreshTabs]);
 
   const updateViewState = useCallback((tabId: string, nextState: TerminalViewState) => {
     setViewStates((current) => {
@@ -160,10 +153,6 @@ export function LocalTerminalPanel({
     if (!tabState || tabState.activeTabId === tabId || pendingAction) {
       return;
     }
-    const targetRootId = tabs.find((tab) => tab.id === tabId)?.rootId;
-    if (!targetRootId) {
-      return;
-    }
     const previousState = tabState;
     const actionVersion = ++actionVersionRef.current;
     applyState({ ...tabState, activeTabId: tabId });
@@ -171,37 +160,37 @@ export function LocalTerminalPanel({
     setPendingAction(`activate:${tabId}`);
     try {
       const nextState = await activateTerminalTab(tabId);
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         requestVersionRef.current += 1;
         applyState(nextState);
       }
     } catch (error) {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         setTabState(previousState);
         setActionError(errorMessage(error));
       }
     } finally {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         setPendingAction(null);
       }
     }
   }
 
   async function createTab() {
-    if (!rootId || pendingAction) {
+    if (pendingAction) {
       return;
     }
     setActionError(null);
     const actionVersion = ++actionVersionRef.current;
     setPendingAction("create");
     try {
-      const nextState = await createTerminalTab(rootId);
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === rootId) {
+      const nextState = await createTerminalTab();
+      if (actionVersion === actionVersionRef.current) {
         requestVersionRef.current += 1;
         applyState(nextState);
       }
     } catch (error) {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === rootId) {
+      if (actionVersion === actionVersionRef.current) {
         setActionError(
           errorMessage(error) === "Terminal session limit reached"
             ? String(t("workspace.terminal.limitReached", { count: tabState?.maxSessions ?? 32 }))
@@ -209,7 +198,7 @@ export function LocalTerminalPanel({
         );
       }
     } finally {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === rootId) {
+      if (actionVersion === actionVersionRef.current) {
         setPendingAction(null);
       }
     }
@@ -227,23 +216,22 @@ export function LocalTerminalPanel({
       return;
     }
     const customTitle = renameValue.trim() || null;
-    const targetRootId = renameCandidate.rootId;
     const actionVersion = ++actionVersionRef.current;
     setActionError(null);
     setPendingAction("rename");
     try {
       const nextState = await renameTerminalTab(renameCandidate.id, customTitle);
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         requestVersionRef.current += 1;
         applyState(nextState);
         setRenameCandidate(null);
       }
     } catch (error) {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         setActionError(errorMessage(error));
       }
     } finally {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         setPendingAction(null);
       }
     }
@@ -253,27 +241,23 @@ export function LocalTerminalPanel({
     if (pendingAction) {
       return;
     }
-    const targetRootId = tabs.find((tab) => tab.id === tabId)?.rootId;
-    if (!targetRootId) {
-      return;
-    }
     const actionVersion = ++actionVersionRef.current;
     setActionError(null);
     setPendingAction("restart");
     try {
       const nextState = await restartTerminalTab(tabId);
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         requestVersionRef.current += 1;
         applyState(nextState);
         setConnectionVersions((current) => ({ ...current, [tabId]: (current[tabId] ?? 0) + 1 }));
         updateViewState(tabId, { status: "connecting", diagnostic: null });
       }
     } catch (error) {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         setActionError(errorMessage(error));
       }
     } finally {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         setPendingAction(null);
       }
     }
@@ -284,13 +268,12 @@ export function LocalTerminalPanel({
       return;
     }
     const tabId = closeCandidate.id;
-    const targetRootId = closeCandidate.rootId;
     const actionVersion = ++actionVersionRef.current;
     setActionError(null);
     setPendingAction("close");
     try {
       const nextState = await deleteTerminalTab(tabId);
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         requestVersionRef.current += 1;
         applyState(nextState);
         setVisitedTabIds((current) => removeFromSet(current, tabId));
@@ -299,11 +282,11 @@ export function LocalTerminalPanel({
         setCloseCandidate(null);
       }
     } catch (error) {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         setActionError(errorMessage(error));
       }
     } finally {
-      if (actionVersion === actionVersionRef.current && currentRootIdRef.current === targetRootId) {
+      if (actionVersion === actionVersionRef.current) {
         setPendingAction(null);
       }
     }
@@ -314,7 +297,7 @@ export function LocalTerminalPanel({
     updateViewState(tabId, { status: "connecting", diagnostic: null });
   }
 
-  const initialLoading = terminalInitialLoadPending(rootId, settledRootId);
+  const initialLoading = !settled;
   const tabs = initialLoading ? [] : tabState?.tabs ?? [];
   const activeTab = tabs.find((tab) => tab.id === tabState?.activeTabId) ?? null;
   const activeViewState = activeTab
@@ -322,7 +305,7 @@ export function LocalTerminalPanel({
     : null;
   const atLocalLimit = Boolean(tabState && tabs.length >= tabState.maxSessions);
   const visibleTabs = tabs.filter((tab) => visitedTabIds.has(tab.id));
-  const currentLoadError = settledRootId === rootId ? loadError : null;
+  const currentLoadError = loadError;
 
   return (
     <section
@@ -394,9 +377,7 @@ export function LocalTerminalPanel({
 
         <div className="workspace-terminal-stage">
           {initialLoading ? <span className="visually-hidden" role="status">{t("common.states.loading")}</span> : null}
-          {!rootId ? (
-            <TerminalEmptyState title={t("workspace.terminal.noRoot")} />
-          ) : initialLoading ? (
+          {initialLoading ? (
             <div className="workspace-terminal-skeleton" aria-hidden="true">
               <SkeletonBlock width="38%" />
               <SkeletonBlock width="64%" />
@@ -407,7 +388,7 @@ export function LocalTerminalPanel({
               title={t("workspace.terminal.loadFailed")}
               detail={currentLoadError}
               actionLabel={t("workspace.terminal.retry")}
-              onAction={() => void refreshTabs(rootId, true)}
+              onAction={() => void refreshTabs(true)}
             />
           ) : tabState && tabs.length === 0 ? (
             <TerminalEmptyState
@@ -423,7 +404,6 @@ export function LocalTerminalPanel({
             <TerminalSessionView
               key={tab.id}
               tab={tab}
-              rootId={tab.rootId}
               label={terminalTabLabel(tab, t)}
               active={active && tab.id === tabState?.activeTabId}
               codeFontSettings={codeFontSettings}
@@ -600,7 +580,6 @@ export function TerminalTabBar({
 
 function TerminalSessionView({
   tab,
-  rootId,
   label,
   active,
   codeFontSettings,
@@ -610,7 +589,6 @@ function TerminalSessionView({
   onStateChange
 }: {
   tab: TerminalTab;
-  rootId: string;
   label: string;
   active: boolean;
   codeFontSettings: CodeFontSettings;
@@ -740,7 +718,7 @@ function TerminalSessionView({
       if (disposed || stopped || existing?.readyState === WebSocket.OPEN || existing?.readyState === WebSocket.CONNECTING) {
         return;
       }
-      const socket = new WebSocket(terminalWebSocketUrl(rootId), terminalWebSocketProtocols(tab.id));
+      const socket = new WebSocket(terminalWebSocketUrl(), terminalWebSocketProtocols(tab.id));
       socketRef.current = socket;
       report("connecting");
       socket.addEventListener("open", () => {
@@ -803,7 +781,7 @@ function TerminalSessionView({
         socket.close();
       }
     };
-  }, [active, connectionError, connectionVersion, disconnectedError, onStateChange, rootId, tab.id]);
+  }, [active, connectionError, connectionVersion, disconnectedError, onStateChange, tab.id]);
 
   return (
     <div
@@ -817,8 +795,8 @@ function TerminalSessionView({
   );
 }
 
-export function terminalInitialLoadPending(rootId: string | undefined, settledRootId: string | null): boolean {
-  return Boolean(rootId && rootId !== settledRootId);
+export function terminalInitialLoadPending(terminalScope: string | undefined, settledScope: string | null): boolean {
+  return Boolean(terminalScope && terminalScope !== settledScope);
 }
 
 export function terminalReconnectDelay(attempt: number): number {
@@ -853,8 +831,8 @@ function TerminalEmptyState({
   );
 }
 
-function terminalWebSocketUrl(rootId: string): string {
-  const url = new URL(`/api/terminal?rootId=${encodeURIComponent(rootId)}`, window.location.href);
+function terminalWebSocketUrl(): string {
+  const url = new URL("/api/terminal", window.location.href);
   url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 }

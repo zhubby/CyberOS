@@ -6,14 +6,14 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { CapabilityError, capabilityErrorShape, capabilityResult, type JsonValue } from "@cyberos/capabilities";
+import { requireStoragePool } from "@cyberos/capability-runtime";
 import {
   authenticateMcpClient,
   consumeMcpResourceToken,
   consumeMcpTransferToken,
-  getNasRoot,
   type McpResourceRecord
 } from "@cyberos/db";
-import { assertNoSymlinkPathSegments, resolveSafeExistingPath } from "@cyberos/nas-tools";
+import { assertNoSymlinkPathSegments, resolveSafeExistingPath } from "@cyberos/storage-tools";
 import { catalogForClient, createClientRuntime, invokeCapability, type ClientRuntime, type McpRuntimeDependencies } from "./runtime.js";
 
 export interface McpRegistrationOptions {
@@ -55,7 +55,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
     config: { rateLimit: { max: 120, timeWindow: "1 minute" } }
   }, async (request, reply) => {
     if (request.headers["x-cyberos-mcp-external"] === "1") {
-      if (dependencies.config.mcp?.externalEnabled !== true) {
+      if (!dependencies.config.mcp.externalEnabled) {
         reply.status(403).send({ error: "external_mcp_disabled" });
         return;
       }
@@ -135,7 +135,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
 
   server.get<{ Params: { token: string } }>("/mcp-transfer/:token", { preHandler: guards }, async (request, reply) => {
     const external = request.headers["x-cyberos-mcp-external"] === "1";
-    if (external && (dependencies.config.mcp?.externalEnabled !== true || request.headers["x-forwarded-proto"] !== "https")) {
+    if (external && (!dependencies.config.mcp.externalEnabled || request.headers["x-forwarded-proto"] !== "https")) {
       reply.status(403).send({ error: "https_required" });
       return;
     }
@@ -153,11 +153,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
       reply.status(404).send({ error: "transfer_not_found" });
       return;
     }
-    const root = getNasRoot(dependencies.db, transfer.rootId);
-    if (!root) {
-      reply.status(404).send({ error: "root_not_found" });
-      return;
-    }
+    const root = requireStoragePool(dependencies.config, transfer.storagePoolId);
     let file: Awaited<ReturnType<typeof open>> | null = null;
     try {
       const safe = await resolveSafeExistingPath(root.path, transfer.relativePath);
@@ -184,7 +180,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
 
   server.get<{ Params: { token: string } }>("/mcp-resource/:token", { preHandler: guards }, async (request, reply) => {
     const external = request.headers["x-cyberos-mcp-external"] === "1";
-    if (external && (dependencies.config.mcp?.externalEnabled !== true || request.headers["x-forwarded-proto"] !== "https")) {
+    if (external && (!dependencies.config.mcp.externalEnabled || request.headers["x-forwarded-proto"] !== "https")) {
       reply.status(403).send({ error: "https_required" });
       return;
     }
@@ -222,7 +218,7 @@ export function registerMcp(server: FastifyInstance, dependencies: McpRuntimeDep
 function createMcpServer(runtime: ClientRuntime): McpServer {
   const server = new McpServer({ name: "cyberos", version: "2.0.0" }, {
     maxToolInputElements: 2_000,
-    instructions: "Use rootId and root-relative paths. Mutations require approval in the first-party CyberOS UI. Secrets must be entered in CyberOS, never in tool arguments."
+    instructions: "Use storagePoolId and storage-pool-relative paths. Mutations require approval in the first-party CyberOS UI. Secrets must be entered in CyberOS, never in tool arguments."
   });
 
   server.registerTool("cyberos.catalog.get", {
@@ -267,11 +263,11 @@ function registerResources(server: McpServer, runtime: ClientRuntime): void {
       mimeType: "application/json"
     }, async (uri) => resourceFromCapability(uri, runtime, "cyberos.system.status", {}));
   }
-  if (runtime.context.subject.scopes.has("cyberos:roots:read")) {
-    server.registerResource("CyberOS NAS root", new ResourceTemplate("cyberos://roots/{id}", { list: undefined }), {
-      title: "CyberOS NAS root",
+  if (runtime.context.subject.scopes.has("cyberos:storage-pools:read")) {
+    server.registerResource("CyberOS storage pool", new ResourceTemplate("cyberos://storage-pools/{id}", { list: undefined }), {
+      title: "CyberOS storage pool",
       mimeType: "application/json"
-    }, async (uri, variables) => resourceFromCapability(uri, runtime, "cyberos.roots.list", { rootId: String(variables.id) }));
+    }, async (uri, variables) => resourceFromCapability(uri, runtime, "cyberos.storage-pools.list", { storagePoolId: String(variables.id) }));
   }
   if (runtime.context.subject.scopes.has("cyberos:runs:read")) {
     server.registerResource("CyberOS capability run", new ResourceTemplate("cyberos://runs/{id}", { list: undefined }), {
@@ -283,12 +279,12 @@ function registerResources(server: McpServer, runtime: ClientRuntime): void {
     runtime.context.subject.scopes.has("cyberos:files:read")
     && runtime.registry.get("cyberos.files.read")?.approval === "none"
   ) {
-    server.registerResource("CyberOS bounded text file", new ResourceTemplate("cyberos://files/{rootId}/{+path}", { list: undefined }), {
+    server.registerResource("CyberOS bounded text file", new ResourceTemplate("cyberos://files/{storagePoolId}/{+path}", { list: undefined }), {
       title: "CyberOS bounded text file",
-      description: "A bounded UTF-8 preview addressed by NAS root and root-relative path",
+      description: "A bounded UTF-8 preview addressed by storage pool and pool-relative path",
       mimeType: "text/plain"
     }, async (uri, variables) => resourceFromCapability(uri, runtime, "cyberos.files.read", {
-      rootId: String(variables.rootId),
+      storagePoolId: String(variables.storagePoolId),
       path: String(variables.path),
       maxBytes: 128 * 1024
     }));
@@ -308,11 +304,11 @@ function registerPrompts(server: McpServer): void {
   server.registerPrompt("cyberos.diagnose", {
     title: "Diagnose CyberOS",
     description: "Inspect status, readiness, monitoring, and recent runs without changing the NAS."
-  }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Diagnose the current CyberOS state. Start with cyberos.system.status and cyberos.roots.list, then inspect only the relevant read capabilities. Report evidence and do not propose changes until the cause is clear." } }] }));
+  }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Diagnose the current CyberOS state. Start with cyberos.system.status and cyberos.storage-pools.list, then inspect only the relevant read capabilities. Report evidence and do not propose changes until the cause is clear." } }] }));
   server.registerPrompt("cyberos.organize", {
     title: "Organize NAS files",
     description: "Plan a reversible file organization workflow."
-  }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Inspect the selected NAS root using bounded reads and search. Produce a proposed organization with an explicit diff. Submit mutations only through approval-gated CyberOS proposal tools." } }] }));
+  }, () => ({ messages: [{ role: "user", content: { type: "text", text: "Inspect the selected storage pool using bounded reads and search. Produce a proposed organization with an explicit diff. Submit mutations only through approval-gated CyberOS proposal tools." } }] }));
   server.registerPrompt("cyberos.restore", {
     title: "Restore from backup",
     description: "Guide a staged restore workflow."
@@ -367,11 +363,10 @@ async function serveFallbackFileResource(
     throw { statusCode: 400, code: "invalid_resource" };
   }
   const descriptor = resource.descriptor as Record<string, JsonValue>;
-  if (typeof descriptor.rootId !== "string" || typeof descriptor.path !== "string") {
+  if (typeof descriptor.storagePoolId !== "string" || typeof descriptor.path !== "string") {
     throw { statusCode: 400, code: "invalid_resource" };
   }
-  const root = getNasRoot(dependencies.db, descriptor.rootId);
-  if (!root) throw { statusCode: 404, code: "root_not_found" };
+  const root = requireStoragePool(dependencies.config, descriptor.storagePoolId);
   const safe = await resolveSafeExistingPath(root.path, descriptor.path);
   await assertNoSymlinkPathSegments(safe.rootRealPath, safe.absolutePath);
   const file = await open(safe.realPath, "r");

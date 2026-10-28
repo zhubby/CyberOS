@@ -17,26 +17,23 @@ source-layout work.
 - `packages/api`: Fastify API, WebSocket/SSE endpoints, and production static files.
 - `packages/worker`: agent job worker.
 - `packages/ops`, `packages/backup`: one-shot operations and restic jobs.
-- `packages/db`, `packages/nas-tools`, `packages/agent`, `packages/shared`:
+- `packages/db`, `packages/storage-tools`, `packages/agent`, `packages/shared`:
   persistence, path-safe filesystem operations, agent routing, and shared
   configuration/types.
-- `crates/indexer`, `crates/monitor`, `crates/alerter`, `crates/photostaff`,
-  `crates/downloader`: NAS indexing, monitoring, alerts, media, and downloads.
-- `crates/hostd`, `crates/host-accessd`, `crates/termux`,
+- `crates/indexer`, `crates/monitor`, `crates/alerter`, `crates/photos`,
+  `crates/downloader`: storage indexing, monitoring, alerts, media, and downloads.
+- `crates/hostd`, `crates/host-accessd`, `crates/terminald`,
   `crates/bluetoothd`, `crates/vod-player`: host integration processes.
-- `nix`: reproducible packages, the NixOS module, and its VM test.
 - `docs`: Astro/Starlight documentation site and Playwright smoke tests.
 - `scripts`: build metadata, version policy, and release preparation.
-- `packaging`: Debian rules, systemd units, Nginx config, host installer, and
-  appliance rootfs builder.
+- `packaging`: Debian rules, systemd units, Nginx config, and host installer.
 - `.github/workflows/package-release.yml`: CI quality, package, browser smoke,
   and tagged release workflow.
 
 Node.js 22 (the documented minimum is 22.12+) and npm are required for local
 development and CI. Production packages support Debian-family `amd64` and
 `arm64`; native modules such as `better-sqlite3` and Rust daemons must be built
-for the target architecture. The flake provides pinned Node.js/Rust development
-shells on Linux and macOS plus Linux packages for `x86_64` and `aarch64`.
+for the target architecture.
 
 ## Working Tree And Scope
 
@@ -63,19 +60,13 @@ npm --prefix docs ci
 make install
 ```
 
-With Nix installed, `nix develop` provides the pinned Node.js and Rust tools;
-run `npm ci` and `npm --prefix docs ci` inside the shell when working outside a
-Nix package build.
-
 Use an isolated development data directory so local processes cannot read or
 mutate production NAS paths:
 
 ```bash
-mkdir -p .cyberos/dev-root/data/primary
+mkdir -p .cyberos/dev-root/data/pool-1
 CYBEROS_ENVIRONMENT=development \
 CYBEROS_ROOT="$PWD/.cyberos/dev-root" \
-CYBEROS_NAS_ROOTS="dev:Development NAS:$PWD/.cyberos/dev-root/data/primary" \
-CYBEROS_ENABLE_LOCAL_AGENT_FALLBACK=1 \
 npm run dev
 ```
 
@@ -137,8 +128,6 @@ package job then builds and validates one `.deb`, `.changes`, and `.buildinfo`
 artifact for each of `amd64` and `arm64`. The docs-browser job separately
 installs Chromium and runs the Playwright smoke suite. Tagged releases also
 require the tag to be reachable from `main` and to match the Debian changelog.
-The Nix CI matrix additionally runs `nix flake check` on native
-`x86_64-linux` and `aarch64-linux` runners; the NixOS VM test runs on x86_64.
 
 ## Deployment And Packaging
 
@@ -166,8 +155,7 @@ and service activation.
 root on Debian-family `amd64`/`arm64`. The terminal identity is always `cyberos`:
 
 ```bash
-sudo CYBEROS_NAS_ROOT_PATH=/cyberos/data/primary \
-  ./packaging/scripts/install.sh
+sudo ./packaging/scripts/install.sh
 ```
 
 The script can install/verify Node.js 22, configure and back up known APT
@@ -183,43 +171,6 @@ health, and backup timers are enabled but do not all
 run immediately. Nginx proxies the loopback API (`127.0.0.1:3010`) and serves
 the LAN entrypoint (default port 80).
 
-### Appliance rootfs
-
-`packaging/appliance/build-image.sh` creates a systemd rootfs tarball, not a
-flashable SD/eMMC image. It requires `node`, `mmdebstrap`, `systemd-nspawn`,
-`tar`, `curl`, and `sha256sum`, and consumes a previously built `.deb`:
-
-```bash
-CYBEROS_DEB="$PWD/.cyberos/cyberos_<version>_arm64.deb" \
-CYBEROS_IMAGE_OUT="$PWD/.cyberos/appliance" \
-CYBEROS_TARGET_ARCH=arm64 \
-  ./packaging/appliance/build-image.sh
-# or: make appliance (when the default .deb path is present)
-```
-
-Defaults are Debian bookworm, `arm64`, and `.cyberos/appliance`. The output is
-`.cyberos/appliance/cyberos-rootfs-<arch>.tar`; board-specific boot, network,
-mount, and first-boot configuration remain outside this script. Docker, VM,
-and backup are disabled by the generated first-boot defaults and must be
-enabled/configured deliberately.
-
-### NixOS module
-
-`flake.nix` exports `nixosModules.default` and packages for `x86_64-linux` and
-`aarch64-linux`. The module creates the `cyberos` account, `/cyberos` state layout,
-native systemd services/timers, and an optional Nginx proxy. Non-secret TOML
-may be rendered from `services.cyberos.settings`; use
-`services.cyberos.configFile` for secret-bearing configuration so secrets do not
-enter the Nix store.
-
-The module always sets `CYBEROS_HOST_MUTATION_POLICY=declarative`. Inspection stays
-available, but share, storage-pool, NetworkManager, and Docker daemon
-configuration writes return HTTP 501 and hostd protocol error `unsupported`.
-Declare those host resources through NixOS. This policy does not make `/cyberos`
-or NAS files immutable and does not disable approved application/file actions.
-See `docs/src/content/docs/operations/nixos.md` for configuration and rollback
-details.
-
 ### Post-deploy checks and operations
 
 Use service status and journald, not only a single liveness request:
@@ -227,11 +178,11 @@ Use service status and journald, not only a single liveness request:
 ```bash
 sudo systemctl --failed
 sudo systemctl is-active cyberos-api.service cyberos-worker@1.service \
-  cyberos-termux.service cyberos-hostd.service
+  cyberos-terminald.service cyberos-hostd.service
 sudo systemctl list-timers 'cyberos-*'
 sudo journalctl -u cyberos-api.service -u cyberos-worker@1.service -n 100 --no-pager
 curl -fsS http://127.0.0.1:3010/health
-curl -fsS http://127.0.0.1:3010/api/roots/readiness
+curl -fsS http://127.0.0.1:3010/api/system/storage
 curl -fsS http://127.0.0.1:3010/api/system/health
 ```
 
@@ -256,10 +207,10 @@ CyberOS installation created with the current `/cyberos` layout.
 
 ## Safety Boundaries
 
-- Keep all NAS reads/writes inside configured NAS roots. Preserve traversal,
+- Keep all storage reads/writes inside configured storage pools. Preserve traversal,
   symlink, mount-readiness, and path normalization protections.
 - Mutating file operations and agent actions remain approval-gated. Do not add
-  a bypass or broaden the local fallback without explicit product direction.
+  an approval bypass without explicit product direction.
 - Keep API response contracts stable unless an API change is explicitly
   requested and tested.
 - SQLite is shared by API, worker, indexer, Ops, and backup; avoid

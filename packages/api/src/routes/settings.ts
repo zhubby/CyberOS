@@ -40,8 +40,9 @@ import {
 } from "../lib/settings.js";
 import { configureAgentMcp, publicAgentMcpSettings } from "../lib/agent-mcp-settings.js";
 import { collectSystemInfo } from "../lib/system-info.js";
+import { collectSystemStorage } from "../lib/system-management.js";
 
-export function registerSettingsRoutes(server: FastifyInstance, { config, db }: ApiRouteContext): void {
+export function registerSettingsRoutes(server: FastifyInstance, { config, db, system }: ApiRouteContext): void {
   server.get("/api/settings/indexer", async () => ({
     settings: getIndexerSettings(db) ?? defaultIndexerSettings()
   }));
@@ -52,9 +53,11 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db }: 
     try {
       const existing = getIndexerSettings(db) ?? defaultIndexerSettings();
       const next = { ...existing, ...request.body };
-      const rootIds = new Set(listNasRootsForIndexerSettings(db));
-      if (next.ocrRootIds.some((rootId) => !rootIds.has(rootId))) {
-        throw new Error("Indexer OCR roots must reference configured NAS roots");
+      const storagePoolIds = new Set(
+        system ? (await collectSystemStorage(system)).pools.map((pool) => pool.id) : []
+      );
+      if (next.ocrStoragePoolIds.some((storagePoolId) => !storagePoolIds.has(storagePoolId))) {
+        throw new Error("Indexer OCR pools must reference mounted storage pools");
       }
       reply.send({ settings: saveIndexerSettings(db, next) });
     } catch (error) {
@@ -100,21 +103,25 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db }: 
   }));
 
   server.get("/api/settings/model-provider", async () => ({
-    settings: toPublicModelProviderSettings(getModelProviderSettings(db) ?? defaultModelProviderSettings(config))
+    settings: toPublicModelProviderSettings(getModelProviderSettings(db) ?? defaultModelProviderSettings())
   }));
 
   server.patch<{
     Body: {
       providerName?: string;
-      provider?: string;
       baseUrl?: string | null;
       model?: string;
       apiKey?: string;
       clearApiKey?: boolean;
     };
   }>("/api/settings/model-provider", async (request, reply) => {
-    const existing = getModelProviderSettings(db) ?? defaultModelProviderSettings(config);
-    const providerName = request.body?.providerName ?? request.body?.provider ?? existing.providerName;
+    const allowedFields = new Set(["providerName", "baseUrl", "model", "apiKey", "clearApiKey"]);
+    if (Object.keys(request.body ?? {}).some((key) => !allowedFields.has(key))) {
+      reply.status(400).send({ error: "Model provider settings contain unknown fields" });
+      return;
+    }
+    const existing = getModelProviderSettings(db) ?? defaultModelProviderSettings();
+    const providerName = request.body?.providerName ?? existing.providerName;
     if (!isModelProviderName(providerName)) {
       reply.status(400).send({ error: "Unsupported model provider" });
       return;
@@ -182,7 +189,7 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db }: 
       reply.status(400).send({ error: "Agent MCP enabled must be a boolean" });
       return;
     }
-    if (request.body.enabled && !config.mcp?.enabled) {
+    if (request.body.enabled && !config.mcp.enabled) {
       reply.status(409).send({ error: "CyberOS MCP is disabled by host configuration" });
       return;
     }
@@ -234,10 +241,6 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db }: 
       });
     }
   });
-}
-
-function listNasRootsForIndexerSettings(db: ApiRouteContext["db"]): string[] {
-  return db.prepare("SELECT id FROM nas_roots WHERE enabled = 1 ORDER BY id").pluck().all() as string[];
 }
 
 function normalizeTextField(value: string | undefined, fallback: string, defaultValue: string): string {

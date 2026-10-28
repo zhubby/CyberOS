@@ -9,7 +9,7 @@ import type { CyberOsDatabase } from "../connection.js";
 
 export function queryIndexedText(
   db: CyberOsDatabase,
-  input: { rootId: string; query: string; path?: string; limit?: number }
+  input: { storagePoolId: string; query: string; path?: string; limit?: number }
 ): Array<{
   fileId: string;
   path: string;
@@ -21,24 +21,13 @@ export function queryIndexedText(
 }> {
   const searchPath = input.path ?? ".";
   const pathPattern = searchPath === "." ? null : `${searchPath}/%`;
-  const contentState = db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
-    .pluck().get(input.rootId) as string | undefined;
-  const useNewOnly = contentState === "ready";
   const rows = db
     .prepare(`
       WITH matches AS (
         SELECT file_id, path, name,
           snippet(indexed_content_fts, 4, '<mark>', '</mark>', '...', 12) AS snippet
         FROM indexed_content_fts
-        WHERE root_id = ? AND indexed_content_fts MATCH ?
-        ${useNewOnly ? "" : `
-          UNION ALL
-          SELECT file_id, path, name,
-            snippet(indexed_text, 4, '<mark>', '</mark>', '...', 12) AS snippet
-          FROM indexed_text
-          WHERE root_id = ? AND indexed_text MATCH ?
-            AND file_id NOT IN (SELECT file_id FROM indexed_content_fts WHERE root_id = ?)
-        `}
+        WHERE storage_pool_id = ? AND indexed_content_fts MATCH ?
       )
       SELECT
         matches.file_id as fileId,
@@ -49,7 +38,7 @@ export function queryIndexedText(
         f.mtime_ms AS mtimeMs,
         f.mime_type AS mimeType
       FROM matches
-      LEFT JOIN indexed_files f ON f.id = matches.file_id AND f.root_id = ?
+      LEFT JOIN indexed_files f ON f.id = matches.file_id AND f.storage_pool_id = ?
       WHERE (
           ? IS NULL
           OR matches.path = ?
@@ -58,10 +47,9 @@ export function queryIndexedText(
       LIMIT ?
     `)
     .all(
-      input.rootId,
+      input.storagePoolId,
       input.query,
-      ...(useNewOnly ? [] : [input.rootId, input.query, input.rootId]),
-      input.rootId,
+      input.storagePoolId,
       pathPattern,
       searchPath,
       searchPath,
@@ -89,7 +77,7 @@ interface SearchCursor {
 
 interface AdvancedSearchRow {
   file_id: string;
-  root_id: string;
+  storage_pool_id: string;
   path: string;
   name: string;
   mime_type: string | null;
@@ -131,9 +119,6 @@ export function queryIndexAdvanced(db: CyberOsDatabase, request: IndexSearchRequ
   let scoreSql = "NULL";
   const snippetSql = "''";
   if (normalized.filenameTerms.length && normalized.contentFtsQuery) {
-    const contentState = db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
-      .pluck().get(normalized.rootId) as string | undefined;
-    const includeLegacy = contentState !== "ready";
     const candidateWhere: string[] = [];
     const candidateParameters: unknown[] = [];
     addAdvancedSearchFilters(candidateWhere, candidateParameters, "candidate_files", normalized);
@@ -163,34 +148,11 @@ export function queryIndexAdvanced(db: CyberOsDatabase, request: IndexSearchRequ
           ON candidate_files.id = content.c0
         WHERE ${candidateFilterSql}
         LIMIT ?
-      )
-      ${includeLegacy ? `,
-      legacy_content_rows AS MATERIALIZED (
-        SELECT rowid
-        FROM indexed_text
-        WHERE indexed_text MATCH ?
       ),
-      legacy_content_matches AS MATERIALIZED (
-        SELECT legacy_content.c0 AS file_id, 0.5 AS score
-        FROM legacy_content_rows matched
-        JOIN indexed_text_content legacy_content ON legacy_content.id = matched.rowid
-        JOIN indexed_files candidate_files
-          ON candidate_files.id = legacy_content.c0
-        LEFT JOIN indexed_content_fts_content current_content
-          ON current_content.c0 = legacy_content.c0
-        WHERE ${candidateFilterSql}
-          AND current_content.id IS NULL
-        LIMIT ?
-      )
-      ` : ""},
       raw_matches AS (
         SELECT file_id, score, 0 AS content_match FROM filename_matches
         UNION ALL
         SELECT file_id, score, 1 AS content_match FROM current_content_matches
-        ${includeLegacy ? `
-          UNION ALL
-          SELECT file_id, score, 1 AS content_match FROM legacy_content_matches
-        ` : ""}
       ),
       matches AS MATERIALIZED (
         SELECT file_id, MAX(score) AS score, MAX(content_match) AS content_match
@@ -203,18 +165,13 @@ export function queryIndexAdvanced(db: CyberOsDatabase, request: IndexSearchRequ
       MAX_FTS_CANDIDATES,
       normalized.contentFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES
     );
-    if (includeLegacy) {
-      matchParameters.push(
-        normalized.legacyContentFtsQuery, ...candidateParameters, MAX_FTS_CANDIDATES
-      );
-    }
     joinSql = "JOIN matches m ON m.file_id = f.id";
     scoreSql = "m.score";
   }
 
   const sql = `
     ${matchesSql}
-    SELECT f.id AS file_id, f.root_id, f.path, f.name, f.mime_type,
+    SELECT f.id AS file_id, f.storage_pool_id, f.path, f.name, f.mime_type,
       f.size_bytes, f.mtime_ms, ${scoreSql} AS score,
       ${snippetSql} AS marked_snippet,
       f.extraction_source, f.extraction_status,
@@ -237,12 +194,9 @@ export function queryIndexAdvanced(db: CyberOsDatabase, request: IndexSearchRequ
   if (pageRows.length && pageRows[0]!.content_match_count <= MAX_SNIPPET_MATCHES) {
     const snippets = queryMarkedSnippets(
       db,
-      normalized.rootId,
+      normalized.storagePoolId,
       normalized.contentFtsQuery,
-      normalized.legacyContentFtsQuery,
-      pageRows.filter((row) => row.content_match === 1).map((row) => row.file_id),
-      normalized.filenameTerms.length ? db.prepare("SELECT status FROM index_content_state WHERE root_id = ?")
-        .pluck().get(normalized.rootId) !== "ready" : false
+      pageRows.filter((row) => row.content_match === 1).map((row) => row.file_id)
     );
     for (const row of pageRows) row.marked_snippet = snippets.get(row.file_id) ?? "";
   }
@@ -262,9 +216,8 @@ export function queryIndexAdvanced(db: CyberOsDatabase, request: IndexSearchRequ
 }
 
 function normalizeAdvancedRequest(request: IndexSearchRequest) {
-  const rootId = request.rootId.trim();
   const storagePoolId = request.storagePoolId.trim();
-  if (!rootId || !storagePoolId) throw new Error("rootId and storagePoolId are required");
+  if (!storagePoolId) throw new Error("storagePoolId is required");
   const query = request.query?.normalize("NFKC").trim().toLocaleLowerCase() ?? "";
   if (query.length > 256) throw new Error("Search query must not exceed 256 characters");
   const path = normalizeSearchPath(request.path ?? ".");
@@ -289,7 +242,7 @@ function normalizeAdvancedRequest(request: IndexSearchRequest) {
   const extractionSources = normalizedList(request.extractionSources);
   const extractionStatuses = normalizedList(request.extractionStatuses);
   const signature = {
-    rootId, storagePoolId, path, query, mimeTypes, categories,
+    storagePoolId, path, query, mimeTypes, categories,
     modifiedFromMs, modifiedToMs, sizeMin, sizeMax,
     extractionSources, extractionStatuses, sort
   };
@@ -297,7 +250,6 @@ function normalizeAdvancedRequest(request: IndexSearchRequest) {
     ...signature,
     filenameTerms: query ? searchTokens(query) : [],
     contentFtsQuery: query ? literalFtsQuery(query, ["body", "terms"]) : null,
-    legacyContentFtsQuery: query ? literalFtsQuery(query, ["body"]) : null,
     cursor: request.cursor ?? null,
     limit,
     signature
@@ -320,38 +272,22 @@ function literalFtsQuery(query: string, columns: string[]): string {
 
 function queryMarkedSnippets(
   db: CyberOsDatabase,
-  rootId: string,
+  storagePoolId: string,
   currentQuery: string | null,
-  legacyQuery: string | null,
-  fileIds: string[],
-  includeLegacy: boolean
+  fileIds: string[]
 ): Map<string, string> {
   const snippets = new Map<string, string>();
-  if (!currentQuery || !legacyQuery || !fileIds.length) return snippets;
+  if (!currentQuery || !fileIds.length) return snippets;
   const placeholders = fileIds.map(() => "?").join(", ");
   const current = db.prepare(`
     SELECT file_id, snippet(indexed_content_fts, 4, ?, ?, '...', 24) AS marked_snippet
     FROM indexed_content_fts
-    WHERE root_id = ? AND indexed_content_fts MATCH ? AND file_id IN (${placeholders})
-  `).all(HIGHLIGHT_START, HIGHLIGHT_END, rootId, currentQuery, ...fileIds) as Array<{
+    WHERE storage_pool_id = ? AND indexed_content_fts MATCH ? AND file_id IN (${placeholders})
+  `).all(HIGHLIGHT_START, HIGHLIGHT_END, storagePoolId, currentQuery, ...fileIds) as Array<{
     file_id: string;
     marked_snippet: string;
   }>;
   for (const row of current) snippets.set(row.file_id, row.marked_snippet);
-  if (!includeLegacy) return snippets;
-
-  const missing = fileIds.filter((fileId) => !snippets.has(fileId));
-  if (!missing.length) return snippets;
-  const missingPlaceholders = missing.map(() => "?").join(", ");
-  const legacy = db.prepare(`
-    SELECT file_id, snippet(indexed_text, 4, ?, ?, '...', 24) AS marked_snippet
-    FROM indexed_text
-    WHERE root_id = ? AND indexed_text MATCH ? AND file_id IN (${missingPlaceholders})
-  `).all(HIGHLIGHT_START, HIGHLIGHT_END, rootId, legacyQuery, ...missing) as Array<{
-    file_id: string;
-    marked_snippet: string;
-  }>;
-  for (const row of legacy) snippets.set(row.file_id, row.marked_snippet);
   return snippets;
 }
 
@@ -393,8 +329,8 @@ function addAdvancedSearchFilters(
   alias: string,
   input: ReturnType<typeof normalizeAdvancedRequest>
 ): void {
-  where.push(`${alias}.root_id = ?`);
-  parameters.push(input.rootId);
+  where.push(`${alias}.storage_pool_id = ?`);
+  parameters.push(input.storagePoolId);
   if (input.path !== ".") {
     where.push(`(${alias}.path = ? OR substr(${alias}.path, 1, length(?) + 1) = ? || '/')`);
     parameters.push(input.path, input.path, input.path);
@@ -459,7 +395,7 @@ function mapAdvancedSearchRow(row: AdvancedSearchRow): IndexSearchResult {
   const snippet = markedSnippetToPlainText(row.marked_snippet ?? "");
   return {
     fileId: row.file_id,
-    rootId: row.root_id,
+    storagePoolId: row.storage_pool_id,
     path: row.path,
     name: row.name,
     mimeType: row.mime_type,

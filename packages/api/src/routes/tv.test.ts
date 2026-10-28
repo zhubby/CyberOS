@@ -99,8 +99,7 @@ async function writeHealth(
 
 function playerStatus(): VodPlayerStatus {
   return {
-    state: "idle", sessionId: null, serviceInstanceId: "instance", revision: 1, rootId: null,
-    storagePoolId: null, relativePath: null, fileName: null, mediaFileId: null, videoOutput: "wayland",
+    state: "idle", sessionId: null, serviceInstanceId: "instance", revision: 1,  storagePoolId: null, relativePath: null, fileName: null, mediaFileId: null, videoOutput: "wayland",
     positionSeconds: 0, durationSeconds: null, volume: 100, retryCount: 0, nextRetryAt: null,
     audioDeviceId: null, effectiveAudioDeviceId: null, audioFallbackReason: null, audioTracks: [], subtitleTracks: [],
     selectedAudioTrackId: null, selectedSubtitleTrackId: null,

@@ -24,7 +24,7 @@ import type {
   AgentToolActivity,
   JobStatus,
   ModelProviderSettings,
-  NasRoot,
+  StoragePool,
   SessionSummary,
   SystemPowerAction,
   TranscriptMessage
@@ -74,12 +74,12 @@ export function hasActiveAgentTurn(activeJobId: string | null, activeJobStatus: 
 export function agentSessionHeaderTitle(
   session: SessionSummary | undefined,
   newSessionTitle: string,
-  rootFallback: string
+  workspaceFallback: string
 ): string {
   if (!session?.firstMessage?.trim() && !session?.lastMessage?.trim()) {
     return newSessionTitle;
   }
-  return sessionTitle(session, rootFallback);
+  return sessionTitle(session, workspaceFallback);
 }
 
 export function composerFeedbackState({
@@ -130,14 +130,14 @@ export function composerFeedbackLabel(state: ComposerFeedbackState | null, t: Tr
 function SessionList({
   sessions,
   activeSessionId,
-  rootAgentTitle,
+  workspaceAgentTitle,
   locale,
   ariaLabel,
   onSelectSession
 }: {
   sessions: SessionSummary[];
   activeSessionId: string;
-  rootAgentTitle: string;
+  workspaceAgentTitle: string;
   locale: SupportedLocale;
   ariaLabel: string;
   onSelectSession: (session: SessionSummary) => void;
@@ -153,7 +153,7 @@ function SessionList({
   return (
     <nav className="session-list" aria-label={ariaLabel}>
       {sessions.map((item) => {
-        const title = sessionTitle(item, rootAgentTitle);
+        const title = sessionTitle(item, workspaceAgentTitle);
         const relativeTime = formatRelativeTime(item.updatedAt, locale, now);
         const baseLabel = `${title} - ${relativeTime} (${formatDate(item.updatedAt, locale)})`;
         const label = item.pendingApprovalCount > 0
@@ -221,7 +221,7 @@ export function ChatPane({
   onOpenWorkspacePath
 }: {
   active: boolean;
-  selectedRoot: NasRoot | undefined;
+  selectedRoot: StoragePool | undefined;
   activeSessionSummary: SessionSummary | undefined;
   sessions: SessionSummary[];
   activeSessionId: string;
@@ -264,11 +264,11 @@ export function ChatPane({
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const approvalDialogRef = useRef<HTMLElement | null>(null);
   const approvalDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const rootAgentTitle = t("chat.rootAgent");
+  const workspaceAgentTitle = t("chat.workspaceAgent");
   const hasConversationContent = transcript.length > 0
     || activeCapabilityApprovals.length > 0
     || agentToolActivities.length > 0;
-  const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), rootAgentTitle);
+  const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), workspaceAgentTitle);
   const activeSessionIndex = sessions.findIndex((item) => item.id === activeSessionId);
   const activeSessionCode = String((activeSessionIndex >= 0 ? activeSessionIndex : 0) + 1).padStart(2, "0");
   const composerFeedback = composerFeedbackState({ activeJobId, activeJobStatus, messageSubmitting, status });
@@ -328,7 +328,7 @@ export function ChatPane({
       ? null
       : typeof changes === "string" ? changes : JSON.stringify(changes, null, 2);
     const proposalTarget = formatApprovalValue(proposal.target);
-    const requestTarget = [request?.rootId, request?.sourcePath, request?.targetPath]
+    const requestTarget = [request?.storagePoolId, request?.sourcePath, request?.targetPath]
       .filter((value): value is string => typeof value === "string" && value.length > 0)
       .join(" -> ");
     const target = proposalTarget ?? requestTarget;
@@ -435,7 +435,7 @@ export function ChatPane({
         <SessionList
           sessions={sessions}
           activeSessionId={activeSessionId}
-          rootAgentTitle={rootAgentTitle}
+          workspaceAgentTitle={workspaceAgentTitle}
           locale={locale}
           ariaLabel={t("chat.agentSessions")}
           onSelectSession={onSelectSession}

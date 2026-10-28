@@ -2,17 +2,17 @@
 set -euo pipefail
 
 usage() {
-  printf 'usage: cyberos-nas-acl --check|--apply --pool /path/to/mounted/pool [--root /path/to/nas/root]\n' >&2
+  printf 'usage: cyberos-nas-acl --check|--apply --pool /cyberos/data/<storage-pool-id>\n' >&2
   exit 2
 }
 
-mode= pool= root=/cyberos/data/primary
+mode= pool=
 while (($#)); do
   case "$1" in
     --check|--apply) [[ -z "$mode" ]] || usage; mode=$1; shift ;;
-    --pool|--root)
+    --pool)
       (($# >= 2)) || usage
-      if [[ "$1" == --pool ]]; then pool=$2; else root=$2; fi
+      pool=$2
       shift 2 ;;
     *) usage ;;
   esac
@@ -33,9 +33,9 @@ case "$backup_root" in
   *) printf 'CYBEROS_ACL_BACKUP_DIR must be under %s/system-backups\n' "$cyberos_root" >&2; exit 1 ;;
 esac
 
-root=$(realpath -e -- "$root")
+data_root=$(realpath -e -- "$cyberos_root/data")
 pool=$(realpath -e -- "$pool")
-[[ "$pool" == "$root/"* ]] || { printf 'pool must be below NAS root\n' >&2; exit 1; }
+[[ $(dirname -- "$pool") == "$data_root" ]] || { printf 'pool must be a direct child of %s\n' "$data_root" >&2; exit 1; }
 [[ $(findmnt -rn --mountpoint "$pool" -o TARGET) == "$pool" ]] || {
   printf 'pool is not mounted: %s\n' "$pool" >&2; exit 1;
 }
@@ -48,7 +48,7 @@ pool=$(realpath -e -- "$pool")
 printf 'pool: %s\nfiles and directories: ' "$pool"
 find -P "$pool" -xdev -path "$pool/.cyberos" -prune -o \
   \( -type f -o -type d \) -printf '.' | wc -c
-printf 'pool ACL and owner before migration:\n'
+printf 'pool ACL and owner before update:\n'
 getfacl --absolute-names -e -- "$pool"
 printf 'planned change: grant cyberos rwx on directories (including default ACL), rw on files; preserve owners and existing effective ACL permissions\n'
 items=$(mktemp)
@@ -225,4 +225,4 @@ if ((errors)); then
   printf '%s ACL updates failed; review the pool and restore with setfacl --restore=%s/acl.dump if necessary\n' "$errors" "$backup" >&2
   exit 1
 fi
-printf 'ACL migration complete; original ACL: %s/acl.dump\n' "$backup"
+printf 'ACL configuration complete; original ACL: %s/acl.dump\n' "$backup"

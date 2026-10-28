@@ -34,11 +34,6 @@ max_database_bytes = 536870912
 display_name = "CyberOS Admin"
 auth_mode = "local-only"
 
-[model]
-provider = "pi"
-pi_command = "pi"
-local_endpoint = ""
-
 [docker]
 enabled = false
 socket_path = "/var/run/docker.sock"
@@ -64,7 +59,7 @@ account_username = "cyberos-share"
 
 [terminal]
 user = "cyberos"
-termux_socket_path = "/run/cyberos/termux.sock"
+socket_path = "/run/cyberos/terminald.sock"
 session_idle_timeout_ms = 1800000
 connect_timeout_ms = 10000
 max_sessions = 32
@@ -85,15 +80,9 @@ audio_device = ""
 hwdec = "auto-safe"
 user = "cyberos"
 
-[[nas_roots]]
-id = "primary"
-name = "Primary NAS"
-path = "/cyberos/data/primary"
-mount_policy = "required"
-
 [backup]
 enabled = false
-repository_path = "/cyberos/data/backup/restic"
+repository = "/cyberos/backup"
 password_file = "/cyberos/config/restic-password"
 staging_path = "/cyberos/state/backup-staging"
 require_mount = true

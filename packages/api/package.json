@@ -22,7 +22,7 @@
     "@cyberos/db": "2.0.0",
     "@cyberos/mcp": "2.0.0",
     "@cyberos/monitoring": "2.0.0",
-    "@cyberos/nas-tools": "2.0.0",
+    "@cyberos/storage-tools": "2.0.0",
     "@cyberos/shared": "2.0.0",
     "@cyberos/system-health": "2.0.0",
     "archiver": "^8.0.0",

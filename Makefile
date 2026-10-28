@@ -3,7 +3,7 @@ NPM ?= npm
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev dev-api dev-web dev-worker dev-indexer dev-ops docs-dev docs-check docs-test docs-build docs-browser index health maintenance preview-web start-api start-worker start-indexer protocol-check typecheck lint test build check ci clean deb appliance
+.PHONY: help install dev dev-api dev-web dev-worker dev-indexer dev-ops docs-dev docs-check docs-test docs-build docs-browser index health maintenance preview-web start-api start-worker start-indexer protocol-check typecheck lint test build check ci clean deb
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-18s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -86,10 +86,7 @@ check: protocol-check typecheck lint test ## Run protocol drift, typecheck, lint
 ci: check build ## Run the full local verification suite.
 
 clean: ## Remove generated build and packaging artifacts.
-	rm -rf packages/*/dist coverage target .cyberos/deb-build .cyberos/appliance
+	rm -rf packages/*/dist coverage target .cyberos/deb-build
 
 deb: ## Build the Debian package artifacts.
 	./packaging/scripts/build-deb.sh
-
-appliance: ## Build the appliance rootfs tarball.
-	./packaging/appliance/build-image.sh

@@ -17,7 +17,6 @@ import {
   getPiTurnFailure,
   mapPiAssistantMessageEnd,
   piAgentToolNames,
-  previewPiToolArgs,
   projectPiSessionEntry,
   publicPiSessionFile,
   redactPiToolArgs,
@@ -218,19 +217,8 @@ describe("Pi MCP run continuation", () => {
     })).toBeNull();
   });
 
-  it("redacts secrets and complete legacy mutation payloads from durable events", () => {
-    expect(redactPiToolArgs("bash", {
-      command: "curl -H 'Authorization: Bearer secret' https://example.test",
-      env: { API_KEY: "secret", LANG: "en_US.UTF-8" }
-    })).toEqual({
-      command: "[59 byte command redacted]",
-      env: { API_KEY: "[redacted]", LANG: "en_US.UTF-8" }
-    });
-    expect(redactPiToolArgs("write", { path: "notes.txt", content: "private content" })).toEqual({
-      path: "notes.txt",
-      content: "[15 bytes]"
-    });
-    expect(redactPiToolArgs("cyberos.downloads.manage-propose", {
+  it("redacts secrets and URL credentials from durable tool events", () => {
+    expect(redactPiToolArgs({
       request: {
         url: "https://user:password@example.test/file?token=secret",
         registryToken: "secret"
@@ -240,32 +228,6 @@ describe("Pi MCP run continuation", () => {
         url: "https://example.test/file",
         registryToken: "[redacted]"
       }
-    });
-  });
-
-  it("keeps approval previews reviewable while redacting common secrets", () => {
-    expect(previewPiToolArgs("bash", {
-      command: "API_KEY=secret;printf ok && curl --token 'hidden' -H 'Authorization: Bearer bearer-secret' https://user:password@example.test/path?token=secret;printf done",
-      env: { PASSWORD: "secret", LANG: "en_US.UTF-8" }
-    })).toEqual({
-      command: "API_KEY=[redacted];printf ok && curl --token [redacted] -H 'Authorization: Bearer [redacted]' https://example.test/path;printf done",
-      env: { PASSWORD: "[redacted]", LANG: "en_US.UTF-8" }
-    });
-    expect(previewPiToolArgs("write", {
-      path: "notes.txt",
-      content: "title=Review me\npassword: private"
-    })).toEqual({
-      path: "notes.txt",
-      content: "title=Review me\npassword: [redacted]",
-      contentBytes: 33
-    });
-    expect(previewPiToolArgs("edit", {
-      path: "notes.txt",
-      edits: [{ oldText: "before", newText: "after" }]
-    })).toEqual({
-      path: "notes.txt",
-      edits: [{ oldText: "before", newText: "after" }],
-      editCount: 1
     });
   });
 });

@@ -14,7 +14,6 @@ export function recordAppliedOperation(
   db: CyberOsDatabase,
   input: {
     id?: string;
-    approvalId: string | null;
     operation: FileMutationOperation;
     sourcePath?: string | null;
     targetPath?: string | null;
@@ -25,7 +24,6 @@ export function recordAppliedOperation(
   const now = new Date().toISOString();
   const operation: FileOperationRecord = {
     id: input.id ?? randomUUID(),
-    approvalId: input.approvalId,
     operation: input.operation,
     sourcePath: input.sourcePath ?? null,
     targetPath: input.targetPath ?? null,
@@ -37,9 +35,9 @@ export function recordAppliedOperation(
 
   db.prepare(`
     INSERT INTO file_operations (
-      id, approval_id, operation, source_path, target_path, status, metadata_json, created_at, updated_at
+      id, operation, source_path, target_path, status, metadata_json, created_at, updated_at
     )
-    VALUES (@id, @approvalId, @operation, @sourcePath, @targetPath, @status, @metadataJson, @createdAt, @updatedAt)
+    VALUES (@id, @operation, @sourcePath, @targetPath, @status, @metadataJson, @createdAt, @updatedAt)
   `).run({
     ...operation,
     metadataJson: JSON.stringify(operation.metadata)
@@ -53,16 +51,14 @@ export function recordAppliedOperation(
 }
 
 function enqueueAppliedOperationPaths(db: CyberOsDatabase, operation: FileOperationRecord): void {
-  const rootId = typeof operation.metadata.rootId === "string" ? operation.metadata.rootId : null;
-  if (!rootId) return;
   const storagePoolId = typeof operation.metadata.storagePoolId === "string"
     ? operation.metadata.storagePoolId
     : null;
+  if (!storagePoolId) return;
   const paths = indexableOperationPaths(operation);
   for (const path of paths) {
     try {
       enqueueIndexTask(db, {
-        rootId,
         storagePoolId,
         path,
         recursive: ["copy", "extract", "mkdir", "move", "rename", "restore", "trash"].includes(operation.operation),
@@ -70,10 +66,10 @@ function enqueueAppliedOperationPaths(db: CyberOsDatabase, operation: FileOperat
       });
     } catch (error) {
       const now = new Date().toISOString();
-      const scope = `${rootId}:${path}`;
+      const scope = `${storagePoolId}:${path}`;
       db.prepare(`
         INSERT INTO health_alerts (
-          id, code, scope, root_id, severity, status, first_seen_at, last_seen_at, details
+          id, code, scope, storage_pool_id, severity, status, first_seen_at, last_seen_at, details
         ) VALUES (?, 'index_enqueue_failed', ?, ?, 'warning', 'active', ?, ?, ?)
         ON CONFLICT(code, scope) DO UPDATE SET
           status = 'active', last_seen_at = excluded.last_seen_at,
@@ -81,7 +77,7 @@ function enqueueAppliedOperationPaths(db: CyberOsDatabase, operation: FileOperat
       `).run(
         randomUUID(),
         scope,
-        rootId,
+        storagePoolId,
         now,
         now,
         error instanceof Error ? error.message : String(error)
@@ -115,7 +111,7 @@ function indexableOperationPaths(operation: FileOperationRecord): string[] {
 export function getFileOperation(db: CyberOsDatabase, operationId: string): FileOperationRecord | null {
   const row = db
     .prepare(`
-      SELECT id, approval_id, operation, source_path, target_path, status, metadata_json, created_at, updated_at
+      SELECT id, operation, source_path, target_path, status, metadata_json, created_at, updated_at
       FROM file_operations
       WHERE id = ?
     `)
@@ -154,7 +150,7 @@ export function createTrashEntry(
   db: CyberOsDatabase,
   input: {
     id?: string;
-    rootId: string;
+    storagePoolId: string;
     originalPath: string;
     trashPath: string;
     metadata?: Record<string, unknown>;
@@ -163,7 +159,7 @@ export function createTrashEntry(
   const now = new Date().toISOString();
   const entry: TrashEntryRecord = {
     id: input.id ?? randomUUID(),
-    rootId: input.rootId,
+    storagePoolId: input.storagePoolId,
     originalPath: input.originalPath,
     trashPath: input.trashPath,
     metadata: input.metadata ?? {},
@@ -173,9 +169,9 @@ export function createTrashEntry(
 
   db.prepare(`
     INSERT INTO trash_entries (
-      id, root_id, original_path, trash_path, metadata_json, created_at, restored_at
+      id, storage_pool_id, original_path, trash_path, metadata_json, created_at, restored_at
     )
-    VALUES (@id, @rootId, @originalPath, @trashPath, @metadataJson, @createdAt, @restoredAt)
+    VALUES (@id, @storagePoolId, @originalPath, @trashPath, @metadataJson, @createdAt, @restoredAt)
   `).run({
     ...entry,
     metadataJson: JSON.stringify(entry.metadata)
@@ -187,7 +183,7 @@ export function createTrashEntry(
 export function getTrashEntry(db: CyberOsDatabase, trashEntryId: string): TrashEntryRecord | null {
   const row = db
     .prepare(`
-      SELECT id, root_id, original_path, trash_path, metadata_json, created_at, restored_at
+      SELECT id, storage_pool_id, original_path, trash_path, metadata_json, created_at, restored_at
       FROM trash_entries
       WHERE id = ?
     `)
@@ -204,26 +200,16 @@ export function markTrashEntryRestored(db: CyberOsDatabase, trashEntryId: string
 
 export function listFileOperations(
   db: CyberOsDatabase,
-  input: { limit?: number; approvalId?: string } = {}
+  input: { limit?: number } = {}
 ): FileOperationRecord[] {
   const limit = input.limit ?? 100;
-  const rows = input.approvalId
-    ? (db
-        .prepare(`
-          SELECT id, approval_id, operation, source_path, target_path, status, metadata_json, created_at, updated_at
-          FROM file_operations
-          WHERE approval_id = ?
-          ORDER BY created_at DESC
-          LIMIT ?
-        `)
-        .all(input.approvalId, limit) as DbOperationRow[])
-    : (db
-        .prepare(`
-          SELECT id, approval_id, operation, source_path, target_path, status, metadata_json, created_at, updated_at
-          FROM file_operations
-          ORDER BY created_at DESC
-          LIMIT ?
-        `)
-        .all(limit) as DbOperationRow[]);
+  const rows = db
+    .prepare(`
+      SELECT id, operation, source_path, target_path, status, metadata_json, created_at, updated_at
+      FROM file_operations
+      ORDER BY created_at DESC
+      LIMIT ?
+    `)
+    .all(limit) as DbOperationRow[];
   return rows.map(mapOperation);
 }

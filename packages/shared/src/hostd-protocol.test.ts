@@ -37,7 +37,7 @@ describe("hostd protocol", () => {
         account: { username: "cyberos_share", password: null },
         shares: []
       },
-      roots: [{ id: "primary", path: "/cyberos/data/mediaprimary" }]
+      dataRoot: "/cyberos/data"
     };
     expect(parseHostdResult("shares.apply", sharesRequest, {
       appliedAt: "2026-10-10T00:00:00Z",
@@ -241,7 +241,7 @@ describe("hostd protocol", () => {
   it("rejects mismatched, out-of-range, and non-exact result shapes", () => {
     expect(parseHostdResult("shares.apply", {
       settings: { enabled: false, account: { username: "cyberos_share", password: null }, shares: [] },
-      roots: []
+      dataRoot: "/cyberos/data"
     }, {
       appliedAt: "2026-10-10T00:00:00Z",
       files: [],

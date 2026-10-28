@@ -2,14 +2,15 @@ import { link, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
-import { ensureNasRoots, openCyberOsDb, saveBluetoothSettings, type CyberOsDatabase } from "@cyberos/db";
-import type { BluetoothOperationResult, BluetoothStatus } from "@cyberos/shared";
+import { openCyberOsDb, saveBluetoothSettings, type CyberOsDatabase } from "@cyberos/db";
+import { resolveCyberOsPaths, type BluetoothOperationResult, type BluetoothStatus } from "@cyberos/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ApiRouteContext } from "../context.js";
 import type { BluetoothManagerRuntime } from "../lib/bluetooth-manager.js";
 import { finalizeBluetoothReceives, registerBluetoothTransferRoutes, streamBluetoothTransfers } from "./bluetooth-transfers.js";
 
-const poolId = "/dev/md/test-pool";
+const poolId = "pool-1";
+const poolDevice = "/dev/md/pool-1";
 let temporaryDirectory: string | null = null;
 let database: CyberOsDatabase | null = null;
 
@@ -55,10 +56,6 @@ describe("Bluetooth transfer routes", () => {
 
   it("keeps audio ids unique across adapters and suppresses ambiguous BlueALSA routes", async () => {
     const { server, bluetooth } = await setup();
-    saveBluetoothSettings(database!, { defaultAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF" });
-
-    const migrated = await server.inject({ method: "GET", url: "/api/system/bluetooth/settings" });
-    expect(migrated.json().settings.defaultAudioDeviceId).toBe("bluetooth:adapter-hci0/AA:BB:CC:DD:EE:FF");
 
     bluetooth.status.adapters.push({
       ...bluetooth.status.adapters[0]!, id: "adapter-hci1", name: "hci1", alias: "USB adapter", defaultAdapter: false
@@ -89,8 +86,7 @@ describe("Bluetooth transfer routes", () => {
       payload: {
         adapterId: "adapter-hci0",
         address: "aa:bb:cc:dd:ee:ff",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         paths: ["clip.bin"]
       }
     });
@@ -116,8 +112,7 @@ describe("Bluetooth transfer routes", () => {
       payload: {
         adapterId: "adapter-hci0",
         address: "AA:BB:CC:DD:EE:FF",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         paths: ["../clip.bin"]
       }
     });
@@ -130,8 +125,7 @@ describe("Bluetooth transfer routes", () => {
       payload: {
         adapterId: "adapter-hci0",
         address: "AA:BB:CC:DD:EE:FF",
-        rootId: "local",
-        storagePoolId: poolId,
+                storagePoolId: poolId,
         paths: ["clip.bin"]
       }
     });
@@ -164,7 +158,6 @@ describe("Bluetooth transfer routes", () => {
     const { server, storage } = await setup();
     saveBluetoothSettings(database!, {
       receiveEnabled: true,
-      inboxRootId: "local",
       inboxStoragePoolId: poolId,
       inboxPath: "inbox"
     });
@@ -194,7 +187,6 @@ describe("Bluetooth transfer routes", () => {
       url: "/api/system/bluetooth/settings",
       payload: {
         receiveEnabled: true,
-        inboxRootId: "local",
         inboxStoragePoolId: poolId,
         inboxPath: "inbox"
       }
@@ -216,7 +208,7 @@ describe("Bluetooth transfer routes", () => {
 
   it("finalizes staged receives into the configured inbox without overwriting", async () => {
     const { server } = await setup();
-    const root = path.join(temporaryDirectory!, "root");
+    const root = path.join(temporaryDirectory!, "data", poolId);
     const incoming = path.join(temporaryDirectory!, "bluetooth", "incoming");
     const firstId = "11111111-1111-4111-8111-111111111111";
     const secondId = "22222222-2222-4222-8222-222222222222";
@@ -225,16 +217,15 @@ describe("Bluetooth transfer routes", () => {
     await writeFile(path.join(root, "inbox", "report.txt"), "existing");
     saveBluetoothSettings(database!, {
       receiveEnabled: true,
-      inboxRootId: "local",
       inboxStoragePoolId: poolId,
       inboxPath: "inbox"
     });
     const insert = database!.prepare(`
       INSERT INTO bluetooth_transfers (
-        id, direction, device_address, root_id, storage_pool_id, relative_path,
+        id, direction, device_address, storage_pool_id, relative_path,
         display_name, status, transferred_bytes, total_bytes, created_at, updated_at, started_at
       ) VALUES (
-        ?, 'receive', 'AA:BB:CC:DD:EE:FF', 'local', ?, ?,
+        ?, 'receive', 'AA:BB:CC:DD:EE:FF', ?, ?,
         ?, 'finalizing', ?, ?, ?, ?, ?
       )
     `);
@@ -247,16 +238,18 @@ describe("Bluetooth transfer routes", () => {
     let findmntCalls = 0;
 
     await finalizeBluetoothReceives({
-      config: { databasePath: path.join(temporaryDirectory!, "cyberos.sqlite") },
+      config: {
+        paths: resolveCyberOsPaths(temporaryDirectory!)
+      },
       db: database,
       system: {
         commandRunner: {
           async run(command: string) {
             if (command === "findmnt") {
               findmntCalls += 1;
-              return JSON.stringify({ filesystems: [{ source: poolId, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
+              return JSON.stringify({ filesystems: [{ source: poolDevice, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
             }
-            if (command === "mdadm") return `ARRAY ${poolId} name=test UUID=test`;
+            if (command === "mdadm") return `ARRAY ${poolDevice} name=${poolId} UUID=test`;
             if (command === "smartctl") return JSON.stringify({ devices: [] });
             return JSON.stringify({ blockdevices: [] });
           }
@@ -277,7 +270,7 @@ describe("Bluetooth transfer routes", () => {
 
   it("resumes an already published receive without creating a duplicate", async () => {
     const { server } = await setup();
-    const root = path.join(temporaryDirectory!, "root");
+    const root = path.join(temporaryDirectory!, "data", poolId);
     const incoming = path.join(temporaryDirectory!, "bluetooth", "incoming");
     const id = "33333333-3333-4333-8333-333333333333";
     const finalName = "report-recovered.txt";
@@ -286,11 +279,11 @@ describe("Bluetooth transfer routes", () => {
     const now = new Date().toISOString();
     database!.prepare(`
       INSERT INTO bluetooth_transfers (
-        id, direction, device_address, root_id, storage_pool_id, relative_path,
+        id, direction, device_address, storage_pool_id, relative_path,
         display_name, finalization_relative_path, status, transferred_bytes,
         total_bytes, created_at, updated_at, started_at
       ) VALUES (
-        ?, 'receive', 'AA:BB:CC:DD:EE:FF', 'local', ?, 'inbox/report.txt',
+        ?, 'receive', 'AA:BB:CC:DD:EE:FF', ?, 'inbox/report.txt',
         'report.txt', ?, 'finalizing', 8, 8, ?, ?, ?
       )
     `).run(id, poolId, `inbox/${finalName}`, now, now, now);
@@ -302,15 +295,17 @@ describe("Bluetooth transfer routes", () => {
     );
 
     await finalizeBluetoothReceives({
-      config: { databasePath: path.join(temporaryDirectory!, "cyberos.sqlite") },
+      config: {
+        paths: resolveCyberOsPaths(temporaryDirectory!)
+      },
       db: database,
       system: {
         commandRunner: {
           async run(command: string) {
             if (command === "findmnt") {
-              return JSON.stringify({ filesystems: [{ source: poolId, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
+              return JSON.stringify({ filesystems: [{ source: poolDevice, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }] });
             }
-            if (command === "mdadm") return `ARRAY ${poolId} name=test UUID=test`;
+            if (command === "mdadm") return `ARRAY ${poolDevice} name=${poolId} UUID=test`;
             if (command === "smartctl") return JSON.stringify({ devices: [] });
             return JSON.stringify({ blockdevices: [] });
           }
@@ -335,17 +330,19 @@ async function setup(): Promise<{
   storage: { online: boolean };
 }> {
   temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-bluetooth-transfers-"));
-  const root = path.join(temporaryDirectory, "root");
-  await mkdir(root);
+  const root = path.join(temporaryDirectory, "data", poolId);
+  await mkdir(root, { recursive: true });
   await mkdir(path.join(root, "inbox"));
   await writeFile(path.join(root, "clip.bin"), "video");
   database = openCyberOsDb(path.join(temporaryDirectory, "cyberos.sqlite"));
-  ensureNasRoots(database, [{ id: "local", name: "Local", path: root }]);
   const bluetooth = new FakeBluetoothManager();
   const storage = { online: true };
   const server = Fastify({ logger: false });
   registerBluetoothTransferRoutes(server, {
-    config: { hostd: { socketPath: "/tmp/hostd.sock" } },
+    config: {
+      paths: resolveCyberOsPaths(temporaryDirectory),
+      hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" }
+    },
     db: database,
     system: {
       bluetoothManager: bluetooth,
@@ -354,11 +351,11 @@ async function setup(): Promise<{
           if (command === "findmnt") {
             return JSON.stringify({
               filesystems: storage.online
-                ? [{ source: poolId, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }]
+                ? [{ source: poolDevice, target: root, fstype: "ext4", size: 1000, used: 100, avail: 900, "use%": "10%" }]
                 : []
             });
           }
-          if (command === "mdadm") return `ARRAY ${poolId} name=test UUID=test`;
+          if (command === "mdadm") return `ARRAY ${poolDevice} name=${poolId} UUID=test`;
           if (command === "smartctl") return JSON.stringify({ devices: [] });
           return JSON.stringify({ blockdevices: [] });
         }

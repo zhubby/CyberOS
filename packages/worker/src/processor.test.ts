@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,22 +12,19 @@ import {
   createMcpClient,
   decideCapabilityApproval,
   deleteSession,
-  ensureNasRoots,
   getAgentProviderSession,
   getAgentSessionCommand,
   getJob,
   listEvents,
   listPendingAgentCapabilityApprovals,
-  listPendingApprovals,
   openCyberOsDb,
   recoverInterruptedAgentSessionCommands,
   saveAgentProviderSession,
   saveAgentMcpSettings,
-  upsertIndexedFile,
   type CyberOsDatabase
 } from "@cyberos/db";
 import { PiActiveTurnUnavailableError, type PiAgentRunner } from "@cyberos/agent";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { processNextAgentCommand, processNextJob } from "./processor.js";
 
 let tempDir: string;
@@ -40,7 +37,6 @@ beforeEach(async () => {
   await mkdir(rootDir);
   await writeFile(path.join(rootDir, "alpha.txt"), "alpha");
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
 afterEach(async () => {
@@ -50,7 +46,7 @@ afterEach(async () => {
 
 describe("worker processor", () => {
   it("claims a queued job and writes ordered agent events", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List files"
@@ -58,14 +54,20 @@ describe("worker processor", () => {
     const runner: PiAgentRunner = async (input) => {
       await input.emit({
         type: "agent.started",
+        runId: "test-turn-1",
+        sequence: 1,
         payload: { provider: "pi" }
       });
       await input.emit({
         type: "agent.message",
+        runId: "test-turn-1",
+        sequence: 2,
         payload: { role: "assistant", content: "Pi response" }
       });
       await input.emit({
         type: "agent.completed",
+        runId: "test-turn-1",
+        sequence: 3,
         payload: { provider: "pi" }
       });
       await input.saveProviderSession({
@@ -94,8 +96,8 @@ describe("worker processor", () => {
   });
 
   it("processes different sessions concurrently in one worker", async () => {
-    const firstSession = createSession(db, { rootId: "local" });
-    const secondSession = createSession(db, { rootId: "local" });
+    const firstSession = createSession(db, { });
+    const secondSession = createSession(db, { });
     const firstJob = createUserMessageAndJob(db, {
       sessionId: firstSession.id,
       content: "First"
@@ -137,7 +139,7 @@ describe("worker processor", () => {
   });
 
   it("executes active commands only for the worker holding the session lease", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Inspect logs" });
     expect(claimNextJob(db, { workerId: "worker-owner", leaseMs: 30_000 })?.id).toBe(job.id);
     const command = createAgentSessionCommand(db, {
@@ -177,7 +179,7 @@ describe("worker processor", () => {
   });
 
   it("cancels the active job before dispatching an abort command", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Long task" });
     expect(claimNextJob(db, { workerId: "worker-owner", leaseMs: 30_000 })?.id).toBe(job.id);
     const command = createAgentSessionCommand(db, {
@@ -203,7 +205,7 @@ describe("worker processor", () => {
   });
 
   it("requeues steer while the claimed Pi session is still starting", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Long task" });
     expect(claimNextJob(db, { workerId: "worker-owner", leaseMs: 30_000 })?.id).toBe(job.id);
     const command = createAgentSessionCommand(db, {
@@ -226,7 +228,7 @@ describe("worker processor", () => {
   });
 
   it("signals cancellation when an idle command loses its lease", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const command = createAgentSessionCommand(db, {
       sessionId: session.id,
       idempotencyKey: "compact-lease-loss",
@@ -259,7 +261,7 @@ describe("worker processor", () => {
   });
 
   it("applies the persisted Agent MCP switch to new jobs without a worker restart", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const config: CyberOsConfig = {
       ...testConfig(),
       mcp: {
@@ -291,7 +293,7 @@ describe("worker processor", () => {
   });
 
   it("marks Pi failures as failed jobs", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List files"
@@ -306,10 +308,14 @@ describe("worker processor", () => {
       });
       await input.emit({
         type: "agent.started",
+        runId: "test-turn-failed",
+        sequence: 1,
         payload: { provider: "pi" }
       });
       await input.emit({
         type: "agent.failed",
+        runId: "test-turn-failed",
+        sequence: 2,
         payload: { provider: "pi", error: "Pi unavailable" }
       });
       return { status: "failed", error: "Pi unavailable" };
@@ -328,7 +334,7 @@ describe("worker processor", () => {
   });
 
   it("clears a provider session saved by a Pi runner that throws", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List files"
@@ -355,7 +361,7 @@ describe("worker processor", () => {
   });
 
   it("preserves a durable Pi session when a turn fails after JSONL persistence", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List files"
@@ -385,7 +391,7 @@ describe("worker processor", () => {
   });
 
   it("preserves an existing provider session when the failing runner did not save one", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     saveAgentProviderSession(db, {
       sessionId: session.id,
       providerSessionId: "pi-session-existing",
@@ -415,7 +421,7 @@ describe("worker processor", () => {
   });
 
   it("does not clear a newer provider session saved by another turn", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List files"
@@ -447,7 +453,7 @@ describe("worker processor", () => {
   });
 
   it("allows a later successful turn to restore the provider session after failure", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createUserMessageAndJob(db, { sessionId: session.id, content: "First" });
     createUserMessageAndJob(db, { sessionId: session.id, content: "Second" });
     let turn = 0;
@@ -476,7 +482,7 @@ describe("worker processor", () => {
   });
 
   it("treats a cascaded job record as cancellation", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "List files"
@@ -490,69 +496,8 @@ describe("worker processor", () => {
     await expect(processNextJob({ db, config: testConfig(), agentRunner: runner })).resolves.toBe(true);
   });
 
-  it("keeps local fallback read-only without creating an approval", async () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "move alpha.txt to beta.txt"
-    });
-
-    await expect(processNextJob({ db, config: testConfig(), allowLocalFallback: true })).resolves.toBe(true);
-
-    expect(getJob(db, job.id)?.status).toBe("completed");
-    expect(listPendingApprovals(db)).toHaveLength(0);
-    expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual([
-      "job.running",
-      "agent.started",
-      "agent.message",
-      "agent.completed",
-      "job.completed"
-    ]);
-    await expect(readFile(path.join(rootDir, "alpha.txt"), "utf8")).resolves.toBe("alpha");
-  });
-
-  it("scopes local agent index searches to the session directory", async () => {
-    await mkdir(path.join(rootDir, "docs"));
-    const session = createSession(db, { rootId: "local", currentPath: "docs" });
-    createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "search alpha"
-    });
-    upsertIndexedFile(db, {
-      rootId: "local",
-      path: "alpha.txt",
-      name: "alpha.txt",
-      mimeType: "text/plain",
-      sizeBytes: 5,
-      mtimeMs: 1,
-      body: "alpha outside"
-    });
-    upsertIndexedFile(db, {
-      rootId: "local",
-      path: "docs/inside.txt",
-      name: "inside.txt",
-      mimeType: "text/plain",
-      sizeBytes: 5,
-      mtimeMs: 1,
-      body: "alpha inside"
-    });
-
-    await expect(processNextJob({ db, config: testConfig(), allowLocalFallback: true })).resolves.toBe(true);
-
-    const queryEvent = listEvents(db, { sessionId: session.id }).find(
-      (event) => event.type === "tool_call.completed"
-    );
-    expect(queryEvent?.payload).toMatchObject({
-      name: "query_index",
-      output: {
-        count: 1,
-        matches: [{ path: "docs/inside.txt" }]
-      }
-    });
-  });
-
   it("passes the saved Pi provider session back into the next job for the same CyberOS session", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "First"
@@ -573,6 +518,8 @@ describe("worker processor", () => {
       });
       await input.emit({
         type: "agent.started",
+        runId: `test-turn-${seenProviderSessions.length}`,
+        sequence: 1,
         payload: { provider: "pi" }
       });
       return { status: "completed" };
@@ -585,7 +532,7 @@ describe("worker processor", () => {
   });
 
   it("resumes the same Pi job with a terminal capability run continuation", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Move alpha.txt"
@@ -597,7 +544,7 @@ describe("worker processor", () => {
       subjectKind: "pi",
       capabilityId: "cyberos.files.mutate-propose",
       risk: "high",
-      redactedInput: { operation: "move", rootId: "local" },
+      redactedInput: { operation: "move", storagePoolId: "local" },
       proposal: { target: "beta.txt", revision: "r1" },
       expiresAt: new Date(Date.now() + 60_000).toISOString()
     });
@@ -643,7 +590,7 @@ describe("worker processor", () => {
   });
 
   it("does not hand off an approved continuation until the originating Pi turn is idle", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {
       sessionId: session.id,
       content: "Move alpha.txt"
@@ -653,7 +600,7 @@ describe("worker processor", () => {
       subjectKind: "pi",
       capabilityId: "cyberos.files.mutate-propose",
       risk: "high",
-      redactedInput: { operation: "move", rootId: "local" },
+      redactedInput: { operation: "move", storagePoolId: "local" },
       proposal: { target: "beta.txt", revision: "r1" },
       expiresAt: new Date(Date.now() + 60_000).toISOString()
     });
@@ -705,7 +652,7 @@ describe("worker processor", () => {
   });
 
   it("links every pending capability and waits for all decisions before continuing", async () => {
-    const session = createSession(db, { rootId: "local" });
+    const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Inspect both files" });
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
     const proposals = ["alpha.txt", "beta.txt"].map((pathValue) => createCapabilityProposal(db, {
@@ -760,25 +707,22 @@ describe("worker processor", () => {
 });
 
 function testConfig(): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
   return {
-    dataDir: tempDir,
-    databasePath: path.join(tempDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: rootDir, databasePath: path.join(tempDir, "cyberos.sqlite") },
     api: {
       host: "127.0.0.1",
       port: 0,
       allowedOrigins: []
     },
     worker: {
-      pollMs: 10
+      pollMs: 10,
+      concurrency: 1
     },
     admin: {
       displayName: "Test Admin",
       authMode: "local-only"
-    },
-    model: {
-      provider: "pi",
-      piCommand: "pi",
-      localEndpoint: null
     },
     docker: {
       enabled: false,
@@ -795,9 +739,8 @@ function testConfig(): CyberOsConfig {
       },
       shares: []
     },
-    hostd: { socketPath: "/tmp/hostd.sock" },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock" },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }

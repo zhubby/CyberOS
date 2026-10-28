@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   claimNextDownloadTask,
   createDownloadTask,
-  ensureNasRoots,
   getDownloadWorkerHealth,
   openCyberOsDb,
   renewDownloadTaskLease,
@@ -19,7 +18,6 @@ let db: CyberOsDatabase;
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-download-repository-"));
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
 afterEach(async () => {
@@ -99,8 +97,7 @@ describe("download reliability repository", () => {
 function createTask(fileName: string) {
   return createDownloadTask(db, {
     url: `https://example.com/${fileName}`,
-    rootId: "local",
-    storagePoolId: "/dev/test",
+    storagePoolId: "pool-1",
     targetDirectory: ".",
     targetFileName: fileName,
     targetPath: fileName

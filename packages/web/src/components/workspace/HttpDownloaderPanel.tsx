@@ -49,10 +49,9 @@ export function HttpDownloaderPanel({
   selectedStoragePoolId: string;
   locale: SupportedLocale;
   onSelectStoragePool: (poolId: string) => void;
-  onOpenDirectory: (rootId: string, storagePoolId: string, path: string) => void;
+  onOpenDirectory: (storagePoolId: string, path: string) => void;
   onOpenStorage: () => void;
   onRequestCreateFolder?: (input: {
-    rootId: string;
     storagePoolId: string;
     parentPath: string;
     name: string;
@@ -129,7 +128,6 @@ export function HttpDownloaderPanel({
     const pool = pools.find((candidate) => candidate.id === selectedStoragePoolId) ?? mountedPools[0] ?? null;
     if (!target && pool) {
       setTarget({
-        rootId: pool.rootId,
         storagePoolId: pool.id,
         path: pool.path,
         name: pool.name
@@ -168,7 +166,7 @@ export function HttpDownloaderPanel({
       return;
     }
     const pool = pools.find((candidate) => candidate.id === selectedStoragePoolId) ?? mountedPools[0] ?? null;
-    setTarget(pool ? { rootId: pool.rootId, storagePoolId: pool.id, path: pool.path, name: pool.name } : null);
+    setTarget(pool ? { storagePoolId: pool.id, path: pool.path, name: pool.name } : null);
     setUrl("");
     setFileName("");
     setSha256("");
@@ -228,7 +226,6 @@ export function HttpDownloaderPanel({
     try {
       const task = await createDownload({
         url: url.trim(),
-        rootId: target.rootId,
         storagePoolId: target.storagePoolId,
         targetDirectory: target.path,
         fileName: fileName.trim(),
@@ -366,7 +363,7 @@ export function HttpDownloaderPanel({
                   pendingAction={pendingAction}
                   onAction={(action) => void runAction(task, action)}
                   onDelete={() => void removeTask(task)}
-                  onOpenDirectory={() => onOpenDirectory(task.rootId, task.storagePoolId, task.targetDirectory)}
+                  onOpenDirectory={() => onOpenDirectory(task.storagePoolId, task.targetDirectory)}
                 />
               ))
             )}
@@ -683,7 +680,7 @@ function formatSpeed(speed: number, locale: SupportedLocale, t: (key: string) =>
   return speed > 0 ? `${formatBytes(speed, locale)}/s` : t("workspace.downloads.noSpeed");
 }
 
-function formatEta(task: DownloadTask, locale: SupportedLocale, t: (key: string) => string): string {
+function formatEta(task: DownloadTask, _locale: SupportedLocale, t: (key: string) => string): string {
   if (!task.totalBytes || task.speedBytesPerSecond <= 0 || task.totalBytes <= task.receivedBytes) {
     return task.status === "completed" ? t("workspace.downloads.done") : t("workspace.downloads.unknownEta");
   }

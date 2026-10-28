@@ -11,9 +11,9 @@ sidebar:
 
 ## 选择存储范围
 
-打开 Web UI 后，应用会读取 `/api/roots` 并选择第一个可用 root。若主机暴露多个磁盘或 storage pool，在文件面板的 storage pool 切换器中选择目标卷；所有浏览、搜索和写操作都会携带 root 与 storage pool 范围。
+打开 Web UI 后，应用会读取 `/api/system/storage` 并选择第一个可用 storage pool。若主机暴露多个 pool，在文件面板的 storage pool 切换器中选择目标卷；所有浏览、搜索和写操作都由 `storagePoolId + relativePath` 唯一定位。
 
-如果 root readiness 是 `not_ready`、`offline` 或 `unknown`，先处理挂载问题，不要尝试通过 URL 绕过 root 限制。生产环境的 `mount_policy = "required"` 会阻止未就绪 root 被当成普通目录使用。
+如果 storage pool 状态是 `offline`、`warning` 或 `unknown`，先处理挂载问题，不要尝试通过 URL 绕过存储池边界。生产环境只接受直接挂载到 `/cyberos/data/<storagePoolId>` 的 pool，未挂载目录不会被当成可用数据盘。
 
 ## 浏览、搜索和预览
 
@@ -36,44 +36,44 @@ sidebar:
 
 ## 使用相册
 
-相册面板使用系统配置中指定的唯一媒体目录，不在面板内切换目录。原媒体和 XMP sidecar 始终保持原字节；内部 `cyberos-photostaff.service` 递归扫描图片、视频和 RAW，索引 EXIF、IPTC、XMP、ICC/JFIF、RAW 与视频标签，并生成不携带原元数据的本地 WebP 缩略图与预览。扫描断点、重试和发布 journal 会在 daemon 或系统重启后恢复。正常状态不占用常驻信息栏；出现降级、离线、Worker 异常或稳定错误码时，检索工具栏会显示异常图标，悬停或键盘聚焦可查看状态、Worker、错误码和重试信息。阻断首次加载的错误仍会显示可重试空状态。
+相册面板使用系统配置中指定的唯一媒体目录，不在面板内切换目录。原媒体和 XMP sidecar 始终保持原字节；内部 `cyberos-photos.service` 递归扫描图片、视频和 RAW，索引 EXIF、IPTC、XMP、ICC/JFIF、RAW 与视频标签，并生成不携带原元数据的本地 WebP 缩略图与预览。扫描断点、重试和发布 journal 会在 daemon 或系统重启后恢复。正常状态不占用常驻信息栏；出现降级、离线、Worker 异常或稳定错误码时，检索工具栏会显示异常图标，悬停或键盘聚焦可查看状态、Worker、错误码和重试信息。阻断首次加载的错误仍会显示可重试空状态。
 
 时间线的文本搜索、视图切换和排序保持在单行工具栏中；日期、类型、相机、镜头、ISO、光圈、快门、焦距、评分、关键词、位置和高级字段条件从筛选图标打开，在弹层中编辑后一次应用。照片按日期分组，并以真实宽高比组成瀑布墙；每次加载 60 项，滚动到时间线底部附近时通过稳定游标自动追加，缩略图只在接近视口时加载。分页失败会暂停自动请求并提供重试。查看器异步加载完整元数据；敏感组默认隐藏，需主动揭示。多文件上传先处理媒体再处理 `.xmp`；移动、trash 和 ZIP 会将确定关联的 sidecar 去重后成对处理，单独下载原图不附带 sidecar。
 
-地图视图首次打开时显示“下载离线地图”，只有点击后 API 才下载固定的 Natural Earth II 3.2.0 全球概览图；下载期间每秒恢复进度，离开页面不会中止服务端任务，完成后无需刷新即可加载。文件保存在 data directory 的 `photostaff/maps/natural-earth-ii-3.2.0.pmtiles`，生产路径为 `/cyberos/state/photostaff/maps/natural-earth-ii-3.2.0.pmtiles`，会跨服务重启和软件升级保留。
+地图视图首次打开时显示“下载离线地图”，只有点击后 API 才下载固定的 Natural Earth II 3.2.0 全球概览图；下载期间每秒恢复进度，离开页面不会中止服务端任务，完成后无需刷新即可加载。文件保存在 data directory 的 `photos/maps/natural-earth-ii-3.2.0.pmtiles`，生产路径为 `/cyberos/state/photos/maps/natural-earth-ii-3.2.0.pmtiles`，会跨服务重启和软件升级保留。
 
 该 JPEG PMTiles 只覆盖 `z0–z6`，适合按国家、地区和城市群浏览照片，不提供道路、门牌或街道级细节。下载完成后地图瓦片只从本机同源 API 读取；CyberOS 不请求在线瓦片、遥测、反向地理编码或第三方坐标服务。当前位置仍只在点击按钮后请求浏览器权限。
 
 ## 使用 Agent
 
-1. 点击新建 agent session，session 会绑定当前 root 和目录。
+1. 点击新建 agent session，session 会绑定当前 storage pool 和相对目录。
 2. 在输入框描述任务；点击文件路径可以把路径带入消息上下文。
-3. 发送后观察事件时间线。API 使用 SSE 推送 agent、tool call、approval 和 job 状态。
+3. 发送后观察事件时间线。API 使用 SSE 推送 Agent、capability run/approval 和 job 状态。
 4. 需要长时间运行时可以点击停止；取消只影响 queued/running/waiting approval 的 job。
 
-只读请求可以询问目录内容、文件路径和索引结果。Agent 不应被当作绕过路径安全的 shell：所有工具都在配置的 NAS root 内解析。
+只读请求可以询问目录内容、文件路径和索引结果。Agent 不应被当作绕过路径安全的 shell：所有工具都在配置的 storage pool 内解析。
 
-## 审批与可逆操作
+## 确认、审批与可逆操作
 
-创建目录、移动、复制、重命名、trash、tag、Docker 生命周期/Compose、share/storage 操作以及危险 Pi tool call 会显示 approval 卡片。卡片至少包含操作类型、目标路径、风险和可逆性。Docker 面板中的容器、卷、网络创建在最终确认后直接执行，并写入 operation/job 历史；容器启动失败时会保留已创建容器并显示部分成功警告。VM 创建、生命周期、快照、控制台和删除操作均直接执行，不创建 approval，同时保留 operation/job 历史；永久删除托管磁盘前仍会显示本地二次确认。
+Workspace 中的文件、Docker、VM、share 和 storage 操作由第一方页面显示明确确认，API 直接执行服务端校验并写入相应领域 operation；它们不创建 capability approval。容器启动失败时会保留已创建容器并显示部分成功警告。VM 创建、生命周期、快照、控制台和删除同样直接执行并保留 operation 历史；永久删除托管磁盘前仍会显示本地二次确认。
 
-- 点击 **Approve** 后 API 才会执行对应操作；
-- 点击 **Reject** 不改变文件系统；
+- Agent 或 MCP mutation 会创建 capability run；需要人工决定时，聊天区显示包含能力、目标、风险、revision 和可逆性的 approval 卡片；
+- 点击 **Approve** 后 API 重新校验并执行一次；点击 **Reject** 不改变目标资源；
 - 文件移除进入 CyberOS trash，而不是永久删除；
 - 已应用的文件操作可在 Activity 中执行 rollback；
 - trash 项可通过 restore 恢复，恢复失败时保留原条目并查看 API 错误。
 
-审批前不要根据 agent 的文字回复判断“已经完成”；以 approval 状态和 operation 记录为准。
+不要根据 Agent 的文字回复判断“已经完成”；以 capability run、approval 和领域 operation 的持久状态为准。
 
 ## 终端与管理面板
 
-Workspace 的 Terminal 使用 Rust termux 和 tmux 承载受限 PTY。每个 NAS root 有独立的顶部标签列表；标签名称、创建顺序和活动项保存在 SQLite，并在浏览器之间共享。首次打开会自动创建“终端 1”；旧版浏览器保存的会话 ID 会在首次访问时导入。新建标签受整机 `terminal.maxSessions` 限制，默认上限为 32。
+Workspace 的 Terminal 使用 Rust terminal 和 tmux 承载受限 PTY，并以 `/cyberos/data` 作为全局工作区。顶部标签名称、创建顺序和活动项保存在 SQLite，并在浏览器之间共享。首次打开会自动创建“终端 1”；新建标签受整机 `terminal.maxSessions` 限制，默认上限为 32。
 
-切换标签时浏览器保留已经打开标签的本地显示缓冲，但只有活动标签连接 WebSocket。刷新页面、断开浏览器或重启 API/termux 不会终止已登记标签的 tmux shell；重启标签或确认关闭标签会终止其中的 shell 和所有子进程。关闭最后一个标签后保持空状态，不会立即自动创建新标签。未登记的旧客户端会话仍使用原有空闲回收策略。
+切换标签时浏览器保留已经打开标签的本地显示缓冲，但只有活动标签连接 WebSocket。刷新页面、断开浏览器或重启 API/terminal 不会终止已登记标签的 tmux shell；重启标签或确认关闭标签会终止其中的 shell 和所有子进程。关闭最后一个标签后保持空状态，不会立即自动创建新标签。
 
-同一标签同时只允许一个控制端。另一个浏览器连接时，原连接会显示“会话已在其他位置打开”并停止自动重连；点击重新接管会把控制权取回。整机重启后 SQLite 中的标签、名称、顺序和活动项仍保留，但 tmux 进程和 scrollback 不会恢复，首次重新连接会启动新的 shell。连接失败时检查 `tmux`、`cyberos-termux.service` 和 termux identity drop-in。
+同一标签同时只允许一个控制端。另一个浏览器连接时，原连接会显示“会话已在其他位置打开”并停止自动重连；点击重新接管会把控制权取回。整机重启后 SQLite 中的标签、名称、顺序和活动项仍保留，但 tmux 进程和 scrollback 不会恢复，首次重新连接会启动新的 shell。连接失败时检查 `tmux`、`cyberos-terminald.service` 和 terminal identity drop-in。
 
-Downloads 面板使用独立 Rust `cyberos-downloader.service`，支持公网 HTTP/HTTPS 地址、可选 SHA-256、目录选择、排队、协作式暂停/继续、取消、自动重试和历史。任务行显示 worker health、单流/分段模式、校验/发布阶段、重试倒计时和稳定错误码；失败任务保留 `.part` 文件，取消任务清理临时文件，同名目标不会覆盖。大文件在来源提供可靠 validator 时最多使用设置中指定的 Range 并发；设置页还可调整分段阈值、重试、超时、最低剩余空间和最大文件大小。Docker、VM、Shares、Storage 面板只在配置和宿主机能力可用时展示完整操作；Docker 资源创建和全部 VM 操作是直接执行的管理流程，Docker 生命周期和 Compose 变更仍通过 approval。
+Downloads 面板使用独立 Rust `cyberos-downloader.service`，支持公网 HTTP/HTTPS 地址、可选 SHA-256、目录选择、排队、协作式暂停/继续、取消、自动重试和历史。任务行显示 worker health、单流/分段模式、校验/发布阶段、重试倒计时和稳定错误码；失败任务保留 `.part` 文件，取消任务清理临时文件，同名目标不会覆盖。大文件在来源提供可靠 validator 时最多使用设置中指定的 Range 并发；设置页还可调整分段阈值、重试、超时、最低剩余空间和最大文件大小。Docker、VM、Shares、Storage 面板只在配置和宿主机能力可用时展示完整操作；这些第一方管理流程均直接执行并写入领域审计。
 
 Docker 面板的镜像区域可以搜索本地镜像、查看完整 ID/tags/digests/占用信息、拉取镜像和删除未被容器引用的具体 tag。删除需要在详情弹窗中再次确认，不会强制删除，也不进入 agent approval。多标签镜像必须先选择要删除的具体 tag；无标签镜像使用完整 ID。
 
@@ -85,7 +85,7 @@ Registry 凭证入口即使 Engine 离线或 Docker 管理关闭也可使用。�
 
 Compose 项目区的“创建”按钮用于管理系统托管 App。名称用于显示，`projectKey` 创建后不可修改；Compose YAML 和环境变量保存在 SQLite，`/cyberos/apps/<project-key>` 只是 CyberOS 自动发布的运行副本，不在文件面板中显示，也不应手工编辑。已有环境变量只显示“已配置”，留空保存表示保留原值，从列表移除才会删除。
 
-“保存”只生成新的 revision 并显示“需要部署”；“保存并部署”在保存成功后发起现有 Compose Up approval，审批创建失败不会撤销已保存内容。Engine 离线时仍可查看、创建和编辑，但不能部署或删除。删除前必须先通过 Down approval 移除项目容器，再进行独立二次确认；删除 App 不会清理镜像、named volume、网络或 NAS bind mount 数据。
+“保存”只生成新的 revision 并显示“需要部署”；“保存并部署”在保存成功后直接执行 Compose Up，并以当前 revision 防止漂移。Engine 离线时仍可查看、创建和编辑，但不能部署或删除。删除前必须先执行 Down 移除项目容器，再进行独立二次确认；删除 App 不会清理镜像、named volume、网络或 storage-pool bind mount 数据。
 
 设置面板可以修改 model provider、Pi tool policy、Docker 配置、语言、预览大小和编辑器字体。界面固定使用深色 HUD 主题；保存 provider secret 后 UI 只显示是否已配置，不会回显密钥。
 
@@ -96,7 +96,7 @@ Compose 项目区的“创建”按钮用于管理系统托管 App。名称用�
 ```bash
 curl -fsS http://127.0.0.1:3010/health
 curl -fsS http://127.0.0.1:3010/api/system/health
-curl -fsS http://127.0.0.1:3010/api/roots/readiness
+curl -fsS http://127.0.0.1:3010/api/system/storage
 curl -fsS http://127.0.0.1:3010/api/indexer/status
 curl -fsS http://127.0.0.1:3010/api/backup/status
 ```

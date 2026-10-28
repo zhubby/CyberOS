@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ensureNasRoots, openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
+import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 import { type TerminalPty, type TerminalRuntime } from "../lib/terminal.js";
 
@@ -13,10 +13,9 @@ let db: CyberOsDatabase;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-terminal-"));
-  rootDir = path.join(tempDir, "root");
-  await mkdir(rootDir);
+  rootDir = path.join(tempDir, "data");
+  await mkdir(rootDir, { recursive: true });
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: rootDir }]);
 });
 
 afterEach(async () => {
@@ -28,7 +27,8 @@ describe("terminal WebSocket", () => {
   it("starts in the user's home directory and forwards terminal traffic", async () => {
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const socket = await connect(server);
+    const sessionId = await initializeTab(server);
+    const socket = await connect(server, sessionId);
     const homeDir = os.homedir();
 
     expect(await nextMessage(socket)).toMatchObject({ type: "ready", cwd: homeDir });
@@ -58,16 +58,17 @@ describe("terminal WebSocket", () => {
   it("releases the broker attachment and reconnects the persistent tmux session", async () => {
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const socket = await connect(server);
+    const sessionId = await initializeTab(server);
+    const socket = await connect(server, sessionId);
     const ready = await nextMessage(socket);
-    const sessionId = ready.sessionId;
+    expect(ready.sessionId).toBe(sessionId);
 
     socket.close();
     await socketEvent(socket, "close");
     await waitFor(() => runtime.terminals[0]!.disconnected);
     expect(runtime.terminals[0]!.killed).toBe(false);
 
-    const reconnect = await connect(server, "local", String(sessionId));
+    const reconnect = await connect(server, sessionId);
     expect(await nextMessage(reconnect)).toEqual({ type: "ready", cwd: os.homedir(), sessionId });
     expect(runtime.spawnCount).toBe(2);
     expect(runtime.optionsHistory[0]!.sessionName).toBe(runtime.optionsHistory[1]!.sessionName);
@@ -78,41 +79,42 @@ describe("terminal WebSocket", () => {
     await server.close();
   });
 
-  it("resets the previous session when a new session id is requested", async () => {
+  it("rejects connections without a registered persistent tab", async () => {
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const firstSocket = await connect(server);
-    const previousSessionId = String((await nextMessage(firstSocket)).sessionId);
-    const nextSessionId = "22222222-2222-4222-8222-222222222222";
+    const missingProtocol = await connect(server);
+    expect(await nextMessage(missingProtocol)).toEqual({
+      type: "error",
+      error: "Terminal requires the current WebSocket protocol and a registered tab"
+    });
+    await socketEvent(missingProtocol, "close");
 
-    const resetSocket = await connect(server, "local", nextSessionId, [
-      `cyberos-reset.${previousSessionId}`,
-      `cyberos-next.${nextSessionId}`
-    ]);
-    expect(await nextMessage(resetSocket)).toMatchObject({ type: "ready", sessionId: nextSessionId });
-    expect(runtime.spawnCount).toBe(2);
-    expect(runtime.terminals[0]!.killed).toBe(true);
-
-    resetSocket.close();
-    await socketEvent(resetSocket, "close");
+    const unknownTab = await connect(server, "22222222-2222-4222-8222-222222222222");
+    expect(await nextMessage(unknownTab)).toEqual({ type: "error", error: "Terminal tab is not registered" });
+    await socketEvent(unknownTab, "close");
+    expect(runtime.spawnCount).toBe(0);
     await server.close();
   });
 
-  it("closes unknown-root sessions without spawning a shell", async () => {
+  it("uses the global terminal workspace without a storage-pool selection", async () => {
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const socket = await connect(server, "missing");
+    const sessionId = await initializeTab(server);
+    const socket = await connect(server, sessionId);
 
-    expect(await nextMessage(socket)).toEqual({ type: "error", error: "NAS root not found" });
+    expect(await nextMessage(socket)).toMatchObject({ type: "ready" });
+    expect(runtime.spawned).toBe(true);
+    expect(runtime.options?.sessionName).toMatch(/^cyberos-/u);
+    socket.close();
     await socketEvent(socket, "close");
-    expect(runtime.spawned).toBe(false);
     await server.close();
   });
 
   it("terminates sessions that send invalid messages", async () => {
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const socket = await connect(server);
+    const sessionId = await initializeTab(server);
+    const socket = await connect(server, sessionId);
     await nextMessage(socket);
 
     socket.send(JSON.stringify({ type: "resize", cols: 1, rows: 32 }));
@@ -127,15 +129,14 @@ describe("terminal WebSocket", () => {
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
     const initialized = await server.inject({
       method: "POST",
-      url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local" }
+      url: "/api/terminal/tabs/initialize"
     });
     expect(initialized.statusCode).toBe(200);
     const sessionId = String(initialized.json().activeTabId);
 
-    const firstSocket = await connect(server, "local", sessionId);
+    const firstSocket = await connect(server, sessionId);
     await nextMessage(firstSocket);
-    const secondSocket = await connect(server, "local", sessionId);
+    const secondSocket = await connect(server, sessionId);
 
     expect(await nextMessage(firstSocket)).toEqual({ type: "taken_over" });
     expect(await nextMessage(secondSocket)).toMatchObject({ type: "ready", sessionId });
@@ -146,43 +147,18 @@ describe("terminal WebSocket", () => {
     await server.close();
   });
 
-  it("rejects a registered tab through a different root without spawning a shell", async () => {
-    const otherRootDir = path.join(tempDir, "other-root");
-    await mkdir(otherRootDir);
-    ensureNasRoots(db, [
-      { id: "local", name: "Local", path: rootDir },
-      { id: "other", name: "Other", path: otherRootDir }
-    ]);
-    const runtime = new FakeTerminalRuntime();
-    const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const initialized = await server.inject({
-      method: "POST",
-      url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local" }
-    });
-    expect(initialized.statusCode).toBe(200);
-    const sessionId = String(initialized.json().activeTabId);
-
-    const socket = await connect(server, "other", sessionId);
-
-    expect(await nextMessage(socket)).toEqual({ type: "error", error: "Terminal session is not available" });
-    await socketEvent(socket, "close");
-    expect(runtime.spawned).toBe(false);
-    await server.close();
-  });
 });
 
 describe("terminal tab routes", () => {
   it("initializes, creates, renames, activates, and deletes persistent tabs", async () => {
     const runtime = new FakeTerminalRuntime();
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
-    const empty = await server.inject({ method: "GET", url: "/api/terminal/tabs?rootId=local" });
+    const empty = await server.inject({ method: "GET", url: "/api/terminal/tabs" });
     expect(empty.json()).toMatchObject({ initialized: false, tabs: [], activeTabId: null, maxSessions: 4 });
 
     const initialized = await server.inject({
       method: "POST",
-      url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local" }
+      url: "/api/terminal/tabs/initialize"
     });
     const firstId = String(initialized.json().activeTabId);
     expect(initialized.json()).toMatchObject({
@@ -191,7 +167,7 @@ describe("terminal tab routes", () => {
       tabs: [{ id: firstId, ordinal: 1, customTitle: null }]
     });
 
-    const created = await server.inject({ method: "POST", url: "/api/terminal/tabs", payload: { rootId: "local" } });
+    const created = await server.inject({ method: "POST", url: "/api/terminal/tabs" });
     expect(created.statusCode).toBe(201);
     const createdState = created.json();
     const secondId = String(createdState.activeTabId);
@@ -214,19 +190,13 @@ describe("terminal tab routes", () => {
     await server.close();
   });
 
-  it("validates roots, ids, names, and the global tab limit", async () => {
+  it("validates ids, names, and the global tab limit", async () => {
     const server = await buildServer({ config: testConfig(), db, terminal: new FakeTerminalRuntime() });
 
-    expect((await server.inject({ method: "GET", url: "/api/terminal/tabs" })).statusCode).toBe(400);
-    expect((await server.inject({
-      method: "POST",
-      url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "missing" }
-    })).statusCode).toBe(404);
+    expect((await server.inject({ method: "GET", url: "/api/terminal/tabs" })).statusCode).toBe(200);
     const initialized = await server.inject({
       method: "POST",
-      url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local" }
+      url: "/api/terminal/tabs/initialize"
     });
     const id = String(initialized.json().activeTabId);
     expect((await server.inject({
@@ -235,10 +205,10 @@ describe("terminal tab routes", () => {
       payload: { customTitle: "  " }
     })).statusCode).toBe(400);
 
-    await server.inject({ method: "POST", url: "/api/terminal/tabs", payload: { rootId: "local" } });
-    await server.inject({ method: "POST", url: "/api/terminal/tabs", payload: { rootId: "local" } });
-    await server.inject({ method: "POST", url: "/api/terminal/tabs", payload: { rootId: "local" } });
-    const limited = await server.inject({ method: "POST", url: "/api/terminal/tabs", payload: { rootId: "local" } });
+    await server.inject({ method: "POST", url: "/api/terminal/tabs" });
+    await server.inject({ method: "POST", url: "/api/terminal/tabs" });
+    await server.inject({ method: "POST", url: "/api/terminal/tabs" });
+    const limited = await server.inject({ method: "POST", url: "/api/terminal/tabs" });
     expect(limited.statusCode).toBe(409);
     expect(limited.json()).toEqual({ error: "Terminal session limit reached" });
     await server.close();
@@ -249,8 +219,7 @@ describe("terminal tab routes", () => {
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
     const initialized = await server.inject({
       method: "POST",
-      url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local" }
+      url: "/api/terminal/tabs/initialize"
     });
     const id = String(initialized.json().activeTabId);
     runtime.destroyError = new Error("tmux kill failed");
@@ -258,7 +227,7 @@ describe("terminal tab routes", () => {
     const response = await server.inject({ method: "DELETE", url: `/api/terminal/tabs/${id}` });
 
     expect(response.statusCode).toBe(503);
-    expect((await server.inject({ method: "GET", url: "/api/terminal/tabs?rootId=local" })).json()).toMatchObject({
+    expect((await server.inject({ method: "GET", url: "/api/terminal/tabs" })).json()).toMatchObject({
       activeTabId: id,
       tabs: [{ id }]
     });
@@ -270,8 +239,7 @@ describe("terminal tab routes", () => {
     const server = await buildServer({ config: testConfig(), db, terminal: runtime });
     const initialized = await server.inject({
       method: "POST",
-      url: "/api/terminal/tabs/initialize",
-      payload: { rootId: "local" }
+      url: "/api/terminal/tabs/initialize"
     });
     const id = String(initialized.json().activeTabId);
 
@@ -283,7 +251,7 @@ describe("terminal tab routes", () => {
     runtime.destroyError = new Error("tmux kill failed");
     const failed = await server.inject({ method: "POST", url: `/api/terminal/tabs/${id}/restart` });
     expect(failed.statusCode).toBe(503);
-    expect((await server.inject({ method: "GET", url: "/api/terminal/tabs?rootId=local" })).json()).toMatchObject({
+    expect((await server.inject({ method: "GET", url: "/api/terminal/tabs" })).json()).toMatchObject({
       activeTabId: id,
       tabs: [{ id }]
     });
@@ -379,13 +347,13 @@ class FakeTerminal implements TerminalPty {
 }
 
 function testConfig(): CyberOsConfig {
+  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
   return {
-    dataDir: tempDir,
-    databasePath: path.join(tempDir, "cyberos.sqlite"),
+    ...base,
+    paths: { ...base.paths, dataRoot: rootDir, databasePath: path.join(tempDir, "cyberos.sqlite") },
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
-    worker: { pollMs: 50 },
+    worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test Admin", authMode: "local-only" },
-    model: { provider: "pi", piCommand: "pi", localEndpoint: null },
     docker: {
       enabled: false,
       socketPath: "/var/run/docker.sock",
@@ -398,18 +366,15 @@ function testConfig(): CyberOsConfig {
       account: { username: "cyberos-share", password: null },
       shares: []
     },
-    hostd: { socketPath: "/tmp/hostd.sock" },
-    terminal: { user: "test-user", termuxSocketPath: "/tmp/termux.sock", maxSessions: 4 },
+    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
-    nasRoots: [{ id: "local", name: "Local", path: rootDir }]
   };
 }
 
 async function connect(
   server: Awaited<ReturnType<typeof buildServer>>,
-  rootId = "local",
-  sessionId?: string,
-  extraProtocols: string[] = []
+  sessionId?: string
 ): Promise<WebSocket> {
   if (!server.server.listening) {
     await server.listen({ host: "127.0.0.1", port: 0 });
@@ -418,11 +383,10 @@ async function connect(
   if (!address || typeof address === "string") {
     throw new Error("Test server did not expose a TCP address");
   }
-  const query = new URLSearchParams({ rootId, ...(sessionId ? { sessionId } : {}) });
   const protocols = sessionId
-    ? ["cyberos-terminal-v1", `cyberos-session.${sessionId}`, ...extraProtocols]
-    : ["cyberos-terminal-v1", ...extraProtocols];
-  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/api/terminal?${query.toString()}`, protocols);
+    ? ["cyberos-terminal-v1", `cyberos-session.${sessionId}`]
+    : ["cyberos-terminal-v1"];
+  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/api/terminal`, protocols);
   messageQueues.set(socket, { queue: [], waiter: null });
   socket.addEventListener("message", (event) => {
     const state = messageQueues.get(socket);
@@ -439,6 +403,12 @@ async function connect(
   });
   await socketEvent(socket, "open");
   return socket;
+}
+
+async function initializeTab(server: Awaited<ReturnType<typeof buildServer>>): Promise<string> {
+  const response = await server.inject({ method: "POST", url: "/api/terminal/tabs/initialize" });
+  expect(response.statusCode).toBe(200);
+  return String(response.json().activeTabId);
 }
 
 const messageQueues = new WeakMap<WebSocket, {

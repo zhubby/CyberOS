@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -16,7 +16,6 @@ pub struct SendTask {
     pub id: String,
     pub adapter_id: String,
     pub device_address: String,
-    pub root_path: PathBuf,
     pub storage_pool_id: String,
     pub relative_path: String,
 }
@@ -25,7 +24,6 @@ pub struct SendTask {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub receive_enabled: bool,
-    pub inbox_root_id: Option<String>,
     pub inbox_storage_pool_id: Option<String>,
     pub inbox_path: Option<String>,
 }
@@ -50,34 +48,17 @@ impl Db {
     pub fn claim_send(&self) -> Result<Option<SendTask>, TransferError> {
         let connection = self.connection()?;
         let row = connection.query_row(
-            "UPDATE bluetooth_transfers SET status = 'running', started_at = COALESCE(started_at, ?), updated_at = ?, error = NULL WHERE id = (SELECT id FROM bluetooth_transfers WHERE direction = 'send' AND status = 'queued' ORDER BY created_at LIMIT 1) AND status = 'queued' RETURNING id, adapter_id, device_address, root_id, storage_pool_id, relative_path",
+            "UPDATE bluetooth_transfers SET status = 'running', started_at = COALESCE(started_at, ?), updated_at = ?, error = NULL WHERE id = (SELECT id FROM bluetooth_transfers WHERE direction = 'send' AND status = 'queued' ORDER BY created_at LIMIT 1) AND status = 'queued' RETURNING id, adapter_id, device_address, storage_pool_id, relative_path",
             params![now(), now()],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, String>(5)?)),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?)),
         ).optional()?;
-        let Some((id, adapter_id, device_address, root_id, storage_pool_id, relative_path)) = row
-        else {
-            return Ok(None);
-        };
-        let root_path = connection
-            .query_row(
-                "SELECT path FROM nas_roots WHERE id = ? AND enabled = 1",
-                [root_id],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?;
-        let Some(root_path) = root_path else {
-            let timestamp = now();
-            connection.execute(
-                "UPDATE bluetooth_transfers SET status = 'failed', error = 'NAS root is unavailable', control_requested = NULL, read_at = NULL, finished_at = ?, updated_at = ? WHERE id = ?",
-                params![timestamp, timestamp, id],
-            )?;
+        let Some((id, adapter_id, device_address, storage_pool_id, relative_path)) = row else {
             return Ok(None);
         };
         Ok(Some(SendTask {
             id,
             adapter_id,
             device_address,
-            root_path: PathBuf::from(root_path),
             storage_pool_id,
             relative_path,
         }))
@@ -201,22 +182,11 @@ impl Db {
         }
     }
 
-    pub fn root_path(&self, root_id: &str) -> Result<PathBuf, TransferError> {
-        self.connection()?
-            .query_row(
-                "SELECT path FROM nas_roots WHERE id = ? AND enabled = 1",
-                [root_id],
-                |row| row.get::<_, String>(0).map(PathBuf::from),
-            )
-            .optional()?
-            .ok_or_else(|| TransferError("Bluetooth inbox NAS root is unavailable".to_owned()))
-    }
-
     pub fn record_receive(&self, input: ReceiveRecord<'_>) -> Result<String, TransferError> {
         let id = uuid::Uuid::new_v4().to_string();
         self.connection()?.execute(
-            "INSERT INTO bluetooth_transfers(id, direction, adapter_id, device_address, root_id, storage_pool_id, relative_path, display_name, status, total_bytes, created_at, updated_at, started_at) VALUES (?, 'receive', ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)",
-            params![id, input.adapter_id, input.address, input.root_id, input.pool_id, input.relative_path, input.display_name, input.total_bytes.map(to_i64), now(), now(), now()],
+            "INSERT INTO bluetooth_transfers(id, direction, adapter_id, device_address, storage_pool_id, relative_path, display_name, status, total_bytes, created_at, updated_at, started_at) VALUES (?, 'receive', ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)",
+            params![id, input.adapter_id, input.address, input.pool_id, input.relative_path, input.display_name, input.total_bytes.map(to_i64), now(), now(), now()],
         )?;
         Ok(id)
     }
@@ -231,7 +201,6 @@ impl Db {
 pub struct ReceiveRecord<'a> {
     pub adapter_id: &'a str,
     pub address: &'a str,
-    pub root_id: &'a str,
     pub pool_id: &'a str,
     pub relative_path: &'a str,
     pub display_name: &'a str,
@@ -294,17 +263,11 @@ mod tests {
             .unwrap()
             .execute_batch(
                 "
-                CREATE TABLE nas_roots (
-                    id TEXT PRIMARY KEY,
-                    path TEXT NOT NULL,
-                    enabled INTEGER NOT NULL DEFAULT 1
-                );
                 CREATE TABLE bluetooth_transfers (
                     id TEXT PRIMARY KEY,
                     direction TEXT NOT NULL,
                     adapter_id TEXT,
                     device_address TEXT NOT NULL,
-                    root_id TEXT NOT NULL,
                     storage_pool_id TEXT NOT NULL,
                     relative_path TEXT NOT NULL,
                     display_name TEXT NOT NULL,
@@ -332,27 +295,20 @@ mod tests {
         (db, directory)
     }
 
-    fn insert_transfer(db: &Db, id: &str, direction: &str, status: &str, root_id: &str) {
+    fn insert_transfer(db: &Db, id: &str, direction: &str, status: &str) {
         db.connection()
             .unwrap()
             .execute(
-                "INSERT INTO bluetooth_transfers(id, direction, adapter_id, device_address, root_id, storage_pool_id, relative_path, display_name, status, created_at, updated_at) VALUES (?, ?, 'adapter-hci0', 'AA:BB:CC:DD:EE:FF', ?, 'pool-1', 'inbox/partial.txt', 'partial.txt', ?, '2026-10-20T00:00:00Z', '2026-10-20T00:00:00Z')",
-                rusqlite::params![id, direction, root_id, status],
+                "INSERT INTO bluetooth_transfers(id, direction, adapter_id, device_address, storage_pool_id, relative_path, display_name, status, created_at, updated_at) VALUES (?, ?, 'adapter-hci0', 'AA:BB:CC:DD:EE:FF', 'pool-1', 'inbox/partial.txt', 'partial.txt', ?, '2026-10-20T00:00:00Z', '2026-10-20T00:00:00Z')",
+                rusqlite::params![id, direction, status],
             )
             .unwrap();
     }
 
     #[test]
     fn progress_updates_refresh_the_service_heartbeat() {
-        let (db, directory) = test_db();
-        db.connection()
-            .unwrap()
-            .execute(
-                "INSERT INTO nas_roots(id, path, enabled) VALUES ('root-1', ?, 1)",
-                [directory.path().to_string_lossy().as_ref()],
-            )
-            .unwrap();
-        insert_transfer(&db, "send-1", "send", "running", "root-1");
+        let (db, _directory) = test_db();
+        insert_transfer(&db, "send-1", "send", "running");
         db.connection()
             .unwrap()
             .execute(
@@ -381,49 +337,21 @@ mod tests {
     }
 
     #[test]
-    fn claiming_a_send_with_an_unavailable_root_marks_it_failed() {
-        let (db, directory) = test_db();
-        db.connection()
-            .unwrap()
-            .execute(
-                "INSERT INTO nas_roots(id, path, enabled) VALUES ('root-1', ?, 0)",
-                [directory.path().to_string_lossy().as_ref()],
-            )
-            .unwrap();
-        insert_transfer(&db, "send-1", "send", "queued", "root-1");
+    fn claiming_a_send_returns_the_storage_pool_identity() {
+        let (db, _directory) = test_db();
+        insert_transfer(&db, "send-1", "send", "queued");
 
-        assert!(db.claim_send().unwrap().is_none());
-
-        let (status, error, finished_at): (String, Option<String>, Option<String>) = db
-            .connection()
-            .unwrap()
-            .query_row(
-                "SELECT status, error, finished_at FROM bluetooth_transfers WHERE id = 'send-1'",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
-            .unwrap();
-        assert_eq!(status, "failed");
-        assert_eq!(error.as_deref(), Some("NAS root is unavailable"));
-        assert!(finished_at.is_some());
+        let task = db.claim_send().unwrap().unwrap();
+        assert_eq!(task.storage_pool_id, "pool-1");
+        assert_eq!(task.relative_path, "inbox/partial.txt");
     }
 
     #[test]
     fn recovery_removes_an_interrupted_receive_target() {
         let (db, directory) = test_db();
-        let root = directory.path().join("root");
-        let inbox = root.join("inbox");
-        fs::create_dir_all(&inbox).unwrap();
         let partial = directory.path().join("receive-1.part");
         fs::write(&partial, b"partial").unwrap();
-        db.connection()
-            .unwrap()
-            .execute(
-                "INSERT INTO nas_roots(id, path, enabled) VALUES ('root-1', ?, 1)",
-                [root.to_string_lossy().as_ref()],
-            )
-            .unwrap();
-        insert_transfer(&db, "receive-1", "receive", "running", "root-1");
+        insert_transfer(&db, "receive-1", "receive", "running");
 
         db.recover_interrupted(directory.path()).unwrap();
 
@@ -447,18 +375,9 @@ mod tests {
     #[test]
     fn recovery_preserves_a_fully_received_staging_file_for_finalization() {
         let (db, directory) = test_db();
-        let root = directory.path().join("root");
-        fs::create_dir_all(root.join("inbox")).unwrap();
         let partial = directory.path().join("receive-complete.part");
         fs::write(&partial, b"complete").unwrap();
-        db.connection()
-            .unwrap()
-            .execute(
-                "INSERT INTO nas_roots(id, path, enabled) VALUES ('root-1', ?, 1)",
-                [root.to_string_lossy().as_ref()],
-            )
-            .unwrap();
-        insert_transfer(&db, "receive-complete", "receive", "running", "root-1");
+        insert_transfer(&db, "receive-complete", "receive", "running");
         db.connection()
             .unwrap()
             .execute(

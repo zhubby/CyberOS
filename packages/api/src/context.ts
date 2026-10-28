@@ -13,7 +13,7 @@ import type { TerminalRuntime } from "./lib/terminal.js";
 import type { VideoTranscoder } from "./lib/video-cache.js";
 import type { VodPlayerRuntime } from "./lib/vod-player.js";
 import type { VmRuntimeDependencies } from "./lib/vm-service.js";
-import type { PhotostaffMapArchiveRuntime } from "./lib/photostaff-map.js";
+import type { PhotosMapArchiveRuntime } from "./lib/photos-map.js";
 import type { FileBatchRuntime } from "./lib/file-batch-runner.js";
 import type { DockerHostAccessRuntime } from "./lib/docker-host-access.js";
 import type { MonitoringEventBroker } from "./lib/monitoring-events.js";
@@ -38,7 +38,7 @@ export interface ApiRouteContext {
   terminal?: TerminalRuntime;
   videoTranscoder?: VideoTranscoder;
   vodPlayer?: VodPlayerRuntime;
-  photostaffMap?: PhotostaffMapArchiveRuntime;
+  photosMap?: PhotosMapArchiveRuntime;
   fileBatches?: FileBatchRuntime;
   hostAccess?: DockerHostAccessRuntime;
   capabilityRuntime?: CapabilityRuntimeDependencies;

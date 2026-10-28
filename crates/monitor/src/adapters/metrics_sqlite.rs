@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use cyberos_monitoring_contracts::METRICS_SCHEMA_VERSION;
+use cyberos_monitoring_contracts::{METRICS_SCHEMA_IDENTITY, METRICS_SCHEMA_VERSION};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use tokio::sync::{mpsc, oneshot};
 
@@ -22,24 +22,8 @@ const MAX_SERIES_PER_METRIC: i64 = 64;
 const MAX_SERIES: i64 = 512;
 const INACTIVE_SERIES_AFTER_MS: i64 = 24 * 60 * 60 * 1_000;
 
-const MIGRATIONS: &[(i64, &str)] = &[
-    (
-        1,
-        include_str!("../../../../packages/monitoring/contracts/migrations/001_initial.sql"),
-    ),
-    (
-        2,
-        include_str!(
-            "../../../../packages/monitoring/contracts/migrations/002_counter_increase.sql"
-        ),
-    ),
-    (
-        3,
-        include_str!(
-            "../../../../packages/monitoring/contracts/migrations/003_counter_boundary.sql"
-        ),
-    ),
-];
+const CYBEROS_2_0_SCHEMA: &str =
+    include_str!("../../../../packages/monitoring/contracts/migrations/001_cyberos_2_0.sql");
 
 pub struct MetricsStore {
     connection: Connection,
@@ -72,10 +56,13 @@ impl MetricsStore {
         if version > METRICS_SCHEMA_VERSION {
             return Err(MonitorError::FutureMetricsSchema(version));
         }
-        ensure_incremental_vacuum(&connection)?;
+        if version == 0 {
+            connection.pragma_update(None, "auto_vacuum", "INCREMENTAL")?;
+            initialize_schema(&mut connection)?;
+        }
+        validate_schema_identity(&connection)?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         connection.pragma_update(None, "synchronous", "NORMAL")?;
-        migrate(&mut connection, version)?;
         let writes_paused = connection
             .query_row(
                 "SELECT value FROM monitoring_metadata WHERE key = 'writes_paused'",
@@ -534,18 +521,30 @@ fn schema_version(connection: &Connection) -> Result<i64, MonitorError> {
     )?)
 }
 
-fn migrate(connection: &mut Connection, current: i64) -> Result<(), MonitorError> {
-    connection.execute_batch(
-        "CREATE TABLE IF NOT EXISTS monitoring_schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL) STRICT;",
+fn initialize_schema(connection: &mut Connection) -> Result<(), MonitorError> {
+    let transaction = connection.transaction()?;
+    transaction.execute_batch(
+        "CREATE TABLE monitoring_schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL) STRICT;",
     )?;
-    for (version, sql) in MIGRATIONS.iter().filter(|(version, _)| *version > current) {
-        let transaction = connection.transaction()?;
-        transaction.execute_batch(sql)?;
-        transaction.execute(
-            "INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            [version],
-        )?;
-        transaction.commit()?;
+    transaction.execute_batch(CYBEROS_2_0_SCHEMA)?;
+    transaction.execute(
+        "INSERT INTO monitoring_schema_migrations(version, applied_at) VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+        [METRICS_SCHEMA_VERSION],
+    )?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn validate_schema_identity(connection: &Connection) -> Result<(), MonitorError> {
+    let identity = connection
+        .query_row(
+            "SELECT value FROM monitoring_metadata WHERE key = 'schema_identity'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    if identity.as_deref() != Some(METRICS_SCHEMA_IDENTITY) {
+        return Err(MonitorError::IncompatibleMetricsSchema);
     }
     Ok(())
 }
@@ -757,19 +756,6 @@ fn rebuild_rollup(
             boundary
         ],
     )?;
-    Ok(())
-}
-
-fn ensure_incremental_vacuum(connection: &Connection) -> Result<(), MonitorError> {
-    let mode: i64 = connection.pragma_query_value(None, "auto_vacuum", |row| row.get(0))?;
-    if mode == 2 {
-        return Ok(());
-    }
-    connection.pragma_update(None, "auto_vacuum", "INCREMENTAL")?;
-    let updated: i64 = connection.pragma_query_value(None, "auto_vacuum", |row| row.get(0))?;
-    if updated != 2 {
-        connection.execute_batch("VACUUM")?;
-    }
     Ok(())
 }
 
@@ -1094,7 +1080,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_writes_and_builds_reset_aware_rollups() {
+    fn initializes_writes_and_builds_reset_aware_rollups() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("metrics.sqlite");
         let mut store = MetricsStore::open(&path, config()).unwrap();
@@ -1122,7 +1108,10 @@ mod tests {
             )
             .unwrap();
         assert_eq!(row, (160.0, 0.0, 4));
-        assert_eq!(schema_version(&store.connection).unwrap(), 3);
+        assert_eq!(
+            schema_version(&store.connection).unwrap(),
+            METRICS_SCHEMA_VERSION
+        );
     }
 
     #[test]
@@ -1141,6 +1130,33 @@ mod tests {
         assert!(matches!(
             MetricsStore::open(&path, config()),
             Err(MonitorError::FutureMetricsSchema(999))
+        ));
+        assert!(fs::read_dir(directory.path()).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("corrupt")
+        }));
+    }
+
+    #[test]
+    fn rejects_a_pre_2_0_schema_without_quarantining_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("metrics.sqlite");
+        let store = MetricsStore::open(&path, config()).unwrap();
+        store
+            .connection
+            .execute(
+                "DELETE FROM monitoring_metadata WHERE key = 'schema_identity'",
+                [],
+            )
+            .unwrap();
+        drop(store);
+
+        assert!(matches!(
+            MetricsStore::open(&path, config()),
+            Err(MonitorError::IncompatibleMetricsSchema)
         ));
         assert!(fs::read_dir(directory.path()).unwrap().all(|entry| {
             !entry

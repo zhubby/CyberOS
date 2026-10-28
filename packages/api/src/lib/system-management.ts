@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
 import type {
   SystemCollectionIssue,
@@ -821,7 +822,7 @@ function mapMount(row: Record<string, unknown>): SystemStorageMount {
 function mapStoragePool(array: SystemRaidArray, mounts: SystemStorageMount[]): SystemStoragePool {
   const mount = mounts.find((candidate) => storageDevicePathsEqual(candidate.source, array.path)) ?? null;
   return {
-    id: array.path,
+    id: mount?.target ? path.basename(mount.target) : array.name,
     name: array.name,
     raidPath: array.path,
     raidLevel: array.level,

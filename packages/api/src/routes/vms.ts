@@ -10,21 +10,21 @@ import {
   consumeVmConsoleAuthorization,
   updateVmOperationStatus
 } from "@cyberos/db";
-import type {
-  VmCpuMode,
-  VmDiskBus,
-  VmDiskCache,
-  VmDiskDiscard,
-  VmFirmware,
-  VmGraphics,
-  VmMemoryBacking,
-  VmNetworkModel,
-  VmOperationAction,
-  VmOperationProposal,
-  VmVideoModel
+import {
+  type VmCpuMode,
+  type VmDiskBus,
+  type VmDiskCache,
+  type VmDiskDiscard,
+  type VmFirmware,
+  type VmGraphics,
+  type VmMemoryBacking,
+  type VmNetworkModel,
+  type VmOperationAction,
+  type VmOperationProposal,
+  type VmVideoModel
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
-import { applyVmOperation, collectVmSummary, safeVmMessage, DEFAULT_VM_CONFIG } from "../lib/vm-service.js";
+import { applyVmOperation, collectVmSummary, safeVmMessage } from "../lib/vm-service.js";
 import { resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 type VmActionBody = {
@@ -45,7 +45,6 @@ type VmActionBody = {
   diskCache?: VmDiskCache;
   diskDiscard?: VmDiskDiscard;
   isoPath?: string;
-  isoRootId?: string;
   isoStoragePoolId?: string;
   diskPath?: string;
   networkName?: string;
@@ -93,7 +92,6 @@ export function registerVmRoutes(server: FastifyInstance, context: ApiRouteConte
           const authorization = proposal.action === "console"
             ? createVmConsoleAuthorization(context.db, {
               operationId: operation.id,
-              approvalId: null,
               domainName: proposal.domainName!
             })
             : null;
@@ -125,7 +123,7 @@ export function registerVmRoutes(server: FastifyInstance, context: ApiRouteConte
   server.get<{ Params: { id: string } }>("/api/vms/console/:id", { websocket: true }, async (socket, request) => {
     const authorization = consumeVmConsoleAuthorization(context.db, request.params.id);
     if (!authorization) { sendSocket(socket, { type: "error", error: "VM console session is not available" }); socket.close(); return; }
-    const consoleProcess = vmConsoleSpawnSpec((context.config.vm ?? DEFAULT_VM_CONFIG).libvirtUri, authorization.domainName);
+    const consoleProcess = vmConsoleSpawnSpec(context.config.vm.libvirtUri, authorization.domainName);
     const child = spawn(consoleProcess.command, consoleProcess.args, {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...consoleProcess.env }
@@ -161,7 +159,7 @@ async function buildVmProposal(body: VmActionBody, context: ApiRouteContext): Pr
   const storageIso = action === "create" && body.isoPath ? await resolveStorageIso(body, context) : null;
   const isoPath = storageIso?.absolutePath ?? body.isoPath;
   if (action === "create" && !isoPath && !body.diskPath) throw new Error("An ISO or existing disk path is required");
-  const vmConfig = context.config.vm ?? DEFAULT_VM_CONFIG;
+  const vmConfig = context.config.vm;
   if (action === "create" && isoPath && !storageIso && !vmConfig.isoRoots.some((root) => isInside(root, isoPath))) throw new Error("ISO path must stay inside a configured ISO root");
   if (action === "create" && body.diskPath && !isInside(vmConfig.storagePath, body.diskPath)) throw new Error("Disk path must stay inside the configured VM storage path");
   if (body.networkName && !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/u.test(body.networkName)) throw new Error("Network name is invalid");
@@ -174,7 +172,6 @@ async function buildVmProposal(body: VmActionBody, context: ApiRouteContext): Pr
     ...(body.diskSizeBytes !== undefined ? { diskSizeBytes: boundedInteger(body.diskSizeBytes, 1 * 1024 ** 3, 64 * 1024 ** 4, "Disk size") } : {}),
     ...(isoPath ? { isoPath } : {}),
     ...(storageIso ? {
-      isoRootId: storageIso.rootId,
       isoStoragePoolId: storageIso.storagePoolId,
       isoSourcePath: storageIso.sourcePath
     } : {}),
@@ -267,14 +264,13 @@ function normalizeMac(value: string): string {
 async function prepareVmExecution(context: ApiRouteContext, proposal: VmOperationProposal) {
   let config = context.config;
   let preparedProposal = proposal;
-  if (proposal.isoRootId || proposal.isoStoragePoolId || proposal.isoSourcePath) {
+  if (proposal.isoStoragePoolId || proposal.isoSourcePath) {
     const storageIso = await resolveStorageIso({
       ...(proposal.isoSourcePath ? { isoPath: proposal.isoSourcePath } : {}),
-      ...(proposal.isoRootId ? { isoRootId: proposal.isoRootId } : {}),
       ...(proposal.isoStoragePoolId ? { isoStoragePoolId: proposal.isoStoragePoolId } : {})
     }, context);
     if (!storageIso) throw new Error("Stored ISO selection is incomplete");
-    const vmConfig = context.config.vm ?? DEFAULT_VM_CONFIG;
+    const vmConfig = context.config.vm;
     config = {
       ...context.config,
       vm: { ...vmConfig, isoRoots: [...vmConfig.isoRoots, storageIso.mountpointPath] }
@@ -285,24 +281,27 @@ async function prepareVmExecution(context: ApiRouteContext, proposal: VmOperatio
 }
 
 async function resolveStorageIso(
-  source: Pick<VmActionBody, "isoPath" | "isoRootId" | "isoStoragePoolId">,
+  source: Pick<VmActionBody, "isoPath" | "isoStoragePoolId">,
   context: ApiRouteContext
 ): Promise<{
   absolutePath: string;
   sourcePath: string;
   mountpointPath: string;
-  rootId: string;
   storagePoolId: string;
 } | null> {
-  const hasStorageSelection = Boolean(source.isoRootId || source.isoStoragePoolId);
+  const hasStorageSelection = Boolean(source.isoStoragePoolId);
   if (!hasStorageSelection) return null;
-  if (!source.isoRootId || !source.isoStoragePoolId || !source.isoPath) {
+  if (!source.isoStoragePoolId || !source.isoPath) {
     throw new Error("Storage pool ISO selection is incomplete");
   }
   if (path.extname(source.isoPath).toLowerCase() !== ".iso") {
     throw new Error("Selected boot media must be an ISO file");
   }
-  const scope = await resolveStoragePoolScope(context.db, context.system, source.isoRootId, source.isoStoragePoolId);
+  const scope = await resolveStoragePoolScope(
+    context.config.paths.dataRoot,
+    context.system,
+    source.isoStoragePoolId
+  );
   const safe = await resolveScopedExistingPath(scope, source.isoPath);
   const file = await stat(safe.realPath);
   if (!file.isFile()) {
@@ -312,7 +311,6 @@ async function resolveStorageIso(
     absolutePath: safe.realPath,
     sourcePath: safe.relativePath,
     mountpointPath: scope.mountpointRealPath,
-    rootId: source.isoRootId,
     storagePoolId: source.isoStoragePoolId
   };
 }

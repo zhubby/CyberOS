@@ -4,9 +4,10 @@ import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { CapabilityError, type CapabilityExecution, type JsonValue } from "@cyberos/capabilities";
-import { getNasRoot, getRootReadiness, type CyberOsDatabase } from "@cyberos/db";
-import { isPathInside, resolveSafeExistingPath, toRootRelative } from "@cyberos/nas-tools";
-import type { NasRootRecord } from "@cyberos/shared";
+import type { CyberOsDatabase } from "@cyberos/db";
+import { isPathInside, resolveSafeExistingPath, toRootRelative } from "@cyberos/storage-tools";
+import type { CyberOsConfig } from "@cyberos/shared";
+import { requireStoragePool, type ResolvedStoragePool } from "./storage-pools.js";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -27,11 +28,11 @@ interface WalkEntry {
 }
 
 export async function executeExtendedFileReadCapability(
-  dependencies: { db: CyberOsDatabase },
+  dependencies: { db: CyberOsDatabase; config: CyberOsConfig },
   capabilityId: ExtendedFileReadCapabilityId,
   input: Record<string, JsonValue>
 ): Promise<CapabilityExecution> {
-  const root = requireReadyRoot(dependencies.db, requiredString(input.rootId, "rootId"));
+  const root = requireStoragePool(dependencies.config, requiredString(input.storagePoolId, "storagePoolId"));
   switch (capabilityId) {
     case "cyberos.files.grep": return grepFiles(root, input);
     case "cyberos.files.find": return findFiles(root, input);
@@ -40,7 +41,7 @@ export async function executeExtendedFileReadCapability(
   }
 }
 
-async function grepFiles(root: NasRootRecord, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
+async function grepFiles(root: ResolvedStoragePool, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
   const requestedPath = optionalString(input.path) ?? ".";
   const pattern = requiredString(input.pattern, "pattern");
   const mode = optionalString(input.mode) ?? "literal";
@@ -75,7 +76,7 @@ async function grepFiles(root: NasRootRecord, input: Record<string, JsonValue>):
   const startedAt = Date.now();
   const walked = await walk(root, requestedPath, { maxEntries: maxFiles, timeoutMs, startedAt });
   const files = walked.entries.filter((entry) => entry.kind === "file" && matchesFilters(entry.relativePath, include, exclude));
-  const signature = stableSignature({ rootId: root.id, requestedPath, pattern, mode, caseSensitive, include: stringArray(input.include, "include", 32), exclude: stringArray(input.exclude, "exclude", 32) });
+  const signature = stableSignature({ storagePoolId: root.id, requestedPath, pattern, mode, caseSensitive, include: stringArray(input.include, "include", 32), exclude: stringArray(input.exclude, "exclude", 32) });
   const offset = decodeCursor(optionalString(input.cursor), signature);
   const matches: JsonValue[] = [];
   let scannedBytes = 0;
@@ -114,7 +115,7 @@ async function grepFiles(root: NasRootRecord, input: Record<string, JsonValue>):
   const truncated = walked.truncated || scannedFiles < files.length || hasMore;
   return {
     data: {
-      rootId: root.id,
+      storagePoolId: root.id,
       path: requestedPath,
       matches,
       scannedFiles,
@@ -132,7 +133,7 @@ async function grepFiles(root: NasRootRecord, input: Record<string, JsonValue>):
   };
 }
 
-async function findFiles(root: NasRootRecord, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
+async function findFiles(root: ResolvedStoragePool, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
   const requestedPath = optionalString(input.path) ?? ".";
   const kind = optionalString(input.kind) ?? "any";
   if (!new Set(["any", "file", "directory"]).has(kind)) {
@@ -148,7 +149,7 @@ async function findFiles(root: NasRootRecord, input: Record<string, JsonValue>):
     (kind === "any" || kind === entry.kind) &&
     (!globPattern || globPattern.test(entry.relativePath) || globPattern.test(path.basename(entry.relativePath)))
   ));
-  const signature = stableSignature({ rootId: root.id, requestedPath, kind, glob: glob ?? null });
+  const signature = stableSignature({ storagePoolId: root.id, requestedPath, kind, glob: glob ?? null });
   const offset = decodeCursor(optionalString(input.cursor), signature);
   const entries = filtered.slice(offset, offset + limit).map(({ relativePath, kind: entryKind, size, mtimeMs }) => ({
     path: relativePath,
@@ -159,7 +160,7 @@ async function findFiles(root: NasRootRecord, input: Record<string, JsonValue>):
   const nextOffset = offset + entries.length;
   const hasMore = nextOffset < filtered.length;
   return {
-    data: { rootId: root.id, path: requestedPath, entries, scannedEntries: walked.entries.length, truncated: walked.truncated },
+    data: { storagePoolId: root.id, path: requestedPath, entries, scannedEntries: walked.entries.length, truncated: walked.truncated },
     warnings: [
       ...(walked.skippedSymlinks > 0 ? [`Skipped ${walked.skippedSymlinks} symbolic link(s)`] : []),
       ...(walked.truncated ? ["Find stopped at a configured budget"] : [])
@@ -168,7 +169,7 @@ async function findFiles(root: NasRootRecord, input: Record<string, JsonValue>):
   };
 }
 
-async function inspectGit(root: NasRootRecord, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
+async function inspectGit(root: ResolvedStoragePool, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
   const requestedPath = optionalString(input.path) ?? ".";
   const safe = await safeExisting(root, requestedPath);
   const metadata = await stat(safe.realPath);
@@ -186,7 +187,7 @@ async function inspectGit(root: NasRootRecord, input: Record<string, JsonValue>)
     const repository = await execFileAsync("git", [...gitArgs, "rev-parse", "--show-toplevel"], gitOptions(cwd));
     repositoryPath = repository.stdout.trim();
     if (!isPathInside(safe.rootRealPath, repositoryPath)) {
-      throw new CapabilityError("INVALID_ARGUMENT", "Git repository escapes the configured NAS root");
+      throw new CapabilityError("INVALID_ARGUMENT", "Git repository escapes the storage pool");
     }
     const statusResult = await execFileAsync(
       "git",
@@ -219,7 +220,7 @@ async function inspectGit(root: NasRootRecord, input: Record<string, JsonValue>)
   }
   return {
     data: {
-      rootId: root.id,
+      storagePoolId: root.id,
       repositoryPath: toRootRelative(safe.rootRealPath, repositoryPath),
       branch,
       files,
@@ -229,7 +230,7 @@ async function inspectGit(root: NasRootRecord, input: Record<string, JsonValue>)
   };
 }
 
-async function inspectArchive(root: NasRootRecord, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
+async function inspectArchive(root: ResolvedStoragePool, input: Record<string, JsonValue>): Promise<CapabilityExecution> {
   const requestedPath = requiredString(input.path, "path");
   const safe = await safeExisting(root, requestedPath);
   const metadata = await stat(safe.realPath);
@@ -273,18 +274,18 @@ async function inspectArchive(root: NasRootRecord, input: Record<string, JsonVal
     throw new CapabilityError("INVALID_ARGUMENT", "Archive contains an unsafe absolute or traversal entry");
   }
   const limit = boundedInteger(input.limit, 100, 1, 200);
-  const signature = stableSignature({ rootId: root.id, requestedPath, size: metadata.size, mtimeMs: metadata.mtimeMs });
+  const signature = stableSignature({ storagePoolId: root.id, requestedPath, size: metadata.size, mtimeMs: metadata.mtimeMs });
   const offset = decodeCursor(optionalString(input.cursor), signature);
   const entries = rawEntries.slice(offset, offset + limit).map((entry) => ({ path: entry }));
   const nextOffset = offset + entries.length;
   return {
-    data: { rootId: root.id, path: safe.relativePath, format: archiveFormat(lower), entries, totalEntries: rawEntries.length },
+    data: { storagePoolId: root.id, path: safe.relativePath, format: archiveFormat(lower), entries, totalEntries: rawEntries.length },
     page: { limit, nextCursor: nextOffset < rawEntries.length ? encodeCursor(nextOffset, signature) : null }
   };
 }
 
 async function walk(
-  root: NasRootRecord,
+  root: ResolvedStoragePool,
   requestedPath: string,
   budget: { maxEntries: number; timeoutMs: number; startedAt: number }
 ): Promise<{ entries: WalkEntry[]; skippedSymlinks: number; truncated: boolean }> {
@@ -331,7 +332,7 @@ async function walk(
   return { entries, skippedSymlinks, truncated };
 }
 
-async function safeExisting(root: NasRootRecord, requestedPath: string) {
+async function safeExisting(root: ResolvedStoragePool, requestedPath: string) {
   try {
     const safe = await resolveSafeExistingPath(root.path, requestedPath);
     if (path.resolve(safe.absolutePath) !== path.resolve(safe.realPath)) {
@@ -342,15 +343,6 @@ async function safeExisting(root: NasRootRecord, requestedPath: string) {
     if (error instanceof CapabilityError) throw error;
     throw new CapabilityError("INVALID_ARGUMENT", "NAS path is invalid or unavailable", { cause: error });
   }
-}
-
-function requireReadyRoot(db: CyberOsDatabase, rootId: string): NasRootRecord {
-  const root = getNasRoot(db, rootId);
-  if (!root || !root.enabled) throw new CapabilityError("INVALID_ARGUMENT", "NAS root not found");
-  if (root.mountPolicy === "required" && getRootReadiness(db, root.id)?.status !== "ready") {
-    throw new CapabilityError("NOT_READY", "NAS root is not ready", { retryable: true });
-  }
-  return root;
 }
 
 function gitOptions(cwd: string) {

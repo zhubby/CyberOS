@@ -92,11 +92,11 @@ export function HostAccessPicker({
     setDegradedAcknowledged(false);
   }
 
-  function toggleNasRoot(rootId: string, checked: boolean) {
-    const nextGrant: DockerHostAccessGrant = { capability: "nas_capacity", rootId };
+  function toggleStoragePool(storagePoolId: string, checked: boolean) {
+    const nextGrant: DockerHostAccessGrant = { capability: "nas_capacity", storagePoolId };
     onChange(checked
       ? [...grants, nextGrant].sort(compareGrants)
-      : grants.filter((grant) => grant.capability !== "nas_capacity" || grant.rootId !== rootId));
+      : grants.filter((grant) => grant.capability !== "nas_capacity" || grant.storagePoolId !== storagePoolId));
     setDegradedAcknowledged(false);
   }
 
@@ -105,7 +105,7 @@ export function HostAccessPicker({
     const lines = [
       `${t("workspace.management.docker.hostAccess.reportPolicy")}: ${catalog.policyVersion}`,
       ...grants.map((grant) => {
-        const root = grant.capability === "nas_capacity" ? ` (${grant.rootId})` : "";
+        const root = grant.capability === "nas_capacity" ? ` (${grant.storagePoolId})` : "";
         return `${t("workspace.management.docker.hostAccess.states.requested")}: ${t(`workspace.management.docker.hostAccess.capabilities.${grant.capability}`)}${root}`;
       }),
       ...coverageItems.map((item) => {
@@ -154,22 +154,22 @@ export function HostAccessPicker({
                 const capability = catalog.capabilities.find((entry) => entry.id === capabilityId);
                 if (!capability) return null;
                 return capability.id === "nas_capacity"
-                  ? catalog.nasRoots.map((root) => {
-                      const grant = grants.find((entry) => entry.capability === "nas_capacity" && entry.rootId === root.rootId);
+                  ? catalog.storagePools.map((root) => {
+                      const grant = grants.find((entry) => entry.capability === "nas_capacity" && entry.storagePoolId === root.storagePoolId);
                       const unavailable = capability.availability.status === "unavailable" || root.availability.status === "unavailable";
                       return (
                         <CapabilityRow
-                          key={`${capability.id}:${root.rootId}`}
-                          id={`${fieldId}-${capability.id}-${root.rootId}`}
+                          key={`${capability.id}:${root.storagePoolId}`}
+                          id={`${fieldId}-${capability.id}-${root.storagePoolId}`}
                           capability={capability}
                           label={`${t(`workspace.management.docker.hostAccess.capabilities.${capability.id}`)} · ${root.name}`}
                           checked={Boolean(grant)}
                           unavailable={unavailable}
                           reasons={[...capability.availability.reasonCodes, ...root.availability.reasonCodes]}
-                          target={grant?.target ?? `/host/nas/${root.rootId}`}
-                          defaultTarget={`/host/nas/${root.rootId}`}
-                          onToggle={(checked) => toggleNasRoot(root.rootId, checked)}
-                          onTarget={(target) => replaceGrant({ capability: "nas_capacity", rootId: root.rootId, ...(target ? { target } : {}) })}
+                          target={grant?.target ?? `/host/nas/${root.storagePoolId}`}
+                          defaultTarget={`/host/nas/${root.storagePoolId}`}
+                          onToggle={(checked) => toggleStoragePool(root.storagePoolId, checked)}
+                          onTarget={(target) => replaceGrant({ capability: "nas_capacity", storagePoolId: root.storagePoolId, ...(target ? { target } : {}) })}
                         />
                       );
                     })
@@ -283,7 +283,7 @@ function pickerCoverage(
   const items: DockerHostAccessCoverageItem[] = [...coverage.entries()].map(([item, capabilities]) => {
     const rootAvailability = grants
       .filter((grant) => grant.capability === "nas_capacity")
-      .map((grant) => catalog?.nasRoots.find((root) => root.rootId === grant.rootId)?.availability)
+      .map((grant) => catalog?.storagePools.find((root) => root.storagePoolId === grant.storagePoolId)?.availability)
       .filter((availability) => availability !== undefined);
     const availability = [
       ...capabilities.map((capability) => capability.availability),
@@ -305,7 +305,7 @@ function pickerCoverage(
 }
 
 function grantIdentity(grant: DockerHostAccessGrant): string {
-  return grant.capability === "nas_capacity" ? `${grant.capability}:${grant.rootId}` : grant.capability;
+  return grant.capability === "nas_capacity" ? `${grant.capability}:${grant.storagePoolId}` : grant.capability;
 }
 
 function compareGrants(left: DockerHostAccessGrant, right: DockerHostAccessGrant): number {
@@ -330,7 +330,7 @@ export function hostAccessPickerBlocked({
     const capability = catalog.capabilities.find((entry) => entry.id === grant.capability);
     if (!capability || capability.availability.status === "unavailable") return true;
     if (grant.capability === "nas_capacity") {
-      const root = catalog.nasRoots.find((entry) => entry.rootId === grant.rootId);
+      const root = catalog.storagePools.find((entry) => entry.storagePoolId === grant.storagePoolId);
       if (!root || root.availability.status === "unavailable") return true;
     }
   }
@@ -343,7 +343,7 @@ function hasDegradedGrant(grants: DockerHostAccessGrant[], catalog: DockerHostAc
     const capability = catalog.capabilities.find((entry) => entry.id === grant.capability);
     if (capability?.availability.status === "degraded") return true;
     return grant.capability === "nas_capacity" &&
-      catalog.nasRoots.find((root) => root.rootId === grant.rootId)?.availability.status === "degraded";
+      catalog.storagePools.find((root) => root.storagePoolId === grant.storagePoolId)?.availability.status === "degraded";
   });
 }
 

@@ -1,5 +1,5 @@
-import { getNasRoot, type CyberOsDatabase } from "@cyberos/db";
-import type { NasRootRecord, SystemStoragePool } from "@cyberos/shared";
+import type { StorageWorkspace, SystemStoragePool } from "@cyberos/shared";
+import path from "node:path";
 import {
   StorageScopeSafetyError,
   assertNoSymlinkPathSegments,
@@ -9,7 +9,7 @@ import {
   resolveStorageScopeTargetPath,
   type SafeStorageScope,
   type SafePathResult
-} from "@cyberos/nas-tools";
+} from "@cyberos/storage-tools";
 import type { SystemManagementDependencies } from "./system-management.js";
 import { collectSystemStorage } from "./system-management.js";
 
@@ -29,28 +29,24 @@ export class StorageScopeError extends Error {
 }
 
 export interface StoragePoolScope {
-  root: NasRootRecord;
   pool: SystemStoragePool;
-  rootRealPath: string;
+  workspace: StorageWorkspace & { id: string };
+  dataRoot: string;
+  dataRootRealPath: string;
   mountpointRealPath: string;
   mountpointPath: string;
   nestedMountpointRealPaths: string[];
 }
 
 export async function resolveStoragePoolScope(
-  db: CyberOsDatabase,
+  dataRoot: string,
   system: SystemManagementDependencies | undefined,
-  rootId: string | undefined,
   storagePoolId: string | undefined
 ): Promise<StoragePoolScope> {
   if (typeof storagePoolId !== "string" || !storagePoolId.trim()) {
     throw new StorageScopeError("Storage pool selection is required", 400);
   }
 
-  const root = rootId ? getNasRoot(db, rootId) : null;
-  if (!root) {
-    throw new StorageScopeError("NAS root not found", 404);
-  }
   if (!system) {
     throw new StorageScopeError("Storage pool inventory is unavailable", 503);
   }
@@ -61,10 +57,14 @@ export async function resolveStoragePoolScope(
     throw new StorageScopeError("Storage pool is not mounted", 404);
   }
   const mountpointPath = pool.mountpoint;
+  const expectedMountpoint = path.join(dataRoot, pool.id);
+  if (path.resolve(mountpointPath) !== path.resolve(expectedMountpoint)) {
+    throw new StorageScopeError("Storage pool must be mounted directly below the CyberOS data root", 403);
+  }
 
   const safeScope = await withStorageScopeError(() =>
     createSafeStorageScope({
-      rootPath: root.path,
+      rootPath: dataRoot,
       mountpointPath,
       siblingMountpointPaths: summary.pools
         .filter((candidate) => candidate.id !== pool.id)
@@ -74,11 +74,12 @@ export async function resolveStoragePoolScope(
   );
 
   return {
-    root,
     pool,
-    rootRealPath: safeScope.rootRealPath,
+    workspace: { id: pool.id, path: mountpointPath },
+    dataRoot,
+    dataRootRealPath: safeScope.rootRealPath,
     mountpointRealPath: safeScope.mountpointRealPath,
-    mountpointPath: safeScope.mountpointPath,
+    mountpointPath: ".",
     nestedMountpointRealPaths: safeScope.nestedMountpointRealPaths
   };
 }
@@ -142,7 +143,7 @@ export async function validateStoragePoolProposal(
       }
       throw error;
     }
-    await withStorageScopeError(() => assertNoSymlinkPathSegments(scope.rootRealPath, target.absolutePath));
+    await withStorageScopeError(() => assertNoSymlinkPathSegments(scope.mountpointRealPath, target.absolutePath));
   }
 }
 
@@ -153,10 +154,10 @@ function isMissingPathError(error: unknown): boolean {
 
 function toSafeScope(scope: StoragePoolScope): SafeStorageScope {
   return {
-    rootPath: scope.root.path,
-    rootRealPath: scope.rootRealPath,
+    rootPath: scope.workspace.path,
+    rootRealPath: scope.mountpointRealPath,
     mountpointRealPath: scope.mountpointRealPath,
-    mountpointPath: scope.mountpointPath,
+    mountpointPath: ".",
     nestedMountpointRealPaths: scope.nestedMountpointRealPaths
   };
 }

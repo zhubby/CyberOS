@@ -7,7 +7,7 @@ describe("docker create form", () => {
     form.name = "media";
     form.image = "nginx";
     form.environment = [{ key: "PORT", value: "8080" }];
-    form.mounts = [{ type: "volume", source: "media-data", rootId: "", target: "/data", readOnly: true, noCopy: false, sizeBytes: "", mode: "" }];
+    form.mounts = [{ type: "volume", source: "media-data", storagePoolId: "", target: "/data", readOnly: true, noCopy: false, sizeBytes: "", mode: "" }];
     form.ports = [{ containerPort: "80", protocol: "tcp", hostIp: "127.0.0.1", hostPort: "8080" }];
     expect(dockerCreateInput(form)).toMatchObject({
       targetType: "container",
@@ -17,7 +17,7 @@ describe("docker create form", () => {
       mounts: [{ type: "volume", source: "media-data", target: "/data", readOnly: true, noCopy: false }],
       ports: [{ containerPort: 80, protocol: "tcp", hostIp: "127.0.0.1", hostPort: 8080 }]
     });
-    form.mounts = [{ type: "tmpfs", source: "", rootId: "", target: "/tmp", readOnly: false, noCopy: false, sizeBytes: "", mode: "1777" }];
+    form.mounts = [{ type: "tmpfs", source: "", storagePoolId: "", target: "/tmp", readOnly: false, noCopy: false, sizeBytes: "", mode: "1777" }];
     expect(dockerCreateInput(form)).toMatchObject({ mounts: [{ type: "tmpfs", mode: 0o1777 }] });
   });
 
@@ -94,7 +94,7 @@ describe("docker create form", () => {
     const form = initialDockerCreateForm("container");
     form.name = "media";
     form.image = "nginx";
-    form.mounts = [{ type: "tmpfs", source: "", rootId: "", target: "/tmp", readOnly: false, noCopy: false, sizeBytes: "512", mode: "1888" }];
+    form.mounts = [{ type: "tmpfs", source: "", storagePoolId: "", target: "/tmp", readOnly: false, noCopy: false, sizeBytes: "512", mode: "1888" }];
     expect(validateDockerCreateStep(4, form)).toContain("tmpfs");
     form.mounts = [];
     form.networkMode = "custom";

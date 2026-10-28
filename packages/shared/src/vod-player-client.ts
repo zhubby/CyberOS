@@ -125,7 +125,6 @@ function disabledStatus(): VodPlayerStatus {
     sessionId: null,
     serviceInstanceId: "disabled",
     revision: 0,
-    rootId: null,
     storagePoolId: null,
     relativePath: null,
     fileName: null,

@@ -33,16 +33,13 @@ pub(super) fn open(path: &Path) -> Result<Connection, AlerterError> {
         [],
         |row| row.get(0),
     )?;
-    let unsilenced_event_ready = migrations_ready
+    let cyberos_2_0_ready = migrations_ready
         && connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE id = '031_monitoring_unsilenced_event')",
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE id = '001_cyberos_2_0')",
             [],
             |row| row.get::<_, bool>(0),
         )?;
-    if !alerts_ready
-        || !silence_cancellation_ready
-        || !rule_evaluation_ready
-        || !unsilenced_event_ready
+    if !alerts_ready || !silence_cancellation_ready || !rule_evaluation_ready || !cyberos_2_0_ready
     {
         return Err(AlerterError::AlertSchemaUnavailable);
     }

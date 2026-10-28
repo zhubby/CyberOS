@@ -83,8 +83,8 @@ function parseCommand(value: Record<string, unknown>): VodPlayerBrokerRequest["c
   if (value.type === "status") return hasOnlyKeys(value, ["type"]) ? { type: "status" } : null;
   if (value.type === "play") {
     if (
-      !hasOnlyKeys(value, ["type", "rootId", "storagePoolId", "relativePath", "startPositionSeconds", "audioDeviceId", "mediaFileId"]) ||
-      !safeIdentifier(value.rootId) || !safeIdentifier(value.storagePoolId) ||
+      !hasOnlyKeys(value, ["type", "storagePoolId", "relativePath", "startPositionSeconds", "audioDeviceId", "mediaFileId"]) ||
+      !safeIdentifier(value.storagePoolId) ||
       typeof value.relativePath !== "string" || !safeRelativePath(value.relativePath) ||
       (value.audioDeviceId !== undefined && value.audioDeviceId !== null && !isBluetoothAudioDeviceId(value.audioDeviceId)) ||
       (value.mediaFileId !== undefined && value.mediaFileId !== null && !safeIdentifier(value.mediaFileId))
@@ -93,7 +93,6 @@ function parseCommand(value: Record<string, unknown>): VodPlayerBrokerRequest["c
     if (value.startPositionSeconds !== undefined && value.startPositionSeconds !== null && startPositionSeconds === null) return null;
     return {
       type: "play",
-      rootId: value.rootId,
       storagePoolId: value.storagePoolId,
       relativePath: value.relativePath,
       ...(startPositionSeconds === null ? {} : { startPositionSeconds }),
@@ -145,7 +144,7 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, [
-      "state", "sessionId", "serviceInstanceId", "revision", "rootId", "storagePoolId",
+      "state", "sessionId", "serviceInstanceId", "revision", "storagePoolId",
       "relativePath", "fileName", "mediaFileId", "videoOutput", "positionSeconds", "durationSeconds", "volume", "retryCount",
       "nextRetryAt", "audioDeviceId", "effectiveAudioDeviceId", "audioFallbackReason",
       "audioTracks", "subtitleTracks", "selectedAudioTrackId", "selectedSubtitleTrackId",
@@ -163,7 +162,6 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     (typeof value.sessionId !== "string" && value.sessionId !== null) ||
     typeof value.serviceInstanceId !== "string" || !value.serviceInstanceId ||
     revision === null || retryCount === null ||
-    (typeof value.rootId !== "string" && value.rootId !== null) ||
     (typeof value.storagePoolId !== "string" && value.storagePoolId !== null) ||
     (typeof value.relativePath !== "string" && value.relativePath !== null) ||
     (typeof value.fileName !== "string" && value.fileName !== null) ||
@@ -187,7 +185,6 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     sessionId: value.sessionId,
     serviceInstanceId: value.serviceInstanceId,
     revision,
-    rootId: value.rootId,
     storagePoolId: value.storagePoolId,
     relativePath: value.relativePath,
     fileName: value.fileName,

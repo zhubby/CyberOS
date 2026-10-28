@@ -5,15 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   consumeDockerConsoleAuthorization,
   createDockerConsoleAuthorization,
-  createSession,
-  createUserMessageAndJob,
-  ensureNasRoots,
+  createDockerOperationRecord,
   openCyberOsDb,
-  updateApprovalStatus,
   updateDockerOperationStatus,
   type CyberOsDatabase
 } from "./index.js";
-import { createDockerOperationApproval } from "./repositories/docker-operations.js";
 
 let tempDir: string;
 let db: CyberOsDatabase;
@@ -21,7 +17,6 @@ let db: CyberOsDatabase;
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-db-console-"));
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
-  ensureNasRoots(db, [{ id: "local", name: "Local", path: tempDir }]);
 });
 
 afterEach(async () => {
@@ -31,14 +26,7 @@ afterEach(async () => {
 
 describe("Docker console authorization repository", () => {
   it("only authorizes approved Docker console operations and consumes them once", () => {
-    const session = createSession(db, { rootId: "local" });
-    const { job } = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "Open container console",
-      status: "waiting_approval"
-    });
-    const { approval, operation } = createDockerOperationApproval(db, {
-      jobId: job.id,
+    const operation = createDockerOperationRecord(db, {
       proposal: {
         action: "console",
         targetType: "console",
@@ -53,19 +41,16 @@ describe("Docker console authorization repository", () => {
     expect(() =>
       createDockerConsoleAuthorization(db, {
         operationId: operation.id,
-        approvalId: approval.id,
         containerId: "container-1",
         shell: "/bin/sh"
       })
     ).toThrow("Approved console operation not found");
 
-    expect(updateApprovalStatus(db, approval.id, "approved", ["pending"])).toBe(true);
     expect(updateDockerOperationStatus(db, operation.id, "approved")).toMatchObject({
       status: "approved"
     });
     const authorization = createDockerConsoleAuthorization(db, {
       operationId: operation.id,
-      approvalId: approval.id,
       containerId: "container-1",
       shell: "/bin/sh"
     });

@@ -16,7 +16,6 @@ type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 export function FileEditorModal({
-  rootId,
   storagePoolId,
   meta,
   locale,
@@ -24,7 +23,6 @@ export function FileEditorModal({
   onSaved,
   onNotifyError
 }: {
-  rootId: string;
   storagePoolId: string;
   meta: FileMeta;
   locale: SupportedLocale;
@@ -68,7 +66,7 @@ export function FileEditorModal({
     setLastSavedAt(null);
 
     try {
-      const editable = await getEditableText(rootId, meta.path, storagePoolId);
+      const editable = await getEditableText(storagePoolId, meta.path);
       setContent(editable.content);
       setSavedContent(editable.content);
       setModifiedAt(editable.modifiedAt);
@@ -82,7 +80,7 @@ export function FileEditorModal({
     } finally {
       setLoading(false);
     }
-  }, [meta.path, onNotifyError, rootId, storagePoolId]);
+  }, [meta.path, onNotifyError, storagePoolId]);
 
   useEffect(() => {
     void loadEditor();
@@ -98,7 +96,6 @@ export function FileEditorModal({
       setError(null);
       try {
         const result = await saveEditableText({
-          rootId,
           storagePoolId,
           currentPath: meta.path,
           content: nextContent,
@@ -118,7 +115,7 @@ export function FileEditorModal({
         return false;
       }
     },
-    [loading, meta.path, modifiedAt, onNotifyError, rootId, storagePoolId]
+    [loading, meta.path, modifiedAt, onNotifyError, storagePoolId]
   );
 
   useEffect(() => {

@@ -687,7 +687,7 @@
     var(--hud-panel-raised);
 }
 
-.files-navigation-bar .root-control label {
+.files-navigation-bar .storage-pool-control label {
   color: var(--hud-cyan);
   font-family: var(--font-mono);
   font-size: 9px;
@@ -950,10 +950,9 @@
   }
 
   .files-navigation-bar,
-  .files-navigation-bar.has-root-switcher,
   .files-navigation-bar.has-storage-pool-switcher,
   .files-navigation-bar.has-batch-selection,
-  .files-navigation-bar.has-root-switcher.has-storage-pool-switcher.has-multiple-switchers {
+  .files-navigation-bar.has-storage-pool-switcher.has-batch-selection {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -12,8 +12,8 @@ fn queue_scan(database: &Path, source_path: &str, scan_id: &str, generation: &st
     connection
         .execute(
             "INSERT OR IGNORE INTO media_sources (
-           id, name, kind, root_id, storage_pool_id, path, enabled, created_at, updated_at
-         ) VALUES ('movies', 'Movies', 'movie', 'local', 'pool-1', ?, 1, 'now', 'now')",
+           id, name, kind, storage_pool_id, path, enabled, created_at, updated_at
+         ) VALUES ('movies', 'Movies', 'movie', 'local', ?, 1, 'now', 'now')",
             [source_path],
         )
         .unwrap();
@@ -24,8 +24,16 @@ fn queue_scan(database: &Path, source_path: &str, scan_id: &str, generation: &st
     ).unwrap();
 }
 
-async fn claim_and_run(db: &Db, worker: &str) -> Result<(), cyberos_indexer::error::IndexerError> {
-    let task = db.claim_media_scan(worker).await.unwrap().unwrap();
+async fn claim_and_run(
+    db: &Db,
+    worker: &str,
+    storage_pool_path: &Path,
+) -> Result<(), cyberos_indexer::error::IndexerError> {
+    let task = db
+        .claim_media_scan(worker, &[common::storage_pool(storage_pool_path)])
+        .await
+        .unwrap()
+        .unwrap();
     run_media_scan(db, &task, worker, &CancellationToken::new()).await
 }
 
@@ -51,7 +59,7 @@ async fn scan_prefers_nfo_and_ignores_symlinked_media() {
     common::create_schema(&database, &root);
     queue_scan(&database, "Movies", "scan-1", "generation-1");
     let db = Db::open(&database).unwrap();
-    claim_and_run(&db, "media-worker").await.unwrap();
+    claim_and_run(&db, "media-worker", &root).await.unwrap();
 
     let connection = Connection::open(&database).unwrap();
     let title = connection
@@ -113,11 +121,11 @@ async fn successful_generation_removes_stale_files() {
     common::create_schema(&database, &root);
     queue_scan(&database, "Movies", "scan-1", "generation-1");
     let db = Db::open(&database).unwrap();
-    claim_and_run(&db, "media-worker").await.unwrap();
+    claim_and_run(&db, "media-worker", &root).await.unwrap();
 
     std::fs::remove_file(movies.join("Second.2021.mkv")).unwrap();
     queue_scan(&database, "Movies", "scan-2", "generation-2");
-    claim_and_run(&db, "media-worker").await.unwrap();
+    claim_and_run(&db, "media-worker", &root).await.unwrap();
 
     let connection = Connection::open(&database).unwrap();
     assert_eq!(
@@ -150,11 +158,11 @@ async fn failed_scan_preserves_the_previous_catalog() {
     common::create_schema(&database, &root);
     queue_scan(&database, "Movies", "scan-1", "generation-1");
     let db = Db::open(&database).unwrap();
-    claim_and_run(&db, "media-worker").await.unwrap();
+    claim_and_run(&db, "media-worker", &root).await.unwrap();
 
     std::fs::rename(&movies, root.join("Movies-offline")).unwrap();
     queue_scan(&database, "Movies", "scan-2", "generation-2");
-    assert!(claim_and_run(&db, "media-worker").await.is_err());
+    assert!(claim_and_run(&db, "media-worker", &root).await.is_err());
 
     let connection = Connection::open(&database).unwrap();
     assert_eq!(

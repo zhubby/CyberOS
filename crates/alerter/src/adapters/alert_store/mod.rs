@@ -209,7 +209,7 @@ mod tests {
     }
 
     #[test]
-    fn open_waits_for_the_latest_alert_migrations() {
+    fn open_waits_for_the_cyberos_2_0_schema() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("cyberos.sqlite");
         let connection = Connection::open(&path).unwrap();
@@ -296,7 +296,7 @@ mod tests {
                    id TEXT PRIMARY KEY, code TEXT, scope TEXT, severity TEXT, details TEXT, status TEXT\
                  );\
                  INSERT INTO health_alerts VALUES (\
-                   'health-1', 'nas_unavailable', 'primary', 'critical', 'offline', 'active'\
+                   'health-1', 'nas_unavailable', 'system', 'critical', 'offline', 'active'\
                  );\
                  CREATE TABLE monitoring_alert_incidents(\
                    id TEXT PRIMARY KEY, source TEXT, rule_id TEXT, health_alert_id TEXT, series_key TEXT,\

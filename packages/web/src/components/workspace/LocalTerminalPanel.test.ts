@@ -50,25 +50,23 @@ describe("LocalTerminalPanel", () => {
     await i18n.changeLanguage("en");
     const html = renderToStaticMarkup(createElement(LocalTerminalPanel, {
       active: true,
-      root: undefined,
       codeFontSettings: { familyId: "system", fontSizePx: 12 }
     }));
 
     expect(html).toContain('class="management-header workspace-terminal-overview"');
     expect(html).toContain('class="workspace-terminal-frame"');
     expect(html).toContain("<h2>Terminal</h2>");
-    expect(html).toContain("Direct shell access to the selected NAS root.");
+    expect(html).toContain("Direct shell access to CyberOS.");
     expect(html).toContain('aria-label="Terminal actions"');
     expect(html).not.toContain("Local shell");
     expect(html).not.toContain("panel-inline-status");
   });
 
-  it("renders tab and terminal skeletons on the first frame for a selected root", async () => {
+  it("renders tab and terminal skeletons on the first frame", async () => {
     await initI18n();
     await i18n.changeLanguage("en");
     const html = renderToStaticMarkup(createElement(LocalTerminalPanel, {
       active: true,
-      root: { id: "local", name: "Primary NAS", path: "/cyberos/data/primary", homePath: null },
       codeFontSettings: { familyId: "system", fontSizePx: 12 }
     }));
 
@@ -117,7 +115,6 @@ function renderTabBar(createDisabled: boolean): string {
 function terminalTab(id: string, ordinal: number): TerminalTab {
   return {
     id,
-    rootId: "local",
     ordinal,
     customTitle: null,
     createdAt: "2026-09-20T00:00:00.000Z",

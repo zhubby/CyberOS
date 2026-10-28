@@ -32,7 +32,6 @@ enum Message {
 #[derive(Debug, Clone)]
 struct DesiredSession {
     session_id: String,
-    root_id: String,
     storage_pool_id: String,
     relative_path: String,
     position_seconds: f64,
@@ -78,7 +77,6 @@ impl ControllerHandle {
                 let saved = *saved;
                 status.state = PlayerState::Recovering;
                 status.session_id = Some(saved.session_id.clone());
-                status.root_id = Some(saved.root_id.clone());
                 status.storage_pool_id = Some(saved.storage_pool_id.clone());
                 status.relative_path = Some(saved.relative_path.clone());
                 status.file_name = file_name(&saved.relative_path);
@@ -86,7 +84,6 @@ impl ControllerHandle {
                 status.volume = saved.volume;
                 Some(DesiredSession {
                     session_id: saved.session_id,
-                    root_id: saved.root_id,
                     storage_pool_id: saved.storage_pool_id,
                     relative_path: saved.relative_path,
                     position_seconds: saved.position_seconds,
@@ -204,7 +201,6 @@ impl Controller {
         match command {
             Command::Status => {}
             Command::Play {
-                root_id,
                 storage_pool_id,
                 relative_path,
                 start_position_seconds,
@@ -212,12 +208,8 @@ impl Controller {
                 media_file_id,
             } => {
                 if let Some(file_id) = media_file_id.as_deref() {
-                    self.progress.verify_media_file(
-                        file_id,
-                        &root_id,
-                        &storage_pool_id,
-                        &relative_path,
-                    )?;
+                    self.progress
+                        .verify_media_file(file_id, &storage_pool_id, &relative_path)?;
                 }
                 self.stop_mpv().await;
                 self.retry_at = None;
@@ -225,7 +217,6 @@ impl Controller {
                 self.status.retry_count = 0;
                 self.desired = Some(DesiredSession {
                     session_id: Uuid::new_v4().to_string(),
-                    root_id,
                     storage_pool_id,
                     relative_path,
                     position_seconds: start_position_seconds.unwrap_or(0.0),
@@ -439,7 +430,6 @@ impl Controller {
         }
         let media = open_media(
             &self.config,
-            &desired.root_id,
             &desired.storage_pool_id,
             &desired.relative_path,
         )?;
@@ -789,7 +779,6 @@ impl Controller {
     fn copy_desired_to_status(&mut self) {
         if let Some(desired) = &self.desired {
             self.status.session_id = Some(desired.session_id.clone());
-            self.status.root_id = Some(desired.root_id.clone());
             self.status.storage_pool_id = Some(desired.storage_pool_id.clone());
             self.status.relative_path = Some(desired.relative_path.clone());
             self.status.file_name = file_name(&desired.relative_path);
@@ -823,7 +812,6 @@ impl Controller {
             &PersistedSession {
                 version: 2,
                 session_id: desired.session_id.clone(),
-                root_id: desired.root_id.clone(),
                 storage_pool_id: desired.storage_pool_id.clone(),
                 relative_path: desired.relative_path.clone(),
                 position_seconds: desired.position_seconds,
@@ -892,7 +880,6 @@ fn empty_status(
         session_id: None,
         service_instance_id,
         revision: 0,
-        root_id: None,
         storage_pool_id: None,
         relative_path: None,
         file_name: None,
@@ -1004,14 +991,14 @@ fn bluetooth_alsa_device(device_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::NasRoot;
-
     fn test_config(directory: &Path) -> Arc<VodPlayerConfig> {
         Arc::new(VodPlayerConfig {
             enabled: true,
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
             database_path: directory.join("cyberos.sqlite"),
+            data_root: directory.join("data"),
+            production: false,
             command_timeout_ms: 100,
             startup_timeout_ms: 100,
             checkpoint_interval_ms: 5_000,
@@ -1024,10 +1011,6 @@ mod tests {
             hwdec: "no".to_owned(),
             user: "test".to_owned(),
             peer_uid: nix::unistd::Uid::current().as_raw(),
-            nas_roots: vec![NasRoot {
-                id: "root".to_owned(),
-                path: directory.to_owned(),
-            }],
         })
     }
 
@@ -1104,7 +1087,6 @@ mod tests {
         controller.status.audio_fallback_reason = Some("BlueALSA unavailable".to_owned());
         controller.desired = Some(DesiredSession {
             session_id: "next-session".to_owned(),
-            root_id: "root".to_owned(),
             storage_pool_id: "pool".to_owned(),
             relative_path: "movie.mp4".to_owned(),
             position_seconds: 0.0,
@@ -1165,7 +1147,6 @@ mod tests {
         let (mut controller, _sender, _done) = test_controller(directory.path());
         controller.desired = Some(DesiredSession {
             session_id: "session".to_owned(),
-            root_id: "root".to_owned(),
             storage_pool_id: "pool".to_owned(),
             relative_path: "movie.mp4".to_owned(),
             position_seconds: 0.0,

@@ -22,7 +22,7 @@ describe("terminal tab helpers", () => {
     expect(terminalTabNavigationTarget(tabs, "second", "End")).toBe("third");
   });
 
-  it("initializes only roots without a persisted tab set", () => {
+  it("initializes only when there is no persisted global tab set", () => {
     const state: TerminalTabState = { initialized: true, tabs, activeTabId: "first", maxSessions: 32 };
     expect(shouldInitializeTerminalTabs({ ...state, initialized: false })).toBe(true);
     expect(shouldInitializeTerminalTabs(state)).toBe(false);
@@ -32,7 +32,6 @@ describe("terminal tab helpers", () => {
 function tab(id: string, ordinal: number): TerminalTab {
   return {
     id,
-    rootId: "local",
     ordinal,
     customTitle: null,
     createdAt: "2026-09-20T00:00:00.000Z",

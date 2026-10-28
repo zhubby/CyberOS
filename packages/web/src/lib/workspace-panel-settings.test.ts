@@ -34,13 +34,6 @@ describe("workspace panel settings helpers", () => {
     }
   });
 
-  it("migrates the accidentally persisted photostaff panel id", () => {
-    const storage = createMemoryStorage();
-    storage.setItem(WORKSPACE_PANEL_STORAGE_KEY, "photostaff");
-
-    expect(readStoredWorkspacePanel(storage)).toBe("photos");
-  });
-
   it("keeps session-only behavior when storage operations fail", () => {
     const unavailableStorage = {
       getItem: () => {
