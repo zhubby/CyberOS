@@ -46,7 +46,7 @@ describe("iSCSI dependency installation", () => {
     }
   });
 
-  it("loads newly installed LIO before hostd even when the prepare unit was already active", async () => {
+  it.each(["no", "yes"])("loads LIO and clears only skipped restoration failures (condition %s)", async (restoreCondition) => {
     const root = await mkdtemp(path.join(os.tmpdir(), "cyberos-iscsi-activation-"));
     roots.push(root);
     const deploy = await readFile(new URL("scripts/cyberos-deploy", import.meta.url), "utf8");
@@ -60,11 +60,19 @@ STATEFUL_RUNTIME_UNITS=''
 RUNTIME_SERVICES=''
 TIMERS=''
 modules_loaded=0
+stale_failed=1
 systemctl() {
   case "$*" in
     'restart cyberos-iscsi-prepare.service') modules_loaded=1 ;;
+    'show --property=ConditionResult --value rtslib-fb-targetctl.service') printf '%s\\n' '${restoreCondition}' ;;
+    'reset-failed rtslib-fb-targetctl.service') stale_failed=0 ;;
     'start cyberos-hostd.service')
-      [ "$modules_loaded" -eq 1 ] || { echo 'LIO was not loaded after installation' >&2; return 1; } ;;
+      [ "$modules_loaded" -eq 1 ] || { echo 'LIO was not loaded after installation' >&2; return 1; }
+      if [ '${restoreCondition}' = no ]; then
+        [ "$stale_failed" -eq 0 ] || { echo 'Skipped restoration left a stale failure' >&2; return 1; }
+      else
+        [ "$stale_failed" -eq 1 ] || { echo 'A real restoration failure was hidden' >&2; return 1; }
+      fi ;;
   esac
 }
 log() { :; }

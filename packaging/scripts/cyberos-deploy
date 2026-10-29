@@ -274,6 +274,11 @@ activate_runtime() {
   # An earlier install may have completed this oneshot before DKMS installed
   # LIO. Starting an already-active oneshot would not load the new modules.
   systemctl restart cyberos-iscsi-prepare.service
+  # A skipped condition retains an earlier failed state. Clear only that
+  # historical state; actual target restoration failures must stay visible.
+  if [ "$(systemctl show --property=ConditionResult --value rtslib-fb-targetctl.service)" = no ]; then
+    systemctl reset-failed rtslib-fb-targetctl.service
+  fi
   start_service_stably cyberos-hostd.service 1
   start_service_stably cyberos-terminald.service 1
   if [ -f "$state_dir/cyberos-host-accessd.service.enabled" ] || systemctl is-enabled --quiet docker.service 2>/dev/null; then

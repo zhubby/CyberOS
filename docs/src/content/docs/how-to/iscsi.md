@@ -15,6 +15,8 @@ CyberOS 使用 Linux LIO 作为 iSCSI Target，向 Windows、ESXi 等连接端�
 
 Debian 的 `rtslib-fb-targetctl` 恢复服务仅在 LIO 已就绪时启动，避免依赖配置早于 DKMS 编译时导致安装失败。安装前脚本会刷新这一条件，安装成功后移除临时条件文件；不启动服务、不修改已有 Target 配置。部署会在安装完成后的正常激活阶段重新运行模块准备服务，再启动 hostd，避免前一次失败安装留下的已完成状态跳过新模块加载。
 
+如果恢复服务最近因 LIO 条件不满足而跳过，部署激活会清除它遗留的历史失败状态；真正执行恢复后失败的状态会保留，便于诊断。
+
 ## 创建和连接
 
 1. 确认存储池已挂载且有足够可用空间。iSCSI 必须具备内核 `target_core_mod`、`target_core_file`、`iscsi_target_mod` 和 configfs 支持；缺少能力时卡片显示不可用原因。
