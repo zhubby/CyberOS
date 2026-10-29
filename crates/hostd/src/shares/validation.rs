@@ -38,6 +38,17 @@ pub(super) async fn resolve_shares<'a>(
         let absolute_path = fs::canonicalize(&candidate_path).await.map_err(|_| {
             HostdError::validation(format!("Share {} path is unavailable", share.id))
         })?;
+        for checked in [&candidate_path, &absolute_path] {
+            let relative = checked
+                .strip_prefix(&real_root)
+                .map_err(|_| HostdError::validation("Share path escapes storage pool"))?;
+            let mut segments = relative.components();
+            if segments.next() == Some(Component::Normal(".cyberos".as_ref())) {
+                return Err(HostdError::validation(
+                    "CyberOS internal storage cannot be shared",
+                ));
+            }
+        }
         if !path_inside(&real_root, &absolute_path) {
             return Err(HostdError::validation(format!(
                 "Share {} resolves outside storage pool {}",
@@ -97,6 +108,15 @@ pub(super) fn validate_request(request: &ShareApplyRequest) -> Result<(), HostdE
     if !valid_username {
         return Err(HostdError::validation("Share account username is invalid"));
     }
+    let existing_identity = nix::unistd::User::from_name(username)
+        .map_err(|error| HostdError::unavailable(error.to_string()))?;
+    if matches!(username.as_str(), "root" | "cyberos")
+        || existing_identity.is_some_and(|identity| identity.uid.is_root())
+    {
+        return Err(HostdError::validation(
+            "Share account must not use a privileged system identity",
+        ));
+    }
     for share in &request.settings.shares {
         safe_inline(&share.id)?;
         safe_inline(&share.name)?;
@@ -106,12 +126,9 @@ pub(super) fn validate_request(request: &ShareApplyRequest) -> Result<(), HostdE
                 "Enabled NFS shares require at least one allowed CIDR",
             ));
         }
-        if share.protocols.nfs.enabled
-            && !share.protocols.nfs.read_only
-            && !share.protocols.nfs.root_squash
-        {
+        if share.protocols.nfs.enabled && !share.protocols.nfs.root_squash {
             return Err(HostdError::validation(
-                "Writable NFS shares require root squashing",
+                "NFS shares require root squashing to protect managed storage",
             ));
         }
         for cidr in &share.protocols.nfs.allowed_cidrs {

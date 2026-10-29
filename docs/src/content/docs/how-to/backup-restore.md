@@ -13,6 +13,10 @@ sidebar:
 
 备份包括 storage pools、SQLite 在线快照、trash 状态和 v2 manifest。恢复首先写入新的 0700 staging 目录，校验 data root 身份与 SHA-256；非 v2 manifest 会被拒绝，恢复不会覆盖活动 storage pool、数据库目录或备份仓库。
 
+## iSCSI 磁盘
+
+存储池中的 `.cyberos/iscsi` 是受保护的 LUN 镜像目录，普通文件备份明确排除整个目录，避免读取运行中的磁盘镜像并误报为一致备份。日常 restic 备份也不保存 `/cyberos/state/hostd/iscsi` 的 Target 配置及 CHAP 凭据。需要保护 iSCSI 数据时，在连接端使用文件系统或应用支持的一致性备份；重装前单独保管受限的 Target 配置，并核实原镜像与存储池身份。普通文件恢复不会自动恢复 iSCSI 服务。
+
 ## Docker 工作负载的数据
 
 默认 Docker named volume 位于 `/var/lib/docker/volumes`，不属于 CyberOS storage pools，也不会因备份 SQLite 而被备份。设备状态备份保存的 Registry 凭证不等于容器数据备份，恢复目录或数据库也不会自动重建容器。生产 RustFS 等对象存储必须另外制定应用一致的数据备份策略，或使用经过规划的 NAS bind mount；不要在线复制活跃 volume 并声称已得到一致备份。

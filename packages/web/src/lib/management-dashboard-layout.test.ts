@@ -23,6 +23,22 @@ function memoryStorage() {
 }
 
 describe("management dashboard layouts", () => {
+  it("appends the full-width iSCSI card while preserving existing Storage positions", () => {
+    const storage = memoryStorage();
+    const defaults = defaultManagementDashboardLayouts("storage");
+    const oldLayouts = {
+      desktop: defaults.desktop.filter((item) => item.i !== "iscsi").map((item) => ({ ...item, y: item.y + 4 })),
+      tablet: defaults.tablet.filter((item) => item.i !== "iscsi").map((item) => ({ ...item, y: item.y + 4 }))
+    };
+    writeManagementDashboardLayouts("storage", oldLayouts, storage);
+    const restored = readManagementDashboardLayouts("storage", storage);
+    expect(restored.desktop.find((item) => item.i === "iscsi")).toMatchObject({ w: 12, minW: 12 });
+    expect(restored.tablet.find((item) => item.i === "iscsi")).toMatchObject({ w: 8, minW: 8 });
+    expect(restored.desktop.find((item) => item.i === "overview")?.y).toBe(oldLayouts.desktop[0]?.y);
+    expect(restored.desktop.find((item) => item.i === "iscsi")?.y).toBeGreaterThanOrEqual(
+      Math.max(...oldLayouts.desktop.map((item) => item.y + item.h))
+    );
+  });
   it("packs every dashboard widget inside each breakpoint without overlap", () => {
     for (const dashboardId of ["docker", "virtualMachines", "network", "storage", "shares", "monitoring"] as const) {
       const layouts = defaultManagementDashboardLayouts(dashboardId);

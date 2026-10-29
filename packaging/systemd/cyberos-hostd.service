@@ -2,8 +2,11 @@
 Description=CyberOS privileged host integration daemon
 Documentation=file:///usr/share/doc/cyberos/README.md
 After=local-fs.target systemd-tmpfiles-setup.service NetworkManager.service bluetooth.service
+After=systemd-modules-load.service sys-kernel-config.mount cyberos-iscsi-prepare.service
+# Debian targetctl restores may clear LIO objects before CyberOS recovery.
+After=rtslib-fb-targetctl.service
 Before=network-online.target
-Wants=NetworkManager.service bluetooth.service
+Wants=NetworkManager.service bluetooth.service sys-kernel-config.mount cyberos-iscsi-prepare.service
 
 [Service]
 Type=simple
@@ -24,9 +27,12 @@ ReadWritePaths=/etc /run/cyberos /run/mdadm /cyberos/state/hostd /cyberos/state/
 ReadWritePaths=-/run/samba -/var/lib/samba -/var/cache/samba -/var/log/samba
 ReadWritePaths=-/cyberos/state/hostd/docker-daemon /cyberos/state/hostd/network-manager /cyberos/state/hostd/bluetooth
 ReadWritePaths=/cyberos/system-backups/permissions
+# LIO's configfs objects are managed through the fixed, root-only helper.
+ReadWritePaths=-/sys/kernel/config
 NoNewPrivileges=yes
 PrivateTmp=yes
-CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_MKNOD CAP_SYS_ADMIN CAP_SYS_RAWIO
+# Immutable internal metadata entries prevent writable share clients renaming LUN storage.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_MKNOD CAP_SYS_ADMIN CAP_SYS_RAWIO CAP_LINUX_IMMUTABLE
 MemoryMax=128M
 CPUQuota=50%
 TasksMax=128

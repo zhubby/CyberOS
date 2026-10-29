@@ -46,5 +46,14 @@ describe("resolveSafeExistingPath", () => {
 
     await expect(resolveSafeExistingPath(rootDir, "escape.txt")).rejects.toThrow("Path escapes");
   });
+
+  it("reserves iSCSI images even through a symbolic-link alias", async () => {
+    await mkdir(path.join(rootDir, ".cyberos", "iscsi"), { recursive: true });
+    await writeFile(path.join(rootDir, ".cyberos", "iscsi", "disk.img"), "data");
+    await symlink(path.join(rootDir, ".cyberos", "iscsi"), path.join(rootDir, "alias"));
+
+    await expect(resolveSafeExistingPath(rootDir, ".cyberos/iscsi/disk.img")).rejects.toThrow("iSCSI");
+    await expect(resolveSafeExistingPath(rootDir, "alias/disk.img")).rejects.toThrow("iSCSI");
+  });
 });
 

@@ -50,6 +50,15 @@ const dashboardItems: ManagementDashboardItem[] = [
 ];
 
 describe("ManagementDashboardGrid loading layout", () => {
+  it("keeps independently fetched widgets mounted during panel refresh", () => {
+    const html = renderToStaticMarkup(createElement(ManagementDashboardGrid, {
+      dashboard: dashboardController(),
+      items: [{ id: "iscsi", title: "iSCSI", loading: false, content: createElement("span", null, "live iSCSI") }],
+      loading: true
+    }));
+    expect(html).toContain("live iSCSI");
+    expect(html).not.toContain("data-skeleton-kind");
+  });
   it("keeps the current item structure while replacing only widget content", () => {
     const dashboard = dashboardController();
     const html = renderToStaticMarkup(createElement(ManagementDashboardGrid, {

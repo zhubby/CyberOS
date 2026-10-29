@@ -231,9 +231,9 @@ pub(super) fn render_nfs_with_identity(
         .filter(|item| item.share.protocols.nfs.enabled)
     {
         let nfs = &resolved.share.protocols.nfs;
-        if !nfs.read_only && !nfs.root_squash {
+        if !nfs.root_squash {
             return Err(HostdError::validation(
-                "Writable NFS shares require root squashing",
+                "NFS shares require root squashing to protect managed storage",
             ));
         }
         let path = safe_inline(&resolved.absolute_path.to_string_lossy())?.replace(' ', "\\040");

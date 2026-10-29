@@ -174,7 +174,7 @@ export async function runBackup(input: BackupDependencies & { kind?: Exclude<Bac
     ensureLease();
     const dataResult = await runResticWithRetry(
       runner,
-      ["backup", "--json", "--repo", config.repositoryPath!, "--tag", kind, dataRoot],
+      ["backup", "--json", "--repo", config.repositoryPath!, "--tag", kind, "--exclude", "*/.cyberos/iscsi", dataRoot],
       config
     );
     if (dataResult.code !== 0) {

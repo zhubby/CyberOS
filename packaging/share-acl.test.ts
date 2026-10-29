@@ -21,6 +21,10 @@ describe("share ACL transaction", () => {
     const state = path.join(directory, "state.json");
     const backup = path.join(directory, "system-backups", "permissions");
     await mkdir(path.join(shared, "nested"), { recursive: true });
+    const iscsi = path.join(shared, ".cyberos", "iscsi");
+    await mkdir(iscsi, { recursive: true });
+    await chmod(iscsi, 0o700);
+    await writeFile(path.join(iscsi, "disk.img"), "private-image", { mode: 0o600 });
     await mkdir(privatePath);
     const runReal = (action: string, grants?: unknown[], transaction?: string) => spawnSync(
       process.execPath,
@@ -31,10 +35,18 @@ describe("share ACL transaction", () => {
     const grant = { path: shared, principal: "nobody", access: "write", scope: "tree" };
     const initial = runReal("prepare", [grant]);
     expect(initial.status, initial.stderr).toBe(0);
+    expect(await readFile(path.join(initial.stdout.trim(), "acl-0.dump"), "utf8"))
+      .not.toContain(".cyberos");
     expect(runReal("commit", undefined, initial.stdout.trim()).status).toBe(0);
     expect(spawnSync("getfacl", ["-c", path.join(shared, "nested")], { encoding: "utf8" }).stdout)
       .toContain("user:nobody:rwx");
     expect(spawnSync("getfacl", ["-c", privatePath], { encoding: "utf8" }).stdout)
+      .not.toContain("user:nobody:");
+    expect(spawnSync("getfacl", ["-c", path.dirname(iscsi)], { encoding: "utf8" }).stdout)
+      .not.toContain("user:nobody:");
+    expect(spawnSync("getfacl", ["-c", iscsi], { encoding: "utf8" }).stdout)
+      .not.toContain("user:nobody:");
+    expect(spawnSync("getfacl", ["-c", path.join(iscsi, "disk.img")], { encoding: "utf8" }).stdout)
       .not.toContain("user:nobody:");
 
     const removal = runReal("prepare", []);
@@ -134,8 +146,12 @@ describe("share ACL transaction", () => {
     expect(run(fixture, "rollback", undefined, removed.stdout.trim()).status).toBe(0);
     await expect(readFile(fixture.state, "utf8")).resolves.toBe(JSON.stringify([grant]));
     const calls = await readFile(fixture.log, "utf8");
-    expect(calls).toContain(`setfacl -R -P -n -m u:www-data:rX -- ${fixture.shared}`);
-    expect(calls).toContain(`setfacl -R -P -n -x u:www-data -- ${fixture.shared}`);
+    expect(calls).toContain("-path */.cyberos -prune -o");
+    expect(calls).toContain("-exec getfacl --absolute-names -- {} +");
+    expect(calls).not.toContain("getfacl --absolute-names -R");
+    expect(calls).toContain("-exec setfacl -n -m u:www-data:rX -- {} +");
+    expect(calls).toContain("-exec setfacl -n -x u:www-data -- {} +");
+    expect(calls).not.toContain("setfacl -R");
     expect(calls).toContain("setfacl --restore=");
   });
 
@@ -155,6 +171,17 @@ describe("share ACL transaction", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("CYBEROS_ACL_BACKUP_DIR must be under");
+  });
+
+  it("rejects direct ACL grants for reserved metadata and its descendants", async () => {
+    const fixture = await setup();
+    for (const internal of [".cyberos", ".cyberos/iscsi", ".cyberos/ordinary.json"]) {
+      const result = run(fixture, "prepare", JSON.stringify({ grants: [
+        { path: path.join(fixture.shared, internal), principal: "www-data", access: "write", scope: "tree" }
+      ] }));
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("Managed storage metadata cannot be shared");
+    }
   });
 
   it("removes stale state when a previously shared directory was deleted", async () => {
@@ -194,6 +221,11 @@ async function setup() {
 printf '%s %s\\n' "$(basename "$0")" "$*" >> "$CYBEROS_ACL_LOG"
 case "$(basename "$0")" in
   findmnt) printf '/\\n' ;;
+  find)
+    target="$2"
+    for arg do
+      if [ "$arg" = getfacl ]; then getfacl --absolute-names -- "$target"; break; fi
+    done ;;
   getfacl)
     for arg do :; done
     printf '# file: %s\\nuser::rwx\\n' "$arg"

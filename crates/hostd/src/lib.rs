@@ -4,6 +4,7 @@ pub mod config;
 pub mod docker_daemon;
 pub mod error;
 pub mod host_access;
+pub mod iscsi;
 pub mod network_manager;
 pub mod ops;
 pub mod power;

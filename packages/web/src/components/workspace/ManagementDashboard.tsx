@@ -37,6 +37,8 @@ export interface ManagementDashboardItem {
   id: string;
   title: string;
   content: ReactNode;
+  /** Override panel loading for independently fetched widgets. */
+  loading?: boolean;
 }
 
 export interface ManagementDashboardController {
@@ -291,7 +293,7 @@ function DashboardWidget({
         tabIndex={0}
         aria-label={item.title}
       >
-        {loading ? <ManagementWidgetSkeleton dashboardId={dashboard.dashboardId} widgetId={item.id} /> : item.content}
+        {(item.loading ?? loading) ? <ManagementWidgetSkeleton dashboardId={dashboard.dashboardId} widgetId={item.id} /> : item.content}
       </div>
     </div>
   );

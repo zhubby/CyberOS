@@ -3,7 +3,7 @@ import { lstat, open, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import type { StorageWorkspace } from "@cyberos/shared";
-import { isPathInside, resolveSafeExistingPath } from "./path-safety.js";
+import { isManagedIscsiPath, isPathInside, resolveSafeExistingPath } from "./path-safety.js";
 
 export interface FileEntry {
   name: string;
@@ -38,7 +38,7 @@ export async function listDir(root: StorageWorkspace, requestedPath = "."): Prom
 
   const entries = await readdir(safe.realPath, { withFileTypes: true });
   const hydrated = await Promise.all(
-    entries.map(async (entry): Promise<FileEntry> => {
+    entries.filter((entry) => !isManagedIscsiPath(path.join(safe.realPath, entry.name))).map(async (entry): Promise<FileEntry> => {
       const absoluteEntryPath = path.join(safe.realPath, entry.name);
       const entryStat = await lstat(absoluteEntryPath);
       const relativePath = path.join(safe.relativePath, entry.name);
@@ -143,6 +143,7 @@ export async function searchFiles(
       }
 
       const absoluteEntryPath = path.join(currentPath, entry.name);
+      if (isManagedIscsiPath(absoluteEntryPath)) continue;
       const entryStat = await lstat(absoluteEntryPath);
       const safeEntry = await isEntrySafe(safe.rootRealPath, absoluteEntryPath);
       const relativePath = path.relative(safe.rootRealPath, absoluteEntryPath) || ".";
@@ -195,7 +196,7 @@ export async function readFirstLines(filePath: string, maxLines = 12): Promise<s
 async function isEntrySafe(rootRealPath: string, absoluteEntryPath: string): Promise<boolean> {
   try {
     const entryRealPath = await import("node:fs/promises").then((fs) => fs.realpath(absoluteEntryPath));
-    return isPathInside(rootRealPath, entryRealPath);
+    return isPathInside(rootRealPath, entryRealPath) && !isManagedIscsiPath(entryRealPath);
   } catch {
     return false;
   }

@@ -1748,6 +1748,19 @@ export const en = {
         }
       },
       storage: {
+        iscsi: {
+          title: "iSCSI", description: "Network disks from your storage pools.",
+          createTarget: "Create Target", editTarget: "Edit Target", targets: "Targets", luns: "LUNs", sessions: "Sessions", sessionCount: "{{count}} sessions",
+          retained: "Retained images", noTargets: "No iSCSI Targets configured.", noRetained: "No retained images.", noLuns: "No LUNs attached.", noSessions: "No active sessions.",
+          ready: "Ready", unavailable: "Unavailable", loading: "Loading iSCSI.", running: "Running", disabled: "Disabled", degraded: "Degraded",
+          refresh: "Refresh iSCSI", details: "Manage {{name}}", enabled: "Enabled", apply: "Apply", save: "Save", close: "Close", cancel: "Cancel", back: "Back", retry: "Reload",
+          name: "Name", address: "Listen address", selectAddress: "Select a local address", port: "Port", iqn: "Target IQN", initiators: "Initiator IQN whitelist", initiatorsHint: "One IQN per line. Only listed clients can connect.",
+          chap: "CHAP authentication", username: "CHAP username", password: "CHAP password", passwordHint: "12–16 printable ASCII characters.", keepPassword: "Leave blank to keep the current password.",
+          addLun: "Create LUN", attach: "Attach image", selectImage: "Select a retained image", selectTarget: "Select Target", storagePool: "Storage pool", selectPool: "Select a ready pool", size: "Capacity (GiB)", capacityHint: "The full capacity is reserved when created.",
+          removeLun: "Remove LUN", deleteTarget: "Delete Target", destroyImage: "Destroy image", destroyAlso: "Permanently destroy the disk image data", destroyAll: "Permanently destroy all attached disk images", keepImages: "Images are retained and can be attached again.", destroyWarning: "Destroyed disk images cannot be recovered.", confirmName: "Type {{name}} to confirm", confirm: "Confirm", attached: "Attached", retainedStatus: "Retained", free: "{{size}} free",
+          connectedWarning: "Disconnect all clients before changing this Target or its LUNs.", backupHint: "Disk images are excluded from normal file backup.", operationComplete: "iSCSI configuration updated.", loadError: "Unable to load iSCSI. Refresh to retry.", staleError: "Reload iSCSI before trying again.",
+          validation: { name: "Enter a name of 1–64 characters.", address: "Select an available local address.", port: "Enter a port from 1 to 65535.", initiators: "Enter at least one valid Initiator IQN.", username: "Enter a CHAP username without spaces (up to 128 ASCII characters).", password: "Enter a CHAP password of 12–16 printable ASCII characters.", capacity: "Enter a whole GiB capacity that fits the selected pool.", pool: "Select a ready storage pool.", image: "Select a retained image.", target: "Select an available Target without active sessions.", confirmation: "The confirmation name does not match." }
+        },
         eyebrow: "Storage",
         title: "Storage",
         description: "Manage mdadm storage pools with direct disk creation and live health data.",
@@ -4792,6 +4805,19 @@ export const zhCN = {
         }
       },
       storage: {
+        iscsi: {
+          title: "iSCSI", description: "将存储池空间作为网络磁盘提供。",
+          createTarget: "创建 Target", editTarget: "编辑 Target", targets: "Target", luns: "LUN", sessions: "会话", sessionCount: "{{count}} 个会话",
+          retained: "保留的镜像", noTargets: "尚未配置 iSCSI Target。", noRetained: "没有保留的镜像。", noLuns: "尚未挂接 LUN。", noSessions: "没有活动会话。",
+          ready: "就绪", unavailable: "不可用", loading: "正在加载 iSCSI。", running: "运行中", disabled: "已停用", degraded: "降级",
+          refresh: "刷新 iSCSI", details: "管理 {{name}}", enabled: "启用", apply: "应用", save: "保存", close: "关闭", cancel: "取消", back: "返回", retry: "重新加载",
+          name: "名称", address: "监听地址", selectAddress: "选择本机地址", port: "端口", iqn: "Target IQN", initiators: "Initiator IQN 白名单", initiatorsHint: "每行一个 IQN，仅允许列表中的客户端连接。",
+          chap: "CHAP 认证", username: "CHAP 用户名", password: "CHAP 密码", passwordHint: "12–16 个可打印 ASCII 字符。", keepPassword: "留空保留现有密码。",
+          addLun: "创建 LUN", attach: "挂接镜像", selectImage: "选择保留的镜像", selectTarget: "选择 Target", storagePool: "存储池", selectPool: "选择就绪的存储池", size: "容量（GiB）", capacityHint: "创建时预留全部容量。",
+          removeLun: "移除 LUN", deleteTarget: "删除 Target", destroyImage: "销毁镜像", destroyAlso: "永久销毁磁盘镜像数据", destroyAll: "永久销毁所有已挂接镜像", keepImages: "镜像将被保留，可再次挂接。", destroyWarning: "镜像销毁后无法恢复。", confirmName: "输入 {{name}} 确认", confirm: "确认", attached: "已挂接", retainedStatus: "已保留", free: "剩余 {{size}}",
+          connectedWarning: "请先断开所有客户端，再修改此 Target 或其 LUN。", backupHint: "磁盘镜像不包含在普通文件备份中。", operationComplete: "iSCSI 配置已更新。", loadError: "无法加载 iSCSI，请刷新重试。", staleError: "请重新加载 iSCSI 后重试。",
+          validation: { name: "请输入 1–64 个字符的名称。", address: "请选择可用的本机地址。", port: "请输入 1 至 65535 的端口。", initiators: "请至少填写一个有效的 Initiator IQN。", username: "CHAP 用户名不能含空格，最多 128 个 ASCII 字符。", password: "CHAP 密码应为 12–16 个可打印 ASCII 字符。", capacity: "请输入所选存储池可容纳的整数 GiB 容量。", pool: "请选择就绪的存储池。", image: "请选择保留的镜像。", target: "请选择没有活动会话的可用 Target。", confirmation: "确认名称不匹配。" }
+        },
         eyebrow: "存储",
         title: "存储",
         description: "管理 mdadm 存储池；创建操作会直接执行，并实时展示健康状态。",

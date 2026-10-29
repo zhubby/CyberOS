@@ -66,6 +66,8 @@ import {
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
 import { SystemEthernetManagement } from "./SystemEthernetManagement.js";
 import { SystemWifiReadonly } from "./SystemWifiReadonly.js";
+import { IscsiManagementCard } from "./IscsiManagementCard.js";
+import { ISCSI_REFRESH_EVENT } from "../../config/iscsi.js";
 
 type StatusTone = "ready" | "warning" | "offline" | "neutral";
 type GaugeTone = "ready" | "warning" | "danger" | "neutral";
@@ -645,7 +647,7 @@ export function SystemStorageManagementPanel({
           <PanelHeaderAction
             label={t("common.actions.refresh")}
             type="button"
-            onClick={() => void refreshSummary()}
+            onClick={() => { window.dispatchEvent(new Event(ISCSI_REFRESH_EVENT)); void refreshSummary(); }}
             disabled={loading}
             aria-busy={loading || undefined}
           >
@@ -734,6 +736,12 @@ export function SystemStorageManagementPanel({
                     <StorageHealthCharts summary={summary} locale={locale} t={translate} />
                   </section>
                 )
+              },
+              {
+                id: "iscsi",
+                title: "iSCSI",
+                loading: false,
+                content: <IscsiManagementCard locale={locale} onNotifySuccess={onNotifySuccess} onWorkQueuesChanged={() => { void refreshSummary(); return onWorkQueuesChanged(); }} />
               }
           ]}
         />

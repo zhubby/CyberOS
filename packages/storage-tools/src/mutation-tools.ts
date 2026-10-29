@@ -6,7 +6,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import type { FileOperationProposal, FileOperationRecord, StorageWorkspace } from "@cyberos/shared";
-import { isPathInside, resolveSafeExistingPath, toRootRelative, PathSafetyError } from "./path-safety.js";
+import { assertNoManagedIscsiDescendants, assertNotManagedIscsiPath, isPathInside, resolveSafeExistingPath, toRootRelative, PathSafetyError } from "./path-safety.js";
 
 const MAX_ARCHIVE_ENTRIES = 10_000;
 const MAX_EXTRACTED_BYTES = 2 * 1024 * 1024 * 1024;
@@ -179,6 +179,7 @@ export async function resolveSafeTargetPath(
 
   const root = await resolveSafeExistingPath(rootPath, ".");
   const absolutePath = path.resolve(root.rootRealPath, requestedPath);
+  assertNotManagedIscsiPath(absolutePath);
   if (!isPathInside(root.rootRealPath, absolutePath)) {
     throw new PathSafetyError("Mutation target escapes the storage pool");
   }
@@ -233,6 +234,7 @@ async function applyMove(root: StorageWorkspace, proposal: FileOperationProposal
   }
 
   const source = await resolveSafeExistingPath(root.path, proposal.sourcePath);
+  await assertNoManagedIscsiDescendants(source.realPath, source.rootRealPath);
   const target = await resolveSafeTargetPath(root.path, proposal.targetPath);
   await assertTransferDestinationIsValid(source, target.absolutePath);
   await assertTargetDoesNotExist(target.absolutePath);
@@ -255,6 +257,7 @@ async function applyCopy(root: StorageWorkspace, proposal: FileOperationProposal
   }
 
   const source = await resolveSafeExistingPath(root.path, proposal.sourcePath);
+  await assertNoManagedIscsiDescendants(source.realPath, source.rootRealPath);
   const target = await resolveSafeTargetPath(root.path, proposal.targetPath);
   await assertTransferDestinationIsValid(source, target.absolutePath);
   await assertTargetDoesNotExist(target.absolutePath);
@@ -316,6 +319,7 @@ async function applyTrash(
 
   const source = await resolveSafeExistingPath(root.path, proposal.sourcePath);
   const trash = trashPathFor(trashRootPath, proposal.storagePoolId, source.relativePath, proposal.trashEntryId);
+  await assertNoManagedIscsiDescendants(source.realPath, source.rootRealPath);
   await assertTargetDoesNotExist(trash.absoluteTrashPath);
   await mkdir(path.dirname(trash.absoluteTrashPath), { recursive: true });
   await movePath(source.realPath, trash.absoluteTrashPath);
@@ -612,6 +616,7 @@ async function rollbackMove(
   }
 
   const current = await resolveSafeExistingPath(root.path, operation.targetPath);
+  await assertNoManagedIscsiDescendants(current.realPath, current.rootRealPath);
   const original = await resolveSafeTargetPath(root.path, operation.sourcePath);
   await assertNoSymlinkPathSegments(original.rootRealPath, path.dirname(original.absolutePath));
   await assertTargetDoesNotExist(original.absolutePath);
@@ -641,6 +646,7 @@ async function rollbackByTrashingTarget(
   }
 
   const target = await resolveSafeExistingPath(root.path, targetPath);
+  await assertNoManagedIscsiDescendants(target.realPath, target.rootRealPath);
   const storagePoolId = operation.metadata.storagePoolId;
   if (typeof storagePoolId !== "string" || !storagePoolId) {
     throw new Error(`${operation.operation} rollback is missing storage pool metadata`);

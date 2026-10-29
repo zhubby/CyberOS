@@ -31,7 +31,8 @@ if [ "$1" = "configure" ]; then
   install -d -o root -g root -m 0755 /cyberos/home/share /cyberos/state/hostd
   install -d -o root -g root -m 0700 \
     /cyberos/state/hostd/docker-daemon /cyberos/state/hostd/network-manager /cyberos/state/hostd/bluetooth /cyberos/state/shares \
-    /cyberos/state/tv/control /cyberos/system-backups/permissions
+    /cyberos/state/hostd/iscsi /cyberos/state/tv/control /cyberos/system-backups/permissions
+  install -d -o root -g root -m 0700 /etc/target
 
   chown -R root:root /cyberos/state/hostd /cyberos/system-backups/permissions
   usermod --home /cyberos/home/terminal --shell /bin/bash cyberos

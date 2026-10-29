@@ -1,4 +1,6 @@
 import type {
+  IscsiAction,
+  IscsiSummary,
   AgentCapabilityId as SharedAgentCapabilityId,
   AgentCapabilityPolicyMode as SharedAgentCapabilityPolicyMode,
   PublicAgentCapabilityPolicySettings,
@@ -1171,6 +1173,18 @@ export async function getSystemStorage(): Promise<StorageSummary> {
   await ensureOk(response);
   const body = (await response.json()) as { storage: StorageSummary };
   return body.storage;
+}
+
+export async function getIscsiSummary(signal?: AbortSignal): Promise<IscsiSummary> {
+  const response = await fetch("/api/storage/iscsi", signal ? { signal } : undefined);
+  await ensureOk(response);
+  return ((await response.json()) as { summary: IscsiSummary }).summary;
+}
+
+export async function applyIscsiAction(input: IscsiAction): Promise<IscsiSummary> {
+  const response = await fetch("/api/storage/iscsi/actions", jsonRequest("POST", input));
+  await ensureOk(response);
+  return ((await response.json()) as { summary: IscsiSummary }).summary;
 }
 
 export async function getDockerSummary(): Promise<DockerSummary> {

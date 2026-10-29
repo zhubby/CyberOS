@@ -1,0 +1,343 @@
+.iscsi-card {
+  height: 100%;
+  min-height: 0;
+}
+
+.iscsi-card h3,
+.iscsi-retained h4,
+.iscsi-subheading,
+.iscsi-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iscsi-actions {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.iscsi-card .management-section-header {
+  flex-wrap: wrap;
+}
+
+.iscsi-card-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.iscsi-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.iscsi-target-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.iscsi-target-row > svg {
+  color: var(--muted);
+}
+
+.iscsi-target-identity,
+.iscsi-target-state,
+.iscsi-image-row > div {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  min-width: 0;
+  gap: 5px;
+}
+
+.iscsi-target-identity code,
+.iscsi-target-identity small,
+.iscsi-target-state small,
+.iscsi-image-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.iscsi-target-identity code,
+.iscsi-connection code,
+.iscsi-session-list code {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.iscsi-target-identity .storage-pool-name-button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.iscsi-retained {
+  padding: 12px 14px;
+}
+
+.iscsi-retained h4,
+.iscsi-detail h4,
+.iscsi-form > h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.iscsi-image-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.iscsi-image-row > div {
+  flex: 1 1 160px;
+  overflow-wrap: anywhere;
+}
+
+.iscsi-image-row strong {
+  font-size: 13px;
+}
+
+.iscsi-card .management-empty,
+.iscsi-dialog .management-empty {
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.iscsi-backdrop {
+  z-index: 90;
+}
+
+.management-modal.iscsi-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: calc(100dvh - 36px);
+  border-radius: 0;
+  border-top: 3px solid var(--accent);
+}
+
+.iscsi-dialog > header {
+  flex-shrink: 0;
+  background: var(--channel-bg);
+}
+
+.iscsi-dialog > header h3 {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+
+.iscsi-dialog-body {
+  min-height: 0;
+  padding: 14px;
+  overflow: auto;
+}
+
+.iscsi-detail,
+.iscsi-form {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.iscsi-form fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.iscsi-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
+.iscsi-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.iscsi-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.iscsi-field input,
+.iscsi-field select,
+.iscsi-field textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--input-bg);
+  font-size: 13px;
+}
+
+.iscsi-field textarea {
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.iscsi-field small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.iscsi-form footer {
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.iscsi-error,
+.iscsi-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 14px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.iscsi-error {
+  color: var(--danger-text);
+  border-left: 2px solid var(--danger-text);
+}
+
+.iscsi-error > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.iscsi-error > svg,
+.iscsi-warning > svg {
+  flex-shrink: 0;
+}
+
+.iscsi-warning {
+  color: var(--warning-text);
+  border-left: 2px solid var(--warning-text);
+}
+
+.iscsi-connection {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
+}
+
+.iscsi-connection > div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.iscsi-connection dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.iscsi-connection dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.iscsi-subheading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 0 !important;
+  padding-bottom: 10px !important;
+}
+
+.iscsi-subheading h4 {
+  margin: 0;
+}
+
+.iscsi-session-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.iscsi-session-list li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 0;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 12px;
+}
+
+.iscsi-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--danger-text);
+  font-size: 12px;
+}
+
+@media (max-width: 620px) {
+  .iscsi-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .iscsi-target-row {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .iscsi-target-state {
+    grid-column: 2;
+  }
+
+  .iscsi-connection > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .management-modal-backdrop.iscsi-backdrop {
+    padding: 10px;
+  }
+
+  .management-modal.iscsi-dialog {
+    max-height: calc(100dvh - 20px);
+  }
+}

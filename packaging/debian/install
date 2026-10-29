@@ -41,6 +41,8 @@ packaging/scripts/cyberos-deploy usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-mcp usr/lib/cyberos/scripts/
 packaging/nginx/cyberos.conf usr/share/cyberos/nginx/
 packaging/etc/samba.conf usr/share/cyberos/
+packaging/helpers/iscsi.py usr/lib/cyberos/helpers/
+packaging/modules-load.d/cyberos-iscsi.conf usr/lib/modules-load.d/
 packaging/systemd/*.service lib/systemd/system/
 packaging/systemd/*.timer lib/systemd/system/
 packaging/systemd/*.target lib/systemd/system/

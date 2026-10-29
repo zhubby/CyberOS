@@ -5,6 +5,33 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 describe("native packaging artifacts", () => {
+  it("orders CyberOS recovery after Debian targetctl restore without starting that service", async () => {
+    const hostd = await readPackagingFile("systemd", "cyberos-hostd.service");
+    expect(hostd).toMatch(/^After=.*\brtslib-fb-targetctl\.service\b/m);
+    expect(hostd).not.toMatch(/^(?:Wants|Requires)=.*\brtslib-fb-targetctl\.service\b/m);
+  });
+
+  it("ships an isolated LIO helper and prepares configfs without granting hostd module loading", async () => {
+    const control = await readPackagingFile("debian", "control");
+    const install = await readPackagingFile("debian", "install");
+    const postinst = await readPackagingFile("debian", "postinst");
+    const hostd = await readPackagingFile("systemd", "cyberos-hostd.service");
+    expect(control).toContain("python3-rtslib-fb");
+    expect(control).toContain("python3");
+    expect(install).toContain("packaging/helpers/iscsi.py usr/lib/cyberos/helpers/");
+    expect(install).toContain("packaging/modules-load.d/cyberos-iscsi.conf usr/lib/modules-load.d/");
+    expect(postinst).toContain("/cyberos/state/hostd/iscsi");
+    expect(hostd).toContain("sys-kernel-config.mount");
+    expect(hostd).toContain("ReadWritePaths=-/sys/kernel/config");
+    expect(hostd).toContain("CAP_LINUX_IMMUTABLE");
+    expect(hostd).not.toContain("CAP_SYS_MODULE");
+    const prepare = await readPackagingFile("systemd", "cyberos-iscsi-prepare.service");
+    expect(prepare).toContain("CapabilityBoundingSet=CAP_SYS_MODULE");
+    expect(prepare).toContain("/usr/lib/systemd/systemd-modules-load /usr/lib/modules-load.d/cyberos-iscsi.conf");
+    expect(hostd).toContain("cyberos-iscsi-prepare.service");
+    const modules = await readPackagingFile("modules-load.d", "cyberos-iscsi.conf");
+    expect(modules.split("\n")).toEqual(expect.arrayContaining(["configfs", "target_core_mod", "target_core_file", "iscsi_target_mod"]));
+  });
   it("builds monitor and alerter as independent Rust applications", async () => {
     const workspace = await readFile(path.join(repoRoot, "Cargo.toml"), "utf8");
     const monitor = await readFile(path.join(repoRoot, "crates/monitor/Cargo.toml"), "utf8");

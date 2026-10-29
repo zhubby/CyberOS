@@ -716,6 +716,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejects_privileged_share_accounts_before_host_changes() {
+        let temp = TempDir::new().unwrap();
+        for username in ["root", "cyberos"] {
+            let mut request = fixture(&temp.path().join("data"));
+            request.settings.account.username = username.to_owned();
+            let runner = FakeRunner::default();
+            let error =
+                apply_with_options(&request, &runner, &test_options(&temp), &request.data_root)
+                    .await
+                    .unwrap_err();
+            assert!(error.message.contains("privileged system identity"));
+            assert!(runner.calls.lock().unwrap().is_empty());
+        }
+        if let Some(identity) = nix::unistd::User::from_uid(nix::unistd::Uid::from_raw(0)).unwrap()
+        {
+            let mut request = fixture(&temp.path().join("data"));
+            request.settings.account.username = identity.name;
+            assert!(validate_request(&request).is_err());
+        }
+    }
+
+    #[tokio::test]
     async fn rejects_writable_nfs_without_root_squashing() {
         let temp = TempDir::new().unwrap();
         fs::create_dir_all(temp.path().join("data/pool-1/media"))
@@ -731,6 +753,39 @@ mod tests {
                 .is_err()
         );
         assert!(runner.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn rejects_read_only_nfs_without_root_squashing() {
+        let temp = TempDir::new().unwrap();
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
+            .await
+            .unwrap();
+        let mut request = fixture(&temp.path().join("data"));
+        request.settings.shares[0].protocols.nfs.root_squash = false;
+        let runner = FakeRunner::default();
+        assert!(
+            apply_with_options(&request, &runner, &test_options(&temp), &request.data_root)
+                .await
+                .is_err()
+        );
+        assert!(runner.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn rejects_sharing_managed_iscsi_directories_or_aliases() {
+        let temp = TempDir::new().unwrap();
+        let data_root = temp.path().join("data");
+        let pool = data_root.join("pool-1");
+        fs::create_dir_all(pool.join(".cyberos/iscsi"))
+            .await
+            .unwrap();
+        std::os::unix::fs::symlink(pool.join(".cyberos/iscsi"), pool.join("alias")).unwrap();
+        for candidate in [".cyberos", ".cyberos/iscsi", "alias"] {
+            let mut request = fixture(&data_root);
+            request.settings.shares[0].path = candidate.into();
+            assert!(resolve_shares(&request.settings, &data_root).await.is_err());
+        }
     }
 
     #[tokio::test]

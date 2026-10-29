@@ -46,6 +46,24 @@ export type HostdEthernetUpdateInput = { config: HostdEthernetConfig, expectedRe
 
 export type HostdFtpConfig = { enabled: boolean, readOnly: boolean, allowGuest: boolean, port: number, passivePortStart: number, passivePortEnd: number, };
 
+export type HostdIscsiChapInput = { enabled: boolean, username: string, password?: string, };
+
+export type HostdIscsiImage = { id: string, name: string, storagePoolId: string, sizeBytes: number, attachedTargetId: string | null, };
+
+export type HostdIscsiLun = { imageId: string, lun: number, };
+
+export type HostdIscsiPool = { id: string, name: string, availableBytes: number | null, ready: boolean, };
+
+export type HostdIscsiRequest = { "action": "read", } | { "action": "create_target", confirmed: boolean, expectedRevision: string, name: string, address: string, port: number, initiators: Array<string>, chap: HostdIscsiChapInput, enabled: boolean, } | { "action": "update_target", confirmed: boolean, expectedRevision: string, targetId: string, name: string, address: string, port: number, initiators: Array<string>, chap: HostdIscsiChapInput, } | { "action": "set_target_enabled", confirmed: boolean, expectedRevision: string, targetId: string, enabled: boolean, } | { "action": "delete_target", confirmed: boolean, expectedRevision: string, targetId: string, destroyImages: boolean, confirmation?: string, } | { "action": "create_lun", confirmed: boolean, expectedRevision: string, targetId: string, name: string, storagePoolId: string, sizeBytes: number, } | { "action": "attach_lun", confirmed: boolean, expectedRevision: string, targetId: string, imageId: string, } | { "action": "detach_lun", confirmed: boolean, expectedRevision: string, targetId: string, imageId: string, destroyImage: boolean, confirmation?: string, } | { "action": "destroy_image", confirmed: boolean, expectedRevision: string, imageId: string, confirmation: string, };
+
+export type HostdIscsiSession = { initiator: string, address: string | null, };
+
+export type HostdIscsiSummary = { collectedAt: string, revision: string, available: boolean, error: string | null, listenAddresses: Array<string>, pools: Array<HostdIscsiPool>, targets: Array<HostdIscsiTarget>, images: Array<HostdIscsiImage>, };
+
+export type HostdIscsiTarget = { id: string, name: string, iqn: string, address: string, port: number, enabled: boolean, chapEnabled: boolean, chapUsername: string | null, credentialConfigured: boolean, initiators: Array<string>, status: HostdIscsiTargetStatus, error: string | null, luns: Array<HostdIscsiLun>, sessions: Array<HostdIscsiSession>, };
+
+export type HostdIscsiTargetStatus = "running" | "disabled" | "degraded";
+
 export type HostdNetworkAccessPoint = { active: boolean, ssid: string, bssid: string, channel: number, frequencyMHz: number, signal: number, band: string, security: string, savedProfileId: string | null, };
 
 export type HostdNetworkConfirmedDeviceInput = { device: string, confirmed: boolean, };
@@ -80,7 +98,7 @@ export type HostdNetworkScanResult = { device: string, scannedAt: string, access
 
 export type HostdNfsConfig = { enabled: boolean, readOnly: boolean, allowedCidrs: Array<string>, rootSquash: boolean, };
 
-export type HostdOperation = "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "system.power" | "system.ops" | "system.tv";
+export type HostdOperation = "shares.apply" | "iscsi.manager" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "system.power" | "system.ops" | "system.tv";
 
 export type HostdOpsRequest = { task: HostdOpsTask, confirmed: boolean | null, };
 
@@ -94,9 +112,9 @@ export type HostdPowerRequest = { action: HostdPowerAction, confirmed: boolean, 
 
 export type HostdPowerResult = { action: HostdPowerAction, accepted: true, };
 
-export type HostdRequestContract = { "operation": "shares.apply", "payload": HostdShareApplyRequest } | { "operation": "storage.command", "payload": HostdStorageCommand } | { "operation": "storage.operation", "payload": HostdStorageOperation } | { "operation": "docker.daemon", "payload": HostdDockerDaemonRequest } | { "operation": "network.manager", "payload": HostdNetworkManagerRequest } | { "operation": "bluetooth.manager", "payload": HostdBluetoothManagerRequest } | { "operation": "system.power", "payload": HostdPowerRequest } | { "operation": "system.ops", "payload": HostdOpsRequest } | { "operation": "system.tv", "payload": HostdTvRequest };
+export type HostdRequestContract = { "operation": "shares.apply", "payload": HostdShareApplyRequest } | { "operation": "iscsi.manager", "payload": HostdIscsiRequest } | { "operation": "storage.command", "payload": HostdStorageCommand } | { "operation": "storage.operation", "payload": HostdStorageOperation } | { "operation": "docker.daemon", "payload": HostdDockerDaemonRequest } | { "operation": "network.manager", "payload": HostdNetworkManagerRequest } | { "operation": "bluetooth.manager", "payload": HostdBluetoothManagerRequest } | { "operation": "system.power", "payload": HostdPowerRequest } | { "operation": "system.ops", "payload": HostdOpsRequest } | { "operation": "system.tv", "payload": HostdTvRequest };
 
-export type HostdResultContract = { "operation": "shares.apply", "result": HostdShareApplyResult } | { "operation": "storage.command", "result": HostdStorageCommandResult } | { "operation": "storage.operation", "result": HostdStorageOperationResult } | { "operation": "docker.daemon", "result": HostdDockerDaemonResult } | { "operation": "network.manager", "result": HostdNetworkManagerResult } | { "operation": "bluetooth.manager", "result": HostdBluetoothManagerResult } | { "operation": "system.power", "result": HostdPowerResult } | { "operation": "system.ops", "result": HostdOpsResult } | { "operation": "system.tv", "result": HostdTvResult };
+export type HostdResultContract = { "operation": "shares.apply", "result": HostdShareApplyResult } | { "operation": "iscsi.manager", "result": HostdIscsiSummary } | { "operation": "storage.command", "result": HostdStorageCommandResult } | { "operation": "storage.operation", "result": HostdStorageOperationResult } | { "operation": "docker.daemon", "result": HostdDockerDaemonResult } | { "operation": "network.manager", "result": HostdNetworkManagerResult } | { "operation": "bluetooth.manager", "result": HostdBluetoothManagerResult } | { "operation": "system.power", "result": HostdPowerResult } | { "operation": "system.ops", "result": HostdOpsResult } | { "operation": "system.tv", "result": HostdTvResult };
 
 export type HostdShareAccount = { username: string, password: string | null, };
 

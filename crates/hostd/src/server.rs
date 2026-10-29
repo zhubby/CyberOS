@@ -82,6 +82,9 @@ impl HostdServer {
         let mut network_recovery = interval(Duration::from_secs(1));
         network_recovery.set_missed_tick_behavior(MissedTickBehavior::Skip);
         network_recovery.tick().await;
+        let mut iscsi_reconciliation = interval(Duration::from_secs(30));
+        iscsi_reconciliation.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut iscsi_task: Option<tokio::task::JoinHandle<()>> = None;
         let mut host_access_reconciliation = interval(Duration::from_secs(30));
         host_access_reconciliation.set_missed_tick_behavior(MissedTickBehavior::Skip);
         host_access_reconciliation.tick().await;
@@ -108,6 +111,17 @@ impl HostdServer {
                         tracing::error!(code = ?error.code, message = %error.message, "could not recover expired Ethernet transaction");
                     }
                 }
+                _ = iscsi_reconciliation.tick() => {
+                    if iscsi_task.as_ref().is_none_or(|task| task.is_finished()) {
+                        let state = Arc::clone(&self.state);
+                        iscsi_task = Some(tokio::spawn(async move {
+                            let _guard = state.storage_lock.lock().await;
+                            if let Err(error) = crate::iscsi::reconcile(state.runner.as_ref(), &state.data_root).await {
+                                tracing::warn!(code = ?error.code, "iSCSI recovery is unavailable");
+                            }
+                        }));
+                    }
+                }
                 _ = host_access_reconciliation.tick() => {
                     crate::host_access::reconcile_capacity_anchors(&self.state.data_root).await;
                 }
@@ -116,6 +130,9 @@ impl HostdServer {
                     break;
                 }
             }
+        }
+        if let Some(task) = iscsi_task {
+            task.abort();
         }
         drop(listener);
         while let Some(result) = connections.join_next().await {
@@ -305,6 +322,12 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
             crate::shares::apply(request, state.runner.as_ref(), &state.data_root)
                 .await
                 .map(HostdResult::SharesApply)
+        }
+        HostdRequest::IscsiManager(request) => {
+            let _guard = state.storage_lock.lock().await;
+            crate::iscsi::handle(request, state.runner.as_ref(), &state.data_root)
+                .await
+                .map(HostdResult::IscsiManager)
         }
         HostdRequest::StorageCommand(request) => {
             crate::storage::command(request, state.runner.as_ref())

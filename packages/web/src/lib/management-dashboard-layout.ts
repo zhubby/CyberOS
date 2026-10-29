@@ -87,7 +87,8 @@ const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly Manag
     { id: "metric-capacity", size: "metric" },
     { id: "pools", size: "wide" },
     { id: "disks", size: "half" },
-    { id: "health", size: "full" }
+    { id: "health", size: "full" },
+    { id: "iscsi", size: "full" }
   ],
   shares: [
     { id: "overview", size: "overview" },
@@ -250,6 +251,17 @@ function mergeDashboardLayouts(
 }
 
 function mergeBreakpointLayout(stored: Layout | undefined, defaults: Layout, cols: number): Layout {
+  // iSCSI is an additive Storage widget. Keep existing arrangements intact
+  // when upgrading the previous complete widget set.
+  if (Array.isArray(stored) && defaults.some((item) => item.i === "iscsi") && stored.length === defaults.length - 1) {
+    const previousIds = new Set(stored.filter(isValidLayoutItem).map((item) => item.i));
+    const previousDefaults = defaults.filter((item) => item.i !== "iscsi");
+    if (previousIds.size === previousDefaults.length && previousDefaults.every((item) => previousIds.has(item.i))) {
+      const existing = previousDefaults.map((fallback) => sanitizeLayoutItem(stored.find((item) => item.i === fallback.i), fallback, cols));
+      const iscsi = defaults.find((item) => item.i === "iscsi")!;
+      return [...existing, { ...iscsi, x: 0, y: Math.max(...existing.map((item) => item.y + item.h)) }];
+    }
+  }
   if (!Array.isArray(stored) || stored.length !== defaults.length) {
     return defaults;
   }

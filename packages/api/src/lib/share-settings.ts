@@ -170,6 +170,9 @@ function normalizeProtocols(
   if (config.nfs.enabled && config.nfs.allowedCidrs.length === 0) {
     throw new Error(`NFS share ${id} requires at least one allowed CIDR`);
   }
+  if (config.nfs.enabled && !config.nfs.rootSquash) {
+    throw new Error("NFS shares require root squashing to protect managed storage");
+  }
   for (const cidr of config.nfs.allowedCidrs) {
     validateCidr(cidr);
   }
@@ -242,6 +245,9 @@ function validateCidr(value: string): void {
 function validateUsername(username: string): void {
   if (!SHARE_USERNAME_PATTERN.test(username)) {
     throw new Error("Share account username must be a lowercase system-safe name");
+  }
+  if (username === "root" || username === "cyberos") {
+    throw new Error("Share account must not use a privileged system identity");
   }
 }
 

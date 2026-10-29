@@ -76,6 +76,10 @@ describe("backup workflow", () => {
     const result = await runBackup({ db, config: cfg, restic });
     expect(result).toMatchObject({ status: "completed", snapshotIds: ["abc123"], verified: true });
     expect(calls.some((args) => args[0] === "backup")).toBe(true);
+    const dataBackup = calls.find((args) => args[0] === "backup" && args.at(-1) === root)!;
+    expect(dataBackup).toContain("--exclude");
+    expect(dataBackup).toContain("*/.cyberos/iscsi");
+    expect(dataBackup).not.toContain("*/.cyberos");
     expect(manifestVersion).toBe(2);
   });
 

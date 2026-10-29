@@ -16,6 +16,7 @@ import { registerShareRoutes } from "./shares.js";
 import { registerSystemRoutes } from "./system.js";
 import { registerSystemOperationsRoutes } from "./system-operations.js";
 import { registerStorageRoutes } from "./storage.js";
+import { registerIscsiRoutes } from "./iscsi.js";
 import { registerTerminalRoutes } from "./terminal.js";
 import { registerVmRoutes } from "./vms.js";
 import { registerVodPlayerRoutes } from "./vod-player.js";
@@ -39,6 +40,7 @@ export function registerApiRoutes(server: FastifyInstance, context: ApiRouteCont
   registerBluetoothTransferRoutes(server, context);
   registerSystemOperationsRoutes(server, context);
   registerStorageRoutes(server, context);
+  registerIscsiRoutes(server, context);
   registerSessionRoutes(server, context);
   registerJobRoutes(server, context);
   registerFileRoutes(server, context);

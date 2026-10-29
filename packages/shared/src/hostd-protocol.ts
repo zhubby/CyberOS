@@ -23,6 +23,7 @@ import type {
   SystemWifiSecurity,
   BluetoothStatus
 } from "./types.js";
+import { parseIscsiSummary, type IscsiSummary } from "./iscsi.js";
 
 export type { HostdOperation, HostdRequestContract, HostdResultContract } from "./generated/hostd.js";
 
@@ -79,6 +80,7 @@ export type HostdResult<Operation extends HostdOperation, Request extends HostdR
   Operation extends "shares.apply" ? HostdShareApplyResult
     : Operation extends "storage.command" ? HostdStorageCommandResult
       : Operation extends "storage.operation" ? HostdStorageResult<Request>
+        : Operation extends "iscsi.manager" ? IscsiSummary
             : Operation extends "docker.daemon" ? HostdDockerResult<Request>
               : Operation extends "network.manager" ? HostdNetworkResult<Request>
                 : Operation extends "bluetooth.manager" ? HostdBluetoothManagerResult
@@ -101,6 +103,9 @@ export function parseHostdResult<
       break;
     case "storage.operation":
       parsed = parseStorageOperationResult(request, value);
+      break;
+    case "iscsi.manager":
+      parsed = parseIscsiSummary(value);
       break;
     case "docker.daemon":
       parsed = parseDockerResult(request, value);

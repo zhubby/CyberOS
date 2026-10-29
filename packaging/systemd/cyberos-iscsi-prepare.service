@@ -1,0 +1,19 @@
+[Unit]
+Description=Prepare CyberOS iSCSI kernel support
+After=systemd-modules-load.service
+Before=cyberos-hostd.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+# Unsupported kernels leave iSCSI unavailable while the NAS remains usable.
+ExecStart=-/usr/lib/systemd/systemd-modules-load /usr/lib/modules-load.d/cyberos-iscsi.conf
+RemainAfterExit=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=CAP_SYS_MODULE
+MemoryMax=64M
+TasksMax=16

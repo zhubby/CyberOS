@@ -38,6 +38,11 @@ function key(grant) {
   return `${grant.path}\0${grant.principal}`;
 }
 
+function managedMetadataPath(value) {
+  const segments = path.resolve(value).split(path.sep);
+  return segments.includes(".cyberos");
+}
+
 function validate(grants) {
   if (!Array.isArray(grants)) throw new Error("Invalid ACL grant list");
   for (const grant of grants) {
@@ -47,6 +52,7 @@ function validate(grants) {
       || !["tree", "parent"].includes(grant.scope)) {
       throw new Error("Invalid ACL grant");
     }
+    if (managedMetadataPath(grant.path)) throw new Error("Managed storage metadata cannot be shared");
   }
 }
 
@@ -70,14 +76,16 @@ function available(grant, desired) {
 }
 
 function directories(target, callback) {
-  run("find", ["-P", target, "-xdev", "-type", "d", "-exec", "setfacl", ...callback, "{}", "+"]);
+  run("find", ["-P", target, "-xdev", "-path", "*/.cyberos", "-prune", "-o",
+    "-type", "d", "-exec", "setfacl", ...callback, "{}", "+"]);
 }
 
 function change(grant, remove = false) {
   const entry = `u:${grant.principal}`;
   const args = ["-n", remove ? "-x" : "-m", remove ? entry : `${entry}:${grant.access === "write" ? "rwX" : grant.access === "read" ? "rX" : "--x"}`];
   if (grant.scope === "tree") {
-    run("setfacl", ["-R", "-P", ...args, "--", grant.path]);
+    run("find", ["-P", grant.path, "-xdev", "-path", "*/.cyberos", "-prune", "-o",
+      "(", "-type", "d", "-o", "-type", "f", ")", "-exec", "setfacl", ...args, "--", "{}", "+"]);
     const defaultEntry = `d:${entry}`;
     const defaultMode = grant.access === "write" ? "rwx" : grant.access === "read" ? "r-x" : "--x";
     directories(grant.path, ["-n", remove ? "-x" : "-m", remove ? defaultEntry : `${defaultEntry}:${defaultMode}`, "--"]);
@@ -107,7 +115,7 @@ async function maskUpdates(snapshot, previous, desired) {
   const updates = [];
   const managed = new Set(["cyberos", ...previous.map((grant) => grant.principal), ...desired.map((grant) => grant.principal)]);
   const check = () => {
-    if (!currentPath) return;
+    if (!currentPath || managedMetadataPath(currentPath)) return;
     const metadata = lstatSync(currentPath);
     const isDirectory = metadata.isDirectory();
     const isExecutable = (metadata.mode & 0o111) !== 0;
@@ -172,7 +180,12 @@ async function prepare() {
   const snapshots = new Map();
   for (const [index, grant] of affected.entries()) {
     const snapshot = path.join(transaction, `acl-${index}.dump`);
-    run("getfacl", ["--absolute-names", ...(grant.scope === "tree" ? ["-R", "-P"] : []), "--", grant.path], snapshot);
+    if (grant.scope === "tree") {
+      run("find", ["-P", grant.path, "-xdev", "-path", "*/.cyberos", "-prune", "-o",
+        "(", "-type", "d", "-o", "-type", "f", ")", "-exec", "getfacl", "--absolute-names", "--", "{}", "+"], snapshot);
+    } else {
+      run("getfacl", ["--absolute-names", "--", grant.path], snapshot);
+    }
     snapshots.set(grant.path, snapshot);
   }
   writeFileSync(path.join(transaction, "previous.json"), JSON.stringify(previous), { mode: 0o600 });

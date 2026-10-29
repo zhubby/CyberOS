@@ -7,7 +7,7 @@ use crate::power::{PowerRequest, PowerResult};
 use crate::shares::{ShareApplyRequest, ShareApplyResult};
 use crate::storage::{StorageCommand, StorageCommandResult, StorageOperation, StorageResult};
 use crate::tv::{TvRequest, TvResult};
-use crate::{bluetooth, docker_daemon, network_manager};
+use crate::{bluetooth, docker_daemon, iscsi, network_manager};
 
 pub const PROTOCOL_VERSION: u8 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -27,6 +27,8 @@ pub struct RequestEnvelope {
 pub(crate) enum HostdOperation {
     #[serde(rename = "shares.apply")]
     SharesApply,
+    #[serde(rename = "iscsi.manager")]
+    IscsiManager,
     #[serde(rename = "storage.command")]
     StorageCommand,
     #[serde(rename = "storage.operation")]
@@ -52,6 +54,8 @@ pub(crate) enum HostdOperation {
 pub(crate) enum HostdRequest {
     #[serde(rename = "shares.apply")]
     SharesApply(ShareApplyRequest),
+    #[serde(rename = "iscsi.manager")]
+    IscsiManager(iscsi::IscsiRequest),
     #[serde(rename = "storage.command")]
     StorageCommand(StorageCommand),
     #[serde(rename = "storage.operation")]
@@ -74,6 +78,7 @@ pub(crate) enum HostdRequest {
 #[serde(untagged)]
 pub(crate) enum HostdResult {
     SharesApply(ShareApplyResult),
+    IscsiManager(iscsi::IscsiSummary),
     StorageCommand(StorageCommandResult),
     StorageOperation(StorageResult),
     DockerDaemon(docker_daemon::DockerResult),
@@ -156,6 +161,7 @@ impl HostdOperation {
     fn invalid_payload_message(self) -> &'static str {
         match self {
             Self::SharesApply => "Invalid shares.apply payload",
+            Self::IscsiManager => "Invalid iSCSI manager request",
             Self::StorageCommand => "Invalid storage command request",
             Self::StorageOperation => "Invalid storage operation request",
             Self::DockerDaemon => "Invalid Docker daemon request",
@@ -219,6 +225,8 @@ mod tests {
     enum HostdResultContract {
         #[serde(rename = "shares.apply")]
         SharesApply(ShareApplyResult),
+        #[serde(rename = "iscsi.manager")]
+        IscsiManager(iscsi::IscsiSummary),
         #[serde(rename = "storage.command")]
         StorageCommand(StorageCommandResult),
         #[serde(rename = "storage.operation")]
@@ -247,6 +255,7 @@ mod tests {
         ErrorCode::export_all(&config).unwrap();
         crate::shares::export_protocol_bindings(&config);
         crate::storage::export_protocol_bindings(&config);
+        crate::iscsi::export_protocol_bindings(&config);
         crate::docker_daemon::export_protocol_bindings(&config);
         crate::network_manager::export_protocol_bindings(&config);
         crate::bluetooth::export_protocol_bindings(&config);

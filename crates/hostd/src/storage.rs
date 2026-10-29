@@ -294,6 +294,9 @@ async fn delete_pool(
     else {
         unreachable!()
     };
+    // The server holds storage_lock for both pool deletion and iSCSI mutations.
+    // Retained images still own space in this pool and must be destroyed explicitly.
+    crate::iscsi::assert_pool_unused(&options.mount_root, name).await?;
     assert_array_members(md_device, devices, runner).await?;
     let previous_fstab = remove_entry(mountpoint, &options.fstab_path).await?;
     let mut array_stopped = false;
@@ -807,6 +810,48 @@ mod tests {
         assert!(calls.iter().any(|(command, args)| {
             command == "mdadm" && args.starts_with(&["--stop".to_owned()])
         }));
+    }
+
+    #[tokio::test]
+    async fn refuses_pool_deletion_with_retained_iscsi_images_before_any_host_change() {
+        let temp = TempDir::new().unwrap();
+        let mut options = options(&temp);
+        options.mount_root = fs::canonicalize(temp.path()).await.unwrap().join("data");
+        let state_dir = options
+            .mount_root
+            .parent()
+            .unwrap()
+            .join("state/hostd/iscsi");
+        fs::create_dir_all(&state_dir).await.unwrap();
+        fs::set_permissions(&state_dir, std::fs::Permissions::from_mode(0o700))
+            .await
+            .unwrap();
+        let registry = serde_json::json!({
+            "version": 1, "targets": [],
+            "images": [{
+                "id": "27f9f605-a5e5-4421-84f1-8b41d8973710", "name": "retained",
+                "storagePoolId": "data", "sizeBytes": 1073741824, "attachedTargetId": null
+            }]
+        });
+        fs::write(state_dir.join("state.json"), registry.to_string())
+            .await
+            .unwrap();
+        fs::set_permissions(
+            state_dir.join("state.json"),
+            std::fs::Permissions::from_mode(0o600),
+        )
+        .await
+        .unwrap();
+        let payload = serde_json::json!({
+            "action": "delete_pool", "name": "data", "mdDevice": "/dev/md/data",
+            "devices": ["/dev/sda", "/dev/sdb"], "mountpoint": "/cyberos/data/data", "risk": "high"
+        });
+        let runner = FakeRunner::default();
+        let error = operation_with_options(payload, &runner, &options)
+            .await
+            .unwrap_err();
+        assert_eq!(error.status, 409);
+        assert!(runner.calls.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
