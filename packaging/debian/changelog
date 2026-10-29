@@ -1,3 +1,9 @@
+cyberos (2.0.8) unstable; urgency=medium
+
+  * Ship BitTorrent and protected iSCSI management with verified Raspberry Pi LIO kernel modules.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Thu, 29 Oct 2026 14:33:16 +0000
+
 cyberos (2.0.7) unstable; urgency=medium
 
   * Add iSCSI targets and LUN management with protected storage, plus BitTorrent downloads and seeding.
