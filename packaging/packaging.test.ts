@@ -527,6 +527,7 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toMatch(/- name: Verify CM5 services and build metadata\n\s+timeout-minutes: 20/u);
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
     expect(deployWorkflow).toContain("prepare_incoming()");
+    expect(deployWorkflow).toContain("getfacl -p \"$incoming_dir\"");
     expect(deployWorkflow).toContain('sudo -n "$deploy_helper" --prepare-incoming');
     expect(deployWorkflow).toContain("Legacy deployment helper requires a regular staged release manifest");
     expect(deployWorkflow).toContain("refusing to bootstrap unrelated staged release");

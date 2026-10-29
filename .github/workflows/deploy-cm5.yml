@@ -395,6 +395,10 @@ jobs:
           deploy_helper=/usr/local/sbin/cyberos-deploy
           incoming_dir=/cyberos/deploy/incoming
 
+          id >&2
+          stat -c '%A %a %U:%G %n' /cyberos /cyberos/deploy "$incoming_dir" >&2
+          getfacl -p "$incoming_dir" >&2 2>/dev/null || true
+
           if grep -Fq -- '  --prepare-incoming)' "$deploy_helper"; then
             sudo -n "$deploy_helper" --prepare-incoming
             exit 0
