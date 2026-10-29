@@ -55,3 +55,11 @@ if [ "$1" = "configure" ]; then
 fi
 
 #DEBHELPER#
+
+if [ "$1" = "configure" ]; then
+  rm -f /run/systemd/system/rtslib-fb-targetctl.service.d/cyberos-install.conf
+  rmdir /run/systemd/system/rtslib-fb-targetctl.service.d 2>/dev/null || true
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+  fi
+fi

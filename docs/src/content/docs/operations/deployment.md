@@ -136,6 +136,8 @@ sudo journalctl -u cyberos-hostd.service -u cyberos-terminald.service -n 100 --n
 
 完整的一次性配置、tag 发布步骤、manifest 校验链、幂等重试和故障处理见[GitHub Actions 发布与 CM5 自动部署](/docs/operations/github-actions-release/)。自动部署只接受稳定的 `vX.Y.Z` tag；不要使用 `latest`、移动已发布 tag 或绕过部署程序的 checksum、版本与数据库回滚边界。
 
+若依赖配置失败，CyberOS 可能已解包但尚未完成 Debian 配置。部署流程只允许对版本与随包 release 构建信息一致、数据库校验通过的 `unpacked` / `half-configured` 安装重试；移除中、损坏或未知安装仍拒绝部署。`verify_only` 始终要求包已完整配置，不会把服务能够响应当作安装成功。
+
 构建前先运行 `npm run version:check`。构建过程会在源码复制到 Debian staging 之前冻结 commit、tag/branch、构建时间、来源和 dirty 状态，并将 `/usr/lib/cyberos/build-info.json` 随包安装。运行中的 API 通过 `/api/system/build-info` 暴露可公开的追溯字段，Web 设置的“版本”分类展示同一份信息。
 
 发布 tag 必须严格匹配根 `package.json`、所有 workspace、docs、Cargo crates 和 Debian changelog 中的统一 SemVer。使用 `npm run release -- patch|minor|major --note "..."` 只准备版本差异；commit、tag、push 和发布仍由维护者单独执行。

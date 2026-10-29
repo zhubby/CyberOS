@@ -50,4 +50,5 @@ packaging/systemd/*.target lib/systemd/system/
 packaging/systemd/smbd.service.d/cyberos.conf lib/systemd/system/smbd.service.d/
 packaging/systemd/vsftpd.service.d/cyberos.conf lib/systemd/system/vsftpd.service.d/
 packaging/systemd/minidlna.service.d/cyberos.conf lib/systemd/system/minidlna.service.d/
+packaging/systemd/rtslib-fb-targetctl.service.d/cyberos.conf lib/systemd/system/rtslib-fb-targetctl.service.d/
 packaging/tmpfiles.d/cyberos.conf usr/lib/tmpfiles.d/

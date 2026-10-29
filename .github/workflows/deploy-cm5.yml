@@ -302,6 +302,8 @@ jobs:
           ping: ${{ vars.CM5_HOST }}
 
       - name: Capture CM5 upgrade baseline
+        env:
+          VERIFY_ONLY: ${{ inputs.verify_only }}
         run: |
           set -euo pipefail
 
@@ -314,8 +316,12 @@ jobs:
             -o StrictHostKeyChecking=accept-new
           )
           mapfile -t baseline < <(
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s <<'REMOTE'
+            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+              "${VERIFY_ONLY:-false}" "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" <<'REMOTE'
           set -eu
+          verify_only=$1
+          target_version=$2
+          target_commit=$3
           [ -x /usr/local/bin/node ]
           runtime_node_version="$(/usr/local/bin/node --version)"
           case "$runtime_node_version" in
@@ -323,13 +329,41 @@ jobs:
             *) printf 'CM5 runtime requires Node.js 22; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
           esac
           package_status="$(dpkg-query -W -f='${Status}' cyberos 2>/dev/null || true)"
-          [ "$package_status" = "install ok installed" ] || {
-            printf 'CM5 does not have a valid CyberOS installation\n' >&2
-            exit 1
+          package_version="$(dpkg-query -W -f='${Version}' cyberos)"
+          case "$package_status" in
+            'install ok installed') ;;
+            'install ok unpacked'|'install ok half-configured')
+              [ "$verify_only" != true ] || {
+                printf 'Verification requires a fully configured CyberOS package\n' >&2
+                exit 1
+              }
+              # Repair only a recognized CyberOS unpack, never an unknown or
+              # partially removed installation. Keep the database integrity gate.
+              node - "$package_version" "$target_version" "$target_commit" <<'NODE'
+          const fs = require("node:fs");
+          const build = JSON.parse(fs.readFileSync("/usr/lib/cyberos/build-info.json", "utf8"));
+          if (build.version !== process.argv[2] || build.source !== "release" ||
+              !/^[0-9a-f]{40}$/.test(build.commitSha ?? "")) {
+            throw new Error("Unconfigured package does not match an unpacked CyberOS release");
           }
+          const installed = build.version.split(".").map(Number);
+          const comparison = process.argv[3].split(".").map((part, index) => Number(part) - installed[index])
+            .find(value => value !== 0) ?? 0;
+          if (comparison < 0 || (comparison === 0 && build.commitSha !== process.argv[4])) {
+            throw new Error("Refusing an interrupted-release downgrade or changed commit");
+          }
+          NODE
+              database_check="$(sudo -n /usr/local/sbin/cyberos-deploy --database-check)"
+              [ "$database_check" = ok ]
+              printf 'Recovering interrupted CyberOS package configuration: %s\n' "$package_version" >&2
+              ;;
+            *)
+              printf 'CM5 does not have a valid CyberOS installation: %s\n' "$package_status" >&2
+              exit 1
+              ;;
+          esac
           [ -x /usr/local/sbin/cyberos-deploy ]
           [ -d /cyberos/deploy/incoming ] && [ -w /cyberos/deploy/incoming ]
-          package_version="$(dpkg-query -W -f='${Version}' cyberos)"
           if grep -Fq -- '  --settings-sha256)' /usr/local/sbin/cyberos-deploy; then
             settings_baseline_mode=checksum
             settings_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --settings-sha256)"

@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+# Dependencies configure before our postinst builds the optional LIO modules.
+# Publish this condition before unpacking, including when systemd has already
+# cached the dependency's unit. The packaged drop-in takes over after unpacking.
+case "$1" in
+  install|upgrade)
+    if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+      mkdir -p /run/systemd/system/rtslib-fb-targetctl.service.d
+      printf '[Unit]\nConditionPathIsDirectory=/sys/kernel/config/target\n' \
+        > /run/systemd/system/rtslib-fb-targetctl.service.d/cyberos-install.conf
+      systemctl daemon-reload
+    fi
+    ;;
+esac
+
+#DEBHELPER#

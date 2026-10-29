@@ -1,6 +1,13 @@
 #!/bin/sh
 set -e
 
+case "$1" in
+  remove|purge|abort-install|abort-upgrade|disappear)
+    rm -f /run/systemd/system/rtslib-fb-targetctl.service.d/cyberos-install.conf
+    rmdir /run/systemd/system/rtslib-fb-targetctl.service.d 2>/dev/null || true
+    ;;
+esac
+
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
   rm -f /etc/systemd/system/cyberos-api.service.d/optional-groups.conf
   rm -f /etc/systemd/system/cyberos-terminald.service.d/identity.conf
