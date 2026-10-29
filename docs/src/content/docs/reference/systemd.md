@@ -35,4 +35,4 @@ sudo systemctl start cyberos-maintenance.service
 sudo systemctl start cyberos-health.service
 ```
 
-修改 unit、drop-in 或 `/cyberos/config/config.toml` 后执行 `systemctl daemon-reload`，再重启受影响的常驻服务。停用 timer 前确认没有正在执行的同类 oneshot，避免 SQLite 写入并发。
+修改 unit 或 drop-in 后执行 `systemctl daemon-reload`，再重启受影响的常驻服务。产品设置通过系统设置或 `/api/settings/*` 写入 SQLite，不需要 `daemon-reload`。停用 timer 前确认没有正在执行的同类 oneshot，避免 SQLite 写入并发。

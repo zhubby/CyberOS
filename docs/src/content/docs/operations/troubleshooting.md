@@ -78,7 +78,7 @@ curl -fsS -H 'Range: bytes=0-7' http://127.0.0.1:3010/api/photos/map/archive
 
 `ready` 时最后一个请求应返回 `206`；`not_downloaded` 时归档接口返回 `404`。网络、长度、23,141,432 字节固定大小、SHA-256 或 PMTiles/JPEG 校验失败会进入 `failed`，无效 `.part` 文件会自动删除，界面“重试”从零下载。不要手工放入同名文件来绕过校验；若固定成品损坏，保留 journal 信息后移走该单一文件，再从界面重试。
 
-受限网络可把 `CYBEROS_PHOTOS_BASEMAP_URL` 或 TOML `[photos].basemap_url` 指向 HTTPS 镜像。镜像必须逐字节提供同一资产，内置 SHA-256 不可覆盖；镜像校验失败时修复镜像内容，而不是修改本机校验值。Natural Earth II 最高仅到 `z6`，放大后缺少街道细节是预期行为。
+Photos 地图底图使用 CyberOS 固定、带校验的发行资源，不支持通过环境变量或产品配置改写下载地址。受限网络环境应在出口代理或镜像层透明提供同一资产；校验失败时修复镜像内容，不能修改本机校验值。Natural Earth II 最高仅到 `z6`，放大后缺少街道细节是预期行为。
 
 ## 服务目录所有权与启动顺序
 

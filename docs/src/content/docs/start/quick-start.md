@@ -4,7 +4,7 @@ description: 从源码启动 CyberOS，并完成第一次文件浏览、索引�
 type: tutorial
 status: current
 audience: [developer, user]
-sourceOfTruth: [README.md, package.json, config.example.toml, packages/shared/src/config.ts, packages/api/src/index.ts]
+sourceOfTruth: [README.md, package.json, packages/shared/src/config.ts, packages/shared/src/paths.ts, packages/api/src/index.ts]
 sidebar:
   order: 1
 ---

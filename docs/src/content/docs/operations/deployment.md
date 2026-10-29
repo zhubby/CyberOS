@@ -43,23 +43,22 @@ npm run build
 
 ## 安装与首次启动
 
-最小安装示例：
+标准安装无需产品配置参数：
 
 ```bash
 sudo ./packaging/scripts/install.sh
 ```
 
-常用开关：
+只有安装器自身的 Nginx 选项在安装前生效：
 
 ```bash
 sudo CYBEROS_ENABLE_NGINX=1 \
-  CYBEROS_ENABLE_DOCKER=0 \
-  CYBEROS_ENABLE_VM=0 \
-  CYBEROS_ENABLE_VOD_PLAYER=0 \
   ./packaging/scripts/install.sh
 ```
 
-脚本会安装 Node.js 22 和 Rust 1.95.0、构建并安装本架构 `.deb`，然后仅在新安装时执行 `cyberos-first-boot.sh`。首次初始化会创建 `/cyberos/config/config.toml`、`/cyberos/state`、`/cyberos/home/terminal`、`/cyberos/state/vod-player`、`/cyberos/data`、`/cyberos/backup`、`/cyberos/iso` 和本地管理员记录，但不会创建存储池。它不会探测或迁移 CyberOS 之前的目录、配置、数据库或服务。
+脚本会安装 Node.js 22 和 Rust 1.95.0、构建并安装本架构 `.deb`，创建固定的 `/cyberos/state`、`/cyberos/home/terminal`、`/cyberos/data`、`/cyberos/backup` 和 `/cyberos/iso` 目录，再先运行 `cyberos-state-init.service` 创建并校验主数据库，然后启动 API 及其他数据库消费进程。缺失的设置在运行时使用代码默认值，不会为了填充默认值而写库。安装不会创建存储池，也不会探测或迁移 CyberOS 2.0 之前的目录、设置、数据库或服务。
+
+Docker Engine、Compose、QEMU 与 libvirt 是 CyberOS 的安装依赖，安装器会启动相应运行时并准备默认 libvirt 网络。CyberOS 默认不开放 Docker 与虚拟机管理能力；安装完成后分别在“系统设置 > Docker”和“系统设置 > 虚拟机”中启用。KVM 硬件加速由宿主内核提供，启用虚拟机管理后仍需检查 `/dev/kvm`；缺失时页面会显示宿主降级，而不是把 QEMU/libvirt 误报为未安装。
 
 安装器默认通过 `sparse+https://rsproxy.cn/index/` 下载 Rust crate；可用 `CYBEROS_CARGO_REGISTRY` 指向其他以 `/` 结尾的 sparse HTTPS registry。该设置只写入一次性 Debian 构建副本，不覆盖 root 用户已有的 Cargo 配置。源码 checkout 和 `.cyberos/deb-build` 必须位于有足够空间的持久文件系统；不要在容量较小的 `/tmp` tmpfs 中执行完整构建。
 

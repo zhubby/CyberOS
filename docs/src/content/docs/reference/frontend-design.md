@@ -7,6 +7,7 @@ audience: [developer]
 sourceOfTruth:
   - packages/shared/src/hud-tokens.css
   - packages/web/src/styles/base.css
+  - packages/web/src/styles/switch.css
   - packages/web/src/styles/brand.css
   - packages/web/src/styles/layout.css
   - packages/web/src/styles/chat.css
@@ -15,6 +16,7 @@ sourceOfTruth:
   - packages/web/src/styles/responsive.css
   - packages/web/src/styles/interactions.css
   - packages/web/src/components/chat/ChatPane.tsx
+  - packages/web/src/components/common/Switch.tsx
   - packages/web/src/components/workspace/ManagementDashboard.tsx
   - packages/web/src/components/workspace/PanelHeader.tsx
   - packages/web/src/components/workspace/WorkspacePane.tsx
@@ -119,6 +121,8 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 ## 5. 组件状态
 
 按钮、图标按钮、输入框、选择器、页签、表格行、菜单、Toast 和对话框必须覆盖：default、hover、active、selected、focus、disabled、busy、error。
+
+- **Switch 与 checkbox**：启用/禁用、自动启动、只读模式等单一布尔设置统一使用共享 HUD Switch，并暴露 `role="switch"` 与 `aria-checked`。checkbox 只用于多选列表、筛选条件、权限选择和危险操作确认，不能用原生 checkbox 表现服务开关。
 
 - **Hover**：深色表面使用青色边框、青色角标或轻微抬升层，不把整块内容染成高饱和色。
 - **Active**：位移最多 `1px`，硬偏移底板收紧；禁止缩放。

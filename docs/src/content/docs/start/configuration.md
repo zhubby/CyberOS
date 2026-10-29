@@ -1,76 +1,75 @@
 ---
-title: 配置与环境变量
-description: CyberOS TOML 配置、环境变量覆盖规则和安全默认值。
+title: 设置与启动环境
+description: CyberOS 零配置安装、SQLite 系统设置和启动环境变量。
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/shared/src/config.ts, config.example.toml, packaging/etc/config.toml]
+sourceOfTruth: [packages/shared/src/config.ts, packages/shared/src/paths.ts, packages/db/src/repositories/settings.ts, packages/api/src/routes/settings.ts]
 sidebar:
   order: 3
 ---
 
-生产根目录固定为 `/cyberos`，配置固定为 `/cyberos/config/config.toml`；开发环境可以通过 `CYBEROS_ROOT` 和 `CYBEROS_CONFIG` 指向隔离目录。环境变量优先于 TOML；解析后会规范化路径、端口、超时、storage pools、备份、Docker、VM、terminal、monitoring 和 health 设置。
+CyberOS 不使用产品配置文件。标准 Debian 安装无需参数即可启动，固定目录由安装包创建，用户可调设置保存在 `/cyberos/state/cyberos.sqlite` 的 `system_settings` 中。设置缺失时使用代码默认值但不会自动写库；设置记录损坏时读取接口返回 attention/error，PATCH 仍可用有效数据覆盖修复。
 
-最重要的约束是：API 只能绑定 loopback；生产 storage pool 默认要求 mount readiness；Docker 默认关闭；备份仓库必须显式初始化；provider secret 只返回“是否已配置”。完整字段和环境变量应以 `packages/shared/src/config.ts` 为准。
+生产根目录固定为 `/cyberos`，API 只允许绑定 loopback。服务 socket、账号、重试、超时、采样频率和 Photos 地图发行资源属于代码常量，不提供隐藏高级编辑器。Docker、VM、TV 和 Backup 默认关闭，必须在系统设置中显式启用；Backup 还必须先保存凭据并验证仓库。
 
-`CYBEROS_HOST_MUTATION_POLICY` 接受 `mutable` 或 `declarative`，Debian 默认使用 `mutable`。声明式模式只限制宿主机配置写入：共享、存储池、NetworkManager 和 Docker daemon 配置由外部系统管理，API 对这些写请求返回 501，读取与状态采集继续工作。仅在另一个配置管理系统已经接管这些资源时使用 `declarative`。
+## 启动环境变量
 
-## 最小开发配置
+常驻进程只接受启动 SQLite 前必须确定的变量：
 
-不建议直接把带有生产路径和 VM 开关的 `config.example.toml` 当作开发配置。可以使用以下环境变量覆盖默认值：
+| 变量 | 用途 | 默认值 |
+| --- | --- | --- |
+| `CYBEROS_ENVIRONMENT` | `development` 或 `production` | `development` |
+| `CYBEROS_ROOT` | 开发根目录；生产必须为 `/cyberos` | 开发为 `.cyberos/dev-root` |
+| `CYBEROS_API_HOST` | API 监听地址，只接受 loopback | `127.0.0.1` |
+| `CYBEROS_API_PORT` | API 监听端口 | `3010` |
+| `CYBEROS_ALLOWED_ORIGINS` | 逗号分隔的显式 CORS origin | 空 |
 
-```bash
-CYBEROS_ENVIRONMENT=development
-CYBEROS_ROOT=.cyberos/dev-root
-CYBEROS_API_HOST=127.0.0.1
-CYBEROS_API_PORT=3010
-CYBEROS_DOCKER_ENABLED=0
-CYBEROS_VM_ENABLED=0
-CYBEROS_BACKUP_ENABLED=0
-```
+打包资产路径和进程间 socket 变量只供 systemd/构建内部使用，不是产品设置。安装器的镜像、registry、Nginx 端口等变量仅影响一次安装流程，不会写入产品设置。
 
-## Monitoring
-
-监控默认开启，指标库路径由 `CYBEROS_ROOT` 推导为 `${CYBEROS_ROOT}/state/metrics.sqlite`。生产默认值为：fast 10 秒、standard 30 秒、温度 5 分钟；raw 保留 48 小时、1m 保留 30 天、1h 保留 1 年；容量上限 512 MiB。
-
-```toml
-[monitoring]
-enabled = true
-fast_sample_interval_ms = 10000
-standard_sample_interval_ms = 30000
-temperature_sample_interval_ms = 300000
-raw_retention_ms = 172800000
-minute_retention_ms = 2592000000
-hour_retention_ms = 31536000000
-max_database_bytes = 536870912
-```
-
-同名 `CYBEROS_MONITORING_*` 环境变量优先于 TOML；容量只允许 64 MiB–4 GiB，采样和保留值必须满足配置校验。设置 `enabled = false` 后 monitor service 保持 active/idle，API 和页面显示 Disabled，Health 不生成 `monitoring_unavailable`，alerter 也不会求值 metric rules。修改监控配置后重启 `cyberos-api.service`、`cyberos-monitor.service` 和 `cyberos-alerter.service`。
-
-SMTP 与 Health severity 路由通过 Settings > Alerts 或 `/api/monitoring/alerts/*` 管理并保存在主库，不写入 TOML。API 不返回 SMTP 密码；清空、轮换凭据和测试投递都应通过告警设置接口完成。
-
-Agent worker 默认并行处理两个不同 session，同一 session 仍由数据库 lease 串行化。可通过 `[worker].concurrency` 或 `CYBEROS_WORKER_CONCURRENCY` 调整单个 worker 的并行度；多 worker 实例共享同一套 lease 约束。
-
-存储池不通过环境变量或 TOML 声明。CyberOS 发现 `${CYBEROS_ROOT}/data` 的一级真实目录，并使用目录名作为 `storagePoolId`；生产池必须直接挂载到 `/cyberos/data/<pool-id>`。生产 backup repository 固定为独立挂载的 `/cyberos/backup`，staging 位于 `/cyberos/state`；三者不能互相覆盖。`CYBEROS_VM_ISO_ROOTS` 支持逗号分隔的多个路径。
-
-## Photos 离线地图镜像
-
-默认地图资产来自 CyberOS 的固定 GitHub Release。只在设备无法访问 GitHub 时配置同字节 HTTPS 镜像：
-
-```toml
-[photos]
-basemap_url = "https://mirror.example.com/cyberos/natural-earth-ii-3.2.0-raster.pmtiles"
-```
-
-环境变量 `CYBEROS_PHOTOS_BASEMAP_URL` 优先于 TOML。这里的 `photos` 是内部模块和数据目录标识；公开界面与 API 仍使用 Photos。该设置只替换下载地址，不能改变文件名、大小或 SHA-256；`http://`、不同版本和重新编码的文件都会被拒绝。成品写入 `${CYBEROS_ROOT}/state/photos/maps/`，生产路径为 `/cyberos/state/photos/maps/`，不写入 storage pool。
-
-## 生产配置检查
-
-修改 `/cyberos/config/config.toml` 后，先用只读 API 检查配置效果，再重启依赖服务：
+开发环境示例：
 
 ```bash
-sudo systemctl restart cyberos-api.service cyberos-worker@1.service
-curl -fsS http://127.0.0.1:3010/api/system/storage
+mkdir -p .cyberos/dev-root/data/pool-1
+CYBEROS_ENVIRONMENT=development \
+CYBEROS_ROOT="$PWD/.cyberos/dev-root" \
+npm run dev
+```
+
+## 系统设置
+
+以下设置通过 Web 设置页或 `/api/settings/*` 管理，并由 API、worker、Agent/MCP 与对应 daemon 在操作时读取：
+
+- System Profile：管理员显示名。
+- Model Providers 与 Agent：模型、密钥、能力策略和 MCP 开关。
+- Docker 与虚拟机：只公开产品能力开关；socket、命令和超时固定。
+- Monitoring：启用状态、raw/minute/hour 保留周期和指标库空间上限。采样频率固定，monitor 根据 `updated_at` 热重载。
+- Backup：启用状态、仓库、挂载要求和 daily/weekly 保留策略。密码只写 `/cyberos/state/secrets/backup/restic-password`，读取响应只返回 `passwordConfigured`。
+- Media / TV：TV 开关、输出模式、DRM connector、音频设备和硬件解码。TV 切换由 typed hostd 操作原子应用，失败不写库。
+- Shares、Indexer、Photos 与 Downloads：继续使用各自的 typed SQLite 设置。共享账户密码只写 `/cyberos/state/secrets/share/account-password`，数据库、operation metadata 和读取响应均不保存或返回明文。
+
+存储池不是设置记录。CyberOS 发现 `${CYBEROS_ROOT}/data` 下的一级真实目录，并使用目录名作为 `storagePoolId`；生产池必须直接挂载到 `/cyberos/data/<pool-id>`。
+
+## Backup 恢复
+
+定时备份从 SQLite 读取设置，保存设置不会隐式初始化仓库。灾难恢复可能发生在主库不存在时，因此只接受显式 CLI 参数：
+
+```bash
+cyberos-backup restore \
+  --repository /path/to/repository \
+  --password-file /path/to/password-file \
+  --snapshot latest
+```
+
+CLI 不接受明文密码参数，也不会恢复任何全局产品配置文件。
+
+## 运维检查
+
+设置更新通常无需重启服务。修改 systemd unit 或 drop-in 后才需要 `daemon-reload`：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart cyberos-api.service
 curl -fsS http://127.0.0.1:3010/api/system/health
 ```
 

@@ -145,9 +145,9 @@ CYBEROS_NPM_REGISTRY=https://registry.npmmirror.com \
 ```
 
 The package contains compiled app/docs assets, bundled workspace `node_modules`,
-build metadata, `/cyberos/config` defaults, and systemd units. It does not start
-services during `dpkg` installation; the host installer performs first boot
-and service activation.
+build metadata, and systemd units. It does not install a product configuration
+file or start services during `dpkg` installation; the host installer runs the
+state initializer and performs service activation.
 
 ### Host installer
 
@@ -160,10 +160,10 @@ sudo ./packaging/scripts/install.sh
 
 The script can install/verify Node.js 22, configure and back up known APT
 sources under `/cyberos/system-backups/apt`, build/install the current checkout,
-initialize `/cyberos/config/config.toml` and `/cyberos/state`, and configure
-Nginx. `CYBEROS_ENABLE_NGINX` defaults to `1`; Docker and VM support default to
-`0` and can be enabled explicitly with `CYBEROS_ENABLE_DOCKER=1` and
-`CYBEROS_ENABLE_VM=1`. Review `CYBEROS_APT_*`, `CYBEROS_NODE_*`, and
+initialize `/cyberos/state`, and configure Nginx. `CYBEROS_ENABLE_NGINX`
+defaults to `1`; Docker and VM runtime dependencies are installed and their
+CyberOS management features are enabled from System Settings. Review
+`CYBEROS_APT_*`, `CYBEROS_NODE_*`, and
 `CYBEROS_NPM_REGISTRY` before using internal or domestic mirrors.
 
 After installation, core services are enabled and started; maintenance,
@@ -190,11 +190,11 @@ curl -fsS http://127.0.0.1:3010/api/system/health
 backup readiness. Oneshot units normally return to `inactive (dead)` after
 success, so inspect their exit code and journal. Manually run a task with its
 service, for example `sudo systemctl start cyberos-indexer.service`, rather
-than invoking a timer directly. After changing units or configuration, run
+than invoking a timer directly. After changing units, run
 `sudo systemctl daemon-reload` and restart affected resident services.
 
 For upgrades, stop the indexer and all maintenance/health/backup timers,
-save the current `.deb`, `/cyberos/config`, `/cyberos/state` and SQLite state,
+save the current `.deb`, `/cyberos/state` and SQLite state,
 install the new package, and re-run the API, readiness, index, health, and
 backup acceptance checks before re-enabling timers. Database migrations have no
 general reverse migration; a downgrade may require restoring a matching state

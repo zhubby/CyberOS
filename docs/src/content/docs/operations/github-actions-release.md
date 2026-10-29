@@ -194,12 +194,12 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 目标版本低于已安装版本时拒绝降级。
 - 版本相同但 commit 不同时拒绝覆盖。
 - 版本和 commit 都相同时不重装，只重新验证服务和 build-info，因此可安全重试同一个 tag。
-- 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/cyberos/config` 和 `/cyberos/state`，再通过 APT 安装已校验的 `.deb`。
+- 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/cyberos/state` 和 `/cyberos/home`，再通过 APT 安装已校验的 `.deb`。
 - 安装后先启动 API，再启动 monitor、立即运行一次 Health，然后恢复后台服务并强制启用 maintenance、health 和 backup 核心 timers。monitor 失败会报告 monitoring degraded，但不会阻断核心 API 部署；其他核心服务及 Operations Health 仍须通过。
 
 成功记录写入 `/cyberos/deploy/current-release.json`，已验证包保存在 `/cyberos/deploy/releases/<tag>/`。升级失败时，部署程序会尽力恢复此前的 systemd 状态。升级备份和诊断保留在 `/cyberos/deploy/backups/<tag>-<timestamp>/`。
 
-部署成功后 helper 会在部署锁内清理受它管理的临时构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录以及旧 release 包。默认保留当前 release 和一个上一版本 release；升级备份与失败诊断不会自动删除，保留期限和清理动作必须由运维显式决定。helper 不会清理 `/cyberos/state`、`/cyberos/config`、Photo 数据、数据库或服务日志。
+部署成功后 helper 会在部署锁内清理受它管理的临时构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录以及旧 release 包。默认保留当前 release 和一个上一版本 release；升级备份与失败诊断不会自动删除，保留期限和清理动作必须由运维显式决定。helper 不会清理 `/cyberos/state`、Photo 数据、数据库或服务日志。
 
 部署程序不自动回滚 Debian 包或数据库 migration。schema 变化后的回滚必须使用与旧包匹配的状态备份，不能只重新安装旧 `.deb`。
 

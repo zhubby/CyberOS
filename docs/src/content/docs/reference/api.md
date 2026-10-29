@@ -19,6 +19,12 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 - `PATCH /api/settings/agent-mcp` 接收 `{ enabled: boolean }`。开启时服务端自动创建或修复 `Built-in Pi` 凭据，响应永不包含 token；关闭时保留配对。主机禁用 MCP 时返回 `409`。
 - `GET/PATCH /api/settings/agent-capability-policy` 继续独立管理每项能力的自动、审批、二次确认和禁用策略。
 
+## Docker 与虚拟机开关
+
+- `GET/PATCH /api/settings/docker` 管理 CyberOS 的 Docker 能力开关，PATCH 只接受 `{ enabled: boolean }`。Engine socket、Compose 命令、操作超时和控制台 shell 是固定运行时常量。运行时由安装器预先安装；关闭开关后 Docker API 与 Agent/MCP mutation 不可用。
+- `GET/PATCH /api/settings/vm` 管理独立的虚拟机能力开关，PATCH 只接受 `{ enabled: boolean }`。运行时由安装器预先安装；该值动态控制 VM 页面、API 与 Agent/MCP capability。
+- `GET /api/vms/summary` 在开关关闭时返回 `enabled: false` 与 `host.status: "disabled"`，不把未探测的 KVM 状态报告成宿主机故障。
+
 ## Monitoring
 
 - `GET /api/monitoring/overview` 返回 `disabled | starting | ready | degraded | unavailable`、最新核心值、collector 状态，以及 raw/1m/1h 保留期、数据库大小和是否暂停写入。
@@ -97,7 +103,7 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 
 - `PUT /api/shares/account` 直接更新 SMB、WebDAV 和 FTP 共用账号，不创建 approval、job 或 operation。请求包含 `username`、可选的新 `password` 和当前 `expectedUpdatedAt`；省略密码或传空字符串表示保留已有密码。
 - API 串行执行所有共享配置写入，先通过受限 hostd 应用完整当前配置，成功后才更新数据库。revision 不匹配返回 `409`，输入错误返回 `400`，hostd 不可用返回 `503`，宿主应用失败返回脱敏后的 `502`。
-- 响应只返回公开共享设置和 hostd 应用时间，密码永不回传。共享目录、协议、权限和全局启停通过 `POST /api/shares/settings` 直接应用，并写入 share operation；Agent/MCP 发起同类变更时仍由 capability run/approval 调用相同领域校验。
+- 响应只返回公开共享设置和 hostd 应用时间，密码永不回传。密码以 `0600` 文件保存到 `/cyberos/state/secrets/share/account-password`，不会写入 SQLite 或 share operation metadata。共享目录、协议、权限和全局启停通过 `POST /api/shares/settings` 直接应用，并写入 share operation；Agent/MCP 发起同类变更时仍由 capability run/approval 调用相同领域校验。
 
 ## HTTP 下载
 

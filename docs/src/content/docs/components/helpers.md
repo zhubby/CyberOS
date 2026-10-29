@@ -9,7 +9,7 @@ sidebar:
   order: 6
 ---
 
-`cyberos-hostd` 是 Rust root daemon，默认只在 `/run/cyberos/hostd.sock` 接受版本化 JSONL 单请求，并验证 Unix peer UID。systemd unit 与 API 共同读取 `/cyberos/config/config.toml` 的 `[hostd].socket_path`，不会用 unit 环境变量覆盖配置路径；自定义路径若超出 `/run/cyberos`，还必须同步调整 unit 的 `ReadWritePaths`。操作名、命令、参数和配置目标均使用 allowlist；共享路径只能引用 hostd 自己从配置读取的 storage pools，请求中的 data root 只用于与 hostd 配置做一致性校验。
+`cyberos-hostd` 是 Rust root daemon，只在固定的 `/run/cyberos/hostd.sock` 接受版本化 JSONL 单请求，并验证 Unix peer UID。API 使用同一固定 socket，路径不是产品设置。操作名、命令、参数和配置目标均使用 allowlist；共享路径只能引用 `/cyberos/data` 下已挂载且安全解析的 storage pool。
 
 `cyberos-terminald` 是非 root Rust daemon，默认在 `/run/cyberos/terminald.sock` 接受 Terminal Protocol v1 JSONL 长连接，并验证 Unix peer UID。协议用 request、response、stream ID 关联控制请求和 PTY 流，以 Base64 传输原始字节；未知版本、字段、重复 attach 和超限输入都会返回结构化错误。API 与 terminal 均以 `cyberos` 运行，terminal 在 `/cyberos/home/terminal` 保存 tmux socket，并通过 native PTY attach。session 名称由规范化 data root workspace key 和标签 ID 稳定生成，因此 API 或 WebSocket 重连只会重新 attach，不会重复创建 shell。两者共用 UID，不能把 systemd 路径屏蔽视为安全隔离边界。
 

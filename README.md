@@ -220,44 +220,13 @@ Status responses include scan metrics and storage-pool-relative failures plus da
 
 Configure an OpenAI or Anthropic provider, model, and API key in **Settings > Model Providers** before starting an AI turn. Provider secrets are stored in the local SQLite database; API reads only report whether a key is configured.
 
-The backend reads process environment variables directly; `.env.example` is a reference file and is not automatically loaded by the Node.js services.
-
 ## Configuration
 
-Production services read TOML from the fixed path `/cyberos/config/config.toml`. Development can override the location with `CYBEROS_CONFIG`. See [`config.example.toml`](config.example.toml) and [`packaging/etc/config.toml`](packaging/etc/config.toml) for the supported baseline.
+CyberOS has no product configuration file. A standard Debian installation starts with safe defaults and stores user-managed settings in `/cyberos/state/cyberos.sqlite`. Use the web Settings pages or the corresponding `/api/settings/*` endpoints for the administrator profile, model providers, Monitoring, Backup, TV, Docker, VM, Shares, Photos, Downloads, Indexer, Agent, and MCP settings. Secrets use the database or fixed root-only files under `/cyberos/state/secrets` and are never returned by read APIs.
 
-A minimal configuration is:
+Only bootstrap values that must exist before SQLite can be opened remain in the process environment: `CYBEROS_ENVIRONMENT`, `CYBEROS_ROOT`, `CYBEROS_API_HOST`, `CYBEROS_API_PORT`, and `CYBEROS_ALLOWED_ORIGINS`. Production enforces the exact root `/cyberos` and a loopback API listener. Socket paths, service identities, retries, timeouts, and Photos map assets are fixed runtime constants rather than hidden settings.
 
-```toml
-root_dir = "/cyberos"
-environment = "production"
-
-[api]
-host = "127.0.0.1"
-port = 3010
-allowed_origins = []
-
-[worker]
-poll_ms = 750
-concurrency = 2
-
-[docker]
-enabled = false
-socket_path = "/var/run/docker.sock"
-compose_command = "docker"
-operation_timeout_ms = 120000
-console_shells = ["/bin/sh", "/bin/bash"]
-
-[hostd]
-socket_path = "/run/cyberos/hostd.sock"
-
-[shares]
-enabled = false
-account_username = "cyberos-share"
-
-```
-
-Environment variables override the corresponding TOML values. The most useful development overrides are `CYBEROS_ROOT`, `CYBEROS_API_HOST`, `CYBEROS_API_PORT`, `CYBEROS_ALLOWED_ORIGINS`, and the `CYBEROS_DOCKER_*` variables documented in [`.env.example`](.env.example). `CYBEROS_DATA_DIR` and `CYBEROS_DATABASE_PATH` are intentionally unsupported because state is derived from the single CyberOS root.
+For development, `CYBEROS_ROOT="$PWD/.cyberos/dev-root"` selects an isolated root. Do not add feature settings to `.env` files or systemd units; add them to the typed `system_settings` repository and Settings API instead.
 
 ## Build and verification
 
@@ -299,7 +268,7 @@ On a Debian or Ubuntu build host with Node.js 22, `build-essential`, `debhelper`
 make deb
 ```
 
-Package artifacts are written under `.cyberos/`. The package installs the built applications under `/usr/lib/cyberos`, configuration under `/cyberos/config`, persistent state under `/cyberos/state`, and the service units under `/lib/systemd/system`.
+Package artifacts are written under `.cyberos/`. The package installs immutable applications under `/usr/lib/cyberos`, persistent state under `/cyberos/state`, and service units under `/lib/systemd/system`. It does not install a product configuration directory.
 
 Tagged releases publish `amd64` and `arm64` Debian artifacts with checksums through GitHub Actions.
 
@@ -311,7 +280,7 @@ For an `arm64` CM5 (or an `amd64` Debian host), run the host installer from a ch
 sudo packaging/scripts/install.sh
 ```
 
-The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, configures npm to use `https://registry.npmmirror.com`, and uses the sparse `https://rsproxy.cn/index/` Cargo registry for the package build. It then builds the package on the target host and initializes first-boot configuration only for a new installation. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the CyberOS API, monitor, alerter, worker, hostd, terminal, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
+The installer checks the Debian architecture, switches Debian and Raspberry Pi APT entries to domestic mirrors, installs Node.js 22 from the verified Aliyun Node.js release mirror when needed, installs the pinned Rust 1.95.0 toolchain through rustup, configures npm to use `https://registry.npmmirror.com`, and uses the sparse `https://rsproxy.cn/index/` Cargo registry for the package build. It then builds the package on the target host and runs the one-shot state initializer before starting database consumers. Building on the target keeps the Rust daemons, `better-sqlite3`, and OCR helpers compatible with the board. It starts the CyberOS API, monitor, alerter, worker, hostd, terminal, downloader, indexer, and an Nginx reverse proxy on port 80 by default; maintenance, health, and backup timers remain scheduled tasks. The API remains loopback-only and Nginx is the LAN entry point.
 
 The mirror defaults can be overridden for a private mirror or restored to another mirror with `CYBEROS_APT_MIRROR`, `CYBEROS_APT_SECURITY_MIRROR`, `CYBEROS_RPI_MIRROR`, `CYBEROS_NODE_MIRROR`, `CYBEROS_NODE_VERSION`, `CYBEROS_NPM_REGISTRY`, and `CYBEROS_CARGO_REGISTRY`. The Cargo value must be a sparse HTTPS registry URL ending in `/`; it is written only into the disposable package-build copy and does not replace an administrator's Cargo configuration. The installer only rewrites known Debian/Raspberry Pi URIs, saves original source files under `/cyberos/system-backups/apt`, preserves `signed-by`, suites, components, and unrelated sources, and disables any NodeSource entry after switching to the domestic Node.js binary distribution. To restore an original source, copy its backup from `/cyberos/system-backups/apt` back to `/etc/apt/sources.list.d` (or uncomment the marked NodeSource line) before running the installer again with an explicit `CYBEROS_NODE_MIRROR`.
 
@@ -319,9 +288,11 @@ The installer also normalizes the host locale to `C.UTF-8` by default and stops 
 
 Set `CYBEROS_NGINX_PORT` to choose another listener port, or set `CYBEROS_ENABLE_NGINX=0` to keep the API loopback-only and skip Nginx installation.
 
-Docker and VM runtimes are opt-in because Docker socket access is root-equivalent. Enable both during installation with `CYBEROS_ENABLE_DOCKER=1 CYBEROS_ENABLE_VM=1`; the installer installs the Docker engine, CLI, Compose plugin, and matching QEMU/libvirt packages, writes the feature flags, refreshes API access to the `docker`, `libvirt`, and `kvm` groups, grants the CyberOS service account the non-interactive libvirt polkit action, starts the runtime services, and autostarts the standard libvirt `default` NAT network when it is available.
+Docker and VM runtimes are installed and prepared with CyberOS. The package includes the Docker engine, CLI, Compose integration, and architecture-appropriate QEMU/libvirt stack; the installer refreshes the `docker`, `libvirt`, and `kvm` groups, grants the CyberOS service account the non-interactive libvirt polkit action, starts the runtime services, and autostarts the standard libvirt `default` NAT network when it is available. Docker and virtual machine management remain disabled in CyberOS until they are enabled in their dedicated System Settings sections.
 
-Optional integrations are listed as Debian `Suggests` rather than hard dependencies. The package includes the required `ffmpeg` and `libraw-bin` media tools; install other host tools you need (for example `git`, `restic`, Samba, or NFS) separately. The core package does not enable optional services implicitly.
+KVM hardware acceleration is a host kernel capability rather than an installable CyberOS package. Enabling virtual machine management probes `/dev/kvm`; when the kernel or firmware does not expose it, CyberOS reports a degraded host instead of treating QEMU/libvirt installation as missing.
+
+Optional integrations are listed as Debian `Suggests` rather than hard dependencies. Docker and the virtualization stack are core dependencies, as are the required `ffmpeg` and `libraw-bin` media tools; install other host tools you need (for example `git`, `restic`, Samba, or NFS) separately.
 
 ## Repository layout
 
