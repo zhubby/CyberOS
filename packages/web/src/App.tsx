@@ -367,7 +367,7 @@ export function App() {
       .filter((pool) => pool.status !== "offline")
       .map((pool): StoragePool => ({
         id: pool.id,
-        name: pool.name,
+        name: pool.id,
         mountpoint: pool.mountpoint,
         path: ".",
         filesystem: pool.filesystem,

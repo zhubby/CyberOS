@@ -769,6 +769,10 @@
   color: var(--hud-yellow);
 }
 
+.files-content-breadcrumbs button[aria-current="page"] {
+  color: var(--hud-yellow);
+}
+
 .files-list-summary {
   color: var(--hud-muted);
 }

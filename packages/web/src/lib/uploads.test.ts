@@ -14,6 +14,9 @@ describe("upload path helpers", () => {
     expect(normalizeUploadRelativePath("album\\day-one/./photos.jpg")).toBe("album/day-one/photos.jpg");
     expect(normalizeNasPath("./docs//incoming")).toBe("docs/incoming");
     expect(joinNasPath("docs/incoming", "album/photos.jpg")).toBe("docs/incoming/album/photos.jpg");
+    expect(joinNasPath("pool-1", ".")).toBe("pool-1");
+    expect(joinNasPath(".", ".")).toBe(".");
+    expect(() => joinNasPath("pool-1", "")).toThrow("Upload path is required");
   });
 
   it("rejects traversal outside the selected root", () => {

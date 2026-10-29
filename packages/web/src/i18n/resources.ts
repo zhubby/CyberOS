@@ -357,7 +357,7 @@ export const en = {
     filesEyebrow: "Files",
     filesManagementDescription: "Browse, preview, search, and manage files.",
     filesListTitle: "Directory contents",
-    filesListDescription: "{{total}} items · {{root}}",
+    filesListDescription: "{{total}} items",
     items: "Items",
     safe: "Safe",
     table: {
@@ -3197,7 +3197,7 @@ export const zhCN = {
     filesEyebrow: "文件",
     filesManagementDescription: "浏览、预览、搜索和管理文件。",
     filesListTitle: "目录内容",
-    filesListDescription: "{{total}} 项 · {{root}}",
+    filesListDescription: "{{total}} 项",
     items: "项目",
     safe: "安全",
     table: {

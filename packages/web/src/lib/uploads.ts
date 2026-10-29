@@ -88,7 +88,13 @@ export function normalizeNasPath(rawPath: string): string {
 
 export function joinNasPath(basePath: string, relativePath: string): string {
   const normalizedBase = normalizeNasPath(basePath);
-  const normalizedRelative = normalizeUploadRelativePath(relativePath);
+  const normalizedRelative = relativePath.trim() === "."
+    ? "."
+    : normalizeUploadRelativePath(relativePath);
+
+  if (normalizedRelative === ".") {
+    return normalizedBase;
+  }
 
   if (normalizedBase === ".") {
     return normalizedRelative;

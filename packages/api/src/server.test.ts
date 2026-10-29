@@ -505,6 +505,7 @@ describe("API server", () => {
   });
 
   it("lists files from a selected storage pool", async () => {
+    await mkdir(path.join(rootDir, ".cyberos-host-access-capacity"));
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
       method: "GET",
@@ -522,6 +523,11 @@ describe("API server", () => {
         }
       ]
     });
+    expect(response.json().entries).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: ".cyberos-host-access-capacity" })
+      ])
+    );
 
     await server.close();
   });

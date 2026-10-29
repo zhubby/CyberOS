@@ -45,6 +45,7 @@ import {
   sendFileStream,
   safeQueryIndex
 } from "../lib/files.js";
+import { DOCKER_HOST_ACCESS_STORAGE_POOL_ANCHOR } from "../lib/docker-host-access.js";
 import { getDirectoryGitView } from "../lib/git.js";
 import {
   assertPathInsideStoragePool,
@@ -84,7 +85,9 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     const scope = await resolveStoragePoolScope(dataRoot, system, request.query.storagePoolId);
     const root = scope.workspace;
     const safe = await resolveScopedExistingPath(scope, request.query.path ?? scope.mountpointPath);
-    const entries = await listDir(root, safe.relativePath);
+    const entries = (await listDir(root, safe.relativePath)).filter((entry) => (
+      safe.relativePath !== scope.mountpointPath || entry.name !== DOCKER_HOST_ACCESS_STORAGE_POOL_ANCHOR
+    ));
     const scopedEntries = await Promise.all(
       entries.map(async (entry) => {
         if (!entry.isSafe) {

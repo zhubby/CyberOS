@@ -149,6 +149,11 @@ export function storagePoolStateKey(status: FileStoragePoolOption["status"]): `w
   return `workspace.storagePoolStates.${status}`;
 }
 
+export function storagePoolRootDepth(poolPath: string): number {
+  const segments = poolPath.replaceAll("\\", "/").split("/").filter((segment) => segment && segment !== ".");
+  return segments.length;
+}
+
 export interface WorkspaceSearchOptions {
   categories: IndexSearchCategory[];
   extractionSources: NonNullable<IndexSearchRequest["extractionSources"]>;
@@ -386,7 +391,6 @@ function StoragePoolSwitcher({
         </span>
         <span className="storage-pool-switcher-copy">
           <strong>{selectedPool?.name ?? t("workspace.storagePoolPlaceholder")}</strong>
-          <small>{selectedPool?.filesystem ?? t("common.states.unknown")}</small>
         </span>
         <ChevronDown aria-hidden="true" size={15} />
       </button>
@@ -411,7 +415,6 @@ function StoragePoolSwitcher({
                 <span className="storage-pool-status" data-state={pool.status} aria-hidden="true" />
                 <span className="storage-pool-menu-copy">
                   <strong>{pool.name}</strong>
-                  <small>{[pool.filesystem, pool.path].filter(Boolean).join(" · ")}</small>
                 </span>
                 {selected ? <Check aria-hidden="true" size={15} /> : null}
               </button>
@@ -599,7 +602,7 @@ export function WorkspacePane({
   const selectedStoragePool = storagePools.find((pool) => pool.id === selectedStoragePoolId);
   const selectedStoragePoolState = selectedStoragePool?.status ?? "unknown";
   const hasStoragePool = Boolean(selectedStoragePool);
-  const storagePoolPathDepth = selectedStoragePool?.path.split("/").filter(Boolean).length ?? 0;
+  const storagePoolPathDepth = selectedStoragePool ? storagePoolRootDepth(selectedStoragePool.path) : 0;
   const visibleBreadcrumbs = selectedStoragePool ? breadcrumbs.slice(storagePoolPathDepth) : breadcrumbs;
   const sortedEntries = useMemo(
     () => searchResults ? entries : sortEntries(entries, fileSort),
@@ -1404,7 +1407,12 @@ export function WorkspacePane({
                         </div>
                       ) : (
                         <nav className="breadcrumbs files-content-breadcrumbs" aria-label={t("workspace.breadcrumbs")}>
-                          <button type="button" onClick={onGoToStoragePool} disabled={!selectedStoragePool}>
+                          <button
+                            type="button"
+                            onClick={onGoToStoragePool}
+                            disabled={!selectedStoragePool || visibleBreadcrumbs.length === 0}
+                            aria-current={visibleBreadcrumbs.length === 0 ? "page" : undefined}
+                          >
                             <HardDrive aria-hidden="true" size={14} />
                             <span>{selectedStoragePool?.name ?? t("workspace.storagePoolPlaceholder")}</span>
                           </button>
@@ -1413,6 +1421,8 @@ export function WorkspacePane({
                               key={`${crumb}-${index}`}
                               type="button"
                               onClick={() => onGoToBreadcrumb(selectedStoragePool ? storagePoolPathDepth + index : index)}
+                              disabled={index === visibleBreadcrumbs.length - 1}
+                              aria-current={index === visibleBreadcrumbs.length - 1 ? "page" : undefined}
                             >
                               <span>{crumb}</span>
                             </button>
@@ -1420,10 +1430,9 @@ export function WorkspacePane({
                         </nav>
                       )}
                       <p className="files-list-summary">
-                        {fileListingLoading ? <SkeletonBlock width="58%" /> : t("workspace.filesListDescription", {
-                          total: entryCount,
-                          root: selectedStoragePool?.name ?? t("workspace.storagePoolPlaceholder")
-                        })}
+                        {fileListingLoading
+                          ? <SkeletonBlock width="58%" />
+                          : t("workspace.filesListDescription", { total: entryCount })}
                       </p>
                     </div>
                     {gitStatus ? (

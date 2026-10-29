@@ -3086,6 +3086,12 @@
   color: var(--text);
 }
 
+.files-content-breadcrumbs button[aria-current="page"] {
+  color: var(--text);
+  cursor: default;
+  opacity: 1;
+}
+
 .files-list-summary {
   margin-top: 4px;
   max-width: 520px;

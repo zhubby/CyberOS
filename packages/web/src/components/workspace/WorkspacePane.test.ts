@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { isPathWithinStoragePool } from "../../App.js";
-import { defaultWorkspaceSearchOptions, hasWorkspaceSearchFilters, storagePoolStateKey } from "./WorkspacePane.js";
+import {
+  defaultWorkspaceSearchOptions,
+  hasWorkspaceSearchFilters,
+  storagePoolRootDepth,
+  storagePoolStateKey
+} from "./WorkspacePane.js";
 
 describe("isPathWithinStoragePool", () => {
   it("allows nested paths when the pool is mounted at the storage pool", () => {
@@ -39,5 +44,10 @@ describe("storage pool HUD status", () => {
       "workspace.storagePoolStates.offline",
       "workspace.storagePoolStates.unknown"
     ]);
+  });
+
+  it("keeps root-relative breadcrumbs visible for the canonical pool path", () => {
+    expect(storagePoolRootDepth(".")).toBe(0);
+    expect(storagePoolRootDepth("pool/nested")).toBe(2);
   });
 });
