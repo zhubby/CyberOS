@@ -4,7 +4,7 @@ description: CyberOS 的 loopback、storage pool、审批和宿主机权限边�
 type: explanation
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/api/src/server.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/docker-compose.ts, packages/api/src/lib/docker-host-access.ts, crates/host-accessd/src/proxy.rs, packages/db/src/repositories/docker-registry-credentials.ts, packages/db/src/repositories/docker-compose-apps.ts, packages/storage-tools/src/path-safety.ts, crates/hostd/src/server.rs, crates/hostd/src/network_manager/ethernet.rs, crates/terminald/src/server.rs, crates/terminald/src/pty.rs]
+sourceOfTruth: [packages/api/src/server.ts, packages/api/src/lib/agent-mcp-service.ts, packages/api/src/lib/agent-skills.ts, packages/shared/src/mcp-credentials.ts, packages/shared/src/mcp-network.ts, packages/agent/src/pi-agent.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/docker-compose.ts, packages/api/src/lib/docker-host-access.ts, crates/host-accessd/src/proxy.rs, packages/db/src/repositories/docker-registry-credentials.ts, packages/db/src/repositories/docker-compose-apps.ts, packages/storage-tools/src/path-safety.ts, crates/hostd/src/server.rs, crates/hostd/src/network_manager/ethernet.rs, crates/terminald/src/server.rs, crates/terminald/src/pty.rs]
 sidebar:
   order: 3
 ---
@@ -12,6 +12,10 @@ sidebar:
 CyberOS 2.0 假设可信的单用户设备，没有多用户认证边界。API 强制绑定 loopback；Nginx 可以把它代理到局域网，但这不等于增加了认证。
 
 所有文件路径都相对于已挂载 storage pool 解析，拒绝 traversal、绝对路径和不安全的符号链接逃逸。Pi 的读取、编辑、写入与 shell 能力遵循 Agent 策略中的 `auto`、`approve`、`confirm`、`disabled` 四档；MCP mutation 统一通过 `capability_runs` 与 `capability_approvals`。Workspace 面板操作不会创建 capability approval，但仍执行服务端校验、危险确认和领域 operation 审计。trash 是可恢复隔离区，不会被维护任务永久删除。
+
+第三方 MCP Server 是明确的外部信任例外：用户测试并启用后，其工具调用直接执行，不创建逐次 CyberOS capability approval。连接层只支持 Streamable HTTP，公网强制 HTTPS；私有 HTTP 需要明文风险确认，并阻止 metadata、link-local、DNS rebinding、解析地址漂移、跨 origin 重定向和危险 Header。MCP secret 只存放在 `0600` state 文件，数据库、公开 API、Agent 上下文和日志不得包含值。
+
+全局 Skills 在受限临时目录中完成 ZIP/Git 获取和 `SKILL.md` 校验后原子安装。ZIP 在解压前拒绝 traversal、链接和特殊文件；Git 只允许无凭据的公开 HTTPS 来源。Skill 可以影响 Pi 工具选择与脚本执行，因此安装和启用都要求确认。项目 `.agents/skills` 必须先信任当前项目才加载，且项目未信任不会连带禁用全局 Skills。
 
 Docker socket 近似 root 权限。Rust `hostd` 通过受限 root Unix socket 执行 allowlist 配置与命令；Rust `terminald` 验证 Unix peer UID，并以固定的非 root `cyberos` 用户运行 native PTY。systemd 使用 `ProtectSystem=strict`、`NoNewPrivileges` 和最小 capability 集合。
 

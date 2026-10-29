@@ -341,7 +341,7 @@ describe("native packaging artifacts", () => {
     expect(tmpfiles).toContain("/run/cyberos");
     expect(tmpfiles).toContain("/run/mdadm");
     expect(tmpfiles).toContain("d /run/samba 0755 root root -");
-    expect(control).toContain("Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, openssl, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, bluez");
+    expect(control).toContain("Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, openssl, git, unzip, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, bluez");
     expect(control).toMatch(/^Depends:.*poppler-utils.*tesseract-ocr-chi-sim.*tesseract-ocr-eng/m);
     expect(control).toMatch(/^Depends:.*libheif-examples/m);
     expect(control).not.toContain("Recommends: libheif-examples");
@@ -355,7 +355,8 @@ describe("native packaging artifacts", () => {
     expect(control).toMatch(/^Depends:.*chromium.*weston.*mpv.*v4l-utils.*wtype/m);
     expect(control).not.toMatch(/^Suggests:.*ffmpeg/m);
     expect(control).toContain("Suggests:");
-    expect(control).toContain("git");
+    expect(control.match(/^Depends:.*$/mu)?.[0]).toContain("git");
+    expect(control.match(/^Depends:.*$/mu)?.[0]).toContain("unzip");
     expect(control).toContain("ffmpeg");
     expect(control).toContain("samba");
     expect(control).toContain("nfs-kernel-server");
@@ -442,6 +443,11 @@ describe("native packaging artifacts", () => {
     expect(installer).toContain("net-start default");
     expect(installer).toContain("systemctl enable --now docker.service");
     expect(installer).toContain("systemctl restart cyberos-host-accessd.service");
+    expect(installer).toContain("http://127.0.0.1:3010/api/settings/tv");
+    expect(installer).toContain('cyberos-tv-mode "$tv_mode_action"');
+    expect(installer.indexOf("systemctl restart cyberos-api.service")).toBeLessThan(
+      installer.lastIndexOf("apply_tv_mode_setting")
+    );
     expect(installer).toContain("cyberos-nginx.sh");
     expect(installer).toContain("systemctl restart nginx");
     expect(installer).toContain("systemctl enable --now");
@@ -485,6 +491,9 @@ describe("native packaging artifacts", () => {
     expect(depends.split(", ")).toContain("libvirt-daemon-system");
     expect(depends.split(", ")).toContain("${cyberos:VmDepends}");
     expect(depends.split(", ")).toContain("ipxe-qemu");
+    expect(depends.split(", ")).toEqual(expect.arrayContaining([
+      "chromium", "weston", "mpv", "v4l-utils", "seatd", "wtype"
+    ]));
     expect(suggests.split(", ")).not.toContain("smartmontools");
     expect(suggests.split(", ")).not.toContain("docker.io");
     expect(suggests.split(", ")).not.toContain("libvirt-daemon-system");

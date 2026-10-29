@@ -411,7 +411,26 @@ type SettingsUpdateRequest =
   | (Operation<"backup"> & OptionalJsonFields<"enabled" | "repositoryPath" | "requireMount" | "keepDaily" | "keepWeekly">)
   | Operation<"backup_credential_set">
   | Operation<"backup_credential_clear">
-  | (Operation<"tv"> & OptionalJsonFields<"enabled" | "videoOutput" | "drmConnector" | "audioDevice" | "hardwareDecoding">);
+  | (Operation<"tv"> & OptionalJsonFields<"enabled" | "videoOutput" | "drmConnector" | "audioDevice" | "hardwareDecoding">)
+  | Operation<"mcp_builtin", { enabled: boolean }>
+  | Operation<"mcp_server_create", {
+    name: string;
+    description: string;
+    url: string;
+    timeoutSeconds: number;
+    exposure: "codemode" | "deferred" | "direct";
+    authMode: "none" | "bearer" | "headers";
+    allowInsecureHttp: boolean;
+  }>
+  | (Operation<"mcp_server_update", { serverId: string }> & OptionalJsonFields<
+    "name" | "description" | "url" | "timeoutSeconds" | "exposure" | "authMode" | "allowInsecureHttp" | "enabled"
+  >)
+  | Operation<"mcp_server_delete" | "mcp_server_test" | "mcp_credentials_clear", { serverId: string }>
+  | Operation<"mcp_credentials_set", { serverId: string; authMode: "bearer" | "headers" }>
+  | Operation<"skill_import", { storagePoolId: string; path: string; replaceId?: string }>
+  | Operation<"skill_install_git", { url: string; ref?: string; subdirectory?: string; replaceId?: string }>
+  | Operation<"skill_set_enabled", { skillId: string; enabled: boolean }>
+  | Operation<"skill_update" | "skill_delete", { skillId: string }>;
 
 type TerminalManageRequest =
   | Operation<"create">
@@ -751,7 +770,27 @@ const schemas: Record<string, JsonSchema> = {
     operation("backup", { enabled: boolean, repositoryPath: nonEmptyText(4096), requireMount: boolean, keepDaily: integer(1, 365), keepWeekly: integer(1, 104) }),
     operation("backup_credential_set"),
     operation("backup_credential_clear"),
-    operation("tv", { enabled: boolean, videoOutput: stringEnum(["drm", "wayland"]), drmConnector: nullableText(128), audioDevice: nullableText(256), hardwareDecoding: stringEnum(["auto-safe", "auto", "no"]) })
+    operation("tv", { enabled: boolean, videoOutput: stringEnum(["drm", "wayland"]), drmConnector: nullableText(128), audioDevice: nullableText(256), hardwareDecoding: stringEnum(["auto-safe", "auto", "no"]) }),
+    operation("mcp_builtin", { enabled: boolean }, ["enabled"]),
+    operation("mcp_server_create", {
+      name: nonEmptyText(63), description: text(1024), url: nonEmptyText(2048), timeoutSeconds: integer(1, 300),
+      exposure: stringEnum(["codemode", "deferred", "direct"]), authMode: stringEnum(["none", "bearer", "headers"]),
+      allowInsecureHttp: boolean
+    }, ["name", "description", "url", "timeoutSeconds", "exposure", "authMode", "allowInsecureHttp"]),
+    operation("mcp_server_update", {
+      serverId: id(128), name: nonEmptyText(63), description: text(1024), url: nonEmptyText(2048), timeoutSeconds: integer(1, 300),
+      exposure: stringEnum(["codemode", "deferred", "direct"]), authMode: stringEnum(["none", "bearer", "headers"]),
+      allowInsecureHttp: boolean, enabled: boolean
+    }, ["serverId"]),
+    operation("mcp_server_delete", { serverId: id(128) }, ["serverId"]),
+    operation("mcp_server_test", { serverId: id(128) }, ["serverId"]),
+    operation("mcp_credentials_set", { serverId: id(128), authMode: stringEnum(["bearer", "headers"]) }, ["serverId", "authMode"]),
+    operation("mcp_credentials_clear", { serverId: id(128) }, ["serverId"]),
+    operation("skill_import", { storagePoolId, path: nonEmptyText(4096), replaceId: id(128) }, ["storagePoolId", "path"]),
+    operation("skill_install_git", { url: nonEmptyText(2048), ref: nonEmptyText(256), subdirectory: nonEmptyText(1024), replaceId: id(128) }, ["url"]),
+    operation("skill_set_enabled", { skillId: id(128), enabled: boolean }, ["skillId", "enabled"]),
+    operation("skill_update", { skillId: id(128) }, ["skillId"]),
+    operation("skill_delete", { skillId: id(128) }, ["skillId"])
   )),
   "cyberos.terminal.tabs": EMPTY_OBJECT_SCHEMA,
   "cyberos.terminal.manage-propose": proposal(operationUnion(

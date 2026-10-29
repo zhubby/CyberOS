@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   capabilityPendingRunId,
   getPiTurnFailure,
+  loadControlledPiMcpConfig,
   mapPiAssistantMessageEnd,
   piAgentToolNames,
   projectPiSessionEntry,
@@ -233,7 +234,36 @@ describe("Pi MCP run continuation", () => {
 });
 
 describe("Pi MCP tool selection", () => {
-  it("filters dynamically registered MCP tools to the CyberOS server and resource helpers", async () => {
+  it("loads all three third-party exposure modes into controlled HTTP transports", async () => {
+    const loaded = await loadControlledPiMcpConfig({
+      generation: 9,
+      servers: (["codemode", "deferred", "direct"] as const).map((exposure, index) => ({
+        id: `00000000-0000-4000-8000-00000000000${index}`,
+        name: `server-${index}`,
+        description: `Server ${index}`,
+        url: `http://127.0.0.1:${8100 + index}/mcp`,
+        exposure,
+        timeoutSeconds: 30,
+        allowInsecureHttp: true
+      }))
+    });
+    try {
+      expect(loaded.config.servers.map((server) => server.config.exposure)).toEqual([
+        "codemode",
+        "deferred",
+        "direct"
+      ]);
+      expect(loaded.config.servers.map((server) => server.source)).toEqual([
+        "cyberos:mcp:00000000-0000-4000-8000-000000000000",
+        "cyberos:mcp:00000000-0000-4000-8000-000000000001",
+        "cyberos:mcp:00000000-0000-4000-8000-000000000002"
+      ]);
+    } finally {
+      await loaded.close();
+    }
+  });
+
+  it("filters dynamically registered MCP tools to configured servers and resource helpers", async () => {
     const settingsManager = SettingsManager.inMemory({ defaultProjectTrust: "never" });
     const resourceLoader = new DefaultResourceLoader({
       cwd: tempDir,
@@ -265,7 +295,7 @@ describe("Pi MCP tool selection", () => {
     await resourceLoader.reload();
     const { session } = await createAgentSession({
       cwd: tempDir,
-      tools: piAgentToolNames({ mcpEnabled: true }),
+      tools: piAgentToolNames({ mcpServerNames: ["cyberos", "external"] }),
       resourceLoader,
       settingsManager,
       sessionManager: SessionManager.inMemory(tempDir)
@@ -279,8 +309,8 @@ describe("Pi MCP tool selection", () => {
       expect(activeTools).toContain("mcp__cyberos__cyberos_files_read");
       expect(activeTools).not.toContain("mcp__cyberos__cyberos_apps_inspect");
       expect(callableTools).toContain("mcp__cyberos__cyberos_apps_inspect");
-      expect(callableTools).not.toContain("mcp__external__danger");
-      expect(callableTools).not.toContain("mcp__external__lookup");
+      expect(activeTools).toContain("mcp__external__danger");
+      expect(callableTools).toContain("mcp__external__lookup");
       expect(callableTools).toEqual(expect.arrayContaining([
         "list_mcp_resources",
         "list_mcp_resource_templates",
@@ -295,12 +325,13 @@ describe("Pi MCP tool selection", () => {
   });
 
   it("selects the exact MCP allowlist without a direct-tool fallback", () => {
-    expect(piAgentToolNames({ mcpEnabled: false })).toEqual([]);
+    expect(piAgentToolNames({ mcpServerNames: [] })).toEqual([]);
 
-    expect(piAgentToolNames({ mcpEnabled: true })).toEqual([
+    expect(piAgentToolNames({ mcpServerNames: ["cyberos", "home-assistant"] })).toEqual([
       "codemode",
       "tool_search",
       "mcp__cyberos__*",
+      "mcp__home_assistant__*",
       "list_mcp_resources",
       "list_mcp_resource_templates",
       "read_mcp_resource"

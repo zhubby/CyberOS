@@ -6,6 +6,8 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createDownloadTask,
+  createAgentMcpServer,
+  createAgentSkill,
   createMcpClient,
   defaultAgentCapabilityPolicySettings,
   getCapabilityApprovalByRun,
@@ -342,6 +344,39 @@ describe("MCP Streamable HTTP", () => {
       model: "test-model",
       apiKey: "super-secret-api-key"
     });
+    const externalMcp = createAgentMcpServer(db, {
+      name: "home-assistant",
+      description: "Local automation",
+      url: "http://127.0.0.1:8123/mcp",
+      timeoutSeconds: 30,
+      exposure: "codemode",
+      authMode: "bearer",
+      credentialHeaderNames: ["Authorization"],
+      enabled: false,
+      allowInsecureHttp: true
+    });
+    createAgentSkill(db, {
+      name: "ops-review",
+      description: "Review operational changes",
+      version: "1.0.0",
+      sourceType: "git",
+      sourceUrl: "https://example.com/skills.git",
+      sourceRef: "main",
+      sourceSubdirectory: null,
+      sourceStoragePoolId: null,
+      sourcePath: null,
+      resolvedCommit: "a".repeat(40),
+      digest: "b".repeat(64),
+      enabled: true,
+      diagnostics: []
+    });
+    const mcpSecretDir = testConfig(tempDir).paths.mcpSecretsDir;
+    await mkdir(mcpSecretDir, { recursive: true, mode: 0o700 });
+    await writeFile(
+      path.join(mcpSecretDir, `${externalMcp.id}.json`),
+      `${JSON.stringify({ bearerToken: "external-mcp-secret" })}\n`,
+      { mode: 0o600 }
+    );
     const templates = await postMcp({
       jsonrpc: "2.0",
       id: 30,
@@ -367,10 +402,23 @@ describe("MCP Streamable HTTP", () => {
           baseUrl: "https://example.test/v1",
           model: "test-model",
           apiKeyConfigured: true
+        },
+        agentResources: {
+          generation: 3,
+          mcp: {
+            builtIn: { enabled: true, available: true },
+            servers: [{
+              id: externalMcp.id,
+              name: "home-assistant",
+              credentialsConfigured: true,
+              credentialHeaderNames: ["Authorization"]
+            }]
+          },
+          skills: [{ name: "ops-review", enabled: true }]
         }
       }
     });
-    expect(JSON.stringify(payload)).not.toMatch(/super-secret-api-key|user:password|token=secret/u);
+    expect(JSON.stringify(payload)).not.toMatch(/super-secret-api-key|external-mcp-secret|user:password|token=secret/u);
   });
 
   it("redacts download credentials and host paths", async () => {

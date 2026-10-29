@@ -17,11 +17,14 @@ export type SettingsSectionId =
   | "system-profile"
   | "version"
   | "model-providers"
-  | "agents"
+  | "pi-agent"
+  | "mcp"
+  | "skills"
   | "wireless"
   | "bluetooth"
   | "docker"
   | "virtual-machines"
+  | "shares"
   | "files"
   | "indexer"
   | "operations"
@@ -31,8 +34,7 @@ export type SettingsSectionId =
   | "photos"
   | "media"
   | "downloads"
-  | "appearance"
-  | "advanced";
+  | "appearance";
 
 export type SettingsGroupId = "cyberos" | "devices" | "ai" | "workspace" | "administration";
 export type SettingsState = "ready" | "missing" | "loading";
@@ -84,7 +86,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "ai"
   },
   {
-    id: "agents",
+    id: "pi-agent",
+    group: "ai"
+  },
+  {
+    id: "mcp",
+    group: "ai"
+  },
+  {
+    id: "skills",
     group: "ai"
   },
   {
@@ -101,6 +111,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   },
   {
     id: "virtual-machines",
+    group: "administration"
+  },
+  {
+    id: "shares",
     group: "administration"
   },
   {
@@ -142,10 +156,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "appearance",
     group: "cyberos"
-  },
-  {
-    id: "advanced",
-    group: "administration"
   }
 ];
 
@@ -154,11 +164,14 @@ const SECTION_TITLE_KEYS = {
   "system-profile": "settings.sections.systemProfile.title",
   version: "settings.sections.version.title",
   "model-providers": "settings.sections.modelProviders.title",
-  agents: "settings.sections.agents.title",
+  "pi-agent": "settings.sections.piAgent.title",
+  mcp: "settings.sections.mcp.title",
+  skills: "settings.sections.skills.title",
   wireless: "settings.sections.wireless.title",
   bluetooth: "settings.sections.bluetooth.title",
   docker: "settings.sections.docker.title",
   "virtual-machines": "settings.sections.virtualMachines.title",
+  shares: "settings.sections.shares.title",
   files: "settings.sections.files.title",
   indexer: "settings.sections.indexer.title",
   operations: "settings.sections.operations.title",
@@ -168,8 +181,7 @@ const SECTION_TITLE_KEYS = {
   photos: "settings.sections.photos.title",
   media: "settings.sections.media.title",
   downloads: "settings.sections.downloads.title",
-  appearance: "settings.sections.appearance.title",
-  advanced: "settings.sections.advanced.title"
+  appearance: "settings.sections.appearance.title"
 } as const satisfies Record<SettingsSectionId, string>;
 
 const SECTION_DESCRIPTION_KEYS = {
@@ -177,11 +189,14 @@ const SECTION_DESCRIPTION_KEYS = {
   "system-profile": "settings.sections.systemProfile.description",
   version: "settings.sections.version.description",
   "model-providers": "settings.sections.modelProviders.description",
-  agents: "settings.sections.agents.description",
+  "pi-agent": "settings.sections.piAgent.description",
+  mcp: "settings.sections.mcp.description",
+  skills: "settings.sections.skills.description",
   wireless: "settings.sections.wireless.description",
   bluetooth: "settings.sections.bluetooth.description",
   docker: "settings.sections.docker.description",
   "virtual-machines": "settings.sections.virtualMachines.description",
+  shares: "settings.sections.shares.description",
   files: "settings.sections.files.description",
   indexer: "settings.sections.indexer.description",
   operations: "settings.sections.operations.description",
@@ -191,8 +206,7 @@ const SECTION_DESCRIPTION_KEYS = {
   photos: "settings.sections.photos.description",
   media: "settings.sections.media.description",
   downloads: "settings.sections.downloads.description",
-  appearance: "settings.sections.appearance.description",
-  advanced: "settings.sections.advanced.description"
+  appearance: "settings.sections.appearance.description"
 } as const satisfies Record<SettingsSectionId, string>;
 
 const GROUP_LABEL_KEYS = {

@@ -6,6 +6,8 @@ import {
   claimNextCapabilityContinuation,
   claimNextJob,
   createAgentSessionCommand,
+  createAgentMcpServer,
+  createAgentSkill,
   createSession,
   createUserMessageAndJob,
   createCapabilityProposal,
@@ -21,6 +23,8 @@ import {
   recoverInterruptedAgentSessionCommands,
   saveAgentProviderSession,
   saveAgentMcpSettings,
+  updateAgentMcpServer,
+  updateAgentSkill,
   type CyberOsDatabase
 } from "@cyberos/db";
 import { PiActiveTurnUnavailableError, type PiAgentRunner } from "@cyberos/agent";
@@ -283,7 +287,7 @@ describe("worker processor", () => {
     };
     const observed: boolean[] = [];
     const runner: PiAgentRunner = async (input) => {
-      observed.push(Boolean(input.mcp?.enabled));
+      observed.push(Boolean(input.mcp?.servers.length));
       return { status: "completed", summary: "Done" };
     };
 
@@ -296,6 +300,103 @@ describe("worker processor", () => {
     await processNextJob({ db, config, agentRunner: runner });
 
     expect(observed).toEqual([true, false]);
+  });
+
+  it("refreshes third-party MCP servers and global Skills on the next turn", async () => {
+    const session = createSession(db, {});
+    const config = testConfig();
+    saveAgentMcpSettings(db, false);
+    const testedAt = new Date().toISOString();
+    const server = createAgentMcpServer(db, {
+      name: "home-assistant",
+      description: "Local automation",
+      url: "http://127.0.0.1:8123/mcp",
+      timeoutSeconds: 30,
+      exposure: "codemode",
+      authMode: "none",
+      enabled: true,
+      allowInsecureHttp: true,
+      testStatus: "ready",
+      toolCount: 3,
+      lastTestedAt: testedAt,
+      trustedAt: testedAt
+    });
+    const skill = createAgentSkill(db, {
+      name: "ops-review",
+      description: "Review operational changes",
+      version: null,
+      sourceType: "git",
+      sourceUrl: "https://example.com/skills.git",
+      sourceRef: "main",
+      sourceSubdirectory: null,
+      sourceStoragePoolId: null,
+      sourcePath: null,
+      resolvedCommit: "a".repeat(40),
+      digest: "b".repeat(64),
+      enabled: true,
+      diagnostics: []
+    });
+    const observed: Array<{ servers: string[]; skills: string[]; generation: number }> = [];
+    const runner: PiAgentRunner = async (input) => {
+      observed.push({
+        servers: input.mcp?.servers.map((entry) => entry.name) ?? [],
+        skills: input.skills?.globalPaths ?? [],
+        generation: input.skills?.generation ?? 0
+      });
+      return { status: "completed", summary: "Done" };
+    };
+
+    createUserMessageAndJob(db, { sessionId: session.id, content: "First" });
+    await processNextJob({ db, config, agentRunner: runner });
+    updateAgentMcpServer(db, server.id, { ...server, enabled: false });
+    updateAgentSkill(db, skill.id, { ...skill, enabled: false });
+    createUserMessageAndJob(db, { sessionId: session.id, content: "Second" });
+    await processNextJob({ db, config, agentRunner: runner });
+
+    expect(observed[0]).toMatchObject({
+      servers: ["home-assistant"],
+      skills: [path.join(config.paths.piSkillsDir, skill.id)]
+    });
+    expect(observed[1]).toMatchObject({ servers: [], skills: [] });
+    expect(observed[1]!.generation).toBeGreaterThan(observed[0]!.generation);
+  });
+
+  it("fails closed when a persisted MCP credential contains a forbidden header", async () => {
+    const session = createSession(db, {});
+    const config = testConfig();
+    saveAgentMcpSettings(db, false);
+    const testedAt = new Date().toISOString();
+    const server = createAgentMcpServer(db, {
+      name: "unsafe-credentials",
+      description: "Corrupted local credential fixture",
+      url: "http://127.0.0.1:8123/mcp",
+      timeoutSeconds: 30,
+      exposure: "direct",
+      authMode: "headers",
+      credentialHeaderNames: ["Host"],
+      enabled: true,
+      allowInsecureHttp: true,
+      testStatus: "ready",
+      toolCount: 1,
+      lastTestedAt: testedAt,
+      trustedAt: testedAt
+    });
+    await mkdir(config.paths.mcpSecretsDir, { recursive: true });
+    await writeFile(
+      path.join(config.paths.mcpSecretsDir, `${server.id}.json`),
+      JSON.stringify({ headers: { Host: "metadata.internal" } }),
+      { mode: 0o600 }
+    );
+    const observed: string[][] = [];
+    const runner: PiAgentRunner = async (input) => {
+      observed.push(input.mcp?.servers.map((entry) => entry.name) ?? []);
+      return { status: "completed", summary: "Done" };
+    };
+
+    createUserMessageAndJob(db, { sessionId: session.id, content: "Run the external tool" });
+    await processNextJob({ db, config, agentRunner: runner });
+
+    expect(observed).toEqual([[]]);
   });
 
   it("marks Pi failures as failed jobs", async () => {

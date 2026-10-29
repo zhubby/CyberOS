@@ -99,6 +99,10 @@ describe("settings helpers", () => {
     expect(SETTINGS_SECTIONS.map((section) => section.id)).not.toContain("security");
   });
 
+  it("keeps runtime details in Overview instead of exposing an Advanced section", () => {
+    expect(SETTINGS_SECTIONS.map((section) => section.id)).not.toContain("advanced");
+  });
+
   it("groups wireless and Bluetooth settings under devices", () => {
     expect(SETTINGS_SECTIONS.filter((section) => section.group === "devices").map((section) => section.id))
       .toEqual(["wireless", "bluetooth"]);

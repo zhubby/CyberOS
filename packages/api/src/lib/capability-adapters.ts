@@ -357,7 +357,44 @@ function settingsRequest(
   if (operation === "backup_credential_set") return { method: "PUT", url: "/api/settings/backup/credential", payload: { password: secrets.backupPassword } };
   if (operation === "backup_credential_clear") return { method: "DELETE", url: "/api/settings/backup/credential" };
   if (operation === "tv") return { method: "PATCH", url: "/api/settings/tv", payload: { ...body, confirmed: true } };
+  if (operation === "mcp_builtin") return { method: "PATCH", url: "/api/settings/mcp/servers/builtin", payload: { enabled: request.enabled, confirmed: true } };
+  if (operation === "mcp_server_create") return { method: "POST", url: "/api/settings/mcp/servers", payload: { ...body, confirmed: true } };
+  if (operation === "mcp_server_update") return { method: "PATCH", url: `/api/settings/mcp/servers/${encoded(request.serverId)}`, payload: { ...without(body, "serverId"), confirmed: true } };
+  if (operation === "mcp_server_delete") return { method: "DELETE", url: `/api/settings/mcp/servers/${encoded(request.serverId)}`, payload: { confirmed: true } };
+  if (operation === "mcp_server_test") return { method: "POST", url: `/api/settings/mcp/servers/${encoded(request.serverId)}/test` };
+  if (operation === "mcp_credentials_set") return {
+    method: "PUT",
+    url: `/api/settings/mcp/servers/${encoded(request.serverId)}/credentials`,
+    payload: request.authMode === "bearer"
+      ? { bearerToken: secrets.mcpBearerToken, confirmed: true }
+      : { headers: parseMcpSecretHeaders(secrets.mcpSecretHeaders), confirmed: true }
+  };
+  if (operation === "mcp_credentials_clear") return { method: "DELETE", url: `/api/settings/mcp/servers/${encoded(request.serverId)}/credentials`, payload: { confirmed: true } };
+  if (operation === "skill_import") return { method: "POST", url: "/api/settings/skills/import", payload: { ...body, confirmed: true } };
+  if (operation === "skill_install_git") return { method: "POST", url: "/api/settings/skills/install-git", payload: { ...body, confirmed: true } };
+  if (operation === "skill_set_enabled") return { method: "PATCH", url: `/api/settings/skills/${encoded(request.skillId)}`, payload: { enabled: request.enabled, confirmed: true } };
+  if (operation === "skill_update") return { method: "POST", url: `/api/settings/skills/${encoded(request.skillId)}/update`, payload: { confirmed: true } };
+  if (operation === "skill_delete") return { method: "DELETE", url: `/api/settings/skills/${encoded(request.skillId)}`, payload: { confirmed: true } };
   throw invalidOperation("settings", operation);
+}
+
+function parseMcpSecretHeaders(value: string | undefined): Record<string, string> {
+  if (!value) throw new CapabilityError("INVALID_ARGUMENT", "MCP secret headers are required");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new CapabilityError("INVALID_ARGUMENT", "MCP secret headers must be a JSON object");
+  }
+  if (
+    typeof parsed !== "object"
+    || parsed === null
+    || Array.isArray(parsed)
+    || Object.values(parsed).some((item) => typeof item !== "string")
+  ) {
+    throw new CapabilityError("INVALID_ARGUMENT", "MCP secret headers must be a JSON object of string values");
+  }
+  return parsed as Record<string, string>;
 }
 
 function terminalRequest(operation: string, request: Record<string, JsonValue>): InternalRequest {
@@ -829,7 +866,9 @@ function revisionTables(capabilityId: string): string[] {
   if (capabilityId.startsWith("cyberos.notifications.")) return ["operation_notifications"];
   if (capabilityId.startsWith("cyberos.docker.")) return ["docker_operations", "docker_compose_apps", "docker_registry_credentials", "system_settings"];
   if (capabilityId.startsWith("cyberos.vm.")) return ["vm_operations"];
-  if (capabilityId.startsWith("cyberos.settings.")) return ["system_settings"];
+  if (capabilityId.startsWith("cyberos.settings.")) {
+    return ["system_settings", "agent_resource_generation", "agent_mcp_servers", "agent_skills"];
+  }
   if (capabilityId.startsWith("cyberos.terminal.")) return ["terminal_tabs"];
   return [];
 }
@@ -856,6 +895,16 @@ function secretRequirements(capabilityId: string, request: Record<string, JsonVa
   if (capabilityId === "cyberos.settings.update-propose" && operation === "backup_credential_set") {
     return [{ name: "backupPassword", label: "Backup repository password", maxLength: 4096 }];
   }
+  if (capabilityId === "cyberos.settings.update-propose" && operation === "mcp_credentials_set") {
+    return request.authMode === "bearer"
+      ? [{ name: "mcpBearerToken", label: "MCP bearer token", maxLength: 8192 }]
+      : [{
+          name: "mcpSecretHeaders",
+          label: "MCP secret headers JSON",
+          description: "JSON object containing only secret HTTP header names and values",
+          maxLength: 65_536
+        }];
+  }
   if (capabilityId === "cyberos.storage.manage-propose" && operation === "share_account") {
     return [{ name: "sharePassword", label: "Share account password", maxLength: 256 }];
   }
@@ -864,7 +913,7 @@ function secretRequirements(capabilityId: string, request: Record<string, JsonVa
 
 function capabilitySummary(capabilityId: string, request: Record<string, JsonValue>): string {
   const operation = requiredString(request.operation, "operation");
-  const target = [request.path, request.taskId, request.containerId, request.appId, request.domainName, request.connectionId, request.poolId, request.tabId, request.id]
+  const target = [request.path, request.taskId, request.containerId, request.appId, request.domainName, request.connectionId, request.poolId, request.tabId, request.serverId, request.skillId, request.id]
     .find((value): value is string => typeof value === "string" && value.length > 0);
   const title = capabilityId.replace(/^cyberos\./u, "").replace(/-propose$/u, "").replaceAll(".", " ");
   return `${title}: ${operation.replaceAll("_", " ")}${target ? ` (${target})` : ""}`;

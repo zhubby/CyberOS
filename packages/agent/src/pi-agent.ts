@@ -12,10 +12,14 @@ import {
   type AgentSession,
   type AgentSessionEvent,
   type LoadedMcpConfig,
+  type McpTransportFactory,
   type SessionEntry
 } from "@earendil-works/pi-coding-agent";
+import { StreamableHttpTransport } from "@earendil-works/pi-mcp";
 import { resolveSafeExistingPath } from "@cyberos/storage-tools";
+import { createSecureMcpFetch, type SecureMcpFetch } from "@cyberos/shared/mcp-network";
 import type {
+  AgentMcpExposure,
   AgentProviderSessionRecord,
   AgentSessionCommandType,
   AgentSessionRecord,
@@ -78,13 +82,30 @@ export interface PiAgentInput {
   }) => void | Promise<void>;
   onCapabilityRunPending?: (runId: string, providerSessionId: string) => void | Promise<void>;
   mcp?: PiMcpRuntimeSettings;
+  skills?: PiSkillRuntimeSettings;
   runner?: PiAgentRunner;
 }
 
 export interface PiMcpRuntimeSettings {
-  enabled: boolean;
+  generation: number;
+  servers: PiMcpRuntimeServer[];
+}
+
+export interface PiMcpRuntimeServer {
+  id: string;
+  name: string;
   url: string;
-  tokenFile: string;
+  description: string;
+  exposure: AgentMcpExposure;
+  timeoutSeconds: number;
+  allowInsecureHttp: boolean;
+  headers?: Record<string, string>;
+  tokenFile?: string;
+}
+
+export interface PiSkillRuntimeSettings {
+  generation: number;
+  globalPaths: string[];
 }
 
 export type PiAgentRunner = (input: PiAgentRuntimeInput) => Promise<PiAgentTurnResult>;
@@ -103,6 +124,7 @@ export interface PiAgentRuntimeInput {
   saveProviderSession: PiAgentInput["saveProviderSession"];
   onCapabilityRunPending?: PiAgentInput["onCapabilityRunPending"];
   mcp?: PiMcpRuntimeSettings;
+  skills?: PiSkillRuntimeSettings;
 }
 
 const DIRECT_MCP_TOOLS = [
@@ -121,7 +143,6 @@ const MCP_RESOURCE_TOOL_NAMES = [
   "list_mcp_resource_templates",
   "read_mcp_resource"
 ] as const;
-const CYBEROS_MCP_SERVER_NAME = "cyberos";
 const PI_CANCELLATION_POLL_MS = 100;
 const PI_PROJECTION_ROOT = "__root__";
 export async function runPiAgentTurn(input: PiAgentInput): Promise<PiAgentTurnResult> {
@@ -230,7 +251,8 @@ export class PiAgentSessionHost {
     const fingerprint = JSON.stringify({
       workingPath: workspace.relativePath,
       runtimeGeneration: runtime.generation,
-      mcp: input.mcp ?? null,
+      mcp: piMcpFingerprint(input.mcp),
+      skills: piSkillFingerprint(input.skills),
       resourcesTrusted: input.session.piResourcesTrusted === true
     });
     return this.sessions.run({
@@ -258,7 +280,8 @@ export class PiAgentSessionHost {
     const fingerprint = JSON.stringify({
       workingPath: workspace.relativePath,
       runtimeGeneration: runtime.generation,
-      mcp: commandInput.mcp ?? null,
+      mcp: piMcpFingerprint(commandInput.mcp),
+      skills: piSkillFingerprint(commandInput.skills),
       resourcesTrusted: commandInput.session.piResourcesTrusted === true
     });
     return this.sessions.run({
@@ -291,8 +314,13 @@ export class PiAgentSessionHost {
       ...(runtime.settings.model ? { defaultModel: runtime.settings.model } : {}),
       defaultProjectTrust: "never"
     });
-    const mcpConfig = input.mcp?.enabled ? await loadControlledPiMcpConfig(input.mcp) : null;
+    const mcpRuntime = input.mcp?.servers.length ? await loadControlledPiMcpConfig(input.mcp) : null;
+    const mcpConfig = mcpRuntime?.config ?? null;
     const resourcePolicy = this.resourcePolicy.evaluate(input.session);
+    const additionalSkillPaths = [
+      ...(input.skills?.globalPaths ?? []),
+      ...(resourcePolicy.allowProjectSkills ? [path.join(workspace.realPath, ".agents", "skills")] : [])
+    ];
     const resourceLoader = new DefaultResourceLoader({
       cwd: workspace.realPath,
       agentDir: this.piAgentDir,
@@ -304,11 +332,13 @@ export class PiAgentSessionHost {
         createMcpExtension({
           loadConfig: () => mcpConfig,
           updateConfig: () => undefined,
+          createTransport: mcpRuntime!.createTransport,
           logPath: path.join(this.piAgentDir, "mcp.log"),
           startupWaitMs: 10_000
         })
       ] : [],
-      noSkills: !resourcePolicy.allowProjectSkills,
+      additionalSkillPaths,
+      noSkills: true,
       noPromptTemplates: !resourcePolicy.allowProjectPrompts,
       noThemes: true,
       noContextFiles: !resourcePolicy.allowProjectContext,
@@ -338,7 +368,7 @@ export class PiAgentSessionHost {
       modelRuntime: runtime.runtime,
       ...(runtime.model ? { model: runtime.model } : {}),
       tools: piAgentToolNames({
-        mcpEnabled: mcpConfig !== null
+        mcpServerNames: mcpConfig?.servers.map((server) => server.name) ?? []
       }),
       customTools: [],
       resourceLoader,
@@ -372,6 +402,7 @@ export class PiAgentSessionHost {
         hosted.unsubscribe();
         if (!hosted.piSession.isIdle) await hosted.piSession.abort();
         hosted.piSession.dispose();
+        await mcpRuntime?.close();
       }
     };
   }
@@ -762,50 +793,101 @@ export function startPiCancellationMonitor(input: {
 }
 
 export function piAgentToolNames(options: {
-  mcpEnabled: boolean;
+  mcpServerNames: string[];
 }): string[] {
   return [
     // Pi requires an MCP allowlist match before direct tools can be declared to the model.
-    ...(options.mcpEnabled
+    ...(options.mcpServerNames.length > 0
       ? [
           "codemode",
           "tool_search",
-          `mcp__${CYBEROS_MCP_SERVER_NAME}__*`,
+          ...options.mcpServerNames.map((name) => `mcp__${mcpNamespaceName(name)}__*`),
           ...MCP_RESOURCE_TOOL_NAMES
         ]
       : [])
   ];
 }
 
-export async function loadControlledPiMcpConfig(settings: PiMcpRuntimeSettings): Promise<LoadedMcpConfig> {
-  const tokenStat = await stat(settings.tokenFile);
-  if (!tokenStat.isFile()) {
-    throw new Error("CyberOS Pi MCP token path is not a regular file");
+export async function loadControlledPiMcpConfig(settings: PiMcpRuntimeSettings): Promise<{
+  config: LoadedMcpConfig;
+  createTransport: McpTransportFactory;
+  close: () => Promise<void>;
+}> {
+  const networks = new Map<string, SecureMcpFetch>();
+  const servers: LoadedMcpConfig["servers"] = [];
+  try {
+    for (const server of settings.servers) {
+      const headers = server.tokenFile
+        ? { Authorization: `Bearer ${await readPiMcpToken(server.tokenFile)}` }
+        : { ...(server.headers ?? {}) };
+      networks.set(server.name, await createSecureMcpFetch(server.url, server.allowInsecureHttp));
+      servers.push({
+        name: server.name,
+        source: server.id === "builtin" ? "cyberos:internal" : `cyberos:mcp:${server.id}`,
+        scope: "global",
+        config: {
+          type: "http",
+          url: server.url,
+          headers,
+          exposure: server.exposure,
+          timeout: server.timeoutSeconds,
+          description: server.description,
+          ...(server.id === "builtin" ? {
+            toolExposure: Object.fromEntries(DIRECT_MCP_TOOLS.map((name) => [name, "direct" as const]))
+          } : {})
+        }
+      });
+    }
+  } catch (error) {
+    await Promise.all([...networks.values()].map((network) => network.close().catch(() => undefined)));
+    throw error;
   }
-  if ((tokenStat.mode & 0o077) !== 0) {
-    throw new Error("CyberOS Pi MCP token file permissions must be 0600");
-  }
-  const token = (await readFile(settings.tokenFile, "utf8")).trim();
-  if (!/^cyberos_mcp_[A-Za-z0-9_-]{40,}$/u.test(token)) {
-    throw new Error("CyberOS Pi MCP token file is invalid");
-  }
-  return {
-    servers: [{
-      name: CYBEROS_MCP_SERVER_NAME,
-      source: "cyberos:internal",
-      scope: "global",
-      config: {
-        type: "http",
-        url: settings.url,
-        headers: { Authorization: `Bearer ${token}` },
-        exposure: "codemode",
-        description: "CyberOS NAS capabilities, durable runs, resources, and approval-gated proposals.",
-        toolExposure: Object.fromEntries(DIRECT_MCP_TOOLS.map((name) => [name, "direct" as const]))
-      }
-    }],
-    autoEnableCodemode: true,
-    errors: []
+  const createTransport: McpTransportFactory = (entry) => {
+    const network = networks.get(entry.name);
+    if (!network || entry.config.type !== "http") {
+      throw new Error(`MCP transport is unavailable for ${entry.name}`);
+    }
+    return new StreamableHttpTransport({
+      url: entry.config.url,
+      ...(entry.config.headers ? { headers: entry.config.headers } : {}),
+      fetch: network.fetch,
+      maxMessageBytes: 4 * 1024 * 1024
+    });
   };
+  return {
+    config: { servers, autoEnableCodemode: true, errors: [] },
+    createTransport,
+    close: async () => {
+      await Promise.all([...networks.values()].map((network) => network.close().catch(() => undefined)));
+    }
+  };
+}
+
+async function readPiMcpToken(tokenFile: string): Promise<string> {
+  const tokenStat = await stat(tokenFile);
+  if (!tokenStat.isFile()) throw new Error("CyberOS Pi MCP token path is not a regular file");
+  if ((tokenStat.mode & 0o077) !== 0) throw new Error("CyberOS Pi MCP token file permissions must be 0600");
+  const token = (await readFile(tokenFile, "utf8")).trim();
+  if (!/^cyberos_mcp_[A-Za-z0-9_-]{40,}$/u.test(token)) throw new Error("CyberOS Pi MCP token file is invalid");
+  return token;
+}
+
+function mcpNamespaceName(name: string): string {
+  return name.replaceAll("-", "_");
+}
+
+function piMcpFingerprint(settings: PiMcpRuntimeSettings | undefined) {
+  return settings ? {
+    generation: settings.generation,
+    servers: settings.servers.map((server) => ({ id: server.id, name: server.name }))
+  } : null;
+}
+
+function piSkillFingerprint(settings: PiSkillRuntimeSettings | undefined) {
+  return settings ? {
+    generation: settings.generation,
+    paths: settings.globalPaths
+  } : null;
 }
 
 async function mapPiEvent(

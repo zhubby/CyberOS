@@ -15,6 +15,7 @@ export const en = {
       rollback: "Rollback",
       save: "Save",
       edit: "Edit",
+      update: "Update",
       delete: "Delete",
       clear: "Clear",
       saveChanges: "Save Changes",
@@ -1376,27 +1377,10 @@ export const en = {
         addShare: "Add share",
         removeShare: "Remove share",
         protocolsTitle: "Protocols",
-        editAccount: "Edit share account",
-        publishingTitle: "Global sharing",
-        publishingDescription: "Enable or disable host sharing directly on this appliance.",
-        accountDialog: {
-          title: "Share account",
-          passwordConfigured: "Password configured",
-          passwordNotConfigured: "Password not configured",
-          passwordStatusDetail: "Used by authenticated SMB, WebDAV, and FTP connections.",
-          newPassword: "New password",
-          confirmPassword: "Confirm password",
-          invalidUsername: "Use a lowercase system-safe username.",
-          invalidPassword: "The password must be no more than 256 characters and cannot contain line breaks.",
-          passwordMismatch: "The passwords do not match.",
-          conflict: "Share settings changed. Close this dialog, reload the panel, and try again."
-        },
         servicesTitle: "Services",
         servicesDescription: "Host service state for each supported sharing protocol.",
         directoriesTitle: "Shared directories",
         directoriesDescription: "Each directory stays inside a storage pool and chooses which protocols expose it.",
-        passwordConfiguredPlaceholder: "Configured; enter a new password to replace",
-        passwordPlaceholder: "Set a share password",
         enabledShares: "{{count}} enabled",
         states: {
           enabled: "Enabled",
@@ -1422,10 +1406,6 @@ export const en = {
           pictures: "Pictures"
         },
         fields: {
-          enabled: "Global sharing",
-          username: "Username",
-          password: "Password",
-          clearPassword: "Clear saved password",
           shareName: "Name",
           shareId: "ID",
           root: "storage pool",
@@ -1565,8 +1545,12 @@ export const en = {
         },
         gauges: {
           connected: "Connected links",
-          addressCoverage: "Address coverage",
-          defaultRoute: "Default route"
+          connectedDetail: "Links reporting carrier",
+          addresses: "Assigned addresses",
+          addressesDetail: "IPv4 and IPv6 assignments",
+          defaultRoute: "Default route",
+          defaultRouteReadyDetail: "Outbound path available",
+          defaultRouteMissingDetail: "No outbound path detected"
         },
         traffic: {
           title: "Live traffic",
@@ -1606,8 +1590,8 @@ export const en = {
         wifi: {
           title: "Wi-Fi",
           description: "Manage wireless adapters, saved networks, and a local hotspot.",
-          readOnlyDescription: "Connection status and nearby Wi-Fi networks. Configuration is in Settings.",
-          openSettings: "Open wireless settings",
+          readOnlyDescription: "Connection status. Configuration is in Settings.",
+          openSettings: "Wi-Fi settings",
           radioOffTitle: "Wi-Fi radio is off",
           radioOffDescription: "Nearby networks are hidden while the radio is off. Turn it on in Wireless settings.",
           radioUnknownTitle: "Wi-Fi radio state is unavailable",
@@ -1630,6 +1614,8 @@ export const en = {
           hostdUnavailableDescription: "Wireless state remains visible, but configuration changes are disabled.",
           managementPath: "management path",
           signal: "Signal",
+          signalUnavailable: "Signal unavailable",
+          notConnected: "No active Wi-Fi network",
           channel: "Channel",
           mode: "Mode",
           availableTitle: "Available networks",
@@ -1658,6 +1644,7 @@ export const en = {
             connecting: "Connecting",
             disconnected: "Disconnected",
             hotspot: "Hotspot active",
+            off: "Off",
             unavailable: "Unavailable",
             reconnecting: "Reconnecting"
           },
@@ -1849,9 +1836,14 @@ export const en = {
           mounts: "Mounts"
         },
         healthTitle: "Storage health",
-        healthDescription: "Capacity, pool readiness, and SMART pass rate.",
+        healthDescription: "Independent views of capacity, disk SMART results, and pool readiness.",
         healthCenter: "Overall status",
         healthChartLabel: "Storage health signals",
+        healthCapacityChartLabel: "Used storage capacity",
+        healthSmartChartLabel: "SMART results by disk",
+        healthSmartAria: "{{passed}} passed, {{failed}} failed, {{unknown}} unknown",
+        healthPoolsChartLabel: "Readiness state of each storage pool",
+        healthReadyOf: "of {{total}} storage pools",
         healthNoData: "No storage health signals are available.",
         detailsEyebrow: "Storage pool",
         openPoolDetails: "Open details for {{name}}",
@@ -1915,8 +1907,11 @@ export const en = {
         },
         gauges: {
           capacity: "Used capacity",
+          capacityDetail: "Mounted pool space",
           smart: "SMART pass",
-          pools: "Ready pools"
+          smartDetail: "Disk health results",
+          pools: "Ready pools",
+          poolsDetail: "Array and mount state"
         }
       },
       virtualMachines: {
@@ -2139,9 +2134,17 @@ export const en = {
         title: "Model Providers",
         description: "Third-party model provider credentials and endpoint routing."
       },
-      agents: {
-        title: "Agents",
-        description: "Tool execution policy and approval behavior."
+      piAgent: {
+        title: "Pi Agent",
+        description: "Pi execution policy, approvals, and project resource trust."
+      },
+      mcp: {
+        title: "MCP",
+        description: "Built-in capabilities and trusted Streamable HTTP servers."
+      },
+      skills: {
+        title: "Skills",
+        description: "Managed global Skills and read-only project Skills."
       },
       wireless: {
         title: "Wireless",
@@ -2158,6 +2161,10 @@ export const en = {
       virtualMachines: {
         title: "Virtual Machines",
         description: "KVM/libvirt access, guest lifecycle, snapshots, and console sessions."
+      },
+      shares: {
+        title: "Shares",
+        description: "Global publishing state and credentials for authenticated file sharing."
       },
       files: {
         title: "Files & Preview",
@@ -2198,10 +2205,6 @@ export const en = {
       downloads: {
         title: "Downloads",
         description: "HTTP download concurrency and transfer behavior."
-      },
-      advanced: {
-        title: "Advanced",
-        description: "Runtime paths, process details, and service configuration."
       }
     },
     media: {
@@ -2222,7 +2225,7 @@ export const en = {
       unmatched: "Needs match",
       library: "Library",
       tvStatusTitle: "TV mode health",
-      tvStatusDescription: "Read-only status for the local HDMI shell and playback services.",
+      tvStatusDescription: "TV dependencies are installed with CyberOS. TV mode is enabled by default and can be managed here.",
       tvMode: "TV mode",
       tvEnableConfirm: "Enable TV mode and take over the local display?",
       tvDisableConfirm: "Disable TV mode and restore the previous desktop session?",
@@ -2586,7 +2589,7 @@ export const en = {
       runNow: "Run now",
       starting: "Starting",
       historyTitle: "Run history",
-      historyDescription: "The most recent 60 health and maintenance runs.",
+      historyDescription: "The five most recent health and maintenance runs.",
       tabs: {
         all: "All",
         health: "Health",
@@ -2652,21 +2655,101 @@ export const en = {
       enabledDescription: "Allows VM inspection, lifecycle actions, snapshots, creation, and console sessions.",
       runtimeNote: "CyberOS installs and prepares the virtualization runtime during system installation. This switch controls access; hardware acceleration still requires the host kernel to expose /dev/kvm."
     },
+    shares: {
+      publishingTitle: "Global sharing",
+      publishingDescription: "Control whether configured directories are published by host sharing services.",
+      enabled: "Enable sharing",
+      enabledDescription: "Configured protocols and directories are available to network clients.",
+      disabledDescription: "Publishing is stopped while directory and protocol settings are preserved.",
+      publishingSaved: "Global sharing state saved.",
+      accountTitle: "Share account",
+      accountDescription: "Set the system-safe username and password used by authenticated SMB, WebDAV, and FTP clients.",
+      username: "Username",
+      newPassword: "New password",
+      confirmPassword: "Confirm password",
+      passwordConfigured: "Password configured",
+      passwordNotConfigured: "Password not configured",
+      passwordStatusDetail: "Existing passwords are never returned to the browser.",
+      passwordConfiguredPlaceholder: "Configured; enter a new password to replace",
+      passwordPlaceholder: "Set a share password",
+      invalidUsername: "Use a lowercase system-safe username.",
+      invalidPassword: "The password must be no more than 256 characters and cannot contain line breaks.",
+      passwordMismatch: "The passwords do not match.",
+      conflict: "Share settings changed in another view. Reopen settings and try again.",
+      accountSaved: "Share account saved."
+    },
+    mcp: {
+      builtInTitle: "CyberOS built-in MCP",
+      builtInDescription: "Approval-aware CyberOS capabilities available to Pi Agent. It is enabled by default and cannot be edited or removed.",
+      builtInToggle: "Enable CyberOS built-in MCP",
+      externalTitle: "External MCP servers",
+      externalDescription: "Only MCP Streamable HTTP is supported. External tool calls run directly without CyberOS capability approval.",
+      addServer: "Add server",
+      editServer: "Edit server",
+      empty: "No external MCP servers configured.",
+      paired: "Paired and ready",
+      needsRepair: "Credential pairing needs attention",
+      tools: "{{count}} tools",
+      credentialsReady: "credentials configured",
+      credentialsMissing: "credentials missing",
+      test: "Test connection",
+      clearCredentials: "Clear credentials",
+      toggleServer: "Toggle {{name}}",
+      name: "Server ID",
+      url: "Streamable HTTP URL",
+      description: "Description",
+      exposureLabel: "Tool exposure",
+      authLabel: "Authentication",
+      timeout: "Request timeout (seconds)",
+      allowHttp: "Allow private HTTP",
+      allowHttpHelp: "Only loopback and private LAN addresses are allowed. Traffic and credentials are plaintext.",
+      bearerToken: "Bearer token",
+      secretHeaders: "Secret headers",
+      secretHeadersPlaceholder: "X-API-Key: secret",
+      invalidHeaders: "Enter one secret header per line using Name: value syntax.",
+      keepCredential: "Leave blank to keep the current credential",
+      securityNotice: "Changing the URL or authentication disables this server until it passes a new connection test.",
+      confirmBuiltIn: "Change the CyberOS built-in MCP state?",
+      confirmEnable: "Enable {{name}}? Its external tools execute directly without CyberOS capability approval.",
+      confirmDelete: "Delete MCP server {{name}} and its stored credentials?",
+      confirmCredentials: "Clear the stored credentials for {{name}}?",
+      confirmSave: "Trust and save this MCP server configuration?",
+      exposure: { codemode: "Codemode", deferred: "Deferred", direct: "Direct" },
+      auth: { none: "None", bearer: "Bearer token", headers: "Secret headers" },
+      testStatus: { untested: "Not tested", ready: "Connection ready", error: "Connection failed" }
+    },
+    skills: {
+      globalTitle: "Global Skills",
+      globalDescription: "CyberOS validates and installs these Skills for every Pi Agent session.",
+      projectTitle: "Project Skills",
+      projectDescription: "Read-only Skills from the active project's .agents/skills directory.",
+      importZip: "Import ZIP",
+      installGit: "Install from Git",
+      install: "Install Skill",
+      replace: "Replace Skill",
+      empty: "No global Skills installed.",
+      noProjectSkills: "No project Skills found.",
+      noSession: "Select an Agent session to inspect project Skills.",
+      trusted: "Project trusted",
+      untrusted: "Project not trusted",
+      readOnly: "Read-only",
+      toggle: "Toggle {{name}}",
+      gitUrl: "Public HTTPS Git URL",
+      gitRef: "Ref (optional)",
+      gitSubdirectory: "Repository subdirectory (optional)",
+      securityNotice: "Skills can influence Pi tool calls and execute scripts. Review the source before installation.",
+      confirmInstall: "Install this Skill? Skills can influence Pi tool calls and script execution.",
+      confirmEnable: "Enable {{name}} for Pi Agent sessions?",
+      confirmUpdate: "Update {{name}} from its public Git source and disable it until reviewed?",
+      confirmDelete: "Delete Skill {{name}} and its installed files?",
+      pickerTitle: "Select a Skill ZIP",
+      pickerDescription: "Choose one validated ZIP archive from a storage pool.",
+      pickerList: "ZIP files",
+      pickerEmpty: "No ZIP files in this directory.",
+      pickerNone: "No ZIP selected",
+      pickerSelect: "Use this ZIP"
+    },
     toolPolicy: {
-      mcp: {
-        title: "Agent MCP",
-        description: "Control whether the built-in Agent uses the CyberOS capability registry.",
-        label: "Use CyberOS MCP",
-        status: {
-          loading: "Checking pairing status...",
-          disabled: "Off. Agent capabilities are unavailable.",
-          ready: "Paired and ready for new Agent tasks.",
-          attention: "Enabled, but the protected credential needs repair. Turn it off and on again to repair it.",
-          unavailable: "MCP is disabled by host configuration."
-        },
-        enabledNotice: "Agent MCP enabled.",
-        disabledNotice: "Agent MCP disabled."
-      },
       readOnlyTitle: "Read-Only Tools",
       readOnlyDescription: "Tools that can run automatically while staying inside the storage pool.",
       dangerousTitle: "Approval Tools",
@@ -2701,10 +2784,15 @@ export const en = {
     overview: {
       systemProfile: "System Profile",
       systemProfileDescription: "Essential identity and availability for this appliance.",
-      needsAttention: "Needs attention",
-      attentionTitle: "Needs attention",
-      attentionDescription: "Only settings that require input or are still loading appear here.",
-      allReady: "No configuration needs attention."
+      hardwareTitle: "Hardware",
+      hardwareDescription: "Processor, architecture, and installed physical memory.",
+      runtimeUnavailable: "System hardware and runtime information is unavailable.",
+      serviceTitle: "Service",
+      serviceDescription: "API binding, worker cadence, and authentication mode.",
+      processTitle: "Process",
+      processDescription: "Node runtime, memory, working directory, and executable path.",
+      pathsTitle: "Paths",
+      pathsDescription: "CyberOS state and database locations."
     },
     system: {
       collectedAt: "Collected {{time}}",
@@ -2723,16 +2811,21 @@ export const en = {
         rss: "RSS",
         heapUsed: "Heap used",
         stateDir: "State directory",
-        storagePoolNamespace: "Storage pool namespace",
         databasePath: "Database",
         apiBind: "API bind",
         allowedOrigins: "Allowed origins",
         workerPoll: "Worker poll",
         authMode: "Auth mode",
+        cpuModel: "CPU model",
+        architecture: "Architecture",
+        cpuThreads: "CPU threads",
+        cpuSpeed: "CPU frequency",
+        physicalMemory: "Physical memory",
         storagePools: "storage pools"
       },
       values: {
         milliseconds: "{{value}} ms",
+        megahertz: "{{value}} MHz",
         configured: "Configured",
         notConfigured: "Not configured"
       },
@@ -2818,16 +2911,6 @@ export const en = {
         stale: "Worker stale",
         unavailable: "Worker unavailable"
       }
-    },
-    advanced: {
-      runtimeTitle: "Runtime",
-      runtimeDescription: "System information could not be loaded for this session.",
-      serviceTitle: "Service",
-      serviceDescription: "API bind, worker cadence, authentication, and model mode.",
-      processTitle: "Process",
-      processDescription: "Node runtime, memory, working directory, and executable path.",
-      pathsTitle: "Paths",
-      pathsDescription: "CyberOS data, database, and storage pool paths."
     }
   },
   preview: {
@@ -2931,6 +3014,7 @@ export const zhCN = {
       rollback: "回滚",
       save: "保存",
       edit: "编辑",
+      update: "更新",
       delete: "删除",
       clear: "清除",
       saveChanges: "保存更改",
@@ -4292,27 +4376,10 @@ export const zhCN = {
         addShare: "添加共享",
         removeShare: "移除共享",
         protocolsTitle: "协议",
-        editAccount: "编辑共享账号",
-        publishingTitle: "全局共享",
-        publishingDescription: "直接在此设备上启用或停用宿主共享。",
-        accountDialog: {
-          title: "共享账号",
-          passwordConfigured: "密码已配置",
-          passwordNotConfigured: "密码未配置",
-          passwordStatusDetail: "用于需要认证的 SMB、WebDAV 和 FTP 连接。",
-          newPassword: "新密码",
-          confirmPassword: "确认密码",
-          invalidUsername: "请使用小写且适合作为系统用户的用户名。",
-          invalidPassword: "密码不能超过 256 个字符，也不能包含换行符。",
-          passwordMismatch: "两次输入的密码不一致。",
-          conflict: "共享设置已发生变化。请关闭弹窗，刷新面板后重试。"
-        },
         servicesTitle: "服务",
         servicesDescription: "每个共享协议对应的宿主服务状态。",
         directoriesTitle: "共享目录",
         directoriesDescription: "每个目录必须位于 storage pool 内，并单独选择要开放的协议。",
-        passwordConfiguredPlaceholder: "已配置；输入新密码会替换",
-        passwordPlaceholder: "设置共享密码",
         enabledShares: "已启用 {{count}} 个",
         states: {
           enabled: "已启用",
@@ -4338,10 +4405,6 @@ export const zhCN = {
           pictures: "图片"
         },
         fields: {
-          enabled: "全局共享",
-          username: "用户名",
-          password: "密码",
-          clearPassword: "清除已保存密码",
           shareName: "名称",
           shareId: "ID",
           root: "storage pool",
@@ -4481,8 +4544,12 @@ export const zhCN = {
         },
         gauges: {
           connected: "已连接链路",
-          addressCoverage: "地址覆盖",
-          defaultRoute: "默认路由"
+          connectedDetail: "已报告载波的链路",
+          addresses: "已分配地址",
+          addressesDetail: "IPv4 与 IPv6 地址分配",
+          defaultRoute: "默认路由",
+          defaultRouteReadyDetail: "出站路径可用",
+          defaultRouteMissingDetail: "未检测到出站路径"
         },
         traffic: {
           title: "实时流量",
@@ -4522,8 +4589,8 @@ export const zhCN = {
         wifi: {
           title: "无线网络",
           description: "管理无线网卡、已保存网络和本机热点。",
-          readOnlyDescription: "查看连接状态和附近的 Wi-Fi 网络，配置操作请前往设置。",
-          openSettings: "打开无线网卡设置",
+          readOnlyDescription: "查看连接状态，配置操作请前往设置。",
+          openSettings: "Wi-Fi 设置",
           radioOffTitle: "Wi-Fi 射频已关闭",
           radioOffDescription: "射频关闭时不会显示附近网络，请在无线网卡设置中开启。",
           radioUnknownTitle: "无法获取 Wi-Fi 射频状态",
@@ -4546,6 +4613,8 @@ export const zhCN = {
           hostdUnavailableDescription: "仍可查看无线状态，但配置操作已禁用。",
           managementPath: "管理链路",
           signal: "信号",
+          signalUnavailable: "信号不可用",
+          notConnected: "未连接 Wi-Fi 网络",
           channel: "信道",
           mode: "模式",
           availableTitle: "可用网络",
@@ -4574,6 +4643,7 @@ export const zhCN = {
             connecting: "正在连接",
             disconnected: "未连接",
             hotspot: "热点运行中",
+            off: "已关闭",
             unavailable: "不可用",
             reconnecting: "正在重连"
           },
@@ -4765,9 +4835,14 @@ export const zhCN = {
           mounts: "挂载点"
         },
         healthTitle: "存储健康",
-        healthDescription: "容量、存储池就绪度和 SMART 通过率。",
+        healthDescription: "分别查看容量、磁盘 SMART 结果和存储池就绪状态。",
         healthCenter: "总体状态",
         healthChartLabel: "存储健康信号",
+        healthCapacityChartLabel: "已使用的存储容量",
+        healthSmartChartLabel: "各磁盘 SMART 结果",
+        healthSmartAria: "{{passed}} 个通过，{{failed}} 个失败，{{unknown}} 个未知",
+        healthPoolsChartLabel: "各存储池的就绪状态",
+        healthReadyOf: "共 {{total}} 个存储池",
         healthNoData: "暂无可用的存储健康信号。",
         detailsEyebrow: "存储池",
         openPoolDetails: "打开 {{name}} 的详情",
@@ -4831,8 +4906,11 @@ export const zhCN = {
         },
         gauges: {
           capacity: "已用容量",
+          capacityDetail: "已挂载存储池空间",
           smart: "SMART 通过",
-          pools: "就绪池"
+          smartDetail: "磁盘健康结果",
+          pools: "就绪池",
+          poolsDetail: "阵列与挂载状态"
         }
       },
       virtualMachines: {
@@ -5055,9 +5133,17 @@ export const zhCN = {
         title: "模型 Provider",
         description: "第三方模型 provider 凭据和端点路由。"
       },
-      agents: {
-        title: "Agents",
-        description: "工具执行策略和审批行为。"
+      piAgent: {
+        title: "Pi Agent",
+        description: "管理 Pi 执行策略、审批与项目资源信任。"
+      },
+      mcp: {
+        title: "MCP",
+        description: "管理内置能力与受信任的 Streamable HTTP Server。"
+      },
+      skills: {
+        title: "Skills",
+        description: "管理全局 Skills，并只读查看项目 Skills。"
       },
       wireless: {
         title: "无线网卡",
@@ -5074,6 +5160,10 @@ export const zhCN = {
       virtualMachines: {
         title: "虚拟机",
         description: "管理 KVM/libvirt 访问、客户机生命周期、快照和控制台会话。"
+      },
+      shares: {
+        title: "共享",
+        description: "管理文件共享的全局发布状态和认证凭据。"
       },
       files: {
         title: "文件与预览",
@@ -5114,10 +5204,6 @@ export const zhCN = {
       downloads: {
         title: "下载",
         description: "HTTP 下载并发数和传输行为。"
-      },
-      advanced: {
-        title: "高级",
-        description: "运行时路径、进程详情和服务配置。"
       }
     },
     media: {
@@ -5138,7 +5224,7 @@ export const zhCN = {
       unmatched: "待匹配",
       library: "媒体库",
       tvStatusTitle: "电视模式健康状态",
-      tvStatusDescription: "本机 HDMI 界面与播放服务的只读运行状态。",
+      tvStatusDescription: "电视模式依赖随 CyberOS 一并安装，默认开启，可在此管理输出与运行状态。",
       tvMode: "电视模式",
       tvEnableConfirm: "启用电视模式并接管本机显示输出？",
       tvDisableConfirm: "关闭电视模式并恢复之前的桌面会话？",
@@ -5502,7 +5588,7 @@ export const zhCN = {
       runNow: "立即运行",
       starting: "正在启动",
       historyTitle: "运行历史",
-      historyDescription: "最近 60 条健康检查和维护记录。",
+      historyDescription: "最近 5 条健康检查和维护记录。",
       tabs: {
         all: "全部",
         health: "健康检查",
@@ -5568,21 +5654,101 @@ export const zhCN = {
       enabledDescription: "允许查看虚拟机、执行生命周期操作、管理快照、创建客户机和打开控制台。",
       runtimeNote: "CyberOS 会在系统安装时安装并准备虚拟化运行时；此开关只控制访问能力，硬件加速仍要求宿主内核提供 /dev/kvm。"
     },
+    shares: {
+      publishingTitle: "全局共享",
+      publishingDescription: "控制宿主共享服务是否发布已配置的目录。",
+      enabled: "启用共享",
+      enabledDescription: "已配置的协议和目录可供网络客户端访问。",
+      disabledDescription: "停止发布，同时保留目录和协议设置。",
+      publishingSaved: "全局共享状态已保存。",
+      accountTitle: "共享账号",
+      accountDescription: "设置认证 SMB、WebDAV 和 FTP 客户端使用的系统安全用户名与密码。",
+      username: "用户名",
+      newPassword: "新密码",
+      confirmPassword: "确认密码",
+      passwordConfigured: "密码已配置",
+      passwordNotConfigured: "密码未配置",
+      passwordStatusDetail: "已保存的密码不会返回到浏览器。",
+      passwordConfiguredPlaceholder: "密码已配置；输入新密码以替换",
+      passwordPlaceholder: "设置共享密码",
+      invalidUsername: "请输入符合系统规则的小写用户名。",
+      invalidPassword: "密码不得超过 256 个字符，且不能包含换行。",
+      passwordMismatch: "两次输入的密码不一致。",
+      conflict: "共享设置已在其他视图中变更，请重新打开设置后再试。",
+      accountSaved: "共享账号已保存。"
+    },
+    mcp: {
+      builtInTitle: "CyberOS 内置 MCP",
+      builtInDescription: "向 Pi Agent 提供带审批边界的 CyberOS 能力。默认开启，且不能编辑或删除。",
+      builtInToggle: "开启 CyberOS 内置 MCP",
+      externalTitle: "第三方 MCP Server",
+      externalDescription: "仅支持 MCP Streamable HTTP。第三方工具调用将直接执行，不经过 CyberOS capability 审批。",
+      addServer: "添加 Server",
+      editServer: "编辑 Server",
+      empty: "尚未配置第三方 MCP Server。",
+      paired: "已配对并就绪",
+      needsRepair: "凭据配对需要处理",
+      tools: "{{count}} 个工具",
+      credentialsReady: "已配置凭据",
+      credentialsMissing: "缺少凭据",
+      test: "测试连接",
+      clearCredentials: "清除凭据",
+      toggleServer: "切换 {{name}}",
+      name: "Server ID",
+      url: "Streamable HTTP URL",
+      description: "描述",
+      exposureLabel: "工具暴露模式",
+      authLabel: "认证方式",
+      timeout: "请求超时（秒）",
+      allowHttp: "允许私有网络 HTTP",
+      allowHttpHelp: "仅允许 loopback 与私有局域网地址；流量和凭据均为明文。",
+      bearerToken: "Bearer Token",
+      secretHeaders: "Secret Headers",
+      secretHeadersPlaceholder: "X-API-Key: secret",
+      invalidHeaders: "每行输入一个 Secret Header，格式为 Name: value。",
+      keepCredential: "留空以保留现有凭据",
+      securityNotice: "修改 URL 或认证后会禁用 Server，重新测试成功后才能开启。",
+      confirmBuiltIn: "确认修改 CyberOS 内置 MCP 的状态？",
+      confirmEnable: "确认开启 {{name}}？其第三方工具会直接执行，不经过 CyberOS capability 审批。",
+      confirmDelete: "确认删除 MCP Server {{name}} 及其凭据？",
+      confirmCredentials: "确认清除 {{name}} 的已保存凭据？",
+      confirmSave: "确认信任并保存此 MCP Server 配置？",
+      exposure: { codemode: "Codemode", deferred: "Deferred", direct: "Direct" },
+      auth: { none: "无认证", bearer: "Bearer Token", headers: "Secret Headers" },
+      testStatus: { untested: "未测试", ready: "连接就绪", error: "连接失败" }
+    },
+    skills: {
+      globalTitle: "全局 Skills",
+      globalDescription: "CyberOS 校验并安装这些 Skills，供所有 Pi Agent 会话使用。",
+      projectTitle: "项目 Skills",
+      projectDescription: "只读展示当前项目 .agents/skills 目录中的 Skills。",
+      importZip: "导入 ZIP",
+      installGit: "从 Git 安装",
+      install: "安装 Skill",
+      replace: "替换 Skill",
+      empty: "尚未安装全局 Skills。",
+      noProjectSkills: "当前项目中没有 Skills。",
+      noSession: "请选择 Agent 会话以查看项目 Skills。",
+      trusted: "项目已信任",
+      untrusted: "项目未信任",
+      readOnly: "只读",
+      toggle: "切换 {{name}}",
+      gitUrl: "公开 HTTPS Git URL",
+      gitRef: "Ref（可选）",
+      gitSubdirectory: "仓库子目录（可选）",
+      securityNotice: "Skills 可以影响 Pi 的工具调用并执行脚本，安装前请审查来源。",
+      confirmInstall: "确认安装此 Skill？Skills 可以影响 Pi 的工具调用和脚本执行。",
+      confirmEnable: "确认对 Pi Agent 会话开启 {{name}}？",
+      confirmUpdate: "确认从公开 Git 来源更新 {{name}}，并在重新审查前禁用？",
+      confirmDelete: "确认删除 Skill {{name}} 及其安装文件？",
+      pickerTitle: "选择 Skill ZIP",
+      pickerDescription: "从存储池选择一个待校验的 ZIP 压缩包。",
+      pickerList: "ZIP 文件",
+      pickerEmpty: "当前目录没有 ZIP 文件。",
+      pickerNone: "未选择 ZIP",
+      pickerSelect: "使用此 ZIP"
+    },
     toolPolicy: {
-      mcp: {
-        title: "Agent MCP",
-        description: "控制内置 Agent 是否使用 CyberOS 能力注册表。",
-        label: "使用 CyberOS MCP",
-        status: {
-          loading: "正在检查配对状态...",
-          disabled: "已关闭，Agent 能力不可用。",
-          ready: "已配对，将对新的 Agent 任务生效。",
-          attention: "已开启，但受保护凭据需要修复；关闭后重新开启即可修复。",
-          unavailable: "主机配置已禁用 MCP。"
-        },
-        enabledNotice: "Agent MCP 已开启。",
-        disabledNotice: "Agent MCP 已关闭。"
-      },
       readOnlyTitle: "只读工具",
       readOnlyDescription: "只读工具可自动运行，但始终受 storage pool 路径保护。",
       dangerousTitle: "审批工具",
@@ -5617,10 +5783,15 @@ export const zhCN = {
     overview: {
       systemProfile: "系统概况",
       systemProfileDescription: "这台设备的关键身份与可用性信息。",
-      needsAttention: "需要处理",
-      attentionTitle: "需要处理",
-      attentionDescription: "这里只显示仍需输入或正在加载的设置。",
-      allReady: "当前没有需要处理的配置。"
+      hardwareTitle: "硬件",
+      hardwareDescription: "处理器、架构与已安装的物理内存。",
+      runtimeUnavailable: "系统硬件与运行时信息当前不可用。",
+      serviceTitle: "服务",
+      serviceDescription: "API 绑定、Worker 轮询与认证模式。",
+      processTitle: "进程",
+      processDescription: "Node 运行时、内存、工作目录和可执行文件路径。",
+      pathsTitle: "路径",
+      pathsDescription: "CyberOS 状态与数据库位置。"
     },
     system: {
       collectedAt: "采集于 {{time}}",
@@ -5639,16 +5810,21 @@ export const zhCN = {
         rss: "RSS",
         heapUsed: "Heap 已用",
         stateDir: "状态目录",
-        storagePoolNamespace: "Storage pool 命名空间",
         databasePath: "数据库",
         apiBind: "API 绑定",
         allowedOrigins: "允许来源",
         workerPoll: "Worker 轮询",
         authMode: "认证模式",
+        cpuModel: "CPU 型号",
+        architecture: "系统架构",
+        cpuThreads: "CPU 线程",
+        cpuSpeed: "CPU 频率",
+        physicalMemory: "物理内存",
         storagePools: "存储池"
       },
       values: {
         milliseconds: "{{value}} ms",
+        megahertz: "{{value}} MHz",
         configured: "已配置",
         notConfigured: "未配置"
       },
@@ -5734,16 +5910,6 @@ export const zhCN = {
         stale: "Worker 心跳过期",
         unavailable: "Worker 不可用"
       }
-    },
-    advanced: {
-      runtimeTitle: "运行时",
-      runtimeDescription: "本次会话无法加载系统信息。",
-      serviceTitle: "服务",
-      serviceDescription: "API 绑定、worker 频率、认证和模型模式。",
-      processTitle: "进程",
-      processDescription: "Node 运行时、内存、工作目录和可执行路径。",
-      pathsTitle: "路径",
-      pathsDescription: "CyberOS 数据、数据库和 存储池路径。"
     }
   },
   preview: {

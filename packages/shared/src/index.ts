@@ -4,6 +4,7 @@ export * from "./docker-resources.js";
 export * from "./hostd-protocol.js";
 export * from "./monitoring.js";
 export * from "./monitoring-alerts.js";
+export * from "./mcp-credentials.js";
 export * from "./photos-config.js";
 export * from "./vod-player-protocol.js";
 export * from "./vod-player-client.js";

@@ -25,6 +25,7 @@ export default defineConfig({
       "@cyberos/shared/docker-images": new URL("packages/shared/src/docker-images.ts", `file://${root}`).pathname,
       "@cyberos/shared/docker-resources": new URL("packages/shared/src/docker-resources.ts", `file://${root}`).pathname,
       "@cyberos/shared/photos-config": new URL("packages/shared/src/photos-config.ts", `file://${root}`).pathname,
+      "@cyberos/shared/mcp-network": new URL("packages/shared/src/mcp-network.ts", `file://${root}`).pathname,
       "@cyberos/shared": new URL("packages/shared/src/index.ts", `file://${root}`).pathname
     }
   }

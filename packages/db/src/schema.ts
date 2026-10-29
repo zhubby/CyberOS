@@ -1,11 +1,13 @@
 import type Database from "better-sqlite3";
 import { currentMigrations } from "./migrations/current.js";
+import { agentResourceMigrations } from "./migrations/agent-resources.js";
 import type { Migration } from "./migrations/types.js";
 
 export type { Migration } from "./migrations/types.js";
 
 export const migrations: Migration[] = [
-  ...currentMigrations
+  ...currentMigrations,
+  ...agentResourceMigrations
 ];
 
 export function runMigrations(db: Database.Database): void {

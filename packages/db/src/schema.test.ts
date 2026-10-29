@@ -29,7 +29,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
     try {
       expect(database.pragma("user_version", { simple: true })).toBe(CYBEROS_DATABASE_FORMAT_VERSION);
       expect(database.prepare("SELECT id FROM schema_migrations").pluck().all()).toEqual([
-        "001_cyberos_2_0"
+        "001_cyberos_2_0",
+        "002_agent_resources"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
@@ -40,8 +41,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
     reopened.close();
   });
 
-  it("exposes a single clean-install migration", () => {
-    expect(migrations.map((migration) => migration.id)).toEqual(["001_cyberos_2_0"]);
+  it("keeps the clean-install baseline and applies additive 2.x migrations", () => {
+    expect(migrations.map((migration) => migration.id)).toEqual(["001_cyberos_2_0", "002_agent_resources"]);
   });
 
   it("rejects an unmarked non-empty database without changing it", () => {
@@ -154,7 +155,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
     const database = openCyberOsDbReadOnly(databasePath);
     try {
       expect(database.prepare("SELECT id FROM schema_migrations").pluck().all()).toEqual([
-        "001_cyberos_2_0"
+        "001_cyberos_2_0",
+        "002_agent_resources"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {

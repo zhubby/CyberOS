@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ShareProtocol } from "@cyberos/shared";
 import {
@@ -6,7 +6,6 @@ import {
   Database,
   Folder,
   HardDrive,
-  KeyRound,
   LoaderCircle,
   Lock,
   Network,
@@ -28,10 +27,11 @@ import {
 import {
   DLNA_MEDIA_TYPES,
   SHARE_PROTOCOLS,
+  SHARE_SETTINGS_CHANGED_EVENT,
   authenticatedProtocolCount,
   createShareFormState,
   enabledProtocolCount,
-  shareFormToInput,
+  shareDirectoriesToInput,
   shareSettingsToForm,
   toggleDlnaMediaType,
   validateShareForm,
@@ -49,7 +49,6 @@ import {
   useManagementDashboard
 } from "./ManagementDashboard.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
-import { ShareAccountDialog } from "./ShareAccountDialog.js";
 
 type StatusTone = "ready" | "warning" | "offline" | "neutral";
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -85,7 +84,6 @@ export function ShareManagementPanel({
   const [error, setError] = useState<string | null>(null);
   const [newShare, setNewShare] = useState<ShareDefinitionFormState | null>(null);
   const [newShareError, setNewShareError] = useState<string | null>(null);
-  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const reportedIssueSignature = useRef<string | null>(null);
   const validationIssues = useMemo(() => validateShareForm(form, storagePools), [form, storagePools]);
   const canApplyConfiguration = summary?.capabilities.canApplyConfiguration === true;
@@ -99,6 +97,23 @@ export function ShareManagementPanel({
   const serviceIssueCount = summary?.issues.length ?? 0;
   const addShareOpen = newShare !== null;
   const displayedShares = newShare ? [...form.shares, newShare] : form.shares;
+
+  const refreshShareData = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const [settings, nextSummary] = await Promise.all([getShareSettings(), getShareSummary()]);
+      setForm(shareSettingsToForm(settings, storagePools));
+      setSummary(nextSummary);
+      notifySummaryIssues(nextSummary.issues, onNotifyError, reportedIssueSignature);
+    } catch (nextError) {
+      const message = errorMessage(nextError);
+      setError(message);
+      onNotifyError(message);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onNotifyError, storagePools]);
 
   useEffect(() => {
     let active = true;
@@ -146,22 +161,13 @@ export function ShareManagementPanel({
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [addShareOpen]);
 
-  async function refreshShareData() {
-    setRefreshing(true);
-    setError(null);
-    try {
-      const [settings, nextSummary] = await Promise.all([getShareSettings(), getShareSummary()]);
-      setForm(shareSettingsToForm(settings, storagePools));
-      setSummary(nextSummary);
-      notifySummaryIssues(nextSummary.issues, onNotifyError, reportedIssueSignature);
-    } catch (nextError) {
-      const message = errorMessage(nextError);
-      setError(message);
-      onNotifyError(message);
-    } finally {
-      setRefreshing(false);
-    }
-  }
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      void refreshShareData();
+    };
+    window.addEventListener(SHARE_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
+    return () => window.removeEventListener(SHARE_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
+  }, [refreshShareData]);
 
   async function submitProposal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -179,18 +185,11 @@ export function ShareManagementPanel({
     setSubmitting(true);
     setError(null);
     try {
-      await applyShareSettings({
-        settings: shareFormToInput(form)
+      const result = await applyShareSettings({
+        settings: shareDirectoriesToInput(form)
       });
       onNotifySuccess(t("notifications.operationSucceeded"));
-      setForm((current) => ({
-        ...current,
-        account: {
-          ...current.account,
-          password: "",
-          clearPassword: false
-        }
-      }));
+      setForm(shareSettingsToForm(result.settings, storagePools));
       await onWorkQueuesChanged();
     } catch (nextError) {
       const message = errorMessage(nextError);
@@ -320,14 +319,6 @@ export function ShareManagementPanel({
         actions={<PanelHeaderActions label={t("workspace.management.actions.label")}>
           <ManagementDashboardControls dashboard={dashboard} disabled={loading || submitting} />
           <PanelHeaderAction
-            label={t("workspace.management.shares.editAccount")}
-            type="button"
-            onClick={() => setAccountDialogOpen(true)}
-            disabled={loading || submitting || !canApplyConfiguration}
-          >
-            <KeyRound aria-hidden="true" size={17} />
-          </PanelHeaderAction>
-          <PanelHeaderAction
             label={t("common.actions.refresh")}
             type="button"
             onClick={refreshShareData}
@@ -349,12 +340,11 @@ export function ShareManagementPanel({
       />
 
       <form id="share-management-form" className="management-body share-management-body" onSubmit={submitProposal}>
-        <fieldset className="share-management-fields" disabled={!canApplyConfiguration}>
-          {!canApplyConfiguration ? (
-            <p className="management-empty share-management-read-only">
-              {t("workspace.management.shares.configurationUnavailable")}
-            </p>
-          ) : null}
+        {!canApplyConfiguration ? (
+          <p className="management-empty share-management-read-only">
+            {t("workspace.management.shares.configurationUnavailable")}
+          </p>
+        ) : null}
         <ManagementDashboardGrid
           dashboard={dashboard}
           loading={loading}
@@ -440,26 +430,6 @@ export function ShareManagementPanel({
                 />
               },
               {
-                id: "account",
-                title: String(t("workspace.management.shares.publishingTitle")),
-                content: <section className="management-section share-account-section">
-          <SectionHeader title={t("workspace.management.shares.publishingTitle")} description={t("workspace.management.shares.publishingDescription")} />
-          <fieldset className="share-field-grid share-global-settings-grid">
-            <div className="share-form-field">
-              <span className="share-field-label">{t("workspace.management.shares.fields.enabled")}</span>
-              <SwitchControl
-                checked={form.enabled}
-                label={form.enabled ? t("workspace.management.shares.states.enabled") : t("workspace.management.shares.states.disabled")}
-                accessibilityLabel={t("workspace.management.shares.fields.enabled")}
-                onChange={(enabled) => {
-                  setForm((current) => ({ ...current, enabled }));
-                }}
-              />
-            </div>
-          </fieldset>
-        </section>
-              },
-              {
                 id: "services",
                 title: String(t("workspace.management.shares.servicesTitle")),
                 content: <section className="management-section share-services-section">
@@ -483,7 +453,8 @@ export function ShareManagementPanel({
               {
                 id: "directories",
                 title: String(t("workspace.management.shares.directoriesTitle")),
-                content: <section className="management-section share-directory-section">
+                content: <fieldset className="share-management-fields" disabled={!canApplyConfiguration}>
+                  <section className="management-section share-directory-section">
           <header className="management-section-header">
             <div>
               <h3>{t("workspace.management.shares.directoriesTitle")}</h3>
@@ -781,46 +752,12 @@ export function ShareManagementPanel({
               <p className="management-empty">{t("workspace.management.shares.noShares")}</p>
             )}
           </div>
-        </section>
+                  </section>
+                </fieldset>
               }
           ]}
         />
-        </fieldset>
       </form>
-      {accountDialogOpen ? (
-        <ShareAccountDialog
-          settings={{
-            account: {
-              username: form.account.username,
-              passwordConfigured: form.account.passwordConfigured
-            },
-            updatedAt: form.updatedAt
-          }}
-          onClose={() => setAccountDialogOpen(false)}
-          onSaved={(settings) => {
-            setForm((current) => ({
-              ...current,
-              account: {
-                username: settings.account.username,
-                password: "",
-                clearPassword: false,
-                passwordConfigured: settings.account.passwordConfigured
-              },
-              updatedAt: settings.updatedAt
-            }));
-            void getShareSummary()
-              .then((nextSummary) => {
-                setSummary(nextSummary);
-                notifySummaryIssues(nextSummary.issues, onNotifyError, reportedIssueSignature);
-              })
-              .catch((nextError) => {
-                const message = errorMessage(nextError);
-                setError(message);
-                onNotifyError(message);
-              });
-          }}
-        />
-      ) : null}
     </section>
   );
 }

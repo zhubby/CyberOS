@@ -9,8 +9,11 @@ export interface CyberOsPaths {
   backupPasswordPath: string;
   shareSecretsDir: string;
   sharePasswordPath: string;
+  mcpSecretsDir: string;
   mcpStateDir: string;
   mcpTokenPath: string;
+  piAgentStateDir: string;
+  piSkillsDir: string;
   tvStateDir: string;
   tvEnabledMarker: string;
   logsDir: string;
@@ -52,8 +55,11 @@ export function resolveCyberOsPaths(rootDir: string): CyberOsPaths {
     backupPasswordPath: path.join(stateDir, "secrets", "backup", "restic-password"),
     shareSecretsDir: path.join(stateDir, "secrets", "share"),
     sharePasswordPath: path.join(stateDir, "secrets", "share", "account-password"),
+    mcpSecretsDir: path.join(stateDir, "secrets", "mcp"),
     mcpStateDir: path.join(stateDir, "mcp"),
     mcpTokenPath: path.join(stateDir, "mcp", "pi.token"),
+    piAgentStateDir: path.join(stateDir, "pi-agent"),
+    piSkillsDir: path.join(stateDir, "pi-agent", "skills"),
     tvStateDir: path.join(stateDir, "tv"),
     tvEnabledMarker: path.join(stateDir, "tv", "enabled"),
     logsDir: path.join(root, "logs"),

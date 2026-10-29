@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "cd ../.. && tsup packages/api/src/index.ts packages/api/src/state-init.ts --format esm --platform node --target node22 --external=better-sqlite3 --external=@fastify/cors --external=@fastify/rate-limit --external=@fastify/static --external=@fastify/websocket --external=archiver --external=fastify --external=yaml --out-dir packages/api/dist"
+    "build": "cd ../.. && tsup packages/api/src/index.ts packages/api/src/state-init.ts --format esm --platform node --target node22 --external=better-sqlite3 --external=@fastify/cors --external=@fastify/rate-limit --external=@fastify/static --external=@fastify/websocket --external=archiver --external=fastify --external=undici --external=yaml --out-dir packages/api/dist"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
@@ -25,6 +25,7 @@
     "@cyberos/storage-tools": "2.0.1",
     "@cyberos/shared": "2.0.1",
     "@cyberos/system-health": "2.0.1",
+    "@earendil-works/pi-mcp": "1.1.0",
     "archiver": "^8.0.0",
     "fast-xml-parser": "^5.11.1",
     "fastify": "^5.12.5",

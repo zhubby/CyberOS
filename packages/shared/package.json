@@ -11,7 +11,11 @@
     "./docker-images": "./src/docker-images.ts",
     "./docker-resources": "./src/docker-resources.ts",
     "./photos-config": "./src/photos-config.ts",
+    "./mcp-network": "./src/mcp-network.ts",
     "./hud-tokens.css": "./src/hud-tokens.css"
   },
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "dependencies": {
+    "undici": "8.10.2"
+  }
 }

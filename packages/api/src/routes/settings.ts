@@ -60,7 +60,6 @@ import {
   toPublicModelProviderSettings,
   toPublicAgentCapabilityPolicySettings
 } from "../lib/settings.js";
-import { configureAgentMcp, publicAgentMcpSettings } from "../lib/agent-mcp-settings.js";
 import { collectSystemInfo } from "../lib/system-info.js";
 import { collectSystemStorage } from "../lib/system-management.js";
 import { loadEffectiveShareSettings } from "../lib/share-credentials.js";
@@ -426,33 +425,6 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db, sy
       reply.status(400).send({
         error: error instanceof Error ? error.message : String(error)
       });
-    }
-  });
-
-  server.get("/api/settings/agent-mcp", async (_request, reply) => {
-    try {
-      reply.send({ settings: publicAgentMcpSettings(db, config) });
-    } catch (error) {
-      reply.status(409).send({ error: settingError(error), state: "attention" });
-    }
-  });
-
-  server.patch<{
-    Body: { enabled?: boolean };
-  }>("/api/settings/agent-mcp", async (request, reply) => {
-    if (typeof request.body?.enabled !== "boolean") {
-      reply.status(400).send({ error: "Agent MCP enabled must be a boolean" });
-      return;
-    }
-    if (request.body.enabled && !config.mcp.enabled) {
-      reply.status(409).send({ error: "CyberOS MCP is disabled by host configuration" });
-      return;
-    }
-    try {
-      reply.send({ settings: configureAgentMcp(db, config, request.body.enabled) });
-    } catch (error) {
-      request.log.error({ err: error }, "Agent MCP configuration failed");
-      reply.status(500).send({ error: "Agent MCP configuration failed" });
     }
   });
 

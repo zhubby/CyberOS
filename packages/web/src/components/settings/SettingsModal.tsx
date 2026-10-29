@@ -7,6 +7,7 @@ import {
   Bluetooth,
   BellRing,
   Check,
+  Cpu,
   Database,
   Download,
   Folder,
@@ -24,14 +25,13 @@ import {
   Package,
   Search,
   Server,
+  Share2,
   ShieldCheck,
-  Wrench,
   Wifi,
   X
 } from "lucide-react";
 import type {
   AgentCapabilityId,
-  AgentMcpSettings,
   BuildInfo,
   DockerSettings,
   VmSettings,
@@ -54,7 +54,6 @@ import {
   providerLabel,
   settingsGroupLabel,
   settingsSectionDescription,
-  settingsSectionState,
   settingsSectionTitle,
   type DockerSettingsFormState,
   type VmSettingsFormState,
@@ -62,7 +61,7 @@ import {
   type SettingsSectionId,
   type ToolPolicyFormState
 } from "../../config/settings.js";
-import { formatBytes, formatDate, formatLocaleNumber } from "../../i18n/format.js";
+import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { LanguagePreference, SupportedLocale } from "../../i18n/locale.js";
 import {
   CODE_FONT_OPTIONS,
@@ -87,6 +86,9 @@ import { SettingsMediaPage } from "./SettingsMediaPage.js";
 import { SettingsSystemProfilePage } from "./SettingsSystemProfilePage.js";
 import { SettingsMonitoringPage } from "./SettingsMonitoringPage.js";
 import { SettingsBackupPage } from "./SettingsBackupPage.js";
+import { SettingsSharesPage } from "./SettingsSharesPage.js";
+import { SettingsMcpPage } from "./SettingsMcpPage.js";
+import { SettingsSkillsPage } from "./SettingsSkillsPage.js";
 import {
   StorageFilePickerDialog,
   type StorageFilePickerPool,
@@ -95,6 +97,7 @@ import {
 
 interface SettingsModalProps {
   activeSection: SettingsSectionId;
+  activeSessionId: string;
   form: ModelProviderFormState;
   dockerForm: DockerSettingsFormState;
   loading: boolean;
@@ -113,7 +116,6 @@ interface SettingsModalProps {
   buildInfo: BuildInfo | null;
   buildInfoError: string | null;
   toolPolicyForm: ToolPolicyFormState;
-  agentMcpSettings: AgentMcpSettings | null;
   languagePreference: LanguagePreference;
   previewFileSizeLimitBytes: number;
   codeFontSettings: CodeFontSettings;
@@ -145,7 +147,6 @@ interface SettingsModalProps {
     name: string;
   }) => Promise<void>;
   onToolPolicyFormChange: (form: ToolPolicyFormState) => void;
-  onAgentMcpEnabledChange: (enabled: boolean) => Promise<void>;
   onLanguagePreferenceChange: (preference: LanguagePreference) => void;
   onPreviewFileSizeLimitChange: (bytes: number) => void;
   onCodeFontSettingsChange: (settings: CodeFontSettings) => void;
@@ -180,12 +181,11 @@ type Translate = (key: string, options?: Record<string, unknown>) => unknown;
 
 export function SettingsModal({
   activeSection,
+  activeSessionId,
   form,
   dockerForm,
   loading,
   saving,
-  dockerSettings,
-  vmSettings,
   downloadSettings,
   indexerSettings,
   indexerStatus,
@@ -198,7 +198,6 @@ export function SettingsModal({
   buildInfo,
   buildInfoError,
   toolPolicyForm,
-  agentMcpSettings,
   languagePreference,
   previewFileSizeLimitBytes,
   codeFontSettings,
@@ -217,7 +216,6 @@ export function SettingsModal({
   onPhotoProcessingSettingsChange,
   onRequestCreateFolder,
   onToolPolicyFormChange,
-  onAgentMcpEnabledChange,
   onLanguagePreferenceChange,
   onPreviewFileSizeLimitChange,
   onCodeFontSettingsChange,
@@ -267,7 +265,7 @@ export function SettingsModal({
 
   useEffect(() => {
     const revealActiveSection = () => {
-      activeSectionButtonRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      activeSectionButtonRef.current?.scrollIntoView({ block: "nearest", inline: "start" });
     };
     const frame = window.requestAnimationFrame(revealActiveSection);
     window.addEventListener("resize", revealActiveSection);
@@ -383,15 +381,9 @@ export function SettingsModal({
 
           {activeSection === "overview" ? (
             <SettingsOverview
-              settings={settings}
-              dockerSettings={dockerSettings}
-              vmSettings={vmSettings}
               systemInfo={systemInfo}
-              downloadSettings={downloadSettings}
-              photoStatus={photoStatus}
-              indexerSettings={indexerSettings}
+              loading={loading}
               locale={resolvedLocale}
-              onSectionChange={onSectionChange}
             />
           ) : null}
 
@@ -539,17 +531,21 @@ export function SettingsModal({
             />
           ) : null}
 
-          {activeSection === "agents" ? (
+          {activeSection === "pi-agent" ? (
             <SettingsToolPolicyPage
               form={toolPolicyForm}
-              mcpSettings={agentMcpSettings}
               loading={loading}
               saving={saving}
               onChange={onToolPolicyFormChange}
-              onMcpEnabledChange={onAgentMcpEnabledChange}
               onSubmit={onSubmit}
               onClose={onClose}
             />
+          ) : null}
+
+          {activeSection === "mcp" ? <SettingsMcpPage /> : null}
+
+          {activeSection === "skills" ? (
+            <SettingsSkillsPage activeSessionId={activeSessionId} storagePools={storagePools} locale={resolvedLocale} />
           ) : null}
 
           {activeSection === "wireless" ? (
@@ -592,6 +588,13 @@ export function SettingsModal({
               onChange={onVmFormChange}
               onSubmit={onSubmit}
               onClose={onClose}
+            />
+          ) : null}
+
+          {activeSection === "shares" ? (
+            <SettingsSharesPage
+              onNotifySuccess={onNotifySuccess}
+              onNotifyError={onNotifyError}
             />
           ) : null}
 
@@ -662,13 +665,6 @@ export function SettingsModal({
             />
           ) : null}
 
-          {activeSection === "advanced" ? (
-            <SettingsAdvancedPage
-              systemInfo={systemInfo}
-              loading={loading}
-              locale={resolvedLocale}
-            />
-          ) : null}
         </section>
       </section>
     </div>
@@ -676,49 +672,16 @@ export function SettingsModal({
 }
 
 function SettingsOverview({
-  settings,
-  dockerSettings,
-  vmSettings,
   systemInfo,
-  downloadSettings,
-  photoStatus,
-  indexerSettings,
+  loading,
   locale,
-  onSectionChange
 }: {
-  settings: ModelProviderSettings | null;
-  dockerSettings: DockerSettings | null;
-  vmSettings: VmSettings | null;
   systemInfo: SystemInfo | null;
-  downloadSettings: DownloadSettings | null;
-  photoStatus: PhotoLibraryStatus | null;
-  indexerSettings: IndexerSettings | null;
+  loading: boolean;
   locale: SupportedLocale;
-  onSectionChange: (section: SettingsSectionId) => void;
 }) {
   const { t } = useTranslation();
-  const attentionIds = new Set<SettingsSectionId>([
-    "model-providers",
-    "docker",
-    "virtual-machines",
-    "downloads",
-    "indexer",
-    "photos"
-  ]);
-  const sectionState = (section: (typeof SETTINGS_SECTIONS)[number]) =>
-    settingsSectionState(
-      section,
-      settings,
-      dockerSettings,
-      null,
-      downloadSettings,
-      photoStatus,
-      indexerSettings,
-      vmSettings
-    );
-  const attentionSections = SETTINGS_SECTIONS.filter(
-    (section) => attentionIds.has(section.id) && sectionState(section) !== "ready"
-  );
+  const unavailable = String(t("common.dash"));
   const metricItems = [
     {
       value: systemInfo?.identity.hostname ?? String(t("common.dash")),
@@ -735,12 +698,103 @@ function SettingsOverview({
         ? formatDuration(systemInfo.operatingSystem.uptimeSeconds, locale, t)
         : String(t("common.dash")),
       label: t("settings.system.metrics.uptime")
+    }
+  ];
+  const hardwareRows: SettingsInfoRow[] = [
+    {
+      label: t("settings.system.labels.cpuModel"),
+      value: systemInfo?.hardware.cpuModel ?? unavailable
     },
     {
+      label: t("settings.system.labels.architecture"),
       value: systemInfo
-        ? systemInfo.cyberos.dataRoot
-        : String(t("common.dash")),
-      label: t("settings.system.labels.storagePoolNamespace")
+        ? `${systemInfo.operatingSystem.arch} / ${systemInfo.operatingSystem.machine}`
+        : unavailable
+    },
+    {
+      label: t("settings.system.labels.cpuThreads"),
+      value: systemInfo ? formatLocaleNumber(systemInfo.hardware.cpuThreads, locale) : unavailable
+    },
+    {
+      label: t("settings.system.labels.cpuSpeed"),
+      value: systemInfo?.hardware.cpuSpeedMHz === null || systemInfo?.hardware.cpuSpeedMHz === undefined
+        ? unavailable
+        : t("settings.system.values.megahertz", {
+            value: formatLocaleNumber(systemInfo.hardware.cpuSpeedMHz, locale)
+          })
+    },
+    {
+      label: t("settings.system.labels.physicalMemory"),
+      value: systemInfo ? formatBytes(systemInfo.hardware.memory.totalBytes, locale) : unavailable
+    }
+  ];
+  const runtimeMemory = systemInfo?.runtime.memory;
+  const serviceRows: SettingsInfoRow[] = [
+    {
+      label: t("settings.system.labels.apiBind"),
+      value: systemInfo ? `${systemInfo.cyberos.apiHost}:${systemInfo.cyberos.apiPort}` : unavailable
+    },
+    {
+      label: t("settings.system.labels.allowedOrigins"),
+      value: systemInfo ? formatLocaleNumber(systemInfo.cyberos.allowedOriginCount, locale) : unavailable
+    },
+    {
+      label: t("settings.system.labels.workerPoll"),
+      value: systemInfo
+        ? t("settings.system.values.milliseconds", {
+            value: formatLocaleNumber(systemInfo.cyberos.workerPollMs, locale)
+          })
+        : unavailable
+    },
+    {
+      label: t("settings.system.labels.authMode"),
+      value: systemInfo?.identity.authMode ?? unavailable
+    }
+  ];
+  const processRows: SettingsInfoRow[] = [
+    {
+      label: t("settings.system.labels.nodeVersion"),
+      value: systemInfo?.runtime.nodeVersion ?? unavailable
+    },
+    {
+      label: t("settings.system.labels.pid"),
+      value: systemInfo ? formatLocaleNumber(systemInfo.runtime.pid, locale) : unavailable
+    },
+    {
+      label: t("settings.system.labels.processUptime"),
+      value: systemInfo ? formatDuration(systemInfo.runtime.uptimeSeconds, locale, t) : unavailable
+    },
+    {
+      label: t("settings.system.labels.rss"),
+      value: runtimeMemory ? formatBytes(runtimeMemory.rssBytes, locale) : unavailable
+    },
+    {
+      label: t("settings.system.labels.heapUsed"),
+      value: runtimeMemory
+        ? `${formatBytes(runtimeMemory.heapUsedBytes, locale)} / ${formatBytes(runtimeMemory.heapTotalBytes, locale)}`
+        : unavailable
+    },
+    {
+      label: t("settings.system.labels.cwd"),
+      value: systemInfo?.runtime.cwd ?? unavailable,
+      mono: true
+    },
+    {
+      label: t("settings.system.labels.execPath"),
+      value: systemInfo?.runtime.execPath ?? unavailable,
+      mono: true
+    }
+  ];
+  const pathRows: SettingsInfoRow[] = [
+    {
+      label: t("settings.system.labels.stateDir"),
+      value: systemInfo?.cyberos.stateDir ?? unavailable,
+      mono: true
+    },
+    {
+      label: t("settings.system.labels.databasePath"),
+      value: systemInfo?.cyberos.databasePath ?? unavailable,
+      mono: true
     }
   ];
 
@@ -763,35 +817,41 @@ function SettingsOverview({
         </div>
       </section>
 
-      <section className="settings-section-card">
-        <header>
-          <div>
-            <h3>{t("settings.overview.attentionTitle")}</h3>
-            <p>{t("settings.overview.attentionDescription")}</p>
-          </div>
-        </header>
-        {attentionSections.length > 0 ? (
-          <div className="settings-area-list">
-            {attentionSections.map((section) => {
-              const state = sectionState(section);
-              return (
-                <button key={section.id} type="button" onClick={() => onSectionChange(section.id)}>
-                  {settingsSectionIcon(section.id)}
-                  <span>
-                    <strong>{settingsSectionTitle(section, t)}</strong>
-                    <small>{settingsSectionDescription(section, t)}</small>
-                  </span>
-                  <em data-state={state}>
-                    {state === "loading" ? t("common.states.loading") : t("settings.overview.needsAttention")}
-                  </em>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="settings-empty-note">{t("settings.overview.allReady")}</p>
-        )}
-      </section>
+      <div className="settings-page-grid settings-overview-details">
+        <SettingsInfoCard
+          icon={<Cpu aria-hidden="true" size={17} />}
+          title={t("settings.overview.hardwareTitle")}
+          description={t("settings.overview.hardwareDescription")}
+          rows={hardwareRows}
+        >
+          {!systemInfo ? (
+            <p className="settings-inline-alert" role="status">
+              {loading ? t("common.states.loading") : t("settings.overview.runtimeUnavailable")}
+            </p>
+          ) : null}
+        </SettingsInfoCard>
+
+        <SettingsInfoCard
+          icon={<Server aria-hidden="true" size={17} />}
+          title={t("settings.overview.serviceTitle")}
+          description={t("settings.overview.serviceDescription")}
+          rows={serviceRows}
+        />
+
+        <SettingsInfoCard
+          icon={<MemoryStick aria-hidden="true" size={17} />}
+          title={t("settings.overview.processTitle")}
+          description={t("settings.overview.processDescription")}
+          rows={processRows}
+        />
+
+        <SettingsInfoCard
+          icon={<HardDrive aria-hidden="true" size={17} />}
+          title={t("settings.overview.pathsTitle")}
+          description={t("settings.overview.pathsDescription")}
+          rows={pathRows}
+        />
+      </div>
     </div>
   );
 }
@@ -1506,71 +1566,30 @@ function DownloadNumberField({
 
 function SettingsToolPolicyPage({
   form,
-  mcpSettings,
   loading,
   saving,
   onChange,
-  onMcpEnabledChange,
   onSubmit,
   onClose
 }: {
   form: ToolPolicyFormState;
-  mcpSettings: AgentMcpSettings | null;
   loading: boolean;
   saving: boolean;
   onChange: (form: ToolPolicyFormState) => void;
-  onMcpEnabledChange: (enabled: boolean) => Promise<void>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [mcpSaving, setMcpSaving] = useState(false);
   const policyOptions = AGENT_CAPABILITY_POLICY_OPTIONS.map((mode) => ({
     value: mode,
     label: toolPolicyModeLabel(mode, t)
   }));
   const approvalRequiredPolicyOptions = policyOptions.filter((option) => option.value !== "auto");
 
-  async function toggleMcp() {
-    if (!mcpSettings?.available || mcpSaving) return;
-    setMcpSaving(true);
-    try {
-      await onMcpEnabledChange(!mcpSettings.enabled);
-    } finally {
-      setMcpSaving(false);
-    }
-  }
-
   return (
     <form className="settings-form" onSubmit={onSubmit}>
       <div className="settings-content-body">
         <div className="settings-page-grid">
-          <section className="settings-section-card settings-field-wide">
-            <header>
-              <div>
-                <h3>{t("settings.toolPolicy.mcp.title")}</h3>
-                <p>{t("settings.toolPolicy.mcp.description")}</p>
-              </div>
-            </header>
-            <div className="settings-agent-mcp-row" data-status={mcpSettings?.status ?? "loading"}>
-              <span className="settings-agent-mcp-icon" aria-hidden="true">
-                <Bot size={17} />
-              </span>
-              <span className="settings-agent-mcp-copy">
-                <strong>{t("settings.toolPolicy.mcp.label")}</strong>
-                <small>{t(`settings.toolPolicy.mcp.status.${mcpSettings?.status ?? "loading"}`)}</small>
-              </span>
-              <Switch
-                className="settings-agent-mcp-control"
-                checked={mcpSettings?.enabled ?? false}
-                ariaLabel={t("settings.toolPolicy.mcp.label")}
-                disabled={loading || mcpSaving || !mcpSettings?.available}
-                busy={mcpSaving}
-                onCheckedChange={() => void toggleMcp()}
-              />
-            </div>
-          </section>
-
           <section className="settings-section-card">
             <header>
               <div>
@@ -1776,134 +1795,6 @@ function SettingsVmPage({
   );
 }
 
-function SettingsAdvancedPage({
-  systemInfo,
-  loading,
-  locale
-}: {
-  systemInfo: SystemInfo | null;
-  loading: boolean;
-  locale: SupportedLocale;
-}) {
-  const { t } = useTranslation();
-  const statusLabel = systemInfo
-    ? t("settings.system.collectedAt", { time: formatDate(systemInfo.collectedAt, locale) })
-    : loading
-      ? t("common.states.loading")
-      : t("common.states.unavailable");
-
-  if (!systemInfo) {
-    return (
-      <div className="settings-content-body">
-        <div className="settings-page-grid">
-          <section className="settings-section-card">
-            <header>
-              <div>
-                <h3>{t("settings.advanced.runtimeTitle")}</h3>
-                <p>{t("settings.advanced.runtimeDescription")}</p>
-              </div>
-            </header>
-            <p className="settings-inline-alert" role="status">{statusLabel}</p>
-          </section>
-        </div>
-      </div>
-    );
-  }
-
-  const runtimeMemory = systemInfo.runtime.memory;
-  const serviceRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.system.labels.apiBind"),
-      value: `${systemInfo.cyberos.apiHost}:${systemInfo.cyberos.apiPort}`
-    },
-    {
-      label: t("settings.system.labels.allowedOrigins"),
-      value: formatLocaleNumber(systemInfo.cyberos.allowedOriginCount, locale)
-    },
-    {
-      label: t("settings.system.labels.workerPoll"),
-      value: t("settings.system.values.milliseconds", {
-        value: formatLocaleNumber(systemInfo.cyberos.workerPollMs, locale)
-      })
-    },
-    {
-      label: t("settings.system.labels.authMode"),
-      value: systemInfo.identity.authMode
-    },
-  ];
-  const processRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.system.labels.nodeVersion"),
-      value: systemInfo.runtime.nodeVersion
-    },
-    {
-      label: t("settings.system.labels.pid"),
-      value: formatLocaleNumber(systemInfo.runtime.pid, locale)
-    },
-    {
-      label: t("settings.system.labels.processUptime"),
-      value: formatDuration(systemInfo.runtime.uptimeSeconds, locale, t)
-    },
-    {
-      label: t("settings.system.labels.rss"),
-      value: formatBytes(runtimeMemory.rssBytes, locale)
-    },
-    {
-      label: t("settings.system.labels.heapUsed"),
-      value: `${formatBytes(runtimeMemory.heapUsedBytes, locale)} / ${formatBytes(runtimeMemory.heapTotalBytes, locale)}`
-    },
-    {
-      label: t("settings.system.labels.cwd"),
-      value: systemInfo.runtime.cwd,
-      mono: true
-    },
-    {
-      label: t("settings.system.labels.execPath"),
-      value: systemInfo.runtime.execPath,
-      mono: true
-    }
-  ];
-  const pathRows: SettingsInfoRow[] = [
-    {
-      label: t("settings.system.labels.stateDir"),
-      value: systemInfo.cyberos.stateDir,
-      mono: true
-    },
-    {
-      label: t("settings.system.labels.databasePath"),
-      value: systemInfo.cyberos.databasePath,
-      mono: true
-    }
-  ];
-
-  return (
-    <div className="settings-content-body">
-      <div className="settings-page-grid">
-        <SettingsInfoCard
-          icon={<Server aria-hidden="true" size={17} />}
-          title={t("settings.advanced.serviceTitle")}
-          description={t("settings.advanced.serviceDescription")}
-          rows={serviceRows}
-        />
-
-        <SettingsInfoCard
-          icon={<MemoryStick aria-hidden="true" size={17} />}
-          title={t("settings.advanced.processTitle")}
-          description={t("settings.advanced.processDescription")}
-          rows={processRows}
-        />
-
-        <SettingsInfoCard
-          icon={<HardDrive aria-hidden="true" size={17} />}
-          title={t("settings.advanced.pathsTitle")}
-          description={t("settings.advanced.pathsDescription")}
-          rows={pathRows}
-        />
-      </div>
-    </div>
-  );
-}
-
 function formatDuration(
   seconds: number,
   locale: SupportedLocale,
@@ -1948,8 +1839,12 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Package aria-hidden="true" size={16} />;
     case "model-providers":
       return <KeyRound aria-hidden="true" size={16} />;
-    case "agents":
+    case "pi-agent":
       return <Bot aria-hidden="true" size={16} />;
+    case "mcp":
+      return <Server aria-hidden="true" size={16} />;
+    case "skills":
+      return <Package aria-hidden="true" size={16} />;
     case "wireless":
       return <Wifi aria-hidden="true" size={16} />;
     case "bluetooth":
@@ -1958,6 +1853,8 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Server aria-hidden="true" size={16} />;
     case "virtual-machines":
       return <MonitorCog aria-hidden="true" size={16} />;
+    case "shares":
+      return <Share2 aria-hidden="true" size={16} />;
     case "files":
       return <Folder aria-hidden="true" size={16} />;
     case "indexer":
@@ -1978,8 +1875,6 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Download aria-hidden="true" size={16} />;
     case "appearance":
       return <ImageIcon aria-hidden="true" size={16} />;
-    case "advanced":
-      return <Wrench aria-hidden="true" size={16} />;
   }
 }
 

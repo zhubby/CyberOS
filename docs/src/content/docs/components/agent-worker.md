@@ -15,6 +15,8 @@ API 只写入 message 和 queued job。worker 负责 claim、取消检测、prov
 
 Pi 工具按 `read`、`grep`、`find`、`ls`、`bash`、`edit`、`write` 分组，策略可配置。模型和凭据由数据库及设置界面管理；没有可用模型时，Pi turn 明确失败。
 
-Agent 设置中的 MCP 开关保存在 SQLite。开启时 API 自动创建或修复受保护的 `Built-in Pi` 身份和 `0600` token；worker 在每次领取 job 时读取最新值，因此新任务无需重启即可启用 capability registry。关闭后 Agent 不再获得 capability tools；主机级 `[mcp].enabled` 仍是不可由页面绕过的总开关。
+CyberOS 内置 MCP 缺少 SQLite 设置记录时默认开启。开启时 API 自动创建或修复受保护的 `Built-in Pi` 身份和 `0600` token；worker 在每轮执行前读取内置 MCP、已启用第三方 MCP 与全局 Skills。资源 generation 改变后，下一轮会重建 Pi 资源，但不会中断正在运行的 turn。
+
+第三方 MCP 只支持 Streamable HTTP，并按用户选择的 `codemode`、`deferred` 或 `direct` 模式暴露。第三方工具调用不创建 CyberOS capability approval；Server 新增、修改、测试、启用和凭据操作仍属于高风险设置变更。全局 Skills 独立于项目信任加载；项目 `.agents/skills` 只在当前 session 已信任项目资源时加载。
 
 当 session root 与配置的 Photos 图库 root 一致时，worker 额外注入只读 `search_photos` 和 `get_photos_metadata`。工具名中的 `photos` 是内部模块标识；两者复用 Photos 数据库查询服务并强制限制到当前库版本。位置可以作为筛选条件，但工具输出再次移除精确 GPS、设备/镜头序列号、联系信息和人物区域，避免敏感元数据进入云模型上下文。

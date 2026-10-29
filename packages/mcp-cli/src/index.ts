@@ -188,7 +188,7 @@ function initializeTls(database: CyberOsDatabase, args: string[]): void {
       enabled: config.mcp.externalEnabled,
       nextStep: config.mcp.externalEnabled
         ? "Restart cyberos-api.service, then test the paired client."
-        : "Set [mcp].external_enabled = true and restart cyberos-api.service before using the LAN endpoint."
+        : "The standard runtime keeps inbound LAN MCP disabled; use the loopback endpoint until a managed listener setting is available."
     };
   } catch (error) {
     removeFiles(createdTargets);

@@ -49,7 +49,7 @@ describe("Pi compatibility contract", () => {
   });
 
   it("never exposes Pi's local bash tool in a CyberOS tool allowlist", () => {
-    for (const options of [{ mcpEnabled: false }, { mcpEnabled: true }]) {
+    for (const options of [{ mcpServerNames: [] }, { mcpServerNames: ["cyberos"] }]) {
       expect(piAgentToolNames(options)).not.toContain("bash");
     }
   });

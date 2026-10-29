@@ -4,7 +4,7 @@ description: API 传输面、端点分组和稳定契约。
 type: reference
 status: current
 audience: [developer]
-sourceOfTruth: [packages/api/src/routes/index.ts, packages/api/src/routes/files.ts, packages/api/src/routes/photos.ts, packages/api/src/routes/sessions.ts, packages/api/src/routes/downloads.ts, packages/api/src/routes/docker.ts, packages/api/src/routes/shares.ts, packages/api/src/routes/settings.ts, packages/api/src/routes/system.ts, packages/api/src/routes/terminal.ts, packages/api/src/routes/monitoring.ts, packages/api/src/routes/monitoring-alerts.ts, packages/api/src/routes/notifications.ts, packages/api/src/lib/agent-mcp-settings.ts, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, packages/web/src/api.ts]
+sourceOfTruth: [packages/api/src/routes/index.ts, packages/api/src/routes/files.ts, packages/api/src/routes/photos.ts, packages/api/src/routes/sessions.ts, packages/api/src/routes/downloads.ts, packages/api/src/routes/docker.ts, packages/api/src/routes/shares.ts, packages/api/src/routes/settings.ts, packages/api/src/routes/agent-resources.ts, packages/api/src/routes/system.ts, packages/api/src/routes/terminal.ts, packages/api/src/routes/monitoring.ts, packages/api/src/routes/monitoring-alerts.ts, packages/api/src/routes/notifications.ts, packages/api/src/lib/agent-mcp-settings.ts, packages/api/src/lib/agent-mcp-service.ts, packages/api/src/lib/agent-skills.ts, packages/api/src/lib/docker-daemon.ts, packages/api/src/lib/docker-registry.ts, packages/api/src/lib/network-manager.ts, packages/api/src/lib/ethernet-manager.ts, packages/web/src/api.ts]
 sidebar:
   order: 2
 ---
@@ -13,11 +13,15 @@ REST 路由按 storage pools、files/search、Photos、sessions/jobs/events、ca
 
 Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM console 使用 WebSocket。Agent/MCP mutation 统一走 capability run/approval；第一方 Web mutation 使用页面确认、服务端校验和领域 operation 审计，不创建 capability approval。本页不复制易漂移的完整 JSON schema。
 
-## Agent 设置
+## Pi Agent、MCP 与 Skills
 
-- `GET /api/settings/agent-mcp` 返回内置 Agent MCP 的 `enabled`、主机级 `available`、凭据 `paired` 和归一化状态。
-- `PATCH /api/settings/agent-mcp` 接收 `{ enabled: boolean }`。开启时服务端自动创建或修复 `Built-in Pi` 凭据，响应永不包含 token；关闭时保留配对。主机禁用 MCP 时返回 `409`。
-- `GET/PATCH /api/settings/agent-capability-policy` 继续独立管理每项能力的自动、审批、二次确认和禁用策略。
+- `GET/PATCH /api/settings/agent-capability-policy` 管理 Pi Agent 每项 CyberOS capability 的自动、审批、二次确认和禁用策略。
+- `GET /api/settings/mcp` 返回内置 MCP、第三方 Streamable HTTP Server 的脱敏状态及共享 generation；`PATCH /api/settings/mcp/servers/builtin` 只允许启停内置 MCP。
+- `POST /api/settings/mcp/servers` 与 `PATCH/DELETE /api/settings/mcp/servers/:id` 管理第三方 Server。`POST .../:id/test` 完成工具发现并建立信任；测试成功且凭据就绪后才能启用。
+- `PUT/DELETE /api/settings/mcp/servers/:id/credentials` 管理受限 secret 文件。响应只返回 `credentialsConfigured` 和 Header 名称，不返回 Bearer Token 或 Header 值。
+- `GET /api/settings/skills?sessionId=...` 分开返回全局 Skills 与当前项目只读 Skills。`POST .../import` 从 storage pool ZIP 安装，`POST .../install-git` 从公开 HTTPS Git 安装；`PATCH/DELETE .../:id` 和 `POST .../:id/update` 负责启停、删除和 Git 更新。
+
+第三方只支持 MCP Streamable HTTP，不支持旧 SSE 或 stdio。第三方工具调用按用户信任直接执行，不创建逐次 CyberOS capability approval；Server 配置和 Skill 安装仍要求高风险确认。
 
 ## Docker 与虚拟机开关
 

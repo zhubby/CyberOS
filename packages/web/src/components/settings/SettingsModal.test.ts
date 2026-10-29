@@ -8,6 +8,7 @@ import {
   vmSettingsToForm,
   SETTINGS_SECTIONS
 } from "../../config/settings.js";
+import type { SystemInfo } from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
 import { SettingsModal } from "./SettingsModal.js";
 
@@ -31,37 +32,15 @@ describe("SettingsModal", () => {
     expect(navigation.match(/<button/gu)).toHaveLength(SETTINGS_SECTIONS.length);
   });
 
-  it("renders the Agent MCP switch with its pairing status", () => {
+  it("separates Pi Agent, MCP, and Skills in the AI navigation", () => {
     const html = renderSettings({
-      activeSection: "agents",
-      agentMcpSettings: {
-        enabled: true,
-        available: true,
-        paired: true,
-        status: "ready",
-        updatedAt: "2026-10-23T00:00:00.000Z"
-      }
+      activeSection: "pi-agent"
     });
 
-    expect(html).toContain("Agent MCP");
-    expect(html).toContain("Paired and ready for new Agent tasks.");
-    expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/u);
-  });
-
-  it("keeps the Agent MCP switch enabled when its credential needs attention", () => {
-    const html = renderSettings({
-      activeSection: "agents",
-      agentMcpSettings: {
-        enabled: true,
-        available: true,
-        paired: false,
-        status: "attention",
-        updatedAt: "2026-10-23T00:00:00.000Z"
-      }
-    });
-
-    expect(html).toContain("Enabled, but the protected credential needs repair");
-    expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/u);
+    expect(html.indexOf("Model Providers")).toBeLessThan(html.indexOf("Pi Agent"));
+    expect(html.indexOf("Pi Agent")).toBeLessThan(html.indexOf(">MCP<"));
+    expect(html.indexOf(">MCP<")).toBeLessThan(html.indexOf(">Skills<"));
+    expect(html).not.toContain("Agent MCP");
   });
 
   it("keeps language preferences without rendering a theme selector", () => {
@@ -94,11 +73,114 @@ describe("SettingsModal", () => {
     expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/u);
     expect(html).toContain("QEMU, KVM, and libvirt");
   });
+
+  it("includes sharing in the administration settings navigation", () => {
+    const html = renderSettings({ activeSection: "shares" });
+
+    expect(html).toContain("Global publishing state and credentials");
+    expect(html).toContain("Shares");
+  });
+
+  it("moves hardware and runtime details into Overview without the Advanced section", () => {
+    const html = renderSettings({
+      systemInfo: systemInfoFixture()
+    });
+
+    expect(SETTINGS_SECTIONS.map((section) => section.id)).not.toContain("advanced");
+    expect(html).not.toContain("Storage pool namespace");
+    expect(html).not.toContain("Needs attention");
+    expect(html).not.toContain(">Advanced<");
+    expect(html).toContain("CPU model");
+    expect(html).toContain("Cortex-A76");
+    expect(html).toContain("arm64 / aarch64");
+    expect(html).toContain("Physical memory");
+    expect(html).toContain("Service");
+    expect(html).toContain("Process");
+    expect(html).toContain("Paths");
+    expect(html).toContain("127.0.0.1:3010");
+    expect(html).toContain("/cyberos/state/cyberos.sqlite");
+  });
 });
+
+function systemInfoFixture(): SystemInfo {
+  return {
+    collectedAt: "2026-10-29T00:00:00.000Z",
+    identity: {
+      hostname: "cyberos-cm5",
+      adminDisplayName: "Admin",
+      authMode: "local-only",
+      timezone: "Asia/Shanghai"
+    },
+    operatingSystem: {
+      type: "Linux",
+      platform: "linux",
+      release: "6.12.0",
+      version: "Debian GNU/Linux 13",
+      arch: "arm64",
+      machine: "aarch64",
+      endianness: "LE",
+      uptimeSeconds: 86_400,
+      loadAverage: [0.2, 0.3, 0.4],
+      availableParallelism: 4
+    },
+    hardware: {
+      cpuModel: "Cortex-A76",
+      cpuSpeedMHz: 2_400,
+      cpuThreads: 4,
+      cpus: [],
+      memory: {
+        totalBytes: 8 * 1024 * 1024 * 1024,
+        freeBytes: 3 * 1024 * 1024 * 1024,
+        usedBytes: 5 * 1024 * 1024 * 1024,
+        usedPercent: 62.5
+      }
+    },
+    storage: { volumes: [] },
+    network: { interfaces: [] },
+    runtime: {
+      nodeVersion: "v22.12.0",
+      versions: {},
+      pid: 1024,
+      uptimeSeconds: 3_600,
+      cwd: "/usr/lib/cyberos",
+      execPath: "/usr/bin/node",
+      memory: {
+        rssBytes: 256 * 1024 * 1024,
+        heapTotalBytes: 128 * 1024 * 1024,
+        heapUsedBytes: 64 * 1024 * 1024,
+        externalBytes: 0,
+        arrayBuffersBytes: 0
+      }
+    },
+    cyberos: {
+      rootDir: "/cyberos",
+      stateDir: "/cyberos/state",
+      dataRoot: "/cyberos/data",
+      appsRoot: "/cyberos/apps",
+      isoRoot: "/cyberos/data/iso",
+      vmRoot: "/cyberos/data/vm",
+      backupRoot: "/cyberos/state/backup",
+      databasePath: "/cyberos/state/cyberos.sqlite",
+      apiHost: "127.0.0.1",
+      apiPort: 3010,
+      allowedOriginCount: 1,
+      workerPollMs: 1_000,
+      dockerEnabled: true,
+      photos: {
+        dataDir: "/cyberos/state/photos",
+        maxFileSizeBytes: 1024,
+        thumbnailSizePx: 512,
+        previewMaxEdgePx: 2048,
+        supportedExtensions: ["jpg"]
+      }
+    }
+  };
+}
 
 function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>> = {}): string {
   const props: ComponentProps<typeof SettingsModal> = {
     activeSection: "overview",
+    activeSessionId: "",
     form: modelSettingsToForm(null),
     dockerForm: dockerSettingsToForm(null),
     vmForm: vmSettingsToForm(null),
@@ -118,13 +200,6 @@ function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>>
     buildInfo: null,
     buildInfoError: null,
     toolPolicyForm: defaultToolPolicyForm(),
-    agentMcpSettings: {
-      enabled: false,
-      available: true,
-      paired: false,
-      status: "disabled",
-      updatedAt: new Date(0).toISOString()
-    },
     languagePreference: "system",
     previewFileSizeLimitBytes: 10 * 1024 * 1024,
     codeFontSettings: { familyId: "system", fontSizePx: 12 },
@@ -145,7 +220,6 @@ function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>>
     onPhotoProcessingSettingsChange: vi.fn(async () => undefined),
     onRequestCreateFolder: vi.fn(async () => undefined),
     onToolPolicyFormChange: vi.fn(),
-    onAgentMcpEnabledChange: vi.fn(async () => undefined),
     onLanguagePreferenceChange: vi.fn(),
     onPreviewFileSizeLimitChange: vi.fn(),
     onCodeFontSettingsChange: vi.fn(),

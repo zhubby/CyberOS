@@ -2,7 +2,12 @@ import type {
   AgentCapabilityId as SharedAgentCapabilityId,
   AgentCapabilityPolicyMode as SharedAgentCapabilityPolicyMode,
   PublicAgentCapabilityPolicySettings,
-  PublicAgentMcpSettings,
+  PublicAgentMcpConfiguration,
+  PublicAgentMcpServer,
+  PublicAgentSkillsConfiguration,
+  AgentSkillRecord as SharedAgentSkillRecord,
+  AgentMcpExposure,
+  AgentMcpAuthMode,
   BluetoothAdapterInput,
   BluetoothAudioDevice as SharedBluetoothAudioDevice,
   BluetoothDeviceInput,
@@ -512,7 +517,12 @@ export interface ModelProviderSettingsInput {
 }
 
 export type AgentCapabilityPolicySettings = PublicAgentCapabilityPolicySettings;
-export type AgentMcpSettings = PublicAgentMcpSettings;
+export type AgentMcpSettings = PublicAgentMcpConfiguration;
+export type AgentMcpServer = PublicAgentMcpServer;
+export type AgentSkillsSettings = PublicAgentSkillsConfiguration;
+export type AgentSkill = SharedAgentSkillRecord;
+export type McpExposure = AgentMcpExposure;
+export type McpAuthMode = AgentMcpAuthMode;
 
 export type SystemInfo = PublicSystemInfo;
 export type SystemProfileSettings = SharedSystemProfileSettings;
@@ -564,12 +574,13 @@ export interface ShareAccountUpdateInput {
   password?: string;
   expectedUpdatedAt: string;
 }
-export type ShareSettingsInput = Omit<ShareSettings, "account" | "updatedAt"> & {
-  account: {
+export type ShareSettingsInput = Partial<Omit<ShareSettings, "account" | "shares" | "updatedAt">> & {
+  account?: {
     username: string;
     password?: string;
     clearPassword?: boolean;
   };
+  shares?: ShareSettings["shares"];
 };
 export type DockerContainer = DockerSummary["containers"][number];
 export type DockerContainerDetails = SharedDockerContainerDetails;
@@ -1704,23 +1715,145 @@ export async function saveAgentCapabilityPolicySettings(
 }
 
 export async function getAgentMcpSettings(): Promise<AgentMcpSettings> {
-  const response = await fetch("/api/settings/agent-mcp");
+  const response = await fetch("/api/settings/mcp");
   await ensureOk(response);
   const body = (await response.json()) as { settings: AgentMcpSettings };
   return body.settings;
 }
 
-export async function saveAgentMcpSettings(enabled: boolean): Promise<AgentMcpSettings> {
-  const response = await fetch("/api/settings/agent-mcp", {
+export async function saveBuiltInAgentMcpSettings(enabled: boolean): Promise<AgentMcpSettings["builtIn"]> {
+  const response = await fetch("/api/settings/mcp/servers/builtin", {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ enabled })
+    body: JSON.stringify({ enabled, confirmed: true })
   });
   await ensureOk(response);
-  const body = (await response.json()) as { settings: AgentMcpSettings };
-  return body.settings;
+  const body = (await response.json()) as { server: AgentMcpSettings["builtIn"] };
+  return body.server;
+}
+
+export interface AgentMcpServerInput {
+  name: string;
+  description: string;
+  url: string;
+  timeoutSeconds: number;
+  exposure: McpExposure;
+  authMode: McpAuthMode;
+  allowInsecureHttp: boolean;
+}
+
+export async function createAgentMcpServer(input: AgentMcpServerInput): Promise<AgentMcpServer> {
+  return await agentMcpServerRequest("/api/settings/mcp/servers", "POST", { ...input, confirmed: true });
+}
+
+export async function updateAgentMcpServer(
+  id: string,
+  input: Partial<AgentMcpServerInput> & { enabled?: boolean }
+): Promise<AgentMcpServer> {
+  return await agentMcpServerRequest(`/api/settings/mcp/servers/${encodeURIComponent(id)}`, "PATCH", {
+    ...input,
+    confirmed: true
+  });
+}
+
+export async function deleteAgentMcpServer(id: string): Promise<void> {
+  const response = await fetch(`/api/settings/mcp/servers/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmed: true })
+  });
+  await ensureOk(response);
+}
+
+export async function saveAgentMcpCredentials(
+  id: string,
+  credentials: { bearerToken?: string; headers?: Record<string, string> }
+): Promise<AgentMcpServer> {
+  return await agentMcpServerRequest(
+    `/api/settings/mcp/servers/${encodeURIComponent(id)}/credentials`,
+    "PUT",
+    { ...credentials, confirmed: true }
+  );
+}
+
+export async function deleteAgentMcpCredentials(id: string): Promise<AgentMcpServer> {
+  return await agentMcpServerRequest(
+    `/api/settings/mcp/servers/${encodeURIComponent(id)}/credentials`,
+    "DELETE",
+    { confirmed: true }
+  );
+}
+
+export async function testAgentMcpServer(id: string): Promise<AgentMcpServer> {
+  return await agentMcpServerRequest(`/api/settings/mcp/servers/${encodeURIComponent(id)}/test`, "POST", {});
+}
+
+async function agentMcpServerRequest(url: string, method: string, body: object): Promise<AgentMcpServer> {
+  const response = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { server: AgentMcpServer }).server;
+}
+
+export async function getAgentSkills(sessionId?: string): Promise<AgentSkillsSettings> {
+  const query = sessionId ? `?${new URLSearchParams({ sessionId }).toString()}` : "";
+  const response = await fetch(`/api/settings/skills${query}`);
+  await ensureOk(response);
+  return ((await response.json()) as { settings: AgentSkillsSettings }).settings;
+}
+
+export async function importAgentSkill(input: {
+  storagePoolId: string;
+  path: string;
+  replaceId?: string;
+}): Promise<AgentSkill> {
+  return await agentSkillRequest("/api/settings/skills/import", "POST", { ...input, confirmed: true });
+}
+
+export async function installGitAgentSkill(input: {
+  url: string;
+  ref?: string;
+  subdirectory?: string;
+  replaceId?: string;
+}): Promise<AgentSkill> {
+  return await agentSkillRequest("/api/settings/skills/install-git", "POST", { ...input, confirmed: true });
+}
+
+export async function setAgentSkillEnabled(id: string, enabled: boolean): Promise<AgentSkill> {
+  return await agentSkillRequest(`/api/settings/skills/${encodeURIComponent(id)}`, "PATCH", {
+    enabled,
+    confirmed: true
+  });
+}
+
+export async function updateAgentSkill(id: string): Promise<AgentSkill> {
+  return await agentSkillRequest(`/api/settings/skills/${encodeURIComponent(id)}/update`, "POST", {
+    confirmed: true
+  });
+}
+
+export async function deleteAgentSkill(id: string): Promise<void> {
+  const response = await fetch(`/api/settings/skills/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmed: true })
+  });
+  await ensureOk(response);
+}
+
+async function agentSkillRequest(url: string, method: string, body: object): Promise<AgentSkill> {
+  const response = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { skill: AgentSkill }).skill;
 }
 
 export async function getSessions(): Promise<SessionSummary[]> {

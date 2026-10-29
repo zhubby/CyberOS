@@ -11,7 +11,7 @@ sidebar:
 
 CyberOS 不使用产品配置文件。标准 Debian 安装无需参数即可启动，固定目录由安装包创建，用户可调设置保存在 `/cyberos/state/cyberos.sqlite` 的 `system_settings` 中。设置缺失时使用代码默认值但不会自动写库；设置记录损坏时读取接口返回 attention/error，PATCH 仍可用有效数据覆盖修复。
 
-生产根目录固定为 `/cyberos`，API 只允许绑定 loopback。服务 socket、账号、重试、超时、采样频率和 Photos 地图发行资源属于代码常量，不提供隐藏高级编辑器。Docker、VM、TV 和 Backup 默认关闭，必须在系统设置中显式启用；Backup 还必须先保存凭据并验证仓库。
+生产根目录固定为 `/cyberos`，API 只允许绑定 loopback。服务 socket、账号、重试、超时、采样频率和 Photos 地图发行资源属于代码常量，不提供隐藏高级编辑器。Docker、VM 和 Backup 默认关闭，必须在系统设置中显式启用；Backup 还必须先保存凭据并验证仓库。TV 模式默认开启，也由系统设置控制。
 
 ## 启动环境变量
 
@@ -41,7 +41,10 @@ npm run dev
 以下设置通过 Web 设置页或 `/api/settings/*` 管理，并由 API、worker、Agent/MCP 与对应 daemon 在操作时读取：
 
 - System Profile：管理员显示名。
-- Model Providers 与 Agent：模型、密钥、能力策略和 MCP 开关。
+- Model Providers：模型端点和密钥。
+- Pi Agent：capability 执行/审批策略与项目资源信任。
+- MCP：默认开启的 CyberOS 内置 MCP，以及经测试和确认的第三方 Streamable HTTP Server。第三方凭据只写 `/cyberos/state/secrets/mcp`。
+- Skills：安装在 `/cyberos/state/pi-agent/skills` 的全局 Skills，以及当前项目 `.agents/skills` 的只读信任状态。
 - Docker 与虚拟机：只公开产品能力开关；socket、命令和超时固定。
 - Monitoring：启用状态、raw/minute/hour 保留周期和指标库空间上限。采样频率固定，monitor 根据 `updated_at` 热重载。
 - Backup：启用状态、仓库、挂载要求和 daily/weekly 保留策略。密码只写 `/cyberos/state/secrets/backup/restic-password`，读取响应只返回 `passwordConfigured`。

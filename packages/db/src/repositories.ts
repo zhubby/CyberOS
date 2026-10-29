@@ -1,4 +1,5 @@
 export * from "./repositories/agent-session-commands.js";
+export * from "./repositories/agent-resources.js";
 export * from "./repositories/bluetooth-transfers.js";
 export * from "./repositories/capability-runs.js";
 export * from "./repositories/docker-console-authorizations.js";

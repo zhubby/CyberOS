@@ -2178,6 +2178,82 @@ export interface PublicAgentMcpSettings extends AgentMcpSettingsRecord {
   status: "disabled" | "ready" | "attention" | "unavailable";
 }
 
+export type AgentMcpExposure = "codemode" | "deferred" | "direct";
+export type AgentMcpAuthMode = "none" | "bearer" | "headers";
+export type AgentMcpTestStatus = "untested" | "ready" | "error";
+
+export interface AgentMcpServerRecord {
+  id: string;
+  name: string;
+  description: string;
+  url: string;
+  timeoutSeconds: number;
+  exposure: AgentMcpExposure;
+  authMode: AgentMcpAuthMode;
+  credentialHeaderNames: string[];
+  enabled: boolean;
+  allowInsecureHttp: boolean;
+  testStatus: AgentMcpTestStatus;
+  toolCount: number;
+  lastTestedAt: string | null;
+  lastError: string | null;
+  trustedAt: string | null;
+  generation: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicAgentMcpServer extends AgentMcpServerRecord {
+  credentialsConfigured: boolean;
+}
+
+export interface PublicAgentMcpConfiguration {
+  builtIn: PublicAgentMcpSettings;
+  servers: PublicAgentMcpServer[];
+  generation: number;
+}
+
+export type AgentSkillSourceType = "zip" | "git";
+
+export interface AgentSkillRecord {
+  id: string;
+  name: string;
+  description: string;
+  version: string | null;
+  sourceType: AgentSkillSourceType;
+  sourceUrl: string | null;
+  sourceRef: string | null;
+  sourceSubdirectory: string | null;
+  sourceStoragePoolId: string | null;
+  sourcePath: string | null;
+  resolvedCommit: string | null;
+  digest: string;
+  enabled: boolean;
+  diagnostics: string[];
+  generation: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectAgentSkill {
+  name: string;
+  description: string;
+  path: string;
+  valid: boolean;
+  diagnostics: string[];
+}
+
+export interface PublicAgentSkillsConfiguration {
+  global: AgentSkillRecord[];
+  project: {
+    sessionId: string | null;
+    path: string | null;
+    trusted: boolean;
+    skills: ProjectAgentSkill[];
+  };
+  generation: number;
+}
+
 export type PublicPiToolPolicySettings = PiToolPolicySettingsRecord;
 
 export interface AgentSessionRecord {

@@ -9,8 +9,8 @@ Rules-Requires-Root: no
 
 Package: cyberos
 Architecture: any
-Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, openssl, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, bluez, bluez-obexd, bluez-alsa-utils, libasound2-plugin-bluez, dbus-user-session, chromium, weston, mpv, v4l-utils, seatd, wtype, fonts-noto-core, fonts-noto-cjk, fonts-noto-color-emoji, libheif-examples, libimage-exiftool-perl, libvips-tools, ffmpeg, libraw-bin, poppler-utils, smartmontools, tesseract-ocr, tesseract-ocr-chi-sim, tesseract-ocr-eng, docker.io, docker-cli, docker-compose, libvirt-daemon-system, libvirt-clients, ${cyberos:VmDepends}, qemu-utils, virtinst, ipxe-qemu, ${misc:Depends}
-Suggests: git, gzip, unzip, libarchive-tools, unrar-free, mdadm, btrfs-progs, restic, nginx, samba, apache2, apache2-utils, vsftpd, libpam-pwdfile, nfs-kernel-server, minidlna
+Depends: nodejs (>= 20), sqlite3, tmux, util-linux, acl, adduser, openssl, git, unzip, network-manager, wpasupplicant, dnsmasq-base, wireless-regdb, iw, bluez, bluez-obexd, bluez-alsa-utils, libasound2-plugin-bluez, dbus-user-session, chromium, weston, mpv, v4l-utils, seatd, wtype, fonts-noto-core, fonts-noto-cjk, fonts-noto-color-emoji, libheif-examples, libimage-exiftool-perl, libvips-tools, ffmpeg, libraw-bin, poppler-utils, smartmontools, tesseract-ocr, tesseract-ocr-chi-sim, tesseract-ocr-eng, docker.io, docker-cli, docker-compose, libvirt-daemon-system, libvirt-clients, ${cyberos:VmDepends}, qemu-utils, virtinst, ipxe-qemu, ${misc:Depends}
+Suggests: gzip, libarchive-tools, unrar-free, mdadm, btrfs-progs, restic, nginx, samba, apache2, apache2-utils, vsftpd, libpam-pwdfile, nfs-kernel-server, minidlna
 Description: Native Linux NAS appliance with approval-gated AI file operations
  CyberOS provides a local web UI, API service, agent worker, SQLite FTS
  indexer, and scheduled maintenance tasks for a single-user NAS appliance.

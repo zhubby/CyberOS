@@ -49,7 +49,7 @@ export function StorageFilePickerDialog({
   pools: StorageFilePickerPool[];
   initialPoolId: string;
   locale: SupportedLocale;
-  mode?: "iso" | "directory" | "files";
+  mode?: "iso" | "directory" | "files" | "skill-zip";
   directoryPurpose?: "downloads" | "photoLibrary" | "photoMove" | "fileMove" | "bluetoothInbox" | "mediaLibrary";
   initialPath?: string;
   boundaryPath?: string;
@@ -151,7 +151,16 @@ export function StorageFilePickerDialog({
     none: t("settings.bluetooth.transfers.filePickerNone"),
     select: t("settings.bluetooth.transfers.filePickerSelect", { count: multiSelection.length })
   };
-  const activeFileCopy = mode === "files" ? multiFileCopy : fileCopy;
+  const skillZipCopy = {
+    eyebrow: t("settings.skills.importZip"),
+    title: t("settings.skills.pickerTitle"),
+    description: t("settings.skills.pickerDescription"),
+    list: t("settings.skills.pickerList"),
+    empty: t("settings.skills.pickerEmpty"),
+    none: t("settings.skills.pickerNone"),
+    select: t("settings.skills.pickerSelect")
+  };
+  const activeFileCopy = mode === "files" ? multiFileCopy : mode === "skill-zip" ? skillZipCopy : fileCopy;
   const pickerRootPath = boundaryPath && selectedPool?.id === initialPool?.id ? boundaryPath : selectedPool?.path ?? ".";
   const currentDirectoryDisabled = mode === "directory" && Boolean(directorySelectionDisabled?.(currentPath));
 
@@ -170,7 +179,9 @@ export function StorageFilePickerDialog({
         ? isDirectoryPickerEntry(entry)
         : mode === "files"
           ? isMultiFilePickerEntry(entry)
-          : isIsoPickerEntry(entry)));
+          : mode === "skill-zip"
+            ? isSkillZipPickerEntry(entry)
+            : isIsoPickerEntry(entry)));
     } catch (nextError) {
       if (requestId !== loadRequestId.current) return;
       setEntries([]);
@@ -473,7 +484,7 @@ export function StorageFilePickerDialog({
                 <div className="storage-file-picker-state"><HardDrive aria-hidden="true" size={19} /><span>{t("workspace.management.virtualMachines.isoPickerNoPools")}</span></div>
               ) : entries.length === 0 ? (
                 <div className="storage-file-picker-state">
-                  {mode === "directory" ? <Folder aria-hidden="true" size={19} /> : mode === "files" ? <File aria-hidden="true" size={19} /> : <Disc3 aria-hidden="true" size={19} />}
+                  {mode === "directory" ? <Folder aria-hidden="true" size={19} /> : mode === "files" || mode === "skill-zip" ? <File aria-hidden="true" size={19} /> : <Disc3 aria-hidden="true" size={19} />}
                   <span>{mode === "directory" ? directoryCopy.empty : activeFileCopy.empty}</span>
                 </div>
               ) : (
@@ -502,7 +513,7 @@ export function StorageFilePickerDialog({
                       }}
                     >
                       <span className="storage-file-picker-file-icon" data-kind={isDirectory ? "directory" : "iso"}>
-                        {isDirectory ? <Folder aria-hidden="true" size={17} /> : mode === "files" ? <File aria-hidden="true" size={17} /> : <Disc3 aria-hidden="true" size={17} />}
+                        {isDirectory ? <Folder aria-hidden="true" size={17} /> : mode === "files" || mode === "skill-zip" ? <File aria-hidden="true" size={17} /> : <Disc3 aria-hidden="true" size={17} />}
                       </span>
                       <span className="storage-file-picker-file-name">{entry.name}</span>
                       <span className="storage-file-picker-file-meta">
@@ -559,6 +570,10 @@ export function isDirectoryPickerEntry(entry: FileEntry): boolean {
 
 export function isMultiFilePickerEntry(entry: FileEntry): boolean {
   return entry.isSafe && (entry.kind === "directory" || entry.kind === "file");
+}
+
+export function isSkillZipPickerEntry(entry: FileEntry): boolean {
+  return entry.isSafe && (entry.kind === "directory" || (entry.kind === "file" && entry.name.toLowerCase().endsWith(".zip")));
 }
 
 export function parentPickerPath(poolPath: string, currentPath: string): string {

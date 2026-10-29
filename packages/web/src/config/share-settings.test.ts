@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { ShareSettings, StoragePool } from "../api.js";
 import {
   createShareFormState,
-  shareFormToInput,
+  shareDirectoriesToInput,
   shareSettingsToForm,
+  validateShareAccountDraft,
   validateShareForm
 } from "./share-settings.js";
 
@@ -82,7 +83,7 @@ describe("share settings form helpers", () => {
     expect(form.shares[0]?.protocols.webdav.port).toBe("8088");
   });
 
-  it("converts strings and write-only password fields to API input", () => {
+  it("converts directory fields without overwriting global sharing or credentials", () => {
     const share = createShareFormState(storagePools);
     share.id = "photos";
     share.name = "Photos";
@@ -94,7 +95,7 @@ describe("share settings form helpers", () => {
     share.protocols.dlna.enabled = true;
     share.protocols.dlna.bindAddress = "192.168.1.5";
 
-    const input = shareFormToInput({
+    const input = shareDirectoriesToInput({
       enabled: true,
       account: {
         username: "cyberos-share",
@@ -106,10 +107,18 @@ describe("share settings form helpers", () => {
       updatedAt: new Date(0).toISOString()
     });
 
-    expect(input.account.password).toBe("new-secret");
-    expect(input.shares[0]?.protocols.webdav.pathPrefix).toBe("/dav/photos");
-    expect(input.shares[0]?.protocols.nfs.allowedCidrs).toEqual(["192.168.1.0/24", "fd00::/64"]);
-    expect(input.shares[0]?.protocols.dlna.bindAddress).toBe("192.168.1.5");
+    expect(input.account).toBeUndefined();
+    expect(input.enabled).toBeUndefined();
+    expect(input.shares?.[0]?.protocols.webdav.pathPrefix).toBe("/dav/photos");
+    expect(input.shares?.[0]?.protocols.nfs.allowedCidrs).toEqual(["192.168.1.0/24", "fd00::/64"]);
+    expect(input.shares?.[0]?.protocols.dlna.bindAddress).toBe("192.168.1.5");
+  });
+
+  it("validates system-safe account credentials", () => {
+    expect(validateShareAccountDraft("Share User", "", "")).toBe("invalidUsername");
+    expect(validateShareAccountDraft("share-user", "next-secret", "different")).toBe("passwordMismatch");
+    expect(validateShareAccountDraft("share-user", "line\nbreak", "line\nbreak")).toBe("invalidPassword");
+    expect(validateShareAccountDraft("share-user", "next-secret", "next-secret")).toBeNull();
   });
 
   it("validates password, CIDR, ports, FTP capacity, and DLNA bind requirements", () => {

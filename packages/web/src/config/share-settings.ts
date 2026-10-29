@@ -3,6 +3,7 @@ import type { StoragePool, ShareSettings, ShareSettingsInput } from "../api.js";
 
 export const SHARE_PROTOCOLS = ["smb", "webdav", "ftp", "nfs", "dlna"] as const satisfies readonly ShareProtocol[];
 export const DLNA_MEDIA_TYPES = ["audio", "video", "pictures"] as const satisfies readonly DlnaMediaType[];
+export const SHARE_SETTINGS_CHANGED_EVENT = "cyberos:share-settings-changed";
 
 export interface ShareAccountFormState {
   username: string;
@@ -103,6 +104,29 @@ const DEFAULT_UPDATED_AT = new Date(0).toISOString();
 const USERNAME_PATTERN = /^[a-z_][a-z0-9_-]{0,31}$/u;
 const SHARE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
 
+export type ShareAccountValidationError =
+  | "invalidUsername"
+  | "invalidPassword"
+  | "passwordMismatch"
+  | null;
+
+export function validateShareAccountDraft(
+  username: string,
+  password: string,
+  passwordConfirmation: string
+): ShareAccountValidationError {
+  if (!USERNAME_PATTERN.test(username.trim())) {
+    return "invalidUsername";
+  }
+  if (password.includes("\0") || password.includes("\n") || password.length > 256) {
+    return "invalidPassword";
+  }
+  if (password !== passwordConfirmation) {
+    return "passwordMismatch";
+  }
+  return null;
+}
+
 export function shareSettingsToForm(settings: ShareSettings | null, storagePools: StoragePool[] = []): ShareSettingsFormState {
   return {
     enabled: settings?.enabled ?? false,
@@ -198,19 +222,8 @@ export function defaultShareProtocols(id = "share-1", name = "Share 1"): SharePr
   };
 }
 
-export function shareFormToInput(form: ShareSettingsFormState): ShareSettingsInput {
-  const account: ShareSettingsInput["account"] = {
-    username: form.account.username.trim() || "cyberos-share"
-  };
-  if (form.account.password.length > 0) {
-    account.password = form.account.password;
-  } else if (form.account.clearPassword) {
-    account.clearPassword = true;
-  }
-
+export function shareDirectoriesToInput(form: ShareSettingsFormState): ShareSettingsInput {
   return {
-    enabled: form.enabled,
-    account,
     shares: form.shares.map((share, index) => {
       const id = share.id.trim() || `share-${index + 1}`;
       const name = share.name.trim() || id;

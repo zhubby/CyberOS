@@ -1,10 +1,13 @@
 import { existsSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
 import {
   PiActiveTurnUnavailableError,
   runPiAgentCommand,
   runPiAgentTurn,
   type PiAgentCommand,
-  type PiAgentRunner
+  type PiAgentRunner,
+  type PiMcpRuntimeServer
 } from "@cyberos/agent";
 import {
   appendEvent,
@@ -21,9 +24,12 @@ import {
   getModelProviderSettings,
   getAgentCapabilityPolicySettings,
   getAgentMcpSettings,
+  getAgentResourceGeneration,
   getSession,
   finishAgentSessionCommand,
   linkAgentJobToCapabilityRun,
+  listAgentMcpServers,
+  listAgentSkills,
   requeueAgentSessionCommand,
   renewAgentJobLease,
   renewAgentSessionCommandLease,
@@ -31,7 +37,14 @@ import {
   updateJobStatus,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { type ModelProviderSettingsRecord, type CyberOsRuntime } from "@cyberos/shared";
+import {
+  agentMcpCredentialHeaders,
+  validateAgentMcpCredentials,
+  type AgentMcpCredentials,
+  type AgentMcpServerRecord,
+  type ModelProviderSettingsRecord,
+  type CyberOsRuntime
+} from "@cyberos/shared";
 
 export interface ProcessNextJobDependencies {
   db: CyberOsDatabase;
@@ -140,6 +153,7 @@ export async function processNextAgentCommand({
         }
       });
     }
+    const resources = await loadPiAgentResources(db, config);
     const result = await commandRunner({
       session: { ...session, currentPath: workingPath },
       root: workspace,
@@ -193,13 +207,8 @@ export async function processNextAgentCommand({
           providerSessionId
         });
       },
-      ...(config.mcp.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
-        mcp: {
-          enabled: true,
-          url: `http://127.0.0.1:${config.api.port}/mcp`,
-          tokenFile: config.mcp.piTokenFile
-        }
-      } : {})
+      ...(resources.mcp.servers.length > 0 ? { mcp: resources.mcp } : {}),
+      skills: resources.skills
     }, {
       type: command.type as PiAgentCommand["type"],
       payload: command.payload
@@ -317,6 +326,7 @@ export async function processNextJob({
   try {
     const turnSession = { ...session, currentPath: job.workingPath };
     const turnMessage = continuation ? capabilityContinuationMessage(continuation.runs) : message.content;
+    const resources = await loadPiAgentResources(db, config);
     const result = await runPiAgentTurn({
           session: turnSession,
           root: workspace,
@@ -368,13 +378,8 @@ export async function processNextJob({
           onCapabilityRunPending: (runId, providerSessionId) => {
             linkAgentJobToCapabilityRun(db, { jobId: job.id, runId, providerSessionId });
           },
-          ...(config.mcp.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled) ? {
-            mcp: {
-              enabled: true,
-              url: `http://127.0.0.1:${config.api.port}/mcp`,
-              tokenFile: config.mcp.piTokenFile
-            }
-          } : {})
+          ...(resources.mcp.servers.length > 0 ? { mcp: resources.mcp } : {}),
+          skills: resources.skills
     });
 
     if (result.status === "cancelled" || getJob(db, job.id)?.status === "cancelled") {
@@ -550,4 +555,63 @@ function defaultModelProviderSettings(): ModelProviderSettingsRecord {
     apiKey: null,
     updatedAt: new Date(0).toISOString()
   };
+}
+
+async function loadPiAgentResources(db: CyberOsDatabase, config: CyberOsRuntime) {
+  const generation = getAgentResourceGeneration(db);
+  const servers: PiMcpRuntimeServer[] = [];
+  const builtInEnabled = config.mcp.enabled && (getAgentMcpSettings(db)?.enabled ?? config.mcp.piEnabled);
+  if (builtInEnabled) {
+    servers.push({
+      id: "builtin",
+      name: "cyberos",
+      url: `http://127.0.0.1:${config.api.port}/mcp`,
+      description: "CyberOS capabilities, durable runs, resources, and approval-gated proposals.",
+      exposure: "codemode" as const,
+      timeoutSeconds: 60,
+      allowInsecureHttp: true,
+      tokenFile: config.mcp.piTokenFile
+    });
+  }
+  for (const server of listAgentMcpServers(db)) {
+    if (!server.enabled || server.testStatus !== "ready" || !server.trustedAt) continue;
+    const headers = await readExternalMcpHeaders(config.paths.mcpSecretsDir, server);
+    if (!headers && server.authMode !== "none") continue;
+    servers.push({
+      id: server.id,
+      name: server.name,
+      url: server.url,
+      description: server.description,
+      exposure: server.exposure,
+      timeoutSeconds: server.timeoutSeconds,
+      allowInsecureHttp: server.allowInsecureHttp,
+      ...(headers ? { headers } : {})
+    });
+  }
+  return {
+    mcp: { generation, servers },
+    skills: {
+      generation,
+      globalPaths: listAgentSkills(db)
+        .filter((skill) => skill.enabled)
+        .map((skill) => path.join(config.paths.piSkillsDir, skill.id))
+    }
+  };
+}
+
+async function readExternalMcpHeaders(
+  secretsDir: string,
+  server: AgentMcpServerRecord
+): Promise<Record<string, string> | null> {
+  if (server.authMode === "none") return {};
+  const credentialPath = path.join(secretsDir, `${server.id}.json`);
+  try {
+    const metadata = await stat(credentialPath);
+    if (!metadata.isFile() || (metadata.mode & 0o077) !== 0) return null;
+    const parsed = JSON.parse(await readFile(credentialPath, "utf8")) as unknown;
+    validateAgentMcpCredentials(server.authMode, parsed);
+    return agentMcpCredentialHeaders(server.authMode, parsed as AgentMcpCredentials);
+  } catch {
+    return null;
+  }
 }

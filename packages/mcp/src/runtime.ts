@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import path from "node:path";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CapabilityError,
@@ -47,6 +48,7 @@ import {
   getPhotosWorkerHealth,
   getAgentCapabilityPolicySettings,
   getAgentMcpSettings,
+  getAgentResourceGeneration,
   getDockerSettings,
   getBackupSettings,
   getMonitoringSettings,
@@ -57,6 +59,8 @@ import {
   getTerminalTabState,
   getSystemOperations,
   listBackupRuns,
+  listAgentMcpServers,
+  listAgentSkills,
   listDownloadTasks,
   listHealthAlerts,
   listIndexStoragePoolStatuses,
@@ -465,6 +469,9 @@ function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecuti
     dependencies.config.environment === "production"
   );
   const tv = getTvSettings(dependencies.db) ?? defaultTvSettings();
+  const builtInMcp = getAgentMcpSettings(dependencies.db);
+  const agentMcpServers = listAgentMcpServers(dependencies.db);
+  const agentSkills = listAgentSkills(dependencies.db);
   return {
     data: jsonValue({
       environment: dependencies.config.environment,
@@ -489,6 +496,54 @@ function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecuti
       agentCapabilityPolicy: jsonValue(
         getAgentCapabilityPolicySettings(dependencies.db) ?? defaultAgentCapabilityPolicySettings()
       ),
+      agentResources: {
+        generation: getAgentResourceGeneration(dependencies.db),
+        mcp: {
+          builtIn: {
+            enabled: builtInMcp?.enabled ?? dependencies.config.mcp.piEnabled,
+            available: dependencies.config.mcp.enabled,
+            updatedAt: builtInMcp?.updatedAt ?? new Date(0).toISOString()
+          },
+          servers: agentMcpServers.map((server) => ({
+            id: server.id,
+            name: server.name,
+            description: server.description,
+            url: server.url,
+            timeoutSeconds: server.timeoutSeconds,
+            exposure: server.exposure,
+            authMode: server.authMode,
+            credentialHeaderNames: [...server.credentialHeaderNames],
+            credentialsConfigured: server.authMode === "none" || existsSync(
+              path.join(dependencies.config.paths.mcpSecretsDir, `${server.id}.json`)
+            ),
+            enabled: server.enabled,
+            allowInsecureHttp: server.allowInsecureHttp,
+            testStatus: server.testStatus,
+            toolCount: server.toolCount,
+            lastTestedAt: server.lastTestedAt,
+            lastError: server.lastError,
+            trustedAt: server.trustedAt,
+            updatedAt: server.updatedAt
+          }))
+        },
+        skills: agentSkills.map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          version: skill.version,
+          sourceType: skill.sourceType,
+          sourceUrl: skill.sourceUrl,
+          sourceRef: skill.sourceRef,
+          sourceSubdirectory: skill.sourceSubdirectory,
+          sourceStoragePoolId: skill.sourceStoragePoolId,
+          sourcePath: skill.sourcePath,
+          resolvedCommit: skill.resolvedCommit,
+          digest: skill.digest,
+          enabled: skill.enabled,
+          diagnostics: [...skill.diagnostics],
+          updatedAt: skill.updatedAt
+        }))
+      },
       indexer: jsonValue(getIndexerSettings(dependencies.db) ?? defaultIndexerSettings()),
       downloads: jsonValue(getDownloadSettings(dependencies.db) ?? defaultDownloadSettings()),
       systemProfile: jsonValue(systemProfile),

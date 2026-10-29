@@ -3776,21 +3776,21 @@ describe("API server", () => {
     };
     const server = await buildServer({ config, db });
 
-    const initial = await server.inject({ method: "GET", url: "/api/settings/agent-mcp" });
+    const initial = await server.inject({ method: "GET", url: "/api/settings/mcp" });
     const enabled = await server.inject({
       method: "PATCH",
-      url: "/api/settings/agent-mcp",
-      payload: { enabled: true }
+      url: "/api/settings/mcp/servers/builtin",
+      payload: { enabled: true, confirmed: true }
     });
     const token = (await readFile(tokenFile, "utf8")).trim();
     const tokenStat = await stat(tokenFile);
 
     expect(initial.json()).toMatchObject({
-      settings: { enabled: false, available: true, paired: false, status: "disabled" }
+      settings: { builtIn: { enabled: false, available: true, paired: false, status: "disabled" } }
     });
     expect(enabled.statusCode).toBe(200);
     expect(enabled.json()).toMatchObject({
-      settings: { enabled: true, available: true, paired: true, status: "ready" }
+      server: { enabled: true, available: true, paired: true, status: "ready" }
     });
     expect(enabled.payload).not.toContain(token);
     expect(token).toMatch(/^cyberos_mcp_[A-Za-z0-9_-]{43}$/u);
@@ -3801,18 +3801,18 @@ describe("API server", () => {
     expect(getAgentMcpSettings(db)).toMatchObject({ enabled: true });
 
     await rm(tokenFile);
-    const attention = await server.inject({ method: "GET", url: "/api/settings/agent-mcp" });
+    const attention = await server.inject({ method: "GET", url: "/api/settings/mcp" });
     const repaired = await server.inject({
       method: "PATCH",
-      url: "/api/settings/agent-mcp",
-      payload: { enabled: true }
+      url: "/api/settings/mcp/servers/builtin",
+      payload: { enabled: true, confirmed: true }
     });
     const repairedToken = (await readFile(tokenFile, "utf8")).trim();
     expect(attention.json()).toMatchObject({
-      settings: { enabled: true, paired: false, status: "attention" }
+      settings: { builtIn: { enabled: true, paired: false, status: "attention" } }
     });
     expect(repaired.json()).toMatchObject({
-      settings: { enabled: true, paired: true, status: "ready" }
+      server: { enabled: true, paired: true, status: "ready" }
     });
     expect(repaired.payload).not.toContain(repairedToken);
     expect(repairedToken).not.toBe(token);
@@ -3820,17 +3820,17 @@ describe("API server", () => {
 
     const disabled = await server.inject({
       method: "PATCH",
-      url: "/api/settings/agent-mcp",
-      payload: { enabled: false }
+      url: "/api/settings/mcp/servers/builtin",
+      payload: { enabled: false, confirmed: true }
     });
     expect(disabled.json()).toMatchObject({
-      settings: { enabled: false, paired: true, status: "disabled" }
+      server: { enabled: false, paired: true, status: "disabled" }
     });
     expect(listMcpClients(db)).toHaveLength(1);
     await server.close();
   });
 
-  it("rejects Agent MCP enablement when the host service is disabled", async () => {
+  it("rejects built-in MCP enablement when the host service is disabled", async () => {
     const config = testConfig(tempDir);
     const server = await buildServer({
       config: { ...config, mcp: { ...config.mcp, enabled: false } },
@@ -3838,8 +3838,8 @@ describe("API server", () => {
     });
     const response = await server.inject({
       method: "PATCH",
-      url: "/api/settings/agent-mcp",
-      payload: { enabled: true }
+      url: "/api/settings/mcp/servers/builtin",
+      payload: { enabled: true, confirmed: true }
     });
 
     expect(response.statusCode).toBe(409);
