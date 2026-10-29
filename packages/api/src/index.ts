@@ -6,12 +6,14 @@ import { loadBuildInfo } from "./lib/build-info.js";
 import { createSystemCommandRunner } from "./lib/system-management.js";
 import { createTerminalRuntime } from "./lib/terminal-client.js";
 import { HostdTvModeRuntime } from "./lib/tv-mode.js";
+import { upgradeShareCredential } from "./lib/settings-upgrade.js";
 import { ffmpegVideoTranscoder } from "./lib/video-cache.js";
 import { buildServer } from "./server.js";
 import { registerWebApp } from "./web-static.js";
 
 const config = loadCyberOsRuntime();
 const db = openCyberOsDb(config.paths.databasePath);
+upgradeShareCredential(db, config.paths);
 const buildInfo = await loadBuildInfo();
 const server = await buildServer({
   config,

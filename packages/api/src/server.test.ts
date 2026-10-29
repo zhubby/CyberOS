@@ -2174,6 +2174,26 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("reapplies the saved share account without changing settings or the credential", async () => {
+    const existing = saveShareSettings(db, { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] });
+    const hostd = new FakeShareHostd();
+    const config = testConfig(tempDir);
+    await mkdir(path.dirname(config.paths.sharePasswordPath), { recursive: true });
+    await writeFile(config.paths.sharePasswordPath, "existing-secret", { mode: 0o600 });
+    const before = db.prepare("SELECT * FROM system_settings ORDER BY key").all();
+    const server = await buildServer({ config, db, shares: { hostd } });
+    const response = await server.inject({
+      method: "PUT", url: "/api/shares/account",
+      payload: { username: existing.account.username, expectedUpdatedAt: existing.updatedAt }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().settings.updatedAt).toBe(existing.updatedAt);
+    expect(hostd.requests).toHaveLength(1);
+    expect(db.prepare("SELECT * FROM system_settings ORDER BY key").all()).toEqual(before);
+    expect(await readFile(config.paths.sharePasswordPath, "utf8")).toBe("existing-secret");
+    await server.close();
+  });
+
   it("keeps the saved share account when direct host application fails", async () => {
     await mkdir(path.join(rootDir, "media"));
     const existing = saveShareSettings(db, shareSettingsPayload("old-secret"));

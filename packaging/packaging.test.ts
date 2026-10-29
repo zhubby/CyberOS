@@ -586,7 +586,8 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain("migration-status");
     expect(deployWorkflow).not.toContain("staging_channel");
     expect(deployWorkflow).toContain('[ "$installed_status" = "install ok installed" ]');
-    expect(deployWorkflow).toContain('[ "$actual_settings_sha256" = "$expected_settings_sha256" ]');
+    expect(deployWorkflow).toContain('[ "$upgrade_check" = "$expected_settings_sha256 $actual_settings_sha256" ]');
+    expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/cyberos-deploy --settings-upgrade-check");
     expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/cyberos-deploy --settings-sha256");
     expect(deployWorkflow).toContain("sudo -n /usr/local/sbin/cyberos-deploy --database-check");
     expect(deployWorkflow).toContain("/usr/lib/cyberos/bin/cyberos-terminald");
@@ -751,6 +752,9 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain('restore_tv_runtime_state "$state_dir"');
     expect(deploy).toContain('restore_unit_state "$TV_RUNTIME_TARGET" "$state_dir"');
     expect(deploy).toContain("activate_runtime");
+    expect(deploy).toContain("systemctl restart cyberos-state-init.service");
+    expect(deploy).toContain('apply_tv_runtime_settings');
+    expect(deploy).toContain('/usr/lib/cyberos/scripts/cyberos-tv-mode "$tv_enabled"');
     expect(deploy).not.toContain("systemctl restart $RUNTIME_SERVICES");
     expect(deploy).not.toContain("systemctl enable --now $TIMERS");
     expect(deploy).toContain("systemctl start cyberos-health.service");
@@ -762,6 +766,7 @@ describe("native packaging artifacts", () => {
     const activationOrder = [
       "for unit in $STATEFUL_RUNTIME_UNITS; do",
       "systemctl enable $RUNTIME_SERVICES",
+      "systemctl restart cyberos-state-init.service",
       "start_service_stably cyberos-hostd.service",
       "start_service_stably cyberos-terminald.service",
       "start_service_stably cyberos-api.service",
@@ -774,10 +779,10 @@ describe("native packaging artifacts", () => {
       "start_service_stably cyberos-downloader.service",
       "start_service_stably cyberos-bluetoothd.service",
       "start_service_stably cyberos-indexer.service",
+      "apply_tv_runtime_settings",
       "systemctl start cyberos-health.service",
       "systemctl enable $TIMERS",
-      "systemctl start $TIMERS",
-      'restore_tv_runtime_state "$state_dir"'
+      "systemctl start $TIMERS"
     ];
     for (let index = 1; index < activationOrder.length; index += 1) {
       expect(activateRuntime.indexOf(activationOrder[index - 1]!)).toBeGreaterThanOrEqual(0);

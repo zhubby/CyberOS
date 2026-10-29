@@ -171,6 +171,18 @@ describe("settings routes", () => {
     expect(apply.mock.calls).toEqual([[false], [true]]);
     await server.close();
   });
+
+  it("reapplies a confirmed TV mode even when it matches the saved default", async () => {
+    const apply = vi.fn(async () => undefined);
+    const server = createServer(db, { apply });
+    const response = await server.inject({
+      method: "PATCH", url: "/api/settings/tv", payload: { enabled: true, confirmed: true }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(apply.mock.calls).toEqual([[true]]);
+    expect(getTvSettings(db)?.enabled).toBe(true);
+    await server.close();
+  });
 });
 
 function testConfig() {

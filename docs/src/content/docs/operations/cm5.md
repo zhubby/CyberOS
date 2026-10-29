@@ -55,6 +55,8 @@ sudo cyberos-tv-mode status
 
 启用命令会原子记录当前 display manager 的 unit、enabled/masked 和 active 状态，只停止当前桌面会话，不改动管理员原有的 enabled/masked 配置。随后它安装仅由 CyberOS 管理的 drop-in、启用 `cyberos-tv.target`，并等待 `/api/tv/status` 最多 90 秒；Weston、Chromium 或 VOD 未就绪会自动清理 drop-in 并恢复此前桌面。标准安装器从 `/api/settings/tv` 读取设置：全新数据库使用默认开启值，已经在设置中关闭的设备在重装或升级时保持关闭。
 
+CM5 自动部署同样按数据库中的 TV 设置恢复运行状态，不能仅恢复升级前的 systemd active 状态。升级后默认开启但未运行的设备会启动 TV；已保存关闭的设备保持关闭。
+
 恢复桌面使用：
 
 ```bash
@@ -131,6 +133,10 @@ curl -fsS http://127.0.0.1:3010/api/system/network
 首次接管前为未配置端口创建的临时外部 profile 不使用 `cyberos-` 前缀。只有在两个 CyberOS 托管 profile 已确认、重启后仍稳定恢复时，才删除已知临时 profile；不得批量删除其他 Netplan 或管理员 profile。降级前按 troubleshooting 的步骤恢复外部 profile 并移除 `cyberos-ethernet-*`。
 
 ## 升级、保留与回滚
+
+CyberOS 2.x 升级会将早期 2.x 数据库中的共享密码转存到权限为 `0600` 的 `/cyberos/state/secrets/share/account-password`，保留用户名、共享定义、开关和设置 revision。已存在但不同的凭据会中止转存，避免覆盖。此处理只接受当前 CyberOS 数据库，不导入其他产品或 1.x 数据。
+
+部署前后默认要求完整设置摘要相同。仅上述凭据转存允许通过私有回执校验两份完整摘要，并验证密钥文件内容；其他设置变化仍使验收失败。部署时重新应用共享配置不会改写设置 revision。
 
 ### Tailscale 自动升级 bootstrap
 

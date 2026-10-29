@@ -720,7 +720,12 @@ jobs:
           printf '%s\n' "$actual_settings_sha256" | grep -Eq '^[0-9a-f]{64}$'
           case "$settings_baseline_mode" in
             checksum)
-              [ "$actual_settings_sha256" = "$expected_settings_sha256" ]
+              if [ "$actual_settings_sha256" != "$expected_settings_sha256" ]; then
+                # A verified 2.x credential relocation changes only the password
+                # representation. Check both complete snapshots; any other write fails.
+                upgrade_check="$(sudo -n /usr/local/sbin/cyberos-deploy --settings-upgrade-check)"
+                [ "$upgrade_check" = "$expected_settings_sha256 $actual_settings_sha256" ]
+              fi
               ;;
             database-only)
               [ "$expected_settings_sha256" = unavailable ]
@@ -875,6 +880,10 @@ jobs:
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/storage > "$check_dir/storage.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/health > "$check_dir/system-health.json"
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/settings/shares > "$check_dir/share-settings.json"
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/shares/summary > "$check_dir/shares-summary.json"
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/settings/tv > "$check_dir/tv-settings.json"
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/tv/status > "$check_dir/tv-status.json"
           wait_for_indexer_ready
 
           database_check="$(sudo -n /usr/local/sbin/cyberos-deploy --database-check)"
@@ -904,6 +913,16 @@ jobs:
           const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
           if (payload?.operations?.health?.status !== "ready") {
             throw new Error(`health operation is not ready: ${JSON.stringify(payload?.operations?.health)}`);
+          }
+          NODE
+          node - "$check_dir/tv-settings.json" "$check_dir/tv-status.json" <<'NODE'
+          const fs = require("node:fs");
+          const [settingsPath, statusPath] = process.argv.slice(2);
+          const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")).settings;
+          const status = JSON.parse(fs.readFileSync(statusPath, "utf8")).status;
+          if (typeof settings?.enabled !== "boolean" || status?.enabled !== settings.enabled ||
+              (settings.enabled && status.state !== "ready")) {
+            throw new Error(`TV runtime does not match the configured mode: ${JSON.stringify(status)}`);
           }
           NODE
           node - "$check_dir/monitoring-overview.json" <<'NODE'

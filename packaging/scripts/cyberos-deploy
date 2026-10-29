@@ -72,6 +72,20 @@ restore_tv_runtime_state() {
   fi
 }
 
+apply_tv_runtime_settings() {
+  settings_path="$work_dir/tv-settings.json"
+  curl --fail --silent --show-error --max-time 15 \
+    http://127.0.0.1:3010/api/settings/tv > "$settings_path"
+  tv_enabled=$(node --input-type=module - "$settings_path" <<'NODE'
+import fs from "node:fs";
+const settings = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))?.settings;
+if (typeof settings?.enabled !== "boolean") throw new Error("TV settings response is invalid");
+console.log(settings.enabled ? "enable" : "disable");
+NODE
+  )
+  /usr/lib/cyberos/scripts/cyberos-tv-mode "$tv_enabled"
+}
+
 restore_unit_state() {
   unit=$1
   state_dir=$2
@@ -253,6 +267,9 @@ activate_runtime() {
   log "enabling CyberOS services"
   systemctl enable $RUNTIME_SERVICES
 
+  log "initializing the installed state schema and credentials"
+  systemctl restart cyberos-state-init.service
+
   log "starting CyberOS runtime prerequisites"
   start_service_stably cyberos-hostd.service 1
   start_service_stably cyberos-terminald.service 1
@@ -286,6 +303,9 @@ activate_runtime() {
   start_service_stably cyberos-bluetoothd.service
   start_service_stably cyberos-indexer.service
 
+  log "applying the configured TV appliance mode"
+  apply_tv_runtime_settings
+
   log "refreshing health after all runtime services are stable"
   systemctl start cyberos-health.service
 
@@ -293,8 +313,6 @@ activate_runtime() {
   systemctl enable $TIMERS
   systemctl start $TIMERS
 
-  log "restoring the TV appliance session"
-  restore_tv_runtime_state "$state_dir"
 }
 
 verify_runtime() {
@@ -564,6 +582,12 @@ case "${1:-}" in
     sqlite3 -batch -noheader /cyberos/state/cyberos.sqlite \
       "PRAGMA busy_timeout=5000; SELECT length(key) || ':' || hex(key) || ':' || length(value_json) || ':' || hex(value_json) || ':' || length(updated_at) || ':' || hex(updated_at) FROM system_settings ORDER BY key;" | \
       sha256sum | awk '{ print $1 }'
+    exit 0
+    ;;
+  --settings-upgrade-check)
+    [ "$#" -eq 1 ] || die "settings upgrade verification does not accept arguments"
+    CYBEROS_ENVIRONMENT=production CYBEROS_ROOT=/cyberos \
+      /usr/local/bin/node /usr/lib/cyberos/apps/api/dist/state-init.js --settings-upgrade-check
     exit 0
     ;;
   --database-check)

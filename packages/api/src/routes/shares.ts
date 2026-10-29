@@ -82,7 +82,9 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
 
         let saved;
         try {
-          saved = await persistShareSettings(db, config, settings);
+          saved = settings.account.username === existing.account.username && !password
+            ? existing
+            : await persistShareSettings(db, config, settings);
         } catch (error) {
           await applyShareSettings(config, existing, context.shares).catch(() => undefined);
           throw error;

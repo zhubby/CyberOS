@@ -229,7 +229,7 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db, sy
       reply.status(400).send({ error: settingError(error) });
       return;
     }
-    const changingMode = next.enabled !== existing.enabled;
+    const changingMode = next.enabled !== existing.enabled || (updates.enabled !== undefined && confirmed === true);
     if (changingMode && confirmed !== true) {
       reply.status(400).send({ error: "TV mode changes require confirmation" });
       return;
