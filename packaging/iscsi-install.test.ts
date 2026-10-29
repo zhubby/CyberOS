@@ -46,6 +46,40 @@ describe("iSCSI dependency installation", () => {
     }
   });
 
+  it("loads newly installed LIO before hostd even when the prepare unit was already active", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "cyberos-iscsi-activation-"));
+    roots.push(root);
+    const deploy = await readFile(new URL("scripts/cyberos-deploy", import.meta.url), "utf8");
+    const start = deploy.indexOf("activate_runtime() {");
+    const end = deploy.indexOf("\nverify_runtime() {", start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const script = path.join(root, "activate");
+    await writeFile(script, `set -eu
+STATEFUL_RUNTIME_UNITS=''
+RUNTIME_SERVICES=''
+TIMERS=''
+modules_loaded=0
+systemctl() {
+  case "$*" in
+    'restart cyberos-iscsi-prepare.service') modules_loaded=1 ;;
+    'start cyberos-hostd.service')
+      [ "$modules_loaded" -eq 1 ] || { echo 'LIO was not loaded after installation' >&2; return 1; } ;;
+  esac
+}
+log() { :; }
+stop_unit() { :; }
+start_service_stably() { systemctl start "$1"; }
+wait_for_url() { :; }
+restore_unit_state() { :; }
+apply_tv_runtime_settings() { :; }
+${deploy.slice(start, end)}
+activate_runtime "$1"
+`);
+    const result = spawnSync("sh", [script, root], { encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+  });
+
   it("repairs only recognized interrupted releases and rejects incomplete verification", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "cyberos-deploy-preflight-"));
     roots.push(root);

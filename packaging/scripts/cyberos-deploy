@@ -271,6 +271,9 @@ activate_runtime() {
   systemctl restart cyberos-state-init.service
 
   log "starting CyberOS runtime prerequisites"
+  # An earlier install may have completed this oneshot before DKMS installed
+  # LIO. Starting an already-active oneshot would not load the new modules.
+  systemctl restart cyberos-iscsi-prepare.service
   start_service_stably cyberos-hostd.service 1
   start_service_stably cyberos-terminald.service 1
   if [ -f "$state_dir/cyberos-host-accessd.service.enabled" ] || systemctl is-enabled --quiet docker.service 2>/dev/null; then

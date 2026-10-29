@@ -13,7 +13,7 @@ CyberOS 使用 Linux LIO 作为 iSCSI Target，向 Windows、ESXi 等连接端�
 
 安装包包含 `python3-rtslib-fb` 和所需模块的加载规则。Raspberry Pi 6.18 内核默认未启用 `CONFIG_TARGET_CORE`，安装包通过 DKMS 构建缺失的 LIO 模块，不替换内核；必须安装与运行内核匹配的 headers。原生包含 LIO 的内核继续使用发行版模块。模块源代码固定为 Linux 6.18.34 并逐文件验证 SHA256，完整对应源码和许可安装在 `/usr/src/cyberos-lio-6.18.34`，安装过程无需联网拉取驱动源码。
 
-Debian 的 `rtslib-fb-targetctl` 恢复服务仅在 LIO 已就绪时启动，避免依赖配置早于 DKMS 编译时导致安装失败。安装前脚本会刷新这一条件，安装成功后移除临时条件文件；不启动服务、不修改已有 Target 配置。CyberOS 的模块准备服务与 hostd 在安装完成后的正常激活阶段恢复网络磁盘。
+Debian 的 `rtslib-fb-targetctl` 恢复服务仅在 LIO 已就绪时启动，避免依赖配置早于 DKMS 编译时导致安装失败。安装前脚本会刷新这一条件，安装成功后移除临时条件文件；不启动服务、不修改已有 Target 配置。部署会在安装完成后的正常激活阶段重新运行模块准备服务，再启动 hostd，避免前一次失败安装留下的已完成状态跳过新模块加载。
 
 ## 创建和连接
 

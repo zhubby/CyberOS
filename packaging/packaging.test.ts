@@ -814,6 +814,7 @@ describe("native packaging artifacts", () => {
       "for unit in $STATEFUL_RUNTIME_UNITS; do",
       "systemctl enable $RUNTIME_SERVICES",
       "systemctl restart cyberos-state-init.service",
+      "systemctl restart cyberos-iscsi-prepare.service",
       "start_service_stably cyberos-hostd.service",
       "start_service_stably cyberos-terminald.service",
       "start_service_stably cyberos-api.service",
