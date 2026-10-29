@@ -25,7 +25,7 @@ beforeAll(async () => {
 describe("HttpDownloaderPanel download creation", () => {
   it("does not render a dedicated connection state", () => {
     const html = renderDownloader({ storagePoolsLoading: false, pools: [mountedPool] });
-    const header = html.match(/<header[^>]*class="management-header downloads-header"[^>]*>[\s\S]*?<\/header>/u)?.[0] ?? "";
+    const header = html.match(/<header[^>]*class="management-header app-titlebar downloads-header"[^>]*>[\s\S]*?<\/header>/u)?.[0] ?? "";
 
     expect(header).toContain("<h2>Downloads</h2>");
     expect(header).toContain("Queue and monitor public HTTP and HTTPS downloads.");

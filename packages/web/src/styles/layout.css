@@ -1,5 +1,6 @@
 .app-shell {
   --chat-pane-width: 560px;
+  --app-titlebar-height: 70px;
   display: grid;
   grid-template-columns: minmax(560px, var(--chat-pane-width)) 14px minmax(460px, 1fr);
   width: 100vw;
@@ -8,6 +9,12 @@
   min-height: 0;
   background: var(--app-bg);
   color: var(--text);
+}
+
+.app-shell .app-titlebar {
+  height: var(--app-titlebar-height);
+  min-height: var(--app-titlebar-height);
+  border-bottom-width: 1px;
 }
 
 .app-shell.is-resizing {

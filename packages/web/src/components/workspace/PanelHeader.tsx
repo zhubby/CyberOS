@@ -18,7 +18,7 @@ export function PanelHeader({
   className
 }: PanelHeaderProps) {
   return (
-    <header className={["management-header", className].filter(Boolean).join(" ")}>
+    <header className={["management-header", "app-titlebar", className].filter(Boolean).join(" ")}>
       <span className="management-title-icon">{icon}</span>
       <div className="management-title-copy">
         <h2>{title}</h2>

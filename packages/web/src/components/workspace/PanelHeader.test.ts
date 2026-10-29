@@ -25,7 +25,7 @@ describe("PanelHeader", () => {
       )
     }));
 
-    expect(html).toContain('class="management-header example-header"');
+    expect(html).toContain('class="management-header app-titlebar example-header"');
     expect(html).toContain('<h2>Downloads</h2>');
     expect(html).toContain('<p>Queue and monitor downloads.</p>');
     expect(html).toContain('class="panel-header-meta"');

@@ -52,6 +52,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 根布局保持 Agent / Workspace 双工作区，中间是支持鼠标和键盘的工业分隔结构。
 
 - `.app-shell` 占满视口；Agent 最小宽度 `560px`，Workspace 最小宽度 `460px`。
+- Agent 聊天页头与所有 Workspace `PanelHeader` 必须复用 `.app-titlebar` 和 `--app-titlebar-height`，桌面总高度固定为 `70px`，`560px` 以下统一为 `64px`，两侧底边基线不得错位。
 - Agent 导航是黑色控制轨，当前会话使用黄色反色面和红色左轨。
 - Workspace 是深色操作画布，最右侧面板导航使用黑色轨道，当前面板使用黄色反色面和红色状态轨。
 - 分栏拖拽区使用黑色结构、黄色双线和红/青状态标记，不能因 hover 改变宽度。

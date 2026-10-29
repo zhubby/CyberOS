@@ -53,7 +53,7 @@ describe("LocalTerminalPanel", () => {
       codeFontSettings: { familyId: "system", fontSizePx: 12 }
     }));
 
-    expect(html).toContain('class="management-header workspace-terminal-overview"');
+    expect(html).toContain('class="management-header app-titlebar workspace-terminal-overview"');
     expect(html).toContain('class="workspace-terminal-frame"');
     expect(html).toContain("<h2>Terminal</h2>");
     expect(html).toContain("Direct shell access to CyberOS.");

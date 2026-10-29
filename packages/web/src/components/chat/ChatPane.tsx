@@ -479,7 +479,7 @@ export function ChatPane({
       </aside>
 
       <section className="chat-main" aria-label={t("chat.agentChat")}>
-        <header className="chat-header">
+        <header className="chat-header app-titlebar">
           <span className="chat-header-index" aria-hidden="true">{activeSessionCode}</span>
           <div className="chat-header-copy">
             <h2>{activeSessionTitle}</h2>

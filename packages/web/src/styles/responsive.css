@@ -810,6 +810,10 @@
 }
 
 @media (max-width: 560px) {
+  .app-shell {
+    --app-titlebar-height: 64px;
+  }
+
   .downloads-toolbar {
     align-items: flex-start;
     flex-direction: column;
