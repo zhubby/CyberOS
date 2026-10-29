@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-alerter"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "async-trait",
  "cyberos-monitoring-contracts",
@@ -513,7 +513,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-bluetoothd"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "nix 0.30.1",
  "rusqlite",
@@ -531,7 +531,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-downloader"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "futures-util",
  "httpdate",
@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-host-accessd"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "nix 0.30.1",
  "serde",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-hostd"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "async-trait",
  "nix 0.30.1",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-indexer"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "futures-util",
  "nix 0.30.1",
@@ -620,7 +620,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-monitor"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "async-trait",
  "cyberos-monitoring-contracts",
@@ -640,7 +640,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-monitoring-contracts"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "serde",
  "serde_json",
@@ -648,7 +648,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-photos"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "futures-util",
  "nix 0.30.1",
@@ -670,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-terminald"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "base64 0.22.1",
  "nix 0.30.1",
@@ -687,7 +687,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-tv-gamepad"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "evdev",
  "tempfile",
@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "cyberos-vod-player"
-version = "2.0.10"
+version = "2.0.11"
 dependencies = [
  "nix 0.30.1",
  "rusqlite",

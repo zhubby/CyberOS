@@ -1,3 +1,9 @@
+cyberos (2.0.11) unstable; urgency=medium
+
+  * Clear historical skipped iSCSI restoration failures after CM5 kernel support is available
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Thu, 29 Oct 2026 17:40:45 +0000
+
 cyberos (2.0.10) unstable; urgency=medium
 
   * Complete iSCSI activation after interrupted installs and fix BitTorrent storage mount detection
