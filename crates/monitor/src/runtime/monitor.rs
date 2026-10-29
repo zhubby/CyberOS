@@ -11,20 +11,17 @@ use crate::adapters::monitoring_events::MetricsEventPublisher;
 use crate::application::monitor::{run_collector, run_maintenance};
 use crate::domain::config::MonitorConfig;
 use crate::error::MonitorError;
-use crate::ports::{Collector, MetricsStorePort};
+use crate::ports::MetricsStorePort;
 
 pub struct MonitorService {
     config: MonitorConfig,
-    collectors: Vec<Box<dyn Collector>>,
     shutdown: CancellationToken,
 }
 
 impl MonitorService {
     pub fn new(config: MonitorConfig) -> Self {
-        let collectors = default_collectors(&config);
         Self {
             config,
-            collectors,
             shutdown: CancellationToken::new(),
         }
     }
@@ -33,17 +30,7 @@ impl MonitorService {
         self.shutdown.clone()
     }
 
-    pub async fn run(self) -> Result<(), MonitorError> {
-        if !self.config.monitoring.enabled {
-            let _ = sd_notify::notify(&[
-                NotifyState::Status("Monitoring disabled"),
-                NotifyState::Ready,
-            ]);
-            self.shutdown.cancelled().await;
-            let _ = sd_notify::notify(&[NotifyState::Stopping]);
-            return Ok(());
-        }
-
+    pub async fn run(mut self) -> Result<(), MonitorError> {
         let publisher = MetricsEventPublisher::start(
             env::var_os("CYBEROS_MONITORING_EVENTS_SOCKET")
                 .map(PathBuf::from)
@@ -55,34 +42,79 @@ impl MonitorService {
                     }
                 }),
         );
+        let _ = sd_notify::notify(&[NotifyState::Ready]);
+        loop {
+            if self.shutdown.is_cancelled() {
+                break;
+            }
+            if !self.config.monitoring.enabled {
+                let _ = sd_notify::notify(&[NotifyState::Status("Monitoring disabled")]);
+                tokio::select! {
+                    _ = self.shutdown.cancelled() => break,
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+                }
+                self.refresh_config();
+                continue;
+            }
+            let next = self.run_generation(publisher.clone()).await?;
+            if let Some(monitoring) = next {
+                self.config.monitoring = monitoring;
+            } else {
+                break;
+            }
+        }
+        let _ = sd_notify::notify(&[NotifyState::Stopping]);
+        Ok(())
+    }
+
+    fn refresh_config(&mut self) {
+        match self.config.refresh_monitoring() {
+            Ok(monitoring) => self.config.monitoring = monitoring,
+            Err(error) => {
+                tracing::warn!(error = %error, "monitor settings reload failed; keeping last valid settings")
+            }
+        }
+    }
+
+    async fn run_generation(
+        &self,
+        publisher: MetricsEventPublisher,
+    ) -> Result<Option<crate::domain::config::MonitoringConfig>, MonitorError> {
         let store = MetricsStoreHandle::start_with_publisher(
             self.config.metrics_database_path.clone(),
             self.config.monitoring.clone(),
             Some(publisher),
         )
         .await?;
+        let generation_shutdown = self.shutdown.child_token();
         let mut tasks = JoinSet::new();
-        for collector in self.collectors {
+        for collector in default_collectors(&self.config) {
             tasks.spawn(run_collector(
                 collector,
                 store.clone(),
                 SystemClock,
-                self.shutdown.child_token(),
+                generation_shutdown.child_token(),
             ));
         }
         tasks.spawn(run_maintenance(
             store.clone(),
             SystemClock,
-            self.shutdown.child_token(),
+            generation_shutdown.child_token(),
         ));
-
-        let _ = sd_notify::notify(&[
-            NotifyState::Status("Collecting system metrics"),
-            NotifyState::Ready,
-        ]);
-        self.shutdown.cancelled().await;
-        let _ = sd_notify::notify(&[NotifyState::Stopping]);
-
+        let _ = sd_notify::notify(&[NotifyState::Status("Collecting system metrics")]);
+        let next = loop {
+            tokio::select! {
+                _ = self.shutdown.cancelled() => break None,
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                    match self.config.refresh_monitoring() {
+                        Ok(monitoring) if monitoring != self.config.monitoring => break Some(monitoring),
+                        Ok(_) => {}
+                        Err(error) => tracing::warn!(error = %error, "monitor settings reload failed; keeping last valid settings"),
+                    }
+                }
+            }
+        };
+        generation_shutdown.cancel();
         while let Some(result) = tasks.join_next().await {
             match result {
                 Ok(Ok(())) => {}
@@ -91,6 +123,6 @@ impl MonitorService {
             }
         }
         MetricsStorePort::stop(&store).await;
-        Ok(())
+        Ok(next)
     }
 }

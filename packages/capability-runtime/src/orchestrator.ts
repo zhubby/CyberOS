@@ -36,7 +36,7 @@ import {
   resolveSafeTargetPath,
   statPath
 } from "@cyberos/storage-tools";
-import type { AgentCapabilityId, FileMutationOperation, FileOperationProposal, CyberOsConfig } from "@cyberos/shared";
+import type { AgentCapabilityId, FileMutationOperation, FileOperationProposal, CyberOsRuntime } from "@cyberos/shared";
 import {
   isStoredCapabilityAdapterPayload,
   parseStoredCapabilityAdapterProposal,
@@ -83,7 +83,7 @@ interface StoredFileMutationProposal {
 
 export interface CapabilityRuntimeDependencies {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   adapters?: Readonly<Record<string, CapabilityDomainAdapter>>;
 }
 

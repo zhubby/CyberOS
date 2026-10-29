@@ -24,7 +24,7 @@ export function normalizeShareSettings(
     enabled: normalizeBoolean(settings.enabled, false),
     account: {
       username: normalizeString(account.username) ?? "cyberos-share",
-      password: normalizeNullableString(account.password)
+      password: null
     },
     shares: normalizeShareDefinitions(settings.shares),
     updatedAt
@@ -165,7 +165,7 @@ function isCurrentShareSettings(value: unknown): value is ShareSettingsRecord {
   if (
     !isRecord(value.account)
     || normalizeString(value.account.username) === null
-    || !isNullableString(value.account.password)
+    || value.account.password !== null
   ) {
     return false;
   }

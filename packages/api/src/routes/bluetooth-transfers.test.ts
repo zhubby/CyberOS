@@ -341,7 +341,7 @@ async function setup(): Promise<{
   registerBluetoothTransferRoutes(server, {
     config: {
       paths: resolveCyberOsPaths(temporaryDirectory),
-      hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" }
+      hostd: { socketPath: "/tmp/hostd.sock" }
     },
     db: database,
     system: {

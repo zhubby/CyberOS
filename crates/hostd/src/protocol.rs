@@ -6,6 +6,7 @@ use crate::ops::{OpsRequest, OpsResult};
 use crate::power::{PowerRequest, PowerResult};
 use crate::shares::{ShareApplyRequest, ShareApplyResult};
 use crate::storage::{StorageCommand, StorageCommandResult, StorageOperation, StorageResult};
+use crate::tv::{TvRequest, TvResult};
 use crate::{bluetooth, docker_daemon, network_manager};
 
 pub const PROTOCOL_VERSION: u8 = 1;
@@ -40,6 +41,8 @@ pub(crate) enum HostdOperation {
     SystemPower,
     #[serde(rename = "system.ops")]
     SystemOps,
+    #[serde(rename = "system.tv")]
+    SystemTv,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -63,6 +66,8 @@ pub(crate) enum HostdRequest {
     SystemPower(PowerRequest),
     #[serde(rename = "system.ops")]
     SystemOps(OpsRequest),
+    #[serde(rename = "system.tv")]
+    SystemTv(TvRequest),
 }
 
 #[derive(Debug, Serialize)]
@@ -76,6 +81,7 @@ pub(crate) enum HostdResult {
     BluetoothManager(bluetooth::BluetoothResult),
     SystemPower(PowerResult),
     SystemOps(OpsResult),
+    SystemTv(TvResult),
 }
 
 #[derive(Debug, Serialize)]
@@ -157,6 +163,7 @@ impl HostdOperation {
             Self::BluetoothManager => "Invalid Bluetooth request",
             Self::SystemPower => "A confirmed power action is required",
             Self::SystemOps => "Invalid system.ops payload",
+            Self::SystemTv => "Invalid system.tv payload",
         }
     }
 }
@@ -226,6 +233,8 @@ mod tests {
         SystemPower(PowerResult),
         #[serde(rename = "system.ops")]
         SystemOps(OpsResult),
+        #[serde(rename = "system.tv")]
+        SystemTv(TvResult),
     }
 
     #[test]
@@ -243,6 +252,7 @@ mod tests {
         crate::bluetooth::export_protocol_bindings(&config);
         crate::power::export_protocol_bindings(&config);
         crate::ops::export_protocol_bindings(&config);
+        crate::tv::export_protocol_bindings(&config);
     }
 
     #[test]
@@ -273,7 +283,7 @@ mod tests {
             "/../../packages/shared/fixtures/hostd-protocol-v1.json"
         )))
         .unwrap();
-        assert_eq!(fixtures.contracts.len(), 28);
+        assert_eq!(fixtures.contracts.len(), 29);
 
         for contract in fixtures.contracts {
             let frame = serde_json::to_vec(&serde_json::json!({

@@ -28,6 +28,7 @@ import type { CyberOsDatabase } from "../connection.js";
 const SMTP_KEY = "monitoring_smtp";
 const HEALTH_ROUTING_KEY = "monitoring_health_routing";
 const MAX_PENDING_DELIVERIES = 10_000;
+const EPOCH = new Date(0).toISOString();
 
 export class MonitoringAlertRevisionConflictError extends Error {
   constructor() {
@@ -444,15 +445,42 @@ export function getMonitoringAlertDelivery(db: CyberOsDatabase, id: string): Mon
 
 export function getMonitoringSmtpSettings(db: CyberOsDatabase): MonitoringSmtpSettings {
   const row = readSetting(db, SMTP_KEY);
+  if (!row) {
+    return {
+      enabled: false,
+      host: "",
+      port: 587,
+      security: "starttls",
+      username: "",
+      from: "",
+      credentialConfigured: false,
+      revision: 1,
+      updatedAt: EPOCH
+    };
+  }
   const value = parseObject(row.value_json);
+  if (
+    typeof value.enabled !== "boolean"
+    || typeof value.host !== "string"
+    || typeof value.port !== "number"
+    || !Number.isSafeInteger(value.port)
+    || value.port < 1
+    || value.port > 65_535
+    || (value.security !== "none" && value.security !== "starttls" && value.security !== "tls")
+    || typeof value.username !== "string"
+    || typeof value.password !== "string"
+    || typeof value.from !== "string"
+  ) {
+    throw new Error("SMTP settings do not match the CyberOS 2.0 format");
+  }
   return {
-    enabled: value.enabled === true,
-    host: typeof value.host === "string" ? value.host : "",
-    port: typeof value.port === "number" ? value.port : 587,
-    security: value.security === "none" || value.security === "tls" ? value.security : "starttls",
-    username: typeof value.username === "string" ? value.username : "",
-    from: typeof value.from === "string" ? value.from : "",
-    credentialConfigured: typeof value.password === "string" && value.password.length > 0,
+    enabled: value.enabled,
+    host: value.host,
+    port: value.port,
+    security: value.security,
+    username: value.username,
+    from: value.from,
+    credentialConfigured: value.password.length > 0,
     revision: settingRevision(value),
     updatedAt: row.updated_at
   };
@@ -464,7 +492,7 @@ export function saveMonitoringSmtpSettings(
   input: MonitoringSmtpSettingsInput
 ): MonitoringSmtpSettings {
   const row = readSetting(db, SMTP_KEY);
-  const current = parseObject(row.value_json);
+  const current = row ? parseObject(row.value_json) : {};
   if (settingRevision(current) !== expectedRevision) throw new MonitoringAlertRevisionConflictError();
   const now = new Date().toISOString();
   const password = input.password?.trim() || (typeof current.password === "string" ? current.password : "");
@@ -483,7 +511,18 @@ export function saveMonitoringSmtpSettings(
 
 export function getMonitoringHealthRouting(db: CyberOsDatabase): MonitoringHealthRouting {
   const row = readSetting(db, HEALTH_ROUTING_KEY);
+  if (!row) {
+    return {
+      warningPolicyId: null,
+      criticalPolicyId: null,
+      revision: 1,
+      updatedAt: EPOCH
+    };
+  }
   const value = parseObject(row.value_json);
+  if (!isNullableString(value.warningPolicyId) || !isNullableString(value.criticalPolicyId)) {
+    throw new Error("Monitoring health routing does not match the CyberOS 2.0 format");
+  }
   return {
     warningPolicyId: stringOrNull(value.warningPolicyId),
     criticalPolicyId: stringOrNull(value.criticalPolicyId),
@@ -717,16 +756,18 @@ function escalationTargetExists(
   `).get(targetType, id));
 }
 
-function readSetting(db: CyberOsDatabase, key: string): SettingRow {
+function readSetting(db: CyberOsDatabase, key: string): SettingRow | null {
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(key) as SettingRow | undefined;
-  if (!row) throw new Error(`Required monitoring setting is missing: ${key}`);
-  return row;
+  return row ?? null;
 }
 
 function writeSetting(db: CyberOsDatabase, key: string, value: Record<string, unknown>, updatedAt: string): void {
-  db.prepare("UPDATE system_settings SET value_json = ?, updated_at = ? WHERE key = ?")
-    .run(JSON.stringify(value), updatedAt, key);
+  db.prepare(`
+    INSERT INTO system_settings (key, value_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+  `).run(key, JSON.stringify(value), updatedAt);
 }
 
 function settingRevision(value: Record<string, unknown>): number {
@@ -734,14 +775,15 @@ function settingRevision(value: Record<string, unknown>): number {
 }
 
 function parseObject(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
+  const parsed = JSON.parse(value) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Monitoring setting does not match the CyberOS 2.0 format");
   }
+  return parsed as Record<string, unknown>;
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
 }
 
 function parseStringRecord(value: string): Record<string, string> {

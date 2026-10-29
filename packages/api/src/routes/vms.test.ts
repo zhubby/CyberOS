@@ -5,9 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   consumeVmConsoleAuthorization,
   openCyberOsDb,
+  saveVmSettings,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 import { vmQemuCommand, type VmCommandRunner } from "../lib/vm-service.js";
 import { vmConsoleSpawnSpec } from "./vms.js";
@@ -33,6 +34,27 @@ afterEach(async () => {
 });
 
 describe("VM routes", () => {
+  it("uses the persisted settings switch instead of the static installation default", async () => {
+    saveVmSettings(db, { enabled: false });
+    const server = await buildServer({
+      config: testConfig(),
+      db,
+      vm: { commandRunner: vmRunner(), kvmAvailable: true }
+    });
+
+    const disabled = await server.inject({ method: "GET", url: "/api/vms/summary" });
+    expect(disabled.json()).toMatchObject({
+      summary: { enabled: false, host: { status: "disabled" } }
+    });
+
+    saveVmSettings(db, { enabled: true });
+    const enabled = await server.inject({ method: "GET", url: "/api/vms/summary" });
+    expect(enabled.json()).toMatchObject({
+      summary: { enabled: true, host: { status: "ready", kvmAvailable: true } }
+    });
+    await server.close();
+  });
+
   it("runs virsh console inside a PTY wrapper without interpolating configuration into the shell command", () => {
     expect(vmConsoleSpawnSpec("qemu:///system; unsafe", "guest-name")).toEqual({
       command: "script",
@@ -410,8 +432,8 @@ function expectNoAgentSideEffects(): void {
   expect(db.prepare("SELECT COUNT(*) FROM operation_notifications").pluck().get()).toBe(0);
 }
 
-function testConfig(): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
+function testConfig(): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: tempDir }, tempDir);
   return {
     ...base,
     paths: { ...base.paths, dataRoot: rootDir, databasePath: path.join(tempDir, "cyberos.sqlite") },
@@ -420,7 +442,7 @@ function testConfig(): CyberOsConfig {
     admin: { displayName: "Test Admin", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
     vm: { enabled: true, libvirtUri: "qemu:///system", storagePath: path.join(tempDir, "vmstore"), networkName: "default", isoRoots: [path.join(tempDir, "iso")], operationTimeoutMs: 1000, consoleMode: "serial" },
-    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },

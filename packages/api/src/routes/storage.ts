@@ -27,20 +27,13 @@ export function registerStorageRoutes(server: FastifyInstance, context: ApiRoute
       confirm?: boolean;
     };
   }>("/api/storage/actions", async (request, reply) => {
-    if (context.config.hostd.mutationPolicy === "declarative") {
-      reply.status(501).send({ error: "Persistent storage configuration is managed declaratively on this host" });
-      return;
-    }
     if (request.body?.confirm !== true) {
       reply.status(400).send({ error: "Storage operation requires explicit confirmation" });
       return;
     }
 
     try {
-      const summary = await collectSystemStorage({
-        ...context.system,
-        mutationPolicy: context.config.hostd.mutationPolicy
-      });
+      const summary = await collectSystemStorage(context.system);
       const proposal: StorageOperationProposal = request.body?.action === "delete_pool"
         ? buildStoragePoolDeleteProposal(request.body, summary)
         : buildStoragePoolProposal(request.body ?? {}, summary);

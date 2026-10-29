@@ -4,13 +4,13 @@ import {
   startOpsRun,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { type OpsMaintenanceSummary, type CyberOsConfig, type SystemHealthSummary } from "@cyberos/shared";
+import { type OpsMaintenanceSummary, type CyberOsRuntime, type SystemHealthSummary } from "@cyberos/shared";
 import { runScheduledHealthEvaluation } from "@cyberos/system-health";
 import { runMaintenance } from "./maintenance.js";
 
 export async function runHealthTask(input: {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   now?: Date;
 }): Promise<SystemHealthSummary> {
   return runTrackedTask(input, "health", async () => {
@@ -21,7 +21,7 @@ export async function runHealthTask(input: {
 
 export async function runMaintenanceTask(input: {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   now?: Date;
 }): Promise<OpsMaintenanceSummary> {
   return runTrackedTask(input, "maintenance", async () => {
@@ -31,7 +31,7 @@ export async function runMaintenanceTask(input: {
 }
 
 async function runTrackedTask<T>(
-  input: { db: CyberOsDatabase; config: CyberOsConfig; now?: Date },
+  input: { db: CyberOsDatabase; config: CyberOsRuntime; now?: Date },
   task: "health" | "maintenance",
   execute: () => Promise<{ result: T; persisted: Record<string, unknown> }>
 ): Promise<T> {
@@ -63,7 +63,7 @@ async function runTrackedTask<T>(
   }
 }
 
-function sanitizeOpsError(error: unknown, config: CyberOsConfig): string {
+function sanitizeOpsError(error: unknown, config: CyberOsRuntime): string {
   let message = error instanceof Error ? error.message : "operation failed";
   const privatePaths = [config.paths.dataRoot, config.paths.stateDir, config.paths.databasePath]
     .filter(Boolean)

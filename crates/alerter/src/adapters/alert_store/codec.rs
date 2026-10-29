@@ -1,5 +1,3 @@
-use serde_json::Value;
-
 use crate::domain::rule::{
     Aggregation, Comparator, InstanceState, MetricTransform, NoDataPolicy, Severity,
 };
@@ -33,14 +31,6 @@ pub(super) fn sanitize_error(value: &str) -> String {
         return "Alert operation failed".to_owned();
     }
     normalized.chars().take(240).collect()
-}
-
-pub(super) fn json_string(value: &Value, key: &str) -> String {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned()
 }
 
 pub(super) fn retry_delay(attempt: i64) -> i64 {

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 pub(super) const DEFAULT_MANAGED_ROOTS: &[&str] = &[
-    "/cyberos/config",
+    "/cyberos/state/shares",
     "/etc/samba/smb.conf.d",
     "/etc/apache2/sites-available",
     "/etc/vsftpd.d",
@@ -40,7 +40,7 @@ impl Default for SharePaths {
             ftp_config: "/etc/vsftpd.d/cyberos-shares.conf".into(),
             nfs_exports: "/etc/exports.d/cyberos.exports".into(),
             dlna_config: "/etc/minidlna.d/cyberos.conf".into(),
-            htpasswd: "/cyberos/config/shares.htpasswd".into(),
+            htpasswd: "/cyberos/state/shares/htpasswd".into(),
             ftp_pam: "/etc/pam.d/vsftpd-cyberos".into(),
         }
     }
@@ -62,7 +62,7 @@ impl Default for ShareOptions {
             credential_group: "www-data".to_owned(),
             managed_roots: DEFAULT_MANAGED_ROOTS.iter().map(PathBuf::from).collect(),
             acl_script: "/usr/lib/cyberos/scripts/cyberos-share-acl.mjs".into(),
-            acl_state: "/cyberos/config/share-acl.json".into(),
+            acl_state: "/cyberos/state/shares/acl.json".into(),
         }
     }
 }

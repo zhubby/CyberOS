@@ -14,12 +14,16 @@ export function createShareOperationRecord(
   input: { proposal: ShareOperationProposal; settings: ShareSettingsRecord }
 ): ShareOperationRecord {
   const now = new Date().toISOString();
+  const settings = {
+    ...input.settings,
+    account: { ...input.settings.account, password: null }
+  };
   const operation: ShareOperationRecord = {
     id: randomUUID(),
     action: input.proposal.action,
     targetId: "share-settings",
     status: "proposed",
-    metadata: { proposal: input.proposal, settings: input.settings },
+    metadata: { proposal: input.proposal, settings },
     createdAt: now,
     updatedAt: now
   };

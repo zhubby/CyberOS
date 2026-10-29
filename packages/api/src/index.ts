@@ -1,16 +1,16 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { openCyberOsDb } from "@cyberos/db";
-import { loadConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime } from "@cyberos/shared";
 import { loadBuildInfo } from "./lib/build-info.js";
 import { createSystemCommandRunner } from "./lib/system-management.js";
 import { createTerminalRuntime } from "./lib/terminal-client.js";
-import { createVodPlayerRuntime } from "./lib/vod-player.js";
+import { HostdTvModeRuntime } from "./lib/tv-mode.js";
 import { ffmpegVideoTranscoder } from "./lib/video-cache.js";
 import { buildServer } from "./server.js";
 import { registerWebApp } from "./web-static.js";
 
-const config = loadConfig();
+const config = loadCyberOsRuntime();
 const db = openCyberOsDb(config.paths.databasePath);
 const buildInfo = await loadBuildInfo();
 const server = await buildServer({
@@ -22,7 +22,7 @@ const server = await buildServer({
   },
   terminal: createTerminalRuntime(config.terminal),
   videoTranscoder: ffmpegVideoTranscoder,
-  vodPlayer: createVodPlayerRuntime(config.vodPlayer)
+  tvMode: new HostdTvModeRuntime(config.hostd.socketPath)
 });
 const webDist = resolveWebDist();
 const docsDist = resolveDocsDist();

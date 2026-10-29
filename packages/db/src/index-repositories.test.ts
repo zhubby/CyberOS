@@ -367,11 +367,7 @@ describe("SQLite schema and repositories", () => {
   });
 
   it("validates and persists indexer settings", () => {
-    expect(getIndexerSettings(db)).toMatchObject({
-      scanConcurrency: 4,
-      extractionConcurrency: 2,
-      ocrStoragePoolIds: []
-    });
+    expect(getIndexerSettings(db)).toBeNull();
     expect(saveIndexerSettings(db, {
       ...defaultIndexerSettings(),
       scanConcurrency: 8,
@@ -381,13 +377,13 @@ describe("SQLite schema and repositories", () => {
   });
 
   it("rejects incomplete Indexer and Photos processing settings", () => {
-    db.prepare("UPDATE system_settings SET value_json = ? WHERE key = 'indexer_settings'")
-      .run(JSON.stringify({ scanConcurrency: 4 }));
-    db.prepare("UPDATE system_settings SET value_json = ? WHERE key = 'photos_processing_settings'")
-      .run(JSON.stringify({ processingConcurrency: 1 }));
+    db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)")
+      .run("indexer_settings", JSON.stringify({ scanConcurrency: 4 }), new Date().toISOString());
+    db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)")
+      .run("photos_processing_settings", JSON.stringify({ processingConcurrency: 1 }), new Date().toISOString());
 
-    expect(getIndexerSettings(db)).toBeNull();
-    expect(getPhotosProcessingSettings(db)).toBeNull();
+    expect(() => getIndexerSettings(db)).toThrow(/CyberOS 2.0 format/);
+    expect(() => getPhotosProcessingSettings(db)).toThrow(/CyberOS 2.0 format/);
   });
 
   it("searches the new FTS with safe snippets, stable cursors, and query-bound cursors", () => {

@@ -5,7 +5,7 @@ import type {
   JsonValue
 } from "@cyberos/capabilities";
 import type { CyberOsDatabase } from "@cyberos/db";
-import type { CyberOsConfig } from "@cyberos/shared";
+import type { CyberOsRuntime } from "@cyberos/shared";
 
 export interface CapabilitySecretRequirement {
   name: string;
@@ -17,7 +17,7 @@ export interface CapabilitySecretRequirement {
 
 export interface CapabilityAdapterContext {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   capabilityId: string;
   subject: CapabilitySubject;
 }

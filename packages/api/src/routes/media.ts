@@ -33,7 +33,7 @@ import {
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { searchTmdbCandidates, type TmdbCandidateSearchInput } from "../lib/tmdb-client.js";
-import { createVodPlayerRuntime } from "../lib/vod-player.js";
+import { resolveVodPlayerRuntime } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 const ARTWORK_MAX_BYTES = 15 * 1024 * 1024;
@@ -50,18 +50,31 @@ export function registerMediaRoutes(
 ): void {
   const { db } = context;
   const dataRoot = context.config.paths.dataRoot;
-  const vodPlayer = context.vodPlayer ?? createVodPlayerRuntime(context.config.vodPlayer);
   const searchTmdb = dependencies.searchTmdb ?? searchTmdbCandidates;
 
-  server.get("/api/media/settings", async () => ({
-    settings: toPublicMediaLibrarySettings(getMediaLibrarySettings(db) ?? defaultMediaLibrarySettings())
-  }));
+  server.get("/api/media/settings", async (_request, reply) => {
+    try {
+      reply.send({
+        settings: toPublicMediaLibrarySettings(getMediaLibrarySettings(db) ?? defaultMediaLibrarySettings())
+      });
+    } catch (error) {
+      reply.status(409).send({
+        error: error instanceof Error ? error.message : "Media settings are invalid",
+        state: "attention"
+      });
+    }
+  });
 
   server.patch<{
     Body: { tmdbReadAccessToken?: string | null; language?: string; region?: string | null };
   }>("/api/media/settings", async (request, reply) => {
     try {
-      const current = getMediaLibrarySettings(db) ?? defaultMediaLibrarySettings();
+      let current;
+      try {
+        current = getMediaLibrarySettings(db) ?? defaultMediaLibrarySettings();
+      } catch {
+        current = defaultMediaLibrarySettings();
+      }
       const settings = saveMediaLibrarySettings(db, {
         tmdbReadAccessToken: request.body?.tmdbReadAccessToken === undefined
           ? current.tmdbReadAccessToken
@@ -252,7 +265,7 @@ export function registerMediaRoutes(
       const safe = await resolveScopedExistingPath(scope, file.relativePath);
       if (!(await stat(safe.realPath)).isFile()) return reply.status(404).send({ error: "Media file not found" });
       const audioDeviceId = getBluetoothSettings(db)?.defaultAudioDeviceId ?? null;
-      const status = await vodPlayer.command({
+      const status = await resolveVodPlayerRuntime(context).command({
         type: "play",
         storagePoolId: file.storagePoolId,
         relativePath: safe.relativePath,

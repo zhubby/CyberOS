@@ -6,7 +6,7 @@ import type {
   PublicSystemInfoCpu,
   PublicSystemInfoNetworkAddress,
   PublicSystemInfoStorageVolume,
-  CyberOsConfig
+  CyberOsRuntime
 } from "@cyberos/shared";
 import {
   PHOTOS_DATA_DIRECTORY_NAME,
@@ -24,7 +24,10 @@ interface StorageCandidate {
   storagePoolId: string | null;
 }
 
-export async function collectSystemInfo(config: CyberOsConfig): Promise<PublicSystemInfo> {
+export async function collectSystemInfo(
+  config: CyberOsRuntime,
+  adminDisplayName = config.admin.displayName
+): Promise<PublicSystemInfo> {
   const cpus = os.cpus().map(toPublicCpu);
   const totalMemoryBytes = os.totalmem();
   const freeMemoryBytes = os.freemem();
@@ -36,7 +39,7 @@ export async function collectSystemInfo(config: CyberOsConfig): Promise<PublicSy
     collectedAt: new Date().toISOString(),
     identity: {
       hostname: os.hostname(),
-      adminDisplayName: config.admin.displayName,
+      adminDisplayName,
       authMode: config.admin.authMode,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
     },
@@ -124,7 +127,7 @@ function toPublicCpu(cpu: ReturnType<typeof os.cpus>[number]): PublicSystemInfoC
   };
 }
 
-function storageCandidates(config: CyberOsConfig): StorageCandidate[] {
+function storageCandidates(config: CyberOsRuntime): StorageCandidate[] {
   return [
     {
       id: "data-root",

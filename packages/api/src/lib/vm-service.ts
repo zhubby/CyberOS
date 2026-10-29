@@ -5,7 +5,7 @@ import os from "node:os";
 import { promisify } from "node:util";
 import { XMLParser } from "fast-xml-parser";
 import type {
-  CyberOsConfig,
+  CyberOsRuntime,
   VmConfig,
   VmInstanceSummary,
   VmOperationProposal,
@@ -47,7 +47,7 @@ class NodeVmCommandRunner implements VmCommandRunner {
   }
 }
 
-export function vmCommandRunner(config: CyberOsConfig, dependencies?: VmRuntimeDependencies): VmCommandRunner {
+export function vmCommandRunner(config: CyberOsRuntime, dependencies?: VmRuntimeDependencies): VmCommandRunner {
   const vm = config.vm;
   return dependencies?.commandRunner ?? new NodeVmCommandRunner(
     vm.operationTimeoutMs,
@@ -55,7 +55,7 @@ export function vmCommandRunner(config: CyberOsConfig, dependencies?: VmRuntimeD
   );
 }
 
-export async function collectVmSummary(config: CyberOsConfig, dependencies?: VmRuntimeDependencies): Promise<VmSummary> {
+export async function collectVmSummary(config: CyberOsRuntime, dependencies?: VmRuntimeDependencies): Promise<VmSummary> {
   const vm = config.vm;
   if (!vm.enabled) return unavailableSummary(vm, "disabled");
   const runner = vmCommandRunner(config, dependencies);
@@ -113,7 +113,7 @@ export async function collectVmSummary(config: CyberOsConfig, dependencies?: VmR
 }
 
 export async function applyVmOperation(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   operation: VmOperationRecord,
   proposal: VmOperationProposal,
   dependencies?: VmRuntimeDependencies

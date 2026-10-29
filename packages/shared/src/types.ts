@@ -1156,7 +1156,8 @@ export interface DockerConfig {
   consoleShells: string[];
 }
 
-export interface DockerSettingsRecord extends DockerConfig {
+export interface DockerSettingsRecord {
+  enabled: boolean;
   updatedAt: string;
 }
 
@@ -1246,11 +1247,8 @@ export interface ShareConfig {
   shares: ShareDefinitionConfig[];
 }
 
-export type HostMutationPolicy = "mutable" | "declarative";
-
 export interface HostdConfig {
   socketPath: string;
-  mutationPolicy: HostMutationPolicy;
 }
 
 export interface TerminalConfig {
@@ -1301,7 +1299,7 @@ export interface PublicShareSettings extends Omit<ShareSettingsRecord, "account"
   account: PublicShareAccountConfig;
 }
 
-export interface CyberOsConfig {
+export interface CyberOsBootstrap {
   environment: DeploymentMode;
   paths: CyberOsPaths;
   api: {
@@ -1309,6 +1307,10 @@ export interface CyberOsConfig {
     port: number;
     allowedOrigins: string[];
   };
+}
+
+/** Runtime wiring derived from bootstrap paths and product-safe constants. */
+export interface CyberOsRuntime extends CyberOsBootstrap {
   mcp: McpConfig;
   worker: {
     pollMs: number;
@@ -1368,6 +1370,50 @@ export interface VmConfig {
   isoRoots: string[];
   operationTimeoutMs: number;
   consoleMode: "serial";
+}
+
+export interface VmSettingsRecord {
+  enabled: boolean;
+  updatedAt: string;
+}
+
+export type PublicVmSettings = VmSettingsRecord;
+
+export interface SystemProfileSettingsRecord {
+  adminDisplayName: string;
+  updatedAt: string;
+}
+
+export interface MonitoringSettingsRecord {
+  enabled: boolean;
+  rawRetentionDays: number;
+  minuteRetentionDays: number;
+  hourRetentionDays: number;
+  maxDatabaseBytes: number;
+  updatedAt: string;
+}
+
+export interface BackupSettingsRecord {
+  enabled: boolean;
+  repositoryPath: string;
+  requireMount: boolean;
+  keepDaily: number;
+  keepWeekly: number;
+  validatedAt: string | null;
+  updatedAt: string;
+}
+
+export interface PublicBackupSettings extends BackupSettingsRecord {
+  passwordConfigured: boolean;
+}
+
+export interface TvSettingsRecord {
+  enabled: boolean;
+  videoOutput: "drm" | "wayland";
+  drmConnector: string | null;
+  audioDevice: string | null;
+  hardwareDecoding: "auto-safe" | "auto" | "no";
+  updatedAt: string;
 }
 
 export const MODEL_PROVIDER_NAMES = ["openai", "anthropic"] as const;
@@ -1925,7 +1971,6 @@ export interface SystemNetworkSummary {
     canManageWifi: boolean;
     canManageHotspot: boolean;
     hostdReady: boolean;
-    hostMutationPolicy: HostMutationPolicy;
   };
   metrics: {
     interfaces: number;
@@ -2085,7 +2130,6 @@ export interface SystemStorageSummary {
     canCreatePool: boolean;
     canDeletePool: boolean;
     canApplyConfiguration: false;
-    hostMutationPolicy: HostMutationPolicy;
   };
   metrics: {
     pools: number;
@@ -2731,7 +2775,6 @@ export interface DockerSummary {
   enabled: boolean;
   capabilities: {
     canUpdateDaemonConfiguration: boolean;
-    hostMutationPolicy: HostMutationPolicy;
   };
   daemon: DockerDaemonStatus;
   engine: DockerEngineSummary;
@@ -3106,7 +3149,6 @@ export interface ShareSummary {
   settingsUpdatedAt: string;
   capabilities: {
     canApplyConfiguration: boolean;
-    hostMutationPolicy: HostMutationPolicy;
   };
   metrics: {
     shares: number;

@@ -5,7 +5,7 @@ use cyberos_monitoring_contracts::SamplingIntervals;
 
 const MIB: u64 = 1024 * 1024;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MonitoringConfig {
     pub enabled: bool,
     pub sampling: SamplingIntervals,

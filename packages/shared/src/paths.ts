@@ -3,8 +3,16 @@ import path from "node:path";
 /** Canonical persistent and volatile locations owned by CyberOS. */
 export interface CyberOsPaths {
   rootDir: string;
-  configDir: string;
   stateDir: string;
+  secretsDir: string;
+  backupSecretsDir: string;
+  backupPasswordPath: string;
+  shareSecretsDir: string;
+  sharePasswordPath: string;
+  mcpStateDir: string;
+  mcpTokenPath: string;
+  tvStateDir: string;
+  tvEnabledMarker: string;
   logsDir: string;
   homeDir: string;
   dataRoot: string;
@@ -38,8 +46,16 @@ export function resolveCyberOsPaths(rootDir: string): CyberOsPaths {
   const hostdStateDir = path.join(stateDir, "hostd");
   return {
     rootDir: root,
-    configDir: path.join(root, "config"),
     stateDir,
+    secretsDir: path.join(stateDir, "secrets"),
+    backupSecretsDir: path.join(stateDir, "secrets", "backup"),
+    backupPasswordPath: path.join(stateDir, "secrets", "backup", "restic-password"),
+    shareSecretsDir: path.join(stateDir, "secrets", "share"),
+    sharePasswordPath: path.join(stateDir, "secrets", "share", "account-password"),
+    mcpStateDir: path.join(stateDir, "mcp"),
+    mcpTokenPath: path.join(stateDir, "mcp", "pi.token"),
+    tvStateDir: path.join(stateDir, "tv"),
+    tvEnabledMarker: path.join(stateDir, "tv", "enabled"),
     logsDir: path.join(root, "logs"),
     homeDir: path.join(root, "home"),
     dataRoot,

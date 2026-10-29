@@ -146,7 +146,6 @@ function summary(): SystemStorageSummary {
       canCreatePool: true,
       canDeletePool: false,
       canApplyConfiguration: false,
-      hostMutationPolicy: "mutable"
     },
     metrics: { pools: 0, arrays: 0, disks: 5, totalBytes: 500, usedBytes: null, availableBytes: null, smartPassed: 0, smartFailed: 0, smartUnknown: 5 },
     pools: [],

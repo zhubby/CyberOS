@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { listOperationNotifications, openCyberOsDb, saveBluetoothSettings, type CyberOsDatabase } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig, type VodPlayerStatus } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime, type VodPlayerStatus } from "@cyberos/shared";
 import { VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { buildServer } from "../server.js";
 
@@ -215,9 +215,9 @@ async function setup(): Promise<{ server: Awaited<ReturnType<typeof buildServer>
   return { server, root };
 }
 
-function testConfig(root: string, enabled: boolean): CyberOsConfig {
+function testConfig(root: string, enabled: boolean): CyberOsRuntime {
   const rootDir = tempDir!;
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: rootDir }, rootDir);
   return {
     ...base,
     paths: { ...base.paths, dataRoot: path.dirname(root), databasePath: path.join(rootDir, "cyberos.sqlite") },
@@ -225,7 +225,7 @@ function testConfig(root: string, enabled: boolean): CyberOsConfig {
     worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
-    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: {

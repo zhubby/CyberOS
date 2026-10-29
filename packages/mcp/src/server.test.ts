@@ -16,7 +16,7 @@ import {
   transitionDownloadTask,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { registerMcp } from "./server.js";
 
 let tempDir: string;
@@ -534,8 +534,8 @@ function parseMcpResponse(body: string): McpTestResponse {
   return JSON.parse(data) as McpTestResponse;
 }
 
-function testConfig(root: string): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(root, "missing.toml"), CYBEROS_ROOT: root }, root);
+function testConfig(root: string): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: root }, root);
   return {
     ...base,
     paths: { ...base.paths, dataRoot: root, databasePath: path.join(root, "cyberos.sqlite") },
@@ -543,7 +543,7 @@ function testConfig(root: string): CyberOsConfig {
     worker: { pollMs: 100, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: path.join(root, "hostd.sock"), mutationPolicy: "mutable" },
+    hostd: { socketPath: path.join(root, "hostd.sock") },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
     terminal: { user: "cyberos", socketPath: path.join(root, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(root, "vod.sock"), statePath: path.join(root, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },

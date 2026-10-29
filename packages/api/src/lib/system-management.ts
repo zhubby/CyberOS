@@ -22,8 +22,7 @@ import type {
   SystemStorageMount,
   SystemStoragePartition,
   SystemStoragePool,
-  SystemStorageSummary,
-  HostMutationPolicy
+  SystemStorageSummary
 } from "@cyberos/shared";
 import type { NetworkManagerRuntime } from "./network-manager.js";
 import type { EthernetManagerRuntime } from "./ethernet-manager.js";
@@ -44,7 +43,6 @@ export interface SystemManagementDependencies {
   networkManager?: NetworkManagerRuntime;
   ethernetManager?: EthernetManagerRuntime;
   bluetoothManager?: BluetoothManagerRuntime;
-  mutationPolicy?: HostMutationPolicy;
 }
 
 class NodeSystemCommandRunner implements SystemCommandRunner {
@@ -177,27 +175,22 @@ export async function collectSystemNetwork(
   const status = collectionStatus(interfaces.length > 0 || routes.length > 0, issues);
   const networkManagerBackend = wifi.backend === "NetworkManager" || ethernet.backend === "NetworkManager";
   const hostdReady = wifi.hostdReady || ethernet.hostdReady;
-  const hostMutationPolicy = dependencies.mutationPolicy ?? "mutable";
-  const canMutateHost = hostMutationPolicy === "mutable";
-
   return {
     collectedAt: new Date().toISOString(),
     status,
     capabilities: {
       backend: networkManagerBackend ? "NetworkManager" : wifi.backend,
-      canApplyConfiguration: canMutateHost && networkManagerBackend && hostdReady,
+      canApplyConfiguration: networkManagerBackend && hostdReady,
       canConfigureBridge: false,
       canConfigureBond: false,
       canConfigureVlan: false,
-      canManageEthernet: canMutateHost && ethernet.backend === "NetworkManager" && ethernet.hostdReady && ethernet.devices.length > 0,
-      canManageWifi: canMutateHost && wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.length > 0,
+      canManageEthernet: ethernet.backend === "NetworkManager" && ethernet.hostdReady && ethernet.devices.length > 0,
+      canManageWifi: wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.length > 0,
       canManageHotspot:
-        canMutateHost &&
         wifi.backend === "NetworkManager" &&
         wifi.hostdReady &&
         wifi.devices.some((device) => device.capabilities.accessPoint),
-      hostdReady,
-      hostMutationPolicy
+      hostdReady
     },
     metrics: {
       interfaces: interfaces.length,
@@ -308,18 +301,14 @@ export async function collectSystemStorage(
   const pools = arrays.map((array) => mapStoragePool(array, mounts));
   const metrics = storageMetrics(pools, arrays, disks);
   const status = collectionStatus(disks.length > 0 || arrays.length > 0 || mounts.length > 0, issues);
-  const hostMutationPolicy = dependencies.mutationPolicy ?? "mutable";
-  const canMutateHost = hostMutationPolicy === "mutable";
-
   return {
     collectedAt: new Date().toISOString(),
     status,
     capabilities: {
       backend: "mdadm",
-      canCreatePool: canMutateHost,
-      canDeletePool: canMutateHost,
-      canApplyConfiguration: false,
-      hostMutationPolicy
+      canCreatePool: true,
+      canDeletePool: true,
+      canApplyConfiguration: false
     },
     metrics,
     pools,

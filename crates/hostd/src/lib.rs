@@ -11,3 +11,4 @@ pub mod protocol;
 pub mod server;
 pub mod shares;
 pub mod storage;
+pub mod tv;

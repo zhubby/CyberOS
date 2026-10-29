@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CapabilityError,
@@ -28,6 +29,10 @@ import {
   defaultDownloadSettings,
   defaultIndexerSettings,
   defaultAgentCapabilityPolicySettings,
+  defaultBackupSettings,
+  defaultMonitoringSettings,
+  defaultSystemProfileSettings,
+  defaultTvSettings,
   getDownloadSettings,
   getDownloadWorkerHealth,
   getIndexerSettings,
@@ -42,7 +47,13 @@ import {
   getPhotosWorkerHealth,
   getAgentCapabilityPolicySettings,
   getAgentMcpSettings,
+  getDockerSettings,
+  getBackupSettings,
+  getMonitoringSettings,
+  getSystemProfileSettings,
+  getTvSettings,
   getShareSettings,
+  getVmSettings,
   getTerminalTabState,
   getSystemOperations,
   listBackupRuns,
@@ -64,11 +75,11 @@ import {
   type CyberOsDatabase
 } from "@cyberos/db";
 import { inferMimeType, statPath } from "@cyberos/storage-tools";
-import type { AgentCapabilityId, AgentCapabilityPolicyMode, DownloadTaskStatus, PublicBuildInfo, CyberOsConfig } from "@cyberos/shared";
+import type { AgentCapabilityId, AgentCapabilityPolicyMode, DownloadTaskStatus, PublicBuildInfo, CyberOsRuntime } from "@cyberos/shared";
 
 export interface McpRuntimeDependencies {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   buildInfo?: PublicBuildInfo;
   readAdapters?: Readonly<Record<string, (
     input: JsonValue,
@@ -283,7 +294,10 @@ async function executeImplemented(
     case "cyberos.operations.list":
       return { data: jsonValue(getSystemOperations(dependencies.db, { limit: boundedInteger(object.limit, 20, 1, 100) })) };
     case "cyberos.backup.status":
-      return { data: { enabled: dependencies.config.backup.enabled, runs: jsonValue(listBackupRuns(dependencies.db, boundedInteger(object.limit, 20, 1, 100))) } };
+      return { data: { enabled: (getBackupSettings(dependencies.db) ?? defaultBackupSettings(
+        dependencies.config.paths.backupRoot,
+        dependencies.config.environment === "production"
+      )).enabled, runs: jsonValue(listBackupRuns(dependencies.db, boundedInteger(object.limit, 20, 1, 100))) } };
     case "cyberos.index.status":
       return indexStatus(dependencies, object);
     case "cyberos.photos.status":
@@ -438,10 +452,19 @@ function notificationsStatus(dependencies: McpRuntimeDependencies, input: Record
 
 function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecution {
   const model = getModelProviderSettings(dependencies.db);
+  const dockerEnabled = getDockerSettings(dependencies.db)?.enabled ?? dependencies.config.docker.enabled;
+  const vmEnabled = getVmSettings(dependencies.db)?.enabled ?? dependencies.config.vm.enabled;
   const shares = getShareSettings(dependencies.db) ?? {
     ...dependencies.config.shares,
     updatedAt: new Date(0).toISOString()
   };
+  const systemProfile = getSystemProfileSettings(dependencies.db) ?? defaultSystemProfileSettings();
+  const monitoring = getMonitoringSettings(dependencies.db) ?? defaultMonitoringSettings();
+  const backup = getBackupSettings(dependencies.db) ?? defaultBackupSettings(
+    dependencies.config.paths.backupRoot,
+    dependencies.config.environment === "production"
+  );
+  const tv = getTvSettings(dependencies.db) ?? defaultTvSettings();
   return {
     data: jsonValue({
       environment: dependencies.config.environment,
@@ -450,10 +473,11 @@ function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecuti
         mcpPiEnabled: getAgentMcpSettings(dependencies.db)?.enabled ?? dependencies.config.mcp.piEnabled,
         mcpExternalEnabled: dependencies.config.mcp.externalEnabled,
         mcpShellEnabled: dependencies.config.mcp.shellEnabled,
-        dockerEnabled: dependencies.config.docker.enabled,
-        vmEnabled: dependencies.config.vm.enabled,
-        backupEnabled: dependencies.config.backup.enabled,
-        monitoringEnabled: dependencies.config.monitoring.enabled
+        dockerEnabled,
+        vmEnabled,
+        backupEnabled: backup.enabled,
+        monitoringEnabled: monitoring.enabled,
+        tvEnabled: tv.enabled
       },
       model: model ? {
         providerName: model.providerName,
@@ -467,9 +491,16 @@ function publicSettings(dependencies: McpRuntimeDependencies): CapabilityExecuti
       ),
       indexer: jsonValue(getIndexerSettings(dependencies.db) ?? defaultIndexerSettings()),
       downloads: jsonValue(getDownloadSettings(dependencies.db) ?? defaultDownloadSettings()),
+      systemProfile: jsonValue(systemProfile),
+      monitoring: jsonValue(monitoring),
+      backup: jsonValue({ ...backup, passwordConfigured: existsSync(dependencies.config.paths.backupPasswordPath) }),
+      tv: jsonValue(tv),
       shares: {
         enabled: shares.enabled,
-        account: { username: shares.account.username, passwordConfigured: Boolean(shares.account.password) },
+        account: {
+          username: shares.account.username,
+          passwordConfigured: existsSync(dependencies.config.paths.sharePasswordPath)
+        },
         shares: shares.shares.map((share) => ({ ...share }))
       }
     })
@@ -483,15 +514,23 @@ function terminalTabs(dependencies: McpRuntimeDependencies, _input: Record<strin
 }
 
 function systemStatus(dependencies: McpRuntimeDependencies): JsonValue {
+  const dockerEnabled = getDockerSettings(dependencies.db)?.enabled ?? dependencies.config.docker.enabled;
+  const vmEnabled = getVmSettings(dependencies.db)?.enabled ?? dependencies.config.vm.enabled;
+  const backupEnabled = (getBackupSettings(dependencies.db) ?? defaultBackupSettings(
+    dependencies.config.paths.backupRoot,
+    dependencies.config.environment === "production"
+  )).enabled;
+  const monitoringEnabled = (getMonitoringSettings(dependencies.db) ?? defaultMonitoringSettings()).enabled;
+  const tvEnabled = (getTvSettings(dependencies.db) ?? defaultTvSettings()).enabled;
   return {
     build: dependencies.buildInfo ? jsonValue(dependencies.buildInfo) : null,
     environment: dependencies.config.environment,
     services: {
-      dockerConfigured: dependencies.config.docker.enabled,
-      vmConfigured: dependencies.config.vm.enabled,
-      backupConfigured: dependencies.config.backup.enabled,
-      monitoringConfigured: dependencies.config.monitoring.enabled,
-      vodConfigured: dependencies.config.vodPlayer.enabled
+      dockerConfigured: dockerEnabled,
+      vmConfigured: vmEnabled,
+      backupConfigured: backupEnabled,
+      monitoringConfigured: monitoringEnabled,
+      vodConfigured: tvEnabled
     },
     activeHealthAlerts: jsonValue(listHealthAlerts(dependencies.db, { status: "active", limit: 100 })),
     operations: jsonValue(getSystemOperations(dependencies.db, { limit: 10 }))

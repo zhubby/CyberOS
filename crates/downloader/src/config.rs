@@ -1,9 +1,7 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use crate::error::{DownloadError, ErrorCode};
-
-pub const DEFAULT_CONFIG_PATH: &str = "/cyberos/config/config.toml";
+use crate::error::DownloadError;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -14,43 +12,48 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, DownloadError> {
-        let config_path = env::var_os("CYBEROS_CONFIG")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH));
-        let root_dir = resolve_root_dir(&config_path, env::var_os("CYBEROS_ROOT"))?;
+        let production = env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("production");
+        let root_dir = resolve_root_dir(env::var_os("CYBEROS_ROOT"), production)?;
         Ok(Self {
             database_path: root_dir.join("state/cyberos.sqlite"),
             data_root: root_dir.join("data"),
-            production: env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("production"),
+            production,
         })
     }
 }
 
 fn resolve_root_dir(
-    config_path: &Path,
     environment_override: Option<std::ffi::OsString>,
+    production: bool,
 ) -> Result<PathBuf, DownloadError> {
-    match environment_override {
-        Some(path) => Ok(PathBuf::from(path)),
-        None if config_path.exists() => root_dir_from_file(config_path),
-        None => Ok(PathBuf::from(".cyberos/dev-root")),
-    }
+    let root = environment_override.map(PathBuf::from).unwrap_or_else(|| {
+        if production {
+            PathBuf::from("/cyberos")
+        } else {
+            env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(".cyberos/dev-root")
+        }
+    });
+    validate_root(root, production)
 }
 
-fn root_dir_from_file(path: &Path) -> Result<PathBuf, DownloadError> {
-    let text = std::fs::read_to_string(path).map_err(DownloadError::storage)?;
-    let document = text.parse::<toml_edit::DocumentMut>().map_err(|error| {
-        DownloadError::new(
-            ErrorCode::Internal,
-            format!("invalid CyberOS config: {error}"),
+fn validate_root(root: PathBuf, production: bool) -> Result<PathBuf, DownloadError> {
+    if !root.is_absolute() {
+        return Err(DownloadError::new(
+            crate::error::ErrorCode::Internal,
+            "CYBEROS_ROOT must be an absolute path",
             false,
-        )
-    })?;
-    Ok(document
-        .get("root_dir")
-        .and_then(toml_edit::Item::as_str)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".cyberos/dev-root")))
+        ));
+    }
+    if production && root != std::path::Path::new("/cyberos") {
+        return Err(DownloadError::new(
+            crate::error::ErrorCode::Internal,
+            "production CyberOS root must be /cyberos",
+            false,
+        ));
+    }
+    Ok(root)
 }
 
 #[cfg(test)]
@@ -58,17 +61,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn environment_root_directory_overrides_the_config_file() {
-        let directory = tempfile::tempdir().unwrap();
-        let config = directory.path().join("config.toml");
-        std::fs::write(&config, "root_dir = '/production'\n").unwrap();
+    fn environment_root_directory_overrides_the_default() {
         assert_eq!(
-            resolve_root_dir(&config, Some("/isolated".into())).unwrap(),
+            resolve_root_dir(Some("/isolated".into()), false).unwrap(),
             PathBuf::from("/isolated")
         );
+    }
+
+    #[test]
+    fn production_rejects_a_nonstandard_root() {
+        assert!(resolve_root_dir(Some("/isolated".into()), true).is_err());
         assert_eq!(
-            resolve_root_dir(&config, None).unwrap(),
-            PathBuf::from("/production")
+            resolve_root_dir(Some("/cyberos".into()), true).unwrap(),
+            PathBuf::from("/cyberos")
         );
     }
 }

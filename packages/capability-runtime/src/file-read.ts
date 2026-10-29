@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { CapabilityError, type CapabilityExecution, type JsonValue } from "@cyberos/capabilities";
 import type { CyberOsDatabase } from "@cyberos/db";
 import { isPathInside, resolveSafeExistingPath, toRootRelative } from "@cyberos/storage-tools";
-import type { CyberOsConfig } from "@cyberos/shared";
+import type { CyberOsRuntime } from "@cyberos/shared";
 import { requireStoragePool, type ResolvedStoragePool } from "./storage-pools.js";
 
 const execFileAsync = promisify(execFile);
@@ -28,7 +28,7 @@ interface WalkEntry {
 }
 
 export async function executeExtendedFileReadCapability(
-  dependencies: { db: CyberOsDatabase; config: CyberOsConfig },
+  dependencies: { db: CyberOsDatabase; config: CyberOsRuntime },
   capabilityId: ExtendedFileReadCapabilityId,
   input: Record<string, JsonValue>
 ): Promise<CapabilityExecution> {

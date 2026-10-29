@@ -1,11 +1,13 @@
 import type {
+  BackupSettingsRecord,
   DockerConfig,
   DockerSettingsRecord,
   ModelProviderSettingsRecord,
   PublicShareSettings,
   ShareConfig,
   ShareSettingsRecord,
-  CyberOsConfig
+  CyberOsRuntime,
+  VmSettingsRecord
 } from "@cyberos/shared";
 import { isModelProviderName as sharedIsModelProviderName } from "@cyberos/shared";
 import { defaultAgentCapabilityPolicySettings } from "@cyberos/db";
@@ -48,9 +50,9 @@ export function toPublicAgentCapabilityPolicySettings(settings = defaultAgentCap
   return settings;
 }
 
-export function defaultDockerSettings(config: CyberOsConfig): DockerSettingsRecord {
+export function defaultDockerSettings(config: CyberOsRuntime): DockerSettingsRecord {
   return {
-    ...config.docker,
+    enabled: config.docker.enabled,
     updatedAt: new Date(0).toISOString()
   };
 }
@@ -59,7 +61,14 @@ export function toPublicDockerSettings(settings: DockerSettingsRecord): DockerSe
   return settings;
 }
 
-export function defaultShareSettings(config: CyberOsConfig): ShareSettingsRecord {
+export function defaultVmSettings(config: CyberOsRuntime): VmSettingsRecord {
+  return {
+    enabled: config.vm.enabled,
+    updatedAt: new Date(0).toISOString()
+  };
+}
+
+export function defaultShareSettings(config: CyberOsRuntime): ShareSettingsRecord {
   return {
     ...config.shares,
     updatedAt: new Date(0).toISOString()
@@ -89,21 +98,51 @@ export function shareSettingsToConfig(settings: ShareSettingsRecord): ShareConfi
 export function dockerSettingsToConfig(settings: DockerSettingsRecord): DockerConfig {
   return {
     enabled: settings.enabled,
-    socketPath: settings.socketPath,
-    composeCommand: settings.composeCommand,
-    operationTimeoutMs: settings.operationTimeoutMs,
-    consoleShells: settings.consoleShells
+    socketPath: "/var/run/docker.sock",
+    composeCommand: "docker",
+    operationTimeoutMs: 120_000,
+    consoleShells: ["/bin/sh", "/bin/bash"]
   };
 }
 
-export function effectiveDockerConfig(config: CyberOsConfig, settings: DockerSettingsRecord | null): CyberOsConfig {
+export function effectiveDockerConfig(config: CyberOsRuntime, settings: DockerSettingsRecord | null): CyberOsRuntime {
   return {
     ...config,
     docker: settings ? dockerSettingsToConfig(settings) : config.docker
   };
 }
 
-export function effectiveShareConfig(config: CyberOsConfig, settings: ShareSettingsRecord | null): CyberOsConfig {
+export function effectiveVmConfig(config: CyberOsRuntime, settings: VmSettingsRecord | null): CyberOsRuntime {
+  return {
+    ...config,
+    vm: {
+      ...config.vm,
+      enabled: settings?.enabled ?? config.vm.enabled
+    }
+  };
+}
+
+export function effectiveBackupConfig(
+  config: CyberOsRuntime,
+  settings: BackupSettingsRecord | null
+): CyberOsRuntime {
+  return {
+    ...config,
+    backup: settings
+      ? {
+          ...config.backup,
+          enabled: settings.enabled,
+          repositoryPath: settings.repositoryPath,
+          passwordFile: config.paths.backupPasswordPath,
+          requireMount: settings.requireMount,
+          keepDaily: settings.keepDaily,
+          keepWeekly: settings.keepWeekly
+        }
+      : config.backup
+  };
+}
+
+export function effectiveShareConfig(config: CyberOsRuntime, settings: ShareSettingsRecord | null): CyberOsRuntime {
   return {
     ...config,
     shares: settings ? shareSettingsToConfig(settings) : config.shares

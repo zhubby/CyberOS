@@ -3,10 +3,10 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { TvComponentHealth, TvModeStatus, VodPlayerStatus } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
-import { createVodPlayerRuntime } from "../lib/vod-player.js";
+import { resolveVodPlayerRuntime } from "../lib/vod-player.js";
 
 const DEFAULT_STATUS_DIRECTORY = "/run/cyberos-tv/status";
-const DEFAULT_ENABLED_MARKER = "/cyberos/config/tv-mode/enabled";
+const DEFAULT_ENABLED_MARKER = "/cyberos/state/tv/enabled";
 const HEARTBEAT_STALE_MS = 20_000;
 
 interface TvStatusDependencies {
@@ -20,18 +20,20 @@ export function registerTvRoutes(
   context: ApiRouteContext,
   dependencies: TvStatusDependencies = {}
 ): void {
-  const vodPlayer = context.vodPlayer ?? createVodPlayerRuntime(context.config.vodPlayer);
   server.get("/api/tv/status", async () => {
     const now = (dependencies.now ?? (() => new Date()))();
     const statusDirectory = dependencies.statusDirectory ?? DEFAULT_STATUS_DIRECTORY;
     const enabledMarker = dependencies.enabledMarker ?? DEFAULT_ENABLED_MARKER;
-    const [enabled, weston, chromium, cec, gamepad, vodResult] = await Promise.all([
-      fileExists(enabledMarker),
+    const enabled = await fileExists(enabledMarker);
+    const [weston, chromium, cec, gamepad, vodResult] = await Promise.all([
       readComponentHealth(statusDirectory, "weston", now),
       readComponentHealth(statusDirectory, "chromium", now),
       readComponentHealth(statusDirectory, "cec", now),
       readComponentHealth(statusDirectory, "gamepad", now),
-      vodPlayer.getStatus().then(vodHealth).catch(() => unavailable("VOD Player is unavailable"))
+      Promise.resolve()
+        .then(() => resolveVodPlayerRuntime(context, { transitionEnabled: enabled }).getStatus())
+        .then(vodHealth)
+        .catch(() => unavailable("VOD Player is unavailable"))
     ]);
     return {
       status: buildTvModeStatus({ enabled, weston, chromium, cec, gamepad, vodPlayer: vodResult, now })

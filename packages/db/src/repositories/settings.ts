@@ -1,14 +1,20 @@
+import path from "node:path";
 import type {
   AgentCapabilityPolicySettingsRecord,
   AgentMcpSettingsRecord,
   BluetoothSettingsRecord,
+  BackupSettingsRecord,
   DownloadSettingsRecord,
   DockerSettingsRecord,
   IndexerSettingsRecord,
+  MonitoringSettingsRecord,
   ModelProviderSettingsRecord,
   PhotosProcessingSettingsRecord,
   PiToolPolicySettingsRecord,
-  ShareSettingsRecord
+  ShareSettingsRecord,
+  SystemProfileSettingsRecord,
+  TvSettingsRecord,
+  VmSettingsRecord
 } from "@cyberos/shared";
 import {
   PHOTOS_DEFAULT_COMMAND_TIMEOUT_MS,
@@ -28,6 +34,7 @@ import {
   mapDockerSettings,
   mapAgentCapabilityPolicySettings,
   mapModelProviderSettings,
+  mapVmSettings,
   normalizeModelProviderName,
   normalizeAgentCapabilityPolicySettings
 } from "./settings-mappers.js";
@@ -39,11 +46,47 @@ const MODEL_PROVIDER_SETTING_KEY = "model_provider";
 const AGENT_CAPABILITY_POLICY_SETTING_KEY = "agent_capability_policy";
 const AGENT_MCP_SETTING_KEY = "agent_mcp";
 const DOCKER_SETTING_KEY = "docker_settings";
+const VM_SETTING_KEY = "vm_settings";
 const SHARE_SETTING_KEY = "share_settings";
 const DOWNLOAD_SETTING_KEY = "download_settings";
 const PHOTOS_PROCESSING_SETTING_KEY = "photos_processing_settings";
 const INDEXER_SETTING_KEY = "indexer_settings";
 const BLUETOOTH_SETTING_KEY = "bluetooth_settings";
+const SYSTEM_PROFILE_SETTING_KEY = "system_profile_settings";
+const MONITORING_SETTING_KEY = "monitoring_settings";
+const BACKUP_SETTING_KEY = "backup_settings";
+const TV_SETTING_KEY = "tv_settings";
+
+const EPOCH = new Date(0).toISOString();
+
+export const DEFAULT_SYSTEM_PROFILE_SETTINGS: Omit<SystemProfileSettingsRecord, "updatedAt"> = {
+  adminDisplayName: "CyberOS Admin"
+};
+
+export const DEFAULT_MONITORING_SETTINGS: Omit<MonitoringSettingsRecord, "updatedAt"> = {
+  enabled: true,
+  rawRetentionDays: 2,
+  minuteRetentionDays: 30,
+  hourRetentionDays: 365,
+  maxDatabaseBytes: 512 * 1024 * 1024
+};
+
+export const DEFAULT_BACKUP_SETTINGS: Omit<BackupSettingsRecord, "updatedAt"> = {
+  enabled: false,
+  repositoryPath: "/cyberos/backup",
+  requireMount: true,
+  keepDaily: 7,
+  keepWeekly: 4,
+  validatedAt: null
+};
+
+export const DEFAULT_TV_SETTINGS: Omit<TvSettingsRecord, "updatedAt"> = {
+  enabled: false,
+  videoOutput: "drm",
+  drmConnector: null,
+  audioDevice: null,
+  hardwareDecoding: "auto-safe"
+};
 
 export const DEFAULT_BLUETOOTH_SETTINGS: Omit<BluetoothSettingsRecord, "updatedAt"> = {
   defaultAdapterId: null,
@@ -105,31 +148,27 @@ export function getBluetoothSettings(db: CyberOsDatabase): BluetoothSettingsReco
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(BLUETOOTH_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
-  try {
-    const parsed = currentSettingsObject(JSON.parse(row.value_json), [
-      "defaultAdapterId",
-      "defaultAudioDeviceId",
-      "receiveEnabled",
-      "inboxStoragePoolId",
-      "inboxPath",
-      "updatedAt"
-    ], "Bluetooth");
-    if (
-      !isNullableString(parsed.defaultAdapterId)
-      || !isNullableString(parsed.defaultAudioDeviceId)
-      || typeof parsed.receiveEnabled !== "boolean"
-      || !isNullableString(parsed.inboxStoragePoolId)
-      || !isNullableString(parsed.inboxPath)
-    ) {
-      throw new Error("Bluetooth settings contain invalid field types");
-    }
-    return normalizeBluetoothSettings(
-      parsed as unknown as BluetoothSettingsRecord,
-      currentSettingsUpdatedAt(parsed, "Bluetooth")
-    );
-  } catch {
-    return null;
+  const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+    "defaultAdapterId",
+    "defaultAudioDeviceId",
+    "receiveEnabled",
+    "inboxStoragePoolId",
+    "inboxPath",
+    "updatedAt"
+  ], "Bluetooth");
+  if (
+    !isNullableString(parsed.defaultAdapterId)
+    || !isNullableString(parsed.defaultAudioDeviceId)
+    || typeof parsed.receiveEnabled !== "boolean"
+    || !isNullableString(parsed.inboxStoragePoolId)
+    || !isNullableString(parsed.inboxPath)
+  ) {
+    throw new Error("Bluetooth settings contain invalid field types");
   }
+  return normalizeBluetoothSettings(
+    parsed as unknown as BluetoothSettingsRecord,
+    currentSettingsUpdatedAt(parsed, "Bluetooth")
+  );
 }
 
 export function saveBluetoothSettings(
@@ -137,7 +176,12 @@ export function saveBluetoothSettings(
   settings: Partial<Omit<BluetoothSettingsRecord, "updatedAt">>
 ): BluetoothSettingsRecord {
   const updatedAt = new Date().toISOString();
-  const current = getBluetoothSettings(db) ?? defaultBluetoothSettings();
+  let current: BluetoothSettingsRecord;
+  try {
+    current = getBluetoothSettings(db) ?? defaultBluetoothSettings();
+  } catch {
+    current = defaultBluetoothSettings();
+  }
   const record = normalizeBluetoothSettings({ ...current, ...settings }, updatedAt);
   db.prepare(`
     INSERT INTO system_settings (key, value_json, updated_at)
@@ -181,7 +225,13 @@ export function saveModelProviderSettings(
 ): ModelProviderSettingsRecord {
   return db.transaction(() => {
     const updatedAt = new Date().toISOString();
-    const generation = (getModelProviderSettings(db)?.generation ?? 0) + 1;
+    let previousGeneration = 0;
+    try {
+      previousGeneration = getModelProviderSettings(db)?.generation ?? 0;
+    } catch {
+      // A valid PATCH is the repair path for a damaged settings record.
+    }
+    const generation = previousGeneration + 1;
     const record: ModelProviderSettingsRecord = {
       generation,
       providerName: normalizeModelProviderName(settings.providerName),
@@ -282,10 +332,6 @@ export function saveDockerSettings(
   const updatedAt = new Date().toISOString();
   const record: DockerSettingsRecord = {
     enabled: settings.enabled,
-    socketPath: settings.socketPath,
-    composeCommand: settings.composeCommand,
-    operationTimeoutMs: settings.operationTimeoutMs,
-    consoleShells: settings.consoleShells,
     updatedAt
   };
 
@@ -298,6 +344,154 @@ export function saveDockerSettings(
   `).run(DOCKER_SETTING_KEY, JSON.stringify(record), updatedAt);
 
   return record;
+}
+
+export function getVmSettings(db: CyberOsDatabase): VmSettingsRecord | null {
+  const row = db
+    .prepare("SELECT key, value_json, updated_at FROM system_settings WHERE key = ?")
+    .get(VM_SETTING_KEY) as DbSystemSettingRow | undefined;
+
+  return row ? mapVmSettings(row) : null;
+}
+
+export function saveVmSettings(
+  db: CyberOsDatabase,
+  settings: Omit<VmSettingsRecord, "updatedAt">
+): VmSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record: VmSettingsRecord = { enabled: settings.enabled, updatedAt };
+
+  db.prepare(`
+    INSERT INTO system_settings (key, value_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value_json = excluded.value_json,
+      updated_at = excluded.updated_at
+  `).run(VM_SETTING_KEY, JSON.stringify(record), updatedAt);
+
+  return record;
+}
+
+export function defaultSystemProfileSettings(): SystemProfileSettingsRecord {
+  return { ...DEFAULT_SYSTEM_PROFILE_SETTINGS, updatedAt: EPOCH };
+}
+
+export function getSystemProfileSettings(db: CyberOsDatabase): SystemProfileSettingsRecord | null {
+  const row = settingRow(db, SYSTEM_PROFILE_SETTING_KEY);
+  if (!row) return null;
+  const parsed = currentSettingsObject(JSON.parse(row.value_json), ["adminDisplayName", "updatedAt"], "System profile");
+  return normalizeSystemProfileSettings(parsed, currentSettingsUpdatedAt(parsed, "System profile"));
+}
+
+export function saveSystemProfileSettings(
+  db: CyberOsDatabase,
+  settings: Omit<SystemProfileSettingsRecord, "updatedAt">
+): SystemProfileSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = normalizeSystemProfileSettings(settings, updatedAt);
+  saveSetting(db, SYSTEM_PROFILE_SETTING_KEY, record, updatedAt);
+  return record;
+}
+
+export function defaultMonitoringSettings(): MonitoringSettingsRecord {
+  return { ...DEFAULT_MONITORING_SETTINGS, updatedAt: EPOCH };
+}
+
+export function getMonitoringSettings(db: CyberOsDatabase): MonitoringSettingsRecord | null {
+  const row = settingRow(db, MONITORING_SETTING_KEY);
+  if (!row) return null;
+  const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+    "enabled",
+    "rawRetentionDays",
+    "minuteRetentionDays",
+    "hourRetentionDays",
+    "maxDatabaseBytes",
+    "updatedAt"
+  ], "Monitoring");
+  return normalizeMonitoringSettings(parsed, currentSettingsUpdatedAt(parsed, "Monitoring"));
+}
+
+export function saveMonitoringSettings(
+  db: CyberOsDatabase,
+  settings: Omit<MonitoringSettingsRecord, "updatedAt">
+): MonitoringSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = normalizeMonitoringSettings(settings, updatedAt);
+  saveSetting(db, MONITORING_SETTING_KEY, record, updatedAt);
+  return record;
+}
+
+export function defaultBackupSettings(
+  repositoryPath = DEFAULT_BACKUP_SETTINGS.repositoryPath,
+  requireMount = DEFAULT_BACKUP_SETTINGS.requireMount
+): BackupSettingsRecord {
+  return { ...DEFAULT_BACKUP_SETTINGS, repositoryPath, requireMount, updatedAt: EPOCH };
+}
+
+export function getBackupSettings(db: CyberOsDatabase): BackupSettingsRecord | null {
+  const row = settingRow(db, BACKUP_SETTING_KEY);
+  if (!row) return null;
+  const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+    "enabled",
+    "repositoryPath",
+    "requireMount",
+    "keepDaily",
+    "keepWeekly",
+    "validatedAt",
+    "updatedAt"
+  ], "Backup");
+  return normalizeBackupSettings(parsed, currentSettingsUpdatedAt(parsed, "Backup"));
+}
+
+export function saveBackupSettings(
+  db: CyberOsDatabase,
+  settings: Omit<BackupSettingsRecord, "updatedAt">
+): BackupSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = normalizeBackupSettings(settings, updatedAt);
+  saveSetting(db, BACKUP_SETTING_KEY, record, updatedAt);
+  return record;
+}
+
+export function defaultTvSettings(): TvSettingsRecord {
+  return { ...DEFAULT_TV_SETTINGS, updatedAt: EPOCH };
+}
+
+export function getTvSettings(db: CyberOsDatabase): TvSettingsRecord | null {
+  const row = settingRow(db, TV_SETTING_KEY);
+  if (!row) return null;
+  const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+    "enabled",
+    "videoOutput",
+    "drmConnector",
+    "audioDevice",
+    "hardwareDecoding",
+    "updatedAt"
+  ], "TV");
+  return normalizeTvSettings(parsed, currentSettingsUpdatedAt(parsed, "TV"));
+}
+
+export function saveTvSettings(
+  db: CyberOsDatabase,
+  settings: Omit<TvSettingsRecord, "updatedAt">
+): TvSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = normalizeTvSettings(settings, updatedAt);
+  saveSetting(db, TV_SETTING_KEY, record, updatedAt);
+  return record;
+}
+
+export function validateTvSettings(
+  settings: Omit<TvSettingsRecord, "updatedAt">
+): Omit<TvSettingsRecord, "updatedAt"> {
+  const validated = normalizeTvSettings(settings, EPOCH);
+  return {
+    enabled: validated.enabled,
+    videoOutput: validated.videoOutput,
+    drmConnector: validated.drmConnector,
+    audioDevice: validated.audioDevice,
+    hardwareDecoding: validated.hardwareDecoding
+  };
 }
 
 export function getShareSettings(db: CyberOsDatabase): ShareSettingsRecord | null {
@@ -333,29 +527,25 @@ export function getDownloadSettings(db: CyberOsDatabase): DownloadSettingsRecord
   if (!row) {
     return null;
   }
-  try {
-    const parsed = currentSettingsObject(JSON.parse(row.value_json), [
-      "concurrency",
-      "parallelRequestsPerTask",
-      "segmentedDownloadMinBytes",
-      "maxAutoRetries",
-      "retryBaseDelayMs",
-      "retryMaxDelayMs",
-      "retryAfterMaxDelayMs",
-      "connectTimeoutMs",
-      "responseHeaderTimeoutMs",
-      "readIdleTimeoutMs",
-      "minFreeSpaceBytes",
-      "maxFileSizeBytes",
-      "updatedAt"
-    ], "Download");
-    return normalizeDownloadSettings(
-      parsed as unknown as Omit<DownloadSettingsRecord, "updatedAt">,
-      currentSettingsUpdatedAt(parsed, "Download")
-    );
-  } catch {
-    return null;
-  }
+  const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+    "concurrency",
+    "parallelRequestsPerTask",
+    "segmentedDownloadMinBytes",
+    "maxAutoRetries",
+    "retryBaseDelayMs",
+    "retryMaxDelayMs",
+    "retryAfterMaxDelayMs",
+    "connectTimeoutMs",
+    "responseHeaderTimeoutMs",
+    "readIdleTimeoutMs",
+    "minFreeSpaceBytes",
+    "maxFileSizeBytes",
+    "updatedAt"
+  ], "Download");
+  return normalizeDownloadSettings(
+    parsed as unknown as Omit<DownloadSettingsRecord, "updatedAt">,
+    currentSettingsUpdatedAt(parsed, "Download")
+  );
 }
 
 export function defaultDownloadSettings(): DownloadSettingsRecord {
@@ -382,26 +572,22 @@ export function getIndexerSettings(db: CyberOsDatabase): IndexerSettingsRecord |
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(INDEXER_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
-  try {
-    const parsed = currentSettingsObject(JSON.parse(row.value_json), [
-      "scanConcurrency",
-      "extractionConcurrency",
-      "reconciliationIntervalMs",
-      "maxExtractedTextBytes",
-      "maxSourceDocumentBytes",
-      "commandTimeoutMs",
-      "maxPdfTextPages",
-      "maxOcrPages",
-      "ocrStoragePoolIds",
-      "updatedAt"
-    ], "Indexer");
-    return normalizeIndexerSettings(
-      parsed as Partial<IndexerSettingsRecord>,
-      currentSettingsUpdatedAt(parsed, "Indexer")
-    );
-  } catch {
-    return null;
-  }
+  const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+    "scanConcurrency",
+    "extractionConcurrency",
+    "reconciliationIntervalMs",
+    "maxExtractedTextBytes",
+    "maxSourceDocumentBytes",
+    "commandTimeoutMs",
+    "maxPdfTextPages",
+    "maxOcrPages",
+    "ocrStoragePoolIds",
+    "updatedAt"
+  ], "Indexer");
+  return normalizeIndexerSettings(
+    parsed as Partial<IndexerSettingsRecord>,
+    currentSettingsUpdatedAt(parsed, "Indexer")
+  );
 }
 
 export function defaultIndexerSettings(): IndexerSettingsRecord {
@@ -426,28 +612,24 @@ export function getPhotosProcessingSettings(db: CyberOsDatabase): PhotosProcessi
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(PHOTOS_PROCESSING_SETTING_KEY) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
   if (!row) return null;
-  try {
-    const parsed = currentSettingsObject(JSON.parse(row.value_json), [
-      "processingConcurrency",
-      "scanIntervalMs",
-      "maxAutoRetries",
-      "retryBaseDelayMs",
-      "retryMaxDelayMs",
-      "commandTimeoutMs",
-      "maxFileSizeBytes",
-      "maxXmpSizeBytes",
-      "maxIntermediateBytes",
-      "minFreeSpaceBytes",
-      "maxDecodedPixels",
-      "updatedAt"
-    ], "Photos processing");
-    return normalizePhotosProcessingSettings(
-      parsed as Partial<PhotosProcessingSettingsRecord>,
-      currentSettingsUpdatedAt(parsed, "Photos processing")
-    );
-  } catch {
-    return null;
-  }
+  const parsed = currentSettingsObject(JSON.parse(row.value_json), [
+    "processingConcurrency",
+    "scanIntervalMs",
+    "maxAutoRetries",
+    "retryBaseDelayMs",
+    "retryMaxDelayMs",
+    "commandTimeoutMs",
+    "maxFileSizeBytes",
+    "maxXmpSizeBytes",
+    "maxIntermediateBytes",
+    "minFreeSpaceBytes",
+    "maxDecodedPixels",
+    "updatedAt"
+  ], "Photos processing");
+  return normalizePhotosProcessingSettings(
+    parsed as Partial<PhotosProcessingSettingsRecord>,
+    currentSettingsUpdatedAt(parsed, "Photos processing")
+  );
 }
 
 export function defaultPhotosProcessingSettings(): PhotosProcessingSettingsRecord {
@@ -473,6 +655,114 @@ function normalizeDownloadConcurrency(value: unknown): number {
     throw new Error("Download concurrency must be an integer between 1 and 3");
   }
   return value;
+}
+
+function normalizeSystemProfileSettings(value: Record<string, unknown>, updatedAt: string): SystemProfileSettingsRecord {
+  if (typeof value.adminDisplayName !== "string") throw new Error("Administrator display name must be text");
+  const adminDisplayName = value.adminDisplayName.trim();
+  if (!adminDisplayName || adminDisplayName.length > 80) {
+    throw new Error("Administrator display name must contain between 1 and 80 characters");
+  }
+  return { adminDisplayName, updatedAt };
+}
+
+function normalizeMonitoringSettings(value: Record<string, unknown>, updatedAt: string): MonitoringSettingsRecord {
+  if (typeof value.enabled !== "boolean") throw new Error("Monitoring enabled must be a boolean");
+  return {
+    enabled: value.enabled,
+    rawRetentionDays: settingInteger("Monitoring raw retention", value.rawRetentionDays, 1, 14),
+    minuteRetentionDays: settingInteger("Monitoring minute retention", value.minuteRetentionDays, 7, 180),
+    hourRetentionDays: settingInteger("Monitoring hour retention", value.hourRetentionDays, 30, 1_825),
+    maxDatabaseBytes: settingInteger(
+      "Monitoring database space limit",
+      value.maxDatabaseBytes,
+      16 * 1024 * 1024,
+      16 * 1024 * 1024 * 1024
+    ),
+    updatedAt
+  };
+}
+
+function normalizeBackupSettings(value: Record<string, unknown>, updatedAt: string): BackupSettingsRecord {
+  if (typeof value.enabled !== "boolean" || typeof value.requireMount !== "boolean") {
+    throw new Error("Backup enabled and mount requirement must be booleans");
+  }
+  if (typeof value.repositoryPath !== "string" || !value.repositoryPath.trim()) {
+    throw new Error("Backup repository path is required");
+  }
+  const repositoryPath = path.resolve(value.repositoryPath.trim());
+  if (!path.isAbsolute(value.repositoryPath.trim()) || repositoryPath === path.parse(repositoryPath).root) {
+    throw new Error("Backup repository must be an absolute non-root path");
+  }
+  if (value.validatedAt !== null && (typeof value.validatedAt !== "string" || !Number.isFinite(Date.parse(value.validatedAt)))) {
+    throw new Error("Backup validation timestamp is invalid");
+  }
+  if (value.enabled && value.validatedAt === null) {
+    throw new Error("Backup must be validated before it can be enabled");
+  }
+  return {
+    enabled: value.enabled,
+    repositoryPath,
+    requireMount: value.requireMount,
+    keepDaily: settingInteger("Backup daily retention", value.keepDaily, 1, 365),
+    keepWeekly: settingInteger("Backup weekly retention", value.keepWeekly, 1, 104),
+    validatedAt: value.validatedAt,
+    updatedAt
+  };
+}
+
+function normalizeTvSettings(value: Record<string, unknown>, updatedAt: string): TvSettingsRecord {
+  if (typeof value.enabled !== "boolean") throw new Error("TV enabled must be a boolean");
+  if (value.videoOutput !== "drm" && value.videoOutput !== "wayland") {
+    throw new Error("TV video output must be drm or wayland");
+  }
+  if (value.hardwareDecoding !== "auto-safe" && value.hardwareDecoding !== "auto" && value.hardwareDecoding !== "no") {
+    throw new Error("TV hardware decoding mode is invalid");
+  }
+  if (!isNullableString(value.drmConnector) || !isNullableString(value.audioDevice)) {
+    throw new Error("TV output device settings must be text or null");
+  }
+  if (value.enabled && value.videoOutput !== "wayland") {
+    throw new Error("TV mode requires Wayland video output");
+  }
+  return {
+    enabled: value.enabled,
+    videoOutput: value.videoOutput,
+    drmConnector: normalizeNullableText(value.drmConnector, 128),
+    audioDevice: normalizeNullableText(value.audioDevice, 256),
+    hardwareDecoding: value.hardwareDecoding,
+    updatedAt
+  };
+}
+
+function settingInteger(label: string, value: unknown, minimum: number, maximum: number): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${label} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return value;
+}
+
+function normalizeNullableText(value: string | null, maximum: number): string | null {
+  if (value === null) return null;
+  const normalized = value.trim();
+  if (normalized.length > maximum) throw new Error(`Setting text cannot exceed ${maximum} characters`);
+  return normalized || null;
+}
+
+function settingRow(
+  db: CyberOsDatabase,
+  key: string
+): Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined {
+  return db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
+    .get(key) as Pick<DbSystemSettingRow, "value_json" | "updated_at"> | undefined;
+}
+
+function saveSetting(db: CyberOsDatabase, key: string, record: object, updatedAt: string): void {
+  db.prepare(`
+    INSERT INTO system_settings (key, value_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+  `).run(key, JSON.stringify(record), updatedAt);
 }
 
 function normalizeDownloadSettings(

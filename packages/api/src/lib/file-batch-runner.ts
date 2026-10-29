@@ -12,7 +12,7 @@ import {
   type CyberOsDatabase
 } from "@cyberos/db";
 import { applyFileMutation, trashPathFor } from "@cyberos/storage-tools";
-import { type FileBatchRecord, type FileOperationProposal, type CyberOsConfig } from "@cyberos/shared";
+import { type FileBatchRecord, type FileOperationProposal, type CyberOsRuntime } from "@cyberos/shared";
 import type { SystemManagementDependencies } from "./system-management.js";
 import {
   resolveScopedExistingPath,
@@ -33,7 +33,7 @@ export class FileBatchRunner implements FileBatchRuntime {
   constructor(
     private readonly dependencies: {
       db: CyberOsDatabase;
-      config: CyberOsConfig;
+      config: CyberOsRuntime;
       system?: SystemManagementDependencies;
       log?: { error: (input: unknown, message?: string) => void };
     }
@@ -83,7 +83,7 @@ interface ProcessedFileBatchItem {
 export async function processNextFileBatchItem(
   dependencies: {
     db: CyberOsDatabase;
-    config: CyberOsConfig;
+    config: CyberOsRuntime;
     system?: SystemManagementDependencies;
   },
   onStarted?: (batch: FileBatchRecord) => void
@@ -110,7 +110,7 @@ export async function processNextFileBatchItem(
 async function applyClaimedItem(
   { db, config, system }: {
     db: CyberOsDatabase;
-    config: CyberOsConfig;
+    config: CyberOsRuntime;
     system?: SystemManagementDependencies;
   },
   { batch, item }: ClaimedFileBatchItem

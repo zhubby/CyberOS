@@ -87,15 +87,6 @@ pub(crate) enum NetworkRequest {
     },
 }
 
-impl NetworkRequest {
-    pub(crate) fn is_configuration_mutation(&self) -> bool {
-        !matches!(
-            self,
-            Self::Ping | Self::Inspect | Self::Scan { .. } | Self::EthernetStatus
-        )
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export_to = "hostd.ts", rename = "HostdNetworkScanInput"))]

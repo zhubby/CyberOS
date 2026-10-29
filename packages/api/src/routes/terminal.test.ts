@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 import { type TerminalPty, type TerminalRuntime } from "../lib/terminal.js";
 
@@ -346,8 +346,8 @@ class FakeTerminal implements TerminalPty {
   }
 }
 
-function testConfig(): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
+function testConfig(): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: tempDir }, tempDir);
   return {
     ...base,
     paths: { ...base.paths, dataRoot: rootDir, databasePath: path.join(tempDir, "cyberos.sqlite") },
@@ -366,7 +366,7 @@ function testConfig(): CyberOsConfig {
       account: { username: "cyberos-share", password: null },
       shares: []
     },
-    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    hostd: { socketPath: "/tmp/hostd.sock" },
     terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
   };

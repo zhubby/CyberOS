@@ -254,6 +254,11 @@
       "operation": "system.ops",
       "request": { "task": "maintenance", "confirmed": true },
       "result": { "task": "maintenance", "accepted": true }
+    },
+    {
+      "operation": "system.tv",
+      "request": { "enabled": true, "confirmed": true },
+      "result": { "enabled": true, "applied": true }
     }
   ]
 }

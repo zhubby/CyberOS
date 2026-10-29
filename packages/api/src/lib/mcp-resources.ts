@@ -22,7 +22,7 @@ import {
   PHOTOS_DATA_DIRECTORY_NAME,
   photosMediaKind,
   type PhotosAssetRecord,
-  type CyberOsConfig
+  type CyberOsRuntime
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { sendFileStream } from "./files.js";
@@ -75,7 +75,7 @@ interface ResolvedPhotoAsset {
 }
 
 interface StorageResolutionDependencies {
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   system?: SystemManagementDependencies;
 }
 
@@ -88,7 +88,7 @@ export class McpResourceError extends Error {
 
 export async function createFileMcpResource(input: {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   system?: SystemManagementDependencies;
   clientId: string;
   baseUrl: string;
@@ -116,7 +116,7 @@ export async function createFileMcpResource(input: {
 
 export async function createFileExportMcpResource(input: {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   system?: SystemManagementDependencies;
   clientId: string;
   baseUrl: string;
@@ -141,7 +141,7 @@ export async function createFileExportMcpResource(input: {
 }
 
 export async function fileExportResourceRevision(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   storagePoolId: string,
   paths: string[]
@@ -152,7 +152,7 @@ export async function fileExportResourceRevision(
 
 export async function createPhotoMediaMcpResource(input: {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   system?: SystemManagementDependencies;
   clientId: string;
   baseUrl: string;
@@ -177,7 +177,7 @@ export async function createPhotoMediaMcpResource(input: {
 
 export async function createPhotoExportMcpResource(input: {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   system?: SystemManagementDependencies;
   clientId: string;
   baseUrl: string;
@@ -201,7 +201,7 @@ export async function createPhotoExportMcpResource(input: {
 
 export async function photoExportResourceRevision(
   db: CyberOsDatabase,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   assetIds: string[]
 ): Promise<string> {
@@ -448,7 +448,7 @@ async function resolvePhotoAsset(
   };
 }
 
-async function resolvePhotoMedia(config: CyberOsConfig, resolved: ResolvedPhotoAsset, variant: PhotoVariant): Promise<{
+async function resolvePhotoMedia(config: CyberOsRuntime, resolved: ResolvedPhotoAsset, variant: PhotoVariant): Promise<{
   realPath: string;
   mimeType: string;
   fileName: string;

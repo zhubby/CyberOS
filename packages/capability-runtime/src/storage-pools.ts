@@ -2,13 +2,13 @@ import { lstatSync, readFileSync, readdirSync, realpathSync, type Dirent } from 
 import path from "node:path";
 import { CapabilityError } from "@cyberos/capabilities";
 import { isPathInside } from "@cyberos/storage-tools";
-import { type CyberOsConfig, type StorageWorkspace } from "@cyberos/shared";
+import { type CyberOsRuntime, type StorageWorkspace } from "@cyberos/shared";
 
 export interface ResolvedStoragePool extends StorageWorkspace {
   id: string;
 }
 
-export function listStoragePools(config: CyberOsConfig): ResolvedStoragePool[] {
+export function listStoragePools(config: CyberOsRuntime): ResolvedStoragePool[] {
   const dataRoot = config.paths.dataRoot;
   let entries: Dirent<string>[];
   try {
@@ -28,7 +28,7 @@ export function listStoragePools(config: CyberOsConfig): ResolvedStoragePool[] {
   }).sort((left, right) => left.id.localeCompare(right.id));
 }
 
-export function requireStoragePool(config: CyberOsConfig, storagePoolId: string): ResolvedStoragePool {
+export function requireStoragePool(config: CyberOsRuntime, storagePoolId: string): ResolvedStoragePool {
   const id = normalizeStoragePoolId(storagePoolId);
   const dataRoot = config.paths.dataRoot;
   const poolPath = path.join(dataRoot, id);

@@ -24,7 +24,7 @@ import {
   type CyberOsDatabase
 } from "@cyberos/db";
 import { PiActiveTurnUnavailableError, type PiAgentRunner } from "@cyberos/agent";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { processNextAgentCommand, processNextJob } from "./processor.js";
 
 let tempDir: string;
@@ -268,7 +268,7 @@ describe("worker processor", () => {
 
   it("applies the persisted Agent MCP switch to new jobs without a worker restart", async () => {
     const session = createSession(db, { });
-    const config: CyberOsConfig = {
+    const config: CyberOsRuntime = {
       ...testConfig(),
       mcp: {
         enabled: true,
@@ -712,8 +712,8 @@ describe("worker processor", () => {
 
 });
 
-function testConfig(): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
+function testConfig(): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: tempDir }, tempDir);
   return {
     ...base,
     paths: { ...base.paths, dataRoot: rootDir, databasePath: path.join(tempDir, "cyberos.sqlite") },
@@ -745,7 +745,7 @@ function testConfig(): CyberOsConfig {
       },
       shares: []
     },
-    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    hostd: { socketPath: "/tmp/hostd.sock" },
     terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
   };

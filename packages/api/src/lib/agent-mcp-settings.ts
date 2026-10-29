@@ -22,9 +22,9 @@ import {
   updateMcpClientScopes,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { PublicAgentMcpSettings, CyberOsConfig } from "@cyberos/shared";
+import type { PublicAgentMcpSettings, CyberOsRuntime } from "@cyberos/shared";
 
-export function publicAgentMcpSettings(db: CyberOsDatabase, config: CyberOsConfig): PublicAgentMcpSettings {
+export function publicAgentMcpSettings(db: CyberOsDatabase, config: CyberOsRuntime): PublicAgentMcpSettings {
   const stored = getAgentMcpSettings(db);
   const enabled = stored?.enabled ?? config.mcp.piEnabled;
   const available = config.mcp.enabled;
@@ -38,7 +38,7 @@ export function publicAgentMcpSettings(db: CyberOsDatabase, config: CyberOsConfi
   };
 }
 
-export function configureAgentMcp(db: CyberOsDatabase, config: CyberOsConfig, enabled: boolean): PublicAgentMcpSettings {
+export function configureAgentMcp(db: CyberOsDatabase, config: CyberOsRuntime, enabled: boolean): PublicAgentMcpSettings {
   if (enabled) {
     ensurePairedPiClient(db, config);
   }
@@ -46,20 +46,20 @@ export function configureAgentMcp(db: CyberOsDatabase, config: CyberOsConfig, en
   return publicAgentMcpSettings(db, config);
 }
 
-export function reconcileAgentMcp(db: CyberOsDatabase, config: CyberOsConfig): PublicAgentMcpSettings {
+export function reconcileAgentMcp(db: CyberOsDatabase, config: CyberOsRuntime): PublicAgentMcpSettings {
   const stored = getAgentMcpSettings(db);
   const enabled = stored?.enabled ?? config.mcp.piEnabled;
   if (config.mcp.enabled && enabled) ensurePairedPiClient(db, config);
   return publicAgentMcpSettings(db, config);
 }
 
-function hasPairedPiClient(db: CyberOsDatabase, config: CyberOsConfig): boolean {
+function hasPairedPiClient(db: CyberOsDatabase, config: CyberOsRuntime): boolean {
   const token = readValidPiToken(config.mcp.piTokenFile);
   if (!token) return false;
   return findMcpClientByToken(db, token)?.kind === "pi";
 }
 
-function ensurePairedPiClient(db: CyberOsDatabase, config: CyberOsConfig): void {
+function ensurePairedPiClient(db: CyberOsDatabase, config: CyberOsRuntime): void {
   const tokenFile = config.mcp.piTokenFile;
   if (!path.isAbsolute(tokenFile)) {
     throw new Error("CyberOS Pi MCP token file is not configured with an absolute path");
@@ -104,7 +104,7 @@ function ensurePairedPiClient(db: CyberOsDatabase, config: CyberOsConfig): void 
   }
 }
 
-function piClientScopes(config: CyberOsConfig): string[] {
+function piClientScopes(config: CyberOsRuntime): string[] {
   return [...new Set(createCatalogDescriptors().flatMap((descriptor) => descriptor.requiredScopes))]
     .filter((scope) => scope !== "cyberos:admin:shell" || config.mcp.shellEnabled)
     .sort();

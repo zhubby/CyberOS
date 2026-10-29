@@ -21,6 +21,9 @@ const REPEAT_TICK: Duration = Duration::from_millis(20);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const WTYPE_TIMEOUT: Duration = Duration::from_secs(2);
 const EVENT_QUEUE_CAPACITY: usize = 256;
+const INPUT_DIR: &str = "/dev/input";
+const STATUS_WRITER: &str = "/usr/lib/cyberos/scripts/cyberos-tv-write-status";
+const WTYPE: &str = "wtype";
 
 #[derive(Debug)]
 struct ActiveDevice {
@@ -65,15 +68,9 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> io::Result<()> {
-    let input_dir = env::var_os("CYBEROS_TV_INPUT_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/dev/input"));
-    let status_writer = env::var_os("CYBEROS_TV_STATUS_WRITER")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/usr/lib/cyberos/scripts/cyberos-tv-write-status"));
-    let wtype = env::var_os("CYBEROS_TV_WTYPE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("wtype"));
+    let input_dir = PathBuf::from(INPUT_DIR);
+    let status_writer = PathBuf::from(STATUS_WRITER);
+    let wtype = PathBuf::from(WTYPE);
     let started = Instant::now();
     let (sender, mut receiver) = mpsc::channel(EVENT_QUEUE_CAPACITY);
     let mut active = HashMap::<PathBuf, ActiveDevice>::new();

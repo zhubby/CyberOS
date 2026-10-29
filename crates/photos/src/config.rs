@@ -5,8 +5,6 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{ErrorCode, PhotosError};
 
-pub const DEFAULT_CONFIG_PATH: &str = "/cyberos/config/config.toml";
-
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_path: PathBuf,
@@ -17,23 +15,43 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, PhotosError> {
-        let config_path = env::var_os("CYBEROS_CONFIG")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH));
-        let root_dir = match env::var_os("CYBEROS_ROOT") {
-            Some(path) => PathBuf::from(path),
-            None if config_path.exists() => root_dir_from_file(&config_path)?,
-            None => PathBuf::from(".cyberos/dev-root"),
-        };
+        let production = env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("production");
+        let root_dir =
+            resolve_root_dir(env::var_os("CYBEROS_ROOT"), production, env::current_dir()?)?;
         let data_dir = root_dir.join("state");
         let database_path = data_dir.join("cyberos.sqlite");
         Ok(Self {
             database_path,
             data_root: root_dir.join("data"),
             cache_root: data_dir.join("photos"),
-            production: env::var("CYBEROS_ENVIRONMENT").as_deref() == Ok("production"),
+            production,
         })
     }
+}
+
+fn resolve_root_dir(
+    environment_root: Option<std::ffi::OsString>,
+    production: bool,
+    current_dir: PathBuf,
+) -> Result<PathBuf, PhotosError> {
+    let root = environment_root.map(PathBuf::from).unwrap_or_else(|| {
+        if production {
+            PathBuf::from("/cyberos")
+        } else {
+            current_dir.join(".cyberos/dev-root")
+        }
+    });
+    if !root.is_absolute() {
+        return Err(PhotosError::internal(
+            "CYBEROS_ROOT must be an absolute path",
+        ));
+    }
+    if production && root != std::path::Path::new("/cyberos") {
+        return Err(PhotosError::internal(
+            "production CyberOS root must be /cyberos",
+        ));
+    }
+    Ok(root)
 }
 
 pub fn verify_tools() -> Result<(), PhotosError> {
@@ -55,18 +73,6 @@ pub fn verify_tools() -> Result<(), PhotosError> {
         }
     }
     Ok(())
-}
-
-fn root_dir_from_file(path: &Path) -> Result<PathBuf, PhotosError> {
-    let text = std::fs::read_to_string(path).map_err(PhotosError::storage)?;
-    let document = text
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(|error| PhotosError::internal(format!("Invalid CyberOS config: {error}")))?;
-    Ok(document
-        .get("root_dir")
-        .and_then(toml_edit::Item::as_str)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".cyberos/dev-root")))
 }
 
 fn find_in_path(name: &str) -> Option<PathBuf> {
@@ -97,4 +103,20 @@ pub fn sync_file_and_parent(path: &Path) -> Result<(), PhotosError> {
         .and_then(|file| file.sync_all())
         .map_err(PhotosError::storage)?;
     sync_parent(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn production_rejects_a_nonstandard_root() {
+        assert!(
+            resolve_root_dir(Some("/isolated".into()), true, PathBuf::from("/workspace")).is_err()
+        );
+        assert_eq!(
+            resolve_root_dir(Some("/cyberos".into()), true, PathBuf::from("/workspace")).unwrap(),
+            PathBuf::from("/cyberos")
+        );
+    }
 }

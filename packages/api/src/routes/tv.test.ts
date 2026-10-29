@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { VodPlayerStatus } from "@cyberos/shared";
+import { openCyberOsDb } from "@cyberos/db";
+import { loadCyberOsRuntime, type VodPlayerStatus } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { registerTvRoutes } from "./tv.js";
 
@@ -76,6 +77,37 @@ describe("TV status API", () => {
     expect(status.state).toBe("ready");
     expect(status.gamepad).toEqual(expect.objectContaining({ state: "unavailable" }));
     await server.close();
+  });
+
+  it("probes the VOD socket while TV mode is being enabled before settings are persisted", async () => {
+    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "cyberos-tv-transition-"));
+    const statusDirectory = path.join(temporaryDirectory, "status");
+    const enabledMarker = path.join(temporaryDirectory, "enabled");
+    await mkdir(statusDirectory, { recursive: true });
+    await writeFile(enabledMarker, "enabled\n");
+    const now = new Date("2026-10-21T08:00:00.000Z");
+    for (const component of ["weston", "chromium", "cec", "gamepad"]) {
+      await writeHealth(statusDirectory, component, "ready", null, now);
+    }
+    const runtime = loadCyberOsRuntime({ CYBEROS_ROOT: temporaryDirectory }, temporaryDirectory);
+    const db = openCyberOsDb(runtime.paths.databasePath);
+    const server = Fastify();
+    registerTvRoutes(server, {
+      config: {
+        ...runtime,
+        vodPlayer: { ...runtime.vodPlayer, socketPath: path.join(temporaryDirectory, "missing-vod.sock") }
+      },
+      db
+    } as unknown as ApiRouteContext, { statusDirectory, enabledMarker, now: () => now });
+
+    const status = (await server.inject({ method: "GET", url: "/api/tv/status" })).json().status;
+    expect(status.enabled).toBe(true);
+    expect(status.vodPlayer).toEqual(expect.objectContaining({
+      state: "unavailable",
+      detail: "VOD Player is unavailable"
+    }));
+    await server.close();
+    db.close();
   });
 });
 

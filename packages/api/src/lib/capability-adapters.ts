@@ -3,7 +3,7 @@ import { copyFile, link, lstat, readFile, rename, stat, unlink, writeFile } from
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { parseDocument } from "yaml";
-import { checkBackup, initBackup, restoreBackup, runBackup, validateBackup } from "@cyberos/backup";
+import { checkBackup, initBackup, loadBackupRuntime, runBackup, validateBackup } from "@cyberos/backup";
 import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
 import {
   createRestrictedShellAdapter,
@@ -14,11 +14,15 @@ import {
 import {
   enqueuePhotosJob,
   getPhotosLibrarySettings,
+  getDockerSettings,
+  getBackupSettings,
+  getTvSettings,
+  getVmSettings,
   recordAppliedOperation,
   type CyberOsDatabase
 } from "@cyberos/db";
 import { isPathInside, resolveSafeExistingPath, resolveSafeTargetPath } from "@cyberos/storage-tools";
-import { photosMediaKind, type CyberOsConfig } from "@cyberos/shared";
+import { photosMediaKind, type CyberOsRuntime } from "@cyberos/shared";
 import {
   createFileExportMcpResource,
   createPhotoExportMcpResource,
@@ -81,11 +85,10 @@ function httpDomainAdapter(
   options: { resourceBaseUrl: string; system?: SystemManagementDependencies }
 ): CapabilityDomainAdapter {
   return {
-    availability: ({ config }) => capabilityAvailability(capabilityId, config),
+    availability: ({ config, db }) => capabilityAvailability(capabilityId, config, db),
     prepare: async (request, context) => {
       const parsed = requestObject(request);
       validateMcpRequest(parsed);
-      await validateHostPolicy(capabilityId, parsed, context.config);
       await validateStoragePoolReferences(parsed, context.config, options.system);
       const revision = await capabilityRevision(context.db, context.config, options.system, capabilityId, parsed);
       return {
@@ -99,7 +102,6 @@ function httpDomainAdapter(
     },
     revalidate: async (prepared, context) => {
       const request = adapterRequest(prepared);
-      await validateHostPolicy(capabilityId, request, context.config);
       await validateStoragePoolReferences(request, context.config, options.system);
       const current = await capabilityRevision(context.db, context.config, options.system, capabilityId, request);
       if (prepared.revision && prepared.revision !== current) {
@@ -131,7 +133,7 @@ async function executeDirectCapability(
   request: Record<string, JsonValue>,
   secrets: Readonly<Record<string, string>>,
   db: CyberOsDatabase,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   clientId: string,
   resourceBaseUrl: string
@@ -349,6 +351,12 @@ function settingsRequest(
   if (operation === "indexer") return { method: "PATCH", url: "/api/settings/indexer", payload: body };
   if (operation === "agent_policy") return { method: "PATCH", url: "/api/settings/agent-capability-policy", payload: { policies: request.policies } };
   if (operation === "model_provider") return { method: "PATCH", url: "/api/settings/model-provider", payload: { ...without(body, "replaceApiKey"), ...(secrets.apiKey ? { apiKey: secrets.apiKey } : {}) } };
+  if (operation === "system_profile") return { method: "PATCH", url: "/api/settings/system-profile", payload: body };
+  if (operation === "monitoring") return { method: "PATCH", url: "/api/settings/monitoring", payload: body };
+  if (operation === "backup") return { method: "PATCH", url: "/api/settings/backup", payload: body };
+  if (operation === "backup_credential_set") return { method: "PUT", url: "/api/settings/backup/credential", payload: { password: secrets.backupPassword } };
+  if (operation === "backup_credential_clear") return { method: "DELETE", url: "/api/settings/backup/credential" };
+  if (operation === "tv") return { method: "PATCH", url: "/api/settings/tv", payload: { ...body, confirmed: true } };
   throw invalidOperation("settings", operation);
 }
 
@@ -423,7 +431,7 @@ async function executeFileEdit(server: FastifyInstance, request: Record<string, 
 
 async function executeFileWrite(
   db: CyberOsDatabase,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   request: Record<string, JsonValue>
 ): Promise<JsonValue> {
@@ -477,7 +485,7 @@ async function executeFileWrite(
 
 async function importPhotosFromStorage(
   db: CyberOsDatabase,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   request: Record<string, JsonValue>
 ): Promise<JsonValue> {
@@ -505,7 +513,7 @@ async function importPhotosFromStorage(
 
 async function resolvePhotoImportPlan(
   db: CyberOsDatabase,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   request: Record<string, JsonValue>
 ) {
@@ -556,16 +564,16 @@ async function resolvePhotoImportPlan(
   return { settings, sourceScope, libraryScope, destinationDirectory, items };
 }
 
-async function executeBackup(db: CyberOsDatabase, config: CyberOsConfig, request: Record<string, JsonValue>): Promise<JsonValue> {
+async function executeBackup(db: CyberOsDatabase, config: CyberOsRuntime, request: Record<string, JsonValue>): Promise<JsonValue> {
   const operation = requiredString(request.operation, "operation");
-  if (operation === "validate") return toJson(await validateBackup({ db, config }));
+  const runtime = loadBackupRuntime(db, config);
+  if (operation === "validate") return toJson(await validateBackup({ db, config: runtime }));
   if (operation === "init") {
-    await initBackup({ db, config });
+    await initBackup({ db, config: runtime });
     return { initialized: true };
   }
-  if (operation === "run") return toJson(await runBackup({ db, config, kind: request.schedule === "weekly" ? "weekly" : "daily" }));
-  if (operation === "check") return toJson(await checkBackup({ db, config }));
-  if (operation === "restore") return toJson(await restoreBackup({ db, config, snapshot: requiredString(request.snapshotId, "snapshotId") }));
+  if (operation === "run") return toJson(await runBackup({ db, config: runtime, kind: request.schedule === "weekly" ? "weekly" : "daily" }));
+  if (operation === "check") return toJson(await checkBackup({ db, config: runtime }));
   throw invalidOperation("backup", operation);
 }
 
@@ -601,34 +609,22 @@ function resourceCapabilityError(error: unknown): CapabilityError {
   return new CapabilityError("INVALID_ARGUMENT", error.message, { cause: error });
 }
 
-function capabilityAvailability(capabilityId: string, config: CyberOsConfig) {
-  if (capabilityId.startsWith("cyberos.docker.")) return config.docker.enabled
+function capabilityAvailability(capabilityId: string, config: CyberOsRuntime, db: CyberOsDatabase) {
+  const dockerEnabled = getDockerSettings(db)?.enabled ?? config.docker.enabled;
+  const vmEnabled = getVmSettings(db)?.enabled ?? config.vm.enabled;
+  if (capabilityId.startsWith("cyberos.docker.")) return dockerEnabled
     ? { available: true }
     : { available: false, reason: "Docker management is disabled" };
-  if (capabilityId.startsWith("cyberos.vm.")) return config.vm.enabled
+  if (capabilityId.startsWith("cyberos.vm.")) return vmEnabled
     ? { available: true }
     : { available: false, reason: "Virtual machine management is disabled" };
-  if (capabilityId === "cyberos.vod.control-propose") return config.vodPlayer.enabled
+  if (capabilityId === "cyberos.vod.control-propose") return (getTvSettings(db)?.enabled ?? config.vodPlayer.enabled)
     ? { available: true }
     : { available: false, reason: "VOD Player is disabled" };
-  if (capabilityId === "cyberos.backup.run-propose") return config.backup.enabled
+  if (capabilityId === "cyberos.backup.run-propose") return (getBackupSettings(db)?.enabled ?? config.backup.enabled)
     ? { available: true }
     : { available: false, reason: "Backup is disabled" };
-  if (
-    (capabilityId === "cyberos.network.manage-propose" || capabilityId === "cyberos.storage.manage-propose") &&
-    config.hostd.mutationPolicy === "declarative"
-  ) return { available: false, reason: "Host configuration is managed declaratively" };
   return { available: true };
-}
-
-async function validateHostPolicy(capabilityId: string, request: Record<string, JsonValue>, config: CyberOsConfig): Promise<void> {
-  if (config.hostd.mutationPolicy !== "declarative") return;
-  if (capabilityId === "cyberos.network.manage-propose" || capabilityId === "cyberos.storage.manage-propose") {
-    throw new CapabilityError("NOT_READY", "Host configuration is managed declaratively");
-  }
-  if (capabilityId === "cyberos.docker.manage-propose" && request.operation === "daemon_update") {
-    throw new CapabilityError("NOT_READY", "Docker daemon configuration is managed declaratively");
-  }
 }
 
 function validateMcpRequest(request: Record<string, JsonValue>): void {
@@ -678,7 +674,7 @@ function rejectComposeCredentials(value: unknown, pathSegments: string[] = []): 
 
 async function validateStoragePoolReferences(
   request: Record<string, JsonValue>,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined
 ): Promise<void> {
   for (const reference of storagePoolReferences(request)) {
@@ -688,7 +684,7 @@ async function validateStoragePoolReferences(
 
 async function capabilityRevision(
   db: CyberOsDatabase,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   capabilityId: string,
   request: Record<string, JsonValue>
@@ -715,7 +711,6 @@ async function capabilityRevision(
   return createHash("sha256").update(JSON.stringify({
     capabilityId,
     operation: request.operation,
-    hostMutationPolicy: config.hostd.mutationPolicy,
     storagePoolStates,
     tableStates,
     resourceState
@@ -738,7 +733,7 @@ function storagePoolReferences(value: JsonValue, prefix = "request"): Array<{ fi
 
 async function capabilityResourceState(
   db: CyberOsDatabase,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   capabilityId: string,
   request: Record<string, JsonValue>
@@ -858,6 +853,9 @@ function secretRequirements(capabilityId: string, request: Record<string, JsonVa
   if (capabilityId === "cyberos.settings.update-propose" && operation === "model_provider" && request.replaceApiKey === true) {
     return [{ name: "apiKey", label: "Model API key", maxLength: 4096 }];
   }
+  if (capabilityId === "cyberos.settings.update-propose" && operation === "backup_credential_set") {
+    return [{ name: "backupPassword", label: "Backup repository password", maxLength: 4096 }];
+  }
   if (capabilityId === "cyberos.storage.manage-propose" && operation === "share_account") {
     return [{ name: "sharePassword", label: "Share account password", maxLength: 256 }];
   }
@@ -917,7 +915,7 @@ function requestObject(value: JsonValue): Record<string, JsonValue> {
 }
 
 async function resolveCapabilityStoragePool(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   system: SystemManagementDependencies | undefined,
   storagePoolId: string
 ) {

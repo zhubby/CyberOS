@@ -5,8 +5,16 @@ describe("CyberOS paths", () => {
   it("derives every persistent production path from /cyberos", () => {
     expect(resolveCyberOsPaths("/cyberos")).toEqual({
       rootDir: "/cyberos",
-      configDir: "/cyberos/config",
       stateDir: "/cyberos/state",
+      secretsDir: "/cyberos/state/secrets",
+      backupSecretsDir: "/cyberos/state/secrets/backup",
+      backupPasswordPath: "/cyberos/state/secrets/backup/restic-password",
+      shareSecretsDir: "/cyberos/state/secrets/share",
+      sharePasswordPath: "/cyberos/state/secrets/share/account-password",
+      mcpStateDir: "/cyberos/state/mcp",
+      mcpTokenPath: "/cyberos/state/mcp/pi.token",
+      tvStateDir: "/cyberos/state/tv",
+      tvEnabledMarker: "/cyberos/state/tv/enabled",
       logsDir: "/cyberos/logs",
       homeDir: "/cyberos/home",
       dataRoot: "/cyberos/data",

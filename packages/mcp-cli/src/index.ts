@@ -14,7 +14,7 @@ import {
   type McpClientKind,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { loadConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime } from "@cyberos/shared";
 
 const arguments_ = process.argv.slice(2);
 
@@ -22,7 +22,7 @@ if (process.getuid?.() !== 0 && process.env.CYBEROS_MCP_ALLOW_NON_ROOT !== "1") 
   fail("cyberos-mcp must run as root");
 }
 
-const config = loadConfig();
+const config = loadCyberOsRuntime();
 const db = openCyberOsDb(config.paths.databasePath);
 try {
   dispatch(db, arguments_);

@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadConfig, PHOTOS_SUPPORTED_EXTENSIONS, resolveCyberOsPaths } from "@cyberos/shared";
+import { loadCyberOsRuntime, PHOTOS_SUPPORTED_EXTENSIONS, resolveCyberOsPaths } from "@cyberos/shared";
 import {
   appendEvent,
   claimNextJob,
@@ -30,6 +30,7 @@ import {
   getJob,
   getSession,
   getShareSettings,
+  getVmSettings,
   getTrashEntry,
   listEvents,
   listDockerOperations,
@@ -43,7 +44,7 @@ import {
   openCyberOsDb,
   recoverExpiredAgentJobs,
   recordIndexFailure,
-  saveDockerSettings,
+  saveBackupSettings,
   savePhotosLibrarySettings,
   saveShareSettings,
   startBackupRun,
@@ -70,7 +71,7 @@ import type {
   ShareApplyRequest,
   ShareApplyResult,
   ShareSettingsRecord,
-  CyberOsConfig,
+  CyberOsRuntime,
   SystemEthernetApplyTransaction,
   SystemEthernetStatus,
   SystemEthernetUpdateInput,
@@ -381,9 +382,18 @@ describe("API server", () => {
 
   it("exposes backup and aggregate health as read-only status", async () => {
     const repositoryPath = path.join(tempDir, "backup-repository");
-    const passwordFile = path.join(tempDir, "restic-password");
     await mkdir(repositoryPath);
-    await writeFile(passwordFile, "test-secret\n");
+    const config = testConfig(tempDir);
+    await mkdir(path.dirname(config.paths.backupPasswordPath), { recursive: true });
+    await writeFile(config.paths.backupPasswordPath, "test-secret\n");
+    saveBackupSettings(db, {
+      enabled: true,
+      repositoryPath,
+      requireMount: false,
+      keepDaily: 7,
+      keepWeekly: 4,
+      validatedAt: new Date().toISOString()
+    });
     upsertHealthAlert(db, {
       code: "backup_failed",
       severity: "critical",
@@ -399,21 +409,6 @@ describe("API server", () => {
       error: "latest backup failed",
       finishedAt: new Date(Date.now() - 59_000)
     });
-    const config = {
-      ...testConfig(tempDir),
-      environment: "development" as const,
-      backup: {
-        enabled: true,
-        repositoryPath,
-        passwordFile,
-        stagingPath: path.join(tempDir, "backup-staging"),
-        requireMount: false,
-        retryCount: 1,
-        timeoutMs: 1_000,
-        keepDaily: 7,
-        keepWeekly: 4
-      }
-    };
     const server = await buildServer({ config, db });
 
     const backup = await server.inject({ method: "GET", url: "/api/backup/status" });
@@ -462,20 +457,15 @@ describe("API server", () => {
   it("does not report a configured backup password when the file is missing", async () => {
     const repositoryPath = path.join(tempDir, "backup-repository");
     await mkdir(repositoryPath);
-    const config = {
-      ...testConfig(tempDir),
-      backup: {
-        enabled: false,
-        repositoryPath,
-        passwordFile: path.join(tempDir, "missing-restic-password"),
-        stagingPath: path.join(tempDir, "backup-staging"),
-        requireMount: false,
-        retryCount: 1,
-        timeoutMs: 1_000,
-        keepDaily: 7,
-        keepWeekly: 4
-      }
-    };
+    const config = testConfig(tempDir);
+    saveBackupSettings(db, {
+      enabled: false,
+      repositoryPath,
+      requireMount: false,
+      keepDaily: 7,
+      keepWeekly: 4,
+      validatedAt: null
+    });
     const server = await buildServer({ config, db });
 
     const response = await server.inject({ method: "GET", url: "/api/backup/status" });
@@ -979,7 +969,7 @@ describe("API server", () => {
         info: {
           identity: {
             hostname: expect.any(String),
-            adminDisplayName: "Test Admin",
+            adminDisplayName: "CyberOS Admin",
             authMode: "local-only"
           },
           operatingSystem: {
@@ -1986,7 +1976,12 @@ describe("API server", () => {
   });
 
   it("returns and stores Docker settings through the settings API", async () => {
-    const server = await buildServer({ config: testConfig(tempDir), db });
+    const engine = new FakeDockerEngine();
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      docker: { engine, compose: new FakeDockerCompose(), daemon: new FakeDockerDaemon() }
+    });
     const initial = await server.inject({
       method: "GET",
       url: "/api/settings/docker"
@@ -1994,13 +1989,7 @@ describe("API server", () => {
     const saved = await server.inject({
       method: "PATCH",
       url: "/api/settings/docker",
-      payload: {
-        enabled: true,
-        socketPath: "/tmp/docker.sock",
-        composeCommand: "/usr/bin/docker",
-        operationTimeoutMs: 90_000,
-        consoleShells: ["/bin/sh"]
-      }
+      payload: { enabled: true }
     });
     const loaded = await server.inject({
       method: "GET",
@@ -2010,31 +1999,52 @@ describe("API server", () => {
     expect(initial.statusCode).toBe(200);
     expect(initial.json()).toMatchObject({
       settings: {
-        enabled: false,
-        socketPath: "/var/run/docker.sock",
-        composeCommand: "docker",
-        operationTimeoutMs: 120_000,
-        consoleShells: ["/bin/sh", "/bin/bash"]
+        enabled: false
       }
     });
     expect(saved.statusCode).toBe(200);
     expect(saved.json()).toMatchObject({
       settings: {
-        enabled: true,
-        socketPath: "/tmp/docker.sock",
-        composeCommand: "/usr/bin/docker",
-        operationTimeoutMs: 90_000,
-        consoleShells: ["/bin/sh"]
+        enabled: true
       }
     });
     expect(loaded.json()).toMatchObject({
       settings: {
-        enabled: true,
-        socketPath: "/tmp/docker.sock",
-        composeCommand: "/usr/bin/docker"
+        enabled: true
       }
     });
     expect(getDockerSettings(db)).toMatchObject({ enabled: true });
+    const action = await server.inject({
+      method: "POST",
+      url: "/api/docker/actions",
+      payload: { action: "stop", targetType: "container", containerId: "container-1" }
+    });
+    expect(action.statusCode).toBe(202);
+    expect(engine.calls).toContain("stop:container-1");
+    await server.close();
+  });
+
+  it("returns and stores virtual machine settings through the settings API", async () => {
+    const config = testConfig(tempDir);
+    const server = await buildServer({ config, db });
+    const initial = await server.inject({ method: "GET", url: "/api/settings/vm" });
+    const invalid = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/vm",
+      payload: { enabled: "yes" }
+    });
+    const saved = await server.inject({
+      method: "PATCH",
+      url: "/api/settings/vm",
+      payload: { enabled: true }
+    });
+
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json()).toMatchObject({ settings: { enabled: config.vm.enabled } });
+    expect(invalid.statusCode).toBe(400);
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ settings: { enabled: true } });
+    expect(getVmSettings(db)).toMatchObject({ enabled: true });
     await server.close();
   });
 
@@ -2057,6 +2067,37 @@ describe("API server", () => {
       }
     });
     expect(response.payload).not.toContain("password\":\"");
+    await server.close();
+  });
+
+  it("reports damaged share settings and allows a full settings repair", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)").run(
+      "share_settings",
+      JSON.stringify({ enabled: "broken" }),
+      new Date().toISOString()
+    );
+    const hostd = new FakeShareHostd();
+    const server = await buildServer({
+      config: testConfig(tempDir),
+      db,
+      shares: { hostd }
+    });
+
+    const damaged = await server.inject({ method: "GET", url: "/api/settings/shares" });
+    expect(damaged.statusCode).toBe(409);
+    expect(damaged.json()).toMatchObject({ state: "attention" });
+
+    const repaired = await server.inject({
+      method: "POST",
+      url: "/api/shares/settings",
+      payload: { settings: shareSettingsPayload("replacement-secret") }
+    });
+    expect(repaired.statusCode).toBe(200);
+    expect(repaired.payload).not.toContain("replacement-secret");
+    expect(getShareSettings(db)).toMatchObject({ enabled: true });
+    expect(await readFile(testConfig(tempDir).paths.sharePasswordPath, "utf8"))
+      .toBe("replacement-secret");
     await server.close();
   });
 
@@ -2098,8 +2139,11 @@ describe("API server", () => {
     });
     expect(getShareSettings(db)?.account).toEqual({
       username: "media-share",
-      password: "new-secret"
+      password: null
     });
+    const sharePasswordPath = testConfig(tempDir).paths.sharePasswordPath;
+    expect(await readFile(sharePasswordPath, "utf8")).toBe("new-secret");
+    expect((await stat(sharePasswordPath)).mode & 0o077).toBe(0);
 
     const retained = await server.inject({
       method: "PUT",
@@ -2113,8 +2157,9 @@ describe("API server", () => {
     expect(retained.statusCode).toBe(200);
     expect(getShareSettings(db)?.account).toEqual({
       username: "archive-share",
-      password: "new-secret"
+      password: null
     });
+    expect(await readFile(sharePasswordPath, "utf8")).toBe("new-secret");
 
     const stale = await server.inject({
       method: "PUT",
@@ -2132,6 +2177,9 @@ describe("API server", () => {
   it("keeps the saved share account when direct host application fails", async () => {
     await mkdir(path.join(rootDir, "media"));
     const existing = saveShareSettings(db, shareSettingsPayload("old-secret"));
+    const sharePasswordPath = testConfig(tempDir).paths.sharePasswordPath;
+    await mkdir(path.dirname(sharePasswordPath), { recursive: true });
+    await writeFile(sharePasswordPath, "old-secret", { mode: 0o600 });
     const hostd = new FakeShareHostd();
     hostd.failApply = true;
     const server = await buildServer({
@@ -2154,8 +2202,9 @@ describe("API server", () => {
     expect(response.payload).not.toContain("new-secret");
     expect(getShareSettings(db)?.account).toEqual({
       username: "cyberos-share",
-      password: "old-secret"
+      password: null
     });
+    expect(await readFile(sharePasswordPath, "utf8")).toBe("old-secret");
     await server.close();
   });
 
@@ -2199,7 +2248,7 @@ describe("API server", () => {
       enabled: true,
       account: {
         username: "cyberos-share",
-        password: "secret"
+        password: null
       },
       shares: [
         {
@@ -2220,6 +2269,10 @@ describe("API server", () => {
         }
       ]
     });
+    expect(await readFile(testConfig(tempDir).paths.sharePasswordPath, "utf8")).toBe("secret");
+    const operationMetadata = db.prepare("SELECT metadata_json FROM share_operations LIMIT 1")
+      .pluck().get() as string;
+    expect(operationMetadata).not.toContain("secret");
     expect(listOperationNotifications(db)).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
@@ -2262,8 +2315,9 @@ describe("API server", () => {
     });
     expect(getShareSettings(db)?.account).toEqual({
       username: "latest-share",
-      password: "latest-secret"
+      password: null
     });
+    expect(await readFile(testConfig(tempDir).paths.sharePasswordPath, "utf8")).toBe("latest-secret");
     await server.close();
   });
 
@@ -2459,51 +2513,6 @@ describe("API server", () => {
     });
     expect(nonObjectJson.statusCode).toBe(400);
     expect(daemon.updates).toHaveLength(1);
-    await server.close();
-  });
-
-  it("rejects host configuration mutations in declarative mode without calling runtimes", async () => {
-    const config = testConfig(tempDir);
-    config.hostd.mutationPolicy = "declarative";
-    const daemon = new FakeDockerDaemon();
-    const server = await buildServer({ config, db, docker: { daemon } });
-
-    const requests = [
-      server.inject({
-        method: "PUT",
-        url: "/api/docker/daemon/config",
-        payload: {
-          content: "{}",
-          expectedRevision: "a".repeat(64),
-          restart: false,
-          confirmed: false
-        }
-      }),
-      server.inject({ method: "POST", url: "/api/storage/actions", payload: { confirm: true } }),
-      server.inject({ method: "POST", url: "/api/shares/settings", payload: { settings: {} } }),
-      server.inject({
-        method: "PUT",
-        url: "/api/system/network/wifi/radio",
-        payload: { enabled: false, confirmed: true }
-      }),
-      server.inject({
-        method: "PUT",
-        url: "/api/system/network/ethernet/device-a",
-        payload: { config: {}, expectedRevision: "revision" }
-      })
-    ];
-
-    const responses = await Promise.all(requests);
-    expect(responses.map((response) => response.statusCode)).toEqual([501, 501, 501, 501, 501]);
-    expect(responses.every((response) => response.json().error.includes("managed declaratively"))).toBe(true);
-    expect(daemon.updates).toHaveLength(0);
-
-    const shareSummary = await server.inject({ method: "GET", url: "/api/shares/summary" });
-    expect(shareSummary.statusCode).toBe(200);
-    expect(shareSummary.json().summary.capabilities).toEqual({
-      canApplyConfiguration: false,
-      hostMutationPolicy: "declarative"
-    });
     await server.close();
   });
 
@@ -3361,30 +3370,6 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("rejects bind mounts that expose the configured Docker socket through a parent directory", async () => {
-    const engine = new FakeDockerEngine();
-    const config = dockerEnabledConfig(tempDir, { socketPath: path.join(rootDir, "docker.sock") });
-    saveDockerSettings(db, config.docker);
-    const server = await buildServer({
-      config,
-      db,
-      docker: { engine, compose: new FakeDockerCompose() }
-    });
-    const response = await server.inject({ method: "POST", url: "/api/docker/actions", payload: {
-      action: "create",
-      targetType: "container",
-      name: "unsafe-bind",
-      image: "nginx",
-      start: false,
-      mounts: [{ type: "bind", storagePoolId: TEST_STORAGE_POOL_ID, sourcePath: ".", target: "/host", readOnly: true }]
-    } });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: expect.stringContaining("Docker socket") });
-    expect(engine.calls).not.toContain("create-container");
-    await server.close();
-  });
-
   it("records direct Docker action failures without creating Agent records", async () => {
     const engine = new FakeDockerEngine();
     engine.failStart = true;
@@ -3776,7 +3761,7 @@ describe("API server", () => {
 
   it("pairs and toggles the built-in Agent MCP without exposing its token", async () => {
     const tokenFile = path.join(tempDir, "config", "mcp", "pi.token");
-    const config: CyberOsConfig = {
+    const config: CyberOsRuntime = {
       ...testConfig(tempDir),
       mcp: {
         enabled: true,
@@ -6333,8 +6318,8 @@ async function closeNetServer(server: net.Server): Promise<void> {
   });
 }
 
-function testConfig(dataDir: string): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(dataDir, "missing.toml"), CYBEROS_ROOT: dataDir }, dataDir);
+function testConfig(dataDir: string): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: dataDir }, dataDir);
   return {
     ...base,
     paths: { ...base.paths, databasePath: path.join(dataDir, "cyberos.sqlite") },
@@ -6359,8 +6344,7 @@ function testConfig(dataDir: string): CyberOsConfig {
       consoleShells: ["/bin/sh", "/bin/bash"],
     },
     hostd: {
-      socketPath: "/run/cyberos/hostd.sock",
-      mutationPolicy: "mutable"
+      socketPath: "/run/cyberos/hostd.sock"
     },
     shares: {
       enabled: false,
@@ -6451,7 +6435,7 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
   };
 }
 
-function dockerEnabledConfig(dataDir: string, overrides: Partial<CyberOsConfig["docker"]> = {}): CyberOsConfig {
+function dockerEnabledConfig(dataDir: string, overrides: Partial<CyberOsRuntime["docker"]> = {}): CyberOsRuntime {
   const config = testConfig(dataDir);
   return {
     ...config,

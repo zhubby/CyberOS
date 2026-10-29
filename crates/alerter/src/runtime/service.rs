@@ -77,11 +77,17 @@ async fn wait_for_first_evaluation(
     shutdown: CancellationToken,
     publisher: AlertEventPublisher,
 ) -> Result<bool, AlerterError> {
+    let mut monitoring_enabled = config.monitoring_enabled;
+    let mut sampling = config.sampling;
     loop {
         let database_path = config.database_path.clone();
         let metrics_path = config.metrics_database_path.clone();
-        let monitoring_enabled = config.monitoring_enabled;
-        let sampling = config.sampling;
+        match config.refresh_monitoring() {
+            Ok(next) => (monitoring_enabled, sampling) = next,
+            Err(error) => {
+                tracing::warn!(error = %error, "alerter settings reload failed; keeping last valid settings")
+            }
+        }
         let now_ms = SystemClock.wall_time_ms();
         let result = tokio::task::spawn_blocking(move || {
             evaluate_once(
@@ -116,6 +122,8 @@ async fn run_evaluation_loop(
     shutdown: CancellationToken,
     publisher: AlertEventPublisher,
 ) -> Result<(), AlerterError> {
+    let mut monitoring_enabled = config.monitoring_enabled;
+    let mut sampling = config.sampling;
     let mut schedule =
         tokio::time::interval_at(Instant::now() + EVALUATION_INTERVAL, EVALUATION_INTERVAL);
     schedule.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -126,8 +134,10 @@ async fn run_evaluation_loop(
             _ = schedule.tick() => {
                 let database_path = config.database_path.clone();
                 let metrics_path = config.metrics_database_path.clone();
-                let monitoring_enabled = config.monitoring_enabled;
-                let sampling = config.sampling;
+                match config.refresh_monitoring() {
+                    Ok(next) => (monitoring_enabled, sampling) = next,
+                    Err(error) => tracing::warn!(error = %error, "alerter settings reload failed; keeping last valid settings"),
+                }
                 let now_ms = SystemClock.wall_time_ms();
                 let result = tokio::task::spawn_blocking(move || {
                     evaluate_once(

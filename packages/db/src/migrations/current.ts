@@ -1363,54 +1363,6 @@ CREATE TRIGGER trg_index_failures_storage_pool_matches_run_update
 
 INSERT INTO monitoring_alerter_state(id, status, pending_deliveries, updated_at)
 VALUES (1, 'starting', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-INSERT INTO system_settings(key, value_json, updated_at)
-VALUES (
-  'indexer_settings',
-  json_object(
-    'scanConcurrency', 4,
-    'extractionConcurrency', 2,
-    'reconciliationIntervalMs', 1800000,
-    'maxExtractedTextBytes', 2097152,
-    'maxSourceDocumentBytes', 536870912,
-    'commandTimeoutMs', 120000,
-    'maxPdfTextPages', 500,
-    'maxOcrPages', 20,
-    'ocrStoragePoolIds', json('[]'),
-    'updatedAt', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-  ),
-  strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-);
-INSERT INTO system_settings(key, value_json, updated_at)
-VALUES (
-  'photos_processing_settings',
-  json_object(
-    'processingConcurrency', 1,
-    'scanIntervalMs', 1800000,
-    'maxAutoRetries', 5,
-    'retryBaseDelayMs', 2000,
-    'retryMaxDelayMs', 300000,
-    'commandTimeoutMs', 120000,
-    'maxFileSizeBytes', 536870912,
-    'maxXmpSizeBytes', 16777216,
-    'maxIntermediateBytes', 2147483648,
-    'minFreeSpaceBytes', 0,
-    'maxDecodedPixels', 268402689,
-    'updatedAt', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-  ),
-  strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-);
-INSERT INTO system_settings(key, value_json, updated_at)
-VALUES (
-  'monitoring_smtp',
-  '{"host":"","port":587,"security":"starttls","username":"","password":"","from":"","enabled":false}',
-  strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-);
-INSERT INTO system_settings(key, value_json, updated_at)
-VALUES (
-  'monitoring_health_routing',
-  '{"warningPolicyId":null,"criticalPolicyId":null}',
-  strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-);
     `
   }
 ];

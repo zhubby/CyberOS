@@ -80,7 +80,7 @@ export type HostdNetworkScanResult = { device: string, scannedAt: string, access
 
 export type HostdNfsConfig = { enabled: boolean, readOnly: boolean, allowedCidrs: Array<string>, rootSquash: boolean, };
 
-export type HostdOperation = "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "system.power" | "system.ops";
+export type HostdOperation = "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "system.power" | "system.ops" | "system.tv";
 
 export type HostdOpsRequest = { task: HostdOpsTask, confirmed: boolean | null, };
 
@@ -94,9 +94,9 @@ export type HostdPowerRequest = { action: HostdPowerAction, confirmed: boolean, 
 
 export type HostdPowerResult = { action: HostdPowerAction, accepted: true, };
 
-export type HostdRequestContract = { "operation": "shares.apply", "payload": HostdShareApplyRequest } | { "operation": "storage.command", "payload": HostdStorageCommand } | { "operation": "storage.operation", "payload": HostdStorageOperation } | { "operation": "docker.daemon", "payload": HostdDockerDaemonRequest } | { "operation": "network.manager", "payload": HostdNetworkManagerRequest } | { "operation": "bluetooth.manager", "payload": HostdBluetoothManagerRequest } | { "operation": "system.power", "payload": HostdPowerRequest } | { "operation": "system.ops", "payload": HostdOpsRequest };
+export type HostdRequestContract = { "operation": "shares.apply", "payload": HostdShareApplyRequest } | { "operation": "storage.command", "payload": HostdStorageCommand } | { "operation": "storage.operation", "payload": HostdStorageOperation } | { "operation": "docker.daemon", "payload": HostdDockerDaemonRequest } | { "operation": "network.manager", "payload": HostdNetworkManagerRequest } | { "operation": "bluetooth.manager", "payload": HostdBluetoothManagerRequest } | { "operation": "system.power", "payload": HostdPowerRequest } | { "operation": "system.ops", "payload": HostdOpsRequest } | { "operation": "system.tv", "payload": HostdTvRequest };
 
-export type HostdResultContract = { "operation": "shares.apply", "result": HostdShareApplyResult } | { "operation": "storage.command", "result": HostdStorageCommandResult } | { "operation": "storage.operation", "result": HostdStorageOperationResult } | { "operation": "docker.daemon", "result": HostdDockerDaemonResult } | { "operation": "network.manager", "result": HostdNetworkManagerResult } | { "operation": "bluetooth.manager", "result": HostdBluetoothManagerResult } | { "operation": "system.power", "result": HostdPowerResult } | { "operation": "system.ops", "result": HostdOpsResult };
+export type HostdResultContract = { "operation": "shares.apply", "result": HostdShareApplyResult } | { "operation": "storage.command", "result": HostdStorageCommandResult } | { "operation": "storage.operation", "result": HostdStorageOperationResult } | { "operation": "docker.daemon", "result": HostdDockerDaemonResult } | { "operation": "network.manager", "result": HostdNetworkManagerResult } | { "operation": "bluetooth.manager", "result": HostdBluetoothManagerResult } | { "operation": "system.power", "result": HostdPowerResult } | { "operation": "system.ops", "result": HostdOpsResult } | { "operation": "system.tv", "result": HostdTvResult };
 
 export type HostdShareAccount = { username: string, password: string | null, };
 
@@ -119,5 +119,9 @@ export type HostdStorageCommandResult = { stdout: string, };
 export type HostdStorageOperation = { "action": "create_pool", name: string, raidLevel: string, devices: Array<string>, filesystem: string, mountpoint: string, risk: string, } | { "action": "delete_pool", name: string, mdDevice: string, devices: Array<string>, mountpoint: string, risk: string, };
 
 export type HostdStorageOperationResult = { "action": "create_pool", name: string, raidLevel: string, devices: Array<string>, filesystem: string, mountpoint: string, mdDevice: string, uuid: string, } | { "action": "delete_pool", name: string, mountpoint: string, mdDevice: string, devices: Array<string>, };
+
+export type HostdTvRequest = { enabled: boolean, confirmed: boolean, };
+
+export type HostdTvResult = { enabled: boolean, applied: true, };
 
 export type HostdWebDavConfig = { enabled: boolean, readOnly: boolean, allowGuest: boolean, port: number, pathPrefix: string, };

@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
 import { resolveSafeExistingPath } from "@cyberos/storage-tools";
-import type { CyberOsConfig } from "@cyberos/shared";
+import type { CyberOsRuntime } from "@cyberos/shared";
 import type { CapabilityDomainAdapter, PreparedCapabilityAction } from "./adapters.js";
 import { requireStoragePool, type ResolvedStoragePool } from "./storage-pools.js";
 
@@ -89,7 +89,7 @@ export function createRestrictedShellAdapter(): CapabilityDomainAdapter {
   };
 }
 
-async function validateRequest(value: JsonValue, config: CyberOsConfig, enabled: boolean): Promise<RestrictedShellPayload> {
+async function validateRequest(value: JsonValue, config: CyberOsRuntime, enabled: boolean): Promise<RestrictedShellPayload> {
   if (!enabled) throw new CapabilityError("NOT_READY", "Restricted shell is disabled by host configuration", { retryable: true });
   if (!isRecord(value)) throw new CapabilityError("INVALID_ARGUMENT", "Shell request must be an object");
   const allowedKeys = new Set(["storagePoolId", "command", "args", "cwd", "timeoutMs", "revision"]);

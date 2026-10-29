@@ -279,8 +279,7 @@ type DownloadManageRequest =
 
 type BackupRunRequest =
   | Operation<"validate" | "init" | "check">
-  | Operation<"run", { schedule: "daily" | "weekly" }>
-  | Operation<"restore", { snapshotId: string }>;
+  | Operation<"run", { schedule: "daily" | "weekly" }>;
 
 type AlertManageRequest =
   | Operation<"create_rule", { rule: Record<string, JsonValue> }>
@@ -406,7 +405,13 @@ type SettingsUpdateRequest =
     "maxSourceDocumentBytes" | "commandTimeoutMs" | "maxPdfTextPages" | "maxOcrPages" | "ocrStoragePoolIds"
   >)
   | (Operation<"model_provider"> & OptionalJsonFields<"providerName" | "baseUrl" | "model" | "replaceApiKey" | "clearApiKey">)
-  | Operation<"agent_policy", { policies: Record<string, "auto" | "approve" | "confirm" | "disabled"> }>;
+  | Operation<"agent_policy", { policies: Record<string, "auto" | "approve" | "confirm" | "disabled"> }>
+  | Operation<"system_profile", { adminDisplayName: string }>
+  | (Operation<"monitoring"> & OptionalJsonFields<"enabled" | "rawRetentionDays" | "minuteRetentionDays" | "hourRetentionDays" | "maxDatabaseBytes">)
+  | (Operation<"backup"> & OptionalJsonFields<"enabled" | "repositoryPath" | "requireMount" | "keepDaily" | "keepWeekly">)
+  | Operation<"backup_credential_set">
+  | Operation<"backup_credential_clear">
+  | (Operation<"tv"> & OptionalJsonFields<"enabled" | "videoOutput" | "drmConnector" | "audioDevice" | "hardwareDecoding">);
 
 type TerminalManageRequest =
   | Operation<"create">
@@ -622,10 +627,7 @@ const schemas: Record<string, JsonSchema> = {
     operation("validate"),
     operation("init"),
     operation("run", { schedule: stringEnum(["daily", "weekly"]) }, ["schedule"]),
-    operation("check"),
-    operation("restore", {
-      snapshotId: id(256)
-    }, ["snapshotId"])
+    operation("check")
   )),
   "cyberos.monitoring.overview": EMPTY_OBJECT_SCHEMA,
   "cyberos.monitoring.query": strictObject({
@@ -743,7 +745,13 @@ const schemas: Record<string, JsonSchema> = {
   "cyberos.settings.update-propose": proposal(operationUnion(
     operation("indexer", { scanConcurrency: integer(1, 16), extractionConcurrency: integer(1, 8), reconciliationIntervalMs: integer(60_000, 86_400_000), maxExtractedTextBytes: integer(65_536, 16_777_216), maxSourceDocumentBytes: integer(1_048_576, 2_199_023_255_552), commandTimeoutMs: integer(5_000, 900_000), maxPdfTextPages: integer(1, 5_000), maxOcrPages: integer(1, 100), ocrStoragePoolIds: arrayOf(storagePoolId, 0, 100) }),
     operation("model_provider", { providerName: stringEnum(["openai", "anthropic"]), baseUrl: nullableText(2048), model: text(256), replaceApiKey: boolean, clearApiKey: boolean }),
-    operation("agent_policy", { policies: { type: "object", additionalProperties: stringEnum(["auto", "approve", "confirm", "disabled"]), maxProperties: 9 } }, ["policies"])
+    operation("agent_policy", { policies: { type: "object", additionalProperties: stringEnum(["auto", "approve", "confirm", "disabled"]), maxProperties: 9 } }, ["policies"]),
+    operation("system_profile", { adminDisplayName: nonEmptyText(80) }, ["adminDisplayName"]),
+    operation("monitoring", { enabled: boolean, rawRetentionDays: integer(1, 14), minuteRetentionDays: integer(7, 180), hourRetentionDays: integer(30, 1825), maxDatabaseBytes: integer(16_777_216, 17_179_869_184) }),
+    operation("backup", { enabled: boolean, repositoryPath: nonEmptyText(4096), requireMount: boolean, keepDaily: integer(1, 365), keepWeekly: integer(1, 104) }),
+    operation("backup_credential_set"),
+    operation("backup_credential_clear"),
+    operation("tv", { enabled: boolean, videoOutput: stringEnum(["drm", "wayland"]), drmConnector: nullableText(128), audioDevice: nullableText(256), hardwareDecoding: stringEnum(["auto-safe", "auto", "no"]) })
   )),
   "cyberos.terminal.tabs": EMPTY_OBJECT_SCHEMA,
   "cyberos.terminal.manage-propose": proposal(operationUnion(

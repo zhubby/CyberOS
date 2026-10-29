@@ -10,7 +10,7 @@ import {
   releaseExecutionLock,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { initBackup, restoreBackup, runBackup, shouldSkipScheduledBackup, validateBackup } from "./backup.js";
 
 let tempDir: string | undefined;
@@ -23,9 +23,9 @@ afterEach(async () => {
   tempDir = undefined;
 });
 
-function config(root: string, repository: string, passwordFile: string): CyberOsConfig {
+function config(root: string, repository: string, passwordFile: string): CyberOsRuntime {
   const rootDir = path.dirname(root);
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: rootDir }, rootDir);
   return {
     ...base,
     paths: { ...base.paths, dataRoot: root, databasePath: path.join(rootDir, "cyberos.sqlite") },
@@ -33,7 +33,7 @@ function config(root: string, repository: string, passwordFile: string): CyberOs
     worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
@@ -142,7 +142,13 @@ describe("backup workflow", () => {
       }
     };
 
-    await expect(restoreBackup({ db, config: cfg, restic, snapshot: "snapshot-v2" }))
+    await expect(restoreBackup({
+      config: cfg,
+      repositoryPath: repo,
+      passwordFile: password,
+      restic,
+      snapshot: "snapshot-v2"
+    }))
       .resolves.toMatchObject({ verified: true });
   });
 
@@ -172,7 +178,13 @@ describe("backup workflow", () => {
       }
     };
 
-    await expect(restoreBackup({ db, config: cfg, restic, snapshot: "snapshot-v1" }))
+    await expect(restoreBackup({
+      config: cfg,
+      repositoryPath: repo,
+      passwordFile: password,
+      restic,
+      snapshot: "snapshot-v1"
+    }))
       .rejects.toThrow("restore manifest validation failed");
   });
 

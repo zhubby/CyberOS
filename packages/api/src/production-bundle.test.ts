@@ -22,7 +22,6 @@ it("starts the production API bundle", async () => {
     cwd: repoRoot,
     env: {
       ...process.env,
-      CYBEROS_CONFIG: path.join(tempDir, "missing.toml"),
       CYBEROS_ENVIRONMENT: "development",
       CYBEROS_ROOT: cyberosRoot,
       CYBEROS_API_HOST: "127.0.0.1",

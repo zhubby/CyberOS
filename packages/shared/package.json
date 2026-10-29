@@ -13,8 +13,5 @@
     "./photos-config": "./src/photos-config.ts",
     "./hud-tokens.css": "./src/hud-tokens.css"
   },
-  "types": "./src/index.ts",
-  "dependencies": {
-    "smol-toml": "^1.9.0"
-  }
+  "types": "./src/index.ts"
 }

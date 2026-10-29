@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import os from "node:os";
 import { disposePiAgentHosts } from "@cyberos/agent";
 import { openCyberOsDb, recoverInterruptedAgentSessionCommands } from "@cyberos/db";
-import { loadConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime } from "@cyberos/shared";
 import { AGENT_JOB_LEASE_MS, processNextAgentCommand, processNextJob } from "./processor.js";
 
-const config = loadConfig();
+const config = loadCyberOsRuntime();
 const db = openCyberOsDb(config.paths.databasePath);
 recoverInterruptedAgentSessionCommands(db);
 

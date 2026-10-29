@@ -53,7 +53,7 @@ describe("Bluetooth persistence", () => {
     const { updatedAt: _updatedAt, ...incompleteRecord } = saved;
     db.prepare("UPDATE system_settings SET value_json = ? WHERE key = 'bluetooth_settings'")
       .run(JSON.stringify(incompleteRecord));
-    expect(getBluetoothSettings(db)).toBeNull();
+    expect(() => getBluetoothSettings(db)).toThrow(/CyberOS 2.0 format/);
   });
 
   it("persists a batch, cancellation, read state, and worker health", () => {

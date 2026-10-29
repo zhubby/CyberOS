@@ -296,10 +296,6 @@ export function registerDockerRoutes(server: FastifyInstance, context: ApiRouteC
   server.put<{
     Body: DockerDaemonConfigUpdateInput;
   }>("/api/docker/daemon/config", { bodyLimit: MAX_DOCKER_DAEMON_BODY_BYTES }, async (request, reply) => {
-    if (config.hostd.mutationPolicy === "declarative") {
-      reply.status(501).send({ error: "Docker daemon configuration is managed declaratively on this host" });
-      return;
-    }
     try {
       const input = validateDockerDaemonConfigUpdate(request.body);
       reply.send({ result: await daemon.updateConfig(input) });
@@ -742,7 +738,8 @@ async function buildDockerProposal(
   body: DockerActionProposalBody,
   context: ApiRouteContext
 ): Promise<BuiltDockerProposal> {
-  const { config, docker } = context;
+  const { docker } = context;
+  const config = currentDockerConfig(context);
   const action = body.action;
   if (!action) {
     throw new Error("Docker action is required");
@@ -814,15 +811,20 @@ async function prepareComposeHostAccessDraft(
   draftRevision: string;
   hostAccess: NonNullable<DockerOperationProposal["hostAccess"]>;
 }> {
-  const compose = dockerCompose(context.config.docker, context.docker);
+  const dockerConfig = currentDockerConfig(context).docker;
+  const compose = dockerCompose(dockerConfig, context.docker);
   if (!compose.prepareHostAccessDraft) {
     throw new DockerCreateValidationError("Compose Host Access draft is unavailable", 503);
   }
   return compose.prepareHostAccessDraft(
     projectId,
-    dockerEngine(context.config.docker, context.docker),
+    dockerEngine(dockerConfig, context.docker),
     listDockerRegistryCredentials(context.db)
   );
+}
+
+function currentDockerConfig(context: ApiRouteContext) {
+  return effectiveDockerConfig(context.config, getDockerSettings(context.db));
 }
 
 function sendDockerComposeAppError(reply: FastifyReply, error: unknown): void {

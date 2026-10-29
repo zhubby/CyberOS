@@ -5,7 +5,7 @@ import type {
   DockerOperationProposal,
   DockerOperationRecord,
   DockerSummary,
-  CyberOsConfig
+  CyberOsRuntime
 } from "@cyberos/shared";
 import type { DockerRegistryCredentialRecord } from "@cyberos/db";
 import type { DockerComposeRuntime } from "./docker-compose.js";
@@ -37,7 +37,7 @@ export function dockerCompose(config: DockerConfig, dependencies?: DockerRuntime
 }
 
 export async function collectDockerSummary(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   dependencies?: DockerRuntimeDependencies
 ): Promise<DockerSummary> {
   const daemon = dependencies?.daemon ?? new SystemDockerDaemonRuntime({ hostdSocketPath: config.hostd.socketPath });
@@ -46,7 +46,7 @@ export async function collectDockerSummary(
   if (!config.docker.enabled) {
     const composeProjects = await compose.listProjects(null).catch(() => []);
     return {
-      ...dockerUnavailableSummary(config.docker, "disabled", null, daemonStatus, dockerCapabilities(config)),
+      ...dockerUnavailableSummary(config.docker, "disabled", null, daemonStatus, dockerCapabilities()),
       composeProjects
     };
   }
@@ -62,7 +62,7 @@ export async function collectDockerSummary(
     return {
       collectedAt: new Date().toISOString(),
       enabled: true,
-      capabilities: dockerCapabilities(config),
+      capabilities: dockerCapabilities(),
       daemon: daemonStatus,
       engine: {
         status: "ready",
@@ -95,7 +95,7 @@ export async function collectDockerSummary(
         "unavailable",
         safeDockerMessage(error),
         daemonStatus,
-        dockerCapabilities(config)
+        dockerCapabilities()
       ),
       composeProjects
     };
@@ -123,7 +123,7 @@ export function resolveDockerImageOccupancy(
 }
 
 export async function applyDockerOperation(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   operation: DockerOperationRecord,
   proposal: DockerOperationProposal,
   dependencies?: DockerRuntimeDependencies,
@@ -188,8 +188,7 @@ export function dockerUnavailableSummary(
     collectedAt: new Date().toISOString()
   },
   capabilities: DockerSummary["capabilities"] = {
-    canUpdateDaemonConfiguration: true,
-    hostMutationPolicy: "mutable"
+    canUpdateDaemonConfiguration: true
   }
 ): DockerSummary {
   return {
@@ -230,11 +229,9 @@ export function dockerUnavailableSummary(
   };
 }
 
-function dockerCapabilities(config: CyberOsConfig): DockerSummary["capabilities"] {
-  const hostMutationPolicy = config.hostd.mutationPolicy;
+function dockerCapabilities(): DockerSummary["capabilities"] {
   return {
-    canUpdateDaemonConfiguration: hostMutationPolicy === "mutable",
-    hostMutationPolicy
+    canUpdateDaemonConfiguration: true
   };
 }
 

@@ -3,7 +3,8 @@ import type {
   AgentCapabilityPolicySettingsRecord,
   DockerSettingsRecord,
   ModelProviderName,
-  ModelProviderSettingsRecord
+  ModelProviderSettingsRecord,
+  VmSettingsRecord
 } from "@cyberos/shared";
 import { isModelProviderName } from "@cyberos/shared";
 import {
@@ -64,34 +65,24 @@ export function mapModelProviderSettings(row: DbSystemSettingRow): ModelProvider
 
 export function mapDockerSettings(row: DbSystemSettingRow): DockerSettingsRecord {
   const parsed = currentRecord(JSON.parse(row.value_json), "Docker");
-  if (
-    typeof parsed.enabled !== "boolean"
-    || normalizeString(parsed.socketPath) === null
-    || normalizeString(parsed.composeCommand) === null
-    || normalizePositiveInteger(parsed.operationTimeoutMs) === null
-    || !Array.isArray(parsed.consoleShells)
-    || parsed.consoleShells.length === 0
-    || parsed.consoleShells.some((shell) => normalizeString(shell) === null)
-  ) {
+  if (typeof parsed.enabled !== "boolean") {
     throw new Error("Docker settings do not match the CyberOS 2.0 format");
   }
   return {
     enabled: parsed.enabled,
-    socketPath: normalizeString(parsed.socketPath)!,
-    composeCommand: normalizeString(parsed.composeCommand)!,
-    operationTimeoutMs: normalizePositiveInteger(parsed.operationTimeoutMs)!,
-    consoleShells: normalizeDockerShells(parsed.consoleShells),
     updatedAt: currentTimestamp(parsed.updatedAt, "Docker")
   };
 }
 
-function normalizeDockerShells(shells: unknown): string[] {
-  if (!Array.isArray(shells)) {
-    return ["/bin/sh", "/bin/bash"];
+export function mapVmSettings(row: DbSystemSettingRow): VmSettingsRecord {
+  const parsed = currentRecord(JSON.parse(row.value_json), "Virtual machine");
+  if (typeof parsed.enabled !== "boolean") {
+    throw new Error("Virtual machine settings do not match the CyberOS 2.0 format");
   }
-
-  const normalized = shells.map(normalizeString).filter((shell): shell is string => shell !== null);
-  return normalized.length ? normalized : ["/bin/sh", "/bin/bash"];
+  return {
+    enabled: parsed.enabled,
+    updatedAt: currentTimestamp(parsed.updatedAt, "Virtual machine")
+  };
 }
 
 function normalizeString(value: unknown): string | null {
@@ -100,13 +91,6 @@ function normalizeString(value: unknown): string | null {
   }
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
-}
-
-function normalizePositiveInteger(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    return null;
-  }
-  return value;
 }
 
 function isAgentCapabilityPolicyMode(value: unknown): value is AgentCapabilityPolicyMode {

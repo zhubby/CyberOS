@@ -1,5 +1,6 @@
 use rusqlite::{OptionalExtension, params};
-use serde_json::{Value, json};
+use serde::Deserialize;
+use serde_json::json;
 use uuid::Uuid;
 
 use super::AlertStore;
@@ -9,6 +10,15 @@ use super::escalation::snapshot_policy_id;
 use crate::error::AlerterError;
 
 const HEALTH_EPISODE_COOLDOWN_MS: i64 = 60 * 60 * 1_000;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StoredHealthRouting {
+    warning_policy_id: Option<String>,
+    critical_policy_id: Option<String>,
+    #[serde(default)]
+    revision: Option<u64>,
+}
 
 impl AlertStore {
     pub(super) fn sync_health_incidents(&mut self, now_ms: i64) -> Result<(), AlerterError> {
@@ -92,23 +102,30 @@ impl AlertStore {
             }
             let id = Uuid::new_v4().to_string();
             let policy_snapshot = if initialized {
-                let setting: String = transaction.query_row(
-                    "SELECT value_json FROM system_settings WHERE key = 'monitoring_health_routing'",
-                    [],
-                    |row| row.get(0),
-                )?;
-                let setting: Value = serde_json::from_str(&setting)?;
-                let key = if severity == "critical" {
-                    "criticalPolicyId"
-                } else {
-                    "warningPolicyId"
-                };
-                setting
-                    .get(key)
-                    .and_then(Value::as_str)
-                    .map(|policy_id| snapshot_policy_id(&transaction, policy_id))
-                    .transpose()?
-                    .flatten()
+                let setting: Option<String> = transaction
+                    .query_row(
+                        "SELECT value_json FROM system_settings WHERE key = 'monitoring_health_routing'",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                match setting {
+                    Some(setting) => {
+                        let setting: StoredHealthRouting = serde_json::from_str(&setting)?;
+                        let _revision = setting.revision;
+                        let policy_id = if severity == "critical" {
+                            setting.critical_policy_id
+                        } else {
+                            setting.warning_policy_id
+                        };
+                        policy_id
+                            .as_deref()
+                            .map(|policy_id| snapshot_policy_id(&transaction, policy_id))
+                            .transpose()?
+                            .flatten()
+                    }
+                    None => None,
+                }
             } else {
                 None
             };

@@ -31,11 +31,11 @@ import {
   updateJobStatus,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { type ModelProviderSettingsRecord, type CyberOsConfig } from "@cyberos/shared";
+import { type ModelProviderSettingsRecord, type CyberOsRuntime } from "@cyberos/shared";
 
 export interface ProcessNextJobDependencies {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   agentRunner?: PiAgentRunner;
   workerId?: string;
   leaseMs?: number;
@@ -49,7 +49,7 @@ export const AGENT_COMMAND_HEARTBEAT_MS = 10_000;
 
 export interface ProcessNextAgentCommandDependencies {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   workerId: string;
   commandRunner?: typeof runPiAgentCommand;
   leaseMs?: number;

@@ -10,7 +10,7 @@ import {
   runOpsMaintenanceRetention,
   type CyberOsDatabase
 } from "@cyberos/db";
-import type { OpsMaintenanceSummary, CyberOsConfig } from "@cyberos/shared";
+import type { OpsMaintenanceSummary, CyberOsRuntime } from "@cyberos/shared";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAINTENANCE_LOCK = "ops:maintenance";
@@ -18,7 +18,7 @@ const BACKUP_LOCK = "backup";
 
 export async function runMaintenance(input: {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   now?: Date;
 }): Promise<OpsMaintenanceSummary> {
   const now = input.now ?? new Date();
@@ -59,7 +59,7 @@ export async function runMaintenance(input: {
 
 export async function cleanupRestoreStaging(
   db: CyberOsDatabase,
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   now = new Date()
 ): Promise<OpsMaintenanceSummary["restoreStaging"]> {
   const owner = randomUUID();

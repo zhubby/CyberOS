@@ -12,7 +12,7 @@ import {
   type CyberOsDatabase
 } from "@cyberos/db";
 import { registerMcp } from "@cyberos/mcp";
-import { loadConfig, PHOTOS_DATA_DIRECTORY_NAME, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, PHOTOS_DATA_DIRECTORY_NAME, type CyberOsRuntime } from "@cyberos/shared";
 import {
   createFileExportMcpResource,
   createMcpResourceResponder,
@@ -26,7 +26,7 @@ let tempDir: string;
 let rootDir: string;
 let db: CyberOsDatabase;
 let app: ReturnType<typeof Fastify>;
-let config: CyberOsConfig;
+let config: CyberOsRuntime;
 let client: ReturnType<typeof createMcpClient>;
 let system: SystemManagementDependencies;
 
@@ -189,9 +189,9 @@ async function downloadResource(url: string) {
   });
 }
 
-function testConfig(dataDir: string, root: string): CyberOsConfig {
+function testConfig(dataDir: string, root: string): CyberOsRuntime {
   const rootDir = path.dirname(path.dirname(root));
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: rootDir }, rootDir);
   return {
     ...base,
     paths: {
@@ -204,7 +204,7 @@ function testConfig(dataDir: string, root: string): CyberOsConfig {
     worker: { pollMs: 100, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: path.join(dataDir, "hostd.sock"), mutationPolicy: "mutable" },
+    hostd: { socketPath: path.join(dataDir, "hostd.sock") },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
     terminal: { user: "cyberos", socketPath: path.join(dataDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },

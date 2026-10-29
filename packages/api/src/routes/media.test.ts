@@ -10,7 +10,7 @@ import {
   upsertMediaCatalogEntry,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { loadConfig, type VodPlayerStatus, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type VodPlayerStatus, type CyberOsRuntime } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import type { VodPlayerRuntime } from "../lib/vod-player.js";
 import { registerMediaRoutes } from "./media.js";
@@ -64,6 +64,26 @@ afterEach(async () => {
 });
 
 describe("Media API", () => {
+  it("reports damaged settings and allows PATCH repair", async () => {
+    db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)").run(
+      "media_library_settings",
+      JSON.stringify({ language: 42 }),
+      new Date().toISOString()
+    );
+
+    const damaged = await server.inject({ method: "GET", url: "/api/media/settings" });
+    expect(damaged.statusCode).toBe(409);
+    expect(damaged.json()).toMatchObject({ state: "attention" });
+
+    const repaired = await server.inject({
+      method: "PATCH",
+      url: "/api/media/settings",
+      payload: { language: "en-US", region: "US" }
+    });
+    expect(repaired.statusCode).toBe(200);
+    expect(repaired.json().settings).toMatchObject({ language: "en-US", region: "US" });
+  });
+
   it("redacts TMDB credentials and validates source paths", async () => {
     const saved = await server.inject({
       method: "PATCH",
@@ -288,9 +308,9 @@ function storageSystem() {
   };
 }
 
-function testConfig(): CyberOsConfig {
+function testConfig(): CyberOsRuntime {
   const rootDir = temporaryDirectory;
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(rootDir, "missing.toml"), CYBEROS_ROOT: rootDir }, rootDir);
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: rootDir }, rootDir);
   return {
     ...base,
     paths: { ...base.paths, dataRoot: path.dirname(root), databasePath: path.join(rootDir, "cyberos.sqlite") },
@@ -298,7 +318,7 @@ function testConfig(): CyberOsConfig {
     worker: { pollMs: 50, concurrency: 1 },
     admin: { displayName: "Test", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
-    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: {

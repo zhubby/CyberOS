@@ -10,7 +10,7 @@ import {
   releaseExecutionLock,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { cleanupRestoreStaging, runMaintenance } from "./maintenance.js";
 import { runHealthTask } from "./runner.js";
 
@@ -18,7 +18,7 @@ let tempDir: string;
 let rootDir: string;
 let stagingDir: string;
 let db: CyberOsDatabase;
-let config: CyberOsConfig;
+let config: CyberOsRuntime;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-ops-"));
@@ -103,8 +103,8 @@ describe("operations runner", () => {
   });
 });
 
-function createConfig(dataDir: string, rootPath: string, stagingPath: string): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(dataDir, "missing.toml"), CYBEROS_ROOT: dataDir }, dataDir);
+function createConfig(dataDir: string, rootPath: string, stagingPath: string): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: dataDir }, dataDir);
   return {
     ...base,
     paths: { ...base.paths, dataRoot: rootPath, databasePath: path.join(dataDir, "cyberos.sqlite") },
@@ -113,7 +113,7 @@ function createConfig(dataDir: string, rootPath: string, stagingPath: string): C
     admin: { displayName: "Test Admin", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120_000, consoleShells: ["/bin/sh"] },
     shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
-    hostd: { socketPath: path.join(dataDir, "hostd.sock"), mutationPolicy: "mutable" },
+    hostd: { socketPath: path.join(dataDir, "hostd.sock") },
     terminal: { user: "test-user", socketPath: path.join(dataDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     backup: { enabled: false, repositoryPath: null, passwordFile: null, stagingPath, requireMount: false, retryCount: 1, timeoutMs: 1000, keepDaily: 7, keepWeekly: 4 },

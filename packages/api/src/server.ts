@@ -11,6 +11,7 @@ import {
   getDockerSettings,
   getMonitoringAlertSummary,
   getShareSettings,
+  getVmSettings,
   listDockerComposeAppSummaries,
   listDockerOperations,
   listDockerRegistryCredentials,
@@ -22,7 +23,7 @@ import type { MonitoringQueryRequest } from "@cyberos/shared";
 import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
 import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
-import { defaultShareSettings, effectiveDockerConfig } from "./lib/settings.js";
+import { defaultShareSettings, effectiveDockerConfig, effectiveVmConfig } from "./lib/settings.js";
 import { registerApiRoutes } from "./routes/index.js";
 import { FileBatchRunner } from "./lib/file-batch-runner.js";
 import { DockerHostAccessPolicy, reconcileRunningDockerHostAccess } from "./lib/docker-host-access.js";
@@ -36,7 +37,7 @@ import { SystemNetworkManagerRuntime } from "./lib/network-manager.js";
 import { SystemEthernetManagerRuntime } from "./lib/ethernet-manager.js";
 import { collectShareSummary } from "./lib/share-service.js";
 import { collectVmSummary } from "./lib/vm-service.js";
-import { createVodPlayerRuntime } from "./lib/vod-player.js";
+import { resolveVodPlayerRuntime } from "./lib/vod-player.js";
 import { MonitoringEventBroker } from "./lib/monitoring-events.js";
 import { createCapabilityAdapters } from "./lib/capability-adapters.js";
 import {
@@ -48,7 +49,7 @@ import { reconcileAgentMcp } from "./lib/agent-mcp-settings.js";
 
 export type { ServerDependencies } from "./context.js";
 
-export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, monitoringEvents: monitoringEventsDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photosMap, hostAccess }: ServerDependencies): Promise<FastifyInstance> {
+export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, monitoringEvents: monitoringEventsDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photosMap, hostAccess, tvMode }: ServerDependencies): Promise<FastifyInstance> {
   if (!isLoopbackHost(config.api.host)) {
     throw new Error("CyberOS API must bind to a loopback host");
   }
@@ -130,7 +131,8 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     ...(photosMap ? { photosMap } : {}),
     fileBatches,
     hostAccess: hostAccessRuntime,
-    capabilityRuntime
+    capabilityRuntime,
+    ...(tvMode ? { tvMode } : {})
   };
   registerApiRoutes(server, routeContext);
   const mcpNetworkManager = system?.networkManager ?? new SystemNetworkManagerRuntime({
@@ -138,7 +140,6 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     hostdSocketPath: config.hostd.socketPath
   });
   const mcpEthernetManager = system?.ethernetManager ?? new SystemEthernetManagerRuntime(config.hostd.socketPath);
-  const mcpVodPlayer = vodPlayer ?? createVodPlayerRuntime(config.vodPlayer);
   const readAdapters = {
     "cyberos.monitoring.overview": () => asJsonValue({
       ...monitoring.overview(),
@@ -153,8 +154,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
         collectSystemNetwork({
           ...system,
           networkManager: mcpNetworkManager,
-          ethernetManager: mcpEthernetManager,
-          mutationPolicy: config.hostd.mutationPolicy
+          ethernetManager: mcpEthernetManager
         }),
         collectSystemNetworkTraffic(system),
         mcpNetworkManager.getStatus(),
@@ -165,14 +165,8 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     "cyberos.storage.status": async () => {
       const shareSettings = getShareSettings(db) ?? defaultShareSettings(config);
       const [storage, sharesSummary] = await Promise.all([
-        collectSystemStorage({
-          ...system,
-          mutationPolicy: config.hostd.mutationPolicy
-        }),
-        collectShareSummary(shareSettings, {
-          ...shares,
-          mutationPolicy: config.hostd.mutationPolicy
-        })
+        collectSystemStorage(system),
+        collectShareSummary(shareSettings, shares)
       ]);
       return asJsonValue({ storage, shares: sharesSummary });
     },
@@ -194,10 +188,10 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
       });
     },
     "cyberos.vm.status": async () => asJsonValue({
-      summary: await collectVmSummary(config, vm),
+      summary: await collectVmSummary(effectiveVmConfig(config, getVmSettings(db)), vm),
       operations: listVmOperations(db, { limit: 100 })
     }),
-    "cyberos.vod.status": async () => asJsonValue({ status: await mcpVodPlayer.getStatus() }),
+    "cyberos.vod.status": async () => asJsonValue({ status: await resolveVodPlayerRuntime({ config, db, ...(vodPlayer ? { vodPlayer } : {}) }).getStatus() }),
     "cyberos.photos.media": async (input: JsonValue, executionContext, dependencies) => {
       if (!input || typeof input !== "object" || Array.isArray(input)) {
         throw new CapabilityError("INVALID_ARGUMENT", "Photo media request is invalid");

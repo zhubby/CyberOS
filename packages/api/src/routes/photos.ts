@@ -91,15 +91,27 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
 
   server.get("/api/photos/settings", async () => ({ settings: getPhotosLibrarySettings(db) }));
 
-  server.get("/api/settings/photos", async () => ({
-    settings: getPhotosProcessingSettings(db) ?? defaultPhotosProcessingSettings()
-  }));
+  server.get("/api/settings/photos", async (_request, reply) => {
+    try {
+      reply.send({ settings: getPhotosProcessingSettings(db) ?? defaultPhotosProcessingSettings() });
+    } catch (error) {
+      reply.status(409).send({
+        error: error instanceof Error ? error.message : "Photo settings are invalid",
+        state: "attention"
+      });
+    }
+  });
 
   server.patch<{ Body: Partial<Omit<PhotoProcessingSettingsRecord, "updatedAt">> }>(
     "/api/settings/photos",
     async (request, reply) => {
       try {
-        const current = getPhotosProcessingSettings(db) ?? defaultPhotosProcessingSettings();
+        let current;
+        try {
+          current = getPhotosProcessingSettings(db) ?? defaultPhotosProcessingSettings();
+        } catch {
+          current = defaultPhotosProcessingSettings();
+        }
         const settings = savePhotosProcessingSettings(db, { ...current, ...request.body });
         reply.send({ settings });
       } catch (error) {

@@ -2,8 +2,6 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
   createShareOperationRecord,
-  getShareSettings,
-  saveShareSettings,
   updateShareOperationStatus
 } from "@cyberos/db";
 import { type ShareOperationProposal } from "@cyberos/shared";
@@ -21,19 +19,22 @@ import {
   serializeShareMutation,
   toPublicShareOperation
 } from "../lib/share-service.js";
-import { defaultShareSettings, toPublicShareSettings } from "../lib/settings.js";
+import {
+  loadEffectiveShareSettings,
+  loadRepairableShareSettings,
+  persistShareSettings,
+  withoutSharePassword
+} from "../lib/share-credentials.js";
+import { toPublicShareSettings } from "../lib/settings.js";
 import { collectSystemStorage } from "../lib/system-management.js";
 
 export function registerShareRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   const { config, db } = context;
 
   server.get("/api/shares/summary", async () => {
-    const settings = getShareSettings(db) ?? defaultShareSettings(config);
+    const settings = await loadEffectiveShareSettings(db, config);
     return {
-      summary: await collectShareSummary(settings, {
-        ...context.shares,
-        mutationPolicy: config.hostd.mutationPolicy
-      })
+      summary: await collectShareSummary(settings, context.shares)
     };
   });
 
@@ -44,10 +45,6 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
       expectedUpdatedAt?: string;
     };
   }>("/api/shares/account", async (request, reply) => {
-    if (config.hostd.mutationPolicy === "declarative") {
-      reply.status(501).send({ error: "Share configuration is managed declaratively on this host" });
-      return;
-    }
     try {
       const response = await serializeShareMutation(async () => {
         const { username, password, expectedUpdatedAt } = request.body ?? {};
@@ -58,7 +55,7 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
           throw new ShareAccountUpdateError(400, "Password must be a string");
         }
 
-        const existing = getShareSettings(db) ?? defaultShareSettings(config);
+        const existing = await loadEffectiveShareSettings(db, config);
         if (existing.updatedAt !== expectedUpdatedAt) {
           throw new ShareAccountUpdateError(409, "Share settings changed; reload before saving the account");
         }
@@ -83,8 +80,13 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
           throw new ShareAccountUpdateError(statusCode, safeShareMessage(error));
         }
 
-        const { updatedAt: _normalizedAt, ...settingsToSave } = settings;
-        const saved = saveShareSettings(db, settingsToSave);
+        let saved;
+        try {
+          saved = await persistShareSettings(db, config, settings);
+        } catch (error) {
+          await applyShareSettings(config, existing, context.shares).catch(() => undefined);
+          throw error;
+        }
         return {
           settings: toPublicShareSettings(saved),
           appliedAt: applied.appliedAt
@@ -105,12 +107,8 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
       settings?: ShareSettingsInput;
     };
   }>("/api/shares/settings", async (request, reply) => {
-    if (config.hostd.mutationPolicy === "declarative") {
-      reply.status(501).send({ error: "Share configuration is managed declaratively on this host" });
-      return;
-    }
-    const existing = getShareSettings(db) ?? defaultShareSettings(config);
     try {
+      const existing = await loadRepairableShareSettings(db, config);
       const storagePools = await listShareStoragePools(context);
       const settings = await normalizeShareSettingsInput(request.body?.settings, existing, storagePools);
       const publicSettings = toPublicShareSettings(settings);
@@ -122,12 +120,17 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
       };
       const operation = createShareOperationRecord(db, {
         proposal,
-        settings
+        settings: withoutSharePassword(settings)
       });
       try {
         const applied = await applyShareSettings(config, settings, context.shares);
-        const { updatedAt: _normalizedAt, ...settingsToSave } = settings;
-        const saved = saveShareSettings(db, settingsToSave);
+        let saved;
+        try {
+          saved = await persistShareSettings(db, config, settings);
+        } catch (error) {
+          await applyShareSettings(config, existing, context.shares).catch(() => undefined);
+          throw error;
+        }
         const completed = updateShareOperationStatus(db, operation.id, "applied", {
           ...applied,
           settingsUpdatedAt: saved.updatedAt,

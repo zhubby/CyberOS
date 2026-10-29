@@ -9,12 +9,12 @@ import type {
   ShareProtocolServiceStatus,
   ShareSettingsRecord,
   ShareSummary,
-  CyberOsConfig,
-  SystemCollectionIssue,
-  HostMutationPolicy
+  CyberOsRuntime,
+  SystemCollectionIssue
 } from "@cyberos/shared";
 import { SHARE_PROTOCOLS } from "@cyberos/shared";
 import { HostdClient } from "./hostd-client.js";
+import { readSharePassword, withSharePassword } from "./share-credentials.js";
 import type { SystemCommandRunner } from "./system-management.js";
 
 const execFileAsync = promisify(execFile);
@@ -38,7 +38,6 @@ export interface ShareHostdClient {
 export interface ShareManagementDependencies {
   hostd?: ShareHostdClient;
   commandRunner?: SystemCommandRunner;
-  mutationPolicy?: HostMutationPolicy;
 }
 
 export function serializeShareMutation<Result>(task: () => Promise<Result>): Promise<Result> {
@@ -111,8 +110,7 @@ export async function collectShareSummary(
     enabled: settings.enabled,
     settingsUpdatedAt: settings.updatedAt,
     capabilities: {
-      canApplyConfiguration: (dependencies.mutationPolicy ?? "mutable") === "mutable",
-      hostMutationPolicy: dependencies.mutationPolicy ?? "mutable"
+      canApplyConfiguration: true
     },
     metrics: {
       shares: settings.shares.length,
@@ -132,7 +130,7 @@ export async function collectShareSummary(
 }
 
 export async function applyShareOperation(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   operation: ShareOperationRecord,
   proposal: ShareOperationProposal,
   dependencies: ShareManagementDependencies = {}
@@ -141,7 +139,11 @@ export async function applyShareOperation(
     throw new Error("Unsupported share action");
   }
   const settings = shareSettingsFromOperation(operation);
-  const result = await applyShareSettings(config, settings, dependencies);
+  const result = await applyShareSettings(
+    config,
+    withSharePassword(settings, await readSharePassword(config.paths.sharePasswordPath)),
+    dependencies
+  );
   return {
     action: proposal.action,
     files: result.files,
@@ -151,7 +153,7 @@ export async function applyShareOperation(
 }
 
 export async function applyShareSettings(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   settings: ShareSettingsRecord,
   dependencies: ShareManagementDependencies = {}
 ): Promise<ShareApplyResult> {

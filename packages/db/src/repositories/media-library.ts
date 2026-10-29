@@ -208,26 +208,27 @@ export function getMediaLibrarySettings(db: CyberOsDatabase): MediaLibrarySettin
   const row = db.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = ?")
     .get(MEDIA_LIBRARY_SETTING_KEY) as { value_json: string; updated_at: string } | undefined;
   if (!row) return null;
+  let parsed: Partial<MediaLibrarySettingsRecord>;
   try {
-    const parsed = JSON.parse(row.value_json) as Partial<MediaLibrarySettingsRecord>;
-    if (
-      !isNullableNonEmptyString(parsed.tmdbReadAccessToken)
-      || typeof parsed.language !== "string"
-      || !isNullableNonEmptyString(parsed.region)
-      || typeof parsed.updatedAt !== "string"
-      || !Number.isFinite(Date.parse(parsed.updatedAt))
-    ) {
-      return null;
-    }
-    return {
-      tmdbReadAccessToken: textOrNull(parsed.tmdbReadAccessToken),
-      language: normalizeLanguage(parsed.language),
-      region: normalizeRegion(parsed.region),
-      updatedAt: parsed.updatedAt
-    };
+    parsed = JSON.parse(row.value_json) as Partial<MediaLibrarySettingsRecord>;
   } catch {
-    return null;
+    throw new Error("Media library settings are not valid CyberOS 2.0 format");
   }
+  if (
+    !isNullableNonEmptyString(parsed.tmdbReadAccessToken)
+    || typeof parsed.language !== "string"
+    || !isNullableNonEmptyString(parsed.region)
+    || typeof parsed.updatedAt !== "string"
+    || !Number.isFinite(Date.parse(parsed.updatedAt))
+  ) {
+    throw new Error("Media library settings are not valid CyberOS 2.0 format");
+  }
+  return {
+    tmdbReadAccessToken: textOrNull(parsed.tmdbReadAccessToken),
+    language: normalizeLanguage(parsed.language),
+    region: normalizeRegion(parsed.region),
+    updatedAt: parsed.updatedAt
+  };
 }
 
 export function saveMediaLibrarySettings(

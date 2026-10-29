@@ -41,22 +41,7 @@ describe("share service status", () => {
       { name: "cyberos-webdav.service", status: "active", error: null }
     ]);
     expect(summary.capabilities).toEqual({
-      canApplyConfiguration: true,
-      hostMutationPolicy: "mutable"
-    });
-  });
-
-  it("reports declarative share configuration as read-only", async () => {
-    const summary = await collectShareSummary({
-      enabled: false,
-      account: { username: "cyberos-share", password: null },
-      updatedAt: "2026-09-22T00:00:00.000Z",
-      shares: []
-    }, { mutationPolicy: "declarative" });
-
-    expect(summary.capabilities).toEqual({
-      canApplyConfiguration: false,
-      hostMutationPolicy: "declarative"
+      canApplyConfiguration: true
     });
   });
 });

@@ -2,11 +2,11 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadConfig, type CyberOsConfig, type VmOperationRecord } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime, type VmOperationRecord } from "@cyberos/shared";
 import { applyVmOperation, buildVmCreateArgs, collectVmSummary, safeVmMessage, vmQemuCommand, type VmCommandRunner } from "./vm-service.js";
 
-function config(): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: "/tmp/cyberos-missing.toml", CYBEROS_ROOT: "/tmp/cyberos" }, "/tmp/cyberos");
+function config(): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: "/tmp/cyberos" }, "/tmp/cyberos");
   return {
     ...base,
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
@@ -14,7 +14,7 @@ function config(): CyberOsConfig {
     admin: { displayName: "Admin", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1000, consoleShells: [] },
     vm: { enabled: true, libvirtUri: "qemu:///system", storagePath: "/tmp/vmstore", networkName: "default", isoRoots: ["/tmp/iso"], operationTimeoutMs: 1000, consoleMode: "serial" },
-    hostd: { socketPath: "/tmp/hostd.sock", mutationPolicy: "mutable" },
+    hostd: { socketPath: "/tmp/hostd.sock" },
     shares: { enabled: false, account: { username: "share", password: null }, shares: [] },
     terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: "/tmp/vod-player.sock", statePath: "/tmp/vod-player-session.json", commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
@@ -250,7 +250,7 @@ describe("VM service", () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-vm-disk-"));
     const diskPath = path.join(tempDir, "guest.qcow2");
     await writeFile(diskPath, "disk", { mode: 0o644 });
-    const nextConfig: CyberOsConfig = {
+    const nextConfig: CyberOsRuntime = {
       ...config(),
       vm: { ...config().vm!, storagePath: tempDir }
     };

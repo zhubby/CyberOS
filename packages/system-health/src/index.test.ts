@@ -13,13 +13,13 @@ import {
   type CyberOsDatabase
 } from "@cyberos/db";
 import { MetricsFixture } from "@cyberos/monitoring/test-utils";
-import { DEFAULT_MONITORING_CONFIG, loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { DEFAULT_MONITORING_CONFIG, loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { evaluateSystemHealth, runScheduledHealthEvaluation } from "./index.js";
 
 let tempDir: string;
 let rootDir: string;
 let db: CyberOsDatabase;
-let config: CyberOsConfig;
+let config: CyberOsRuntime;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(path.join(os.tmpdir(), "cyberos-system-health-"));
@@ -160,8 +160,8 @@ describe("shared system health evaluator", () => {
   });
 });
 
-function createConfig(dataDir: string, dataRoot: string): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(dataDir, "missing.toml"), CYBEROS_ROOT: dataDir }, dataDir);
+function createConfig(dataDir: string, dataRoot: string): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: dataDir }, dataDir);
   return {
     ...base,
     paths: {
@@ -176,7 +176,7 @@ function createConfig(dataDir: string, dataRoot: string): CyberOsConfig {
     admin: { displayName: "Test Admin", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 120_000, consoleShells: ["/bin/sh"] },
     shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
-    hostd: { socketPath: path.join(dataDir, "hostd.sock"), mutationPolicy: "mutable" },
+    hostd: { socketPath: path.join(dataDir, "hostd.sock") },
     terminal: { user: "test-user", socketPath: path.join(dataDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(dataDir, "vod.sock"), statePath: path.join(dataDir, "vod.json"), commandTimeoutMs: 5000, startupTimeoutMs: 15000, checkpointIntervalMs: 5000, retryBaseDelayMs: 2000, retryMaxDelayMs: 60000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: null, hwdec: "auto-safe", user: "cyberos" },
     health: { staleIndexWarningMs: 2 * 60 * 60 * 1000, staleIndexCriticalMs: 6 * 60 * 60 * 1000, stalledRunMs: 15 * 60 * 1000, consecutiveFailureThreshold: 2, backupStaleMs: 26 * 60 * 60 * 1000 },

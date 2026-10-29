@@ -746,7 +746,7 @@ describe("core repositories", () => {
 
     db.prepare("UPDATE system_settings SET value_json = ? WHERE key = 'download_settings'")
       .run(JSON.stringify({ concurrency: 2 }));
-    expect(getDownloadSettings(db)).toBeNull();
+    expect(() => getDownloadSettings(db)).toThrow(/CyberOS 2.0 format/);
   });
 
   it("claims download tasks in FIFO order and recovers expired leases", () => {

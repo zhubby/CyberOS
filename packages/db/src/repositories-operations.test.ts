@@ -86,7 +86,7 @@ describe("operation repositories", () => {
       enabled: true,
       account: {
         username: "cyberos-share",
-        password: "secret"
+        password: null
       },
       shares: [
         {
@@ -160,11 +160,12 @@ describe("operation repositories", () => {
       metadata: {
         settings: {
           account: {
-            password: "secret"
+            password: null
           }
         }
       }
     });
+    expect(JSON.stringify(getShareOperation(db, operation.id)?.metadata)).not.toContain("secret");
     expect(updateShareOperationStatus(db, operation.id, "approved")).toMatchObject({
       status: "approved"
     });

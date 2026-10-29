@@ -13,7 +13,7 @@ import {
   type VodPlayerStatus
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
-import { createVodPlayerRuntime, VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
+import { resolveVodPlayerRuntime, VodPlayerRuntimeError } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 type VodPlayerCommandBody =
@@ -26,10 +26,9 @@ type VodPlayerCommandBody =
   | { type: "set-volume"; sessionId?: string; volume?: number };
 
 export function registerVodPlayerRoutes(server: FastifyInstance, context: ApiRouteContext): void {
-  const runtime: VodPlayerRuntime = context.vodPlayer ?? createVodPlayerRuntime(context.config.vodPlayer);
-
   server.get("/api/vod-player/status", async (_request, reply) => {
     try {
+      const runtime = resolveVodPlayerRuntime(context);
       const status = await runtime.getStatus();
       recordAudioFallback(context, status);
       reply.send({ status });
@@ -40,6 +39,7 @@ export function registerVodPlayerRoutes(server: FastifyInstance, context: ApiRou
 
   server.post<{ Body: VodPlayerCommandBody }>("/api/vod-player/command", async (request, reply) => {
     try {
+      const runtime = resolveVodPlayerRuntime(context);
       const command = await buildCommand(request.body, context);
       const status = await runtime.command(command);
       recordAudioFallback(context, status);

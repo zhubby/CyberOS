@@ -282,7 +282,7 @@ describe("hostd protocol", () => {
     const fixtures = JSON.parse(await readFile(new URL("../fixtures/hostd-protocol-v1.json", import.meta.url), "utf8")) as {
       contracts: HostdFixtureContract[];
     };
-    expect(fixtures.contracts).toHaveLength(28);
+    expect(fixtures.contracts).toHaveLength(29);
     for (const contract of fixtures.contracts) {
       expect(parseFixtureContract(contract)).toEqual(contract.result);
     }
@@ -290,7 +290,7 @@ describe("hostd protocol", () => {
 });
 
 interface HostdFixtureContract {
-  operation: "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "system.power" | "system.ops";
+  operation: "shares.apply" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "system.power" | "system.ops" | "system.tv";
   request: unknown;
   result: unknown;
 }
@@ -313,5 +313,7 @@ function parseFixtureContract(contract: HostdFixtureContract): unknown {
       return parseHostdResult(contract.operation, contract.request as HostdRequest<"system.power">, contract.result);
     case "system.ops":
       return parseHostdResult(contract.operation, contract.request as HostdRequest<"system.ops">, contract.result);
+    case "system.tv":
+      return parseHostdResult(contract.operation, contract.request as HostdRequest<"system.tv">, contract.result);
   }
 }

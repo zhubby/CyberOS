@@ -1,8 +1,8 @@
 use rusqlite::{OptionalExtension, params};
-use serde_json::Value;
+use serde::Deserialize;
 
 use super::AlertStore;
-use super::codec::{iso, json_string, retry_delay, sanitize_error};
+use super::codec::{iso, retry_delay, sanitize_error};
 use super::deliveries::{
     add_event, missing_resolved_recipients, queue_resolved_delivery_for_recipients,
 };
@@ -11,30 +11,61 @@ use crate::error::AlerterError;
 
 const MAX_DELIVERY_ATTEMPTS: i64 = 12;
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StoredSmtpSettings {
+    enabled: bool,
+    host: String,
+    port: u16,
+    security: String,
+    username: String,
+    password: String,
+    from: String,
+    #[serde(default)]
+    revision: Option<u64>,
+}
+
 impl AlertStore {
     pub(super) fn smtp_settings(&self) -> Result<SmtpSettings, AlerterError> {
-        let value: String = self.connection.query_row(
-            "SELECT value_json FROM system_settings WHERE key = 'monitoring_smtp'",
-            [],
-            |row| row.get(0),
-        )?;
-        let value: Value = serde_json::from_str(&value)?;
-        let port = value.get("port").and_then(Value::as_u64).unwrap_or(587);
+        let value: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT value_json FROM system_settings WHERE key = 'monitoring_smtp'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(value) = value else {
+            return Ok(SmtpSettings {
+                enabled: false,
+                host: String::new(),
+                port: 587,
+                security: SmtpSecurity::StartTls,
+                username: String::new(),
+                password: String::new(),
+                from: String::new(),
+            });
+        };
+        let value: StoredSmtpSettings = serde_json::from_str(&value)?;
+        let security = match value.security.as_str() {
+            "none" => SmtpSecurity::None,
+            "starttls" => SmtpSecurity::StartTls,
+            "tls" => SmtpSecurity::Tls,
+            _ => {
+                return Err(AlerterError::Config(
+                    "SMTP security mode is invalid".to_owned(),
+                ));
+            }
+        };
+        let _revision = value.revision;
         Ok(SmtpSettings {
-            enabled: value
-                .get("enabled")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-            host: json_string(&value, "host"),
-            port: u16::try_from(port).unwrap_or(587),
-            security: match value.get("security").and_then(Value::as_str) {
-                Some("none") => SmtpSecurity::None,
-                Some("tls") => SmtpSecurity::Tls,
-                _ => SmtpSecurity::StartTls,
-            },
-            username: json_string(&value, "username"),
-            password: json_string(&value, "password"),
-            from: json_string(&value, "from"),
+            enabled: value.enabled,
+            host: value.host,
+            port: value.port,
+            security,
+            username: value.username,
+            password: value.password,
+            from: value.from,
         })
     }
 

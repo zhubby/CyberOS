@@ -94,8 +94,7 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "terminal_tabs"
       ]));
 
-      expect(database.prepare("SELECT value_json FROM system_settings WHERE key = 'indexer_settings'")
-        .pluck().get()).toEqual(expect.stringContaining("ocrStoragePoolIds"));
+      expect(database.prepare("SELECT COUNT(*) FROM system_settings").pluck().get()).toBe(0);
       expect(database.prepare("SELECT status FROM monitoring_alerter_state WHERE id = 1")
         .pluck().get()).toBe("starting");
     } finally {

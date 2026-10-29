@@ -60,8 +60,7 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
   const systemDependencies = {
     ...system,
     networkManager,
-    ethernetManager,
-    mutationPolicy: config.hostd.mutationPolicy
+    ethernetManager
   };
   const power = system?.power ?? new HostdSystemPowerRuntime(config.hostd.socketPath);
   const bluetooth = system?.bluetoothManager ?? new HostdBluetoothManagerClient(config.hostd.socketPath);
@@ -144,7 +143,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", EthernetManagerRequestError);
         reply.send({ ethernet: await ethernetManager.save(request.params.id, request.body) });
       } catch (error) {
         sendEthernetManagerError(reply, error);
@@ -157,7 +155,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", EthernetManagerRequestError);
         reply.status(202).send({ transaction: await ethernetManager.apply(request.body?.confirmed === true) });
       } catch (error) {
         sendEthernetManagerError(reply, error);
@@ -169,7 +166,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     "/api/system/network/ethernet/apply/:transactionId/confirm",
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", EthernetManagerRequestError);
         reply.send({ transaction: await ethernetManager.confirm(request.params.transactionId) });
       } catch (error) {
         sendEthernetManagerError(reply, error);
@@ -181,7 +177,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     "/api/system/network/ethernet/apply/:transactionId/rollback",
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", EthernetManagerRequestError);
         reply.send({ transaction: await ethernetManager.rollback(request.params.transactionId) });
       } catch (error) {
         sendEthernetManagerError(reply, error);
@@ -242,7 +237,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", NetworkManagerRequestError);
         await requireManagementPathConfirmation(networkManager, request.body?.device, request.body?.confirmed);
         reply.send({ result: await networkManager.connect(request.body) });
       } catch (error) {
@@ -256,7 +250,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", NetworkManagerRequestError);
         requireConfirmation(request.body?.confirmed);
         reply.send({ result: await networkManager.disconnect(request.body) });
       } catch (error) {
@@ -270,7 +263,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", NetworkManagerRequestError);
         if (request.body?.enabled === false) requireConfirmation(request.body.confirmed);
         reply.send({ result: await networkManager.setRadio(request.body) });
       } catch (error) {
@@ -284,7 +276,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", NetworkManagerRequestError);
         reply.send({ result: await networkManager.updateProfile(request.params.id, request.body) });
       } catch (error) {
         sendNetworkManagerError(reply, error);
@@ -297,7 +288,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", NetworkManagerRequestError);
         requireConfirmation(request.body?.confirmed);
         reply.send({ result: await networkManager.deleteProfile(request.params.id, true) });
       } catch (error) {
@@ -311,7 +301,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", NetworkManagerRequestError);
         reply.send({ result: await networkManager.updateHotspot(request.body) });
       } catch (error) {
         sendNetworkManagerError(reply, error);
@@ -325,7 +314,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
   ] as const) {
     server.post<{ Body: SystemWifiHotspotActionInput }>(path, { bodyLimit: MAX_WIFI_BODY_BYTES }, async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", NetworkManagerRequestError);
         requireConfirmation(request.body?.confirmed);
         reply.send({ result: await networkManager[action](request.body) });
       } catch (error) {
@@ -339,7 +327,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     { bodyLimit: MAX_WIFI_BODY_BYTES },
     async (request, reply) => {
       try {
-        requireMutableHost(config.hostd.mutationPolicy, "NetworkManager configuration", NetworkManagerRequestError);
         requireConfirmation(request.body?.confirmed);
         reply.send({ result: await networkManager.deleteHotspot(request.body) });
       } catch (error) {
@@ -358,16 +345,6 @@ export function registerSystemRoutes(server: FastifyInstance, { buildInfo, confi
     });
     await streamWifiEvents(request.raw, reply.raw, networkManager);
   });
-}
-
-function requireMutableHost<ErrorType extends Error>(
-  policy: "mutable" | "declarative" | undefined,
-  operation: string,
-  ErrorConstructor: new (message: string, statusCode: number) => ErrorType
-): void {
-  if (policy === "declarative") {
-    throw new ErrorConstructor(`${operation} is managed declaratively on this host`, 501);
-  }
 }
 
 export async function streamEthernetEvents(

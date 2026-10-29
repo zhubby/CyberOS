@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 use tokio::time::{MissedTickBehavior, interval, timeout};
 
 use crate::command::{CommandRunner, SystemCommandRunner};
-use crate::config::{HostMutationPolicy, HostdConfig};
+use crate::config::HostdConfig;
 use crate::error::{ErrorCode, HostdError};
 use crate::protocol::{
     HostdRequest, HostdResult, MAX_FRAME_BYTES, RequestEnvelope, ResponseEnvelope,
@@ -33,7 +33,6 @@ pub struct HostdServer {
 struct HostdState {
     runner: Arc<dyn CommandRunner>,
     data_root: std::path::PathBuf,
-    mutation_policy: HostMutationPolicy,
     shares_lock: Mutex<()>,
     storage_lock: Mutex<()>,
     docker_lock: Mutex<()>,
@@ -41,6 +40,7 @@ struct HostdState {
     bluetooth_lock: Mutex<()>,
     power_lock: Mutex<()>,
     ops_lock: Mutex<()>,
+    tv_lock: Mutex<()>,
 }
 
 impl HostdServer {
@@ -50,13 +50,11 @@ impl HostdServer {
 
     pub fn with_runner(config: HostdConfig, runner: Arc<dyn CommandRunner>) -> Self {
         let data_root = config.data_root.clone();
-        let mutation_policy = config.mutation_policy;
         Self {
             config,
             state: Arc::new(HostdState {
                 runner,
                 data_root,
-                mutation_policy,
                 shares_lock: Mutex::new(()),
                 storage_lock: Mutex::new(()),
                 docker_lock: Mutex::new(()),
@@ -64,17 +62,14 @@ impl HostdServer {
                 bluetooth_lock: Mutex::new(()),
                 power_lock: Mutex::new(()),
                 ops_lock: Mutex::new(()),
+                tv_lock: Mutex::new(()),
             }),
         }
     }
 
     pub async fn run(self) -> Result<(), HostdError> {
-        if self
-            .state
-            .mutation_policy
-            .allows_host_configuration_mutation()
-            && let Err(error) =
-                crate::network_manager::recover_on_startup(self.state.runner.as_ref()).await
+        if let Err(error) =
+            crate::network_manager::recover_on_startup(self.state.runner.as_ref()).await
         {
             tracing::error!(code = ?error.code, message = %error.message, "could not recover unfinished Ethernet transaction");
             return Err(error);
@@ -107,7 +102,7 @@ impl HostdServer {
                         tracing::warn!(message = %error, "hostd request task failed");
                     }
                 }
-                _ = network_recovery.tick(), if self.state.mutation_policy.allows_host_configuration_mutation() => {
+                _ = network_recovery.tick() => {
                     let _guard = self.state.network_lock.lock().await;
                     if let Err(error) = crate::network_manager::recover_expired_transaction(self.state.runner.as_ref()).await {
                         tracing::error!(code = ?error.code, message = %error.message, "could not recover expired Ethernet transaction");
@@ -306,7 +301,6 @@ async fn write_response(
 async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdResult, HostdError> {
     match request.into_contract()? {
         HostdRequest::SharesApply(request) => {
-            require_mutable_host(state.mutation_policy, "Share configuration")?;
             let _guard = state.shares_lock.lock().await;
             crate::shares::apply(request, state.runner.as_ref(), &state.data_root)
                 .await
@@ -318,7 +312,6 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
                 .map(HostdResult::StorageCommand)
         }
         HostdRequest::StorageOperation(request) => {
-            require_mutable_host(state.mutation_policy, "Persistent storage configuration")?;
             let _guard = state.storage_lock.lock().await;
             crate::storage::operation(request, state.runner.as_ref())
                 .await
@@ -330,7 +323,6 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
                 .map(HostdResult::DockerDaemon)
         }
         HostdRequest::DockerDaemon(request) => {
-            require_mutable_host(state.mutation_policy, "Docker daemon configuration")?;
             let _guard = state.docker_lock.lock().await;
             crate::docker_daemon::handle(request, state.runner.as_ref())
                 .await
@@ -342,9 +334,6 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
                 .map(HostdResult::NetworkManager)
         }
         HostdRequest::NetworkManager(request) => {
-            if request.is_configuration_mutation() {
-                require_mutable_host(state.mutation_policy, "NetworkManager configuration")?;
-            }
             let _guard = state.network_lock.lock().await;
             crate::network_manager::handle(request, state.runner.as_ref())
                 .await
@@ -368,16 +357,12 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
                 .await
                 .map(HostdResult::SystemOps)
         }
-    }
-}
-
-fn require_mutable_host(policy: HostMutationPolicy, operation: &str) -> Result<(), HostdError> {
-    if policy.allows_host_configuration_mutation() {
-        Ok(())
-    } else {
-        Err(HostdError::unsupported(format!(
-            "{operation} is managed declaratively on this host"
-        )))
+        HostdRequest::SystemTv(request) => {
+            let _guard = state.tv_lock.lock().await;
+            crate::tv::apply(request, state.runner.as_ref())
+                .await
+                .map(HostdResult::SystemTv)
+        }
     }
 }
 
@@ -448,17 +433,9 @@ mod tests {
     }
 
     fn test_state(runner: Arc<dyn CommandRunner>) -> Arc<HostdState> {
-        test_state_with_policy(runner, HostMutationPolicy::Mutable)
-    }
-
-    fn test_state_with_policy(
-        runner: Arc<dyn CommandRunner>,
-        mutation_policy: HostMutationPolicy,
-    ) -> Arc<HostdState> {
         Arc::new(HostdState {
             runner,
             data_root: "/cyberos/data".into(),
-            mutation_policy,
             shares_lock: Mutex::new(()),
             storage_lock: Mutex::new(()),
             docker_lock: Mutex::new(()),
@@ -466,6 +443,7 @@ mod tests {
             bluetooth_lock: Mutex::new(()),
             power_lock: Mutex::new(()),
             ops_lock: Mutex::new(()),
+            tv_lock: Mutex::new(()),
         })
     }
 
@@ -619,27 +597,5 @@ mod tests {
         assert_eq!(first_response["ok"], true);
         assert_eq!(second_response["ok"], true);
         assert_eq!(runner.max_active.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn declarative_policy_rejects_configuration_mutations_without_running_commands() {
-        let runner = Arc::new(FakeRunner::default());
-        let state = test_state_with_policy(runner.clone(), HostMutationPolicy::Declarative);
-        let request = RequestEnvelope {
-            version: 1,
-            id: "67e55044-10b1-426f-9247-bb680e5fe0c8".to_owned(),
-            operation: "network.manager".to_owned(),
-            payload: serde_json::json!({
-                "action": "radio",
-                "input": { "enabled": true, "confirmed": true }
-            }),
-        };
-
-        let error = dispatch(request, &state).await.unwrap_err();
-
-        assert_eq!(error.status, 501);
-        assert_eq!(error.code, ErrorCode::Unsupported);
-        assert_eq!(runner.active.load(Ordering::SeqCst), 0);
-        assert_eq!(runner.max_active.load(Ordering::SeqCst), 0);
     }
 }

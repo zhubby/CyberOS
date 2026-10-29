@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { executeExtendedFileReadCapability } from "./file-read.js";
 
 const execFileAsync = promisify(execFile);
@@ -135,8 +135,8 @@ function run(
   return executeExtendedFileReadCapability({ db, config: testConfig() }, capabilityId, input);
 }
 
-function testConfig(): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
+function testConfig(): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: tempDir }, tempDir);
   return {
     ...base,
     paths: { ...base.paths, databasePath: path.join(tempDir, "cyberos.sqlite") },
@@ -150,7 +150,7 @@ function testConfig(): CyberOsConfig {
       operationTimeoutMs: 1_000,
       consoleShells: ["/bin/sh"]
     },
-    hostd: { socketPath: path.join(tempDir, "hostd.sock"), mutationPolicy: "mutable" },
+    hostd: { socketPath: path.join(tempDir, "hostd.sock") },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
     terminal: {
       user: "cyberos",

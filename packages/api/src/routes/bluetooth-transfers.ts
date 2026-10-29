@@ -68,10 +68,19 @@ export function registerBluetoothTransferRoutes(server: FastifyInstance, context
   });
 
   server.get("/api/system/bluetooth/settings", async (_request, reply) => {
+    let settings: BluetoothSettingsRecord;
+    try {
+      settings = getBluetoothSettings(context.db) ?? defaultBluetoothSettings();
+    } catch (error) {
+      reply.status(409).send({
+        error: error instanceof Error ? error.message : "Bluetooth settings are invalid",
+        state: "attention"
+      });
+      return;
+    }
     try {
       const status = await bluetooth.getStatus().catch(() => unavailableBluetoothStatus());
       const audioDevices = bluetoothAudioDevices(status);
-      const settings = getBluetoothSettings(context.db) ?? defaultBluetoothSettings();
       reply.send({
         settings,
         audioDevices,
@@ -487,7 +496,12 @@ async function validateSettingsPatch(
   if ("receiveEnabled" in body && typeof body.receiveEnabled !== "boolean") {
     throw new BluetoothTransferRequestError("Bluetooth setting receiveEnabled must be a boolean", 400);
   }
-  const current = getBluetoothSettings(context.db) ?? defaultBluetoothSettings();
+  let current: BluetoothSettingsRecord;
+  try {
+    current = getBluetoothSettings(context.db) ?? defaultBluetoothSettings();
+  } catch {
+    current = defaultBluetoothSettings();
+  }
   const candidate = { ...current, ...body };
   if (("defaultAdapterId" in body && candidate.defaultAdapterId !== null)
     || ("defaultAudioDeviceId" in body && candidate.defaultAudioDeviceId !== null)) {

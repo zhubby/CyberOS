@@ -3,8 +3,10 @@ import { access, constants as fsConstants, copyFile, lstat, mkdir, mkdtemp, read
 import path from "node:path";
 import {
   acquireExecutionLock,
+  defaultBackupSettings,
   finishBackupRun,
   heartbeatExecutionLock,
+  getBackupSettings,
   isExecutionLockOwner,
   listBackupRuns,
   recordBackupFailure,
@@ -14,22 +16,57 @@ import {
 } from "@cyberos/db";
 import {
   type BackupConfig,
+  type BackupSettingsRecord,
   type BackupRunKind,
   type BackupRunSummary,
-  type CyberOsConfig
+  type CyberOsRuntime
 } from "@cyberos/shared";
 import { summarizeResticOutput, SystemResticRunner, type ResticCommandRunner } from "./restic.js";
 
 export interface BackupDependencies {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   restic?: ResticCommandRunner;
   mountInfo?: string;
 }
 
+export interface DisasterRestoreDependencies {
+  config: CyberOsRuntime;
+  repositoryPath: string;
+  passwordFile: string;
+  snapshot: string;
+  restic?: ResticCommandRunner;
+}
+
 const BACKUP_LOCK_NAME = "backup";
 
-export function shouldSkipScheduledBackup(config: CyberOsConfig, command: string | undefined): boolean {
+export function backupRuntimeFromSettings(
+  config: CyberOsRuntime,
+  settings: BackupSettingsRecord
+): CyberOsRuntime {
+  return {
+    ...config,
+    backup: {
+      ...config.backup,
+      enabled: settings.enabled,
+      repositoryPath: settings.repositoryPath,
+      passwordFile: config.paths.backupPasswordPath,
+      requireMount: settings.requireMount,
+      keepDaily: settings.keepDaily,
+      keepWeekly: settings.keepWeekly
+    }
+  };
+}
+
+export function loadBackupRuntime(db: CyberOsDatabase, config: CyberOsRuntime): CyberOsRuntime {
+  const settings = getBackupSettings(db) ?? defaultBackupSettings(
+    config.paths.backupRoot,
+    config.environment === "production"
+  );
+  return backupRuntimeFromSettings(config, settings);
+}
+
+export function shouldSkipScheduledBackup(config: CyberOsRuntime, command: string | undefined): boolean {
   return command === "run" && !config.backup.enabled;
 }
 
@@ -243,73 +280,66 @@ export async function checkBackup(input: BackupDependencies): Promise<BackupRunS
   }
 }
 
-export async function restoreBackup(input: BackupDependencies & { snapshot: string }): Promise<{ stagingPath: string; verified: boolean }> {
-  const config = requireBackupConfig(input.config);
-  const pathIssues = validateBackupPaths(input.config);
-  if (pathIssues.length) throw new Error(pathIssues.join("; "));
-  const runner = input.restic ?? new SystemResticRunner();
-  const owner = randomUUID();
-  if (!acquireExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner })) throw new Error("backup already running");
-  const run = startBackupRun(input.db, { kind: "restore" });
-  let stagingPath = "";
-  const heartbeat = setInterval(() => {
-    heartbeatExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
-  }, 5_000);
-  heartbeat.unref?.();
-  const ensureLease = (): void => {
-    if (!isExecutionLockOwner(input.db, { name: BACKUP_LOCK_NAME, owner })) {
-      throw new Error("backup execution lease lost");
+export async function restoreBackup(input: DisasterRestoreDependencies): Promise<{ stagingPath: string; verified: boolean }> {
+  if (!path.isAbsolute(input.passwordFile)) throw new Error("Restore password file must be an absolute path");
+  if (!input.repositoryPath.trim()) throw new Error("Restore repository is required");
+  if (!input.snapshot.trim()) throw new Error("Restore snapshot is required");
+  const passwordMetadata = await stat(input.passwordFile);
+  if (!passwordMetadata.isFile()) throw new Error("Restore password file must be a regular file");
+  await access(input.passwordFile, fsConstants.R_OK);
+  const runtime: CyberOsRuntime = {
+    ...input.config,
+    backup: {
+      ...input.config.backup,
+      enabled: true,
+      repositoryPath: input.repositoryPath,
+      passwordFile: input.passwordFile,
+      requireMount: false
     }
   };
+  const config = requireBackupConfig(runtime);
+  const pathIssues = validateBackupPaths(runtime);
+  if (pathIssues.length) throw new Error(pathIssues.join("; "));
+  const runner = input.restic ?? new SystemResticRunner();
+  let stagingPath = "";
   try {
-    ensureLease();
-    await assertBackupMountsReady(input, false);
     const check = await runResticWithRetry(runner, ["check", "--repo", config.repositoryPath ?? ""], config);
     if (check.code !== 0) {
       const reason = `repository check failed: ${summarizeResticOutput(check.stderr || check.stdout)}`;
-      recordBackupFailure(input.db, { runId: run.id, path: "repository", code: "REPO_CHECK_FAILED", reason });
       throw new Error(reason);
     }
     await mkdir(config.stagingPath, { recursive: true });
     stagingPath = await mkdtemp(path.join(config.stagingPath, "restore-"));
-    ensureLease();
     const dryRun = await runResticWithRetry(runner, ["restore", input.snapshot, "--dry-run", "--repo", config.repositoryPath ?? "", "--target", stagingPath], config);
     if (dryRun.code !== 0) {
       const reason = `restore dry-run failed: ${summarizeResticOutput(dryRun.stderr || dryRun.stdout)}`;
-      recordBackupFailure(input.db, { runId: run.id, path: "restore", code: "RESTORE_DRY_RUN_FAILED", reason });
       throw new Error(reason);
     }
-    ensureLease();
     const result = await runResticWithRetry(runner, ["restore", input.snapshot, "--repo", config.repositoryPath ?? "", "--target", stagingPath], config);
     if (result.code !== 0) {
       const reason = `restore failed: ${summarizeResticOutput(result.stderr || result.stdout)}`;
-      recordBackupFailure(input.db, { runId: run.id, path: "restore", code: "RESTORE_FAILED", reason });
       throw new Error(reason);
     }
     const manifestPath = await findManifest(stagingPath);
     if (!manifestPath) throw new Error("restore manifest not found");
     const manifestRoot = path.dirname(manifestPath);
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as BackupManifest;
-    await validateManifest(manifest, manifestRoot, input.config);
-    finishBackupRun(input.db, { runId: run.id, status: "completed", snapshotIds: [input.snapshot], verified: true });
+    await validateManifest(manifest, manifestRoot, runtime);
     return { stagingPath, verified: true };
   } catch (error) {
-    finishBackupRun(input.db, { runId: run.id, status: "failed", snapshotIds: [input.snapshot], error: error instanceof Error ? error.message : "restore failed" });
+    if (stagingPath) await rm(stagingPath, { recursive: true, force: true });
     throw error;
-  } finally {
-    clearInterval(heartbeat);
-    releaseExecutionLock(input.db, { name: BACKUP_LOCK_NAME, owner });
   }
 }
 
 export function listBackups(db: CyberOsDatabase): BackupRunSummary[] { return listBackupRuns(db, 30); }
 
-function requireBackupConfig(config: CyberOsConfig): BackupConfig {
+function requireBackupConfig(config: CyberOsRuntime): BackupConfig {
   if (!config.backup.enabled) throw new Error("Backup is disabled");
   return config.backup;
 }
 
-function validateBackupPaths(config: CyberOsConfig): string[] {
+function validateBackupPaths(config: CyberOsRuntime): string[] {
   const backup = config.backup;
   if (!backup.enabled) return [];
   if (!backup.repositoryPath) return ["repository not configured"];
@@ -476,7 +506,7 @@ async function findManifest(rootPath: string): Promise<string | null> {
   return matches.length === 1 ? matches[0] ?? null : null;
 }
 
-async function validateManifest(manifest: BackupManifest, manifestRoot: string, config: CyberOsConfig): Promise<void> {
+async function validateManifest(manifest: BackupManifest, manifestRoot: string, config: CyberOsRuntime): Promise<void> {
   if (manifest.version !== 2 || !manifest.runId || typeof manifest.dataRoot !== "string" || manifest.database !== "cyberos.sqlite") {
     throw new Error("restore manifest validation failed");
   }

@@ -20,7 +20,7 @@ import {
   saveAgentCapabilityPolicySettings,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import {
   capabilityRunSecretRequirements,
   executeApprovedCapabilityRun,
@@ -346,8 +346,8 @@ function dependencies() {
   return { db, config: testConfig() };
 }
 
-function testConfig(): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
+function testConfig(): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: tempDir }, tempDir);
   return {
     ...base,
     paths: { ...base.paths, databasePath: path.join(tempDir, "cyberos.sqlite") },
@@ -355,7 +355,7 @@ function testConfig(): CyberOsConfig {
     worker: { pollMs: 100, concurrency: 1 },
     admin: { displayName: "Admin", authMode: "local-only" },
     docker: { enabled: false, socketPath: "/var/run/docker.sock", composeCommand: "docker", operationTimeoutMs: 1_000, consoleShells: ["/bin/sh"] },
-    hostd: { socketPath: path.join(tempDir, "hostd.sock"), mutationPolicy: "mutable" },
+    hostd: { socketPath: path.join(tempDir, "hostd.sock") },
     shares: { enabled: false, account: { username: "cyberos", password: null }, shares: [] },
     terminal: { user: "cyberos", socketPath: path.join(tempDir, "terminald.sock"), sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: { enabled: false, socketPath: path.join(tempDir, "vod.sock"), statePath: path.join(tempDir, "vod.json"), commandTimeoutMs: 1_000, startupTimeoutMs: 1_000, checkpointIntervalMs: 1_000, retryBaseDelayMs: 100, retryMaxDelayMs: 1_000, videoOutput: "drm", drmConnector: null, audioOutput: "alsa", audioDevice: "default", hwdec: "auto-safe", user: "cyberos" },

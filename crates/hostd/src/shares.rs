@@ -565,7 +565,7 @@ mod tests {
         let webdav = render_webdav(
             &request.settings,
             &resolved,
-            Path::new("/cyberos/config/shares.htpasswd"),
+            Path::new("/cyberos/state/shares/htpasswd"),
         )
         .unwrap();
 
@@ -581,7 +581,7 @@ mod tests {
             render_webdav(
                 &request.settings,
                 &resolved,
-                Path::new("/cyberos/config/shares.htpasswd")
+                Path::new("/cyberos/state/shares/htpasswd")
             )
             .unwrap()
             .contains("Require all granted")

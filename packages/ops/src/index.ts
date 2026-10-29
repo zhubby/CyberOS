@@ -1,5 +1,5 @@
 import { openCyberOsDb } from "@cyberos/db";
-import { loadConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime } from "@cyberos/shared";
 import { runHealthTask, runMaintenanceTask } from "./runner.js";
 
 const [command, ...rest] = process.argv.slice(2);
@@ -7,7 +7,7 @@ if ((command !== "health" && command !== "maintenance") || rest.length > 0) {
   console.error("Usage: ops health|maintenance");
   process.exitCode = 2;
 } else {
-  const config = loadConfig();
+  const config = loadCyberOsRuntime();
   const db = openCyberOsDb(config.paths.databasePath);
   try {
     const summary = command === "health"

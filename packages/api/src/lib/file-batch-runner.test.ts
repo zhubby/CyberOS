@@ -11,7 +11,7 @@ import {
   recoverInterruptedFileBatches,
   type CyberOsDatabase
 } from "@cyberos/db";
-import { loadConfig, type CyberOsConfig } from "@cyberos/shared";
+import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import type { SystemCommandRunner } from "./system-management.js";
 import { FileBatchRunner, processNextFileBatchItem } from "./file-batch-runner.js";
 
@@ -148,8 +148,8 @@ function storageCommandRunner(): SystemCommandRunner {
   };
 }
 
-function testConfig(): CyberOsConfig {
-  const base = loadConfig({ CYBEROS_CONFIG: path.join(tempDir, "missing.toml"), CYBEROS_ROOT: tempDir }, tempDir);
+function testConfig(): CyberOsRuntime {
+  const base = loadCyberOsRuntime({ CYBEROS_ROOT: tempDir }, tempDir);
   return {
     ...base,
     api: { host: "127.0.0.1", port: 3010, allowedOrigins: [] },
@@ -162,7 +162,7 @@ function testConfig(): CyberOsConfig {
       operationTimeoutMs: 120_000,
       consoleShells: ["/bin/sh"]
     },
-    hostd: { socketPath: "/run/cyberos/hostd.sock", mutationPolicy: "mutable" },
+    hostd: { socketPath: "/run/cyberos/hostd.sock" },
     shares: { enabled: false, account: { username: "cyberos-share", password: null }, shares: [] },
     terminal: { user: "test-user", socketPath: "/tmp/terminald.sock", sessionIdleTimeoutMs: 60_000, connectTimeoutMs: 1_000, maxSessions: 4 },
     vodPlayer: {

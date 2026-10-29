@@ -43,6 +43,7 @@ type HostdStorageCommandResult = HostdOperationResult<"storage.command">;
 type HostdStorageOperationResult = HostdOperationResult<"storage.operation">;
 type HostdPowerResult = HostdOperationResult<"system.power">;
 type HostdOpsResult = HostdOperationResult<"system.ops">;
+type HostdTvResult = HostdOperationResult<"system.tv">;
 
 type HostdNetworkProfileInspection = Omit<GeneratedNetworkProfileInspection, "security" | "mode" | "band"> & {
   security: SystemWifiSecurity;
@@ -82,7 +83,8 @@ export type HostdResult<Operation extends HostdOperation, Request extends HostdR
               : Operation extends "network.manager" ? HostdNetworkResult<Request>
                 : Operation extends "bluetooth.manager" ? HostdBluetoothManagerResult
                 : Operation extends "system.power" ? HostdPowerResult
-              : Operation extends "system.ops" ? HostdOpsResult
+                : Operation extends "system.ops" ? HostdOpsResult
+                  : Operation extends "system.tv" ? HostdTvResult
                 : never;
 
 export function parseHostdResult<
@@ -114,6 +116,9 @@ export function parseHostdResult<
       break;
     case "system.ops":
       parsed = parseOpsResult(request, value);
+      break;
+    case "system.tv":
+      parsed = parseTvResult(request, value);
       break;
   }
   return parsed as HostdResult<Operation, Request> | null;
@@ -340,6 +345,12 @@ function parseOpsResult(request: unknown, value: unknown): HostdOpsResult | null
   if (!isRecord(request) || !isRecordWithKeys(value, ["task", "accepted"])) return null;
   return value.task === request.task && (value.task === "health" || value.task === "maintenance")
     && value.accepted === true ? value as HostdOpsResult : null;
+}
+
+function parseTvResult(request: unknown, value: unknown): HostdTvResult | null {
+  if (!isRecord(request) || !isRecordWithKeys(value, ["enabled", "applied"])) return null;
+  return typeof request.enabled === "boolean" && value.enabled === request.enabled && value.applied === true
+    ? value as HostdTvResult : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

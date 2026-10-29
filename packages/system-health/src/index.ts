@@ -17,7 +17,7 @@ import { readMonitoringHealth } from "@cyberos/monitoring";
 import {
   createVodPlayerRuntime,
   type StoragePoolReadiness,
-  type CyberOsConfig,
+  type CyberOsRuntime,
   type SystemHealthSummary,
   type VodPlayerRuntime
 } from "@cyberos/shared";
@@ -47,7 +47,7 @@ const HEALTH_OWNED_ALERT_SET = new Set<string>(HEALTH_OWNED_ALERT_CODES);
 
 export interface SystemHealthEvaluationInput {
   db: CyberOsDatabase;
-  config: CyberOsConfig;
+  config: CyberOsRuntime;
   now?: Date;
   vodPlayer?: VodPlayerRuntime;
   backupTargetReadiness?: StoragePoolReadiness | null;
@@ -285,7 +285,7 @@ export async function runScheduledHealthEvaluation(
 }
 
 export async function inspectStoragePools(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   now = new Date()
 ): Promise<StoragePoolReadiness[]> {
   const dataRoot = config.paths.dataRoot;
@@ -323,7 +323,7 @@ export async function inspectStoragePools(
 }
 
 async function inspectBackupTarget(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   now: Date
 ): Promise<StoragePoolReadiness | null> {
   if (!config.backup.enabled) return null;
@@ -375,7 +375,7 @@ function unescapeMountInfo(value: string): string {
 }
 
 async function collectVodPlayerHealth(
-  config: CyberOsConfig,
+  config: CyberOsRuntime,
   now: Date,
   runtime = createVodPlayerRuntime(config.vodPlayer)
 ): Promise<SystemHealthSummary["vodPlayer"]> {
