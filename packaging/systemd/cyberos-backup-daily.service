@@ -1,18 +1,17 @@
 [Unit]
 Description=CyberOS daily restic backup
-After=local-fs.target
+After=local-fs.target cyberos-state-init.service
+Requires=cyberos-state-init.service
 RequiresMountsFor=/cyberos/data /cyberos/backup
-ConditionPathExists=/cyberos/config/restic-password
+ConditionPathExists=/cyberos/state/secrets/backup/restic-password
 
 [Service]
 Type=oneshot
 User=cyberos
 Group=cyberos
 Environment=CYBEROS_ROOT=/cyberos
-Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
-Environment=CYBEROS_BACKUP_PASSWORD_FILE=%d/restic-password
+Environment=CYBEROS_ENVIRONMENT=production
 WorkingDirectory=/cyberos/state
-LoadCredential=restic-password:/cyberos/config/restic-password
 ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/backup/dist/index.js run --kind daily
 ProtectSystem=strict
 ProtectHome=read-only

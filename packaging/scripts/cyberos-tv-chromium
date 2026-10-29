@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
 
-runtime_dir=${CYBEROS_TV_RUNTIME_DIR:-/run/cyberos-tv}
-status_writer=${CYBEROS_TV_SCRIPT_DIR:-/usr/lib/cyberos/scripts}/cyberos-tv-write-status
-tv_url=${CYBEROS_TV_URL:-http://127.0.0.1:3010/tv/}
-health_url=${CYBEROS_TV_HEALTH_URL:-http://127.0.0.1:3010/health}
+runtime_dir=/run/cyberos-tv
+status_writer=/usr/lib/cyberos/scripts/cyberos-tv-write-status
+tv_url=http://127.0.0.1:3010/tv/
+health_url=http://127.0.0.1:3010/health
 chromium_pid=
 
 cleanup() {

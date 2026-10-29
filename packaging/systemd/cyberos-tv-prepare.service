@@ -1,6 +1,6 @@
 [Unit]
 Description=Prepare the CyberOS TV runtime
-ConditionPathExists=/cyberos/config/tv-mode/enabled
+ConditionPathExists=/cyberos/state/tv/enabled
 PartOf=cyberos-tv.target
 Before=cyberos-tv-weston.service cyberos-tv-chromium.service cyberos-tv-cec.service cyberos-tv-gamepad.service
 

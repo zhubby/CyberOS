@@ -7,13 +7,12 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
   rm -f /etc/systemd/system/cyberos-vod-player.service.d/identity.conf
   rm -f /etc/systemd/system/cyberos-vod-player.service.d/50-cyberos-tv-mode.conf
   rm -f /etc/systemd/system/cyberos-api.service.d/50-cyberos-tv-mode.conf
-  rm -f /cyberos/config/tv-mode/enabled
+  rm -f /cyberos/state/tv/enabled
   rm -f /usr/local/sbin/cyberos-tv-mode
   rm -f /etc/polkit-1/rules.d/49-cyberos-libvirt.rules
   rmdir /etc/systemd/system/cyberos-api.service.d 2>/dev/null || true
   rmdir /etc/systemd/system/cyberos-terminald.service.d 2>/dev/null || true
   rmdir /etc/systemd/system/cyberos-vod-player.service.d 2>/dev/null || true
-  rmdir /cyberos/config/tv-mode 2>/dev/null || true
 fi
 
 if command -v systemctl >/dev/null 2>&1; then

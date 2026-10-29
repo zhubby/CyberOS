@@ -329,14 +329,14 @@ jobs:
           }
           [ -x /usr/local/sbin/cyberos-deploy ]
           [ -d /cyberos/deploy/incoming ] && [ -w /cyberos/deploy/incoming ]
-          config_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --config-sha256)"
+          settings_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --settings-sha256)"
           package_version="$(dpkg-query -W -f='${Version}' cyberos)"
           printf '%s\n%s\n%s\n%s\n' \
-            "$config_sha256" "$package_version" "$package_status" "$runtime_node_version"
+            "$settings_sha256" "$package_version" "$package_status" "$runtime_node_version"
           REMOTE
           )
           [[ "${baseline[0]:-}" =~ ^[0-9a-f]{64}$ ]]
-          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-config.sha256"
+          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-settings.sha256"
           printf 'CM5 upgrade baseline: version=%s status=%s node=%s\n' \
             "${baseline[1]:-unknown}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}"
 
@@ -535,13 +535,13 @@ jobs:
             -o ServerAliveCountMax=4
             -o StrictHostKeyChecking=accept-new
           )
-          expected_config_sha256="$(<"$RUNNER_TEMP/cm5-config.sha256")"
+          expected_settings_sha256="$(<"$RUNNER_TEMP/cm5-settings.sha256")"
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_config_sha256" <<'REMOTE'
+            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_settings_sha256" <<'REMOTE'
           set -eu
           expected_version=$1
           expected_commit_sha=$2
-          expected_config_sha256=$3
+          expected_settings_sha256=$3
           check_dir="$(mktemp -d /tmp/cyberos-deploy-check.XXXXXX)"
           trap 'rm -rf "$check_dir"' EXIT HUP INT TERM
 
@@ -549,8 +549,8 @@ jobs:
           installed_version="$(dpkg-query -W -f='${Version}' cyberos)"
           [ "$installed_status" = "install ok installed" ]
           [ "$installed_version" = "$expected_version" ]
-          actual_config_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --config-sha256)"
-          [ "$actual_config_sha256" = "$expected_config_sha256" ]
+          actual_settings_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --settings-sha256)"
+          [ "$actual_settings_sha256" = "$expected_settings_sha256" ]
 
           check_active_unit() {
             unit=$1

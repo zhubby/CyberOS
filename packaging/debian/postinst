@@ -17,8 +17,7 @@ if [ "$1" = "configure" ]; then
   fi
 
   install -d -o root -g cyberos -m 0751 /cyberos
-  install -d -o root -g cyberos -m 0750 /cyberos/config
-  install -d -o cyberos -g cyberos -m 0700 /cyberos/config/mcp
+  rm -rf -- /cyberos/config
   install -d -o cyberos -g cyberos -m 0750 \
     /cyberos/state /cyberos/state/trash /cyberos/state/reports \
     /cyberos/state/pi-sessions /cyberos/state/pi-agent /cyberos/state/photos \
@@ -26,17 +25,15 @@ if [ "$1" = "configure" ]; then
     /cyberos/state/tv /cyberos/state/tv/chromium \
     /cyberos/logs /cyberos/home /cyberos/home/terminal /cyberos/apps /cyberos/deploy \
     /cyberos/system-backups /cyberos/data /cyberos/backup
+  install -d -o cyberos -g cyberos -m 0700 \
+    /cyberos/state/secrets /cyberos/state/secrets/backup /cyberos/state/secrets/share /cyberos/state/mcp
   install -d -o cyberos -g cyberos -m 0711 /cyberos/vm /cyberos/iso
   install -d -o root -g root -m 0755 /cyberos/home/share /cyberos/state/hostd
   install -d -o root -g root -m 0700 \
-    /cyberos/state/hostd/docker-daemon /cyberos/state/hostd/network-manager /cyberos/state/hostd/bluetooth \
+    /cyberos/state/hostd/docker-daemon /cyberos/state/hostd/network-manager /cyberos/state/hostd/bluetooth /cyberos/state/shares \
     /cyberos/state/tv/control /cyberos/system-backups/permissions
 
   chown -R root:root /cyberos/state/hostd /cyberos/system-backups/permissions
-  if [ -e /cyberos/config/config.toml ]; then
-    chown root:cyberos /cyberos/config/config.toml
-    chmod 0640 /cyberos/config/config.toml
-  fi
   usermod --home /cyberos/home/terminal --shell /bin/bash cyberos
   usermod --home /cyberos/home/share cyberos-share
 
@@ -52,8 +49,6 @@ if [ "$1" = "configure" ]; then
     systemctl daemon-reload || true
     systemd-tmpfiles --create cyberos.conf || true
     /usr/lib/cyberos/scripts/cyberos-refresh-groups.sh
-    /usr/lib/cyberos/scripts/cyberos-refresh-terminald.sh || true
-    /usr/lib/cyberos/scripts/cyberos-refresh-vod-player.sh || true
   fi
 fi
 

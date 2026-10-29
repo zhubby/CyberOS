@@ -2,7 +2,7 @@
 set -eu
 
 LOCALE_NAME=${CYBEROS_LOCALE:-C.UTF-8}
-BACKUP_DIR=${CYBEROS_CONFIG_BACKUP_DIR:-/cyberos/system-backups}
+BACKUP_DIR=${CYBEROS_SYSTEM_BACKUP_DIR:-/cyberos/system-backups}
 
 log() {
   printf 'cyberos-locale: %s\n' "$*"
@@ -68,7 +68,7 @@ esac
 BACKUP_DIR=$(realpath -m -- "$BACKUP_DIR")
 case "$BACKUP_DIR" in
   /cyberos/system-backups|/cyberos/system-backups/*) ;;
-  *) die "CYBEROS_CONFIG_BACKUP_DIR must be under /cyberos/system-backups" ;;
+  *) die "CYBEROS_SYSTEM_BACKUP_DIR must be under /cyberos/system-backups" ;;
 esac
 
 configure_default_locale

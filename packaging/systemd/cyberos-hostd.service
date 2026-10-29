@@ -10,7 +10,7 @@ Type=simple
 User=root
 Group=root
 Environment=CYBEROS_ROOT=/cyberos
-Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+Environment=CYBEROS_ENVIRONMENT=production
 WorkingDirectory=/cyberos/state
 ExecStart=/usr/lib/cyberos/bin/cyberos-hostd
 Restart=on-failure
@@ -19,7 +19,7 @@ TimeoutStopSec=180
 ProtectSystem=strict
 ProtectHome=read-only
 # Dynamic share accounts require useradd to atomically replace passwd/shadow files.
-ReadWritePaths=/etc /run/cyberos /run/mdadm /cyberos/config /cyberos/data
+ReadWritePaths=/etc /run/cyberos /run/mdadm /cyberos/state/hostd /cyberos/state/shares /cyberos/data
 # smbpasswd needs Samba's lock, state, cache, and log directories to initialize its databases.
 ReadWritePaths=-/run/samba -/var/lib/samba -/var/cache/samba -/var/log/samba
 ReadWritePaths=-/cyberos/state/hostd/docker-daemon /cyberos/state/hostd/network-manager /cyberos/state/hostd/bluetooth

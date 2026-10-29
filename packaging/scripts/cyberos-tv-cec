@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-runtime_dir=${CYBEROS_TV_RUNTIME_DIR:-/run/cyberos-tv}
-status_writer=${CYBEROS_TV_SCRIPT_DIR:-/usr/lib/cyberos/scripts}/cyberos-tv-write-status
+runtime_dir=/run/cyberos-tv
+status_writer=/usr/lib/cyberos/scripts/cyberos-tv-write-status
 socket_path="$runtime_dir/wayland-0"
 input_error_file="$runtime_dir/cec-input-error"
 cec_pid=

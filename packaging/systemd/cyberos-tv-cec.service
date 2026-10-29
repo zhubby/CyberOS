@@ -1,6 +1,6 @@
 [Unit]
 Description=CyberOS TV HDMI-CEC remote input
-ConditionPathExists=/cyberos/config/tv-mode/enabled
+ConditionPathExists=/cyberos/state/tv/enabled
 PartOf=cyberos-tv.target
 Requires=cyberos-tv-prepare.service
 After=cyberos-tv-prepare.service cyberos-tv-weston.service

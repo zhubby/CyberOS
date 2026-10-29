@@ -1,0 +1,21 @@
+[Unit]
+Description=CyberOS state database initialization
+After=local-fs.target
+Before=cyberos-api.service cyberos-worker@1.service cyberos-monitor.service cyberos-alerter.service cyberos-photos.service cyberos-downloader.service cyberos-indexer.service cyberos-vod-player.service cyberos-bluetoothd.service
+
+[Service]
+Type=oneshot
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ENVIRONMENT=production
+Environment=CYBEROS_ROOT=/cyberos
+ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/api/dist/state-init.js
+RemainAfterExit=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/cyberos/state
+
+[Install]
+WantedBy=multi-user.target

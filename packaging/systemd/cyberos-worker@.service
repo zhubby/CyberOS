@@ -1,15 +1,15 @@
 [Unit]
 Description=CyberOS agent worker instance %i
 Documentation=file:///usr/share/doc/cyberos/README.md
-After=cyberos-api.service
-Requires=cyberos-api.service
+After=cyberos-api.service cyberos-state-init.service
+Requires=cyberos-api.service cyberos-state-init.service
 
 [Service]
 Type=simple
 User=cyberos
 Group=cyberos
 Environment=CYBEROS_ROOT=/cyberos
-Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+Environment=CYBEROS_ENVIRONMENT=production
 WorkingDirectory=/cyberos/state
 ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/worker/dist/index.js
 Restart=on-failure

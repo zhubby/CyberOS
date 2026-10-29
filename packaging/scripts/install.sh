@@ -18,12 +18,6 @@ CYBEROS_RUSTUP_HOME=${CYBEROS_RUSTUP_HOME:-/root/.rustup}
 CYBEROS_APT_BACKUP_DIR=${CYBEROS_APT_BACKUP_DIR:-/cyberos/system-backups/apt}
 CYBEROS_LOCALE=${CYBEROS_LOCALE:-C.UTF-8}
 NGINX_ENABLED=${CYBEROS_ENABLE_NGINX:-1}
-DOCKER_ENABLED=${CYBEROS_ENABLE_DOCKER:-0}
-VM_ENABLED=${CYBEROS_ENABLE_VM:-0}
-VOD_PLAYER_ENABLED=${CYBEROS_ENABLE_VOD_PLAYER:-0}
-TV_MODE_ENABLED=${CYBEROS_ENABLE_TV_MODE:-0}
-VOD_PLAYER_USER=${CYBEROS_VOD_PLAYER_USER:-cyberos}
-TERMINAL_USER=${CYBEROS_TERMINALD_USER:-cyberos}
 DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND
 export CARGO_HOME="$CYBEROS_CARGO_HOME"
@@ -124,8 +118,6 @@ esac
 [ -n "$CYBEROS_RUSTUP_HOME" ] || die "CYBEROS_RUSTUP_HOME must not be empty"
 [ -n "$CYBEROS_APT_BACKUP_DIR" ] || die "CYBEROS_APT_BACKUP_DIR must not be empty"
 [ -n "$CYBEROS_LOCALE" ] || die "CYBEROS_LOCALE must not be empty"
-[ "$TERMINAL_USER" = cyberos ] || die "CYBEROS_TERMINALD_USER must be cyberos"
-
 printf '%s\n' "$CYBEROS_CARGO_REGISTRY" \
   | grep -Eq '^sparse\+https://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+/$' \
   || die "CYBEROS_CARGO_REGISTRY must be a safe sparse HTTPS registry URL ending in /"
@@ -140,29 +132,6 @@ case "$NGINX_ENABLED" in
   0|1) ;;
   *) die "CYBEROS_ENABLE_NGINX must be 0 or 1" ;;
 esac
-case "$DOCKER_ENABLED" in
-  0|1) ;;
-  *) die "CYBEROS_ENABLE_DOCKER must be 0 or 1" ;;
-esac
-case "$VM_ENABLED" in
-  0|1) ;;
-  *) die "CYBEROS_ENABLE_VM must be 0 or 1" ;;
-esac
-case "$VOD_PLAYER_ENABLED" in
-  0|1) ;;
-  *) die "CYBEROS_ENABLE_VOD_PLAYER must be 0 or 1" ;;
-esac
-case "$TV_MODE_ENABLED" in
-  0|1) ;;
-  *) die "CYBEROS_ENABLE_TV_MODE must be 0 or 1" ;;
-esac
-if [ "$TV_MODE_ENABLED" = "1" ]; then
-  VOD_PLAYER_ENABLED=1
-fi
-case "$VOD_PLAYER_USER" in
-  *[!a-zA-Z0-9._-]*|root) die "CYBEROS_VOD_PLAYER_USER must name a non-root local user" ;;
-esac
-
 install_build_dependencies() {
   log "installing build prerequisites"
   apt_install update
@@ -193,36 +162,7 @@ install_rust_toolchain() {
     || die "Rust ${RUST_VERSION_REQUIRED} is required; found $(rustc --version 2>/dev/null || printf 'none')"
 }
 
-install_optional_runtime() {
-  runtime_packages=""
-  if [ "$DOCKER_ENABLED" = "1" ]; then
-    # docker.io recommends the CLI, but does not pull it when the installer
-    # deliberately disables recommends. Keep the engine and client explicit.
-    runtime_packages="$runtime_packages docker.io docker-cli docker-compose"
-  fi
-  if [ "$VM_ENABLED" = "1" ]; then
-    runtime_packages="$runtime_packages ipxe-qemu"
-    case "$ARCH" in
-      arm64) runtime_packages="$runtime_packages libvirt-daemon-system libvirt-clients qemu-system-arm qemu-efi-aarch64 qemu-utils virtinst" ;;
-      amd64) runtime_packages="$runtime_packages libvirt-daemon-system libvirt-clients qemu-system-x86 qemu-utils virtinst" ;;
-    esac
-  fi
-  if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
-    runtime_packages="$runtime_packages mpv seatd"
-  fi
-  if [ "$TV_MODE_ENABLED" = "1" ]; then
-    runtime_packages="$runtime_packages chromium weston v4l-utils wtype fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji"
-  fi
-  if [ -n "$runtime_packages" ]; then
-    log "installing optional runtime components:$runtime_packages"
-    apt_install update
-    # shellcheck disable=SC2086
-    apt_install install -y --no-install-recommends $runtime_packages
-  fi
-}
-
 ensure_vm_network() {
-  [ "$VM_ENABLED" = "1" ] || return 0
   command -v virsh >/dev/null 2>&1 || return 0
 
   if ! virsh -c qemu:///system net-info default >/dev/null 2>&1; then
@@ -291,13 +231,6 @@ node --version | grep -Eq '^v22\.' || die "Node.js 22 is required; found $(node 
 install_build_dependencies
 install_rust_toolchain
 npm config set registry "$CYBEROS_NPM_REGISTRY" --global
-install_optional_runtime
-
-CYBEROS_CONFIG_EXISTS=0
-if [ -e /cyberos/config/config.toml ]; then
-  CYBEROS_CONFIG_EXISTS=1
-fi
-
 log "building the native ${ARCH} Debian package"
 CYBEROS_CARGO_REGISTRY="$CYBEROS_CARGO_REGISTRY" \
   "$ROOT_DIR/packaging/scripts/build-deb.sh"
@@ -311,38 +244,19 @@ log "installing $DEB_PATH"
 # to replace an already-installed package from an earlier checkout revision.
 apt_install install -y --no-install-recommends --reinstall "$DEB_PATH"
 
-if [ "$CYBEROS_CONFIG_EXISTS" = "0" ]; then
-  log "initializing CyberOS configuration"
-  CYBEROS_FIRST_BOOT_FORCE=1 \
-  CYBEROS_ADMIN_DISPLAY_NAME=${CYBEROS_ADMIN_DISPLAY_NAME:-CyberOS Admin} \
-  CYBEROS_DOCKER_ENABLED="$DOCKER_ENABLED" \
-  CYBEROS_VM_ENABLED="$VM_ENABLED" \
-  CYBEROS_VOD_PLAYER_ENABLED="$VOD_PLAYER_ENABLED" \
-  CYBEROS_VOD_PLAYER_USER="$VOD_PLAYER_USER" \
-  CYBEROS_TERMINALD_USER="$TERMINAL_USER" \
-    /usr/lib/cyberos/scripts/cyberos-first-boot.sh
-else
-  log "preserving existing CyberOS configuration"
-fi
-
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload
   /usr/lib/cyberos/scripts/cyberos-refresh-groups.sh
-  /usr/lib/cyberos/scripts/cyberos-refresh-terminald.sh
-  CYBEROS_VOD_PLAYER_USER="$VOD_PLAYER_USER" /usr/lib/cyberos/scripts/cyberos-refresh-vod-player.sh
-  if [ "$DOCKER_ENABLED" = "1" ]; then
-    systemctl enable --now docker.service
-    systemctl enable cyberos-host-accessd.service
-  fi
-  if [ "$VM_ENABLED" = "1" ]; then
-    for vm_unit in libvirtd.service virtqemud.socket; do
-      if systemctl list-unit-files "$vm_unit" --no-legend 2>/dev/null | grep -q "$vm_unit"; then
-        systemctl enable --now "$vm_unit" || true
-      fi
-    done
-    ensure_vm_network
-  fi
+  systemctl enable --now docker.service
+  systemctl enable cyberos-host-accessd.service
+  for vm_unit in libvirtd.service virtqemud.socket; do
+    if systemctl list-unit-files "$vm_unit" --no-legend 2>/dev/null | grep -q "$vm_unit"; then
+      systemctl enable --now "$vm_unit" || true
+    fi
+  done
+  ensure_vm_network
   systemctl enable \
+    cyberos-state-init.service \
     cyberos-hostd.service \
     cyberos-terminald.service \
     cyberos-api.service \
@@ -353,10 +267,9 @@ if command -v systemctl >/dev/null 2>&1; then
     cyberos-downloader.service \
     cyberos-bluetoothd.service \
     cyberos-indexer.service
+  systemctl restart cyberos-state-init.service
   systemctl restart cyberos-hostd.service cyberos-terminald.service
-  if [ "$DOCKER_ENABLED" = "1" ]; then
-    systemctl restart cyberos-host-accessd.service
-  fi
+  systemctl restart cyberos-host-accessd.service
   systemctl restart cyberos-api.service
   if ! systemctl restart cyberos-monitor.service; then
     log "warning: monitoring service failed to start; core services remain available"
@@ -365,9 +278,6 @@ if command -v systemctl >/dev/null 2>&1; then
     log "warning: alerting service failed to start; core services remain available"
   fi
   systemctl restart cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service
-  if [ "$VOD_PLAYER_ENABLED" = "1" ]; then
-    systemctl enable --now cyberos-vod-player.service
-  fi
   systemctl enable --now \
     cyberos-maintenance.timer \
     cyberos-backup-daily.timer \
@@ -390,9 +300,4 @@ if [ "$NGINX_ENABLED" = "1" ]; then
 else
   log "installed successfully; Nginx reverse proxy disabled"
   log "API listens on http://127.0.0.1:3010"
-fi
-
-if [ "$TV_MODE_ENABLED" = "1" ]; then
-  log "enabling the local HDMI TV shell"
-  /usr/local/sbin/cyberos-tv-mode enable
 fi

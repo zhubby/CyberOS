@@ -47,29 +47,18 @@ describe("cyberos-tv-prepare", () => {
       .rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("can leave disconnected HDMI outputs untouched", async () => {
-    const fixture = await createFixture();
-    const statusPath = await addConnector(fixture, "card1-HDMI-A-1", "disconnected", "");
-
-    const result = run(fixture, "start", { CYBEROS_TV_FORCE_HDMI: "never" });
-
-    expect(result.status).toBe(0);
-    await expect(readFile(statusPath, "utf8")).resolves.toBe("disconnected\n");
-    const config = await readFile(path.join(fixture.runtimeDirectory, "weston.ini"), "utf8");
-    expect(config).not.toContain("[output]");
-  });
-
-  it("rejects malformed HDMI connector overrides", async () => {
+  it("rejects a relative test root", async () => {
     const fixture = await createFixture();
 
-    const result = run(fixture, "start", { CYBEROS_TV_HDMI_CONNECTOR: "HDMI-A-1/../../status" });
+    const result = run(fixture, "start", { CYBEROS_TEST_ROOT: "relative" });
 
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain("must name an HDMI-A connector");
+    expect(result.stderr).toContain("CYBEROS_TEST_ROOT must be absolute");
   });
 });
 
 interface Fixture {
+  root: string;
   binDirectory: string;
   drmDirectory: string;
   runtimeDirectory: string;
@@ -79,8 +68,8 @@ async function createFixture(): Promise<Fixture> {
   const root = await mkdtemp(path.join(os.tmpdir(), "cyberos-tv-prepare-test-"));
   temporaryDirectories.push(root);
   const binDirectory = path.join(root, "bin");
-  const drmDirectory = path.join(root, "drm");
-  const runtimeDirectory = path.join(root, "runtime");
+  const drmDirectory = path.join(root, "sys/class/drm");
+  const runtimeDirectory = path.join(root, "run/cyberos-tv");
   await mkdir(binDirectory, { recursive: true });
   await mkdir(drmDirectory, { recursive: true });
   await executable(path.join(binDirectory, "install"), `#!/bin/sh
@@ -95,7 +84,7 @@ done
 mkdir -p "$@"
 `);
   await executable(path.join(binDirectory, "chown"), "#!/bin/sh\nexit 0\n");
-  return { binDirectory, drmDirectory, runtimeDirectory };
+  return { root, binDirectory, drmDirectory, runtimeDirectory };
 }
 
 async function addConnector(
@@ -122,10 +111,9 @@ function run(fixture: Fixture, command: "start" | "stop", environment: NodeJS.Pr
     encoding: "utf8",
     env: {
       ...process.env,
-      ...environment,
       PATH: `${fixture.binDirectory}:${process.env.PATH ?? ""}`,
-      CYBEROS_TV_DRM_ROOT: fixture.drmDirectory,
-      CYBEROS_TV_RUNTIME_DIR: fixture.runtimeDirectory
+      CYBEROS_TEST_ROOT: fixture.root,
+      ...environment
     }
   });
 }

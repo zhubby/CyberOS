@@ -1,5 +1,15 @@
 #!/usr/bin/make -f
 
+DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+ifeq ($(DEB_HOST_ARCH),arm64)
+CYBEROS_VM_DEPENDS = qemu-system-arm, qemu-efi-aarch64
+else ifeq ($(DEB_HOST_ARCH),amd64)
+CYBEROS_VM_DEPENDS = qemu-system-x86, ovmf
+else
+$(error Unsupported CyberOS package architecture: $(DEB_HOST_ARCH))
+endif
+
 %:
 	dh $@
 
@@ -22,6 +32,9 @@ override_dh_auto_install:
 override_dh_install:
 	dh_install
 	rm -rf debian/cyberos/usr/lib/cyberos/node_modules/@cyberos
+
+override_dh_gencontrol:
+	dh_gencontrol -- -Vcyberos:VmDepends="$(CYBEROS_VM_DEPENDS)"
 
 # npm dependencies bundle prebuilt native artifacts for several platforms. The
 # foreign .bare and .node files are already stripped and cannot be processed by

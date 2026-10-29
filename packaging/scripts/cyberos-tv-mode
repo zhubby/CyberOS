@@ -1,18 +1,20 @@
 #!/bin/sh
 set -eu
 
-state_dir=${CYBEROS_TV_STATE_DIR:-/cyberos/state/tv/control}
+test_root=${CYBEROS_TEST_ROOT:-}
+case "$test_root" in
+  "") ;;
+  /*) ;;
+  *) printf 'cyberos-tv-mode: CYBEROS_TEST_ROOT must be absolute\n' >&2; exit 1 ;;
+esac
+
+state_dir="$test_root/cyberos/state/tv/control"
 state_file="$state_dir/desktop-state"
-config_dir=${CYBEROS_TV_CONFIG_DIR:-/cyberos/config/tv-mode}
-enabled_marker="$config_dir/enabled"
-systemd_dir=${CYBEROS_TV_SYSTEMD_DIR:-/etc/systemd/system}
-vod_dropin_dir="$systemd_dir/cyberos-vod-player.service.d"
-vod_dropin="$vod_dropin_dir/50-cyberos-tv-mode.conf"
-api_dropin_dir="$systemd_dir/cyberos-api.service.d"
-api_dropin="$api_dropin_dir/50-cyberos-tv-mode.conf"
-policy_file=${CYBEROS_HOST_MUTATION_POLICY_FILE:-/cyberos/config/host-mutation-policy}
-status_url=${CYBEROS_TV_STATUS_URL:-http://127.0.0.1:3010/api/tv/status}
-wait_seconds=${CYBEROS_TV_WAIT_SECONDS:-90}
+marker_dir="$test_root/cyberos/state/tv"
+enabled_marker="$marker_dir/enabled"
+systemd_dir="$test_root/etc/systemd/system"
+status_url=http://127.0.0.1:3010/api/tv/status
+if [ -n "$test_root" ]; then wait_seconds=0; else wait_seconds=90; fi
 
 log() {
   printf 'cyberos-tv-mode: %s\n' "$*"
@@ -27,25 +29,10 @@ require_root() {
   [ "$(id -u)" -eq 0 ] || die "must run as root"
 }
 
-require_mutable_host() {
-  policy=${CYBEROS_HOST_MUTATION_POLICY:-}
-  if [ -f "$policy_file" ]; then
-    policy=$(sed -n '1p' "$policy_file")
-  fi
-  case "$policy" in
-    ""|mutable) ;;
-    declarative) die "TV mode is managed declaratively on this host" ;;
-    *) die "CYBEROS_HOST_MUTATION_POLICY must be mutable or declarative" ;;
-  esac
-}
-
 validate_paths() {
-  case "$state_dir:$config_dir:$systemd_dir" in
-    /*:/*:/*) ;;
-    *) die "state, configuration, and systemd paths must be absolute" ;;
-  esac
-  case "$wait_seconds" in
-    ""|*[!0-9]*) die "CYBEROS_TV_WAIT_SECONDS must be a non-negative integer" ;;
+  case "$state_dir:$systemd_dir" in
+    /*:/*) ;;
+    *) die "state and systemd paths must be absolute" ;;
   esac
 }
 
@@ -71,14 +58,13 @@ load_state() {
   dm_active=$(state_value DM_ACTIVE)
   dm_masked=$(state_value DM_MASKED)
   vod_active=$(state_value VOD_ACTIVE)
-  api_active=$(state_value API_ACTIVE)
   validate_unit "$dm_unit"
   case "$dm_enabled" in
     enabled|enabled-runtime|disabled|static|indirect|generated|linked|linked-runtime|alias|masked|masked-runtime|not-found|unknown) ;;
     *) die "saved display manager enablement is invalid" ;;
   esac
-  case "$dm_active:$dm_masked:$vod_active:$api_active" in
-    [01]:[01]:[01]:[01]) ;;
+  case "$dm_active:$dm_masked:$vod_active" in
+    [01]:[01]:[01]) ;;
     *) die "saved TV mode state is invalid" ;;
   esac
 }
@@ -112,7 +98,6 @@ capture_state() {
     dm_active=$(unit_active "$dm_unit")
   fi
   vod_active=$(unit_active cyberos-vod-player.service)
-  api_active=$(unit_active cyberos-api.service)
 
   temporary=$(mktemp "$state_dir/.desktop-state.XXXXXX")
   trap 'rm -f "$temporary"' EXIT HUP INT TERM
@@ -122,7 +107,6 @@ capture_state() {
     printf 'DM_ACTIVE=%s\n' "$dm_active"
     printf 'DM_MASKED=%s\n' "$dm_masked"
     printf 'VOD_ACTIVE=%s\n' "$vod_active"
-    printf 'API_ACTIVE=%s\n' "$api_active"
   } > "$temporary"
   chmod 0600 "$temporary"
   mv -f "$temporary" "$state_file"
@@ -147,8 +131,8 @@ display_manager_dropin() {
 }
 
 install_dropins() {
-  install -d -o root -g root -m 0755 "$config_dir"
-  marker_tmp=$(mktemp "$config_dir/.enabled.XXXXXX")
+  install -d -o cyberos -g cyberos -m 0750 "$marker_dir"
+  marker_tmp=$(mktemp "$marker_dir/.enabled.XXXXXX")
   printf 'enabled\n' > "$marker_tmp"
   chmod 0644 "$marker_tmp"
   mv -f "$marker_tmp" "$enabled_marker"
@@ -161,29 +145,15 @@ ConditionPathExists=!$enabled_marker
 Conflicts=cyberos-tv.target
 EOF
   fi
-  write_file_atomically "$vod_dropin" <<'EOF'
-[Service]
-Environment=CYBEROS_VOD_PLAYER_ENABLED=1
-Environment=CYBEROS_VOD_PLAYER_VIDEO_OUTPUT=wayland
-Environment=XDG_RUNTIME_DIR=/run/cyberos-tv
-Environment=WAYLAND_DISPLAY=wayland-0
-EOF
-  write_file_atomically "$api_dropin" <<'EOF'
-[Service]
-Environment=CYBEROS_VOD_PLAYER_ENABLED=1
-EOF
 }
 
 remove_dropins() {
-  rm -f "$enabled_marker" "$vod_dropin" "$api_dropin"
-  rmdir "$vod_dropin_dir" 2>/dev/null || true
-  rmdir "$api_dropin_dir" 2>/dev/null || true
+  rm -f "$enabled_marker"
   dm_dropin=$(display_manager_dropin)
   if [ -n "$dm_dropin" ]; then
     rm -f "$dm_dropin"
     rmdir "${dm_dropin%/*}" 2>/dev/null || true
   fi
-  rmdir "$config_dir" 2>/dev/null || true
 }
 
 restore_runtime() {
@@ -191,11 +161,6 @@ restore_runtime() {
     systemctl restart cyberos-vod-player.service || return 1
   else
     systemctl stop cyberos-vod-player.service 2>/dev/null || true
-  fi
-  if [ "$api_active" = 1 ]; then
-    systemctl restart cyberos-api.service || return 1
-  else
-    systemctl stop cyberos-api.service 2>/dev/null || true
   fi
   if [ "$dm_unit" != none ] && [ "$dm_active" = 1 ] && [ "$dm_masked" = 0 ]; then
     systemctl start "$dm_unit" || return 1
@@ -246,7 +211,6 @@ enable_runtime() {
     systemctl stop "$dm_unit" || return 1
   fi
   systemctl enable cyberos-tv.target || return 1
-  systemctl restart cyberos-api.service || return 1
   systemctl restart cyberos-vod-player.service || return 1
   systemctl start cyberos-tv.target || return 1
   wait_until_ready
@@ -265,7 +229,7 @@ disable_tv() {
   if ! load_state; then
     systemctl stop cyberos-tv.target 2>/dev/null || true
     systemctl disable cyberos-tv.target 2>/dev/null || true
-    rm -f "$enabled_marker" "$vod_dropin" "$api_dropin"
+    rm -f "$enabled_marker"
     systemctl daemon-reload
     log "already disabled"
     return
@@ -305,8 +269,8 @@ validate_paths
 command -v systemctl >/dev/null 2>&1 || die "systemctl is required"
 
 case "${1:-}" in
-  enable) require_mutable_host; enable_tv ;;
-  disable) require_mutable_host; disable_tv ;;
+  enable) enable_tv ;;
+  disable) disable_tv ;;
   status) show_status ;;
   *) die "usage: cyberos-tv-mode enable|disable|status" ;;
 esac

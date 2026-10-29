@@ -1,15 +1,16 @@
 [Unit]
 Description=CyberOS host and service metrics collector
 Documentation=file:///usr/share/doc/cyberos/README.md
-After=local-fs.target cyberos-api.service
+After=local-fs.target cyberos-api.service cyberos-state-init.service
 Wants=cyberos-api.service
+Requires=cyberos-state-init.service
 
 [Service]
 Type=notify
 User=cyberos
 Group=cyberos
 Environment=CYBEROS_ROOT=/cyberos
-Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+Environment=CYBEROS_ENVIRONMENT=production
 WorkingDirectory=/cyberos/state
 ExecStart=/usr/lib/cyberos/bin/cyberos-monitor
 Restart=on-failure

@@ -534,10 +534,13 @@ case "${1:-}" in
     success=1
     exit 0
     ;;
-  --config-sha256)
-    [ -f /cyberos/config/config.toml ] && [ ! -L /cyberos/config/config.toml ] || \
-      die "CyberOS configuration must be a regular file"
-    sha256sum /cyberos/config/config.toml | awk '{ print $1 }'
+  --settings-sha256)
+    command -v sqlite3 >/dev/null 2>&1 || die "sqlite3 is required"
+    [ -f /cyberos/state/cyberos.sqlite ] && [ ! -L /cyberos/state/cyberos.sqlite ] || \
+      die "CyberOS database must be a regular file"
+    sqlite3 -batch -noheader /cyberos/state/cyberos.sqlite \
+      "PRAGMA busy_timeout=5000; SELECT length(key) || ':' || hex(key) || ':' || length(value_json) || ':' || hex(value_json) || ':' || length(updated_at) || ':' || hex(updated_at) FROM system_settings ORDER BY key;" | \
+      sha256sum | awk '{ print $1 }'
     exit 0
     ;;
   --database-check)
@@ -555,9 +558,9 @@ case "${1:-}" in
     create_upgrade_backup=0
     ;;
   '') ;;
-  *) die "usage: cyberos-deploy [--no-upgrade-backup|--config-sha256|--database-check]" ;;
+  *) die "usage: cyberos-deploy [--no-upgrade-backup|--settings-sha256|--database-check]" ;;
 esac
-[ "$#" -le 1 ] || die "usage: cyberos-deploy [--no-upgrade-backup|--config-sha256|--database-check]"
+[ "$#" -le 1 ] || die "usage: cyberos-deploy [--no-upgrade-backup|--settings-sha256|--database-check]"
 
 command -v node >/dev/null 2>&1 || die "Node.js is required"
 command -v apt-get >/dev/null 2>&1 || die "apt-get is required"
@@ -690,7 +693,6 @@ for unit in $STATEFUL_RUNTIME_UNITS; do
 done
 
 if [ "$create_upgrade_backup" -eq 1 ]; then
-  tar -C /cyberos -czf "$backup_path/config.tgz" config
   tar -C /cyberos -czf "$backup_path/state.tgz" state home
 fi
 

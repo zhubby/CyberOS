@@ -1,15 +1,16 @@
 [Unit]
 Description=CyberOS monitoring alert evaluator and delivery worker
 Documentation=file:///usr/share/doc/cyberos/README.md
-After=network-online.target local-fs.target cyberos-api.service cyberos-monitor.service
+After=network-online.target local-fs.target cyberos-api.service cyberos-monitor.service cyberos-state-init.service
 Wants=network-online.target cyberos-api.service cyberos-monitor.service
+Requires=cyberos-state-init.service
 
 [Service]
 Type=notify
 User=cyberos
 Group=cyberos
 Environment=CYBEROS_ROOT=/cyberos
-Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+Environment=CYBEROS_ENVIRONMENT=production
 WorkingDirectory=/cyberos/state
 ExecStart=/usr/lib/cyberos/bin/cyberos-alerter
 Restart=on-failure

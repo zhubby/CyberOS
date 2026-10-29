@@ -8,7 +8,7 @@ detail=$3
 case "$component" in weston|chromium|cec|gamepad) ;; *) exit 64 ;; esac
 case "$state" in ready|degraded|unavailable) ;; *) exit 64 ;; esac
 
-status_dir=${CYBEROS_TV_STATUS_DIR:-/run/cyberos-tv/status}
+status_dir=/run/cyberos-tv/status
 [ -d "$status_dir" ] || exit 1
 escaped_detail=$(printf '%s' "$detail" | sed 's/\\/\\\\/g; s/"/\\"/g')
 updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')

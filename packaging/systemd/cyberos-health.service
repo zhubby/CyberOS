@@ -1,13 +1,14 @@
 [Unit]
 Description=CyberOS health evaluator
-After=local-fs.target
+After=local-fs.target cyberos-state-init.service
+Requires=cyberos-state-init.service
 
 [Service]
 Type=oneshot
 User=cyberos
 Group=cyberos
 Environment=CYBEROS_ROOT=/cyberos
-Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+Environment=CYBEROS_ENVIRONMENT=production
 WorkingDirectory=/cyberos/state
 ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/ops/dist/index.js health
 TimeoutStartSec=2min

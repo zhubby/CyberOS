@@ -1,23 +1,14 @@
 #!/bin/sh
 set -eu
 
-runtime_dir=${CYBEROS_TV_RUNTIME_DIR:-/run/cyberos-tv}
-drm_root=${CYBEROS_TV_DRM_ROOT:-/sys/class/drm}
-force_hdmi=${CYBEROS_TV_FORCE_HDMI:-auto}
-preferred_connector=${CYBEROS_TV_HDMI_CONNECTOR:-HDMI-A-1}
+test_root=${CYBEROS_TEST_ROOT:-}
+case "$test_root" in
+  "") runtime_dir=/run/cyberos-tv; drm_root=/sys/class/drm ;;
+  /*) runtime_dir="$test_root/run/cyberos-tv"; drm_root="$test_root/sys/class/drm" ;;
+  *) printf 'cyberos-tv-prepare: CYBEROS_TEST_ROOT must be absolute\n' >&2; exit 2 ;;
+esac
+preferred_connector=HDMI-A-1
 forced_connectors="$runtime_dir/forced-connectors"
-
-case "$force_hdmi" in
-  auto|never) ;;
-  *) printf 'cyberos-tv-prepare: CYBEROS_TV_FORCE_HDMI must be auto or never\n' >&2; exit 2 ;;
-esac
-case "$preferred_connector" in
-  HDMI-A-*) connector_number=${preferred_connector#HDMI-A-} ;;
-  *) printf 'cyberos-tv-prepare: CYBEROS_TV_HDMI_CONNECTOR must name an HDMI-A connector\n' >&2; exit 2 ;;
-esac
-case "$connector_number" in
-  ""|*[!0-9]*) printf 'cyberos-tv-prepare: CYBEROS_TV_HDMI_CONNECTOR must name an HDMI-A connector\n' >&2; exit 2 ;;
-esac
 
 release_forced_connectors() {
   [ -f "$forced_connectors" ] || return 0
@@ -52,7 +43,7 @@ for connector_status in "$drm_root"/card*-HDMI-A-*/status; do
   fi
 done
 
-if [ "$hdmi_connected" -eq 0 ] && [ "$force_hdmi" = auto ]; then
+if [ "$hdmi_connected" -eq 0 ]; then
   for connector_status in "$drm_root"/card*-"$preferred_connector"/status; do
     [ -w "$connector_status" ] || continue
     if printf '%s\n' on-digital > "$connector_status"; then

@@ -1,15 +1,16 @@
 [Unit]
 Description=CyberOS API and web UI
 Documentation=file:///usr/share/doc/cyberos/README.md
-After=network-online.target local-fs.target
+After=network-online.target local-fs.target cyberos-state-init.service
 Wants=network-online.target
+Requires=cyberos-state-init.service
 
 [Service]
 Type=simple
 User=cyberos
 Group=cyberos
 Environment=CYBEROS_ROOT=/cyberos
-Environment=CYBEROS_CONFIG=/cyberos/config/config.toml
+Environment=CYBEROS_ENVIRONMENT=production
 Environment=CYBEROS_WEB_DIST=/usr/lib/cyberos/apps/web/dist
 Environment=CYBEROS_DOCS_DIST=/usr/lib/cyberos/docs/dist
 Environment=CYBEROS_BUILD_INFO_PATH=/usr/lib/cyberos/build-info.json
@@ -19,7 +20,7 @@ Restart=on-failure
 RestartSec=3
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/run/cyberos /cyberos/state /cyberos/logs /cyberos/data /cyberos/vm /cyberos/iso /cyberos/apps /cyberos/config/mcp
+ReadWritePaths=/run/cyberos /cyberos/state /cyberos/logs /cyberos/data /cyberos/vm /cyberos/iso /cyberos/apps
 BindReadOnlyPaths=-/run/libvirt/libvirt-sock
 NoNewPrivileges=yes
 PrivateTmp=yes

@@ -1,6 +1,6 @@
 [Unit]
 Description=CyberOS TV Chromium shell
-ConditionPathExists=/cyberos/config/tv-mode/enabled
+ConditionPathExists=/cyberos/state/tv/enabled
 PartOf=cyberos-tv.target
 Requires=cyberos-tv-weston.service cyberos-api.service
 After=cyberos-tv-weston.service cyberos-api.service

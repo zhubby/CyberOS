@@ -24,16 +24,12 @@ packages/agent/node_modules/* usr/lib/cyberos/packages/agent/node_modules/
 package.json usr/lib/cyberos/
 package-lock.json usr/lib/cyberos/
 .cyberos/build-info.json usr/lib/cyberos/
-packaging/etc/config.toml cyberos/config/
 packaging/etc/mpv-input.conf usr/share/cyberos/
-packaging/scripts/cyberos-first-boot.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-nginx.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-configure-locale.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-refresh-groups.sh usr/lib/cyberos/scripts/
-packaging/scripts/cyberos-refresh-terminald.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-nas-acl.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-share-acl.mjs usr/lib/cyberos/scripts/
-packaging/scripts/cyberos-refresh-vod-player.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-tv-mode usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-tv-prepare usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-tv-weston usr/lib/cyberos/scripts/

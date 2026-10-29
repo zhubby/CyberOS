@@ -17,11 +17,9 @@ describe("cyberos-tv-mode", () => {
     const enabled = run(fixture, "enable");
 
     expect(enabled.status).toBe(0);
-    await expect(readFile(path.join(fixture.configDirectory, "enabled"), "utf8")).resolves.toBe("enabled\n");
+    await expect(readFile(path.join(fixture.markerDirectory, "enabled"), "utf8")).resolves.toBe("enabled\n");
     await expect(readFile(path.join(fixture.systemdDirectory, "lightdm.service.d", "50-cyberos-tv-mode.conf"), "utf8"))
       .resolves.toContain("ConditionPathExists=!");
-    await expect(readFile(path.join(fixture.systemdDirectory, "cyberos-vod-player.service.d", "50-cyberos-tv-mode.conf"), "utf8"))
-      .resolves.toContain("CYBEROS_VOD_PLAYER_VIDEO_OUTPUT=wayland");
     await expect(readFile(path.join(fixture.stateDirectory, "desktop-state"), "utf8"))
       .resolves.toContain("DM_ENABLED=enabled");
 
@@ -43,9 +41,7 @@ describe("cyberos-tv-mode", () => {
     expect(result.stderr).toContain("startup failed or did not become ready");
     const calls = await readFile(fixture.systemctlLog, "utf8");
     expect(calls).toContain("start lightdm.service");
-    await expect(readFile(path.join(fixture.configDirectory, "enabled"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(path.join(fixture.systemdDirectory, "cyberos-vod-player.service.d", "50-cyberos-tv-mode.conf"), "utf8"))
-      .rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(path.join(fixture.markerDirectory, "enabled"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("keeps the desktop snapshot when rollback cannot restore the prior session", async () => {
@@ -58,21 +54,13 @@ describe("cyberos-tv-mode", () => {
       .resolves.toContain("DM_UNIT=lightdm.service");
   });
 
-  it("refuses host mutation under declarative policy", async () => {
-    const fixture = await createFixture("ready");
-    const result = run(fixture, "enable", { CYBEROS_HOST_MUTATION_POLICY: "declarative" });
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("managed declaratively");
-    await expect(readFile(fixture.systemctlLog, "utf8")).resolves.toBe("");
-  });
 });
 
 interface Fixture {
   root: string;
   binDirectory: string;
   stateDirectory: string;
-  configDirectory: string;
+  markerDirectory: string;
   systemdDirectory: string;
   systemctlLog: string;
 }
@@ -84,9 +72,9 @@ async function createFixture(
   const root = await mkdtemp(path.join(os.tmpdir(), "cyberos-tv-mode-test-"));
   temporaryDirectories.push(root);
   const binDirectory = path.join(root, "bin");
-  const stateDirectory = path.join(root, "state");
-  const configDirectory = path.join(root, "config");
-  const systemdDirectory = path.join(root, "systemd");
+  const stateDirectory = path.join(root, "cyberos/state/tv/control");
+  const markerDirectory = path.join(root, "cyberos/state/tv");
+  const systemdDirectory = path.join(root, "etc/systemd/system");
   const systemctlLog = path.join(root, "systemctl.log");
   await mkdir(binDirectory, { recursive: true });
   await writeFile(systemctlLog, "");
@@ -118,7 +106,7 @@ exit 0
   await executable(path.join(binDirectory, "curl"), `#!/bin/sh
 printf '%s\\n' '{"status":{"enabled":true,"state":"${tvState}","weston":{"state":"${tvState}"},"chromium":{"state":"${tvState}"},"vodPlayer":{"state":"${tvState}"},"cec":{"state":"degraded"}}}'
 `);
-  return { root, binDirectory, stateDirectory, configDirectory, systemdDirectory, systemctlLog };
+  return { root, binDirectory, stateDirectory, markerDirectory, systemdDirectory, systemctlLog };
 }
 
 async function executable(filePath: string, content: string): Promise<void> {
@@ -133,11 +121,7 @@ function run(fixture: Fixture, command: string, environment: NodeJS.ProcessEnv =
       ...process.env,
       ...environment,
       PATH: `${fixture.binDirectory}:${process.env.PATH ?? ""}`,
-      CYBEROS_TV_STATE_DIR: fixture.stateDirectory,
-      CYBEROS_TV_CONFIG_DIR: fixture.configDirectory,
-      CYBEROS_TV_SYSTEMD_DIR: fixture.systemdDirectory,
-      CYBEROS_HOST_MUTATION_POLICY_FILE: path.join(fixture.root, "missing-policy"),
-      CYBEROS_TV_WAIT_SECONDS: "0"
+      CYBEROS_TEST_ROOT: fixture.root
     }
   });
 }
