@@ -271,17 +271,14 @@ function SkeletonSectionHeader() {
 function StorageHealthSkeleton() {
   return (
     <div className="storage-health-chart management-skeleton-storage-health">
-      <div className="storage-health-chart-layout">
-        <SkeletonBlock className="management-skeleton-storage-radial" />
-        <div className="storage-health-signal-list">
-          {Array.from({ length: 3 }, (_, index) => (
-            <div className="storage-health-signal" key={index}>
-              <SkeletonBlock className="management-skeleton-signal-dot" />
-              <div><SkeletonBlock width={index % 2 ? "66%" : "78%"} /><SkeletonBlock width="92%" /></div>
-              <SkeletonBlock width="34px" />
-            </div>
-          ))}
-        </div>
+      <div className="storage-health-plot-grid">
+        {Array.from({ length: 3 }, (_, index) => (
+          <div className="storage-health-plot management-skeleton-storage-plot" key={index}>
+            <div><SkeletonBlock width={index % 2 ? "58%" : "72%"} /><SkeletonBlock width="38%" /></div>
+            <SkeletonBlock width="100%" />
+            <SkeletonBlock width={index % 2 ? "64%" : "82%"} />
+          </div>
+        ))}
       </div>
     </div>
   );

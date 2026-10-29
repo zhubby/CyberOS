@@ -133,4 +133,54 @@ describe("management dashboard layouts", () => {
       [...layouts.tablet].sort((left, right) => left.y - right.y || left.x - right.x).map((item) => item.i)
     );
   });
+
+  it("uses the current full-width Shares layout without the removed account widget", () => {
+    const definitions = managementDashboardWidgetDefinitions("shares");
+    expect(MANAGEMENT_DASHBOARD_LAYOUT_VERSION).toBe(3);
+    expect(managementDashboardStorageKey("shares")).toContain(":v3:shares");
+    expect(definitions.some((widget) => widget.id === "account")).toBe(false);
+    expect(definitions.find((widget) => widget.id === "services")?.size).toBe("wide");
+
+    const layouts = defaultManagementDashboardLayouts("shares");
+    expect(layouts.desktop.find((item) => item.i === "services")?.w).toBe(MANAGEMENT_DASHBOARD_COLUMNS.desktop);
+    expect(layouts.desktop.find((item) => item.i === "directories")?.w).toBe(MANAGEMENT_DASHBOARD_COLUMNS.desktop);
+  });
+
+  it("keeps the Network Wi-Fi status widget compact", () => {
+    const definitions = managementDashboardWidgetDefinitions("network");
+    expect(definitions.find((widget) => widget.id === "wifi")?.size).toBe("status");
+
+    const layouts = defaultManagementDashboardLayouts("network");
+    expect(layouts.desktop.find((item) => item.i === "wifi")).toMatchObject({ w: 3, h: 10, maxW: 3, maxH: 10 });
+    expect(layouts.tablet.find((item) => item.i === "wifi")).toMatchObject({ w: 4, h: 10, maxW: 4, maxH: 10 });
+  });
+
+  it("shrinks a previously saved large Wi-Fi widget without resetting the Network layout", () => {
+    const storage = memoryStorage();
+    const defaults = defaultManagementDashboardLayouts("network");
+    const oversized = {
+      desktop: defaults.desktop.map((item) => item.i === "wifi" ? { ...item, w: 12, h: 26 } : item),
+      tablet: defaults.tablet.map((item) => item.i === "wifi" ? { ...item, w: 8, h: 26 } : item)
+    };
+
+    writeManagementDashboardLayouts("network", oversized, storage);
+    const restored = readManagementDashboardLayouts("network", storage);
+    expect(restored.desktop.find((item) => item.i === "wifi")).toMatchObject({ w: 3, h: 10 });
+    expect(restored.tablet.find((item) => item.i === "wifi")).toMatchObject({ w: 4, h: 10 });
+  });
+
+  it("keeps the three-chart storage health widget full width", () => {
+    const storage = memoryStorage();
+    const defaults = defaultManagementDashboardLayouts("storage");
+    expect(defaults.desktop.find((item) => item.i === "health")).toMatchObject({ w: 12, minW: 12 });
+    expect(defaults.tablet.find((item) => item.i === "health")).toMatchObject({ w: 8, minW: 8 });
+
+    writeManagementDashboardLayouts("storage", {
+      desktop: defaults.desktop.map((item) => item.i === "health" ? { ...item, w: 6 } : item),
+      tablet: defaults.tablet.map((item) => item.i === "health" ? { ...item, w: 4 } : item)
+    }, storage);
+    const restored = readManagementDashboardLayouts("storage", storage);
+    expect(restored.desktop.find((item) => item.i === "health")?.w).toBe(12);
+    expect(restored.tablet.find((item) => item.i === "health")?.w).toBe(8);
+  });
 });

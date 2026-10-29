@@ -2,7 +2,7 @@ import { moveElement, verticalCompactor, type Layout, type LayoutItem } from "re
 
 export type ManagementDashboardId = "docker" | "virtualMachines" | "network" | "storage" | "shares" | "monitoring";
 export type ManagementDashboardBreakpoint = "desktop" | "tablet";
-export type ManagementDashboardWidgetSize = "overview" | "metric" | "wide" | "half" | "narrow" | "large";
+export type ManagementDashboardWidgetSize = "overview" | "metric" | "status" | "full" | "wide" | "half" | "narrow" | "large";
 
 export interface ManagementDashboardWidgetDefinition {
   id: string;
@@ -25,7 +25,7 @@ export const MANAGEMENT_DASHBOARD_COLUMNS: Record<ManagementDashboardBreakpoint,
 };
 
 export const MANAGEMENT_DASHBOARD_MOBILE_MAX_WIDTH = 620;
-export const MANAGEMENT_DASHBOARD_LAYOUT_VERSION = 2;
+export const MANAGEMENT_DASHBOARD_LAYOUT_VERSION = 3;
 
 const STORAGE_KEY_PREFIX = `cyberos:management-dashboard-layout:v${MANAGEMENT_DASHBOARD_LAYOUT_VERSION}`;
 
@@ -73,7 +73,7 @@ const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly Manag
     { id: "metric-addresses", size: "metric" },
     { id: "metric-defaultRoutes", size: "metric" },
     { id: "ethernet", size: "wide" },
-    { id: "wifi", size: "large" },
+    { id: "wifi", size: "status" },
     { id: "traffic", size: "large" },
     { id: "interfaces", size: "wide" },
     { id: "routes", size: "half" },
@@ -87,7 +87,7 @@ const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly Manag
     { id: "metric-capacity", size: "metric" },
     { id: "pools", size: "wide" },
     { id: "disks", size: "half" },
-    { id: "health", size: "half" }
+    { id: "health", size: "full" }
   ],
   shares: [
     { id: "overview", size: "overview" },
@@ -95,8 +95,7 @@ const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly Manag
     { id: "metric-protocols", size: "metric" },
     { id: "metric-authenticated", size: "metric" },
     { id: "metric-issues", size: "metric" },
-    { id: "account", size: "half" },
-    { id: "services", size: "half" },
+    { id: "services", size: "wide" },
     { id: "directories", size: "large" }
   ]
 };
@@ -117,6 +116,8 @@ interface GridSize {
   h: number;
   minW: number;
   minH: number;
+  maxW?: number;
+  maxH?: number;
 }
 
 export type DashboardKeyboardAdjustment =
@@ -303,7 +304,7 @@ function packLayout(
   for (const definition of definitions) {
     const size = gridSize(definition.size, breakpoint);
     const position = firstAvailablePosition(layout, size.w, size.h, cols);
-    layout.push({ i: definition.id, ...position, ...size, maxW: cols });
+    layout.push({ i: definition.id, ...position, ...size, maxW: size.maxW ?? cols });
   }
   return layout;
 }
@@ -315,6 +316,17 @@ function gridSize(size: ManagementDashboardWidgetSize, breakpoint: ManagementDas
       return { w: tablet ? 8 : 6, h: 12, minW: tablet ? 4 : 4, minH: 9 };
     case "metric":
       return { w: tablet ? 4 : 3, h: 6, minW: 2, minH: 5 };
+    case "status":
+      return {
+        w: tablet ? 4 : 3,
+        h: 10,
+        minW: tablet ? 4 : 3,
+        minH: 8,
+        maxW: tablet ? 4 : 3,
+        maxH: 10
+      };
+    case "full":
+      return { w: colsFor(breakpoint), h: 16, minW: colsFor(breakpoint), minH: 12, maxW: colsFor(breakpoint) };
     case "half":
       return { w: tablet ? 4 : 6, h: 16, minW: tablet ? 4 : 4, minH: 9 };
     case "narrow":

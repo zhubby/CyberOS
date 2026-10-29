@@ -20,13 +20,9 @@ import {
   type LucideIcon
 } from "lucide-react";
 import {
-  Bar,
-  BarChart,
   Area,
   AreaChart,
   CartesianGrid,
-  Cell,
-  LabelList,
   PolarAngleAxis,
   RadialBar,
   RadialBarChart,
@@ -88,14 +84,6 @@ interface Metric {
   Icon: LucideIcon;
 }
 
-interface Gauge {
-  id: string;
-  label: string;
-  value: number;
-  display: string;
-  tone: GaugeTone;
-}
-
 interface NetworkTrafficPoint {
   timestamp: number;
   rxBytesPerSecond: number;
@@ -104,15 +92,6 @@ interface NetworkTrafficPoint {
 
 const NETWORK_TRAFFIC_INTERVAL_MS = 2_000;
 const NETWORK_TRAFFIC_HISTORY_LIMIT = 31;
-
-interface StorageHealthSignal {
-  id: "capacity" | "smart" | "pools";
-  label: string;
-  value: number | null;
-  display: string;
-  tone: GaugeTone;
-  color: string;
-}
 
 function StatusIcon({ tone, label }: { tone: StatusTone; label: string }) {
   const Icon = tone === "ready"
@@ -344,14 +323,8 @@ export function SystemNetworkManagementPanel({
                 content: summary ? (
                   <SystemWifiReadonly
                     wifi={summary.wifi}
-                    canScan={
-                      summary.wifi.backend === "NetworkManager"
-                      && summary.wifi.hostdReady
-                      && summary.wifi.devices.length > 0
-                    }
                     onStatus={handleWifiStatus}
                     onOpenSettings={onOpenWirelessSettings}
-                    onNotifyError={(message) => onNotifyError(message)}
                   />
                 ) : (
                   <section className="management-section">
@@ -412,7 +385,7 @@ export function SystemNetworkManagementPanel({
                 content: (
                   <section className="management-section">
                     <SectionHeader title={t("workspace.management.network.readinessTitle")} description={t("workspace.management.network.readinessDescription")} />
-                    <NetworkReadinessChart gauges={networkGauges(summary, locale, translate)} t={translate} />
+                    <NetworkReadinessSummary metrics={summary?.metrics} locale={locale} />
                   </section>
                 )
               }
@@ -758,7 +731,7 @@ export function SystemStorageManagementPanel({
                 content: (
                   <section className="management-section">
                     <SectionHeader title={t("workspace.management.storage.healthTitle")} description={t("workspace.management.storage.healthDescription")} />
-                    <StorageHealthChart summary={summary} locale={locale} t={translate} />
+                    <StorageHealthCharts summary={summary} locale={locale} t={translate} />
                   </section>
                 )
               }
@@ -1544,57 +1517,65 @@ function MetricCard({ metric }: { metric: Metric }) {
   );
 }
 
-function NetworkReadinessChart({ gauges, t }: { gauges: Gauge[]; t: Translate }) {
+export function NetworkReadinessSummary({
+  metrics,
+  locale
+}: {
+  metrics: NetworkSummary["metrics"] | undefined;
+  locale: SupportedLocale;
+}) {
+  const { t } = useTranslation();
+  const interfaces = metrics?.interfaces ?? 0;
+  const connected = metrics?.connected ?? 0;
+  const addresses = metrics?.addresses ?? 0;
+  const defaultRoutes = metrics?.defaultRoutes ?? 0;
+  const connectedPercent = ratioGauge(connected, interfaces);
+  const connectedDisplay = `${formatLocaleNumber(connected, locale)} / ${formatLocaleNumber(interfaces, locale)}`;
+  const hasDefaultRoute = defaultRoutes > 0;
+
   return (
-    <div
-      className="network-readiness-chart"
-      role="img"
-      aria-label={t("workspace.management.network.readinessDescription")}
-    >
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={gauges}
-          layout="vertical"
-          margin={{ top: 8, right: 18, bottom: 4, left: 4 }}
-          barCategoryGap="42%"
-        >
-          <CartesianGrid horizontal={false} stroke="var(--line-soft)" strokeDasharray="3 4" />
-          <XAxis
-            type="number"
-            domain={[0, 100]}
-            ticks={[0, 50, 100]}
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: "var(--muted-2)", fontSize: 10 }}
-            tickFormatter={(value) => `${value}%`}
-          />
-          <YAxis
-            type="category"
-            dataKey="label"
-            axisLine={false}
-            tickLine={false}
-            tickMargin={10}
-            tick={{ fill: "var(--text)", fontFamily: "var(--font-emphasis)", fontSize: 11, fontWeight: 800 }}
-            width={112}
-          />
-          <Bar
-            dataKey="value"
-            background={{ fill: "var(--surface)" }}
-            radius={[0, 5, 5, 0]}
-            barSize={16}
-            isAnimationActive={false}
-          >
-            {gauges.map((gauge) => (
-              <Cell key={gauge.id} fill={storageHealthColor(gauge.tone)} />
-            ))}
-            <LabelList
-              dataKey="display"
-              content={<NetworkReadinessValueLabel />}
-            />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <dl className="network-readiness-summary" aria-label={t("workspace.management.network.readinessDescription")}>
+      <div className="network-readiness-signal" data-kind="ratio" data-state={connected ? "ready" : interfaces ? "warning" : "neutral"}>
+        <dt>
+          <Activity aria-hidden="true" size={18} />
+          <span><strong>{t("workspace.management.network.gauges.connected")}</strong><small>{t("workspace.management.network.gauges.connectedDetail")}</small></span>
+        </dt>
+        <dd className="network-readiness-ratio">
+          <div><strong>{formatLocaleNumber(connected, locale)} <span>/ {formatLocaleNumber(interfaces, locale)}</span></strong><small>{formatLocaleNumber(connectedPercent / 100, locale, { style: "percent", maximumFractionDigits: 0 })}</small></div>
+          <div
+            className="network-readiness-track"
+            role="progressbar"
+            aria-label={t("workspace.management.network.gauges.connected")}
+            aria-valuemin={0}
+            aria-valuemax={Math.max(interfaces, 1)}
+            aria-valuenow={connected}
+            aria-valuetext={connectedDisplay}
+          ><span style={{ width: `${connectedPercent}%` }} /></div>
+        </dd>
+      </div>
+
+      <div className="network-readiness-signal" data-kind="count" data-state={addresses ? "ready" : interfaces ? "warning" : "neutral"}>
+        <dt>
+          <Route aria-hidden="true" size={18} />
+          <span><strong>{t("workspace.management.network.gauges.addresses")}</strong><small>{t("workspace.management.network.gauges.addressesDetail")}</small></span>
+        </dt>
+        <dd className="network-readiness-count"><data value={addresses}>{formatLocaleNumber(addresses, locale)}</data></dd>
+      </div>
+
+      <div className="network-readiness-signal" data-kind="status" data-state={hasDefaultRoute ? "ready" : "warning"}>
+        <dt>
+          <Network aria-hidden="true" size={18} />
+          <span><strong>{t("workspace.management.network.gauges.defaultRoute")}</strong><small>{t("workspace.management.network.metrics.defaultRoutesDetail")}</small></span>
+        </dt>
+        <dd className="network-readiness-state">
+          {hasDefaultRoute ? <CircleCheck aria-hidden="true" size={20} /> : <CircleAlert aria-hidden="true" size={20} />}
+          <span>
+            <strong>{t(hasDefaultRoute ? "common.states.ready" : "common.states.missing")}</strong>
+            <small>{t(hasDefaultRoute ? "workspace.management.network.gauges.defaultRouteReadyDetail" : "workspace.management.network.gauges.defaultRouteMissingDetail")}</small>
+          </span>
+        </dd>
+      </div>
+    </dl>
   );
 }
 
@@ -1757,39 +1738,6 @@ function NetworkTrafficMonitor({
         </div>
       </div>
     </section>
-  );
-}
-
-function NetworkReadinessValueLabel({
-  x = 0,
-  y = 0,
-  width = 0,
-  height = 0,
-  value = ""
-}: {
-  x?: number | string;
-  y?: number | string;
-  width?: number | string;
-  height?: number | string;
-  value?: number | string;
-}) {
-  const barX = Number(x);
-  const barY = Number(y);
-  const barWidth = Number(width);
-  const barHeight = Number(height);
-  const placeInside = barWidth >= 58;
-
-  return (
-    <text
-      className="network-readiness-value"
-      x={placeInside ? barX + barWidth - 8 : barX + barWidth + 8}
-      y={barY + (barHeight / 2)}
-      fill={placeInside ? "white" : "var(--muted)"}
-      textAnchor={placeInside ? "end" : "start"}
-      dominantBaseline="central"
-    >
-      {value}
-    </text>
   );
 }
 
@@ -2059,40 +2007,6 @@ function networkMetrics(
   ];
 }
 
-function networkGauges(
-  summary: NetworkSummary | null,
-  locale: SupportedLocale,
-  t: Translate
-): Gauge[] {
-  const interfaces = summary?.metrics.interfaces ?? 0;
-  const connected = summary?.metrics.connected ?? 0;
-  const addresses = summary?.metrics.addresses ?? 0;
-  const defaultRoutes = summary?.metrics.defaultRoutes ?? 0;
-  return [
-    {
-      id: "connected",
-      label: t("workspace.management.network.gauges.connected"),
-      value: ratioGauge(connected, interfaces),
-      display: `${formatLocaleNumber(connected, locale)} / ${formatLocaleNumber(interfaces, locale)}`,
-      tone: connected === 0 && interfaces > 0 ? "warning" : "ready"
-    },
-    {
-      id: "addressCoverage",
-      label: t("workspace.management.network.gauges.addressCoverage"),
-      value: interfaces ? Math.min(Math.round((addresses / interfaces) * 100), 100) : 0,
-      display: formatLocaleNumber(addresses, locale),
-      tone: addresses ? "ready" : "neutral"
-    },
-    {
-      id: "defaultRoute",
-      label: t("workspace.management.network.gauges.defaultRoute"),
-      value: defaultRoutes ? 100 : 0,
-      display: defaultRoutes ? t("workspace.management.states.ready") : t("common.dash"),
-      tone: defaultRoutes ? "ready" : "warning"
-    }
-  ];
-}
-
 function storageMetrics(
   summary: StorageSummary | null,
   locale: SupportedLocale,
@@ -2140,7 +2054,7 @@ function storageMetrics(
   ];
 }
 
-function StorageHealthChart({
+export function StorageHealthCharts({
   summary,
   locale,
   t
@@ -2155,107 +2069,130 @@ function StorageHealthChart({
   const disks = metrics?.disks ?? 0;
   const smartPassed = metrics?.smartPassed ?? 0;
   const smartFailed = metrics?.smartFailed ?? 0;
+  const reportedSmartUnknown = metrics?.smartUnknown ?? 0;
   const pools = summary?.pools ?? [];
   const readyPools = pools.filter((pool) => pool.status === "ready").length;
   const capacityRatio = total !== null && total > 0 && used !== null ? clampStorageRatio(used / total) : null;
-  const smartRatio = disks > 0 ? clampStorageRatio(smartPassed / disks) : null;
-  const poolRatio = pools.length > 0 ? clampStorageRatio(readyPools / pools.length) : null;
-  const signals: StorageHealthSignal[] = [
-    {
-      id: "capacity",
-      label: t("workspace.management.storage.gauges.capacity"),
-      value: capacityRatio === null ? null : capacityRatio * 100,
-      display: capacityRatio === null || used === null || total === null
-        ? t("common.dash")
-        : `${formatBytes(used, locale)} / ${formatBytes(total, locale)} (${formatRatioPercent(capacityRatio, locale, t)})`,
-      tone: usageGaugeTone(capacityRatio),
-      color: storageHealthColor(usageGaugeTone(capacityRatio), "var(--accent-soft-text)")
-    },
-    {
-      id: "smart",
-      label: t("workspace.management.storage.gauges.smart"),
-      value: smartRatio === null ? null : smartRatio * 100,
-      display: `${formatLocaleNumber(smartPassed, locale)} / ${formatLocaleNumber(disks, locale)}`,
-      tone: smartFailed ? "danger" : smartRatio === null ? "neutral" : "ready",
-      color: storageHealthColor(smartFailed ? "danger" : smartRatio === null ? "neutral" : "ready")
-    },
-    {
-      id: "pools",
-      label: t("workspace.management.storage.gauges.pools"),
-      value: poolRatio === null ? null : poolRatio * 100,
-      display: `${formatLocaleNumber(readyPools, locale)} / ${formatLocaleNumber(pools.length, locale)}`,
-      tone: poolRatio === null ? "neutral" : readyPools === pools.length ? "ready" : "warning",
-      color: storageHealthColor(
-        poolRatio === null ? "neutral" : readyPools === pools.length ? "ready" : "warning",
-        "var(--teal-text)"
-      )
-    }
-  ];
-  const availableSignals = signals.filter((signal): signal is StorageHealthSignal & { value: number } => signal.value !== null);
-  const chartData = [...availableSignals].reverse().map((signal) => ({
-    name: signal.id,
-    label: signal.label,
-    value: signal.value,
-    fill: signal.color
-  }));
-  const overallTone = storageHealthTone(summary, capacityRatio, smartFailed, readyPools, pools.length);
-  const overallLabel = overallTone === "danger"
-    ? t("workspace.management.states.attention")
-    : overallTone === "warning"
-      ? t("workspace.management.states.degraded")
-      : overallTone === "ready"
-        ? t("workspace.management.states.healthy")
-        : t("common.dash");
+  const capacityPercent = capacityRatio === null ? 0 : capacityRatio * 100;
+  const capacityTone = usageGaugeTone(capacityRatio);
+  const capacityData = [{
+    name: t("workspace.management.storage.gauges.capacity"),
+    value: capacityPercent,
+    fill: storageHealthColor(capacityTone, "var(--accent-soft-text)")
+  }];
+  const smartTotal = Math.max(disks, smartPassed + smartFailed + reportedSmartUnknown);
+  const smartUnknown = Math.max(reportedSmartUnknown, smartTotal - smartPassed - smartFailed);
+  const smartRatio = smartTotal > 0 ? clampStorageRatio(smartPassed / smartTotal) : null;
+  const smartTone: GaugeTone = smartTotal === 0
+    ? "neutral"
+    : smartFailed > 0
+      ? "danger"
+      : smartUnknown > 0
+        ? "warning"
+        : "ready";
+  const poolTone: GaugeTone = pools.length === 0
+    ? "neutral"
+    : pools.some((pool) => pool.status === "offline")
+      ? "danger"
+      : readyPools === pools.length
+        ? "ready"
+        : "warning";
+  const capacityDisplay = capacityRatio === null || used === null || total === null
+    ? t("common.dash")
+    : `${formatBytes(used, locale)} / ${formatBytes(total, locale)}`;
+  const smartDisplay = `${formatLocaleNumber(smartPassed, locale)} / ${formatLocaleNumber(smartTotal, locale)}`;
+  const poolDisplay = `${formatLocaleNumber(readyPools, locale)} / ${formatLocaleNumber(pools.length, locale)}`;
 
   return (
     <div className="storage-health-chart">
-      {availableSignals.length ? (
-        <div className="storage-health-chart-layout">
-          <div className="storage-health-radial" aria-label={t("workspace.management.storage.healthChartLabel")}>
+      <div className="storage-health-plot-grid">
+        <article className="storage-health-plot storage-health-capacity" data-kind="capacity" data-state={capacityTone}>
+          <header>
+            <div><Database aria-hidden="true" size={17} /><span><strong>{t("workspace.management.storage.gauges.capacity")}</strong><small>{t("workspace.management.storage.gauges.capacityDetail")}</small></span></div>
+            <em>{formatRatioPercent(capacityRatio, locale, t)}</em>
+          </header>
+          <div
+            className="storage-health-capacity-ring"
+            role="meter"
+            aria-label={t("workspace.management.storage.healthCapacityChartLabel")}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={capacityRatio === null ? undefined : capacityPercent}
+            aria-valuetext={capacityDisplay}
+          >
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart
-                data={chartData}
+                data={capacityData}
                 cx="50%"
                 cy="50%"
-                innerRadius="43%"
+                innerRadius="68%"
                 outerRadius="92%"
                 startAngle={90}
                 endAngle={-270}
-                barCategoryGap="16%"
               >
                 <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
                 <RadialBar
                   dataKey="value"
-                  name="value"
                   background={{ fill: "var(--surface)" }}
-                  cornerRadius={5}
+                  cornerRadius={6}
                   isAnimationActive={false}
                 />
               </RadialBarChart>
             </ResponsiveContainer>
-            <div className="storage-health-chart-center" data-state={overallTone}>
-              <strong data-state={overallTone}>{overallLabel}</strong>
+            <div className="storage-health-capacity-center">
+              <strong>{capacityRatio === null ? t("common.dash") : formatBytes(used ?? 0, locale)}</strong>
+              <span>{t("workspace.management.storage.capacityUsedLabel")}</span>
             </div>
           </div>
-          <div className="storage-health-signal-list">
-            {signals.map((signal) => (
-              <div className="storage-health-signal" key={signal.id} data-state={signal.tone}>
-                <i style={{ background: signal.color }} aria-hidden="true" />
-                <div>
-                  <strong>{signal.label}</strong>
-                  <span>{signal.display}</span>
-                </div>
-                <em>{signal.value === null ? t("common.dash") : `${formatLocaleNumber(signal.value, locale, { maximumFractionDigits: 1 })}%`}</em>
-              </div>
-            ))}
+          <p>{capacityDisplay}</p>
+        </article>
+
+        <article className="storage-health-plot storage-health-smart" data-kind="smart" data-state={smartTone}>
+          <header>
+            <div><CircleCheck aria-hidden="true" size={17} /><span><strong>{t("workspace.management.storage.gauges.smart")}</strong><small>{t("workspace.management.storage.gauges.smartDetail")}</small></span></div>
+            <em>{smartRatio === null ? t("common.dash") : formatRatioPercent(smartRatio, locale, t)}</em>
+          </header>
+          <div className="storage-health-smart-body">
+            <div
+              className="storage-health-smart-track"
+              role="meter"
+              aria-label={t("workspace.management.storage.healthSmartChartLabel")}
+              aria-valuemin={0}
+              aria-valuemax={Math.max(smartTotal, 1)}
+              aria-valuenow={smartPassed}
+              aria-valuetext={t("workspace.management.storage.healthSmartAria", { passed: smartPassed, failed: smartFailed, unknown: smartUnknown })}
+            >
+              <span data-state="passed" style={{ width: `${smartTotal ? (smartPassed / smartTotal) * 100 : 0}%` }} />
+              <span data-state="failed" style={{ width: `${smartTotal ? (smartFailed / smartTotal) * 100 : 0}%` }} />
+              <span data-state="unknown" style={{ width: `${smartTotal ? (smartUnknown / smartTotal) * 100 : 0}%` }} />
+            </div>
+            <div className="storage-health-smart-value"><strong>{smartDisplay}</strong><span>{t("workspace.management.storage.gauges.smart")}</span></div>
+            <ul className="storage-health-legend">
+              <li data-state="passed"><i />{t("workspace.management.storage.smart.passed")} <strong>{formatLocaleNumber(smartPassed, locale)}</strong></li>
+              <li data-state="failed"><i />{t("workspace.management.storage.smart.failed")} <strong>{formatLocaleNumber(smartFailed, locale)}</strong></li>
+              <li data-state="unknown"><i />{t("workspace.management.storage.smart.unknown")} <strong>{formatLocaleNumber(smartUnknown, locale)}</strong></li>
+            </ul>
           </div>
-        </div>
-      ) : (
-        <div className="storage-health-empty">
-          <Activity aria-hidden="true" size={20} />
-          <span>{t("workspace.management.storage.healthNoData")}</span>
-        </div>
-      )}
+        </article>
+
+        <article className="storage-health-plot storage-health-pools" data-kind="pools" data-state={poolTone}>
+          <header>
+            <div><HardDrive aria-hidden="true" size={17} /><span><strong>{t("workspace.management.storage.gauges.pools")}</strong><small>{t("workspace.management.storage.gauges.poolsDetail")}</small></span></div>
+            <em>{poolDisplay}</em>
+          </header>
+          <div className="storage-health-pools-body">
+            <div className="storage-health-pool-value"><strong>{formatLocaleNumber(readyPools, locale)}</strong><span>{t("workspace.management.storage.healthReadyOf", { total: pools.length })}</span></div>
+            {pools.length ? (
+              <div className="storage-health-pool-track" role="list" aria-label={t("workspace.management.storage.healthPoolsChartLabel")}>
+                {pools.map((pool) => {
+                  const label = `${pool.name}: ${storagePoolStatusLabel(pool, t)}`;
+                  return <span key={pool.id} role="listitem" data-state={storagePoolTone(pool)} aria-label={label} title={label} />;
+                })}
+              </div>
+            ) : <div className="storage-health-pool-empty">{t("workspace.management.storage.noPools")}</div>}
+          </div>
+        </article>
+      </div>
     </div>
   );
 }
@@ -2275,32 +2212,6 @@ function storageHealthColor(tone: GaugeTone, readyColor = "var(--success-text)")
     return readyColor;
   }
   return "var(--neutral-status-text)";
-}
-
-function storageHealthTone(
-  summary: StorageSummary | null,
-  capacityRatio: number | null,
-  smartFailed: number,
-  readyPools: number,
-  poolCount: number
-): GaugeTone {
-  if (!summary || (capacityRatio === null && !summary.metrics.disks && !poolCount)) {
-    return "neutral";
-  }
-  if (smartFailed > 0 || summary.pools.some((pool) => pool.status === "offline")) {
-    return "danger";
-  }
-  if (capacityRatio !== null && capacityRatio >= 0.85) {
-    return "danger";
-  }
-  if (
-    (capacityRatio !== null && capacityRatio >= 0.65) ||
-    (poolCount > 0 && readyPools < poolCount) ||
-    summary.status === "partial"
-  ) {
-    return "warning";
-  }
-  return "ready";
 }
 
 function networkStatusDetail(

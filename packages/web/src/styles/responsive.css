@@ -80,12 +80,7 @@
   }
 
   .settings-operations-task {
-    grid-template-columns: 28px minmax(0, 1fr);
-  }
-
-  .settings-operations-run-button {
-    grid-column: 2;
-    width: 100%;
+    grid-template-columns: 28px minmax(0, 1fr) 38px;
   }
 
   .settings-docker-runtime-grid {
@@ -295,6 +290,28 @@
 @container system-wifi-section (max-width: 520px) {
   .system-wifi-device-details {
     padding-left: 0;
+  }
+}
+
+@container system-wifi-readonly-card (max-width: 250px) {
+  .system-wifi-readonly-header button {
+    width: 32px;
+    padding: 0;
+  }
+
+  .system-wifi-readonly-header button span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-wifi-readonly-signal-track > span {
+    transition: none;
   }
 }
 

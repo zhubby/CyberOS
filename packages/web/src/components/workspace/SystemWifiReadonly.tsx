@@ -1,103 +1,94 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, RefreshCw, Settings, Signal, Wifi, WifiOff } from "lucide-react";
+import { Settings, Wifi, WifiOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { scanSystemWifi, type NetworkSummary, type SystemWifiScanResult, type WifiStatus } from "../../api.js";
-import { groupSystemWifiAccessPoints, systemWifiDeviceTone } from "../../lib/system-wifi.js";
+import type { NetworkSummary, WifiStatus } from "../../api.js";
+import { systemWifiDeviceTone } from "../../lib/system-wifi.js";
 import { useSystemWifiStatus } from "../../lib/use-system-wifi-status.js";
 
 export function SystemWifiReadonly({
   wifi,
-  canScan,
   onStatus,
-  onOpenSettings,
-  onNotifyError
+  onOpenSettings
 }: {
   wifi: NetworkSummary["wifi"];
-  canScan: boolean;
   onStatus: (status: WifiStatus) => void;
   onOpenSettings: () => void;
-  onNotifyError: (message: string) => void;
 }) {
   const { t } = useTranslation();
-  const [selectedDeviceId, setSelectedDeviceId] = useState(wifi.devices[0]?.id ?? "");
-  const [scan, setScan] = useState<SystemWifiScanResult | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const scannedOnEntry = useRef(false);
   const reconnecting = useSystemWifiStatus(onStatus);
-  const device = wifi.devices.find((candidate) => candidate.id === selectedDeviceId) ?? wifi.devices[0] ?? null;
-  const networks = useMemo(() => {
-    if (wifi.radioEnabled !== true || !scan || scan.device !== device?.name) return [];
-    return groupSystemWifiAccessPoints(scan.accessPoints);
-  }, [device?.name, scan, wifi.radioEnabled]);
-
-  useEffect(() => {
-    if (!selectedDeviceId && wifi.devices[0]) setSelectedDeviceId(wifi.devices[0].id);
-  }, [selectedDeviceId, wifi.devices]);
-
-  useEffect(() => {
-    if (scannedOnEntry.current || wifi.radioEnabled !== true || !canScan || !device) return;
-    scannedOnEntry.current = true;
-    void refreshScan();
-  }, [canScan, device?.name, wifi.radioEnabled]);
-
-  useEffect(() => {
-    if (wifi.radioEnabled !== true) {
-      scannedOnEntry.current = false;
-      setScan(null);
-    }
-  }, [wifi.radioEnabled]);
-
-  async function refreshScan() {
-    if (!device || !canScan || wifi.radioEnabled !== true || scanning) return;
-    setScanning(true);
-    try {
-      setScan(await scanSystemWifi({ device: device.name }));
-    } catch (error) {
-      onNotifyError(error instanceof Error ? error.message : String(t("workspace.management.network.wifi.errors.operation")));
-    } finally {
-      setScanning(false);
-    }
-  }
-
+  const device = preferredWifiDevice(wifi.devices);
   const radioOff = wifi.radioEnabled === false;
   const radioUnknown = wifi.backend === "NetworkManager" && Boolean(device) && wifi.radioEnabled === null;
   const unavailable = wifi.backend !== "NetworkManager" || !device || radioUnknown;
-  const disabled = radioOff || unavailable;
-  return (
-    <section className="management-section system-wifi-section" data-disabled={disabled || undefined}>
-      <header className="management-section-header system-wifi-header">
-        <div><h3>{t("workspace.management.network.wifi.title")}</h3><p>{t("workspace.management.network.wifi.readOnlyDescription")}</p></div>
-        <div className="system-wifi-toolbar">
-          {wifi.devices.length > 1 ? <select aria-label={String(t("workspace.management.network.wifi.device"))} value={device?.id ?? ""} onChange={(event) => setSelectedDeviceId(event.target.value)}>{wifi.devices.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select> : null}
-          <button type="button" onClick={() => void refreshScan()} disabled={disabled || !canScan || !device || scanning}><RefreshCw className={scanning ? "is-spinning" : ""} size={14} /><span>{t("common.actions.refresh")}</span></button>
-          <button type="button" onClick={onOpenSettings}><Settings size={14} /><span>{t("workspace.management.network.wifi.openSettings")}</span></button>
-        </div>
-      </header>
+  const tone = reconnecting
+    ? "warning"
+    : radioOff || unavailable
+      ? "offline"
+      : systemWifiDeviceTone(device.state);
+  const state = reconnecting
+    ? "reconnecting"
+    : radioOff
+      ? "off"
+      : unavailable
+        ? "unavailable"
+        : device.state;
+  const networkName = radioOff
+    ? t("workspace.management.network.wifi.radioOffTitle")
+    : radioUnknown
+      ? t("workspace.management.network.wifi.radioUnknownTitle")
+      : wifi.backend !== "NetworkManager"
+        ? t("workspace.management.network.wifi.unavailableTitle")
+        : !device
+          ? t("workspace.management.network.wifi.noDevices")
+          : device.ssid ?? device.activeConnectionName ?? t("workspace.management.network.wifi.notConnected");
+  const signal = radioOff || unavailable ? null : device.signal;
 
-      {radioOff ? (
-        <div className="system-wifi-unavailable">
-          <WifiOff aria-hidden="true" size={18} />
-          <div><strong>{t("workspace.management.network.wifi.radioOffTitle")}</strong><p>{t("workspace.management.network.wifi.radioOffDescription")}</p></div>
-        </div>
-      ) : radioUnknown ? (
-        <div className="system-wifi-unavailable"><AlertTriangle size={18} /><div><strong>{t("workspace.management.network.wifi.radioUnknownTitle")}</strong><p>{t("workspace.management.network.wifi.radioUnknownDescription")}</p></div></div>
-      ) : unavailable ? (
-        <div className="system-wifi-unavailable"><AlertTriangle size={18} /><div><strong>{t("workspace.management.network.wifi.unavailableTitle")}</strong><p>{t("workspace.management.network.wifi.unavailableDescription", { backend: wifi.backend })}</p></div></div>
-      ) : (
-        <div className="system-wifi-content">
-          <div className="system-wifi-device-summary">
-            <div className="system-wifi-device-identity">
-              <div className="system-wifi-device-icon" data-state={systemWifiDeviceTone(device.state)}><Wifi size={20} /></div>
-              <div className="system-wifi-device-copy"><div className="system-wifi-device-heading"><strong>{device.ssid ?? device.name}</strong><span className="management-status-pill" data-state={systemWifiDeviceTone(device.state)}>{reconnecting ? t("workspace.management.network.wifi.states.reconnecting") : t(`workspace.management.network.wifi.states.${device.state}`)}</span></div><small>{device.driver ?? t("common.dash")} · {device.mac ?? t("common.dash")}</small></div>
-            </div>
-            <div className="system-wifi-device-details"><dl><div><dt>{t("workspace.management.network.wifi.signal")}</dt><dd>{device.signal === null ? t("common.dash") : `${device.signal}%`}</dd></div><div><dt>{t("workspace.management.network.wifi.channel")}</dt><dd>{device.channel ?? t("common.dash")}</dd></div><div><dt>{t("workspace.management.network.wifi.mode")}</dt><dd>{t(`workspace.management.network.wifi.modes.${device.mode}`)}</dd></div></dl></div>
+  return (
+    <section className="management-section system-wifi-readonly-card" data-state={tone}>
+      <header className="system-wifi-readonly-header">
+        <h3>{t("workspace.management.network.wifi.title")}</h3>
+        <button type="button" onClick={onOpenSettings}>
+          <Settings aria-hidden="true" size={14} />
+          <span>{t("workspace.management.network.wifi.openSettings")}</span>
+        </button>
+      </header>
+      <div className="system-wifi-readonly-body" role="status" aria-live="polite">
+        <div className="system-wifi-readonly-identity">
+          <div className="system-wifi-readonly-icon" data-state={tone}>
+            {radioOff || unavailable ? <WifiOff aria-hidden="true" size={20} /> : <Wifi aria-hidden="true" size={20} />}
           </div>
-          <section className="system-wifi-list-panel system-wifi-readonly-list">
-            <div className="system-wifi-subheader"><div><h4>{t("workspace.management.network.wifi.availableTitle")}</h4><p>{scan ? t("workspace.management.network.wifi.scanTime", { time: new Date(scan.scannedAt).toLocaleTimeString() }) : t("workspace.management.network.wifi.scanPrompt")}</p></div></div>
-            {networks.length ? <div className="system-wifi-network-list">{networks.map((network) => <article key={network.id} className="system-wifi-network-row"><Signal size={16} /><div><strong>{network.ssid}</strong><small>{t(`workspace.management.network.wifi.security.${network.security}`)} · {network.strongest.band} GHz · {network.strongest.channel}</small></div><span>{network.strongest.signal}%</span></article>)}</div> : <p className="management-empty">{scanning ? t("workspace.management.network.wifi.scanning") : t("workspace.management.network.wifi.noScan")}</p>}
-          </section>
+          <div>
+            <strong>{networkName}</strong>
+            <span className="management-status-pill" data-state={tone}>
+              {t(`workspace.management.network.wifi.states.${state}`)}
+            </span>
+          </div>
         </div>
-      )}
+        <div className="system-wifi-readonly-signal">
+          <div>
+            <span>{t("workspace.management.network.wifi.signal")}</span>
+            <strong>{signal === null ? t("common.dash") : `${signal}%`}</strong>
+          </div>
+          <div
+            className="system-wifi-readonly-signal-track"
+            role="meter"
+            aria-label={String(t("workspace.management.network.wifi.signal"))}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={signal ?? undefined}
+            aria-valuetext={signal === null ? String(t("workspace.management.network.wifi.signalUnavailable")) : `${signal}%`}
+          >
+            <span style={{ width: `${signal ?? 0}%` }} />
+          </div>
+        </div>
+      </div>
     </section>
   );
+}
+
+function preferredWifiDevice(devices: NetworkSummary["wifi"]["devices"]) {
+  return devices.find((device) => device.state === "connected")
+    ?? devices.find((device) => device.state === "hotspot")
+    ?? devices.find((device) => device.state === "connecting")
+    ?? devices[0]
+    ?? null;
 }

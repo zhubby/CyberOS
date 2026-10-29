@@ -23,6 +23,8 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 
 type HistoryFilter = "all" | OpsTask;
 
+export const OPERATIONS_HISTORY_LIMIT = 5;
+
 export function SettingsOperationsPage({
   locale,
   onClose,
@@ -52,7 +54,7 @@ export function SettingsOperationsPage({
   const refresh = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const next = await loadOperations(filter === "all" ? undefined : filter, 60);
+      const next = await loadOperations(filter === "all" ? undefined : filter, OPERATIONS_HISTORY_LIMIT);
       setData(next);
       setError(null);
       if (pendingTask) {
@@ -91,7 +93,7 @@ export function SettingsOperationsPage({
     window.requestAnimationFrame(() => confirmButtonRef.current?.focus());
   }, [confirmOpen]);
 
-  const runs = useMemo(() => data?.runs.slice(0, 60) ?? [], [data]);
+  const runs = useMemo(() => data?.runs.slice(0, OPERATIONS_HISTORY_LIMIT) ?? [], [data]);
 
   async function trigger(task: OpsTask, confirmed = false) {
     if (runningTask || pendingTask) return;
@@ -295,13 +297,14 @@ function TaskRow({ icon, task, overview, schedule, locale, busy, disabled, butto
       <button
         ref={buttonRef}
         type="button"
-        className="secondary-button settings-operations-run-button"
+        className="settings-icon-button settings-operations-run-button"
         disabled={disabled}
         aria-busy={busy || undefined}
+        aria-label={busy ? t("settings.operations.starting") : t("settings.operations.runNow")}
+        title={busy ? t("settings.operations.starting") : t("settings.operations.runNow")}
         onClick={onRun}
       >
         {busy ? <LoaderCircle aria-hidden="true" size={14} className="is-spinning" /> : <Play aria-hidden="true" size={14} />}
-        {busy ? t("settings.operations.starting") : t("settings.operations.runNow")}
       </button>
     </article>
   );
