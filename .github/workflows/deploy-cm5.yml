@@ -385,6 +385,107 @@ jobs:
           )
           release_dir="$RUNNER_TEMP/cm5-release"
 
+          prepare_incoming() {
+            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+              "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$RELEASE_SHA256" <<'REMOTE'
+          set -eu
+          target_version=$1
+          target_commit_sha=$2
+          target_sha256=$3
+          deploy_helper=/usr/local/sbin/cyberos-deploy
+          incoming_dir=/cyberos/deploy/incoming
+
+          if grep -Fq -- '  --prepare-incoming)' "$deploy_helper"; then
+            sudo -n "$deploy_helper" --prepare-incoming
+            exit 0
+          fi
+
+          # CyberOS 2.0.1 predates the constrained staging cleanup operation.
+          # Bootstrap it only through its existing full verifier, and only when
+          # the staged release is either this target or the installed build.
+          manifest_path="$incoming_dir/release-manifest.json"
+          package_path="$incoming_dir/package.deb"
+          if [ ! -e "$manifest_path" ] && [ ! -L "$manifest_path" ] && \
+             [ ! -e "$package_path" ] && [ ! -L "$package_path" ]; then
+            exit 0
+          fi
+          if [ -f "$manifest_path" ] && [ ! -L "$manifest_path" ] && \
+             [ ! -e "$package_path" ] && [ ! -L "$package_path" ]; then
+            : > "$package_path"
+            if cleanup_output="$(printf 'N\n' | sudo -n "$deploy_helper" --no-upgrade-backup 2>&1)"; then
+              echo "Legacy helper unexpectedly accepted an incomplete staged package" >&2
+              exit 1
+            fi
+            printf '%s\n' "$cleanup_output" >&2
+            printf '%s\n' "$cleanup_output" | grep -Fq "package checksum does not match release manifest"
+            [ ! -e "$manifest_path" ] && [ ! -e "$package_path" ]
+            exit 0
+          fi
+          if [ -f "$package_path" ] && [ ! -L "$package_path" ] && \
+             [ ! -e "$manifest_path" ] && [ ! -L "$manifest_path" ]; then
+            printf '{}\n' > "$manifest_path"
+            if cleanup_output="$(printf 'N\n' | sudo -n "$deploy_helper" --no-upgrade-backup 2>&1)"; then
+              echo "Legacy helper unexpectedly accepted an incomplete staged manifest" >&2
+              exit 1
+            fi
+            printf '%s\n' "$cleanup_output" >&2
+            printf '%s\n' "$cleanup_output" | grep -Fq "invalid release manifest"
+            [ ! -e "$manifest_path" ] && [ ! -e "$package_path" ]
+            exit 0
+          fi
+          [ -f "$manifest_path" ] && [ ! -L "$manifest_path" ] || {
+            echo "Legacy deployment helper requires a regular staged release manifest" >&2
+            stat -c '%A %a %U:%G %n' "$incoming_dir" "$manifest_path" 2>&1 || true
+            exit 1
+          }
+          [ -f "$package_path" ] && [ ! -L "$package_path" ] || {
+            echo "Legacy deployment helper requires a regular staged package" >&2
+            stat -c '%A %a %U:%G %n' "$incoming_dir" "$package_path" 2>&1 || true
+            exit 1
+          }
+          installed_version="$(dpkg-query -W -f='${Version}' cyberos)"
+          staged_version="$(node --input-type=module - \
+            "$manifest_path" "$package_path" "$target_version" "$target_commit_sha" \
+            "$target_sha256" "$installed_version" <<'NODE'
+          import crypto from "node:crypto";
+          import fs from "node:fs";
+
+          const [manifestPath, packagePath, targetVersion, targetCommitSha, targetSha256, installedVersion] = process.argv.slice(2);
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          const installedBuild = JSON.parse(fs.readFileSync("/usr/lib/cyberos/build-info.json", "utf8"));
+          const checksum = crypto.createHash("sha256").update(fs.readFileSync(packagePath)).digest("hex");
+          const versionPattern = /^[0-9]+\.[0-9]+\.[0-9]+$/u;
+          const shaPattern = /^[0-9a-f]{40}$/u;
+          const checksumPattern = /^[0-9a-f]{64}$/u;
+
+          if (manifest?.repository !== "zhubby/CyberOS" ||
+              typeof manifest.version !== "string" || !versionPattern.test(manifest.version) ||
+              manifest.tag !== `v${manifest.version}` ||
+              typeof manifest.commitSha !== "string" || !shaPattern.test(manifest.commitSha) ||
+              manifest.architecture !== "arm64" ||
+              manifest.asset !== `cyberos_${manifest.version}_arm64.deb` ||
+              typeof manifest.sha256 !== "string" || !checksumPattern.test(manifest.sha256) ||
+              checksum !== manifest.sha256) {
+            throw new Error("staged legacy release metadata or checksum is invalid");
+          }
+
+          const isTarget = manifest.version === targetVersion &&
+            manifest.commitSha === targetCommitSha && manifest.sha256 === targetSha256;
+          const isInstalled = manifest.version === installedVersion &&
+            manifest.commitSha.toLowerCase() === installedBuild.commitSha?.toLowerCase();
+          if (!isTarget && !isInstalled) {
+            throw new Error(`refusing to bootstrap unrelated staged release ${manifest.tag}`);
+          }
+          process.stdout.write(manifest.version);
+          NODE
+          )"
+          [ "$(dpkg-deb -f "$package_path" Version)" = "$staged_version" ]
+          [ "$(dpkg-deb -f "$package_path" Architecture)" = arm64 ]
+          printf 'N\n' | sudo -n "$deploy_helper" --no-upgrade-backup
+          [ ! -e "$manifest_path" ] && [ ! -e "$package_path" ]
+          REMOTE
+          }
+
           stage_release() {
             local incoming_dir=$1
             local manifest_path=$2
@@ -393,20 +494,6 @@ jobs:
             local remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"
             local partial_package="$incoming_dir/package.deb.$RELEASE_SHA256.download"
 
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-              "$incoming_dir/release-manifest.json" <<'REMOTE'
-          set -eu
-          manifest_path=$1
-          [ "$manifest_path" = /cyberos/deploy/incoming/release-manifest.json ] || {
-            echo "Release manifest path is outside the managed incoming directory" >&2
-            exit 1
-          }
-          if [ -L "$manifest_path" ] || { [ -e "$manifest_path" ] && [ ! -f "$manifest_path" ]; }; then
-            echo "Release manifest path is not a regular file" >&2
-            exit 1
-          fi
-          rm -f -- "$manifest_path"
-          REMOTE
             scp "${ssh_options[@]}" "$manifest_path" \
               "$CM5_DEPLOY_USER@$CM5_HOST:$incoming_dir/release-manifest.json"
             rm -rf "$local_parts_dir"
@@ -556,6 +643,7 @@ jobs:
           REMOTE
           }
 
+          prepare_incoming
           stage_release /cyberos/deploy/incoming "$release_dir/release-manifest.json" cyberos
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
             "printf 'N\\n' | sudo -n /usr/local/sbin/cyberos-deploy --no-upgrade-backup"

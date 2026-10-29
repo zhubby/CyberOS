@@ -506,11 +506,34 @@ EOF
     log "warning: unable to remove stale deployment work directories"
 }
 
+prepare_incoming() {
+  command -v flock >/dev/null 2>&1 || die "flock is required"
+  [ -d "$BASE_DIR" ] && [ ! -L "$BASE_DIR" ] || die "deployment directory is unavailable: $BASE_DIR"
+  [ -d "$INCOMING_DIR" ] && [ ! -L "$INCOMING_DIR" ] || \
+    die "incoming directory is unavailable: $INCOMING_DIR"
+
+  install -d -o root -g root -m 0700 /run/lock
+  exec 9>"$LOCK_PATH"
+  flock -n 9 || die "another CyberOS deployment is already running"
+
+  # The unprivileged uploader cannot remove root-owned files left by an
+  # interrupted helper. Keep cleanup inside the fixed staging directory and
+  # behind the same lock used by deployments.
+  find "$INCOMING_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  log "incoming directory prepared"
+}
+
 trap capture_failure EXIT HUP INT TERM
 
 [ "$(id -u)" -eq 0 ] || die "must run as root"
 
 case "${1:-}" in
+  --prepare-incoming)
+    [ "$#" -eq 1 ] || die "incoming preparation does not accept arguments"
+    prepare_incoming
+    success=1
+    exit 0
+    ;;
   --activate-runtime)
     [ "$#" -eq 3 ] || die "internal runtime activation requires a work directory and state directory"
     command -v flock >/dev/null 2>&1 || die "flock is required"
@@ -558,9 +581,9 @@ case "${1:-}" in
     create_upgrade_backup=0
     ;;
   '') ;;
-  *) die "usage: cyberos-deploy [--no-upgrade-backup|--settings-sha256|--database-check]" ;;
+  *) die "usage: cyberos-deploy [--prepare-incoming|--no-upgrade-backup|--settings-sha256|--database-check]" ;;
 esac
-[ "$#" -le 1 ] || die "usage: cyberos-deploy [--no-upgrade-backup|--settings-sha256|--database-check]"
+[ "$#" -le 1 ] || die "usage: cyberos-deploy [--prepare-incoming|--no-upgrade-backup|--settings-sha256|--database-check]"
 
 command -v node >/dev/null 2>&1 || die "Node.js is required"
 command -v apt-get >/dev/null 2>&1 || die "apt-get is required"
