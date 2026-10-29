@@ -393,6 +393,20 @@ jobs:
             local remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"
             local partial_package="$incoming_dir/package.deb.$RELEASE_SHA256.download"
 
+            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+              "$incoming_dir/release-manifest.json" <<'REMOTE'
+          set -eu
+          manifest_path=$1
+          [ "$manifest_path" = /cyberos/deploy/incoming/release-manifest.json ] || {
+            echo "Release manifest path is outside the managed incoming directory" >&2
+            exit 1
+          }
+          if [ -L "$manifest_path" ] || { [ -e "$manifest_path" ] && [ ! -f "$manifest_path" ]; }; then
+            echo "Release manifest path is not a regular file" >&2
+            exit 1
+          fi
+          rm -f -- "$manifest_path"
+          REMOTE
             scp "${ssh_options[@]}" "$manifest_path" \
               "$CM5_DEPLOY_USER@$CM5_HOST:$incoming_dir/release-manifest.json"
             rm -rf "$local_parts_dir"

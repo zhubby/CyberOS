@@ -180,7 +180,7 @@ git push origin "v${VERSION}"
 
 1. 进入 `production` environment，并验证 GitHub OIDC claims；
 2. 使用 `tailscale/github-action@v4` 创建带 `tag:github-actions` 的临时节点；
-3. 经 Tailscale SSH 上传 `release-manifest.json`，并用 SFTP 将 package 切成可独立续传的分片；CM5 按顺序拼接并校验完整 SHA256 后，再原子替换 staging 中的 `package.deb`；
+3. 经 Tailscale SSH 上传 `release-manifest.json`；上传前只在固定 incoming 目录内拒绝 symlink/特殊文件并清除旧的普通 manifest。随后用 SFTP 将 package 切成可独立续传的分片；CM5 按顺序拼接并校验完整 SHA256 后，再原子替换 staging 中的 `package.deb`；
 4. 执行 `sudo -n /usr/local/sbin/cyberos-deploy`；
 5. 再次检查常驻服务、核心 timers 的启用/运行状态和下一次触发时间、failed units、API liveness、存储池挂载状态、Operations Health，以及 build-info 的版本和 commit；
 6. workflow 结束时 logout 并清理临时 Tailscale 节点。

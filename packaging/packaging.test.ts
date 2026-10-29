@@ -528,6 +528,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
     expect(deployWorkflow).toContain('local_parts_dir="$release_dir/parts-$upload_name"');
     expect(deployWorkflow).toContain('remote_parts_dir="$incoming_dir/package.deb.$RELEASE_SHA256.parts"');
+    expect(deployWorkflow).toContain('[ "$manifest_path" = /cyberos/deploy/incoming/release-manifest.json ]');
+    expect(deployWorkflow).toContain('if [ -L "$manifest_path" ] || { [ -e "$manifest_path" ] && [ ! -f "$manifest_path" ]; }');
+    expect(deployWorkflow).toContain('rm -f -- "$manifest_path"');
     expect(deployWorkflow).toContain('split -b 4m -d -a 4');
     expect(deployWorkflow).toContain('partial_package="$incoming_dir/package.deb.$RELEASE_SHA256.download"');
     expect(deployWorkflow).toContain('if [ -L "$remote_parts_dir" ] || { [ -e "$remote_parts_dir" ] && [ ! -d "$remote_parts_dir" ]; }');
