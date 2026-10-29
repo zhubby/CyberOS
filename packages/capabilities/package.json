@@ -1,6 +1,6 @@
 {
   "name": "@cyberos/capabilities",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -8,6 +8,6 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@cyberos/shared": "2.0.6"
+    "@cyberos/shared": "2.0.7"
   }
 }

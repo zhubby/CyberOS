@@ -1,3 +1,9 @@
+cyberos (2.0.7) unstable; urgency=medium
+
+  * Add iSCSI targets and LUN management with protected storage, plus BitTorrent downloads and seeding.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Thu, 29 Oct 2026 14:13:40 +0000
+
 cyberos (2.0.6) unstable; urgency=medium
 
   * Deploy sharing credential relocation and database-driven TV activation with portable ARM64 packaging checks.
