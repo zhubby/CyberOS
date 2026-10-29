@@ -1,6 +1,6 @@
 {
   "name": "@cyberos/worker",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "type": "module",
   "exports": {
     ".": "./src/processor.ts"
@@ -12,9 +12,9 @@
     "build": "cd ../.. && tsup packages/worker/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --external=@earendil-works/pi-coding-agent --external=undici --out-dir packages/worker/dist"
   },
   "dependencies": {
-    "@cyberos/agent": "2.0.1",
-    "@cyberos/capability-runtime": "2.0.1",
-    "@cyberos/db": "2.0.1",
-    "@cyberos/shared": "2.0.1"
+    "@cyberos/agent": "2.0.2",
+    "@cyberos/capability-runtime": "2.0.2",
+    "@cyberos/db": "2.0.2",
+    "@cyberos/shared": "2.0.2"
   }
 }

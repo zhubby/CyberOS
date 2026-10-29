@@ -1,3 +1,9 @@
+cyberos (2.0.2) unstable; urgency=medium
+
+  * Add managed MCP servers and Skills, streamline system dashboards and sharing, and enable TV mode with restored CM5 telemetry.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Thu, 29 Oct 2026 08:26:07 +0000
+
 cyberos (2.0.1) unstable; urgency=medium
 
   * Add photo library setup, repair terminal initialization, and ensure SMART telemetry tooling is installed.
