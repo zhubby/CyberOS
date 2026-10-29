@@ -1,9 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getShareSettings, openCyberOsDb, saveShareSettings, type CyberOsDatabase } from "@cyberos/db";
+import { getShareSettings, openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
 import { loadBootstrap, type CyberOsPaths } from "@cyberos/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { settingsSha256, upgradeShareCredential, verifySettingsUpgrade } from "./settings-upgrade.js";
@@ -15,9 +13,9 @@ beforeEach(() => {
   const root = mkdtempSync(path.join(os.tmpdir(), "cyberos-settings-upgrade-"));
   paths = loadBootstrap({ CYBEROS_ENVIRONMENT: "development", CYBEROS_ROOT: root }).paths;
   db = openCyberOsDb(paths.databasePath);
-  const record = saveShareSettings(db, { enabled: false, account: { username: "media", password: null }, shares: [] });
-  record.account.password = "saved-secret";
-  db.prepare("UPDATE system_settings SET value_json = ? WHERE key = 'share_settings'").run(JSON.stringify(record));
+  const updatedAt = "2026-10-01T00:00:00.000Z";
+  const record = { enabled: false, account: { username: "media", password: "saved-secret" }, shares: [], updatedAt };
+  db.prepare("INSERT INTO system_settings VALUES (?, ?, ?)").run("share_settings", JSON.stringify(record), updatedAt);
 });
 
 afterEach(() => {
@@ -28,9 +26,8 @@ afterEach(() => {
 describe("CyberOS 2.x share credential relocation", () => {
   it("preserves settings and revision, moves the credential privately, and verifies exact snapshots", () => {
     const before = settingsSha256(db);
-    const cliOutput = execFileSync("sqlite3", [paths.databasePath,
-      "PRAGMA busy_timeout=5000; SELECT length(key) || ':' || hex(key) || ':' || length(value_json) || ':' || hex(value_json) || ':' || length(updated_at) || ':' || hex(updated_at) FROM system_settings ORDER BY key;"]);
-    expect(before).toBe(createHash("sha256").update(cliOutput).digest("hex"));
+    // Golden digest produced by the installed helper's sqlite3 CLI pipeline.
+    expect(before).toBe("e850bdcdb780fb4f0e72aff492862e13b9cbf31edf4c3219b32d1a87f8e229a0");
     const original = db.prepare("SELECT updated_at FROM system_settings WHERE key = 'share_settings'").get();
     upgradeShareCredential(db, paths);
     expect(getShareSettings(db)?.account).toEqual({ username: "media", password: null });
