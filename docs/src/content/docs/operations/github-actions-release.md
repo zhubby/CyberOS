@@ -194,6 +194,7 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 目标版本低于已安装版本时拒绝降级。
 - 版本相同但 commit 不同时拒绝覆盖。
 - 版本和 commit 都相同时不重装，只重新验证服务和 build-info，因此可安全重试同一个 tag。
+- workflow 在升级前记录 `system_settings` 的稳定摘要，并在升级后严格比对。若机器上已安装的 helper 早于数据库设置摘要命令，则只允许一次 `database-only` 引导：升级前必须通过数据库完整性检查，升级后必须由新 helper 生成有效摘要；这不会读取或迁移已删除的产品配置文件。后续部署恢复严格的摘要前后比对。
 - 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/cyberos/state` 和 `/cyberos/home`，再通过 APT 安装已校验的 `.deb`。
 - 安装后先启动 API，再启动 monitor、立即运行一次 Health，然后恢复后台服务并强制启用 maintenance、health 和 backup 核心 timers。monitor 失败会报告 monitoring degraded，但不会阻断核心 API 部署；其他核心服务及 Operations Health 仍须通过。
 

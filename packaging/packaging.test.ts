@@ -554,6 +554,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain(
       "printf 'N\\\\n' | sudo -n /usr/local/sbin/cyberos-deploy --no-upgrade-backup"
     );
+    expect(deployWorkflow).toContain("grep -Fq -- '  --settings-sha256)' /usr/local/sbin/cyberos-deploy");
+    expect(deployWorkflow).toContain("settings_baseline_mode=database-only");
+    expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-settings-baseline-mode"');
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-settings.sha256"');
     expect(deployWorkflow).not.toContain("allow_legacy_migration");
     expect(deployWorkflow).not.toContain("migration-status");

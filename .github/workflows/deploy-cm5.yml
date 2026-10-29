@@ -329,16 +329,40 @@ jobs:
           }
           [ -x /usr/local/sbin/cyberos-deploy ]
           [ -d /cyberos/deploy/incoming ] && [ -w /cyberos/deploy/incoming ]
-          settings_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --settings-sha256)"
           package_version="$(dpkg-query -W -f='${Version}' cyberos)"
-          printf '%s\n%s\n%s\n%s\n' \
-            "$settings_sha256" "$package_version" "$package_status" "$runtime_node_version"
+          if grep -Fq -- '  --settings-sha256)' /usr/local/sbin/cyberos-deploy; then
+            settings_baseline_mode=checksum
+            settings_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --settings-sha256)"
+          else
+            # The installed helper can predate database-native settings. Require
+            # an intact database before the package installs the current helper;
+            # all subsequent deployments use the exact settings checksum path.
+            database_check="$(sudo -n /usr/local/sbin/cyberos-deploy --database-check)"
+            [ "$database_check" = ok ]
+            settings_baseline_mode=database-only
+            settings_sha256=unavailable
+          fi
+          printf '%s\n%s\n%s\n%s\n%s\n' \
+            "$settings_baseline_mode" "$settings_sha256" "$package_version" \
+            "$package_status" "$runtime_node_version"
           REMOTE
           )
-          [[ "${baseline[0]:-}" =~ ^[0-9a-f]{64}$ ]]
-          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-settings.sha256"
+          case "${baseline[0]:-}" in
+            checksum)
+              [[ "${baseline[1]:-}" =~ ^[0-9a-f]{64}$ ]]
+              ;;
+            database-only)
+              [[ "${baseline[1]:-}" == unavailable ]]
+              ;;
+            *)
+              printf 'Unsupported CM5 settings baseline mode: %s\n' "${baseline[0]:-missing}" >&2
+              exit 1
+              ;;
+          esac
+          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-settings-baseline-mode"
+          printf '%s\n' "${baseline[1]}" > "$RUNNER_TEMP/cm5-settings.sha256"
           printf 'CM5 upgrade baseline: version=%s status=%s node=%s\n' \
-            "${baseline[1]:-unknown}" "${baseline[2]:-unknown}" "${baseline[3]:-unknown}"
+            "${baseline[2]:-unknown}" "${baseline[3]:-unknown}" "${baseline[4]:-unknown}"
 
       - name: Stage and deploy release on CM5
         if: inputs.verify_only != true
@@ -535,13 +559,16 @@ jobs:
             -o ServerAliveCountMax=4
             -o StrictHostKeyChecking=accept-new
           )
+          settings_baseline_mode="$(<"$RUNNER_TEMP/cm5-settings-baseline-mode")"
           expected_settings_sha256="$(<"$RUNNER_TEMP/cm5-settings.sha256")"
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
-            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$expected_settings_sha256" <<'REMOTE'
+            "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$settings_baseline_mode" \
+            "$expected_settings_sha256" <<'REMOTE'
           set -eu
           expected_version=$1
           expected_commit_sha=$2
-          expected_settings_sha256=$3
+          settings_baseline_mode=$3
+          expected_settings_sha256=$4
           check_dir="$(mktemp -d /tmp/cyberos-deploy-check.XXXXXX)"
           trap 'rm -rf "$check_dir"' EXIT HUP INT TERM
 
@@ -550,7 +577,19 @@ jobs:
           [ "$installed_status" = "install ok installed" ]
           [ "$installed_version" = "$expected_version" ]
           actual_settings_sha256="$(sudo -n /usr/local/sbin/cyberos-deploy --settings-sha256)"
-          [ "$actual_settings_sha256" = "$expected_settings_sha256" ]
+          printf '%s\n' "$actual_settings_sha256" | grep -Eq '^[0-9a-f]{64}$'
+          case "$settings_baseline_mode" in
+            checksum)
+              [ "$actual_settings_sha256" = "$expected_settings_sha256" ]
+              ;;
+            database-only)
+              [ "$expected_settings_sha256" = unavailable ]
+              ;;
+            *)
+              printf 'Unsupported settings baseline mode: %s\n' "$settings_baseline_mode" >&2
+              exit 1
+              ;;
+          esac
 
           check_active_unit() {
             unit=$1
