@@ -1,14 +1,14 @@
 {
   "name": "@cyberos/mcp-cli",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "cd ../.. && tsup packages/mcp-cli/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir packages/mcp-cli/dist"
   },
   "dependencies": {
-    "@cyberos/capabilities": "2.0.9",
-    "@cyberos/db": "2.0.9",
-    "@cyberos/shared": "2.0.9"
+    "@cyberos/capabilities": "2.0.10",
+    "@cyberos/db": "2.0.10",
+    "@cyberos/shared": "2.0.10"
   }
 }
