@@ -1,3 +1,9 @@
+cyberos (2.0.4) unstable; urgency=medium
+
+  * Repair CM5 deployment staging permissions, first-start database initialization, and legacy deployment recovery.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Thu, 29 Oct 2026 10:41:03 +0000
+
 cyberos (2.0.3) unstable; urgency=medium
 
   * Fix CM5 deployment bootstrap when the installed helper predates settings checksum support.
