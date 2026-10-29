@@ -133,7 +133,8 @@ export function registerSessionRoutes(server: FastifyInstance, { db, config }: A
             role: item.message.role,
             content: item.message.content,
             createdAt: item.message.createdAt,
-            sequence: item.sequence
+            sequence: item.sequence,
+            turnSequence: item.turnSequence
           };
         }
         if (item.event) {
@@ -144,7 +145,8 @@ export function registerSessionRoutes(server: FastifyInstance, { db, config }: A
               ? getFailedJobMessageContent(item.event.payload)
               : getAgentMessageContent(item.event.payload),
             createdAt: item.event.createdAt,
-            sequence: item.sequence
+            sequence: item.sequence,
+            turnSequence: item.turnSequence
           };
         }
         return null;
@@ -191,7 +193,8 @@ export function registerSessionRoutes(server: FastifyInstance, { db, config }: A
         role: "user",
         content: result.message.content,
         createdAt: result.message.createdAt,
-        sequence: result.transcriptSequence
+        sequence: result.transcriptSequence,
+        turnSequence: result.transcriptSequence
       },
       command: result.command
     });

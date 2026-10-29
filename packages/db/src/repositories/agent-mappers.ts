@@ -54,6 +54,7 @@ export function mapEvent(row: DbEventRow): AgentEventRecord {
     type: row.type,
     audience: row.message_role === "system" ? "notification" : "chat",
     transcriptSequence: row.transcript_sequence ?? null,
+    transcriptTurnSequence: row.transcript_turn_sequence ?? null,
     source: row.source,
     sourceId: row.source_id,
     runId: row.run_id,

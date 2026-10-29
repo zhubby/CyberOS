@@ -3,13 +3,19 @@ import type { TranscriptMessage } from "../api.js";
 import type { AgentEvent } from "../api.js";
 import { initialTranscriptState, transcriptReducer } from "./transcript.js";
 
-function message(id: string, sequence: number | null, content = id): TranscriptMessage {
+function message(
+  id: string,
+  sequence: number | null,
+  content = id,
+  turnSequence: number | null = sequence
+): TranscriptMessage {
   return {
     id,
     role: id.startsWith("event:") ? "assistant" : "user",
     content,
     createdAt: "2026-10-16T00:00:00.000Z",
-    sequence
+    sequence,
+    turnSequence
   };
 }
 
@@ -53,6 +59,58 @@ describe("transcriptReducer", () => {
       ["message:1", "message:1"],
       ["event:2", "updated"],
       ["event:3", "event:3"]
+    ]);
+  });
+
+  it("keeps each reply with its prompt when a later prompt was persisted first", () => {
+    let state = transcriptReducer(initialTranscriptState, { type: "begin", sessionId: "session-1" });
+    state = transcriptReducer(state, {
+      type: "snapshot",
+      sessionId: "session-1",
+      messages: [
+        message("message:1", 1, "First prompt", 1),
+        message("message:2", 2, "Second prompt", 2)
+      ]
+    });
+    state = transcriptReducer(state, {
+      type: "event",
+      sessionId: "session-1",
+      message: message("event:3", 3, "First reply", 1)
+    });
+    state = transcriptReducer(state, {
+      type: "event",
+      sessionId: "session-1",
+      message: message("event:4", 4, "Second reply", 2)
+    });
+
+    expect(state.messages.map((item) => item.content)).toEqual([
+      "First prompt",
+      "First reply",
+      "Second prompt",
+      "Second reply"
+    ]);
+  });
+
+  it("keeps a streaming reply before a later persisted prompt", () => {
+    let state = transcriptReducer(initialTranscriptState, { type: "begin", sessionId: "session-1" });
+    state = transcriptReducer(state, {
+      type: "snapshot",
+      sessionId: "session-1",
+      messages: [
+        message("message:1", 1, "First prompt", 1),
+        message("message:2", 2, "Second prompt", 2)
+      ]
+    });
+    state = transcriptReducer(state, {
+      type: "stream",
+      sessionId: "session-1",
+      event: streamEvent("message_update", 3, "First reply")
+    });
+
+    expect(state.messages.map((item) => item.content)).toEqual([
+      "First prompt",
+      "First reply",
+      "Second prompt"
     ]);
   });
 
@@ -194,6 +252,7 @@ function streamEvent(type: "message_start" | "message_update" | "message_end", s
     type,
     audience: "chat",
     transcriptSequence: null,
+    transcriptTurnSequence: 1,
     source: "pi",
     sourceId: `run-1:${sequence}`,
     runId: "run-1",

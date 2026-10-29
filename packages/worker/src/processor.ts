@@ -126,6 +126,20 @@ export async function processNextAgentCommand({
       }
     }
     const workingPath = activeJob?.workingPath ?? session.currentPath;
+    if (command.type === "steer" || command.type === "follow_up") {
+      appendEvent(db, {
+        sessionId: session.id,
+        jobId: activeJob?.id ?? null,
+        type: "agent.message",
+        runId,
+        sourceId: `${runId}:user-message`,
+        payload: {
+          role: "user",
+          content: command.payload.content,
+          delivery: command.type
+        }
+      });
+    }
     const result = await commandRunner({
       session: { ...session, currentPath: workingPath },
       root: workspace,
@@ -197,20 +211,6 @@ export async function processNextAgentCommand({
       result
     });
     if (!completed) return true;
-    if (command.type === "steer" || command.type === "follow_up") {
-      appendEvent(db, {
-        sessionId: session.id,
-        jobId: activeJob?.id ?? null,
-        type: "agent.message",
-        runId,
-        sourceId: `${runId}:user-message`,
-        payload: {
-          role: "user",
-          content: command.payload.content,
-          delivery: command.type
-        }
-      });
-    }
     appendEvent(db, {
       sessionId: session.id,
       jobId: activeJob?.id ?? null,

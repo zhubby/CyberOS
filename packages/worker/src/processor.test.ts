@@ -148,7 +148,13 @@ describe("worker processor", () => {
       type: "steer",
       payload: { content: "Focus on errors" }
     });
-    const commandRunner = vi.fn(async () => ({ disposition: "queued" }));
+    const commandRunner = vi.fn(async () => {
+      expect(listEvents(db, { sessionId: session.id }).map((event) => event.type)).toEqual([
+        "command.running",
+        "agent.message"
+      ]);
+      return { disposition: "queued" };
+    });
 
     await expect(processNextAgentCommand({
       db,

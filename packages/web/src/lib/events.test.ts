@@ -13,6 +13,7 @@ describe("event helpers", () => {
       type: "agent.message",
       audience: "chat",
       transcriptSequence: 7,
+      transcriptTurnSequence: 3,
       payload: { content: "Done" },
       createdAt: "2026-08-21T00:00:00.000Z"
     };
@@ -22,7 +23,8 @@ describe("event helpers", () => {
       role: "assistant",
       content: "Done",
       createdAt: "2026-08-21T00:00:00.000Z",
-      sequence: 7
+      sequence: 7,
+      turnSequence: 3
     });
   });
 
@@ -37,6 +39,7 @@ describe("event helpers", () => {
         type: "job.running",
         audience: "chat",
         transcriptSequence: null,
+        transcriptTurnSequence: 1,
         payload: { content: "ignored" },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -51,6 +54,7 @@ describe("event helpers", () => {
         type: "agent.message",
         audience: "chat",
         transcriptSequence: 2,
+        transcriptTurnSequence: 1,
         payload: { content: "" },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -65,6 +69,7 @@ describe("event helpers", () => {
         type: "agent.message",
         audience: "chat",
         transcriptSequence: 3,
+        transcriptTurnSequence: 1,
         payload: { content: null },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -82,6 +87,7 @@ describe("event helpers", () => {
         type: "job.failed",
         audience: "chat",
         transcriptSequence: 4,
+        transcriptTurnSequence: 1,
         payload: { error: "Pi model is unavailable" },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -90,7 +96,8 @@ describe("event helpers", () => {
       role: "assistant",
       content: "Agent failed: Pi model is unavailable",
       createdAt: "2026-08-21T00:00:00.000Z",
-      sequence: 4
+      sequence: 4,
+      turnSequence: 1
     });
   });
 
@@ -105,6 +112,7 @@ describe("event helpers", () => {
         type: "agent.failed",
         audience: "chat",
         transcriptSequence: null,
+        transcriptTurnSequence: 1,
         payload: { error: "Pi model is unavailable" },
         createdAt: "2026-08-21T00:00:00.000Z"
       })
@@ -121,6 +129,7 @@ describe("event helpers", () => {
       type: "job.failed",
       audience: "notification",
       transcriptSequence: null,
+      transcriptTurnSequence: 1,
       payload: { error: "Docker failed" },
       createdAt: "2026-08-21T00:00:00.000Z"
     })).toBeNull();

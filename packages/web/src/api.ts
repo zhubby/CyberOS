@@ -312,10 +312,14 @@ export interface TranscriptMessage {
   content: string;
   createdAt: string;
   sequence: number | null;
+  turnSequence: number | null;
   streaming?: boolean;
 }
 
-type PersistedTranscriptMessage = Omit<TranscriptMessage, "sequence"> & { sequence: number };
+type PersistedTranscriptMessage = Omit<TranscriptMessage, "sequence" | "turnSequence"> & {
+  sequence: number;
+  turnSequence: number;
+};
 
 export interface Job {
   id: string;
@@ -419,6 +423,7 @@ export interface AgentEvent {
   type: string;
   audience: "chat" | "notification";
   transcriptSequence: number | null;
+  transcriptTurnSequence: number | null;
   source?: string;
   sourceId?: string | null;
   runId: string;

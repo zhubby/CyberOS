@@ -130,6 +130,7 @@ function reduceStreamEvent(state: TranscriptState, event: AgentEvent): Transcrip
           content,
           createdAt: event.createdAt,
           sequence: null,
+          turnSequence: event.transcriptTurnSequence,
           streaming: event.type !== "message_end"
         }])
       : withoutCurrent,
@@ -154,6 +155,11 @@ export function mergeTranscriptMessages(
     }
   }
   return [...messagesById.values()].sort((left, right) => {
+    if (left.turnSequence === null) return right.turnSequence === null ? 0 : 1;
+    if (right.turnSequence === null) return -1;
+    if (left.turnSequence !== right.turnSequence) {
+      return left.turnSequence - right.turnSequence;
+    }
     if (left.sequence === null) return right.sequence === null ? 0 : 1;
     if (right.sequence === null) return -1;
     return left.sequence - right.sequence;

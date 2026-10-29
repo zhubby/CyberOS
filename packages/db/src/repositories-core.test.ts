@@ -417,16 +417,16 @@ describe("core repositories", () => {
     expect(listTranscriptItems(db, { sessionId: session.id })).toHaveLength(2);
   });
 
-  it("persists visible chat items with one monotonic transaction sequence", () => {
+  it("orders visible chat items by their prompt turn when replies are persisted later", () => {
     const session = createSession(db, { });
     const first = createUserMessageAndJob(db, { sessionId: session.id, content: "First" });
+    const second = createUserMessageAndJob(db, { sessionId: session.id, content: "Second" });
     const reply = appendEvent(db, {
       sessionId: session.id,
       jobId: first.job.id,
       type: "agent.message",
       payload: { content: "Reply" }
     });
-    const second = createUserMessageAndJob(db, { sessionId: session.id, content: "Second" });
     const lifecycle = appendEvent(db, {
       sessionId: session.id,
       jobId: second.job.id,
@@ -442,12 +442,20 @@ describe("core repositories", () => {
 
     expect([
       first.transcriptSequence,
-      reply.transcriptSequence,
       second.transcriptSequence,
+      reply.transcriptSequence,
       failed.transcriptSequence
     ]).toEqual([1, 2, 3, 4]);
     expect(lifecycle.transcriptSequence).toBeNull();
-    expect(listTranscriptItems(db, { sessionId: session.id }).map((item) => item.sequence)).toEqual([1, 2, 3, 4]);
+    expect(listTranscriptItems(db, { sessionId: session.id }).map((item) => ({
+      sequence: item.sequence,
+      turnSequence: item.turnSequence
+    }))).toEqual([
+      { sequence: 1, turnSequence: 1 },
+      { sequence: 3, turnSequence: 1 },
+      { sequence: 2, turnSequence: 2 },
+      { sequence: 4, turnSequence: 2 }
+    ]);
 
     db.exec(`
       CREATE TRIGGER reject_test_transcript_event

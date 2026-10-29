@@ -2219,6 +2219,7 @@ export interface AgentEventRecord<TPayload = unknown> {
   type: AgentEventType;
   audience: AgentEventAudience;
   transcriptSequence: number | null;
+  transcriptTurnSequence: number | null;
   source: string;
   sourceId: string | null;
   runId: string;

@@ -480,11 +480,13 @@ export function appendEvent<TPayload>(
           agent_events.payload_json, agent_events.created_at, agent_events.source,
           agent_events.source_id, agent_events.run_id, agent_events.sequence,
           agent_messages.role AS message_role,
-          agent_transcript_items.sequence AS transcript_sequence
+          agent_transcript_items.sequence AS transcript_sequence,
+          job_transcript.sequence AS transcript_turn_sequence
         FROM agent_events
         LEFT JOIN jobs ON jobs.id = agent_events.job_id
         LEFT JOIN agent_messages ON agent_messages.id = jobs.message_id
         LEFT JOIN agent_transcript_items ON agent_transcript_items.event_id = agent_events.id
+        LEFT JOIN agent_transcript_items AS job_transcript ON job_transcript.message_id = jobs.message_id
         WHERE agent_events.session_id = ? AND agent_events.source = ? AND agent_events.source_id = ?
       `).get(input.sessionId, source, sourceId) as DbEventRow | undefined;
       if (existing) return mapEvent(existing) as AgentEventRecord<TPayload>;
@@ -520,6 +522,14 @@ export function appendEvent<TPayload>(
       `).run(input.sessionId, eventId);
       transcriptSequence = Number(transcriptResult.lastInsertRowid);
     }
+    const transcriptTurnSequence = jobId
+      ? db.prepare(`
+          SELECT transcript.sequence
+          FROM jobs
+          JOIN agent_transcript_items AS transcript ON transcript.message_id = jobs.message_id
+          WHERE jobs.id = ?
+        `).pluck().get(jobId)
+      : null;
     return {
       schemaVersion: 1,
       id: eventId,
@@ -528,6 +538,9 @@ export function appendEvent<TPayload>(
       type: input.type,
       audience,
       transcriptSequence,
+      transcriptTurnSequence: typeof transcriptTurnSequence === "number"
+        ? transcriptTurnSequence
+        : transcriptSequence,
       source,
       sourceId,
       runId,
@@ -557,11 +570,13 @@ export function listEvents(
         agent_events.run_id,
         agent_events.sequence,
         agent_messages.role AS message_role,
-        agent_transcript_items.sequence AS transcript_sequence
+        agent_transcript_items.sequence AS transcript_sequence,
+        job_transcript.sequence AS transcript_turn_sequence
       FROM agent_events
       LEFT JOIN jobs ON jobs.id = agent_events.job_id
       LEFT JOIN agent_messages ON agent_messages.id = jobs.message_id
       LEFT JOIN agent_transcript_items ON agent_transcript_items.event_id = agent_events.id
+      LEFT JOIN agent_transcript_items AS job_transcript ON job_transcript.message_id = jobs.message_id
       WHERE agent_events.session_id = ? AND agent_events.id > ?
       ORDER BY agent_events.id ASC
       LIMIT ?

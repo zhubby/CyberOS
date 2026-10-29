@@ -64,7 +64,8 @@ export function registerJobRoutes(server: FastifyInstance, { db }: ApiRouteConte
         role: "user",
         content: result.message.content,
         createdAt: result.message.createdAt,
-        sequence: result.transcriptSequence
+        sequence: result.transcriptSequence,
+        turnSequence: result.transcriptSequence
       }
     });
   });

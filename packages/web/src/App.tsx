@@ -1681,7 +1681,8 @@ export function App() {
       role: "user" as const,
       content,
       createdAt: now,
-      sequence: null
+      sequence: null,
+      turnSequence: null
     };
 
     setMessageSubmitting(true);

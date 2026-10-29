@@ -86,6 +86,7 @@ export type DbEventRow = {
   sequence: number;
   message_role?: AgentMessageRecord["role"] | null;
   transcript_sequence?: number | null;
+  transcript_turn_sequence?: number | null;
 };
 
 export type DbOperationNotificationRow = {

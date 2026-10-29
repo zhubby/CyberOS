@@ -22,7 +22,8 @@ export function eventToTranscriptMessage(event: AgentEvent): TranscriptMessage |
     role: event.payload.role === "user" ? "user" : "assistant",
     content,
     createdAt: event.createdAt,
-    sequence: event.transcriptSequence
+    sequence: event.transcriptSequence,
+    turnSequence: event.transcriptTurnSequence
   };
 }
 
@@ -39,7 +40,8 @@ function failedJobToTranscriptMessage(event: AgentEvent): TranscriptMessage | nu
     role: "assistant",
     content: `Agent failed: ${error}`,
     createdAt: event.createdAt,
-    sequence: event.transcriptSequence
+    sequence: event.transcriptSequence,
+    turnSequence: event.transcriptTurnSequence
   };
 }
 

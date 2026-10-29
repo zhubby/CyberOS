@@ -4391,6 +4391,10 @@ describe("API server", () => {
       sessionId: session.id,
       content: "List this folder"
     });
+    const second = createUserMessageAndJob(db, {
+      sessionId: session.id,
+      content: "Open it"
+    });
     const firstReply = appendEvent(db, {
       sessionId: session.id,
       jobId: first.job.id,
@@ -4399,10 +4403,6 @@ describe("API server", () => {
         role: "assistant",
         content: "hello.txt is available"
       }
-    });
-    const second = createUserMessageAndJob(db, {
-      sessionId: session.id,
-      content: "Open it"
     });
     const failure = appendEvent(db, {
       sessionId: session.id,
@@ -4428,28 +4428,32 @@ describe("API server", () => {
         role: "user",
         content: "List this folder",
         createdAt: "2099-01-01T00:00:00.000Z",
-        sequence: first.transcriptSequence
+        sequence: first.transcriptSequence,
+        turnSequence: first.transcriptSequence
       },
       {
         id: `event:${firstReply.id}`,
         role: "assistant",
         content: "hello.txt is available",
         createdAt: "2000-01-01T00:00:00.000Z",
-        sequence: firstReply.transcriptSequence
+        sequence: firstReply.transcriptSequence,
+        turnSequence: first.transcriptSequence
       },
       {
         id: `message:${second.message.id}`,
         role: "user",
         content: "Open it",
         createdAt: second.message.createdAt,
-        sequence: second.transcriptSequence
+        sequence: second.transcriptSequence,
+        turnSequence: second.transcriptSequence
       },
       {
         id: `event:${failure.id}`,
         role: "assistant",
         content: "Agent failed: Preview unavailable",
         createdAt: failure.createdAt,
-        sequence: failure.transcriptSequence
+        sequence: failure.transcriptSequence,
+        turnSequence: second.transcriptSequence
       }
     ]);
     await server.close();
@@ -4549,7 +4553,8 @@ describe("API server", () => {
       role: "user",
       content: "Show disk usage",
       createdAt: body.message.createdAt,
-      sequence: expect.any(Number)
+      sequence: expect.any(Number),
+      turnSequence: expect.any(Number)
     });
     expect(listMessages(db, { sessionId: session.id })).toMatchObject([
       { role: "user", content: "Show disk usage" }
@@ -4593,7 +4598,8 @@ describe("API server", () => {
       expect(dataLine).toBeDefined();
       expect(JSON.parse(dataLine?.slice(6) ?? "{}")).toMatchObject({
         id: event.id,
-        transcriptSequence: event.transcriptSequence
+        transcriptSequence: event.transcriptSequence,
+        transcriptTurnSequence: event.transcriptTurnSequence
       });
     } finally {
       controller.abort();

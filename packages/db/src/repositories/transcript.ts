@@ -5,12 +5,14 @@ import type { DbEventRow, DbMessageRow } from "./repository-rows.js";
 
 export interface AgentTranscriptItemRecord {
   sequence: number;
+  turnSequence: number;
   message: AgentMessageRecord | null;
   event: AgentEventRecord | null;
 }
 
 type DbTranscriptRow = {
   sequence: number;
+  turn_sequence: number;
   message_id: string | null;
   message_session_id: string | null;
   message_role: AgentMessageRecord["role"] | null;
@@ -36,6 +38,7 @@ export function listTranscriptItems(
   const rows = db.prepare(`
     SELECT
       transcript.sequence,
+      COALESCE(event_job_transcript.sequence, transcript.sequence) AS turn_sequence,
       message.id AS message_id,
       message.session_id AS message_session_id,
       message.role AS message_role,
@@ -57,13 +60,16 @@ export function listTranscriptItems(
     LEFT JOIN agent_events AS event ON event.id = transcript.event_id
     LEFT JOIN jobs AS event_job ON event_job.id = event.job_id
     LEFT JOIN agent_messages AS event_message ON event_message.id = event_job.message_id
+    LEFT JOIN agent_transcript_items AS event_job_transcript
+      ON event_job_transcript.message_id = event_job.message_id
     WHERE transcript.session_id = ?
-    ORDER BY transcript.sequence ASC
+    ORDER BY turn_sequence ASC, transcript.sequence ASC
     LIMIT ?
   `).all(input.sessionId, input.limit ?? 100) as DbTranscriptRow[];
 
   return rows.map((row) => ({
     sequence: row.sequence,
+    turnSequence: row.turn_sequence,
     message: row.message_id === null ? null : mapMessage({
       id: row.message_id,
       session_id: row.message_session_id as string,
@@ -83,7 +89,8 @@ export function listTranscriptItems(
       run_id: row.event_run_id as string,
       sequence: row.event_sequence as number,
       message_role: row.event_message_role,
-      transcript_sequence: row.sequence
+      transcript_sequence: row.sequence,
+      transcript_turn_sequence: row.turn_sequence
     } satisfies DbEventRow)
   }));
 }
