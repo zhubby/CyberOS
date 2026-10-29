@@ -11,6 +11,8 @@ sidebar:
 
 CyberOS 使用 Linux LIO 作为 iSCSI Target，向 Windows、ESXi 等连接端提供块设备。Storage 面板的 iSCSI 卡片管理多个 Target、每个 Target 的多个 LUN、连接会话及保留的镜像。CyberOS 不充当连接远端磁盘的 Initiator。
 
+安装包包含 `python3-rtslib-fb` 和所需模块的加载规则。Raspberry Pi 6.18 内核默认未启用 `CONFIG_TARGET_CORE`，安装包通过 DKMS 构建缺失的 LIO 模块，不替换内核；必须安装与运行内核匹配的 headers。原生包含 LIO 的内核继续使用发行版模块。模块源代码固定为 Linux 6.18.34 并逐文件验证 SHA256，完整对应源码和许可安装在 `/usr/src/cyberos-lio-6.18.34`，安装过程无需联网拉取驱动源码。
+
 ## 创建和连接
 
 1. 确认存储池已挂载且有足够可用空间。iSCSI 必须具备内核 `target_core_mod`、`target_core_file`、`iscsi_target_mod` 和 configfs 支持；缺少能力时卡片显示不可用原因。

@@ -1,0 +1,18 @@
+PACKAGE_NAME="cyberos-lio"
+PACKAGE_VERSION="#MODULE_VERSION#"
+AUTOINSTALL="yes"
+# Raspberry Pi 6.18 kernels omit LIO. Native LIO kernels must keep their own modules.
+BUILD_EXCLUSIVE_KERNEL="^6[.]18[.].*[+]rpt-rpi-"
+if [ -r "${kernel_source_dir}/.config" ] && grep -Eq '^CONFIG_TARGET_CORE=[ym]$' "${kernel_source_dir}/.config"; then
+  BUILD_EXCLUSIVE_KERNEL="^$"
+fi
+MAKE[0]="make -C /lib/modules/${kernelver}/build M=${dkms_tree}/cyberos-lio/${PACKAGE_VERSION}/build/drivers/target CONFIG_TARGET_CORE=m CONFIG_TCM_FILEIO=m CONFIG_ISCSI_TARGET=m modules"
+BUILT_MODULE_NAME[0]="target_core_mod"
+BUILT_MODULE_LOCATION[0]="drivers/target"
+DEST_MODULE_LOCATION[0]="/kernel/drivers/target"
+BUILT_MODULE_NAME[1]="target_core_file"
+BUILT_MODULE_LOCATION[1]="drivers/target"
+DEST_MODULE_LOCATION[1]="/kernel/drivers/target"
+BUILT_MODULE_NAME[2]="iscsi_target_mod"
+BUILT_MODULE_LOCATION[2]="drivers/target/iscsi"
+DEST_MODULE_LOCATION[2]="/kernel/drivers/target/iscsi"

@@ -98,6 +98,7 @@ jobs:
             build-essential \
             cargo \
             debhelper \
+            dh-dkms \
             dpkg-dev \
             fakeroot \
             nodejs \
@@ -165,6 +166,7 @@ jobs:
             ca-certificates \
             cargo \
             debhelper \
+            dh-dkms \
             dpkg-dev \
             fakeroot \
             git \

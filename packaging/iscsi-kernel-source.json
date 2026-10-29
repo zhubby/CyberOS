@@ -1,0 +1,295 @@
+{
+  "version": "6.18.34",
+  "repository": "gregkh/linux",
+  "commit": "18ad16ce4a6b2714583fd1e1044c6ea8e53b3519",
+  "files": [
+    {
+      "path": "drivers/target/Makefile",
+      "sha256": "fdbcaf92ca8053aa6403eab78b46ac2fecd2649649703d1b87706db75ef7d91a"
+    },
+    {
+      "path": "drivers/target/iscsi/Makefile",
+      "sha256": "599d377aeeb7345efdf40d31407fea6a2f50419e3fc792da40cdffeef3cc8692"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target.c",
+      "sha256": "8da6e5863432c0f70fc0f5ff3dede7f349756f0f35b83bcfe016ad0f0d2a637d"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target.h",
+      "sha256": "4b5b29da22a0f4e2a42bb9f17ac5b55f3bc7fecb7caed1683093afa9435063b4"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_auth.c",
+      "sha256": "fa01f1db97326d5918669e92894b6f5b556c0e8e57ec6a4cdc0b9d501d6abc2c"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_auth.h",
+      "sha256": "bd17a1a9763241b67c4b65cf30d659570a7aff4b70042c3526c3936ea000a835"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_configfs.c",
+      "sha256": "66c3b4dd319742a9152e7a85436c399ffb5707587c0a5a1cd27ed92bbcb7e355"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_datain_values.c",
+      "sha256": "a1d2c85bb74562b2b2c8cfab63c132a49c1bff28e67856ae0140eff18a44281e"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_datain_values.h",
+      "sha256": "07bc72433ff59245ef42ec2d8c078bb025a0bc5607b00a377c60955622ae9a28"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_device.c",
+      "sha256": "c4a1921ed2339c3d96378a867c92aaa252663911e1b9252ca2cd537aa87e3b67"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_device.h",
+      "sha256": "83ac4f703999a7e66372023c95c9d1ddec4da993a3b8a44f76d74e8fd67e2347"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_erl0.c",
+      "sha256": "76c6709fc4f028a78fae7122748be461389037f14647e2d54e7c6450db8961a6"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_erl0.h",
+      "sha256": "161709900734e0be5ddb1b2c114563d53aed055c1b8e4217832340a9e33965e7"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_erl1.c",
+      "sha256": "210f46deab6083909b6d4e035e0a4beead5d13517b21202986616d199dd0a4ca"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_erl1.h",
+      "sha256": "27c11c6602e715791191357d244ece7f046044097046214770b3c372273adb4a"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_erl2.c",
+      "sha256": "4caa68219dab768be47d28d0dc8baff1465d7887b57fc1c742cb0309f3ef4c12"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_erl2.h",
+      "sha256": "e80d7329132ddbac8429818e76ed06c7762315248a1dc1d415f9ee0c606b10c7"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_login.c",
+      "sha256": "a21807bb95b17648b149ac359dcc5cf7a34b895e42d24fba2bcc9ea9e70a6b8f"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_login.h",
+      "sha256": "c8112dcede55a66520603416e0424f845a1efe7e4ca946e747ad3fbb2db95f36"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_nego.c",
+      "sha256": "41760ec24ac8ecff83c7e4679634116ad80dd53e7f6156dd9905c3e3f7d1f37a"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_nego.h",
+      "sha256": "347bcee686c9de81ba3918e40d7eb192474c262aa361ad1817242bbfc52e8bc6"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_nodeattrib.c",
+      "sha256": "b879dda0025328575753127966334dc4c07cfa7c8fab0f799cbdc64d1c1121e1"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_nodeattrib.h",
+      "sha256": "9e507619fb0dccdb9d5eccc917dab149f83bc2b6b80972e939235809e1042b14"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_parameters.c",
+      "sha256": "2a0e1402894a02551f0ca731dbf4b47dac014dfa090ad906bcce20bf0226fbd0"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_parameters.h",
+      "sha256": "b58afb245a2243f011478a7fce8ce15a16bfc1370de25fb52fcdb995434a1f4a"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_seq_pdu_list.c",
+      "sha256": "b23c571188e7967f1a74c222c27b2146c310396f560414e96d4e99c35e3e0fc3"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_seq_pdu_list.h",
+      "sha256": "bfcd76cd1b63b4c03c48225e2775759c989288a1ea17c3f1ca9a510a4021542e"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_stat.c",
+      "sha256": "46acb10a18297a5f3d1b866dd09c6e61dd503bae6a307c2241ef232edbd390eb"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_tmr.c",
+      "sha256": "68cfa32aeaeb0f8534340564b149c9aaa285053643da05fe2655ccb9b57becd6"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_tmr.h",
+      "sha256": "6a1d7543458983ff6d890e424e965d7897bba8e985867d5f947919206d3205ed"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_tpg.c",
+      "sha256": "fae5a173cde43c2ca4b98da7bd5d46b6b32cc7720f9374a6d134a88c760d5d44"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_tpg.h",
+      "sha256": "652b8e32ad8ff90c0b736d50fbf8aa1cb1b40ff06a3db570a911d1c4b52ca6b1"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_transport.c",
+      "sha256": "f3d62bf9f47bf0bbc1af52da11f37f41d377d4976a22468557006b1c992d06ac"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_util.c",
+      "sha256": "b0917843f64f3663024a8e2c23e3ee58cc9e38445b9a0a1dd2837c3f86a15764"
+    },
+    {
+      "path": "drivers/target/iscsi/iscsi_target_util.h",
+      "sha256": "0d3a3a56211e966d75e90b90f1336b17a015d81023c77ac72625b14e96179b3a"
+    },
+    {
+      "path": "drivers/target/target_core_alua.c",
+      "sha256": "cab6bb9bf3954ac3085224eb218e9d0d91aecd92ae9a948781a2cb08e8c3fe4f"
+    },
+    {
+      "path": "drivers/target/target_core_alua.h",
+      "sha256": "85bb9e78b82380304a1661781d9bc4aa109bb4acc8ca38b98b830ea239c34bc5"
+    },
+    {
+      "path": "drivers/target/target_core_configfs.c",
+      "sha256": "62945e443f4a56fd0ef0443d03947443497641cd0ba99789d5bf3127995cc0f6"
+    },
+    {
+      "path": "drivers/target/target_core_device.c",
+      "sha256": "e9ed141d5b700f5d55ed7e8aa03f53f39954b44529feb35de4741fc0d82072c8"
+    },
+    {
+      "path": "drivers/target/target_core_fabric_configfs.c",
+      "sha256": "b921a63fd993f635d5a155392620ab269cfd433dd80c9403c2745710ab32b9fb"
+    },
+    {
+      "path": "drivers/target/target_core_fabric_lib.c",
+      "sha256": "d368d97b2a204110eb91e7136033c874b46774623eb52946b42d0b5590711736"
+    },
+    {
+      "path": "drivers/target/target_core_file.c",
+      "sha256": "956a2eb1f066b9c5f5b6082e977d10e1d643e0b55666cd51549684fce4638f0f"
+    },
+    {
+      "path": "drivers/target/target_core_file.h",
+      "sha256": "7935e47b6a7e29097ce9e9fe6b7f19488643501d9a9ace17614e214a1afdd812"
+    },
+    {
+      "path": "drivers/target/target_core_hba.c",
+      "sha256": "3d3e4273abe3397ff18b87718f0e2e0d777216427a205475d56b1eeeff43a8b6"
+    },
+    {
+      "path": "drivers/target/target_core_iblock.c",
+      "sha256": "bce4bde444fa1d6fec3c8c8280f72a0df5e93026a2cf1e440ff194d23dd7bca8"
+    },
+    {
+      "path": "drivers/target/target_core_iblock.h",
+      "sha256": "236f91b91e60a57203026acfcfe0fea4fa6f07fb3de67adf6b9369e58ead6ef0"
+    },
+    {
+      "path": "drivers/target/target_core_internal.h",
+      "sha256": "b96987324a40f10061fe3e71882b534d6142faacc5dff151b7a45cac95597e2d"
+    },
+    {
+      "path": "drivers/target/target_core_pr.c",
+      "sha256": "618896c13526fa96aeb46026fd0f304533ee9bf0027135fbd98e6e4a2fa41834"
+    },
+    {
+      "path": "drivers/target/target_core_pr.h",
+      "sha256": "8240855859a1da183ada32ebdd81919a499d13bdafda934900599917b294c67f"
+    },
+    {
+      "path": "drivers/target/target_core_pscsi.c",
+      "sha256": "a607ba1af0ce014ad2869c8dbdaea6df1b78a5e1674d6b26af7fa695eef41808"
+    },
+    {
+      "path": "drivers/target/target_core_pscsi.h",
+      "sha256": "55b82316ecfd19dc3ff84568c74c4a334acf2e840e2cd6aacf4c7a3a363775e5"
+    },
+    {
+      "path": "drivers/target/target_core_rd.c",
+      "sha256": "08faa36270538827d54f3d4695c8f7d4b20d1aa4203a421f80d1f785d3198f9b"
+    },
+    {
+      "path": "drivers/target/target_core_rd.h",
+      "sha256": "fd998cfd72299d04fdd0857da4fe977910c33067f21d91e0e166e3a9159587d5"
+    },
+    {
+      "path": "drivers/target/target_core_sbc.c",
+      "sha256": "c5bf5bea23a21f3d2af0ed797425ebe764db411856ede14ce4044e2d1825d523"
+    },
+    {
+      "path": "drivers/target/target_core_spc.c",
+      "sha256": "e6474190f7db1aa1eb06ba76e9c44ca3bfd9adb4371f434232d0aa551d8cf4d7"
+    },
+    {
+      "path": "drivers/target/target_core_stat.c",
+      "sha256": "532d6080c405939f8cabdedfe7a5d723927c80de562f2adf41fd8515cd1f4d7d"
+    },
+    {
+      "path": "drivers/target/target_core_tmr.c",
+      "sha256": "14f06547f235f67a1df516031db3918e002a23d035fc8d1871eef2459e70fc4d"
+    },
+    {
+      "path": "drivers/target/target_core_tpg.c",
+      "sha256": "9c0ebe5236c81c322b1fbf2b215a5424c4b639186005f121e5caa99012beb526"
+    },
+    {
+      "path": "drivers/target/target_core_transport.c",
+      "sha256": "86c96600f5e1147c80330253f63d5e5bb191eada2e191bcd70be98ec8e7040e0"
+    },
+    {
+      "path": "drivers/target/target_core_ua.c",
+      "sha256": "166cae0d8d399501a99a38394ce29b08b2bc9099b295176b6d13f07de2ef3b2e"
+    },
+    {
+      "path": "drivers/target/target_core_ua.h",
+      "sha256": "ede286fc5ec575d1e8ef57e6c0c203f1afbbd1562f4d318dd5839788c5182128"
+    },
+    {
+      "path": "drivers/target/target_core_user.c",
+      "sha256": "10ca47d49f9d6eefa85c315cda7d9d36e91d0bde488aa428dc52b44aec077d8c"
+    },
+    {
+      "path": "drivers/target/target_core_xcopy.c",
+      "sha256": "03375851ff05615d33096acff5a2323c4f643cec23dca2ec0d3a634185e3ad9e"
+    },
+    {
+      "path": "drivers/target/target_core_xcopy.h",
+      "sha256": "15953ef5ba3cc2e4fc647d05a0e49c1c598c39dc8f6655bd2532310e4beff72a"
+    },
+    {
+      "path": "include/target/iscsi/iscsi_target_core.h",
+      "sha256": "4a1bdadec1b727778a82c871a0190af18ab942eeb29947d2915cb94d0f1a1aec"
+    },
+    {
+      "path": "include/target/iscsi/iscsi_target_stat.h",
+      "sha256": "6ea8d9a9a3581d54cfcb45b8fd1e96ebc11e040796d4e8f77e1b05a74326129f"
+    },
+    {
+      "path": "include/target/iscsi/iscsi_transport.h",
+      "sha256": "39fbe4a332f15e493ba999026ab7e5d18d6ac5567928a4ae9a88c76ab9426dde"
+    },
+    {
+      "path": "include/target/target_core_backend.h",
+      "sha256": "09c1319b25655c3a2b8fd1fbe64914ccc44f27c257aba7bc109a69362d8f7888"
+    },
+    {
+      "path": "include/target/target_core_base.h",
+      "sha256": "869a101b377270826ead7fc3272f2399f376d381e391c0b2d435c36bc7de9d9d"
+    },
+    {
+      "path": "include/target/target_core_fabric.h",
+      "sha256": "d136a012a19e80aa52b6044a169e51039efd4074fa57caeec9f9805da4d1c896"
+    },
+    {
+      "path": "COPYING",
+      "sha256": "fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0"
+    },
+    {
+      "path": "LICENSES/preferred/GPL-2.0",
+      "sha256": "8780e78a1a737e127f25a65f6d95269bffd36158dc261114de7859b490bfc5aa"
+    }
+  ]
+}

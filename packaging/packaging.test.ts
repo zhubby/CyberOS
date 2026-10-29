@@ -5,6 +5,23 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 describe("native packaging artifacts", () => {
+  it("packages verified DKMS sources for Raspberry Pi kernels without native LIO", async () => {
+    const config = await readPackagingFile("debian", "cyberos.dkms");
+    const rules = await readPackagingFile("debian", "rules");
+    const install = await readPackagingFile("debian", "install");
+    const installer = await readPackagingFile("scripts", "install.sh");
+    const source = JSON.parse(await readPackagingFile("iscsi-kernel-source.json")) as { version: string; commit: string; files: { path: string; sha256: string }[] };
+    expect(source.commit).toMatch(/^[0-9a-f]{40}$/u);
+    expect(source.files.length).toBeGreaterThan(50);
+    for (const file of source.files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/u);
+    expect(rules).toContain(`dh_dkms -V ${source.version}`);
+    expect(rules).toContain("node scripts/prepare-iscsi-dkms.mjs");
+    expect(install).toContain(".cyberos/dkms/cyberos-lio-* usr/src/");
+    expect(config).toContain("CONFIG_TARGET_CORE=[ym]");
+    expect(config).toContain('BUILD_EXCLUSIVE_KERNEL="^6[.]18[.].*[+]rpt-rpi-"');
+    expect(installer).toContain('"linux-headers-$(uname -r)"');
+  });
+
   it("orders CyberOS recovery after Debian targetctl restore without starting that service", async () => {
     const hostd = await readPackagingFile("systemd", "cyberos-hostd.service");
     expect(hostd).toMatch(/^After=.*\brtslib-fb-targetctl\.service\b/m);

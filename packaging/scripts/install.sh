@@ -140,7 +140,7 @@ install_build_dependencies() {
     apt_install remove -y nodejs
   fi
   apt_install install -y --no-install-recommends \
-    ca-certificates curl build-essential cargo rustc debhelper dpkg-dev fakeroot rsync \
+    ca-certificates curl build-essential cargo rustc debhelper dh-dkms dpkg-dev fakeroot rsync \
     nodejs npm xz-utils
 }
 
@@ -261,6 +261,19 @@ fi
 node --version | grep -Eq '^v22\.' || die "Node.js 22 is required; found $(node --version 2>/dev/null || printf 'none')"
 install_build_dependencies
 install_rust_toolchain
+# Only kernels without native LIO need external modules. Never replace a kernel
+# or silently build against headers for a different running kernel.
+if ! /usr/sbin/modinfo target_core_mod >/dev/null 2>&1; then
+  case "$(uname -r)" in
+    6.18.*+rpt-rpi-*)
+      if [ ! -f "/lib/modules/$(uname -r)/build/Makefile" ]; then
+        apt_install install -y --no-install-recommends "linux-headers-$(uname -r)"
+      fi
+      [ -f "/lib/modules/$(uname -r)/build/Makefile" ] \
+        || die "iSCSI requires headers matching the running Raspberry Pi kernel"
+      ;;
+  esac
+fi
 npm config set registry "$CYBEROS_NPM_REGISTRY" --global
 log "building the native ${ARCH} Debian package"
 CYBEROS_CARGO_REGISTRY="$CYBEROS_CARGO_REGISTRY" \

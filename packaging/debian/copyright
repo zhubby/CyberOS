@@ -4,9 +4,21 @@ Source: https://cyberos.local
 
 Files: *
 Copyright: 2026 CyberOS Maintainers
-License: MIT
+License: Apache-2.0
 
-License: MIT
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files, to deal in the Software
- without restriction, subject to the project license file when provided.
+Files: /usr/src/cyberos-lio-*
+Copyright: Linux kernel contributors, as identified in the individual source files
+License: GPL-2.0
+Comment: Unmodified Linux 6.18.34 target sources are selected from commit
+ 18ad16ce4a6b2714583fd1e1044c6ea8e53b3519 with per-file SHA256 verification.
+ The only source adjustment is an external-module include path in the Makefile.
+ Complete corresponding module sources, original SPDX notices, COPYING and
+ LICENSES/preferred/GPL-2.0 are installed in /usr/src/cyberos-lio-6.18.34.
+
+License: Apache-2.0
+ On Debian systems the complete Apache 2.0 license is available in
+ /usr/share/common-licenses/Apache-2.0.
+
+License: GPL-2.0
+ On Debian systems the complete GNU General Public License version 2 is
+ available in /usr/share/common-licenses/GPL-2.

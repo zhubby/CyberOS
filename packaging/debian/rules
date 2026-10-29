@@ -11,12 +11,13 @@ $(error Unsupported CyberOS package architecture: $(DEB_HOST_ARCH))
 endif
 
 %:
-	dh $@
+	dh $@ --with dkms
 
 override_dh_auto_build:
 	npm ci --registry="$${CYBEROS_NPM_REGISTRY:-https://registry.npmmirror.com}"
 	npm --prefix docs ci --registry="$${CYBEROS_NPM_REGISTRY:-https://registry.npmmirror.com}"
 	npm run build
+	node scripts/prepare-iscsi-dkms.mjs
 
 override_dh_auto_test:
 	npm test
@@ -35,6 +36,9 @@ override_dh_install:
 
 override_dh_gencontrol:
 	dh_gencontrol -- -Vcyberos:VmDepends="$(CYBEROS_VM_DEPENDS)"
+
+override_dh_dkms:
+	dh_dkms -V 6.18.34
 
 # npm dependencies bundle prebuilt native artifacts for several platforms. The
 # foreign .bare and .node files are already stripped and cannot be processed by
