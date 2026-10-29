@@ -46,16 +46,23 @@ function userSchemaObjectCount(db: CyberOsDatabase): number {
 }
 
 function initializeOrValidateDatabaseIdentity(db: CyberOsDatabase): void {
-  const version = Number(db.pragma("user_version", { simple: true }));
-  if (version === CYBEROS_DATABASE_FORMAT_VERSION) return;
+  const initialize = db.transaction(() => {
+    const version = Number(db.pragma("user_version", { simple: true }));
+    if (version === CYBEROS_DATABASE_FORMAT_VERSION) return;
 
-  if (version !== 0 || userSchemaObjectCount(db) !== 0) {
-    throw new Error(
-      `Unsupported database format: CyberOS requires format ${CYBEROS_DATABASE_FORMAT_VERSION} and does not migrate older databases`
-    );
-  }
+    if (version !== 0 || userSchemaObjectCount(db) !== 0) {
+      throw new Error(
+        `Unsupported database format: CyberOS requires format ${CYBEROS_DATABASE_FORMAT_VERSION} and does not migrate older databases`
+      );
+    }
 
-  db.pragma(`user_version = ${CYBEROS_DATABASE_FORMAT_VERSION}`);
+    db.pragma(`user_version = ${CYBEROS_DATABASE_FORMAT_VERSION}`);
+  });
+
+  // Re-read the identity after acquiring the write lock. Without this, a
+  // concurrent first-start process can observe version 0 before another
+  // process creates the baseline, then reject that newly created schema.
+  initialize.immediate();
 }
 
 function validateDatabaseIdentity(db: CyberOsDatabase): void {
