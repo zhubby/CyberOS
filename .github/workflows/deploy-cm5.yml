@@ -394,7 +394,7 @@ jobs:
             # CyberOS 2.0.1 postinst could reset this parent to cyberos:cyberos
             # 0750 after deployment bootstrap. The owning runtime account may
             # restore traverse-only access; incoming remains root:deploy 0730.
-            ssh "${ssh_options[@]}" "cyberos@$CM5_HOST" sh -s <<'REMOTE'
+            if ! ssh "${ssh_options[@]}" "cyberos@$CM5_HOST" sh -s <<'REMOTE'
           set -eu
           deploy_path=/cyberos/deploy
           [ "$(id -un)" = cyberos ]
@@ -402,6 +402,18 @@ jobs:
           [ "$(stat -c '%U:%G' "$deploy_path")" = cyberos:cyberos ]
           chmod o+x "$deploy_path"
           REMOTE
+            then
+              ssh "${ssh_options[@]}" "root@$CM5_HOST" sh -s -- "$CM5_DEPLOY_USER" <<'REMOTE'
+          set -eu
+          deploy_user=$1
+          [ "$(id -u)" -eq 0 ]
+          case "$deploy_user" in
+            ''|*[!a-zA-Z0-9._-]*|root|cyberos) exit 1 ;;
+          esac
+          CYBEROS_DEPLOY_USER="$deploy_user" \
+            /usr/lib/cyberos/scripts/cyberos-deploy-bootstrap.sh
+          REMOTE
+            fi
             ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
               "test -x /cyberos/deploy && test -x /cyberos/deploy/incoming && test -w /cyberos/deploy/incoming"
           }

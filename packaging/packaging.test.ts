@@ -534,6 +534,8 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
     expect(deployWorkflow).toContain("ensure_deploy_traversal()");
     expect(deployWorkflow).toContain('ssh "${ssh_options[@]}" "cyberos@$CM5_HOST"');
+    expect(deployWorkflow).toContain('ssh "${ssh_options[@]}" "root@$CM5_HOST"');
+    expect(deployWorkflow).toContain("/usr/lib/cyberos/scripts/cyberos-deploy-bootstrap.sh");
     expect(deployWorkflow).toContain('chmod o+x "$deploy_path"');
     expect(deployWorkflow).toContain(
       "test -x /cyberos/deploy/incoming && test -w /cyberos/deploy/incoming"
