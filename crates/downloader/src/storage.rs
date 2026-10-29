@@ -607,9 +607,18 @@ fn require_exact_mountpoint(_path: &Path, required: bool) -> Result<Option<u64>,
     }
     #[cfg(target_os = "linux")]
     {
+        // systemd may stack a writable bind mount over the pool mount. Resolve
+        // the visible mount through a descriptor instead of trusting table order.
+        // The caller opens it again and verifies this ID to detect replacement.
+        let mount = OpenOptions::new()
+            .read(true)
+            .custom_flags(nix::libc::O_DIRECTORY | nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC)
+            .open(_path)
+            .map_err(DownloadError::storage)?;
+        let visible_id = read_mount_id(&mount)?;
         let mountinfo =
             std::fs::read_to_string("/proc/self/mountinfo").map_err(DownloadError::storage)?;
-        if let Some(mount_id) = exact_mount_id(&mountinfo, _path) {
+        if let Some(mount_id) = exact_mount_id(&mountinfo, _path, visible_id) {
             return Ok(Some(mount_id));
         }
     }
@@ -620,18 +629,13 @@ fn require_exact_mountpoint(_path: &Path, required: bool) -> Result<Option<u64>,
     ))
 }
 
-#[cfg(test)]
-fn has_exact_mountpoint(mountinfo: &str, path: &Path) -> bool {
-    exact_mount_id(mountinfo, path).is_some()
-}
-
 #[cfg(any(target_os = "linux", test))]
-fn exact_mount_id(mountinfo: &str, path: &Path) -> Option<u64> {
+fn exact_mount_id(mountinfo: &str, path: &Path, visible_id: u64) -> Option<u64> {
     mountinfo.lines().find_map(|line| {
         let mut fields = line.split_whitespace();
         let mount_id = fields.next()?.parse().ok()?;
         let mountpoint = fields.nth(3).map(unescape_mount_field)?;
-        (Path::new(&mountpoint) == path).then_some(mount_id)
+        (mount_id == visible_id && Path::new(&mountpoint) == path).then_some(mount_id)
     })
 }
 
@@ -645,17 +649,28 @@ fn unescape_mount_field(value: &str) -> String {
 }
 
 #[cfg(target_os = "linux")]
+fn read_mount_id(file: &File) -> Result<u64, DownloadError> {
+    let fdinfo = std::fs::read_to_string(format!("/proc/self/fdinfo/{}", file.as_raw_fd()))
+        .map_err(DownloadError::storage)?;
+    fdinfo
+        .lines()
+        .find_map(|line| line.strip_prefix("mnt_id:").map(str::trim))
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(|| {
+            DownloadError::new(
+                ErrorCode::Storage,
+                "storage pool descriptor has no mount identity",
+                true,
+            )
+        })
+}
+
+#[cfg(target_os = "linux")]
 fn verify_mount_id(file: &File, expected: Option<u64>) -> Result<(), DownloadError> {
     let Some(expected) = expected else {
         return Ok(());
     };
-    let fdinfo = std::fs::read_to_string(format!("/proc/self/fdinfo/{}", file.as_raw_fd()))
-        .map_err(DownloadError::storage)?;
-    let actual = fdinfo
-        .lines()
-        .find_map(|line| line.strip_prefix("mnt_id:").map(str::trim))
-        .and_then(|value| value.parse().ok());
-    if actual == Some(expected) {
+    if read_mount_id(file)? == expected {
         Ok(())
     } else {
         Err(DownloadError::new(
@@ -868,14 +883,41 @@ mod tests {
             "22 1 8:1 / / rw - ext4 /dev/root rw\n",
             "23 22 8:2 / /cyberos/data/My\\040Pool rw - ext4 /dev/sda1 rw\n",
         );
-        assert!(has_exact_mountpoint(
-            mountinfo,
-            Path::new("/cyberos/data/My Pool")
-        ));
-        assert!(!has_exact_mountpoint(
-            mountinfo,
-            Path::new("/cyberos/data/My Pool/nested")
-        ));
+        assert_eq!(
+            exact_mount_id(mountinfo, Path::new("/cyberos/data/My Pool"), 23),
+            Some(23)
+        );
+        assert_eq!(
+            exact_mount_id(mountinfo, Path::new("/cyberos/data/My Pool/nested"), 23),
+            None
+        );
+        assert_eq!(
+            exact_mount_id(mountinfo, Path::new("/cyberos/data/My Pool"), 22),
+            None
+        );
+    }
+
+    #[test]
+    fn selects_the_opened_mount_identity_among_stacked_systemd_mounts() {
+        let mountinfo = concat!(
+            "1074 1040 0:46 / /cyberos/data/pool1 rw - btrfs /dev/md127 rw\n",
+            "1075 1040 259:2 /cyberos/data /cyberos/data rw - ext4 /dev/nvme0n1p2 rw\n",
+            "1076 1075 0:46 / /cyberos/data/pool1 rw - btrfs /dev/md127 rw\n",
+        );
+        let pool = Path::new("/cyberos/data/pool1");
+        assert_eq!(exact_mount_id(mountinfo, pool, 1076), Some(1076));
+        assert_eq!(exact_mount_id(mountinfo, pool, 1074), Some(1074));
+        assert_eq!(exact_mount_id(mountinfo, pool, 1075), None);
+        assert_eq!(exact_mount_id(mountinfo, pool, 1077), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn rejects_descriptor_mount_identity_changes() {
+        let directory = File::open("/").unwrap();
+        let id = read_mount_id(&directory).unwrap();
+        verify_mount_id(&directory, Some(id)).unwrap();
+        assert!(verify_mount_id(&directory, Some(id + 1)).is_err());
     }
 
     #[test]
