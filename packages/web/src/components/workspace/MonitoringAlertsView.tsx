@@ -35,6 +35,7 @@ import {
 } from "../../api.js";
 import { formatDate, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { Switch } from "../common/Switch.js";
 import { useModalDialog } from "./useModalDialog.js";
 
 type AlertView = "rules" | "incidents";
@@ -227,7 +228,7 @@ function RulesView() {
                 </td>
                 <td><span className="is-mono">{rule.aggregation}({rule.windowSeconds / 60}m) {rule.comparator} {rule.triggerThreshold}</span><small>{formatSelector(rule.selector)}</small></td>
                 <td><span className="monitoring-alert-severity" data-severity={rule.severity}>{t(`workspace.monitoring.alerts.severity.${rule.severity}`)}</span></td>
-                <td><button className="monitoring-alert-switch" type="button" role="switch" aria-checked={rule.enabled} disabled={busyId === rule.id} onClick={() => void toggleRule(rule)}><span />{rule.enabled ? t("workspace.monitoring.alerts.enabled") : t("workspace.monitoring.alerts.disabled")}</button></td>
+                <td><Switch className="monitoring-alert-switch" compact checked={rule.enabled} disabled={busyId === rule.id} label={rule.enabled ? t("workspace.monitoring.alerts.enabled") : t("workspace.monitoring.alerts.disabled")} onCheckedChange={() => void toggleRule(rule)} /></td>
                 <td><div className="monitoring-alert-row-actions">
                   <button type="button" onClick={() => beginEdit(rule)} title={t("common.actions.edit")} aria-label={t("common.actions.edit")}><Pencil size={15} /></button>
                   {!rule.builtin ? <button type="button" data-danger="true" disabled={busyId === rule.id} onClick={() => void removeRule(rule)} title={t("common.actions.delete")} aria-label={t("common.actions.delete")}><Trash2 size={15} /></button> : null}
@@ -280,7 +281,7 @@ function RuleEditor({ draft, selectorText, metrics, policies, busy, builtin, err
           <label><span>{t("workspace.monitoring.alerts.fields.severity")}</span><select value={draft.severity} onChange={(event) => onChange({ ...draft, severity: event.target.value as MonitoringAlertRuleInput["severity"] })}><option value="warning">{t("workspace.monitoring.alerts.severity.warning")}</option><option value="critical">{t("workspace.monitoring.alerts.severity.critical")}</option></select></label>
           <label><span>{t("workspace.monitoring.alerts.fields.noData")}</span><select value={draft.noDataPolicy} onChange={(event) => onChange({ ...draft, noDataPolicy: event.target.value as MonitoringAlertRuleInput["noDataPolicy"] })}><option value="ignore">ignore</option><option value="firing">firing</option></select></label>
           <label className="span-2"><span>{t("workspace.monitoring.alerts.fields.policy")}</span><select value={draft.escalationPolicyId ?? ""} onChange={(event) => onChange({ ...draft, escalationPolicyId: event.target.value || null })}><option value="">{t("workspace.monitoring.alerts.noPolicy")}</option>{policies.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
-          <label className="monitoring-alert-check span-2"><input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} /><span>{t("workspace.monitoring.alerts.enabled")}{builtin ? ` · ${t("workspace.monitoring.alerts.builtin")}` : ""}</span></label>
+          <Switch className="monitoring-alert-check span-2" checked={draft.enabled} onCheckedChange={(enabled) => onChange({ ...draft, enabled })} label={`${t("workspace.monitoring.alerts.enabled")}${builtin ? ` · ${t("workspace.monitoring.alerts.builtin")}` : ""}`} />
         </fieldset>
         <footer><button className="secondary-button" type="button" onClick={onCancel}><X size={15} />{t("common.actions.cancel")}</button><button className="primary-button" type="submit" disabled={busy} aria-busy={busy || undefined}>{busy ? <LoaderCircle className="is-spinning" size={15} /> : <Check size={15} />}{t("common.actions.save")}</button></footer>
       </form>

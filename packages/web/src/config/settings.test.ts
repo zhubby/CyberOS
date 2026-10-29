@@ -4,6 +4,7 @@ import {
   dockerSettingsToForm,
   modelSettingsToForm,
   settingsSectionState,
+  vmSettingsToForm,
   type SettingsSection
 } from "./settings.js";
 
@@ -18,10 +19,6 @@ describe("settings helpers", () => {
     expect(
       settingsSectionState(section, null, {
         enabled: false,
-        socketPath: "/var/run/docker.sock",
-        composeCommand: "docker",
-        operationTimeoutMs: 120_000,
-        consoleShells: ["/bin/sh", "/bin/bash"],
         updatedAt: "2026-01-01T00:00:00.000Z"
       })
     ).toBe("ready");
@@ -30,11 +27,16 @@ describe("settings helpers", () => {
   it("hydrates Docker form defaults from the runtime config", () => {
     expect(dockerSettingsToForm(null)).toMatchObject({
       enabled: false,
-      socketPath: "/var/run/docker.sock",
-      composeCommand: "docker",
-      operationTimeoutMs: String(120_000),
-      consoleShells: "/bin/sh, /bin/bash",
+      updatedAt: new Date(0).toISOString()
     });
+  });
+
+  it("hydrates virtual machine settings independently from Docker", () => {
+    expect(vmSettingsToForm(null)).toEqual({
+      enabled: false,
+      updatedAt: new Date(0).toISOString()
+    });
+    expect(SETTINGS_SECTIONS.map((section) => section.id)).toContain("virtual-machines");
   });
 
   it("hydrates model provider form defaults without a display name", () => {

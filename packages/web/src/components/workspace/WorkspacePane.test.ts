@@ -25,10 +25,9 @@ describe("workspace search options", () => {
     expect(hasWorkspaceSearchFilters(defaultWorkspaceSearchOptions())).toBe(false);
   });
 
-  it("detects category, extraction, boundary, and sort filters", () => {
+  it("detects file type, boundary, and sort filters", () => {
     const defaults = defaultWorkspaceSearchOptions();
-    expect(hasWorkspaceSearchFilters({ ...defaults, categories: ["pdf"] })).toBe(true);
-    expect(hasWorkspaceSearchFilters({ ...defaults, extractionStatuses: ["stale"] })).toBe(true);
+    expect(hasWorkspaceSearchFilters({ ...defaults, fileType: "pdf" })).toBe(true);
     expect(hasWorkspaceSearchFilters({ ...defaults, sizeMin: "1024" })).toBe(true);
     expect(hasWorkspaceSearchFilters({ ...defaults, sort: { field: "mtime", direction: "desc" } })).toBe(true);
   });

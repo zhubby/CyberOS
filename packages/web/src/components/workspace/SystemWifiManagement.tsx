@@ -51,6 +51,7 @@ import {
   type SystemWifiNetworkGroup
 } from "../../lib/system-wifi.js";
 import { useSystemWifiStatus } from "../../lib/use-system-wifi-status.js";
+import { Switch } from "../common/Switch.js";
 
 type WifiSummary = NetworkSummary["wifi"];
 type WifiProfile = WifiSummary["profiles"][number];
@@ -392,7 +393,7 @@ export function SystemWifiManagement({
   }
 
   const unavailable = wifi.backend !== "NetworkManager" || !selectedDevice;
-  const declarativeReadOnly = wifi.backend === "NetworkManager" && wifi.hostdReady && Boolean(selectedDevice) && !canManageWifi;
+  const managementUnavailable = wifi.backend === "NetworkManager" && wifi.hostdReady && Boolean(selectedDevice) && !canManageWifi;
   const selectedDeviceCanHotspot = wifi.radioEnabled === true && canManageHotspot && selectedDevice?.capabilities.accessPoint === true;
 
   return (
@@ -436,12 +437,12 @@ export function SystemWifiManagement({
 
         <div className="system-wifi-content">
           {error ? <p className="system-wifi-error" role="alert">{error}</p> : null}
-          {declarativeReadOnly ? (
+          {managementUnavailable ? (
             <div className="system-wifi-unavailable" role="status">
               <AlertTriangle aria-hidden="true" size={18} />
               <div>
                 <strong>{t("workspace.management.network.wifi.readOnlyTitle")}</strong>
-                <p>{t("workspace.management.network.wifi.declarativeReadOnlyDescription")}</p>
+                <p>{t("workspace.management.network.wifi.managementUnavailableDescription")}</p>
               </div>
             </div>
           ) : null}
@@ -610,7 +611,7 @@ export function SystemWifiManagement({
               {connectDialog.network.security !== "open" ? (
                 <label><span>{t("workspace.management.network.wifi.password")}</span><input autoFocus type="password" value={connectDialog.password} onChange={(event) => setConnectDialog({ ...connectDialog, password: event.target.value })} disabled={busy} autoComplete="new-password" /></label>
               ) : null}
-              <label className="system-wifi-checkbox"><input type="checkbox" checked={connectDialog.autoconnect} onChange={(event) => setConnectDialog({ ...connectDialog, autoconnect: event.target.checked })} disabled={busy} /><span>{t("workspace.management.network.wifi.autoconnectLabel")}</span></label>
+              <Switch className="system-wifi-checkbox" checked={connectDialog.autoconnect} onCheckedChange={(autoconnect) => setConnectDialog({ ...connectDialog, autoconnect })} disabled={busy} label={t("workspace.management.network.wifi.autoconnectLabel")} />
             </>
           )}
           <DialogActions onCancel={() => connectDialog.confirmRisk ? setConnectDialog({ ...connectDialog, confirmRisk: false }) : setConnectDialog(null)} busy={busy} submitLabel={translate(connectDialog.confirmRisk ? "workspace.management.network.wifi.confirm.continue" : "workspace.management.network.wifi.connect")} submitDisabled={connectDialog.network.security !== "open" && !validSystemWifiPassword(connectDialog.password)} danger={connectDialog.confirmRisk} />
@@ -626,7 +627,7 @@ export function SystemWifiManagement({
               <label><span>{t("workspace.management.network.wifi.ssid")}</span><input autoFocus value={profileDialog.ssid} onChange={(event) => setProfileDialog({ ...profileDialog, ssid: event.target.value })} disabled={busy} /></label>
               <label><span>{t("workspace.management.network.wifi.securityLabel")}</span><select value={profileDialog.security} onChange={(event) => setProfileDialog({ ...profileDialog, security: event.target.value as ProfileDialogState["security"] })} disabled={busy}><option value="open">{t("workspace.management.network.wifi.security.open")}</option><option value="wpa2">{t("workspace.management.network.wifi.security.wpa2")}</option><option value="wpa3">{t("workspace.management.network.wifi.security.wpa3")}</option></select></label>
               {profileDialog.security !== "open" ? <label><span>{t("workspace.management.network.wifi.passwordOptional")}</span><input type="password" value={profileDialog.password} onChange={(event) => setProfileDialog({ ...profileDialog, password: event.target.value })} disabled={busy} autoComplete="new-password" placeholder={t("workspace.management.network.wifi.keepPassword")} /></label> : null}
-              <label className="system-wifi-checkbox"><input type="checkbox" checked={profileDialog.autoconnect} onChange={(event) => setProfileDialog({ ...profileDialog, autoconnect: event.target.checked })} disabled={busy} /><span>{t("workspace.management.network.wifi.autoconnectLabel")}</span></label>
+              <Switch className="system-wifi-checkbox" checked={profileDialog.autoconnect} onCheckedChange={(autoconnect) => setProfileDialog({ ...profileDialog, autoconnect })} disabled={busy} label={t("workspace.management.network.wifi.autoconnectLabel")} />
             </>
           )}
           <DialogActions onCancel={() => profileDialog.confirmRestart ? setProfileDialog({ ...profileDialog, confirmRestart: false }) : setProfileDialog(null)} busy={busy} submitLabel={translate(profileDialog.confirmRestart ? "workspace.management.network.wifi.confirm.continue" : "common.actions.save")} submitDisabled={!validSystemWifiSsid(profileDialog.ssid) || Boolean(profileDialog.password && !validSystemWifiPassword(profileDialog.password))} danger={profileDialog.confirmRestart} />
@@ -793,7 +794,7 @@ function HotspotFields({ state, device, busy, t, onChange }: { state: HotspotDia
         <label><span>{t("workspace.management.network.wifi.hotspot.band")}</span><select value={state.band} onChange={(event) => onChange({ ...state, band: event.target.value as HotspotDialogState["band"], channel: "" })} disabled={busy}><option value="auto">{t("workspace.management.network.wifi.hotspot.autoBand")}</option>{device.capabilities.bands.includes("2.4") ? <option value="2.4">2.4 GHz</option> : null}{device.capabilities.bands.includes("5") ? <option value="5">5 GHz</option> : null}</select></label>
         <label><span>{t("workspace.management.network.wifi.channel")}</span><select value={state.channel} onChange={(event) => onChange({ ...state, channel: event.target.value })} disabled={busy || state.band === "auto"}><option value="">{t("workspace.management.network.wifi.hotspot.autoChannel")}</option>{channels.map((channel) => <option key={channel} value={channel}>{channel}</option>)}</select></label>
       </div>
-      <label className="system-wifi-checkbox"><input type="checkbox" checked={state.autostart} onChange={(event) => onChange({ ...state, autostart: event.target.checked })} disabled={busy} /><span>{t("workspace.management.network.wifi.hotspot.autostart")}</span></label>
+      <Switch className="system-wifi-checkbox" checked={state.autostart} onCheckedChange={(autostart) => onChange({ ...state, autostart })} disabled={busy} label={t("workspace.management.network.wifi.hotspot.autostart")} />
     </>
   );
 }

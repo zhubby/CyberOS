@@ -893,7 +893,7 @@ textarea {
 .settings-content-header p,
 .settings-section-card p,
 .settings-preference-field small {
-  color: #474500;
+  color: var(--muted);
 }
 
 .settings-content-header button {
@@ -1202,6 +1202,37 @@ textarea {
   border-color: var(--cyber-red);
   color: var(--cyber-ink);
   background: var(--cyber-red);
+}
+
+.photo-runtime-alert.is-open {
+  border-color: var(--cyber-cyan);
+  box-shadow: inset 0 -3px 0 var(--cyber-cyan);
+}
+
+.photo-runtime-alert-details {
+  border-color: var(--cyber-red);
+  color: var(--cyber-white);
+  background: var(--cyber-ink);
+  box-shadow: 8px 8px 0 rgb(255 0 60 / 28%);
+}
+
+.photo-runtime-alert-details[data-tone="warning"] {
+  border-color: var(--cyber-yellow);
+  box-shadow: 8px 8px 0 rgb(252 238 10 / 18%);
+}
+
+.photo-runtime-alert-heading strong {
+  color: var(--cyber-yellow);
+}
+
+.photo-runtime-alert-details[data-tone="danger"] .photo-runtime-alert-heading strong {
+  color: var(--cyber-red);
+}
+
+.photo-runtime-alert-heading button:hover,
+.photo-runtime-alert-heading button:focus-visible {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-cyan);
 }
 
 .photo-library-content,

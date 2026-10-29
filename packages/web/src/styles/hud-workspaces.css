@@ -738,6 +738,29 @@
   box-shadow: 6px 6px 0 rgb(255 51 95 / 30%);
 }
 
+.workspace-search-filter-menu .custom-select-menu {
+  border-color: var(--hud-red);
+  color: var(--hud-text);
+  background: var(--hud-void);
+  box-shadow: 4px 4px 0 rgb(255 51 95 / 24%);
+}
+
+.workspace-search-filter-menu .custom-select-option {
+  border-bottom-color: var(--hud-line-soft);
+  color: var(--hud-muted);
+  background: transparent;
+}
+
+.workspace-search-filter-menu .custom-select-option:is(.is-active, :hover) {
+  color: var(--hud-cyan);
+  background: var(--hud-cyan-soft);
+}
+
+.workspace-search-filter-menu .custom-select-option.is-selected {
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+}
+
 .workspace-stage[data-panel="files"] .workspace-grid {
   padding: 12px 14px 16px;
 }

@@ -20,10 +20,12 @@ import {
   getMediaSources,
   getMediaTitles,
   getTvStatus,
+  getTvSettings,
   requestMediaScan,
   updateMediaLibrarySettings,
   updateMediaMatch,
   updateMediaSource,
+  updateTvSettings,
   type MediaLibrarySettings,
   type MediaLibraryStatus,
   type MediaMatchCandidate,
@@ -31,9 +33,12 @@ import {
   type MediaSource,
   type MediaSourceKind,
   type MediaTitleSummary,
-  type TvModeStatus
+  type TvModeStatus,
+  type TvSettings
 } from "../../api.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { Switch } from "../common/Switch.js";
+import { CustomSelect } from "../common/CustomSelect.js";
 import {
   StorageFilePickerDialog,
   type StorageFilePickerPool,
@@ -47,6 +52,7 @@ interface MediaPageData {
   scans: MediaScanRun[];
   unmatched: MediaTitleSummary[];
   tvStatus: TvModeStatus;
+  tvSettings: TvSettings;
 }
 
 export function SettingsMediaPage({
@@ -79,14 +85,15 @@ export function SettingsMediaPage({
   const load = useCallback(async (reportError = true, syncForm = false) => {
     const sequence = ++loadSequence.current;
     try {
-      const [settings, sources, status, scans, pending, unmatched, tvStatus] = await Promise.all([
+      const [settings, sources, status, scans, pending, unmatched, tvStatus, tvSettings] = await Promise.all([
         getMediaLibrarySettings(),
         getMediaSources(),
         getMediaLibraryStatus(),
         getMediaScans(undefined, 30),
         getMediaTitles({ matchStatus: "pending", limit: 100 }),
         getMediaTitles({ matchStatus: "unmatched", limit: 100 }),
-        getTvStatus()
+        getTvStatus(),
+        getTvSettings()
       ]);
       if (sequence !== loadSequence.current) return;
       setData({
@@ -96,7 +103,8 @@ export function SettingsMediaPage({
         scans,
         unmatched: [...pending, ...unmatched].filter((title, index, titles) =>
           titles.findIndex((candidate) => candidate.id === title.id) === index),
-        tvStatus
+        tvStatus,
+        tvSettings
       });
       if (syncForm) {
         setLanguage(settings.language);
@@ -150,6 +158,30 @@ export function SettingsMediaPage({
       setTmdbToken("");
       setClearTmdbToken(false);
     }, t("settings.media.settingsSaved"));
+  }
+
+  async function toggleTv(enabled: boolean) {
+    if (!window.confirm(t(enabled ? "settings.media.tvEnableConfirm" : "settings.media.tvDisableConfirm"))) return;
+    await run("tv-mode", async () => {
+      const tvSettings = await updateTvSettings({
+        enabled,
+        ...(enabled ? { videoOutput: "wayland" as const } : {}),
+        confirmed: true
+      });
+      setData((current) => current ? { ...current, tvSettings } : current);
+    }, t(enabled ? "settings.media.tvEnabled" : "settings.media.tvDisabled"));
+  }
+
+  async function saveTvSettings() {
+    if (!data) return;
+    await run("tv-settings", async () => {
+      const tvSettings = await updateTvSettings({
+        audioDevice: data.tvSettings.audioDevice,
+        drmConnector: data.tvSettings.drmConnector,
+        hardwareDecoding: data.tvSettings.hardwareDecoding
+      });
+      setData((current) => current ? { ...current, tvSettings } : current);
+    }, t("settings.media.tvSettingsSaved"));
   }
 
   async function addSource(selection: StorageFileSelection) {
@@ -241,6 +273,12 @@ export function SettingsMediaPage({
           void searchCandidates(title, title.title);
         }}
         onApplyMatch={(title, candidate) => void applyMatch(title, candidate)}
+        onToggleTv={(enabled) => void toggleTv(enabled)}
+        onTvSettingsChange={(patch) => setData((current) => current ? {
+          ...current,
+          tvSettings: { ...current.tvSettings, ...patch }
+        } : current)}
+        onSaveTvSettings={() => void saveTvSettings()}
       />
       {pickerKind ? (
         <StorageFilePickerDialog
@@ -281,7 +319,10 @@ export function SettingsMediaContent({
   onCandidateQueryChange,
   onSearchCandidates,
   onSelectTitle,
-  onApplyMatch
+  onApplyMatch,
+  onToggleTv,
+  onTvSettingsChange,
+  onSaveTvSettings
 }: {
   data: MediaPageData;
   busy: string | null;
@@ -307,6 +348,9 @@ export function SettingsMediaContent({
   onSearchCandidates: (title: MediaTitleSummary) => void;
   onSelectTitle: (title: MediaTitleSummary) => void;
   onApplyMatch: (title: MediaTitleSummary, candidate: MediaMatchCandidate | null) => void;
+  onToggleTv: (enabled: boolean) => void;
+  onTvSettingsChange: (patch: Partial<TvSettings>) => void;
+  onSaveTvSettings: () => void;
 }) {
   const { t } = useTranslation();
   const scansBySource = useMemo(() => new Map(data.sources.map((source) => [
@@ -380,10 +424,21 @@ export function SettingsMediaContent({
               <h3>{t("settings.media.tvStatusTitle")}</h3>
               <p>{t("settings.media.tvStatusDescription")}</p>
             </div>
-            <strong className={`settings-tv-overall is-${data.tvStatus.state}`}>
-              {t(`settings.media.tvStates.${data.tvStatus.state}`)}
-            </strong>
+            <Switch checked={data.tvSettings.enabled} disabled={busy !== null} label={t("settings.media.tvMode")} onCheckedChange={onToggleTv} />
           </header>
+          <div className="settings-tv-control-grid">
+            <label><span>{t("settings.media.audioDevice")}</span><input value={data.tvSettings.audioDevice ?? ""} onChange={(event) => onTvSettingsChange({ audioDevice: event.target.value || null })} placeholder="default" /></label>
+            <label><span>{t("settings.media.drmConnector")}</span><input value={data.tvSettings.drmConnector ?? ""} onChange={(event) => onTvSettingsChange({ drmConnector: event.target.value || null })} placeholder="HDMI-A-1" /></label>
+            <div className="settings-preference-field"><span>{t("settings.media.hardwareDecoding")}</span><CustomSelect value={data.tvSettings.hardwareDecoding} ariaLabel={t("settings.media.hardwareDecoding")} options={[
+              { value: "auto-safe", label: t("settings.media.hwdec.autoSafe") },
+              { value: "auto", label: t("settings.media.hwdec.auto") },
+              { value: "no", label: t("settings.media.hwdec.no") }
+            ]} onChange={(hardwareDecoding) => onTvSettingsChange({ hardwareDecoding })} /></div>
+            <button className="secondary-button" type="button" disabled={busy !== null} onClick={onSaveTvSettings}>{busy === "tv-settings" ? <LoaderCircle className="is-spinning" size={15} /> : <Check size={15} />}{t("common.actions.save")}</button>
+          </div>
+          <strong className={`settings-tv-overall is-${data.tvStatus.state}`}>
+            {t(`settings.media.tvStates.${data.tvStatus.state}`)}
+          </strong>
           <dl className="settings-tv-components">
             {(["weston", "chromium", "vodPlayer", "cec", "gamepad"] as const).map((component) => {
               const health = data.tvStatus[component];
@@ -431,10 +486,14 @@ export function SettingsMediaContent({
                       <span>{scan ? t(`settings.media.scanStates.${scan.status}`) : t("settings.media.notScanned")}</span>
                       {scan?.status === "running" ? <small>{scan.scanned}</small> : null}
                     </div>
-                    <label className="settings-check settings-media-toggle">
-                      <input type="checkbox" checked={source.enabled} disabled={sourceBusy} onChange={() => onToggleSource(source)} />
-                      <span>{t("settings.media.enabled")}</span>
-                    </label>
+                    <Switch
+                      className="settings-media-toggle"
+                      compact
+                      checked={source.enabled}
+                      disabled={sourceBusy}
+                      label={t("settings.media.enabled")}
+                      onCheckedChange={() => onToggleSource(source)}
+                    />
                     <div className="settings-media-row-actions">
                       <button type="button" title={t("settings.media.scan")} aria-label={t("settings.media.scan")} disabled={sourceBusy} onClick={() => onScanSource(source)}>
                         <RefreshCw className={busy === `scan-${source.id}` ? "is-spinning" : undefined} aria-hidden="true" size={15} />

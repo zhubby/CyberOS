@@ -138,6 +138,7 @@ export function PhotoLibraryPanel({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
+  const [runtimeAlertOpen, setRuntimeAlertOpen] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const libraryRef = useRef<HTMLElement | null>(null);
   const libraryContentRef = useRef<HTMLDivElement | null>(null);
@@ -146,6 +147,8 @@ export function PhotoLibraryPanel({
   const lightboxTriggerRef = useRef<HTMLElement | null>(null);
   const deleteDialogRef = useRef<HTMLDivElement | null>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const runtimeAlertRef = useRef<HTMLDivElement | null>(null);
+  const runtimeAlertTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dragDepthRef = useRef(0);
   const libraryRequestRef = useRef(0);
   const configurationUpdatedAtRef = useRef(configurationUpdatedAt);
@@ -170,10 +173,38 @@ export function PhotoLibraryPanel({
     ? [
         t(`settings.photos.states.${runtimeAlert.state}`),
         t(`settings.photos.workerStates.${runtimeAlert.workerStatus}`),
+        runtimeAlert.error,
         runtimeAlert.errorCode,
         runtimeAlert.nextRetryAt ? t("workspace.photos.retryIn", { value: retryCountdown(runtimeAlert.nextRetryAt, clock) }) : null
       ].filter(Boolean).join(" · ")
     : null;
+  const hasRuntimeAlert = runtimeAlert !== null;
+
+  useEffect(() => {
+    if (!hasRuntimeAlert) setRuntimeAlertOpen(false);
+  }, [hasRuntimeAlert]);
+
+  useEffect(() => {
+    if (!runtimeAlertOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !runtimeAlertRef.current?.contains(target)) {
+        setRuntimeAlertOpen(false);
+      }
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setRuntimeAlertOpen(false);
+      runtimeAlertTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [runtimeAlertOpen]);
 
   const loadTimeline = useCallback(async (cursor: string | null = null) => {
     const requestId = cursor ? timelineRequestRef.current : ++timelineRequestRef.current;
@@ -725,16 +756,69 @@ export function PhotoLibraryPanel({
               </button>
             </label>
             {runtimeAlert && runtimeAlertLabel ? (
-              <span
-                className="photo-runtime-alert"
-                data-tone={runtimeAlert.tone}
-                role="status"
-                tabIndex={0}
-                title={runtimeAlertLabel}
-                aria-label={t("workspace.photos.runtimeAlert", { details: runtimeAlertLabel })}
-              >
-                <CircleAlert aria-hidden="true" size={15} />
-              </span>
+              <div ref={runtimeAlertRef} className="photo-runtime-alert-popover">
+                <button
+                  ref={runtimeAlertTriggerRef}
+                  className={`photo-runtime-alert${runtimeAlertOpen ? " is-open" : ""}`}
+                  data-tone={runtimeAlert.tone}
+                  type="button"
+                  title={runtimeAlertLabel}
+                  aria-label={t("workspace.photos.runtimeAlert", { details: runtimeAlertLabel })}
+                  aria-haspopup="dialog"
+                  aria-expanded={runtimeAlertOpen}
+                  aria-controls="photo-runtime-alert-details"
+                  onClick={() => setRuntimeAlertOpen((open) => !open)}
+                >
+                  <CircleAlert aria-hidden="true" size={15} />
+                </button>
+                {runtimeAlertOpen ? (
+                  <div
+                    id="photo-runtime-alert-details"
+                    className="photo-runtime-alert-details"
+                    data-tone={runtimeAlert.tone}
+                    role="dialog"
+                    aria-labelledby="photo-runtime-alert-title"
+                  >
+                    <div className="photo-runtime-alert-heading">
+                      <strong id="photo-runtime-alert-title">{t("workspace.photos.runtimeAlertTitle")}</strong>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRuntimeAlertOpen(false);
+                          runtimeAlertTriggerRef.current?.focus();
+                        }}
+                        title={t("workspace.photos.closeRuntimeAlert")}
+                        aria-label={t("workspace.photos.closeRuntimeAlert")}
+                      >
+                        <X aria-hidden="true" size={14} />
+                      </button>
+                    </div>
+                    <p>{runtimeAlert.error ?? t("workspace.photos.runtimeAlertFallback")}</p>
+                    <dl>
+                      <div>
+                        <dt>{t("workspace.photos.runtimeAlertState")}</dt>
+                        <dd>{t(`settings.photos.states.${runtimeAlert.state}`)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("workspace.photos.runtimeAlertWorker")}</dt>
+                        <dd>{t(`settings.photos.workerStates.${runtimeAlert.workerStatus}`)}</dd>
+                      </div>
+                      {runtimeAlert.errorCode ? (
+                        <div>
+                          <dt>{t("workspace.photos.runtimeAlertCode")}</dt>
+                          <dd><code>{runtimeAlert.errorCode}</code></dd>
+                        </div>
+                      ) : null}
+                      {runtimeAlert.nextRetryAt ? (
+                        <div>
+                          <dt>{t("workspace.photos.runtimeAlertRetry")}</dt>
+                          <dd>{retryCountdown(runtimeAlert.nextRetryAt, clock)}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
             <PhotoSearchFilterMenu
               filters={filters}
@@ -1059,6 +1143,7 @@ export function photoRuntimeAlert(
   tone: "warning" | "danger";
   state: PhotoLibraryStatus["state"];
   workerStatus: PhotoWorkerHealth["status"];
+  error: string | null;
   errorCode: PhotoLibraryStatus["errorCode"];
   nextRetryAt: string | null;
 } | null {
@@ -1071,6 +1156,7 @@ export function photoRuntimeAlert(
     tone: state === "offline" || workerStatus === "unavailable" ? "danger" : "warning",
     state,
     workerStatus,
+    error: status?.error ?? null,
     errorCode: status?.errorCode ?? null,
     nextRetryAt: status?.nextRetryAt ?? null
   };

@@ -16,6 +16,7 @@ import { formatBytes } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { useBluetoothTransfers } from "../../lib/use-bluetooth-transfers.js";
 import { useSystemBluetoothStatus } from "../../lib/use-system-bluetooth-status.js";
+import { Switch } from "../common/Switch.js";
 import {
   StorageFilePickerDialog, type StorageFilePickerPool, type StorageFileSelection
 } from "../workspace/StorageFilePickerDialog.js";
@@ -216,7 +217,7 @@ export function SettingsBluetoothPage({
 
       <section className="settings-section-card bluetooth-inbox-card">
         <header><div><h3>{t("settings.bluetooth.inbox.title")}</h3><p>{t("settings.bluetooth.inbox.description")}</p></div><Inbox aria-hidden="true" size={19} /></header>
-        <div className="bluetooth-inbox-controls"><button type="button" disabled={busyKey !== null || pools.length === 0} onClick={() => setPicker("inbox")}><FolderOpen aria-hidden="true" size={15} /><span>{inboxConfigured ? settings?.inboxPath : t("settings.bluetooth.inbox.choose")}</span></button><label className="bluetooth-switch-row"><input type="checkbox" checked={settings?.receiveEnabled ?? false} disabled={busyKey !== null || !inboxConfigured} onChange={(event) => void updateSettings({ receiveEnabled: event.target.checked }, "receive")} /><span><strong>{t("settings.bluetooth.inbox.receive")}</strong><small>{t("settings.bluetooth.inbox.trustedOnly")}</small></span></label></div>
+        <div className="bluetooth-inbox-controls"><button type="button" disabled={busyKey !== null || pools.length === 0} onClick={() => setPicker("inbox")}><FolderOpen aria-hidden="true" size={15} /><span>{inboxConfigured ? settings?.inboxPath : t("settings.bluetooth.inbox.choose")}</span></button><Switch className="bluetooth-switch-row" checked={settings?.receiveEnabled ?? false} disabled={busyKey !== null || !inboxConfigured} label={<strong>{t("settings.bluetooth.inbox.receive")}</strong>} description={t("settings.bluetooth.inbox.trustedOnly")} onCheckedChange={(receiveEnabled) => void updateSettings({ receiveEnabled }, "receive")} /></div>
         {!inboxConfigured ? <p className="settings-device-disabled">{t("settings.bluetooth.inbox.required")}</p> : null}
         {settings?.receiveEnabled && inboxStatus.status === "paused" && inboxStatus.reason ? <div className="settings-device-unavailable" role="status"><Inbox aria-hidden="true" size={18} /><p>{t(`settings.bluetooth.inbox.pauseReasons.${inboxStatus.reason}`)}</p></div> : null}
       </section>

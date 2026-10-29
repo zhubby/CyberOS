@@ -167,12 +167,9 @@ export function SystemNetworkManagementPanel({
             backend: ethernet.backend === "NetworkManager" ? "NetworkManager" : current.capabilities.backend,
             hostdReady: current.wifi.hostdReady || ethernet.hostdReady,
             canApplyConfiguration:
-              current.capabilities.hostMutationPolicy === "mutable" && (
-                (current.wifi.backend === "NetworkManager" && current.wifi.hostdReady)
-                || (ethernet.backend === "NetworkManager" && ethernet.hostdReady)
-              ),
+              (current.wifi.backend === "NetworkManager" && current.wifi.hostdReady)
+              || (ethernet.backend === "NetworkManager" && ethernet.hostdReady),
             canManageEthernet:
-              current.capabilities.hostMutationPolicy === "mutable" &&
               ethernet.backend === "NetworkManager" &&
               ethernet.hostdReady &&
               ethernet.devices.length > 0
@@ -192,17 +189,13 @@ export function SystemNetworkManagementPanel({
               : wifiStatus.backend,
             hostdReady: wifiStatus.hostdReady || current.ethernet.hostdReady,
             canApplyConfiguration:
-              current.capabilities.hostMutationPolicy === "mutable" && (
-                (wifiStatus.backend === "NetworkManager" && wifiStatus.hostdReady)
-                || (current.ethernet.backend === "NetworkManager" && current.ethernet.hostdReady)
-              ),
+              (wifiStatus.backend === "NetworkManager" && wifiStatus.hostdReady)
+              || (current.ethernet.backend === "NetworkManager" && current.ethernet.hostdReady),
             canManageWifi:
-              current.capabilities.hostMutationPolicy === "mutable" &&
               wifiStatus.backend === "NetworkManager" &&
               wifiStatus.hostdReady &&
               wifiStatus.devices.length > 0,
             canManageHotspot:
-              current.capabilities.hostMutationPolicy === "mutable" &&
               wifiStatus.backend === "NetworkManager" &&
               wifiStatus.hostdReady &&
               wifiStatus.devices.some((device) => device.capabilities.accessPoint)
@@ -709,11 +702,7 @@ export function SystemStorageManagementPanel({
                         <Fact label={t("workspace.management.storage.facts.backend")} value="mdadm" />
                         <Fact
                           label={translate("workspace.management.storage.facts.mode")}
-                          value={translate(
-                            summary?.capabilities.hostMutationPolicy === "declarative"
-                              ? "workspace.management.values.readOnly"
-                              : "workspace.management.storage.values.directApply"
-                          )}
+                          value={translate("workspace.management.storage.values.directApply")}
                         />
                         <Fact label={t("workspace.management.storage.facts.pools")} value={formatLocaleNumber(summary?.metrics.pools ?? 0, locale)} />
                         <Fact label={t("workspace.management.storage.facts.arrays")} value={formatLocaleNumber(summary?.metrics.arrays ?? 0, locale)} />

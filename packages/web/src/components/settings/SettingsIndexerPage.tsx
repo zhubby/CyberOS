@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Database, RefreshCw } from "lucide-react";
 import type { IndexerOverview, IndexerSettings, StoragePool } from "../../api.js";
+import { Switch } from "../common/Switch.js";
 
 type IndexerSettingsDraft = Omit<IndexerSettings, "updatedAt">;
 
@@ -108,20 +109,19 @@ export function SettingsIndexerPage({
                         <strong>{storagePool.name}</strong>
                         <small>{storagePool.mountpoint ?? storagePool.id}</small>
                       </span>
-                      <label className="settings-indexer-ocr">
-                        <input
-                          type="checkbox"
-                          checked={ocrEnabled}
-                          disabled={disabled}
-                          onChange={(event) => setDraft((current) => ({
+                      <Switch
+                        className="settings-indexer-ocr"
+                        compact
+                        checked={ocrEnabled}
+                        disabled={disabled}
+                        label={t("settings.indexer.ocr")}
+                        onCheckedChange={(checked) => setDraft((current) => ({
                             ...current,
-                            ocrStoragePoolIds: event.target.checked
+                            ocrStoragePoolIds: checked
                               ? [...new Set([...current.ocrStoragePoolIds, storagePool.id])]
                               : current.ocrStoragePoolIds.filter((storagePoolId) => storagePoolId !== storagePool.id)
                           }))}
-                        />
-                        <span>{t("settings.indexer.ocr")}</span>
-                      </label>
+                      />
                       <button
                         type="button"
                         className="secondary-button settings-indexer-rebuild"

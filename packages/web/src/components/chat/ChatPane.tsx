@@ -508,6 +508,7 @@ export function ChatPane({
         <div
           ref={transcriptRef}
           className="transcript"
+          role="log"
           aria-label={t("chat.transcript")}
           aria-busy={transcriptPhase === "loading"}
         >
@@ -641,6 +642,7 @@ export function ChatPane({
           <div className="composer-footer">
             <div
               className="composer-model-config"
+              role="group"
               title={modelRoute}
               aria-label={`${t("chat.modelConfiguration")}: ${modelRoute}`}
             >

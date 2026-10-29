@@ -5,6 +5,7 @@ import {
   defaultToolPolicyForm,
   dockerSettingsToForm,
   modelSettingsToForm,
+  vmSettingsToForm,
   SETTINGS_SECTIONS
 } from "../../config/settings.js";
 import { i18n, initI18n } from "../../i18n/index.js";
@@ -71,6 +72,28 @@ describe("SettingsModal", () => {
     expect(html).not.toContain('id="theme-select"');
     expect(html).not.toContain("Interface theme");
   });
+
+  it("renders Docker enablement as a switch instead of a native checkbox control", () => {
+    const html = renderSettings({
+      activeSection: "docker",
+      dockerForm: { ...dockerSettingsToForm(null), enabled: true }
+    });
+
+    expect(html).toContain("Enable Docker management");
+    expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/u);
+    expect(html).toContain("hud-switch-track");
+  });
+
+  it("renders virtual machine enablement in its own settings section", () => {
+    const html = renderSettings({
+      activeSection: "virtual-machines",
+      vmForm: { ...vmSettingsToForm(null), enabled: true }
+    });
+
+    expect(html).toContain("Enable virtual machine management");
+    expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/u);
+    expect(html).toContain("QEMU, KVM, and libvirt");
+  });
 });
 
 function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>> = {}): string {
@@ -78,9 +101,11 @@ function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>>
     activeSection: "overview",
     form: modelSettingsToForm(null),
     dockerForm: dockerSettingsToForm(null),
+    vmForm: vmSettingsToForm(null),
     loading: false,
     saving: false,
     dockerSettings: null,
+    vmSettings: null,
     downloadSettings: null,
     indexerSettings: null,
     indexerStatus: null,
@@ -109,6 +134,7 @@ function renderSettings(overrides: Partial<ComponentProps<typeof SettingsModal>>
     onClose: vi.fn(),
     onFormChange: vi.fn(),
     onDockerFormChange: vi.fn(),
+    onVmFormChange: vi.fn(),
     onDownloadSettingsChange: vi.fn(async () => undefined),
     onIndexerSettingsChange: vi.fn(async () => undefined),
     onIndexerReindex: vi.fn(async () => undefined),

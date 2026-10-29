@@ -30,6 +30,7 @@ import {
 } from "../../api.js";
 import { formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { Switch } from "../common/Switch.js";
 import {
   ethernetTransactionSeconds,
   hasSystemEthernetMetricConflict,
@@ -308,7 +309,7 @@ function EthernetEditor({ state, busy, unavailable, t, onChange, onClose, onSave
         </header>
         <form onSubmit={(event: FormEvent) => { event.preventDefault(); onSave(); }}>
           <div className="system-ethernet-form">
-            <label className="system-ethernet-toggle"><input type="checkbox" checked={state.config.enabled} onChange={(event) => updateConfig({ ...state.config, enabled: event.target.checked })} disabled={busy || unavailable} /><span>{t("workspace.management.network.ethernet.fields.enabled")}</span></label>
+            <Switch className="system-ethernet-toggle" checked={state.config.enabled} onCheckedChange={(enabled) => updateConfig({ ...state.config, enabled })} disabled={busy || unavailable} label={t("workspace.management.network.ethernet.fields.enabled")} />
             <FamilyFields family="ipv4" config={state.config} busy={busy || unavailable} t={t} onChange={updateConfig} />
             <FamilyFields family="ipv6" config={state.config} busy={busy || unavailable} t={t} onChange={updateConfig} />
             {errors.length ? <p className="system-ethernet-form-error" role="alert">{t("workspace.management.network.ethernet.errors.invalid")}</p> : null}
@@ -342,7 +343,7 @@ function FamilyFields({ family, config, busy, t, onChange }: {
         </> : null}
         <label><span>{t("workspace.management.network.ethernet.fields.dnsMode")}</span><select value={value.dnsMode} onChange={(event) => update({ ...value, dnsMode: event.target.value as typeof value.dnsMode, dns: event.target.value === "automatic" ? [] : value.dns })}><option value="automatic">{t("workspace.management.network.ethernet.dns.automatic")}</option><option value="manual">{t("workspace.management.network.ethernet.dns.manual")}</option></select></label>
         {value.dnsMode === "manual" ? <label className="is-wide"><span>{t("workspace.management.network.ethernet.fields.dns")}</span><input value={value.dns.join(", ")} onChange={(event) => update({ ...value, dns: event.target.value.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 3) })} /></label> : null}
-        <label className="system-ethernet-toggle"><input type="checkbox" checked={value.useDefaultRoute} onChange={(event) => update({ ...value, useDefaultRoute: event.target.checked })} disabled={value.mode === "disabled"} /><span>{t("workspace.management.network.ethernet.fields.defaultRoute")}</span></label>
+        <Switch className="system-ethernet-toggle" checked={value.useDefaultRoute} onCheckedChange={(useDefaultRoute) => update({ ...value, useDefaultRoute })} disabled={value.mode === "disabled"} label={t("workspace.management.network.ethernet.fields.defaultRoute")} />
         <label><span>{t("workspace.management.network.ethernet.fields.metric")}</span><input type="number" min="1" max="65535" value={value.routeMetric} onChange={(event) => update({ ...value, routeMetric: Number(event.target.value) })} /></label>
       </div>
     </fieldset>

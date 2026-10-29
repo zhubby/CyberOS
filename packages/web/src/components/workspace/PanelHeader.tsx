@@ -40,7 +40,11 @@ export function PanelHeaderActions({
   children: ReactNode;
 }) {
   return (
-    <div className={["management-actions", "panel-header-actions", className].filter(Boolean).join(" ")} aria-label={label}>
+    <div
+      className={["management-actions", "panel-header-actions", className].filter(Boolean).join(" ")}
+      role="group"
+      aria-label={label}
+    >
       {children}
     </div>
   );

@@ -6,6 +6,7 @@ import type {
   IndexerSettings,
   ModelProviderSettings,
   ModelProviderName,
+  VmSettings,
   PhotoLibraryStatus,
   AgentCapabilityPolicyMode,
   AgentCapabilityPolicySettings
@@ -13,15 +14,19 @@ import type {
 
 export type SettingsSectionId =
   | "overview"
+  | "system-profile"
   | "version"
   | "model-providers"
   | "agents"
   | "wireless"
   | "bluetooth"
   | "docker"
+  | "virtual-machines"
   | "files"
   | "indexer"
   | "operations"
+  | "monitoring"
+  | "backup"
   | "alerts"
   | "photos"
   | "media"
@@ -44,10 +49,11 @@ export interface ModelProviderFormState {
 
 export interface DockerSettingsFormState {
   enabled: boolean;
-  socketPath: string;
-  composeCommand: string;
-  operationTimeoutMs: string;
-  consoleShells: string;
+  updatedAt: string;
+}
+
+export interface VmSettingsFormState {
+  enabled: boolean;
   updatedAt: string;
 }
 
@@ -63,6 +69,10 @@ export const AGENT_CAPABILITY_POLICY_OPTIONS: AgentCapabilityPolicyMode[] = ["au
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "overview",
+    group: "cyberos"
+  },
+  {
+    id: "system-profile",
     group: "cyberos"
   },
   {
@@ -90,7 +100,19 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "administration"
   },
   {
+    id: "virtual-machines",
+    group: "administration"
+  },
+  {
     id: "operations",
+    group: "administration"
+  },
+  {
+    id: "monitoring",
+    group: "administration"
+  },
+  {
+    id: "backup",
     group: "administration"
   },
   {
@@ -129,15 +151,19 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
 const SECTION_TITLE_KEYS = {
   overview: "settings.sections.overview.title",
+  "system-profile": "settings.sections.systemProfile.title",
   version: "settings.sections.version.title",
   "model-providers": "settings.sections.modelProviders.title",
   agents: "settings.sections.agents.title",
   wireless: "settings.sections.wireless.title",
   bluetooth: "settings.sections.bluetooth.title",
   docker: "settings.sections.docker.title",
+  "virtual-machines": "settings.sections.virtualMachines.title",
   files: "settings.sections.files.title",
   indexer: "settings.sections.indexer.title",
   operations: "settings.sections.operations.title",
+  monitoring: "settings.sections.monitoring.title",
+  backup: "settings.sections.backup.title",
   alerts: "settings.sections.alerts.title",
   photos: "settings.sections.photos.title",
   media: "settings.sections.media.title",
@@ -148,15 +174,19 @@ const SECTION_TITLE_KEYS = {
 
 const SECTION_DESCRIPTION_KEYS = {
   overview: "settings.sections.overview.description",
+  "system-profile": "settings.sections.systemProfile.description",
   version: "settings.sections.version.description",
   "model-providers": "settings.sections.modelProviders.description",
   agents: "settings.sections.agents.description",
   wireless: "settings.sections.wireless.description",
   bluetooth: "settings.sections.bluetooth.description",
   docker: "settings.sections.docker.description",
+  "virtual-machines": "settings.sections.virtualMachines.description",
   files: "settings.sections.files.description",
   indexer: "settings.sections.indexer.description",
   operations: "settings.sections.operations.description",
+  monitoring: "settings.sections.monitoring.description",
+  backup: "settings.sections.backup.description",
   alerts: "settings.sections.alerts.description",
   photos: "settings.sections.photos.description",
   media: "settings.sections.media.description",
@@ -186,10 +216,13 @@ export function modelSettingsToForm(settings: ModelProviderSettings | null): Mod
 export function dockerSettingsToForm(settings: DockerSettings | null): DockerSettingsFormState {
   return {
     enabled: settings?.enabled ?? false,
-    socketPath: settings?.socketPath ?? "/var/run/docker.sock",
-    composeCommand: settings?.composeCommand ?? "docker",
-    operationTimeoutMs: String(settings?.operationTimeoutMs ?? 120_000),
-    consoleShells: (settings?.consoleShells ?? ["/bin/sh", "/bin/bash"]).join(", "),
+    updatedAt: settings?.updatedAt ?? new Date(0).toISOString()
+  };
+}
+
+export function vmSettingsToForm(settings: VmSettings | null): VmSettingsFormState {
+  return {
+    enabled: settings?.enabled ?? false,
     updatedAt: settings?.updatedAt ?? new Date(0).toISOString()
   };
 }
@@ -213,13 +246,17 @@ export function settingsSectionState(
   buildInfo: BuildInfo | null = null,
   downloadSettings: DownloadSettings | null = null,
   photoStatus: PhotoLibraryStatus | null = null,
-  indexerSettings: IndexerSettings | null = null
+  indexerSettings: IndexerSettings | null = null,
+  vmSettings: VmSettings | null = null
 ): SettingsState {
   if (section.id === "model-providers") {
     return settings?.apiKeyConfigured ? "ready" : "missing";
   }
   if (section.id === "docker") {
     return dockerSettings ? "ready" : "missing";
+  }
+  if (section.id === "virtual-machines") {
+    return vmSettings ? "ready" : "missing";
   }
   if (section.id === "version") {
     return buildInfo && buildInfo.version !== "unknown" ? "ready" : "missing";

@@ -47,6 +47,7 @@ import {
   type WorkspacePanelId
 } from "../../lib/workspace-panel-settings.js";
 import { ActivityMenu } from "../activity/ActivityMenu.js";
+import { CustomSelect, type CustomSelectOption } from "../common/CustomSelect.js";
 import { FileTypeIcon } from "../file/FileTypeIcon.js";
 import { VodPlayerControls } from "../preview/VodPlayerControls.js";
 import {
@@ -155,10 +156,7 @@ export function storagePoolRootDepth(poolPath: string): number {
 }
 
 export interface WorkspaceSearchOptions {
-  categories: IndexSearchCategory[];
-  extractionSources: NonNullable<IndexSearchRequest["extractionSources"]>;
-  extractionStatuses: NonNullable<IndexSearchRequest["extractionStatuses"]>;
-  mimeTypes: string;
+  fileType: IndexSearchCategory | "";
   modifiedFrom: string;
   modifiedTo: string;
   sizeMin: string;
@@ -168,10 +166,7 @@ export interface WorkspaceSearchOptions {
 
 export function defaultWorkspaceSearchOptions(): WorkspaceSearchOptions {
   return {
-    categories: [],
-    extractionSources: [],
-    extractionStatuses: [],
-    mimeTypes: "",
+    fileType: "",
     modifiedFrom: "",
     modifiedTo: "",
     sizeMin: "",
@@ -181,17 +176,13 @@ export function defaultWorkspaceSearchOptions(): WorkspaceSearchOptions {
 }
 
 export function hasWorkspaceSearchFilters(options: WorkspaceSearchOptions): boolean {
-  return options.categories.length > 0
-    || options.extractionSources.length > 0
-    || options.extractionStatuses.length > 0
-    || Boolean(options.mimeTypes.trim() || options.modifiedFrom || options.modifiedTo || options.sizeMin || options.sizeMax)
+  return Boolean(options.fileType || options.modifiedFrom || options.modifiedTo || options.sizeMin || options.sizeMax)
     || options.sort.field !== "relevance"
     || options.sort.direction !== "desc";
 }
 
-const SEARCH_CATEGORIES: IndexSearchCategory[] = ["text", "document", "spreadsheet", "presentation", "pdf", "other"];
-const SEARCH_STATUSES: NonNullable<IndexSearchRequest["extractionStatuses"]> = ["pending", "ready", "stale", "error", "skipped"];
-const SEARCH_SOURCES: NonNullable<IndexSearchRequest["extractionSources"]> = ["plain_text", "pdftotext", "docx", "xlsx", "pptx", "ocr"];
+const SEARCH_FILE_TYPES: IndexSearchCategory[] = ["text", "document", "spreadsheet", "presentation", "pdf", "other"];
+const SEARCH_SORT_FIELDS: WorkspaceSearchOptions["sort"]["field"][] = ["relevance", "name", "mtime", "size"];
 
 function SearchFilterMenu({ options, disabled, onChange, onApply }: {
   options: WorkspaceSearchOptions;
@@ -204,6 +195,21 @@ function SearchFilterMenu({ options, disabled, onChange, onApply }: {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const active = hasWorkspaceSearchFilters(options);
+  const fileTypeOptions: CustomSelectOption<WorkspaceSearchOptions["fileType"]>[] = [
+    { value: "", label: t("workspace.search.allFileTypes") },
+    ...SEARCH_FILE_TYPES.map((fileType) => ({
+      value: fileType,
+      label: t(`workspace.search.fileTypes.${fileType}`)
+    }))
+  ];
+  const sortFieldOptions: CustomSelectOption<WorkspaceSearchOptions["sort"]["field"]>[] = SEARCH_SORT_FIELDS.map((field) => ({
+    value: field,
+    label: t(`workspace.search.sortFields.${field}`)
+  }));
+  const sortDirectionOptions: CustomSelectOption<WorkspaceSearchOptions["sort"]["direction"]>[] = [
+    { value: "desc", label: t("workspace.search.directions.desc") },
+    { value: "asc", label: t("workspace.search.directions.asc") }
+  ];
 
   useEffect(() => {
     if (!open) return undefined;
@@ -224,17 +230,6 @@ function SearchFilterMenu({ options, disabled, onChange, onApply }: {
     };
   }, [open]);
 
-  function toggleList<Key extends "categories" | "extractionSources" | "extractionStatuses">(
-    key: Key,
-    value: WorkspaceSearchOptions[Key][number]
-  ) {
-    const values = options[key] as string[];
-    onChange({
-      ...options,
-      [key]: values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
-    });
-  }
-
   return (
     <div ref={containerRef} className="workspace-search-filter">
       <button
@@ -252,32 +247,41 @@ function SearchFilterMenu({ options, disabled, onChange, onApply }: {
       </button>
       {open ? (
         <div className="workspace-search-filter-menu" role="dialog" aria-label={t("workspace.search.filters")}>
-          <fieldset>
-            <legend>{t("workspace.search.category")}</legend>
-            <div className="workspace-search-checks">
-              {SEARCH_CATEGORIES.map((category) => <label key={category}><input type="checkbox" checked={options.categories.includes(category)} onChange={() => toggleList("categories", category)} /><span>{t(`workspace.search.categories.${category}`)}</span></label>)}
-            </div>
-          </fieldset>
-          <fieldset>
-            <legend>{t("workspace.search.extractionStatus")}</legend>
-            <div className="workspace-search-checks">
-              {SEARCH_STATUSES.map((status) => <label key={status}><input type="checkbox" checked={options.extractionStatuses.includes(status)} onChange={() => toggleList("extractionStatuses", status)} /><span>{t(`workspace.search.statuses.${status}`)}</span></label>)}
-            </div>
-          </fieldset>
-          <fieldset>
-            <legend>{t("workspace.search.extractionSource")}</legend>
-            <div className="workspace-search-checks">
-              {SEARCH_SOURCES.map((source) => <label key={source}><input type="checkbox" checked={options.extractionSources.includes(source)} onChange={() => toggleList("extractionSources", source)} /><span>{t(`workspace.search.sources.${source}`)}</span></label>)}
-            </div>
-          </fieldset>
-          <label className="workspace-search-field"><span>{t("workspace.search.mimeTypes")}</span><input value={options.mimeTypes} placeholder={t("workspace.search.mimeTypesPlaceholder")} onChange={(event) => onChange({ ...options, mimeTypes: event.target.value })} /></label>
+          <div className="workspace-search-field">
+            <label htmlFor="workspace-search-file-type">{t("workspace.search.fileType")}</label>
+            <CustomSelect
+              id="workspace-search-file-type"
+              value={options.fileType}
+              options={fileTypeOptions}
+              onChange={(fileType) => onChange({ ...options, fileType })}
+              ariaLabel={t("workspace.search.fileType")}
+            />
+          </div>
           <div className="workspace-search-field-grid">
             <label className="workspace-search-field"><span>{t("workspace.search.modifiedFrom")}</span><input type="date" value={options.modifiedFrom} onChange={(event) => onChange({ ...options, modifiedFrom: event.target.value })} /></label>
             <label className="workspace-search-field"><span>{t("workspace.search.modifiedTo")}</span><input type="date" value={options.modifiedTo} onChange={(event) => onChange({ ...options, modifiedTo: event.target.value })} /></label>
             <label className="workspace-search-field"><span>{t("workspace.search.sizeMin")}</span><input type="number" min="0" value={options.sizeMin} onChange={(event) => onChange({ ...options, sizeMin: event.target.value })} /></label>
             <label className="workspace-search-field"><span>{t("workspace.search.sizeMax")}</span><input type="number" min="0" value={options.sizeMax} onChange={(event) => onChange({ ...options, sizeMax: event.target.value })} /></label>
-            <label className="workspace-search-field"><span>{t("workspace.search.sort")}</span><select value={options.sort.field} onChange={(event) => onChange({ ...options, sort: { ...options.sort, field: event.target.value as WorkspaceSearchOptions["sort"]["field"] } })}>{(["relevance", "name", "mtime", "size"] as const).map((field) => <option key={field} value={field}>{t(`workspace.search.sortFields.${field}`)}</option>)}</select></label>
-            <label className="workspace-search-field"><span>{t("workspace.search.sort")}</span><select value={options.sort.direction} onChange={(event) => onChange({ ...options, sort: { ...options.sort, direction: event.target.value as "asc" | "desc" } })}><option value="desc">{t("workspace.search.directions.desc")}</option><option value="asc">{t("workspace.search.directions.asc")}</option></select></label>
+            <div className="workspace-search-field">
+              <label htmlFor="workspace-search-sort-field">{t("workspace.search.sortField")}</label>
+              <CustomSelect
+                id="workspace-search-sort-field"
+                value={options.sort.field}
+                options={sortFieldOptions}
+                onChange={(field) => onChange({ ...options, sort: { ...options.sort, field } })}
+                ariaLabel={t("workspace.search.sortField")}
+              />
+            </div>
+            <div className="workspace-search-field">
+              <label htmlFor="workspace-search-sort-direction">{t("workspace.search.sortDirection")}</label>
+              <CustomSelect
+                id="workspace-search-sort-direction"
+                value={options.sort.direction}
+                options={sortDirectionOptions}
+                onChange={(direction) => onChange({ ...options, sort: { ...options.sort, direction } })}
+                ariaLabel={t("workspace.search.sortDirection")}
+              />
+            </div>
           </div>
           <div className="workspace-search-filter-actions">
             <button type="button" className="secondary-button" onClick={() => { const reset = defaultWorkspaceSearchOptions(); onChange(reset); onApply(reset); setOpen(false); }}>{t("workspace.search.reset")}</button>
@@ -1209,6 +1213,7 @@ export function WorkspacePane({
       className={`workspace-pane ${active ? "is-mobile-active" : ""}`}
       aria-label={t("workspace.label")}
       aria-hidden={!workspaceVisible}
+      inert={!workspaceVisible ? true : undefined}
     >
       <input
         ref={fileUploadInputRef}

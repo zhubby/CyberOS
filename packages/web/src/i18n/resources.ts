@@ -16,6 +16,7 @@ export const en = {
       save: "Save",
       edit: "Edit",
       delete: "Delete",
+      clear: "Clear",
       saveChanges: "Save Changes",
       saving: "Saving",
       send: "Send",
@@ -333,19 +334,16 @@ export const en = {
       filtersActive: "Search filters active",
       reset: "Reset",
       apply: "Apply filters",
-      category: "File category",
-      categories: { text: "Text", document: "Document", spreadsheet: "Spreadsheet", presentation: "Presentation", pdf: "PDF", other: "Other" },
-      extractionStatus: "Extraction status",
+      fileType: "File type",
+      allFileTypes: "All file types",
+      fileTypes: { text: "Text", document: "Document", spreadsheet: "Spreadsheet", presentation: "Presentation", pdf: "PDF", other: "Other" },
       statuses: { pending: "Pending", ready: "Ready", stale: "Stale", error: "Error", skipped: "Skipped" },
-      extractionSource: "Extraction source",
-      sources: { plain_text: "Plain text", pdftotext: "PDF text", docx: "DOCX", xlsx: "XLSX", pptx: "PPTX", ocr: "OCR" },
-      mimeTypes: "MIME types",
-      mimeTypesPlaceholder: "text/plain, application/pdf",
       modifiedFrom: "Modified after",
       modifiedTo: "Modified before",
       sizeMin: "Minimum bytes",
       sizeMax: "Maximum bytes",
-      sort: "Sort",
+      sortField: "Sort by",
+      sortDirection: "Direction",
       sortFields: { relevance: "Relevance", name: "Name", mtime: "Modified", size: "Size" },
       directions: { asc: "Ascending", desc: "Descending" },
       loadMore: "Load more",
@@ -809,6 +807,13 @@ export const en = {
       resetFilters: "Reset filters",
       applyFilters: "Apply filters",
       runtimeAlert: "Photo library issue: {{details}}",
+      runtimeAlertTitle: "Photo library issue",
+      runtimeAlertFallback: "The photo service is degraded. Review the runtime status below.",
+      runtimeAlertState: "Library",
+      runtimeAlertWorker: "Worker",
+      runtimeAlertCode: "Code",
+      runtimeAlertRetry: "Retry in",
+      closeRuntimeAlert: "Close issue details",
       mediaType: "Type",
       camera: "Camera",
       lens: "Lens",
@@ -1360,7 +1365,7 @@ export const en = {
         description: "Manage SMB, WebDAV, FTP, NFS, and DLNA publishing for directories inside storage pools.",
         commandTitle: "Host sharing",
         loading: "Loading share settings and service state.",
-        declarativeReadOnly: "Share settings are managed by the system configuration and are read-only here.",
+        configurationUnavailable: "Share configuration is temporarily unavailable. Refresh the panel and check host services.",
         readyDetail: "Share settings are enabled and host services report healthy status.",
         partialDetail: "Share settings are enabled, but one or more host services need attention.",
         disabledDetail: "Share publishing is disabled; saved directories are kept until sharing is enabled and saved again.",
@@ -1612,7 +1617,7 @@ export const en = {
           enableRadio: "Enable Wi-Fi radio",
           disableRadio: "Disable Wi-Fi radio",
           readOnlyTitle: "Wi-Fi settings are read-only",
-          declarativeReadOnlyDescription: "Wireless configuration is managed declaratively on this host.",
+          managementUnavailableDescription: "Wireless configuration is temporarily unavailable. Check the host integration service.",
           scan: "Scan",
           scanning: "Scanning for nearby networks...",
           scanPrompt: "Run a scan to discover nearby networks.",
@@ -1949,6 +1954,8 @@ export const en = {
         consoleDisconnected: "VM console disconnected.",
         unavailable: "Unavailable",
         unavailableDetail: "libvirt is unavailable on this host.",
+        disabled: "Disabled",
+        disabledDetail: "Virtual machine management is disabled in System Settings.",
         noInstances: "No virtual machines are defined.",
         readyDetail: "libvirt is ready for VM management.",
         kvmMissing: "KVM unavailable",
@@ -2120,6 +2127,10 @@ export const en = {
         title: "Overview",
         description: "Service status and appliance identity."
       },
+      systemProfile: {
+        title: "System Profile",
+        description: "Administrator identity shown across this appliance."
+      },
       version: {
         title: "Version",
         description: "Release identity and source traceability."
@@ -2144,6 +2155,10 @@ export const en = {
         title: "Docker",
         description: "Local Engine access, managed Compose Apps, and short-lived console sessions."
       },
+      virtualMachines: {
+        title: "Virtual Machines",
+        description: "KVM/libvirt access, guest lifecycle, snapshots, and console sessions."
+      },
       files: {
         title: "Files & Preview",
         description: "Editor typography and preview size limits."
@@ -2155,6 +2170,14 @@ export const en = {
       operations: {
         title: "Operations",
         description: "Health checks, maintenance status, and run history."
+      },
+      monitoring: {
+        title: "Monitoring",
+        description: "Collection state, retention windows, and metrics database limit."
+      },
+      backup: {
+        title: "Backup",
+        description: "Restic repository, credential, validation, and retention policy."
       },
       alerts: {
         title: "Alerts",
@@ -2200,6 +2223,16 @@ export const en = {
       library: "Library",
       tvStatusTitle: "TV mode health",
       tvStatusDescription: "Read-only status for the local HDMI shell and playback services.",
+      tvMode: "TV mode",
+      tvEnableConfirm: "Enable TV mode and take over the local display?",
+      tvDisableConfirm: "Disable TV mode and restore the previous desktop session?",
+      tvEnabled: "TV mode enabled.",
+      tvDisabled: "TV mode disabled.",
+      tvSettingsSaved: "TV output settings saved.",
+      audioDevice: "Audio output device",
+      drmConnector: "DRM connector",
+      hardwareDecoding: "Hardware decoding",
+      hwdec: { autoSafe: "Automatic (safe)", auto: "Automatic", no: "Disabled" },
       tvStates: {
         disabled: "Disabled",
         starting: "Starting",
@@ -2263,6 +2296,42 @@ export const en = {
       noOverview: "No overview available.",
       matchSaved: "Match saved and source scan queued.",
       titleExcluded: "Title excluded and source scan queued."
+    },
+    systemProfile: {
+      title: "Administrator identity",
+      description: "This display name is stored in the CyberOS database and used in system identity views.",
+      adminDisplayName: "Administrator display name"
+    },
+    monitoring: {
+      title: "Metrics collection",
+      description: "Sampling cadence is fixed; control collection, retention, and the database size ceiling here.",
+      enabled: "Enable monitoring",
+      enabledDescription: "The monitor and alerter stay resident but pause collection and evaluation when disabled.",
+      rawRetention: "Raw retention (days)",
+      minuteRetention: "Minute rollup retention (days)",
+      hourRetention: "Hourly rollup retention (days)",
+      maxDatabaseMiB: "Maximum database size (MiB)"
+    },
+    backup: {
+      title: "Backup policy",
+      description: "Scheduled backups read this policy from the database at run time.",
+      enabled: "Enable scheduled backups",
+      validated: "Repository and credential have been validated.",
+      validationRequired: "Validate the repository before enabling scheduled backups.",
+      repository: "Repository path",
+      keepDaily: "Daily snapshots",
+      keepWeekly: "Weekly snapshots",
+      requireMount: "Require an exact mount",
+      requireMountDescription: "Reject backup runs if the repository is not a dedicated mounted filesystem.",
+      credentialTitle: "Repository credential",
+      credentialConfigured: "A password is configured; its value is never returned.",
+      credentialMissing: "No repository password is configured.",
+      password: "New repository password",
+      repositoryActions: "Repository operations",
+      repositoryActionsDescription: "Validation is non-destructive. Initialization creates a new restic repository and requires confirmation.",
+      validate: "Validate repository",
+      initialize: "Initialize repository",
+      initializeConfirm: "Initialize a restic repository at the configured path?"
     },
     bluetooth: {
       adaptersTitle: "Bluetooth adapters",
@@ -2576,6 +2645,13 @@ export const en = {
       consoleShellsHelp: "Enter one absolute shell path per line or separate them with commas.",
       socketNote: "Docker socket access is root-equivalent. Only enable this on a trusted appliance."
     },
+    virtualMachines: {
+      runtimeTitle: "Virtualization Access",
+      runtimeDescription: "Control whether CyberOS exposes the installed QEMU, KVM, and libvirt runtime to the web UI and Agent capabilities.",
+      enabledField: "Enable virtual machine management",
+      enabledDescription: "Allows VM inspection, lifecycle actions, snapshots, creation, and console sessions.",
+      runtimeNote: "CyberOS installs and prepares the virtualization runtime during system installation. This switch controls access; hardware acceleration still requires the host kernel to expose /dev/kvm."
+    },
     toolPolicy: {
       mcp: {
         title: "Agent MCP",
@@ -2856,6 +2932,7 @@ export const zhCN = {
       save: "保存",
       edit: "编辑",
       delete: "删除",
+      clear: "清除",
       saveChanges: "保存更改",
       saving: "保存中",
       send: "发送",
@@ -3173,19 +3250,16 @@ export const zhCN = {
       filtersActive: "已启用搜索筛选",
       reset: "重置",
       apply: "应用筛选",
-      category: "文件类别",
-      categories: { text: "文本", document: "文档", spreadsheet: "表格", presentation: "演示文稿", pdf: "PDF", other: "其他" },
-      extractionStatus: "提取状态",
+      fileType: "文件类型",
+      allFileTypes: "全部文件类型",
+      fileTypes: { text: "文本", document: "文档", spreadsheet: "表格", presentation: "演示文稿", pdf: "PDF", other: "其他" },
       statuses: { pending: "等待中", ready: "就绪", stale: "内容过期", error: "错误", skipped: "已跳过" },
-      extractionSource: "提取来源",
-      sources: { plain_text: "纯文本", pdftotext: "PDF 文本", docx: "DOCX", xlsx: "XLSX", pptx: "PPTX", ocr: "OCR" },
-      mimeTypes: "MIME 类型",
-      mimeTypesPlaceholder: "text/plain, application/pdf",
       modifiedFrom: "修改时间起点",
       modifiedTo: "修改时间终点",
       sizeMin: "最小字节数",
       sizeMax: "最大字节数",
-      sort: "排序",
+      sortField: "排序字段",
+      sortDirection: "排序方向",
       sortFields: { relevance: "相关性", name: "名称", mtime: "修改时间", size: "大小" },
       directions: { asc: "升序", desc: "降序" },
       loadMore: "加载更多",
@@ -3649,6 +3723,13 @@ export const zhCN = {
       resetFilters: "重置筛选",
       applyFilters: "应用筛选",
       runtimeAlert: "照片库异常：{{details}}",
+      runtimeAlertTitle: "照片库异常",
+      runtimeAlertFallback: "照片服务当前处于异常状态，请查看以下运行信息。",
+      runtimeAlertState: "照片库",
+      runtimeAlertWorker: "处理进程",
+      runtimeAlertCode: "错误代码",
+      runtimeAlertRetry: "重试倒计时",
+      closeRuntimeAlert: "关闭异常详情",
       mediaType: "类型",
       camera: "相机",
       lens: "镜头",
@@ -4200,7 +4281,7 @@ export const zhCN = {
         description: "管理 storage pool 内目录的 SMB、WebDAV、FTP、NFS 和 DLNA 发布。",
         commandTitle: "宿主共享",
         loading: "正在加载共享设置和服务状态。",
-        declarativeReadOnly: "共享设置由系统配置声明式管理，此处仅供查看。",
+        configurationUnavailable: "共享配置暂时不可用，请刷新面板并检查宿主机服务。",
         readyDetail: "共享设置已启用，宿主服务状态正常。",
         partialDetail: "共享设置已启用，但一个或多个宿主服务需要处理。",
         disabledDetail: "共享发布已禁用；已保存目录会保留，直到重新启用并保存共享。",
@@ -4452,7 +4533,7 @@ export const zhCN = {
           enableRadio: "开启 Wi-Fi 射频",
           disableRadio: "关闭 Wi-Fi 射频",
           readOnlyTitle: "无线网络设置为只读",
-          declarativeReadOnlyDescription: "此主机的无线网络配置由声明式系统配置管理。",
+          managementUnavailableDescription: "无线网络配置暂时不可用，请检查宿主机集成服务。",
           scan: "扫描",
           scanning: "正在扫描附近网络...",
           scanPrompt: "扫描以发现附近的无线网络。",
@@ -4789,6 +4870,8 @@ export const zhCN = {
         consoleDisconnected: "虚拟机控制台连接已断开。",
         unavailable: "不可用",
         unavailableDetail: "此主机上的 libvirt 不可用。",
+        disabled: "已关闭",
+        disabledDetail: "系统设置中尚未启用虚拟机管理。",
         noInstances: "当前没有定义虚拟机。",
         readyDetail: "libvirt 已准备好进行虚拟机管理。",
         kvmMissing: "KVM 不可用",
@@ -4960,6 +5043,10 @@ export const zhCN = {
         title: "概览",
         description: "服务状态和设备身份。"
       },
+      systemProfile: {
+        title: "系统身份",
+        description: "管理设备中展示的管理员身份。"
+      },
       version: {
         title: "版本",
         description: "发布身份和源码追溯信息。"
@@ -4984,6 +5071,10 @@ export const zhCN = {
         title: "Docker",
         description: "本机 Engine 访问、托管 Compose App 和短时控制台会话。"
       },
+      virtualMachines: {
+        title: "虚拟机",
+        description: "管理 KVM/libvirt 访问、客户机生命周期、快照和控制台会话。"
+      },
       files: {
         title: "文件与预览",
         description: "编辑器字体和预览大小限制。"
@@ -4995,6 +5086,14 @@ export const zhCN = {
       operations: {
         title: "运维",
         description: "健康检查、维护状态和运行历史。"
+      },
+      monitoring: {
+        title: "监控",
+        description: "管理采集状态、保留周期和指标数据库上限。"
+      },
+      backup: {
+        title: "备份",
+        description: "管理 Restic 仓库、凭据、验证和保留策略。"
       },
       alerts: {
         title: "告警",
@@ -5040,6 +5139,16 @@ export const zhCN = {
       library: "媒体库",
       tvStatusTitle: "电视模式健康状态",
       tvStatusDescription: "本机 HDMI 界面与播放服务的只读运行状态。",
+      tvMode: "电视模式",
+      tvEnableConfirm: "启用电视模式并接管本机显示输出？",
+      tvDisableConfirm: "关闭电视模式并恢复之前的桌面会话？",
+      tvEnabled: "电视模式已启用。",
+      tvDisabled: "电视模式已关闭。",
+      tvSettingsSaved: "电视输出设置已保存。",
+      audioDevice: "音频输出设备",
+      drmConnector: "DRM 输出接口",
+      hardwareDecoding: "硬件解码",
+      hwdec: { autoSafe: "自动（安全）", auto: "自动", no: "关闭" },
       tvStates: {
         disabled: "未启用",
         starting: "启动中",
@@ -5103,6 +5212,42 @@ export const zhCN = {
       noOverview: "暂无简介。",
       matchSaved: "匹配已保存，并重新扫描媒体源。",
       titleExcluded: "项目已排除，并重新扫描媒体源。"
+    },
+    systemProfile: {
+      title: "管理员身份",
+      description: "该显示名称保存在 CyberOS 数据库中，并用于系统身份界面。",
+      adminDisplayName: "管理员显示名称"
+    },
+    monitoring: {
+      title: "指标采集",
+      description: "采样频率固定；在此控制采集、保留周期和数据库空间上限。",
+      enabled: "启用监控",
+      enabledDescription: "关闭后 monitor 与 alerter 服务保持运行，但暂停采集和告警计算。",
+      rawRetention: "原始数据保留天数",
+      minuteRetention: "分钟汇总保留天数",
+      hourRetention: "小时汇总保留天数",
+      maxDatabaseMiB: "数据库空间上限（MiB）"
+    },
+    backup: {
+      title: "备份策略",
+      description: "定时备份在每次运行时从数据库读取此策略。",
+      enabled: "启用定时备份",
+      validated: "仓库和凭据已经验证。",
+      validationRequired: "启用定时备份前必须验证仓库。",
+      repository: "仓库路径",
+      keepDaily: "每日快照数",
+      keepWeekly: "每周快照数",
+      requireMount: "要求独立挂载",
+      requireMountDescription: "仓库不是精确挂载的文件系统时拒绝执行备份。",
+      credentialTitle: "仓库凭据",
+      credentialConfigured: "密码已配置；其内容不会通过 API 返回。",
+      credentialMissing: "尚未配置仓库密码。",
+      password: "新的仓库密码",
+      repositoryActions: "仓库操作",
+      repositoryActionsDescription: "验证不会写入仓库；初始化会创建新的 Restic 仓库并要求确认。",
+      validate: "验证仓库",
+      initialize: "初始化仓库",
+      initializeConfirm: "在当前路径初始化 Restic 仓库？"
     },
     bluetooth: {
       adaptersTitle: "蓝牙适配器",
@@ -5415,6 +5560,13 @@ export const zhCN = {
       consoleShells: "控制台 shell",
       consoleShellsHelp: "每行输入一个绝对 shell 路径，或用逗号分隔。",
       socketNote: "Docker socket 访问等同 root 权限。仅应在受信任的设备上启用。"
+    },
+    virtualMachines: {
+      runtimeTitle: "虚拟化访问",
+      runtimeDescription: "控制 CyberOS 是否向 Web 界面和 Agent 能力开放已安装的 QEMU、KVM 与 libvirt 运行时。",
+      enabledField: "启用虚拟机管理",
+      enabledDescription: "允许查看虚拟机、执行生命周期操作、管理快照、创建客户机和打开控制台。",
+      runtimeNote: "CyberOS 会在系统安装时安装并准备虚拟化运行时；此开关只控制访问能力，硬件加速仍要求宿主内核提供 /dev/kvm。"
     },
     toolPolicy: {
       mcp: {

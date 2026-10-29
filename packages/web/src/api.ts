@@ -40,6 +40,7 @@ import type {
   DockerNetworkDetails as SharedDockerNetworkDetails,
   DockerVolumeDetails as SharedDockerVolumeDetails,
   DockerSettingsRecord,
+  VmSettingsRecord,
   DockerRegistryCredentialCreateInput,
   DockerRegistryCredentialSummary as SharedDockerRegistryCredentialSummary,
   DockerRegistryCredentialUpdateInput,
@@ -164,7 +165,11 @@ import type {
   MediaSourceRecord as SharedMediaSource,
   MediaTitleSummary as SharedMediaTitleSummary,
   PublicMediaLibrarySettings as SharedPublicMediaLibrarySettings,
-  TvModeStatus as SharedTvModeStatus
+  TvModeStatus as SharedTvModeStatus,
+  SystemProfileSettingsRecord as SharedSystemProfileSettings,
+  MonitoringSettingsRecord as SharedMonitoringSettings,
+  PublicBackupSettings as SharedPublicBackupSettings,
+  TvSettingsRecord as SharedTvSettings
 } from "@cyberos/shared";
 import { createClientId } from "./lib/client-id.js";
 
@@ -510,6 +515,10 @@ export type AgentCapabilityPolicySettings = PublicAgentCapabilityPolicySettings;
 export type AgentMcpSettings = PublicAgentMcpSettings;
 
 export type SystemInfo = PublicSystemInfo;
+export type SystemProfileSettings = SharedSystemProfileSettings;
+export type MonitoringSettings = SharedMonitoringSettings;
+export type BackupSettings = SharedPublicBackupSettings;
+export type TvSettings = SharedTvSettings;
 export type BuildInfo = PublicBuildInfo;
 export type SystemPowerAction = SharedSystemPowerAction;
 export type SystemPowerResult = SharedSystemPowerResult;
@@ -663,6 +672,7 @@ export interface DockerConsoleSession {
 }
 
 export type DockerSettings = DockerSettingsRecord;
+export type VmSettings = VmSettingsRecord;
 
 export const MAX_EDIT_TEXT_BYTES = 1024 * 1024;
 
@@ -1307,6 +1317,96 @@ export async function getDockerSettings(): Promise<DockerSettings> {
   return body.settings;
 }
 
+export async function getSystemProfileSettings(): Promise<SystemProfileSettings> {
+  return fetchJson<{ settings: SystemProfileSettings }>("/api/settings/system-profile")
+    .then((body) => body.settings);
+}
+
+export async function updateSystemProfileSettings(
+  input: Partial<Omit<SystemProfileSettings, "updatedAt">>
+): Promise<SystemProfileSettings> {
+  return fetchJson<{ settings: SystemProfileSettings }>(
+    "/api/settings/system-profile",
+    jsonRequest("PATCH", input)
+  ).then((body) => body.settings);
+}
+
+export async function getMonitoringSettings(): Promise<MonitoringSettings> {
+  return fetchJson<{ settings: MonitoringSettings }>("/api/settings/monitoring")
+    .then((body) => body.settings);
+}
+
+export async function updateMonitoringSettings(
+  input: Partial<Omit<MonitoringSettings, "updatedAt">>
+): Promise<MonitoringSettings> {
+  return fetchJson<{ settings: MonitoringSettings }>(
+    "/api/settings/monitoring",
+    jsonRequest("PATCH", input)
+  ).then((body) => body.settings);
+}
+
+export async function getBackupSettings(): Promise<BackupSettings> {
+  return fetchJson<{ settings: BackupSettings }>("/api/settings/backup")
+    .then((body) => body.settings);
+}
+
+export async function updateBackupSettings(
+  input: Partial<Omit<BackupSettings, "updatedAt" | "passwordConfigured">>
+): Promise<BackupSettings> {
+  return fetchJson<{ settings: BackupSettings }>(
+    "/api/settings/backup",
+    jsonRequest("PATCH", input)
+  ).then((body) => body.settings);
+}
+
+export async function setBackupCredential(password: string): Promise<BackupSettings> {
+  return fetchJson<{ settings: BackupSettings }>(
+    "/api/settings/backup/credential",
+    jsonRequest("PUT", { password })
+  ).then((body) => body.settings);
+}
+
+export async function clearBackupCredential(): Promise<BackupSettings> {
+  return fetchJson<{ settings: BackupSettings }>(
+    "/api/settings/backup/credential",
+    { method: "DELETE" }
+  ).then((body) => body.settings);
+}
+
+export async function initializeBackupRepository(confirmed: boolean): Promise<BackupSettings> {
+  return fetchJson<{ settings: BackupSettings }>(
+    "/api/settings/backup/initialize",
+    jsonRequest("POST", { confirmed })
+  ).then((body) => body.settings);
+}
+
+export async function validateBackupRepository(): Promise<BackupSettings> {
+  return fetchJson<{ settings: BackupSettings }>(
+    "/api/settings/backup/validate",
+    { method: "POST" }
+  ).then((body) => body.settings);
+}
+
+export async function getTvSettings(): Promise<TvSettings> {
+  return fetchJson<{ settings: TvSettings }>("/api/settings/tv")
+    .then((body) => body.settings);
+}
+
+export async function updateTvSettings(
+  input: Partial<Omit<TvSettings, "updatedAt">> & { confirmed?: boolean }
+): Promise<TvSettings> {
+  return fetchJson<{ settings: TvSettings }>(
+    "/api/settings/tv",
+    jsonRequest("PATCH", input)
+  ).then((body) => body.settings);
+}
+
+export async function getVmSettings(): Promise<VmSettings> {
+  const response = await fetch("/api/settings/vm");
+  await ensureOk(response);
+  return ((await response.json()) as { settings: VmSettings }).settings;
+}
+
 export async function getShareSettings(): Promise<ShareSettings> {
   const response = await fetch("/api/settings/shares");
   await ensureOk(response);
@@ -1554,6 +1654,16 @@ export async function saveDockerSettings(input: Omit<DockerSettings, "updatedAt"
   await ensureOk(response);
   const body = (await response.json()) as { settings: DockerSettings };
   return body.settings;
+}
+
+export async function saveVmSettings(input: Omit<VmSettings, "updatedAt">): Promise<VmSettings> {
+  const response = await fetch("/api/settings/vm", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { settings: VmSettings }).settings;
 }
 
 export async function saveModelProviderSettings(

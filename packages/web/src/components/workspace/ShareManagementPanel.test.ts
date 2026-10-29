@@ -7,7 +7,7 @@ const summary: ShareSummary = {
   collectedAt: "2026-09-22T00:00:00.000Z",
   enabled: true,
   settingsUpdatedAt: "2026-09-22T00:00:00.000Z",
-  capabilities: { canApplyConfiguration: true, hostMutationPolicy: "mutable" },
+  capabilities: { canApplyConfiguration: true },
   metrics: { shares: 1, enabledProtocols: 5, authenticatedProtocols: 3 },
   protocols: {
     smb: { protocol: "smb", enabledShares: 1, services: [{ name: "smbd.service", status: "active", error: null }] },

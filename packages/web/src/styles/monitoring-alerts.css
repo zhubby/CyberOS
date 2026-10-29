@@ -165,44 +165,7 @@
 }
 
 .monitoring-alert-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
   font-size: 11px;
-}
-
-.monitoring-alert-switch > span {
-  position: relative;
-  width: 26px;
-  height: 14px;
-  border-radius: 7px;
-  background: var(--surface-strong);
-  transition: background 140ms ease;
-}
-
-.monitoring-alert-switch > span::after {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--muted-2);
-  content: "";
-  transition: transform 140ms ease, background 140ms ease;
-}
-
-.monitoring-alert-switch[aria-checked="true"] > span {
-  background: var(--accent-soft);
-}
-
-.monitoring-alert-switch[aria-checked="true"] > span::after {
-  background: var(--accent);
-  transform: translateX(12px);
 }
 
 .monitoring-alert-row-actions {
@@ -267,17 +230,17 @@
   gap: 6px;
 }
 
-.monitoring-alert-form label > span,
-.settings-alerts-section label > span {
+.monitoring-alert-form label:not(.hud-switch) > span,
+.settings-alerts-section label:not(.hud-switch) > span {
   color: var(--muted);
   font-size: 11px;
   font-family: var(--font-emphasis);
   font-weight: 650;
 }
 
-.monitoring-alert-form input,
+.monitoring-alert-form input:not(.hud-switch-input),
 .monitoring-alert-form select,
-.settings-alerts-section input,
+.settings-alerts-section input:not(.hud-switch-input),
 .settings-alerts-section select {
   min-width: 0;
   height: 34px;
@@ -299,7 +262,6 @@
   align-items: center;
 }
 
-.monitoring-alert-check input,
 .settings-alerts-check-list input {
   width: 15px;
   height: 15px;
@@ -763,12 +725,5 @@
 
   .monitoring-incident-detail-footer button {
     width: 100%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .monitoring-alert-switch > span,
-  .monitoring-alert-switch > span::after {
-    transition: none;
   }
 }

@@ -318,6 +318,11 @@
   flex: 0 0 auto;
 }
 
+.photo-runtime-alert-popover {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .photo-filter-trigger,
 .photo-runtime-alert,
 .photo-select-loaded {
@@ -339,7 +344,7 @@
 }
 
 .photo-runtime-alert {
-  cursor: help;
+  cursor: pointer;
 }
 
 .photo-runtime-alert[data-tone="warning"] {
@@ -359,6 +364,98 @@
 .photo-select-loaded:focus-visible {
   outline: 2px solid var(--focus-ring, var(--accent));
   outline-offset: 2px;
+}
+
+.photo-runtime-alert-details {
+  position: absolute;
+  z-index: 42;
+  top: calc(100% + 7px);
+  right: 0;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid var(--danger-border, var(--line-strong));
+  color: var(--text);
+  background: var(--footer-bg);
+  box-shadow: 8px 8px 0 rgb(0 0 0 / 28%);
+}
+
+.photo-runtime-alert-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.photo-runtime-alert-heading strong {
+  font-family: var(--font-emphasis);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.photo-runtime-alert-heading button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  color: var(--muted);
+  background: transparent;
+}
+
+.photo-runtime-alert-heading button:hover,
+.photo-runtime-alert-heading button:focus-visible {
+  border-color: var(--focus-ring, var(--accent));
+  color: var(--text);
+  outline: 0;
+}
+
+.photo-runtime-alert-details > p {
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.photo-runtime-alert-details dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.photo-runtime-alert-details dl > div {
+  display: grid;
+  grid-template-columns: minmax(84px, .4fr) minmax(0, 1fr);
+  gap: 8px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.photo-runtime-alert-details dt,
+.photo-runtime-alert-details dd {
+  margin: 0;
+  font-size: 10px;
+}
+
+.photo-runtime-alert-details dt {
+  color: var(--muted-2);
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.photo-runtime-alert-details dd {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.photo-runtime-alert-details code {
+  color: inherit;
+  font-size: 9px;
 }
 
 .photo-filter-menu {
@@ -1103,6 +1200,11 @@
 @container workspace-stage (max-width: 760px) {
   .photo-query-toolbar {
     flex-wrap: wrap;
+  }
+
+  .photo-runtime-alert-details {
+    right: -32px;
+    width: min(360px, calc(100cqw - 20px));
   }
 
   .photo-search-field {

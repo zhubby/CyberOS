@@ -316,10 +316,6 @@
   font-weight: 800;
 }
 
-.settings-indexer-ocr input {
-  margin: 0;
-}
-
 .settings-indexer-rebuild {
   min-width: 96px;
 }
@@ -695,7 +691,7 @@
   font-weight: 800;
 }
 
-.settings-media-metadata label:not(.settings-check) > input {
+.settings-media-metadata label:not(.settings-check):not(.hud-switch) > input {
   width: 100%;
   height: 40px;
   border: 1px solid var(--line-soft);
@@ -716,6 +712,86 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.settings-card-actions.is-stacked {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.settings-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settings-switch-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-switch-row strong {
+  font-size: 13px;
+}
+
+.settings-switch-row span,
+.settings-inline-error {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-inline-error {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--red);
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
+.settings-tv-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-tv-control-grid > label,
+.settings-tv-control-grid > .settings-preference-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.settings-tv-control-grid > label > span,
+.settings-tv-control-grid > .settings-preference-field > span {
+  color: var(--muted);
+  font-family: var(--font-emphasis);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.settings-tv-control-grid input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  color: var(--text);
+  background: var(--surface);
+}
+
+@media (max-width: 820px) {
+  .settings-tv-control-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .settings-media-header-actions {
@@ -1155,20 +1231,23 @@
   background: rgb(240 178 50 / 8%);
 }
 
-.settings-form label {
+.settings-form label,
+.settings-section-card label:not(.hud-switch) {
   display: grid;
   gap: 7px;
   min-width: 0;
 }
 
-.settings-form label > span {
+.settings-form label:not(.hud-switch) > span,
+.settings-section-card label:not(.hud-switch) > span {
   color: var(--muted);
   font-size: 11.5px;
   font-family: var(--font-emphasis);
   font-weight: 800;
 }
 
-.settings-form input {
+.settings-form input:not(.hud-switch-input),
+.settings-section-card input:not(.hud-switch-input) {
   width: 100%;
   height: 40px;
   border: 1px solid var(--line-soft);
@@ -1178,7 +1257,8 @@
   background: var(--surface);
 }
 
-.settings-form input::placeholder {
+.settings-form input::placeholder,
+.settings-section-card input::placeholder {
   color: var(--muted-2);
 }
 
@@ -1703,45 +1783,8 @@
   color: var(--warning-text);
 }
 
-.settings-agent-mcp-switch {
-  position: relative;
-  width: 42px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-}
-
-.settings-agent-mcp-switch > span {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--muted-2);
-  transition: transform 150ms ease, background 150ms ease;
-}
-
-.settings-agent-mcp-switch[aria-checked="true"] {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-
-.settings-agent-mcp-switch[aria-checked="true"] > span {
-  background: var(--accent-contrast);
-  transform: translateX(18px);
-}
-
-.settings-agent-mcp-switch:focus-visible {
-  outline: 2px solid var(--focus-ring-soft);
-  outline-offset: 2px;
-}
-
-.settings-agent-mcp-switch:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.settings-agent-mcp-control {
+  justify-self: end;
 }
 
 .settings-device-page {
@@ -1852,14 +1895,7 @@
   background: rgb(0 0 0 / 10%);
 }
 
-.bluetooth-switch-row input {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  accent-color: var(--accent);
-}
-
-.bluetooth-switch-row span,
+.bluetooth-switch-row .hud-switch-copy,
 .bluetooth-switch-row strong,
 .bluetooth-switch-row small {
   display: block;

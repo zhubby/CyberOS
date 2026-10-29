@@ -192,8 +192,13 @@ describe("photo timeline grouping", () => {
       tone: "warning",
       state: "degraded",
       workerStatus: "ready",
+      error: null,
       errorCode: "DATABASE",
       nextRetryAt: null
+    });
+    expect(photoRuntimeAlert(libraryStatus({ state: "degraded", error: "Photo database is locked" }), workerHealth())).toMatchObject({
+      tone: "warning",
+      error: "Photo database is locked"
     });
     expect(photoRuntimeAlert(libraryStatus(), workerHealth({ status: "stale" }))).toMatchObject({
       tone: "warning",

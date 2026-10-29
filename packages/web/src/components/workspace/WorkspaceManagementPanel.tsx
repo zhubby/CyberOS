@@ -41,6 +41,7 @@ import {
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { Switch } from "../common/Switch.js";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   createDockerConsoleSession,
@@ -631,6 +632,7 @@ function VirtualMachineManagementPanel({
   }
 
   const host = summary?.host;
+  const vmDisabled = summary?.enabled === false || host?.status === "disabled";
   const canMutate = host?.status === "ready" && !loading;
   const canConsole = (host?.status === "ready" || host?.status === "degraded") && !loading;
   const isArmHost = isArmVmArchitecture(host?.architecture);
@@ -672,7 +674,7 @@ function VirtualMachineManagementPanel({
                   <section className="management-command-panel">
                     <div className="management-emblem" aria-hidden="true"><MonitorCog size={31} /></div>
                     <div className="management-command-copy">
-                      <div><span className="management-status-pill" data-state={statusTone}>{host?.kvmAvailable ? "KVM" : t("workspace.management.virtualMachines.kvmMissing")}</span><h3>{host?.libvirtVersion ? `libvirt ${host.libvirtVersion}` : t("workspace.management.virtualMachines.hypervisor")}</h3><p>{host?.error ?? host?.issues?.[0] ?? t("workspace.management.virtualMachines.readyDetail")}</p></div>
+                      <div><span className="management-status-pill" data-state={statusTone}>{vmDisabled ? t("workspace.management.virtualMachines.disabled") : host?.kvmAvailable ? "KVM" : t("workspace.management.virtualMachines.kvmMissing")}</span><h3>{host?.libvirtVersion ? `libvirt ${host.libvirtVersion}` : t("workspace.management.virtualMachines.hypervisor")}</h3><p>{vmDisabled ? t("workspace.management.virtualMachines.disabledDetail") : host?.error ?? host?.issues?.[0] ?? t("workspace.management.virtualMachines.readyDetail")}</p></div>
                       <dl className="management-fact-list">
                         <div><dt>{t("workspace.management.virtualMachines.facts.storage")}</dt><dd>{host?.storagePath ?? "-"}</dd></div>
                         <div><dt>{t("workspace.management.virtualMachines.facts.network")}</dt><dd>{host?.networkName ?? "-"}</dd></div>
@@ -782,7 +784,7 @@ function VirtualMachineManagementPanel({
                     {form.cpuMode === "custom" ? <label className="vm-create-field">{t("workspace.management.virtualMachines.cpuModel")}<input value={form.cpuModel} onChange={(event) => updateCreateForm("cpuModel", event.target.value)} placeholder="Skylake-Client" /><small>{t("workspace.management.virtualMachines.cpuModelHint")}</small></label> : null}
                     <label className="vm-create-field">{t("workspace.management.virtualMachines.memoryBacking")}<select value={form.memoryBacking} onChange={(event) => updateCreateForm("memoryBacking", event.target.value as VmCreateForm["memoryBacking"])}><option value="default">{t("workspace.management.virtualMachines.systemDefault")}</option><option value="hugepages">HugePages</option></select><small>{t("workspace.management.virtualMachines.memoryBackingHint")}</small></label>
                   </div>
-                  <label className="vm-create-toggle"><input type="checkbox" checked={form.customTopology} onChange={(event) => updateCreateForm("customTopology", event.target.checked)} /><span><strong>{t("workspace.management.virtualMachines.customTopology")}</strong><small>{t("workspace.management.virtualMachines.customTopologyHint")}</small></span></label>
+                  <Switch className="vm-create-toggle" checked={form.customTopology} onCheckedChange={(customTopology) => updateCreateForm("customTopology", customTopology)} label={<strong>{t("workspace.management.virtualMachines.customTopology")}</strong>} description={t("workspace.management.virtualMachines.customTopologyHint")} />
                   {form.customTopology ? <div className="vm-create-field-grid vm-create-topology"><label className="vm-create-field">{t("workspace.management.virtualMachines.sockets")}<input type="number" min="1" max="16" value={form.sockets} onChange={(event) => updateCreateForm("sockets", event.target.value)} /></label><label className="vm-create-field">{t("workspace.management.virtualMachines.cores")}<input type="number" min="1" max="128" value={form.cores} onChange={(event) => updateCreateForm("cores", event.target.value)} /></label><label className="vm-create-field">{t("workspace.management.virtualMachines.threads")}<input type="number" min="1" max="16" value={form.threads} onChange={(event) => updateCreateForm("threads", event.target.value)} /></label></div> : null}
                 </section>
               ) : null}
@@ -804,7 +806,7 @@ function VirtualMachineManagementPanel({
                 <section className="vm-create-section vm-create-stage">
                   <div className="vm-create-section-heading"><span>04</span><div><h4>{t("workspace.management.virtualMachines.createAdvanced")}</h4><p>{t("workspace.management.virtualMachines.createAdvancedDetail")}</p></div></div>
                   <div className="vm-create-field-grid"><label className="vm-create-field">{t("workspace.management.virtualMachines.firmware")}<select value={form.firmware} onChange={(event) => updateCreateForm("firmware", event.target.value as VmCreateForm["firmware"])}><option value="bios" disabled={isArmHost}>BIOS</option><option value="uefi">UEFI</option></select>{isArmHost ? <small>{t("workspace.management.virtualMachines.firmwareArmHint")}</small> : null}</label><label className="vm-create-field">{t("workspace.management.virtualMachines.machineType")}<input value={form.machineType} onChange={(event) => updateCreateForm("machineType", event.target.value)} placeholder="q35" /><small>{t("workspace.management.virtualMachines.machineTypeHint")}</small></label><label className="vm-create-field">{t("workspace.management.virtualMachines.graphics")}<select value={form.graphics} onChange={(event) => updateCreateForm("graphics", event.target.value as VmCreateForm["graphics"])}><option value="none">none</option><option value="spice">SPICE</option><option value="vnc">VNC</option></select></label><label className="vm-create-field">{t("workspace.management.virtualMachines.videoModel")}<select value={form.videoModel} onChange={(event) => updateCreateForm("videoModel", event.target.value as VmCreateForm["videoModel"])}>{["none", "virtio", "qxl", "vga"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
-                  <div className="vm-create-toggle-grid"><label className="vm-create-toggle"><input type="checkbox" checked={form.bootMenu} onChange={(event) => updateCreateForm("bootMenu", event.target.checked)} /><span><strong>{t("workspace.management.virtualMachines.bootMenu")}</strong><small>{t("workspace.management.virtualMachines.bootMenuHint")}</small></span></label><label className="vm-create-toggle"><input type="checkbox" checked={form.autostart} onChange={(event) => updateCreateForm("autostart", event.target.checked)} /><span><strong>{t("workspace.management.virtualMachines.autostart")}</strong><small>{t("workspace.management.virtualMachines.autostartHint")}</small></span></label></div>
+                  <div className="vm-create-toggle-grid"><Switch className="vm-create-toggle" checked={form.bootMenu} onCheckedChange={(bootMenu) => updateCreateForm("bootMenu", bootMenu)} label={<strong>{t("workspace.management.virtualMachines.bootMenu")}</strong>} description={t("workspace.management.virtualMachines.bootMenuHint")} /><Switch className="vm-create-toggle" checked={form.autostart} onCheckedChange={(autostart) => updateCreateForm("autostart", autostart)} label={<strong>{t("workspace.management.virtualMachines.autostart")}</strong>} description={t("workspace.management.virtualMachines.autostartHint")} /></div>
                   <div className="vm-create-summary"><div><span>{t("workspace.management.virtualMachines.name")}</span><strong>{form.name}</strong></div><div><span>{t("workspace.management.virtualMachines.createResources")}</span><strong>{form.vcpu} vCPU · {form.memoryGiB} GiB</strong></div><div><span>{t("workspace.management.virtualMachines.createSource")}</span><strong title={form.mediaMode === "iso" ? form.isoPath : form.diskPath}>{form.mediaMode === "iso" ? form.isoPath : form.diskPath}</strong></div><div><span>{t("workspace.management.virtualMachines.network")}</span><strong>{form.network} · {form.networkModel}</strong></div><div><span>{t("workspace.management.virtualMachines.firmware")}</span><strong>{form.firmware.toUpperCase()} · {form.graphics}</strong></div></div>
                   <div className="vm-create-review"><Info size={16} /><div><strong>{t("workspace.management.virtualMachines.createDirectTitle")}</strong><p>{t("workspace.management.virtualMachines.createDirectDetail")}</p></div></div>
                 </section>
@@ -1506,7 +1508,13 @@ function DockerManagementPanel({
                   {pendingContainerCreates.map((operation) => (
                     <tr key={`pending:${operation.id}`} aria-busy="true">
                       <td title={operation.targetId}>{operation.targetId}</td>
-                      <td><span className="management-row-status" data-state="warning">{t("workspace.management.docker.containerCreating")}</span></td>
+                      <td>
+                        <DockerContainerStatusIndicator
+                          state="creating"
+                          status={String(t("workspace.management.docker.containerCreating"))}
+                          busy
+                        />
+                      </td>
                       <td>{t("common.dash")}</td>
                       <td>{t("common.dash")}</td>
                       <td>{t("common.dash")}</td>
@@ -1526,9 +1534,10 @@ function DockerManagementPanel({
                         </button>
                       </td>
                       <td>
-                        <span className="management-row-status" data-state={containerTone(container)}>
-                          {container.status || container.state}
-                        </span>
+                        <DockerContainerStatusIndicator
+                          state={container.state}
+                          status={container.status || container.state}
+                        />
                       </td>
                       <td title={container.image}>{container.image}</td>
                       <td>{formatPercent(container.cpuPercent, locale)}</td>
@@ -2461,16 +2470,62 @@ function approvedConsoleOperation(container: DockerContainer, operations: Docker
 }
 
 function containerTone(container: DockerContainer): StatusTone {
-  if (container.state === "running") {
-    return "ready";
-  }
-  if (container.state === "paused" || container.state === "restarting") {
-    return "warning";
-  }
-  if (container.state === "exited" || container.state === "dead") {
+  return containerStateTone(container.state, container.status);
+}
+
+function containerStateTone(state: string, status = ""): StatusTone {
+  const normalizedStatus = status.toLowerCase();
+  if (state === "exited" || state === "dead" || normalizedStatus.includes("unhealthy") || normalizedStatus.includes("error")) {
     return "offline";
   }
+  if (state === "running") {
+    return "ready";
+  }
+  if (state === "paused" || state === "restarting" || state === "created" || state === "creating") {
+    return "warning";
+  }
   return "neutral";
+}
+
+export function DockerContainerStatusIndicator({
+  state,
+  status,
+  busy = false
+}: {
+  state: string;
+  status: string;
+  busy?: boolean;
+}) {
+  const tone = containerStateTone(state, status);
+  const Icon = busy
+    ? LoaderCircle
+    : state === "running"
+      ? CircleCheck
+      : state === "paused"
+        ? Pause
+        : state === "restarting"
+          ? RotateCw
+          : state === "exited" || state === "dead"
+            ? CircleAlert
+            : Info;
+
+  return (
+    <span
+      className="docker-container-status-indicator"
+      data-state={tone}
+      role="img"
+      tabIndex={0}
+      aria-label={status}
+      aria-busy={busy || undefined}
+    >
+      <span className="management-row-status-icon" data-state={tone} aria-hidden="true">
+        <Icon size={17} strokeWidth={2.2} />
+      </span>
+      <span className="docker-container-status-tooltip" role="tooltip" aria-hidden="true">
+        {status}
+      </span>
+    </span>
+  );
 }
 
 function composeTone(project: DockerComposeProject): StatusTone {

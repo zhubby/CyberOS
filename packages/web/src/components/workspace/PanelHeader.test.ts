@@ -52,6 +52,7 @@ describe("PanelHeader", () => {
     const button = html.match(/<button[\s\S]*?<\/button>/u)?.[0] ?? "";
 
     expect(html).toContain('class="management-actions panel-header-actions"');
+    expect(html).toContain('role="group" aria-label="Panel actions"');
     expect(button).toContain('aria-label="Refresh"');
     expect(button).toContain('title="Refresh"');
     expect(button.replace(/<[^>]+>/gu, "").trim()).toBe("");

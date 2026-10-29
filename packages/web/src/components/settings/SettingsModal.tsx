@@ -17,6 +17,10 @@ import {
   KeyRound,
   Lock,
   MemoryStick,
+  MonitorCog,
+  UserRound,
+  ChartNoAxesCombined,
+  ArchiveRestore,
   Package,
   Search,
   Server,
@@ -30,6 +34,7 @@ import type {
   AgentMcpSettings,
   BuildInfo,
   DockerSettings,
+  VmSettings,
   DownloadSettings,
   IndexerOverview,
   IndexerSettings,
@@ -52,6 +57,7 @@ import {
   settingsSectionState,
   settingsSectionTitle,
   type DockerSettingsFormState,
+  type VmSettingsFormState,
   type ModelProviderFormState,
   type SettingsSectionId,
   type ToolPolicyFormState
@@ -70,6 +76,7 @@ import {
   previewFileSizeLimitMiBToBytes
 } from "../../lib/preview-settings.js";
 import { CustomSelect } from "../common/CustomSelect.js";
+import { Switch } from "../common/Switch.js";
 import { VersionSettingsPage } from "./VersionSettingsPage.js";
 import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
 import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
@@ -77,6 +84,9 @@ import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
 import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
 import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
 import { SettingsMediaPage } from "./SettingsMediaPage.js";
+import { SettingsSystemProfilePage } from "./SettingsSystemProfilePage.js";
+import { SettingsMonitoringPage } from "./SettingsMonitoringPage.js";
+import { SettingsBackupPage } from "./SettingsBackupPage.js";
 import {
   StorageFilePickerDialog,
   type StorageFilePickerPool,
@@ -90,6 +100,7 @@ interface SettingsModalProps {
   loading: boolean;
   saving: boolean;
   dockerSettings: DockerSettings | null;
+  vmSettings: VmSettings | null;
   downloadSettings: DownloadSettings | null;
   indexerSettings: IndexerSettings | null;
   indexerStatus: IndexerOverview | null;
@@ -112,6 +123,8 @@ interface SettingsModalProps {
   onClose: () => void;
   onFormChange: (form: ModelProviderFormState) => void;
   onDockerFormChange: (form: DockerSettingsFormState) => void;
+  vmForm: VmSettingsFormState;
+  onVmFormChange: (form: VmSettingsFormState) => void;
   onDownloadSettingsChange: (
     patch: Partial<Omit<DownloadSettings, "updatedAt">>
   ) => Promise<void>;
@@ -172,6 +185,7 @@ export function SettingsModal({
   loading,
   saving,
   dockerSettings,
+  vmSettings,
   downloadSettings,
   indexerSettings,
   indexerStatus,
@@ -194,6 +208,8 @@ export function SettingsModal({
   onClose,
   onFormChange,
   onDockerFormChange,
+  vmForm,
+  onVmFormChange,
   onDownloadSettingsChange,
   onIndexerSettingsChange,
   onIndexerReindex,
@@ -369,6 +385,7 @@ export function SettingsModal({
             <SettingsOverview
               settings={settings}
               dockerSettings={dockerSettings}
+              vmSettings={vmSettings}
               systemInfo={systemInfo}
               downloadSettings={downloadSettings}
               photoStatus={photoStatus}
@@ -513,6 +530,8 @@ export function SettingsModal({
             />
           ) : null}
 
+          {activeSection === "system-profile" ? <SettingsSystemProfilePage /> : null}
+
           {activeSection === "appearance" ? (
             <SettingsAppearancePage
               languagePreference={languagePreference}
@@ -565,6 +584,17 @@ export function SettingsModal({
             />
           ) : null}
 
+          {activeSection === "virtual-machines" ? (
+            <SettingsVmPage
+              form={vmForm}
+              loading={loading}
+              saving={saving}
+              onChange={onVmFormChange}
+              onSubmit={onSubmit}
+              onClose={onClose}
+            />
+          ) : null}
+
           {activeSection === "files" ? (
             <SettingsFilesPage
               previewFileSizeLimitBytes={previewFileSizeLimitBytes}
@@ -599,6 +629,10 @@ export function SettingsModal({
           {activeSection === "operations" ? (
             <SettingsOperationsPage locale={resolvedLocale} onClose={onClose} />
           ) : null}
+
+          {activeSection === "monitoring" ? <SettingsMonitoringPage /> : null}
+
+          {activeSection === "backup" ? <SettingsBackupPage /> : null}
 
           {activeSection === "alerts" ? (
             <SettingsAlertsPage locale={resolvedLocale} />
@@ -644,6 +678,7 @@ export function SettingsModal({
 function SettingsOverview({
   settings,
   dockerSettings,
+  vmSettings,
   systemInfo,
   downloadSettings,
   photoStatus,
@@ -653,6 +688,7 @@ function SettingsOverview({
 }: {
   settings: ModelProviderSettings | null;
   dockerSettings: DockerSettings | null;
+  vmSettings: VmSettings | null;
   systemInfo: SystemInfo | null;
   downloadSettings: DownloadSettings | null;
   photoStatus: PhotoLibraryStatus | null;
@@ -664,6 +700,7 @@ function SettingsOverview({
   const attentionIds = new Set<SettingsSectionId>([
     "model-providers",
     "docker",
+    "virtual-machines",
     "downloads",
     "indexer",
     "photos"
@@ -676,7 +713,8 @@ function SettingsOverview({
       null,
       downloadSettings,
       photoStatus,
-      indexerSettings
+      indexerSettings,
+      vmSettings
     );
   const attentionSections = SETTINGS_SECTIONS.filter(
     (section) => attentionIds.has(section.id) && sectionState(section) !== "ready"
@@ -1522,17 +1560,14 @@ function SettingsToolPolicyPage({
                 <strong>{t("settings.toolPolicy.mcp.label")}</strong>
                 <small>{t(`settings.toolPolicy.mcp.status.${mcpSettings?.status ?? "loading"}`)}</small>
               </span>
-              <button
-                className="settings-agent-mcp-switch"
-                type="button"
-                role="switch"
-                aria-checked={mcpSettings?.enabled ?? false}
-                aria-label={t("settings.toolPolicy.mcp.label")}
+              <Switch
+                className="settings-agent-mcp-control"
+                checked={mcpSettings?.enabled ?? false}
+                ariaLabel={t("settings.toolPolicy.mcp.label")}
                 disabled={loading || mcpSaving || !mcpSettings?.available}
-                onClick={() => void toggleMcp()}
-              >
-                <span aria-hidden="true" />
-              </button>
+                busy={mcpSaving}
+                onCheckedChange={() => void toggleMcp()}
+              />
             </div>
           </section>
 
@@ -1648,81 +1683,12 @@ function SettingsDockerPage({
               </header>
 
               <fieldset className="settings-field-grid settings-docker-runtime-grid" disabled={loading || saving}>
-                <label className="settings-check settings-field-wide">
-                  <input
-                    type="checkbox"
-                    checked={form.enabled}
-                    onChange={(event) =>
-                      onChange({
-                        ...form,
-                        enabled: event.target.checked
-                      })
-                    }
-                  />
-                  <span>{t("settings.docker.enabledField")}</span>
-                </label>
-
-                <label className="settings-field-wide">
-                  <span>{t("settings.docker.socketPath")}</span>
-                  <input
-                    value={form.socketPath}
-                    onChange={(event) =>
-                      onChange({
-                        ...form,
-                        socketPath: event.target.value
-                      })
-                    }
-                    placeholder="/var/run/docker.sock"
-                  />
-                </label>
-
-                <label className="settings-field-wide">
-                  <span>{t("settings.docker.composeCommand")}</span>
-                  <input
-                    value={form.composeCommand}
-                    onChange={(event) =>
-                      onChange({
-                        ...form,
-                        composeCommand: event.target.value
-                      })
-                    }
-                    placeholder="docker"
-                  />
-                </label>
-
-                <label>
-                  <span>{t("settings.docker.operationTimeout")}</span>
-                  <input
-                    type="number"
-                    min="1000"
-                    step="1000"
-                    value={form.operationTimeoutMs}
-                    onChange={(event) =>
-                      onChange({
-                        ...form,
-                        operationTimeoutMs: event.target.value
-                      })
-                    }
-                    placeholder="120000"
-                  />
-                </label>
-
-                <label className="settings-field-wide">
-                  <span>{t("settings.docker.consoleShells")}</span>
-                  <textarea
-                    className="settings-textarea"
-                    rows={3}
-                    value={form.consoleShells}
-                    onChange={(event) =>
-                      onChange({
-                        ...form,
-                        consoleShells: event.target.value
-                      })
-                    }
-                    placeholder="/bin/sh, /bin/bash"
-                  />
-                  <small>{t("settings.docker.consoleShellsHelp")}</small>
-                </label>
+                <Switch
+                  className="settings-field-wide"
+                  checked={form.enabled}
+                  label={t("settings.docker.enabledField")}
+                  onCheckedChange={(enabled) => onChange({ ...form, enabled })}
+                />
               </fieldset>
 
               <div className="settings-secret-note">
@@ -1730,6 +1696,68 @@ function SettingsDockerPage({
                 <span>{t("settings.docker.socketNote")}</span>
               </div>
             </section>
+        </div>
+      </div>
+
+      <footer className="settings-actions">
+        <span role="status">{saving ? t("common.actions.saving") : null}</span>
+        <div>
+          <button className="secondary-button" type="button" onClick={onClose}>
+            {t("common.actions.cancel")}
+          </button>
+          <button className="primary-button" type="submit" disabled={loading || saving} aria-busy={loading || saving || undefined}>
+            {saving ? t("common.actions.saving") : t("common.actions.saveChanges")}
+          </button>
+        </div>
+      </footer>
+    </form>
+  );
+}
+
+function SettingsVmPage({
+  form,
+  loading,
+  saving,
+  onChange,
+  onSubmit,
+  onClose
+}: {
+  form: VmSettingsFormState;
+  loading: boolean;
+  saving: boolean;
+  onChange: (form: VmSettingsFormState) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <form className="settings-form" onSubmit={onSubmit}>
+      <div className="settings-content-body">
+        <div className="settings-page-grid settings-docker-grid">
+          <section className="settings-section-card">
+            <header>
+              <div>
+                <h3>{t("settings.virtualMachines.runtimeTitle")}</h3>
+                <p>{t("settings.virtualMachines.runtimeDescription")}</p>
+              </div>
+            </header>
+
+            <fieldset className="settings-field-grid" disabled={loading || saving}>
+              <Switch
+                className="settings-field-wide"
+                checked={form.enabled}
+                label={t("settings.virtualMachines.enabledField")}
+                description={t("settings.virtualMachines.enabledDescription")}
+                onCheckedChange={(enabled) => onChange({ ...form, enabled })}
+              />
+            </fieldset>
+
+            <div className="settings-secret-note">
+              <MonitorCog aria-hidden="true" size={15} />
+              <span>{t("settings.virtualMachines.runtimeNote")}</span>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -1914,6 +1942,8 @@ function settingsSectionIcon(section: SettingsSectionId) {
   switch (section) {
     case "overview":
       return <HardDrive aria-hidden="true" size={16} />;
+    case "system-profile":
+      return <UserRound aria-hidden="true" size={16} />;
     case "version":
       return <Package aria-hidden="true" size={16} />;
     case "model-providers":
@@ -1926,12 +1956,18 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Bluetooth aria-hidden="true" size={16} />;
     case "docker":
       return <Server aria-hidden="true" size={16} />;
+    case "virtual-machines":
+      return <MonitorCog aria-hidden="true" size={16} />;
     case "files":
       return <Folder aria-hidden="true" size={16} />;
     case "indexer":
       return <Database aria-hidden="true" size={16} />;
     case "operations":
       return <Activity aria-hidden="true" size={16} />;
+    case "monitoring":
+      return <ChartNoAxesCombined aria-hidden="true" size={16} />;
+    case "backup":
+      return <ArchiveRestore aria-hidden="true" size={16} />;
     case "alerts":
       return <BellRing aria-hidden="true" size={16} />;
     case "photos":

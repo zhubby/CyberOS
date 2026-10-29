@@ -42,6 +42,7 @@ import {
 } from "../../config/share-settings.js";
 import { formatDate, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { Switch } from "../common/Switch.js";
 import {
   ManagementDashboardControls,
   ManagementDashboardGrid,
@@ -351,7 +352,7 @@ export function ShareManagementPanel({
         <fieldset className="share-management-fields" disabled={!canApplyConfiguration}>
           {!canApplyConfiguration ? (
             <p className="management-empty share-management-read-only">
-              {t("workspace.management.shares.declarativeReadOnly")}
+              {t("workspace.management.shares.configurationUnavailable")}
             </p>
           ) : null}
         <ManagementDashboardGrid
@@ -906,12 +907,7 @@ function TextField({
 }
 
 function CheckField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return (
-    <label className="share-check">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <span>{label}</span>
-    </label>
-  );
+  return <Switch checked={checked} label={label} onCheckedChange={onChange} />;
 }
 
 function SwitchField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
@@ -933,21 +929,7 @@ function SwitchControl({
   className?: string;
   onChange: (checked: boolean) => void;
 }) {
-  const classes = ["share-switch", disabled ? "is-disabled" : "", className ?? ""].filter(Boolean).join(" ");
-  return (
-    <label className={classes}>
-      <input
-        type="checkbox"
-        role="switch"
-        aria-label={accessibilityLabel}
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-      <span className="share-switch-track" aria-hidden="true" />
-      <span className="share-switch-copy">{label}</span>
-    </label>
-  );
+  return <Switch checked={checked} disabled={disabled} label={label} ariaLabel={accessibilityLabel} onCheckedChange={onChange} {...(className ? { className } : {})} />;
 }
 
 function SectionHeader({ title, description }: { title: string; description: string }) {

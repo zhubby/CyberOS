@@ -15,6 +15,7 @@ import {
   getDockerOperations,
   getVmOperations,
   getDockerSettings,
+  getVmSettings,
   getDownloadSettings,
   getIndexerOverview,
   getIndexerSettings,
@@ -52,6 +53,7 @@ import {
   rollbackOperation,
   requestReindex,
   saveDockerSettings,
+  saveVmSettings,
   savePhotoLibrarySettings,
   saveModelProviderSettings,
   saveAgentCapabilityPolicySettings,
@@ -77,6 +79,7 @@ import {
   type DockerOperation,
   type VmOperation,
   type DockerSettings,
+  type VmSettings,
   type DownloadSettings,
   type IndexerOverview,
   type IndexerSettings,
@@ -123,8 +126,10 @@ import {
 import {
   defaultToolPolicyForm,
   dockerSettingsToForm,
+  vmSettingsToForm,
   modelSettingsToForm,
   type DockerSettingsFormState,
+  type VmSettingsFormState,
   type ModelProviderFormState,
   type SettingsSectionId,
   type ToolPolicyFormState
@@ -157,7 +162,7 @@ import {
 } from "./lib/editor-settings.js";
 import { i18n } from "./i18n/index.js";
 import { toErrorMessage } from "./lib/format.js";
-import { clampSplitWidth, readStoredSplitWidth, writeStoredSplitWidth } from "./lib/layout.js";
+import { MIN_CHAT_WIDTH, clampSplitWidth, readStoredSplitWidth, writeStoredSplitWidth } from "./lib/layout.js";
 import {
   createUploadBatch,
   joinNasPath,
@@ -294,6 +299,7 @@ export function App() {
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("model-providers");
   const [modelSettings, setModelSettings] = useState<ModelProviderSettings | null>(null);
   const [dockerSettings, setDockerSettings] = useState<DockerSettings | null>(null);
+  const [vmSettings, setVmSettings] = useState<VmSettings | null>(null);
   const [downloadSettings, setDownloadSettings] = useState<DownloadSettings | null>(null);
   const [indexerSettings, setIndexerSettings] = useState<IndexerSettings | null>(null);
   const [indexerStatus, setIndexerStatus] = useState<IndexerOverview | null>(null);
@@ -311,6 +317,9 @@ export function App() {
   const [agentMcpSettings, setAgentMcpSettings] = useState<AgentMcpSettings | null>(null);
   const [dockerSettingsForm, setDockerSettingsForm] = useState<DockerSettingsFormState>(() =>
     dockerSettingsToForm(null)
+  );
+  const [vmSettingsForm, setVmSettingsForm] = useState<VmSettingsFormState>(() =>
+    vmSettingsToForm(null)
   );
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -1066,6 +1075,7 @@ export function App() {
         toolPolicyResult,
         agentMcpResult,
         dockerSettingsResult,
+        vmSettingsResult,
         downloadSettingsResult,
         indexerSettingsResult,
         indexerStatusResult,
@@ -1081,6 +1091,7 @@ export function App() {
         getAgentCapabilityPolicySettings(),
         getAgentMcpSettings(),
         getDockerSettings(),
+        getVmSettings(),
         getDownloadSettings(),
         getIndexerSettings(),
         getIndexerOverview(),
@@ -1119,6 +1130,13 @@ export function App() {
         setDockerSettingsForm(dockerSettingsToForm(dockerSettingsResult.value));
       } else {
         errors.push(toErrorMessage(dockerSettingsResult.reason));
+      }
+
+      if (vmSettingsResult.status === "fulfilled") {
+        setVmSettings(vmSettingsResult.value);
+        setVmSettingsForm(vmSettingsToForm(vmSettingsResult.value));
+      } else {
+        errors.push(toErrorMessage(vmSettingsResult.reason));
       }
 
       if (downloadSettingsResult.status === "fulfilled") {
@@ -1223,7 +1241,7 @@ export function App() {
     setSettingsSaving(true);
     setError(null);
     try {
-      const [settings, toolPolicy, nextDockerSettings] = await Promise.all([
+      const [settings, toolPolicy, nextDockerSettings, nextVmSettings] = await Promise.all([
         saveModelProviderSettings({
           providerName: modelSettingsForm.providerName,
           baseUrl: modelSettingsForm.baseUrl || null,
@@ -1233,18 +1251,17 @@ export function App() {
         }),
         saveAgentCapabilityPolicySettings({ policies: toolPolicyForm.policies }),
         saveDockerSettings({
-          enabled: dockerSettingsForm.enabled,
-          socketPath: dockerSettingsForm.socketPath,
-          composeCommand: dockerSettingsForm.composeCommand,
-          operationTimeoutMs: Number(dockerSettingsForm.operationTimeoutMs),
-          consoleShells: parseDockerShells(dockerSettingsForm.consoleShells)
-        })
+          enabled: dockerSettingsForm.enabled
+        }),
+        saveVmSettings({ enabled: vmSettingsForm.enabled })
       ]);
       setModelSettings(settings);
       setDockerSettings(nextDockerSettings);
+      setVmSettings(nextVmSettings);
       setModelSettingsForm(modelSettingsToForm(settings));
       setToolPolicyForm(toolPolicy);
       setDockerSettingsForm(dockerSettingsToForm(nextDockerSettings));
+      setVmSettingsForm(vmSettingsToForm(nextVmSettings));
       try {
         const refreshedSystemInfo = await getSystemInfo();
         setSystemInfo(refreshedSystemInfo);
@@ -1289,9 +1306,9 @@ export function App() {
         ...current.capabilities,
         backend: wifi.backend === "NetworkManager" || current.ethernet.backend === "NetworkManager" ? "NetworkManager" : wifi.backend,
         hostdReady: wifi.hostdReady || current.ethernet.hostdReady,
-        canApplyConfiguration: current.capabilities.hostMutationPolicy === "mutable" && ((wifi.backend === "NetworkManager" && wifi.hostdReady) || (current.ethernet.backend === "NetworkManager" && current.ethernet.hostdReady)),
-        canManageWifi: current.capabilities.hostMutationPolicy === "mutable" && wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.length > 0,
-        canManageHotspot: current.capabilities.hostMutationPolicy === "mutable" && wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.some((device) => device.capabilities.accessPoint)
+        canApplyConfiguration: (wifi.backend === "NetworkManager" && wifi.hostdReady) || (current.ethernet.backend === "NetworkManager" && current.ethernet.hostdReady),
+        canManageWifi: wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.length > 0,
+        canManageHotspot: wifi.backend === "NetworkManager" && wifi.hostdReady && wifi.devices.some((device) => device.capabilities.accessPoint)
       },
       wifi: { ...wifi, profiles: current.wifi.profiles }
     } : current);
@@ -1565,10 +1582,7 @@ export function App() {
         cursor,
         limit: 50,
         ...(query ? { query } : {}),
-        ...(options.categories.length ? { categories: options.categories } : {}),
-        ...(options.extractionSources.length ? { extractionSources: options.extractionSources } : {}),
-        ...(options.extractionStatuses.length ? { extractionStatuses: options.extractionStatuses } : {}),
-        ...optionalProperty("mimeTypes", splitSearchValues(options.mimeTypes)),
+        ...(options.fileType ? { categories: [options.fileType] } : {}),
         ...optionalProperty("modifiedFrom", searchDateBoundary(options.modifiedFrom, false)),
         ...optionalProperty("modifiedTo", searchDateBoundary(options.modifiedTo, true)),
         ...optionalProperty("sizeMin", optionalSearchNumber(options.sizeMin)),
@@ -2701,6 +2715,9 @@ export function App() {
         role="separator"
         aria-orientation="vertical"
         aria-label={t("common.actions.resizePanes")}
+        aria-valuemin={MIN_CHAT_WIDTH}
+        aria-valuemax={clampSplitWidth(Number.POSITIVE_INFINITY)}
+        aria-valuenow={splitWidth}
         onPointerDown={startResize}
         onKeyDown={resizeWithKeyboard}
       />
@@ -2820,6 +2837,7 @@ export function App() {
           saving={settingsSaving}
           settings={modelSettings}
           dockerSettings={dockerSettings}
+          vmSettings={vmSettings}
           downloadSettings={downloadSettings}
           indexerSettings={indexerSettings}
           indexerStatus={indexerStatus}
@@ -2828,6 +2846,7 @@ export function App() {
           photoStatus={photoStatus}
           photoProcessingSettings={photoProcessingSettings}
           dockerForm={dockerSettingsForm}
+          vmForm={vmSettingsForm}
           systemInfo={systemInfo}
           buildInfo={buildInfo}
           buildInfoError={buildInfoError}
@@ -2842,6 +2861,7 @@ export function App() {
           onClose={() => setSettingsOpen(false)}
           onFormChange={setModelSettingsForm}
           onDockerFormChange={setDockerSettingsForm}
+          onVmFormChange={setVmSettingsForm}
           onDownloadSettingsChange={changeDownloadSettings}
           onIndexerSettingsChange={changeIndexerSettings}
           onIndexerReindex={reindexRoot}
@@ -2864,18 +2884,6 @@ export function App() {
       ) : null}
     </main>
   );
-}
-
-function parseDockerShells(input: string): string[] {
-  return input
-    .split(/[\n,]/gu)
-    .map((shell) => shell.trim())
-    .filter(Boolean);
-}
-
-function splitSearchValues(input: string): string[] | undefined {
-  const values = [...new Set(input.split(",").map((value) => value.trim()).filter(Boolean))];
-  return values.length ? values : undefined;
 }
 
 function searchDateBoundary(value: string, endOfDay: boolean): string | undefined {

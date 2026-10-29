@@ -39,6 +39,14 @@ describe("SettingsMediaContent", () => {
           cec: { state: "degraded", detail: "Keyboard input remains available", updatedAt: "2026-10-21T00:00:00.000Z" },
           gamepad: { state: "degraded", detail: "No supported gamepad connected", updatedAt: "2026-10-21T00:00:00.000Z" },
           updatedAt: "2026-10-21T00:00:00.000Z"
+        },
+        tvSettings: {
+          enabled: true,
+          videoOutput: "wayland",
+          drmConnector: "HDMI-A-1",
+          audioDevice: "default",
+          hardwareDecoding: "auto-safe",
+          updatedAt: "2026-10-21T00:00:00.000Z"
         }
       },
       busy: null,
@@ -52,7 +60,8 @@ describe("SettingsMediaContent", () => {
       region: "CN",
       onTmdbTokenChange: vi.fn(), onClearTmdbTokenChange: vi.fn(), onLanguageChange: vi.fn(), onRegionChange: vi.fn(),
       onSaveSettings: vi.fn(), onAddSource: vi.fn(), onToggleSource: vi.fn(), onScanSource: vi.fn(), onDeleteSource: vi.fn(),
-      onCancelDelete: vi.fn(), onCandidateQueryChange: vi.fn(), onSearchCandidates: vi.fn(), onSelectTitle: vi.fn(), onApplyMatch: vi.fn()
+      onCancelDelete: vi.fn(), onCandidateQueryChange: vi.fn(), onSearchCandidates: vi.fn(), onSelectTitle: vi.fn(), onApplyMatch: vi.fn(),
+      onToggleTv: vi.fn(), onTvSettingsChange: vi.fn(), onSaveTvSettings: vi.fn()
     }));
 
     expect(html).toContain("Configured; leave blank to keep");
@@ -62,6 +71,8 @@ describe("SettingsMediaContent", () => {
     expect(html).toContain("Match correction");
     expect(html).toContain("First contact");
     expect(html).toContain("TV mode health");
+    expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/u);
+    expect(html).toContain("HDMI-A-1");
     expect(html).toContain("Keyboard input remains available");
   });
 });

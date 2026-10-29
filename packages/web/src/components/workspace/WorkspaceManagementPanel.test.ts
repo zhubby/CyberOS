@@ -5,6 +5,7 @@ import type { DockerContainer, DockerContainerDetails, VmSummary } from "../../a
 import { i18n, initI18n } from "../../i18n/index.js";
 import { DockerComposeAppDialog } from "./DockerComposeAppDialog.js";
 import {
+  DockerContainerStatusIndicator,
   DockerContainerDetailsDialog,
   VmInstanceActions,
   VmInstanceDetailsDialog
@@ -41,6 +42,23 @@ const runningDetails: DockerContainerDetails = {
   workingDir: "/",
   labels: {}
 };
+
+describe("DockerContainerStatusIndicator", () => {
+  it.each([
+    ["running", "Up 9 days (healthy)", "ready"],
+    ["running", "Up 2 minutes (unhealthy)", "offline"],
+    ["paused", "Paused", "warning"],
+    ["exited", "Exited (255) 9 days ago", "offline"],
+    ["unknown", "Unknown", "neutral"]
+  ])("renders the complete %s status as an accessible icon tooltip", (state, status, tone) => {
+    const html = renderToStaticMarkup(createElement(DockerContainerStatusIndicator, { state, status }));
+
+    expect(html).toContain(`data-state="${tone}"`);
+    expect(html).toContain(`aria-label="${status}"`);
+    expect(html).toContain('role="tooltip"');
+    expect(html).toContain(`>${status}</span>`);
+  });
+});
 
 describe("DockerContainerDetailsDialog", () => {
   it("uses the latest summary state for status and lifecycle actions", () => {
