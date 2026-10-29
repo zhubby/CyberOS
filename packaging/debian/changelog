@@ -1,3 +1,9 @@
+cyberos (2.0.6) unstable; urgency=medium
+
+  * Deploy sharing credential relocation and database-driven TV activation with portable ARM64 packaging checks.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Thu, 29 Oct 2026 12:54:31 +0000
+
 cyberos (2.0.5) unstable; urgency=medium
 
   * Preserve sharing credentials during 2.x upgrades and reconcile TV mode with system settings on deployment.

@@ -1,6 +1,6 @@
 {
   "name": "@cyberos/mcp",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -10,11 +10,11 @@
     "@modelcontextprotocol/fastify": "2.0.1",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
-    "@cyberos/capabilities": "2.0.5",
-    "@cyberos/capability-runtime": "2.0.5",
-    "@cyberos/db": "2.0.5",
-    "@cyberos/storage-tools": "2.0.5",
-    "@cyberos/shared": "2.0.5",
+    "@cyberos/capabilities": "2.0.6",
+    "@cyberos/capability-runtime": "2.0.6",
+    "@cyberos/db": "2.0.6",
+    "@cyberos/storage-tools": "2.0.6",
+    "@cyberos/shared": "2.0.6",
     "fastify": "^5.12.5",
     "zod": "^4.2.0"
   },

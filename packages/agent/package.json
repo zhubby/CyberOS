@@ -1,6 +1,6 @@
 {
   "name": "@cyberos/agent",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -9,8 +9,8 @@
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.1.0",
     "@earendil-works/pi-mcp": "1.1.0",
-    "@cyberos/storage-tools": "2.0.5",
-    "@cyberos/shared": "2.0.5",
+    "@cyberos/storage-tools": "2.0.6",
+    "@cyberos/shared": "2.0.6",
     "typebox": "1.1.38"
   }
 }
