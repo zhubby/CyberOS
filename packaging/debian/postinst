@@ -23,7 +23,7 @@ if [ "$1" = "configure" ]; then
     /cyberos/state/pi-sessions /cyberos/state/pi-agent /cyberos/state/photos \
     /cyberos/state/media-cache /cyberos/state/backup-staging /cyberos/state/vod-player /cyberos/state/bluetooth \
     /cyberos/state/tv /cyberos/state/tv/chromium \
-    /cyberos/logs /cyberos/home /cyberos/home/terminal /cyberos/apps /cyberos/deploy \
+    /cyberos/logs /cyberos/home /cyberos/home/terminal /cyberos/apps \
     /cyberos/system-backups /cyberos/data /cyberos/backup
   install -d -o cyberos -g cyberos -m 0700 \
     /cyberos/state/secrets /cyberos/state/secrets/backup /cyberos/state/secrets/share /cyberos/state/mcp
@@ -44,6 +44,7 @@ if [ "$1" = "configure" ]; then
   ln -sfn /usr/lib/cyberos/scripts/cyberos-deploy /usr/local/sbin/cyberos-deploy
   ln -sfn /usr/lib/cyberos/scripts/cyberos-mcp /usr/local/sbin/cyberos-mcp
   ln -sfn /usr/lib/cyberos/scripts/cyberos-tv-mode /usr/local/sbin/cyberos-tv-mode
+  /usr/lib/cyberos/scripts/cyberos-deploy-bootstrap.sh
 
   if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload || true

@@ -385,6 +385,27 @@ jobs:
           )
           release_dir="$RUNNER_TEMP/cm5-release"
 
+          ensure_deploy_traversal() {
+            if ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
+                "test -x /cyberos/deploy"; then
+              return 0
+            fi
+
+            # CyberOS 2.0.1 postinst could reset this parent to cyberos:cyberos
+            # 0750 after deployment bootstrap. The owning runtime account may
+            # restore traverse-only access; incoming remains root:deploy 0730.
+            ssh "${ssh_options[@]}" "cyberos@$CM5_HOST" sh -s <<'REMOTE'
+          set -eu
+          deploy_path=/cyberos/deploy
+          [ "$(id -un)" = cyberos ]
+          [ -d "$deploy_path" ] && [ ! -L "$deploy_path" ]
+          [ "$(stat -c '%U:%G' "$deploy_path")" = cyberos:cyberos ]
+          chmod o+x "$deploy_path"
+          REMOTE
+            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
+              "test -x /cyberos/deploy && test -x /cyberos/deploy/incoming && test -w /cyberos/deploy/incoming"
+          }
+
           prepare_incoming() {
             ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
               "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$RELEASE_SHA256" <<'REMOTE'
@@ -647,6 +668,7 @@ jobs:
           REMOTE
           }
 
+          ensure_deploy_traversal
           prepare_incoming
           stage_release /cyberos/deploy/incoming "$release_dir/release-manifest.json" cyberos
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \

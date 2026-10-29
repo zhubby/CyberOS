@@ -238,6 +238,12 @@ describe("native packaging artifacts", () => {
     await expect(readPackagingFile("systemd", "cyberos-scheduler.service")).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readPackagingFile("systemd", "cyberos-scheduler.timer")).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readPackagingFile("debian", "postinst")).resolves.toContain("cyberos-refresh-groups.sh");
+    await expect(readPackagingFile("debian", "postinst")).resolves.toContain(
+      "/usr/lib/cyberos/scripts/cyberos-deploy-bootstrap.sh"
+    );
+    await expect(readPackagingFile("debian", "postinst")).resolves.not.toMatch(
+      /\/cyberos\/apps \/cyberos\/deploy/u
+    );
     await expect(readPackagingFile("scripts", "cyberos-refresh-groups.sh")).resolves.toContain("optional-groups.conf");
     await expect(readPackagingFile("scripts", "cyberos-refresh-groups.sh")).resolves.toContain("kvm");
     await expect(readPackagingFile("scripts", "cyberos-refresh-groups.sh")).resolves.toContain(
@@ -526,6 +532,12 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain('while [ "$attempt" -le 120 ]');
     expect(deployWorkflow).toMatch(/- name: Verify CM5 services and build metadata\n\s+timeout-minutes: 20/u);
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
+    expect(deployWorkflow).toContain("ensure_deploy_traversal()");
+    expect(deployWorkflow).toContain('ssh "${ssh_options[@]}" "cyberos@$CM5_HOST"');
+    expect(deployWorkflow).toContain('chmod o+x "$deploy_path"');
+    expect(deployWorkflow).toContain(
+      "test -x /cyberos/deploy/incoming && test -w /cyberos/deploy/incoming"
+    );
     expect(deployWorkflow).toContain("prepare_incoming()");
     expect(deployWorkflow).toContain("getfacl -p \"$incoming_dir\"");
     expect(deployWorkflow).toContain('sudo -n "$deploy_helper" --prepare-incoming');
