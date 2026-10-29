@@ -81,8 +81,8 @@ export const DEFAULT_BACKUP_SETTINGS: Omit<BackupSettingsRecord, "updatedAt"> = 
 };
 
 export const DEFAULT_TV_SETTINGS: Omit<TvSettingsRecord, "updatedAt"> = {
-  enabled: false,
-  videoOutput: "drm",
+  enabled: true,
+  videoOutput: "wayland",
   drmConnector: null,
   audioDevice: null,
   hardwareDecoding: "auto-safe"

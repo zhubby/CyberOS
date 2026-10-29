@@ -60,7 +60,7 @@ export function createCyberOsRuntime(bootstrap: CyberOsBootstrap): CyberOsRuntim
     ...bootstrap,
     mcp: {
       enabled: true,
-      piEnabled: false,
+      piEnabled: true,
       piTokenFile: paths.mcpTokenPath,
       externalEnabled: false,
       shellEnabled: false,
@@ -100,7 +100,7 @@ export function createCyberOsRuntime(bootstrap: CyberOsBootstrap): CyberOsRuntim
       maxSessions: 32
     },
     vodPlayer: {
-      enabled: false,
+      enabled: true,
       socketPath: VOD_PLAYER_SOCKET_PATH,
       statePath: path.join(paths.vodPlayerStateDir, "session.json"),
       commandTimeoutMs: 5_000,
@@ -108,7 +108,7 @@ export function createCyberOsRuntime(bootstrap: CyberOsBootstrap): CyberOsRuntim
       checkpointIntervalMs: 5_000,
       retryBaseDelayMs: 2_000,
       retryMaxDelayMs: 60_000,
-      videoOutput: "drm",
+      videoOutput: "wayland",
       drmConnector: null,
       audioOutput: "alsa",
       audioDevice: null,

@@ -76,6 +76,43 @@ describe("monitoring routes", () => {
     await server.close();
   });
 
+  it("uses the temperature cadence for raw temperature queries", async () => {
+    const databasePath = await tempDatabase();
+    const writer = new MetricsFixture(databasePath);
+    const startMs = Date.parse("2026-01-01T00:00:00.000Z");
+    writer.insertSamples([45, 46, 47].map((value, index) => ({
+      metric: "cyberos_host_temperature_celsius",
+      labels: { sensor: "cpu-thermal:0" },
+      timestampMs: startMs + index * DEFAULT_MONITORING_CONFIG.temperatureSampleIntervalMs,
+      value
+    })));
+    writer.close();
+
+    const server = await buildRoutes(new MonitoringReader(databasePath, { ...DEFAULT_MONITORING_CONFIG }));
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/monitoring/query",
+      payload: {
+        start: "2026-01-01T00:00:00.000Z",
+        end: "2026-01-01T00:15:00.000Z",
+        maxPoints: 720,
+        selectors: [{ metric: "cyberos_host_temperature_celsius" }]
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().series).toEqual([expect.objectContaining({
+      metric: "cyberos_host_temperature_celsius",
+      stepMs: DEFAULT_MONITORING_CONFIG.temperatureSampleIntervalMs,
+      points: [
+        { timestamp: "2026-01-01T00:00:00.000Z", value: 45 },
+        { timestamp: "2026-01-01T00:05:00.000Z", value: 46 },
+        { timestamp: "2026-01-01T00:10:00.000Z", value: 47 }
+      ]
+    })]);
+    await server.close();
+  });
+
   it("excludes series without data in the requested window before applying limits", async () => {
     const databasePath = await tempDatabase();
     const writer = new MetricsFixture(databasePath);

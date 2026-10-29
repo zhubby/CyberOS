@@ -7,6 +7,7 @@ import {
   finishOpsRun,
   listHealthAlerts,
   openCyberOsDb,
+  saveTvSettings,
   startIndexRun,
   startOpsRun,
   upsertHealthAlert,
@@ -156,6 +157,34 @@ describe("shared system health evaluator", () => {
     });
     expect(summary.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "monitoring_unavailable", severity: "warning" })
+    ]));
+  });
+
+  it("uses the persisted TV switch instead of the bootstrap default", async () => {
+    saveTvSettings(db, {
+      enabled: false,
+      videoOutput: "wayland",
+      drmConnector: null,
+      audioDevice: null,
+      hardwareDecoding: "auto-safe"
+    });
+    config = {
+      ...config,
+      vodPlayer: { ...config.vodPlayer, enabled: true, videoOutput: "wayland" }
+    };
+
+    const summary = await evaluateSystemHealth({
+      db,
+      config,
+      now: new Date("2026-01-01T00:01:00.000Z")
+    });
+
+    expect(summary.vodPlayer).toMatchObject({
+      status: "disabled",
+      errorCode: "VOD_PLAYER_DISABLED"
+    });
+    expect(summary.issues).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "vod_player_unavailable" })
     ]));
   });
 });

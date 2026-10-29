@@ -177,6 +177,37 @@ ensure_vm_network() {
   fi
 }
 
+read_tv_mode_setting() {
+  curl --fail --silent --show-error --max-time 10 \
+    http://127.0.0.1:3010/api/settings/tv \
+    | node -e '
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { input += chunk; });
+      process.stdin.on("end", () => {
+        const enabled = JSON.parse(input)?.settings?.enabled;
+        if (typeof enabled !== "boolean") process.exit(1);
+        process.stdout.write(enabled ? "enable" : "disable");
+      });
+    '
+}
+
+apply_tv_mode_setting() {
+  attempt=1
+  tv_mode_action=
+  while [ "$attempt" -le 30 ]; do
+    if tv_mode_action=$(read_tv_mode_setting); then
+      break
+    fi
+    sleep 2
+    attempt=$((attempt + 1))
+  done
+  [ -n "$tv_mode_action" ] || return 1
+
+  log "applying TV mode system setting: $tv_mode_action"
+  /usr/lib/cyberos/scripts/cyberos-tv-mode "$tv_mode_action"
+}
+
 node_major() {
   if ! command -v node >/dev/null 2>&1; then
     printf '0'
@@ -285,6 +316,8 @@ if command -v systemctl >/dev/null 2>&1; then
     cyberos-health.timer
   systemctl start cyberos-health.service || \
     log "warning: initial health evaluation failed; the health timer will retry"
+  apply_tv_mode_setting || \
+    log "warning: TV mode setting could not be applied; use System Settings > Media to retry"
 fi
 
 if [ "$NGINX_ENABLED" = "1" ]; then

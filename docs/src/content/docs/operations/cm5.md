@@ -46,14 +46,14 @@ sudo CYBEROS_ENABLE_NGINX=1 \
 
 电视模式不是把 Debian 桌面换成另一个完整桌面。Weston 以非 root `cyberos` 用户持有 DRM/HDMI 会话，Chromium 只运行全屏 `/tv/` Web shell，电影解码和音视频输出仍由原生 mpv/VOD 进程完成。这样媒体库、匹配、播放进度和 Web 管理页共享同一 API，同时把浏览界面与硬件播放故障隔离开。
 
-安装完成后，在 Web 的“设置 > 媒体”启用 TV 模式并设置输出设备与硬件解码策略。API 会通过 typed hostd 操作切换 systemd 状态；应用失败不会改写数据库，数据库持久化失败会尝试回滚宿主状态。本地维护时也可直接执行：
+标准安装会预装 Chromium、Weston、mpv、seatd、CEC 与输入工具，并按默认设置启用 TV 模式。在 Web 的“设置 > 媒体”可以关闭 TV 模式或调整输出设备与硬件解码策略。API 会通过 typed hostd 操作切换 systemd 状态；应用失败不会改写数据库，数据库持久化失败会尝试回滚宿主状态。本地维护时也可直接执行：
 
 ```bash
 sudo cyberos-tv-mode enable
 sudo cyberos-tv-mode status
 ```
 
-启用命令会原子记录当前 display manager 的 unit、enabled/masked 和 active 状态，只停止当前桌面会话，不改动管理员原有的 enabled/masked 配置。随后它安装仅由 CyberOS 管理的 drop-in、启用 `cyberos-tv.target`，并等待 `/api/tv/status` 最多 90 秒；Weston、Chromium 或 VOD 未就绪会自动清理 drop-in 并恢复此前桌面。升级包会保留当前 TV/桌面选择，不会因安装脚本默认值而切换模式。
+启用命令会原子记录当前 display manager 的 unit、enabled/masked 和 active 状态，只停止当前桌面会话，不改动管理员原有的 enabled/masked 配置。随后它安装仅由 CyberOS 管理的 drop-in、启用 `cyberos-tv.target`，并等待 `/api/tv/status` 最多 90 秒；Weston、Chromium 或 VOD 未就绪会自动清理 drop-in 并恢复此前桌面。标准安装器从 `/api/settings/tv` 读取设置：全新数据库使用默认开启值，已经在设置中关闭的设备在重装或升级时保持关闭。
 
 恢复桌面使用：
 

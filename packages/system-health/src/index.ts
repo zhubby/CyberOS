@@ -7,6 +7,7 @@ import {
   getIndexStoragePoolStatus,
   getOpsTaskOverview,
   getPhotosWorkerHealth,
+  getTvSettings,
   listBackupRuns,
   listHealthAlerts,
   listIndexRunHistory,
@@ -205,7 +206,21 @@ export async function evaluateSystemHealth(
     });
   }
 
-  const vodPlayer = await collectVodPlayerHealth(input.config, now, input.vodPlayer);
+  const storedTvSettings = getTvSettings(input.db);
+  const effectiveConfig = storedTvSettings
+    ? {
+        ...input.config,
+        vodPlayer: {
+          ...input.config.vodPlayer,
+          enabled: storedTvSettings.enabled,
+          videoOutput: storedTvSettings.videoOutput,
+          drmConnector: storedTvSettings.drmConnector,
+          audioDevice: storedTvSettings.audioDevice,
+          hwdec: storedTvSettings.hardwareDecoding
+        }
+      }
+    : input.config;
+  const vodPlayer = await collectVodPlayerHealth(effectiveConfig, now, input.vodPlayer);
   if (vodPlayer.status === "degraded") {
     addIssue({ code: "vod_player_recovering", severity: "warning", message: "VOD Player is recovering playback" });
   } else if (vodPlayer.status === "critical") {

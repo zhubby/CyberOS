@@ -18,10 +18,12 @@ describe("CyberOS bootstrap", () => {
     expect(runtime.hostd.socketPath).toBe("/run/cyberos/hostd.sock");
     expect(runtime.terminal.socketPath).toBe("/run/cyberos/terminald.sock");
     expect(runtime.mcp.piTokenFile).toBe(path.join(bootstrap.paths.stateDir, "mcp", "pi.token"));
+    expect(runtime.mcp.piEnabled).toBe(true);
     expect(runtime.backup.passwordFile).toBe(
       path.join(bootstrap.paths.stateDir, "secrets", "backup", "restic-password")
     );
     expect(runtime.monitoring).toEqual(DEFAULT_MONITORING_CONFIG);
+    expect(runtime.vodPlayer).toMatchObject({ enabled: true, videoOutput: "wayland" });
   });
 
   it("accepts only bootstrap environment values", () => {

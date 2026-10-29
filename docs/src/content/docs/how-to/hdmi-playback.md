@@ -4,16 +4,16 @@ description: 在无桌面 Debian NAS 设备上使用 CyberOS 将视频直接输�
 type: how-to
 status: current
 audience: [user, operator]
-sourceOfTruth: [crates/vod-player/src/controller.rs, packages/api/src/routes/vod-player.ts, packages/web/src/components/preview/VodPlayerControls.tsx, packaging/systemd/cyberos-vod-player.service, packaging/scripts/cyberos-tv-prepare, packaging/scripts/cyberos-tv-weston]
+sourceOfTruth: [crates/vod-player/src/controller.rs, packages/api/src/routes/vod-player.ts, packages/web/src/components/preview/VodPlayerControls.tsx, packaging/systemd/cyberos-vod-player.service, packaging/scripts/install.sh, packaging/scripts/cyberos-tv-prepare, packaging/scripts/cyberos-tv-weston]
 sidebar:
   order: 2
 ---
 
 ## 启用播放器
 
-标准安装已包含 mpv、seatd 和 `cyberos-vod-player.service`，不需要传入安装参数或生成播放器配置文件。服务以固定的非 root `cyberos` 身份运行，只读访问 storage pool，socket、状态路径和超时参数均为代码安全常量。
+标准安装已包含 Chromium、Weston、mpv、seatd、CEC、输入工具和 `cyberos-vod-player.service`，不需要传入安装参数或生成播放器配置文件。服务以固定的非 root `cyberos` 身份运行，只读访问 storage pool，socket、状态路径和超时参数均为代码安全常量。
 
-在 Web 中打开“设置 > 媒体”，启用“TV 模式”。同一页可以选择音频设备、DRM connector 和硬件解码策略；保存后由 API 通过受限的 hostd 操作应用 systemd 状态。切换失败时不写入 SQLite，持久化失败时会尝试恢复之前的宿主状态。
+TV 模式在全新安装中默认开启。在 Web 中打开“设置 > 媒体”，可以关闭 TV 模式，或选择音频设备、DRM connector 和硬件解码策略；保存后由 API 通过受限的 hostd 操作应用 systemd 状态。切换失败时不写入 SQLite，持久化失败时会尝试恢复之前的宿主状态。
 
 ## 使用 Web UI
 
@@ -23,7 +23,7 @@ sidebar:
 
 ## 检查设备能力
 
-仅启用 VOD Player 时，播放器使用 mpv 的 DRM/KMS 视频输出，不依赖 X11 或 Wayland。CM5 启用[电视模式](/docs/operations/cm5/#hdmi-电视模式)后，Weston 持有 DRM 会话，mpv 改为 Wayland 全屏客户端。先检查设备和服务：
+TV 模式下 Weston 持有 DRM 会话，mpv 作为 Wayland 全屏客户端输出视频。先检查设备和服务：
 
 ```bash
 ls -l /dev/dri /dev/snd

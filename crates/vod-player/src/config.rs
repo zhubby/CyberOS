@@ -45,8 +45,8 @@ struct StoredTvSettings {
 impl Default for StoredTvSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
-            video_output: "drm".to_owned(),
+            enabled: true,
+            video_output: "wayland".to_owned(),
             drm_connector: None,
             audio_device: None,
             hardware_decoding: "auto-safe".to_owned(),
@@ -204,6 +204,8 @@ mod tests {
     #[test]
     fn validates_current_tv_settings() {
         let mut settings = StoredTvSettings::default();
+        assert!(settings.enabled);
+        assert_eq!(settings.video_output, "wayland");
         assert!(validate_settings(&settings).is_ok());
         settings.video_output = "invalid".to_owned();
         assert!(validate_settings(&settings).is_err());

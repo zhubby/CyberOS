@@ -91,7 +91,7 @@ export function queryMetrics(
   const plans = requests.map(({ descriptor, transform }): QueryPlan => {
     const resolution = resolutions.get(descriptor.id) ?? preferredResolution;
     const baseStepMs = resolution === "raw"
-      ? config.fastSampleIntervalMs
+      ? rawSampleIntervalMs(descriptor.metric, config)
       : resolution === "1m"
         ? MINUTE_MS
         : HOUR_MS;
@@ -156,6 +156,15 @@ export function queryMetrics(
     end: new Date(normalized.endMs).toISOString(),
     series: output
   };
+}
+
+function rawSampleIntervalMs(metric: string, config: MonitoringConfig): number {
+  const cadence = getMetricDefinition(metric)?.cadence;
+  return cadence === "temperature"
+    ? config.temperatureSampleIntervalMs
+    : cadence === "standard"
+      ? config.standardSampleIntervalMs
+      : config.fastSampleIntervalMs;
 }
 
 function selectResolutions(

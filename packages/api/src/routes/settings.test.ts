@@ -31,6 +31,10 @@ describe("settings routes", () => {
     expect(initial.statusCode).toBe(200);
     expect(initial.json().settings).toMatchObject({ enabled: true, rawRetentionDays: 2 });
 
+    const initialTv = await server.inject({ method: "GET", url: "/api/settings/tv" });
+    expect(initialTv.statusCode).toBe(200);
+    expect(initialTv.json().settings).toMatchObject({ enabled: true, videoOutput: "wayland" });
+
     db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)")
       .run("monitoring_settings", JSON.stringify({ enabled: "broken" }), new Date().toISOString());
     const corrupted = await server.inject({ method: "GET", url: "/api/settings/monitoring" });
@@ -137,14 +141,14 @@ describe("settings routes", () => {
     const unconfirmed = await server.inject({
       method: "PATCH",
       url: "/api/settings/tv",
-      payload: { enabled: true, videoOutput: "wayland" }
+      payload: { enabled: false }
     });
     expect(unconfirmed.statusCode).toBe(400);
 
     const failed = await server.inject({
       method: "PATCH",
       url: "/api/settings/tv",
-      payload: { enabled: true, videoOutput: "wayland", confirmed: true }
+      payload: { enabled: false, confirmed: true }
     });
     expect(failed.statusCode).toBe(503);
     expect(getTvSettings(db)).toBeNull();
@@ -161,10 +165,10 @@ describe("settings routes", () => {
     const response = await server.inject({
       method: "PATCH",
       url: "/api/settings/tv",
-      payload: { enabled: true, videoOutput: "wayland", confirmed: true }
+      payload: { enabled: false, confirmed: true }
     });
     expect(response.statusCode).toBe(500);
-    expect(apply.mock.calls).toEqual([[true], [false]]);
+    expect(apply.mock.calls).toEqual([[false], [true]]);
     await server.close();
   });
 });

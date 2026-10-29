@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { listOperationNotifications, openCyberOsDb, saveBluetoothSettings, type CyberOsDatabase } from "@cyberos/db";
+import {
+  listOperationNotifications,
+  openCyberOsDb,
+  saveBluetoothSettings,
+  saveTvSettings,
+  type CyberOsDatabase
+} from "@cyberos/db";
 import { loadCyberOsRuntime, type CyberOsRuntime, type VodPlayerStatus } from "@cyberos/shared";
 import { VodPlayerRuntimeError, type VodPlayerRuntime } from "../lib/vod-player.js";
 import { buildServer } from "../server.js";
@@ -85,6 +91,13 @@ describe("VOD Player API", () => {
 
   it("removes the old player routes and exposes disabled status", async () => {
     const { server } = await setup();
+    saveTvSettings(db!, {
+      enabled: false,
+      videoOutput: "wayland",
+      drmConnector: null,
+      audioDevice: null,
+      hardwareDecoding: "auto-safe"
+    });
     expect((await server.inject({ method: "GET", url: "/api/player/status" })).statusCode).toBe(404);
     const status = await server.inject({ method: "GET", url: "/api/vod-player/status" });
     expect(status.statusCode).toBe(200);
