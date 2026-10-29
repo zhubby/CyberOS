@@ -9,7 +9,7 @@ sidebar:
   order: 1
 ---
 
-`packages/web` 是 React 19 + Vite 7 单页应用，负责文件浏览、预览、chat、approval、operations、monitoring、terminal、HTTP 下载、Docker/VM/share/storage 管理和设置。API 契约在 `packages/web/src/api.ts` 与共享类型中维护。
+`packages/web` 是 React 19 + Vite 7 单页应用，负责文件浏览、预览、chat、approval、operations、monitoring、terminal、HTTP/BitTorrent 下载、Docker/VM/share/storage 管理和设置。API 契约在 `packages/web/src/api.ts` 与共享类型中维护。
 
 前端通过 REST 读取状态，通过 SSE 订阅 agent/job/download 事件，通过 WebSocket 连接终端和 console。文件预览有大小限制，视频可使用 API 的 FFmpeg cache，界面支持中英文和统一的深色 HUD 主题。
 

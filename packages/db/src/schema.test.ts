@@ -30,7 +30,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
       expect(database.pragma("user_version", { simple: true })).toBe(CYBEROS_DATABASE_FORMAT_VERSION);
       expect(database.prepare("SELECT id FROM schema_migrations").pluck().all()).toEqual([
         "001_cyberos_2_0",
-        "002_agent_resources"
+        "002_agent_resources",
+        "003_p2p_downloads"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
@@ -42,7 +43,40 @@ describe("CyberOS 2.0 SQLite schema", () => {
   });
 
   it("keeps the clean-install baseline and applies additive 2.x migrations", () => {
-    expect(migrations.map((migration) => migration.id)).toEqual(["001_cyberos_2_0", "002_agent_resources"]);
+    expect(migrations.map((migration) => migration.id)).toEqual([
+      "001_cyberos_2_0",
+      "002_agent_resources",
+      "003_p2p_downloads"
+    ]);
+  });
+
+  it("adds P2P task metadata, previews, and selected files without breaking foreign keys", () => {
+    const database = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
+    try {
+      const taskColumns = database.pragma("table_info(download_tasks)") as Array<{ name: string }>;
+      expect(taskColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+        "source_kind",
+        "torrent_info_hash",
+        "uploaded_bytes",
+        "upload_speed_bytes_per_second",
+        "peer_count",
+        "seed_ratio_limit",
+        "seed_time_limit_seconds"
+      ]));
+      expect(database.prepare(`
+        SELECT name FROM sqlite_schema
+        WHERE type = 'table' AND name IN (
+          'download_task_files', 'torrent_previews', 'torrent_preview_files'
+        ) ORDER BY name
+      `).pluck().all()).toEqual([
+        "download_task_files",
+        "torrent_preview_files",
+        "torrent_previews"
+      ]);
+      expect(database.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      database.close();
+    }
   });
 
   it("rejects an unmarked non-empty database without changing it", () => {
@@ -156,7 +190,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
     try {
       expect(database.prepare("SELECT id FROM schema_migrations").pluck().all()).toEqual([
         "001_cyberos_2_0",
-        "002_agent_resources"
+        "002_agent_resources",
+        "003_p2p_downloads"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {

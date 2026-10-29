@@ -2,7 +2,12 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openCyberOsDb, type CyberOsDatabase } from "@cyberos/db";
+import {
+  claimNextTorrentPreview,
+  completeTorrentPreview,
+  openCyberOsDb,
+  type CyberOsDatabase
+} from "@cyberos/db";
 import { loadCyberOsRuntime, type CyberOsRuntime } from "@cyberos/shared";
 import { buildServer } from "../server.js";
 
@@ -29,6 +34,189 @@ afterEach(async () => {
 });
 
 describe("download API", () => {
+  it("creates, reads, consumes, and deletes Magnet previews", async () => {
+    const { app } = await setup();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/downloads/torrent-previews",
+      payload: {
+        magnet: "magnet:?xt=urn:btih:0123456789012345678901234567890123456789"
+      }
+    });
+    expect(created.statusCode).toBe(202);
+    const previewId = created.json().preview.id as string;
+
+    const queued = await app.inject({
+      method: "GET",
+      url: `/api/downloads/torrent-previews/${previewId}`
+    });
+    expect(queued.statusCode).toBe(200);
+    expect(queued.json().preview).toMatchObject({ sourceKind: "magnet", status: "queued" });
+
+    const claimed = claimNextTorrentPreview(db!, {
+      workerId: "torrent-worker",
+      leaseMs: 30_000
+    });
+    completeTorrentPreview(db!, {
+      id: claimed!.id,
+      workerId: "torrent-worker",
+      infoHash: "0123456789012345678901234567890123456789",
+      name: "release",
+      metainfo: Buffer.from("torrent fixture"),
+      totalBytes: 42,
+      isPrivate: false,
+      files: [{ fileIndex: 0, path: "release/file.bin", sizeBytes: 42 }]
+    });
+
+    const customSeeding = await app.inject({
+      method: "POST",
+      url: "/api/downloads",
+      payload: {
+        torrentPreviewId: previewId,
+        selectedFileIndices: [0],
+        storagePoolId: poolId,
+        targetDirectory: ".",
+        fileName: "release",
+        seedRatioLimit: 2,
+        seedTimeLimitSeconds: 60
+      }
+    });
+    expect(customSeeding.statusCode).toBe(400);
+
+    const taskResponse = await app.inject({
+      method: "POST",
+      url: "/api/downloads",
+      payload: {
+        torrentPreviewId: previewId,
+        selectedFileIndices: [0],
+        storagePoolId: poolId,
+        targetDirectory: ".",
+        fileName: "release"
+      }
+    });
+    expect(taskResponse.statusCode).toBe(201);
+    expect(taskResponse.json().task).toMatchObject({
+      sourceKind: "magnet",
+      torrentInfoHash: "0123456789012345678901234567890123456789",
+      selectedFileCount: 1,
+      totalBytes: 42
+    });
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/downloads/torrent-previews",
+      payload: {
+        magnet: "magnet:?xt=urn:btih:abcdefabcdefabcdefabcdefabcdefabcdefabcd"
+      }
+    });
+    const secondId = second.json().preview.id as string;
+    expect((await app.inject({
+      method: "DELETE",
+      url: `/api/downloads/torrent-previews/${secondId}`
+    })).statusCode).toBe(204);
+    expect((await app.inject({
+      method: "GET",
+      url: `/api/downloads/torrent-previews/${secondId}`
+    })).statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("cancels a Magnet preview while the downloader is resolving it", async () => {
+    const { app } = await setup();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/downloads/torrent-previews",
+      payload: {
+        magnet: "magnet:?xt=urn:btih:0123456789012345678901234567890123456789"
+      }
+    });
+    const previewId = created.json().preview.id as string;
+    expect(claimNextTorrentPreview(db!, {
+      workerId: "torrent-worker",
+      leaseMs: 30_000
+    })).toMatchObject({ id: previewId, status: "resolving" });
+
+    const cancelled = await app.inject({
+      method: "DELETE",
+      url: `/api/downloads/torrent-previews/${previewId}`
+    });
+
+    expect(cancelled.statusCode).toBe(204);
+    expect((await app.inject({
+      method: "GET",
+      url: `/api/downloads/torrent-previews/${previewId}`
+    })).statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("queues an uploaded torrent file for metadata resolution", async () => {
+    const { app } = await setup();
+    const metainfo = Buffer.from("d4:infod4:name7:releaseee");
+    const upload = torrentUpload("release.torrent", metainfo);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/downloads/torrent-previews",
+      headers: upload.headers,
+      payload: upload.body
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().preview).toMatchObject({ sourceKind: "torrent", status: "queued" });
+    const stored = db!.prepare("SELECT metainfo FROM torrent_previews WHERE id = ?")
+      .get(response.json().preview.id) as { metainfo: Buffer };
+    expect(stored.metainfo).toEqual(metainfo);
+    await app.close();
+  });
+
+  it("rejects non-torrent upload names without creating a preview", async () => {
+    const { app } = await setup();
+    const upload = torrentUpload("release.txt", Buffer.from("not a torrent"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/downloads/torrent-previews",
+      headers: upload.headers,
+      payload: upload.body
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(countTorrentPreviews()).toBe(0);
+    await app.close();
+  });
+
+  it("enforces the upload size limit before rejecting a non-torrent file name", async () => {
+    const { app } = await setup();
+    const upload = torrentUpload("oversized.txt", Buffer.alloc(16 * 1024 * 1024 + 1, 1));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/downloads/torrent-previews",
+      headers: upload.headers,
+      payload: upload.body
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(countTorrentPreviews()).toBe(0);
+    await app.close();
+  });
+
+  it("rejects torrent uploads larger than 16 MiB without creating a preview", async () => {
+    const { app } = await setup();
+    const upload = torrentUpload("oversized.torrent", Buffer.alloc(16 * 1024 * 1024 + 1, 1));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/downloads/torrent-previews",
+      headers: upload.headers,
+      payload: upload.body
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(countTorrentPreviews()).toBe(0);
+    await app.close();
+  });
+
   it("creates tasks, validates collisions, and transitions task state", async () => {
     const { app, root } = await setup();
     const create = await app.inject({
@@ -182,6 +370,80 @@ describe("download API", () => {
     await app.close();
   });
 
+  it("records pause and stop requests for seeding torrent tasks", async () => {
+    const { app } = await setup();
+    const createSeedingTask = async (fileName: string) => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/downloads",
+        payload: {
+          url: `https://example.com/${fileName}`,
+          storagePoolId: poolId,
+          targetDirectory: ".",
+          fileName
+        }
+      });
+      const id = response.json().task.id as string;
+      db?.prepare(`
+        UPDATE download_tasks
+        SET source_kind = 'torrent', status = 'seeding', worker_id = 'rust-worker',
+            lease_expires_at = ?, phase = 'seeding', content_completed_at = ?, seed_started_at = ?
+        WHERE id = ?
+      `).run(
+        new Date(Date.now() + 30_000).toISOString(),
+        new Date().toISOString(),
+        new Date().toISOString(),
+        id
+      );
+      return id;
+    };
+
+    const pauseId = await createSeedingTask("pause-seeding");
+    const pause = await app.inject({ method: "POST", url: `/api/downloads/${pauseId}/pause` });
+    expect(pause.statusCode).toBe(200);
+    expect(pause.json().task).toMatchObject({
+      status: "seeding",
+      workerId: "rust-worker",
+      controlRequested: "pause"
+    });
+
+    const stopId = await createSeedingTask("stop-seeding");
+    const stop = await app.inject({ method: "POST", url: `/api/downloads/${stopId}/stop-seeding` });
+    expect(stop.statusCode).toBe(200);
+    expect(stop.json().task).toMatchObject({
+      status: "seeding",
+      workerId: "rust-worker",
+      controlRequested: "stop_seeding"
+    });
+    await app.close();
+  });
+
+  it("removes a torrent staging directory when cancelling before publication", async () => {
+    const { app, root } = await setup();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/downloads",
+      payload: {
+        url: "https://example.com/release",
+        storagePoolId: poolId,
+        targetDirectory: ".",
+        fileName: "release"
+      }
+    });
+    const task = response.json().task as { id: string; partialPath: string };
+    db?.prepare("UPDATE download_tasks SET source_kind = 'torrent' WHERE id = ?").run(task.id);
+    const stagingPath = path.join(root, task.partialPath);
+    await mkdir(stagingPath);
+    await writeFile(path.join(stagingPath, "piece.bin"), "partial");
+
+    const cancel = await app.inject({ method: "POST", url: `/api/downloads/${task.id}/cancel` });
+
+    expect(cancel.statusCode).toBe(200);
+    expect(cancel.json().task.status).toBe("cancelled");
+    await expect(access(stagingPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await app.close();
+  });
+
   it("persists all reliability settings and validates bounds", async () => {
     const { app } = await setup();
     const initial = await app.inject({ method: "GET", url: "/api/settings/downloads" });
@@ -305,6 +567,27 @@ async function setup(): Promise<{
   db = openCyberOsDb(path.join(tempDir, "cyberos.sqlite"));
   const app = await buildServer({ config: testConfig(root), db, system: storageSystem() });
   return { app, root };
+}
+
+function torrentUpload(filename: string, content: Buffer): {
+  headers: { "content-type": string };
+  body: Buffer;
+} {
+  const boundary = "cyberos-torrent-boundary";
+  return {
+    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    body: Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="torrent"; filename="${filename}"\r\nContent-Type: application/x-bittorrent\r\n\r\n`
+      ),
+      content,
+      Buffer.from(`\r\n--${boundary}--\r\n`)
+    ])
+  };
+}
+
+function countTorrentPreviews(): number {
+  return (db!.prepare("SELECT COUNT(*) AS count FROM torrent_previews").get() as { count: number }).count;
 }
 
 function testConfig(root: string): CyberOsRuntime {

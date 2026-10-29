@@ -1,5 +1,5 @@
 [Unit]
-Description=CyberOS HTTP downloader
+Description=CyberOS HTTP and BitTorrent downloader
 Documentation=file:///usr/share/doc/cyberos/README.md
 After=network-online.target local-fs.target cyberos-api.service cyberos-state-init.service
 Wants=network-online.target

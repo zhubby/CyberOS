@@ -9,6 +9,7 @@ import type {
   DownloadTaskStatus,
   DownloadTaskPhase,
   DownloadMode,
+  DownloadSourceKind,
   DownloadControlRequest,
   DownloadErrorCode,
   DockerConsoleAuthorizationRecord,
@@ -257,6 +258,17 @@ export type DbDownloadTaskRow = {
   next_retry_at: string | null;
   control_requested: DownloadControlRequest | null;
   segment_count: number;
+  source_kind: DownloadSourceKind;
+  torrent_info_hash: string | null;
+  torrent_name: string | null;
+  selected_file_count: number;
+  uploaded_bytes: number;
+  upload_speed_bytes_per_second: number;
+  peer_count: number;
+  seed_ratio_limit: number;
+  seed_time_limit_seconds: number;
+  content_completed_at: string | null;
+  seed_started_at: string | null;
 };
 
 export type DbBluetoothTransferRow = {

@@ -87,6 +87,9 @@ describe("native packaging artifacts", () => {
       "RequiresMountsFor=/cyberos/data"
     );
     await expect(readPackagingFile("systemd", "cyberos-downloader.service")).resolves.toContain(
+      "Description=CyberOS HTTP and BitTorrent downloader"
+    );
+    await expect(readPackagingFile("systemd", "cyberos-downloader.service")).resolves.toContain(
       "ExecStart=/usr/lib/cyberos/bin/cyberos-downloader"
     );
     await expect(readPackagingFile("systemd", "cyberos-downloader.service")).resolves.toContain(

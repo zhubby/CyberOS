@@ -18,7 +18,7 @@ flowchart LR
   Worker[Agent worker] <--> DB
   Worker --> Agent[Pi agent]
   Agent --> Tools
-  Downloader[Rust HTTP downloader] <--> DB
+  Downloader[Rust HTTP + BitTorrent downloader] <--> DB
   Downloader -->|dirfd / openat2| Storage
   Indexer[Indexer] -->|扫描与增量写入| DB
   Ops[Ops health / maintenance] --> DB

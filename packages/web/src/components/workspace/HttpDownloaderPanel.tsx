@@ -3,12 +3,17 @@ import {
   CheckCircle2,
   CircleAlert,
   Download,
+  FileArchive,
+  FileUp,
   FolderOpen,
+  Link2,
   LoaderCircle,
+  Magnet,
   Pause,
   Play,
   Plus,
   RotateCw,
+  Square,
   Trash2,
   X
 } from "lucide-react";
@@ -16,10 +21,16 @@ import { useTranslation } from "react-i18next";
 import {
   actOnDownload,
   createDownload,
+  createMagnetPreview,
+  createTorrentDownload,
   deleteDownload,
+  deleteTorrentPreview,
   getDownloads,
+  getTorrentPreview,
+  uploadTorrentPreview,
   type DownloadTask,
-  type DownloadWorkerHealth
+  type DownloadWorkerHealth,
+  type TorrentPreview
 } from "../../api.js";
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -30,6 +41,7 @@ import { StorageFilePickerDialog, type StorageFilePickerPool, type StorageFileSe
 export type HttpDownloaderPool = StorageFilePickerPool;
 
 type DownloadFilter = "all" | "active" | "completed" | "failed";
+type DownloadSourceMode = "link" | "torrent-file";
 
 export function HttpDownloaderPanel({
   pools,
@@ -66,7 +78,12 @@ export function HttpDownloaderPanel({
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [sourceMode, setSourceMode] = useState<DownloadSourceMode>("link");
   const [url, setUrl] = useState("");
+  const [torrentFileName, setTorrentFileName] = useState("");
+  const [torrentPreview, setTorrentPreview] = useState<TorrentPreview | null>(null);
+  const [selectedFileIndices, setSelectedFileIndices] = useState<number[]>([]);
+  const [resolvingTorrent, setResolvingTorrent] = useState(false);
   const [fileName, setFileName] = useState("");
   const [sha256, setSha256] = useState("");
   const [fileNameEdited, setFileNameEdited] = useState(false);
@@ -76,8 +93,15 @@ export function HttpDownloaderPanel({
   const [workerHealth, setWorkerHealth] = useState<DownloadWorkerHealth | null>(null);
   const createDialogRef = useRef<HTMLFormElement | null>(null);
   const createUrlInputRef = useRef<HTMLInputElement | null>(null);
+  const torrentFileInputRef = useRef<HTMLInputElement | null>(null);
+  const torrentPreviewRequestRef = useRef(0);
   const selectedPool = pools.find((pool) => pool.id === (target?.storagePoolId ?? selectedStoragePoolId)) ?? null;
   const mountedPools = useMemo(() => pools.filter((pool) => pool.status !== "offline"), [pools]);
+  const torrentSource = sourceMode === "torrent-file" || isMagnetLink(url);
+  const torrentReady = torrentPreview?.status === "ready";
+  const sourceReady = torrentSource
+    ? torrentReady && selectedFileIndices.length > 0
+    : sourceMode === "link" && Boolean(url.trim());
   useEffect(() => {
     let active = true;
     void getDownloads()
@@ -123,6 +147,10 @@ export function HttpDownloaderPanel({
     };
   }, []);
 
+  useEffect(() => () => {
+    torrentPreviewRequestRef.current += 1;
+  }, []);
+
   useEffect(() => {
     if (!createOpen) return;
     const pool = pools.find((candidate) => candidate.id === selectedStoragePoolId) ?? mountedPools[0] ?? null;
@@ -148,12 +176,12 @@ export function HttpDownloaderPanel({
   }, [createOpen]);
 
   const visibleTasks = useMemo(() => tasks.filter((task) => {
-    if (filter === "active") return task.status === "queued" || task.status === "running" || task.status === "paused";
+    if (filter === "active") return task.status === "queued" || task.status === "running" || task.status === "paused" || task.status === "seeding";
     if (filter === "completed") return task.status === "completed";
     if (filter === "failed") return task.status === "failed" || task.status === "cancelled";
     return true;
   }), [filter, tasks]);
-  const activeCount = tasks.filter((task) => task.status === "running" || task.status === "paused").length;
+  const activeCount = tasks.filter((task) => task.status === "running" || task.status === "paused" || task.status === "seeding").length;
   const queueCount = tasks.filter((task) => task.status === "queued").length;
   const totalSpeed = tasks.reduce((sum, task) => sum + (task.status === "running" ? task.speedBytesPerSecond : 0), 0);
   const createControlState = downloadCreateControlState(loading, storagePoolsLoading, mountedPools.length > 0);
@@ -167,7 +195,13 @@ export function HttpDownloaderPanel({
     }
     const pool = pools.find((candidate) => candidate.id === selectedStoragePoolId) ?? mountedPools[0] ?? null;
     setTarget(pool ? { storagePoolId: pool.id, path: pool.path, name: pool.name } : null);
+    torrentPreviewRequestRef.current += 1;
+    setSourceMode("link");
     setUrl("");
+    setTorrentFileName("");
+    setTorrentPreview(null);
+    setSelectedFileIndices([]);
+    setResolvingTorrent(false);
     setFileName("");
     setSha256("");
     setFileNameEdited(false);
@@ -175,13 +209,21 @@ export function HttpDownloaderPanel({
   }
 
   function closeCreateDialog() {
-    if (!submitting) setCreateOpen(false);
+    if (submitting) return;
+    torrentPreviewRequestRef.current += 1;
+    setResolvingTorrent(false);
+    if (torrentPreview) {
+      void deleteTorrentPreview(torrentPreview.id).catch(() => undefined);
+    }
+    setTorrentPreview(null);
+    setSelectedFileIndices([]);
+    setCreateOpen(false);
   }
 
   function handleCreateDialogKeyDown(event: KeyboardEvent<HTMLFormElement>) {
     if (event.key === "Escape" && !event.defaultPrevented && !submitting) {
       event.preventDefault();
-      setCreateOpen(false);
+      closeCreateDialog();
       return;
     }
     if (event.key !== "Tab") return;
@@ -206,10 +248,86 @@ export function HttpDownloaderPanel({
   }
 
   function updateUrl(value: string) {
+    if (resolvingTorrent || torrentPreview) {
+      torrentPreviewRequestRef.current += 1;
+      if (torrentPreview) {
+        void deleteTorrentPreview(torrentPreview.id).catch(() => undefined);
+      }
+      setTorrentPreview(null);
+      setSelectedFileIndices([]);
+      setResolvingTorrent(false);
+    }
     setUrl(value);
     if (!fileNameEdited) {
-      setFileName(deriveFileName(value));
+      setFileName(isMagnetLink(value) ? "" : deriveFileName(value));
     }
+  }
+
+  function selectSourceMode(mode: DownloadSourceMode) {
+    if (sourceMode === mode) return;
+    torrentPreviewRequestRef.current += 1;
+    if (torrentPreview) {
+      void deleteTorrentPreview(torrentPreview.id).catch(() => undefined);
+    }
+    setSourceMode(mode);
+    setUrl("");
+    setTorrentFileName("");
+    setTorrentPreview(null);
+    setSelectedFileIndices([]);
+    setResolvingTorrent(false);
+    setFileName("");
+    setSha256("");
+    setFileNameEdited(false);
+  }
+
+  async function resolveTorrent(createPreview: () => Promise<TorrentPreview>) {
+    if (torrentPreview) {
+      void deleteTorrentPreview(torrentPreview.id).catch(() => undefined);
+    }
+    const requestId = torrentPreviewRequestRef.current + 1;
+    torrentPreviewRequestRef.current = requestId;
+    setResolvingTorrent(true);
+    setTorrentPreview(null);
+    setSelectedFileIndices([]);
+    onNotifyError(null);
+    try {
+      let preview = await createPreview();
+      if (torrentPreviewRequestRef.current !== requestId) return;
+      setTorrentPreview(preview);
+      while (preview.status === "queued" || preview.status === "resolving") {
+        await delay(750);
+        if (torrentPreviewRequestRef.current !== requestId) return;
+        preview = await getTorrentPreview(preview.id);
+        if (torrentPreviewRequestRef.current !== requestId) return;
+        setTorrentPreview(preview);
+      }
+      if (preview.status !== "ready") {
+        throw new Error(preview.error ?? t(`workspace.downloads.previewStatus.${preview.status}`));
+      }
+      setSelectedFileIndices(preview.files.map((file) => file.fileIndex));
+      setFileName(preview.name?.trim() || "torrent");
+      setFileNameEdited(false);
+    } catch (error) {
+      if (torrentPreviewRequestRef.current === requestId) {
+        onNotifyError(errorMessage(error));
+      }
+    } finally {
+      if (torrentPreviewRequestRef.current === requestId) {
+        setResolvingTorrent(false);
+      }
+    }
+  }
+
+  function resolveMagnet() {
+    const magnet = url.trim();
+    if (!isMagnetLink(magnet) || resolvingTorrent) return;
+    void resolveTorrent(() => createMagnetPreview(magnet));
+  }
+
+  function selectTorrentFile(file: File | undefined) {
+    if (!file || resolvingTorrent) return;
+    setTorrentFileName(file.name);
+    void resolveTorrent(() => uploadTorrentPreview(file));
   }
 
   function handleDirectorySelection(selection: StorageFileSelection) {
@@ -220,18 +338,31 @@ export function HttpDownloaderPanel({
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!target || !fileName.trim() || !url.trim() || submitting) return;
+    if (!target || !fileName.trim() || !sourceReady || submitting) return;
     setSubmitting(true);
     onNotifyError(null);
     try {
-      const task = await createDownload({
-        url: url.trim(),
-        storagePoolId: target.storagePoolId,
-        targetDirectory: target.path,
-        fileName: fileName.trim(),
-        ...(sha256.trim() ? { sha256: sha256.trim() } : {})
-      });
+      const task = torrentSource && torrentPreview?.status === "ready"
+        ? await createTorrentDownload({
+            torrentPreviewId: torrentPreview.id,
+            selectedFileIndices,
+            storagePoolId: target.storagePoolId,
+            targetDirectory: target.path,
+            fileName: fileName.trim(),
+            seedRatioLimit: 1,
+            seedTimeLimitSeconds: 7_200
+          })
+        : await createDownload({
+            url: url.trim(),
+            storagePoolId: target.storagePoolId,
+            targetDirectory: target.path,
+            fileName: fileName.trim(),
+            ...(sha256.trim() ? { sha256: sha256.trim() } : {})
+          });
       setTasks((current) => [task, ...current.filter((item) => item.id !== task.id)]);
+      torrentPreviewRequestRef.current += 1;
+      setTorrentPreview(null);
+      setSelectedFileIndices([]);
       setCreateOpen(false);
       onNotifySuccess(t("workspace.downloads.created"));
     } catch (error) {
@@ -241,7 +372,7 @@ export function HttpDownloaderPanel({
     }
   }
 
-  async function runAction(task: DownloadTask, action: "pause" | "resume" | "cancel" | "retry") {
+  async function runAction(task: DownloadTask, action: "pause" | "resume" | "cancel" | "retry" | "stop-seeding") {
     const key = `${action}:${task.id}`;
     if (pendingAction) return;
     setPendingAction(key);
@@ -405,16 +536,84 @@ export function HttpDownloaderPanel({
                     <p>{t("workspace.downloads.sourceDescription")}</p>
                   </div>
                 </div>
-                <label className="download-form-field download-form-field-wide">
-                  <span>{t("workspace.downloads.url")}</span>
-                  <input ref={createUrlInputRef} type="url" value={url} onChange={(event) => updateUrl(event.target.value)} placeholder="https://example.com/file.zip" />
-                </label>
+                <div className="download-source-modes" role="tablist" aria-label={t("workspace.downloads.sourceModeLabel")}>
+                  <button type="button" role="tab" aria-selected={sourceMode === "link"} className={sourceMode === "link" ? "is-active" : ""} onClick={() => selectSourceMode("link")}>
+                    <Link2 aria-hidden="true" size={14} />
+                    <span>{t("workspace.downloads.sourceMode.link")}</span>
+                  </button>
+                  <button type="button" role="tab" aria-selected={sourceMode === "torrent-file"} className={sourceMode === "torrent-file" ? "is-active" : ""} onClick={() => selectSourceMode("torrent-file")}>
+                    <FileUp aria-hidden="true" size={14} />
+                    <span>{t("workspace.downloads.sourceMode.torrentFile")}</span>
+                  </button>
+                </div>
+                {sourceMode === "link" ? (
+                  <div className="download-source-input-row">
+                    <label className="download-form-field download-form-field-wide">
+                      <span>{t("workspace.downloads.link")}</span>
+                      <input
+                        ref={createUrlInputRef}
+                        type="text"
+                        inputMode="url"
+                        value={url}
+                        onChange={(event) => updateUrl(event.target.value)}
+                        placeholder={t("workspace.downloads.linkPlaceholder")}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+                    </label>
+                    {isMagnetLink(url) ? (
+                      <button type="button" className="secondary-button download-resolve-button" disabled={resolvingTorrent || torrentReady} onClick={resolveMagnet}>
+                        {resolvingTorrent ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Magnet aria-hidden="true" size={14} />}
+                        <span>{t(torrentReady ? "workspace.downloads.metadataReady" : "workspace.downloads.resolveMetadata")}</span>
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="download-torrent-upload">
+                    <input
+                      ref={torrentFileInputRef}
+                      type="file"
+                      accept=".torrent,application/x-bittorrent"
+                      hidden
+                      onChange={(event) => {
+                        selectTorrentFile(event.target.files?.[0]);
+                        event.target.value = "";
+                      }}
+                    />
+                    <button type="button" className="download-torrent-pick" disabled={resolvingTorrent} onClick={() => torrentFileInputRef.current?.click()}>
+                      {resolvingTorrent ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <FileArchive aria-hidden="true" size={16} />}
+                      <span>{torrentFileName || t("workspace.downloads.chooseTorrentFile")}</span>
+                    </button>
+                    <small>{t("workspace.downloads.torrentFileHint")}</small>
+                  </div>
+                )}
+                {torrentPreview ? (
+                  <div className="download-preview-status" data-status={torrentPreview.status} role="status">
+                    {resolvingTorrent ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : torrentPreview.status === "ready" ? <CheckCircle2 aria-hidden="true" size={15} /> : <CircleAlert aria-hidden="true" size={15} />}
+                    <div>
+                      <strong>{t(`workspace.downloads.previewStatus.${torrentPreview.status}`)}</strong>
+                      <span>{torrentPreview.status === "ready"
+                        ? t("workspace.downloads.previewSummary", { name: torrentPreview.name ?? t("workspace.downloads.sourceKind.torrent"), count: torrentPreview.fileCount, size: formatBytes(torrentPreview.totalBytes ?? 0, locale) })
+                        : torrentPreview.error ?? t("workspace.downloads.previewWaiting")}</span>
+                    </div>
+                  </div>
+                ) : null}
+                {torrentPreview?.status === "ready" ? (
+                  <TorrentFileSelector
+                    files={torrentPreview.files}
+                    selectedFileIndices={selectedFileIndices}
+                    locale={locale}
+                    disabled={submitting}
+                    onChange={setSelectedFileIndices}
+                  />
+                ) : null}
                 <label className="download-form-field">
-                  <span>{t("workspace.downloads.fileName")}</span>
+                  <span>{t(torrentSource ? "workspace.downloads.outputFolderName" : "workspace.downloads.fileName")}</span>
                   <input value={fileName} onChange={(event) => { setFileNameEdited(true); setFileName(event.target.value); }} />
-                  <small>{t("workspace.downloads.fileNameHint")}</small>
+                  <small>{t(torrentSource ? "workspace.downloads.outputFolderHint" : "workspace.downloads.fileNameHint")}</small>
                 </label>
-                <label className="download-form-field download-form-field-wide">
+                {!torrentSource ? <label className="download-form-field download-form-field-wide">
                   <span>{t("workspace.downloads.sha256")}</span>
                   <input
                     value={sha256}
@@ -425,7 +624,8 @@ export function HttpDownloaderPanel({
                     spellCheck={false}
                   />
                   <small>{t("workspace.downloads.sha256Hint")}</small>
-                </label>
+                </label> : null}
+                {torrentReady ? <p className="download-seeding-policy">{t("workspace.downloads.seedingPolicy")}</p> : null}
               </section>
 
               <section className="download-form-section">
@@ -454,7 +654,7 @@ export function HttpDownloaderPanel({
             </div>
             <footer className="download-create-dialog-footer">
               <button type="button" className="secondary-button" onClick={closeCreateDialog} disabled={submitting}>{t("common.actions.cancel")}</button>
-              <button type="submit" className="primary-button" disabled={submitting || !target || !url.trim() || !fileName.trim()} aria-busy={submitting || undefined}>
+              <button type="submit" className="primary-button" disabled={submitting || !target || !sourceReady || !fileName.trim()} aria-busy={submitting || undefined}>
                 {submitting ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Download aria-hidden="true" size={15} />}
                 <span>{t("workspace.downloads.startDownload")}</span>
               </button>
@@ -537,6 +737,66 @@ function DownloadsInitialSkeleton() {
   );
 }
 
+export function TorrentFileSelector({
+  files,
+  selectedFileIndices,
+  locale,
+  disabled,
+  onChange
+}: {
+  files: TorrentPreview["files"];
+  selectedFileIndices: number[];
+  locale: SupportedLocale;
+  disabled: boolean;
+  onChange: (fileIndices: number[]) => void;
+}) {
+  const { t } = useTranslation();
+  const selected = new Set(selectedFileIndices);
+  const allSelected = files.length > 0 && files.every((file) => selected.has(file.fileIndex));
+  const selectedBytes = files.reduce((sum, file) => selected.has(file.fileIndex) ? sum + file.sizeBytes : sum, 0);
+  const sortedSelection = (values: number[]) => [...values].sort((left, right) => left - right);
+
+  return (
+    <div className="torrent-file-selector" aria-label={t("workspace.downloads.torrentFiles")}>
+      <div className="torrent-file-selector-toolbar">
+        <label>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            disabled={disabled || files.length === 0}
+            onChange={(event) => onChange(event.target.checked ? files.map((file) => file.fileIndex) : [])}
+          />
+          <span>{t("workspace.downloads.selectAllFiles")}</span>
+        </label>
+        <span>{t("workspace.downloads.fileSelectionSummary", {
+          selected: selected.size,
+          total: files.length,
+          size: formatBytes(selectedBytes, locale)
+        })}</span>
+      </div>
+      <div className="torrent-file-list">
+        {files.map((file) => (
+          <label key={file.fileIndex} title={file.path}>
+            <input
+              type="checkbox"
+              checked={selected.has(file.fileIndex)}
+              disabled={disabled}
+              onChange={(event) => {
+                const next = new Set(selected);
+                if (event.target.checked) next.add(file.fileIndex);
+                else next.delete(file.fileIndex);
+                onChange(sortedSelection([...next]));
+              }}
+            />
+            <span>{file.path}</span>
+            <small>{formatBytes(file.sizeBytes, locale)}</small>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DownloadTaskRow({
   task,
   locale,
@@ -548,7 +808,7 @@ export function DownloadTaskRow({
   task: DownloadTask;
   locale: SupportedLocale;
   pendingAction: string | null;
-  onAction: (action: "pause" | "resume" | "cancel" | "retry") => void;
+  onAction: (action: "pause" | "resume" | "cancel" | "retry" | "stop-seeding") => void;
   onDelete: () => void;
   onOpenDirectory: () => void;
 }) {
@@ -559,10 +819,13 @@ export function DownloadTaskRow({
   const isIndeterminate = progress === null && task.status === "running";
   const progressValue = progress ?? (task.status === "completed" ? 100 : null);
   const progressWidth = progressValue ?? (isIndeterminate ? 36 : 0);
-  const host = getHost(task.url);
-  const canPause = task.status === "queued" || task.status === "running";
+  const host = task.sourceKind === "http"
+    ? getHost(task.url)
+    : task.torrentName ?? t(`workspace.downloads.sourceKind.${task.sourceKind}`);
+  const canPause = task.status === "queued" || task.status === "running" || task.status === "seeding";
   const canResume = task.status === "paused";
   const canCancel = task.status === "queued" || task.status === "running" || task.status === "paused";
+  const canStopSeeding = task.status === "seeding";
   const canRetry = task.status === "failed" || task.status === "cancelled";
   const actionBusy = pendingAction?.endsWith(`:${task.id}`) === true;
   const retryLabel = formatRetry(task, locale, t);
@@ -573,7 +836,15 @@ export function DownloadTaskRow({
       <div className="download-task-main">
         <div className="download-task-heading">
           <span className="download-task-icon" aria-hidden="true">
-            {task.status === "completed" ? <CheckCircle2 size={17} /> : task.status === "failed" ? <CircleAlert size={17} /> : <Download size={17} />}
+            {task.status === "completed"
+              ? <CheckCircle2 size={17} />
+              : task.status === "failed"
+                ? <CircleAlert size={17} />
+                : task.sourceKind === "magnet"
+                  ? <Magnet size={17} />
+                  : task.sourceKind === "torrent"
+                    ? <FileArchive size={17} />
+                    : <Download size={17} />}
           </span>
           <div>
             <strong title={task.targetFileName}>{task.targetFileName}</strong>
@@ -602,6 +873,14 @@ export function DownloadTaskRow({
           {task.downloadMode === "segmented" && task.segmentCount > 0
             ? <span>{t("workspace.downloads.segments", { count: task.segmentCount })}</span>
             : null}
+          {task.sourceKind !== "http" ? (
+            <>
+              <span>{t("workspace.downloads.uploaded", { value: formatBytes(task.uploadedBytes, locale) })}</span>
+              <span>{t("workspace.downloads.uploadSpeed", { value: `${formatBytes(task.uploadSpeedBytesPerSecond, locale)}/s` })}</span>
+              <span>{t("workspace.downloads.peers", { count: task.peerCount })}</span>
+              <span>{t("workspace.downloads.ratio", { value: torrentRatio(task) })}</span>
+            </>
+          ) : null}
           {task.controlRequested
             ? <span>{t(`workspace.downloads.control.${task.controlRequested}`)}</span>
             : null}
@@ -616,7 +895,7 @@ export function DownloadTaskRow({
       </div>
       <div className="download-task-actions" aria-label={t("workspace.downloads.actions")}>
         {canPause ? (
-          <IconAction icon={<Pause aria-hidden="true" size={14} />} label={t("workspace.downloads.pause")} disabled={actionBusy} busy={actionBusy} onClick={() => onAction("pause")} />
+          <IconAction icon={<Pause aria-hidden="true" size={14} />} label={t(task.status === "seeding" ? "workspace.downloads.pauseSeeding" : "workspace.downloads.pause")} disabled={actionBusy} busy={actionBusy} onClick={() => onAction("pause")} />
         ) : null}
         {canResume ? (
           <IconAction icon={<Play aria-hidden="true" size={14} />} label={t("workspace.downloads.resume")} disabled={actionBusy} busy={actionBusy} onClick={() => onAction("resume")} />
@@ -627,8 +906,11 @@ export function DownloadTaskRow({
         {canCancel ? (
           <IconAction icon={<X aria-hidden="true" size={14} />} label={t("workspace.downloads.cancel")} disabled={actionBusy} busy={actionBusy} onClick={() => onAction("cancel")} />
         ) : null}
+        {canStopSeeding ? (
+          <IconAction icon={<Square aria-hidden="true" size={13} />} label={t("workspace.downloads.stopSeeding")} disabled={actionBusy} busy={actionBusy} onClick={() => onAction("stop-seeding")} />
+        ) : null}
         <IconAction icon={<FolderOpen aria-hidden="true" size={14} />} label={t("workspace.downloads.openDirectory")} onClick={onOpenDirectory} />
-        {task.status !== "running" ? (
+        {task.status !== "running" && task.status !== "seeding" ? (
           <IconAction icon={<Trash2 aria-hidden="true" size={14} />} label={t("workspace.downloads.remove")} disabled={actionBusy} busy={actionBusy} onClick={onDelete} />
         ) : null}
       </div>
@@ -663,12 +945,25 @@ function deriveFileName(rawUrl: string): string {
   }
 }
 
+function isMagnetLink(value: string): boolean {
+  return value.trim().toLowerCase().startsWith("magnet:");
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 function getHost(rawUrl: string): string {
   try {
     return new URL(rawUrl).host;
   } catch {
     return rawUrl;
   }
+}
+
+function torrentRatio(task: DownloadTask): string {
+  if (!task.totalBytes || task.totalBytes <= 0) return "0.00";
+  return (task.uploadedBytes / task.totalBytes).toFixed(2);
 }
 
 function formatProgress(task: DownloadTask, locale: SupportedLocale, t: (key: string, options?: Record<string, unknown>) => string): string {

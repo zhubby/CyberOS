@@ -24,6 +24,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true
+librqbit = { version = "=9.0.1", default-features = false, features = ["rust-tls"] }
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import fastifyMultipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -69,6 +70,14 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   await server.register(rateLimit, {
     max: 240,
     timeWindow: "1 minute"
+  });
+  await server.register(fastifyMultipart, {
+    limits: {
+      fields: 0,
+      files: 1,
+      fileSize: 16 * 1024 * 1024,
+      parts: 1
+    }
   });
 
   registerErrorHandler(server);

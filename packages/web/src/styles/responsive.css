@@ -855,6 +855,15 @@
     grid-template-columns: 1fr;
   }
 
+  .download-source-input-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .download-resolve-button {
+    width: 100%;
+    justify-content: center;
+  }
+
   .download-create-dialog-footer {
     display: grid;
     grid-template-columns: 1fr 1.3fr;
@@ -870,6 +879,12 @@
 
   .download-create-dialog-header p {
     max-width: none;
+  }
+
+  .torrent-file-selector-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
   }
 
   .settings-download-control {

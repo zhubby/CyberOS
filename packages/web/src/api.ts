@@ -97,6 +97,8 @@ import type {
   DownloadWorkerHealth as SharedDownloadWorkerHealth,
   DownloadTaskRecord as SharedDownloadTask,
   PublicDownloadSettings,
+  TorrentPreviewDetails as SharedTorrentPreview,
+  TorrentTaskFileRecord as SharedTorrentTaskFile,
   VmSummary as PublicVmSummary,
   VmOperationRecord,
   VmOperationAction,
@@ -267,6 +269,8 @@ export type SystemOperations = SharedSystemOperationsResponse;
 export type DownloadTask = SharedDownloadTask;
 export type DownloadSettings = PublicDownloadSettings;
 export type DownloadWorkerHealth = SharedDownloadWorkerHealth;
+export type TorrentPreview = SharedTorrentPreview;
+export type TorrentTaskFile = SharedTorrentTaskFile;
 export type PhotoAsset = SharedPhotoAsset;
 export type PhotoJob = SharedPhotoJob;
 export type PhotoLibrarySettings = SharedPhotoLibrarySettings;
@@ -2174,9 +2178,67 @@ export async function createDownload(input: {
   return body.task;
 }
 
+export async function createMagnetPreview(magnet: string): Promise<TorrentPreview> {
+  const response = await fetch("/api/downloads/torrent-previews", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ magnet })
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { preview: TorrentPreview }).preview;
+}
+
+export async function uploadTorrentPreview(file: File): Promise<TorrentPreview> {
+  const body = new FormData();
+  body.set("torrent", file);
+  const response = await fetch("/api/downloads/torrent-previews", {
+    method: "POST",
+    body
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { preview: TorrentPreview }).preview;
+}
+
+export async function getTorrentPreview(id: string): Promise<TorrentPreview> {
+  const response = await fetch(`/api/downloads/torrent-previews/${encodeURIComponent(id)}`);
+  await ensureOk(response);
+  return ((await response.json()) as { preview: TorrentPreview }).preview;
+}
+
+export async function deleteTorrentPreview(id: string): Promise<void> {
+  const response = await fetch(`/api/downloads/torrent-previews/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+  await ensureOk(response);
+}
+
+export async function createTorrentDownload(input: {
+  torrentPreviewId: string;
+  selectedFileIndices: number[];
+  storagePoolId: string;
+  targetDirectory: string;
+  fileName: string;
+  seedRatioLimit: number;
+  seedTimeLimitSeconds: number;
+}): Promise<DownloadTask> {
+  const response = await fetch("/api/downloads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { task: DownloadTask }).task;
+}
+
+export async function getDownloadTaskFiles(id: string): Promise<TorrentTaskFile[]> {
+  const response = await fetch(`/api/downloads/${encodeURIComponent(id)}/files`);
+  await ensureOk(response);
+  return ((await response.json()) as { files: TorrentTaskFile[] }).files;
+}
+
 export async function actOnDownload(
   id: string,
-  action: "pause" | "resume" | "cancel" | "retry"
+  action: "pause" | "resume" | "cancel" | "retry" | "stop-seeding"
 ): Promise<DownloadTask> {
   const response = await fetch(`/api/downloads/${encodeURIComponent(id)}/${action}`, {
     method: "POST"

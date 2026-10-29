@@ -17,6 +17,10 @@ pub enum ErrorCode {
     Storage,
     TargetConflict,
     ChecksumMismatch,
+    TorrentInvalid,
+    TorrentPrivate,
+    TorrentUnsafe,
+    TorrentEngine,
     Permission,
     Database,
     Internal,
@@ -39,6 +43,10 @@ impl ErrorCode {
             Self::Storage => "storage",
             Self::TargetConflict => "target_conflict",
             Self::ChecksumMismatch => "checksum_mismatch",
+            Self::TorrentInvalid => "torrent_invalid",
+            Self::TorrentPrivate => "private_torrent",
+            Self::TorrentUnsafe => "tracker_blocked",
+            Self::TorrentEngine => "torrent_metadata",
             Self::Permission => "permission",
             Self::Database => "database",
             Self::Internal => "internal",
@@ -124,5 +132,13 @@ mod tests {
             DownloadError::storage(io::Error::from(io::ErrorKind::PermissionDenied)).code,
             ErrorCode::Permission
         );
+    }
+
+    #[test]
+    fn torrent_errors_use_the_shared_api_wire_codes() {
+        assert_eq!(ErrorCode::TorrentInvalid.as_str(), "torrent_invalid");
+        assert_eq!(ErrorCode::TorrentPrivate.as_str(), "private_torrent");
+        assert_eq!(ErrorCode::TorrentUnsafe.as_str(), "tracker_blocked");
+        assert_eq!(ErrorCode::TorrentEngine.as_str(), "torrent_metadata");
     }
 }

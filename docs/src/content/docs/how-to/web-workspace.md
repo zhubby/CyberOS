@@ -73,7 +73,9 @@ Workspace 的 Terminal 使用 Rust terminal 和 tmux 承载受限 PTY，并以 `
 
 同一标签同时只允许一个控制端。另一个浏览器连接时，原连接会显示“会话已在其他位置打开”并停止自动重连；点击重新接管会把控制权取回。整机重启后 SQLite 中的标签、名称、顺序和活动项仍保留，但 tmux 进程和 scrollback 不会恢复，首次重新连接会启动新的 shell。连接失败时检查 `tmux`、`cyberos-terminald.service` 和 terminal identity drop-in。
 
-Downloads 面板使用独立 Rust `cyberos-downloader.service`，支持公网 HTTP/HTTPS 地址、可选 SHA-256、目录选择、排队、协作式暂停/继续、取消、自动重试和历史。任务行显示 worker health、单流/分段模式、校验/发布阶段、重试倒计时和稳定错误码；失败任务保留 `.part` 文件，取消任务清理临时文件，同名目标不会覆盖。大文件在来源提供可靠 validator 时最多使用设置中指定的 Range 并发；设置页还可调整分段阈值、重试、超时、最低剩余空间和最大文件大小。Docker、VM、Shares、Storage 面板只在配置和宿主机能力可用时展示完整操作；这些第一方管理流程均直接执行并写入领域审计。
+Downloads 面板使用独立 Rust `cyberos-downloader.service`，支持公网 HTTP/HTTPS、Magnet 和上传 `.torrent` 文件。Magnet 与种子先解析元数据，再选择文件和目标文件夹；私有种子、电驴、本地或私网 tracker 不支持。BT 下载使用独立单槽，任务行显示下载/上传速率、peer 数和分享率；内容发布后默认做种到分享率 1.0 或 2 小时，以先到者为准，也可手动暂停或停止做种。
+
+HTTP 任务支持可选 SHA-256、单流/分段、自动重试和协作式暂停/继续/取消。失败任务保留 `.part` 文件，取消任务清理临时文件；BT 取消会清理隐藏暂存目录。两种来源都以不覆盖方式发布并进入索引队列。设置页中的并发、Range、重试和超时参数只控制 HTTP；Docker、VM、Shares、Storage 面板只在配置和宿主机能力可用时展示完整操作。
 
 Docker 面板的镜像区域可以搜索本地镜像、查看完整 ID/tags/digests/占用信息、拉取镜像和删除未被容器引用的具体 tag。删除需要在详情弹窗中再次确认，不会强制删除，也不进入 agent approval。多标签镜像必须先选择要删除的具体 tag；无标签镜像使用完整 ID。
 

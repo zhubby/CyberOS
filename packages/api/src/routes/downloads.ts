@@ -1,12 +1,17 @@
 import { constants as fsConstants } from "node:fs";
-import { access, lstat, stat, unlink } from "node:fs/promises";
+import { access, lstat, rm, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   createDownloadTask,
+  createTorrentDownloadTask,
+  createTorrentPreview,
+  deleteTorrentPreview,
   deleteDownloadTask,
   getDownloadTask,
   getDownloadWorkerHealth,
+  getTorrentPreview,
+  listDownloadTaskFiles,
   listDownloadTasks,
   requestDownloadTaskControl,
   transitionDownloadTask,
@@ -25,6 +30,8 @@ import {
 const MAX_URL_LENGTH = 8192;
 const MAX_FILE_NAME_LENGTH = 255;
 const MAX_TARGET_DIRECTORY_LENGTH = 4096;
+const MAX_TORRENT_FILE_COUNT = 10_000;
+const MAX_TORRENT_UPLOAD_BYTES = 16 * 1024 * 1024;
 
 export function registerDownloadRoutes(server: FastifyInstance, { config, db, system }: ApiRouteContext): void {
   const dataRoot = config.paths.dataRoot;
@@ -35,8 +42,16 @@ export function registerDownloadRoutes(server: FastifyInstance, { config, db, sy
       targetDirectory?: string;
       fileName?: string;
       sha256?: string;
+      torrentPreviewId?: string;
+      selectedFileIndices?: number[];
+      seedRatioLimit?: number;
+      seedTimeLimitSeconds?: number;
     };
   }>("/api/downloads", async (request, reply) => {
+    if (request.body?.torrentPreviewId !== undefined) {
+      await createTorrentTaskFromPreview(db, dataRoot, system, request.body, reply);
+      return;
+    }
     const url = normalizeDownloadUrl(request.body?.url);
     const targetDirectory = normalizeTargetDirectory(request.body?.targetDirectory);
     const fileName = normalizeFileName(request.body?.fileName);
@@ -109,10 +124,86 @@ export function registerDownloadRoutes(server: FastifyInstance, { config, db, sy
     }
   });
 
+  server.post<{
+    Body: { magnet?: string };
+  }>("/api/downloads/torrent-previews", async (request, reply) => {
+    if (request.isMultipart()) {
+      const file = await request.file({
+        limits: { fields: 0, files: 1, fileSize: MAX_TORRENT_UPLOAD_BYTES, parts: 1 }
+      });
+      if (!file || file.fieldname !== "torrent") {
+        reply.status(400).send({ error: "Torrent file is required" });
+        return;
+      }
+      const metainfo = await file.toBuffer();
+      if (!file.filename.toLowerCase().endsWith(".torrent")) {
+        reply.status(400).send({ error: "Uploaded file must use the .torrent extension" });
+        return;
+      }
+      if (!metainfo.length) {
+        reply.status(400).send({ error: "Torrent file is empty" });
+        return;
+      }
+      const preview = createTorrentPreview(db, {
+        sourceKind: "torrent",
+        metainfo
+      });
+      reply.status(202).send({ preview: { ...preview, files: [] } });
+      return;
+    }
+    const magnet = normalizeMagnet(request.body?.magnet);
+    if ("error" in magnet) {
+      reply.status(400).send({ error: magnet.error });
+      return;
+    }
+    const preview = createTorrentPreview(db, {
+      sourceKind: "magnet",
+      sourceUri: magnet.value
+    });
+    reply.status(202).send({ preview: { ...preview, files: [] } });
+  });
+
+  server.get<{
+    Params: { id: string };
+  }>("/api/downloads/torrent-previews/:id", async (request, reply) => {
+    const preview = getTorrentPreview(db, request.params.id);
+    if (!preview) {
+      reply.status(404).send({ error: "Torrent preview not found" });
+      return;
+    }
+    reply.send({ preview });
+  });
+
+  server.delete<{
+    Params: { id: string };
+  }>("/api/downloads/torrent-previews/:id", async (request, reply) => {
+    if (deleteTorrentPreview(db, request.params.id)) {
+      reply.status(204).send();
+      return;
+    }
+    const preview = getTorrentPreview(db, request.params.id);
+    if (!preview) {
+      reply.status(404).send({ error: "Torrent preview not found" });
+      return;
+    }
+    reply.status(409).send({ error: "Torrent preview is currently resolving" });
+  });
+
   server.get("/api/downloads", async () => ({
     tasks: listDownloadTasks(db, { limit: 500 }),
     health: getDownloadWorkerHealth(db)
   }));
+
+  server.get<{
+    Params: { id: string };
+  }>("/api/downloads/:id/files", async (request, reply) => {
+    const task = getDownloadTask(db, request.params.id);
+    if (!task) {
+      reply.status(404).send({ error: "Download task not found" });
+      return;
+    }
+    reply.send({ files: listDownloadTaskFiles(db, task.id) });
+  });
 
   server.post<{
     Params: { id: string };
@@ -122,7 +213,7 @@ export function registerDownloadRoutes(server: FastifyInstance, { config, db, sy
       reply.status(404).send({ error: "Download task not found" });
       return;
     }
-    if (task.status === "running") {
+    if (task.status === "running" || task.status === "seeding") {
       const requested = requestDownloadTaskControl(db, { id: task.id, request: "pause" });
       reply.send({ task: requested ?? task });
       return;
@@ -170,6 +261,22 @@ export function registerDownloadRoutes(server: FastifyInstance, { config, db, sy
       }
     }
     reply.send({ task: getDownloadTask(db, task.id) ?? cancelled });
+  });
+
+  server.post<{
+    Params: { id: string };
+  }>("/api/downloads/:id/stop-seeding", async (request, reply) => {
+    const task = getDownloadTask(db, request.params.id);
+    if (!task) {
+      reply.status(404).send({ error: "Download task not found" });
+      return;
+    }
+    if (task.status !== "seeding") {
+      reply.status(409).send({ error: `Download task cannot stop seeding while ${task.status}` });
+      return;
+    }
+    const requested = requestDownloadTaskControl(db, { id: task.id, request: "stop_seeding" });
+    reply.send({ task: requested ?? task });
   });
 
   server.post<{
@@ -287,6 +394,88 @@ export function registerDownloadRoutes(server: FastifyInstance, { config, db, sy
   });
 }
 
+async function createTorrentTaskFromPreview(
+  db: CyberOsDatabase,
+  dataRoot: string,
+  system: ApiRouteContext["system"],
+  body: {
+    torrentPreviewId?: string;
+    selectedFileIndices?: number[];
+    storagePoolId?: string;
+    targetDirectory?: string;
+    fileName?: string;
+    seedRatioLimit?: number;
+    seedTimeLimitSeconds?: number;
+  },
+  reply: FastifyReply
+): Promise<void> {
+  const previewId = body.torrentPreviewId?.trim() ?? "";
+  const targetDirectory = normalizeTargetDirectory(body.targetDirectory);
+  const fileName = normalizeFileName(body.fileName);
+  const selectedFileIndices = normalizeSelectedFileIndices(body.selectedFileIndices);
+  const seedRatioLimit = normalizeSeedRatioLimit(body.seedRatioLimit);
+  const seedTimeLimitSeconds = normalizeSeedTimeLimit(body.seedTimeLimitSeconds);
+  if ("error" in targetDirectory) {
+    reply.status(400).send({ error: targetDirectory.error });
+    return;
+  }
+  if ("error" in fileName) {
+    reply.status(400).send({ error: fileName.error });
+    return;
+  }
+  if ("error" in selectedFileIndices) {
+    reply.status(400).send({ error: selectedFileIndices.error });
+    return;
+  }
+  if ("error" in seedRatioLimit) {
+    reply.status(400).send({ error: seedRatioLimit.error });
+    return;
+  }
+  if ("error" in seedTimeLimitSeconds) {
+    reply.status(400).send({ error: seedTimeLimitSeconds.error });
+    return;
+  }
+  if (!previewId) {
+    reply.status(400).send({ error: "Torrent preview is required" });
+    return;
+  }
+
+  let scope: StoragePoolScope;
+  try {
+    scope = await resolveStoragePoolScope(dataRoot, system, body.storagePoolId);
+    const directory = await resolveScopedExistingPath(scope, targetDirectory.path);
+    const directoryStat = await stat(directory.realPath);
+    if (!directoryStat.isDirectory()) {
+      reply.status(400).send({ error: "Download target directory must be a directory" });
+      return;
+    }
+    await access(directory.realPath, fsConstants.W_OK | fsConstants.X_OK);
+    const targetPath = path.join(directory.relativePath, fileName.name);
+    const target = await resolveScopedTargetPath(scope, targetPath);
+    if (await exists(target.absolutePath)) {
+      reply.status(409).send({ error: "Download target already exists" });
+      return;
+    }
+    const task = createTorrentDownloadTask(db, {
+      previewId,
+      selectedFileIndices: selectedFileIndices.value,
+      storagePoolId: scope.pool.id,
+      targetDirectory: directory.relativePath,
+      targetFileName: fileName.name,
+      targetPath,
+      seedRatioLimit: seedRatioLimit.value,
+      seedTimeLimitSeconds: seedTimeLimitSeconds.value
+    });
+    reply.status(201).send({ task });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      reply.status(409).send({ error: "Torrent or download target already has an active task" });
+      return;
+    }
+    sendDownloadError(reply, error);
+  }
+}
+
 async function transitionTaskStatus(
   db: CyberOsDatabase,
   dataRoot: string,
@@ -327,6 +516,14 @@ async function removePartialFile(
   try {
     const scope = await resolveStoragePoolScope(dataRoot, system, task.storagePoolId);
     const partial = await resolveScopedTargetPath(scope, task.partialPath);
+    if (task.sourceKind !== "http") {
+      const metadata = await lstat(partial.absolutePath);
+      if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+        return false;
+      }
+      await rm(partial.absolutePath, { recursive: true });
+      return true;
+    }
     await unlink(partial.absolutePath);
     return true;
   } catch (error) {
@@ -354,6 +551,54 @@ function normalizeDownloadUrl(raw: string | undefined): { value: string } | { er
   } catch {
     return { error: "Download URL is invalid" };
   }
+}
+
+function normalizeMagnet(raw: string | undefined): { value: string } | { error: string } {
+  const value = raw?.trim() ?? "";
+  if (!value || value.length > MAX_URL_LENGTH) {
+    return { error: "Magnet link is required" };
+  }
+  try {
+    const magnet = new URL(value);
+    if (magnet.protocol !== "magnet:") {
+      return { error: "Magnet link is invalid" };
+    }
+    const exactTopics = magnet.searchParams.getAll("xt");
+    const supported = exactTopics.some((topic) =>
+      /^urn:btih:(?:[a-f0-9]{40}|[a-z2-7]{32})$/iu.test(topic)
+      || /^urn:btmh:1220[a-f0-9]{64}$/iu.test(topic)
+    );
+    if (!supported) {
+      return { error: "Magnet link must contain a supported BitTorrent info hash" };
+    }
+    return { value };
+  } catch {
+    return { error: "Magnet link is invalid" };
+  }
+}
+
+function normalizeSelectedFileIndices(raw: number[] | undefined): { value: number[] } | { error: string } {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_TORRENT_FILE_COUNT) {
+    return { error: "Select at least one torrent file" };
+  }
+  if (raw.some((value) => !Number.isSafeInteger(value) || value < 0)) {
+    return { error: "Torrent file selection is invalid" };
+  }
+  return { value: [...new Set(raw)].sort((a, b) => a - b) };
+}
+
+function normalizeSeedRatioLimit(raw: number | undefined): { value: number } | { error: string } {
+  if (raw !== undefined && raw !== 1) {
+    return { error: "Seed ratio limit is fixed at 1.0" };
+  }
+  return { value: 1 };
+}
+
+function normalizeSeedTimeLimit(raw: number | undefined): { value: number } | { error: string } {
+  if (raw !== undefined && raw !== 7_200) {
+    return { error: "Seed time limit is fixed at 7200 seconds" };
+  }
+  return { value: 7_200 };
 }
 
 function normalizeTargetDirectory(raw: string | undefined): { path: string } | { error: string } {

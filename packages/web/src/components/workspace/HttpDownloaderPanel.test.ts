@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { initI18n } from "../../i18n/index.js";
 import type { DownloadTask } from "../../api.js";
+import * as downloaderModule from "./HttpDownloaderPanel.js";
 import {
   downloadCreateControlState,
   DownloadTaskRow,
@@ -23,12 +24,12 @@ beforeAll(async () => {
 });
 
 describe("HttpDownloaderPanel download creation", () => {
-  it("does not render a dedicated connection state", () => {
+  it("describes the unified public download queue without a dedicated connection state", () => {
     const html = renderDownloader({ storagePoolsLoading: false, pools: [mountedPool] });
     const header = html.match(/<header[^>]*class="management-header app-titlebar downloads-header"[^>]*>[\s\S]*?<\/header>/u)?.[0] ?? "";
 
     expect(header).toContain("<h2>Downloads</h2>");
-    expect(header).toContain("Queue and monitor public HTTP and HTTPS downloads.");
+    expect(header).toContain("Queue and monitor public web, Magnet, and torrent downloads.");
     expect(header).not.toContain("HTTP transfer");
     expect(header).not.toContain("downloads-connection");
     expect(html).not.toContain("downloads-connection");
@@ -91,9 +92,34 @@ describe("DownloadTaskRow progress states", () => {
   });
 
   it("keeps a distinct status marker for every download state", () => {
-    for (const status of ["queued", "running", "paused", "completed", "failed", "cancelled"] as const) {
+    for (const status of ["queued", "running", "paused", "seeding", "completed", "failed", "cancelled"] as const) {
       expect(renderDownloadRow({ status })).toContain(`data-status="${status}"`);
     }
+  });
+
+  it("shows torrent upload telemetry and seeding controls", () => {
+    const html = renderDownloadRow({
+      sourceKind: "magnet",
+      status: "seeding",
+      downloadMode: "torrent",
+      phase: "seeding",
+      receivedBytes: 100,
+      totalBytes: 100,
+      uploadedBytes: 50,
+      uploadSpeedBytesPerSecond: 10,
+      peerCount: 4,
+      torrentName: "Linux release",
+      url: "magnet:?xt=urn:btih:0123456789012345678901234567890123456789"
+    });
+
+    expect(html).toContain("Linux release");
+    expect(html).toContain("50 B uploaded");
+    expect(html).toContain("10 B/s upload");
+    expect(html).toContain("4 peers");
+    expect(html).toContain("Ratio 0.50");
+    expect(html).toContain('aria-label="Pause seeding"');
+    expect(html).toContain('aria-label="Stop seeding"');
+    expect(html).not.toContain('aria-label="Cancel download"');
   });
 
   it("shows segmented, retry, control, checksum, and stable error details", () => {
@@ -119,6 +145,32 @@ describe("DownloadTaskRow progress states", () => {
     expect(html).toContain("Retry 2 in");
     expect(html).toContain("SHA-256 mismatch");
     expect(html).toContain("Checksum mismatch");
+  });
+});
+
+describe("Torrent file selection", () => {
+  it("renders stable checkboxes, selected totals, and select-all state", () => {
+    const TorrentFileSelector = downloaderModule.TorrentFileSelector;
+    expect(TorrentFileSelector).toBeTypeOf("function");
+
+    const html = renderToStaticMarkup(createElement(TorrentFileSelector, {
+      files: [
+        { fileIndex: 0, path: "release/system.img", sizeBytes: 1_024 },
+        { fileIndex: 1, path: "release/checksums.txt", sizeBytes: 128 }
+      ],
+      selectedFileIndices: [0],
+      locale: "en",
+      disabled: false,
+      onChange: vi.fn()
+    }));
+
+    expect(html).toContain('aria-label="Torrent files"');
+    expect(html).toContain("1 of 2 selected");
+    expect(html).toContain("1.0 KB selected");
+    expect(html).toContain("release/system.img");
+    expect(html).toContain("release/checksums.txt");
+    expect(html.match(/type="checkbox"/gu)).toHaveLength(3);
+    expect(html.match(/checked=""/gu)).toHaveLength(1);
   });
 });
 
@@ -192,7 +244,18 @@ const baseTask: DownloadTask = {
   retryCount: 0,
   nextRetryAt: null,
   controlRequested: null,
-  segmentCount: 0
+  segmentCount: 0,
+  sourceKind: "http",
+  torrentInfoHash: null,
+  torrentName: null,
+  selectedFileCount: 0,
+  uploadedBytes: 0,
+  uploadSpeedBytesPerSecond: 0,
+  peerCount: 0,
+  seedRatioLimit: 1,
+  seedTimeLimitSeconds: 7_200,
+  contentCompletedAt: null,
+  seedStartedAt: null
 };
 
 function renderDownloadRow(overrides: Partial<DownloadTask> = {}): string {

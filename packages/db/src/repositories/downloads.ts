@@ -7,6 +7,10 @@ import type {
   DownloadTaskRecord,
   DownloadTaskStatus,
   DownloadWorkerHealth
+  , TorrentFileRecord
+  , TorrentPreviewDetails
+  , TorrentPreviewRecord
+  , TorrentTaskFileRecord
 } from "@cyberos/shared";
 import type { CyberOsDatabase } from "../connection.js";
 import type { DbDownloadTaskRow } from "./repository-rows.js";
@@ -18,8 +22,289 @@ const DOWNLOAD_COLUMNS = `
   lease_expires_at, created_at, updated_at, started_at, finished_at,
   last_progress_at, file_operation_id, phase, download_mode,
   expected_sha256, actual_sha256, error_code, error_retryable,
-  retry_count, next_retry_at, control_requested, segment_count
+  retry_count, next_retry_at, control_requested, segment_count,
+  source_kind, torrent_info_hash, torrent_name, selected_file_count,
+  uploaded_bytes, upload_speed_bytes_per_second, peer_count,
+  seed_ratio_limit, seed_time_limit_seconds, content_completed_at,
+  seed_started_at
 `;
+
+const TORRENT_PREVIEW_COLUMNS = `
+  id, source_kind, source_uri, status, info_hash, name, total_bytes,
+  file_count, is_private, error, worker_id, lease_expires_at,
+  created_at, updated_at, expires_at
+`;
+
+type DbTorrentPreviewRow = {
+  id: string;
+  source_kind: "magnet" | "torrent";
+  source_uri: string | null;
+  status: TorrentPreviewRecord["status"];
+  info_hash: string | null;
+  name: string | null;
+  total_bytes: number | null;
+  file_count: number;
+  is_private: 0 | 1;
+  error: string | null;
+  worker_id: string | null;
+  lease_expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+};
+
+type DbTorrentFileRow = {
+  file_index: number;
+  path: string;
+  size_bytes: number;
+  selected?: 0 | 1;
+  received_bytes?: number;
+};
+
+export function createTorrentPreview(
+  db: CyberOsDatabase,
+  input: {
+    sourceKind: "magnet" | "torrent";
+    sourceUri?: string | null;
+    metainfo?: Uint8Array | null;
+    ttlMs?: number;
+    now?: Date;
+  }
+): TorrentPreviewRecord {
+  const id = randomUUID();
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const expiresAt = new Date(now.getTime() + (input.ttlMs ?? 30 * 60_000)).toISOString();
+  db.prepare(`
+    INSERT INTO torrent_previews (
+      id, source_kind, source_uri, metainfo, status, created_at, updated_at, expires_at
+    ) VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
+  `).run(
+    id,
+    input.sourceKind,
+    input.sourceUri ?? null,
+    input.metainfo ? Buffer.from(input.metainfo) : null,
+    nowIso,
+    nowIso,
+    expiresAt
+  );
+  return getRequiredTorrentPreview(db, id);
+}
+
+export function getTorrentPreview(db: CyberOsDatabase, id: string): TorrentPreviewDetails | null {
+  const row = db.prepare(`
+    SELECT ${TORRENT_PREVIEW_COLUMNS}
+    FROM torrent_previews
+    WHERE id = ?
+  `).get(id) as DbTorrentPreviewRow | undefined;
+  if (!row) return null;
+  const files = db.prepare(`
+    SELECT file_index, path, size_bytes
+    FROM torrent_preview_files
+    WHERE preview_id = ?
+    ORDER BY file_index
+  `).all(id) as DbTorrentFileRow[];
+  return { ...mapTorrentPreview(row), files: files.map(mapTorrentFile) };
+}
+
+export function deleteTorrentPreview(db: CyberOsDatabase, id: string): boolean {
+  const result = db.prepare(`
+    DELETE FROM torrent_previews
+    WHERE id = ?
+  `).run(id);
+  return result.changes === 1;
+}
+
+export function claimNextTorrentPreview(
+  db: CyberOsDatabase,
+  input: { workerId: string; leaseMs: number; now?: Date }
+): TorrentPreviewRecord | null {
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const leaseExpiresAt = new Date(now.getTime() + input.leaseMs).toISOString();
+  db.prepare(`
+    UPDATE torrent_previews
+    SET status = CASE WHEN expires_at <= ? THEN 'expired' ELSE 'queued' END,
+        worker_id = NULL,
+        lease_expires_at = NULL,
+        updated_at = ?
+    WHERE status = 'resolving' AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+  `).run(nowIso, nowIso, nowIso);
+  db.prepare(`
+    UPDATE torrent_previews
+    SET status = 'expired', updated_at = ?
+    WHERE status = 'queued' AND expires_at <= ?
+  `).run(nowIso, nowIso);
+  const row = db.prepare(`
+    UPDATE torrent_previews
+    SET status = 'resolving', worker_id = ?, lease_expires_at = ?, updated_at = ?
+    WHERE id = (
+      SELECT id FROM torrent_previews
+      WHERE status = 'queued' AND expires_at > ?
+      ORDER BY created_at
+      LIMIT 1
+    ) AND status = 'queued'
+    RETURNING ${TORRENT_PREVIEW_COLUMNS}
+  `).get(input.workerId, leaseExpiresAt, nowIso, nowIso) as DbTorrentPreviewRow | undefined;
+  return row ? mapTorrentPreview(row) : null;
+}
+
+export function completeTorrentPreview(
+  db: CyberOsDatabase,
+  input: {
+    id: string;
+    workerId: string;
+    infoHash: string;
+    name: string;
+    metainfo: Uint8Array;
+    totalBytes: number;
+    isPrivate: boolean;
+    files: TorrentFileRecord[];
+    now?: Date;
+  }
+): TorrentPreviewDetails {
+  if (!input.files.length) throw new Error("Torrent preview must contain at least one file");
+  const nowIso = (input.now ?? new Date()).toISOString();
+  const complete = db.transaction(() => {
+    const result = db.prepare(`
+      UPDATE torrent_previews
+      SET status = 'ready', info_hash = ?, name = ?, metainfo = ?, total_bytes = ?,
+          file_count = ?, is_private = ?, error = NULL, worker_id = NULL,
+          lease_expires_at = NULL, updated_at = ?
+      WHERE id = ? AND status = 'resolving' AND worker_id = ?
+    `).run(
+      input.infoHash.toLowerCase(),
+      input.name,
+      Buffer.from(input.metainfo),
+      input.totalBytes,
+      input.files.length,
+      input.isPrivate ? 1 : 0,
+      nowIso,
+      input.id,
+      input.workerId
+    );
+    if (result.changes !== 1) throw new Error("Torrent preview lease was lost");
+    const insertFile = db.prepare(`
+      INSERT INTO torrent_preview_files (preview_id, file_index, path, size_bytes)
+      VALUES (?, ?, ?, ?)
+    `);
+    for (const file of input.files) {
+      insertFile.run(input.id, file.fileIndex, file.path, file.sizeBytes);
+    }
+  });
+  complete.immediate();
+  return getRequiredTorrentPreview(db, input.id);
+}
+
+export function createTorrentDownloadTask(
+  db: CyberOsDatabase,
+  input: {
+    previewId: string;
+    selectedFileIndices: number[];
+    storagePoolId: string;
+    targetDirectory: string;
+    targetFileName: string;
+    targetPath: string;
+    seedRatioLimit?: number;
+    seedTimeLimitSeconds?: number;
+    now?: Date;
+  }
+): DownloadTaskRecord {
+  const selected = [...new Set(input.selectedFileIndices)].sort((a, b) => a - b);
+  if (!selected.length) throw new Error("Select at least one torrent file");
+  const id = randomUUID();
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const create = db.transaction(() => {
+    const preview = db.prepare(`
+      SELECT source_kind, source_uri, metainfo, info_hash, name, is_private
+      FROM torrent_previews
+      WHERE id = ? AND status = 'ready' AND expires_at > ?
+    `).get(input.previewId, nowIso) as {
+      source_kind: "magnet" | "torrent";
+      source_uri: string | null;
+      metainfo: Buffer;
+      info_hash: string;
+      name: string;
+      is_private: 0 | 1;
+    } | undefined;
+    if (!preview) throw new Error("Torrent preview is unavailable or expired");
+    if (preview.is_private === 1) throw new Error("Private torrents are not supported");
+    const files = db.prepare(`
+      SELECT file_index, path, size_bytes
+      FROM torrent_preview_files
+      WHERE preview_id = ?
+      ORDER BY file_index
+    `).all(input.previewId) as DbTorrentFileRow[];
+    const selectedSet = new Set(selected);
+    if (selected.some((index) => !files.some((file) => file.file_index === index))) {
+      throw new Error("Selected torrent file does not exist");
+    }
+    const totalBytes = files.reduce(
+      (sum, file) => sum + (selectedSet.has(file.file_index) ? file.size_bytes : 0),
+      0
+    );
+    const partialPath = `${input.targetDirectory}/.${id}.cyberos-torrent.part`;
+    db.prepare(`
+      INSERT INTO download_tasks (
+        id, url, storage_pool_id, target_directory, target_file_name,
+        target_path, partial_path, status, total_bytes, download_mode,
+        source_kind, torrent_info_hash, torrent_name, torrent_metainfo,
+        selected_file_count, seed_ratio_limit, seed_time_limit_seconds,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, 'torrent', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      preview.source_uri ?? `torrent:${preview.info_hash}`,
+      input.storagePoolId,
+      input.targetDirectory,
+      input.targetFileName,
+      input.targetPath,
+      partialPath,
+      totalBytes,
+      preview.source_kind,
+      preview.info_hash,
+      preview.name,
+      preview.metainfo,
+      selected.length,
+      input.seedRatioLimit ?? 1,
+      input.seedTimeLimitSeconds ?? 7_200,
+      nowIso,
+      nowIso
+    );
+    const insertFile = db.prepare(`
+      INSERT INTO download_task_files (
+        task_id, file_index, path, size_bytes, selected, received_bytes
+      ) VALUES (?, ?, ?, ?, ?, 0)
+    `);
+    for (const file of files) {
+      insertFile.run(
+        id,
+        file.file_index,
+        file.path,
+        file.size_bytes,
+        selectedSet.has(file.file_index) ? 1 : 0
+      );
+    }
+    db.prepare("DELETE FROM torrent_previews WHERE id = ?").run(input.previewId);
+  });
+  create.immediate();
+  return getRequiredDownloadTask(db, id);
+}
+
+export function listDownloadTaskFiles(db: CyberOsDatabase, taskId: string): TorrentTaskFileRecord[] {
+  const rows = db.prepare(`
+    SELECT file_index, path, size_bytes, selected, received_bytes
+    FROM download_task_files
+    WHERE task_id = ?
+    ORDER BY file_index
+  `).all(taskId) as DbTorrentFileRow[];
+  return rows.map((row) => ({
+    ...mapTorrentFile(row),
+    selected: row.selected === 1,
+    receivedBytes: row.received_bytes ?? 0
+  }));
+}
 
 export function createDownloadTask(
   db: CyberOsDatabase,
@@ -101,6 +386,7 @@ export function recoverExpiredDownloadTasks(db: CyberOsDatabase, now = new Date(
         finished_at = CASE WHEN control_requested = 'cancel' THEN ? ELSE NULL END,
         updated_at = ?
     WHERE status = 'running'
+      AND source_kind = 'http'
       AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
       AND NOT EXISTS (
         SELECT 1 FROM download_publish_journal journal
@@ -109,7 +395,9 @@ export function recoverExpiredDownloadTasks(db: CyberOsDatabase, now = new Date(
   `).run(nowIso, nowIso, nowIso);
   db.prepare(`
     DELETE FROM download_space_reservations
-    WHERE task_id IN (SELECT id FROM download_tasks WHERE status <> 'running')
+    WHERE task_id IN (
+      SELECT id FROM download_tasks WHERE source_kind = 'http' AND status <> 'running'
+    )
   `).run();
   return result.changes;
 }
@@ -140,6 +428,7 @@ export function claimNextDownloadTask(
       SELECT id
       FROM download_tasks
       WHERE status = 'queued'
+        AND source_kind = 'http'
         AND (next_retry_at IS NULL OR next_retry_at <= ?)
         AND NOT EXISTS (
           SELECT 1 FROM download_publish_journal journal
@@ -373,7 +662,7 @@ export function requestDownloadTaskControl(
           ELSE ?
         END,
         updated_at = ?
-    WHERE id = ? AND status = 'running'
+    WHERE id = ? AND status IN ('running', 'seeding')
     RETURNING ${DOWNLOAD_COLUMNS}
   `).get(input.request, (input.now ?? new Date()).toISOString(), input.id) as DbDownloadTaskRow | undefined;
   return row ? mapDownloadTask(row) : null;
@@ -408,7 +697,9 @@ export function getDownloadWorkerHealth(db: CyberOsDatabase, now = new Date()): 
 }
 
 export function deleteDownloadTask(db: CyberOsDatabase, id: string): boolean {
-  const result = db.prepare("DELETE FROM download_tasks WHERE id = ? AND status <> 'running'").run(id);
+  const result = db.prepare(
+    "DELETE FROM download_tasks WHERE id = ? AND status NOT IN ('running', 'seeding')"
+  ).run(id);
   return result.changes === 1;
 }
 
@@ -418,6 +709,40 @@ function getRequiredDownloadTask(db: CyberOsDatabase, id: string): DownloadTaskR
     throw new Error("Download task not found after write");
   }
   return task;
+}
+
+function getRequiredTorrentPreview(db: CyberOsDatabase, id: string): TorrentPreviewDetails {
+  const preview = getTorrentPreview(db, id);
+  if (!preview) throw new Error("Torrent preview not found after write");
+  return preview;
+}
+
+function mapTorrentPreview(row: DbTorrentPreviewRow): TorrentPreviewRecord {
+  return {
+    id: row.id,
+    sourceKind: row.source_kind,
+    sourceUri: row.source_uri,
+    status: row.status,
+    infoHash: row.info_hash,
+    name: row.name,
+    totalBytes: row.total_bytes,
+    fileCount: row.file_count,
+    isPrivate: row.is_private === 1,
+    error: row.error,
+    workerId: row.worker_id,
+    leaseExpiresAt: row.lease_expires_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    expiresAt: row.expires_at
+  };
+}
+
+function mapTorrentFile(row: DbTorrentFileRow): TorrentFileRecord {
+  return {
+    fileIndex: row.file_index,
+    path: row.path,
+    sizeBytes: row.size_bytes
+  };
 }
 
 function mapDownloadTask(row: DbDownloadTaskRow): DownloadTaskRecord {
@@ -453,6 +778,17 @@ function mapDownloadTask(row: DbDownloadTaskRow): DownloadTaskRecord {
     retryCount: row.retry_count,
     nextRetryAt: row.next_retry_at,
     controlRequested: row.control_requested,
-    segmentCount: row.segment_count
+    segmentCount: row.segment_count,
+    sourceKind: row.source_kind,
+    torrentInfoHash: row.torrent_info_hash,
+    torrentName: row.torrent_name,
+    selectedFileCount: row.selected_file_count,
+    uploadedBytes: row.uploaded_bytes,
+    uploadSpeedBytesPerSecond: row.upload_speed_bytes_per_second,
+    peerCount: row.peer_count,
+    seedRatioLimit: row.seed_ratio_limit,
+    seedTimeLimitSeconds: row.seed_time_limit_seconds,
+    contentCompletedAt: row.content_completed_at,
+    seedStartedAt: row.seed_started_at
   };
 }

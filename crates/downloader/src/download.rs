@@ -21,6 +21,7 @@ use crate::config::Config;
 use crate::db::{Db, DownloadSettings, Progress, PublishJournal, Segment, SegmentCheckpoint, Task};
 use crate::error::{DownloadError, ErrorCode};
 use crate::network::{RangeRequest, RequestOptions, get};
+use crate::p2p::{TorrentEngine, TorrentRunContext, TorrentTaskOutcome, run_torrent_task};
 use crate::retry::retry_delay;
 use crate::storage::{FileIdentity, StorageTarget};
 
@@ -119,8 +120,12 @@ impl Downloader {
             .await?;
         self.db.recover_expired().await?;
         self.recover_publish_journals().await?;
+        let torrent_engine =
+            TorrentEngine::new(&self.data_root, self.shutdown.child_token()).await?;
 
         let mut tasks = JoinSet::new();
+        let mut torrent_tasks = JoinSet::new();
+        let mut preview_tasks = JoinSet::new();
         let mut poll = tokio::time::interval(POLL_INTERVAL);
         let mut heartbeat = tokio::time::interval(HEARTBEAT_INTERVAL);
 
@@ -137,6 +142,16 @@ impl Downloader {
                             error!(%error, "download task panicked");
                         }
                     }
+                    Some(result) = torrent_tasks.join_next(), if !torrent_tasks.is_empty() => {
+                        if let Err(error) = result {
+                            error!(%error, "torrent task panicked");
+                        }
+                    }
+                    Some(result) = preview_tasks.join_next(), if !preview_tasks.is_empty() => {
+                        if let Err(error) = result {
+                            error!(%error, "torrent preview task panicked");
+                        }
+                    }
                     _ = poll.tick() => {
                         self.db.recover_expired().await?;
                         self.recover_publish_journals().await?;
@@ -150,6 +165,24 @@ impl Downloader {
                                 downloader.handle_task(task).await;
                             });
                         }
+                        if preview_tasks.is_empty()
+                            && let Some(preview) = self.db.claim_torrent_preview(&self.worker_id, LEASE).await?
+                        {
+                            let downloader = self.clone();
+                            let engine = torrent_engine.clone();
+                            preview_tasks.spawn(async move {
+                                downloader.handle_torrent_preview(engine, preview).await;
+                            });
+                        }
+                        let torrent_slots = 1_usize.saturating_sub(self.db.torrent_running_count().await?);
+                        for _ in 0..torrent_slots {
+                            let Some(task) = self.db.claim_torrent(&self.worker_id, LEASE).await? else { break };
+                            let downloader = self.clone();
+                            let engine = torrent_engine.clone();
+                            torrent_tasks.spawn(async move {
+                                downloader.handle_torrent_task(engine, task).await;
+                            });
+                        }
                     }
                 }
             }
@@ -159,18 +192,131 @@ impl Downloader {
 
         self.shutdown.cancel();
         let shutdown_deadline = tokio::time::Instant::now() + Duration::from_secs(20);
-        while !tasks.is_empty()
-            && tokio::time::timeout_at(shutdown_deadline, tasks.join_next())
-                .await
-                .is_ok_and(|result| result.is_some())
-        {}
+        while (!tasks.is_empty() || !torrent_tasks.is_empty() || !preview_tasks.is_empty())
+            && tokio::time::Instant::now() < shutdown_deadline
+        {
+            tokio::select! {
+                result = tasks.join_next(), if !tasks.is_empty() => { let _ = result; }
+                result = torrent_tasks.join_next(), if !torrent_tasks.is_empty() => { let _ = result; }
+                result = preview_tasks.join_next(), if !preview_tasks.is_empty() => { let _ = result; }
+                _ = tokio::time::sleep_until(shutdown_deadline) => break,
+            }
+        }
         tasks.abort_all();
+        torrent_tasks.abort_all();
+        preview_tasks.abort_all();
         while tasks.join_next().await.is_some() {}
+        while torrent_tasks.join_next().await.is_some() {}
+        while preview_tasks.join_next().await.is_some() {}
         let requeue_result = self.db.requeue_owned(&self.worker_id).await;
         let remove_worker_result = self.db.remove_worker(&self.worker_id).await;
         run_result?;
         requeue_result?;
         remove_worker_result
+    }
+
+    async fn handle_torrent_preview(
+        &self,
+        engine: TorrentEngine,
+        preview: crate::db::TorrentPreview,
+    ) {
+        let resolution = engine.resolve_preview(&preview);
+        tokio::pin!(resolution);
+        let mut heartbeat = tokio::time::interval_at(
+            tokio::time::Instant::now() + HEARTBEAT_INTERVAL,
+            HEARTBEAT_INTERVAL,
+        );
+        let result = loop {
+            tokio::select! {
+                result = &mut resolution => break result,
+                _ = heartbeat.tick() => {
+                    match self.db.renew_torrent_preview_lease(&preview.id, &self.worker_id, LEASE).await {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            warn!(preview_id = %preview.id, "torrent preview lease was lost");
+                            return;
+                        }
+                        Err(error) => {
+                            warn!(preview_id = %preview.id, %error, "could not renew torrent preview lease");
+                            return;
+                        }
+                    }
+                }
+                _ = self.shutdown.cancelled() => return,
+            }
+        };
+        match result {
+            Ok(resolved) => {
+                if let Err(error) = self
+                    .db
+                    .complete_torrent_preview(&preview, &self.worker_id, &resolved)
+                    .await
+                {
+                    error!(preview_id = %preview.id, %error, "could not persist torrent preview");
+                }
+            }
+            Err(error) => {
+                warn!(preview_id = %preview.id, code = error.code.as_str(), message = %error.message, "torrent preview failed");
+                let _ = self
+                    .db
+                    .fail_torrent_preview(&preview.id, &self.worker_id, &error.message)
+                    .await;
+            }
+        }
+    }
+
+    async fn handle_torrent_task(&self, engine: TorrentEngine, task: Task) {
+        let settings = match self.db.settings().await {
+            Ok(settings) => settings,
+            Err(error) => {
+                error!(task_id = %task.id, %error, "could not load download settings");
+                return;
+            }
+        };
+        match run_torrent_task(
+            &engine,
+            &self.db,
+            &task,
+            &self.worker_id,
+            &TorrentRunContext {
+                data_root: &self.data_root,
+                require_mount: self.require_mount,
+                minimum_free_bytes: settings.min_free_space_bytes,
+                shutdown: &self.shutdown,
+            },
+        )
+        .await
+        {
+            Ok(TorrentTaskOutcome::Complete) => info!(task_id = %task.id, "torrent completed"),
+            Ok(TorrentTaskOutcome::Interrupted) => {
+                info!(task_id = %task.id, "torrent interrupted by control request")
+            }
+            Ok(TorrentTaskOutcome::Shutdown) => {}
+            Err(error) => {
+                let next_retry = task.retry_count.saturating_add(1);
+                let delay =
+                    (error.retryable && task.retry_count < settings.max_auto_retries).then(|| {
+                        retry_delay(
+                            next_retry,
+                            settings.retry_base_delay_ms,
+                            settings.retry_max_delay_ms,
+                            error.retry_after_ms,
+                            settings.retry_after_max_delay_ms,
+                        )
+                    });
+                match self.db.fail_or_retry(&task, &error, &settings, delay).await {
+                    Ok(true) => {
+                        warn!(task_id = %task.id, code = error.code.as_str(), message = %error.message, "torrent retry scheduled")
+                    }
+                    Ok(false) => {
+                        error!(task_id = %task.id, code = error.code.as_str(), message = %error.message, "torrent failed")
+                    }
+                    Err(db_error) => {
+                        error!(task_id = %task.id, %db_error, "could not persist torrent failure")
+                    }
+                }
+            }
+        }
     }
 
     async fn handle_task(&self, task: Task) {

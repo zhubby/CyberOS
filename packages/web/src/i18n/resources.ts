@@ -444,9 +444,9 @@ export const en = {
       }
     },
     downloads: {
-      eyebrow: "HTTP transfer",
+      eyebrow: "Transfer queue",
       title: "Downloads",
-      description: "Queue and monitor public HTTP and HTTPS downloads.",
+      description: "Queue and monitor public web, Magnet, and torrent downloads.",
       active: "Active",
       queued: "Queued",
       speed: "Speed",
@@ -468,9 +468,35 @@ export const en = {
       connected: "Live",
       disconnected: "Reconnecting",
       created: "Download queued",
-      createDescription: "Add a public file to the queue and choose where it should be stored.",
+      createDescription: "Add a public web link, Magnet link, or torrent file and choose its destination.",
       sourceTitle: "Source",
-      sourceDescription: "Paste a public HTTP or HTTPS address.",
+      sourceDescription: "Use a public link or upload one .torrent file.",
+      sourceModeLabel: "Download source type",
+      sourceMode: {
+        link: "Link",
+        torrentFile: "Torrent file"
+      },
+      link: "HTTP, HTTPS, or Magnet link",
+      linkPlaceholder: "https://example.com/file.zip or magnet:?xt=...",
+      resolveMetadata: "Resolve files",
+      metadataReady: "Files ready",
+      chooseTorrentFile: "Choose .torrent file",
+      torrentFileHint: "Public torrents only, up to 16 MiB.",
+      previewStatus: {
+        queued: "Metadata queued",
+        resolving: "Resolving metadata",
+        ready: "Files ready",
+        failed: "Metadata failed",
+        expired: "Metadata expired"
+      },
+      previewWaiting: "Waiting for the download service.",
+      previewSummary: "{{name}} · {{count}} files · {{size}}",
+      torrentFiles: "Torrent files",
+      selectAllFiles: "Select all",
+      fileSelectionSummary: "{{selected}} of {{total}} selected · {{size}} selected",
+      outputFolderName: "Output folder name",
+      outputFolderHint: "Selected files are published together inside this folder.",
+      seedingPolicy: "Seeds until ratio 1.0 or 2 hours, whichever comes first.",
       destinationTitle: "Destination",
       destinationDescription: "Choose a mounted pool and the folder that should receive the file.",
       url: "HTTP or HTTPS URL",
@@ -495,7 +521,7 @@ export const en = {
       directoryPickerFolder: "Directory",
       selectCurrentDirectory: "Use current directory",
       emptyTitle: "No downloads yet",
-      emptyBody: "Start an HTTP or HTTPS download to see it here.",
+      emptyBody: "Start a public link or torrent download to see it here.",
       unknownTotal: "size unknown",
       noSpeed: "Waiting",
       done: "Done",
@@ -506,20 +532,32 @@ export const en = {
       checksumVerified: "SHA-256 verified",
       checksumMismatch: "SHA-256 mismatch",
       segments: "{{count}} segments",
+      uploaded: "{{value}} uploaded",
+      uploadSpeed: "{{value}} upload",
+      peers: "{{count}} peers",
+      ratio: "Ratio {{value}}",
+      sourceKind: {
+        magnet: "Magnet link",
+        torrent: "Torrent file"
+      },
       mode: {
         single: "Single stream",
-        segmented: "Segmented"
+        segmented: "Segmented",
+        torrent: "BitTorrent"
       },
       phase: {
+        resolving_metadata: "Resolving metadata",
         probing: "Probing source",
         downloading: "Transferring",
         verifying: "Verifying",
         publishing: "Publishing",
+        seeding: "Seeding",
         retry_wait: "Waiting to retry"
       },
       control: {
         pause: "Pausing",
-        cancel: "Cancelling"
+        cancel: "Cancelling",
+        stop_seeding: "Stopping seeding"
       },
       errorCode: {
         dns: "DNS failure",
@@ -537,21 +575,28 @@ export const en = {
         target_conflict: "Target exists",
         checksum_mismatch: "Checksum mismatch",
         permission: "Permission denied",
+        torrent_invalid: "Invalid torrent",
+        torrent_metadata: "Metadata unavailable",
+        private_torrent: "Private torrent unsupported",
+        tracker_blocked: "Tracker blocked",
         database: "Database failure",
         internal: "Internal failure"
       },
       progress: "Download progress for {{name}}",
       actions: "Download actions",
       pause: "Pause download",
+      pauseSeeding: "Pause seeding",
       resume: "Resume download",
       retry: "Retry download",
       cancel: "Cancel download",
+      stopSeeding: "Stop seeding",
       openDirectory: "Open target directory",
       remove: "Remove from history",
       status: {
         queued: "Queued",
         running: "Downloading",
         paused: "Paused",
+        seeding: "Seeding",
         completed: "Completed",
         failed: "Failed",
         cancelled: "Cancelled"
@@ -2204,7 +2249,7 @@ export const en = {
       },
       downloads: {
         title: "Downloads",
-        description: "HTTP download concurrency and transfer behavior."
+        description: "HTTP transfer settings. BitTorrent uses one independent download slot."
       }
     },
     media: {
@@ -2607,10 +2652,10 @@ export const en = {
     },
     downloads: {
       concurrencyTitle: "Download concurrency",
-      concurrencyDescription: "Limit the number of HTTP downloads that can run at the same time.",
-      concurrencyField: "Concurrent downloads",
+      concurrencyDescription: "Limit simultaneous HTTP downloads. One BitTorrent download runs independently.",
+      concurrencyField: "Concurrent HTTP downloads",
       connectionCount: "{{count}} connection",
-      concurrencyHelp: "Lower values reduce disk and network pressure. Running tasks are allowed to finish when you lower the limit.",
+      concurrencyHelp: "Lower values reduce disk and network pressure. This setting does not change the independent BitTorrent slot.",
       connectionUnit: "connections",
       parallelRequests: "Range requests per task",
       parallelRequestsHelp: "Used only when the server supports safe segmented downloads (1-8).",
@@ -3443,9 +3488,9 @@ export const zhCN = {
       }
     },
     downloads: {
-      eyebrow: "HTTP 传输",
+      eyebrow: "传输队列",
       title: "下载",
-      description: "排队并监控公网 HTTP/HTTPS 下载任务。",
+      description: "排队并监控公网链接、磁力链接和 BT 种子下载任务。",
       active: "活动",
       queued: "队列",
       speed: "速度",
@@ -3467,9 +3512,35 @@ export const zhCN = {
       connected: "实时",
       disconnected: "重连中",
       created: "已加入下载队列",
-      createDescription: "添加一个公网文件到队列，并选择保存位置。",
+      createDescription: "添加公网链接、磁力链接或 BT 种子，并选择保存位置。",
       sourceTitle: "来源",
-      sourceDescription: "粘贴公网 HTTP 或 HTTPS 地址。",
+      sourceDescription: "使用公网链接，或上传一个 .torrent 文件。",
+      sourceModeLabel: "下载来源类型",
+      sourceMode: {
+        link: "链接",
+        torrentFile: "种子文件"
+      },
+      link: "HTTP、HTTPS 或磁力链接",
+      linkPlaceholder: "https://example.com/file.zip 或 magnet:?xt=...",
+      resolveMetadata: "解析文件列表",
+      metadataReady: "文件列表已就绪",
+      chooseTorrentFile: "选择 .torrent 文件",
+      torrentFileHint: "仅支持公网种子，最大 16 MiB。",
+      previewStatus: {
+        queued: "元数据已排队",
+        resolving: "正在解析元数据",
+        ready: "文件列表已就绪",
+        failed: "元数据解析失败",
+        expired: "元数据已过期"
+      },
+      previewWaiting: "正在等待下载服务处理。",
+      previewSummary: "{{name}} · {{count}} 个文件 · {{size}}",
+      torrentFiles: "种子文件列表",
+      selectAllFiles: "全选",
+      fileSelectionSummary: "已选 {{selected}} / {{total}} · 共 {{size}}",
+      outputFolderName: "输出文件夹名称",
+      outputFolderHint: "选中的文件将一起发布到这个文件夹中。",
+      seedingPolicy: "分享率达到 1.0 或做种满 2 小时后自动停止，以先到者为准。",
       destinationTitle: "目标位置",
       destinationDescription: "选择已挂载的存储池和接收文件的文件夹。",
       url: "HTTP 或 HTTPS 地址",
@@ -3494,7 +3565,7 @@ export const zhCN = {
       directoryPickerFolder: "目录",
       selectCurrentDirectory: "使用当前目录",
       emptyTitle: "暂无下载任务",
-      emptyBody: "开始一个 HTTP 或 HTTPS 下载后，任务会显示在这里。",
+      emptyBody: "开始公网链接或 BT 下载后，任务会显示在这里。",
       unknownTotal: "大小未知",
       noSpeed: "等待中",
       done: "完成",
@@ -3505,20 +3576,32 @@ export const zhCN = {
       checksumVerified: "SHA-256 校验通过",
       checksumMismatch: "SHA-256 不匹配",
       segments: "{{count}} 个分段",
+      uploaded: "已上传 {{value}}",
+      uploadSpeed: "上传 {{value}}",
+      peers: "{{count}} 个 Peer",
+      ratio: "分享率 {{value}}",
+      sourceKind: {
+        magnet: "磁力链接",
+        torrent: "BT 种子"
+      },
       mode: {
         single: "单流",
-        segmented: "分段"
+        segmented: "分段",
+        torrent: "BT 下载"
       },
       phase: {
+        resolving_metadata: "正在解析元数据",
         probing: "正在探测来源",
         downloading: "正在传输",
         verifying: "正在校验",
         publishing: "正在发布",
+        seeding: "正在做种",
         retry_wait: "等待重试"
       },
       control: {
         pause: "正在暂停",
-        cancel: "正在取消"
+        cancel: "正在取消",
+        stop_seeding: "正在停止做种"
       },
       errorCode: {
         dns: "DNS 失败",
@@ -3536,21 +3619,28 @@ export const zhCN = {
         target_conflict: "目标文件已存在",
         checksum_mismatch: "校验和不匹配",
         permission: "权限不足",
+        torrent_invalid: "种子文件无效",
+        torrent_metadata: "无法获取种子元数据",
+        private_torrent: "暂不支持私有种子",
+        tracker_blocked: "Tracker 已阻止",
         database: "数据库错误",
         internal: "内部错误"
       },
       progress: "{{name}} 的下载进度",
       actions: "下载操作",
       pause: "暂停下载",
+      pauseSeeding: "暂停做种",
       resume: "继续下载",
       retry: "重试下载",
       cancel: "取消下载",
+      stopSeeding: "停止做种",
       openDirectory: "打开目标目录",
       remove: "从历史中移除",
       status: {
         queued: "等待中",
         running: "下载中",
         paused: "已暂停",
+        seeding: "做种中",
         completed: "已完成",
         failed: "失败",
         cancelled: "已取消"
@@ -5203,7 +5293,7 @@ export const zhCN = {
       },
       downloads: {
         title: "下载",
-        description: "HTTP 下载并发数和传输行为。"
+        description: "HTTP 传输设置；BT 使用一个独立下载槽。"
       }
     },
     media: {
@@ -5606,10 +5696,10 @@ export const zhCN = {
     },
     downloads: {
       concurrencyTitle: "下载并发数",
-      concurrencyDescription: "限制同时运行的 HTTP 下载任务数量。",
-      concurrencyField: "同时下载数",
+      concurrencyDescription: "限制同时运行的 HTTP 下载；另有一个独立 BT 下载槽。",
+      concurrencyField: "HTTP 同时下载数",
       connectionCount: "{{count}} 个连接",
-      concurrencyHelp: "较低的并发数可以减少磁盘和网络压力。降低上限时，已经运行的任务会继续完成。",
+      concurrencyHelp: "较低的并发数可以减少磁盘和网络压力；此设置不改变独立 BT 下载槽。",
       connectionUnit: "个连接",
       parallelRequests: "每任务 Range 请求数",
       parallelRequestsHelp: "仅在服务端支持安全分段下载时使用（1-8）。",

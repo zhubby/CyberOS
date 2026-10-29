@@ -13,6 +13,7 @@ use std::time::Duration;
 use nix::fcntl::openat;
 use nix::fcntl::{Flock, FlockArg, OFlag};
 use nix::sys::stat::Mode;
+use nix::sys::stat::mkdirat;
 use nix::sys::statvfs::fstatvfs;
 #[cfg(target_os = "linux")]
 use tokio::process::Command;
@@ -25,6 +26,14 @@ use crate::error::{DownloadError, ErrorCode};
 
 #[derive(Debug)]
 pub struct StorageTarget {
+    directory: File,
+    directory_path: PathBuf,
+    target_name: OsString,
+    partial_name: OsString,
+}
+
+#[derive(Debug)]
+pub struct TorrentStorageTarget {
     directory: File,
     directory_path: PathBuf,
     target_name: OsString,
@@ -315,6 +324,262 @@ impl StorageTarget {
         }
         Ok(())
     }
+}
+
+impl TorrentStorageTarget {
+    pub fn resolve(
+        task: &Task,
+        data_root: &Path,
+        require_mount: bool,
+    ) -> Result<Self, DownloadError> {
+        validate_relative_path(Path::new(&task.target_directory))?;
+        validate_relative_path(Path::new(&task.target_path))?;
+        validate_relative_path(Path::new(&task.partial_path))?;
+        let target_path = Path::new(&task.target_path);
+        let partial_path = Path::new(&task.partial_path);
+        if normalized_parent(target_path) != normalized_parent(partial_path)
+            || normalized_parent(target_path)
+                != normalize_relative(Path::new(&task.target_directory))
+        {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "torrent staging directory must share the target directory",
+                false,
+            ));
+        }
+        let target_name = target_path.file_name().ok_or_else(|| {
+            DownloadError::new(ErrorCode::Storage, "torrent target has no name", false)
+        })?;
+        let partial_name = partial_path.file_name().ok_or_else(|| {
+            DownloadError::new(
+                ErrorCode::Storage,
+                "torrent staging directory has no name",
+                false,
+            )
+        })?;
+        if target_name != OsStr::new(&task.target_file_name) {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "torrent target name does not match its target path",
+                false,
+            ));
+        }
+        validate_storage_pool_id(&task.storage_pool_id)?;
+        let root = std::fs::canonicalize(data_root).map_err(DownloadError::storage)?;
+        let pool_path = root.join(&task.storage_pool_id);
+        let metadata = std::fs::symlink_metadata(&pool_path).map_err(DownloadError::storage)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "storage pool must be a real directory",
+                false,
+            ));
+        }
+        let mountpoint = std::fs::canonicalize(pool_path).map_err(DownloadError::storage)?;
+        if mountpoint != root.join(&task.storage_pool_id) {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "storage pool is not a direct child of the CyberOS data root",
+                false,
+            ));
+        }
+        let expected_mount_id = require_exact_mountpoint(&mountpoint, require_mount)?;
+        let directory_relative = normalize_relative(Path::new(&task.target_directory));
+        let mount = OpenOptions::new()
+            .read(true)
+            .custom_flags(nix::libc::O_DIRECTORY | nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC)
+            .open(&mountpoint)
+            .map_err(DownloadError::storage)?;
+        verify_mount_id(&mount, expected_mount_id)?;
+        let directory_path = mountpoint.join(&directory_relative);
+        let directory = open_directory_beneath(&mount, &directory_relative, &directory_path)?;
+        Ok(Self {
+            directory,
+            directory_path,
+            target_name: target_name.to_owned(),
+            partial_name: partial_name.to_owned(),
+        })
+    }
+
+    pub fn prepare_partial(&self) -> Result<PathBuf, DownloadError> {
+        if path_exists(&self.directory_path.join(&self.target_name))? {
+            return Err(DownloadError::new(
+                ErrorCode::TargetConflict,
+                "torrent target already exists",
+                false,
+            ));
+        }
+        let partial_path = self.directory_path.join(&self.partial_name);
+        match std::fs::symlink_metadata(&partial_path) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+                return Ok(partial_path);
+            }
+            Ok(_) => {
+                return Err(DownloadError::new(
+                    ErrorCode::Storage,
+                    "torrent staging path is not a real directory",
+                    false,
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(DownloadError::storage(error)),
+        }
+        mkdirat(
+            &self.directory,
+            Path::new(&self.partial_name),
+            Mode::from_bits_truncate(0o700),
+        )
+        .map_err(DownloadError::storage)?;
+        self.directory.sync_all().map_err(DownloadError::storage)?;
+        Ok(partial_path)
+    }
+
+    pub fn available_bytes(&self) -> Result<u64, DownloadError> {
+        let stats = fstatvfs(&self.directory).map_err(DownloadError::storage)?;
+        Ok(block_count_to_u64(stats.blocks_available()).saturating_mul(stats.fragment_size()))
+    }
+
+    pub fn final_path(&self) -> PathBuf {
+        self.directory_path.join(&self.target_name)
+    }
+
+    pub fn recover_published_path(&self) -> Result<Option<PathBuf>, DownloadError> {
+        let target = self.final_path();
+        let metadata = match std::fs::symlink_metadata(&target) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(DownloadError::storage(error)),
+        };
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "published torrent path is not a real directory",
+                false,
+            ));
+        }
+        if path_exists(&self.directory_path.join(&self.partial_name))? {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "torrent staging and published directories both exist",
+                false,
+            ));
+        }
+        Ok(Some(target))
+    }
+
+    pub fn publish(&self) -> Result<(), DownloadError> {
+        let partial_path = self.directory_path.join(&self.partial_name);
+        let partial = std::fs::symlink_metadata(&partial_path).map_err(DownloadError::storage)?;
+        if !partial.is_dir() || partial.file_type().is_symlink() {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "torrent staging path changed before publication",
+                false,
+            ));
+        }
+        normalize_torrent_tree(&partial_path)?;
+        if path_exists(&self.directory_path.join(&self.target_name))? {
+            return Err(DownloadError::new(
+                ErrorCode::TargetConflict,
+                "torrent target already exists",
+                false,
+            ));
+        }
+        rename_directory_no_replace(
+            &self.directory,
+            &self.directory_path,
+            &self.partial_name,
+            &self.target_name,
+        )?;
+        self.directory.sync_all().map_err(DownloadError::storage)
+    }
+
+    pub fn remove_partial(&self) -> Result<(), DownloadError> {
+        let partial = self.directory_path.join(&self.partial_name);
+        match std::fs::symlink_metadata(&partial) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+                std::fs::remove_dir_all(partial).map_err(DownloadError::storage)?;
+                self.directory.sync_all().map_err(DownloadError::storage)
+            }
+            Ok(_) => Err(DownloadError::new(
+                ErrorCode::Storage,
+                "torrent staging path is not a real directory",
+                false,
+            )),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(DownloadError::storage(error)),
+        }
+    }
+}
+
+fn normalize_torrent_tree(directory: &Path) -> Result<(), DownloadError> {
+    for entry in std::fs::read_dir(directory).map_err(DownloadError::storage)? {
+        let entry = entry.map_err(DownloadError::storage)?;
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path).map_err(DownloadError::storage)?;
+        let file_type = metadata.file_type();
+        if file_type.is_symlink() {
+            return Err(DownloadError::new(
+                ErrorCode::Storage,
+                "torrent staging directory contains a symbolic link",
+                false,
+            ));
+        }
+        if file_type.is_dir() {
+            normalize_torrent_tree(&path)?;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o770))
+                .map_err(DownloadError::storage)?;
+            continue;
+        }
+        if file_type.is_file() {
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o660))
+                .map_err(DownloadError::storage)?;
+            continue;
+        }
+        return Err(DownloadError::new(
+            ErrorCode::Storage,
+            "torrent staging directory contains a special file",
+            false,
+        ));
+    }
+    std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o770))
+        .map_err(DownloadError::storage)
+}
+
+fn path_exists(path: &Path) -> Result<bool, DownloadError> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(DownloadError::storage(error)),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn rename_directory_no_replace(
+    directory: &File,
+    _directory_path: &Path,
+    source: &OsStr,
+    target: &OsStr,
+) -> Result<(), DownloadError> {
+    rename_no_replace(directory, source, target)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn rename_directory_no_replace(
+    _directory: &File,
+    directory_path: &Path,
+    source: &OsStr,
+    target: &OsStr,
+) -> Result<(), DownloadError> {
+    let target_path = directory_path.join(target);
+    if path_exists(&target_path)? {
+        return Err(DownloadError::new(
+            ErrorCode::TargetConflict,
+            "torrent target already exists",
+            false,
+        ));
+    }
+    std::fs::rename(directory_path.join(source), target_path).map_err(DownloadError::storage)
 }
 
 fn block_count_to_u64<T: Into<u64>>(block_count: T) -> u64 {
@@ -611,5 +876,115 @@ mod tests {
             mountinfo,
             Path::new("/cyberos/data/My Pool/nested")
         ));
+    }
+
+    #[test]
+    fn torrent_directory_publish_stays_in_pool_and_never_overwrites() {
+        let root = tempfile::tempdir().unwrap();
+        let pool = root.path().join("pool-1");
+        std::fs::create_dir(&pool).unwrap();
+        std::fs::create_dir(pool.join("Downloads")).unwrap();
+        let task = torrent_task();
+        let target = TorrentStorageTarget::resolve(&task, root.path(), false).unwrap();
+        let staging = target.prepare_partial().unwrap();
+        std::fs::write(staging.join("file.bin"), b"new").unwrap();
+        target.publish().unwrap();
+        assert_eq!(
+            std::fs::metadata(pool.join("Downloads/release"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o770
+        );
+        assert_eq!(
+            std::fs::metadata(pool.join("Downloads/release/file.bin"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o660
+        );
+        assert_eq!(
+            target.recover_published_path().unwrap(),
+            Some(
+                std::fs::canonicalize(&pool)
+                    .unwrap()
+                    .join("Downloads/release")
+            )
+        );
+        assert_eq!(
+            std::fs::read(pool.join("Downloads/release/file.bin")).unwrap(),
+            b"new"
+        );
+
+        let target = TorrentStorageTarget::resolve(&task, root.path(), false).unwrap();
+        assert!(target.prepare_partial().is_err());
+        assert_eq!(
+            std::fs::read(pool.join("Downloads/release/file.bin")).unwrap(),
+            b"new"
+        );
+    }
+
+    #[test]
+    fn torrent_publish_rejects_symlinks_inside_the_staging_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let pool = root.path().join("pool-1");
+        std::fs::create_dir(&pool).unwrap();
+        std::fs::create_dir(pool.join("Downloads")).unwrap();
+        let outside = root.path().join("outside.bin");
+        std::fs::write(&outside, b"outside").unwrap();
+        let target = TorrentStorageTarget::resolve(&torrent_task(), root.path(), false).unwrap();
+        let staging = target.prepare_partial().unwrap();
+        std::os::unix::fs::symlink(&outside, staging.join("linked.bin")).unwrap();
+
+        let error = target.publish().unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::Storage);
+        assert!(error.to_string().contains("symbolic link"));
+        assert!(!pool.join("Downloads/release").exists());
+        assert_eq!(std::fs::read(outside).unwrap(), b"outside");
+    }
+
+    fn torrent_task() -> Task {
+        Task {
+            id: "torrent".to_owned(),
+            url: "magnet:?xt=urn:btih:0123456789012345678901234567890123456789".to_owned(),
+            storage_pool_id: "pool-1".to_owned(),
+            target_directory: "Downloads".to_owned(),
+            target_file_name: "release".to_owned(),
+            target_path: "Downloads/release".to_owned(),
+            partial_path: "Downloads/.release.cyberos-part".to_owned(),
+            status: "running".to_owned(),
+            received_bytes: 0,
+            total_bytes: Some(3),
+            speed_bytes_per_second: 0,
+            etag: None,
+            last_modified: None,
+            worker_id: Some("worker".to_owned()),
+            lease_expires_at: None,
+            phase: None,
+            download_mode: Some("torrent".to_owned()),
+            expected_sha256: None,
+            actual_sha256: None,
+            retry_count: 0,
+            next_retry_at: None,
+            control_requested: None,
+            segment_count: 0,
+            source_kind: "magnet".to_owned(),
+            torrent_info_hash: Some("0123456789012345678901234567890123456789".to_owned()),
+            torrent_name: Some("release".to_owned()),
+            torrent_metainfo: Some(b"torrent".to_vec()),
+            selected_file_count: 1,
+            selected_file_indices: vec![0],
+            uploaded_bytes: 0,
+            upload_speed_bytes_per_second: 0,
+            peer_count: 0,
+            seed_ratio_limit: 1.0,
+            seed_time_limit_seconds: 7_200,
+            content_completed_at: None,
+            seed_started_at: None,
+            engine_torrent_id: None,
+        }
     }
 }

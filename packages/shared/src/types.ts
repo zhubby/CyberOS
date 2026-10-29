@@ -44,19 +44,24 @@ export type DownloadTaskStatus =
   | "queued"
   | "running"
   | "paused"
+  | "seeding"
   | "completed"
   | "failed"
   | "cancelled";
 
 export type DownloadTaskPhase =
+  | "resolving_metadata"
   | "probing"
   | "downloading"
   | "verifying"
   | "publishing"
+  | "seeding"
   | "retry_wait";
 
-export type DownloadMode = "single" | "segmented";
-export type DownloadControlRequest = "pause" | "cancel";
+export type DownloadMode = "single" | "segmented" | "torrent";
+export type DownloadSourceKind = "http" | "magnet" | "torrent";
+export type DownloadControlRequest = "pause" | "cancel" | "stop_seeding";
+export type TorrentPreviewStatus = "queued" | "resolving" | "ready" | "failed" | "expired";
 export type DownloadErrorCode =
   | "dns"
   | "ssrf_blocked"
@@ -73,6 +78,10 @@ export type DownloadErrorCode =
   | "target_conflict"
   | "checksum_mismatch"
   | "permission"
+  | "torrent_invalid"
+  | "torrent_metadata"
+  | "private_torrent"
+  | "tracker_blocked"
   | "database"
   | "internal";
 
@@ -109,6 +118,17 @@ export interface DownloadTaskRecord {
   nextRetryAt: string | null;
   controlRequested: DownloadControlRequest | null;
   segmentCount: number;
+  sourceKind: DownloadSourceKind;
+  torrentInfoHash: string | null;
+  torrentName: string | null;
+  selectedFileCount: number;
+  uploadedBytes: number;
+  uploadSpeedBytesPerSecond: number;
+  peerCount: number;
+  seedRatioLimit: number;
+  seedTimeLimitSeconds: number;
+  contentCompletedAt: string | null;
+  seedStartedAt: string | null;
 }
 
 export interface DownloadTaskCreateInput {
@@ -117,6 +137,39 @@ export interface DownloadTaskCreateInput {
   targetDirectory: string;
   targetFileName: string;
   expectedSha256?: string | null;
+}
+
+export interface TorrentFileRecord {
+  fileIndex: number;
+  path: string;
+  sizeBytes: number;
+}
+
+export interface TorrentTaskFileRecord extends TorrentFileRecord {
+  selected: boolean;
+  receivedBytes: number;
+}
+
+export interface TorrentPreviewRecord {
+  id: string;
+  sourceKind: Exclude<DownloadSourceKind, "http">;
+  sourceUri: string | null;
+  status: TorrentPreviewStatus;
+  infoHash: string | null;
+  name: string | null;
+  totalBytes: number | null;
+  fileCount: number;
+  isPrivate: boolean;
+  error: string | null;
+  workerId: string | null;
+  leaseExpiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
+export interface TorrentPreviewDetails extends TorrentPreviewRecord {
+  files: TorrentFileRecord[];
 }
 
 export interface DownloadSettingsRecord {

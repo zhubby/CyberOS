@@ -19,7 +19,11 @@ const TASK_COLUMNS: &str = "
   d.received_bytes, d.total_bytes, d.speed_bytes_per_second,
   d.etag, d.last_modified, d.worker_id, d.lease_expires_at,
   d.phase, d.download_mode, d.expected_sha256, d.actual_sha256,
-  d.retry_count, d.next_retry_at, d.control_requested, d.segment_count
+  d.retry_count, d.next_retry_at, d.control_requested, d.segment_count,
+  d.source_kind, d.torrent_info_hash, d.torrent_name, d.torrent_metainfo,
+  d.selected_file_count, d.uploaded_bytes, d.upload_speed_bytes_per_second,
+  d.peer_count, d.seed_ratio_limit, d.seed_time_limit_seconds,
+  d.content_completed_at, d.seed_started_at, d.engine_torrent_id
 ";
 
 #[derive(Clone)]
@@ -52,6 +56,20 @@ pub struct Task {
     pub next_retry_at: Option<String>,
     pub control_requested: Option<String>,
     pub segment_count: u32,
+    pub source_kind: String,
+    pub torrent_info_hash: Option<String>,
+    pub torrent_name: Option<String>,
+    pub torrent_metainfo: Option<Vec<u8>>,
+    pub selected_file_count: u32,
+    pub selected_file_indices: Vec<usize>,
+    pub uploaded_bytes: u64,
+    pub upload_speed_bytes_per_second: u64,
+    pub peer_count: u32,
+    pub seed_ratio_limit: f64,
+    pub seed_time_limit_seconds: u64,
+    pub content_completed_at: Option<String>,
+    pub seed_started_at: Option<String>,
+    pub engine_torrent_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -175,6 +193,42 @@ pub struct Progress<'a> {
     pub phase: &'a str,
     pub mode: &'a str,
     pub segment_count: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct TorrentProgress {
+    pub received_bytes: u64,
+    pub total_bytes: u64,
+    pub speed_bytes_per_second: u64,
+    pub uploaded_bytes: u64,
+    pub upload_speed_bytes_per_second: u64,
+    pub peer_count: u32,
+    pub file_progress: Vec<(usize, u64)>,
+    pub seeding: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TorrentPreview {
+    pub id: String,
+    pub source_kind: String,
+    pub source_uri: Option<String>,
+    pub metainfo: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TorrentFile {
+    pub file_index: usize,
+    pub path: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedTorrentPreview {
+    pub info_hash: String,
+    pub name: String,
+    pub metainfo: Vec<u8>,
+    pub total_bytes: u64,
+    pub files: Vec<TorrentFile>,
 }
 
 impl Db {
@@ -332,7 +386,7 @@ impl Db {
             let changed = connection
                 .execute(
                     "UPDATE download_tasks SET lease_expires_at = ?, updated_at = ? \
-                 WHERE id = ? AND status = 'running' AND worker_id = ? AND control_requested IS NULL",
+                 WHERE id = ? AND status IN ('running', 'seeding') AND worker_id = ? AND control_requested IS NULL",
                     params![future_iso(lease), now_iso(), task_id, worker_id],
                 )
                 .map_err(DownloadError::database)?;
@@ -361,10 +415,14 @@ impl Db {
             let transaction = connection.transaction().map_err(DownloadError::database)?;
             let changed = transaction.execute(
                 "UPDATE download_tasks SET \
-                   status = CASE control_requested WHEN 'pause' THEN 'paused' WHEN 'cancel' THEN 'cancelled' ELSE 'queued' END, \
-                   worker_id = NULL, lease_expires_at = NULL, speed_bytes_per_second = 0, phase = NULL, \
+                   status = CASE control_requested WHEN 'pause' THEN 'paused' WHEN 'cancel' THEN 'cancelled' \
+                     ELSE CASE status WHEN 'seeding' THEN 'seeding' ELSE 'queued' END END, \
+                   worker_id = NULL, lease_expires_at = NULL, speed_bytes_per_second = 0, \
+                   upload_speed_bytes_per_second = 0, peer_count = 0, \
+                   phase = CASE WHEN status = 'seeding' THEN 'seeding' \
+                     WHEN source_kind <> 'http' AND phase = 'publishing' THEN 'publishing' ELSE NULL END, \
                    control_requested = NULL, finished_at = CASE WHEN control_requested = 'cancel' THEN ? ELSE NULL END, updated_at = ? \
-                 WHERE status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at <= ?) \
+                 WHERE status IN ('running', 'seeding') AND (lease_expires_at IS NULL OR lease_expires_at <= ?) \
                    AND NOT EXISTS (SELECT 1 FROM download_publish_journal j WHERE j.task_id = download_tasks.id)",
                 params![now, now, now],
             ).map_err(DownloadError::database)?;
@@ -381,7 +439,7 @@ impl Db {
         self.call(|connection| {
             let count: i64 = connection
                 .query_row(
-                    "SELECT COUNT(*) FROM download_tasks WHERE status = 'running'",
+                    "SELECT COUNT(*) FROM download_tasks WHERE status = 'running' AND source_kind = 'http'",
                     [],
                     |row| row.get(0),
                 )
@@ -400,7 +458,7 @@ impl Db {
                 UPDATE download_tasks SET status = 'running', worker_id = ?1, lease_expires_at = ?2, \
                   started_at = COALESCE(started_at, ?3), finished_at = NULL, error = NULL, error_code = NULL, \
                   error_retryable = 0, phase = 'probing', next_retry_at = NULL, control_requested = NULL, updated_at = ?3 \
-                WHERE id = (SELECT id FROM download_tasks WHERE status = 'queued' \
+                WHERE id = (SELECT id FROM download_tasks WHERE status = 'queued' AND source_kind = 'http' \
                   AND (next_retry_at IS NULL OR next_retry_at <= ?3) \
                   AND NOT EXISTS (SELECT 1 FROM download_publish_journal j WHERE j.task_id = download_tasks.id) \
                   ORDER BY COALESCE(next_retry_at, created_at), created_at LIMIT 1) \
@@ -421,6 +479,295 @@ impl Db {
                 .map_err(DownloadError::database)
         })
         .await
+    }
+
+    pub async fn torrent_running_count(&self) -> DbResult<usize> {
+        self.call(|connection| {
+            let count: i64 = connection.query_row(
+                    "SELECT COUNT(*) FROM download_tasks WHERE source_kind <> 'http' AND status = 'running' AND worker_id IS NOT NULL",
+                [],
+                |row| row.get(0),
+            ).map_err(DownloadError::database)?;
+            Ok(count.max(0) as usize)
+        }).await
+    }
+
+    pub async fn claim_torrent(&self, worker_id: &str, lease: Duration) -> DbResult<Option<Task>> {
+        let worker_id = worker_id.to_owned();
+        self.call(move |connection| {
+            let now = now_iso();
+            let lease_expires = future_iso(lease);
+            let sql = format!("\
+                UPDATE download_tasks SET status = CASE WHEN status = 'queued' THEN 'running' ELSE status END, \
+                  worker_id = ?1, lease_expires_at = ?2, started_at = COALESCE(started_at, ?3), \
+                  finished_at = NULL, error = NULL, error_code = NULL, error_retryable = 0, \
+                  phase = CASE WHEN status = 'seeding' THEN 'seeding' \
+                    WHEN phase = 'publishing' THEN 'publishing' ELSE 'downloading' END, \
+                  download_mode = 'torrent', next_retry_at = NULL, control_requested = NULL, updated_at = ?3 \
+                WHERE id = (SELECT id FROM download_tasks WHERE source_kind <> 'http' \
+                  AND ((status = 'queued' AND (next_retry_at IS NULL OR next_retry_at <= ?3)) \
+                    OR (status = 'seeding' AND (worker_id IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= ?3))) \
+                  ORDER BY CASE status WHEN 'seeding' THEN 0 ELSE 1 END, COALESCE(next_retry_at, created_at), created_at LIMIT 1) \
+                RETURNING {}", TASK_COLUMNS.replace("d.", ""));
+            let mut task = connection.query_row(&sql, params![worker_id, lease_expires, now], map_task)
+                .optional().map_err(DownloadError::database)?;
+            if let Some(task) = task.as_mut() {
+                let mut statement = connection.prepare(
+                    "SELECT file_index FROM download_task_files WHERE task_id = ? AND selected = 1 ORDER BY file_index"
+                ).map_err(DownloadError::database)?;
+                let rows = statement.query_map([&task.id], |row| row.get::<_, i64>(0))
+                    .map_err(DownloadError::database)?;
+                task.selected_file_indices = rows
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(DownloadError::database)?
+                    .into_iter()
+                    .filter_map(|value| usize::try_from(value).ok())
+                    .collect();
+            }
+            Ok(task)
+        }).await
+    }
+
+    pub async fn claim_torrent_preview(
+        &self,
+        worker_id: &str,
+        lease: Duration,
+    ) -> DbResult<Option<TorrentPreview>> {
+        let worker_id = worker_id.to_owned();
+        self.call(move |connection| {
+            let now = now_iso();
+            connection.execute(
+                "UPDATE torrent_previews SET status = CASE WHEN expires_at <= ? THEN 'expired' ELSE 'queued' END, \
+                   worker_id = NULL, lease_expires_at = NULL, updated_at = ? \
+                 WHERE status = 'resolving' AND (lease_expires_at IS NULL OR lease_expires_at <= ?)",
+                params![now, now, now],
+            ).map_err(DownloadError::database)?;
+            connection.execute(
+                "UPDATE torrent_previews SET status = 'expired', updated_at = ? \
+                 WHERE status = 'queued' AND expires_at <= ?",
+                params![now, now],
+            ).map_err(DownloadError::database)?;
+            connection.query_row(
+                "UPDATE torrent_previews SET status = 'resolving', worker_id = ?, lease_expires_at = ?, updated_at = ? \
+                 WHERE id = (SELECT id FROM torrent_previews WHERE status = 'queued' AND expires_at > ? \
+                   ORDER BY created_at LIMIT 1) AND status = 'queued' \
+                 RETURNING id, source_kind, source_uri, metainfo",
+                params![worker_id, future_iso(lease), now, now],
+                |row| Ok(TorrentPreview {
+                    id: row.get(0)?,
+                    source_kind: row.get(1)?,
+                    source_uri: row.get(2)?,
+                    metainfo: row.get(3)?,
+                }),
+            ).optional().map_err(DownloadError::database)
+        }).await
+    }
+
+    pub async fn renew_torrent_preview_lease(
+        &self,
+        preview_id: &str,
+        worker_id: &str,
+        lease: Duration,
+    ) -> DbResult<bool> {
+        let preview_id = preview_id.to_owned();
+        let worker_id = worker_id.to_owned();
+        self.call(move |connection| {
+            let now = now_iso();
+            let changed = connection
+                .execute(
+                    "UPDATE torrent_previews SET lease_expires_at = ?, updated_at = ? \
+                 WHERE id = ? AND status = 'resolving' AND worker_id = ? AND expires_at > ?",
+                    params![future_iso(lease), now, preview_id, worker_id, now],
+                )
+                .map_err(DownloadError::database)?;
+            Ok(changed == 1)
+        })
+        .await
+    }
+
+    pub async fn complete_torrent_preview(
+        &self,
+        preview: &TorrentPreview,
+        worker_id: &str,
+        resolved: &ResolvedTorrentPreview,
+    ) -> DbResult<()> {
+        let preview = preview.clone();
+        let worker_id = worker_id.to_owned();
+        let resolved = resolved.clone();
+        self.call(move |connection| {
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(DownloadError::database)?;
+            let now = now_iso();
+            let changed = transaction.execute(
+                "UPDATE torrent_previews SET status = 'ready', info_hash = ?, name = ?, metainfo = ?, \
+                   total_bytes = ?, file_count = ?, is_private = 0, error = NULL, worker_id = NULL, \
+                   lease_expires_at = NULL, updated_at = ? \
+                 WHERE id = ? AND status = 'resolving' AND worker_id = ?",
+                params![resolved.info_hash, resolved.name, resolved.metainfo,
+                    i64_from(resolved.total_bytes)?, i64::try_from(resolved.files.len()).unwrap_or(i64::MAX),
+                    now, preview.id, worker_id],
+            ).map_err(DownloadError::database)?;
+            ensure_owned(changed)?;
+            transaction.execute("DELETE FROM torrent_preview_files WHERE preview_id = ?", [&preview.id])
+                .map_err(DownloadError::database)?;
+            {
+                let mut insert = transaction.prepare(
+                    "INSERT INTO torrent_preview_files (preview_id, file_index, path, size_bytes) VALUES (?, ?, ?, ?)"
+                ).map_err(DownloadError::database)?;
+                for file in resolved.files {
+                    insert.execute(params![preview.id, i64::try_from(file.file_index).unwrap_or(i64::MAX),
+                        file.path, i64_from(file.size_bytes)?]).map_err(DownloadError::database)?;
+                }
+            }
+            transaction.commit().map_err(DownloadError::database)
+        }).await
+    }
+
+    pub async fn fail_torrent_preview(
+        &self,
+        preview_id: &str,
+        worker_id: &str,
+        message: &str,
+    ) -> DbResult<()> {
+        let preview_id = preview_id.to_owned();
+        let worker_id = worker_id.to_owned();
+        let message = message.to_owned();
+        self.call(move |connection| {
+            let changed = connection
+                .execute(
+                    "UPDATE torrent_previews SET status = 'failed', error = ?, worker_id = NULL, \
+                   lease_expires_at = NULL, updated_at = ? \
+                 WHERE id = ? AND status = 'resolving' AND worker_id = ?",
+                    params![message, now_iso(), preview_id, worker_id],
+                )
+                .map_err(DownloadError::database)?;
+            ensure_owned(changed)
+        })
+        .await
+    }
+
+    pub async fn torrent_progress(
+        &self,
+        task: &Task,
+        worker_id: &str,
+        lease: Duration,
+        progress: &TorrentProgress,
+    ) -> DbResult<bool> {
+        let task_id = task.id.clone();
+        let worker_id = worker_id.to_owned();
+        let progress = progress.clone();
+        self.call(move |connection| {
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(DownloadError::database)?;
+            let now = now_iso();
+            let changed = transaction.execute(
+                "UPDATE download_tasks SET status = CASE WHEN ? THEN 'seeding' ELSE 'running' END, \
+                   received_bytes = ?, total_bytes = ?, speed_bytes_per_second = ?, uploaded_bytes = ?, \
+                   upload_speed_bytes_per_second = ?, peer_count = ?, phase = CASE WHEN ? THEN 'seeding' ELSE 'downloading' END, \
+                   content_completed_at = CASE WHEN ? THEN COALESCE(content_completed_at, ?) ELSE content_completed_at END, \
+                   seed_started_at = CASE WHEN ? THEN COALESCE(seed_started_at, ?) ELSE seed_started_at END, \
+                   lease_expires_at = ?, last_progress_at = ?, updated_at = ? \
+                 WHERE id = ? AND status IN ('running', 'seeding') AND worker_id = ? AND control_requested IS NULL",
+                params![progress.seeding, i64_from(progress.received_bytes)?, i64_from(progress.total_bytes)?,
+                    i64_from(progress.speed_bytes_per_second)?, i64_from(progress.uploaded_bytes)?,
+                    i64_from(progress.upload_speed_bytes_per_second)?, i64::from(progress.peer_count), progress.seeding,
+                    progress.seeding, now, progress.seeding, now, future_iso(lease), now, now, task_id, worker_id],
+            ).map_err(DownloadError::database)?;
+            if changed == 1 {
+                transaction.execute(
+                    "UPDATE download_space_reservations SET reserved_bytes = MAX(0, ? - ?), updated_at = ? WHERE task_id = ?",
+                    params![i64_from(progress.total_bytes)?, i64_from(progress.received_bytes)?, now, task_id],
+                ).map_err(DownloadError::database)?;
+                let mut update = transaction.prepare(
+                    "UPDATE download_task_files SET received_bytes = MIN(size_bytes, ?) WHERE task_id = ? AND file_index = ?"
+                ).map_err(DownloadError::database)?;
+                for (index, received) in progress.file_progress {
+                    update.execute(params![i64_from(received)?, task_id, i64::try_from(index).unwrap_or(i64::MAX)])
+                        .map_err(DownloadError::database)?;
+                }
+            }
+            transaction.commit().map_err(DownloadError::database)?;
+            Ok(changed == 1)
+        }).await
+    }
+
+    pub async fn complete_torrent(&self, task: &Task, worker_id: &str) -> DbResult<()> {
+        let task_id = task.id.clone();
+        let worker_id = worker_id.to_owned();
+        self.call(move |connection| {
+            let now = now_iso();
+            let changed = connection.execute(
+                "UPDATE download_tasks SET status = 'completed', phase = NULL, worker_id = NULL, \
+                   lease_expires_at = NULL, speed_bytes_per_second = 0, upload_speed_bytes_per_second = 0, \
+                   peer_count = 0, control_requested = NULL, finished_at = ?, updated_at = ? \
+                 WHERE id = ? AND status IN ('running', 'seeding') AND worker_id = ?",
+                params![now, now, task_id, worker_id],
+            ).map_err(DownloadError::database)?;
+            ensure_owned(changed)
+        }).await
+    }
+
+    pub async fn begin_torrent_publish(&self, task: &Task, worker_id: &str) -> DbResult<()> {
+        let task_id = task.id.clone();
+        let worker_id = worker_id.to_owned();
+        self.call(move |connection| {
+            let changed = connection.execute(
+                "UPDATE download_tasks SET phase = 'publishing', speed_bytes_per_second = 0, updated_at = ? \
+                 WHERE id = ? AND status = 'running' AND worker_id = ? AND control_requested IS NULL",
+                params![now_iso(), task_id, worker_id],
+            ).map_err(DownloadError::database)?;
+            ensure_owned(changed)
+        }).await
+    }
+
+    pub async fn publish_torrent(&self, task: &Task, worker_id: &str) -> DbResult<()> {
+        let task = task.clone();
+        let worker_id = worker_id.to_owned();
+        self.call(move |connection| {
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(DownloadError::database)?;
+            let now = now_iso();
+            let operation_id = format!("download:{}", task.id);
+            let metadata = serde_json::json!({
+                "storagePoolId": task.storage_pool_id,
+                "reversible": true,
+                "sourceKind": task.source_kind,
+                "infoHash": task.torrent_info_hash,
+                "selectedFileCount": task.selected_file_count,
+                "downloadMode": "torrent"
+            });
+            transaction.execute(
+                "INSERT OR IGNORE INTO file_operations \
+                   (id, operation, source_path, target_path, status, metadata_json, created_at, updated_at) \
+                 VALUES (?, 'download', NULL, ?, 'applied', ?, ?, ?)",
+                params![operation_id, task.target_path, metadata.to_string(), now, now],
+            ).map_err(DownloadError::database)?;
+            let changed = transaction.execute(
+                "UPDATE download_tasks SET status = 'seeding', phase = 'seeding', download_mode = 'torrent', \
+                   received_bytes = COALESCE(total_bytes, received_bytes), speed_bytes_per_second = 0, \
+                   content_completed_at = COALESCE(content_completed_at, ?), seed_started_at = COALESCE(seed_started_at, ?), \
+                   file_operation_id = ?, last_progress_at = ?, updated_at = ? \
+                 WHERE id = ? AND status = 'running' AND phase = 'publishing' \
+                   AND worker_id = ? AND control_requested IS NULL",
+                params![now, now, operation_id, now, now, task.id, worker_id],
+            ).map_err(DownloadError::database)?;
+            ensure_owned(changed)?;
+            transaction.execute(
+                "DELETE FROM download_space_reservations WHERE task_id = ?",
+                [&task.id],
+            ).map_err(DownloadError::database)?;
+            transaction.execute(
+                "INSERT INTO index_queue \
+                   (id, storage_pool_id, path, recursive, kind, generation, priority, status, created_at, updated_at) \
+                 VALUES (?, ?, ?, 1, 'incremental', 1, 50, 'queued', ?, ?) \
+                 ON CONFLICT(storage_pool_id, path) DO UPDATE SET generation = index_queue.generation + 1, \
+                   recursive = 1, priority = MAX(index_queue.priority, 50), status = 'queued', retry_count = 0, \
+                   next_retry_at = NULL, worker_id = NULL, lease_expires_at = NULL, error = NULL, error_code = NULL, \
+                   updated_at = excluded.updated_at, finished_at = NULL",
+                params![format!("{}-index", operation_id), task.storage_pool_id, task.target_path, now, now],
+            ).map_err(DownloadError::database)?;
+            transaction.commit().map_err(DownloadError::database)
+        }).await
     }
 
     pub async fn progress(
@@ -822,8 +1169,9 @@ impl Db {
             let transaction = connection.transaction().map_err(DownloadError::database)?;
             let changed = transaction.execute(
                 "UPDATE download_tasks SET status = ?, phase = NULL, control_requested = NULL, worker_id = NULL, lease_expires_at = NULL, \
-                   speed_bytes_per_second = 0, finished_at = CASE WHEN ? THEN ? ELSE NULL END, updated_at = ? \
-                 WHERE id = ? AND status = 'running' AND worker_id = ?",
+                   speed_bytes_per_second = 0, upload_speed_bytes_per_second = 0, peer_count = 0, \
+                   finished_at = CASE WHEN ? THEN ? ELSE NULL END, updated_at = ? \
+                 WHERE id = ? AND status IN ('running', 'seeding') AND worker_id = ?",
                 params![status, cancelled, now, now, task_id, worker_id],
             ).map_err(DownloadError::database)?;
             if changed == 1 {
@@ -854,10 +1202,13 @@ impl Db {
         self.call(move |connection| {
             let transaction = connection.transaction().map_err(DownloadError::database)?;
             let changed = transaction.execute(
-                "UPDATE download_tasks SET status = ?, phase = ?, error = ?, error_code = ?, error_retryable = ?, \
+                "UPDATE download_tasks SET status = ?, \
+                   phase = CASE WHEN source_kind <> 'http' AND phase = 'publishing' THEN 'publishing' ELSE ? END, \
+                   error = ?, error_code = ?, error_retryable = ?, \
                    retry_count = retry_count + ?, next_retry_at = ?, worker_id = NULL, lease_expires_at = NULL, \
-                   speed_bytes_per_second = 0, control_requested = NULL, finished_at = ?, updated_at = ? \
-                 WHERE id = ? AND status = 'running' AND worker_id = ?",
+                   speed_bytes_per_second = 0, upload_speed_bytes_per_second = 0, peer_count = 0, \
+                   control_requested = NULL, finished_at = ?, updated_at = ? \
+                 WHERE id = ? AND status IN ('running', 'seeding') AND worker_id = ?",
                 params![if retry { "queued" } else { "failed" }, if retry { Some("retry_wait") } else { None },
                     message, code, error_retryable, if retry { 1 } else { 0 }, next_retry_at,
                     if retry { None } else { Some(now_iso()) }, now_iso(), task_id, worker_id],
@@ -878,10 +1229,14 @@ impl Db {
             let now = now_iso();
             transaction.execute(
                 "UPDATE download_tasks SET \
-                   status = CASE control_requested WHEN 'pause' THEN 'paused' WHEN 'cancel' THEN 'cancelled' ELSE 'queued' END, \
-                   phase = NULL, worker_id = NULL, lease_expires_at = NULL, speed_bytes_per_second = 0, \
+                   status = CASE control_requested WHEN 'pause' THEN 'paused' WHEN 'cancel' THEN 'cancelled' \
+                     ELSE CASE status WHEN 'seeding' THEN 'seeding' ELSE 'queued' END END, \
+                   phase = CASE WHEN status = 'seeding' THEN 'seeding' \
+                     WHEN source_kind <> 'http' AND phase = 'publishing' THEN 'publishing' ELSE NULL END, \
+                   worker_id = NULL, lease_expires_at = NULL, speed_bytes_per_second = 0, \
+                   upload_speed_bytes_per_second = 0, peer_count = 0, \
                    control_requested = NULL, finished_at = CASE WHEN control_requested = 'cancel' THEN ? ELSE NULL END, updated_at = ? \
-                 WHERE status = 'running' AND worker_id = ?",
+                 WHERE status IN ('running', 'seeding') AND worker_id = ?",
                 params![now, now, worker_id],
             ).map_err(DownloadError::database)?;
             transaction.execute(
@@ -921,6 +1276,20 @@ fn map_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         next_retry_at: row.get(20)?,
         control_requested: row.get(21)?,
         segment_count: row.get::<_, i64>(22)?.max(0) as u32,
+        source_kind: row.get(23)?,
+        torrent_info_hash: row.get(24)?,
+        torrent_name: row.get(25)?,
+        torrent_metainfo: row.get(26)?,
+        selected_file_count: row.get::<_, i64>(27)?.max(0) as u32,
+        selected_file_indices: Vec::new(),
+        uploaded_bytes: row.get::<_, i64>(28)?.max(0) as u64,
+        upload_speed_bytes_per_second: row.get::<_, i64>(29)?.max(0) as u64,
+        peer_count: row.get::<_, i64>(30)?.max(0) as u32,
+        seed_ratio_limit: row.get(31)?,
+        seed_time_limit_seconds: row.get::<_, i64>(32)?.max(0) as u64,
+        content_completed_at: row.get(33)?,
+        seed_started_at: row.get(34)?,
+        engine_torrent_id: row.get(35)?,
     })
 }
 
@@ -1002,7 +1371,13 @@ CREATE TABLE download_tasks (
   file_operation_id TEXT, phase TEXT, download_mode TEXT, expected_sha256 TEXT,
   actual_sha256 TEXT, error_code TEXT, error_retryable INTEGER NOT NULL DEFAULT 0,
   retry_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT, control_requested TEXT,
-  segment_count INTEGER NOT NULL DEFAULT 0
+  segment_count INTEGER NOT NULL DEFAULT 0,
+  source_kind TEXT NOT NULL DEFAULT 'http', torrent_info_hash TEXT, torrent_name TEXT,
+  torrent_metainfo BLOB, selected_file_count INTEGER NOT NULL DEFAULT 0,
+  uploaded_bytes INTEGER NOT NULL DEFAULT 0, upload_speed_bytes_per_second INTEGER NOT NULL DEFAULT 0,
+  peer_count INTEGER NOT NULL DEFAULT 0, seed_ratio_limit REAL NOT NULL DEFAULT 1.0,
+  seed_time_limit_seconds INTEGER NOT NULL DEFAULT 7200, content_completed_at TEXT,
+  seed_started_at TEXT, engine_torrent_id TEXT
 );
 CREATE TABLE download_segments (
   task_id TEXT NOT NULL, start_byte INTEGER NOT NULL, end_byte INTEGER NOT NULL,
@@ -1031,6 +1406,22 @@ CREATE TABLE index_queue (
 );
 CREATE TABLE system_settings (
   key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE torrent_previews (
+  id TEXT PRIMARY KEY, source_kind TEXT NOT NULL, source_uri TEXT, metainfo BLOB,
+  status TEXT NOT NULL, info_hash TEXT, name TEXT, total_bytes INTEGER,
+  file_count INTEGER NOT NULL DEFAULT 0, is_private INTEGER NOT NULL DEFAULT 0,
+  error TEXT, worker_id TEXT, lease_expires_at TEXT, created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE TABLE torrent_preview_files (
+  preview_id TEXT NOT NULL, file_index INTEGER NOT NULL, path TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL, PRIMARY KEY (preview_id, file_index)
+);
+CREATE TABLE download_task_files (
+  task_id TEXT NOT NULL, file_index INTEGER NOT NULL, path TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL, selected INTEGER NOT NULL DEFAULT 1,
+  received_bytes INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (task_id, file_index)
 );
 "#;
 
@@ -1281,6 +1672,355 @@ mod tests {
         db.remove_worker("worker").await.unwrap();
     }
 
+    #[tokio::test]
+    async fn torrent_claims_and_seeding_are_isolated_from_http_slots() {
+        let directory = tempfile::tempdir().unwrap();
+        let db = Db::open(&directory.path().join("test.sqlite")).unwrap();
+        db.test_call(|connection| {
+            connection
+                .execute_batch(TEST_SCHEMA)
+                .map_err(DownloadError::database)?;
+            insert_queued_task(connection, "http")?;
+            insert_queued_torrent_task(connection, "torrent")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let http = db
+            .claim("http-worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(http.id, "http");
+        assert!(
+            db.claim("http-worker", Duration::from_secs(30))
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        let torrent = db
+            .claim_torrent("torrent-worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(torrent.id, "torrent");
+        assert_eq!(torrent.source_kind, "magnet");
+        assert_eq!(torrent.selected_file_indices, vec![0]);
+        db.reserve_space(&torrent, 10, 100, 5).await.unwrap();
+
+        assert!(
+            db.torrent_progress(
+                &torrent,
+                "torrent-worker",
+                Duration::from_secs(30),
+                &TorrentProgress {
+                    received_bytes: 10,
+                    total_bytes: 10,
+                    speed_bytes_per_second: 0,
+                    uploaded_bytes: 4,
+                    upload_speed_bytes_per_second: 2,
+                    peer_count: 3,
+                    file_progress: vec![(0, 10)],
+                    seeding: false,
+                },
+            )
+            .await
+            .unwrap()
+        );
+        db.begin_torrent_publish(&torrent, "torrent-worker")
+            .await
+            .unwrap();
+        db.publish_torrent(&torrent, "torrent-worker")
+            .await
+            .unwrap();
+        let seeding = db.get_task("torrent").await.unwrap().unwrap();
+        assert_eq!(seeding.status, "seeding");
+        assert_eq!(seeding.uploaded_bytes, 4);
+        let published = db.test_call(|connection| {
+            let operation: String = connection.query_row(
+                "SELECT operation FROM file_operations WHERE id = 'download:torrent'",
+                [],
+                |row| row.get(0),
+            ).map_err(DownloadError::database)?;
+            let recursive: i64 = connection.query_row(
+                "SELECT recursive FROM index_queue WHERE storage_pool_id = 'pool-1' AND path = 'release'",
+                [],
+                |row| row.get(0),
+            ).map_err(DownloadError::database)?;
+            let reservations: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM download_space_reservations WHERE task_id = 'torrent'",
+                [],
+                |row| row.get(0),
+            ).map_err(DownloadError::database)?;
+            Ok((operation, recursive, reservations))
+        }).await.unwrap();
+        assert_eq!(published, ("download".to_owned(), 1, 0));
+
+        db.complete_torrent(&seeding, "torrent-worker")
+            .await
+            .unwrap();
+        let completed = db.get_task("torrent").await.unwrap().unwrap();
+        assert_eq!(completed.status, "completed");
+        assert!(completed.worker_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn pausing_seeding_preserves_published_content_and_clears_live_stats() {
+        let directory = tempfile::tempdir().unwrap();
+        let db = Db::open(&directory.path().join("test.sqlite")).unwrap();
+        db.test_call(|connection| {
+            connection
+                .execute_batch(TEST_SCHEMA)
+                .map_err(DownloadError::database)?;
+            insert_queued_torrent_task(connection, "torrent")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let task = db
+            .claim_torrent("torrent-worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        db.begin_torrent_publish(&task, "torrent-worker")
+            .await
+            .unwrap();
+        db.publish_torrent(&task, "torrent-worker").await.unwrap();
+        assert!(
+            db.torrent_progress(
+                &task,
+                "torrent-worker",
+                Duration::from_secs(30),
+                &TorrentProgress {
+                    received_bytes: 10,
+                    total_bytes: 10,
+                    speed_bytes_per_second: 0,
+                    uploaded_bytes: 7,
+                    upload_speed_bytes_per_second: 4,
+                    peer_count: 3,
+                    file_progress: vec![(0, 10)],
+                    seeding: true,
+                },
+            )
+            .await
+            .unwrap()
+        );
+
+        db.finish_control(&task, false).await.unwrap();
+
+        let paused = db.get_task("torrent").await.unwrap().unwrap();
+        assert_eq!(paused.status, "paused");
+        assert!(paused.content_completed_at.is_some());
+        assert!(paused.seed_started_at.is_some());
+        assert_eq!(paused.uploaded_bytes, 7);
+        assert_eq!(paused.upload_speed_bytes_per_second, 0);
+        assert_eq!(paused.peer_count, 0);
+    }
+
+    #[tokio::test]
+    async fn restart_requeues_staging_torrents_but_keeps_published_torrents_seeding() {
+        let directory = tempfile::tempdir().unwrap();
+        let db = Db::open(&directory.path().join("test.sqlite")).unwrap();
+        db.test_call(|connection| {
+            connection
+                .execute_batch(TEST_SCHEMA)
+                .map_err(DownloadError::database)?;
+            insert_queued_torrent_task(connection, "staging")?;
+            insert_queued_torrent_task(connection, "published")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let staging = db
+            .claim_torrent("staging-worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        let published = db
+            .claim_torrent("published-worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        db.begin_torrent_publish(&published, "published-worker")
+            .await
+            .unwrap();
+        db.publish_torrent(&published, "published-worker")
+            .await
+            .unwrap();
+        assert!(
+            db.torrent_progress(
+                &published,
+                "published-worker",
+                Duration::from_secs(30),
+                &TorrentProgress {
+                    received_bytes: 10,
+                    total_bytes: 10,
+                    speed_bytes_per_second: 0,
+                    uploaded_bytes: 2,
+                    upload_speed_bytes_per_second: 1,
+                    peer_count: 2,
+                    file_progress: vec![(0, 10)],
+                    seeding: true,
+                },
+            )
+            .await
+            .unwrap()
+        );
+        db.test_call(|connection| {
+            connection
+                .execute(
+                    "UPDATE download_tasks SET lease_expires_at = '1970-01-01T00:00:00Z' WHERE id IN ('staging', 'published')",
+                    [],
+                )
+                .map_err(DownloadError::database)?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(db.recover_expired().await.unwrap(), 2);
+        let staging = db.get_task(&staging.id).await.unwrap().unwrap();
+        assert_eq!(staging.status, "queued");
+        assert!(staging.content_completed_at.is_none());
+        let published = db.get_task(&published.id).await.unwrap().unwrap();
+        assert_eq!(published.status, "seeding");
+        assert!(published.content_completed_at.is_some());
+        assert_eq!(published.upload_speed_bytes_per_second, 0);
+        assert_eq!(published.peer_count, 0);
+    }
+
+    #[tokio::test]
+    async fn restart_preserves_torrent_publication_recovery_marker() {
+        let directory = tempfile::tempdir().unwrap();
+        let db = Db::open(&directory.path().join("test.sqlite")).unwrap();
+        db.test_call(|connection| {
+            connection
+                .execute_batch(TEST_SCHEMA)
+                .map_err(DownloadError::database)?;
+            insert_queued_torrent_task(connection, "publishing")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let task = db
+            .claim_torrent("first-worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        db.begin_torrent_publish(&task, "first-worker")
+            .await
+            .unwrap();
+        db.test_call(|connection| {
+            connection
+                .execute(
+                    "UPDATE download_tasks SET lease_expires_at = '1970-01-01T00:00:00Z' WHERE id = 'publishing'",
+                    [],
+                )
+                .map_err(DownloadError::database)?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(db.recover_expired().await.unwrap(), 1);
+        let recovered = db
+            .claim_torrent("recovery-worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(recovered.id, "publishing");
+        assert_eq!(recovered.phase.as_deref(), Some("publishing"));
+    }
+
+    #[tokio::test]
+    async fn torrent_preview_resolution_is_lease_owned_and_atomic() {
+        let directory = tempfile::tempdir().unwrap();
+        let db = Db::open(&directory.path().join("test.sqlite")).unwrap();
+        db.test_call(|connection| {
+            connection.execute_batch(TEST_SCHEMA).map_err(DownloadError::database)?;
+            connection.execute(
+                "INSERT INTO torrent_previews (id, source_kind, metainfo, status, created_at, updated_at, expires_at) \
+                 VALUES ('preview', 'torrent', x'64617461', 'queued', ?, ?, ?)",
+                params![now_iso(), now_iso(), future_iso(Duration::from_secs(60))],
+            ).map_err(DownloadError::database)?;
+            Ok(())
+        }).await.unwrap();
+
+        let preview = db
+            .claim_torrent_preview("resolver", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(preview.id, "preview");
+        assert_eq!(preview.metainfo.as_deref(), Some(b"data".as_slice()));
+        assert!(
+            db.renew_torrent_preview_lease("preview", "resolver", Duration::from_secs(30))
+                .await
+                .unwrap()
+        );
+        assert!(
+            !db.renew_torrent_preview_lease("preview", "other", Duration::from_secs(30))
+                .await
+                .unwrap()
+        );
+        assert!(
+            db.claim_torrent_preview("other", Duration::from_secs(30))
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        db.complete_torrent_preview(
+            &preview,
+            "resolver",
+            &ResolvedTorrentPreview {
+                info_hash: "0123456789012345678901234567890123456789".to_owned(),
+                name: "release".to_owned(),
+                metainfo: b"normalized".to_vec(),
+                total_bytes: 12,
+                files: vec![TorrentFile {
+                    file_index: 0,
+                    path: "release.bin".to_owned(),
+                    size_bytes: 12,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+        let stored = db.test_call(|connection| {
+            let preview = connection.query_row(
+                "SELECT status, info_hash, name, total_bytes, file_count, metainfo FROM torrent_previews WHERE id = 'preview'",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?, row.get::<_, i64>(4)?, row.get::<_, Vec<u8>>(5)?)),
+            ).map_err(DownloadError::database)?;
+            let file = connection.query_row(
+                "SELECT file_index, path, size_bytes FROM torrent_preview_files WHERE preview_id = 'preview'",
+                [],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?)),
+            ).map_err(DownloadError::database)?;
+            Ok((preview, file))
+        }).await.unwrap();
+        assert_eq!(
+            stored.0,
+            (
+                "ready".to_owned(),
+                "0123456789012345678901234567890123456789".to_owned(),
+                "release".to_owned(),
+                12,
+                1,
+                b"normalized".to_vec()
+            )
+        );
+        assert_eq!(stored.1, (0, "release.bin".to_owned(), 12));
+    }
+
     fn insert_queued_task(connection: &Connection, id: &str) -> DbResult<()> {
         connection
             .execute(
@@ -1295,6 +2035,26 @@ mod tests {
                     now_iso(),
                     now_iso()
                 ],
+            )
+            .map_err(DownloadError::database)?;
+        Ok(())
+    }
+
+    fn insert_queued_torrent_task(connection: &Connection, id: &str) -> DbResult<()> {
+        connection.execute(
+            "INSERT INTO download_tasks (id, url, storage_pool_id, target_directory, \
+               target_file_name, target_path, partial_path, status, created_at, updated_at, \
+               source_kind, torrent_info_hash, torrent_name, torrent_metainfo, selected_file_count) \
+             VALUES (?, 'magnet:?xt=urn:btih:0123456789012345678901234567890123456789', \
+               'pool-1', '.', 'release', 'release', '.release.part', 'queued', ?, ?, 'magnet', \
+               '0123456789012345678901234567890123456789', 'release', x'64617461', 1)",
+            params![id, now_iso(), now_iso()],
+        ).map_err(DownloadError::database)?;
+        connection
+            .execute(
+                "INSERT INTO download_task_files (task_id, file_index, path, size_bytes, selected) \
+             VALUES (?, 0, 'release.bin', 10, 1)",
+                [id],
             )
             .map_err(DownloadError::database)?;
         Ok(())
