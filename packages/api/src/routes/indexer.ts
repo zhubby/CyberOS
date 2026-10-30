@@ -9,7 +9,7 @@ import {
 } from "@cyberos/db";
 import { type IndexReindexRequest, type SystemStoragePool } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
-import { collectSystemStorage } from "../lib/system-management.js";
+import { collectStoragePools } from "../lib/system-management.js";
 import {
   resolveScopedExistingPath,
   resolveScopedTargetPath,
@@ -21,7 +21,7 @@ export function registerIndexerRoutes(server: FastifyInstance, { db, config, sys
   server.get<{
     Querystring: { storagePoolId?: string };
   }>("/api/indexer/status", async (request, reply) => {
-    const storage = system ? await collectSystemStorage(system) : null;
+    const storage = system ? await collectStoragePools(system) : null;
     if (request.query.storagePoolId) {
       const pool = storage?.pools.find((candidate) => candidate.id === request.query.storagePoolId);
       if (!pool) {

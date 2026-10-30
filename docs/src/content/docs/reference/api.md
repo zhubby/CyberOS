@@ -53,7 +53,7 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 - `GET/PATCH /api/settings/photos` 读取或更新处理并发、扫描周期、自动重试、命令超时、大小/像素限制、scratch 上限和最低剩余空间。
 - `GET /api/photos` 使用不透明 cursor 返回按 `takenAt DESC, id DESC` 稳定排序的页面；`GET /api/photos/status` 返回 `unconfigured/queued/discovering/processing/retrying/ready/degraded/offline` 状态与 worker health，`POST /api/photos/scans` 排队手动扫描。
 - `POST /api/photos/query` 接收最多 64 KiB、25 个高级条件，支持文本、日期、媒体类型、相机、镜头、曝光、评分、关键词、位置和任意标量字段。排序 cursor 绑定查询指纹；响应包含精确总数、元数据升级进度、排除自身条件的分类分面和当前结果的数值范围。
-- `GET /api/photos/metadata/fields` 返回可查询字段目录；`GET /api/photos/:id/metadata` 默认排除 GPS、设备/镜头序列号、联系信息和人物区域，只有显式 `includeSensitive=1` 才返回敏感组。
+- `GET /api/photos/metadata/fields` 在独立只读工作线程中返回可查询字段目录，避免大库聚合阻塞状态与健康检查；只合并同时进行的相同查询，不缓存已完成结果；`GET /api/photos/:id/metadata` 默认排除 GPS、设备/镜头序列号、联系信息和人物区域，只有显式 `includeSensitive=1` 才返回敏感组。
 - `POST /api/photos/map/query` 在视口内返回最多 4096 个本地聚合点。地理查询先用 RTree 缩小候选，再用规范坐标或 Haversine 精确计算，支持反经线；距离排序必须提供附近查询中心。
 - `GET /api/photos/map/settings` 返回固定 Natural Earth II 3.2.0 资产信息及 `not_downloaded/downloading/ready/failed`、已下载字节、总字节和错误；`POST /api/photos/map/download` 无请求体，幂等启动或返回当前下载任务。客户端不能提交 URL 或文件路径，旧 `PUT /api/photos/map/settings` 不再存在。
 - `GET /api/photos/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${CYBEROS_ROOT}/state/photos/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。

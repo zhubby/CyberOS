@@ -1,6 +1,6 @@
 {
   "name": "@cyberos/api",
-  "version": "2.2.5",
+  "version": "2.2.6",
   "type": "module",
   "exports": {
     ".": "./src/server.ts"
@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "cd ../.. && tsup packages/api/src/index.ts packages/api/src/state-init.ts --format esm --platform node --target node22 --external=better-sqlite3 --external=@fastify/cors --external=@fastify/multipart --external=@fastify/rate-limit --external=@fastify/static --external=@fastify/websocket --external=archiver --external=fastify --external=undici --external=yaml --out-dir packages/api/dist"
+    "build": "cd ../.. && tsup packages/api/src/index.ts packages/api/src/state-init.ts packages/api/src/lib/photos-metadata-fields-worker.ts --format esm --platform node --target node22 --external=better-sqlite3 --external=@fastify/cors --external=@fastify/multipart --external=@fastify/rate-limit --external=@fastify/static --external=@fastify/websocket --external=archiver --external=fastify --external=undici --external=yaml --out-dir packages/api/dist"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
@@ -17,15 +17,15 @@
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/static": "^10.1.3",
     "@fastify/websocket": "^11.3.0",
-    "@cyberos/capabilities": "2.2.5",
-    "@cyberos/backup": "2.2.5",
-    "@cyberos/capability-runtime": "2.2.5",
-    "@cyberos/db": "2.2.5",
-    "@cyberos/mcp": "2.2.5",
-    "@cyberos/monitoring": "2.2.5",
-    "@cyberos/storage-tools": "2.2.5",
-    "@cyberos/shared": "2.2.5",
-    "@cyberos/system-health": "2.2.5",
+    "@cyberos/capabilities": "2.2.6",
+    "@cyberos/backup": "2.2.6",
+    "@cyberos/capability-runtime": "2.2.6",
+    "@cyberos/db": "2.2.6",
+    "@cyberos/mcp": "2.2.6",
+    "@cyberos/monitoring": "2.2.6",
+    "@cyberos/storage-tools": "2.2.6",
+    "@cyberos/shared": "2.2.6",
+    "@cyberos/system-health": "2.2.6",
     "@earendil-works/pi-mcp": "1.1.0",
     "archiver": "^8.0.0",
     "fast-xml-parser": "^5.11.1",
