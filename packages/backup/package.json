@@ -1,6 +1,6 @@
 {
   "name": "@cyberos/backup",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "type": "module",
   "exports": {
     ".": "./src/backup.ts"
@@ -13,8 +13,8 @@
     "build": "cd ../.. && tsup packages/backup/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir packages/backup/dist"
   },
   "dependencies": {
-    "@cyberos/db": "2.2.0",
-    "@cyberos/storage-tools": "2.2.0",
-    "@cyberos/shared": "2.2.0"
+    "@cyberos/db": "2.2.1",
+    "@cyberos/storage-tools": "2.2.1",
+    "@cyberos/shared": "2.2.1"
   }
 }
