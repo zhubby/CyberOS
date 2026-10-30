@@ -718,7 +718,7 @@ jobs:
           prepare_incoming
           stage_release /cyberos/deploy/incoming "$release_dir/release-manifest.json" cyberos
           ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
-            "printf 'N\\n' | sudo -n /usr/local/sbin/cyberos-deploy --no-upgrade-backup"
+            "printf 'N\\n' | sudo -n /usr/local/sbin/cyberos-deploy"
 
       - name: Verify CM5 services and build metadata
         timeout-minutes: 20

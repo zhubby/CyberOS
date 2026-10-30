@@ -6,6 +6,7 @@ import {
 import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { connect } from "node:net";
+import { Readable } from "node:stream";
 import { StreamError, type StreamManager } from "./manager.js";
 
 export async function startStreamServer(
@@ -124,11 +125,26 @@ async function handle(
         ? { "content-range": `bytes ${start}-${end}/${asset.size}` }
         : {}),
     });
-    const stream = asset.file.createReadStream({
-      start,
-      end,
-      autoClose: false,
-    });
+    // FileHandle read streams close their handle on destroy even with autoClose
+    // disabled. Direct responses share the session handle, so read at explicit
+    // offsets without transferring ownership to a request's stream.
+    const stream = Readable.from(
+      (async function* () {
+        for (let position = start; position <= end; ) {
+          const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, end - position + 1));
+          const { bytesRead } = await asset.file.read(
+            chunk,
+            0,
+            chunk.length,
+            position,
+          );
+          if (!bytesRead) break;
+          position += bytesRead;
+          yield chunk.subarray(0, bytesRead);
+        }
+      })(),
+      { objectMode: false },
+    );
     stream.once("error", () => res.destroy());
     res.once("close", () => {
       stream.destroy();
