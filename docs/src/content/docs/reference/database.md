@@ -4,7 +4,7 @@ description: SQLite WAL、表域和 migration policy。
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/db/src/schema.ts, packages/db/src/connection.ts, packages/db/src/migrations/current.ts, packages/monitoring/contracts/migrations, crates/monitor/src/adapters/metrics_sqlite.rs, crates/alerter/src/adapters/alert_store]
+sourceOfTruth: [packages/db/src/schema.ts, packages/db/src/connection.ts, packages/db/src/migrations/current.ts, packages/db/src/migrations/photos-metadata-lookup.ts, packages/monitoring/contracts/migrations, crates/monitor/src/adapters/metrics_sqlite.rs, crates/alerter/src/adapters/alert_store]
 sidebar:
   order: 5
 ---
@@ -28,3 +28,5 @@ Photos worker 中先验证租约或查询状态、再写入的事务使用 `BEGI
 此约束适用于主库的所有写入者：alerter 的健康事件同步、指标求值、升级投递调度和投递完成，以及 downloader 验证所有权后替换分段，都必须在首次读取前取得写锁。TypeScript repository 中的同类事务用 better-sqlite3 的 `.immediate()` 调用；连接初始化时的 WAL 重试不能保护后续业务事务。不要把只读快照改成写锁，也不要以增加 busy timeout 或外层无限重试替代正确的事务模式；取得锁后仍须重新校验租约、revision 和所有权。
 
 `006_photos_scan_contention` 为 pending 与可重试失败条目分别增加 partial index。worker 必须等此迁移完成后启动，领取条目时分别通过对应索引取候选，再按路径比较，保持原有顺序，避免在写事务中反复遍历已完成条目。目录发现结果每批最多 128 条提交，整批校验租约并原子写入；中断后重读目录时按主键幂等去重。不要把文件遍历放进批量事务，也不要通过延长 busy timeout 掩盖持续抢占写锁。
+
+`007_photos_metadata_lookup` 为 EAV 增加非唯一覆盖索引 `(asset_id, sensitive, key, value_type)`，支持时间线和详情按资源检查敏感字段，以及元数据替换、删除时的资源定位；同一字段的多个 ordinal 继续分别保存。字段列表先通过 `IN` 子查询一次构造当前图库、ready 资源和当前 metadata schema 的范围，再聚合公开值，按不同资源计数，不能将数组长度当作资源数量。当前 schema 的 partial metadata 仍参与字段列表，敏感值始终排除。API 使用同步 SQLite，相关子查询不得对每张照片重复扫描整张 EAV 表；应以真实 repository SQL 的查询计划回归约束索引查找，而非增加请求超时。字段列表仍需聚合范围内的公开值，索引不代表其成本与图库规模无关。

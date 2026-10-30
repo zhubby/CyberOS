@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PHOTOS_METADATA_SCHEMA_VERSION, type PhotosMetadataCondition } from "@cyberos/shared";
 import type { PhotosMetadataWriteInput } from "./index.js";
@@ -567,6 +568,89 @@ describe("photos repositories", () => {
       assetId: asset.id,
       libraryUpdatedAt: settings.updatedAt
     })?.summary?.hasSensitiveMetadata).toBe(true);
+  });
+
+  it("seeks per-asset metadata and builds the eligible field scope once", () => {
+    const settings = saveSettings();
+    for (let index = 0; index < 8; index += 1) {
+      upsertReady(settings, `Photos/plan-${index}.jpg`, `plan-${index}`,
+        "2026-01-01T00:00:00.000Z", undefined, metadata({ bodySerial: `serial-${index}` }));
+    }
+
+    const statements: string[] = [];
+    const observed = new Database(db.name, {
+      readonly: true,
+      verbose: (sql) => statements.push(String(sql))
+    });
+    try {
+      const page = queryPhotosAssets(observed, {
+        libraryUpdatedAt: settings.updatedAt,
+        request: { includeFacets: true }
+      });
+      expect(page.photos).toHaveLength(8);
+      expect(page.photos.every((photo) => photo.metadata?.hasSensitiveMetadata)).toBe(true);
+      listPhotosMetadataFields(observed, { libraryUpdatedAt: settings.updatedAt });
+      const pageSql = statements.find((sql) => sql.includes("SELECT * FROM matches"));
+      const fieldsSql = statements.find((sql) => sql.includes("COUNT(DISTINCT v.asset_id)"));
+
+      expect(pageSql).toBeDefined();
+      const pagePlan = observed.prepare(`EXPLAIN QUERY PLAN ${pageSql!}`)
+        .all() as Array<{ detail: string }>;
+      expect(pagePlan.some(({ detail }) =>
+        /SEARCH sensitive_value USING COVERING INDEX/.test(detail) &&
+        detail.includes("asset_id=? AND sensitive=?"))).toBe(true);
+      expect(pagePlan.some(({ detail }) => /SCAN sensitive_value/.test(detail))).toBe(false);
+
+      expect(fieldsSql).toBeDefined();
+      const fieldsPlan = observed.prepare(`EXPLAIN QUERY PLAN ${fieldsSql!}`)
+        .all() as Array<{ detail: string }>;
+      expect(fieldsPlan.some(({ detail }) => /LIST SUBQUERY/.test(detail))).toBe(true);
+      expect(fieldsPlan.some(({ detail }) => /CORRELATED/.test(detail))).toBe(false);
+    } finally {
+      observed.close();
+    }
+  });
+
+  it("counts public fields once per eligible asset while preserving schema and library scope", () => {
+    const settings = saveSettings();
+    const values: PhotosMetadataWriteInput["values"] = [
+      { source: "xmp", key: "xmp.Title", valueType: "text", value: "one", sensitive: false, ordinal: 0 },
+      { source: "xmp", key: "xmp.Title", valueType: "text", value: "two", sensitive: false, ordinal: 1 },
+      { source: "xmp", key: "xmp.Title", valueType: "number", value: 3, sensitive: false, ordinal: 2 },
+      { source: "exif", key: "exif.BodySerialNumber", valueType: "text", value: "private", sensitive: true, ordinal: 0 }
+    ];
+    for (const name of ["current", "partial", "stale", "missing", "failed", "old-library"]) {
+      const asset = upsertReady(settings, `Photos/${name}.jpg`, name,
+        "2026-01-01T00:00:00.000Z", undefined, metadata({ values }));
+      if (name === "partial") {
+        db.prepare("UPDATE photos_asset_metadata SET status = 'partial' WHERE asset_id = ?").run(asset.id);
+      } else if (name === "stale") {
+        db.prepare("UPDATE photos_asset_metadata SET schema_version = ? WHERE asset_id = ?")
+          .run(PHOTOS_METADATA_SCHEMA_VERSION + 1, asset.id);
+      } else if (name === "missing") {
+        db.prepare("DELETE FROM photos_asset_metadata WHERE asset_id = ?").run(asset.id);
+      } else if (name === "failed") {
+        db.prepare("UPDATE photos_assets SET status = 'failed' WHERE id = ?").run(asset.id);
+      } else if (name === "old-library") {
+        db.prepare("UPDATE photos_assets SET library_updated_at = 'old-library' WHERE id = ?").run(asset.id);
+      }
+    }
+
+    const expected = [
+      { key: "xmp.Title", valueType: "number", count: 2, sensitive: false },
+      { key: "xmp.Title", valueType: "text", count: 2, sensitive: false }
+    ];
+    expect(listPhotosMetadataFields(db, { libraryUpdatedAt: settings.updatedAt })
+      .toSorted((left, right) => left.valueType.localeCompare(right.valueType))).toEqual(expected);
+    const limited = listPhotosMetadataFields(db, {
+      libraryUpdatedAt: settings.updatedAt, query: "  ＴＩＴＬＥ  ", limit: 1
+    });
+    expect(limited).toHaveLength(1);
+    expect(expected).toContainEqual(limited[0]);
+    expect(listPhotosMetadataFields(db, {
+      libraryUpdatedAt: settings.updatedAt, query: "serial"
+    })).toEqual([]);
+    expect(listPhotosMetadataFields(db, { libraryUpdatedAt: "absent-library" })).toEqual([]);
   });
 });
 

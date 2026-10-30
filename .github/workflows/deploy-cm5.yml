@@ -929,14 +929,24 @@ jobs:
             exit 1
           fi
 
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/health > "$check_dir/health.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/storage > "$check_dir/storage.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/health > "$check_dir/system-health.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/system/build-info > "$check_dir/build-info.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/settings/shares > "$check_dir/share-settings.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/shares/summary > "$check_dir/shares-summary.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/settings/tv > "$check_dir/tv-settings.json"
-          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3010/api/tv/status > "$check_dir/tv-status.json"
+          probe_api() {
+            probe_endpoint=$1
+            probe_output=$2
+            printf 'CM5 API probe GET %s starting\n' "$probe_endpoint" >&2
+            curl --fail --silent --show-error --max-time 15 \
+              --output "$probe_output" \
+              --write-out "CM5 API probe GET $probe_endpoint http_status=%{http_code} elapsed_seconds=%{time_total}\n" \
+              "http://127.0.0.1:3010$probe_endpoint" >&2
+          }
+
+          probe_api /health "$check_dir/health.json"
+          probe_api /api/system/storage "$check_dir/storage.json"
+          probe_api /api/system/health "$check_dir/system-health.json"
+          probe_api /api/system/build-info "$check_dir/build-info.json"
+          probe_api /api/settings/shares "$check_dir/share-settings.json"
+          probe_api /api/shares/summary "$check_dir/shares-summary.json"
+          probe_api /api/settings/tv "$check_dir/tv-settings.json"
+          probe_api /api/tv/status "$check_dir/tv-status.json"
           wait_for_indexer_ready
 
           database_check="$(sudo -n /usr/local/sbin/cyberos-deploy --database-check)"

@@ -38,7 +38,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "003_p2p_downloads",
         "004_music_library",
         "005_video_library",
-        "006_photos_scan_contention"
+        "006_photos_scan_contention",
+        "007_photos_metadata_lookup"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
@@ -56,7 +57,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
       "003_p2p_downloads",
         "004_music_library",
         "005_video_library",
-        "006_photos_scan_contention"
+        "006_photos_scan_contention",
+        "007_photos_metadata_lookup"
     ]);
   });
 
@@ -185,6 +187,75 @@ describe("CyberOS 2.0 SQLite schema", () => {
     openCyberOsDb(databasePath).close();
   });
 
+  it("adds metadata lookup coverage without changing existing Photos values or settings", () => {
+    const databasePath = path.join(tempDir, "metadata-upgrade.sqlite");
+    const snapshot = (database: Database.Database) => ({
+      assets: database.prepare("SELECT * FROM photos_assets ORDER BY id").all(),
+      metadata: database.prepare("SELECT * FROM photos_asset_metadata ORDER BY asset_id").all(),
+      values: database.prepare("SELECT * FROM photos_metadata_values ORDER BY id").all(),
+      settings: database.prepare("SELECT * FROM system_settings ORDER BY key").all()
+    });
+    const previous = new Database(databasePath);
+    let before: ReturnType<typeof snapshot>;
+    try {
+      previous.pragma(`user_version = ${CYBEROS_DATABASE_FORMAT_VERSION}`);
+      previous.pragma("foreign_keys = ON");
+      previous.exec("CREATE TABLE schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+      for (const migration of migrations.filter((entry) => entry.id < "007_photos_metadata_lookup")) {
+        migration.prepare?.(previous);
+        previous.exec(migration.sql);
+        previous.prepare("INSERT INTO schema_migrations VALUES (?, ?)").run(migration.id, "2026-10-30T00:00:00Z");
+      }
+      previous.exec(`
+        INSERT INTO system_settings VALUES ('unrelated', '{"enabled":true}', 'saved');
+        INSERT INTO photos_assets (id, storage_pool_id, path, name, mime_type, size_bytes,
+          mtime_ms, taken_at, taken_at_source, status, library_updated_at, indexed_at)
+        VALUES ('asset-1', 'pool-1', 'Photos/one.jpg', 'one.jpg', 'image/jpeg',
+          10, 1, 'taken', 'file_mtime', 'ready', 'library-1', 'indexed');
+        INSERT INTO photos_asset_metadata (asset_id, schema_version, status, media_kind,
+          capture_source, raw_metadata_json, warnings_json, updated_at)
+        VALUES ('asset-1', 2, 'partial', 'image', 'exif', '{"xmp":{"Title":["one","two"]}}', '[]', 'updated');
+        INSERT INTO photos_metadata_values (asset_id, source, key, value_type, text_value,
+          normalized_text_value, sensitive, ordinal) VALUES
+          ('asset-1', 'xmp', 'xmp.Title', 'text', 'one', 'one', 0, 0),
+          ('asset-1', 'xmp', 'xmp.Title', 'text', 'two', 'two', 0, 1),
+          ('asset-1', 'exif', 'exif.BodySerialNumber', 'text', 'private', 'private', 1, 0);
+      `);
+      before = snapshot(previous);
+    } finally {
+      previous.close();
+    }
+
+    const upgraded = openCyberOsDb(databasePath);
+    try {
+      expect(snapshot(upgraded)).toEqual(before);
+      expect(upgraded.pragma("index_info(idx_photos_metadata_values_asset_sensitive)")).toEqual([
+        expect.objectContaining({ seqno: 0, name: "asset_id" }),
+        expect.objectContaining({ seqno: 1, name: "sensitive" }),
+        expect.objectContaining({ seqno: 2, name: "key" }),
+        expect.objectContaining({ seqno: 3, name: "value_type" })
+      ]);
+      expect(upgraded.pragma("index_list(photos_metadata_values)")).toContainEqual(
+        expect.objectContaining({ name: "idx_photos_metadata_values_asset_sensitive", unique: 0 })
+      );
+      expect(upgraded.prepare("SELECT COUNT(*) FROM schema_migrations WHERE id = '007_photos_metadata_lookup'")
+        .pluck().get()).toBe(1);
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+      expect(upgraded.pragma("quick_check")).toEqual([{ quick_check: "ok" }]);
+    } finally {
+      upgraded.close();
+    }
+
+    const reopened = openCyberOsDb(databasePath);
+    try {
+      expect(snapshot(reopened)).toEqual(before);
+      expect(reopened.prepare("SELECT COUNT(*) FROM schema_migrations WHERE id = '007_photos_metadata_lookup'")
+        .pluck().get()).toBe(1);
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("rejects an unmarked non-empty database without changing it", () => {
     const databasePath = path.join(tempDir, "old.sqlite");
     const oldDatabase = new Database(databasePath);
@@ -300,7 +371,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "003_p2p_downloads",
         "004_music_library",
         "005_video_library",
-        "006_photos_scan_contention"
+        "006_photos_scan_contention",
+        "007_photos_metadata_lookup"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {

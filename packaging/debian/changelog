@@ -1,3 +1,9 @@
+cyberos (2.2.5) unstable; urgency=medium
+
+  * Prevent Photos metadata scans from blocking the API and identify slow CM5 acceptance probes.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Fri, 30 Oct 2026 11:31:54 +0000
+
 cyberos (2.2.4) unstable; urgency=medium
 
   * Fix WAL transaction upgrade contention across alert evaluation, download segments and repository state checks.
