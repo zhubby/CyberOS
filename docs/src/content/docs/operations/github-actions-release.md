@@ -194,6 +194,7 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 目标版本低于已安装版本时拒绝降级。
 - 版本相同但 commit 不同时拒绝覆盖。
 - 版本和 commit 都相同时不重装，只重新验证服务和 build-info，因此可安全重试同一个 tag。
+- workflow 在升级基线检查时先确认 `cyberos` 账号存在且 home 为 `/home/cyberos`；旧 home 或账号缺失会在传输、停止服务和调用 APT 之前拒绝，避免旧包的卸载脚本先改变 DKMS 状态。
 - workflow 在升级前记录 `system_settings` 的稳定摘要，并在升级后严格比对。若机器上已安装的 helper 早于数据库设置摘要命令，则只允许一次 `database-only` 引导：升级前必须通过数据库完整性检查，升级后必须由新 helper 生成有效摘要；这不会读取或迁移已删除的产品配置文件。后续部署恢复严格的摘要前后比对。
 - 正常升级会保存原 service/timer 状态；如果当前托管 release 的包仍存在，还会另存为 `previous-package.deb`。停止 SQLite/NAS writers 后，将 `/cyberos/state` 和 `/cyberos/home` 保存为 `state.tgz`，其中包含 SQLite 数据库及尚未 checkpoint 的 WAL，再通过 APT 安装已校验的 `.deb`。任一备份失败都会中止安装。正式部署 workflow 不传 `--no-upgrade-backup`；该参数只供运维显式跳过升级备份。
 - 升级前的备份由设备上已安装的 helper 执行。当前 helper 还将 `/home/cyberos` 保存为 `terminal-home.tgz`（排除 tmux socket）；从 2.1.0 升级时，旧 helper 只生成 `state.tgz`，不会生成独立的终端家目录归档。安装后的新 helper 无法补建升级前的归档，验收时必须以本次实际备份文件为准。
