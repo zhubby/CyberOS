@@ -429,7 +429,7 @@ export function updateJobStatus(
     }
     return result.changes === 1;
   });
-  return tx();
+  return tx.immediate();
 }
 
 function failPendingActiveTurnCommands(

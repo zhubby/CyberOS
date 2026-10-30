@@ -889,7 +889,11 @@ impl Db {
         let worker_id = worker_id.to_owned();
         let segments = segments.to_vec();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(DownloadError::database)?;
+            // Wait for the writer before reading ownership; a WAL read-to-write
+            // upgrade can otherwise bypass busy_timeout during normal writes.
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(DownloadError::database)?;
             let owned: bool = transaction.query_row(
                 "SELECT EXISTS(SELECT 1 FROM download_tasks WHERE id = ? AND status = 'running' \
                  AND worker_id = ? AND control_requested IS NULL)",
@@ -1428,6 +1432,156 @@ CREATE TABLE download_task_files (
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn segment_contention_fixture() -> (tempfile::TempDir, Db, Connection) {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("test.sqlite");
+        let db = Db::open(&path).unwrap();
+        db.test_call(|connection| {
+            connection
+                .execute_batch(TEST_SCHEMA)
+                .map_err(DownloadError::database)?;
+            insert_queued_task(connection, "task")?;
+            insert_queued_task(connection, "other")?;
+            connection
+                .execute_batch(
+                    "UPDATE download_tasks SET status='running', worker_id='owner' WHERE id='task';
+                 INSERT INTO download_segments VALUES ('task', 0, 100, 25, 'before');
+                 INSERT INTO download_segments VALUES ('other', 0, 50, 10, 'before');",
+                )
+                .map_err(DownloadError::database)?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        let writer = Connection::open(path).unwrap();
+        writer
+            .execute_batch(
+                "BEGIN IMMEDIATE;
+             INSERT INTO system_settings VALUES ('other-service', '{}', 'now');",
+            )
+            .unwrap();
+        (directory, db, writer)
+    }
+
+    async fn replace_segments_during_write(db: &Db, writer: Connection) -> DbResult<()> {
+        let (release, requested) = mpsc::channel();
+        let writer_thread = std::thread::spawn(move || {
+            // Own the real WAL writer lock before invoking the Db actor. The
+            // bounded hold schedules a commit; elapsed time is not asserted.
+            let _ = requested.recv_timeout(Duration::from_millis(250));
+            writer.execute_batch("COMMIT").unwrap();
+        });
+        let result = db
+            .replace_segments(
+                "task",
+                "owner",
+                &[
+                    Segment {
+                        start: 0,
+                        end: 50,
+                        next: 0,
+                    },
+                    Segment {
+                        start: 50,
+                        end: 100,
+                        next: 50,
+                    },
+                ],
+            )
+            .await;
+        let _ = release.send(());
+        writer_thread.join().unwrap();
+        result
+    }
+
+    async fn assert_original_segments(db: &Db) {
+        let segments = db.segments("task").await.unwrap();
+        assert_eq!(segments.len(), 1);
+        assert_eq!(
+            (segments[0].start, segments[0].end, segments[0].next),
+            (0, 100, 25)
+        );
+    }
+
+    #[tokio::test]
+    async fn replacing_segments_waits_for_a_concurrent_writer_and_keeps_other_tasks() {
+        let (_directory, db, writer) = segment_contention_fixture().await;
+
+        replace_segments_during_write(&db, writer).await.unwrap();
+
+        let segments = db.segments("task").await.unwrap();
+        assert_eq!(
+            segments
+                .iter()
+                .map(|segment| (segment.start, segment.end, segment.next))
+                .collect::<Vec<_>>(),
+            vec![(0, 50, 0), (50, 100, 50)]
+        );
+        let other = db.segments("other").await.unwrap();
+        assert_eq!(other.len(), 1);
+        assert_eq!((other[0].start, other[0].end, other[0].next), (0, 50, 10));
+    }
+
+    #[tokio::test]
+    async fn replacing_segments_rechecks_owner_after_a_concurrent_commit() {
+        let (_directory, db, writer) = segment_contention_fixture().await;
+        writer
+            .execute(
+                "UPDATE download_tasks SET worker_id='replacement' WHERE id='task'",
+                [],
+            )
+            .unwrap();
+
+        let error = replace_segments_during_write(&db, writer)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.message,
+            "download task lease or control ownership was lost"
+        );
+        assert_original_segments(&db).await;
+        assert_eq!(
+            db.get_task("task")
+                .await
+                .unwrap()
+                .unwrap()
+                .worker_id
+                .as_deref(),
+            Some("replacement")
+        );
+    }
+
+    #[tokio::test]
+    async fn replacing_segments_rechecks_control_after_a_concurrent_commit() {
+        let (_directory, db, writer) = segment_contention_fixture().await;
+        writer
+            .execute(
+                "UPDATE download_tasks SET control_requested='pause' WHERE id='task'",
+                [],
+            )
+            .unwrap();
+
+        let error = replace_segments_during_write(&db, writer)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.message,
+            "download task lease or control ownership was lost"
+        );
+        assert_original_segments(&db).await;
+        assert_eq!(
+            db.get_task("task")
+                .await
+                .unwrap()
+                .unwrap()
+                .control_requested
+                .as_deref(),
+            Some("pause")
+        );
+    }
 
     #[tokio::test]
     async fn journal_fences_claims_and_live_recovery() {

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use uuid::Uuid;
 
 use super::AlertStore;
@@ -62,7 +62,9 @@ impl AlertStore {
         value: Option<f64>,
         now_ms: i64,
     ) -> Result<(), AlerterError> {
-        let transaction = self.connection.transaction()?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let existing = read_instance(&transaction, &rule.id, series_key)?;
         let was_active = existing.as_ref().is_some_and(|instance| {
             matches!(

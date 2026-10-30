@@ -19,6 +19,9 @@ mod outbox;
 mod rules;
 
 #[cfg(test)]
+mod contention_tests;
+
+#[cfg(test)]
 use codec::{iso, parse_iso, retry_delay};
 #[cfg(test)]
 use deliveries::{

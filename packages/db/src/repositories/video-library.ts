@@ -339,7 +339,7 @@ export function updateMediaCollection(
       );
       patch.titleIds.forEach((t, i) => insert.run(id, t, i));
     }
-  })();
+  }).immediate();
 }
 export function deleteMediaCollection(db: CyberOsDatabase, id: string): void {
   db.prepare("DELETE FROM media_collections WHERE id=? AND kind='manual'").run(
