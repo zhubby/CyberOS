@@ -2,7 +2,7 @@ Source: cyberos
 Section: admin
 Priority: optional
 Maintainer: CyberOS Maintainers <maintainers@cyberos.local>
-Build-Depends: debhelper-compat (= 13), nodejs, npm, cargo, rustc, acl, python3, dh-dkms
+Build-Depends: debhelper-compat (= 13), nodejs, npm, cargo, rustc, acl, python3, dh-dkms, ffmpeg
 Standards-Version: 4.7.0
 Homepage: https://cyberos.local
 Rules-Requires-Root: no

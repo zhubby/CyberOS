@@ -57,7 +57,7 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 - `POST /api/photos/map/query` 在视口内返回最多 4096 个本地聚合点。地理查询先用 RTree 缩小候选，再用规范坐标或 Haversine 精确计算，支持反经线；距离排序必须提供附近查询中心。
 - `GET /api/photos/map/settings` 返回固定 Natural Earth II 3.2.0 资产信息及 `not_downloaded/downloading/ready/failed`、已下载字节、总字节和错误；`POST /api/photos/map/download` 无请求体，幂等启动或返回当前下载任务。客户端不能提交 URL 或文件路径，旧 `PUT /api/photos/map/settings` 不再存在。
 - `GET /api/photos/map/archive` 只在托管文件通过固定大小、SHA-256 和 PMTiles JPEG 头校验后提供 Range/`206`。下载使用同目录临时文件并原子发布到 `${CYBEROS_ROOT}/state/photos/maps/natural-earth-ii-3.2.0.pmtiles`；中断或失败会删除临时文件，重试从零开始。
-- `GET /api/photos/:id/thumbnail|preview|original` 只解析当前照片库中的资源。缩略图和预览来自 data directory 的 hash-addressed WebP cache；GIF preview 保留动画原文件，视频 preview 是首帧海报。
+- `GET /api/photos/:id/thumbnail|preview|original` 只解析当前照片库中的资源。缩略图和预览来自 data directory 的 hash-addressed WebP cache；GIF preview 保留动画原文件，视频 preview 优先使用一秒处海报，没有可用输出时回退首帧。
 - `GET /api/photos/:id/video` 为视频资源提供带 Range 的播放流；MP4/WebM 直接流式返回，其他支持容器通过 FFmpeg 缓存为 MP4。
 - `PUT /api/photos/upload` 使用 `application/octet-stream`，查询参数传文件名和可选目录。媒体限制 512 MiB、原子发布并按 SHA-256 拒绝当前库中的重复内容；XMP sidecar 限制 16 MiB。
 - Photos 支持图片 `.jpg`、`.jpeg`、`.png`、`.webp`、`.gif`、`.heic`、`.heif`，视频 `.mp4`、`.mov`、`.m4v`、`.avi`、`.mkv`、`.webm`、`.mpeg`、`.mpg`，以及 RAW `.cr2`、`.cr3`、`.crw`、`.nef`、`.nrw`、`.arw`、`.srf`、`.sr2`、`.dng`、`.raf`、`.orf`、`.rw2`、`.pef`、`.rwl`、`.3fr`、`.x3f`、`.erf`、`.kdc`、`.mos`、`.mrw`、`.bay`。
@@ -65,6 +65,8 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 - `POST /api/photos/actions` 对最多 100 张照片执行 move 或 trash，并去重加入关联 XMP。目标必须仍在照片库内；第一方页面先完成显式确认，API 重新校验资源与路径并为每个结果写入文件 operation。
 
 JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `photos` 服务处理；`photos` 仅是模块和进程标识，公开产品与 HTTP 契约统一使用 Photos。ExifTool 提取 EXIF/IPTC/XMP/ICC/JFIF/RAW 标量，视频使用 `ffprobe`，libvips CLI 生成 WebP；同目录精确媒体名和同 stem XMP 按确定性规则关联，大小写冲突标记为 ambiguous。源文件由 storage-pool dirfd 与 `openat2` 打开后以继承 fd 交给子工具，发布使用空间预留、文件/目录 sync 和 journal。原图、视频流和文件变更每次访问都重新经过 storage pool、挂载、遍历和 symlink 校验；当前配置版本的缓存 WebP 缩略图与预览可以在存储池离线时继续读取。不要把索引记录当成原文件存在性的授权依据。
+
+支持的扩展名用于选择媒体大类，验证内容属于同一大类后按 MIME 选择图像解码器；JPEG 内容即使命名为 `.HEIC` 也不调用 HEIF 解码器。GIF 尺寸读取 ExifTool 的 GIF 分组并应用相同像素上限。视频海报必须是非空普通文件才进入衍生图处理；回退首帧不放宽子进程资源、源文件或尺寸限制。
 
 ## 系统电源
 

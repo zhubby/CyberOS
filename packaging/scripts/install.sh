@@ -140,7 +140,7 @@ install_build_dependencies() {
     apt_install remove -y nodejs
   fi
   apt_install install -y --no-install-recommends \
-    ca-certificates curl build-essential cargo rustc debhelper dh-dkms dpkg-dev fakeroot rsync \
+    ca-certificates curl build-essential cargo rustc debhelper dh-dkms dpkg-dev fakeroot ffmpeg rsync \
     nodejs npm xz-utils
 }
 

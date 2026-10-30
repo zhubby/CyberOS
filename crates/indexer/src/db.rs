@@ -526,7 +526,9 @@ impl Db {
         );
         let identity = file.identity;
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(IndexerError::database)?;
+            // Acquire the writer lock before establishing a read snapshot;
+            // WAL read-to-write upgrades can bypass busy_timeout.
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(IndexerError::database)?;
             let id = transaction.query_row(
                 "SELECT id FROM indexed_files WHERE storage_pool_id = ? AND path = ?",
                 params![values.0, values.1],
@@ -645,7 +647,9 @@ impl Db {
     ) -> DbResult<u64> {
         let values = (storage_pool_id.to_owned(), path.to_owned());
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(IndexerError::database)?;
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(IndexerError::database)?;
             let ids = selected_ids(&transaction, &values.0, &values.1, recursive, None)?;
             delete_ids(&transaction, &ids)?;
             transaction.commit().map_err(IndexerError::database)?;
@@ -668,7 +672,7 @@ impl Db {
             root_rebuild,
         );
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(IndexerError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(IndexerError::database)?;
             let ids = selected_ids(&transaction, &values.0, &values.1, true, Some(&values.2))?;
             delete_ids(&transaction, &ids)?;
             transaction.execute(
@@ -774,7 +778,7 @@ impl Db {
         let run_id = run_id.to_owned();
         let stats = stats.clone();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(IndexerError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(IndexerError::database)?;
             let storage_pool_id: String = transaction.query_row("SELECT storage_pool_id FROM index_runs WHERE id = ?", [&run_id], |row| row.get(0))
                 .map_err(IndexerError::database)?;
             for (path, reason) in &stats.failures {
@@ -947,7 +951,7 @@ impl Db {
         let worker_id = worker_id.to_owned();
         let entries = entries.to_vec();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(IndexerError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(IndexerError::database)?;
             let active: bool = transaction.query_row(
                 "SELECT EXISTS(SELECT 1 FROM media_scan_runs \
                  WHERE id = ? AND generation = ? AND status = 'running' AND worker_id = ?)",

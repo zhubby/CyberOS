@@ -236,21 +236,14 @@ pub async fn process_media(
     temporary_files.track(&preview_temp_path);
 
     let decoded_path = match detected {
-        MediaKind::Image if is_heif(source_name) => {
+        MediaKind::Image => {
             let output = scratch.join(format!("{}.jpg", Uuid::new_v4()));
             temporary_files.track(&output);
-            runner
-                .run(
-                    "heif-convert",
-                    &[
-                        child_media_path().into(),
-                        output.to_string_lossy().into_owned(),
-                    ],
-                    Some(source),
-                    &limits,
-                )
-                .await?;
-            Some(output)
+            if decode_image_input(source, &mime_type, &output, runner, &limits).await? {
+                Some(output)
+            } else {
+                None
+            }
         }
         MediaKind::Raw => {
             let output = scratch.join(format!("{}.tiff", Uuid::new_v4()));
@@ -274,31 +267,9 @@ pub async fn process_media(
         MediaKind::Video => {
             let output = scratch.join(format!("{}.jpg", Uuid::new_v4()));
             temporary_files.track(&output);
-            runner
-                .run(
-                    "ffmpeg",
-                    &[
-                        "-hide_banner".into(),
-                        "-loglevel".into(),
-                        "error".into(),
-                        "-y".into(),
-                        "-ss".into(),
-                        "00:00:01".into(),
-                        "-i".into(),
-                        child_media_path().into(),
-                        "-frames:v".into(),
-                        "1".into(),
-                        "-q:v".into(),
-                        "2".into(),
-                        output.to_string_lossy().into_owned(),
-                    ],
-                    Some(source),
-                    &limits,
-                )
-                .await?;
+            extract_video_frame(source, &output, runner, &limits).await?;
             Some(output)
         }
-        MediaKind::Image => None,
     };
     let derivative_input = derivative_input(decoded_path.as_deref(), &mime_type);
     render_derivative(
@@ -588,6 +559,90 @@ fn derivative_input(decoded_path: Option<&Path>, mime_type: &str) -> PathBuf {
             PathBuf::from(child_media_path())
         }
     })
+}
+
+async fn decode_image_input(
+    source: &File,
+    verified_mime: &str,
+    output: &Path,
+    runner: &CommandRunner,
+    limits: &CommandLimits,
+) -> Result<bool, PhotosError> {
+    // The supported extension already selected and validated the media family.
+    // Use verified content to choose its decoder, including renamed JPEGs.
+    if !matches!(
+        verified_mime,
+        "image/heic" | "image/heif" | "image/heic-sequence" | "image/heif-sequence"
+    ) {
+        return Ok(false);
+    }
+    runner
+        .run(
+            "heif-convert",
+            &[
+                child_media_path().into(),
+                output.to_string_lossy().into_owned(),
+            ],
+            Some(source),
+            limits,
+        )
+        .await?;
+    Ok(true)
+}
+
+async fn extract_video_frame(
+    source: &File,
+    output: &Path,
+    runner: &CommandRunner,
+    limits: &CommandLimits,
+) -> Result<(), PhotosError> {
+    for seek in ["00:00:01", "00:00:00"] {
+        let result = runner
+            .run(
+                "ffmpeg",
+                &[
+                    "-hide_banner".into(),
+                    "-loglevel".into(),
+                    "error".into(),
+                    "-y".into(),
+                    "-ss".into(),
+                    seek.into(),
+                    "-i".into(),
+                    child_media_path().into(),
+                    "-frames:v".into(),
+                    "1".into(),
+                    "-q:v".into(),
+                    "2".into(),
+                    output.to_string_lossy().into_owned(),
+                ],
+                Some(source),
+                limits,
+            )
+            .await;
+        match result {
+            Ok(_) if nonempty_regular_file(output)? => return Ok(()),
+            Err(error) if seek == "00:00:00" || error.code != ErrorCode::CorruptMedia => {
+                return Err(error);
+            }
+            _ => {}
+        }
+        // Seeking past the last video frame can exit successfully without
+        // creating an output. Retry once at the first frame; resource/tool
+        // errors above retain their original classification and limits.
+    }
+    Err(PhotosError::new(
+        ErrorCode::CorruptMedia,
+        "FFmpeg did not produce a video frame",
+        false,
+    ))
+}
+
+fn nonempty_regular_file(path: &Path) -> Result<bool, PhotosError> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file() && metadata.len() > 0),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(PhotosError::storage(error)),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1155,7 +1210,12 @@ fn dimensions(
     }
     let width = metadata_number(
         groups,
-        &["EXIF:ExifImageWidth", "File:ImageWidth", "PNG:ImageWidth"],
+        &[
+            "EXIF:ExifImageWidth",
+            "File:ImageWidth",
+            "PNG:ImageWidth",
+            "GIF:ImageWidth",
+        ],
     );
     let height = metadata_number(
         groups,
@@ -1163,6 +1223,7 @@ fn dimensions(
             "EXIF:ExifImageHeight",
             "File:ImageHeight",
             "PNG:ImageHeight",
+            "GIF:ImageHeight",
         ],
     );
     match (width, height) {
@@ -1312,17 +1373,6 @@ fn mime_for_name(name: &str) -> &'static str {
     }
 }
 
-fn is_heif(name: &str) -> bool {
-    matches!(
-        Path::new(name)
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(str::to_ascii_lowercase)
-            .as_deref(),
-        Some("heic" | "heif")
-    )
-}
-
 fn iso_from_ns(timestamp_ns: i64) -> String {
     OffsetDateTime::from_unix_timestamp_nanos(i128::from(timestamp_ns))
         .ok()
@@ -1333,6 +1383,184 @@ fn iso_from_ns(timestamp_ns: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn jpeg_content_named_heic_uses_the_original_image_descriptor() {
+        let directory = tempfile::tempdir().unwrap();
+        let input = directory.path().join("jpeg-content.HEIC");
+        let output = directory.path().join("decoded.jpg");
+        let limits = command_limits(&ProcessingSettings::default());
+        let runner = CommandRunner;
+        runner
+            .run(
+                "ffmpeg",
+                &[
+                    "-hide_banner".into(),
+                    "-loglevel".into(),
+                    "error".into(),
+                    "-y".into(),
+                    "-f".into(),
+                    "lavfi".into(),
+                    "-i".into(),
+                    "color=c=red:s=16x16".into(),
+                    "-frames:v".into(),
+                    "1".into(),
+                    "-c:v".into(),
+                    "mjpeg".into(),
+                    "-pix_fmt".into(),
+                    "yuvj420p".into(),
+                    "-f".into(),
+                    "image2".into(),
+                    input.to_string_lossy().into_owned(),
+                ],
+                None,
+                &limits,
+            )
+            .await
+            .unwrap();
+        let source = File::open(&input).unwrap();
+        let mut magic = [0; 3];
+        source.read_exact_at(&mut magic, 0).unwrap();
+        assert_eq!(magic, [0xff, 0xd8, 0xff]);
+        let inspected = serde_json::json!({
+            "File:MIMEType": "image/jpeg", "File:FileType": "JPEG"
+        });
+        let candidate = candidate_kind("jpeg-content.HEIC").unwrap();
+        assert_eq!(
+            detect_kind(candidate, &inspected).unwrap(),
+            MediaKind::Image
+        );
+        let verified_mime = json_string(&inspected, &["File:MIMEType"]).unwrap();
+
+        let decoded = decode_image_input(&source, &verified_mime, &output, &runner, &limits)
+            .await
+            .unwrap();
+
+        assert!(!decoded, "Verified JPEG content must bypass heif-convert");
+        assert!(!output.exists());
+        let probe = ffprobe(&source, &runner, &limits).await.unwrap();
+        assert_eq!(probe["streams"][0]["codec_name"], "mjpeg");
+    }
+
+    #[tokio::test]
+    async fn sub_second_mov_produces_a_decodable_video_poster() {
+        let directory = tempfile::tempdir().unwrap();
+        let input = directory.path().join("short.MOV");
+        let output = directory.path().join("poster.jpg");
+        let limits = command_limits(&ProcessingSettings::default());
+        let runner = CommandRunner;
+        generate_mov(&input, "color=c=red:s=32x32:r=10:d=0.5", &runner, &limits).await;
+        let source = File::open(&input).unwrap();
+
+        extract_video_frame(&source, &output, &runner, &limits)
+            .await
+            .unwrap();
+
+        assert!(
+            output.metadata().is_ok_and(|metadata| metadata.len() > 0),
+            "A valid half-second MOV must produce a poster before libvips runs"
+        );
+        let pixel = poster_pixel(&output, &runner, &limits).await;
+        assert!(pixel[0] > 200 && pixel[2] < 30, "{pixel:?}");
+    }
+
+    #[tokio::test]
+    async fn video_poster_keeps_the_one_second_frame_when_available() {
+        let directory = tempfile::tempdir().unwrap();
+        let input = directory.path().join("normal.MOV");
+        let output = directory.path().join("poster.jpg");
+        let limits = command_limits(&ProcessingSettings::default());
+        let runner = CommandRunner;
+        generate_mov(
+            &input,
+            "color=c=red:s=32x32:r=10:d=0.5[red];color=c=blue:s=32x32:r=10:d=1.5[blue];[red][blue]concat=n=2:v=1:a=0",
+            &runner,
+            &limits,
+        )
+        .await;
+        let source = File::open(&input).unwrap();
+
+        extract_video_frame(&source, &output, &runner, &limits)
+            .await
+            .unwrap();
+
+        let pixel = poster_pixel(&output, &runner, &limits).await;
+        assert!(pixel[2] > 200 && pixel[0] < 30, "{pixel:?}");
+    }
+
+    #[test]
+    fn video_frame_validation_rejects_missing_empty_and_non_regular_outputs() {
+        let directory = tempfile::tempdir().unwrap();
+        let output = directory.path().join("poster.jpg");
+        assert!(!nonempty_regular_file(&output).unwrap());
+        std::fs::write(&output, []).unwrap();
+        assert!(!nonempty_regular_file(&output).unwrap());
+        std::fs::write(&output, b"frame bytes").unwrap();
+        assert!(nonempty_regular_file(&output).unwrap());
+        let link = directory.path().join("link.jpg");
+        std::os::unix::fs::symlink(&output, &link).unwrap();
+        assert!(!nonempty_regular_file(&link).unwrap());
+        assert!(!nonempty_regular_file(directory.path()).unwrap());
+    }
+
+    async fn generate_mov(
+        output: &Path,
+        filter: &str,
+        runner: &CommandRunner,
+        limits: &CommandLimits,
+    ) {
+        runner
+            .run(
+                "ffmpeg",
+                &[
+                    "-hide_banner".into(),
+                    "-loglevel".into(),
+                    "error".into(),
+                    "-y".into(),
+                    "-f".into(),
+                    "lavfi".into(),
+                    "-i".into(),
+                    filter.into(),
+                    "-c:v".into(),
+                    "mjpeg".into(),
+                    "-pix_fmt".into(),
+                    "yuvj420p".into(),
+                    output.to_string_lossy().into_owned(),
+                ],
+                None,
+                limits,
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn poster_pixel(input: &Path, runner: &CommandRunner, limits: &CommandLimits) -> Vec<u8> {
+        runner
+            .run(
+                "ffmpeg",
+                &[
+                    "-hide_banner".into(),
+                    "-loglevel".into(),
+                    "error".into(),
+                    "-i".into(),
+                    input.to_string_lossy().into_owned(),
+                    "-frames:v".into(),
+                    "1".into(),
+                    "-vf".into(),
+                    "scale=1:1".into(),
+                    "-f".into(),
+                    "rawvideo".into(),
+                    "-pix_fmt".into(),
+                    "rgb24".into(),
+                    "pipe:1".into(),
+                ],
+                None,
+                limits,
+            )
+            .await
+            .unwrap()
+            .stdout
+    }
 
     #[test]
     fn classifies_extensions_and_derivative_keys() {
@@ -1355,6 +1583,35 @@ mod tests {
             ErrorCode::SizeLimit
         );
         assert!(validate_pixel_limit(512, 512, 268_402_689).is_ok());
+    }
+
+    #[test]
+    fn gif_dimensions_are_read_from_verified_metadata_and_enforce_the_pixel_limit() {
+        let metadata = normalize_metadata(
+            MediaKind::Image,
+            serde_json::json!({
+                "File:MIMEType": "image/gif",
+                "File:FileType": "GIF",
+                "GIF:ImageWidth": 270,
+                "GIF:ImageHeight": 270
+            }),
+            None,
+            None,
+            0,
+            None,
+            Vec::new(),
+        );
+
+        let (width, height) = dimensions(&metadata.raw_metadata, None).unwrap();
+
+        assert_eq!((width, height), (270, 270));
+        validate_pixel_limit(width, height, 72_900).unwrap();
+        assert_eq!(
+            validate_pixel_limit(width, height, 72_899)
+                .unwrap_err()
+                .code,
+            ErrorCode::SizeLimit
+        );
     }
 
     #[test]

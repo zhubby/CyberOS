@@ -64,6 +64,8 @@ command -v ffprobe
 
 单个 HEIC/HEIF 失败时确认 `libheif-examples` 已安装；单个 RAW 失败时确认 `libraw-bin`/`dcraw_emu` 可执行并验证源文件；视频海报或播放失败时确认 `ffmpeg` 和 `ffprobe` 已安装。JPEG/PNG 等全部失败时检查 `/cyberos/state/photos` 与照片目录对 `cyberos` 用户的读写权限。WebP 衍生图位于 `/cyberos/state/photos/thumbnail` 和 `/cyberos/state/photos/preview`，视频转码缓存位于 `/cyberos/state/media-cache/videos`。单个文件解码失败只会将该媒体标记为 `failed`，其他媒体继续处理，原文件仍可下载；完整遍历失败不会清理未确认的旧资源。
 
+修复解码器后，已有不可重试的 `failed` 条目不会因服务重启立即重试。当前扫描尚在运行时，普通 Scan 会复用该任务；等本轮完成后再发起 Scan，或等待后续周期扫描，失败资源会重新处理，未变化的 `ready` 资源仍可跳过。不要直接修改生产任务表或删除原文件来触发重试。
+
 ## 离线地图下载
 
 地图下载失败时先读取托管状态和 API journal，再检查固定目录的空间与权限：
