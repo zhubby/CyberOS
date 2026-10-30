@@ -25,4 +25,6 @@ Photos 图库配置保存在内部键 `system_settings.photos_library_settings`�
 
 Photos worker 中先验证租约或查询状态、再写入的事务使用 `BEGIN IMMEDIATE`；indexer 的文件发布、路径删除、generation 清理、run 完成和媒体扫描发布也遵循此规则，在读取前取得写锁。与 API 等进程竞争时按 30 秒 busy timeout 等待。不要依赖 deferred 事务读后升级写锁：WAL 下遇到其他写入者或过期快照时，升级可能立即返回 `database is locked`，跳过 busy timeout。事务内只执行数据库操作，文件遍历与媒体处理放在事务外；只读缓存快照继续使用 deferred 事务。
 
+此约束适用于主库的所有写入者：alerter 的健康事件同步、指标求值、升级投递调度和投递完成，以及 downloader 验证所有权后替换分段，都必须在首次读取前取得写锁。TypeScript repository 中的同类事务用 better-sqlite3 的 `.immediate()` 调用；连接初始化时的 WAL 重试不能保护后续业务事务。不要把只读快照改成写锁，也不要以增加 busy timeout 或外层无限重试替代正确的事务模式；取得锁后仍须重新校验租约、revision 和所有权。
+
 `006_photos_scan_contention` 为 pending 与可重试失败条目分别增加 partial index。worker 必须等此迁移完成后启动，领取条目时分别通过对应索引取候选，再按路径比较，保持原有顺序，避免在写事务中反复遍历已完成条目。目录发现结果每批最多 128 条提交，整批校验租约并原子写入；中断后重读目录时按主键幂等去重。不要把文件遍历放进批量事务，也不要通过延长 busy timeout 掩盖持续抢占写锁。

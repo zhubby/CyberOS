@@ -35,7 +35,7 @@ export function recoverInterruptedIndexRuns(
     }
     return result.changes;
   });
-  return tx();
+  return tx.immediate();
 }
 
 function retainLatestFinalizedIndexRun(db: CyberOsDatabase, storagePoolId: string): void {
@@ -178,7 +178,7 @@ export function finishIndexRun(
     retainLatestFinalizedIndexRun(db, run.storage_pool_id);
     return true;
   });
-  return tx();
+  return tx.immediate();
 }
 
 export function updateIndexRunProgress(

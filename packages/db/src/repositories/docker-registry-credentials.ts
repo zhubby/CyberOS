@@ -58,7 +58,7 @@ export function createDockerRegistryCredential(
     };
     saveRecords(db, [...records, record], now);
     return record;
-  })();
+  }).immediate();
 }
 
 export function updateDockerRegistryCredential(
@@ -86,7 +86,7 @@ export function updateDockerRegistryCredential(
     records[index] = updated;
     saveRecords(db, records, updatedAt);
     return updated;
-  })();
+  }).immediate();
 }
 
 export function deleteDockerRegistryCredential(db: CyberOsDatabase, id: string): boolean {
@@ -98,7 +98,7 @@ export function deleteDockerRegistryCredential(db: CyberOsDatabase, id: string):
     }
     saveRecords(db, remaining, new Date().toISOString());
     return true;
-  })();
+  }).immediate();
 }
 
 function assertUniqueServer(records: DockerRegistryCredentialRecord[], serverAddress: string, exceptId?: string): void {

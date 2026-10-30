@@ -128,7 +128,7 @@ export function updateMonitoringAlertRule(
       db.prepare("UPDATE monitoring_alert_rules SET evaluation_error = NULL WHERE id = ?").run(id);
     }
     return getMonitoringAlertRule(db, id)!;
-  })();
+  }).immediate();
 }
 
 export function deleteMonitoringAlertRule(
@@ -151,7 +151,7 @@ export function deleteMonitoringAlertRule(
     closeRuleIncidents(db, id, "deleted", now);
     db.prepare("DELETE FROM monitoring_alert_instances WHERE rule_id = ?").run(id);
     return true;
-  })();
+  }).immediate();
 }
 
 export function listMonitoringAlertIncidents(
@@ -280,7 +280,7 @@ export function markAllMonitoringAlertIncidentsRead(db: CyberOsDatabase): number
     `);
     for (const id of ids) insert.run(id, now);
     return ids.length;
-  })();
+  }).immediate();
 }
 
 export function acknowledgeMonitoringAlertIncident(
@@ -340,7 +340,7 @@ export function deleteMonitoringAlertSilence(
       WHERE silences.id = ? AND incidents.status = 'firing'
     `).run(now, id);
     return true;
-  })();
+  }).immediate();
 }
 
 export function listMonitoringAlertContacts(db: CyberOsDatabase): MonitoringAlertContact[] {
@@ -675,7 +675,7 @@ function changeIncident(
       `).run(now, id);
     }
     return getMonitoringAlertIncident(db, id)!;
-  })();
+  }).immediate();
 }
 
 function cancelSilencedDeliveries(db: CyberOsDatabase, silenceId: string, now: string): void {
@@ -732,7 +732,7 @@ function deleteRevisioned(
     const result = db.prepare(`DELETE FROM ${table} WHERE id = ? AND revision = ?`).run(id, expectedRevision);
     if (result.changes !== 1) throw new MonitoringAlertRevisionConflictError();
     return true;
-  })();
+  }).immediate();
 }
 
 function referenceExists(

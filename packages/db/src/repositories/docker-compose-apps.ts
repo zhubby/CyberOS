@@ -173,7 +173,7 @@ export function updateDockerComposeApp(
     if (result.changes !== 1) throw new DockerComposeAppConflictError();
     replaceEnvironment(db, id, environment, now);
     return getDockerComposeApp(db, id)!;
-  })();
+  }).immediate();
 }
 
 export function markDockerComposeAppDeployed(

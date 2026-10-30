@@ -330,7 +330,7 @@ export function enqueueMediaScan(db: CyberOsDatabase, sourceId: string, now = ne
     `).run(id, sourceId, randomUUID(), timestamp, timestamp);
     return getRequiredMediaScan(db, id);
   });
-  return tx();
+  return tx.immediate();
 }
 
 export function claimNextMediaScan(
@@ -590,7 +590,7 @@ export function upsertMediaCatalogEntry(
     if (!detail || !file) throw new Error("Media catalog entry was not persisted");
     return { title: detail, file, created: !existingFileId };
   });
-  return tx();
+  return tx.immediate();
 }
 
 export function replaceMediaArtwork(

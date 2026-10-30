@@ -218,7 +218,7 @@ export function createCapabilityProposal(db: CyberOsDatabase, input: {
     appendCapabilityRunEvent(db, created.id, "approval.requested", { approvalId: approval.id, revision: 1 });
     return { run: getCapabilityRun(db, created.id)!, approval };
   });
-  return tx();
+  return tx.immediate();
 }
 
 export function getCapabilityRun(db: CyberOsDatabase, runId: string): CapabilityRunRecord | null {

@@ -170,7 +170,7 @@ export function enqueuePhotosJob(
     );
     return getRequiredPhotosJob(db, id);
   });
-  return tx();
+  return tx.immediate();
 }
 
 export function ensurePeriodicPhotosScan(
@@ -362,7 +362,7 @@ export function upsertPhotosAsset(
     if (input.metadata) replacePhotosAssetMetadata(db, asset, input.metadata, input.indexedAt);
     return asset;
   });
-  return tx();
+  return tx.immediate();
 }
 
 export function getPhotosAsset(db: CyberOsDatabase, id: string, libraryUpdatedAt: string): PhotosAssetRecord | null {

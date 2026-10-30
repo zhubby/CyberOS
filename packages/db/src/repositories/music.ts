@@ -214,7 +214,7 @@ export function updateMusicSource(
       db.prepare("DELETE FROM music_scan_entries WHERE scan_id IN (SELECT id FROM music_scan_runs WHERE source_id=? AND status='cancelled')").run(id);
     }
     return getMusicSource(db, id);
-  })();
+  }).immediate();
 }
 export function removeMusicSource(db: CyberOsDatabase, id: string): boolean {
   return db.transaction(() => {
@@ -742,7 +742,7 @@ export function replaceMusicPlaylistTracks(
       now(),
       id
     );
-  })();
+  }).immediate();
 }
 export function updateMusicPlaylist(
   db: CyberOsDatabase,
@@ -761,7 +761,7 @@ export function updateMusicPlaylist(
     if (input.trackIds !== undefined)
       replaceMusicPlaylistTracks(db, id, input.trackIds);
     return getMusicPlaylist(db, id)!.playlist;
-  })();
+  }).immediate();
 }
 export function deleteMusicPlaylist(db: CyberOsDatabase, id: string): boolean {
   return (
