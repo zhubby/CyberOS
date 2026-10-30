@@ -14,7 +14,7 @@ STATE_PATH="$BASE_DIR/current-release.json"
 LOCK_PATH=/run/lock/cyberos-deploy.lock
 
 TIMERS='cyberos-maintenance.timer cyberos-health.timer cyberos-backup-daily.timer cyberos-backup-weekly.timer'
-CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-terminald.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service'
+CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-terminald.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-media-streamer.service cyberos-indexer.service'
 RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES cyberos-monitor.service cyberos-alerter.service"
 SHARE_SERVICES='smbd.service nmbd.service cyberos-webdav.service vsftpd.service nfs-server.service minidlna.service'
 OPTIONAL_RUNTIME_SERVICES='cyberos-host-accessd.service'
@@ -309,6 +309,7 @@ activate_runtime() {
   start_service_stably cyberos-photos.service
   start_service_stably cyberos-downloader.service
   start_service_stably cyberos-bluetoothd.service
+  start_service_stably cyberos-media-streamer.service
   start_service_stably cyberos-indexer.service
 
   log "applying the configured TV appliance mode"
@@ -467,7 +468,7 @@ capture_runtime_diagnostics() {
   target_diagnostics_path=$1
   systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES cyberos-vod-player.service $SHARE_SERVICES --no-pager --full > "$target_diagnostics_path/services-status.txt" 2>&1 || true
   systemctl --failed --no-legend --plain > "$target_diagnostics_path/failed-units.txt" 2>&1 || true
-  journalctl -u cyberos-api.service -u cyberos-monitor.service -u cyberos-alerter.service -u cyberos-worker@1.service -u cyberos-photos.service -u cyberos-downloader.service -u cyberos-indexer.service -u cyberos-hostd.service -u cyberos-host-accessd.service -u cyberos-terminald.service -u cyberos-vod-player.service -u smbd.service -u nmbd.service -u cyberos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
+  journalctl -u cyberos-api.service -u cyberos-monitor.service -u cyberos-alerter.service -u cyberos-worker@1.service -u cyberos-photos.service -u cyberos-downloader.service -u cyberos-indexer.service -u cyberos-hostd.service -u cyberos-host-accessd.service -u cyberos-terminald.service -u cyberos-vod-player.service -u cyberos-media-streamer.service -u smbd.service -u nmbd.service -u cyberos-webdav.service -u vsftpd.service -u nfs-server.service -u minidlna.service -n 300 --no-pager > "$target_diagnostics_path/services-journal.txt" 2>&1 || true
 
   log "service status at failure:" >&2
   cat "$target_diagnostics_path/services-status.txt" >&2

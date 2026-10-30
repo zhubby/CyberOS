@@ -175,6 +175,7 @@ impl VodPlayerConfig {
     pub fn for_music_session(&self, bluetooth: bool) -> Self {
         let mut config = self.clone();
         config.video_output = "null".to_owned();
+        config.audio_device = None;
         config.drm_connector = None;
         config.hwdec = "no".to_owned();
         if bluetooth {

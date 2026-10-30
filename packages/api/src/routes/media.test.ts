@@ -193,10 +193,10 @@ describe("Media API", () => {
             storagePoolId: poolId,
       relativePath: "Movies/Arrival.2016.mkv",
       mediaFileId: stored.file.id,
-      audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
       startPositionSeconds: 120,
       expectedSessionId: "music-session"
     })]);
+    expect(playerCommands[0]).not.toHaveProperty("audioDeviceId");
   });
 
   it("serves local artwork only from inside its configured source", async () => {

@@ -1,4 +1,6 @@
 @import "@cyberos/shared/hud-tokens.css";
+@import "../styles/music.css";
+@import "../styles/video.css";
 @import "../styles/modal.css";
 
 :root {
@@ -907,3 +909,27 @@ pinyin-ime-editor::part(candidate-row) {
 .tv-takeover > div { display: flex; justify-content: flex-end; gap: 16px; margin-top: 24px; }
 .tv-takeover button { min-height: 48px; padding: 12px 20px; border: 1px solid var(--tv-line); color: var(--tv-text); background: var(--tv-bg); }
 .tv-takeover button:last-child { color: var(--tv-accent-contrast); background: var(--tv-command); }
+
+/* The TV library shares components and tokens with the Web library at a distance. */
+:root { --app-bg: var(--tv-bg); --surface: var(--tv-surface); --text: var(--tv-text); --muted: var(--tv-muted); --line: var(--tv-line); --accent: var(--tv-command); --cyber-cyan: var(--tv-focus); --red: var(--tv-danger); --font-mono: var(--cyberos-font-mono); }
+.tv-library-shell { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.tv-library-shell > .tv-header { position: relative; padding: 14px 32px; }
+.tv-library-shell > .video-panel { grid-row: 2; padding: 0 24px; }
+.tv-library-shell > .playback-shell { grid-row: 3; }
+.video-panel-tv .video-navigation button { font-size: 21px; min-height: 48px; padding: 8px 18px; }
+.video-panel-tv .video-poster-rail { grid-auto-columns: 180px; gap: 24px; }
+.video-panel-tv .video-poster-wall { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 24px; }
+.video-panel-tv .video-poster strong, .video-panel-tv h3 { font-size: 21px; }
+.video-panel-tv button, .video-panel-tv input, .video-panel-tv select { min-height: 44px; }
+.video-panel-tv .video-detail-main { grid-template-columns: 200px minmax(0, 1fr); }
+.video-panel-tv .video-detail-main h2 { font-size: 28px; }
+.video-panel-tv .video-detail-main p { font-size: 18px; }
+.video-panel-tv :focus-visible { outline: 3px solid var(--tv-focus); outline-offset: 4px; }
+.tv-library-shell .management-header { display: flex; align-items: center; gap: 12px; min-height: 64px; }
+.tv-library-shell .management-title-copy { flex: 1; }
+.tv-library-shell .management-title-copy h2 { font-size: 22px; margin: 0; }
+.tv-library-shell .management-title-copy p { display: none; }
+.tv-library-shell .management-dialog-backdrop { position: fixed; inset: 0; background: #000c; z-index: 100; display: grid; place-items: center; padding: 24px; }
+@media (max-width: 620px) { .tv-library-shell > .video-panel { padding: 0; } .video-panel-tv .video-detail-main { grid-template-columns: 100px minmax(0,1fr); } }
+
+:root { --accent-contrast: var(--tv-accent-contrast); --control-focus: var(--tv-focus); --dialog-bg: var(--tv-surface); --surface-hover: var(--tv-surface-raised, var(--tv-surface)); --line-soft: var(--tv-line); --muted-2: var(--tv-muted); --warning-text: var(--tv-command); --danger-text: var(--tv-danger); --danger-bg-soft: var(--cyberos-color-surface-raised); --input-deep-bg: var(--tv-bg); --modal-backdrop: var(--cyberos-hud-overlay); }

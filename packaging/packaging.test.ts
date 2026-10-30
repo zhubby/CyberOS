@@ -871,7 +871,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain("runtime_before=$(runtime_fingerprint)");
     expect(deploy).toContain("sleep 30");
     expect(deploy).toContain(
-      "CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-terminald.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-indexer.service'"
+      "CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-terminald.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-media-streamer.service cyberos-indexer.service'"
     );
     expect(deploy).toContain('systemctl is-enabled --quiet "$unit"');
     expect(deploy).toContain('die "one or more services restarted during stabilization"');
@@ -891,7 +891,7 @@ describe("native packaging artifacts", () => {
     expect(deploy).toContain('capture_runtime_diagnostics "$failure_dir"');
     expect(deploy).toContain("SHARE_SERVICES='smbd.service nmbd.service cyberos-webdav.service vsftpd.service nfs-server.service minidlna.service'");
     expect(deploy).toContain("systemctl status $RUNTIME_SERVICES $OPTIONAL_RUNTIME_SERVICES cyberos-vod-player.service $SHARE_SERVICES");
-    expect(deploy).toContain("-u cyberos-vod-player.service -u smbd.service");
+    expect(deploy).toContain("-u cyberos-vod-player.service -u cyberos-media-streamer.service -u smbd.service");
     expect(deploy).toContain("-u vsftpd.service -u nfs-server.service -u minidlna.service");
     expect(deploy).toContain('cat "$target_diagnostics_path/services-status.txt" >&2');
     expect(deploy).toContain('cat "$target_diagnostics_path/services-journal.txt" >&2');

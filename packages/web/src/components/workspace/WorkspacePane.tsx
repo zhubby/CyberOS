@@ -62,6 +62,7 @@ import {
 import { WorkspaceManagementPanel } from "./WorkspaceManagementPanel.js";
 import { LocalTerminalPanel } from "./LocalTerminalPanel.js";
 import { HttpDownloaderPanel } from "./HttpDownloaderPanel.js";
+import { VideoLibraryPanel } from "../video/VideoLibraryPanel.js";
 import { MusicLibraryPanel } from "../music/MusicLibraryPanel.js";
 import { PhotoLibraryPanel } from "./PhotoLibraryPanel.js";
 import { FileListSkeleton, SkeletonBlock } from "./ManagementSkeleton.js";
@@ -86,6 +87,7 @@ const WORKSPACE_PANELS = [
     shortLabelKey: "workspace.panels.photosShort",
     Icon: Images
   },
+  { id: "video", labelKey: "workspace.panels.video", shortLabelKey: "workspace.panels.videoShort", Icon: MonitorPlay },
   { id: "music", labelKey: "workspace.panels.music", shortLabelKey: "workspace.panels.musicShort", Icon: Music2 },
   {
     id: "terminal",
@@ -574,7 +576,7 @@ export function WorkspacePane({
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
   onNotifyWarning: (message: string | null) => void;
-  onOpenDeviceSettings: (section: "wireless" | "bluetooth") => void;
+  onOpenDeviceSettings: (section: "wireless" | "bluetooth" | "media") => void;
   onOpenPhotoSettings: () => void;
   onClosePreview: () => void;
   onRollback: (operation: FileOperation) => void;
@@ -1757,6 +1759,8 @@ export function WorkspacePane({
               onOpenSettings={onOpenPhotoSettings}
               configurationUpdatedAt={photoLibrarySettingsUpdatedAt}
             />
+          ) : activePanel === "video" ? (
+            <VideoLibraryPanel onManage={() => onOpenDeviceSettings("media")} />
           ) : activePanel === "music" ? (
             <MusicLibraryPanel pools={storagePools} locale={locale} />
           ) : activePanel === "monitoring" ? (

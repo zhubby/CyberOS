@@ -53,7 +53,7 @@ describe("VOD Player API", () => {
     await server.close();
   });
 
-  it("uses only the Bluetooth audio device selected in system settings", async () => {
+  it("does not borrow the music Bluetooth default for video playback", async () => {
     const { root } = await setup();
     const calls: unknown[] = [];
     saveBluetoothSettings(db!, { defaultAudioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF" });
@@ -70,9 +70,9 @@ describe("VOD Player API", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(calls).toEqual([expect.objectContaining({
-      type: "play",
-      audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF"
+      type: "play"
     })]);
+    expect(calls[0]).not.toHaveProperty("audioDeviceId");
 
     const rejected = await app.inject({
       method: "POST",

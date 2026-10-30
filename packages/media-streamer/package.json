@@ -1,0 +1,11 @@
+{
+  "name": "@cyberos/media-streamer",
+  "version": "2.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "build": "cd ../.. && tsup packages/media-streamer/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir packages/media-streamer/dist"
+  },
+  "dependencies": { "@cyberos/db": "2.1.0", "@cyberos/shared": "2.1.0", "@cyberos/storage-tools": "2.1.0" }
+}

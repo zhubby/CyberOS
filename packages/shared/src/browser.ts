@@ -8,3 +8,6 @@ export * from "./vod-player-protocol.js";
 export * from "./terminal-protocol.js";
 export * from "./types.js";
 export * from "./iscsi.js";
+export type * from "./video.js";
+export type * from "./playback.js";
+export type * from "./media-stream.js";

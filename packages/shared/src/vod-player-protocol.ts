@@ -13,7 +13,7 @@ export const VOD_PLAYER_BROKER_CONNECT_TIMEOUT_MS = 5_000;
 export type VodPlayerState = GeneratedVodPlayerState;
 export type VodPlayerErrorCode = GeneratedVodPlayerErrorCode;
 export type VodPlayerCapabilities = GeneratedVodPlayerCapabilities;
-export type VodPlayerStatus = Omit<GeneratedVodPlayerStatus, "owner" | "music">;
+export type VodPlayerStatus = Omit<GeneratedVodPlayerStatus, "owner" | "music" | "preferences" | "audioDelayKey">;
 
 type GeneratedPlayCommand = Extract<VodPlayerWireCommand, { type: "play" }>;
 export type VodPlayerCommand =
@@ -102,7 +102,19 @@ function parseCommand(value: Record<string, unknown>): VodPlayerBrokerRequest["c
       ...(typeof value.expectedSessionId === "string" ? { expectedSessionId: value.expectedSessionId } : {})
     };
   }
+  if (value.type === "guarded") {
+    if (!hasOnlyKeys(value, ["type", "serviceInstanceId", "expectedSessionId", "command"]) || !safeIdentifier(value.serviceInstanceId) || (value.expectedSessionId !== null && !safeIdentifier(value.expectedSessionId)) || !isRecord(value.command) || value.command.type === "guarded") return null;
+    const nested = parseCommand(value.command);
+    if (!nested || nested.type === "status") return null;
+    return { type: "guarded", serviceInstanceId: value.serviceInstanceId, expectedSessionId: value.expectedSessionId, command: nested };
+  }
   if (!safeIdentifier(value.sessionId)) return null;
+  if (value.type === "set-output") {
+    if (!hasOnlyKeys(value, ["type", "sessionId", "audioDeviceId"]) || (value.audioDeviceId !== null && !isBluetoothAudioDeviceId(value.audioDeviceId))) return null;
+    return { type: "set-output", sessionId: value.sessionId, audioDeviceId: value.audioDeviceId };
+  }
+  if (value.type === "set-muted") return hasOnlyKeys(value, ["type", "sessionId", "muted"]) && typeof value.muted === "boolean" ? { type: "set-muted", sessionId: value.sessionId, muted: value.muted } : null;
+  if (value.type === "set-audio-delay") return hasOnlyKeys(value, ["type", "sessionId", "milliseconds"]) && typeof value.milliseconds === "number" && Number.isFinite(value.milliseconds) && Math.abs(value.milliseconds) <= 5000 ? { type: "set-audio-delay", sessionId: value.sessionId, milliseconds: value.milliseconds } : null;
   if (
     value.type === "pause" || value.type === "resume" || value.type === "toggle-pause" ||
     value.type === "stop" || value.type === "stop-video" || value.type === "retry" || value.type === "cycle-audio-track" ||
@@ -150,7 +162,7 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
       "relativePath", "fileName", "mediaFileId", "videoOutput", "positionSeconds", "durationSeconds", "volume", "retryCount",
       "nextRetryAt", "audioDeviceId", "effectiveAudioDeviceId", "audioFallbackReason",
       "audioTracks", "subtitleTracks", "selectedAudioTrackId", "selectedSubtitleTrackId",
-      "capabilities", "error", "errorCode", "updatedAt", "owner", "music"
+      "capabilities", "error", "errorCode", "updatedAt", "owner", "music", "preferences", "audioDelayKey"
     ]) ||
     !isVodPlayerState(value.state)
   ) return null;

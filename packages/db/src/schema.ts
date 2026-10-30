@@ -3,6 +3,7 @@ import { currentMigrations } from "./migrations/current.js";
 import { agentResourceMigrations } from "./migrations/agent-resources.js";
 import { p2pDownloadMigrations } from "./migrations/p2p-downloads.js";
 import { musicMigrations } from "./migrations/music.js";
+import { videoMigrations } from "./migrations/video.js";
 import type { Migration } from "./migrations/types.js";
 
 export type { Migration } from "./migrations/types.js";
@@ -11,7 +12,8 @@ export const migrations: Migration[] = [
   ...currentMigrations,
   ...agentResourceMigrations,
   ...p2pDownloadMigrations,
-  ...musicMigrations
+  ...musicMigrations,
+  ...videoMigrations
 ];
 
 export function runMigrations(db: Database.Database): void {

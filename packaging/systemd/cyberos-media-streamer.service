@@ -1,0 +1,32 @@
+[Unit]
+Description=CyberOS browser media streaming
+After=local-fs.target cyberos-state-init.service
+Requires=cyberos-state-init.service
+
+[Service]
+Type=simple
+User=cyberos
+Group=cyberos
+Environment=CYBEROS_ROOT=/cyberos
+Environment=CYBEROS_ENVIRONMENT=production
+WorkingDirectory=/cyberos/state
+ExecStart=/usr/local/bin/node /usr/lib/cyberos/apps/media-streamer/dist/index.js
+Restart=on-failure
+RestartSec=3
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/cyberos/data
+ReadWritePaths=/run/cyberos /cyberos/state
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=768M
+CPUQuota=150%
+TasksMax=64
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

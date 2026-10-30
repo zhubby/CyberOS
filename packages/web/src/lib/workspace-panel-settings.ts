@@ -4,6 +4,7 @@ export const WORKSPACE_PANEL_IDS = [
   "files",
   "photos",
   "music",
+  "video",
   "terminal",
   "downloads",
   "monitoring",

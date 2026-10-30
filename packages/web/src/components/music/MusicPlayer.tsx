@@ -1,3 +1,6 @@
+import { OutputDeviceSelect } from "../playback/OutputDeviceSelect.js";
+import { useOptionalPlayback } from "../playback/PlaybackProvider.js";
+import { PlaybackSlider } from "../playback/PlaybackSlider.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -61,10 +64,13 @@ export function MusicCover({
 
 export function MusicPlayer({
   onOpenBluetoothSettings,
+  hideBar = false,
 }: {
   onOpenBluetoothSettings: () => void;
+  hideBar?: boolean;
 }) {
   const { t } = useTranslation();
+  const playback = useOptionalPlayback();
   const remote = useMusicRemote();
   const { status, busy, execute, drawerOpen, setDrawerOpen, error } = remote;
   const [tab, setTab] = useState<"queue" | "lyrics">("queue");
@@ -188,7 +194,7 @@ export function MusicPlayer({
   };
   return (
     <>
-      <section className="music-player-bar" aria-label={t("music.nasPlayer")}>
+      <section hidden={hideBar} className="music-player-bar" aria-label={t("music.nasPlayer")}>
         <button
           type="button"
           className="music-current"
@@ -240,7 +246,7 @@ export function MusicPlayer({
         </div>
         <label className="music-progress">
           <span>{musicTime(status.positionSeconds)}</span>
-          <MusicSlider
+          <PlaybackSlider
             max={Math.max(1, status.durationSeconds ?? 1)}
             step={0.1}
             value={Math.min(
@@ -396,7 +402,7 @@ export function MusicPlayer({
             </div>
             <label className="music-progress">
               <span>{musicTime(status.positionSeconds)}</span>
-              <MusicSlider
+              <PlaybackSlider
                 max={Math.max(1, status.durationSeconds ?? 1)}
                 value={Math.min(
                   status.positionSeconds,
@@ -413,32 +419,7 @@ export function MusicPlayer({
             <label>
               <Speaker size={16} aria-hidden="true" />
               <span>{t("music.output")}</span>
-              <select
-                value={status.audioDeviceId ?? ""}
-                disabled={busy}
-                onChange={(event) =>
-                  void execute({
-                    type: "output",
-                    audioDeviceId: event.target.value || null,
-                  })
-                }
-              >
-                <option value="">{t("music.defaultOutput")}</option>
-                {status.audioDeviceId &&
-                !devices.some(
-                  (device) => device.id === status.audioDeviceId,
-                ) ? (
-                  <option value={status.audioDeviceId} disabled>
-                    {t("music.unavailableOutput")}
-                  </option>
-                ) : null}
-                {devices.map((device) => (
-                  <option key={device.id} value={device.id}>
-                    {device.name}
-                    {device.connected ? "" : ` (${t("music.disconnected")})`}
-                  </option>
-                ))}
-              </select>
+              <OutputDeviceSelect value={status.audioDeviceId} devices={devices} disabled={busy} defaultLabel={t("music.defaultOutput")} onChange={audioDeviceId => void execute({ type: "output", audioDeviceId })} />
             </label>
             <button
               type="button"
@@ -452,7 +433,7 @@ export function MusicPlayer({
             </button>
             <label>
               <Volume2 size={16} aria-hidden="true" />
-              <MusicSlider
+              <PlaybackSlider
                 max={100}
                 value={status.volume}
                 disabled={busy}
@@ -461,6 +442,7 @@ export function MusicPlayer({
               />
               <span>{Math.round(status.volume)}</span>
             </label>
+            {playback?.nas?.owner === "music" && playback.nas.sessionId ? <button disabled={busy} aria-pressed={playback.nas.preferences.musicMuted} onClick={() => void playback.control({ type: "set-muted", sessionId: playback.nas!.sessionId!, muted: !playback.nas!.preferences.musicMuted }).catch(error => setDeviceError(error instanceof Error ? error.message : String(error)))}>{t("playback.mute")}</button> : null}
           </div>
           {status.owner === "video" ? (
             <p className="music-inline-state">
@@ -650,56 +632,5 @@ export function MusicPlayer({
         />
       ) : null}
     </>
-  );
-}
-
-function MusicSlider({
-  value,
-  max,
-  step = 1,
-  disabled,
-  label,
-  onCommit,
-}: {
-  value: number;
-  max: number;
-  step?: number;
-  disabled: boolean;
-  label: string;
-  onCommit: (value: number) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  const dirty = useRef(false);
-  const latest = useRef(value);
-  useEffect(() => {
-    if (!dirty.current) {
-      setDraft(value);
-      latest.current = value;
-    }
-  }, [value]);
-  const commit = () => {
-    if (dirty.current) {
-      dirty.current = false;
-      onCommit(latest.current);
-    }
-  };
-  return (
-    <input
-      type="range"
-      min={0}
-      max={max}
-      step={step}
-      value={Math.min(draft, max)}
-      disabled={disabled}
-      aria-label={label}
-      onChange={(event) => {
-        latest.current = Number(event.target.value);
-        dirty.current = true;
-        setDraft(latest.current);
-      }}
-      onPointerUp={commit}
-      onKeyUp={commit}
-      onBlur={commit}
-    />
   );
 }

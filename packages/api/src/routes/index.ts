@@ -27,6 +27,8 @@ import { registerMonitoringAlertRoutes } from "./monitoring-alerts.js";
 import { registerBluetoothTransferRoutes } from "./bluetooth-transfers.js";
 import { registerMusicRoutes } from "./music.js";
 import { registerMediaRoutes } from "./media.js";
+import { registerMediaStreamRoutes } from "./media-stream.js";
+import { registerPlaybackRoutes } from "./playback.js";
 import { registerTvRoutes } from "./tv.js";
 import { registerAgentResourceRoutes } from "./agent-resources.js";
 
@@ -54,6 +56,8 @@ export function registerApiRoutes(server: FastifyInstance, context: ApiRouteCont
   registerVmRoutes(server, context);
   registerVodPlayerRoutes(server, context);
   registerMediaRoutes(server, context);
+  registerPlaybackRoutes(server, context);
+  registerMediaStreamRoutes(server, context);
   registerMusicRoutes(server, context);
   registerTvRoutes(server, context);
   registerDownloadRoutes(server, context);

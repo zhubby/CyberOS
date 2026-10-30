@@ -32,7 +32,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "001_cyberos_2_0",
         "002_agent_resources",
         "003_p2p_downloads",
-        "004_music_library"
+        "004_music_library",
+        "005_video_library"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
@@ -48,7 +49,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
       "001_cyberos_2_0",
       "002_agent_resources",
       "003_p2p_downloads",
-        "004_music_library"
+        "004_music_library",
+        "005_video_library"
     ]);
   });
 
@@ -194,7 +196,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "001_cyberos_2_0",
         "002_agent_resources",
         "003_p2p_downloads",
-        "004_music_library"
+        "004_music_library",
+        "005_video_library"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
