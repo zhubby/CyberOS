@@ -181,7 +181,7 @@ git push origin "v${VERSION}"
 1. 进入 `production` environment，并验证 GitHub OIDC claims；
 2. 使用 `tailscale/github-action@v4` 创建带 `tag:github-actions` 的临时节点；
 3. 经 Tailscale SSH 上传 `release-manifest.json`；上传前只在固定 incoming 目录内拒绝 symlink/特殊文件并清除旧的普通 manifest。随后用 SFTP 将 package 切成可独立续传的分片；CM5 按顺序拼接并校验完整 SHA256 后，再原子替换 staging 中的 `package.deb`；
-4. 执行 `sudo -n /usr/local/sbin/cyberos-deploy`；
+4. 执行 `sudo -n /usr/local/sbin/cyberos-deploy`，使用 helper 默认启用的升级备份；
 5. 再次检查常驻服务、核心 timers 的启用/运行状态和下一次触发时间、failed units、API liveness、存储池挂载状态、Operations Health，以及 build-info 的版本和 commit；
 6. workflow 结束时 logout 并清理临时 Tailscale 节点。
 
@@ -195,7 +195,8 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 版本相同但 commit 不同时拒绝覆盖。
 - 版本和 commit 都相同时不重装，只重新验证服务和 build-info，因此可安全重试同一个 tag。
 - workflow 在升级前记录 `system_settings` 的稳定摘要，并在升级后严格比对。若机器上已安装的 helper 早于数据库设置摘要命令，则只允许一次 `database-only` 引导：升级前必须通过数据库完整性检查，升级后必须由新 helper 生成有效摘要；这不会读取或迁移已删除的产品配置文件。后续部署恢复严格的摘要前后比对。
-- 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，将 `/cyberos/state` 和 `/cyberos/home` 保存为 `state.tgz`，将 `/home/cyberos` 另存为 `terminal-home.tgz`（排除 tmux socket），再通过 APT 安装已校验的 `.deb`。任一备份失败都会中止安装；`--no-upgrade-backup` 仍显式跳过两个备份。
+- 正常升级会保存原 service/timer 状态；如果当前托管 release 的包仍存在，还会另存为 `previous-package.deb`。停止 SQLite/NAS writers 后，将 `/cyberos/state` 和 `/cyberos/home` 保存为 `state.tgz`，其中包含 SQLite 数据库及尚未 checkpoint 的 WAL，再通过 APT 安装已校验的 `.deb`。任一备份失败都会中止安装。正式部署 workflow 不传 `--no-upgrade-backup`；该参数只供运维显式跳过升级备份。
+- 升级前的备份由设备上已安装的 helper 执行。当前 helper 还将 `/home/cyberos` 保存为 `terminal-home.tgz`（排除 tmux socket）；从 2.1.0 升级时，旧 helper 只生成 `state.tgz`，不会生成独立的终端家目录归档。安装后的新 helper 无法补建升级前的归档，验收时必须以本次实际备份文件为准。
 - 安装后先启动 API，再启动 monitor、立即运行一次 Health，然后恢复后台服务并强制启用 maintenance、health 和 backup 核心 timers。monitor 失败会报告 monitoring degraded，但不会阻断核心 API 部署；其他核心服务及 Operations Health 仍须通过。
 
 成功记录写入 `/cyberos/deploy/current-release.json`，已验证包保存在 `/cyberos/deploy/releases/<tag>/`。升级失败时，部署程序会尽力恢复此前的 systemd 状态。升级备份和诊断保留在 `/cyberos/deploy/backups/<tag>-<timestamp>/`。
@@ -204,7 +205,7 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 
 部署程序不自动回滚 Debian 包或数据库 migration。schema 变化后的回滚必须使用与旧包匹配的状态备份，不能只重新安装旧 `.deb`。
 
-恢复时先停止相关服务并核对备份与包版本，再将 `state.tgz` 解压到 `/cyberos`，将 `terminal-home.tgz` 解压到 `/home`，保留账号所有权与目录权限。终端 socket 和运行进程不在恢复范围内。家目录仍为 `/cyberos/home/terminal` 的旧布局不支持原地升级到新布局，必须干净安装；安装脚本不会自动搬移文件或切换已有会话。
+恢复时先停止相关服务并核对备份与包版本，再将 `state.tgz` 解压到 `/cyberos`；若本次存在 `terminal-home.tgz`，将其解压到 `/home`，保留账号所有权与目录权限。没有终端家目录归档的备份无法恢复该目录的升级前状态。终端 socket 和运行进程不在恢复范围内。家目录仍为 `/cyberos/home/terminal` 的旧布局不支持原地升级到新布局，必须干净安装；安装脚本不会自动搬移文件或切换已有会话。
 
 ## 观察、验证与手动重试
 

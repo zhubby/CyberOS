@@ -1,6 +1,6 @@
 {
   "name": "@cyberos/media-streamer",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -8,8 +8,8 @@
     "build": "cd ../.. && tsup packages/media-streamer/src/index.ts --format esm --platform node --target node22 --external=better-sqlite3 --out-dir packages/media-streamer/dist"
   },
   "dependencies": {
-    "@cyberos/db": "2.2.0",
-    "@cyberos/shared": "2.2.0",
-    "@cyberos/storage-tools": "2.2.0"
+    "@cyberos/db": "2.2.1",
+    "@cyberos/shared": "2.2.1",
+    "@cyberos/storage-tools": "2.2.1"
   }
 }

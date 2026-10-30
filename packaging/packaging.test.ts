@@ -632,8 +632,9 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("ServerAliveInterval=15");
     expect(deployWorkflow).not.toContain("--continue-at -");
     expect(deployWorkflow).toContain(
-      "printf 'N\\\\n' | sudo -n /usr/local/sbin/cyberos-deploy --no-upgrade-backup"
+      "printf 'N\\\\n' | sudo -n /usr/local/sbin/cyberos-deploy\""
     );
+    expect(deployWorkflow).not.toContain("/usr/local/sbin/cyberos-deploy --no-upgrade-backup");
     expect(deployWorkflow).toContain("grep -Fq -- '  --settings-sha256)' /usr/local/sbin/cyberos-deploy");
     expect(deployWorkflow).toContain("settings_baseline_mode=database-only");
     expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-settings-baseline-mode"');

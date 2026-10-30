@@ -1,7 +1,15 @@
 import { request } from "node:http";
 import { startStreamServer } from "./server.js";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -131,35 +139,71 @@ it.skipIf(!ffmpeg)(
     expect((await manager.asset(direct.id, "direct")).size).toBeGreaterThan(0);
     const socketPath = path.join(root, "state/http.sock");
     closeHttp = await startStreamServer(manager, socketPath);
-    const response = await new Promise<{
-      status: number;
-      bytes: number;
-      range: string | undefined;
-    }>((resolve, reject) => {
+    const readRange = (start: number, end: number) =>
+      new Promise<{
+        status: number;
+        bytes: Buffer;
+        range: string | undefined;
+      }>((resolve, reject) => {
+        const req = request(
+          {
+            socketPath,
+            path: `/sessions/${direct.id}/assets/direct`,
+            headers: { range: `bytes=${start}-${end}` },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.once("error", reject);
+            res.on("data", (chunk) => chunks.push(chunk as Buffer));
+            res.on("end", () =>
+              resolve({
+                status: res.statusCode!,
+                bytes: Buffer.concat(chunks),
+                range: res.headers["content-range"],
+              }),
+            );
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+    const response = await readRange(0, 31);
+    expect(response.status).toBe(206);
+    expect(response.bytes.length).toBe(32);
+    expect(response.range).toMatch(/^bytes 0-31\//);
+    expect((await manager.get(direct.id)).state).toBe("ready");
+
+    const original = await readFile(mp4);
+    for (const [start, end] of [[32, 63], [64, 95]] as const) {
+      const next = await readRange(start, end);
+      expect(next.status).toBe(206);
+      expect(next.bytes).toEqual(original.subarray(start, end + 1));
+      expect((await manager.get(direct.id)).state).toBe("ready");
+    }
+    const concurrent = await Promise.all([readRange(96, 127), readRange(128, 159)]);
+    expect(concurrent.map((part) => part.status)).toEqual([206, 206]);
+    expect(concurrent[0]!.bytes).toEqual(original.subarray(96, 128));
+    expect(concurrent[1]!.bytes).toEqual(original.subarray(128, 160));
+    expect((await manager.get(direct.id)).state).toBe("ready");
+
+    await new Promise<void>((resolve, reject) => {
       const req = request(
-        {
-          socketPath,
-          path: `/sessions/${direct.id}/assets/direct`,
-          headers: { range: "bytes=0-31" },
-        },
+        { socketPath, path: `/sessions/${direct.id}/assets/direct` },
         (res) => {
-          const chunks: Buffer[] = [];
-          res.on("data", (chunk) => chunks.push(chunk as Buffer));
-          res.on("end", () =>
-            resolve({
-              status: res.statusCode!,
-              bytes: Buffer.concat(chunks).length,
-              range: res.headers["content-range"],
-            }),
-          );
+          res.once("close", resolve);
+          res.destroy();
         },
       );
-      req.on("error", reject);
+      req.once("error", reject);
       req.end();
     });
-    expect(response.status).toBe(206);
-    expect(response.bytes).toBe(32);
-    expect(response.range).toMatch(/^bytes 0-31\//);
+    const afterCancel = await readRange(160, 191);
+    expect(afterCancel.status).toBe(206);
+    expect(afterCancel.bytes).toEqual(original.subarray(160, 192));
+    expect((await manager.get(direct.id)).state).toBe("ready");
+    const whole = await readRange(0, original.length - 1);
+    expect(whole.bytes).toEqual(original);
+    expect((await manager.get(direct.id)).state).toBe("ready");
 
     const mkv = path.join(root, "data/pool/Movies/sample.mkv");
     execFileSync("ffmpeg", [
