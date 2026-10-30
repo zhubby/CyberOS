@@ -265,7 +265,7 @@ activate_runtime() {
   done
 
   log "enabling CyberOS services"
-  systemctl enable $RUNTIME_SERVICES
+  systemctl enable $RUNTIME_SERVICES cyberos-vod-player.service
 
   log "initializing the installed state schema and credentials"
   systemctl restart cyberos-state-init.service
@@ -292,11 +292,11 @@ activate_runtime() {
   start_service_stably cyberos-api.service
   wait_for_url http://127.0.0.1:3010/health || die "API startup recovery failed"
 
-  # The player opens the shared SQLite database during startup. Restoring it
+  # The shared music/video player opens SQLite during startup. Starting it
   # before the API is healthy lets systemd satisfy After=cyberos-api.service while
   # the API is still completing schema initialization and recovery.
-  log "restoring the VOD player after API database recovery"
-  restore_unit_state cyberos-vod-player.service "$state_dir"
+  log "starting the shared music/video player after API database recovery"
+  start_service_stably cyberos-vod-player.service
 
   log "starting monitoring after API database recovery"
   start_service_stably cyberos-monitor.service
@@ -749,6 +749,8 @@ done
 
 if [ "$create_upgrade_backup" -eq 1 ]; then
   tar -C /cyberos -czf "$backup_path/state.tgz" state home
+  tar -C /home --exclude=cyberos/.cyberos/tmux.sock \
+    -czf "$backup_path/terminal-home.tgz" cyberos
 fi
 
 log "installing $manifest_tag"

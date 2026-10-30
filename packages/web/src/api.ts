@@ -600,7 +600,7 @@ export type DockerOperation = DockerOperationRecord;
 export type ShareOperation = ShareOperationRecord;
 export type VodPlayerStatus = SharedVodPlayerStatus;
 export type VodPlayerCommand =
-  | { type: "play"; storagePoolId: string; path: string; startPositionSeconds?: number; audioDeviceId?: string }
+  | { type: "play"; storagePoolId: string; path: string; startPositionSeconds?: number; audioDeviceId?: string; expectedSessionId?: string }
   | Exclude<SharedVodPlayerCommand, { type: "play" }>;
 
 export interface FileMeta {

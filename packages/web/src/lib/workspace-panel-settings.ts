@@ -3,6 +3,7 @@ export const WORKSPACE_PANEL_STORAGE_KEY = "cyberos:last-workspace-panel";
 export const WORKSPACE_PANEL_IDS = [
   "files",
   "photos",
+  "music",
   "terminal",
   "downloads",
   "monitoring",

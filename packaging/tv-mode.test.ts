@@ -30,6 +30,8 @@ describe("cyberos-tv-mode", () => {
     expect(calls).toContain("start lightdm.service");
     expect(calls).toContain("enable cyberos-tv.target");
     expect(calls).toContain("disable cyberos-tv.target");
+    expect(calls).not.toContain("restart cyberos-vod-player.service");
+    expect(calls).not.toContain("stop cyberos-vod-player.service");
     await expect(readFile(path.join(fixture.stateDirectory, "desktop-state"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 

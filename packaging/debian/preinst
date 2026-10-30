@@ -6,6 +6,13 @@ set -e
 # cached the dependency's unit. The packaged drop-in takes over after unpacking.
 case "$1" in
   install|upgrade)
+    if terminal_account=$(getent passwd cyberos); then
+      terminal_home=$(printf '%s\n' "$terminal_account" | cut -d: -f6)
+      if [ "$terminal_home" != /home/cyberos ]; then
+        printf 'cyberos: clean installation required; cyberos home must be /home/cyberos (found %s). No home migration is supported.\n' "$terminal_home" >&2
+        exit 1
+      fi
+    fi
     if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
       mkdir -p /run/systemd/system/rtslib-fb-targetctl.service.d
       printf '[Unit]\nConditionPathIsDirectory=/sys/kernel/config/target\n' \

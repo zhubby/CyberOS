@@ -50,7 +50,7 @@ export function StorageFilePickerDialog({
   initialPoolId: string;
   locale: SupportedLocale;
   mode?: "iso" | "directory" | "files" | "skill-zip";
-  directoryPurpose?: "downloads" | "photoLibrary" | "photoMove" | "fileMove" | "bluetoothInbox" | "mediaLibrary";
+  directoryPurpose?: "downloads" | "photoLibrary" | "photoMove" | "fileMove" | "bluetoothInbox" | "mediaLibrary" | "musicLibrary";
   initialPath?: string;
   boundaryPath?: string;
   directorySelectionDisabled?: (path: string) => boolean;
@@ -80,7 +80,9 @@ export function StorageFilePickerDialog({
   const [createFolderSubmitting, setCreateFolderSubmitting] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const loadRequestId = useRef(0);
-  const directoryCopy = directoryPurpose === "bluetoothInbox"
+  const directoryCopy = directoryPurpose === "musicLibrary"
+    ? { eyebrow: t("music.pickerEyebrow"), title: t("music.pickerTitle"), description: t("music.pickerDescription"), list: t("music.pickerList"), empty: t("music.pickerEmpty"), select: t("music.useDirectory") }
+    : directoryPurpose === "bluetoothInbox"
     ? {
         eyebrow: t("settings.bluetooth.inbox.location"),
         title: t("settings.bluetooth.inbox.pickerTitle"),

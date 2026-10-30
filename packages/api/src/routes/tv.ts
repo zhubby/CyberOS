@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { TvComponentHealth, TvModeStatus, VodPlayerStatus } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { resolveVodPlayerRuntime } from "../lib/vod-player.js";
+import { resolveMusicPlayerRuntime } from "../lib/music-player.js";
 
 const DEFAULT_STATUS_DIRECTORY = "/run/cyberos-tv/status";
 const DEFAULT_ENABLED_MARKER = "/cyberos/state/tv/enabled";
@@ -20,6 +21,20 @@ export function registerTvRoutes(
   context: ApiRouteContext,
   dependencies: TvStatusDependencies = {}
 ): void {
+  server.post("/api/tv/stop-video", async (_request, reply) => {
+    try {
+      const current = await resolveMusicPlayerRuntime(context).getStatus();
+      if (current.owner === "video" && current.sessionId) {
+        await resolveVodPlayerRuntime(context, { transitionEnabled: true }).command({ type: "stop-video", sessionId: current.sessionId });
+      }
+      return { stopped: current.owner === "video" };
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "SESSION_CONFLICT") return { stopped: false };
+      const code = error instanceof Error && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 503;
+      return reply.status(code).send({ error: error instanceof Error ? error.message : "Playback service is unavailable" });
+    }
+  });
+
   server.get("/api/tv/status", async () => {
     const now = (dependencies.now ?? (() => new Date()))();
     const statusDirectory = dependencies.statusDirectory ?? DEFAULT_STATUS_DIRECTORY;

@@ -20,6 +20,7 @@ import {
   Images,
   MessageSquarePlus,
   MonitorPlay,
+  Music2,
   MonitorCog,
   Network,
   LoaderCircle,
@@ -60,6 +61,7 @@ import {
 import { WorkspaceManagementPanel } from "./WorkspaceManagementPanel.js";
 import { LocalTerminalPanel } from "./LocalTerminalPanel.js";
 import { HttpDownloaderPanel } from "./HttpDownloaderPanel.js";
+import { MusicLibraryPanel } from "../music/MusicLibraryPanel.js";
 import { PhotoLibraryPanel } from "./PhotoLibraryPanel.js";
 import { FileListSkeleton, SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
@@ -83,6 +85,7 @@ const WORKSPACE_PANELS = [
     shortLabelKey: "workspace.panels.photosShort",
     Icon: Images
   },
+  { id: "music", labelKey: "workspace.panels.music", shortLabelKey: "workspace.panels.musicShort", Icon: Music2 },
   {
     id: "terminal",
     labelKey: "workspace.panels.terminal",
@@ -1753,6 +1756,8 @@ export function WorkspacePane({
               onOpenSettings={onOpenPhotoSettings}
               configurationUpdatedAt={photoLibrarySettingsUpdatedAt}
             />
+          ) : activePanel === "music" ? (
+            <MusicLibraryPanel pools={storagePools} locale={locale} />
           ) : activePanel === "monitoring" ? (
             <MonitoringPanel locale={locale} visible={workspaceVisible} />
           ) : activePanel === "terminal" || !workspaceVisible ? null : (

@@ -1,5 +1,5 @@
 [Unit]
-Description=CyberOS VOD Player
+Description=CyberOS Music and Video Player
 Documentation=file:///usr/share/doc/cyberos/README.md
 After=local-fs.target systemd-tmpfiles-setup.service cyberos-api.service bluetooth.service bluealsa.service cyberos-state-init.service
 Wants=cyberos-api.service bluetooth.service bluealsa.service

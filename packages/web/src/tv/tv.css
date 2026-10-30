@@ -898,3 +898,11 @@ pinyin-ime-editor::part(candidate-row) {
   16% { opacity: 1; }
   to { top: 100%; opacity: 0; }
 }
+
+.tv-takeover-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: var(--cyberos-hud-overlay); }
+.tv-takeover { width: min(640px, 100%); padding: 32px; border: 1px solid var(--tv-line); border-top: 3px solid var(--tv-danger); background: var(--tv-surface); }
+.tv-takeover h2 { margin: 0 0 16px; font-size: 28px; }
+.tv-takeover p { color: var(--tv-muted); line-height: 1.6; }
+.tv-takeover > div { display: flex; justify-content: flex-end; gap: 16px; margin-top: 24px; }
+.tv-takeover button { min-height: 48px; padding: 12px 20px; border: 1px solid var(--tv-line); color: var(--tv-text); background: var(--tv-bg); }
+.tv-takeover button:last-child { color: var(--tv-accent-contrast); background: var(--tv-command); }

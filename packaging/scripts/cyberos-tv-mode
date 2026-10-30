@@ -57,14 +57,13 @@ load_state() {
   dm_enabled=$(state_value DM_ENABLED)
   dm_active=$(state_value DM_ACTIVE)
   dm_masked=$(state_value DM_MASKED)
-  vod_active=$(state_value VOD_ACTIVE)
   validate_unit "$dm_unit"
   case "$dm_enabled" in
     enabled|enabled-runtime|disabled|static|indirect|generated|linked|linked-runtime|alias|masked|masked-runtime|not-found|unknown) ;;
     *) die "saved display manager enablement is invalid" ;;
   esac
-  case "$dm_active:$dm_masked:$vod_active" in
-    [01]:[01]:[01]) ;;
+  case "$dm_active:$dm_masked" in
+    [01]:[01]) ;;
     *) die "saved TV mode state is invalid" ;;
   esac
 }
@@ -97,7 +96,6 @@ capture_state() {
     esac
     dm_active=$(unit_active "$dm_unit")
   fi
-  vod_active=$(unit_active cyberos-vod-player.service)
 
   temporary=$(mktemp "$state_dir/.desktop-state.XXXXXX")
   trap 'rm -f "$temporary"' EXIT HUP INT TERM
@@ -106,7 +104,6 @@ capture_state() {
     printf 'DM_ENABLED=%s\n' "$dm_enabled"
     printf 'DM_ACTIVE=%s\n' "$dm_active"
     printf 'DM_MASKED=%s\n' "$dm_masked"
-    printf 'VOD_ACTIVE=%s\n' "$vod_active"
   } > "$temporary"
   chmod 0600 "$temporary"
   mv -f "$temporary" "$state_file"
@@ -157,14 +154,14 @@ remove_dropins() {
 }
 
 restore_runtime() {
-  if [ "$vod_active" = 1 ]; then
-    systemctl restart cyberos-vod-player.service || return 1
-  else
-    systemctl stop cyberos-vod-player.service 2>/dev/null || true
-  fi
   if [ "$dm_unit" != none ] && [ "$dm_active" = 1 ] && [ "$dm_masked" = 0 ]; then
     systemctl start "$dm_unit" || return 1
   fi
+}
+
+stop_video() {
+  curl --fail --silent --show-error --max-time 30 --request POST \
+    http://127.0.0.1:3010/api/tv/stop-video >/dev/null
 }
 
 rollback_enable() {
@@ -211,7 +208,7 @@ enable_runtime() {
     systemctl stop "$dm_unit" || return 1
   fi
   systemctl enable cyberos-tv.target || return 1
-  systemctl restart cyberos-vod-player.service || return 1
+  systemctl start cyberos-vod-player.service || return 1
   systemctl start cyberos-tv.target || return 1
   wait_until_ready
 }
@@ -226,6 +223,7 @@ enable_tv() {
 }
 
 disable_tv() {
+  stop_video || die "could not stop the current video session; TV mode was left unchanged"
   if ! load_state; then
     systemctl stop cyberos-tv.target 2>/dev/null || true
     systemctl disable cyberos-tv.target 2>/dev/null || true

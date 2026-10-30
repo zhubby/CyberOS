@@ -67,11 +67,11 @@ Workspace 中的文件、Docker、VM、share 和 storage 操作由第一方页�
 
 ## 终端与管理面板
 
-Workspace 的 Terminal 使用 Rust terminal 和 tmux 承载受限 PTY，并以 `/cyberos/data` 作为全局工作区。顶部标签名称、创建顺序和活动项保存在 SQLite，并在浏览器之间共享。首次打开会自动创建“终端 1”；新建标签受整机 `terminal.maxSessions` 限制，默认上限为 32。
+Workspace 的 Terminal 使用 Rust terminal 和 tmux 承载受限 PTY，固定以非 root 的 `cyberos` 用户运行。新建或重启标签时，shell 从 `/home/cyberos` 启动，`HOME` 和 `cd ~` 也指向该目录；`/cyberos/data` 仅作为标签所属的全局工作区标识，不是 shell 初始目录。顶部标签名称、创建顺序和活动项保存在 SQLite，并在浏览器之间共享。首次打开会自动创建“终端 1”；新建标签受整机 `terminal.maxSessions` 限制，默认上限为 32。
 
-切换标签时浏览器保留已经打开标签的本地显示缓冲，但只有活动标签连接 WebSocket。刷新页面、断开浏览器或重启 API/terminal 不会终止已登记标签的 tmux shell；重启标签或确认关闭标签会终止其中的 shell 和所有子进程。关闭最后一个标签后保持空状态，不会立即自动创建新标签。
+切换标签时浏览器保留已经打开标签的本地显示缓冲，但只有活动标签连接 WebSocket。刷新页面、断开浏览器或重启 API/terminal 不会终止已登记标签的 tmux shell，重连会保留此前的工作目录，不会强制返回 home；重启标签或确认关闭标签会终止其中的 shell 和所有子进程。关闭最后一个标签后保持空状态，不会立即自动创建新标签。
 
-同一标签同时只允许一个控制端。另一个浏览器连接时，原连接会显示“会话已在其他位置打开”并停止自动重连；点击重新接管会把控制权取回。整机重启后 SQLite 中的标签、名称、顺序和活动项仍保留，但 tmux 进程和 scrollback 不会恢复，首次重新连接会启动新的 shell。连接失败时检查 `tmux`、`cyberos-terminald.service` 和 terminal identity drop-in。
+同一标签同时只允许一个控制端。另一个浏览器连接时，原连接会显示“会话已在其他位置打开”并停止自动重连；点击重新接管会把控制权取回。整机重启后 SQLite 中的标签、名称、顺序和活动项仍保留，但 tmux 进程和 scrollback 不会恢复，首次重新连接会启动新的 shell。连接失败时检查 `tmux`、`cyberos-terminald.service`、`getent passwd cyberos` 和 `/home/cyberos` 的所有者与访问权限。
 
 Downloads 面板使用独立 Rust `cyberos-downloader.service`，支持公网 HTTP/HTTPS、Magnet 和上传 `.torrent` 文件。Magnet 与种子先解析元数据，再选择文件和目标文件夹；私有种子、电驴、本地或私网 tracker 不支持。BT 下载使用独立单槽，任务行显示下载/上传速率、peer 数和分享率；内容发布后默认做种到分享率 1.0 或 2 小时，以先到者为准，也可手动暂停或停止做种。
 

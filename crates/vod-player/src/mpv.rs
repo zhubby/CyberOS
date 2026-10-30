@@ -104,7 +104,7 @@ impl MpvHandle {
             volume,
             paused,
             audio_device,
-            OsStr::new("mpv"),
+            config.mpv_executable.as_os_str(),
         )
         .await
     }
@@ -141,15 +141,23 @@ impl MpvHandle {
             "--input-default-bindings=no".to_owned(),
             "--terminal=no".to_owned(),
             "--idle=no".to_owned(),
-            "--vo=gpu".to_owned(),
-            format!("--gpu-context={}", config.video_output),
             format!("--ao={}", config.audio_output),
             format!("--hwdec={}", config.hwdec),
             format!("--volume={volume}"),
             format!("--start={position_seconds}"),
             format!("--input-ipc-client=fd://{MPV_IPC_FD}"),
         ];
-        append_video_output_args(&mut args, config);
+        if config.video_output == "null" {
+            args.extend([
+                "--vid=no".to_owned(),
+                "--vo=null".to_owned(),
+                "--audio-display=no".to_owned(),
+            ]);
+        } else {
+            args.push("--vo=gpu".to_owned());
+            args.push(format!("--gpu-context={}", config.video_output));
+            append_video_output_args(&mut args, config);
+        }
         if paused {
             args.push("--pause".to_owned());
         }
@@ -289,7 +297,7 @@ impl MpvHandle {
         Ok(handle)
     }
 
-    async fn verify_requested_audio_output(&mut self) -> Result<(), VodError> {
+    pub(crate) async fn verify_requested_audio_output(&mut self) -> Result<(), VodError> {
         let tracks = self
             .command(json!(["get_property", "track-list"]))
             .await
@@ -477,11 +485,62 @@ pub async fn probe_active_outputs(config: &VodPlayerConfig) -> CapabilityProbe {
     probe_with_mpv(config, true).await
 }
 
+/// A BlueALSA PCM may stay open while a speaker disconnects. A confirmed
+/// BlueZ disconnect pauses music until the user explicitly resumes it.
+pub async fn bluetooth_connected(device_id: &str) -> Option<bool> {
+    let device_path = bluetooth_device_path(device_id)?;
+    let mut command = Command::new("busctl");
+    command
+        .args([
+            "--system",
+            "--timeout=1",
+            "get-property",
+            "org.bluez",
+            &device_path,
+            "org.bluez.Device1",
+            "Connected",
+        ])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    let output = timeout(Duration::from_millis(750), command.output())
+        .await
+        .ok()?
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    match std::str::from_utf8(&output.stdout).ok()?.trim() {
+        "b true" => Some(true),
+        "b false" => Some(false),
+        _ => None,
+    }
+}
+
+fn bluetooth_device_path(device_id: &str) -> Option<String> {
+    crate::protocol::validate_bluetooth_audio_device_id(device_id).ok()?;
+    let target = device_id.strip_prefix("bluetooth:")?;
+    let (adapter, address) = match target.split_once('/') {
+        Some((adapter, address)) => (adapter.strip_prefix("adapter-")?, address),
+        None => ("hci0", target),
+    };
+    if !adapter
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        return None;
+    }
+    Some(format!(
+        "/org/bluez/{adapter}/dev_{}",
+        address.replace(':', "_").to_ascii_uppercase()
+    ))
+}
+
 async fn probe_with_mpv(config: &VodPlayerConfig, active_process: bool) -> CapabilityProbe {
     let mpv = if active_process {
         Availability::Available
     } else {
-        let mut version_command = Command::new("mpv");
+        let mut version_command = Command::new(&config.mpv_executable);
         version_command
             .arg("--version")
             .stdout(Stdio::null())
@@ -500,7 +559,12 @@ async fn probe_with_mpv(config: &VodPlayerConfig, active_process: bool) -> Capab
     } else {
         Availability::Available
     };
-    let audio = if config.audio_output == "alsa" {
+    let bluealsa = config.video_output == "null"
+        && config
+            .audio_device
+            .as_deref()
+            .is_some_and(|device| device.starts_with("alsa/bluealsa:"));
+    let audio = if config.audio_output == "alsa" && !bluealsa {
         directory_availability("/dev/snd")
     } else {
         Availability::Available
@@ -773,13 +837,34 @@ pub(crate) fn classify_end_file_failure(reason: &str, error: Option<&str>) -> Vo
         .unwrap_or_else(|| format!("mpv ended playback: {reason}"));
     let diagnostic = sanitize_diagnostic(&raw);
     let normalized = diagnostic.to_ascii_lowercase();
-    if reason == "eof"
+    if ["audio output", "audio device", "alsa", "bluealsa"]
+        .iter()
+        .any(|marker| normalized.contains(marker))
+    {
+        VodError::unavailable(ErrorCode::AudioUnavailable, diagnostic)
+    } else if [
+        "input/output error",
+        "i/o error",
+        "stale file handle",
+        "no medium found",
+        "no such file or directory",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
+    {
+        VodError::unavailable(ErrorCode::StorageUnavailable, diagnostic)
+    } else if reason == "eof"
         || [
             "unsupported",
             "unrecognized file format",
             "codec not found",
             "decoder not found",
             "could not open codec",
+            "error decoding",
+            "decode error",
+            "decoding failed",
+            "invalid data found when processing input",
+            "corrupt",
         ]
         .iter()
         .any(|marker| normalized.contains(marker))
@@ -801,6 +886,7 @@ mod tests {
     fn config(directory: &std::path::Path) -> VodPlayerConfig {
         VodPlayerConfig {
             enabled: true,
+            mpv_executable: PathBuf::from("mpv"),
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
             database_path: directory.join("cyberos.sqlite"),
@@ -1010,6 +1096,57 @@ done
     }
 
     #[tokio::test]
+    async fn headless_music_starts_without_a_video_context_or_display_arguments() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = fake_mpv(directory.path());
+        let script = std::fs::read_to_string(&executable).unwrap().replace(
+            "ipc_fd=\n",
+            r#"video_disabled=0
+null_video=0
+for argument do
+  case "$argument" in
+    --vid=no) video_disabled=1 ;;
+    --vo=null) null_video=1 ;;
+    --gpu-context=*|--fullscreen=*|--drm-connector=*|--wayland-app-id=*) exit 97 ;;
+  esac
+done
+[ "$video_disabled:$null_video" = 1:1 ] || exit 98
+ipc_fd=
+"#,
+        );
+        write_executable(&executable, &script);
+        let playback_config = config(directory.path()).for_music_session(false);
+        let handle = MpvHandle::start_with_executable(
+            &playback_config,
+            media(directory.path()),
+            0.0,
+            70.0,
+            false,
+            None,
+            executable.as_os_str(),
+        )
+        .await
+        .unwrap();
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn pure_bluetooth_music_does_not_require_drm_or_local_sound_devices() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut playback_config = config(directory.path()).for_music_session(true);
+        playback_config.audio_device =
+            Some("alsa/bluealsa:DEV=AA:BB:CC:DD:EE:FF,PROFILE=a2dp".to_owned());
+        let result = probe_active_outputs(&playback_config).await;
+        assert!(result.error.is_none());
+        assert!(result.capabilities.audio_available);
+        assert!(result.capabilities.drm_available);
+        assert_eq!(
+            result.capabilities.hardware_decode,
+            HardwareDecode::Software
+        );
+    }
+
+    #[tokio::test]
     async fn fake_mpv_command_rejections_are_not_reported_as_success() {
         let directory = tempfile::tempdir().unwrap();
         let executable = fake_mpv(directory.path());
@@ -1030,6 +1167,22 @@ done
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::PlaybackFailed);
         handle.shutdown().await;
+    }
+
+    #[test]
+    fn bluetooth_connection_probe_uses_a_validated_adapter_and_device_path() {
+        assert_eq!(
+            bluetooth_device_path("bluetooth:adapter-hci1/aa:bb:cc:dd:ee:ff").as_deref(),
+            Some("/org/bluez/hci1/dev_AA_BB_CC_DD_EE_FF")
+        );
+        assert_eq!(
+            bluetooth_device_path("bluetooth:AA:BB:CC:DD:EE:FF").as_deref(),
+            Some("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF")
+        );
+        assert!(bluetooth_device_path("alsa/arbitrary").is_none());
+        assert!(
+            bluetooth_device_path("bluetooth:adapter-../../unsafe/AA:BB:CC:DD:EE:FF").is_none()
+        );
     }
 
     #[tokio::test]

@@ -12,3 +12,5 @@ export * from "./vod-player-client.js";
 export * from "./terminal-protocol.js";
 export * from "./types.js";
 export * from "./paths.js";
+export * from "./music.js";
+export * from "./music-player.js";

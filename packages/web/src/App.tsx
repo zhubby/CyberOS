@@ -1,3 +1,6 @@
+import { getMusicPlayer } from "./lib/music-api.js";
+import { MusicTakeoverDialog, MusicProvider, useMusicRemote } from "./components/music/MusicProvider.js";
+import { MusicPlayer } from "./components/music/MusicPlayer.js";
 import { FormEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X } from "lucide-react";
@@ -225,6 +228,12 @@ function upsertToolActivity(
 }
 
 export function App() {
+  return <MusicProvider><AppContent /></MusicProvider>;
+}
+
+function AppContent() {
+  const musicRemote = useMusicRemote();
+  const [videoTakeover, setVideoTakeover] = useState<string | null>(null);
   const { t } = useTranslation();
   const [selectedStoragePoolId, setSelectedStoragePoolId] = useState("");
   const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null);
@@ -2389,7 +2398,7 @@ export function App() {
     }
   }
 
-  async function playSelectedOnVodPlayer() {
+  async function playSelectedOnVodPlayer(expectedSessionId?: string) {
     if (!selectedStoragePoolId || !selectedFilePath || previewMeta?.previewKind !== "video") {
       return;
     }
@@ -2398,10 +2407,17 @@ export function App() {
       const next = await sendVodPlayerCommand({
           type: "play",
           storagePoolId: selectedStoragePoolId,
-          path: selectedFilePath
+          path: selectedFilePath,
+          ...(expectedSessionId ? { expectedSessionId } : {})
         });
+      setVideoTakeover(null);
       setVodPlayerStatus((current) => acceptVodPlayerStatus(current, next));
     } catch (nextError) {
+      if (typeof nextError === "object" && nextError !== null && "statusCode" in nextError && nextError.statusCode === 409) {
+        const player = await getMusicPlayer().catch(() => null);
+        if (player?.owner === "music" && player.sessionId) { setVideoTakeover(player.sessionId); return; }
+      }
+      setVideoTakeover(null);
       reportVodPlayerError(nextError);
     } finally {
       setVodPlayerBusy(false);
@@ -2565,7 +2581,7 @@ export function App() {
 
   return (
     <main
-      className={`app-shell${resizing ? " is-resizing" : ""}`}
+      className={`app-shell${resizing ? " is-resizing" : ""}${musicRemote.status && (musicRemote.status.queue.length > 0 || musicRemote.status.owner === "music") ? " has-music-player" : ""}`}
       style={appStyle}
     >
       <div className="mobile-tabs">
@@ -2857,6 +2873,8 @@ export function App() {
           onSubmit={(event) => void saveSettings(event)}
         />
       ) : null}
+      {videoTakeover ? <MusicTakeoverDialog title={t("music.takeoverTitle")} body={t("music.takeoverMusic")} busy={vodPlayerBusy} onCancel={() => setVideoTakeover(null)} onConfirm={() => void playSelectedOnVodPlayer(videoTakeover)} /> : null}
+      <MusicPlayer onOpenBluetoothSettings={() => void openSettings("bluetooth")} />
     </main>
   );
 }

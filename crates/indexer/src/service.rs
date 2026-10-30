@@ -12,6 +12,7 @@ use crate::config::Config;
 use crate::db::{Db, IndexerSettings, QueueTask, StoragePool};
 use crate::error::{ErrorCode, IndexerError};
 use crate::media::{MediaScanTask, run_media_scan};
+use crate::music::{MusicScanTask, run_music_scan};
 use crate::scanner::run_task;
 use crate::watcher::{WatchMessage, merge_ancestor};
 
@@ -27,6 +28,7 @@ pub struct OnceOptions {
 pub struct Indexer {
     db: Db,
     data_root: PathBuf,
+    music_artwork_root: PathBuf,
     production: bool,
     worker_id: String,
     shutdown: CancellationToken,
@@ -36,6 +38,11 @@ impl Indexer {
     pub fn new(config: Config) -> Result<Self, IndexerError> {
         Ok(Self {
             db: Db::open(&config.database_path)?,
+            music_artwork_root: config
+                .database_path
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join("music/artwork"),
             data_root: config.data_root,
             production: config.production,
             worker_id: Uuid::new_v4().to_string(),
@@ -128,6 +135,7 @@ impl Indexer {
                     let snapshot = settings.lock().await.clone();
                     if once.is_none() {
                         self.db.ensure_reconciliation_tasks(Duration::from_millis(snapshot.reconciliation_interval_ms)).await?;
+                        self.db.reconcile_music(Duration::from_millis(snapshot.reconciliation_interval_ms)).await?;
                     }
                     match self.db.claim(&self.worker_id, &storage_pools).await? {
                         Some(task) => {
@@ -137,6 +145,10 @@ impl Indexer {
                         None if let Some(task) = self.db.claim_media_scan(&self.worker_id, &storage_pools).await? => {
                             idle_polls = 0;
                             self.process_media_scan(task).await?;
+                        }
+                        None if let Some(task) = self.db.claim_music_scan(&self.worker_id, &storage_pools).await? => {
+                            idle_polls = 0;
+                            self.process_music_scan(task).await?;
                         }
                         None if once.is_some() => {
                             idle_polls = idle_polls.saturating_add(1);
@@ -240,6 +252,9 @@ impl Indexer {
         match result {
             Ok(()) => {
                 self.db.complete_task(&task, &self.worker_id).await?;
+                self.db
+                    .enqueue_music_changes(&task.storage_pool_id, &task.path)
+                    .await?;
                 Ok(())
             }
             Err(error) => {
@@ -250,6 +265,24 @@ impl Indexer {
                 Ok(())
             }
         }
+    }
+
+    async fn process_music_scan(&self, task: MusicScanTask) -> Result<(), IndexerError> {
+        if let Err(error) = run_music_scan(
+            &self.db,
+            &task,
+            &self.worker_id,
+            &self.music_artwork_root,
+            &self.shutdown,
+        )
+        .await
+        {
+            self.db
+                .fail_music_scan(&task, &self.worker_id, &error)
+                .await?;
+            tracing::warn!(scan_id=%task.id,code=error.code.as_str(),message=%error.message,"Music scan failed");
+        }
+        Ok(())
     }
 
     async fn process_media_scan(&self, task: MediaScanTask) -> Result<(), IndexerError> {
@@ -316,6 +349,7 @@ async fn watch_loop(
                             tracing::warn!(message = %error.message, "Could not persist watcher degradation");
                         }
                         let _ = db.enqueue(&storage_pool_id, ".", true, "full", 10).await;
+                        let _ = db.enqueue_music_changes(&storage_pool_id, ".").await;
                     }
                 }
                 None => break,
@@ -324,6 +358,7 @@ async fn watch_loop(
                 let events = std::mem::take(&mut pending);
                 for (storage_pool_id, paths) in events {
                     for path in paths {
+                        let _ = db.enqueue_music_changes(&storage_pool_id, &path).await;
                         if let Err(error) = db.enqueue(&storage_pool_id, &path, true, "incremental", 50).await {
                             tracing::warn!(storage_pool_id = %storage_pool_id, path = %path, message = %error.message, "Could not enqueue filesystem event");
                         }

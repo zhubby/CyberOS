@@ -10,8 +10,8 @@ User=cyberos
 Group=cyberos
 Environment=CYBEROS_ROOT=/cyberos
 Environment=CYBEROS_ENVIRONMENT=production
-Environment=HOME=/cyberos/home/terminal
-WorkingDirectory=/cyberos/home/terminal
+Environment=HOME=/home/cyberos
+WorkingDirectory=/home/cyberos
 KillMode=process
 ExecStart=/usr/lib/cyberos/bin/cyberos-terminald
 Restart=on-failure
@@ -19,7 +19,8 @@ RestartSec=3
 UMask=0007
 ProtectSystem=strict
 ProtectHome=tmpfs
-ReadWritePaths=/run/cyberos /cyberos/data /cyberos/home/terminal
+BindPaths=/home/cyberos
+ReadWritePaths=/run/cyberos /cyberos/data /home/cyberos
 InaccessiblePaths=/cyberos/state /cyberos/logs
 NoNewPrivileges=yes
 RestrictSUIDSGID=yes

@@ -295,6 +295,7 @@ mod tests {
     fn config(directory: &Path) -> VodPlayerConfig {
         VodPlayerConfig {
             enabled: true,
+            mpv_executable: PathBuf::from("mpv"),
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
             database_path: directory.join("cyberos.sqlite"),

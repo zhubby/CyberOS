@@ -17,11 +17,11 @@ export async function searchMedia(query: string, signal?: AbortSignal): Promise<
   );
 }
 
-export async function playMediaFile(fileId: string, startPositionSeconds?: number): Promise<VodPlayerStatus> {
+export async function playMediaFile(fileId: string, startPositionSeconds?: number, expectedSessionId?: string): Promise<VodPlayerStatus> {
   const response = await fetch(`/api/media/files/${encodeURIComponent(fileId)}/play`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(startPositionSeconds === undefined ? {} : { startPositionSeconds })
+    body: JSON.stringify({ ...(startPositionSeconds === undefined ? {} : { startPositionSeconds }), ...(expectedSessionId ? { expectedSessionId } : {}) })
   });
   await ensureOk(response);
   return ((await response.json()) as { status: VodPlayerStatus }).status;
@@ -68,5 +68,5 @@ async function ensureOk(response: Response): Promise<void> {
   } catch {
     // Keep the HTTP status text.
   }
-  throw new Error(message);
+  throw Object.assign(new Error(message), { statusCode: response.status });
 }

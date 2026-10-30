@@ -5,6 +5,15 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 describe("native packaging artifacts", () => {
+  it("starts the shared music player after API recovery independently of TV activation", async () => {
+    const installer = await readPackagingFile("scripts", "install.sh");
+    const deploy = await readPackagingFile("scripts", "cyberos-deploy");
+    expect(installer).toMatch(/systemctl enable \\\n[\s\S]*?cyberos-vod-player\.service \\\n/u);
+    expect(installer.indexOf("systemctl restart cyberos-api.service")).toBeLessThan(installer.indexOf("systemctl restart cyberos-vod-player.service"));
+    expect(installer.indexOf("systemctl restart cyberos-vod-player.service")).toBeLessThan(installer.lastIndexOf("apply_tv_mode_setting"));
+    expect(deploy).toContain("systemctl enable $RUNTIME_SERVICES cyberos-vod-player.service");
+    expect(deploy.indexOf("wait_for_url http://127.0.0.1:3010/health")).toBeLessThan(deploy.indexOf("start_service_stably cyberos-vod-player.service"));
+  });
   it("packages verified DKMS sources for Raspberry Pi kernels without native LIO", async () => {
     const config = await readPackagingFile("debian", "cyberos.dkms");
     const rules = await readPackagingFile("debian", "rules");
@@ -758,7 +767,10 @@ describe("native packaging artifacts", () => {
     expect(unit).toContain("RestrictSUIDSGID=yes");
     expect(unit).toContain("CapabilityBoundingSet=");
     expect(unit).toContain("InaccessiblePaths=/cyberos/state /cyberos/logs");
-    expect(unit).toContain("ReadWritePaths=/run/cyberos /cyberos/data /cyberos/home/terminal");
+    expect(unit).toContain("Environment=HOME=/home/cyberos");
+    expect(unit).toContain("WorkingDirectory=/home/cyberos");
+    expect(unit).toContain("BindPaths=/home/cyberos");
+    expect(unit).toContain("ReadWritePaths=/run/cyberos /cyberos/data /home/cyberos");
     expect(unit).toContain("KillMode=process");
     expect(unit).toContain("ExecStart=/usr/lib/cyberos/bin/cyberos-terminald");
     expect(unit).not.toContain("/node");
@@ -766,6 +778,10 @@ describe("native packaging artifacts", () => {
     const postinst = await readPackagingFile("debian", "postinst");
     expect(postinst).toContain("ln -sfn /usr/lib/cyberos/scripts/cyberos-deploy /usr/local/sbin/cyberos-deploy");
     expect(postinst).not.toContain("legacy_terminal_home");
+    expect(postinst).toContain("--home /home/cyberos --no-create-home --shell /bin/bash cyberos");
+    expect(postinst).toContain("install -d -o cyberos -g cyberos -m 0750 /home/cyberos");
+    expect(postinst).not.toContain("/cyberos/home/terminal");
+    expect(await readPackagingFile("debian", "prerm")).toContain("tmux -S /home/cyberos/.cyberos/tmux.sock kill-server");
     expect(await readPackagingFile("scripts", "cyberos-nas-acl.sh")).toContain("findmnt -rn --mountpoint");
     expect(await readPackagingFile("scripts", "cyberos-nas-acl.sh")).toContain("getfacl --absolute-names");
   });
@@ -819,7 +835,7 @@ describe("native packaging artifacts", () => {
       "start_service_stably cyberos-terminald.service",
       "start_service_stably cyberos-api.service",
       "wait_for_url http://127.0.0.1:3010/health",
-      'restore_unit_state cyberos-vod-player.service "$state_dir"',
+      "start_service_stably cyberos-vod-player.service",
       "start_service_stably cyberos-monitor.service",
       "start_service_stably cyberos-alerter.service",
       "start_service_stably cyberos-worker@1.service",

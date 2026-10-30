@@ -17,7 +17,7 @@ import { resolveVodPlayerRuntime, VodPlayerRuntimeError } from "../lib/vod-playe
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 type VodPlayerCommandBody =
-  | { type: "play"; storagePoolId?: string; path?: string; startPositionSeconds?: number; audioDeviceId?: string }
+  | { type: "play"; storagePoolId?: string; path?: string; startPositionSeconds?: number; audioDeviceId?: string; expectedSessionId?: string }
   | { type: "pause" | "resume" | "toggle-pause" | "stop" | "retry" | "cycle-audio-track" | "cycle-subtitle-track"; sessionId?: string }
   | { type: "seek"; sessionId?: string; seconds?: number }
   | { type: "seek-relative"; sessionId?: string; seconds?: number }
@@ -73,6 +73,9 @@ async function buildCommand(body: VodPlayerCommandBody | undefined, context: Api
     throw new VodPlayerRuntimeError("VOD Player command is required", 400, "INVALID_COMMAND");
   }
   if (body.type === "play") {
+    if (body.expectedSessionId !== undefined && (typeof body.expectedSessionId !== "string" || !body.expectedSessionId || body.expectedSessionId.length > 256 || body.expectedSessionId.includes("\0"))) {
+      throw new VodPlayerRuntimeError("Expected playback session is invalid", 400, "INVALID_COMMAND");
+    }
     if (!body.storagePoolId?.trim() || typeof body.path !== "string" || !body.path) {
       throw new VodPlayerRuntimeError("A storage pool and path are required", 400, "INVALID_PATH");
     }
@@ -95,6 +98,7 @@ async function buildCommand(body: VodPlayerCommandBody | undefined, context: Api
       type: "play",
       storagePoolId: scope.pool.id,
       relativePath: safe.relativePath,
+      ...(body.expectedSessionId === undefined ? {} : { expectedSessionId: body.expectedSessionId }),
       ...(body.startPositionSeconds === undefined ? {} : { startPositionSeconds: body.startPositionSeconds }),
       ...(audioDeviceId ? { audioDeviceId } : {})
     };

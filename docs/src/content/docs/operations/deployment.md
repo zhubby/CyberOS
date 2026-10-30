@@ -56,7 +56,7 @@ sudo CYBEROS_ENABLE_NGINX=1 \
   ./packaging/scripts/install.sh
 ```
 
-脚本会安装 Node.js 22 和 Rust 1.95.0、构建并安装本架构 `.deb`，创建固定的 `/cyberos/state`、`/cyberos/home/terminal`、`/cyberos/data`、`/cyberos/backup` 和 `/cyberos/iso` 目录，再先运行 `cyberos-state-init.service` 创建并校验主数据库，然后启动 API 及其他数据库消费进程。缺失的设置在运行时使用代码默认值，不会为了填充默认值而写库。安装不会创建存储池，也不会探测或迁移 CyberOS 2.0 之前的目录、设置、数据库或服务。
+脚本会安装 Node.js 22 和 Rust 1.95.0、构建并安装本架构 `.deb`，创建固定的 `/cyberos/state`、`/home/cyberos`、`/cyberos/data`、`/cyberos/backup` 和 `/cyberos/iso` 目录，再先运行 `cyberos-state-init.service` 创建并校验主数据库，然后启动 API 及其他数据库消费进程。`cyberos` 账号的家目录为 `/home/cyberos`，shell 为 `/bin/bash`，目录权限为 `0750 cyberos:cyberos`；共享账号仍使用 `/cyberos/home/share`。已有 `cyberos` 账号的 home 若不等于 `/home/cyberos`，安装将明确拒绝，要求干净安装，不搬移旧家目录或保留旧终端进程。缺失的设置在运行时使用代码默认值，不会为了填充默认值而写库。安装不会创建存储池，也不会探测或迁移 CyberOS 2.0 之前的目录、设置、数据库或服务。
 
 Docker Engine、Compose、QEMU、libvirt、Chromium、Weston、mpv、seatd、CEC 与输入工具都是 CyberOS 的安装依赖。安装器会启动 Docker 与 libvirt、准备默认 libvirt 网络，并在 API 就绪后按数据库设置应用 TV 模式。CyberOS 默认不开放 Docker 与虚拟机管理能力；安装完成后分别在“系统设置 > Docker”和“系统设置 > 虚拟机”中启用。TV 模式默认开启，可在“系统设置 > 媒体”中关闭或调整输出设备和硬件解码。KVM 硬件加速由宿主内核提供，启用虚拟机管理后仍需检查 `/dev/kvm`；缺失时页面会显示宿主降级，而不是把 QEMU/libvirt 误报为未安装。
 

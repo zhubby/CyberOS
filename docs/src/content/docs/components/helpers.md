@@ -11,7 +11,7 @@ sidebar:
 
 `cyberos-hostd` 是 Rust root daemon，只在固定的 `/run/cyberos/hostd.sock` 接受版本化 JSONL 单请求，并验证 Unix peer UID。API 使用同一固定 socket，路径不是产品设置。操作名、命令、参数和配置目标均使用 allowlist；共享路径只能引用 `/cyberos/data` 下已挂载且安全解析的 storage pool。
 
-`cyberos-terminald` 是非 root Rust daemon，默认在 `/run/cyberos/terminald.sock` 接受 Terminal Protocol v1 JSONL 长连接，并验证 Unix peer UID。协议用 request、response、stream ID 关联控制请求和 PTY 流，以 Base64 传输原始字节；未知版本、字段、重复 attach 和超限输入都会返回结构化错误。API 与 terminal 均以 `cyberos` 运行，terminal 在 `/cyberos/home/terminal` 保存 tmux socket，并通过 native PTY attach。session 名称由规范化 data root workspace key 和标签 ID 稳定生成，因此 API 或 WebSocket 重连只会重新 attach，不会重复创建 shell。两者共用 UID，不能把 systemd 路径屏蔽视为安全隔离边界。
+`cyberos-terminald` 是非 root Rust daemon，默认在 `/run/cyberos/terminald.sock` 接受 Terminal Protocol v1 JSONL 长连接，并验证 Unix peer UID。协议用 request、response、stream ID 关联控制请求和 PTY 流，以 Base64 传输原始字节；未知版本、字段、重复 attach 和超限输入都会返回结构化错误。API 与 terminal 均以 `cyberos` 运行，terminal 从系统账号记录读取 home 和 shell，新建会话进入 `/home/cyberos`，tmux socket 保存为 `/home/cyberos/.cyberos/tmux.sock`，并通过 native PTY attach。session 名称由规范化 data root workspace key 和标签 ID 稳定生成，因此 API 或 WebSocket 重连只会重新 attach，保留 shell、子进程和当前目录，不会重复创建 shell。`session.open` 的 `cwd` 返回默认启动目录，不跟踪 shell 后续的 `cd`。两者共用 UID，不能把 systemd 路径屏蔽视为安全隔离边界。
 
 API 在已登记标签的 `open` 请求中发送 `persistent: true`。terminal 把该状态写入 tmux session 的 `@cyberos_persistent` 选项；空闲 reaper 和容量淘汰都会跳过这些 session。整机上所有 session 共同受 `terminal.maxSessions` 限制，连接上限与 session 上限分开计算。
 

@@ -67,7 +67,7 @@ describe("VOD player broker protocol", () => {
       mediaFileId: "file-1"
     });
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "request-2",
       command: {
         type: "play",
@@ -88,33 +88,33 @@ describe("VOD player broker protocol", () => {
   it("requires the protocol version, safe paths, session ids, and bounded values", () => {
     expect(parseVodPlayerBrokerRequest(JSON.stringify({ id: "request-1", command: { type: "status" } }))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "request-1",
       command: { type: "play", storagePoolId: "pool", relativePath: "../video.mp4" }
     }))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "request-1",
       command: { type: "play", storagePoolId: "pool", relativePath: "video.mp4", audioDeviceId: "alsa/arbitrary" }
     }))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "request-1",
       command: { type: "pause" }
     }))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "request-1",
       command: { type: "set-volume", sessionId: "session-1", volume: 101 }
     }))).toBeNull();
     expect(parseVodPlayerBrokerRequest("x".repeat(128 * 1024 + 1))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "request-1",
       command: { type: "status", extra: true }
     }))).toBeNull();
     expect(parseVodPlayerBrokerRequest(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "x".repeat(129),
       command: { type: "status" }
     }))).toBeNull();
@@ -122,14 +122,14 @@ describe("VOD player broker protocol", () => {
 
   it("round-trips stable errors", () => {
     expect(parseVodPlayerBrokerResponse(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "request-1",
       ok: false,
       error: "The session changed",
       code: "SESSION_CONFLICT",
       statusCode: 409
     }))).toEqual({
-      version: 2,
+      version: 3,
       id: "request-1",
       ok: false,
       error: "The session changed",
@@ -137,7 +137,7 @@ describe("VOD player broker protocol", () => {
       statusCode: 409
     });
     expect(parseVodPlayerBrokerResponse(JSON.stringify({
-      version: 2,
+      version: 3,
       id: "request-1",
       ok: true,
       status: { ...status, extra: true }
@@ -145,11 +145,23 @@ describe("VOD player broker protocol", () => {
   });
 
   it("keeps the checked-in golden frames valid", async () => {
-    const fixtures = JSON.parse(await readFile(new URL("../fixtures/vod-player-protocol-v2.json", import.meta.url), "utf8")) as {
+    const fixtures = JSON.parse(await readFile(new URL("../fixtures/vod-player-protocol-v3.json", import.meta.url), "utf8")) as {
       requests: string[];
       responses: string[];
     };
     expect(fixtures.requests.map(parseVodPlayerBrokerRequest).every(Boolean)).toBe(true);
     expect(fixtures.responses.map(parseVodPlayerBrokerResponse).every(Boolean)).toBe(true);
+  });
+
+  it("keeps the legacy video view idle while the shared engine plays music", () => {
+    const response = parseVodPlayerBrokerResponse(JSON.stringify({
+      version: VOD_PLAYER_PROTOCOL_VERSION, id: "music-is-playing", ok: true,
+      status: { ...status, owner: "music", music: { queue: [] } }
+    }));
+    expect(response).toMatchObject({ ok: true, status: { state: "idle", sessionId: null, relativePath: null, mediaFileId: null } });
+    if (response?.ok) {
+      expect(response.status).not.toHaveProperty("owner");
+      expect(response.status).not.toHaveProperty("music");
+    }
   });
 });

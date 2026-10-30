@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 futures-util.workspace = true
+lofty = "0.25.5"
 nix.workspace = true
 notify.workspace = true
 quick-xml.workspace = true

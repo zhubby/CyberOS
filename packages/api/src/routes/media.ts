@@ -252,12 +252,16 @@ export function registerMediaRoutes(
 
   server.post<{
     Params: { id: string };
-    Body: { startPositionSeconds?: number };
+    Body: { startPositionSeconds?: number; expectedSessionId?: string };
   }>("/api/media/files/:id/play", async (request, reply) => {
     try {
       const file = getMediaFile(db, request.params.id);
       if (!file) return reply.status(404).send({ error: "Media file not found" });
       const startPositionSeconds = request.body?.startPositionSeconds;
+      const expectedSessionId = request.body?.expectedSessionId;
+      if (expectedSessionId !== undefined && (typeof expectedSessionId !== "string" || !expectedSessionId || expectedSessionId.length > 256 || expectedSessionId.includes("\0"))) {
+        return reply.status(400).send({ error: "Expected playback session is invalid" });
+      }
       if (startPositionSeconds !== undefined && (!Number.isFinite(startPositionSeconds) || startPositionSeconds < 0)) {
         return reply.status(400).send({ error: "Start position must be non-negative" });
       }
@@ -270,6 +274,7 @@ export function registerMediaRoutes(
         storagePoolId: file.storagePoolId,
         relativePath: safe.relativePath,
         mediaFileId: file.id,
+        ...(expectedSessionId === undefined ? {} : { expectedSessionId }),
         ...(audioDeviceId ? { audioDeviceId } : {}),
         ...(startPositionSeconds === undefined ? {} : { startPositionSeconds })
       });

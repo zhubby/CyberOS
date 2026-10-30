@@ -14,7 +14,7 @@ CM5 必须在目标 arm64 主机上构建 Debian 包，以匹配 `better-sqlite3
 ## CM5 前置条件
 
 - 运行 Debian 12/bookworm 或兼容的 arm64 系统（Debian 13/trixie 也需在目标主机验收）；
-- 确认包管理的非 root `cyberos` 用户可以使用 `/cyberos/home/terminal` 和配置的 storage pools；
+- 确认包管理的非 root `cyberos` 用户可以使用 `/home/cyberos` 和配置的 storage pools；
 - 将 NAS 数据盘挂载到 `/cyberos/data/pool-1`，需要备份时将仓库放在与 NAS、`/cyberos/state` 不重叠的 `/cyberos/backup`；
 - 确保构建阶段可以访问 APT、Node.js release、npm registry 和 Cargo sparse registry，或传入内部镜像；
 - Wi-Fi 管理要求 NetworkManager、wpa_supplicant、dnsmasq-base、wireless-regdb 和 iw；Debian 包会声明这些依赖，但不会自动把现有 networkd 主机迁移到 NetworkManager；
@@ -173,9 +173,11 @@ sudo systemctl stop cyberos-alerter.service cyberos-monitor.service cyberos-inde
 ```bash
 sudo install -d -o root -g root -m 0700 /cyberos/system-backups/cyberos-upgrade
 sudo tar -C /cyberos -czf /cyberos/system-backups/cyberos-upgrade/state-before-upgrade.tgz state home
+sudo tar -C /home --exclude=cyberos/.cyberos/tmux.sock \
+  -czf /cyberos/system-backups/cyberos-upgrade/terminal-home.tgz cyberos
 ```
 
-示例目录必须未被之前升级占用，避免覆盖恢复材料。state 包可能包含未加密秘密，限制权限并转存到加密备份仓库。它不包含默认 Docker volume 数据，容器工作负载需另行备份。
+示例目录必须未被之前升级占用，避免覆盖恢复材料。两个备份包都可能包含未加密秘密，限制权限并转存到加密备份仓库。它们不包含默认 Docker volume 数据，容器工作负载需另行备份。恢复时先停止相关服务，核对备份与软件包版本匹配，再将 `state-before-upgrade.tgz` 解压到 `/cyberos`、`terminal-home.tgz` 解压到 `/home`；保留账号所有权及目录权限。tmux socket 和运行中的进程不会恢复，终端重新连接时创建新 shell。
 
 安装新包后先启动 API 完成 migration，再依次启动 `cyberos-monitor.service`、`cyberos-alerter.service` 并检查 `/api/monitoring/overview` 与 `/api/monitoring/alerts/summary`，之后启动 worker、hostd、terminal 和 `cyberos-indexer.service`。确认监控、告警求值与 Indexer heartbeat 后再串行运行 `cyberos-health.service`、`cyberos-maintenance.service`，最后重新启用 timers。回滚旧包时先停止 alerter；新增主库表和派生 series 保留但会被旧版本忽略。保留旧 `.deb` 与状态备份，直到浏览器、API、终端身份、存储池挂载状态、监控、索引和备份结果全部通过验收。
 
@@ -217,7 +219,7 @@ node -e '
 
 把结果分为“通过”“失败”“未验证”，记录版本、commit、Engine/API 版本、镜像 digest、时间与脱敏证据。一次创建成功和 HTTP `200` 只能作为冒烟通过，不代表生产验收完成。
 
-1. **基础部署**：核对 dpkg/build-info/Web 版本，检查失败 unit、重启计数、storage pool readiness、索引、终端身份及 `/docs/`。终端应以部署指定的非 root 用户（例如 `zhubby`）从其 home 启动 passwd shell 的交互登录模式，而不是 `/cyberos/state`。
+1. **基础部署**：核对 dpkg/build-info/Web 版本，检查失败 unit、重启计数、storage pool readiness、索引、终端身份及 `/docs/`。新建终端应满足 `whoami` 为 `cyberos`，`pwd`、`echo "$HOME"` 和 `cd ~; pwd` 均为 `/home/cyberos`，shell 为账号记录中的 `/bin/bash`。执行 `cd` 后刷新或重连应保留实际目录，重启标签则回到 home。
 2. **网络与镜像**：从 CM5 检查 DNS/TLS、mirror `/v2/` 和真实 pull；确认 daemon 已加载 `registry-mirrors`。使用不可变的 `rustfs/rustfs@sha256:<verified-digest>` 并确认 arm64，`latest` 仅用于探索，不作为可重复发布依据。
 3. **功能路径**：使用临时、最小权限 Registry 账号分别验证手动私有 pull、创建容器的 `missing/always`、托管 Compose App 的 `pull/up`；轮换/删除凭证后验证下一次执行使用新状态，并测试拉取失败不泄密。摘要中有镜像不能证明认证成功，匿名可拉取的公开镜像也不能验证凭证集成。
 4. **容器与应用**：通过页面创建独立测试 volume/容器和托管 Compose App，检查 `/cyberos/apps/<project-key>` 的 `0750/0640/0600` 权限、保存后的 `needsDeploy`、确认后的 Up、环境变量轮换、revision 漂移拒绝、Down 后二次确认删除。明确 `/data` 命令、非 root 用户、非 privileged、资源能力与重启策略。使用独立名字和测试端口；仅在 LAN 地址绑定 S3/console，不默认暴露到所有接口。确认 inspect、容器状态、重启数、实际日志、S3 health、浏览器登录与对象上传/下载，而非只检查“创建成功”。

@@ -51,8 +51,25 @@ pub fn open_media(
     storage_pool_id: &str,
     relative_path: &str,
 ) -> Result<OpenedMedia, VodError> {
+    open_local_media(config, storage_pool_id, relative_path, false)
+}
+
+pub fn open_audio(
+    config: &VodPlayerConfig,
+    storage_pool_id: &str,
+    relative_path: &str,
+) -> Result<OpenedMedia, VodError> {
+    open_local_media(config, storage_pool_id, relative_path, true)
+}
+
+fn open_local_media(
+    config: &VodPlayerConfig,
+    storage_pool_id: &str,
+    relative_path: &str,
+    audio: bool,
+) -> Result<OpenedMedia, VodError> {
     validate_relative_path(relative_path)?;
-    validate_media_extension(relative_path)?;
+    validate_media_extension(relative_path, audio)?;
     validate_storage_pool_id(storage_pool_id)?;
     let data_root = std::fs::canonicalize(&config.data_root).map_err(|_| {
         VodError::unavailable(
@@ -138,22 +155,49 @@ fn validate_relative_path(value: &str) -> Result<(), VodError> {
     Ok(())
 }
 
-fn validate_media_extension(value: &str) -> Result<(), VodError> {
+fn validate_media_extension(value: &str, audio: bool) -> Result<(), VodError> {
     let extension = Path::new(value)
         .extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_ascii_lowercase);
     if extension.as_deref().is_some_and(|extension| {
-        matches!(
-            extension,
-            "mp4" | "mkv" | "webm" | "mov" | "avi" | "m4v" | "ts" | "mts" | "m2ts" | "mpeg" | "mpg"
-        )
+        if audio {
+            matches!(
+                extension,
+                "mp3"
+                    | "flac"
+                    | "m4a"
+                    | "aac"
+                    | "ogg"
+                    | "oga"
+                    | "opus"
+                    | "wav"
+                    | "wave"
+                    | "aif"
+                    | "aiff"
+            )
+        } else {
+            matches!(
+                extension,
+                "mp4"
+                    | "mkv"
+                    | "webm"
+                    | "mov"
+                    | "avi"
+                    | "m4v"
+                    | "ts"
+                    | "mts"
+                    | "m2ts"
+                    | "mpeg"
+                    | "mpg"
+            )
+        }
     }) {
         Ok(())
     } else {
         Err(VodError::new(
             ErrorCode::UnsupportedMedia,
-            "Selected file is not a supported video",
+            "Selected file is not a supported media format",
             415,
         ))
     }
@@ -318,9 +362,11 @@ mod tests {
         assert!(validate_relative_path("movies/a.mkv").is_ok());
         assert!(validate_relative_path("../a.mkv").is_err());
         assert!(validate_relative_path("/tmp/a.mkv").is_err());
-        assert!(validate_media_extension("movies/a.MP4").is_ok());
+        assert!(validate_media_extension("movies/a.MP4", false).is_ok());
         assert_eq!(
-            validate_media_extension("movies/a.txt").unwrap_err().code,
+            validate_media_extension("movies/a.txt", false)
+                .unwrap_err()
+                .code,
             ErrorCode::UnsupportedMedia
         );
     }

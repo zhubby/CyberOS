@@ -1,7 +1,7 @@
 import type { CyberOsDatabase } from "@cyberos/db";
 import type { CapabilityRuntimeDependencies } from "@cyberos/capability-runtime";
 import type { MonitoringReader } from "@cyberos/monitoring";
-import type { PublicBuildInfo, CyberOsRuntime } from "@cyberos/shared";
+import type { PublicBuildInfo, CyberOsRuntime, MusicPlayerRuntime } from "@cyberos/shared";
 import type { DockerComposeRuntime } from "./lib/docker-compose.js";
 import type { DockerEngineRuntime } from "./lib/docker-client.js";
 import type { DockerDaemonRuntime } from "./lib/docker-daemon.js";
@@ -39,6 +39,7 @@ export interface ApiRouteContext {
   terminal?: TerminalRuntime;
   videoTranscoder?: VideoTranscoder;
   vodPlayer?: VodPlayerRuntime;
+  musicPlayer?: MusicPlayerRuntime;
   photosMap?: PhotosMapArchiveRuntime;
   fileBatches?: FileBatchRuntime;
   hostAccess?: DockerHostAccessRuntime;

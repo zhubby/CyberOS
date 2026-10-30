@@ -1,3 +1,5 @@
+import { getMusicPlayer } from "../lib/music-api.js";
+import { useModalDialog } from "../components/workspace/useModalDialog.js";
 import {
   ArrowLeft,
   Clock3,
@@ -51,6 +53,7 @@ export function TvApp() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [playerStatus, setPlayerStatus] = useState<VodPlayerStatus | null>(null);
   const [clock, setClock] = useState(() => new Date());
+  const [takeover, setTakeover] = useState<{ file: MediaFileRecord; position: number | undefined; sessionId: string } | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const playerStatusRef = useRef<VodPlayerStatus | null>(null);
   const playerWasActiveRef = useRef(false);
@@ -126,12 +129,18 @@ export function TvApp() {
     }
   }, [returnHome, searchOpen, view.kind]);
 
-  const playFile = useCallback(async (file: MediaFileRecord, position?: number) => {
+  const playFile = useCallback(async (file: MediaFileRecord, position?: number, expectedSessionId?: string) => {
     showNotice(t("tv.playing"));
     try {
-      applyPlayerStatus(await playMediaFile(file.id, position));
+      applyPlayerStatus(await playMediaFile(file.id, position, expectedSessionId));
+      setTakeover(null);
       showNotice(t("tv.playing"), 1_800);
     } catch (playError) {
+      if (typeof playError === "object" && playError !== null && "statusCode" in playError && playError.statusCode === 409) {
+        const player = await getMusicPlayer().catch(() => null);
+        if (player?.owner === "music" && player.sessionId) { setTakeover({ file, position, sessionId: player.sessionId }); return; }
+      }
+      setTakeover(null);
       showNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
     }
   }, [applyPlayerStatus, showNotice, t]);
@@ -348,6 +357,7 @@ export function TvApp() {
         <DetailView title={view.title} onBack={back} onPlay={playFile} />
       )}
 
+      {takeover ? <TvTakeoverDialog onCancel={() => setTakeover(null)} onConfirm={() => void playFile(takeover.file, takeover.position, takeover.sessionId)} /> : null}
       {searchOpen ? <SearchOverlay onClose={back} onOpen={openTitle} /> : null}
       {notice ? <div className="tv-notice" role="status">{notice}</div> : null}
     </div>
@@ -639,7 +649,9 @@ function useRemoteNavigation({
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const state = current.current;
-      const playbackCommand = playbackCommandForKey(state.playerStatus, event.key);
+      const modal = document.querySelector('[role="dialog"][aria-modal="true"]');
+      if (modal && !directionForKey(event.key) && event.key !== "Enter") return;
+      const playbackCommand = modal ? null : playbackCommandForKey(state.playerStatus, event.key);
       if (playbackCommand) {
         event.preventDefault();
         event.stopPropagation();
@@ -695,7 +707,8 @@ function directionForKey(key: string): Direction | null {
 }
 
 function moveFocus(direction: Direction): void {
-  const candidates = [...document.querySelectorAll<HTMLElement>("[data-tv-focusable]:not(:disabled)")]
+  const modal = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')].at(-1);
+  const candidates = [...(modal ?? document).querySelectorAll<HTMLElement>("[data-tv-focusable]:not(:disabled)")]
     .filter((element) => element.offsetParent !== null);
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   if (!active || !candidates.includes(active)) {
@@ -757,4 +770,10 @@ function titleMetadata(title: MediaTitleSummary, runtime: string | null): string
 
 function formatClock(date: Date, language: string | undefined): string {
   return new Intl.DateTimeFormat(language ?? "zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+}
+
+function TvTakeoverDialog({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  const { t } = useTranslation();
+  const ref = useModalDialog(onCancel);
+  return <div className="tv-takeover-backdrop"><section className="tv-takeover" ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t("music.takeoverTitle")}><h2>{t("music.takeoverTitle")}</h2><p>{t("music.takeoverMusic")}</p><div><button type="button" data-tv-focusable onClick={onCancel}>{t("common.actions.cancel")}</button><button type="button" data-tv-focusable onClick={onConfirm}>{t("music.switchPlayback")}</button></div></section></div>;
 }

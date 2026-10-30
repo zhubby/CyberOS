@@ -31,7 +31,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
       expect(database.prepare("SELECT id FROM schema_migrations").pluck().all()).toEqual([
         "001_cyberos_2_0",
         "002_agent_resources",
-        "003_p2p_downloads"
+        "003_p2p_downloads",
+        "004_music_library"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
@@ -46,7 +47,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
     expect(migrations.map((migration) => migration.id)).toEqual([
       "001_cyberos_2_0",
       "002_agent_resources",
-      "003_p2p_downloads"
+      "003_p2p_downloads",
+        "004_music_library"
     ]);
   });
 
@@ -191,7 +193,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
       expect(database.prepare("SELECT id FROM schema_migrations").pluck().all()).toEqual([
         "001_cyberos_2_0",
         "002_agent_resources",
-        "003_p2p_downloads"
+        "003_p2p_downloads",
+        "004_music_library"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {

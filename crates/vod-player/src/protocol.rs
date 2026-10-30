@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::{ErrorCode, VodError};
+use crate::music::{MusicCommand, QueueState};
 
-pub const PROTOCOL_VERSION: u8 = 2;
-pub const MAX_FRAME_BYTES: usize = 128 * 1024;
+pub const PROTOCOL_VERSION: u8 = 3;
+pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -21,7 +22,7 @@ pub struct RequestEnvelope {
 impl RequestEnvelope {
     pub fn parse(bytes: &[u8]) -> Result<Self, VodError> {
         if bytes.len() > MAX_FRAME_BYTES {
-            return Err(VodError::protocol("VOD player request exceeds 128 KiB"));
+            return Err(VodError::protocol("VOD player request exceeds 1 MiB"));
         }
         let value: serde_json::Value = serde_json::from_slice(bytes)
             .map_err(|_| VodError::protocol("Invalid VOD player request"))?;
@@ -59,11 +60,14 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
             "startPositionSeconds",
             "audioDeviceId",
             "mediaFileId",
+            "expectedSessionId",
         ],
+        "music" => &["type", "command"],
         "pause"
         | "resume"
         | "toggle-pause"
         | "stop"
+        | "stop-video"
         | "retry"
         | "cycle-audio-track"
         | "cycle-subtitle-track" => &["type", "sessionId"],
@@ -107,6 +111,16 @@ pub enum Command {
         #[serde(rename = "mediaFileId")]
         #[cfg_attr(test, ts(optional = nullable))]
         media_file_id: Option<String>,
+        #[serde(rename = "expectedSessionId")]
+        #[cfg_attr(test, ts(optional = nullable))]
+        expected_session_id: Option<String>,
+    },
+    Music {
+        command: MusicCommand,
+    },
+    StopVideo {
+        #[serde(rename = "sessionId")]
+        session_id: String,
     },
     Pause {
         #[serde(rename = "sessionId")]
@@ -175,6 +189,7 @@ impl Command {
                 start_position_seconds,
                 audio_device_id,
                 media_file_id,
+                expected_session_id,
             } => {
                 validate_id(storage_pool_id)?;
                 validate_relative_path(relative_path)?;
@@ -191,12 +206,17 @@ impl Command {
                 if let Some(media_file_id) = media_file_id {
                     validate_id(media_file_id)?;
                 }
+                if let Some(session_id) = expected_session_id {
+                    validate_id(session_id)?;
+                }
                 Ok(())
             }
+            Self::Music { command } => command.validate(),
             Self::Pause { session_id }
             | Self::Resume { session_id }
             | Self::TogglePause { session_id }
             | Self::Stop { session_id }
+            | Self::StopVideo { session_id }
             | Self::Retry { session_id }
             | Self::CycleAudioTrack { session_id }
             | Self::CycleSubtitleTrack { session_id } => validate_id(session_id),
@@ -294,11 +314,24 @@ pub enum HardwareDecode {
     Unknown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export_to = "vod-player.ts", rename = "PlaybackOwner"))]
+#[serde(rename_all = "lowercase")]
+pub enum PlaybackOwner {
+    Music,
+    Video,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export_to = "vod-player.ts", rename = "VodPlayerStatus"))]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
+    #[serde(default)]
+    pub owner: Option<PlaybackOwner>,
+    #[serde(default)]
+    pub music: QueueState,
     pub state: PlayerState,
     pub session_id: Option<String>,
     pub service_instance_id: String,
@@ -356,7 +389,7 @@ pub struct ErrorResponse<'a> {
     pub status_code: u16,
 }
 
-fn validate_id(value: &str) -> Result<(), VodError> {
+pub(crate) fn validate_id(value: &str) -> Result<(), VodError> {
     if value.is_empty() || value.len() > 256 || value.contains('\0') {
         return Err(VodError::new(
             ErrorCode::InvalidCommand,
@@ -408,7 +441,7 @@ pub(crate) fn validate_bluetooth_audio_device_id(value: &str) -> Result<(), VodE
     Ok(())
 }
 
-fn validate_relative_path(value: &str) -> Result<(), VodError> {
+pub(crate) fn validate_relative_path(value: &str) -> Result<(), VodError> {
     if value.starts_with('/')
         || value
             .split('/')
@@ -495,14 +528,14 @@ mod tests {
     #[test]
     fn parses_strict_versioned_commands() {
         let request = RequestEnvelope::parse(
-            br#"{"version":2,"id":"r1","command":{"type":"play","storagePoolId":"pool","relativePath":"movies/a.mp4","startPositionSeconds":4,"mediaFileId":"file-1"}}"#,
+            br#"{"version":3,"id":"r1","command":{"type":"play","storagePoolId":"pool","relativePath":"movies/a.mp4","startPositionSeconds":4,"mediaFileId":"file-1"}}"#,
         )
         .unwrap();
         assert!(matches!(request.command, Command::Play { .. }));
         assert!(RequestEnvelope::parse(br#"{"id":"r1","command":{"type":"status"}}"#).is_err());
         assert!(
             RequestEnvelope::parse(
-                br#"{"version":2,"id":"r1","command":{"type":"status","extra":true}}"#
+                br#"{"version":3,"id":"r1","command":{"type":"status","extra":true}}"#
             )
             .is_err()
         );
@@ -510,13 +543,13 @@ mod tests {
 
     #[test]
     fn rejects_unsafe_paths_and_unbound_controls() {
-        assert!(RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"play","storagePoolId":"pool","relativePath":"../a.mp4"}}"#).is_err());
+        assert!(RequestEnvelope::parse(br#"{"version":3,"id":"r1","command":{"type":"play","storagePoolId":"pool","relativePath":"../a.mp4"}}"#).is_err());
         assert!(
-            RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"pause"}}"#)
+            RequestEnvelope::parse(br#"{"version":3,"id":"r1","command":{"type":"pause"}}"#)
                 .is_err()
         );
-        assert!(RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"seek-relative","sessionId":"session-1","seconds":-10}}"#).is_ok());
-        assert!(RequestEnvelope::parse(br#"{"version":2,"id":"r1","command":{"type":"set-subtitle-track","sessionId":"session-1","trackId":null}}"#).is_ok());
+        assert!(RequestEnvelope::parse(br#"{"version":3,"id":"r1","command":{"type":"seek-relative","sessionId":"session-1","seconds":-10}}"#).is_ok());
+        assert!(RequestEnvelope::parse(br#"{"version":3,"id":"r1","command":{"type":"set-subtitle-track","sessionId":"session-1","trackId":null}}"#).is_ok());
         assert!(
             validate_bluetooth_audio_device_id("bluetooth:adapter-hci1/AA:BB:CC:DD:EE:FF").is_ok()
         );
@@ -529,7 +562,7 @@ mod tests {
     fn accepts_the_shared_golden_frames() {
         let fixtures: GoldenFixtures = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../packages/shared/fixtures/vod-player-protocol-v2.json"
+            "/../../packages/shared/fixtures/vod-player-protocol-v3.json"
         )))
         .unwrap();
         for frame in fixtures.requests {

@@ -54,3 +54,5 @@ export * from "./repositories/vm-console-authorizations.js";
 export * from "./repositories/system-status.js";
 export * from "./repositories/terminal-tabs.js";
 export * from "./repositories/transcript.js";
+
+export * from "./repositories/music.js";

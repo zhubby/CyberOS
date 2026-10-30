@@ -195,7 +195,7 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 - 版本相同但 commit 不同时拒绝覆盖。
 - 版本和 commit 都相同时不重装，只重新验证服务和 build-info，因此可安全重试同一个 tag。
 - workflow 在升级前记录 `system_settings` 的稳定摘要，并在升级后严格比对。若机器上已安装的 helper 早于数据库设置摘要命令，则只允许一次 `database-only` 引导：升级前必须通过数据库完整性检查，升级后必须由新 helper 生成有效摘要；这不会读取或迁移已删除的产品配置文件。后续部署恢复严格的摘要前后比对。
-- 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，备份 `/cyberos/state` 和 `/cyberos/home`，再通过 APT 安装已校验的 `.deb`。
+- 正常升级会保存原 service/timer 状态，停止 SQLite/NAS writers，将 `/cyberos/state` 和 `/cyberos/home` 保存为 `state.tgz`，将 `/home/cyberos` 另存为 `terminal-home.tgz`（排除 tmux socket），再通过 APT 安装已校验的 `.deb`。任一备份失败都会中止安装；`--no-upgrade-backup` 仍显式跳过两个备份。
 - 安装后先启动 API，再启动 monitor、立即运行一次 Health，然后恢复后台服务并强制启用 maintenance、health 和 backup 核心 timers。monitor 失败会报告 monitoring degraded，但不会阻断核心 API 部署；其他核心服务及 Operations Health 仍须通过。
 
 成功记录写入 `/cyberos/deploy/current-release.json`，已验证包保存在 `/cyberos/deploy/releases/<tag>/`。升级失败时，部署程序会尽力恢复此前的 systemd 状态。升级备份和诊断保留在 `/cyberos/deploy/backups/<tag>-<timestamp>/`。
@@ -203,6 +203,8 @@ helper 用 `flock` 阻止并发执行，并在离开可写 staging 后重新校�
 部署成功后 helper 会在部署锁内清理受它管理的临时构建产物：`incoming/` 中断点上传留下的分片和临时包、过期的 `work.*` 目录以及旧 release 包。默认保留当前 release 和一个上一版本 release；升级备份与失败诊断不会自动删除，保留期限和清理动作必须由运维显式决定。helper 不会清理 `/cyberos/state`、Photo 数据、数据库或服务日志。
 
 部署程序不自动回滚 Debian 包或数据库 migration。schema 变化后的回滚必须使用与旧包匹配的状态备份，不能只重新安装旧 `.deb`。
+
+恢复时先停止相关服务并核对备份与包版本，再将 `state.tgz` 解压到 `/cyberos`，将 `terminal-home.tgz` 解压到 `/home`，保留账号所有权与目录权限。终端 socket 和运行进程不在恢复范围内。家目录仍为 `/cyberos/home/terminal` 的旧布局不支持原地升级到新布局，必须干净安装；安装脚本不会自动搬移文件或切换已有会话。
 
 ## 观察、验证与手动重试
 

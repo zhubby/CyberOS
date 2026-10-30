@@ -178,7 +178,7 @@ impl Db {
         Ok(Self { sender })
     }
 
-    async fn call<T, F>(&self, operation: F) -> DbResult<T>
+    pub(crate) async fn call<T, F>(&self, operation: F) -> DbResult<T>
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> DbResult<T> + Send + 'static,

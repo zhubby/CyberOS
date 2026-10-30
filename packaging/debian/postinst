@@ -2,11 +2,18 @@
 set -e
 
 if [ "$1" = "configure" ]; then
+  if terminal_account=$(getent passwd cyberos); then
+    terminal_home=$(printf '%s\n' "$terminal_account" | cut -d: -f6)
+    if [ "$terminal_home" != /home/cyberos ]; then
+      printf 'cyberos: clean installation required; cyberos home must be /home/cyberos (found %s). No home migration is supported.\n' "$terminal_home" >&2
+      exit 1
+    fi
+  fi
   if ! getent group cyberos >/dev/null; then
     addgroup --system cyberos
   fi
   if ! id cyberos >/dev/null 2>&1; then
-    adduser --system --ingroup cyberos --home /cyberos/home/terminal --no-create-home --shell /bin/bash cyberos
+    adduser --system --ingroup cyberos --home /home/cyberos --no-create-home --shell /bin/bash cyberos
   fi
   if ! id cyberos-nfs >/dev/null 2>&1; then
     adduser --system --no-create-home --disabled-login --shell /usr/sbin/nologin cyberos-nfs
@@ -17,13 +24,14 @@ if [ "$1" = "configure" ]; then
   fi
 
   install -d -o root -g cyberos -m 0751 /cyberos
+  install -d -o cyberos -g cyberos -m 0750 /home/cyberos
   rm -rf -- /cyberos/config
   install -d -o cyberos -g cyberos -m 0750 \
     /cyberos/state /cyberos/state/trash /cyberos/state/reports \
     /cyberos/state/pi-sessions /cyberos/state/pi-agent /cyberos/state/photos \
     /cyberos/state/media-cache /cyberos/state/backup-staging /cyberos/state/vod-player /cyberos/state/bluetooth \
     /cyberos/state/tv /cyberos/state/tv/chromium \
-    /cyberos/logs /cyberos/home /cyberos/home/terminal /cyberos/apps \
+    /cyberos/logs /cyberos/home /cyberos/apps \
     /cyberos/system-backups /cyberos/data /cyberos/backup
   install -d -o cyberos -g cyberos -m 0700 \
     /cyberos/state/secrets /cyberos/state/secrets/backup /cyberos/state/secrets/share /cyberos/state/mcp
@@ -35,7 +43,7 @@ if [ "$1" = "configure" ]; then
   install -d -o root -g root -m 0700 /etc/target
 
   chown -R root:root /cyberos/state/hostd /cyberos/system-backups/permissions
-  usermod --home /cyberos/home/terminal --shell /bin/bash cyberos
+  usermod --shell /bin/bash cyberos
   usermod --home /cyberos/home/share cyberos-share
 
   CYBEROS_LOCALE=${CYBEROS_LOCALE:-C.UTF-8} \

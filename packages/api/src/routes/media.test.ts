@@ -185,7 +185,7 @@ describe("Media API", () => {
     const played = await server.inject({
       method: "POST",
       url: `/api/media/files/${stored.file.id}/play`,
-      payload: { startPositionSeconds: 120 }
+      payload: { startPositionSeconds: 120, expectedSessionId: "music-session" }
     });
     expect(played.statusCode).toBe(200);
     expect(playerCommands).toEqual([expect.objectContaining({
@@ -194,7 +194,8 @@ describe("Media API", () => {
       relativePath: "Movies/Arrival.2016.mkv",
       mediaFileId: stored.file.id,
       audioDeviceId: "bluetooth:AA:BB:CC:DD:EE:FF",
-      startPositionSeconds: 120
+      startPositionSeconds: 120,
+      expectedSessionId: "music-session"
     })]);
   });
 

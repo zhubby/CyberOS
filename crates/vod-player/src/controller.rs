@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -11,11 +12,20 @@ use uuid::Uuid;
 
 use crate::config::VodPlayerConfig;
 use crate::error::{ErrorCode, VodError};
-use crate::mpv::{MpvEvent, MpvHandle, classify_end_file_failure, probe, probe_active_outputs};
+use crate::mpv::{
+    MpvEvent, MpvHandle, bluetooth_connected, classify_end_file_failure, probe,
+    probe_active_outputs,
+};
+use crate::music::{self, Checkpoint as MusicCheckpoint};
 use crate::progress::ProgressStore;
-use crate::protocol::{Capabilities, Command, HardwareDecode, PlayerState, Status, Track};
+use crate::protocol::{
+    Capabilities, Command, HardwareDecode, PlaybackOwner, PlayerState, Status, Track,
+};
 use crate::session::{self, LoadOutcome, PersistedSession};
-use crate::storage::{FileIdentity, open_media};
+use crate::storage::{FileIdentity, open_audio, open_media};
+
+#[path = "music_controller.rs"]
+mod music_controller;
 
 #[derive(Clone)]
 pub struct ControllerHandle {
@@ -56,6 +66,10 @@ struct Controller {
     last_checkpoint: Instant,
     last_capability_probe: Instant,
     progress: ProgressStore,
+    music_checkpoint: MusicCheckpoint,
+    music_history_flush: Option<tokio::task::JoinHandle<Vec<String>>>,
+    music_last_tick: Instant,
+    music_failed_items: HashSet<String>,
 }
 
 impl ControllerHandle {
@@ -67,15 +81,22 @@ impl ControllerHandle {
             capabilities,
             config.video_output.clone(),
         );
-        let desired = match session::load(&config.state_path)? {
+        let music_checkpoint = music::load_checkpoint(&music::checkpoint_path(&config.state_path))?;
+        status.music = music_checkpoint.state.clone();
+        let mut desired = match session::load(&config.state_path)? {
             LoadOutcome::Empty => None,
             LoadOutcome::Corrupt(path) => {
                 tracing::warn!(path = %path.display(), "ignored corrupt VOD player session");
                 None
             }
+            LoadOutcome::Session(_) if !config.for_video_session()?.enabled => {
+                session::clear(&config.state_path)?;
+                None
+            }
             LoadOutcome::Session(saved) => {
                 let saved = *saved;
                 status.state = PlayerState::Recovering;
+                status.owner = Some(PlaybackOwner::Video);
                 status.session_id = Some(saved.session_id.clone());
                 status.storage_pool_id = Some(saved.storage_pool_id.clone());
                 status.relative_path = Some(saved.relative_path.clone());
@@ -95,6 +116,32 @@ impl ControllerHandle {
                 })
             }
         };
+        if desired.is_none()
+            && let Some(entry) = status.music.current().cloned()
+        {
+            status.owner = Some(PlaybackOwner::Music);
+            status.state = PlayerState::Paused;
+            let session_id = Uuid::new_v4().to_string();
+            status.session_id = Some(session_id.clone());
+            status.storage_pool_id = Some(entry.storage_pool_id.clone());
+            status.relative_path = Some(entry.relative_path.clone());
+            status.file_name = Some(entry.title);
+            status.position_seconds = status.music.position_seconds;
+            status.duration_seconds = entry.duration_seconds;
+            status.volume = status.music.volume;
+            status.audio_device_id = status.music.audio_device_id.clone();
+            desired = Some(DesiredSession {
+                session_id,
+                storage_pool_id: entry.storage_pool_id,
+                relative_path: entry.relative_path,
+                position_seconds: status.music.position_seconds,
+                volume: status.music.volume,
+                paused: true,
+                audio_device_id: status.music.audio_device_id.clone(),
+                media_file_id: None,
+                identity: None,
+            });
+        }
         let (status_sender, status_receiver) = watch::channel(status.clone());
         let (sender, receiver) = mpsc::channel(32);
         let (shutdown_sender, shutdown_receiver) = watch::channel(false);
@@ -114,6 +161,10 @@ impl ControllerHandle {
             last_checkpoint: Instant::now(),
             last_capability_probe: Instant::now(),
             progress,
+            music_checkpoint,
+            music_history_flush: None,
+            music_last_tick: Instant::now(),
+            music_failed_items: HashSet::new(),
         };
         tokio::spawn(async move { controller.run().await });
         Ok(Self {
@@ -166,7 +217,7 @@ impl ControllerHandle {
 
 impl Controller {
     async fn run(&mut self) {
-        if self.desired.is_some() {
+        if self.desired.is_some() && self.status.owner != Some(PlaybackOwner::Music) {
             self.try_start_or_schedule().await;
         }
         let mut tick = interval(Duration::from_secs(1));
@@ -200,18 +251,40 @@ impl Controller {
     async fn handle_command(&mut self, command: Command) -> Result<Status, VodError> {
         match command {
             Command::Status => {}
+            Command::Music { command } => return self.handle_music_command(command).await,
+            Command::StopVideo { session_id } => {
+                if self.status.owner != Some(PlaybackOwner::Video) {
+                    return Err(VodError::new(
+                        ErrorCode::SessionConflict,
+                        "Video no longer owns playback",
+                        409,
+                    ));
+                }
+                return Box::pin(self.handle_command(Command::Stop { session_id })).await;
+            }
             Command::Play {
                 storage_pool_id,
                 relative_path,
                 start_position_seconds,
                 audio_device_id,
                 media_file_id,
+                expected_session_id,
             } => {
+                if expected_session_id.is_some()
+                    || (self.status.owner == Some(PlaybackOwner::Music) && self.desired.is_some())
+                {
+                    self.assert_takeover(expected_session_id.as_deref())?;
+                }
+                if self.status.owner == Some(PlaybackOwner::Music) && self.desired.is_some() {
+                    self.record_music_listening();
+                    self.persist_music_checkpoint()?;
+                }
                 if let Some(file_id) = media_file_id.as_deref() {
                     self.progress
                         .verify_media_file(file_id, &storage_pool_id, &relative_path)?;
                 }
                 self.stop_mpv().await;
+                self.status.owner = Some(PlaybackOwner::Video);
                 self.retry_at = None;
                 self.stable_since = None;
                 self.status.retry_count = 0;
@@ -276,6 +349,8 @@ impl Controller {
                 self.save_progress();
                 self.stop_mpv().await;
                 self.desired = None;
+                self.status.owner = None;
+                self.status.session_id = None;
                 self.retry_at = None;
                 self.status.state = PlayerState::Stopped;
                 self.status.position_seconds = 0.0;
@@ -423,16 +498,61 @@ impl Controller {
             .desired
             .clone()
             .ok_or_else(|| VodError::internal("No playback session to start"))?;
-        let probe = probe(&self.config).await;
+        let is_music = self.status.owner == Some(PlaybackOwner::Music);
+        let audio_device_id = if is_music {
+            self.config
+                .music_audio_device_id(desired.audio_device_id.as_deref())?
+        } else {
+            desired.audio_device_id.clone()
+        };
+        let mut playback_config = if is_music {
+            self.config.for_music_session(audio_device_id.is_some())
+        } else {
+            self.config.for_video_session()?
+        };
+        if !is_music && !playback_config.enabled {
+            return Err(VodError::new(
+                ErrorCode::VodPlayerDisabled,
+                "TV playback is disabled",
+                503,
+            ));
+        }
+        if is_music && let Some(device) = audio_device_id.as_deref() {
+            playback_config.audio_device = Some(bluetooth_alsa_device(device));
+            if bluetooth_connected(device).await == Some(false) {
+                return Err(VodError::unavailable(
+                    ErrorCode::AudioUnavailable,
+                    "Bluetooth speaker is disconnected",
+                ));
+            }
+        }
+        if !is_music {
+            self.status.video_output = playback_config.video_output.clone();
+        }
+        let probe = probe(&playback_config).await;
         self.status.capabilities = probe.capabilities;
         if let Some(error) = probe.error {
             return Err(error);
         }
-        let media = open_media(
-            &self.config,
-            &desired.storage_pool_id,
-            &desired.relative_path,
-        )?;
+        let media = if is_music {
+            let entry = self
+                .status
+                .music
+                .current()
+                .ok_or_else(|| VodError::internal("Music queue has no current song"))?;
+            music::verify_track(&self.config.database_path, entry)?;
+            open_audio(
+                &playback_config,
+                &desired.storage_pool_id,
+                &desired.relative_path,
+            )?
+        } else {
+            open_media(
+                &playback_config,
+                &desired.storage_pool_id,
+                &desired.relative_path,
+            )?
+        };
         if desired
             .identity
             .is_some_and(|expected| expected != media.identity)
@@ -452,13 +572,10 @@ impl Controller {
         self.status.next_retry_at = None;
         self.publish();
         self.persist_current()?;
-        let requested_audio_device = desired
-            .audio_device_id
-            .as_deref()
-            .map(bluetooth_alsa_device);
+        let requested_audio_device = audio_device_id.as_deref().map(bluetooth_alsa_device);
         let mpv = if let Some(audio_device) = requested_audio_device.as_deref() {
             match MpvHandle::start(
-                &self.config,
+                &playback_config,
                 media.try_clone()?,
                 desired.position_seconds,
                 desired.volume,
@@ -468,16 +585,19 @@ impl Controller {
             .await
             {
                 Ok(mpv) => {
-                    self.status.effective_audio_device_id = desired.audio_device_id.clone();
+                    self.status.effective_audio_device_id = audio_device_id.clone();
                     self.status.audio_fallback_reason = None;
                     mpv
                 }
                 Err(error) => {
+                    if is_music {
+                        return Err(error);
+                    }
                     self.status.effective_audio_device_id = None;
                     self.status.audio_fallback_reason = Some(error.message.clone());
-                    tracing::warn!(device_id = ?desired.audio_device_id, message = %error.message, "Bluetooth audio failed; falling back to configured output");
+                    tracing::warn!(device_id = ?audio_device_id, message = %error.message, "Bluetooth audio failed; falling back to configured output");
                     MpvHandle::start(
-                        &self.config,
+                        &playback_config,
                         media,
                         desired.position_seconds,
                         desired.volume,
@@ -491,7 +611,7 @@ impl Controller {
             self.status.effective_audio_device_id = None;
             self.status.audio_fallback_reason = None;
             MpvHandle::start(
-                &self.config,
+                &playback_config,
                 media,
                 desired.position_seconds,
                 desired.volume,
@@ -502,11 +622,7 @@ impl Controller {
         };
         self.mpv = Some(mpv);
         self.retry_at = None;
-        self.status.state = if desired.paused {
-            PlayerState::Paused
-        } else {
-            PlayerState::Playing
-        };
+        self.finish_start(desired.paused);
         self.status.error = None;
         self.status.error_code = None;
         self.status.next_retry_at = None;
@@ -516,7 +632,21 @@ impl Controller {
         Ok(())
     }
 
+    fn finish_start(&mut self, paused: bool) {
+        self.status.state = if paused {
+            PlayerState::Paused
+        } else {
+            PlayerState::Playing
+        };
+        if self.status.owner == Some(PlaybackOwner::Music) {
+            self.music_last_tick = Instant::now();
+        }
+    }
+
     async fn tick(&mut self) {
+        self.record_music_listening();
+        self.flush_music_history().await;
+        let event_session = self.status.session_id.clone();
         let events = self
             .mpv
             .as_mut()
@@ -524,6 +654,9 @@ impl Controller {
             .unwrap_or_default();
         for event in events {
             self.handle_mpv_event(event).await;
+            if self.status.session_id != event_session {
+                break;
+            }
         }
         if self.last_capability_probe.elapsed() >= Duration::from_secs(5) {
             self.refresh_capabilities().await;
@@ -544,7 +677,9 @@ impl Controller {
             self.stable_since = None;
             self.publish();
         }
-        if self.desired.is_some()
+        if (self.desired.is_some()
+            || !self.status.music.queue.is_empty()
+            || !self.music_checkpoint.pending_events.is_empty())
             && self.last_checkpoint.elapsed()
                 >= Duration::from_millis(self.config.checkpoint_interval_ms)
             && let Err(error) = self.persist_current()
@@ -555,11 +690,40 @@ impl Controller {
 
     async fn refresh_capabilities(&mut self) {
         self.last_capability_probe = Instant::now();
-        let mut probe = if self.mpv.is_some() {
-            probe_active_outputs(&self.config).await
+        let mut playback_config = if self.status.owner == Some(PlaybackOwner::Music) {
+            self.config
+                .for_music_session(self.status.effective_audio_device_id.is_some())
         } else {
-            probe(&self.config).await
+            self.config.as_ref().clone()
         };
+        if self.status.owner == Some(PlaybackOwner::Music)
+            && let Some(device) = self.status.effective_audio_device_id.as_deref()
+        {
+            playback_config.audio_device = Some(bluetooth_alsa_device(device));
+        }
+        let mut probe = if self.mpv.is_some() {
+            probe_active_outputs(&playback_config).await
+        } else {
+            probe(&playback_config).await
+        };
+        if self.status.owner == Some(PlaybackOwner::Music)
+            && self.status.effective_audio_device_id.is_some()
+            && let Some(mpv) = self.mpv.as_mut()
+            && let Err(error) = mpv.verify_requested_audio_output().await
+        {
+            probe.error = Some(error);
+        }
+        if self.status.owner == Some(PlaybackOwner::Music)
+            && self.mpv.is_some()
+            && let Some(device) = self.status.effective_audio_device_id.as_deref()
+            && bluetooth_connected(device).await == Some(false)
+        {
+            probe.capabilities.audio_available = false;
+            probe.error = Some(VodError::unavailable(
+                ErrorCode::AudioUnavailable,
+                "Bluetooth speaker disconnected; reconnect and resume manually",
+            ));
+        }
         if self.mpv.is_some() && self.config.hwdec != "no" {
             probe.capabilities.hardware_decode = self.status.capabilities.hardware_decode;
         }
@@ -651,6 +815,12 @@ impl Controller {
                 if self.mpv.is_none() {
                     return;
                 }
+                if self.status.owner == Some(PlaybackOwner::Music) {
+                    self.music_failed_items.clear();
+                    self.stop_mpv().await;
+                    self.advance_music(false, true).await;
+                    return;
+                }
                 self.stop_mpv().await;
                 self.retry_at = None;
                 self.status.state = PlayerState::Stopped;
@@ -663,6 +833,8 @@ impl Controller {
                 }
                 self.save_progress();
                 self.desired = None;
+                self.status.owner = None;
+                self.status.session_id = None;
                 self.status.error = None;
                 self.status.error_code = None;
                 let _ = session::clear(&self.config.state_path);
@@ -676,6 +848,8 @@ impl Controller {
                 if matches!(reason.as_str(), "quit" | "stop") {
                     self.save_progress();
                     self.desired = None;
+                    self.status.owner = None;
+                    self.status.session_id = None;
                     self.retry_at = None;
                     self.status.state = PlayerState::Stopped;
                     self.status.error = None;
@@ -686,6 +860,33 @@ impl Controller {
                 }
                 self.save_progress();
                 let failure = classify_end_file_failure(&reason, error.as_deref());
+                if self.status.owner == Some(PlaybackOwner::Music) {
+                    let failure = if failure.code == ErrorCode::UnsupportedMedia {
+                        self.desired
+                            .as_ref()
+                            .and_then(|desired| {
+                                open_audio(
+                                    &self.config,
+                                    &desired.storage_pool_id,
+                                    &desired.relative_path,
+                                )
+                                .err()
+                            })
+                            .unwrap_or(failure)
+                    } else {
+                        failure
+                    };
+                    if failure.code == ErrorCode::UnsupportedMedia {
+                        if let Some(next) = self.next_after_music_failure() {
+                            self.start_music_item(next, 0.0, true).await;
+                        } else {
+                            self.stop_failed_music_cycle();
+                        }
+                    } else {
+                        self.pause_music_with_error(failure);
+                    }
+                    return;
+                }
                 if failure.retryable() {
                     self.schedule_recovery(failure);
                 } else {
@@ -716,6 +917,10 @@ impl Controller {
     }
 
     fn schedule_recovery(&mut self, error: VodError) {
+        if self.status.owner == Some(PlaybackOwner::Music) {
+            self.pause_music_with_error(error);
+            return;
+        }
         if self.desired.is_none() {
             return;
         }
@@ -741,6 +946,8 @@ impl Controller {
     fn finish_external_stop(&mut self) {
         self.save_progress();
         self.desired = None;
+        self.status.owner = None;
+        self.status.session_id = None;
         self.retry_at = None;
         self.stable_since = None;
         self.status.state = PlayerState::Stopped;
@@ -752,6 +959,10 @@ impl Controller {
     }
 
     fn set_terminal_error(&mut self, error: VodError) {
+        if self.status.owner == Some(PlaybackOwner::Music) {
+            self.pause_music_with_error(error);
+            return;
+        }
         self.save_progress();
         self.status.state = PlayerState::Error;
         self.status.error = Some(error.message);
@@ -801,6 +1012,11 @@ impl Controller {
     }
 
     fn persist_current(&mut self) -> Result<(), VodError> {
+        self.persist_music_checkpoint()?;
+        if self.status.owner == Some(PlaybackOwner::Music) {
+            self.last_checkpoint = Instant::now();
+            return Ok(());
+        }
         let Some(desired) = &self.desired else {
             return Ok(());
         };
@@ -845,6 +1061,10 @@ impl Controller {
     }
 
     fn publish(&mut self) {
+        if self.status.owner == Some(PlaybackOwner::Music) {
+            self.status.music.position_seconds = self.status.position_seconds;
+            self.status.music.volume = self.status.volume;
+        }
         self.status.revision = self.status.revision.saturating_add(1);
         self.status.updated_at = now();
         self.status_sender.send_replace(self.status.clone());
@@ -861,6 +1081,7 @@ impl Controller {
     }
 
     async fn shutdown(&mut self) {
+        self.record_music_listening();
         self.stop_mpv().await;
         let _ = self.persist_current();
     }
@@ -876,6 +1097,8 @@ fn empty_status(
     video_output: String,
 ) -> Status {
     Status {
+        owner: None,
+        music: music::QueueState::default(),
         state: PlayerState::Idle,
         session_id: None,
         service_instance_id,
@@ -994,6 +1217,7 @@ mod tests {
     fn test_config(directory: &Path) -> Arc<VodPlayerConfig> {
         Arc::new(VodPlayerConfig {
             enabled: true,
+            mpv_executable: "mpv".into(),
             socket_path: directory.join("vod-player.sock"),
             state_path: directory.join("session.json"),
             database_path: directory.join("cyberos.sqlite"),
@@ -1047,10 +1271,276 @@ mod tests {
                 last_checkpoint: Instant::now(),
                 last_capability_probe: Instant::now(),
                 progress: ProgressStore::new(directory.join("cyberos.sqlite")),
+                music_checkpoint: MusicCheckpoint::default(),
+                music_history_flush: None,
+                music_last_tick: Instant::now(),
+                music_failed_items: HashSet::new(),
             },
             sender,
             done_receiver,
         )
+    }
+
+    fn prepare_music_process(controller: &mut Controller, directory: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+        let executable = directory.join("fake-music-mpv");
+        std::fs::write(&executable, r#"#!/bin/sh
+[ "$1" = --version ] && exit 0
+for argument do
+  case "$argument" in
+    --input-ipc-client=fd://*) ipc_fd=${argument#--input-ipc-client=fd://} ;;
+    fdclose://*) media_fd=${argument#fdclose://} ;;
+  esac
+done
+eval "exec 5<&$ipc_fd"
+eval "exec 6>&$ipc_fd"
+eval "content=\$(dd bs=5 count=1 <&$media_fd 2>/dev/null)"
+[ "$content" = crash ] && exit 9
+if [ "$content" = bad ]; then
+  printf '%s\n' '{"event":"end-file","reason":"error","file_error":"unrecognized file format"}' >&6
+else
+  printf '%s\n' '{"event":"file-loaded"}' >&6
+fi
+while IFS= read -r line <&5; do
+  case "$line" in
+    *'"quit"'*) exit 0 ;;
+    *'"emit-eof"'*) printf '%s\n' '{"event":"end-file","reason":"eof"}' >&6 ;;
+    *'"emit-error"'*) printf '%s\n' '{"event":"end-file","reason":"error","file_error":"error decoding audio"}' >&6 ;;
+    *'"emit-storage-error"'*) printf '%s\n' '{"event":"end-file","reason":"error","file_error":"Input/output error"}' >&6 ;;
+    *'"emit-audio-error"'*) printf '%s\n' '{"event":"end-file","reason":"error","file_error":"audio output device unavailable"}' >&6 ;;
+  esac
+  request_id=$(printf '%s' "$line" | sed -n 's/.*"request_id":\([0-9][0-9]*\).*/\1/p')
+  [ -n "$request_id" ] || continue
+  printf '{"request_id":%s,"error":"success","data":null}\n' "$request_id" >&6
+done
+"#).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let config = Arc::make_mut(&mut controller.config);
+        config.mpv_executable = executable;
+        config.audio_output = "null".to_owned();
+        config.command_timeout_ms = 1_000;
+        config.startup_timeout_ms = 1_000;
+        let music_directory = config.data_root.join("pool-1/music");
+        std::fs::create_dir_all(&music_directory).unwrap();
+        let connection = rusqlite::Connection::open(&config.database_path).unwrap();
+        connection.execute_batch("CREATE TABLE system_settings(key TEXT PRIMARY KEY,value_json TEXT); CREATE TABLE music_tracks(id TEXT PRIMARY KEY,storage_pool_id TEXT,relative_path TEXT,missing INTEGER); CREATE TABLE music_play_events(id TEXT PRIMARY KEY,track_id TEXT,played_at TEXT,listened_seconds REAL);").unwrap();
+        for id in ["a", "b"] {
+            let entry = music::tests::entry(id);
+            std::fs::write(music_directory.join(format!("{id}.flac")), b"audio").unwrap();
+            connection
+                .execute(
+                    "INSERT INTO music_tracks VALUES (?,?,?,0)",
+                    rusqlite::params![entry.track_id, entry.storage_pool_id, entry.relative_path],
+                )
+                .unwrap();
+        }
+    }
+
+    async fn start_test_music(controller: &mut Controller) {
+        controller
+            .handle_music_command(music::MusicCommand::Replace {
+                entries: vec![music::tests::entry("a"), music::tests::entry("b")],
+                expected_queue_version: 0,
+                expected_session_id: None,
+            })
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn daemon_advances_to_the_next_music_process_on_eof_without_a_browser() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        prepare_music_process(&mut controller, directory.path());
+        start_test_music(&mut controller).await;
+        assert_eq!(controller.status.state, PlayerState::Playing);
+        let first_session = controller.status.session_id.clone();
+        controller
+            .execute_mpv_command(json!(["emit-eof"]))
+            .await
+            .unwrap();
+        controller.tick().await;
+        assert_eq!(
+            controller.status.music.current_item_id.as_deref(),
+            Some("b")
+        );
+        assert_eq!(
+            controller.status.relative_path.as_deref(),
+            Some("music/b.flac")
+        );
+        assert_eq!(controller.status.state, PlayerState::Playing);
+        assert_ne!(controller.status.session_id, first_session);
+        assert!(controller.mpv.is_some());
+        let saved =
+            music::load_checkpoint(&music::checkpoint_path(&controller.config.state_path)).unwrap();
+        assert_eq!(saved.state.current_item_id.as_deref(), Some("b"));
+        controller.stop_mpv().await;
+    }
+
+    #[tokio::test]
+    async fn runtime_decode_failures_skip_songs_and_stop_after_one_failed_repeat_cycle() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        prepare_music_process(&mut controller, directory.path());
+        controller.status.music.repeat = music::RepeatMode::All;
+        start_test_music(&mut controller).await;
+        controller
+            .execute_mpv_command(json!(["emit-error"]))
+            .await
+            .unwrap();
+        controller.tick().await;
+        assert_eq!(
+            controller.status.music.current_item_id.as_deref(),
+            Some("b")
+        );
+        assert_eq!(controller.status.state, PlayerState::Playing);
+        controller
+            .execute_mpv_command(json!(["emit-error"]))
+            .await
+            .unwrap();
+        controller.tick().await;
+        assert_eq!(controller.status.state, PlayerState::Stopped);
+        assert!(controller.mpv.is_none());
+        assert!(controller.retry_at.is_none());
+        assert_eq!(controller.status.music.queue.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_failed_cycle_includes_startup_and_runtime_decode_failures() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        prepare_music_process(&mut controller, directory.path());
+        std::fs::write(
+            controller.config.data_root.join("pool-1/music/a.flac"),
+            b"bad",
+        )
+        .unwrap();
+        controller.status.music.repeat = music::RepeatMode::All;
+        start_test_music(&mut controller).await;
+        assert_eq!(
+            controller.status.music.current_item_id.as_deref(),
+            Some("b")
+        );
+        assert_eq!(controller.status.state, PlayerState::Playing);
+        controller
+            .execute_mpv_command(json!(["emit-error"]))
+            .await
+            .unwrap();
+        controller.tick().await;
+        assert_eq!(controller.status.state, PlayerState::Stopped);
+        assert!(controller.mpv.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_successful_song_resets_the_failed_cycle_for_the_next_repeat() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        prepare_music_process(&mut controller, directory.path());
+        controller.status.music.repeat = music::RepeatMode::All;
+        start_test_music(&mut controller).await;
+        controller
+            .execute_mpv_command(json!(["emit-error"]))
+            .await
+            .unwrap();
+        controller.tick().await;
+        controller
+            .execute_mpv_command(json!(["emit-eof"]))
+            .await
+            .unwrap();
+        controller.tick().await;
+        assert_eq!(
+            controller.status.music.current_item_id.as_deref(),
+            Some("a")
+        );
+        assert_eq!(controller.status.state, PlayerState::Playing);
+        controller
+            .execute_mpv_command(json!(["emit-error"]))
+            .await
+            .unwrap();
+        controller.tick().await;
+        assert_eq!(
+            controller.status.music.current_item_id.as_deref(),
+            Some("b")
+        );
+        assert_eq!(controller.status.state, PlayerState::Playing);
+        controller.stop_mpv().await;
+    }
+
+    #[tokio::test]
+    async fn a_decode_error_after_the_pool_goes_offline_pauses_instead_of_skipping() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        prepare_music_process(&mut controller, directory.path());
+        start_test_music(&mut controller).await;
+        std::fs::rename(
+            controller.config.data_root.join("pool-1"),
+            directory.path().join("offline-pool"),
+        )
+        .unwrap();
+        controller
+            .execute_mpv_command(json!(["emit-error"]))
+            .await
+            .unwrap();
+        controller.tick().await;
+        assert_eq!(
+            controller.status.music.current_item_id.as_deref(),
+            Some("a")
+        );
+        assert_eq!(controller.status.state, PlayerState::Paused);
+        assert_eq!(
+            controller.status.error_code,
+            Some(ErrorCode::StorageUnavailable)
+        );
+        assert!(controller.mpv.is_none());
+    }
+
+    #[tokio::test]
+    async fn output_and_storage_failures_pause_the_current_song_without_skipping() {
+        for (event, code) in [
+            ("emit-audio-error", ErrorCode::AudioUnavailable),
+            ("emit-storage-error", ErrorCode::StorageUnavailable),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let (mut controller, _sender, _done) = test_controller(directory.path());
+            prepare_music_process(&mut controller, directory.path());
+            start_test_music(&mut controller).await;
+            controller
+                .execute_mpv_command(json!([event]))
+                .await
+                .unwrap();
+            controller.tick().await;
+            assert_eq!(
+                controller.status.music.current_item_id.as_deref(),
+                Some("a")
+            );
+            assert_eq!(controller.status.state, PlayerState::Paused);
+            assert_eq!(controller.status.error_code, Some(code));
+            assert!(controller.retry_at.is_none());
+            assert!(controller.mpv.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unknown_startup_process_failure_pauses_instead_of_skipping_the_queue() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        prepare_music_process(&mut controller, directory.path());
+        std::fs::write(
+            controller.config.data_root.join("pool-1/music/a.flac"),
+            b"crash",
+        )
+        .unwrap();
+        start_test_music(&mut controller).await;
+        assert_eq!(
+            controller.status.music.current_item_id.as_deref(),
+            Some("a")
+        );
+        assert_eq!(controller.status.state, PlayerState::Paused);
+        assert_eq!(
+            controller.status.error_code,
+            Some(ErrorCode::PlaybackFailed)
+        );
+        assert!(controller.mpv.is_none());
     }
 
     #[test]
@@ -1182,5 +1672,321 @@ mod tests {
         assert!(is_clean_mpv_exit(Some(0), None));
         assert!(!is_clean_mpv_exit(Some(1), None));
         assert!(!is_clean_mpv_exit(None, Some(15)));
+    }
+
+    #[tokio::test]
+    async fn restores_music_queue_paused_without_starting_an_audio_device() {
+        let directory = tempfile::tempdir().unwrap();
+        let config = test_config(directory.path());
+        let mut checkpoint = MusicCheckpoint::default();
+        checkpoint.state.queue.push(music::tests::entry("a"));
+        checkpoint.state.current_item_id = Some("a".to_owned());
+        checkpoint.state.position_seconds = 13.0;
+        music::persist_checkpoint(&music::checkpoint_path(&config.state_path), &checkpoint)
+            .unwrap();
+        let handle = ControllerHandle::start(config).await.unwrap();
+        let restored = handle.status().unwrap();
+        assert_eq!(restored.owner, Some(PlaybackOwner::Music));
+        assert_eq!(restored.state, PlayerState::Paused);
+        assert_eq!(restored.position_seconds, 13.0);
+        assert_eq!(restored.music.current().unwrap().track_id, "track-a");
+        assert_eq!(restored.retry_count, 0);
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn disabled_tv_does_not_restore_a_saved_video_over_the_music_queue() {
+        let directory = tempfile::tempdir().unwrap();
+        let config = test_config(directory.path());
+        let connection = rusqlite::Connection::open(&config.database_path).unwrap();
+        connection
+            .execute_batch("CREATE TABLE system_settings(key TEXT PRIMARY KEY,value_json TEXT);")
+            .unwrap();
+        connection.execute("INSERT INTO system_settings VALUES('tv_settings',?)", [r#"{"enabled":false,"videoOutput":"drm","drmConnector":null,"audioDevice":null,"hardwareDecoding":"no","updatedAt":"2026-10-30T00:00:00Z"}"#]).unwrap();
+        let saved = PersistedSession {
+            version: 2,
+            session_id: "old-video".to_owned(),
+            storage_pool_id: "pool-1".to_owned(),
+            relative_path: "movie.mp4".to_owned(),
+            position_seconds: 17.0,
+            volume: 70.0,
+            desired_paused: false,
+            audio_device_id: None,
+            media_file_id: None,
+            identity: FileIdentity {
+                device: 1,
+                inode: 2,
+                size: 3,
+                modified_seconds: 4,
+                modified_nanoseconds: 5,
+                changed_seconds: 6,
+                changed_nanoseconds: 7,
+            },
+            updated_at: now(),
+        };
+        session::persist(&config.state_path, &saved).unwrap();
+        let mut checkpoint = MusicCheckpoint::default();
+        checkpoint.state.queue.push(music::tests::entry("a"));
+        checkpoint.state.current_item_id = Some("a".to_owned());
+        music::persist_checkpoint(&music::checkpoint_path(&config.state_path), &checkpoint)
+            .unwrap();
+        let handle = ControllerHandle::start(config.clone()).await.unwrap();
+        let status = handle.status().unwrap();
+        assert_eq!(status.owner, Some(PlaybackOwner::Music));
+        assert_eq!(status.state, PlayerState::Paused);
+        assert_ne!(status.session_id.as_deref(), Some("old-video"));
+        assert!(!config.state_path.exists());
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn stale_queue_edits_and_unconfirmed_takeovers_do_not_change_playback() {
+        use crate::music::MusicCommand;
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.status.music.queue_version = 2;
+        let error = controller
+            .handle_music_command(MusicCommand::Append {
+                entries: vec![music::tests::entry("a")],
+                expected_queue_version: 1,
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::SessionConflict);
+        assert!(controller.status.music.queue.is_empty());
+        controller.status.owner = Some(PlaybackOwner::Video);
+        controller.status.session_id = Some("movie-session".to_owned());
+        controller.desired = Some(DesiredSession {
+            session_id: "movie-session".to_owned(),
+            storage_pool_id: "pool-1".to_owned(),
+            relative_path: "film.mp4".to_owned(),
+            position_seconds: 22.0,
+            volume: 80.0,
+            paused: false,
+            audio_device_id: None,
+            media_file_id: None,
+            identity: None,
+        });
+        let error = controller
+            .handle_music_command(MusicCommand::Replace {
+                entries: vec![music::tests::entry("a")],
+                expected_queue_version: 2,
+                expected_session_id: None,
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::SessionConflict);
+        assert_eq!(controller.status.owner, Some(PlaybackOwner::Video));
+        assert!(controller.status.music.queue.is_empty());
+        assert!(controller.assert_takeover(Some("old-session")).is_err());
+        assert!(controller.assert_takeover(Some("movie-session")).is_ok());
+    }
+
+    #[tokio::test]
+    async fn tv_stop_cannot_stop_a_music_session_even_with_a_matching_id() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.status.owner = Some(PlaybackOwner::Music);
+        controller.status.session_id = Some("music-session".to_owned());
+        let error = controller
+            .handle_command(Command::StopVideo {
+                session_id: "music-session".to_owned(),
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::SessionConflict);
+        assert_eq!(controller.status.owner, Some(PlaybackOwner::Music));
+    }
+
+    #[test]
+    fn music_output_failure_pauses_without_retrying_or_clearing_the_queue() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.status.owner = Some(PlaybackOwner::Music);
+        controller.status.music.queue.push(music::tests::entry("a"));
+        controller.status.music.current_item_id = Some("a".to_owned());
+        controller.schedule_recovery(VodError::unavailable(
+            ErrorCode::AudioUnavailable,
+            "Speaker disconnected",
+        ));
+        assert_eq!(controller.status.state, PlayerState::Paused);
+        assert!(controller.retry_at.is_none());
+        assert_eq!(controller.status.music.queue.len(), 1);
+        assert!(controller.status.effective_audio_device_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_late_confirmed_video_start_cannot_replace_a_newer_video_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.status.owner = Some(PlaybackOwner::Video);
+        controller.status.session_id = Some("newer-video".to_owned());
+        controller.desired = Some(DesiredSession {
+            session_id: "newer-video".to_owned(),
+            storage_pool_id: "pool-1".to_owned(),
+            relative_path: "newer.mp4".to_owned(),
+            position_seconds: 8.0,
+            volume: 80.0,
+            paused: false,
+            audio_device_id: None,
+            media_file_id: None,
+            identity: None,
+        });
+        let error = controller
+            .handle_command(Command::Play {
+                storage_pool_id: "pool-1".to_owned(),
+                relative_path: "requested.mp4".to_owned(),
+                start_position_seconds: None,
+                audio_device_id: None,
+                media_file_id: None,
+                expected_session_id: Some("replaced-music".to_owned()),
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::SessionConflict);
+        assert_eq!(
+            controller.desired.as_ref().unwrap().relative_path,
+            "newer.mp4"
+        );
+        assert_eq!(controller.status.session_id.as_deref(), Some("newer-video"));
+
+        controller.status.owner = Some(PlaybackOwner::Music);
+        let error = controller
+            .handle_music_command(music::MusicCommand::Resume {
+                expected_queue_version: 0,
+                expected_session_id: Some("replaced-video".to_owned()),
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::SessionConflict);
+        assert_eq!(controller.status.session_id.as_deref(), Some("newer-video"));
+    }
+
+    #[tokio::test]
+    async fn removing_a_paused_current_song_keeps_the_next_song_paused_and_owned() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.status.owner = Some(PlaybackOwner::Music);
+        controller.status.state = PlayerState::Paused;
+        controller.status.session_id = Some("current-a".to_owned());
+        controller.status.music.queue = vec![music::tests::entry("a"), music::tests::entry("b")];
+        controller.status.music.current_item_id = Some("a".to_owned());
+        controller.desired = Some(DesiredSession {
+            session_id: "current-a".to_owned(),
+            storage_pool_id: "pool-1".to_owned(),
+            relative_path: "music/a.flac".to_owned(),
+            position_seconds: 12.0,
+            volume: 100.0,
+            paused: true,
+            audio_device_id: None,
+            media_file_id: None,
+            identity: None,
+        });
+        let status = controller
+            .handle_music_command(music::MusicCommand::Remove {
+                item_id: "a".to_owned(),
+                expected_queue_version: 0,
+            })
+            .await
+            .unwrap();
+        assert_eq!(status.music.current_item_id.as_deref(), Some("b"));
+        assert_eq!(status.state, PlayerState::Paused);
+        assert_eq!(status.relative_path.as_deref(), Some("music/b.flac"));
+        assert_eq!(status.duration_seconds, Some(30.0));
+        assert_eq!(status.position_seconds, 0.0);
+        assert_ne!(status.session_id.as_deref(), Some("current-a"));
+        let desired = controller.desired.as_ref().unwrap();
+        assert!(desired.paused);
+        assert_eq!(desired.relative_path, "music/b.flac");
+        let error = controller
+            .handle_command(Command::Play {
+                storage_pool_id: "pool-1".to_owned(),
+                relative_path: "movie.mp4".to_owned(),
+                start_position_seconds: None,
+                audio_device_id: None,
+                media_file_id: None,
+                expected_session_id: None,
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::SessionConflict);
+    }
+
+    #[test]
+    fn successful_music_output_start_excludes_device_startup_time_from_listening() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.status.owner = Some(PlaybackOwner::Music);
+        controller.status.state = PlayerState::Starting;
+        controller.music_last_tick = Instant::now() - Duration::from_secs(20);
+        controller.music_checkpoint.listened_seconds = 10.0;
+        controller.finish_start(false);
+        assert_eq!(controller.status.state, PlayerState::Playing);
+        assert!(controller.music_last_tick.elapsed() < Duration::from_secs(1));
+        assert_eq!(controller.music_checkpoint.listened_seconds, 10.0);
+    }
+
+    #[test]
+    fn music_default_output_resolves_current_system_settings_without_changing_the_preference() {
+        let directory = tempfile::tempdir().unwrap();
+        let config = test_config(directory.path());
+        let connection = rusqlite::Connection::open(&config.database_path).unwrap();
+        connection
+            .execute_batch("CREATE TABLE system_settings(key TEXT PRIMARY KEY,value_json TEXT);")
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO system_settings VALUES('bluetooth_settings',?)",
+                [r#"{"defaultAudioDeviceId":"bluetooth:adapter-hci0/11:22:33:44:55:66","receiveEnabled":false}"#],
+            )
+            .unwrap();
+        assert_eq!(
+            config.music_audio_device_id(None).unwrap().as_deref(),
+            Some("bluetooth:adapter-hci0/11:22:33:44:55:66")
+        );
+        let explicit = "bluetooth:adapter-hci1/AA:BB:CC:DD:EE:FF";
+        assert_eq!(
+            config
+                .music_audio_device_id(Some(explicit))
+                .unwrap()
+                .as_deref(),
+            Some(explicit)
+        );
+        connection
+            .execute(
+                "UPDATE system_settings SET value_json = ? WHERE key = 'bluetooth_settings'",
+                [r#"{"defaultAudioDeviceId":null}"#],
+            )
+            .unwrap();
+        assert!(config.music_audio_device_id(None).unwrap().is_none());
+        connection
+            .execute(
+                "UPDATE system_settings SET value_json = ? WHERE key = 'bluetooth_settings'",
+                [r#"{"defaultAudioDeviceId":"invalid"}"#],
+            )
+            .unwrap();
+        assert!(config.music_audio_device_id(None).is_err());
+    }
+
+    #[tokio::test]
+    async fn history_is_not_submitted_to_sqlite_before_its_checkpoint_is_durable() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        let blocked = directory.path().join("blocked-state-directory");
+        std::fs::write(&blocked, b"not a directory").unwrap();
+        Arc::make_mut(&mut controller.config).state_path = blocked.join("session.json");
+        controller
+            .music_checkpoint
+            .pending_events
+            .push(music::PlayEvent {
+                id: "pending".to_owned(),
+                track_id: "track-a".to_owned(),
+                played_at: now(),
+                listened_seconds: 20.0,
+            });
+        controller.flush_music_history().await;
+        assert!(controller.music_history_flush.is_none());
+        assert_eq!(controller.music_checkpoint.pending_events.len(), 1);
+        assert!(!controller.config.database_path.exists());
     }
 }

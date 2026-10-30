@@ -17,6 +17,9 @@ describe("iSCSI dependency installation", () => {
     const bin = path.join(root, "bin");
     await mkdir(runtime, { recursive: true });
     await mkdir(bin);
+    const getent = path.join(bin, "getent");
+    await writeFile(getent, "#!/bin/sh\nexit 2\n");
+    await chmod(getent, 0o755);
     const guard = path.join(runtime, "rtslib-fb-targetctl.service.d/cyberos-install.conf");
     const calls = path.join(root, "systemctl-calls");
     const systemctl = path.join(bin, "systemctl");

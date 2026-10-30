@@ -12,6 +12,7 @@ pub const DEFAULT_SOCKET_PATH: &str = "/run/cyberos/vod-player.sock";
 #[derive(Debug, Clone)]
 pub struct VodPlayerConfig {
     pub enabled: bool,
+    pub mpv_executable: PathBuf,
     pub socket_path: PathBuf,
     pub state_path: PathBuf,
     pub database_path: PathBuf,
@@ -40,6 +41,12 @@ struct StoredTvSettings {
     audio_device: Option<String>,
     hardware_decoding: String,
     updated_at: String,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredBluetoothSettings {
+    default_audio_device_id: Option<String>,
 }
 
 impl Default for StoredTvSettings {
@@ -87,7 +94,9 @@ impl VodPlayerConfig {
         let settings = load_tv_settings(&database_path)?;
         validate_settings(&settings)?;
         let tv_transition_enabled = root_path.join("state/tv/enabled").is_file();
-        let enabled = settings.enabled || tv_transition_enabled;
+        // The shared engine also owns headless music playback. TV availability
+        // controls video commands, not the lifetime of this daemon.
+        let enabled = true;
         let video_output = if tv_transition_enabled && !settings.enabled {
             "wayland".to_owned()
         } else {
@@ -97,7 +106,7 @@ impl VodPlayerConfig {
         let playback_uid = User::from_name(&user)
             .map_err(|error| VodError::unavailable(ErrorCode::PermissionDenied, error.to_string()))?
             .map(|account| account.uid.as_raw())
-            .or_else(|| (!enabled).then(|| nix::unistd::Uid::current().as_raw()))
+            .or_else(|| (!production).then(|| nix::unistd::Uid::current().as_raw()))
             .ok_or_else(|| {
                 VodError::unavailable(
                     ErrorCode::PermissionDenied,
@@ -113,7 +122,7 @@ impl VodPlayerConfig {
         let peer_uid = User::from_name("cyberos")
             .map_err(|error| VodError::unavailable(ErrorCode::PermissionDenied, error.to_string()))?
             .map(|account| account.uid.as_raw())
-            .or_else(|| (!enabled).then(|| nix::unistd::Uid::current().as_raw()))
+            .or_else(|| (!production).then(|| nix::unistd::Uid::current().as_raw()))
             .ok_or_else(|| {
                 VodError::unavailable(
                     ErrorCode::PermissionDenied,
@@ -122,6 +131,7 @@ impl VodPlayerConfig {
             })?;
         Ok(Self {
             enabled,
+            mpv_executable: PathBuf::from("mpv"),
             socket_path: PathBuf::from(DEFAULT_SOCKET_PATH),
             state_path: root_path.join("state/vod-player/session.json"),
             database_path,
@@ -140,6 +150,77 @@ impl VodPlayerConfig {
             user,
             peer_uid,
         })
+    }
+
+    pub fn for_video_session(&self) -> Result<Self, VodError> {
+        let settings = load_tv_settings(&self.database_path)?;
+        validate_settings(&settings)?;
+        let mut config = self.clone();
+        let transition = self
+            .database_path
+            .parent()
+            .is_some_and(|state| state.join("tv/enabled").is_file());
+        config.enabled = settings.enabled || transition;
+        config.video_output = if transition && !settings.enabled {
+            "wayland".to_owned()
+        } else {
+            settings.video_output
+        };
+        config.drm_connector = optional_text(settings.drm_connector);
+        config.audio_device = optional_text(settings.audio_device);
+        config.hwdec = settings.hardware_decoding;
+        Ok(config)
+    }
+
+    pub fn for_music_session(&self, bluetooth: bool) -> Self {
+        let mut config = self.clone();
+        config.video_output = "null".to_owned();
+        config.drm_connector = None;
+        config.hwdec = "no".to_owned();
+        if bluetooth {
+            // BlueALSA is a userspace ALSA plugin; /dev/snd need not exist.
+            config.audio_output = "alsa".to_owned();
+        }
+        config
+    }
+
+    pub fn music_audio_device_id(
+        &self,
+        requested: Option<&str>,
+    ) -> Result<Option<String>, VodError> {
+        if let Some(device) = requested {
+            crate::protocol::validate_bluetooth_audio_device_id(device)?;
+            return Ok(Some(device.to_owned()));
+        }
+        if !self.database_path.exists() {
+            return Ok(None);
+        }
+        let connection = Connection::open_with_flags(
+            &self.database_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|error| {
+            VodError::internal(format!("Failed to read default audio output: {error}"))
+        })?;
+        let value = connection
+            .query_row(
+                "SELECT value_json FROM system_settings WHERE key = 'bluetooth_settings'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| {
+                VodError::internal(format!("Failed to read default audio output: {error}"))
+            })?;
+        let settings = value
+            .map(|value| serde_json::from_str::<StoredBluetoothSettings>(&value))
+            .transpose()
+            .map_err(|error| VodError::internal(format!("Invalid default audio output: {error}")))?
+            .unwrap_or_default();
+        if let Some(device) = &settings.default_audio_device_id {
+            crate::protocol::validate_bluetooth_audio_device_id(device)?;
+        }
+        Ok(settings.default_audio_device_id)
     }
 }
 
