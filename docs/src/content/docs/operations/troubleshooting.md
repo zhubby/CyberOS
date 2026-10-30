@@ -11,7 +11,9 @@ sidebar:
 
 优先查看对应 service 的 journald，再检查 `/health`、`/api/system/health`、`/api/indexer/status`、`/api/system/storage` 和 `/api/backup/status`。`/health` 只代表 API liveness，不代表 NAS、索引或 backup 已就绪。
 
-`SQLITE_BUSY` 通常表示 oneshot 任务并发；应停止相关 timers，确认任务退出后串行运行。静态页面停在 Loading 时，先确认 API 提供当前 Web asset，且不存在的 `/assets/*` 没有被 SPA fallback 返回。
+SQLite WAL 允许并发读取，但同一时刻仍只有一个写入者。遇到 `SQLITE_BUSY` 或 `database is locked` 时，对照 API、Photos、Indexer、alerter 和 downloader 的时间线，检查写事务长度、事务间的锁释放间隔、心跳和服务重启。大量短事务连续重新获取写锁，也会让其他进程一直等待；单次事务短、API 返回 200 或服务自动重启后恢复，都不能证明锁竞争已经解决。若是重复的 oneshot 任务，停止相关 timers，确认任务退出后串行运行。
+
+静态页面停在 Loading 时，先确认 API 提供当前 Web asset，且不存在的 `/assets/*` 没有被 SPA fallback 返回。
 
 请求超时不等于数据库锁冲突。先对照客户端耗时、API 的请求进入与完成日志，区分进入处理器之前的排队、SQL 执行和异步宿主探测；同步大查询会延迟其他请求及超时回调。照片字段目录使用独立只读工作线程，照片与索引状态不依赖 SMART。不要通过延长验收超时或清空生产数据库掩盖持续阻塞。
 
