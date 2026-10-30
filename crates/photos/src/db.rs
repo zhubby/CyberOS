@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
@@ -18,10 +18,34 @@ type DbResult<T> = Result<T, PhotosError>;
 type DbJob = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
 
 pub const SCAN_ENTRY_BATCH_SIZE: usize = 128;
+const DB_ACTIVE_BUDGET: Duration = Duration::from_millis(100);
+// SQLite's busy handler eventually polls every 100ms. Leave a full polling
+// interval between bursts so other processes can acquire the shared writer.
+const DB_WRITER_RELEASE: Duration = Duration::from_millis(125);
 const PENDING_SCAN_ENTRY_SQL: &str = "SELECT path, entry_type, retry_count FROM photos_scan_entries INDEXED BY idx_photos_scan_entries_pending WHERE job_id = ? AND entry_type = ? AND status = 'pending' ORDER BY path LIMIT 1";
 // Preserve path order without letting the older retry-deadline index force a
 // sort of every eligible retry while the writer transaction is held.
 const RETRY_SCAN_ENTRY_SQL: &str = "SELECT path, entry_type, retry_count FROM photos_scan_entries INDEXED BY idx_photos_scan_entries_retry WHERE job_id = ? AND entry_type = ? AND status = 'failed' AND error_retryable = 1 AND next_retry_at <= ? ORDER BY path LIMIT 1";
+
+#[derive(Default)]
+struct DbPacing {
+    active: Duration,
+}
+
+impl DbPacing {
+    fn pause_after(&mut self, idle: Duration, elapsed: Duration) -> Duration {
+        if idle >= DB_WRITER_RELEASE {
+            self.active = Duration::ZERO;
+        }
+        self.active = self.active.saturating_add(elapsed);
+        if self.active >= DB_ACTIVE_BUDGET {
+            self.active = Duration::ZERO;
+            DB_WRITER_RELEASE
+        } else {
+            Duration::ZERO
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DiscoveredEntry {
@@ -185,8 +209,20 @@ impl Db {
             .name("cyberos-photos-db".into())
             .spawn(move || {
                 let mut connection = connection;
+                let mut pacing = DbPacing::default();
+                let mut finished = Instant::now();
                 while let Ok(job) = receiver.recv() {
+                    let started = Instant::now();
                     job(&mut connection);
+                    // The callback has returned and its transaction has
+                    // committed or rolled back. Pace every callback, including
+                    // no-op claims, which still acquire BEGIN IMMEDIATE locks.
+                    let pause =
+                        pacing.pause_after(started.duration_since(finished), started.elapsed());
+                    if !pause.is_zero() {
+                        std::thread::sleep(pause);
+                    }
+                    finished = Instant::now();
                 }
             })
             .map_err(PhotosError::storage)?;
@@ -1207,6 +1243,48 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn database_pacing_bounds_continuous_work_and_starts_a_fresh_budget() {
+        let mut pacing = DbPacing::default();
+        assert_eq!(
+            pacing.pause_after(Duration::ZERO, Duration::from_millis(60)),
+            Duration::ZERO
+        );
+        // Short gaps between callbacks do not give a busy peer a full poll.
+        assert_eq!(
+            pacing.pause_after(Duration::from_millis(1), Duration::from_millis(39)),
+            Duration::ZERO
+        );
+        assert_eq!(
+            pacing.pause_after(Duration::ZERO, Duration::from_millis(1)),
+            DB_WRITER_RELEASE
+        );
+        assert_eq!(
+            pacing.pause_after(Duration::ZERO, Duration::from_millis(99)),
+            Duration::ZERO
+        );
+        assert_eq!(
+            pacing.pause_after(Duration::ZERO, Duration::from_millis(1)),
+            DB_WRITER_RELEASE
+        );
+    }
+
+    #[test]
+    fn database_pacing_counts_natural_idle_as_a_writer_release() {
+        let mut pacing = DbPacing::default();
+        assert_eq!(
+            pacing.pause_after(Duration::ZERO, Duration::from_millis(99)),
+            Duration::ZERO
+        );
+        assert_eq!(
+            pacing.pause_after(DB_WRITER_RELEASE, Duration::from_millis(1)),
+            Duration::ZERO
+        );
+        assert_eq!(
+            pacing.pause_after(Duration::ZERO, Duration::from_millis(99)),
+            DB_WRITER_RELEASE
+        );
+    }
+    #[test]
     fn processing_defaults_validate() {
         assert!(ProcessingSettings::default().validate().is_ok());
         let invalid = ProcessingSettings {
@@ -1690,6 +1768,107 @@ mod tests {
         assert_eq!(
             scalar(&observer, "SELECT COUNT(*) FROM photos_scan_entries"),
             before
+        );
+    }
+
+    #[tokio::test]
+    async fn continuous_discovery_allows_an_independent_writer_to_keep_progressing() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        use std::time::Instant;
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("db.sqlite");
+        seed_lease_database(&path);
+        let setup = Connection::open(&path).unwrap();
+        create_scan_entries_table(&setup);
+        setup.execute_batch("CREATE TABLE other_writer (progress INTEGER); INSERT INTO other_writer VALUES (0);").unwrap();
+        drop(setup);
+        let db = Db::open(&path).unwrap();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let progress = Arc::new(AtomicU64::new(0));
+        let mut producers = Vec::new();
+        // Multiple scan callers keep the actor queue occupied, without giving
+        // the competing connection a manually scheduled turn between chunks.
+        for producer in 0..4 {
+            let db = db.clone();
+            let stopped = Arc::clone(&stopped);
+            let progress = Arc::clone(&progress);
+            producers.push(tokio::spawn(async move {
+                let mut batch = 0_u64;
+                while !stopped.load(Ordering::Acquire) {
+                    let entries: Vec<_> = (0..SCAN_ENTRY_BATCH_SIZE)
+                        .map(|offset| DiscoveredEntry {
+                            path: format!("Pictures/{producer}/{batch:08}-{offset:04}.jpg"),
+                            entry_type: "media".into(),
+                        })
+                        .collect();
+                    db.add_scan_entries("job-1", "Pictures", &entries, "current-worker")
+                        .await
+                        .unwrap();
+                    progress.fetch_add(1, Ordering::Release);
+                    batch += 1;
+                }
+            }));
+        }
+        let deadline = {
+            let stopped = Arc::clone(&stopped);
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(8)).await;
+                stopped.store(true, Ordering::Release);
+            })
+        };
+        let result = {
+            let stopped = Arc::clone(&stopped);
+            let progress = Arc::clone(&progress);
+            tokio::task::spawn_blocking(move || {
+                let writer = Connection::open(&path).unwrap();
+                // Keep the existing alerter timeout; the test checks writer
+                // progress during the scan, rather than after the scan stops.
+                writer.busy_timeout(Duration::from_secs(5)).unwrap();
+                while progress.load(Ordering::Acquire) == 0 && !stopped.load(Ordering::Acquire) {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                let mut samples = Vec::new();
+                let mut failure = None;
+                for _ in 0..6 {
+                    let started = Instant::now();
+                    if let Err(error) =
+                        writer.execute("UPDATE other_writer SET progress = progress + 1", [])
+                    {
+                        failure = Some(error);
+                        break;
+                    }
+                    samples.push((
+                        started.elapsed(),
+                        progress.load(Ordering::Acquire),
+                        stopped.load(Ordering::Acquire),
+                    ));
+                    std::thread::sleep(Duration::from_millis(80));
+                }
+                stopped.store(true, Ordering::Release);
+                (samples, failure)
+            })
+            .await
+            .unwrap()
+        };
+        deadline.abort();
+        for producer in producers {
+            producer.await.unwrap();
+        }
+        let (samples, failure) = result;
+        eprintln!("independent writer (wait, discovery batches, scan stopped): {samples:?}");
+        assert!(failure.is_none(), "competing writer failed: {failure:?}");
+        assert_eq!(samples.len(), 6);
+        assert!(
+            samples
+                .iter()
+                .all(|(elapsed, _, stopped)| *elapsed < Duration::from_secs(2) && !stopped),
+            "competing writer must keep progressing while discovery is active: {samples:?}"
+        );
+        assert!(
+            samples.last().unwrap().1 > samples.first().unwrap().1,
+            "discovery must also make progress between competing writes: {samples:?}"
         );
     }
 
