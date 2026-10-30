@@ -375,9 +375,12 @@ export function listPhotosMetadataFields(
   const rows = db.prepare(`
     SELECT v.key, v.value_type, COUNT(DISTINCT v.asset_id) AS count
     FROM photos_metadata_values v
-    JOIN photos_assets a ON a.id = v.asset_id
-    JOIN photos_asset_metadata m ON m.asset_id = a.id AND m.schema_version = ?
-    WHERE a.library_updated_at = ? AND a.status = 'ready' AND v.sensitive = 0
+    WHERE v.asset_id IN (
+      SELECT a.id
+      FROM photos_assets a
+      JOIN photos_asset_metadata m ON m.asset_id = a.id AND m.schema_version = ?
+      WHERE a.library_updated_at = ? AND a.status = 'ready'
+    ) AND v.sensitive = 0
       AND (? = '' OR lower(v.key) LIKE '%' || ? || '%')
     GROUP BY v.key, v.value_type
     ORDER BY count DESC, v.key ASC

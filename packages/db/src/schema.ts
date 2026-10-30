@@ -5,6 +5,7 @@ import { p2pDownloadMigrations } from "./migrations/p2p-downloads.js";
 import { musicMigrations } from "./migrations/music.js";
 import { videoMigrations } from "./migrations/video.js";
 import { photosScanContentionMigrations } from "./migrations/photos-scan-contention.js";
+import { photosMetadataLookupMigrations } from "./migrations/photos-metadata-lookup.js";
 import type { Migration } from "./migrations/types.js";
 
 export type { Migration } from "./migrations/types.js";
@@ -15,7 +16,8 @@ export const migrations: Migration[] = [
   ...p2pDownloadMigrations,
   ...musicMigrations,
   ...videoMigrations,
-  ...photosScanContentionMigrations
+  ...photosScanContentionMigrations,
+  ...photosMetadataLookupMigrations
 ];
 
 export function runMigrations(db: Database.Database): void {
