@@ -1,15 +1,15 @@
 {
   "name": "@cyberos/capability-runtime",
-  "version": "2.2.6",
+  "version": "2.2.7",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@cyberos/capabilities": "2.2.6",
-    "@cyberos/db": "2.2.6",
-    "@cyberos/storage-tools": "2.2.6",
-    "@cyberos/shared": "2.2.6"
+    "@cyberos/capabilities": "2.2.7",
+    "@cyberos/db": "2.2.7",
+    "@cyberos/storage-tools": "2.2.7",
+    "@cyberos/shared": "2.2.7"
   }
 }
