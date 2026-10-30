@@ -1,5 +1,5 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, LoaderCircle, Power, RotateCw, X } from "lucide-react";
 import type { SystemPowerAction } from "../../api.js";
@@ -95,7 +95,7 @@ export function PowerControl({
       >
         <Power aria-hidden="true" size={18} />
       </button>
-      {open ? createPortal(
+      {open ? (
         <PowerDialog
           dialogRef={dialogRef}
           action={action}
@@ -104,8 +104,7 @@ export function PowerControl({
           onBack={() => setAction(null)}
           onClose={close}
           onConfirm={() => void confirm()}
-        />,
-        document.body
+        />
       ) : null}
     </>
   );
@@ -133,7 +132,7 @@ export function PowerDialog({
   const descriptionId = action ? `power-confirm-${action}-description` : "power-menu-description";
 
   return (
-    <div
+    <ModalPortal
       className="power-dialog-backdrop"
       role="presentation"
       onMouseDown={(event) => {
@@ -220,6 +219,6 @@ export function PowerDialog({
           </>
         )}
       </section>
-    </div>
+    </ModalPortal>
   );
 }

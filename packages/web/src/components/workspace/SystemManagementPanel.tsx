@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -748,7 +749,7 @@ export function SystemStorageManagementPanel({
       </div>
 
       {selectedPool ? (
-        <div
+        <ModalPortal
           className="management-modal-backdrop"
           role="presentation"
           onMouseDown={(event) => event.currentTarget === event.target && closePoolDetails()}
@@ -875,7 +876,7 @@ export function SystemStorageManagementPanel({
               </section>
             </div>
           </section>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {selectedDisk && summary ? (
@@ -889,7 +890,7 @@ export function SystemStorageManagementPanel({
       ) : null}
 
       {createOpen ? (
-        <div
+        <ModalPortal
           className="management-modal-backdrop"
           role="presentation"
           onMouseDown={(event) => event.currentTarget === event.target && closeCreateModal()}
@@ -1060,7 +1061,7 @@ export function SystemStorageManagementPanel({
               </footer>
             </form>
           </section>
-        </div>
+        </ModalPortal>
       ) : null}
     </section>
   );
@@ -1209,7 +1210,7 @@ function StorageDiskDetailsModal({
   ].filter((fact) => fact.value !== t("common.dash"));
 
   return (
-    <div
+    <ModalPortal
       className="management-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => event.currentTarget === event.target && onClose()}
@@ -1296,7 +1297,7 @@ function StorageDiskDetailsModal({
           <DiskPartitionsTable disk={disk} locale={locale} t={t} />
         </div>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -1806,7 +1807,7 @@ function NetworkInterfaceDetailsModal({
   }, [onClose]);
 
   return (
-    <div
+    <ModalPortal
       className="management-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => event.currentTarget === event.target && onClose()}
@@ -1932,7 +1933,7 @@ function NetworkInterfaceDetailsModal({
           </section>
         </div>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 

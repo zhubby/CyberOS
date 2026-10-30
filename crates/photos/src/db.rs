@@ -328,7 +328,7 @@ impl Db {
         let job = job.clone();
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(PhotosError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &job.id, &worker_id)?;
             transaction.execute(
                 "INSERT INTO photos_scan_entries (job_id, path, entry_type, status, parent_path, updated_at) VALUES (?, ?, 'directory', 'pending', NULL, ?) ON CONFLICT(job_id,path) DO NOTHING",
@@ -380,7 +380,10 @@ impl Db {
         );
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(PhotosError::database)?;
+            // Acquire the write lock before reading the lease. A deferred
+            // read-to-write upgrade can fail immediately under WAL contention,
+            // bypassing busy_timeout when another service is writing.
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &values.0, &worker_id)?;
             transaction.execute(
                 "INSERT INTO photos_scan_entries (job_id,path,entry_type,status,parent_path,updated_at) VALUES (?,?,?,CASE WHEN ? = 'sidecar' THEN 'completed' ELSE 'pending' END,?,?) ON CONFLICT(job_id,path) DO NOTHING",
@@ -401,7 +404,7 @@ impl Db {
         let path = path.to_owned();
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(PhotosError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &job_id, &worker_id)?;
             transaction.execute("UPDATE photos_scan_entries SET status = 'completed', error = NULL, error_code = NULL, error_retryable = 0, next_retry_at = NULL, updated_at = ? WHERE job_id = ? AND path = ?", params![now_iso(), job_id, path]).map_err(PhotosError::database)?;
             transaction.execute(if processed {
@@ -469,7 +472,7 @@ impl Db {
         let path = path.to_owned();
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(PhotosError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &job_id, &worker_id)?;
             transaction.execute("UPDATE photos_scan_entries SET status = 'skipped', updated_at = ? WHERE job_id = ? AND path = ?", params![now_iso(), job_id, path]).map_err(PhotosError::database)?;
             transaction.commit().map_err(PhotosError::database)
@@ -490,7 +493,7 @@ impl Db {
         let message = error.message.clone();
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(PhotosError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &job.id, &worker_id)?;
             let retry = retry_delay.is_some();
             let next = retry_delay.map(|delay| iso_after(delay.as_millis() as i128));
@@ -535,7 +538,7 @@ impl Db {
         let sidecar_identity = sidecar.map(|value| value.1);
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(PhotosError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &job.id, &worker_id)?;
             let matched: bool = transaction.query_row(
                 "SELECT EXISTS(SELECT 1 FROM photos_assets a JOIN photos_asset_metadata m ON m.asset_id = a.id WHERE a.storage_pool_id = ? AND a.path = ? AND a.status = 'ready' AND a.source_device = ? AND a.source_inode = ? AND a.source_size_bytes = ? AND a.source_mtime_ns = ? AND a.source_ctime_ns = ? AND a.derivative_schema_version = 1 AND m.schema_version = 2 AND a.sidecar_path IS ? AND a.sidecar_device IS ? AND a.sidecar_inode IS ? AND a.sidecar_size_bytes IS ? AND a.sidecar_mtime_ns IS ? AND a.sidecar_ctime_ns IS ?)",
@@ -662,7 +665,9 @@ impl Db {
         let retryable = error.retryable;
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(PhotosError::database)?;
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &job.id, &worker_id)?;
             record_failed_asset_connection(
                 &transaction,
@@ -764,7 +769,7 @@ impl Db {
         let operation_id = operation_id.to_owned();
         let worker_id = worker_id.map(str::to_owned);
         self.call(move |connection| {
-            let transaction = connection.transaction().map_err(PhotosError::database)?;
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             let job_id: Option<String> = transaction.query_row(
                     "SELECT job_id FROM photos_publish_journal WHERE operation_id = ?",
                     [&operation_id],
@@ -1306,6 +1311,77 @@ mod tests {
                 .unwrap(),
             "current-worker"
         );
+    }
+
+    #[tokio::test]
+    async fn scan_entry_waits_for_a_concurrent_writer_before_checking_the_lease() {
+        for lease_changed in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("db.sqlite");
+            seed_lease_database(&path);
+            let db = Db::open(&path).unwrap();
+            let writer = Connection::open(&path).unwrap();
+            writer
+                .execute_batch(
+                    "CREATE TABLE photos_scan_entries (
+                        job_id TEXT NOT NULL, path TEXT NOT NULL, entry_type TEXT NOT NULL,
+                        status TEXT NOT NULL, parent_path TEXT, updated_at TEXT NOT NULL,
+                        PRIMARY KEY (job_id, path)
+                    );
+                    BEGIN IMMEDIATE;
+                    UPDATE photos_jobs SET updated_at = '2026-01-02T00:00:00Z' WHERE id = 'job-1';",
+                )
+                .unwrap();
+            if lease_changed {
+                writer
+                    .execute(
+                        "UPDATE photos_jobs SET worker_id = 'new-worker' WHERE id = 'job-1'",
+                        [],
+                    )
+                    .unwrap();
+            }
+            let (release, released) = mpsc::channel();
+            let writer_thread = std::thread::spawn(move || {
+                let _ = released.recv_timeout(Duration::from_secs(1));
+                writer.execute_batch("COMMIT").unwrap();
+            });
+
+            let result = db
+                .add_scan_entry(
+                    "job-1",
+                    "Pictures/photo.jpg",
+                    "media",
+                    "Pictures",
+                    "current-worker",
+                )
+                .await;
+            let _ = release.send(());
+            writer_thread.join().unwrap();
+
+            let connection = Connection::open(&path).unwrap();
+            if lease_changed {
+                let error = result.expect_err("the lease must be checked after the writer commits");
+                assert_eq!(error.code, ErrorCode::Database);
+                assert_eq!(
+                    error.message,
+                    "Photos job lease is no longer owned by this worker"
+                );
+                assert_eq!(
+                    scalar(&connection, "SELECT COUNT(*) FROM photos_scan_entries"),
+                    0
+                );
+            } else {
+                result.expect("a temporary writer must not fail directory discovery");
+                let status: String = connection
+                    .query_row(
+                        "SELECT status FROM photos_scan_entries WHERE job_id = 'job-1' AND path = 'Pictures/photo.jpg'",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                assert_eq!(status, "pending");
+            }
+        }
     }
 
     #[tokio::test]

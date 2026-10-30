@@ -35,6 +35,7 @@ import {
   VodPlayerRuntimeError
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
+import { playbackRuntime } from "./playback.js";
 import { resolveMusicPlayerRuntime } from "../lib/music-player.js";
 import { HostdBluetoothManagerClient } from "../lib/bluetooth-manager.js";
 import { bluetoothAudioDevices } from "./bluetooth-transfers.js";
@@ -460,17 +461,22 @@ export function registerMusicRoutes(
     Body: unknown;
   }>("/api/music/player/command", async (request, reply) =>
     guarded(reply, async () => {
-      const command = await buildMusicCommand(request.body, context);
-      return {
-        status: await resolveMusicPlayerRuntime(context).command(command)
-      };
+      const body = object(request.body);
+      const { serviceInstanceId, playbackSessionId, ...legacy } = body;
+      const command = await buildMusicCommand(legacy, context);
+      if (serviceInstanceId !== undefined) {
+        const instance = text(serviceInstanceId, "Service instance");
+        if (playbackSessionId !== null && (typeof playbackSessionId !== "string" || !playbackSessionId)) throw new MusicRequestError("Playback session is required");
+        return { status: (await playbackRuntime(context).command({ type: "guarded", serviceInstanceId: instance, expectedSessionId: playbackSessionId, command: { type: "music", command } })).music };
+      }
+      return { status: await resolveMusicPlayerRuntime(context).command(command) };
     })
   );
   const clients = new Set<() => void>();
-  server.addHook("onClose", async () => {
+  server.addHook("preClose", async () => {
     for (const close of clients) close();
   });
-  server.get("/api/music/events", async (_request, reply) => {
+  server.get<{ Querystring: { libraryOnly?: string } }>("/api/music/events", async (request, reply) => {
     reply.hijack();
     const raw = reply.raw;
     raw.writeHead(200, {
@@ -489,7 +495,7 @@ export function registerMusicRoutes(
       try {
         let player: MusicPlayerStatus | null = null;
         try {
-          player = await resolveMusicPlayerRuntime(context).getStatus();
+          if (request.query.libraryOnly !== "1") player = await resolveMusicPlayerRuntime(context).getStatus();
         } catch {
           /* Library remains usable when the audio engine is offline. */
         }

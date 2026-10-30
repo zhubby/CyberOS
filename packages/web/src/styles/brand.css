@@ -37,7 +37,9 @@ textarea {
   font-family: inherit;
 }
 
-.app-shell :where(button, input, select, textarea, [role="dialog"], [role="menu"], [role="listbox"]) {
+/* Button geometry must also cover portals mounted outside the app shell. */
+:where(button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]),
+.app-shell :where(input, select, textarea, [role="dialog"], [role="menu"], [role="listbox"]) {
   border-radius: 0 !important;
 }
 

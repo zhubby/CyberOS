@@ -74,6 +74,10 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
         "seek" => &["type", "sessionId", "seconds"],
         "seek-relative" => &["type", "sessionId", "seconds"],
         "set-volume" => &["type", "sessionId", "volume"],
+        "set-output" => &["type", "sessionId", "audioDeviceId"],
+        "set-muted" => &["type", "sessionId", "muted"],
+        "set-audio-delay" => &["type", "sessionId", "milliseconds"],
+        "guarded" => &["type", "serviceInstanceId", "expectedSessionId", "command"],
         "set-audio-track" | "set-subtitle-track" => &["type", "sessionId", "trackId"],
         _ => {
             return Err(VodError::new(
@@ -97,6 +101,29 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
 #[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Command {
     Status,
+    Guarded {
+        #[serde(rename = "serviceInstanceId")]
+        service_instance_id: String,
+        #[serde(rename = "expectedSessionId")]
+        expected_session_id: Option<String>,
+        command: Box<Command>,
+    },
+    SetOutput {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(rename = "audioDeviceId")]
+        audio_device_id: Option<String>,
+    },
+    SetMuted {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        muted: bool,
+    },
+    SetAudioDelay {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        milliseconds: f64,
+    },
     Play {
         #[serde(rename = "storagePoolId")]
         storage_pool_id: String,
@@ -183,6 +210,38 @@ impl Command {
     fn validate(&self) -> Result<(), VodError> {
         match self {
             Self::Status => Ok(()),
+            Self::Guarded {
+                service_instance_id,
+                expected_session_id,
+                command,
+            } => {
+                validate_id(service_instance_id)?;
+                if let Some(id) = expected_session_id {
+                    validate_id(id)?;
+                }
+                if matches!(command.as_ref(), Self::Guarded { .. }) {
+                    return Err(VodError::protocol("Nested guarded command"));
+                }
+                command.validate()
+            }
+            Self::SetOutput {
+                session_id,
+                audio_device_id,
+            } => {
+                validate_id(session_id)?;
+                if let Some(id) = audio_device_id {
+                    validate_bluetooth_audio_device_id(id)?;
+                }
+                Ok(())
+            }
+            Self::SetMuted { session_id, .. } => validate_id(session_id),
+            Self::SetAudioDelay {
+                session_id,
+                milliseconds,
+            } => {
+                validate_id(session_id)?;
+                validate_number(*milliseconds, -5000.0, 5000.0, "audio delay")
+            }
             Self::Play {
                 storage_pool_id,
                 relative_path,
@@ -328,6 +387,10 @@ pub enum PlaybackOwner {
 #[cfg_attr(test, ts(export_to = "vod-player.ts", rename = "VodPlayerStatus"))]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
+    #[serde(default)]
+    pub audio_delay_key: Option<String>,
+    #[serde(default)]
+    pub preferences: crate::preferences::PlaybackPreferences,
     #[serde(default)]
     pub owner: Option<PlaybackOwner>,
     #[serde(default)]

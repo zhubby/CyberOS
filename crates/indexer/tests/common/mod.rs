@@ -127,6 +127,10 @@ pub fn create_schema(path: &Path, _storage_pool_path: &Path) {
             [],
         )
         .unwrap();
+    let video = include_str!("../../../../packages/db/src/migrations/video.ts");
+    connection
+        .execute_batch(video.split('`').nth(1).unwrap())
+        .unwrap();
 }
 
 #[allow(dead_code)]

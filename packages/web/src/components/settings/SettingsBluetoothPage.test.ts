@@ -167,7 +167,7 @@ describe("SettingsBluetoothPage", () => {
     expect(html).not.toContain(">Stop scan</span>");
   });
 
-  it("keeps an unavailable configured audio output visible and disabled", () => {
+  it("keeps an unavailable configured audio output visible instead of defaulting it", () => {
     const html = renderToStaticMarkup(createElement(BluetoothAudioOutputField, {
       audioDevices: [],
       defaultAudioDeviceId: "bluetooth:adapter-hci0/AA:BB:CC:DD:EE:FF",
@@ -176,6 +176,7 @@ describe("SettingsBluetoothPage", () => {
     }));
 
     expect(html).toContain("Configured Bluetooth output unavailable");
-    expect(html).toContain('value="bluetooth:adapter-hci0/AA:BB:CC:DD:EE:FF" disabled="" selected=""');
+    expect(html).toContain('class="custom-select-value">Configured Bluetooth output unavailable</span>');
+    expect(html).not.toContain('class="custom-select-value">System default</span>');
   });
 });

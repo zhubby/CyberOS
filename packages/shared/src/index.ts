@@ -14,3 +14,8 @@ export * from "./types.js";
 export * from "./paths.js";
 export * from "./music.js";
 export * from "./music-player.js";
+export * from "./video.js";
+export * from "./playback.js";
+export * from "./playback-client.js";
+export * from "./media-stream.js";
+export * from "./media-stream-client.js";

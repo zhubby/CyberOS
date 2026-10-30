@@ -86,7 +86,7 @@ async function buildCommand(body: VodPlayerCommandBody | undefined, context: Api
     if (body.audioDeviceId !== undefined && body.audioDeviceId !== configuredAudioDeviceId) {
       throw new VodPlayerRuntimeError("Bluetooth audio device is not selected in system settings", 400, "INVALID_COMMAND");
     }
-    const audioDeviceId = body.audioDeviceId ?? configuredAudioDeviceId;
+    const audioDeviceId = body.audioDeviceId;
     const scope = await resolveStoragePoolScope(context.config.paths.dataRoot, context.system, body.storagePoolId);
     const safe = await resolveScopedExistingPath(scope, body.path);
     const metadata = await stat(safe.realPath);

@@ -39,7 +39,7 @@ export interface MusicPlayerStatus {
   updatedAt: string;
 }
 
-type Versioned = { expectedQueueVersion: number };
+type Versioned = { expectedQueueVersion: number; serviceInstanceId?: string; playbackSessionId?: string | null };
 type Takeover = { expectedSessionId?: string };
 export type MusicPlayerCommand = Versioned & (
   | ({ type: "replace"; entries: MusicQueueEntry[] } & Takeover)

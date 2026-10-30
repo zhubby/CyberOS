@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, LoaderCircle, RotateCw, Save, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -134,7 +135,7 @@ export function DockerDaemonSettingsDialog({
         : t("workspace.management.docker.daemon.validation.valid");
 
   return (
-    <div
+    <ModalPortal
       className="management-modal-backdrop docker-daemon-settings-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !submitting) onClose();
@@ -259,7 +260,7 @@ export function DockerDaemonSettingsDialog({
           )}
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 

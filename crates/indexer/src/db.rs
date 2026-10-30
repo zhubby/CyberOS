@@ -926,6 +926,17 @@ impl Db {
         .await
     }
 
+    pub async fn media_match_overrides(
+        &self,
+        source_id: &str,
+    ) -> DbResult<std::collections::HashMap<String, Option<i64>>> {
+        let source = source_id.to_owned();
+        self.call(move |connection| {
+            connection.prepare("SELECT t.source_path,o.tmdb_id FROM media_match_overrides o JOIN media_titles t ON t.id=o.title_id WHERE t.source_id=?")
+                .and_then(|mut s| s.query_map([source], |r| Ok((r.get(0)?,r.get(1)?)))?.collect()).map_err(IndexerError::database)
+        }).await
+    }
+
     pub async fn publish_media_scan(
         &self,
         task: &MediaScanTask,
@@ -1012,6 +1023,13 @@ impl Db {
                     params![title_id, title_id, title_id, title_id, title_id],
                 ).map_err(IndexerError::database)?;
 
+                transaction.execute("INSERT INTO media_title_metadata(title_id,rating,credits_json) VALUES(?,?,?) ON CONFLICT(title_id) DO UPDATE SET rating=COALESCE(excluded.rating,media_title_metadata.rating),credits_json=CASE WHEN excluded.credits_json='[]' THEN media_title_metadata.credits_json ELSE excluded.credits_json END",params![title_id,entry.title.rating,serde_json::to_string(&entry.title.credits).map_err(IndexerError::database)?]).map_err(IndexerError::database)?;
+                if let Some((external_id,name)) = &entry.title.collection {
+                    let collection_id = format!("tmdb-{external_id}");
+                    transaction.execute("INSERT INTO media_collections(id,name,kind,external_id) VALUES(?,?,'tmdb',?) ON CONFLICT(external_id) DO UPDATE SET name=excluded.name",params![collection_id,name,external_id]).map_err(IndexerError::database)?;
+                    transaction.execute("DELETE FROM media_collection_members WHERE title_id=? AND collection_id IN(SELECT id FROM media_collections WHERE kind='tmdb' AND external_id<>?)",params![title_id,external_id]).map_err(IndexerError::database)?;
+                    transaction.execute("INSERT OR IGNORE INTO media_collection_members(collection_id,title_id,position) VALUES(?,?,COALESCE(?,0))",params![collection_id,title_id,entry.title.year]).map_err(IndexerError::database)?;
+                }
                 let mut season_id = None;
                 let mut episode_id = None;
                 if let (Some(season), Some(episode)) = (&entry.season, &entry.episode) {
@@ -1063,9 +1081,9 @@ impl Db {
                      ON CONFLICT(source_id, relative_path) DO UPDATE SET
                        title_id = excluded.title_id, episode_id = excluded.episode_id,
                        name = excluded.name, mime_type = excluded.mime_type, size_bytes = excluded.size_bytes,
-                       mtime_ms = excluded.mtime_ms, duration_seconds = excluded.duration_seconds,
-                       container = excluded.container, video_codec = excluded.video_codec,
-                       audio_codec = excluded.audio_codec, scan_generation = excluded.scan_generation,
+                       mtime_ms = excluded.mtime_ms, duration_seconds = CASE WHEN media_files.size_bytes=excluded.size_bytes AND media_files.mtime_ms=excluded.mtime_ms THEN COALESCE(excluded.duration_seconds,media_files.duration_seconds) ELSE excluded.duration_seconds END,
+                       container = CASE WHEN media_files.size_bytes=excluded.size_bytes AND media_files.mtime_ms=excluded.mtime_ms THEN COALESCE(excluded.container,media_files.container) ELSE excluded.container END, video_codec = CASE WHEN media_files.size_bytes=excluded.size_bytes AND media_files.mtime_ms=excluded.mtime_ms THEN COALESCE(excluded.video_codec,media_files.video_codec) ELSE excluded.video_codec END,
+                       audio_codec = CASE WHEN media_files.size_bytes=excluded.size_bytes AND media_files.mtime_ms=excluded.mtime_ms THEN COALESCE(excluded.audio_codec,media_files.audio_codec) ELSE excluded.audio_codec END, scan_generation = excluded.scan_generation,
                        updated_at = excluded.updated_at",
                     params![
                         file_id, task.source_id, title_id, episode_id, task.storage_pool_id,

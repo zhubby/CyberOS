@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import {
   useCallback,
   useEffect,
@@ -227,7 +228,7 @@ export function SettingsOperationsPage({
       </footer>
 
       {confirmOpen ? (
-        <div className="settings-ops-confirm-backdrop" role="presentation" onMouseDown={closeConfirmation}>
+        <ModalPortal className="settings-ops-confirm-backdrop" role="presentation" onMouseDown={closeConfirmation}>
           <section
             className="settings-ops-confirm-dialog"
             role="alertdialog"
@@ -260,7 +261,7 @@ export function SettingsOperationsPage({
               </button>
             </footer>
           </section>
-        </div>
+        </ModalPortal>
       ) : null}
     </div>
   );

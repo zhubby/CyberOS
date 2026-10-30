@@ -56,3 +56,4 @@ export * from "./repositories/terminal-tabs.js";
 export * from "./repositories/transcript.js";
 
 export * from "./repositories/music.js";
+export * from "./repositories/video-library.js";

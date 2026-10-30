@@ -1,5 +1,7 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { FormEvent, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { SettingsSecretField } from "./SettingsSecretField.js";
 import {
   AlertTriangle,
   Activity,
@@ -308,7 +310,7 @@ export function SettingsModal({
   }
 
   return (
-    <div className="settings-backdrop" role="presentation" onMouseDown={onClose}>
+    <ModalPortal className="settings-backdrop" role="presentation" onMouseDown={onClose}>
       <section
         ref={dialogRef}
         className="settings-modal settings-center"
@@ -455,40 +457,18 @@ export function SettingsModal({
                     </header>
 
                     <fieldset className="settings-field-grid settings-field-grid-single" disabled={loading || saving}>
-                      <label className="settings-field-wide">
-                        <span>{t("settings.modelProvider.apiKey")}</span>
-                        <input
-                          type="password"
-                          value={form.apiKey}
-                          onChange={(event) =>
-                            onFormChange({
-                              ...form,
-                              apiKey: event.target.value,
-                              clearApiKey: false
-                            })
-                          }
-                          placeholder={
-                            settings?.apiKeyConfigured
-                              ? t("settings.modelProvider.configuredPlaceholder")
-                              : t("settings.modelProvider.notConfiguredPlaceholder")
-                          }
-                        />
-                      </label>
-
-                      <label className="settings-check settings-field-wide">
-                        <input
-                          type="checkbox"
-                          checked={form.clearApiKey}
-                          onChange={(event) =>
-                            onFormChange({
-                              ...form,
-                              apiKey: event.target.checked ? "" : form.apiKey,
-                              clearApiKey: event.target.checked
-                            })
-                          }
-                        />
-                        <span>{t("settings.modelProvider.clearApiKey")}</span>
-                      </label>
+                      <SettingsSecretField
+                        id="model-provider-api-key"
+                        label={t("settings.modelProvider.apiKey")}
+                        value={form.apiKey}
+                        configured={settings?.apiKeyConfigured ?? false}
+                        clearSaved={form.clearApiKey}
+                        placeholder={settings?.apiKeyConfigured
+                          ? t("settings.modelProvider.configuredPlaceholder")
+                          : t("settings.modelProvider.notConfiguredPlaceholder")}
+                        clearLabel={t("settings.modelProvider.clearApiKey")}
+                        onChange={(apiKey, clearApiKey) => onFormChange({ ...form, apiKey, clearApiKey })}
+                      />
                     </fieldset>
 
                     <div className="settings-secret-note">
@@ -667,7 +647,7 @@ export function SettingsModal({
 
         </section>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -1395,19 +1375,19 @@ export function SettingsDownloadsPage({
               <fieldset className="settings-download-control" disabled={loading || saving}>
                 <label className="settings-preference-field">
                   <span>{t("settings.downloads.concurrencyField")}</span>
-                  <select
+                  <CustomSelect
                     value={String(draft.concurrency)}
-                    onChange={(event) => setDraft((current) => ({
-                      ...current,
-                      concurrency: Number(event.target.value)
+                    ariaLabel={t("settings.downloads.concurrencyField")}
+                    disabled={loading || saving}
+                    options={[1, 2, 3].map((value) => ({
+                      value: String(value),
+                      label: t("settings.downloads.connectionCount", { count: value })
                     }))}
-                  >
-                    {[1, 2, 3].map((value) => (
-                      <option key={value} value={value}>
-                        {t("settings.downloads.connectionCount", { count: value })}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setDraft((current) => ({
+                      ...current,
+                      concurrency: Number(value)
+                    }))}
+                  />
                   <small>{t("settings.downloads.concurrencyHelp")}</small>
                 </label>
                 <div className="settings-download-visual" aria-hidden="true">

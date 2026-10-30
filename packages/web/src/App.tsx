@@ -1,6 +1,8 @@
 import { getMusicPlayer } from "./lib/music-api.js";
 import { MusicTakeoverDialog, MusicProvider, useMusicRemote } from "./components/music/MusicProvider.js";
-import { MusicPlayer } from "./components/music/MusicPlayer.js";
+import { PlaybackBar } from "./components/playback/PlaybackBar.js";
+import { PlaybackProvider, usePlayback } from "./components/playback/PlaybackProvider.js";
+import { BrowserPlayer } from "./components/playback/BrowserPlayer.js";
 import { FormEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X } from "lucide-react";
@@ -228,11 +230,12 @@ function upsertToolActivity(
 }
 
 export function App() {
-  return <MusicProvider><AppContent /></MusicProvider>;
+  return <PlaybackProvider><MusicProvider><AppContent /></MusicProvider></PlaybackProvider>;
 }
 
 function AppContent() {
   const musicRemote = useMusicRemote();
+  const playback = usePlayback();
   const [videoTakeover, setVideoTakeover] = useState<string | null>(null);
   const { t } = useTranslation();
   const [selectedStoragePoolId, setSelectedStoragePoolId] = useState("");
@@ -2581,7 +2584,7 @@ function AppContent() {
 
   return (
     <main
-      className={`app-shell${resizing ? " is-resizing" : ""}${musicRemote.status && (musicRemote.status.queue.length > 0 || musicRemote.status.owner === "music") ? " has-music-player" : ""}`}
+      className={`app-shell${resizing ? " is-resizing" : ""}${!playback.fullscreen && (playback.browser || playback.nas?.owner || musicRemote.status?.queue.length) ? " has-music-player" : ""}`}
       style={appStyle}
     >
       <div className="mobile-tabs">
@@ -2874,7 +2877,8 @@ function AppContent() {
         />
       ) : null}
       {videoTakeover ? <MusicTakeoverDialog title={t("music.takeoverTitle")} body={t("music.takeoverMusic")} busy={vodPlayerBusy} onCancel={() => setVideoTakeover(null)} onConfirm={() => void playSelectedOnVodPlayer(videoTakeover)} /> : null}
-      <MusicPlayer onOpenBluetoothSettings={() => void openSettings("bluetooth")} />
+      <PlaybackBar onOpenBluetoothSettings={() => void openSettings("bluetooth")} />
+      <BrowserPlayer />
     </main>
   );
 }

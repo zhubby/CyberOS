@@ -731,6 +731,11 @@ export function setMediaMatchOverride(
   return getMediaTitle(db, input.titleId);
 }
 
+export function getMediaTitleSummary(db: CyberOsDatabase, id: string, profileId = DEFAULT_PROFILE_ID): MediaTitleSummary | null {
+  const row = db.prepare(`${titleSelect(profileId)} WHERE t.id = ?`).get(id) as MediaTitleRow | undefined;
+  return row ? mapMediaTitle(row) : null;
+}
+
 export function getMediaTitle(db: CyberOsDatabase, id: string, profileId = DEFAULT_PROFILE_ID): MediaTitleDetail | null {
   const row = db.prepare(`${titleSelect(profileId)} WHERE t.id = ?`).get(id) as MediaTitleRow | undefined;
   if (!row) return null;

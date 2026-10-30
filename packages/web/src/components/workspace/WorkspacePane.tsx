@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -61,6 +62,7 @@ import {
 import { WorkspaceManagementPanel } from "./WorkspaceManagementPanel.js";
 import { LocalTerminalPanel } from "./LocalTerminalPanel.js";
 import { HttpDownloaderPanel } from "./HttpDownloaderPanel.js";
+import { VideoLibraryPanel } from "../video/VideoLibraryPanel.js";
 import { MusicLibraryPanel } from "../music/MusicLibraryPanel.js";
 import { PhotoLibraryPanel } from "./PhotoLibraryPanel.js";
 import { FileListSkeleton, SkeletonBlock } from "./ManagementSkeleton.js";
@@ -85,6 +87,7 @@ const WORKSPACE_PANELS = [
     shortLabelKey: "workspace.panels.photosShort",
     Icon: Images
   },
+  { id: "video", labelKey: "workspace.panels.video", shortLabelKey: "workspace.panels.videoShort", Icon: MonitorPlay },
   { id: "music", labelKey: "workspace.panels.music", shortLabelKey: "workspace.panels.musicShort", Icon: Music2 },
   {
     id: "terminal",
@@ -573,7 +576,7 @@ export function WorkspacePane({
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
   onNotifyWarning: (message: string | null) => void;
-  onOpenDeviceSettings: (section: "wireless" | "bluetooth") => void;
+  onOpenDeviceSettings: (section: "wireless" | "bluetooth" | "media") => void;
   onOpenPhotoSettings: () => void;
   onClosePreview: () => void;
   onRollback: (operation: FileOperation) => void;
@@ -1756,6 +1759,8 @@ export function WorkspacePane({
               onOpenSettings={onOpenPhotoSettings}
               configurationUpdatedAt={photoLibrarySettingsUpdatedAt}
             />
+          ) : activePanel === "video" ? (
+            <VideoLibraryPanel onManage={() => onOpenDeviceSettings("media")} />
           ) : activePanel === "music" ? (
             <MusicLibraryPanel pools={storagePools} locale={locale} />
           ) : activePanel === "monitoring" ? (
@@ -1875,7 +1880,7 @@ export function WorkspacePane({
       ) : null}
 
       {createFolderOpen ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <form
             className="file-action-dialog"
             role="dialog"
@@ -1910,11 +1915,11 @@ export function WorkspacePane({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {renameEntry ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <form className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="file-rename-title" onSubmit={submitRename}>
             <header>
               <span className="eyebrow">{t("workspace.actions.rename")}</span>
@@ -1947,11 +1952,11 @@ export function WorkspacePane({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {deleteState ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <section className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="file-delete-title">
             <header>
               <span className="eyebrow">{t("workspace.actions.delete")}</span>
@@ -1970,11 +1975,11 @@ export function WorkspacePane({
               </button>
             </footer>
           </section>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {transferState ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <form
             className="file-action-dialog transfer-dialog"
             role="dialog"
@@ -2022,7 +2027,7 @@ export function WorkspacePane({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {batchMoveEntries && selectedStoragePool ? (

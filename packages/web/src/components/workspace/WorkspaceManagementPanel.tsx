@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -736,7 +737,7 @@ function VirtualMachineManagementPanel({
         />
       ) : null}
       {createOpen ? (
-        <div className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setCreateOpen(false)}>
+        <ModalPortal className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setCreateOpen(false)}>
           <form className="management-dialog vm-create-dialog" onSubmit={(event) => void createVm(event)} role="dialog" aria-modal="true" aria-labelledby="vm-create-title">
             <header className="vm-create-dialog-header">
               <div className="vm-create-heading">
@@ -816,7 +817,7 @@ function VirtualMachineManagementPanel({
             </div>
             <footer className="vm-create-dialog-footer"><span>{t("workspace.management.virtualMachines.stepCounter", { current: createStep, total: 4 })} · {form.name || t("workspace.management.virtualMachines.createReviewPlaceholder")}</span><div><button type="button" onClick={() => setCreateOpen(false)} disabled={pendingAction !== null}>{t("common.actions.cancel")}</button>{createStep > 1 ? <button type="button" onClick={retreatWizard} disabled={pendingAction !== null}><ChevronLeft size={14} />{t("workspace.management.virtualMachines.previous")}</button> : null}{createStep < 4 ? <button type="button" className="vm-create-submit" onClick={(event) => { event.preventDefault(); advanceWizard(); }}><span>{t("workspace.management.virtualMachines.next")}</span><ChevronRight size={14} /></button> : <button type="submit" className="vm-create-submit" disabled={pendingAction !== null} aria-busy={pendingAction === `create:${form.name.trim()}` || undefined}>{pendingAction === `create:${form.name.trim()}` ? <><LoaderCircle className="spin" size={14} />{t("workspace.management.virtualMachines.creating")}</> : <><Settings2 size={14} />{t("workspace.management.virtualMachines.createNow")}</>}</button>}</div></footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
       {isoPickerOpen ? (
         <StorageFilePickerDialog
@@ -876,7 +877,7 @@ export function VmInstanceDetailsDialog({
   }, []);
 
   return (
-    <div
+    <ModalPortal
       className="management-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
@@ -1020,7 +1021,7 @@ export function VmInstanceDetailsDialog({
           />
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -1803,7 +1804,7 @@ export function DockerContainerDetailsDialog({
   }
 
   return (
-    <div className="management-modal-backdrop" role="presentation">
+    <ModalPortal className="management-modal-backdrop" role="presentation">
       <section className="management-modal docker-container-detail-modal" role="dialog" aria-modal="true" aria-labelledby="docker-container-detail-title">
         <header className="docker-container-detail-header">
           <div className="docker-container-detail-heading">
@@ -1982,7 +1983,7 @@ export function DockerContainerDetailsDialog({
           </div>
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -2019,7 +2020,7 @@ function DockerLogsDialog({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="management-modal-backdrop" role="presentation">
+    <ModalPortal className="management-modal-backdrop" role="presentation">
       <section className="management-modal" role="dialog" aria-modal="true" aria-labelledby="docker-logs-title">
         <header>
           <div>
@@ -2038,7 +2039,7 @@ function DockerLogsDialog({
               : state.content || t("workspace.management.docker.noLogs")}
         </pre>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -2161,7 +2162,7 @@ function DockerConsoleDialog({ session, onClose, kind = "docker" }: { session: D
   }, [session.websocketUrl]);
 
   return (
-    <div className="management-modal-backdrop" role="presentation">
+    <ModalPortal className="management-modal-backdrop" role="presentation">
       <section className="management-modal management-console-modal" role="dialog" aria-modal="true" aria-labelledby="management-console-title">
         <header>
           <div>
@@ -2174,7 +2175,7 @@ function DockerConsoleDialog({ session, onClose, kind = "docker" }: { session: D
         </header>
         <div ref={terminalRef} className="management-terminal" />
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 

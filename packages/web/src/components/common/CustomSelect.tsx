@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 export interface CustomSelectOption<T extends string = string> {
@@ -70,7 +70,9 @@ export function CustomSelect<T extends string = string>({
   const listboxId = `${triggerId}-listbox`;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [menuLayout, setMenuLayout] = useState({ above: false, maxHeight: 240 });
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
   const selectedValueSet = selectedValues ? new Set(selectedValues) : new Set([value]);
@@ -89,7 +91,57 @@ export function CustomSelect<T extends string = string>({
 
   useEffect(() => {
     setActiveIndex(fallbackActiveIndex);
-  }, [fallbackActiveIndex, open]);
+  }, [fallbackActiveIndex]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    function updateLayout() {
+      const trigger = triggerRef.current;
+      const menu = menuRef.current;
+      if (!trigger || !menu) return;
+      const rect = trigger.getBoundingClientRect();
+      let top = 0;
+      let bottom = window.innerHeight;
+      for (let parent = containerRef.current?.parentElement; parent; parent = parent.parentElement) {
+        if (!/^(auto|scroll|hidden|clip)$/.test(getComputedStyle(parent).overflowY)) continue;
+        const bounds = parent.getBoundingClientRect();
+        top = Math.max(top, bounds.top + parent.clientTop);
+        bottom = Math.min(bottom, bounds.top + parent.clientTop + parent.clientHeight);
+      }
+      const below = Math.max(0, bottom - rect.bottom - 6);
+      const above = Math.max(0, rect.top - top - 6);
+      const required = Math.min(240, menu.scrollHeight + menu.offsetHeight - menu.clientHeight);
+      const placeAbove = below < required && above > below;
+      const maxHeight = Math.min(240, placeAbove ? above : below);
+      setMenuLayout((current) => current.above === placeAbove && current.maxHeight === maxHeight
+        ? current : { above: placeAbove, maxHeight });
+    }
+
+    function handleScroll(event: Event) {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      updateLayout();
+    }
+
+    updateLayout();
+    window.addEventListener("resize", updateLayout);
+    document.addEventListener("scroll", handleScroll, true);
+    return () => {
+      window.removeEventListener("resize", updateLayout);
+      document.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [open, options]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const menu = menuRef.current;
+    const option = menu?.children[activeIndex];
+    if (!menu || !(option instanceof HTMLElement)) return;
+    if (option.offsetTop < menu.scrollTop) menu.scrollTop = option.offsetTop;
+    else if (option.offsetTop + option.offsetHeight > menu.scrollTop + menu.clientHeight) {
+      menu.scrollTop = option.offsetTop + option.offsetHeight - menu.clientHeight;
+    }
+  }, [activeIndex, open, menuLayout]);
 
   useEffect(() => {
     if (!open) {
@@ -129,14 +181,14 @@ export function CustomSelect<T extends string = string>({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);
-      setActiveIndex((currentIndex) => nextEnabledIndex(options, currentIndex, 1));
+      setActiveIndex((currentIndex) => nextEnabledIndex(options, open ? currentIndex : selectedIndex, 1));
       return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
       setOpen(true);
-      setActiveIndex((currentIndex) => nextEnabledIndex(options, currentIndex, -1));
+      setActiveIndex((currentIndex) => nextEnabledIndex(options, open ? currentIndex : selectedIndex, -1));
       return;
     }
 
@@ -159,6 +211,7 @@ export function CustomSelect<T extends string = string>({
       if (open) {
         selectIndex(activeIndex);
       } else {
+        setActiveIndex(fallbackActiveIndex);
         setOpen(true);
       }
       return;
@@ -193,7 +246,10 @@ export function CustomSelect<T extends string = string>({
         aria-controls={open ? listboxId : undefined}
         aria-activedescendant={activeOptionId}
         disabled={disabled || options.length === 0}
-        onClick={() => setOpen((currentOpen) => !currentOpen)}
+        onClick={() => {
+          setActiveIndex(fallbackActiveIndex);
+          setOpen((currentOpen) => !currentOpen);
+        }}
         onKeyDown={handleTriggerKeyDown}
       >
         <span className="custom-select-value">{selectedOption?.label ?? placeholder}</span>
@@ -201,7 +257,18 @@ export function CustomSelect<T extends string = string>({
       </button>
 
       {open ? (
-        <div id={listboxId} className="custom-select-menu" role="listbox" aria-labelledby={triggerId}>
+        <div
+          ref={menuRef}
+          id={listboxId}
+          className="custom-select-menu"
+          role="listbox"
+          aria-labelledby={triggerId}
+          style={{
+            top: menuLayout.above ? "auto" : undefined,
+            bottom: menuLayout.above ? "calc(100% + 6px)" : undefined,
+            maxHeight: menuLayout.maxHeight
+          }}
+        >
           {options.map((option, index) => {
             const selected = selectedValueSet.has(option.value);
             const active = index === activeIndex;
@@ -223,7 +290,7 @@ export function CustomSelect<T extends string = string>({
                 aria-selected={selected}
                 aria-disabled={option.disabled}
                 onPointerDown={(event) => event.preventDefault()}
-                onMouseEnter={() => {
+                onPointerMove={() => {
                   if (!option.disabled) {
                     setActiveIndex(index);
                   }

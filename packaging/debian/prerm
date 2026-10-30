@@ -3,8 +3,8 @@ set -e
 
 if [ "$1" = "remove" ] && command -v systemctl >/dev/null 2>&1; then
   /usr/lib/cyberos/scripts/cyberos-tv-mode disable
-  systemctl stop cyberos-alerter.service cyberos-monitor.service cyberos-host-accessd.service cyberos-hostd.service cyberos-terminald.service cyberos-vod-player.service cyberos-bluetoothd.service cyberos-api.service cyberos-photos.service cyberos-downloader.service 'cyberos-worker@*.service' cyberos-indexer.service cyberos-health.service cyberos-maintenance.service 2>/dev/null || true
-  systemctl disable cyberos-alerter.service cyberos-monitor.service cyberos-host-accessd.service cyberos-hostd.service cyberos-terminald.service cyberos-vod-player.service cyberos-bluetoothd.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-indexer.service cyberos-health.timer cyberos-maintenance.timer 2>/dev/null || true
+  systemctl stop cyberos-alerter.service cyberos-monitor.service cyberos-host-accessd.service cyberos-hostd.service cyberos-terminald.service cyberos-vod-player.service cyberos-media-streamer.service cyberos-bluetoothd.service cyberos-api.service cyberos-photos.service cyberos-downloader.service 'cyberos-worker@*.service' cyberos-indexer.service cyberos-health.service cyberos-maintenance.service 2>/dev/null || true
+  systemctl disable cyberos-alerter.service cyberos-monitor.service cyberos-host-accessd.service cyberos-hostd.service cyberos-terminald.service cyberos-vod-player.service cyberos-media-streamer.service cyberos-bluetoothd.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-indexer.service cyberos-health.timer cyberos-maintenance.timer 2>/dev/null || true
   if command -v tmux >/dev/null 2>&1; then
     runuser -u cyberos -- tmux -S /home/cyberos/.cyberos/tmux.sock kill-server 2>/dev/null || true
   fi

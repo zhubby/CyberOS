@@ -284,6 +284,7 @@ impl Controller {
                     }
                     self.status.audio_device_id = self.status.music.audio_device_id.clone();
                     self.status.effective_audio_device_id = None;
+                    self.resolved_audio_device = None;
                     if self.desired.is_some()
                         && let Err(error) = self.attempt_start().await
                     {
@@ -352,6 +353,9 @@ impl Controller {
         mut position: f64,
         mut reset_event: bool,
     ) {
+        let pinned_output = (self.status.owner == Some(PlaybackOwner::Music))
+            .then(|| self.resolved_audio_device.clone())
+            .flatten();
         self.record_music_listening();
         if self.status.owner == Some(PlaybackOwner::Video) {
             self.save_progress();
@@ -391,6 +395,7 @@ impl Controller {
             self.status.state = PlayerState::Starting;
             self.status.duration_seconds = entry.duration_seconds;
             self.copy_desired_to_status();
+            self.resolved_audio_device = pinned_output.clone();
             self.bump_music_version();
             self.publish();
             match self.attempt_start().await {

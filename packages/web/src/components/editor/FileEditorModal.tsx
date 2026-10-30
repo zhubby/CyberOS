@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { AlertTriangle, CheckCircle2, FilePenLine, LoaderCircle, RotateCcw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -168,7 +169,7 @@ export function FileEditorModal({
   }
 
   return (
-    <div className="editor-backdrop">
+    <ModalPortal className="editor-backdrop">
       <section className="editor-modal" role="dialog" aria-modal="true" aria-labelledby="file-editor-title">
         <header className="editor-header">
           <div>
@@ -220,7 +221,7 @@ export function FileEditorModal({
           ) : null}
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 

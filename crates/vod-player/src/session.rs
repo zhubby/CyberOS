@@ -25,6 +25,10 @@ pub struct PersistedSession {
     pub audio_device_id: Option<String>,
     #[serde(default)]
     pub media_file_id: Option<String>,
+    #[serde(default)]
+    pub selected_audio_track_id: Option<i64>,
+    #[serde(default)]
+    pub selected_subtitle_track_id: Option<i64>,
     pub identity: FileIdentity,
     pub updated_at: String,
 }
@@ -148,6 +152,8 @@ mod tests {
             desired_paused: true,
             audio_device_id: None,
             media_file_id: None,
+            selected_audio_track_id: None,
+            selected_subtitle_track_id: None,
             identity: FileIdentity {
                 device: 1,
                 inode: 2,

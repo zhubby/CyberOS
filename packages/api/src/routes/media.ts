@@ -5,13 +5,12 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   createMediaSource,
+  getNextVideoFile, createMediaCollection, deleteMediaCollection, updateMediaCollection, listMediaCollections, getVideoHome, getVideoTitle, listVideoTitles, saveMediaState, saveEpisodeWatched,
   defaultMediaLibrarySettings,
   deleteMediaSource,
   enqueueMediaScan,
-  getBluetoothSettings,
   getMediaArtwork,
   getMediaFile,
-  getMediaHome,
   getMediaLibrarySettings,
   getMediaLibraryStatus,
   getMediaSource,
@@ -29,10 +28,12 @@ import { inferMimeType } from "@cyberos/storage-tools";
 import {
   type MediaMatchCandidate,
   type MediaMatchStatus,
+  type MediaPersonalState, type VideoQuery,
   type MediaSourceKind
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { searchTmdbCandidates, type TmdbCandidateSearchInput } from "../lib/tmdb-client.js";
+import { playbackRuntime } from "./playback.js";
 import { resolveVodPlayerRuntime } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
@@ -48,6 +49,8 @@ export function registerMediaRoutes(
   context: ApiRouteContext,
   dependencies: MediaRouteDependencies = {}
 ): void {
+  const eventClients = new Set<() => void>();
+  server.addHook("preClose", async () => { for (const close of eventClients) close(); });
   const { db } = context;
   const dataRoot = context.config.paths.dataRoot;
   const searchTmdb = dependencies.searchTmdb ?? searchTmdbCandidates;
@@ -141,11 +144,26 @@ export function registerMediaRoutes(
     scans: listMediaScans(db, request.query.sourceId, numericLimit(request.query.limit, 20, 100))
   }));
 
+  server.get<{ Params: { id: string } }>("/api/media/files/:id/next", async request => ({ next: getNextVideoFile(db, request.params.id) }));
   server.get("/api/media/status", async () => ({ status: getMediaLibraryStatus(db) }));
-  server.get("/api/media/home", async () => getMediaHome(db, DEFAULT_PROFILE_ID));
+  server.get("/api/media/home", async () => getVideoHome(db));
+  server.patch<{ Params: { id: string }; Body: Partial<MediaPersonalState> }>("/api/media/titles/:id/state", async (request, reply) => {
+    try { return { state: saveMediaState(db, request.params.id, request.body) }; } catch (e) { sendMediaError(reply, e, "Invalid state"); }
+  });
+  server.patch<{ Params: { id: string }; Body: { watched: boolean } }>("/api/media/episodes/:id/state", async (request, reply) => {
+    try { saveEpisodeWatched(db, request.params.id, request.body.watched); return { saved: true }; } catch (e) { sendMediaError(reply, e, "Invalid episode state"); }
+  });
+  server.get("/api/media/collections", async () => ({ collections: listMediaCollections(db) }));
+  server.post<{ Body: { name: string } }>("/api/media/collections", async (request, reply) => {
+    try { return reply.status(201).send({ collection: createMediaCollection(db, request.body.name) }); } catch (e) { sendMediaError(reply, e, "Invalid collection"); }
+  });
+  server.patch<{ Params: { id: string }; Body: { name?: string; titleIds?: string[] } }>("/api/media/collections/:id", async (request, reply) => {
+    try { updateMediaCollection(db, request.params.id, request.body); return { saved: true }; } catch (e) { sendMediaError(reply, e, "Invalid collection"); }
+  });
+  server.delete<{ Params: { id: string } }>("/api/media/collections/:id", async (request, reply) => { deleteMediaCollection(db, request.params.id); return reply.status(204).send(); });
 
   server.get<{
-    Querystring: { kind?: string; matchStatus?: string; query?: string; limit?: string };
+    Querystring: Record<string, string | undefined>;
   }>("/api/media/titles", async (request, reply) => {
     if (request.query.kind !== undefined && request.query.kind !== "movie" && request.query.kind !== "series") {
       return reply.status(400).send({ error: "Media kind must be movie or series" });
@@ -153,20 +171,21 @@ export function registerMediaRoutes(
     if (request.query.matchStatus !== undefined && !isMediaMatchStatus(request.query.matchStatus)) {
       return reply.status(400).send({ error: "Media match status is invalid" });
     }
-    reply.send({
-      titles: listMediaTitles(db, {
-        ...(request.query.kind ? { kind: request.query.kind } : {}),
-        ...(request.query.matchStatus ? { matchStatus: request.query.matchStatus } : {}),
-        ...(request.query.query ? { query: request.query.query } : {}),
-        limit: numericLimit(request.query.limit, 40, 100),
-        profileId: DEFAULT_PROFILE_ID
-      }),
-      nextCursor: null
-    });
+    try {
+      if (request.query.matchStatus) return reply.send({ titles: listMediaTitles(db, { matchStatus: request.query.matchStatus as MediaMatchStatus, ...(request.query.query === undefined ? {} : { query: request.query.query }), limit: numericLimit(request.query.limit, 40, 100) }), nextCursor: null });
+      const q: VideoQuery = {};
+      for (const key of ["query", "sourceId", "genre", "collectionId", "cursor"] as const) if (request.query[key]) q[key] = request.query[key];
+      if (request.query.kind) q.kind = request.query.kind as NonNullable<VideoQuery["kind"]>;
+      if (request.query.sort) q.sort = request.query.sort as NonNullable<VideoQuery["sort"]>;
+      for (const key of ["favorite", "watchlist", "watched"] as const) if (request.query[key] !== undefined) { if (!["true", "false"].includes(request.query[key]!)) throw new Error("Invalid boolean filter"); q[key] = request.query[key] === "true"; }
+      if (request.query.year) { q.year = Number(request.query.year); if (!Number.isInteger(q.year)) throw new Error("Invalid year"); }
+      q.limit = numericLimit(request.query.limit, 40, 100);
+      return reply.send(listVideoTitles(db, q));
+    } catch (e) { sendMediaError(reply, e, "Invalid library query"); }
   });
 
   server.get<{ Params: { id: string } }>("/api/media/titles/:id", async (request, reply) => {
-    const title = getMediaTitle(db, request.params.id);
+    const title = getVideoTitle(db, request.params.id);
     if (!title) return reply.status(404).send({ error: "Media title not found" });
     reply.send({ title });
   });
@@ -224,6 +243,7 @@ export function registerMediaRoutes(
         ...(request.body?.excluded === undefined ? {} : { excluded: request.body.excluded })
       });
       if (!title) return reply.status(404).send({ error: "Media title not found" });
+      enqueueMediaScan(db, title.sourceId);
       reply.send({ title });
     } catch (error) {
       sendMediaError(reply, error, "Media match is invalid");
@@ -252,7 +272,7 @@ export function registerMediaRoutes(
 
   server.post<{
     Params: { id: string };
-    Body: { startPositionSeconds?: number; expectedSessionId?: string };
+    Body: { startPositionSeconds?: number; expectedSessionId?: string; serviceInstanceId?: string; playbackSessionId?: string | null };
   }>("/api/media/files/:id/play", async (request, reply) => {
     try {
       const file = getMediaFile(db, request.params.id);
@@ -268,16 +288,18 @@ export function registerMediaRoutes(
       const scope = await resolveStoragePoolScope(dataRoot, context.system, file.storagePoolId);
       const safe = await resolveScopedExistingPath(scope, file.relativePath);
       if (!(await stat(safe.realPath)).isFile()) return reply.status(404).send({ error: "Media file not found" });
-      const audioDeviceId = getBluetoothSettings(db)?.defaultAudioDeviceId ?? null;
-      const status = await resolveVodPlayerRuntime(context).command({
-        type: "play",
+      const command = {
+        type: "play" as const,
         storagePoolId: file.storagePoolId,
         relativePath: safe.relativePath,
         mediaFileId: file.id,
         ...(expectedSessionId === undefined ? {} : { expectedSessionId }),
-        ...(audioDeviceId ? { audioDeviceId } : {}),
         ...(startPositionSeconds === undefined ? {} : { startPositionSeconds })
-      });
+      };
+      const instance = request.body?.serviceInstanceId;
+      const expected = request.body?.playbackSessionId;
+      if (instance !== undefined && (typeof instance !== "string" || !instance || (expected !== null && (typeof expected !== "string" || !expected)))) return reply.status(400).send({ error: "Playback guard is invalid" });
+      const status = instance ? (await playbackRuntime(context).command({ type: "guarded", serviceInstanceId: instance, expectedSessionId: expected ?? null, command })).video : await resolveVodPlayerRuntime(context).command(command);
       reply.send({ status });
     } catch (error) {
       sendMediaError(reply, error, "Media playback could not start");
@@ -292,7 +314,7 @@ export function registerMediaRoutes(
     }
   });
 
-  server.get("/api/media/events", async (request, reply) => {
+  server.get("/api/media/events", async (_request, reply) => {
     reply.hijack();
     const raw = reply.raw;
     raw.writeHead(200, {
@@ -308,7 +330,11 @@ export function registerMediaRoutes(
       const snapshot = JSON.stringify({
         status: getMediaLibraryStatus(db),
         sources: listMediaSources(db),
-        scans: listMediaScans(db, undefined, 20)
+        scans: listMediaScans(db, undefined, 20),
+        personal: db.prepare("SELECT MAX(updated_at) AS stamp,COUNT(*) AS count FROM media_personal_state").get(),
+        episodes: db.prepare("SELECT MAX(updated_at) AS stamp,COUNT(*) AS count FROM media_episode_state").get(),
+        progress: db.prepare("SELECT MAX(updated_at) AS stamp,COUNT(*) AS count FROM media_progress").get(),
+        collections: listMediaCollections(db)
       });
       if (snapshot === previous) return;
       previous = snapshot;
@@ -317,7 +343,9 @@ export function registerMediaRoutes(
     };
     flush();
     const timer = setInterval(flush, 1_000);
-    request.raw.on("close", () => clearInterval(timer));
+    timer.unref();
+    const close = () => { clearInterval(timer); eventClients.delete(close); if (!raw.destroyed) raw.end(); };
+    eventClients.add(close); raw.once("close", close);
   });
 }
 

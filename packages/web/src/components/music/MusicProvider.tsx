@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import {
   createContext,
   useCallback,
@@ -16,6 +17,7 @@ import {
   sendMusicCommand,
 } from "../../lib/music-api.js";
 import { acceptMusicSnapshot } from "../../lib/music-state.js";
+import { useOptionalPlayback } from "../playback/PlaybackProvider.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
 
 type WithoutVersion<T> = T extends { expectedQueueVersion: number }
@@ -42,6 +44,8 @@ export function useMusicRemote(): MusicRemote {
 
 export function MusicProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
+  const shared = useOptionalPlayback();
+  const sharedEnabled = shared !== null;
   const [status, setStatus] = useState<MusicPlayerStatus | null>(null);
   const statusRef = useRef(status);
   const [busy, setBusy] = useState(false);
@@ -66,6 +70,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       setError(failure instanceof Error ? failure.message : String(failure));
     }
   }, [commit]);
+  useEffect(() => { if (shared?.nas) commit(shared.nas.music); }, [shared?.nas, commit]);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -88,11 +93,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           statusRef.current?.state === "playing" ? 1_000 : 5_000,
         );
     };
-    void poll();
+    if (!sharedEnabled) void poll();
     let libraryStamp = "";
     const events =
       typeof EventSource !== "undefined"
-        ? new EventSource("/api/music/events")
+        ? new EventSource(sharedEnabled ? "/api/music/events?libraryOnly=1" : "/api/music/events")
         : null;
     events?.addEventListener("snapshot", (event) => {
       if (!active) return;
@@ -119,7 +124,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       events?.close();
     };
-  }, [commit]);
+  }, [commit, sharedEnabled]);
 
   const execute = useCallback(
     async (command: MusicRemoteCommand) => {
@@ -133,6 +138,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           await sendMusicCommand({
             ...command,
             expectedQueueVersion: current.queueVersion,
+            serviceInstanceId: current.serviceInstanceId,
+            playbackSessionId: current.sessionId,
           } as MusicPlayerRequest),
         );
       } catch (failure) {
@@ -168,6 +175,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         await sendMusicCommand({
           ...pending.command,
           expectedQueueVersion: pending.status.queueVersion,
+          serviceInstanceId: pending.status.serviceInstanceId,
+          playbackSessionId: pending.status.sessionId,
           ...(pending.status.sessionId
             ? { expectedSessionId: pending.status.sessionId }
             : {}),
@@ -229,7 +238,7 @@ export function MusicTakeoverDialog({
   const { t } = useTranslation();
   const ref = useModalDialog(onCancel, busy);
   return (
-    <div
+    <ModalPortal
       className="management-dialog-backdrop music-dialog-backdrop"
       role="presentation"
     >
@@ -257,6 +266,6 @@ export function MusicTakeoverDialog({
           </button>
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }

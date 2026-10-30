@@ -51,6 +51,15 @@ pub struct MediaTitleInput {
     pub match_confidence: Option<f64>,
     pub poster_key: Option<String>,
     pub backdrop_key: Option<String>,
+    pub rating: Option<f64>,
+    pub credits: Vec<MediaCreditInput>,
+    pub collection: Option<(i64, String)>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct MediaCreditInput {
+    pub name: String,
+    pub role: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -181,6 +190,40 @@ struct TmdbClient {
 }
 
 impl TmdbClient {
+    async fn details(&self, kind: &str, id: i64) -> Result<serde_json::Value, IndexerError> {
+        let mut url = self
+            .base_url
+            .join(&format!(
+                "3/{}/{id}",
+                if kind == "movie" { "movie" } else { "tv" }
+            ))
+            .map_err(|_| tmdb_error("Invalid TMDB details URL"))?;
+        url.query_pairs_mut()
+            .append_pair("language", &self.language)
+            .append_pair("append_to_response", "credits");
+        let mut response = self
+            .client
+            .get(url)
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|_| tmdb_error("TMDB details unavailable"))?;
+        if !response.status().is_success() {
+            return Err(tmdb_error("TMDB details unavailable"));
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| tmdb_error("TMDB details unavailable"))?
+        {
+            if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
+                return Err(tmdb_error("TMDB details too large"));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        serde_json::from_slice(&bytes).map_err(|_| tmdb_error("Invalid TMDB details"))
+    }
     fn new(settings: &MediaSettings) -> Result<Option<Self>, IndexerError> {
         let Some(token) = settings
             .tmdb_read_access_token
@@ -291,6 +334,8 @@ pub async fn run_media_scan(
     let files = discover_video_files(&storage, &source_path, shutdown)?;
     let mut entries = Vec::with_capacity(files.len());
     let mut title_cache = HashMap::<String, MediaTitleInput>::new();
+    let overrides = db.media_match_overrides(&task.source_id).await?;
+    let mut details_cache = HashMap::<i64, Option<serde_json::Value>>::new();
     let mut unmatched = 0_u64;
     for (index, relative_path) in files.iter().enumerate() {
         if shutdown.is_cancelled() {
@@ -300,7 +345,7 @@ pub async fn run_media_scan(
                 true,
             ));
         }
-        let entry = build_entry(
+        let mut entry = build_entry(
             &storage,
             task,
             relative_path,
@@ -308,6 +353,41 @@ pub async fn run_media_scan(
             &mut title_cache,
         )
         .await?;
+        let overridden = overrides.get(&entry.title.source_path).copied().flatten();
+        if let Some(id) = overridden {
+            entry.title.tmdb_id = Some(id);
+        }
+        if let (Some(client), Some(id)) = (tmdb.as_ref(), entry.title.tmdb_id) {
+            if let std::collections::hash_map::Entry::Vacant(slot) = details_cache.entry(id) {
+                slot.insert(client.details(&task.kind, id).await.ok());
+            }
+            if let Some(Some(value)) = details_cache.get(&id) {
+                apply_tmdb_details(&mut entry.title, value, overridden.is_some());
+                if overridden.is_some() {
+                    entry
+                        .artwork
+                        .retain(|art| art.source != "tmdb" || art.for_episode);
+                    for (kind, key) in [
+                        ("poster", entry.title.poster_key.as_ref()),
+                        ("backdrop", entry.title.backdrop_key.as_ref()),
+                    ] {
+                        if let Some(key) = key
+                            && !entry
+                                .artwork
+                                .iter()
+                                .any(|art| art.kind == kind && !art.for_episode)
+                        {
+                            entry.artwork.push(tmdb_artwork(
+                                kind,
+                                key,
+                                &settings_language(task),
+                                false,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         unmatched += u64::from(entry.title.match_status != "matched");
         entries.push(entry);
         if index % 25 == 0 {
@@ -582,6 +662,7 @@ async fn resolve_title(
             match_confidence: Some(1.0),
             poster_key: None,
             backdrop_key: None,
+            ..MediaTitleInput::default()
         });
     }
     let Some(tmdb) = tmdb else {
@@ -640,6 +721,83 @@ async fn resolve_title(
         }
         TmdbMatch::None => Ok(filename_title(source_path, fallback_title, fallback_year)),
     }
+}
+
+fn apply_tmdb_details(
+    title: &mut MediaTitleInput,
+    value: &serde_json::Value,
+    override_title: bool,
+) {
+    let text = |key: &str| {
+        value
+            .get(key)
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty())
+            .map(str::to_owned)
+    };
+    if override_title {
+        if let Some(name) = text("title").or_else(|| text("name")) {
+            title.title = name;
+        }
+        title.original_title = text("original_title").or_else(|| text("original_name"));
+        title.overview = text("overview");
+        title.release_date = text("release_date").or_else(|| text("first_air_date"));
+        title.year = date_year(title.release_date.as_deref());
+        title.metadata_source = "tmdb".into();
+        title.match_status = "matched".into();
+        title.poster_key =
+            text("poster_path").map(|p| format!("tmdb/w500/{}", p.trim_start_matches('/')));
+        title.backdrop_key =
+            text("backdrop_path").map(|p| format!("tmdb/w1280/{}", p.trim_start_matches('/')));
+    }
+    title.runtime_minutes = title
+        .runtime_minutes
+        .or_else(|| value["runtime"].as_i64())
+        .or_else(|| value["episode_run_time"][0].as_i64());
+    if let Some(genres) = value["genres"].as_array() {
+        title.genres = genres
+            .iter()
+            .filter_map(|g| g["name"].as_str().map(str::to_owned))
+            .collect();
+    }
+    title.rating = value["vote_average"]
+        .as_f64()
+        .filter(|r| r.is_finite() && (0.0..=10.0).contains(r));
+    if let Some(cast) = value["credits"]["cast"].as_array() {
+        title.credits = cast
+            .iter()
+            .take(20)
+            .filter_map(|c| {
+                Some(MediaCreditInput {
+                    name: c["name"].as_str()?.to_owned(),
+                    role: c["character"].as_str().unwrap_or("Cast").to_owned(),
+                })
+            })
+            .collect();
+    }
+    if let Some(crew) = value["credits"]["crew"].as_array() {
+        title.credits.extend(
+            crew.iter()
+                .filter(|c| {
+                    matches!(
+                        c["job"].as_str(),
+                        Some("Director" | "Writer" | "Screenplay")
+                    )
+                })
+                .take(10)
+                .filter_map(|c| {
+                    Some(MediaCreditInput {
+                        name: c["name"].as_str()?.to_owned(),
+                        role: c["job"].as_str()?.to_owned(),
+                    })
+                }),
+        );
+    }
+    title.collection = value["belongs_to_collection"]["id"].as_i64().zip(
+        value["belongs_to_collection"]["name"]
+            .as_str()
+            .map(str::to_owned),
+    );
 }
 
 fn filename_title(source_path: &str, title: &str, year: Option<i64>) -> MediaTitleInput {

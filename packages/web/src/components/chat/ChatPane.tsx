@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { Fragment, FormEvent, KeyboardEvent, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
@@ -697,7 +698,7 @@ export function ChatPane({
       </section>
 
       {deleteConfirmOpen ? (
-        <div className="session-delete-backdrop" role="presentation">
+        <ModalPortal className="session-delete-backdrop" role="presentation">
           <section
             className="session-delete-dialog"
             role="dialog"
@@ -727,11 +728,11 @@ export function ChatPane({
               </button>
             </footer>
           </section>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {approvalDialog ? (
-        <div
+        <ModalPortal
           className="approval-dialog-backdrop"
           role="presentation"
           onMouseDown={(event) => {
@@ -797,7 +798,7 @@ export function ChatPane({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
     </section>
   );

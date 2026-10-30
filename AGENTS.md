@@ -99,7 +99,8 @@ make ci                       # make check + build
 ```
 
 The root Vitest config runs tests under `packages/**`, `packaging/**`, and
-`scripts/**` in a Node environment with a threaded pool. Cargo tests cover
+`scripts/**` in a Node environment with a forked process pool to isolate native
+SQLite handles. Cargo tests cover
 `crates/**`.
 The test suite includes API contracts, path/traversal safety, database/schema,
 worker/indexer/operations behavior, web components, packaging declarations, and

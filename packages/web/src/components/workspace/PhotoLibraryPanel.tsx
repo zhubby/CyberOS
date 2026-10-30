@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import {
   Check,
   CheckSquare,
@@ -956,7 +957,7 @@ export function PhotoLibraryPanel({
       ) : null}
 
       {deleteOpen ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <div
             ref={deleteDialogRef}
             className="file-action-dialog"
@@ -977,11 +978,11 @@ export function PhotoLibraryPanel({
             <p>{t("workspace.photos.deleteBody")}</p>
             <div className="file-action-actions"><button type="button" onClick={() => setDeleteOpen(false)} disabled={Boolean(busyAction)}>{t("common.actions.cancel")}</button><button className="danger-button" type="button" onClick={() => void applyBatch("trash")} disabled={Boolean(busyAction)} aria-busy={busyAction === "trash" || undefined}>{t("workspace.photos.requestDelete")}</button></div>
           </div>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {lightboxPhoto ? (
-        <div className="photo-lightbox-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setLightboxId(null)}>
+        <ModalPortal className="photo-lightbox-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setLightboxId(null)}>
           <div ref={lightboxRef} className="photo-lightbox" role="dialog" aria-modal="true" aria-labelledby="photo-lightbox-title" tabIndex={-1} onKeyDown={handleLightboxKeyDown}>
             <header className="photo-lightbox-header">
               <div><span className="eyebrow">{t("workspace.photos.viewer")}</span><h2 id="photo-lightbox-title">{lightboxPhoto.name}</h2></div>
@@ -1046,7 +1047,7 @@ export function PhotoLibraryPanel({
               </aside>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       ) : null}
     </section>
   );

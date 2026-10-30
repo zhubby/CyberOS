@@ -3,6 +3,7 @@ pub mod controller;
 pub mod error;
 pub mod mpv;
 pub mod music;
+pub mod preferences;
 pub mod progress;
 pub mod protocol;
 pub mod server;

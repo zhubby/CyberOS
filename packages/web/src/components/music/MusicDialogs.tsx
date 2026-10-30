@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -15,7 +16,7 @@ export function MusicDialog({
   const { t } = useTranslation();
   const ref = useModalDialog(onClose);
   return (
-    <div
+    <ModalPortal
       className="management-dialog-backdrop music-dialog-backdrop"
       role="presentation"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
@@ -40,7 +41,7 @@ export function MusicDialog({
         </header>
         {children}
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 

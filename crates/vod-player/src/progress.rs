@@ -19,6 +19,17 @@ impl ProgressStore {
         Self { path }
     }
 
+    pub fn next_episode(
+        &self,
+        file_id: &str,
+    ) -> Result<Option<(String, String, String)>, VodError> {
+        let connection = open_existing(&self.path)?;
+        connection.query_row(
+            "SELECT f.id,f.storage_pool_id,f.relative_path FROM media_files current JOIN media_episodes e ON e.id=current.episode_id JOIN media_seasons s ON s.id=e.season_id JOIN media_episodes next ON next.title_id=e.title_id JOIN media_seasons ns ON ns.id=next.season_id JOIN media_files f ON f.episode_id=next.id JOIN media_sources source ON source.id=f.source_id JOIN media_titles title ON title.id=f.title_id WHERE current.id=? AND source.enabled=1 AND title.match_status<>'excluded' AND ns.season_number>0 AND (ns.season_number>s.season_number OR (ns.season_number=s.season_number AND next.episode_number>e.episode_number)) ORDER BY ns.season_number,next.episode_number,f.relative_path LIMIT 1",
+            [file_id], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))
+        ).optional().map_err(database_error)
+    }
+
     pub fn verify_media_file(
         &self,
         file_id: &str,

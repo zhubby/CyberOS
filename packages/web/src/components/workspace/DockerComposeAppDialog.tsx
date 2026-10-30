@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   AlertTriangle,
@@ -276,7 +277,7 @@ export function DockerComposeAppDialog({
   }
 
   return (
-    <div className="management-modal-backdrop docker-compose-app-backdrop" onMouseDown={(event) => {
+    <ModalPortal className="management-modal-backdrop docker-compose-app-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !busy) onClose();
     }}>
       <section
@@ -499,7 +500,7 @@ export function DockerComposeAppDialog({
           )}
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 

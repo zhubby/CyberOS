@@ -1,491 +1,50 @@
-import { getMusicPlayer } from "../lib/music-api.js";
 import { useModalDialog } from "../components/workspace/useModalDialog.js";
-import {
-  ArrowLeft,
-  Clock3,
-  Delete,
-  Languages,
-  Play,
-  Search,
-  X
-} from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type RefObject
-} from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { ArrowLeft, Clock3, Delete, Languages, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { MediaFileRecord, MediaHome, MediaTitleDetail, MediaTitleSummary, VodPlayerCommand, VodPlayerStatus } from "@cyberos/shared";
-import { acceptVodPlayerStatus } from "../lib/vod-player-status.js";
-import {
-  getMediaHome,
-  getMediaTitle,
-  getTvModeStatus,
-  getVodPlayerStatus,
-  mediaArtworkUrl,
-  playMediaFile,
-  searchMedia,
-  sendVodPlayerCommand
-} from "./api.js";
+import type { MediaTitleSummary, VodPlayerCommand, VodPlayerStatus } from "@cyberos/shared";
+import { PlaybackProvider, usePlayback } from "../components/playback/PlaybackProvider.js";
+import { PlaybackBar } from "../components/playback/PlaybackBar.js";
+import { MusicProvider } from "../components/music/MusicProvider.js";
+import { VideoLibraryPanel } from "../components/video/VideoLibraryPanel.js";
+import { getTvModeStatus, mediaArtworkUrl, searchMedia } from "./api.js";
 import type { PinyinImeElement } from "./pinyin-ime.js";
-import { gamepadConnectionTransition, isActiveVodPlayback, playbackCommandForKey, vodPlayerPollDelay } from "./player-controls.js";
-
+import { gamepadConnectionTransition, playbackCommandForKey } from "./player-controls.js";
 const VIRTUAL_KEYS = [
   ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
   ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
   ["z", "x", "c", "v", "b", "n", "m"]
 ];
-
-type ViewState = { kind: "home" } | { kind: "detail"; title: MediaTitleDetail };
-
-export function TvApp() {
-  const { t, i18n } = useTranslation();
-  const [home, setHome] = useState<MediaHome | null>(null);
-  const [view, setView] = useState<ViewState>({ kind: "home" });
-  const [featured, setFeatured] = useState<MediaTitleSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [playerStatus, setPlayerStatus] = useState<VodPlayerStatus | null>(null);
-  const [clock, setClock] = useState(() => new Date());
-  const [takeover, setTakeover] = useState<{ file: MediaFileRecord; position: number | undefined; sessionId: string } | null>(null);
-  const mainRef = useRef<HTMLElement>(null);
-  const playerStatusRef = useRef<VodPlayerStatus | null>(null);
-  const playerWasActiveRef = useRef(false);
-  const lastProgressRefreshRef = useRef(0);
-  const gamepadStateRef = useRef<"ready" | "degraded" | "unavailable" | null>(null);
-  const noticeTimeoutRef = useRef<number | null>(null);
-
-  const showNotice = useCallback((message: string, duration?: number) => {
-    if (noticeTimeoutRef.current) window.clearTimeout(noticeTimeoutRef.current);
-    noticeTimeoutRef.current = null;
-    setNotice(message);
-    if (duration !== undefined) {
-      noticeTimeoutRef.current = window.setTimeout(() => {
-        noticeTimeoutRef.current = null;
-        setNotice(null);
-      }, duration);
-    }
-  }, []);
-
-  useEffect(() => () => {
-    if (noticeTimeoutRef.current) window.clearTimeout(noticeTimeoutRef.current);
-  }, []);
-
-  const loadHome = useCallback(async () => {
-    try {
-      const next = await getMediaHome();
-      setHome(next);
-      setFeatured((current) => current ?? firstTitle(next));
-      setError(null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t("tv.unavailableBody"));
-    } finally {
-      setLoading(false);
-    }
+export function TvApp() { return <PlaybackProvider><MusicProvider><TvLibrary /></MusicProvider></PlaybackProvider>; }
+function TvLibrary() {
+  const { t, i18n } = useTranslation(); const playback = usePlayback();
+  const [searchOpen, setSearchOpen] = useState(false); const [titleId, setTitleId] = useState<string | null>(new URL(window.location.href).searchParams.get("title"));
+  const [clock, setClock] = useState(new Date()); const [notice, setNotice] = useState<string | null>(null);
+  const gamepad = useRef<"ready" | "degraded" | "unavailable" | null>(null);
+  useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 30000); focusFirst(); return () => window.clearInterval(timer); }, []);
+  useEffect(() => {
+    let live = true; const poll = () => void getTvModeStatus().then(s => {
+      if (!live) return; const transition = gamepadConnectionTransition(gamepad.current, s.gamepad.state); gamepad.current = s.gamepad.state;
+      if (transition) setNotice(t("tv.gamepad." + transition as "tv.gamepad.connected" | "tv.gamepad.disconnected"));
+    }).catch(() => {});
+    poll(); const timer = window.setInterval(poll, 5000); return () => { live = false; window.clearInterval(timer); };
   }, [t]);
-
-  const openTitle = useCallback(async (summary: MediaTitleSummary, pushHistory = true) => {
-    try {
-      const title = await getMediaTitle(summary.id);
-      setView({ kind: "detail", title });
-      setSearchOpen(false);
-      if (pushHistory) {
-        window.history.pushState({ tvTitleId: title.id }, "", `/tv/?title=${encodeURIComponent(title.id)}`);
-      }
-      window.requestAnimationFrame(() => focusFirst());
-    } catch (loadError) {
-      showNotice(loadError instanceof Error ? loadError.message : t("tv.unavailableBody"));
-    }
-  }, [showNotice, t]);
-
-  const applyPlayerStatus = useCallback((next: VodPlayerStatus) => {
-    const accepted = acceptVodPlayerStatus(playerStatusRef.current, next);
-    playerStatusRef.current = accepted;
-    setPlayerStatus(accepted);
-    return accepted;
-  }, []);
-
-  const returnHome = useCallback(() => {
-    setSearchOpen(false);
-    setView({ kind: "home" });
-    window.requestAnimationFrame(() => focusFirst());
-  }, []);
-
-  const back = useCallback(() => {
-    if (searchOpen) {
-      setSearchOpen(false);
-      window.requestAnimationFrame(() => focusFirst());
-      return;
-    }
-    if (view.kind === "detail") {
-      if (new URL(window.location.href).searchParams.has("title")) window.history.back();
-      else returnHome();
-    }
-  }, [returnHome, searchOpen, view.kind]);
-
-  const playFile = useCallback(async (file: MediaFileRecord, position?: number, expectedSessionId?: string) => {
-    showNotice(t("tv.playing"));
-    try {
-      applyPlayerStatus(await playMediaFile(file.id, position, expectedSessionId));
-      setTakeover(null);
-      showNotice(t("tv.playing"), 1_800);
-    } catch (playError) {
-      if (typeof playError === "object" && playError !== null && "statusCode" in playError && playError.statusCode === 409) {
-        const player = await getMusicPlayer().catch(() => null);
-        if (player?.owner === "music" && player.sessionId) { setTakeover({ file, position, sessionId: player.sessionId }); return; }
-      }
-      setTakeover(null);
-      showNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
-    }
-  }, [applyPlayerStatus, showNotice, t]);
-
-  const playTitle = useCallback(async (summary: MediaTitleSummary) => {
-    try {
-      const detail = await getMediaTitle(summary.id);
-      const progress = summary.progress?.completed ? null : summary.progress;
-      const file = preferredFile(detail, progress?.fileId);
-      if (!file) throw new Error(t("tv.playFailed"));
-      await playFile(file, progress?.positionSeconds);
-    } catch (playError) {
-      showNotice(playError instanceof Error ? playError.message : t("tv.playFailed"));
-    }
-  }, [playFile, showNotice, t]);
-
-  useEffect(() => {
-    void loadHome();
-    const events = new EventSource("/api/media/events");
-    events.addEventListener("snapshot", () => void loadHome());
-    return () => events.close();
-  }, [loadHome]);
-
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    const poll = async () => {
-      try {
-        const response = await getVodPlayerStatus();
-        if (!active) return;
-        const next = applyPlayerStatus(response);
-        if (isActiveVodPlayback(next) && Date.now() - lastProgressRefreshRef.current >= 5_000) {
-          lastProgressRefreshRef.current = Date.now();
-          void loadHome();
-        }
-        timer = window.setTimeout(poll, vodPlayerPollDelay(next));
-      } catch {
-        if (active) timer = window.setTimeout(poll, 5_000);
-      }
-    };
-    void poll();
-    return () => {
-      active = false;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [applyPlayerStatus, loadHome]);
-
-  useEffect(() => {
-    const active = isActiveVodPlayback(playerStatus);
-    if (playerWasActiveRef.current && !active) {
-      void loadHome();
-      window.requestAnimationFrame(() => focusFirst());
-    }
-    playerWasActiveRef.current = active;
-  }, [loadHome, playerStatus]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(new Date()), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    const poll = async () => {
-      try {
-        const status = await getTvModeStatus();
-        if (!active) return;
-        const transition = gamepadConnectionTransition(gamepadStateRef.current, status.gamepad.state);
-        gamepadStateRef.current = status.gamepad.state;
-        if (transition) {
-          showNotice(t(`tv.gamepad.${transition}`), 2_000);
-        }
-      } catch {
-        // Media and playback polling provide their own availability feedback.
-      }
-      if (active) timer = window.setTimeout(poll, 5_000);
-    };
-    void poll();
-    return () => {
-      active = false;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [showNotice, t]);
-
-  useEffect(() => {
-    const syncLocation = () => {
-      const titleId = new URL(window.location.href).searchParams.get("title");
-      if (!titleId) {
-        returnHome();
-        return;
-      }
-      void getMediaTitle(titleId).then((title) => {
-        setView({ kind: "detail", title });
-        window.requestAnimationFrame(() => focusFirst());
-      }).catch(() => returnHome());
-    };
-    window.addEventListener("popstate", syncLocation);
-    syncLocation();
-    return () => window.removeEventListener("popstate", syncLocation);
-  }, [returnHome]);
-
+  useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(null), 4000); return () => window.clearTimeout(timer); }, [notice]);
+  const back = () => { if (searchOpen) { setSearchOpen(false); window.requestAnimationFrame(focusFirst); } else window.dispatchEvent(new Event("cyberos:video-back")); };
   useRemoteNavigation({
-    playerStatus,
-    onPlayerCommand: async (command) => {
-      try {
-        applyPlayerStatus(await sendVodPlayerCommand(command));
-      } catch (commandError) {
-        showNotice(commandError instanceof Error ? commandError.message : t("tv.playFailed"));
-      }
-    },
-    onBack: back,
-    onSearch: () => setSearchOpen(true),
-    onPlay: () => {
-      if (view.kind === "detail") {
-        const progress = view.title.progress?.completed ? null : view.title.progress;
-        const file = preferredFile(view.title, progress?.fileId);
-        if (file) void playFile(file, progress?.positionSeconds);
-      } else if (featured) {
-        void playTitle(featured);
-      }
-    }
+    playerStatus: playback.nas?.owner === "video" ? playback.nas.video : null,
+    onPlayerCommand: c => void playback.control(c).catch(e => setNotice(e.message)),
+    onBack: back, onSearch: () => setSearchOpen(true),
+    onPlay: () => { const active = document.activeElement; if (active instanceof HTMLButtonElement) active.click(); }
   });
-
-  useLayoutEffect(() => {
-    if (!loading && !searchOpen) focusFirst();
-  }, [loading, searchOpen, view.kind]);
-
-  const rows = useMemo(() => home ? [
-    { id: "continue", label: t("tv.continueWatching"), titles: home.continueWatching },
-    { id: "recent", label: t("tv.recentlyAdded"), titles: home.recentlyAdded },
-    { id: "movies", label: t("tv.movies"), titles: home.movies },
-    { id: "series", label: t("tv.series"), titles: home.series }
-  ].filter((row) => row.titles.length > 0) : [], [home, t]);
-
-  if (loading) {
-    return <TvStatus label={t("tv.loading")} />;
-  }
-
-  if (error && !home) {
-    return <TvStatus label={t("tv.unavailableTitle")} detail={t("tv.unavailableBody")} error />;
-  }
-
-  return (
-    <div className="tv-app" data-view={view.kind}>
-      {view.kind === "home" && featured ? (
-        <img
-          className="tv-backdrop"
-          src={mediaArtworkUrl(featured.id, "backdrop")}
-          alt=""
-          aria-hidden="true"
-          onError={(event) => { event.currentTarget.hidden = true; }}
-        />
-      ) : null}
-      <header className="tv-header">
-        <button className="tv-brand" type="button" data-tv-focusable onClick={returnHome} aria-label={t("tv.library")}>
-          <img src="/cyberos-icon.svg" alt="" aria-hidden="true" />
-          <span>CyberOS</span>
-        </button>
-        <div className="tv-header-actions">
-          <button
-            className="tv-icon-button"
-            type="button"
-            data-tv-focusable
-            onClick={() => setSearchOpen(true)}
-            aria-label={t("tv.search")}
-            title={t("tv.search")}
-          >
-            <Search aria-hidden="true" />
-          </button>
-          <span className="tv-clock"><Clock3 aria-hidden="true" />{formatClock(clock, i18n.resolvedLanguage)}</span>
-        </div>
-      </header>
-
-      {view.kind === "home" ? (
-        <main className="tv-main" ref={mainRef}>
-          {featured ? (
-            <section className="tv-feature" aria-labelledby="tv-feature-title">
-              <p>{featured.kind === "movie" ? t("tv.movies") : t("tv.series")}</p>
-              <h1 id="tv-feature-title">{featured.title}</h1>
-              <div className="tv-feature-meta">{titleMetadata(
-                featured,
-                featured.runtimeMinutes ? t("tv.minutes", { count: featured.runtimeMinutes }) : null
-              )}</div>
-              {featured.overview ? <p className="tv-feature-overview">{featured.overview}</p> : null}
-              <div className="tv-feature-actions">
-                <button className="tv-primary-action" type="button" data-tv-focusable onClick={() => void playTitle(featured)}>
-                  <Play fill="currentColor" aria-hidden="true" />
-                  {featured.progress && !featured.progress.completed ? t("tv.resume") : t("tv.play")}
-                </button>
-                <button className="tv-secondary-action" type="button" data-tv-focusable onClick={() => void openTitle(featured)}>
-                  {t("tv.open")}
-                </button>
-              </div>
-            </section>
-          ) : null}
-
-          {rows.length ? rows.map((row) => (
-            <MediaRow
-              key={row.id}
-              label={row.label}
-              titles={row.titles}
-              onFocus={setFeatured}
-              onOpen={openTitle}
-            />
-          )) : (
-            <section className="tv-empty">
-              <h1>{t("tv.emptyTitle")}</h1>
-              <p>{t("tv.emptyBody")}</p>
-            </section>
-          )}
-        </main>
-      ) : (
-        <DetailView title={view.title} onBack={back} onPlay={playFile} />
-      )}
-
-      {takeover ? <TvTakeoverDialog onCancel={() => setTakeover(null)} onConfirm={() => void playFile(takeover.file, takeover.position, takeover.sessionId)} /> : null}
-      {searchOpen ? <SearchOverlay onClose={back} onOpen={openTitle} /> : null}
-      {notice ? <div className="tv-notice" role="status">{notice}</div> : null}
-    </div>
-  );
+  return <div className="tv-app tv-library-shell">
+    <header className="tv-header"><button className="tv-brand" data-tv-focusable onClick={() => window.dispatchEvent(new Event("cyberos:video-back"))}><img src="/cyberos-icon.svg" alt="" /><span>CyberOS</span></button><div className="tv-header-actions"><button className="tv-icon-button" data-tv-focusable onClick={() => setSearchOpen(true)} aria-label={t("tv.search")}><Search /></button><span className="tv-clock"><Clock3 />{formatClock(clock, i18n.resolvedLanguage)}</span></div></header>
+    <VideoLibraryPanel tv requestedTitleId={titleId} />
+    <PlaybackBar onOpenBluetoothSettings={() => setNotice(t("video.manage"))} />
+    {searchOpen ? <SearchOverlay onClose={back} onOpen={title => { setTitleId(title.id); setSearchOpen(false); }} /> : null}
+    {notice ? <div className="tv-notice" role="status">{notice}</div> : null}
+  </div>;
 }
-
-function MediaRow({
-  label,
-  titles,
-  onFocus,
-  onOpen
-}: {
-  label: string;
-  titles: MediaTitleSummary[];
-  onFocus: (title: MediaTitleSummary) => void;
-  onOpen: (title: MediaTitleSummary) => void;
-}) {
-  return (
-    <section className="tv-row" aria-label={label}>
-      <h2>{label}</h2>
-      <div className="tv-poster-strip">
-        {titles.map((title) => (
-          <button
-            className="tv-poster"
-            type="button"
-            data-tv-focusable
-            key={title.id}
-            onFocus={() => onFocus(title)}
-            onClick={() => onOpen(title)}
-            aria-label={title.title}
-          >
-            <span className="tv-poster-art">
-              <img
-                src={mediaArtworkUrl(title.id, "poster")}
-                alt=""
-                loading="lazy"
-                onError={(event) => { event.currentTarget.hidden = true; }}
-              />
-              <span className="tv-poster-fallback" aria-hidden="true">{title.title.slice(0, 1)}</span>
-              {title.progress && !title.progress.completed ? (
-                <span className="tv-progress" aria-hidden="true">
-                  <span style={{ width: `${progressPercent(title)}%` }} />
-                </span>
-              ) : null}
-            </span>
-            <strong>{title.title}</strong>
-            <small>{title.year ?? (title.kind === "movie" ? "Movie" : "Series")}</small>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function DetailView({
-  title,
-  onBack,
-  onPlay
-}: {
-  title: MediaTitleDetail;
-  onBack: () => void;
-  onPlay: (file: MediaFileRecord, position?: number) => void;
-}) {
-  const { t } = useTranslation();
-  const progress = title.progress?.completed ? null : title.progress;
-  const primary = preferredFile(title, progress?.fileId);
-  return (
-    <main className="tv-detail">
-      <img
-        className="tv-detail-backdrop"
-        src={mediaArtworkUrl(title.id, "backdrop")}
-        alt=""
-        aria-hidden="true"
-        onError={(event) => { event.currentTarget.hidden = true; }}
-      />
-      <div className="tv-detail-content">
-        <button className="tv-back-button" type="button" data-tv-focusable onClick={onBack} aria-label={t("tv.back")}>
-          <ArrowLeft aria-hidden="true" />
-        </button>
-        <p className="tv-detail-kind">{title.kind === "movie" ? t("tv.movies") : t("tv.series")}</p>
-        <h1>{title.title}</h1>
-        <div className="tv-feature-meta">{titleMetadata(
-          title,
-          title.runtimeMinutes ? t("tv.minutes", { count: title.runtimeMinutes }) : null
-        )}</div>
-        {title.overview ? <p className="tv-detail-overview">{title.overview}</p> : null}
-        {primary ? (
-          <button
-            className="tv-primary-action"
-            type="button"
-            data-tv-focusable
-            onClick={() => onPlay(primary, progress?.positionSeconds)}
-          >
-            <Play fill="currentColor" aria-hidden="true" />
-            {progress ? t("tv.resume") : t("tv.play")}
-          </button>
-        ) : null}
-
-        {title.seasons.map((season) => (
-          <section className="tv-season" key={season.id}>
-            <h2>{season.name ?? t("tv.season", { number: season.seasonNumber })}</h2>
-            <div className="tv-episode-list">
-              {season.episodes.map((episode) => {
-                const file = episode.files[0];
-                return (
-                  <button
-                    className="tv-episode"
-                    type="button"
-                    data-tv-focusable
-                    disabled={!file}
-                    key={episode.id}
-                    onClick={() => file && onPlay(file)}
-                  >
-                    <span>{String(episode.episodeNumber).padStart(2, "0")}</span>
-                    <strong>{episode.name ?? t("tv.episode", { number: episode.episodeNumber })}</strong>
-                    {episode.runtimeMinutes ? <small>{t("tv.minutes", { count: episode.runtimeMinutes })}</small> : null}
-                    <Play aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
-    </main>
-  );
-}
-
 function SearchOverlay({
   onClose,
   onOpen
@@ -494,6 +53,7 @@ function SearchOverlay({
   onOpen: (title: MediaTitleSummary) => void;
 }) {
   const { t } = useTranslation();
+  const dialogRef = useModalDialog(onClose);
   const editorRef = useRef<PinyinImeElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaTitleSummary[]>([]);
@@ -531,7 +91,7 @@ function SearchOverlay({
   }, [query]);
 
   return (
-    <div className="tv-search" role="dialog" aria-modal="true" aria-label={t("tv.search")}>
+    <section ref={dialogRef} tabIndex={-1} className="tv-search" role="dialog" aria-modal="true" aria-label={t("tv.search")}>
       <div className="tv-search-header">
         <Search aria-hidden="true" />
         <pinyin-ime-editor
@@ -575,7 +135,7 @@ function SearchOverlay({
           ) : <p className="tv-search-empty">{t("tv.noResults")}</p>}
         </section>
       ) : null}
-    </div>
+    </section>
   );
 }
 
@@ -615,16 +175,6 @@ function VirtualKeyboard({
         </button>
       </div>
     </div>
-  );
-}
-
-function TvStatus({ label, detail, error = false }: { label: string; detail?: string; error?: boolean }) {
-  return (
-    <main className="tv-status" data-error={error || undefined}>
-      <img src="/cyberos-icon.svg" alt="" />
-      <h1>{label}</h1>
-      {detail ? <p>{detail}</p> : <span className="tv-loader" aria-hidden="true" />}
-    </main>
   );
 }
 
@@ -708,7 +258,7 @@ function directionForKey(key: string): Direction | null {
 
 function moveFocus(direction: Direction): void {
   const modal = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')].at(-1);
-  const candidates = [...(modal ?? document).querySelectorAll<HTMLElement>("[data-tv-focusable]:not(:disabled)")]
+  const candidates = [...(modal ?? document).querySelectorAll<HTMLElement>("[data-tv-focusable]:not(:disabled), button:not(:disabled), input:not(:disabled), select:not(:disabled), summary")]
     .filter((element) => element.offsetParent !== null);
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   if (!active || !candidates.includes(active)) {
@@ -739,41 +289,9 @@ function center(rect: DOMRect): { x: number; y: number } {
 }
 
 function focusFirst(): void {
-  document.querySelector<HTMLElement>("[data-tv-focusable]:not(:disabled)")?.focus();
-}
-
-function firstTitle(home: MediaHome): MediaTitleSummary | null {
-  return home.continueWatching[0] ?? home.recentlyAdded[0] ?? home.movies[0] ?? home.series[0] ?? null;
-}
-
-function preferredFile(title: MediaTitleDetail, preferredId?: string | null): MediaFileRecord | null {
-  const files = [
-    ...title.files,
-    ...title.seasons.flatMap((season) => season.episodes.flatMap((episode) => episode.files))
-  ];
-  return files.find((file) => file.id === preferredId) ?? files[0] ?? null;
-}
-
-function progressPercent(title: MediaTitleSummary): number {
-  const progress = title.progress;
-  if (!progress?.durationSeconds) return 0;
-  return Math.max(0, Math.min(100, progress.positionSeconds / progress.durationSeconds * 100));
-}
-
-function titleMetadata(title: MediaTitleSummary, runtime: string | null): string {
-  return [
-    title.year,
-    runtime,
-    ...title.genres.slice(0, 3)
-  ].filter(Boolean).join("  ·  ");
+  document.querySelector<HTMLElement>("[data-tv-focusable]:not(:disabled), button:not(:disabled), input:not(:disabled), select:not(:disabled), summary")?.focus();
 }
 
 function formatClock(date: Date, language: string | undefined): string {
   return new Intl.DateTimeFormat(language ?? "zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
-}
-
-function TvTakeoverDialog({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
-  const { t } = useTranslation();
-  const ref = useModalDialog(onCancel);
-  return <div className="tv-takeover-backdrop"><section className="tv-takeover" ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t("music.takeoverTitle")}><h2>{t("music.takeoverTitle")}</h2><p>{t("music.takeoverMusic")}</p><div><button type="button" data-tv-focusable onClick={onCancel}>{t("common.actions.cancel")}</button><button type="button" data-tv-focusable onClick={onConfirm}>{t("music.switchPlayback")}</button></div></section></div>;
 }

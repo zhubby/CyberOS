@@ -60,6 +60,8 @@ struct Controller {
     done: watch::Sender<bool>,
     status: Status,
     desired: Option<DesiredSession>,
+    resolved_audio_device: Option<Option<String>>,
+    resolved_tv_config: Option<VodPlayerConfig>,
     mpv: Option<MpvHandle>,
     retry_at: Option<Instant>,
     stable_since: Option<Instant>,
@@ -81,6 +83,7 @@ impl ControllerHandle {
             capabilities,
             config.video_output.clone(),
         );
+        status.preferences = crate::preferences::PlaybackPreferences::load(&config.state_path)?;
         let music_checkpoint = music::load_checkpoint(&music::checkpoint_path(&config.state_path))?;
         status.music = music_checkpoint.state.clone();
         let mut desired = match session::load(&config.state_path)? {
@@ -95,7 +98,7 @@ impl ControllerHandle {
             }
             LoadOutcome::Session(saved) => {
                 let saved = *saved;
-                status.state = PlayerState::Recovering;
+                status.state = PlayerState::Paused;
                 status.owner = Some(PlaybackOwner::Video);
                 status.session_id = Some(saved.session_id.clone());
                 status.storage_pool_id = Some(saved.storage_pool_id.clone());
@@ -103,13 +106,17 @@ impl ControllerHandle {
                 status.file_name = file_name(&saved.relative_path);
                 status.position_seconds = saved.position_seconds;
                 status.volume = saved.volume;
+                status.audio_device_id = saved.audio_device_id.clone();
+                status.media_file_id = saved.media_file_id.clone();
+                status.selected_audio_track_id = saved.selected_audio_track_id;
+                status.selected_subtitle_track_id = saved.selected_subtitle_track_id;
                 Some(DesiredSession {
                     session_id: saved.session_id,
                     storage_pool_id: saved.storage_pool_id,
                     relative_path: saved.relative_path,
                     position_seconds: saved.position_seconds,
                     volume: saved.volume,
-                    paused: saved.desired_paused,
+                    paused: true,
                     audio_device_id: saved.audio_device_id,
                     media_file_id: saved.media_file_id,
                     identity: Some(saved.identity),
@@ -155,6 +162,8 @@ impl ControllerHandle {
             done: done_sender,
             status,
             desired,
+            resolved_audio_device: None,
+            resolved_tv_config: None,
             mpv: None,
             retry_at: None,
             stable_since: None,
@@ -217,7 +226,9 @@ impl ControllerHandle {
 
 impl Controller {
     async fn run(&mut self) {
-        if self.desired.is_some() && self.status.owner != Some(PlaybackOwner::Music) {
+        if self.desired.as_ref().is_some_and(|desired| !desired.paused)
+            && self.status.owner != Some(PlaybackOwner::Music)
+        {
             self.try_start_or_schedule().await;
         }
         let mut tick = interval(Duration::from_secs(1));
@@ -251,6 +262,90 @@ impl Controller {
     async fn handle_command(&mut self, command: Command) -> Result<Status, VodError> {
         match command {
             Command::Status => {}
+            Command::Guarded {
+                service_instance_id,
+                expected_session_id,
+                command,
+            } => {
+                if service_instance_id != self.status.service_instance_id
+                    || expected_session_id != self.status.session_id
+                {
+                    return Err(VodError::new(
+                        ErrorCode::SessionConflict,
+                        "Playback session changed",
+                        409,
+                    ));
+                }
+                return Box::pin(self.handle_command(*command)).await;
+            }
+            Command::SetOutput {
+                session_id,
+                audio_device_id,
+            } => {
+                self.assert_session(&session_id)?;
+                if self.status.owner != Some(PlaybackOwner::Video) {
+                    return Err(VodError::new(
+                        ErrorCode::SessionConflict,
+                        "Video no longer owns playback",
+                        409,
+                    ));
+                }
+                self.save_progress();
+                if let Some(desired) = self.desired.as_mut() {
+                    desired.audio_device_id = audio_device_id.clone();
+                }
+                self.status.preferences.video_audio_device_id = audio_device_id;
+                self.status.preferences.save(&self.config.state_path)?;
+                self.stop_mpv().await;
+                self.copy_desired_to_status();
+                self.try_start_or_schedule().await;
+            }
+            Command::SetMuted { session_id, muted } => {
+                self.assert_session(&session_id)?;
+                if self.mpv.is_some() {
+                    self.execute_mpv_command(json!(["set_property", "mute", muted]))
+                        .await?;
+                }
+                if self.status.owner == Some(PlaybackOwner::Music) {
+                    self.status.preferences.music_muted = muted;
+                } else {
+                    self.status.preferences.video_muted = muted;
+                }
+                self.status.preferences.save(&self.config.state_path)?;
+                self.publish();
+            }
+            Command::SetAudioDelay {
+                session_id,
+                milliseconds,
+            } => {
+                self.assert_session(&session_id)?;
+                if self.status.owner != Some(PlaybackOwner::Video) {
+                    return Err(VodError::new(
+                        ErrorCode::SessionConflict,
+                        "Video no longer owns playback",
+                        409,
+                    ));
+                }
+                if self.mpv.is_some() {
+                    self.execute_mpv_command(json!([
+                        "set_property",
+                        "audio-delay",
+                        milliseconds / 1000.0
+                    ]))
+                    .await?;
+                }
+                let key = self
+                    .status
+                    .audio_delay_key
+                    .clone()
+                    .unwrap_or_else(|| "tv".into());
+                self.status
+                    .preferences
+                    .audio_delays
+                    .insert(key, milliseconds);
+                self.status.preferences.save(&self.config.state_path)?;
+                self.publish();
+            }
             Command::Music { command } => return self.handle_music_command(command).await,
             Command::StopVideo { session_id } => {
                 if self.status.owner != Some(PlaybackOwner::Video) {
@@ -283,6 +378,7 @@ impl Controller {
                     self.progress
                         .verify_media_file(file_id, &storage_pool_id, &relative_path)?;
                 }
+                self.save_progress();
                 self.stop_mpv().await;
                 self.status.owner = Some(PlaybackOwner::Video);
                 self.retry_at = None;
@@ -293,9 +389,10 @@ impl Controller {
                     storage_pool_id,
                     relative_path,
                     position_seconds: start_position_seconds.unwrap_or(0.0),
-                    volume: self.status.volume,
+                    volume: self.status.preferences.video_volume,
                     paused: false,
-                    audio_device_id,
+                    audio_device_id: audio_device_id
+                        .or_else(|| self.status.preferences.video_audio_device_id.clone()),
                     media_file_id,
                     identity: None,
                 });
@@ -319,6 +416,13 @@ impl Controller {
             }
             Command::Resume { session_id } => {
                 self.assert_session(&session_id)?;
+                if self.mpv.is_none() {
+                    if let Some(desired) = self.desired.as_mut() {
+                        desired.paused = false;
+                    }
+                    self.try_start_or_schedule().await;
+                    return Ok(self.status.clone());
+                }
                 self.execute_mpv_command(json!(["set_property", "pause", false]))
                     .await?;
                 if let Some(desired) = self.desired.as_mut() {
@@ -407,6 +511,10 @@ impl Controller {
                     desired.volume = volume;
                 }
                 self.status.volume = volume;
+                if self.status.owner == Some(PlaybackOwner::Video) {
+                    self.status.preferences.video_volume = volume;
+                    self.status.preferences.save(&self.config.state_path)?;
+                }
                 self.transition_checkpoint()?;
             }
             Command::SetAudioTrack {
@@ -429,7 +537,7 @@ impl Controller {
                 self.execute_mpv_command(json!(["set_property", "aid", track_id]))
                     .await?;
                 self.status.selected_audio_track_id = Some(track_id);
-                self.publish();
+                self.transition_checkpoint()?;
             }
             Command::SetSubtitleTrack {
                 session_id,
@@ -453,7 +561,7 @@ impl Controller {
                 self.execute_mpv_command(json!(["set_property", "sid", value]))
                     .await?;
                 self.status.selected_subtitle_track_id = track_id;
-                self.publish();
+                self.transition_checkpoint()?;
             }
             Command::CycleAudioTrack { session_id } => {
                 self.assert_session(&session_id)?;
@@ -499,16 +607,23 @@ impl Controller {
             .clone()
             .ok_or_else(|| VodError::internal("No playback session to start"))?;
         let is_music = self.status.owner == Some(PlaybackOwner::Music);
-        let audio_device_id = if is_music {
+        let audio_device_id = if let Some(pinned) = &self.resolved_audio_device {
+            pinned.clone()
+        } else if is_music {
             self.config
                 .music_audio_device_id(desired.audio_device_id.as_deref())?
         } else {
             desired.audio_device_id.clone()
         };
+        self.resolved_audio_device = Some(audio_device_id.clone());
         let mut playback_config = if is_music {
             self.config.for_music_session(audio_device_id.is_some())
+        } else if let Some(pinned) = &self.resolved_tv_config {
+            pinned.clone()
         } else {
-            self.config.for_video_session()?
+            let config = self.config.for_video_session()?;
+            self.resolved_tv_config = Some(config.clone());
+            config
         };
         if !is_music && !playback_config.enabled {
             return Err(VodError::new(
@@ -517,7 +632,7 @@ impl Controller {
                 503,
             ));
         }
-        if is_music && let Some(device) = audio_device_id.as_deref() {
+        if let Some(device) = audio_device_id.as_deref() {
             playback_config.audio_device = Some(bluetooth_alsa_device(device));
             if bluetooth_connected(device).await == Some(false) {
                 return Err(VodError::unavailable(
@@ -579,7 +694,7 @@ impl Controller {
                 media.try_clone()?,
                 desired.position_seconds,
                 desired.volume,
-                desired.paused,
+                true,
                 Some(audio_device),
             )
             .await
@@ -589,23 +704,7 @@ impl Controller {
                     self.status.audio_fallback_reason = None;
                     mpv
                 }
-                Err(error) => {
-                    if is_music {
-                        return Err(error);
-                    }
-                    self.status.effective_audio_device_id = None;
-                    self.status.audio_fallback_reason = Some(error.message.clone());
-                    tracing::warn!(device_id = ?audio_device_id, message = %error.message, "Bluetooth audio failed; falling back to configured output");
-                    MpvHandle::start(
-                        &playback_config,
-                        media,
-                        desired.position_seconds,
-                        desired.volume,
-                        desired.paused,
-                        None,
-                    )
-                    .await?
-                }
+                Err(error) => return Err(error),
             }
         } else {
             self.status.effective_audio_device_id = None;
@@ -615,12 +714,55 @@ impl Controller {
                 media,
                 desired.position_seconds,
                 desired.volume,
-                desired.paused,
+                true,
                 None,
             )
             .await?
         };
         self.mpv = Some(mpv);
+        let muted = if is_music {
+            self.status.preferences.music_muted
+        } else {
+            self.status.preferences.video_muted
+        };
+        self.execute_mpv_command(json!(["set_property", "mute", muted]))
+            .await?;
+        if !is_music {
+            let delay_key = audio_device_id.clone().unwrap_or_else(|| {
+                playback_config
+                    .audio_device
+                    .as_ref()
+                    .map(|device| format!("tv:{device}"))
+                    .unwrap_or_else(|| "tv".into())
+            });
+            self.status.audio_delay_key = Some(delay_key.clone());
+            let key = delay_key.as_str();
+            let delay = self
+                .status
+                .preferences
+                .audio_delays
+                .get(key)
+                .copied()
+                .unwrap_or(0.0);
+            self.execute_mpv_command(json!(["set_property", "audio-delay", delay / 1000.0]))
+                .await?;
+        }
+        if !is_music {
+            if let Some(id) = self.status.selected_audio_track_id {
+                self.execute_mpv_command(json!(["set_property", "aid", id]))
+                    .await?;
+            }
+            let sid = self
+                .status
+                .selected_subtitle_track_id
+                .map_or_else(|| json!("no"), |id| json!(id));
+            self.execute_mpv_command(json!(["set_property", "sid", sid]))
+                .await?;
+        }
+        if !desired.paused {
+            self.execute_mpv_command(json!(["set_property", "pause", false]))
+                .await?;
+        }
         self.retry_at = None;
         self.finish_start(desired.paused);
         self.status.error = None;
@@ -694,11 +836,11 @@ impl Controller {
             self.config
                 .for_music_session(self.status.effective_audio_device_id.is_some())
         } else {
-            self.config.as_ref().clone()
+            self.resolved_tv_config
+                .clone()
+                .unwrap_or_else(|| self.config.as_ref().clone())
         };
-        if self.status.owner == Some(PlaybackOwner::Music)
-            && let Some(device) = self.status.effective_audio_device_id.as_deref()
-        {
+        if let Some(device) = self.status.effective_audio_device_id.as_deref() {
             playback_config.audio_device = Some(bluetooth_alsa_device(device));
         }
         let mut probe = if self.mpv.is_some() {
@@ -706,15 +848,13 @@ impl Controller {
         } else {
             probe(&playback_config).await
         };
-        if self.status.owner == Some(PlaybackOwner::Music)
-            && self.status.effective_audio_device_id.is_some()
+        if self.status.effective_audio_device_id.is_some()
             && let Some(mpv) = self.mpv.as_mut()
             && let Err(error) = mpv.verify_requested_audio_output().await
         {
             probe.error = Some(error);
         }
-        if self.status.owner == Some(PlaybackOwner::Music)
-            && self.mpv.is_some()
+        if self.mpv.is_some()
             && let Some(device) = self.status.effective_audio_device_id.as_deref()
             && bluetooth_connected(device).await == Some(false)
         {
@@ -832,6 +972,28 @@ impl Controller {
                     desired.position_seconds = self.status.position_seconds;
                 }
                 self.save_progress();
+                if self.status.owner == Some(PlaybackOwner::Video)
+                    && let Some(previous) = self.desired.clone()
+                    && let Some(file_id) = previous.media_file_id.as_deref()
+                    && let Ok(Some((next_id, pool, relative))) = self.progress.next_episode(file_id)
+                {
+                    // Runs in this serialized controller while video still owns playback.
+                    // No delayed callback can reclaim playback after music takes ownership.
+                    self.desired = Some(DesiredSession {
+                        session_id: Uuid::new_v4().to_string(),
+                        storage_pool_id: pool,
+                        relative_path: relative,
+                        position_seconds: 0.0,
+                        media_file_id: Some(next_id),
+                        identity: None,
+                        paused: false,
+                        ..previous
+                    });
+                    self.status.duration_seconds = None;
+                    self.copy_desired_to_status();
+                    self.try_start_or_schedule().await;
+                    return;
+                }
                 self.desired = None;
                 self.status.owner = None;
                 self.status.session_id = None;
@@ -924,6 +1086,20 @@ impl Controller {
         if self.desired.is_none() {
             return;
         }
+        if error.code == ErrorCode::AudioUnavailable {
+            if let Some(desired) = self.desired.as_mut() {
+                desired.paused = true;
+            }
+            self.status.state = PlayerState::Paused;
+            self.status.error = Some(error.message);
+            self.status.error_code = Some(error.code);
+            self.status.effective_audio_device_id = None;
+            self.retry_at = None;
+            self.status.next_retry_at = None;
+            self.publish();
+            let _ = self.persist_current();
+            return;
+        }
         self.status.retry_count = self.status.retry_count.saturating_add(1);
         let exponent = self.status.retry_count.saturating_sub(1).min(20);
         let multiplier = 1_u64 << exponent;
@@ -970,8 +1146,11 @@ impl Controller {
         self.status.next_retry_at = None;
         self.retry_at = None;
         self.stable_since = None;
-        if let Err(clear_error) = session::clear(&self.config.state_path) {
-            tracing::error!(code = ?clear_error.code, "failed to clear terminal VOD player session");
+        if let Some(desired) = self.desired.as_mut() {
+            desired.paused = true;
+        }
+        if let Err(error) = self.persist_current() {
+            tracing::error!(code = ?error.code, "failed to retain terminal VOD player session");
         }
         self.publish();
     }
@@ -988,7 +1167,10 @@ impl Controller {
     }
 
     fn copy_desired_to_status(&mut self) {
+        self.resolved_audio_device = None;
+        self.resolved_tv_config = None;
         if let Some(desired) = &self.desired {
+            let same_session = self.status.session_id.as_deref() == Some(&desired.session_id);
             self.status.session_id = Some(desired.session_id.clone());
             self.status.storage_pool_id = Some(desired.storage_pool_id.clone());
             self.status.relative_path = Some(desired.relative_path.clone());
@@ -997,12 +1179,15 @@ impl Controller {
             self.status.position_seconds = desired.position_seconds;
             self.status.volume = desired.volume;
             self.status.audio_device_id = desired.audio_device_id.clone();
+            self.status.audio_delay_key = desired.audio_device_id.clone();
             self.status.effective_audio_device_id = None;
             self.status.audio_fallback_reason = None;
-            self.status.audio_tracks.clear();
-            self.status.subtitle_tracks.clear();
-            self.status.selected_audio_track_id = None;
-            self.status.selected_subtitle_track_id = None;
+            if !same_session {
+                self.status.audio_tracks.clear();
+                self.status.subtitle_tracks.clear();
+                self.status.selected_audio_track_id = None;
+                self.status.selected_subtitle_track_id = None;
+            }
         }
     }
 
@@ -1035,6 +1220,8 @@ impl Controller {
                 desired_paused: desired.paused,
                 audio_device_id: desired.audio_device_id.clone(),
                 media_file_id: desired.media_file_id.clone(),
+                selected_audio_track_id: self.status.selected_audio_track_id,
+                selected_subtitle_track_id: self.status.selected_subtitle_track_id,
                 identity,
                 updated_at: now(),
             },
@@ -1097,6 +1284,8 @@ fn empty_status(
     video_output: String,
 ) -> Status {
     Status {
+        audio_delay_key: None,
+        preferences: crate::preferences::PlaybackPreferences::default(),
         owner: None,
         music: music::QueueState::default(),
         state: PlayerState::Idle,
@@ -1265,6 +1454,8 @@ mod tests {
                 done,
                 status,
                 desired: None,
+                resolved_audio_device: None,
+                resolved_tv_config: None,
                 mpv: None,
                 retry_at: None,
                 stable_since: None,
@@ -1279,6 +1470,62 @@ mod tests {
             sender,
             done_receiver,
         )
+    }
+
+    #[tokio::test]
+    async fn guarded_commands_reject_old_service_or_session_without_changing_owner() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.status.owner = Some(PlaybackOwner::Music);
+        controller.status.session_id = Some("current".into());
+        for (instance, session) in [
+            ("old-service".to_owned(), Some("current".to_owned())),
+            (
+                controller.status.service_instance_id.clone(),
+                Some("old-session".to_owned()),
+            ),
+        ] {
+            let error = controller
+                .handle_command(Command::Guarded {
+                    service_instance_id: instance,
+                    expected_session_id: session,
+                    command: Box::new(Command::Stop {
+                        session_id: "current".into(),
+                    }),
+                })
+                .await
+                .unwrap_err();
+            assert_eq!(error.code, ErrorCode::SessionConflict);
+            assert_eq!(controller.status.owner, Some(PlaybackOwner::Music));
+            assert_eq!(controller.status.session_id.as_deref(), Some("current"));
+        }
+    }
+
+    #[test]
+    fn video_audio_failure_pauses_without_retry_or_discarding_the_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _, _) = test_controller(directory.path());
+        controller.status.owner = Some(PlaybackOwner::Video);
+        controller.status.session_id = Some("video".into());
+        controller.desired = Some(DesiredSession {
+            session_id: "video".into(),
+            storage_pool_id: "pool-1".into(),
+            relative_path: "a.mp4".into(),
+            position_seconds: 12.0,
+            volume: 45.0,
+            paused: false,
+            audio_device_id: Some("bluetooth:AA:BB:CC:DD:EE:FF".into()),
+            media_file_id: None,
+            identity: None,
+        });
+        controller.schedule_recovery(VodError::unavailable(
+            ErrorCode::AudioUnavailable,
+            "speaker disconnected",
+        ));
+        assert_eq!(controller.status.state, PlayerState::Paused);
+        assert!(controller.desired.as_ref().unwrap().paused);
+        assert_eq!(controller.desired.as_ref().unwrap().position_seconds, 12.0);
+        assert!(controller.retry_at.is_none());
     }
 
     fn prepare_music_process(controller: &mut Controller, directory: &Path) {
@@ -1713,6 +1960,8 @@ done
             desired_paused: false,
             audio_device_id: None,
             media_file_id: None,
+            selected_audio_track_id: None,
+            selected_subtitle_track_id: None,
             identity: FileIdentity {
                 device: 1,
                 inode: 2,
