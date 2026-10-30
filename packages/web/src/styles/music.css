@@ -68,26 +68,6 @@
   background: var(--input-deep-bg);
   font: inherit;
 }
-.music-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--line);
-  color: var(--accent);
-  background: var(--app-bg);
-}
-.music-search input {
-  flex: 1;
-  width: 0;
-  border: 0;
-  padding-left: 0;
-  background: transparent;
-}
-.music-search-submit {
-  transform: rotate(90deg);
-}
 .music-tabs {
   display: flex;
   flex: 0 0 auto;
@@ -570,8 +550,7 @@
   border-color: var(--line);
   padding: 0 10px;
 }
-.music-field,
-.music-filter-fields label {
+.music-field {
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
@@ -581,16 +560,6 @@
 .music-field input,
 .music-field select {
   width: 100%;
-}
-.music-filter-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 14px;
-}
-.music-filter-fields .music-check {
-  display: flex;
-  align-items: center;
-  grid-column: 1 / -1;
 }
 .music-source-list > section {
   padding: 14px 0;
@@ -800,9 +769,6 @@
   }
   .music-output-controls > button {
     justify-self: start;
-  }
-  .music-filter-fields {
-    grid-template-columns: 1fr;
   }
 }
 

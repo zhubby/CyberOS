@@ -199,6 +199,16 @@ function useRemoteNavigation({
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const state = current.current;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest(".workspace-search-filter-menu")) {
+        if (["Escape", "BrowserBack", "GoBack"].includes(event.key)) return;
+        if (target.closest(".custom-select") && ["ArrowUp", "ArrowDown", "Home", "End", "Enter", " "].includes(event.key)) return;
+        if (target instanceof HTMLInputElement && target.type === "checkbox" && event.key === "Enter") {
+          event.preventDefault();
+          target.click();
+          return;
+        }
+      }
       const modal = document.querySelector('[role="dialog"][aria-modal="true"]');
       if (modal && !directionForKey(event.key) && event.key !== "Enter") return;
       const playbackCommand = modal ? null : playbackCommandForKey(state.playerStatus, event.key);
