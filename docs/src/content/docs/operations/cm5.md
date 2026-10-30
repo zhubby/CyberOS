@@ -243,3 +243,5 @@ curl -fsS http://127.0.0.1:3010/api/backup/status
 ```
 
 健康信号：版本与来源一致、服务重启计数稳定、terminal socket 可连接且终端可输入/调整尺寸/重连、无 `Permission denied`/`SQLITE_CANTOPEN`、Engine ready、已知 ImageID 的占用数准确、不可用限制被拒绝、应用 health/登录/对象读取正常。terminal 反复重启、socket/PTY 错误、家目录冲突、新出现的目录所有权变化、数据不可读或迁移错误应停止验收和 timers，保留现场并按匹配旧包的状态备份恢复；不要盲目降级数据库或 reset-failed。部署前已存在的 backup 失败单独记录与处理，生产 Go 必须有真实备份与恢复证据。
+
+终端身份验收同时检查 `systemctl show cyberos-terminald.service -p Environment -p WorkingDirectory` 的合并后配置：`HOME` 与 `WorkingDirectory` 必须均为 `/home/cyberos`。本地 drop-in 会覆盖安装包中的 unit；部署工作流遇到不符合此约束的有效配置时拒绝通过，并保留诊断供管理员处理。

@@ -669,6 +669,46 @@ describe("native packaging artifacts", () => {
   });
 
   it.each([
+    { environment: "LANG=C.UTF-8 HOME=/home/cyberos CYBEROS_ROOT=/cyberos", directory: "/home/cyberos", accepted: true },
+    { environment: "HOME=/cyberos/home/terminal", directory: "/home/cyberos", accepted: false },
+    { environment: "HOME=/home/cyberos", directory: "/cyberos/home/terminal", accepted: false },
+    { environment: "LANG=C.UTF-8", directory: "/home/cyberos", accepted: false },
+    { environment: "XHOME=/home/cyberos", directory: "/home/cyberos", accepted: false },
+    { environment: "HOME=/home/cyberos HOME=/cyberos/home/terminal", directory: "/home/cyberos", accepted: false },
+  ])("checks effective terminald properties after deployment: $environment / $directory", async ({ environment, directory, accepted }) => {
+    const workflow = await readRepoFile(".github", "workflows", "deploy-cm5.yml");
+    const verification = workflow.split("- name: Verify CM5 services and build metadata")[1]!;
+    const identityCheck = verification.match(/terminal_environment="[\s\S]*?(?=\n\s+failed_units=)/u)?.[0];
+    expect(identityCheck).toBeDefined();
+    expect(identityCheck).toContain("--property=Environment --value cyberos-terminald.service");
+    expect(identityCheck).toContain("--property=WorkingDirectory --value cyberos-terminald.service");
+    const result = spawnSync("sh", ["-s"], {
+      input: `set -eu
+      systemctl() {
+        [ "$1" = show ] && [ "$3" = --value ] && [ "$4" = cyberos-terminald.service ] || return 2
+        case "$2" in
+          --property=Environment) printf '%s\\n' "$TERMINAL_ENVIRONMENT" ;;
+          --property=WorkingDirectory) printf '%s\\n' "$TERMINAL_DIRECTORY" ;;
+          *) return 2 ;;
+        esac
+      }
+      ${identityCheck}
+      printf 'verification continued\\n'
+      `,
+      encoding: "utf8",
+      env: { ...process.env, TERMINAL_ENVIRONMENT: environment, TERMINAL_DIRECTORY: directory },
+    });
+    expect(result.status).toBe(accepted ? 0 : 1);
+    if (accepted) {
+      expect(result.stdout).toBe("verification continued\n");
+      expect(result.stderr).toBe("");
+    } else {
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("terminald HOME and WorkingDirectory must both be /home/cyberos");
+    }
+  });
+
+  it.each([
     { exists: true, home: "/home/cyberos", accepted: true },
     { exists: true, home: "/cyberos/home/terminal", accepted: false },
     { exists: true, home: "/var/lib/cyberos", accepted: false },
