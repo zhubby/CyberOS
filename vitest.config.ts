@@ -13,7 +13,8 @@ export default defineConfig({
       "packaging/**/*.test.mjs",
       "scripts/**/*.test.mjs"
     ],
-    pool: "threads"
+    // Native SQLite handles must be isolated from worker-thread teardown.
+    pool: "forks"
   },
   resolve: {
     alias: {
