@@ -37,7 +37,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "002_agent_resources",
         "003_p2p_downloads",
         "004_music_library",
-        "005_video_library"
+        "005_video_library",
+        "006_photos_scan_contention"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
@@ -54,7 +55,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
       "002_agent_resources",
       "003_p2p_downloads",
         "004_music_library",
-        "005_video_library"
+        "005_video_library",
+        "006_photos_scan_contention"
     ]);
   });
 
@@ -95,7 +97,7 @@ describe("CyberOS 2.0 SQLite schema", () => {
       previous.pragma(`user_version = ${CYBEROS_DATABASE_FORMAT_VERSION}`);
       previous.pragma("foreign_keys = ON");
       previous.exec("CREATE TABLE schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
-      for (const migration of migrations.filter((entry) => entry.id !== "005_video_library")) {
+      for (const migration of migrations.filter((entry) => entry.id < "005_video_library")) {
         migration.prepare?.(previous);
         previous.exec(migration.sql);
         previous.prepare("INSERT INTO schema_migrations VALUES (?, ?)").run(migration.id, "2026-10-29T00:00:00Z");
@@ -129,6 +131,58 @@ describe("CyberOS 2.0 SQLite schema", () => {
     }
     const reopened = openCyberOsDb(databasePath);
     reopened.close();
+  });
+
+  it("adds Photos claim indexes without resetting existing scan progress or leases", () => {
+    const databasePath = path.join(tempDir, "photos-upgrade.sqlite");
+    const previous = new Database(databasePath);
+    try {
+      previous.pragma(`user_version = ${CYBEROS_DATABASE_FORMAT_VERSION}`);
+      previous.pragma("foreign_keys = ON");
+      previous.exec("CREATE TABLE schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+      for (const migration of migrations.filter((entry) => entry.id < "006_photos_scan_contention")) {
+        migration.prepare?.(previous);
+        previous.exec(migration.sql);
+        previous.prepare("INSERT INTO schema_migrations VALUES (?, ?)").run(migration.id, "2026-10-30T00:00:00Z");
+      }
+      previous.exec(`
+        INSERT INTO photos_jobs (id, kind, status, storage_pool_id, path, library_updated_at,
+          scanned, processed, scan_generation, worker_id, lease_expires_at, created_at, updated_at)
+        VALUES ('job-1', 'full_scan', 'running', 'pool-1', 'Photos', 'library-1',
+          4354, 12, 'generation-1', 'worker-1', '2099-01-01T00:00:00Z', 'created', 'updated');
+        INSERT INTO photos_scan_entries (job_id, path, entry_type, status, error_retryable,
+          retry_count, next_retry_at, updated_at) VALUES
+          ('job-1', 'Photos/completed.jpg', 'media', 'completed', 0, 0, NULL, 'completed'),
+          ('job-1', 'Photos/pending', 'directory', 'pending', 0, 0, NULL, 'pending'),
+          ('job-1', 'Photos/retry', 'directory', 'failed', 1, 2, '2026-10-30T00:00:00Z', 'retry');
+      `);
+    } finally {
+      previous.close();
+    }
+
+    const upgraded = openCyberOsDb(databasePath);
+    try {
+      expect(upgraded.prepare("SELECT status, scanned, processed, scan_generation, worker_id, lease_expires_at FROM photos_jobs WHERE id = 'job-1'").get()).toEqual({
+        status: "running", scanned: 4354, processed: 12, scan_generation: "generation-1",
+        worker_id: "worker-1", lease_expires_at: "2099-01-01T00:00:00Z"
+      });
+      expect(upgraded.prepare("SELECT path, status, retry_count FROM photos_scan_entries ORDER BY path").all()).toEqual([
+        { path: "Photos/completed.jpg", status: "completed", retry_count: 0 },
+        { path: "Photos/pending", status: "pending", retry_count: 0 },
+        { path: "Photos/retry", status: "failed", retry_count: 2 }
+      ]);
+      const plans = [
+        "SELECT path FROM photos_scan_entries INDEXED BY idx_photos_scan_entries_pending WHERE job_id = 'job-1' AND entry_type = 'directory' AND status = 'pending' ORDER BY path LIMIT 1",
+        "SELECT path FROM photos_scan_entries INDEXED BY idx_photos_scan_entries_retry WHERE job_id = 'job-1' AND entry_type = 'directory' AND status = 'failed' AND error_retryable = 1 AND next_retry_at <= '2026-10-30T00:00:00Z' ORDER BY path LIMIT 1"
+      ].map((sql) => upgraded.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as Array<{ detail: string }>);
+      expect(plans[0]?.some((row) => row.detail.includes("idx_photos_scan_entries_pending"))).toBe(true);
+      expect(plans[1]?.some((row) => row.detail.includes("idx_photos_scan_entries_retry"))).toBe(true);
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+      expect(upgraded.pragma("quick_check")).toEqual([{ quick_check: "ok" }]);
+    } finally {
+      upgraded.close();
+    }
+    openCyberOsDb(databasePath).close();
   });
 
   it("rejects an unmarked non-empty database without changing it", () => {
@@ -245,7 +299,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "002_agent_resources",
         "003_p2p_downloads",
         "004_music_library",
-        "005_video_library"
+        "005_video_library",
+        "006_photos_scan_contention"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {

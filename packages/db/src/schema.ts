@@ -4,6 +4,7 @@ import { agentResourceMigrations } from "./migrations/agent-resources.js";
 import { p2pDownloadMigrations } from "./migrations/p2p-downloads.js";
 import { musicMigrations } from "./migrations/music.js";
 import { videoMigrations } from "./migrations/video.js";
+import { photosScanContentionMigrations } from "./migrations/photos-scan-contention.js";
 import type { Migration } from "./migrations/types.js";
 
 export type { Migration } from "./migrations/types.js";
@@ -13,7 +14,8 @@ export const migrations: Migration[] = [
   ...agentResourceMigrations,
   ...p2pDownloadMigrations,
   ...musicMigrations,
-  ...videoMigrations
+  ...videoMigrations,
+  ...photosScanContentionMigrations
 ];
 
 export function runMigrations(db: Database.Database): void {

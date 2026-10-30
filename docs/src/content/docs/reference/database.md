@@ -24,3 +24,5 @@ Photos 图库配置保存在内部键 `system_settings.photos_library_settings`�
 同一资源的规范字段、EAV、关键词、FTS 和 RTree 在一个短事务中替换，删除资源通过 foreign key 和 trigger 清理虚拟索引。旧版本元数据和 XMP sidecar 的新增、修改或删除会触发渐进重建；未带元数据条件的旧时间线继续可用，带条件查询只匹配当前 schema version。`photos_jobs` 保存完整扫描和路径刷新的租约与进度；上传通过 `photos_upload_reservations` 事务性预留媒体 hash 和目标路径。`photos_scan_entries`、`photos_publish_journal`、`photos_space_reservations` 和 `photos_workers` 分别保存扫描断点、发布恢复、空间预留和 worker 心跳。设置变化会失效旧资源和未完成任务，worker 只有在完整且挂载身份稳定的遍历后才清理 stale 资源与衍生图缓存。
 
 Photos worker 中先验证租约或查询状态、再写入的事务使用 `BEGIN IMMEDIATE`，在读取前取得写锁；与 API、indexer 等进程竞争时按 30 秒 busy timeout 等待。不要依赖 deferred 事务读后升级写锁：WAL 下遇到其他写入者或过期快照时，升级可能立即返回 `database is locked`，跳过 busy timeout。事务内只执行数据库操作，文件遍历与媒体处理放在事务外；只读缓存快照继续使用 deferred 事务。
+
+`006_photos_scan_contention` 为 pending 与可重试失败条目分别增加 partial index。worker 必须等此迁移完成后启动，领取条目时分别通过对应索引取候选，再按路径比较，保持原有顺序，避免在写事务中反复遍历已完成条目。目录发现结果每批最多 128 条提交，整批校验租约并原子写入；中断后重读目录时按主键幂等去重。不要把文件遍历放进批量事务，也不要通过延长 busy timeout 掩盖持续抢占写锁。
