@@ -11,7 +11,9 @@ use uuid::Uuid;
 
 use crate::command::CommandRunner;
 use crate::config::{Config, verify_tools};
-use crate::db::{Db, Job, ProcessingSettings, PublishRecord, ScanEntry};
+use crate::db::{
+    Db, DiscoveredEntry, Job, ProcessingSettings, PublishRecord, SCAN_ENTRY_BATCH_SIZE, ScanEntry,
+};
 use crate::error::{ErrorCode, PhotosError};
 use crate::media::{Sidecar, candidate_kind, process_media};
 use crate::publish::{
@@ -274,6 +276,7 @@ async fn discover(
             }
             Err(error) => return Err(error),
         };
+        let mut discovered = Vec::with_capacity(SCAN_ENTRY_BATCH_SIZE);
         for child in directory {
             check_control(shutdown, lease_lost)?;
             let child = child.map_err(PhotosError::storage)?;
@@ -292,7 +295,7 @@ async fn discover(
             if file_type.is_symlink() {
                 continue;
             }
-            if file_type.is_dir() {
+            let entry_type = if file_type.is_dir() {
                 match library.open_directory(Path::new(&child_path)) {
                     Ok(directory) => drop(directory),
                     Err(error)
@@ -305,16 +308,28 @@ async fn discover(
                     }
                     Err(error) => return Err(error),
                 }
-                db.add_scan_entry(&job.id, &child_path, "directory", &entry.path, worker_id)
-                    .await?;
+                "directory"
             } else if file_type.is_file() && candidate_kind(&name).is_some() {
-                db.add_scan_entry(&job.id, &child_path, "media", &entry.path, worker_id)
-                    .await?;
+                "media"
             } else if file_type.is_file() && name.to_ascii_lowercase().ends_with(".xmp") {
-                db.add_scan_entry(&job.id, &child_path, "sidecar", &entry.path, worker_id)
+                "sidecar"
+            } else {
+                continue;
+            };
+            discovered.push(DiscoveredEntry {
+                path: child_path,
+                entry_type: entry_type.into(),
+            });
+            if discovered.len() == SCAN_ENTRY_BATCH_SIZE {
+                db.add_scan_entries(&job.id, &entry.path, &discovered, worker_id)
                     .await?;
+                discovered.clear();
+                tokio::task::yield_now().await;
             }
         }
+        check_control(shutdown, lease_lost)?;
+        db.add_scan_entries(&job.id, &entry.path, &discovered, worker_id)
+            .await?;
         db.complete_entry(&job.id, &entry.path, false, worker_id)
             .await?;
     }

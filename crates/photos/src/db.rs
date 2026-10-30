@@ -17,6 +17,18 @@ use crate::storage::FileIdentity;
 type DbResult<T> = Result<T, PhotosError>;
 type DbJob = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
 
+pub const SCAN_ENTRY_BATCH_SIZE: usize = 128;
+const PENDING_SCAN_ENTRY_SQL: &str = "SELECT path, entry_type, retry_count FROM photos_scan_entries INDEXED BY idx_photos_scan_entries_pending WHERE job_id = ? AND entry_type = ? AND status = 'pending' ORDER BY path LIMIT 1";
+// Preserve path order without letting the older retry-deadline index force a
+// sort of every eligible retry while the writer transaction is held.
+const RETRY_SCAN_ENTRY_SQL: &str = "SELECT path, entry_type, retry_count FROM photos_scan_entries INDEXED BY idx_photos_scan_entries_retry WHERE job_id = ? AND entry_type = ? AND status = 'failed' AND error_retryable = 1 AND next_retry_at <= ? ORDER BY path LIMIT 1";
+
+#[derive(Debug, Clone)]
+pub struct DiscoveredEntry {
+    pub path: String,
+    pub entry_type: String,
+}
+
 #[derive(Clone)]
 pub struct Db {
     sender: mpsc::Sender<DbJob>,
@@ -204,7 +216,7 @@ impl Db {
                 .call(|connection| {
                     Ok(connection
                         .query_row(
-                            "SELECT 1 FROM schema_migrations WHERE id = '001_cyberos_2_0'",
+                            "SELECT 1 FROM schema_migrations WHERE id = '006_photos_scan_contention'",
                             [],
                             |_| Ok(()),
                         )
@@ -220,7 +232,7 @@ impl Db {
             if started.elapsed() >= timeout {
                 return Err(PhotosError::new(
                     ErrorCode::Database,
-                    "Required CyberOS 2.0 schema is not applied",
+                    "Required Photos scan indexes are not applied",
                     true,
                 ));
             }
@@ -351,11 +363,7 @@ impl Db {
             let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &job_id, &worker_id)?;
             let now = now_iso();
-            let entry = transaction.query_row(
-                "SELECT path, entry_type, retry_count FROM photos_scan_entries WHERE job_id = ? AND entry_type = ? AND (status = 'pending' OR (status = 'failed' AND error_retryable = 1 AND next_retry_at <= ?)) ORDER BY path LIMIT 1",
-                params![job_id, entry_type, now],
-                |row| Ok(ScanEntry { path: row.get(0)?, entry_type: row.get(1)?, retry_count: row.get(2)? }),
-            ).optional().map_err(PhotosError::database)?;
+            let entry = next_scan_entry(&transaction, &job_id, &entry_type, &now)?;
             if let Some(entry) = &entry {
                 transaction.execute("UPDATE photos_scan_entries SET status = 'processing', updated_at = ? WHERE job_id = ? AND path = ?", params![now, job_id, entry.path]).map_err(PhotosError::database)?;
             }
@@ -372,23 +380,54 @@ impl Db {
         parent_path: &str,
         worker_id: &str,
     ) -> DbResult<()> {
-        let values = (
-            job_id.to_owned(),
-            path.to_owned(),
-            entry_type.to_owned(),
-            parent_path.to_owned(),
-        );
+        self.add_scan_entries(
+            job_id,
+            parent_path,
+            &[DiscoveredEntry {
+                path: path.to_owned(),
+                entry_type: entry_type.to_owned(),
+            }],
+            worker_id,
+        )
+        .await
+    }
+
+    pub async fn add_scan_entries(
+        &self,
+        job_id: &str,
+        parent_path: &str,
+        entries: &[DiscoveredEntry],
+        worker_id: &str,
+    ) -> DbResult<()> {
+        if entries.len() > SCAN_ENTRY_BATCH_SIZE {
+            return Err(PhotosError::new(
+                ErrorCode::Internal,
+                "Photos discovery batch is too large",
+                false,
+            ));
+        }
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let job_id = job_id.to_owned();
+        let parent_path = parent_path.to_owned();
+        let entries = entries.to_vec();
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
             // Acquire the write lock before reading the lease. A deferred
             // read-to-write upgrade can fail immediately under WAL contention,
             // bypassing busy_timeout when another service is writing.
             let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
-            ensure_job_owned(&transaction, &values.0, &worker_id)?;
-            transaction.execute(
-                "INSERT INTO photos_scan_entries (job_id,path,entry_type,status,parent_path,updated_at) VALUES (?,?,?,CASE WHEN ? = 'sidecar' THEN 'completed' ELSE 'pending' END,?,?) ON CONFLICT(job_id,path) DO NOTHING",
-                params![values.0, values.1, values.2, values.2, values.3, now_iso()],
-            ).map_err(PhotosError::database)?;
+            ensure_job_owned(&transaction, &job_id, &worker_id)?;
+            {
+                let mut statement = transaction.prepare(
+                    "INSERT INTO photos_scan_entries (job_id,path,entry_type,status,parent_path,updated_at) VALUES (?,?,?,CASE WHEN ? = 'sidecar' THEN 'completed' ELSE 'pending' END,?,?) ON CONFLICT(job_id,path) DO NOTHING"
+                ).map_err(PhotosError::database)?;
+                let now = now_iso();
+                for entry in entries {
+                    statement.execute(params![job_id, entry.path, entry.entry_type, entry.entry_type, parent_path, now]).map_err(PhotosError::database)?;
+                }
+            }
             transaction.commit().map_err(PhotosError::database)
         }).await
     }
@@ -1010,6 +1049,48 @@ fn complete_publish_transaction(
         .map(|_| true)
 }
 
+fn map_scan_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScanEntry> {
+    Ok(ScanEntry {
+        path: row.get(0)?,
+        entry_type: row.get(1)?,
+        retry_count: row.get(2)?,
+    })
+}
+
+fn next_scan_entry(
+    connection: &Connection,
+    job_id: &str,
+    entry_type: &str,
+    now: &str,
+) -> DbResult<Option<ScanEntry>> {
+    // Each status has its own partial index. Keep the original global path
+    // ordering without scanning completed media while holding the writer lock.
+    let pending = connection
+        .query_row(
+            PENDING_SCAN_ENTRY_SQL,
+            params![job_id, entry_type],
+            map_scan_entry,
+        )
+        .optional()
+        .map_err(PhotosError::database)?;
+    let retry = connection
+        .query_row(
+            RETRY_SCAN_ENTRY_SQL,
+            params![job_id, entry_type, now],
+            map_scan_entry,
+        )
+        .optional()
+        .map_err(PhotosError::database)?;
+    Ok(match (pending, retry) {
+        (Some(pending), Some(retry)) => Some(if pending.path <= retry.path {
+            pending
+        } else {
+            retry
+        }),
+        (pending, retry) => pending.or(retry),
+    })
+}
+
 fn ensure_job_owned(connection: &Connection, job_id: &str, worker_id: &str) -> DbResult<()> {
     let now = now_iso();
     let owned: bool = connection.query_row(
@@ -1382,6 +1463,249 @@ mod tests {
                 assert_eq!(status, "pending");
             }
         }
+    }
+
+    #[test]
+    fn scan_claim_work_does_not_grow_with_completed_entries() {
+        let mut work_by_size = Vec::new();
+        for count in [1_000, 50_000] {
+            let mut connection = Connection::open_in_memory().unwrap();
+            create_scan_entries_table(&connection);
+            let transaction = connection.transaction().unwrap();
+            {
+                let mut insert = transaction.prepare(
+                    "INSERT INTO photos_scan_entries (job_id,path,entry_type,status,updated_at) VALUES ('job-1',?,'media',?,'now')"
+                ).unwrap();
+                for number in 0..count {
+                    // Include pending media, too: a directory claim must not
+                    // scan either the completed prefix or unrelated types.
+                    insert
+                        .execute(params![
+                            format!("Pictures/{number:06}.jpg"),
+                            if number % 2 == 0 {
+                                "completed"
+                            } else {
+                                "pending"
+                            }
+                        ])
+                        .unwrap();
+                }
+            }
+            transaction.execute_batch(
+                "INSERT INTO photos_scan_entries (job_id,path,entry_type,status,error_retryable,next_retry_at,updated_at) VALUES
+                ('job-1','Pictures/z-pending','directory','pending',0,NULL,'now'),
+                ('job-1','Pictures/y-retry','directory','failed',1,'2026-01-01','now');"
+            ).unwrap();
+            transaction.commit().unwrap();
+
+            let mut pending = connection.prepare(PENDING_SCAN_ENTRY_SQL).unwrap();
+            assert_eq!(
+                pending
+                    .query_row(params!["job-1", "directory"], map_scan_entry)
+                    .unwrap()
+                    .path,
+                "Pictures/z-pending"
+            );
+            let mut retry = connection.prepare(RETRY_SCAN_ENTRY_SQL).unwrap();
+            assert_eq!(
+                retry
+                    .query_row(params!["job-1", "directory", "2026-10-30"], map_scan_entry)
+                    .unwrap()
+                    .path,
+                "Pictures/y-retry"
+            );
+            let steps = pending.get_status(rusqlite::StatementStatus::VmStep)
+                + retry.get_status(rusqlite::StatementStatus::VmStep);
+            assert!(steps < 150, "{count} entries required {steps} VM steps");
+            assert_eq!(pending.get_status(rusqlite::StatementStatus::Sort), 0);
+            assert_eq!(retry.get_status(rusqlite::StatementStatus::Sort), 0);
+            work_by_size.push(steps);
+            eprintln!("{count} completed/unrelated scan entries: {steps} claim VM steps");
+        }
+        assert_eq!(work_by_size[0], work_by_size[1]);
+    }
+
+    #[tokio::test]
+    async fn startup_requires_the_scan_contention_migration() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("db.sqlite");
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_migrations (id TEXT PRIMARY KEY);
+             INSERT INTO schema_migrations VALUES ('001_cyberos_2_0');",
+            )
+            .unwrap();
+        let db = Db::open(&path).unwrap();
+        assert!(db.wait_for_schema(Duration::ZERO).await.is_err());
+        connection
+            .execute(
+                "INSERT INTO schema_migrations VALUES ('006_photos_scan_contention')",
+                [],
+            )
+            .unwrap();
+        db.wait_for_schema(Duration::ZERO).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn scan_claim_preserves_eligible_path_order_and_worker_fences() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("db.sqlite");
+        seed_lease_database(&path);
+        let connection = Connection::open(&path).unwrap();
+        create_scan_entries_table(&connection);
+        connection.execute_batch(
+            "INSERT INTO photos_scan_entries (job_id,path,entry_type,status,error_retryable,next_retry_at,updated_at) VALUES
+            ('job-1','a-nonretryable','directory','failed',0,'2000-01-01','now'),
+            ('job-1','b-future','directory','failed',1,'9999-01-01','now'),
+            ('job-1','c-retry','directory','failed',1,'2000-01-01','now'),
+            ('job-1','d-pending','directory','pending',0,NULL,'now'),
+            ('job-1','e-retry','directory','failed',1,'2000-01-01','now'),
+            ('job-1','0-other-type','media','pending',0,NULL,'now'),
+            ('other-job','0-other-job','directory','pending',0,NULL,'now');"
+        ).unwrap();
+        let db = Db::open(&path).unwrap();
+        for expected in ["c-retry", "d-pending", "e-retry"] {
+            let entry = db
+                .claim_entry("job-1", "directory", "current-worker")
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(entry.path, expected);
+        }
+        assert!(
+            db.claim_entry("job-1", "directory", "current-worker")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            db.claim_entry("job-1", "media", "stale-worker")
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT status FROM photos_scan_entries WHERE path='0-other-type'",
+                    [],
+                    |row| row.get::<_, String>(0)
+                )
+                .unwrap(),
+            "pending"
+        );
+    }
+
+    #[tokio::test]
+    async fn discovery_batches_release_the_writer_lock_and_are_atomic() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("db.sqlite");
+        seed_lease_database(&path);
+        let observer = Connection::open(&path).unwrap();
+        create_scan_entries_table(&observer);
+        observer.execute_batch("CREATE TABLE other_writer (progress INTEGER); INSERT INTO other_writer VALUES (0);").unwrap();
+        let db = Db::open(&path).unwrap();
+        let writer = Connection::open(&path).unwrap();
+        writer.busy_timeout(Duration::from_secs(5)).unwrap();
+        let (advance, requested) = mpsc::channel::<()>();
+        let (committed, progress) = mpsc::channel();
+        let writer_thread = std::thread::spawn(move || {
+            while requested.recv().is_ok() {
+                let result = (|| -> rusqlite::Result<i64> {
+                    writer.execute_batch(
+                        "BEGIN IMMEDIATE; UPDATE other_writer SET progress = progress + 1; COMMIT;",
+                    )?;
+                    writer.query_row("SELECT COUNT(*) FROM photos_scan_entries", [], |row| {
+                        row.get(0)
+                    })
+                })();
+                if committed.send(result).is_err() {
+                    break;
+                }
+            }
+        });
+        // The second connection commits between discovery chunks while the
+        // same directory/job is still being traversed. No timing threshold is
+        // used to infer progress, and no scan transaction spans those chunks.
+        for batch in 0..4 {
+            let entries: Vec<_> = (0..SCAN_ENTRY_BATCH_SIZE)
+                .map(|offset| DiscoveredEntry {
+                    path: format!("Pictures/{batch}-{offset}.jpg"),
+                    entry_type: "media".into(),
+                })
+                .collect();
+            db.add_scan_entries("job-1", "Pictures", &entries, "current-worker")
+                .await
+                .unwrap();
+            advance.send(()).unwrap();
+            assert_eq!(
+                progress.recv().unwrap().unwrap(),
+                ((batch + 1) * SCAN_ENTRY_BATCH_SIZE) as i64
+            );
+        }
+        drop(advance);
+        writer_thread.join().unwrap();
+        assert_eq!(scalar(&observer, "SELECT progress FROM other_writer"), 4);
+        let before = scalar(&observer, "SELECT COUNT(*) FROM photos_scan_entries");
+        let invalid = [
+            DiscoveredEntry {
+                path: "Pictures/rolled-back.jpg".into(),
+                entry_type: "media".into(),
+            },
+            DiscoveredEntry {
+                path: "Pictures/invalid".into(),
+                entry_type: "invalid".into(),
+            },
+        ];
+        assert!(
+            db.add_scan_entries("job-1", "Pictures", &invalid, "current-worker")
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            scalar(&observer, "SELECT COUNT(*) FROM photos_scan_entries"),
+            before
+        );
+        let oversized = vec![
+            DiscoveredEntry {
+                path: "oversized".into(),
+                entry_type: "media".into()
+            };
+            SCAN_ENTRY_BATCH_SIZE + 1
+        ];
+        assert!(
+            db.add_scan_entries("job-1", "Pictures", &oversized, "current-worker")
+                .await
+                .is_err()
+        );
+        let entry = [DiscoveredEntry {
+            path: "Pictures/stale.jpg".into(),
+            entry_type: "media".into(),
+        }];
+        assert!(
+            db.add_scan_entries("job-1", "Pictures", &entry, "stale-worker")
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            scalar(&observer, "SELECT COUNT(*) FROM photos_scan_entries"),
+            before
+        );
+    }
+
+    fn create_scan_entries_table(connection: &Connection) {
+        connection.execute_batch(
+            "CREATE TABLE photos_scan_entries (
+              job_id TEXT NOT NULL, path TEXT NOT NULL,
+              entry_type TEXT NOT NULL CHECK(entry_type IN ('directory','media','sidecar')),
+              status TEXT NOT NULL, parent_path TEXT, error_retryable INTEGER NOT NULL DEFAULT 0,
+              retry_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT, updated_at TEXT NOT NULL,
+              PRIMARY KEY(job_id,path)
+            );
+            CREATE INDEX idx_photos_scan_entries_claim ON photos_scan_entries(job_id,status,next_retry_at,path);
+            CREATE INDEX idx_photos_scan_entries_pending ON photos_scan_entries(job_id,entry_type,path) WHERE status='pending';
+            CREATE INDEX idx_photos_scan_entries_retry ON photos_scan_entries(job_id,entry_type,path,next_retry_at) WHERE status='failed' AND error_retryable=1;"
+        ).unwrap();
     }
 
     #[tokio::test]

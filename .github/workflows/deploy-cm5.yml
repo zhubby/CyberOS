@@ -913,6 +913,16 @@ jobs:
           fi
           systemctl show --property ExecStart --value cyberos-terminald.service | \
             grep -Fq /usr/lib/cyberos/bin/cyberos-terminald
+          # Inspect merged unit properties so a retained drop-in cannot silently
+          # override the packaged terminal identity after account validation.
+          terminal_environment="$(systemctl show --property=Environment --value cyberos-terminald.service)"
+          terminal_home="$(printf '%s\n' "$terminal_environment" | tr ' ' '\n' | sed -n 's/^HOME=//p')"
+          terminal_working_directory="$(systemctl show --property=WorkingDirectory --value cyberos-terminald.service)"
+          if [ "$terminal_home" != /home/cyberos ] || [ "$terminal_working_directory" != /home/cyberos ]; then
+            printf 'terminald HOME and WorkingDirectory must both be /home/cyberos (HOME=%s, WorkingDirectory=%s)\n' \
+              "$terminal_home" "$terminal_working_directory" >&2
+            exit 1
+          fi
           failed_units="$(systemctl --failed --no-legend --plain | awk '$1 ~ /^cyberos-/ { print }' || true)"
           if [ -n "$failed_units" ]; then
             printf '%s\n' "$failed_units" >&2
