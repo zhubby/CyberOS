@@ -316,7 +316,6 @@
 
 @media (max-width: 520px) {
   .power-dialog-backdrop {
-    align-items: end;
     padding: 10px;
   }
 

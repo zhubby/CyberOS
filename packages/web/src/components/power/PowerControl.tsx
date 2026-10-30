@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, LoaderCircle, Power, RotateCw, X } from "lucide-react";
 import type { SystemPowerAction } from "../../api.js";
@@ -94,7 +95,7 @@ export function PowerControl({
       >
         <Power aria-hidden="true" size={18} />
       </button>
-      {open ? (
+      {open ? createPortal(
         <PowerDialog
           dialogRef={dialogRef}
           action={action}
@@ -103,7 +104,8 @@ export function PowerControl({
           onBack={() => setAction(null)}
           onClose={close}
           onConfirm={() => void confirm()}
-        />
+        />,
+        document.body
       ) : null}
     </>
   );
