@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -12,7 +12,9 @@ use crate::error::AlerterError;
 
 impl AlertStore {
     pub(super) fn schedule_due_deliveries(&mut self, now_ms: i64) -> Result<(), AlerterError> {
-        let transaction = self.connection.transaction()?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let now = iso(now_ms);
         let mut pending: i64 = transaction.query_row(
             "SELECT COUNT(*) FROM monitoring_alert_deliveries WHERE status IN ('pending','retrying','sending')",

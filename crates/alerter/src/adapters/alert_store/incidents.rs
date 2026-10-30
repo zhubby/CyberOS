@@ -1,4 +1,4 @@
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -22,7 +22,11 @@ struct StoredHealthRouting {
 
 impl AlertStore {
     pub(super) fn sync_health_incidents(&mut self, now_ms: i64) -> Result<(), AlerterError> {
-        let transaction = self.connection.transaction()?;
+        // Acquire the writer lock before reading. A WAL read-to-write upgrade
+        // can fail immediately under contention without honoring busy_timeout.
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let initialized: bool = transaction.query_row(
             "SELECT health_initialized FROM monitoring_alerter_state WHERE id = 1",
             [],

@@ -1,4 +1,4 @@
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use serde::Deserialize;
 
 use super::AlertStore;
@@ -164,7 +164,9 @@ impl AlertStore {
         now_ms: i64,
         result: Result<(), &str>,
     ) -> Result<(), AlerterError> {
-        let transaction = self.connection.transaction()?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let now = iso(now_ms);
         let delivery_context: Option<(Option<String>, String)> = transaction
             .query_row(
