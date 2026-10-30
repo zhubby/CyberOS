@@ -1756,6 +1756,12 @@ export const en = {
         wifi: {
           title: "Wi-Fi",
           description: "Manage wireless adapters, saved networks, and a local hotspot.",
+          statusDescription: "Wireless adapter and hotspot status.",
+          networksTitle: "Wi-Fi networks",
+          connectNetwork: "Connect to {{ssid}}",
+          currentNetwork: "Connected to {{ssid}}",
+          editNetwork: "Edit {{ssid}}",
+          forgetNetwork: "Forget {{ssid}}",
           readOnlyDescription: "Connection status. Configuration is in Settings.",
           openSettings: "Wi-Fi settings",
           radioOffTitle: "Wi-Fi radio is off",
@@ -2289,6 +2295,10 @@ export const en = {
     searchPlaceholder: "Search settings",
     searchEmpty: "No settings match.",
     localProfile: "Local profile",
+    secretInput: {
+      clearOnSave: "Will be cleared on save",
+      undoClear: "Undo clear"
+    },
     groups: {
       cyberos: "CyberOS",
       devices: "Devices",
@@ -4934,6 +4944,12 @@ export const zhCN = {
         wifi: {
           title: "无线网络",
           description: "管理无线网卡、已保存网络和本机热点。",
+          statusDescription: "查看无线网卡与热点状态。",
+          networksTitle: "Wi-Fi 网络",
+          connectNetwork: "连接 {{ssid}}",
+          currentNetwork: "已连接 {{ssid}}",
+          editNetwork: "编辑 {{ssid}}",
+          forgetNetwork: "遗忘 {{ssid}}",
           readOnlyDescription: "查看连接状态，配置操作请前往设置。",
           openSettings: "Wi-Fi 设置",
           radioOffTitle: "Wi-Fi 射频已关闭",
@@ -5467,6 +5483,10 @@ export const zhCN = {
     searchPlaceholder: "搜索设置",
     searchEmpty: "没有匹配的设置。",
     localProfile: "本地配置",
+    secretInput: {
+      clearOnSave: "保存后清除",
+      undoClear: "撤销清除"
+    },
     groups: {
       cyberos: "CyberOS",
       devices: "设备",

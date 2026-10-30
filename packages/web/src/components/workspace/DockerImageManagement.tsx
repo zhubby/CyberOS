@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
@@ -325,7 +326,7 @@ export function DockerImageDetailsDialog({
   const removalBlocked = dockerImageRemovalBlocked(image);
   const dialogRef = useModalDialog(onClose, deleting);
   return (
-    <div className="management-modal-backdrop docker-image-modal-backdrop" onMouseDown={(event) => {
+    <ModalPortal className="management-modal-backdrop docker-image-modal-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !deleting) onClose();
     }}>
       <section ref={dialogRef} tabIndex={-1} className="management-modal docker-image-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="docker-image-detail-title">
@@ -397,7 +398,7 @@ export function DockerImageDetailsDialog({
           )}
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -432,7 +433,7 @@ function DockerImagePullDialog({
   const { t } = useTranslation();
   const valid = isValidDockerImageReference(reference);
   return (
-    <div className="management-modal-backdrop docker-image-modal-backdrop" onMouseDown={(event) => {
+    <ModalPortal className="management-modal-backdrop docker-image-modal-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !submitting) onClose();
     }}>
       <form className="management-modal docker-image-pull-dialog" role="dialog" aria-modal="true" aria-labelledby="docker-image-pull-title" onSubmit={onSubmit}>
@@ -467,7 +468,7 @@ function DockerImagePullDialog({
           </button>
         </footer>
       </form>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -569,7 +570,7 @@ function DockerRegistryDialog({
   }
 
   return (
-    <div className="management-modal-backdrop docker-image-modal-backdrop" onMouseDown={(event) => {
+    <ModalPortal className="management-modal-backdrop docker-image-modal-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !submitting) onClose();
     }}>
       <section className="management-modal docker-registry-dialog" role="dialog" aria-modal="true" aria-labelledby="docker-registry-title">
@@ -649,7 +650,7 @@ function DockerRegistryDialog({
           )}
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 

@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import {
   useCallback,
   useEffect,
@@ -446,7 +447,7 @@ export function LocalTerminalPanel({
       </div>
 
       {renameCandidate ? (
-        <div className="file-action-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setRenameCandidate(null)}>
+        <ModalPortal className="file-action-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setRenameCandidate(null)}>
           <form className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="terminal-rename-title" onSubmit={(event) => void submitRename(event)}>
             <header>
               <span className="eyebrow">{t("workspace.terminal.rename")}</span>
@@ -471,11 +472,11 @@ export function LocalTerminalPanel({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {closeCandidate ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <section className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="terminal-close-title">
             <header>
               <span className="eyebrow">{t("workspace.terminal.close")}</span>
@@ -490,7 +491,7 @@ export function LocalTerminalPanel({
               </button>
             </footer>
           </section>
-        </div>
+        </ModalPortal>
       ) : null}
     </section>
   );

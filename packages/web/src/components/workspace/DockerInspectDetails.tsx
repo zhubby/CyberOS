@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import type { ReactNode } from "react";
 import { CircleAlert, HardDrive, LoaderCircle, Network, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -196,7 +197,7 @@ function DockerInspectDialog({
   const { t } = useTranslation();
   const dialogRef = useModalDialog(onClose);
   return (
-    <div className="management-modal-backdrop docker-resource-detail-backdrop" role="presentation" onMouseDown={(event) => {
+    <ModalPortal className="management-modal-backdrop docker-resource-detail-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
       <section ref={dialogRef} tabIndex={-1} className="management-modal docker-container-detail-modal docker-inspect-detail-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -219,7 +220,7 @@ function DockerInspectDialog({
           {children}
         </div>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 

@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -60,7 +61,7 @@ export function FilePreviewDialog({
   }, []);
 
   return (
-    <div
+    <ModalPortal
       className="file-preview-backdrop"
       data-state={closing ? "closing" : "open"}
       role="presentation"
@@ -118,6 +119,6 @@ export function FilePreviewDialog({
           {footer}
         </div>
       </section>
-    </div>
+    </ModalPortal>
   );
 }

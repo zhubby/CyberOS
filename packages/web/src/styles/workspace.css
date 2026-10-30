@@ -6835,14 +6835,13 @@
   gap: 6px;
 }
 
-.system-wifi-toolbar select {
+.system-wifi-toolbar .custom-select {
+  width: auto;
   min-width: 104px;
+}
+
+.system-wifi-toolbar .custom-select-trigger {
   height: 32px;
-  padding: 0 28px 0 9px;
-  border: 1px solid var(--line-soft);
-  border-radius: 5px;
-  color: var(--text);
-  background: var(--surface-strong);
 }
 
 .system-wifi-toolbar > button:not(.management-icon-action),
@@ -7135,15 +7134,63 @@
   min-width: 0;
 }
 
-.system-wifi-modal-backdrop {
-  z-index: 96;
+.management-modal-backdrop.system-wifi-modal-backdrop {
+  z-index: 110;
 }
 
-.system-wifi-dialog,
-.system-wifi-confirm-dialog {
+.management-modal.system-wifi-dialog,
+.management-modal.system-wifi-confirm-dialog {
   width: min(600px, 100%);
   max-height: min(720px, calc(100dvh - 36px));
   border-top: 3px solid var(--accent);
+}
+
+.management-modal.system-wifi-networks-dialog {
+  width: min(760px, 100%);
+}
+
+.system-wifi-networks-body {
+  container-name: system-wifi-section;
+  container-type: inline-size;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.system-wifi-network-controls,
+.system-wifi-hotspot-actions {
+  flex-wrap: wrap;
+}
+
+.system-wifi-network-controls > strong {
+  margin-right: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.system-wifi-networks-dialog .system-wifi-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.system-wifi-networks-dialog .system-wifi-list-panel + .system-wifi-list-panel {
+  padding-top: 12px;
+  padding-left: 0;
+  border-top: 1px solid var(--line-soft);
+  border-left: 0;
+}
+
+.system-wifi-networks-dialog .system-wifi-network-list,
+.system-wifi-networks-dialog .system-wifi-profile-list {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.system-wifi-hotspot-bar.system-wifi-hotspot-summary {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
 }
 
 .system-wifi-dialog form {
@@ -7170,8 +7217,7 @@
   text-transform: uppercase;
 }
 
-.system-wifi-dialog input:not([type="checkbox"]),
-.system-wifi-dialog select {
+.system-wifi-dialog input:not([type="checkbox"]) {
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -7180,6 +7226,10 @@
   border-radius: 5px;
   color: var(--text);
   background: var(--surface-strong);
+}
+
+.system-wifi-dialog .custom-select-trigger {
+  height: 36px;
 }
 
 .system-wifi-form-grid {

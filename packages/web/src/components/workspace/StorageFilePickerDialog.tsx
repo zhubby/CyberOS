@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   ArrowUp,
@@ -327,7 +328,7 @@ export function StorageFilePickerDialog({
   }
 
   return (
-    <div
+    <ModalPortal
       className="management-dialog-backdrop storage-file-picker-backdrop"
       role="presentation"
       onMouseDown={(event) => event.currentTarget === event.target && onCancel()}
@@ -558,7 +559,7 @@ export function StorageFilePickerDialog({
           </div>
         </footer>
       </div>
-    </div>
+    </ModalPortal>
   );
 }
 

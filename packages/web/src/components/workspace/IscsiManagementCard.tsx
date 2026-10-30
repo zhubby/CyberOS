@@ -1,5 +1,5 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { IscsiAction, IscsiImage, IscsiSummary, IscsiTarget } from "@cyberos/shared";
 import { CircleAlert, Database, HardDrive, LoaderCircle, Plus, RefreshCw, Server, Trash2, X } from "lucide-react";
@@ -163,11 +163,11 @@ export function IscsiManagementCard({ locale, onNotifySuccess, onWorkQueuesChang
         <IscsiInventory summary={summary} busy={busy} locale={locale} onSelectTarget={(id) => open({ kind: "target", id })} onSelectImage={(id) => open({ kind: "image", id })} />
       </> : null}
     </div>
-    {modal && summary ? createPortal(<IscsiDialog title={modal.kind === "create" ? text("createTarget") : target?.name ?? image?.name ?? text("title")} busy={busy} error={modalError} onClose={close}>
+    {modal && summary ? <IscsiDialog title={modal.kind === "create" ? text("createTarget") : target?.name ?? image?.name ?? text("title")} busy={busy} error={modalError} onClose={close}>
       {modal.kind === "create" ? <TargetForm summary={summary} busy={busy} onCancel={close} onSave={async (input) => { if (await apply(input)) close(); }} /> : null}
       {target ? <TargetDetails key={target.id} target={target} summary={summary} busy={busy} locale={locale} apply={apply} onClose={close} onRefresh={() => void refreshDetails()} /> : null}
       {image ? <RetainedImageDetails key={image.id} image={image} summary={summary} busy={busy} locale={locale} apply={apply} onClose={close} /> : null}
-    </IscsiDialog>, document.body) : null}
+    </IscsiDialog> : null}
   </section>;
 }
 
@@ -190,13 +190,13 @@ export function IscsiInventory({ summary, busy, locale, onSelectTarget, onSelect
 function IscsiDialog({ title, busy, error, onClose, children }: { title: string; busy: boolean; error: string | null; onClose: () => void; children: ReactNode }) {
   const text = useIscsiText();
   const ref = useModalDialog(onClose, busy);
-  return <div className="management-modal-backdrop iscsi-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+  return <ModalPortal className="management-modal-backdrop iscsi-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={ref} tabIndex={-1} className="management-modal iscsi-dialog" role="dialog" aria-modal="true" aria-labelledby="iscsi-dialog-title" aria-busy={busy || undefined}>
       <header><div><span className="eyebrow">iSCSI</span><h3 id="iscsi-dialog-title">{title}</h3></div><button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label={text("close")}><X size={18} aria-hidden="true" /></button></header>
       {error ? <div className="iscsi-error" role="alert"><CircleAlert size={16} aria-hidden="true" /><span>{error}</span><button type="button" className="secondary-button" onClick={onClose} disabled={busy}>{text("retry")}</button></div> : null}
       <div className="iscsi-dialog-body">{children}</div>
     </section>
-  </div>;
+  </ModalPortal>;
 }
 
 function TargetForm({ target, summary, busy, onSave, onCancel }: { target?: IscsiTarget; summary: IscsiSummary; busy: boolean; onSave: (input: Mutation) => void | Promise<void>; onCancel: () => void }) {

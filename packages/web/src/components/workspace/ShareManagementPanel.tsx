@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ShareProtocol } from "@cyberos/shared";
@@ -697,7 +698,7 @@ export function ShareManagementPanel({
                   return shareCard;
                 }
                 return (
-                  <div
+                  <ModalPortal
                     key="add-share-modal"
                     className="management-modal-backdrop share-add-modal-backdrop"
                     role="presentation"
@@ -745,7 +746,7 @@ export function ShareManagementPanel({
                         </footer>
                       </div>
                     </section>
-                  </div>
+                  </ModalPortal>
                 );
               })
             ) : (

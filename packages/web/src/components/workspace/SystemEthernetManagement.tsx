@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import {
   useEffect,
   useId,
@@ -301,7 +302,7 @@ function EthernetEditor({ state, busy, unavailable, t, onChange, onClose, onSave
   }
 
   return (
-    <div className="management-modal-backdrop system-ethernet-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    <ModalPortal className="management-modal-backdrop system-ethernet-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <section ref={dialog} className="management-modal system-ethernet-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header>
           <div><span className="eyebrow">{t("workspace.management.network.ethernet.dialogEyebrow")}</span><h2 id={titleId}>{state.device.name}</h2><p>{state.device.permanentMac}</p></div>
@@ -317,7 +318,7 @@ function EthernetEditor({ state, busy, unavailable, t, onChange, onClose, onSave
           <footer className="system-ethernet-dialog-actions"><button type="button" onClick={onClose} disabled={busy}>{t("common.actions.cancel")}</button><button type="submit" className="is-primary" disabled={busy || unavailable || errors.length > 0}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Save aria-hidden="true" size={14} />}<span>{t("common.actions.save")}</span></button></footer>
         </form>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
 
@@ -354,14 +355,14 @@ function ApplyConfirmation({ busy, count, t, onCancel, onConfirm }: { busy: bool
   const titleId = useId();
   const dialog = useRef<HTMLElement | null>(null);
   useDialogFocus(dialog, busy ? undefined : onCancel);
-  return <div className="management-modal-backdrop system-ethernet-modal-backdrop"><section ref={dialog} className="management-modal system-ethernet-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><header><div><span className="eyebrow">{t("workspace.management.network.ethernet.confirm.eyebrow")}</span><h2 id={titleId}>{t("workspace.management.network.ethernet.confirm.title")}</h2></div><button type="button" className="management-icon-action" onClick={onCancel} disabled={busy} aria-label={t("common.actions.close")}><X aria-hidden="true" size={17} /></button></header><div className="system-ethernet-confirm-body"><AlertTriangle aria-hidden="true" size={24} /><p>{t("workspace.management.network.ethernet.confirm.description", { count })}</p></div><footer><button type="button" onClick={onCancel} disabled={busy}>{t("common.actions.cancel")}</button><button type="button" className="is-danger" onClick={onConfirm} disabled={busy}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Check aria-hidden="true" size={14} />}<span>{t("workspace.management.network.ethernet.confirm.apply")}</span></button></footer></section></div>;
+  return <ModalPortal className="management-modal-backdrop system-ethernet-modal-backdrop"><section ref={dialog} className="management-modal system-ethernet-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><header><div><span className="eyebrow">{t("workspace.management.network.ethernet.confirm.eyebrow")}</span><h2 id={titleId}>{t("workspace.management.network.ethernet.confirm.title")}</h2></div><button type="button" className="management-icon-action" onClick={onCancel} disabled={busy} aria-label={t("common.actions.close")}><X aria-hidden="true" size={17} /></button></header><div className="system-ethernet-confirm-body"><AlertTriangle aria-hidden="true" size={24} /><p>{t("workspace.management.network.ethernet.confirm.description", { count })}</p></div><footer><button type="button" onClick={onCancel} disabled={busy}>{t("common.actions.cancel")}</button><button type="button" className="is-danger" onClick={onConfirm} disabled={busy}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Check aria-hidden="true" size={14} />}<span>{t("workspace.management.network.ethernet.confirm.apply")}</span></button></footer></section></ModalPortal>;
 }
 
 function ApplyCountdown({ transaction, seconds, busy, t, onConfirm, onRollback }: { transaction: EthernetApplyTransaction; seconds: number; busy: boolean; t: Translate; onConfirm: () => void; onRollback: () => void }) {
   const titleId = useId();
   const dialog = useRef<HTMLElement | null>(null);
   useDialogFocus(dialog);
-  return <div className="management-modal-backdrop system-ethernet-modal-backdrop"><section ref={dialog} className="management-modal system-ethernet-countdown-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><header><div><span className="eyebrow">{t("workspace.management.network.ethernet.transaction.eyebrow")}</span><h2 id={titleId}>{t("workspace.management.network.ethernet.transaction.title")}</h2></div><span className="system-ethernet-countdown" aria-live="polite">{seconds}s</span></header><div className="system-ethernet-confirm-body"><Cable aria-hidden="true" size={24} /><p>{t("workspace.management.network.ethernet.transaction.description", { count: transaction.deviceIds.length })}</p></div><footer><button type="button" className="is-danger" onClick={onRollback} disabled={busy}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <RotateCcw aria-hidden="true" size={14} />}<span>{t("workspace.management.network.ethernet.transaction.rollback")}</span></button><button type="button" className="is-primary" onClick={onConfirm} disabled={busy || seconds <= 0}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Check aria-hidden="true" size={14} />}<span>{t("workspace.management.network.ethernet.transaction.keep")}</span></button></footer></section></div>;
+  return <ModalPortal className="management-modal-backdrop system-ethernet-modal-backdrop"><section ref={dialog} className="management-modal system-ethernet-countdown-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><header><div><span className="eyebrow">{t("workspace.management.network.ethernet.transaction.eyebrow")}</span><h2 id={titleId}>{t("workspace.management.network.ethernet.transaction.title")}</h2></div><span className="system-ethernet-countdown" aria-live="polite">{seconds}s</span></header><div className="system-ethernet-confirm-body"><Cable aria-hidden="true" size={24} /><p>{t("workspace.management.network.ethernet.transaction.description", { count: transaction.deviceIds.length })}</p></div><footer><button type="button" className="is-danger" onClick={onRollback} disabled={busy}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <RotateCcw aria-hidden="true" size={14} />}<span>{t("workspace.management.network.ethernet.transaction.rollback")}</span></button><button type="button" className="is-primary" onClick={onConfirm} disabled={busy || seconds <= 0}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Check aria-hidden="true" size={14} />}<span>{t("workspace.management.network.ethernet.transaction.keep")}</span></button></footer></section></ModalPortal>;
 }
 
 function useDialogFocus(dialog: RefObject<HTMLElement | null>, onEscape?: () => void) {

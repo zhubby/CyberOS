@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -510,7 +511,7 @@ function IncidentDetailDialog({
     return () => window.cancelAnimationFrame(frame);
   }, [dialogRef, showSilence]);
 
-  return <div className="management-modal-backdrop monitoring-incident-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+  return <ModalPortal className="management-modal-backdrop monitoring-incident-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} tabIndex={-1} className="management-modal monitoring-incident-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="monitoring-incident-detail-title">
       <header>
         <div><span className="eyebrow">{t("workspace.monitoring.alerts.incidents.detailEyebrow")}</span><h2 id="monitoring-incident-detail-title">{incident.title}</h2></div>
@@ -561,7 +562,7 @@ function IncidentDetailDialog({
         {incident.status === "firing" && incident.ruleId && !showSilence ? <button ref={silenceTriggerRef} type="button" className="primary-button" disabled={busy} onClick={() => onShowSilence(true)}><BellOff size={15} />{t("workspace.monitoring.alerts.incidents.silence")}</button> : null}
       </footer>
     </section>
-  </div>;
+  </ModalPortal>;
 }
 
 function localDateTime(value: Date): string {

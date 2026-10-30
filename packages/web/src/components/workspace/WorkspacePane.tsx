@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -1875,7 +1876,7 @@ export function WorkspacePane({
       ) : null}
 
       {createFolderOpen ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <form
             className="file-action-dialog"
             role="dialog"
@@ -1910,11 +1911,11 @@ export function WorkspacePane({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {renameEntry ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <form className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="file-rename-title" onSubmit={submitRename}>
             <header>
               <span className="eyebrow">{t("workspace.actions.rename")}</span>
@@ -1947,11 +1948,11 @@ export function WorkspacePane({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {deleteState ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <section className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="file-delete-title">
             <header>
               <span className="eyebrow">{t("workspace.actions.delete")}</span>
@@ -1970,11 +1971,11 @@ export function WorkspacePane({
               </button>
             </footer>
           </section>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {transferState ? (
-        <div className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation">
           <form
             className="file-action-dialog transfer-dialog"
             role="dialog"
@@ -2022,7 +2023,7 @@ export function WorkspacePane({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {batchMoveEntries && selectedStoragePool ? (

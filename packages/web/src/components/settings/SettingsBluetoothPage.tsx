@@ -16,6 +16,7 @@ import { formatBytes } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { useBluetoothTransfers } from "../../lib/use-bluetooth-transfers.js";
 import { useSystemBluetoothStatus } from "../../lib/use-system-bluetooth-status.js";
+import { CustomSelect } from "../common/CustomSelect.js";
 import { Switch } from "../common/Switch.js";
 import {
   StorageFilePickerDialog, type StorageFilePickerPool, type StorageFileSelection
@@ -249,7 +250,30 @@ export function BluetoothAudioOutputField({
   const { t } = useTranslation();
   const configuredDeviceUnavailable = defaultAudioDeviceId !== null
     && !audioDevices.some((device) => device.id === defaultAudioDeviceId);
-  return <label className="bluetooth-field-row"><span>{t("settings.bluetooth.audio.output")}</span><select value={defaultAudioDeviceId ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value || null)}><option value="">{t("settings.bluetooth.audio.systemDefault")}</option>{configuredDeviceUnavailable ? <option value={defaultAudioDeviceId ?? ""} disabled>{t("settings.bluetooth.audio.configuredUnavailable")}</option> : null}{audioDevices.map((device) => <option key={device.id} value={device.id}>{device.name}{device.connected ? "" : ` (${t("settings.bluetooth.audio.disconnected")})`}</option>)}</select><small>{t("settings.bluetooth.audio.nextPlayback")}</small></label>;
+  return (
+    <label className="bluetooth-field-row">
+      <span>{t("settings.bluetooth.audio.output")}</span>
+      <CustomSelect
+        value={defaultAudioDeviceId ?? ""}
+        ariaLabel={t("settings.bluetooth.audio.output")}
+        disabled={disabled}
+        onChange={(value) => onChange(value || null)}
+        options={[
+          { value: "", label: t("settings.bluetooth.audio.systemDefault") },
+          ...(configuredDeviceUnavailable ? [{
+            value: defaultAudioDeviceId,
+            label: t("settings.bluetooth.audio.configuredUnavailable"),
+            disabled: true
+          }] : []),
+          ...audioDevices.map((device) => ({
+            value: device.id,
+            label: `${device.name}${device.connected ? "" : ` (${t("settings.bluetooth.audio.disconnected")})`}`
+          }))
+        ]}
+      />
+      <small>{t("settings.bluetooth.audio.nextPlayback")}</small>
+    </label>
+  );
 }
 
 function deviceIcon(type: BluetoothStatus["devices"][number]["type"]) {

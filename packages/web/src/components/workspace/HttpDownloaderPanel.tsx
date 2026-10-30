@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import {
   CheckCircle2,
@@ -503,7 +504,7 @@ export function HttpDownloaderPanel({
       )}
 
       {createOpen ? (
-        <div className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && closeCreateDialog()}>
+        <ModalPortal className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && closeCreateDialog()}>
           <form
             ref={createDialogRef}
             className="management-dialog download-create-dialog"
@@ -660,7 +661,7 @@ export function HttpDownloaderPanel({
               </button>
             </footer>
           </form>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {pickerOpen ? (

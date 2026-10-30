@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { CircleAlert, CircleCheck, Container, Database, Info, LoaderCircle, Network, Plus, Settings2, Trash2, X } from "lucide-react";
@@ -111,7 +112,7 @@ export function DockerCreateDialogs({ kind, summary, storagePools, onClose, onCo
   }
 
   return (
-    <div className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!submitting && event.target === event.currentTarget) onClose(); }}>
+    <ModalPortal className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!submitting && event.target === event.currentTarget) onClose(); }}>
       <form className="management-dialog vm-create-dialog docker-create-dialog" onSubmit={(event) => void submit(event)} role="dialog" aria-modal="true" aria-labelledby="docker-create-title" aria-busy={submitting}>
         <header className="vm-create-dialog-header">
           <div className="vm-create-heading"><span className="vm-create-icon" aria-hidden="true">{kind === "container" ? <Container size={19} /> : kind === "volume" ? <Database size={19} /> : <Network size={19} />}</span><div><span className="eyebrow">{createT("eyebrow")}</span><h3 id="docker-create-title">{title}</h3><p>{description}</p></div></div>
@@ -137,7 +138,7 @@ export function DockerCreateDialogs({ kind, summary, storagePools, onClose, onCo
         </div>
         <footer className="vm-create-dialog-footer"><span>{kind === "container" ? `${step} / 6` : createT("actions.directCreate")} · {form.name || createT("actions.unnamed")}</span><div><button type="button" onClick={onClose} disabled={submitting}>{createT("actions.cancel")}</button>{kind === "container" && step > 1 ? <button type="button" onClick={() => goToStep(step - 1)} disabled={submitting}>{createT("actions.back")}</button> : null}{kind === "container" && step < 6 ? <button type="button" className="vm-create-submit" onClick={advance} disabled={submitting}>{createT("actions.next")}</button> : <button type="submit" className="vm-create-submit" disabled={!canSubmit} aria-busy={submitting || undefined}>{submitting ? <><LoaderCircle className="spin" size={14} />{createT("actions.creating")}</> : createT("actions.createNow")}</button>}</div></footer>
       </form>
-    </div>
+    </ModalPortal>
   );
 }
 

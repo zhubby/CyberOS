@@ -39,6 +39,7 @@ import {
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { Switch } from "../common/Switch.js";
 import { CustomSelect } from "../common/CustomSelect.js";
+import { SettingsSecretField } from "./SettingsSecretField.js";
 import {
   StorageFilePickerDialog,
   type StorageFilePickerPool,
@@ -368,25 +369,21 @@ export function SettingsMediaContent({
             </div>
           </header>
           <fieldset className="settings-field-grid settings-media-metadata" disabled={busy === "settings"}>
-            <label className="settings-field-wide">
-              <span>{t("settings.media.tmdbToken")}</span>
-              <input
-                type="password"
-                value={tmdbToken}
-                placeholder={data.settings.tmdbTokenConfigured
-                  ? t("settings.media.tokenConfigured")
-                  : t("settings.media.tokenMissing")}
-                onChange={(event) => onTmdbTokenChange(event.target.value)}
-              />
-            </label>
-            <label className="settings-check settings-field-wide">
-              <input
-                type="checkbox"
-                checked={clearTmdbToken}
-                onChange={(event) => onClearTmdbTokenChange(event.target.checked)}
-              />
-              <span>{t("settings.media.clearToken")}</span>
-            </label>
+            <SettingsSecretField
+              id="tmdb-read-access-token"
+              label={t("settings.media.tmdbToken")}
+              value={tmdbToken}
+              configured={data.settings.tmdbTokenConfigured}
+              clearSaved={clearTmdbToken}
+              placeholder={data.settings.tmdbTokenConfigured
+                ? t("settings.media.tokenConfigured")
+                : t("settings.media.tokenMissing")}
+              clearLabel={t("settings.media.clearToken")}
+              onChange={(value, clearSaved) => {
+                onTmdbTokenChange(value);
+                onClearTmdbTokenChange(clearSaved);
+              }}
+            />
             <label>
               <span>{t("settings.media.language")}</span>
               <input required value={language} onChange={(event) => onLanguageChange(event.target.value)} />

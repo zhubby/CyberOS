@@ -1,4 +1,5 @@
 @import "@cyberos/shared/hud-tokens.css";
+@import "../styles/modal.css";
 
 :root {
   color-scheme: dark;

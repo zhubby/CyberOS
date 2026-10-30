@@ -42,7 +42,7 @@ const wifi: NetworkSummary["wifi"] = {
 };
 
 describe("SystemWifiManagement", () => {
-  it("groups the device summary and network lists in a compact content layout", async () => {
+  it("keeps the settings page focused on status with network management behind dialog entry points", async () => {
     await initI18n();
     await i18n.changeLanguage("en");
 
@@ -59,13 +59,18 @@ describe("SystemWifiManagement", () => {
     expect(html).toContain('class="system-wifi-content"');
     expect(html).toContain('class="system-wifi-device-identity"');
     expect(html).toContain('class="system-wifi-device-details"');
-    expect(html).toContain('class="system-wifi-grid"');
-    expect(html).toContain("Available networks");
-    expect(html).toContain("Saved networks");
-    expect(html).toContain("zhubbyf50pro");
+    expect(html).toContain("wlan0");
+    expect(html).toContain("Disconnected");
+    expect(html).toContain("Scan");
+    expect(html).toContain("Hotspot");
+    expect(html).not.toContain("Available networks");
+    expect(html).not.toContain("Saved networks");
+    expect(html).not.toContain("zhubbyf50pro");
+    expect(html).not.toContain('aria-label="Disable Wi-Fi radio"');
+    expect(html).not.toContain('aria-label="Forget network"');
   });
 
-  it("disables scanning and hotspot configuration while the radio is off", async () => {
+  it("allows opening network settings while the radio is off so it can be enabled in the dialog", async () => {
     await initI18n();
     await i18n.changeLanguage("en");
 
@@ -79,8 +84,39 @@ describe("SystemWifiManagement", () => {
       onNotifyError: () => undefined
     }));
 
-    expect(html).toMatch(/<button type="button" disabled="">.*?<span>Scan<\/span><\/button>/s);
-    expect(html).toMatch(/<button type="button" disabled="">.*?<span>Hotspot<\/span><\/button>/s);
+    const buttons = html.match(/<button\b[^>]*>[\s\S]*?<\/button>/gu) ?? [];
+    expect(buttons.find((button) => button.includes("<span>Scan</span>"))).not.toContain('disabled=""');
+    expect(buttons.find((button) => button.includes("<span>Hotspot</span>"))).toContain('disabled=""');
+  });
+
+  it("shows active connection and hotspot data without inline disconnect, start, stop, or delete controls", async () => {
+    await initI18n();
+    await i18n.changeLanguage("en");
+
+    const html = renderToStaticMarkup(createElement(SystemWifiManagement, {
+      wifi: {
+        ...wifi,
+        devices: [{ ...wifi.devices[0]!, ssid: "Home", state: "connected", mode: "client", activeConnectionId: "profile-1" }],
+        hotspots: [{
+          device: "wlan0", profileId: "hotspot-1", ssid: "CyberOS hotspot", band: "2.4", channel: 6,
+          autostart: false, active: true, credentialConfigured: true, revision: "r1", restoreProfileId: null
+        }]
+      },
+      canManageWifi: true,
+      canManageHotspot: true,
+      onStatus: () => undefined,
+      onRefresh: async () => undefined,
+      onNotifySuccess: () => undefined,
+      onNotifyError: () => undefined
+    }));
+
+    expect(html).toContain("Home");
+    expect(html).toContain("Connected");
+    expect(html).toContain("CyberOS hotspot");
+    expect(html).toContain("Running");
+    const buttons = html.match(/<button\b[^>]*>[\s\S]*?<\/button>/gu) ?? [];
+    expect(buttons).toHaveLength(2);
+    expect(buttons.every((button) => button.includes("<span>Scan</span>") || button.includes("<span>Hotspot</span>"))).toBe(true);
   });
 
   it("disables every write entry point when host networking is declarative", async () => {
@@ -107,8 +143,10 @@ describe("SystemWifiManagement", () => {
     }));
 
     expect(html).toContain("Wi-Fi settings are read-only");
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Disable Wi-Fi radio"/u);
-    expect(html).toMatch(/<button type="button" class="is-danger" disabled="">/u);
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Connect"/u);
+    const buttons = html.match(/<button\b[^>]*>[\s\S]*?<\/button>/gu) ?? [];
+    expect(buttons.find((button) => button.includes("<span>Scan</span>"))).toContain('disabled=""');
+    expect(buttons.find((button) => button.includes("<span>Hotspot</span>"))).toContain('disabled=""');
+    expect(html).not.toContain('class="is-danger"');
+    expect(html).not.toContain('aria-label="Connect"');
   });
 });

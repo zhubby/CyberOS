@@ -366,7 +366,7 @@ button {
   min-width: 86px;
   min-height: 36px;
   padding: 0 12px;
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--accent-contrast);
   font-family: var(--font-emphasis);
   font-weight: 800;

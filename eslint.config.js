@@ -1,6 +1,11 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
+const modalPortalRestriction = {
+  selector: "JSXOpeningElement[name.name=/^(div|section|form)$/] > JSXAttribute[name.name='className'][value.value=/backdrop/][value.value!='notification-drawer-backdrop']",
+  message: "Modal backdrops must use ModalPortal so dialogs center in the full viewport. See docs/src/content/docs/reference/frontend-design.md."
+};
+
 export default tseslint.config(
   {
     ignores: ["**/dist/**", "node_modules/**", "coverage/**", ".*os/**", "**/.astro/**"]
@@ -22,6 +27,28 @@ export default tseslint.config(
         {
           "argsIgnorePattern": "^_",
           "varsIgnorePattern": "^_"
+        }
+      ]
+    }
+  },
+  {
+    files: ["packages/web/src/components/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", modalPortalRestriction]
+    }
+  },
+  {
+    files: [
+      "packages/web/src/components/settings/**/*.tsx",
+      "packages/web/src/components/workspace/SystemWifiManagement.tsx"
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        modalPortalRestriction,
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message: "Settings dropdowns must use CustomSelect, including nested dialogs and shared settings controls. See docs/src/content/docs/reference/frontend-design.md."
         }
       ]
     }

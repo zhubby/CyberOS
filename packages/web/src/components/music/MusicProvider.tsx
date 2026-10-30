@@ -1,3 +1,4 @@
+import { ModalPortal } from "../common/ModalPortal.js";
 import {
   createContext,
   useCallback,
@@ -229,7 +230,7 @@ export function MusicTakeoverDialog({
   const { t } = useTranslation();
   const ref = useModalDialog(onCancel, busy);
   return (
-    <div
+    <ModalPortal
       className="management-dialog-backdrop music-dialog-backdrop"
       role="presentation"
     >
@@ -257,6 +258,6 @@ export function MusicTakeoverDialog({
           </button>
         </footer>
       </section>
-    </div>
+    </ModalPortal>
   );
 }
