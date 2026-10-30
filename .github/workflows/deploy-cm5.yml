@@ -322,6 +322,15 @@ jobs:
           verify_only=$1
           target_version=$2
           target_commit=$3
+          if ! terminal_account="$(getent passwd cyberos)"; then
+            printf 'CM5 clean installation required; cyberos runtime account is missing. In-place account recreation is not supported.\n' >&2
+            exit 1
+          fi
+          terminal_home="$(printf '%s\n' "$terminal_account" | cut -d: -f6)"
+          if [ "$terminal_home" != /home/cyberos ]; then
+            printf 'CM5 clean installation required; cyberos home must be /home/cyberos (found %s). No home migration is supported.\n' "$terminal_home" >&2
+            exit 1
+          fi
           [ -x /usr/local/bin/node ]
           runtime_node_version="$(/usr/local/bin/node --version)"
           case "$runtime_node_version" in

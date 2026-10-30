@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -665,6 +666,46 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain("cyberos-terminal-helper.service");
     expect(deployWorkflow).not.toContain('cp "$package_path" "$release_dir/package.deb"');
     expect(deployWorkflow).not.toContain('"$release_dir/package.deb" \\\n            "$release_dir/release-manifest.json"');
+  });
+
+  it.each([
+    { exists: true, home: "/home/cyberos", accepted: true },
+    { exists: true, home: "/cyberos/home/terminal", accepted: false },
+    { exists: true, home: "/var/lib/cyberos", accepted: false },
+    { exists: true, home: "", accepted: false },
+    { exists: false, home: "/home/cyberos", accepted: false },
+  ])("checks the CM5 terminal identity before upgrade actions: $exists / $home", async ({ exists, home, accepted }) => {
+    const workflow = await readRepoFile(".github", "workflows", "deploy-cm5.yml");
+    const baseline = workflow.split("- name: Capture CM5 upgrade baseline")[1]!
+      .split("- name: Stage and deploy release on CM5")[0]!;
+    const remote = baseline.match(/<<'REMOTE'\n([\s\S]*?)\n\s+REMOTE/u)?.[1];
+    expect(remote).toBeDefined();
+    const identityCheck = remote!.slice(0, remote!.indexOf("[ -x /usr/local/bin/node ]"));
+    expect(identityCheck).toContain("getent passwd cyberos");
+    expect(identityCheck).toContain('if [ "$terminal_home" != /home/cyberos ]');
+    expect(identityCheck).not.toContain("sudo");
+    expect(identityCheck).not.toContain("database_check=");
+    expect(identityCheck).not.toContain("dpkg-query");
+    const result = spawnSync("sh", ["-s", "--", "false", "2.2.0", "a".repeat(40)], {
+      input: `getent() {
+        [ "$ACCOUNT_EXISTS" = true ] || return 2
+        printf 'cyberos:x:123:123::%s:/bin/bash\\n' "$ACCOUNT_HOME"
+      }
+      ${identityCheck}
+      printf 'upgrade actions reached\\n'
+      `,
+      encoding: "utf8",
+      env: { ...process.env, ACCOUNT_EXISTS: String(exists), ACCOUNT_HOME: home },
+    });
+    expect(result.status).toBe(accepted ? 0 : 1);
+    if (accepted) {
+      expect(result.stdout).toBe("upgrade actions reached\n");
+      expect(result.stderr).toBe("");
+    } else {
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("clean installation required");
+      expect(result.stderr).toContain(exists ? "No home migration is supported" : "runtime account is missing");
+    }
   });
 
   it("ships a loopback API reverse proxy for LAN access", async () => {
