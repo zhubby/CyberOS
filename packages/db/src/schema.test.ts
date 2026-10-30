@@ -7,9 +7,13 @@ import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CYBEROS_DATABASE_FORMAT_VERSION,
+  createMediaSource,
+  getMediaFile,
   migrations,
   openCyberOsDb,
-  openCyberOsDbReadOnly
+  openCyberOsDbReadOnly,
+  saveMediaProgress,
+  upsertMediaCatalogEntry
 } from "./index.js";
 
 let tempDir: string;
@@ -81,6 +85,50 @@ describe("CyberOS 2.0 SQLite schema", () => {
     } finally {
       database.close();
     }
+  });
+
+  it("upgrades a populated pre-video 2.x database without changing media or settings", () => {
+    const databasePath = path.join(tempDir, "upgrade.sqlite");
+    const previous = new Database(databasePath);
+    let fileId: string;
+    try {
+      previous.pragma(`user_version = ${CYBEROS_DATABASE_FORMAT_VERSION}`);
+      previous.pragma("foreign_keys = ON");
+      previous.exec("CREATE TABLE schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+      for (const migration of migrations.filter((entry) => entry.id !== "005_video_library")) {
+        migration.prepare?.(previous);
+        previous.exec(migration.sql);
+        previous.prepare("INSERT INTO schema_migrations VALUES (?, ?)").run(migration.id, "2026-10-29T00:00:00Z");
+      }
+      const source = createMediaSource(previous, { name: "Movies", kind: "movie", storagePoolId: "pool-1", path: "Movies" });
+      const { file } = upsertMediaCatalogEntry(previous, {
+        sourceId: source.id,
+        generation: "existing",
+        title: { kind: "movie", sourcePath: "Movies/Arrival", title: "Arrival", metadataSource: "filename", matchStatus: "unmatched" },
+        file: { relativePath: "Movies/Arrival.mp4", name: "Arrival.mp4", mimeType: "video/mp4", sizeBytes: 100, mtimeMs: 1 }
+      });
+      fileId = file.id;
+      saveMediaProgress(previous, { fileId, positionSeconds: 30, durationSeconds: 120 });
+      previous.prepare("INSERT INTO system_settings VALUES (?, ?, ?)").run("test.setting", '{"enabled":true}', "2026-10-29T00:00:00Z");
+    } finally {
+      previous.close();
+    }
+
+    const upgraded = openCyberOsDb(databasePath);
+    try {
+      expect(getMediaFile(upgraded, fileId!)?.relativePath).toBe("Movies/Arrival.mp4");
+      expect(upgraded.prepare("SELECT position_seconds FROM media_progress WHERE file_id = ?").pluck().get(fileId!)).toBe(30);
+      expect(upgraded.prepare("SELECT value_json, updated_at FROM system_settings WHERE key = 'test.setting'").get()).toEqual({
+        value_json: '{"enabled":true}', updated_at: "2026-10-29T00:00:00Z"
+      });
+      expect(upgraded.prepare("SELECT COUNT(*) FROM media_personal_state").pluck().get()).toBe(0);
+      expect(upgraded.prepare("SELECT COUNT(*) FROM schema_migrations WHERE id = '005_video_library'").pluck().get()).toBe(1);
+      expect(upgraded.pragma("foreign_key_check")).toEqual([]);
+    } finally {
+      upgraded.close();
+    }
+    const reopened = openCyberOsDb(databasePath);
+    reopened.close();
   });
 
   it("rejects an unmarked non-empty database without changing it", () => {
