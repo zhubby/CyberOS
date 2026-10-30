@@ -57,13 +57,12 @@ function BrowserPlayerSurface() {
         video.currentTime = b.session.startPositionSeconds;
       void video.play().catch(() => p.updateBrowser({ playing: false }));
     };
-    if (
-      b.session.mode === "direct" ||
-      video.canPlayType("application/vnd.apple.mpegurl")
-    ) {
+    if (b.session.mode === "direct") {
       video.src = b.session.url;
       video.addEventListener("loadedmetadata", ready, { once: true });
     } else if (Hls.isSupported()) {
+      // Prefer MSE: native capability hints can succeed even when the browser
+      // cannot play our rolling playlist.
       hls = new Hls({
         startPosition: 0,
         maxBufferLength: 24,
@@ -75,6 +74,9 @@ function BrowserPlayerSurface() {
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) setError(translate.current("video.streamFailed"));
       });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = b.session.url;
+      video.addEventListener("loadedmetadata", ready, { once: true });
     } else setError(translate.current("video.streamUnsupported"));
     return () => {
       video.pause();

@@ -1,6 +1,7 @@
 cyberos (2.2.1) unstable; urgency=medium
 
   * Fix direct video stream lifetime and restore database backups before CM5 upgrades
+  * Prefer Hls.js for compatible browser streaming and keep native HLS as fallback
 
  -- CyberOS Maintainers <maintainers@cyberos.local>  Fri, 30 Oct 2026 04:48:17 +0000
 
