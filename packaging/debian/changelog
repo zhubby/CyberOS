@@ -1,3 +1,9 @@
+cyberos (2.2.6) unstable; urgency=medium
+
+  * Keep NAS status responsive during photo metadata queries and skip SMART probes for storage scopes
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Fri, 30 Oct 2026 13:12:40 +0000
+
 cyberos (2.2.5) unstable; urgency=medium
 
   * Prevent Photos metadata scans from blocking the API and identify slow CM5 acceptance probes.
