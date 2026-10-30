@@ -11,11 +11,11 @@ import {
   type SafePathResult
 } from "@cyberos/storage-tools";
 import type { SystemManagementDependencies } from "./system-management.js";
-import { collectSystemStorage } from "./system-management.js";
+import { collectStoragePools } from "./system-management.js";
 
 const storageSummaryCache = new WeakMap<
   object,
-  Promise<Awaited<ReturnType<typeof collectSystemStorage>>>
+  Promise<Awaited<ReturnType<typeof collectStoragePools>>>
 >();
 
 export class StorageScopeError extends Error {
@@ -84,13 +84,13 @@ export async function resolveStoragePoolScope(
   };
 }
 
-async function getStorageSummary(system: SystemManagementDependencies): Promise<Awaited<ReturnType<typeof collectSystemStorage>>> {
+async function getStorageSummary(system: SystemManagementDependencies): Promise<Awaited<ReturnType<typeof collectStoragePools>>> {
   const cached = storageSummaryCache.get(system);
   if (cached) {
     return await cached;
   }
 
-  const promise = collectSystemStorage(system);
+  const promise = collectStoragePools(system);
   storageSummaryCache.set(system, promise);
   try {
     return await promise;

@@ -18,7 +18,6 @@ import {
   getPhotosMetadataIndexStatus,
   hasCompletedPhotosScan,
   listPhotosAssets,
-  listPhotosMetadataFields,
   photosQueryFingerprint,
   queryPhotosAssets,
   queryPhotosMap,
@@ -52,6 +51,7 @@ import {
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
 import { sendFileStream } from "../lib/files.js";
+import { PhotosMetadataFieldsReader } from "../lib/photos-metadata-fields.js";
 import {
   defaultPhotosMapSource,
   PhotosMapArchiveError,
@@ -79,6 +79,8 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
   const { db, system } = context;
   const dataRoot = context.config.paths.dataRoot;
   const exports = new Map<string, PhotoExport>();
+  const metadataFields = new PhotosMetadataFieldsReader(db.name);
+  server.addHook("preClose", async () => metadataFields.close());
   const videoCache = new VideoCache({
     dataDir: context.config.paths.stateDir,
     transcoder: context.videoTranscoder ?? ffmpegVideoTranscoder
@@ -218,7 +220,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
       const requestedLimit = Number(request.query.limit ?? "100");
       const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 200)) : 100;
       reply.send({
-        fields: listPhotosMetadataFields(db, {
+        fields: await metadataFields.list({
           libraryUpdatedAt: settings.updatedAt,
           ...(request.query.q !== undefined ? { query: request.query.q } : {}),
           limit

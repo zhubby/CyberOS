@@ -8,6 +8,7 @@ import {
   enqueuePhotosJob,
   finishPhotosJob,
   getPhotosLibrarySettings,
+  listPhotosMetadataFields,
   openCyberOsDb,
   upsertPhotosAsset,
   type PhotosMetadataWriteInput,
@@ -33,6 +34,45 @@ afterEach(async () => {
 });
 
 describe("photos API", () => {
+  it("serves health while a filesystem metadata field query is still running", async () => {
+    const { app, root } = await setup();
+    try {
+      await configure(app);
+      const settings = getPhotosLibrarySettings(db!)!;
+      const asset = await addPhotos(root, settings, "fields.jpg", "2025-01-02T00:00:00.000Z",
+        undefined, undefined, indexedMetadata({ cameraModel: "test", iso: 100, gpsLatitude: 1 }));
+      // Warm the executor before exercising actual query work rather than its startup.
+      expect((await app.inject("/api/photos/metadata/fields")).statusCode).toBe(200);
+      db!.prepare(`
+        WITH RECURSIVE rows(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM rows WHERE n < 250000)
+        INSERT INTO photos_metadata_values(asset_id, source, key, value_type, sensitive, ordinal)
+        SELECT ?, 'exif', 'exif.Field' || (n % 100), 'text', 0, n FROM rows
+      `).run(asset.id);
+      let fieldsFinished = false;
+      const fields = app.inject("/api/photos/metadata/fields").then((response) => {
+        fieldsFinished = true;
+        return response;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const health = await app.inject("/health");
+      expect(health.statusCode).toBe(200);
+      expect(fieldsFinished).toBe(false);
+      const response = await fields;
+      expect(response.statusCode).toBe(200);
+      expect(response.json().fields).toEqual(listPhotosMetadataFields(db!, {
+        libraryUpdatedAt: settings.updatedAt
+      }));
+      expect(response.json().fields.some((field: { key: string }) => field.key.includes("GPS"))).toBe(false);
+      const pendingAtClose = app.inject("/api/photos/metadata/fields");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const closing = app.close();
+      expect((await pendingAtClose).statusCode).toBe(500);
+      await closing;
+    } finally {
+      await app.close();
+    }
+  });
+
   it("serves and validates processing settings and worker health", async () => {
     const { app } = await setup();
 

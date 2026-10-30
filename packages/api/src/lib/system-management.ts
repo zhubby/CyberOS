@@ -319,6 +319,29 @@ export async function collectSystemStorage(
   };
 }
 
+export async function collectStoragePools(
+  dependencies: SystemManagementDependencies = {}
+): Promise<Pick<SystemStorageSummary, "collectedAt" | "pools" | "issues">> {
+  const runner = systemCommandRunner(dependencies);
+  const [findmntResult, mdadmScanResult] = await Promise.all([
+    runJson<unknown>("mounts", runner, "findmnt", [
+      "--json",
+      "--bytes",
+      "--output",
+      "SOURCE,TARGET,FSTYPE,SIZE,USED,AVAIL,USE%"
+    ]),
+    runText("mdadm scan", runner, "mdadm", ["--detail", "--scan"])
+  ]);
+  const scanArrays = mdadmScanResult.value ? parseMdadmScan(mdadmScanResult.value) : [];
+  const [arrays, detailIssues] = await collectMdadmArrays(runner, scanArrays);
+  const mounts = flattenMounts(recordsFrom(recordField(asRecord(findmntResult.value), "filesystems")));
+  return {
+    collectedAt: new Date().toISOString(),
+    pools: arrays.map((array) => mapStoragePool(array, mounts)),
+    issues: [...compactIssues([findmntResult.issue, mdadmScanResult.issue]), ...detailIssues]
+  };
+}
+
 function systemCommandRunner(dependencies: SystemManagementDependencies): SystemCommandRunner {
   return dependencies.commandRunner ?? new NodeSystemCommandRunner();
 }

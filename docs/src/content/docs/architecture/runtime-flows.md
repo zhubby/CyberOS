@@ -17,4 +17,6 @@ AI 请求依次经过 `agent_messages -> jobs -> worker claim -> Pi agent -> age
 
 文件搜索使用 storage pool 和目录范围内的 `indexed_content_fts`。Indexer 与 API 通过同一个 SQLite WAL 数据库协作；execution lock 和 run status 防止周期任务重叠。
 
+照片与索引状态、文件路径校验使用实时挂载和 mdadm 存储池信息，不等待磁盘 SMART 探测；完成的存储池结果不缓存，路径、符号链接与嵌套挂载保护继续独立校验。完整磁盘与 SMART 详情由系统存储接口收集。照片字段目录聚合在 API 的独立只读工作线程执行，避免大库 SQL 阻塞其他请求。
+
 备份先生成在线 SQLite 快照和 manifest，再调用 restic；恢复只进入 staging，校验成功并不代表会自动 promote 到活动目录。
