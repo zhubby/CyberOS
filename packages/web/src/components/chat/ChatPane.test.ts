@@ -229,6 +229,68 @@ describe("ChatMessageContent", () => {
 });
 
 describe("ChatPane agent rail", () => {
+  it.each(["running", "queued", "sending", "reconnecting", "idle"] as const)(
+    "keeps %s feedback and delivery icons in one toolbar above the input",
+    async (state) => {
+      await initI18n();
+      const noop = () => undefined;
+      const html = renderToStaticMarkup(createElement(ChatPane, {
+        active: true,
+        selectedRoot: undefined,
+        activeSessionSummary: undefined,
+        sessions: [],
+        activeSessionId: "session-1",
+        transcript: [],
+        transcriptPhase: "ready",
+        activeCapabilityApprovals: [],
+        message: "Next instruction",
+        composerPath: null,
+        status: state === "reconnecting" ? "reconnecting" : "ready",
+        locale: "en",
+        modelSettings: null,
+        activeJobId: state === "idle" ? null : "job-1",
+        activeJobStatus: state === "idle" ? null : state === "queued" ? "queued" : "running",
+        messageSubmitting: state === "sending",
+        hasSession: true,
+        transcriptRef: createRef<HTMLDivElement>(),
+        onCreateAgent: noop,
+        onDeleteSession: noop,
+        onOpenSettings: noop,
+        onOpenNotifications: noop,
+        onRequestSystemPower: async () => true,
+        notificationUnreadCount: 0,
+        onSelectSession: noop,
+        onApproveCapability: noop,
+        onRejectCapability: noop,
+        onSubmitMessage: noop,
+        onMessageChange: noop,
+        onClearComposerPath: noop,
+        onCancelActiveJob: noop,
+        onOpenWorkspacePath: noop
+      }));
+      const toolbar = html.match(/<div class="composer-toolbar">(.*?)<\/div><textarea/su)?.[1];
+
+      if (state === "idle") {
+        expect(toolbar).toBeUndefined();
+        expect(html).not.toContain('aria-describedby="composer-status"');
+        return;
+      }
+
+      expect(toolbar).toBeDefined();
+      expect(toolbar).toContain(`data-state="${state}"`);
+      expect(html).toContain('aria-describedby="composer-status"');
+      expect(html).not.toContain('class="composer-meta"');
+      if (state === "queued") {
+        expect(toolbar).not.toContain('class="composer-delivery"');
+      } else {
+        expect(toolbar).toContain('aria-pressed="false" title="Steer" aria-label="Steer"');
+        expect(toolbar).toContain('aria-pressed="true" title="Follow-up" aria-label="Follow-up"');
+        expect(toolbar).toContain('class="visually-hidden">Steer</span>');
+        expect(toolbar).toContain('class="visually-hidden">Follow-up</span>');
+      }
+    }
+  );
+
   it("keeps the compact icon navigation and settings action in the footer", async () => {
     await initI18n();
     const session = {

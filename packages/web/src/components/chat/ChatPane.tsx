@@ -589,6 +589,42 @@ export function ChatPane({
               </button>
             </div>
           ) : null}
+          {composerStatusLabel || activeAgentTurn ? (
+            <div className="composer-toolbar">
+              {activeAgentTurn ? (
+                <div className="composer-delivery" role="group" aria-label={t("chat.deliveryMode")}>
+                  <button
+                    type="button"
+                    className={deliveryMode === "steer" ? "is-active" : ""}
+                    aria-pressed={deliveryMode === "steer"}
+                    onClick={() => setDeliveryMode("steer")}
+                    title={t("chat.steer")}
+                    aria-label={t("chat.steer")}
+                  >
+                    <CornerDownLeft aria-hidden="true" size={15} />
+                    <span className="visually-hidden">{t("chat.steer")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={deliveryMode === "follow_up" ? "is-active" : ""}
+                    aria-pressed={deliveryMode === "follow_up"}
+                    onClick={() => setDeliveryMode("follow_up")}
+                    title={t("chat.followUp")}
+                    aria-label={t("chat.followUp")}
+                  >
+                    <ListEnd aria-hidden="true" size={15} />
+                    <span className="visually-hidden">{t("chat.followUp")}</span>
+                  </button>
+                </div>
+              ) : null}
+              {composerStatusLabel ? (
+                <div id={composerStatusId} className="composer-status" role="status" aria-live="polite" data-state={composerFeedback}>
+                  <LoaderCircle aria-hidden="true" className="composer-spinner" size={13} />
+                  <span>{composerStatusLabel}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <textarea
             ref={composerTextareaRef}
             value={message}
@@ -599,38 +635,6 @@ export function ChatPane({
             aria-describedby={composerFeedback ? composerStatusId : undefined}
             rows={3}
           />
-          {composerStatusLabel ? (
-            <div className="composer-meta">
-              <div id={composerStatusId} className="composer-status" role="status" aria-live="polite" data-state={composerFeedback}>
-                <LoaderCircle aria-hidden="true" className="composer-spinner" size={13} />
-                <span>{composerStatusLabel}</span>
-              </div>
-            </div>
-          ) : null}
-          {activeAgentTurn ? (
-            <div className="composer-delivery" role="group" aria-label={t("chat.deliveryMode")}>
-              <button
-                type="button"
-                className={deliveryMode === "steer" ? "is-active" : ""}
-                aria-pressed={deliveryMode === "steer"}
-                onClick={() => setDeliveryMode("steer")}
-                title={t("chat.steer")}
-              >
-                <CornerDownLeft aria-hidden="true" size={14} />
-                <span>{t("chat.steer")}</span>
-              </button>
-              <button
-                type="button"
-                className={deliveryMode === "follow_up" ? "is-active" : ""}
-                aria-pressed={deliveryMode === "follow_up"}
-                onClick={() => setDeliveryMode("follow_up")}
-                title={t("chat.followUp")}
-              >
-                <ListEnd aria-hidden="true" size={14} />
-                <span>{t("chat.followUp")}</span>
-              </button>
-            </div>
-          ) : null}
           <div className="composer-footer">
             <div
               className="composer-model-config"
