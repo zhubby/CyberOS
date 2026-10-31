@@ -86,7 +86,8 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     const root = scope.workspace;
     const safe = await resolveScopedExistingPath(scope, request.query.path ?? scope.mountpointPath);
     const entries = (await listDir(root, safe.relativePath)).filter((entry) => (
-      safe.relativePath !== scope.mountpointPath || entry.name !== DOCKER_HOST_ACCESS_STORAGE_POOL_ANCHOR
+      !isInternalPoolPath(scope, entry.path)
+      && (safe.relativePath !== scope.mountpointPath || entry.name !== DOCKER_HOST_ACCESS_STORAGE_POOL_ANCHOR)
     ));
     const scopedEntries = await Promise.all(
       entries.map(async (entry) => {
@@ -739,6 +740,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
     const indexed = safeQueryIndex(db, root.id, query, safeSearchPath.relativePath);
     const scopedIndexed = [];
     for (const match of indexed) {
+      if (isInternalPoolPath(scope, match.path)) continue;
       try {
         await resolveScopedTargetPath(scope, match.path);
         try {
@@ -760,7 +762,8 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
           await searchFiles(root, {
             query,
             path: safeSearchPath.relativePath,
-            limit: 50
+            limit: 50,
+            excludePaths: [path.join(scope.mountpointPath, ".cyberos")]
           })
         );
     const gitView = await getDirectoryGitView(root.path, safeSearchPath.relativePath, files, scope.mountpointRealPath);
@@ -800,6 +803,7 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
           cursor
         });
         for (const file of page.files) {
+          if (isInternalPoolPath(scope, file.path)) continue;
           try {
             await resolveScopedTargetPath(scope, file.path);
             try {
@@ -896,9 +900,17 @@ async function appendFileExportEntry(
   }
 }
 
+/** Hide the appliance-owned directory only at the selected pool root. */
+function isInternalPoolPath(scope: StoragePoolScope, candidate: string): boolean {
+  const internalPath = path.join(scope.mountpointPath, ".cyberos");
+  const normalized = path.normalize(candidate);
+  return normalized === internalPath || normalized.startsWith(`${internalPath}${path.sep}`);
+}
+
 async function filterScopedSearchResults(scope: StoragePoolScope, matches: FileEntry[]): Promise<FileEntry[]> {
   const scoped: FileEntry[] = [];
   for (const match of matches) {
+    if (isInternalPoolPath(scope, match.path)) continue;
     if (!match.isSafe) {
       scoped.push(match);
       continue;

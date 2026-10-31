@@ -5688,6 +5688,43 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("hides the pool internal directory from listings and filename search without hiding user dotfiles", async () => {
+    await mkdir(path.join(rootDir, ".cyberos"));
+    await mkdir(path.join(rootDir, "docs", ".cyberos"), { recursive: true });
+    await writeFile(path.join(rootDir, ".cyberos", "visible-match.txt"), "internal");
+    await writeFile(path.join(rootDir, "docs", ".cyberos", "visible-match.txt"), "user data");
+    await writeFile(path.join(rootDir, ".visible-match.txt"), "dotfile");
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const listing = await server.inject({ method: "GET", url: `/api/files?storagePoolId=${TEST_STORAGE_POOL_ID}` });
+    expect(listing.statusCode).toBe(200);
+    expect(listing.json().entries.map((entry: { name: string }) => entry.name)).toEqual(["docs", ".visible-match.txt", "hello.txt"]);
+    const search = await server.inject({ method: "GET", url: `/api/search?storagePoolId=${TEST_STORAGE_POOL_ID}&q=visible-match` });
+    expect(search.statusCode).toBe(200);
+    expect(search.json().files.map((file: { path: string }) => file.path).sort()).toEqual([".visible-match.txt", "docs/.cyberos/visible-match.txt"]);
+    expect(await readFile(path.join(rootDir, ".cyberos", "visible-match.txt"), "utf8")).toBe("internal");
+    await server.close();
+  });
+
+  it("omits stale internal index entries and fills advanced search pages with ordinary files", async () => {
+    await mkdir(path.join(rootDir, ".cyberos"));
+    for (const [filePath, name] of [[".cyberos/internal.txt", "a.txt"], ["valid.txt", "z.txt"]] as const) {
+      await writeFile(path.join(rootDir, filePath), "internaltest body");
+      upsertIndexedFile(db, { storagePoolId: TEST_STORAGE_POOL_ID, path: filePath, name,
+        mimeType: "text/plain", sizeBytes: 10, mtimeMs: 1700000000000, body: "internaltest body" });
+    }
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const simple = await server.inject({ method: "GET", url: `/api/search?storagePoolId=${TEST_STORAGE_POOL_ID}&q=internaltest` });
+    expect(simple.statusCode).toBe(200);
+    expect(simple.json().files.map((file: { path: string }) => file.path)).toEqual(["valid.txt"]);
+    expect(simple.json().indexed.map((file: { path: string }) => file.path)).toEqual(["valid.txt"]);
+    const advanced = await server.inject({ method: "POST", url: "/api/search", payload: {
+      storagePoolId: TEST_STORAGE_POOL_ID, query: "internaltest", limit: 1, sort: { field: "name", direction: "asc" }
+    } });
+    expect(advanced.statusCode).toBe(200);
+    expect(advanced.json()).toMatchObject({ files: [{ path: "valid.txt" }], nextCursor: null });
+    await server.close();
+  });
+
   it("scopes filename fallback and validates the requested search directory", async () => {
     await mkdir(path.join(rootDir, "docs"));
     await mkdir(path.join(rootDir, "docs-old"));

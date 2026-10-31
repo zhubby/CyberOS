@@ -123,16 +123,17 @@ export function previewFile(
 
 export async function searchFiles(
   root: StorageWorkspace,
-  input: { query: string; path?: string; limit?: number; maxDepth?: number }
+  input: { query: string; path?: string; limit?: number; maxDepth?: number; excludePaths?: readonly string[] }
 ): Promise<FileEntry[]> {
   const safe = await resolveSafeExistingPath(root.path, input.path ?? ".");
   const query = input.query.toLocaleLowerCase();
   const limit = input.limit ?? 50;
   const maxDepth = input.maxDepth ?? 6;
   const matches: FileEntry[] = [];
+  const excludedPaths = (input.excludePaths ?? []).map((value) => path.resolve(safe.rootRealPath, value));
 
   async function walk(currentPath: string, depth: number): Promise<void> {
-    if (matches.length >= limit || depth > maxDepth) {
+    if (matches.length >= limit || depth > maxDepth || excludedPaths.some((excluded) => isPathInside(excluded, currentPath))) {
       return;
     }
 
@@ -143,7 +144,7 @@ export async function searchFiles(
       }
 
       const absoluteEntryPath = path.join(currentPath, entry.name);
-      if (isManagedIscsiPath(absoluteEntryPath)) continue;
+      if (isManagedIscsiPath(absoluteEntryPath) || excludedPaths.some((excluded) => isPathInside(excluded, absoluteEntryPath))) continue;
       const entryStat = await lstat(absoluteEntryPath);
       const safeEntry = await isEntrySafe(safe.rootRealPath, absoluteEntryPath);
       const relativePath = path.relative(safe.rootRealPath, absoluteEntryPath) || ".";
