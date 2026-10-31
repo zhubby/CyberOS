@@ -138,6 +138,7 @@
 .library-search-toolbar .search {
   position: relative;
   display: block;
+  grid-column: auto;
   min-width: 0;
 }
 
