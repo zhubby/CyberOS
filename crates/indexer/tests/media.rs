@@ -182,3 +182,41 @@ async fn failed_scan_preserves_the_previous_catalog() {
         "generation-1"
     );
 }
+
+#[tokio::test]
+async fn scan_groups_ep_numbered_files_into_one_series_and_season() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("root");
+    let show = root.join("TV Series/大明王朝1566");
+    std::fs::create_dir_all(&show).unwrap();
+    for name in [
+        "大明王朝1566.EP41.2007.D9.480P.AC3.X264.mkv",
+        "大明王朝1566.ep08.mkv",
+    ] {
+        std::fs::write(show.join(name), b"video").unwrap();
+    }
+    let database = directory.path().join("cyberos.sqlite");
+    common::create_schema(&database, &root);
+    queue_scan(&database, "TV Series", "scan-series", "generation-series");
+    let connection = Connection::open(&database).unwrap();
+    connection
+        .execute("UPDATE media_sources SET kind = 'series'", [])
+        .unwrap();
+    let db = Db::open(&database).unwrap();
+    claim_and_run(&db, "media-worker", &root).await.unwrap();
+    let titles: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM media_titles WHERE kind = 'series'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(titles, 1);
+    let mut statement = connection.prepare("SELECT s.season_number, e.episode_number FROM media_episodes e JOIN media_seasons s ON s.id = e.season_id ORDER BY e.episode_number").unwrap();
+    let episodes: Vec<(i64, i64)> = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(episodes, vec![(1, 8), (1, 41)]);
+}

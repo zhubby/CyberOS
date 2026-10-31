@@ -25,6 +25,7 @@ pub struct OnceOptions {
     pub recursive: bool,
 }
 
+#[derive(Clone)]
 pub struct Indexer {
     db: Db,
     data_root: PathBuf,
@@ -55,6 +56,7 @@ impl Indexer {
     }
 
     pub async fn run(self, once: Option<OnceOptions>) -> Result<(), IndexerError> {
+        let _shutdown_guard = self.shutdown.clone().drop_guard();
         self.db.wait_for_schema(Duration::from_secs(60)).await?;
         let storage_pools = discover_storage_pools(&self.data_root, self.production)?;
         self.db.ensure_storage_pool_state(&storage_pools).await?;
@@ -114,6 +116,18 @@ impl Indexer {
         let watchdog = once
             .is_none()
             .then(|| tokio::spawn(watchdog_loop(self.shutdown.clone())));
+        let catalog = once.is_none().then(|| {
+            let worker = self.clone();
+            let pools = storage_pools.clone();
+            tokio::spawn(async move {
+                let result = worker.run_catalog_queue(&pools).await;
+                if let Err(error) = &result {
+                    tracing::error!(%error, "Catalog queue stopped");
+                    worker.shutdown.cancel();
+                }
+                result
+            })
+        });
         if once.is_none() {
             let _ = sd_notify::notify(&[NotifyState::Ready]);
         }
@@ -142,11 +156,11 @@ impl Indexer {
                             idle_polls = 0;
                             self.process_task(task, &snapshot).await?;
                         }
-                        None if let Some(task) = self.db.claim_media_scan(&self.worker_id, &storage_pools).await? => {
+                        None if once.is_some() && let Some(task) = self.db.claim_media_scan(&self.worker_id, &storage_pools).await? => {
                             idle_polls = 0;
                             self.process_media_scan(task).await?;
                         }
-                        None if let Some(task) = self.db.claim_music_scan(&self.worker_id, &storage_pools).await? => {
+                        None if once.is_some() && let Some(task) = self.db.claim_music_scan(&self.worker_id, &storage_pools).await? => {
                             idle_polls = 0;
                             self.process_music_scan(task).await?;
                         }
@@ -168,6 +182,12 @@ impl Indexer {
         if let Some(task) = watch_task {
             let _ = task.await;
         }
+        let catalog_result = match catalog {
+            Some(task) => task
+                .await
+                .map_err(|error| IndexerError::internal(error.to_string()))?,
+            None => Ok(()),
+        };
         if let Some(heartbeat) = heartbeat {
             let _ = heartbeat.await;
             self.db.release_worker(&self.worker_id).await?;
@@ -175,7 +195,24 @@ impl Indexer {
         if let Some(watchdog) = watchdog {
             let _ = watchdog.await;
         }
-        Ok(())
+        catalog_result
+    }
+
+    // Catalog scans must progress even while ordinary indexing hashes large files.
+    async fn run_catalog_queue(&self, pools: &[StoragePool]) -> Result<(), IndexerError> {
+        let mut poll = tokio::time::interval(Duration::from_millis(250));
+        loop {
+            tokio::select! {
+                _ = self.shutdown.cancelled() => return Ok(()),
+                _ = poll.tick() => {
+                    if let Some(task) = self.db.claim_media_scan(&self.worker_id, pools).await? {
+                        self.process_media_scan(task).await?;
+                    } else if let Some(task) = self.db.claim_music_scan(&self.worker_id, pools).await? {
+                        self.process_music_scan(task).await?;
+                    }
+                }
+            }
+        }
     }
 
     async fn enqueue_once(
@@ -442,6 +479,74 @@ fn discover_storage_pools(
 #[cfg(test)]
 mod tests {
     use super::normalize_cli_path;
+
+    #[allow(dead_code)]
+    mod common {
+        use crate as cyberos_indexer;
+        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/common/mod.rs"));
+    }
+
+    #[tokio::test]
+    async fn media_catalog_queue_runs_while_a_file_index_task_is_still_running() {
+        use super::*;
+        use rusqlite::Connection;
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("root");
+        std::fs::create_dir_all(root.join("Movies")).unwrap();
+        std::fs::write(root.join("Movies/Arrival.2016.mkv"), b"video").unwrap();
+        let database = directory.path().join("cyberos.sqlite");
+        common::create_schema(&database, &root);
+        let db = Db::open(&database).unwrap();
+        let pools = vec![common::storage_pool(&root)];
+        db.enqueue("local", "large-video.mkv", false, "manual", 100)
+            .await
+            .unwrap();
+        let generic = db.claim("worker", &pools).await.unwrap().unwrap();
+        let connection = Connection::open(&database).unwrap();
+        connection.execute_batch("INSERT INTO media_sources (id, name, kind, storage_pool_id, path, enabled, created_at, updated_at) VALUES ('movies', 'Movies', 'movie', 'local', 'Movies', 1, 'now', 'now');
+            INSERT INTO media_scan_runs (id, source_id, status, generation, created_at, updated_at) VALUES ('media', 'movies', 'queued', 'generation', 'now', 'now');").unwrap();
+        let worker = Indexer {
+            db,
+            data_root: root,
+            music_artwork_root: directory.path().join("artwork"),
+            production: false,
+            worker_id: "worker".to_owned(),
+            shutdown: CancellationToken::new(),
+        };
+        let shutdown = worker.shutdown.clone();
+        let task = tokio::spawn(async move { worker.run_catalog_queue(&pools).await });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let status: String = connection
+                    .query_row(
+                        "SELECT status FROM media_scan_runs WHERE id = 'media'",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                if status == "completed" {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let status: String = connection
+            .query_row(
+                "SELECT status FROM index_queue WHERE id = ?",
+                [&generic.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "running");
+        let titles: i64 = connection
+            .query_row("SELECT count(*) FROM media_titles", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(titles, 1);
+        shutdown.cancel();
+        task.await.unwrap().unwrap();
+    }
 
     #[test]
     fn cli_paths_are_canonical_relative_paths() {

@@ -483,7 +483,7 @@ async fn build_entry(
                 IndexerError::new(
                     ErrorCode::CorruptDocument,
                     format!(
-                        "Series file does not contain an SxxEyy episode number: {}",
+                        "Series file does not contain an SxxEyy or EPyy episode number: {}",
                         path_text(relative_path)
                     ),
                     false,
@@ -1088,6 +1088,28 @@ fn parse_episode_name(stem: &str) -> Option<ParsedEpisode> {
             episode,
         });
     }
+    // EP numbering is commonly used for series without explicit season folders.
+    for index in 0..bytes.len().saturating_sub(2) {
+        if &bytes[index..index + 2] != b"ep"
+            || (index > 0 && bytes[index - 1].is_ascii_alphanumeric())
+        {
+            continue;
+        }
+        let end = take_digits(bytes, index + 2);
+        if end == index + 2 || (end < bytes.len() && bytes[end].is_ascii_alphanumeric()) {
+            continue;
+        }
+        let title = clean_title(&stem[..index]);
+        return Some(ParsedEpisode {
+            title: if title.is_empty() {
+                "Unknown Series".to_owned()
+            } else {
+                title
+            },
+            season: 1,
+            episode: lower[index + 2..end].parse().ok()?,
+        });
+    }
     None
 }
 
@@ -1223,6 +1245,29 @@ mod tests {
             ("Arrival".to_owned(), Some(2016))
         );
         assert_eq!(parse_movie_name("无名之辈"), ("无名之辈".to_owned(), None));
+    }
+
+    #[test]
+    fn parses_ep_style_episode_numbers_without_treating_release_numbers_as_episodes() {
+        for (name, title, number) in [
+            (
+                "大明王朝1566.EP41.2007.D9.480P.AC3.X264",
+                "大明王朝1566",
+                41,
+            ),
+            ("大明王朝1566.ep08", "大明王朝1566", 8),
+        ] {
+            assert_eq!(
+                parse_episode_name(name),
+                Some(ParsedEpisode {
+                    title: title.to_owned(),
+                    season: 1,
+                    episode: number,
+                })
+            );
+        }
+        assert_eq!(parse_episode_name("STEP01.2024"), None);
+        assert_eq!(parse_episode_name("Series.2007.480P"), None);
     }
 
     #[test]
