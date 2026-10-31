@@ -44,7 +44,7 @@ import {
 } from "../../lib/video-api.js";
 import { usePlayback } from "../playback/PlaybackProvider.js";
 import { MusicTakeoverDialog } from "../music/MusicProvider.js";
-import { PanelHeader, PanelHeaderAction } from "../workspace/PanelHeader.js";
+import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "../workspace/PanelHeader.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
 
 type View = "home" | "movie" | "series" | "collections" | "watchlist";
@@ -451,7 +451,7 @@ export function VideoLibraryPanel({
         title={t("video.title")}
         subtitle={tv ? t("playback.tvOutput") : t("video.library")}
         actions={
-          <div className="management-actions">
+          <PanelHeaderActions className="library-header-actions" label={t("video.library")}>
             <PanelHeaderAction
               data-tv-focusable
               label={t("video.refresh")}
@@ -465,33 +465,12 @@ export function VideoLibraryPanel({
                 <Settings2 size={17} />
               </PanelHeaderAction>
             ) : null}
-          </div>
+          </PanelHeaderActions>
         }
       />
-      <nav className="video-navigation" aria-label={t("video.library")}>
-        {(["home", "movie", "series", "collections", "watchlist"] as const).map(
-          (tab) => (
-            <button
-              data-tv-focusable
-              key={tab}
-              aria-pressed={view === tab && !detail}
-              onClick={() => {
-                closeDetail();
-                setView(tab);
-                setQuery((q) => {
-                  const { collectionId: _collection, ...rest } = q;
-                  return rest;
-                });
-              }}
-            >
-              {t(`video.${tab}`)}
-            </button>
-          ),
-        )}
-      </nav>
       {!detail ? (
         <div className="library-search-toolbar">
-          <label className="search">
+          <form className="search" onSubmit={(event) => event.preventDefault()}>
             <Search size={17} aria-hidden="true" />
             <input
               data-tv-focusable
@@ -501,7 +480,7 @@ export function VideoLibraryPanel({
               value={query.query ?? ""}
               onChange={(event) => setQuery((current) => ({ ...current, query: event.target.value }))}
             />
-          </label>
+          </form>
           <SearchFilterPopover
             label={t("video.filter")}
             active={Boolean(query.sourceId || query.year || query.genre || query.favorite || query.watched !== undefined || (query.sort && query.sort !== "title"))}
@@ -592,6 +571,27 @@ export function VideoLibraryPanel({
           </SearchFilterPopover>
         </div>
       ) : null}
+      <nav className="video-navigation" aria-label={t("video.library")}>
+        {(["home", "movie", "series", "collections", "watchlist"] as const).map(
+          (tab) => (
+            <button
+              data-tv-focusable
+              key={tab}
+              aria-pressed={view === tab && !detail}
+              onClick={() => {
+                closeDetail();
+                setView(tab);
+                setQuery((q) => {
+                  const { collectionId: _collection, ...rest } = q;
+                  return rest;
+                });
+              }}
+            >
+              {t(`video.${tab}`)}
+            </button>
+          ),
+        )}
+      </nav>
       {error ? (
         <p className="video-error" role="alert">
           {error}

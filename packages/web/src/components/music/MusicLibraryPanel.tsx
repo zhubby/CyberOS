@@ -833,7 +833,7 @@ export function MusicLibraryPanel({
         title="Music"
         subtitle={t("music.subtitle")}
         actions={
-          <PanelHeaderActions label={t("music.libraryActions")}>
+          <PanelHeaderActions className="library-header-actions" label={t("music.libraryActions")}>
             <PanelHeaderAction
               label={t("common.actions.refresh")}
               disabled={loading}

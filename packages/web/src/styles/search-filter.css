@@ -140,6 +140,7 @@
   display: block;
   grid-column: auto;
   min-width: 0;
+  margin: 0;
 }
 
 .library-search-toolbar .search > svg {
@@ -168,4 +169,28 @@
 
 .library-search-toolbar .search > input:hover {
   border-color: var(--cyber-cyan);
+}
+
+/* Media headers share the same compact actions; panel button defaults must not shrink their icons. */
+.library-header-actions > .panel-header-action {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: transparent;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+}
+
+.library-header-actions > .panel-header-action > svg {
+  flex-shrink: 0;
+}
+
+.library-header-actions > .panel-header-action:hover:not(:disabled),
+.library-header-actions > .panel-header-action:focus-visible {
+  border-color: var(--cyber-cyan);
+  color: var(--text);
+  background: var(--surface-hover);
 }
