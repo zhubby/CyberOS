@@ -30,6 +30,7 @@ describe("share settings form helpers", () => {
       shares: [
         {
           id: "photos",
+          protocol: "smb",
           name: "Photos",
           storagePoolId: "media",
           path: "photos",

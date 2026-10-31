@@ -2048,6 +2048,139 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("isolates protocol CRUD with revision checks", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    const initial = shareSettingsPayload("");
+    initial.enabled = false;
+    const source = initial.shares[0]!;
+    const shares = (["smb", "webdav", "nfs", "dlna"] as const).map((protocol) => ({
+      ...structuredClone(source), id: `media-${protocol}`, protocol,
+      protocols: Object.fromEntries(Object.entries(source.protocols).map(([key, value]) => [key, { ...value, enabled: key === protocol }])) as typeof source.protocols
+    }));
+    const settings = saveShareSettings(db, { ...initial, shares });
+    const hostd = new FakeShareHostd();
+    const server = await buildServer({ config: testConfig(tempDir), db, shares: { hostd } });
+    const smb = settings.shares.find((share) => share.protocol === "smb")!;
+    const siblings = settings.shares.filter((share) => share.id !== smb.id);
+    const edited = await server.inject({ method: "PUT", url: `/api/shares/protocols/smb/${smb.id}`,
+      payload: { expectedUpdatedAt: settings.updatedAt, share: { ...smb, name: "Independent SMB" } } });
+    expect(edited.statusCode).toBe(200);
+    const afterEdit = edited.json().settings as ShareSettingsRecord;
+    expect(afterEdit.shares.filter((share) => share.id !== smb.id)).toEqual(siblings);
+    expect(getShareSettings(db)?.shares.find((share) => share.id === smb.id)?.protocol).toBe("smb");
+    const stale = await server.inject({ method: "DELETE", url: `/api/shares/protocols/smb/${smb.id}`,
+      payload: { expectedUpdatedAt: settings.updatedAt } });
+    expect(stale.statusCode).toBe(409);
+    const disabled = await server.inject({ method: "PATCH", url: `/api/shares/protocols/smb/${smb.id}`,
+      payload: { expectedUpdatedAt: afterEdit.updatedAt, enabled: false } });
+    expect(disabled.statusCode).toBe(200);
+    const afterDisable = disabled.json().settings as ShareSettingsRecord;
+    expect(afterDisable.shares.find((share) => share.id === smb.id)).toMatchObject({ protocol: "smb", protocols: { smb: { enabled: false } } });
+    const removed = await server.inject({ method: "DELETE", url: `/api/shares/protocols/smb/${smb.id}`,
+      payload: { expectedUpdatedAt: afterDisable.updatedAt } });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json().settings.shares).toEqual(siblings);
+    await server.close();
+  });
+
+  it("rejects cross-protocol and failed mutations without persisting changes", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    const hostd = new FakeShareHostd();
+    const server = await buildServer({ config: testConfig(tempDir), db, shares: { hostd } });
+    const initial = await server.inject({ method: "GET", url: "/api/settings/shares" });
+    const share = shareSettingsPayload("").shares[0]!;
+    share.protocols.nfs.enabled = true;
+    const invalid = await server.inject({ method: "POST", url: "/api/shares/protocols/smb",
+      payload: { expectedUpdatedAt: initial.json().settings.updatedAt, share } });
+    expect(invalid.statusCode).toBe(400);
+    for (const protocol of ["webdav", "ftp", "nfs", "dlna"] as const) share.protocols[protocol].enabled = false;
+    hostd.failApply = true;
+    const failed = await server.inject({ method: "POST", url: "/api/shares/protocols/smb",
+      payload: { expectedUpdatedAt: initial.json().settings.updatedAt, share } });
+    expect(failed.statusCode).toBe(502);
+    expect(getShareSettings(db)).toBeNull();
+    hostd.failApply = false;
+    const created = await server.inject({ method: "POST", url: "/api/shares/protocols/smb",
+      payload: { expectedUpdatedAt: initial.json().settings.updatedAt, share } });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().settings.shares[0].protocol).toBe("smb");
+    await server.close();
+  });
+
+  it("serializes competing protocol writes and rejects an account revision conflict", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    const initial = shareSettingsPayload("");
+    initial.enabled = false;
+    const smb = initial.shares[0]!;
+    smb.protocol = "smb";
+    for (const protocol of ["webdav", "ftp", "nfs", "dlna"] as const) smb.protocols[protocol].enabled = false;
+    const saved = saveShareSettings(db, initial);
+    const hostd = new FakeShareHostd();
+    const server = await buildServer({ config: testConfig(tempDir), db, shares: { hostd } });
+    const responses = await Promise.all(["First", "Second"].map((name) => server.inject({ method: "PUT",
+      url: "/api/shares/protocols/smb/media", payload: { expectedUpdatedAt: saved.updatedAt, share: { ...smb, name } } })));
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+    expect(hostd.requests).toHaveLength(1);
+    const staleAccount = await server.inject({ method: "PUT", url: "/api/shares/account",
+      payload: { username: "new-share", expectedUpdatedAt: saved.updatedAt } });
+    expect(staleAccount.statusCode).toBe(409);
+    expect(getShareSettings(db)?.account.username).toBe("cyberos-share");
+    const current = getShareSettings(db)!;
+    const crossDelete = await server.inject({ method: "DELETE", url: "/api/shares/protocols/nfs/media", payload: { expectedUpdatedAt: current.updatedAt } });
+    expect(crossDelete.statusCode).toBe(404);
+    const unsafe = await server.inject({ method: "PUT", url: "/api/shares/protocols/smb/media", payload: { expectedUpdatedAt: current.updatedAt, share: { ...smb, path: "../outside" } } });
+    expect(unsafe.statusCode).toBe(400);
+    expect(getShareSettings(db)).toEqual(current);
+    await server.close();
+  });
+
+  it("rejects shares without protocol ownership through both write APIs", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    const hostd = new FakeShareHostd();
+    const server = await buildServer({ config: testConfig(tempDir), db, shares: { hostd } });
+    const initial = await server.inject({ method: "GET", url: "/api/settings/shares" });
+    const settings = JSON.parse(JSON.stringify(shareSettingsPayload("secret"))) as { shares: Array<{ protocol?: string }> };
+    delete settings.shares[0]!.protocol;
+    for (const [url, payload] of [
+      ["/api/shares/settings", { settings }],
+      ["/api/shares/protocols/smb", { expectedUpdatedAt: initial.json().settings.updatedAt, share: settings.shares[0] }]
+    ] as const) {
+      const response = await server.inject({ method: "POST", url, payload });
+      expect(response.statusCode).toBe(400);
+    }
+    expect(hostd.requests).toHaveLength(0);
+    expect(getShareSettings(db)).toBeNull();
+    await server.close();
+  });
+
+  it("does not expose the retired conversion endpoint", async () => {
+    const server = await buildServer({ config: testConfig(tempDir), db, shares: { hostd: new FakeShareHostd() } });
+    const response = await server.inject({ method: "POST", url: "/api/shares/convert", payload: {} });
+    expect(response.statusCode).toBe(404);
+    expect(getShareSettings(db)).toBeNull();
+    await server.close();
+  });
+
+  it("restores the previous host configuration when protocol persistence fails", async () => {
+    await mkdir(path.join(rootDir, "media"));
+    const initial = shareSettingsPayload("");
+    initial.enabled = false;
+    const smb = initial.shares[0]!;
+    smb.protocol = "smb";
+    for (const protocol of ["webdav", "ftp", "nfs", "dlna"] as const) smb.protocols[protocol].enabled = false;
+    const saved = saveShareSettings(db, initial);
+    const hostd = new FakeShareHostd();
+    const server = await buildServer({ config: testConfig(tempDir), db, shares: { hostd } });
+    db.exec("CREATE TRIGGER reject_share_persistence BEFORE INSERT ON system_settings WHEN NEW.key = 'share_settings' BEGIN SELECT RAISE(FAIL, 'simulated storage failure'); END");
+    const failed = await server.inject({ method: "PUT", url: "/api/shares/protocols/smb/media", payload: { expectedUpdatedAt: saved.updatedAt, share: { ...smb, name: "Unsaved" } } });
+    expect(failed.statusCode).toBe(502);
+    expect(getShareSettings(db)).toEqual(saved);
+    expect(hostd.requests).toHaveLength(2);
+    expect(hostd.requests[1]?.settings.shares).toEqual(saved.shares);
+    expect(listShareOperations(db)[0]?.status).toBe("failed");
+    await server.close();
+  });
+
   it("returns default share settings without exposing passwords", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
     const response = await server.inject({
@@ -6410,6 +6543,7 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
     shares: [
       {
         id: "media",
+        protocol: "smb",
         name: "Media",
         storagePoolId: TEST_STORAGE_POOL_ID,
         path: "media",
@@ -6422,14 +6556,14 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
             allowGuest: false
           },
           webdav: {
-            enabled: true,
+            enabled: false,
             readOnly: true,
             allowGuest: false,
             port: 8088,
             pathPrefix: "/shares/media"
           },
           ftp: {
-            enabled: true,
+            enabled: false,
             readOnly: true,
             allowGuest: false,
             port: 2121,
@@ -6437,13 +6571,13 @@ function shareSettingsPayload(password: string): Omit<ShareSettingsRecord, "upda
             passivePortEnd: 50100
           },
           nfs: {
-            enabled: true,
+            enabled: false,
             readOnly: true,
             allowedCidrs: ["192.168.1.0/24"],
             rootSquash: true
           },
           dlna: {
-            enabled: true,
+            enabled: false,
             mediaTypes: ["audio", "video"],
             bindInterface: "eth0",
             bindAddress: null,

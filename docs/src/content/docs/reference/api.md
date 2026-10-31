@@ -111,6 +111,13 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 - API 串行执行所有共享配置写入，先通过受限 hostd 应用完整当前配置，成功后才更新数据库。revision 不匹配返回 `409`，输入错误返回 `400`，hostd 不可用返回 `503`，宿主应用失败返回脱敏后的 `502`。
 - 响应只返回公开共享设置和 hostd 应用时间，密码永不回传。密码以 `0600` 文件保存到 `/cyberos/state/secrets/share/account-password`，不会写入 SQLite 或 share operation metadata。共享目录、协议、权限和全局启停通过 `POST /api/shares/settings` 直接应用，并写入 share operation；Agent/MCP 发起同类变更时仍由 capability run/approval 调用相同领域校验。
 
+### 按协议管理共享
+
+- `POST /api/shares/protocols/:protocol` 创建单协议共享；`PUT /api/shares/protocols/:protocol/:id` 编辑；`PATCH` 同一路径只更新 `enabled`；`DELETE` 同一路径移除共享配置，保留目录文件。支持 `smb`、`webdav`、`ftp`、`nfs`、`dlna`。
+- 每次写入必须携带 `expectedUpdatedAt`。创建、编辑通过 `share` 提交共享定义，编辑不能改变 ID 或协议归属。API 在共享写入队列内读取最新配置，只合并目标记录；revision 冲突返回 `409`，跨协议目标返回 `404`，输入错误返回 `400`，应用失败返回 `502`，hostd 不可用返回 `503`。
+- 每条共享记录必须包含 `protocol` 归属，禁用后仍保留；仅允许启用所属协议，不再提供旧格式转换接口。
+- 成功响应为 `{ settings, operation }`，其中 `settings` 为脱敏后的完整配置。配置写入与服务健康分开验证，运行概览仍读取 `GET /api/shares/summary`。全局开关和账号设置入口保持不变。
+
 ## 下载
 
 - `POST /api/downloads` 接收 HTTP/HTTPS 地址、`storagePoolId`、目标目录、文件名和可选的 64 位 `sha256`；SHA-256 会归一化为小写。只接受无凭据的公网下载地址，目标同名或重复任务返回 `409`。

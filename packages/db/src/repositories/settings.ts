@@ -506,7 +506,9 @@ export function saveShareSettings(
   db: CyberOsDatabase,
   settings: Omit<ShareSettingsRecord, "updatedAt">
 ): ShareSettingsRecord {
-  const updatedAt = new Date().toISOString();
+  const previous = db.prepare("SELECT updated_at FROM system_settings WHERE key = ?").get(SHARE_SETTING_KEY) as { updated_at: string } | undefined;
+  const previousTime = previous ? Date.parse(previous.updated_at) : 0;
+  const updatedAt = new Date(Math.max(Date.now(), Number.isFinite(previousTime) ? previousTime + 1 : 0)).toISOString();
   const record = normalizeShareSettings(settings, updatedAt);
 
   db.prepare(`

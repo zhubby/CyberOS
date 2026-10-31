@@ -1,3 +1,4 @@
+import { isShareProtocol } from "@cyberos/shared";
 import type {
   DlnaMediaType,
   ShareDefinitionConfig,
@@ -43,6 +44,7 @@ function normalizeShareDefinitions(shares: unknown): ShareDefinitionConfig[] {
 
 function normalizeShareDefinition(value: unknown, index: number): ShareDefinitionConfig | null {
   const share = recordFrom(value);
+  if (!isShareProtocol(share.protocol)) throw new Error("Invalid share protocol");
   const storagePoolId = normalizeString(share.storagePoolId);
   const sharePath = normalizeString(share.path);
   if (!storagePoolId || !sharePath) {
@@ -52,6 +54,7 @@ function normalizeShareDefinition(value: unknown, index: number): ShareDefinitio
   const name = normalizeString(share.name) ?? id;
   return {
     id,
+    protocol: share.protocol,
     name,
     storagePoolId,
     path: sharePath,
@@ -177,6 +180,7 @@ function isCurrentShareDefinition(value: unknown): value is ShareDefinitionConfi
     !isRecord(value)
     || [value.id, value.name, value.storagePoolId, value.path].some((field) => normalizeString(field) === null)
     || typeof value.description !== "string"
+    || !isShareProtocol(value.protocol)
     || !isRecord(value.protocols)
   ) {
     return false;

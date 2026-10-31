@@ -1,6 +1,9 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { defaultShareProtocols } from "../../config/share-settings.js";
 import { describe, expect, it } from "vitest";
 import type { ShareSummary } from "../../api.js";
-import { shareStatusDetail, shareStatusLabel, shareStatusTone } from "./ShareManagementPanel.js";
+import { ShareProtocolSection, shareStatusDetail, shareStatusLabel, shareStatusTone } from "./ShareManagementPanel.js";
 
 const translate = (key: string) => key;
 const summary: ShareSummary = {
@@ -37,6 +40,10 @@ describe("share panel status", () => {
     expect(shareStatusDetail(null, false, "Failed to fetch", translate)).toBe("Failed to fetch");
   });
 
+  it("does not label missing service data as disabled", () => {
+    expect(shareStatusLabel(null, false, null, translate)).toBe("common.states.unknown");
+  });
+
   it("warns when an enabled protocol has an inactive host service", () => {
     const inactiveSummary: ShareSummary = {
       ...summary,
@@ -55,4 +62,27 @@ describe("share panel status", () => {
     expect(shareStatusDetail(inactiveSummary, false, null, translate))
       .toBe("workspace.management.shares.partialDetail");
   });
+});
+
+it("renders disabled records in their owning protocol with independent actions", () => {
+  const share = { id: "media", protocol: "smb" as const, name: "Media", storagePoolId: "pool-1", path: "media", description: "", protocols: defaultShareProtocols() };
+  const html = renderToStaticMarkup(createElement(ShareProtocolSection, {
+    protocol: "smb", shares: [share], summary, disabled: false,
+    t: translate, onCreate: () => {}, onEdit: () => {}, onToggle: () => {}, onDelete: () => {}
+  }));
+  expect(html).toContain("Media");
+  expect(html).toContain("pool-1 / media");
+  expect(html).toContain('aria-checked="false"');
+  expect(html).toContain("common.actions.edit");
+  expect(html).toContain("workspace.management.shares.removeShare");
+  expect(html).not.toContain("fields.allowedCidrs");
+});
+
+it("shows actual daemon status even when the protocol has no enabled shares", () => {
+  const live = { ...summary, protocols: { ...summary.protocols, smb: { ...summary.protocols.smb, enabledShares: 0 } } };
+  const html = renderToStaticMarkup(createElement(ShareProtocolSection, {
+    protocol: "smb", shares: [], summary: live, disabled: false, t: translate,
+    onCreate: () => {}, onEdit: () => {}, onToggle: () => {}, onDelete: () => {}
+  }));
+  expect(html).toContain("workspace.management.shares.serviceStates.active");
 });

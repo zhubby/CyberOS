@@ -1607,6 +1607,22 @@ export async function createDockerConsoleSession(operationId: string): Promise<D
   return body.consoleSession;
 }
 
+export async function mutateProtocolShare(input: {
+  protocol: import("@cyberos/shared").ShareProtocol;
+  id?: string;
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
+  expectedUpdatedAt: string;
+  share?: ShareSettings["shares"][number];
+  enabled?: boolean;
+}): Promise<ShareSettings> {
+  const { protocol, id, method, ...body } = input;
+  const response = await fetch(`/api/shares/protocols/${protocol}${id ? `/${encodeURIComponent(id)}` : ""}`, {
+    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+  });
+  await ensureOk(response);
+  return ((await response.json()) as { settings: ShareSettings }).settings;
+}
+
 export async function applyShareSettings(input: {
   settings: ShareSettingsInput;
 }): Promise<{

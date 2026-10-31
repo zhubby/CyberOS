@@ -39,6 +39,20 @@ describe("management dashboard layouts", () => {
       Math.max(...oldLayouts.desktop.map((item) => item.y + item.h))
     );
   });
+  it("replaces the old directories widget with five full-width protocol widgets", () => {
+    const storage = memoryStorage();
+    const defaults = defaultManagementDashboardLayouts("shares");
+    const old = defaults.desktop.filter((item) => !item.i.startsWith("protocol-")).map((item) => ({ ...item, y: item.y + 3 }));
+    const service = old.find((item) => item.i === "services")!;
+    old.push({ ...service, i: "directories", y: service.y + service.h });
+    writeManagementDashboardLayouts("shares", { desktop: old, tablet: [] }, storage);
+    const restored = readManagementDashboardLayouts("shares", storage);
+    expect(restored.desktop.some((item) => item.i === "directories")).toBe(false);
+    for (const protocol of ["smb", "webdav", "ftp", "nfs", "dlna"]) {
+      expect(restored.desktop.find((item) => item.i === `protocol-${protocol}`)).toMatchObject({ w: 12 });
+    }
+    expect(restored.desktop.find((item) => item.i === "services")?.y).toBe(service.y);
+  });
   it("packs every dashboard widget inside each breakpoint without overlap", () => {
     for (const dashboardId of ["docker", "virtualMachines", "network", "storage", "shares", "monitoring"] as const) {
       const layouts = defaultManagementDashboardLayouts(dashboardId);
@@ -155,11 +169,11 @@ describe("management dashboard layouts", () => {
     expect(MANAGEMENT_DASHBOARD_LAYOUT_VERSION).toBe(3);
     expect(managementDashboardStorageKey("shares")).toContain(":v3:shares");
     expect(definitions.some((widget) => widget.id === "account")).toBe(false);
-    expect(definitions.find((widget) => widget.id === "services")?.size).toBe("wide");
+    expect(definitions.find((widget) => widget.id === "services")?.size).toBe("shareOverview");
 
     const layouts = defaultManagementDashboardLayouts("shares");
     expect(layouts.desktop.find((item) => item.i === "services")?.w).toBe(MANAGEMENT_DASHBOARD_COLUMNS.desktop);
-    expect(layouts.desktop.find((item) => item.i === "directories")?.w).toBe(MANAGEMENT_DASHBOARD_COLUMNS.desktop);
+    expect(layouts.desktop.find((item) => item.i === "protocol-smb")?.w).toBe(MANAGEMENT_DASHBOARD_COLUMNS.desktop);
   });
 
   it("keeps the Network Wi-Fi status widget compact", () => {

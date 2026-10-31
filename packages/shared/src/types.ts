@@ -1287,6 +1287,7 @@ export interface ShareProtocolConfig {
 
 export interface ShareDefinitionConfig {
   id: string;
+  protocol: ShareProtocol;
   name: string;
   storagePoolId: string;
   path: string;

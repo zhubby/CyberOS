@@ -11,6 +11,7 @@ describe("share service status", () => {
       updatedAt: "2026-09-22T00:00:00.000Z",
       shares: [{
         id: "shares",
+        protocol: "webdav",
         name: "Shares",
         storagePoolId: "pool-1",
         path: "pool1/Shares",

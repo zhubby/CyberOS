@@ -61,6 +61,7 @@ export interface ShareProtocolFormState {
 
 export interface ShareDefinitionFormState {
   id: string;
+  protocol: ShareProtocol;
   name: string;
   storagePoolId: string;
   path: string;
@@ -138,6 +139,7 @@ export function shareSettingsToForm(settings: ShareSettings | null, storagePools
     },
     shares: (settings?.shares ?? []).map((share) => ({
       id: share.id,
+      protocol: share.protocol,
       name: share.name,
       storagePoolId: share.storagePoolId || storagePools[0]?.id || "",
       path: share.path || ".",
@@ -175,6 +177,7 @@ export function createShareFormState(storagePools: StoragePool[], existingShares
   const name = `Share ${index}`;
   return {
     id,
+    protocol: "smb",
     name,
     storagePoolId: storagePools[0]?.id ?? "",
     path: ".",
@@ -229,6 +232,7 @@ export function shareDirectoriesToInput(form: ShareSettingsFormState): ShareSett
       const name = share.name.trim() || id;
       return {
         id,
+        protocol: share.protocol,
         name,
         storagePoolId: share.storagePoolId.trim(),
         path: share.path.trim() || ".",

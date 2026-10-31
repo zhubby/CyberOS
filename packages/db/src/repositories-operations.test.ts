@@ -38,6 +38,7 @@ describe("operation repositories", () => {
       shares: [
         {
           id: "media",
+          protocol: "smb",
           name: "Media",
           storagePoolId: "local",
           path: "media",

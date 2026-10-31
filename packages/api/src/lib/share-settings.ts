@@ -1,3 +1,4 @@
+import { isShareProtocol, SHARE_PROTOCOLS } from "@cyberos/shared";
 import { stat } from "node:fs/promises";
 import net from "node:net";
 import { resolveSafeExistingPath } from "@cyberos/storage-tools";
@@ -101,13 +102,21 @@ async function normalizeShareDefinition(
     throw new Error(`Share ${id} path must be a directory`);
   }
 
+  if (!isShareProtocol(value.protocol)) {
+    throw new Error("Invalid share protocol");
+  }
+  const protocols = normalizeProtocols(value.protocols, id, name);
+  if (SHARE_PROTOCOLS.some((protocol) => protocol !== value.protocol && protocols[protocol].enabled)) {
+    throw new Error("A protocol share cannot enable another protocol");
+  }
   return {
     id,
+    protocol: value.protocol,
     name,
     storagePoolId: storagePool.id,
     path: safe.relativePath,
     description: normalizeDisplayText(value.description) ?? "",
-    protocols: normalizeProtocols(value.protocols, id, name)
+    protocols
   };
 }
 

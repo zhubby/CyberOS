@@ -11941,3 +11941,60 @@
     transform: none;
   }
 }
+
+/* Protocol-owned shares use the existing dashboard and viewport modal geometry. */
+.share-protocol-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.share-protocol-heading > svg { color: var(--accent); flex-shrink: 0; }
+.share-protocol-section .management-section-header { flex-wrap: wrap; gap: 10px; }
+.share-protocol-hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+.share-protocol-shares { display: grid; gap: 0; }
+.share-protocol-share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.share-protocol-share-copy { display: grid; gap: 4px; min-width: 0; }
+.share-protocol-share-copy > * { overflow-wrap: anywhere; min-width: 0; }
+.share-protocol-share-copy small, .share-protocol-share-copy code { color: var(--muted); font-size: 12px; }
+.share-protocol-share-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.share-service-issues, .share-service-problem { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.share-service-problem { display: flex; gap: 6px; }
+.share-service-problem svg { flex-shrink: 0; color: var(--danger-ui-text); }
+.share-overview-facts { margin-bottom: 12px; }
+.share-editor-fields { display: grid; gap: 18px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.management-modal.share-protocol-modal { width: min(680px, 100%); }
+.share-protocol-modal .share-protocol-fields { grid-template-columns: minmax(0, 1fr); }
+.share-protocol-modal .share-directory-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.share-protocol-modal .share-field-wide { grid-column: 1 / -1; }
+.share-protocol-modal input, .share-protocol-modal textarea { min-width: 0; width: 100%; }
+.share-protocol-modal .hud-switch { width: auto; }
+.share-media-checkbox { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.share-protocol-modal .share-media-checkbox input { width: auto; }
+.share-delete-copy { overflow-wrap: anywhere; }
+.share-add-form-actions button.is-danger { color: var(--danger-ui-text); border-color: var(--danger-ui-text); }
+@media (max-width: 620px) {
+  .share-protocol-share-row { flex-wrap: wrap; }
+  .share-protocol-share-copy { flex: 1 1 100%; }
+  .share-protocol-share-actions { margin-left: auto; }
+  .share-protocol-modal .share-directory-fields { grid-template-columns: minmax(0, 1fr); }
+}
+.share-protocol-section, .share-services-section { grid-template-rows: none; align-content: start; }
+.share-protocol-section .share-protocol-shares { padding: 0 14px; }
+.share-protocol-section .share-protocol-hint, .share-service-problem { margin: 10px 14px; }
+.share-services-section .share-overview-facts { margin: 0; padding: 0 14px; }
+.share-services-section .share-service-list { padding: 12px 14px; }
+.share-services-section .share-service-row { border-radius: 0; }
+.share-services-section .share-service-row { grid-template-columns: 16px minmax(0, 1fr) auto; }
+.share-services-section .share-service-row .management-row-status { grid-column: auto; justify-self: end; }
+.share-services-section .share-overview-facts { display: flex; flex-wrap: wrap; }
+.share-services-section .share-overview-facts > div { flex: 1 1 120px; }

@@ -2,7 +2,7 @@ import { moveElement, verticalCompactor, type Layout, type LayoutItem } from "re
 
 export type ManagementDashboardId = "docker" | "virtualMachines" | "network" | "storage" | "shares" | "monitoring";
 export type ManagementDashboardBreakpoint = "desktop" | "tablet";
-export type ManagementDashboardWidgetSize = "overview" | "metric" | "status" | "full" | "wide" | "half" | "narrow" | "large";
+export type ManagementDashboardWidgetSize = "overview" | "metric" | "status" | "full" | "wide" | "half" | "narrow" | "large" | "shareProtocol" | "shareOverview";
 
 export interface ManagementDashboardWidgetDefinition {
   id: string;
@@ -91,13 +91,12 @@ const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly Manag
     { id: "iscsi", size: "full" }
   ],
   shares: [
-    { id: "overview", size: "overview" },
-    { id: "metric-shares", size: "metric" },
-    { id: "metric-protocols", size: "metric" },
-    { id: "metric-authenticated", size: "metric" },
-    { id: "metric-issues", size: "metric" },
-    { id: "services", size: "wide" },
-    { id: "directories", size: "large" }
+    { id: "services", size: "shareOverview" },
+    { id: "protocol-smb", size: "shareProtocol" },
+    { id: "protocol-webdav", size: "shareProtocol" },
+    { id: "protocol-ftp", size: "shareProtocol" },
+    { id: "protocol-nfs", size: "shareProtocol" },
+    { id: "protocol-dlna", size: "shareProtocol" }
   ]
 };
 
@@ -251,6 +250,18 @@ function mergeDashboardLayouts(
 }
 
 function mergeBreakpointLayout(stored: Layout | undefined, defaults: Layout, cols: number): Layout {
+  if (Array.isArray(stored) && defaults.some((item) => item.i === "protocol-smb")
+    && stored.some((item) => item.i === "directories") && !stored.some((item) => item.i.startsWith("protocol-"))) {
+    const fallback = defaults.find((item) => item.i === "services")!;
+    const old = stored.find((item) => item.i === "services" && isValidLayoutItem(item));
+    const service = { ...fallback, y: old?.y ?? fallback.y, h: Math.max(old?.h ?? 0, fallback.h) };
+    let y = service.y + service.h;
+    return [service, ...defaults.filter((item) => item.i !== "services").map((item) => {
+      const placed = { ...item, x: 0, y };
+      y += item.h;
+      return placed;
+    })];
+  }
   // iSCSI is an additive Storage widget. Keep existing arrangements intact
   // when upgrading the previous complete widget set.
   if (Array.isArray(stored) && defaults.some((item) => item.i === "iscsi") && stored.length === defaults.length - 1) {
@@ -337,6 +348,10 @@ function gridSize(size: ManagementDashboardWidgetSize, breakpoint: ManagementDas
         maxW: tablet ? 4 : 3,
         maxH: 10
       };
+    case "shareOverview":
+      return { w: colsFor(breakpoint), h: 25, minW: colsFor(breakpoint), minH: 12, maxW: colsFor(breakpoint) };
+    case "shareProtocol":
+      return { w: colsFor(breakpoint), h: 10, minW: colsFor(breakpoint), minH: 8, maxW: colsFor(breakpoint) };
     case "full":
       return { w: colsFor(breakpoint), h: 16, minW: colsFor(breakpoint), minH: 12, maxW: colsFor(breakpoint) };
     case "half":

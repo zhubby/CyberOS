@@ -4,7 +4,8 @@ import {
   createShareOperationRecord,
   updateShareOperationStatus
 } from "@cyberos/db";
-import { type ShareOperationProposal } from "@cyberos/shared";
+import { isShareProtocol, type ShareDefinitionConfig, type ShareSettingsRecord, type ShareOperationProposal } from "@cyberos/shared";
+import { checkShareRevision, mutateProtocolShares, ShareMutationError } from "../lib/share-protocol-mutations.js";
 import type { ApiRouteContext } from "../context.js";
 import { HostdRequestError } from "../lib/hostd-client.js";
 import {
@@ -110,50 +111,85 @@ export function registerShareRoutes(server: FastifyInstance, context: ApiRouteCo
     };
   }>("/api/shares/settings", async (request, reply) => {
     try {
-      const existing = await loadRepairableShareSettings(db, config);
-      const storagePools = await listShareStoragePools(context);
-      const settings = await normalizeShareSettingsInput(request.body?.settings, existing, storagePools);
-      const publicSettings = toPublicShareSettings(settings);
-      const proposal: ShareOperationProposal = {
-        action: "apply_settings",
-        risk: "high",
-        summary: shareProposalSummary(settings),
-        settings: publicSettings
-      };
-      const operation = createShareOperationRecord(db, {
-        proposal,
-        settings: withoutSharePassword(settings)
+      const response = await serializeShareMutation(async () => {
+        const existing = await loadRepairableShareSettings(db, config);
+        const storagePools = await listShareStoragePools(context);
+        const settings = await normalizeShareSettingsInput(request.body?.settings, existing, storagePools);
+        return applyRecorded(settings, existing);
       });
-      try {
-        const applied = await applyShareSettings(config, settings, context.shares);
-        let saved;
-        try {
-          saved = await persistShareSettings(db, config, settings);
-        } catch (error) {
-          await applyShareSettings(config, existing, context.shares).catch(() => undefined);
-          throw error;
-        }
-        const completed = updateShareOperationStatus(db, operation.id, "applied", {
-          ...applied,
-          settingsUpdatedAt: saved.updatedAt,
-          appliedAt: new Date().toISOString()
-        });
-        reply.status(200).send({
-          settings: toPublicShareSettings(saved),
-          operation: completed ? toPublicShareOperation(completed) : null
-        });
-      } catch (error) {
-        const message = safeShareMessage(error);
-        updateShareOperationStatus(db, operation.id, "failed", {
-          error: message,
-          failedAt: new Date().toISOString()
-        });
-        throw error;
-      }
+      reply.send(response);
     } catch (error) {
       reply.status(400).send({ error: safeShareMessage(error) });
     }
   });
+  async function applyRecorded(settings: ShareSettingsRecord, existing: ShareSettingsRecord) {
+    const publicSettings = toPublicShareSettings(settings);
+    const proposal: ShareOperationProposal = {
+      action: "apply_settings",
+      risk: "high",
+      summary: shareProposalSummary(settings),
+      settings: publicSettings
+    };
+    const operation = createShareOperationRecord(db, {
+      proposal,
+      settings: withoutSharePassword(settings)
+    });
+    try {
+      const applied = await applyShareSettings(config, settings, context.shares);
+      let saved;
+      try {
+        saved = await persistShareSettings(db, config, settings);
+      } catch (error) {
+        await applyShareSettings(config, existing, context.shares).catch(() => undefined);
+        throw error;
+      }
+      const completed = updateShareOperationStatus(db, operation.id, "applied", {
+        ...applied,
+        settingsUpdatedAt: saved.updatedAt,
+        appliedAt: new Date().toISOString()
+      });
+      return {
+        settings: toPublicShareSettings(saved),
+        operation: completed ? toPublicShareOperation(completed) : null
+      };
+    } catch (error) {
+      const message = safeShareMessage(error);
+      updateShareOperationStatus(db, operation.id, "failed", {
+        error: message,
+        failedAt: new Date().toISOString()
+      });
+      throw new ShareMutationError(error instanceof HostdRequestError && error.statusCode === 503 ? 503 : 502, message);
+    }
+  }
+
+  type ProtocolBody = { expectedUpdatedAt?: string; share?: ShareDefinitionConfig; enabled?: boolean };
+  for (const route of [
+    { method: ["POST"] as const, url: "/api/shares/protocols/:protocol" },
+    { method: ["PUT", "PATCH", "DELETE"] as const, url: "/api/shares/protocols/:protocol/:id" }
+  ]) {
+    server.route<{ Params: { protocol: string; id?: string }; Body: ProtocolBody }>({
+      method: [...route.method], url: route.url,
+      handler: async (request, reply) => {
+        try {
+          const response = await serializeShareMutation(async () => {
+            const protocol = request.params.protocol;
+            if (!isShareProtocol(protocol)) throw new ShareMutationError(400, "Unknown share protocol");
+            const existing = await loadEffectiveShareSettings(db, config);
+            checkShareRevision(existing, request.body?.expectedUpdatedAt);
+            const shares = mutateProtocolShares(existing, protocol, request.params.id, request.method, request.body ?? {});
+            const settings = await normalizeShareSettingsInput({ shares }, existing, await listShareStoragePools(context));
+            return applyRecorded(settings, existing);
+          });
+          return reply.send(response);
+        } catch (error) {
+          return reply.status(error instanceof ShareMutationError ? error.statusCode : error instanceof HostdRequestError ? 502 : 400)
+            .send({ error: safeShareMessage(error) });
+        }
+      }
+    });
+  }
+
+
 }
 
 async function listShareStoragePools(context: ApiRouteContext): Promise<ShareStoragePool[]> {

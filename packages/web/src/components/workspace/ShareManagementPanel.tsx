@@ -1,891 +1,273 @@
-import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ShareProtocol } from "@cyberos/shared";
-import {
-  CircleAlert,
-  Database,
-  Folder,
-  HardDrive,
-  LoaderCircle,
-  Lock,
-  Network,
-  Plus,
-  RefreshCw,
-  Server,
-  Share2,
-  Trash2,
-  X,
-  type LucideIcon
-} from "lucide-react";
-import {
-  getShareSettings,
-  getShareSummary,
-  applyShareSettings,
-  type StoragePool,
-  type ShareSummary
-} from "../../api.js";
-import {
-  DLNA_MEDIA_TYPES,
-  SHARE_PROTOCOLS,
-  SHARE_SETTINGS_CHANGED_EVENT,
-  authenticatedProtocolCount,
-  createShareFormState,
-  enabledProtocolCount,
-  shareDirectoriesToInput,
-  shareSettingsToForm,
-  toggleDlnaMediaType,
-  validateShareForm,
-  type ShareDefinitionFormState,
-  type ShareFormValidationIssue,
-  type ShareProtocolFormState,
-  type ShareSettingsFormState
-} from "../../config/share-settings.js";
-import { formatDate, formatLocaleNumber } from "../../i18n/format.js";
+import { CircleAlert, Database, Folder, HardDrive, LoaderCircle, Network, Pencil, Plus, RefreshCw, Server, Share2, Trash2, X } from "lucide-react";
+import { getShareSettings, getShareSummary, mutateProtocolShare, type ShareSettings, type ShareSummary, type StoragePool } from "../../api.js";
+import { SHARE_PROTOCOLS, SHARE_SETTINGS_CHANGED_EVENT, createShareFormState, shareDirectoriesToInput, shareSettingsToForm, validateShareForm, type ShareDefinitionFormState, type ShareProtocolFormState } from "../../config/share-settings.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { formatDate, formatLocaleNumber } from "../../i18n/format.js";
+import { CustomSelect } from "../common/CustomSelect.js";
+import { ModalPortal } from "../common/ModalPortal.js";
 import { Switch } from "../common/Switch.js";
-import {
-  ManagementDashboardControls,
-  ManagementDashboardGrid,
-  useManagementDashboard
-} from "./ManagementDashboard.js";
+import { ManagementDashboardControls, ManagementDashboardGrid, useManagementDashboard } from "./ManagementDashboard.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
+import { ShareProtocolFields } from "./ShareProtocolFields.js";
 
 type StatusTone = "ready" | "warning" | "offline" | "neutral";
 type Translate = (key: string, options?: Record<string, unknown>) => string;
+const PROTOCOL_ICONS = { smb: Server, webdav: Network, ftp: HardDrive, nfs: Folder, dlna: Database };
+type Editor = { kind: "edit"; protocol: ShareProtocol; originalId?: string; draft: ShareDefinitionFormState; snapshot: ShareSettings };
+type Dialog = Editor | { kind: "delete"; share: ShareDefinitionFormState; snapshot: ShareSettings };
 
-const PROTOCOL_ICONS = {
-  smb: Server,
-  webdav: Network,
-  ftp: HardDrive,
-  nfs: Folder,
-  dlna: Database
-} as const satisfies Record<ShareProtocol, LucideIcon>;
-
-export function ShareManagementPanel({
-  storagePools,
-  locale,
-  onWorkQueuesChanged,
-  onNotifyError,
-  onNotifySuccess
-}: {
-  storagePools: StoragePool[];
-  locale: SupportedLocale;
+export function ShareManagementPanel({ storagePools, locale, onWorkQueuesChanged, onNotifyError, onNotifySuccess }: {
+  storagePools: StoragePool[]; locale: SupportedLocale;
   onWorkQueuesChanged: () => void | Promise<void>;
   onNotifyError: (message: string | null) => void;
   onNotifySuccess: (message: string | null) => void;
 }) {
   const { t } = useTranslation();
   const dashboard = useManagementDashboard("shares");
-  const [form, setForm] = useState<ShareSettingsFormState>(() => shareSettingsToForm(null, storagePools));
+  const [settings, setSettings] = useState<ShareSettings | null>(null);
   const [summary, setSummary] = useState<ShareSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [newShare, setNewShare] = useState<ShareDefinitionFormState | null>(null);
-  const [newShareError, setNewShareError] = useState<string | null>(null);
-  const reportedIssueSignature = useRef<string | null>(null);
-  const validationIssues = useMemo(() => validateShareForm(form, storagePools), [form, storagePools]);
-  const canApplyConfiguration = summary?.capabilities.canApplyConfiguration === true;
-  const submitDisabled = loading || submitting || !canApplyConfiguration;
-  const statusTone = shareStatusTone(summary, loading, error);
-  const metrics = summary?.metrics ?? {
-    shares: form.shares.length,
-    enabledProtocols: enabledProtocolCount(form),
-    authenticatedProtocols: authenticatedProtocolCount(form)
-  };
-  const serviceIssueCount = summary?.issues.length ?? 0;
-  const addShareOpen = newShare !== null;
-  const displayedShares = newShare ? [...form.shares, newShare] : form.shares;
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const dialogTrigger = useRef<HTMLElement | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const form = useMemo(() => shareSettingsToForm(settings, storagePools), [settings, storagePools]);
+  const writable = settings !== null && summary?.capabilities.canApplyConfiguration === true;
+  const disabled = loading || busy || !writable;
 
-  const refreshShareData = useCallback(async () => {
+  const refresh = useCallback(async () => {
     setRefreshing(true);
-    setError(null);
     try {
-      const [settings, nextSummary] = await Promise.all([getShareSettings(), getShareSummary()]);
-      setForm(shareSettingsToForm(settings, storagePools));
+      const [nextSettings, nextSummary] = await Promise.all([getShareSettings(), getShareSummary()]);
+      setSettings(nextSettings);
       setSummary(nextSummary);
-      notifySummaryIssues(nextSummary.issues, onNotifyError, reportedIssueSignature);
+      setError(null);
     } catch (nextError) {
       const message = errorMessage(nextError);
       setError(message);
       onNotifyError(message);
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
-  }, [onNotifyError, storagePools]);
+  }, [onNotifyError]);
 
+  useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError(null);
-    void loadShareData().finally(() => {
-      if (active) {
-        setLoading(false);
-      }
-    });
-    return () => {
-      active = false;
-    };
+    const listener = () => { if (!busyRef.current) void refresh(); };
+    window.addEventListener(SHARE_SETTINGS_CHANGED_EVENT, listener);
+    return () => window.removeEventListener(SHARE_SETTINGS_CHANGED_EVENT, listener);
+  }, [refresh]);
 
-    async function loadShareData() {
-      try {
-        const [settings, nextSummary] = await Promise.all([getShareSettings(), getShareSummary()]);
-        if (!active) {
-          return;
-        }
-        setForm(shareSettingsToForm(settings, storagePools));
-        setSummary(nextSummary);
-        notifySummaryIssues(nextSummary.issues, onNotifyError, reportedIssueSignature);
-      } catch (nextError) {
-        if (active) {
-          const message = errorMessage(nextError);
-          setError(message);
-          onNotifyError(message);
-        }
-      }
-    }
-  }, [storagePools]);
+  function closeDialog() {
+    if (busyRef.current) return;
+    setDialog(null);
+    setDialogError(null);
+  }
+  function openDialog(next: Dialog) {
+    dialogTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setDialogError(null); setDialog(next);
+  }
+  function edit(protocol: ShareProtocol, share?: ShareDefinitionFormState) {
+    if (!settings) return;
+    const draft = share ? structuredClone(share) : createShareFormState(storagePools, form.shares);
+    draft.protocol = protocol;
+    if (!share) draft.protocols[protocol].enabled = true;
+    openDialog({ kind: "edit", protocol, ...(share ? { originalId: share.id } : {}), draft, snapshot: settings });
+  }
+  function updateDraft(patch: Partial<ShareDefinitionFormState>) {
+    setDialog((current) => current?.kind === "edit" ? { ...current, draft: { ...current.draft, ...patch } } : current);
+    setDialogError(null);
+  }
+  function updateProtocol<P extends ShareProtocol>(protocol: P, patch: Partial<ShareProtocolFormState[P]>) {
+    setDialog((current) => current?.kind === "edit" ? { ...current, draft: {
+      ...current.draft, protocols: { ...current.draft.protocols, [protocol]: { ...current.draft.protocols[protocol], ...patch } }
+    } } : current);
+    setDialogError(null);
+  }
 
-  useEffect(() => {
-    if (!addShareOpen) {
-      return;
-    }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setNewShare(null);
-        setNewShareError(null);
-      }
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [addShareOpen]);
-
-  useEffect(() => {
-    const handleSettingsChanged = () => {
-      void refreshShareData();
-    };
-    window.addEventListener(SHARE_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
-    return () => window.removeEventListener(SHARE_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
-  }, [refreshShareData]);
-
-  async function submitProposal(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (newShare) {
-      confirmAddShare();
-      return;
-    }
-    if (validationIssues.length > 0) {
-      const message = validationIssueText(validationIssues[0]!, t);
-      setError(message);
-      onNotifyError(message);
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
+  async function runMutation(action: () => Promise<ShareSettings>) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setDialogError(null);
     try {
-      const result = await applyShareSettings({
-        settings: shareDirectoriesToInput(form)
-      });
-      onNotifySuccess(t("notifications.operationSucceeded"));
-      setForm(shareSettingsToForm(result.settings, storagePools));
-      await onWorkQueuesChanged();
+      const saved = await action();
+      setSettings(saved);
+      setError(null);
+      onNotifySuccess(t("workspace.management.shares.saved"));
+      // A successful configuration write is distinct from collecting live service health.
+      setSummary(null);
+      try {
+        setSummary(await getShareSummary());
+      } catch (nextError) {
+        setError(errorMessage(nextError));
+        onNotifyError(errorMessage(nextError));
+      }
+      void Promise.resolve().then(onWorkQueuesChanged).catch((nextError: unknown) => onNotifyError(errorMessage(nextError)));
+      window.dispatchEvent(new Event(SHARE_SETTINGS_CHANGED_EVENT));
+      setDialog(null);
     } catch (nextError) {
-      const message = errorMessage(nextError);
+      const message = nextError instanceof Error && "statusCode" in nextError && nextError.statusCode === 409
+        ? t("workspace.management.shares.conflict") : errorMessage(nextError);
+      setDialogError(message);
       setError(message);
       onNotifyError(message);
     } finally {
-      setSubmitting(false);
+      busyRef.current = false;
+      setBusy(false);
     }
   }
 
-  function updateShare(index: number, patch: Partial<ShareDefinitionFormState>) {
-    if (newShare && index === form.shares.length) {
-      updateNewShare(patch);
-      return;
-    }
-    setForm((current) => ({
-      ...current,
-      shares: current.shares.map((share, shareIndex) =>
-        shareIndex === index
-          ? {
-              ...share,
-              ...patch
-            }
-          : share
-      )
-    }));
-  }
-
-  function updateShareProtocol<Protocol extends ShareProtocol>(
-    index: number,
-    protocol: Protocol,
-    patch: Partial<ShareProtocolFormState[Protocol]>
-  ) {
-    if (newShare && index === form.shares.length) {
-      updateNewShareProtocol(protocol, patch);
-      return;
-    }
-    setForm((current) => ({
-      ...current,
-      shares: current.shares.map((share, shareIndex) => {
-        if (shareIndex !== index) {
-          return share;
-        }
-        return {
-          ...share,
-          protocols: {
-            ...share.protocols,
-            [protocol]: {
-              ...share.protocols[protocol],
-              ...patch
-            }
-          } as ShareProtocolFormState
-        };
-      })
-    }));
-  }
-
-  function openAddShare() {
-    setNewShare(createShareFormState(storagePools, form.shares));
-    setNewShareError(null);
-  }
-
-  function closeAddShare() {
-    setNewShare(null);
-    setNewShareError(null);
-  }
-
-  function confirmAddShare() {
-    if (!newShare) {
-      return;
-    }
-    const issue = newShareValidationIssue(form, newShare, storagePools);
+  function saveEditor(event: FormEvent) {
+    event.preventDefault();
+    if (dialog?.kind !== "edit") return;
+    const current = shareSettingsToForm(dialog.snapshot, storagePools);
+    const shares = dialog.originalId ? current.shares.map((share) => share.id === dialog.originalId ? dialog.draft : share) : [...current.shares, dialog.draft];
+    const issue = validateShareForm({ ...current, shares }, storagePools)[0];
     if (issue) {
-      setNewShareError(validationIssueText(issue, t));
+      setDialogError(t(`workspace.management.shares.validation.${issue.code}`, { share: issue.shareName ?? t("common.dash"), value: issue.value ?? t("common.dash") }));
       return;
     }
-    setForm((current) => ({
-      ...current,
-      shares: [...current.shares, newShare]
-    }));
-    closeAddShare();
+    const input = shareDirectoriesToInput({ ...current, shares: [dialog.draft] }).shares?.[0];
+    if (!input) return;
+    void runMutation(() => mutateProtocolShare({ protocol: dialog.protocol, method: dialog.originalId ? "PUT" : "POST",
+      ...(dialog.originalId ? { id: dialog.originalId } : {}), expectedUpdatedAt: dialog.snapshot.updatedAt, share: input }));
   }
 
-  function updateNewShare(patch: Partial<ShareDefinitionFormState>) {
-    setNewShare((current) => (current ? { ...current, ...patch } : current));
-    setNewShareError(null);
-  }
-
-  function updateNewShareProtocol<Protocol extends ShareProtocol>(
-    protocol: Protocol,
-    patch: Partial<ShareProtocolFormState[Protocol]>
-  ) {
-    setNewShare((current) =>
-      current
-        ? {
-            ...current,
-            protocols: {
-              ...current.protocols,
-              [protocol]: {
-                ...current.protocols[protocol],
-                ...patch
-              }
-            } as ShareProtocolFormState
-          }
-        : current
-    );
-    setNewShareError(null);
-  }
-
-  function removeShare(index: number) {
-    if (newShare && index === form.shares.length) {
-      closeAddShare();
-      return;
-    }
-    setForm((current) => ({
-      ...current,
-      shares: current.shares.filter((_, shareIndex) => shareIndex !== index)
-    }));
-  }
-
-  return (
-    <section className="workspace-management workspace-share-management" aria-label={t("workspace.management.shares.title")}>
-      <PanelHeader
-        icon={<Share2 aria-hidden="true" size={20} />}
-        title={t("workspace.management.shares.title")}
-        subtitle={t("workspace.management.shares.description")}
-        actions={<PanelHeaderActions label={t("workspace.management.actions.label")}>
-          <ManagementDashboardControls dashboard={dashboard} disabled={loading || submitting} />
-          <PanelHeaderAction
-            label={t("common.actions.refresh")}
-            type="button"
-            onClick={refreshShareData}
-            disabled={loading || refreshing || submitting}
-            aria-busy={loading || refreshing || undefined}
-          >
-            {loading || refreshing ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <RefreshCw aria-hidden="true" size={17} />}
-          </PanelHeaderAction>
-          <PanelHeaderAction
-            label={t("common.actions.save")}
-            type="submit"
-            form="share-management-form"
-            disabled={submitDisabled}
-            aria-busy={submitting || undefined}
-          >
-            {submitting ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <Share2 aria-hidden="true" size={17} />}
-          </PanelHeaderAction>
-        </PanelHeaderActions>}
-      />
-
-      <form id="share-management-form" className="management-body share-management-body" onSubmit={submitProposal}>
-        {!canApplyConfiguration ? (
-          <p className="management-empty share-management-read-only">
-            {t("workspace.management.shares.configurationUnavailable")}
-          </p>
-        ) : null}
-        <ManagementDashboardGrid
-          dashboard={dashboard}
-          loading={loading}
-          items={[
-              {
-                id: "overview",
-                title: String(t("workspace.management.shares.commandTitle")),
-                content: <section className="management-command-panel">
-          <div className="management-emblem" aria-hidden="true">
-            <Share2 size={31} />
-          </div>
-          <div className="management-command-copy">
-            <div>
-              <span className="management-status-pill" data-state={statusTone}>
-                {shareStatusLabel(summary, loading, error, t)}
-              </span>
-              <h3>{t("workspace.management.shares.commandTitle")}</h3>
-              <p>{shareStatusDetail(summary, loading, error, t)}</p>
-            </div>
-            <dl className="management-fact-list">
-              <div>
-                <dt>{t("workspace.management.shares.facts.account")}</dt>
-                <dd>{form.account.username || t("common.dash")}</dd>
-              </div>
-              <div>
-                <dt>{t("workspace.management.shares.facts.password")}</dt>
-                <dd>
-                  {form.account.passwordConfigured || form.account.password
-                    ? t("common.states.configured")
-                    : t("settings.modelProvider.notConfiguredPlaceholder")}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("workspace.management.shares.facts.updated")}</dt>
-                <dd>{settingsUpdatedAtLabel(form.updatedAt, locale, t)}</dd>
-              </div>
-            </dl>
-          </div>
-        </section>
-              },
-              {
-                id: "metric-shares",
-                title: String(t("workspace.management.shares.metrics.shares")),
-                content: <ShareMetric
-                  Icon={Folder}
-                  label={t("workspace.management.shares.metrics.shares")}
-                  value={formatLocaleNumber(metrics.shares, locale)}
-                  detail={t("workspace.management.shares.metrics.sharesDetail")}
-                  state={metrics.shares > 0 ? "ready" : "neutral"}
-                />
-              },
-              {
-                id: "metric-protocols",
-                title: String(t("workspace.management.shares.metrics.protocols")),
-                content: <ShareMetric
-                  Icon={Share2}
-                  label={t("workspace.management.shares.metrics.protocols")}
-                  value={formatLocaleNumber(metrics.enabledProtocols, locale)}
-                  detail={t("workspace.management.shares.metrics.protocolsDetail")}
-                  state={metrics.enabledProtocols > 0 ? "ready" : "neutral"}
-                />
-              },
-              {
-                id: "metric-authenticated",
-                title: String(t("workspace.management.shares.metrics.authenticated")),
-                content: <ShareMetric
-                  Icon={Lock}
-                  label={t("workspace.management.shares.metrics.authenticated")}
-                  value={formatLocaleNumber(metrics.authenticatedProtocols, locale)}
-                  detail={t("workspace.management.shares.metrics.authenticatedDetail")}
-                  state={metrics.authenticatedProtocols > 0 ? "warning" : "neutral"}
-                />
-              },
-              {
-                id: "metric-issues",
-                title: String(t("workspace.management.shares.metrics.issues")),
-                content: <ShareMetric
-                  Icon={CircleAlert}
-                  label={t("workspace.management.shares.metrics.issues")}
-                  value={formatLocaleNumber(serviceIssueCount, locale)}
-                  detail={t("workspace.management.shares.metrics.issuesDetail")}
-                  state={serviceIssueCount > 0 ? "warning" : "ready"}
-                />
-              },
-              {
-                id: "services",
-                title: String(t("workspace.management.shares.servicesTitle")),
-                content: <section className="management-section share-services-section">
-          <SectionHeader title={t("workspace.management.shares.servicesTitle")} description={t("workspace.management.shares.servicesDescription")} />
-          <div className="share-service-list">
-            {SHARE_PROTOCOLS.map((protocol) => (
-              <article key={protocol} className="share-service-row">
-                {protocolIcon(protocol, 16)}
-                <div>
-                  <strong>{t(`workspace.management.shares.protocolLabels.${protocol}`)}</strong>
-                  <span>{t("workspace.management.shares.enabledShares", { count: summary?.protocols[protocol].enabledShares ?? 0 })}</span>
-                </div>
-                <span className="management-row-status" data-state={protocolSummaryTone(summary, protocol)}>
-                  {protocolSummaryLabel(summary, protocol, t)}
-                </span>
-              </article>
-            ))}
-          </div>
-        </section>
-              },
-              {
-                id: "directories",
-                title: String(t("workspace.management.shares.directoriesTitle")),
-                content: <fieldset className="share-management-fields" disabled={!canApplyConfiguration}>
-                  <section className="management-section share-directory-section">
-          <header className="management-section-header">
-            <div>
-              <h3>{t("workspace.management.shares.directoriesTitle")}</h3>
-              <p>{t("workspace.management.shares.directoriesDescription")}</p>
-            </div>
-            <button
-              type="button"
-              className="management-row-action"
-              onClick={openAddShare}
-              disabled={storagePools.length === 0 || loading || submitting}
-              title={t("workspace.management.shares.addShare")}
-              aria-label={t("workspace.management.shares.addShare")}
-            >
-              <Plus aria-hidden="true" size={13} />
-              <span>{t("workspace.management.shares.addShare")}</span>
-            </button>
+  return <section className="workspace-management workspace-share-management" aria-label={t("workspace.management.shares.title")}>
+    <PanelHeader icon={<Share2 aria-hidden="true" size={20} />} title={t("workspace.management.shares.title")}
+      subtitle={t("workspace.management.shares.description")} actions={<PanelHeaderActions label={t("workspace.management.actions.label")}>
+        <ManagementDashboardControls dashboard={dashboard} disabled={loading || busy} />
+        <PanelHeaderAction label={t("common.actions.refresh")} onClick={() => void refresh()} disabled={refreshing || busy} aria-busy={refreshing || undefined}>
+          {refreshing ? <LoaderCircle className="is-spinning" size={17} /> : <RefreshCw size={17} />}
+        </PanelHeaderAction>
+      </PanelHeaderActions>} />
+    <div className="management-body share-management-body">
+      {error ? <p className="share-add-form-error" role="alert"><CircleAlert size={15} aria-hidden="true" />{error}</p> : null}
+      {!loading && !writable ? <p className="management-empty">{t("workspace.management.shares.configurationUnavailable")}</p> : null}
+      <ManagementDashboardGrid dashboard={dashboard} loading={loading} items={[
+        { id: "services", title: t("workspace.management.shares.servicesTitle"), content: <section className="management-section share-services-section">
+          <header className="management-section-header"><div><h3>{t("workspace.management.shares.servicesTitle")}</h3><p>{shareStatusDetail(summary, loading, error, t)}</p></div>
+            <span className="management-status-pill" data-state={shareStatusTone(summary, loading, error)}>{shareStatusLabel(summary, loading, error, t)}</span>
           </header>
-
-          <div className="share-directory-list">
-            {displayedShares.length ? (
-              displayedShares.map((share, index) => {
-                const isNewShare = Boolean(newShare && index === form.shares.length);
-                const shareCard = (
-                <article key={`share-${index}`} className="share-directory-card">
-                  <header className="share-directory-card-header">
-                    <div>
-                      <Folder aria-hidden="true" size={17} />
-                      <span>
-                        <strong>{share.name || share.id || t("workspace.management.shares.untitledShare")}</strong>
-                        <small>
-                          {storagePoolDisplayName(share.storagePoolId, storagePools)} / {share.path || "."}
-                        </small>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="management-icon-action is-danger"
-                      onClick={() => removeShare(index)}
-                      title={t("workspace.management.shares.removeShare")}
-                      aria-label={t("workspace.management.shares.removeShare")}
-                    >
-                      <Trash2 aria-hidden="true" size={13} />
-                    </button>
-                  </header>
-
-                  <div className="share-directory-fields">
-                    <label>
-                      <span>{t("workspace.management.shares.fields.shareName")}</span>
-                      <input
-                        value={share.name}
-                        autoFocus={isNewShare}
-                        onChange={(event) => updateShare(index, { name: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      <span>{t("workspace.management.shares.fields.shareId")}</span>
-                      <input value={share.id} onChange={(event) => updateShare(index, { id: event.target.value })} />
-                    </label>
-                    <label>
-                      <span>{t("workspace.management.shares.fields.root")}</span>
-                      <select value={share.storagePoolId} onChange={(event) => updateShare(index, { storagePoolId: event.target.value })}>
-                        {storagePools.length ? null : <option value="">{t("workspace.management.shares.noStoragePools")}</option>}
-                        {storagePools.map((pool) => (
-                          <option key={pool.id} value={pool.id}>
-                            {pool.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>{t("workspace.management.shares.fields.path")}</span>
-                      <input value={share.path} onChange={(event) => updateShare(index, { path: event.target.value })} placeholder="." />
-                    </label>
-                    <label className="share-field-wide">
-                      <span>{t("workspace.management.shares.fields.description")}</span>
-                      <input value={share.description} onChange={(event) => updateShare(index, { description: event.target.value })} />
-                    </label>
-                  </div>
-
-                  <div className="share-protocol-grid" aria-label={t("workspace.management.shares.protocolsTitle")}>
-                    <ProtocolCard
-                      protocol="smb"
-                      enabled={share.protocols.smb.enabled}
-                      t={t}
-                      onEnabledChange={(enabled) => updateShareProtocol(index, "smb", { enabled })}
-                    >
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.readOnly")}
-                        checked={share.protocols.smb.readOnly}
-                        onChange={(readOnly) => updateShareProtocol(index, "smb", { readOnly })}
-                      />
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.browseable")}
-                        checked={share.protocols.smb.browseable}
-                        onChange={(browseable) => updateShareProtocol(index, "smb", { browseable })}
-                      />
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.allowGuest")}
-                        checked={share.protocols.smb.allowGuest}
-                        onChange={(allowGuest) => updateShareProtocol(index, "smb", { allowGuest })}
-                      />
-                    </ProtocolCard>
-
-                    <ProtocolCard
-                      protocol="webdav"
-                      enabled={share.protocols.webdav.enabled}
-                      t={t}
-                      onEnabledChange={(enabled) => updateShareProtocol(index, "webdav", { enabled })}
-                    >
-                      <TextField
-                        label={t("workspace.management.shares.fields.port")}
-                        value={share.protocols.webdav.port}
-                        inputMode="numeric"
-                        onChange={(port) => updateShareProtocol(index, "webdav", { port })}
-                      />
-                      <TextField
-                        label={t("workspace.management.shares.fields.pathPrefix")}
-                        value={share.protocols.webdav.pathPrefix}
-                        onChange={(pathPrefix) => updateShareProtocol(index, "webdav", { pathPrefix })}
-                      />
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.readOnly")}
-                        checked={share.protocols.webdav.readOnly}
-                        onChange={(readOnly) => updateShareProtocol(index, "webdav", { readOnly })}
-                      />
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.allowGuest")}
-                        checked={share.protocols.webdav.allowGuest}
-                        onChange={(allowGuest) => updateShareProtocol(index, "webdav", { allowGuest })}
-                      />
-                    </ProtocolCard>
-
-                    <ProtocolCard
-                      protocol="ftp"
-                      enabled={share.protocols.ftp.enabled}
-                      t={t}
-                      onEnabledChange={(enabled) => updateShareProtocol(index, "ftp", { enabled })}
-                    >
-                      <TextField
-                        label={t("workspace.management.shares.fields.port")}
-                        value={share.protocols.ftp.port}
-                        inputMode="numeric"
-                        onChange={(port) => updateShareProtocol(index, "ftp", { port })}
-                      />
-                      <TextField
-                        label={t("workspace.management.shares.fields.passiveStart")}
-                        value={share.protocols.ftp.passivePortStart}
-                        inputMode="numeric"
-                        onChange={(passivePortStart) => updateShareProtocol(index, "ftp", { passivePortStart })}
-                      />
-                      <TextField
-                        label={t("workspace.management.shares.fields.passiveEnd")}
-                        value={share.protocols.ftp.passivePortEnd}
-                        inputMode="numeric"
-                        onChange={(passivePortEnd) => updateShareProtocol(index, "ftp", { passivePortEnd })}
-                      />
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.readOnly")}
-                        checked={share.protocols.ftp.readOnly}
-                        onChange={(readOnly) => updateShareProtocol(index, "ftp", { readOnly })}
-                      />
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.allowGuest")}
-                        checked={share.protocols.ftp.allowGuest}
-                        onChange={(allowGuest) => updateShareProtocol(index, "ftp", { allowGuest })}
-                      />
-                    </ProtocolCard>
-
-                    <ProtocolCard
-                      protocol="nfs"
-                      enabled={share.protocols.nfs.enabled}
-                      t={t}
-                      onEnabledChange={(enabled) => updateShareProtocol(index, "nfs", { enabled })}
-                    >
-                      <label className="share-field-wide">
-                        <span>{t("workspace.management.shares.fields.allowedCidrs")}</span>
-                        <textarea
-                          value={share.protocols.nfs.allowedCidrs}
-                          onChange={(event) => updateShareProtocol(index, "nfs", { allowedCidrs: event.target.value })}
-                          placeholder="192.168.1.0/24"
-                        />
-                      </label>
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.readOnly")}
-                        checked={share.protocols.nfs.readOnly}
-                        onChange={(readOnly) => updateShareProtocol(index, "nfs", { readOnly })}
-                      />
-                      <SwitchField
-                        label={t("workspace.management.shares.fields.rootSquash")}
-                        checked={share.protocols.nfs.rootSquash}
-                        onChange={(rootSquash) => updateShareProtocol(index, "nfs", { rootSquash })}
-                      />
-                    </ProtocolCard>
-
-                    <ProtocolCard
-                      protocol="dlna"
-                      enabled={share.protocols.dlna.enabled}
-                      t={t}
-                      onEnabledChange={(enabled) => updateShareProtocol(index, "dlna", { enabled })}
-                    >
-                      <TextField
-                        label={t("workspace.management.shares.fields.friendlyName")}
-                        value={share.protocols.dlna.friendlyName}
-                        onChange={(friendlyName) => updateShareProtocol(index, "dlna", { friendlyName })}
-                      />
-                      <TextField
-                        label={t("workspace.management.shares.fields.bindInterface")}
-                        value={share.protocols.dlna.bindInterface}
-                        onChange={(bindInterface) => updateShareProtocol(index, "dlna", { bindInterface })}
-                        placeholder="eth0"
-                      />
-                      <TextField
-                        label={t("workspace.management.shares.fields.bindAddress")}
-                        value={share.protocols.dlna.bindAddress}
-                        onChange={(bindAddress) => updateShareProtocol(index, "dlna", { bindAddress })}
-                        placeholder="192.168.1.10"
-                      />
-                      <div className="share-media-type-group">
-                        <span>{t("workspace.management.shares.fields.mediaTypes")}</span>
-                        <div>
-                          {DLNA_MEDIA_TYPES.map((mediaType) => (
-                            <CheckField
-                              key={mediaType}
-                              label={t(`workspace.management.shares.mediaTypes.${mediaType}`)}
-                              checked={share.protocols.dlna.mediaTypes.includes(mediaType)}
-                              onChange={() =>
-                                updateShareProtocol(index, "dlna", {
-                                  mediaTypes: toggleDlnaMediaType(share.protocols.dlna.mediaTypes, mediaType)
-                                })
-                              }
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </ProtocolCard>
-                  </div>
-                </article>
-                );
-                if (!isNewShare) {
-                  return shareCard;
-                }
-                return (
-                  <ModalPortal
-                    key="add-share-modal"
-                    className="management-modal-backdrop share-add-modal-backdrop"
-                    role="presentation"
-                    onMouseDown={(event) => event.currentTarget === event.target && closeAddShare()}
-                  >
-                    <section
-                      className="management-modal share-add-modal"
-                      role="dialog"
-                      aria-modal="true"
-                      aria-labelledby="share-add-title"
-                    >
-                      <header>
-                        <div>
-                          <span className="eyebrow">{t("workspace.management.shares.eyebrow")}</span>
-                          <h2 id="share-add-title">{t("workspace.management.shares.addShare")}</h2>
-                        </div>
-                        <button
-                          type="button"
-                          className="management-icon-action"
-                          onClick={closeAddShare}
-                          title={t("common.actions.cancel")}
-                          aria-label={t("common.actions.cancel")}
-                        >
-                          <X aria-hidden="true" size={15} />
-                        </button>
-                      </header>
-                      <div className="share-add-form">
-                        <div className="share-add-form-body">
-                          {shareCard}
-                          {newShareError ? (
-                            <p className="share-add-form-error" role="alert">
-                              <CircleAlert aria-hidden="true" size={15} />
-                              <span>{newShareError}</span>
-                            </p>
-                          ) : null}
-                        </div>
-                        <footer className="share-add-form-actions">
-                          <button type="button" onClick={closeAddShare}>
-                            {t("common.actions.cancel")}
-                          </button>
-                          <button type="button" className="is-primary" onClick={confirmAddShare}>
-                            <Plus aria-hidden="true" size={15} />
-                            <span>{t("workspace.management.shares.addShare")}</span>
-                          </button>
-                        </footer>
-                      </div>
-                    </section>
-                  </ModalPortal>
-                );
-              })
-            ) : (
-              <p className="management-empty">{t("workspace.management.shares.noShares")}</p>
-            )}
-          </div>
-                  </section>
-                </fieldset>
-              }
-          ]}
-        />
+          <dl className="management-fact-list share-overview-facts">
+            <div><dt>{t("workspace.management.shares.metrics.shares")}</dt><dd>{formatLocaleNumber(settings?.shares.length ?? 0, locale)}</dd></div>
+            <div><dt>{t("workspace.management.shares.metrics.protocols")}</dt><dd>{formatLocaleNumber(summary?.metrics.enabledProtocols ?? 0, locale)}</dd></div>
+            <div><dt>{t("workspace.management.shares.facts.updated")}</dt><dd>{settings?.updatedAt && settings.updatedAt !== new Date(0).toISOString() ? formatDate(settings.updatedAt, locale) : t("workspace.management.shares.notSaved")}</dd></div>
+          </dl>
+          <div className="share-service-list">{SHARE_PROTOCOLS.map((protocol) => <div className="share-service-row" key={protocol}>
+            {protocolIcon(protocol, 16)}<div><strong>{t(`workspace.management.shares.protocolLabels.${protocol}`)}</strong><span>{t("workspace.management.shares.enabledShares", { count: summary?.protocols[protocol].enabledShares ?? 0 })}</span></div>
+            <span className="management-row-status" data-state={protocolSummaryTone(summary, protocol)}>{protocolSummaryLabel(summary, protocol, t)}</span>
+          </div>)}</div>
+          {summary?.issues.length ? <ul className="share-service-issues">{summary.issues.map((issue, index) => <li key={index}>{issue.source}: {issue.message}</li>)}</ul> : null}
+        </section> },
+        ...SHARE_PROTOCOLS.map((protocol) => ({ id: `protocol-${protocol}`, title: t(`workspace.management.shares.protocolLabels.${protocol}`),
+          content: <ShareProtocolSection protocol={protocol} shares={form.shares.filter((share) => share.protocol === protocol)}
+            summary={summary} disabled={disabled} createDisabled={!storagePools.length} t={t} onCreate={() => edit(protocol)} onEdit={(share) => edit(protocol, share)}
+            onToggle={(share, enabled) => settings && void runMutation(() => mutateProtocolShare({ protocol, id: share.id, method: "PATCH", expectedUpdatedAt: settings.updatedAt, enabled }))}
+            onDelete={(share) => settings && openDialog({ kind: "delete", share, snapshot: settings })} /> }))
+      ]} />
+    </div>
+    {dialog ? <ShareDialog title={dialog.kind === "edit" ? `${t(`workspace.management.shares.protocolLabels.${dialog.protocol}`)} · ${t(dialog.originalId ? "common.actions.edit" : "workspace.management.shares.addShare")}` : t("workspace.management.shares.removeShare")} busy={busy} onClose={closeDialog} returnFocus={dialogTrigger.current} closeLabel={t("common.actions.close")}>
+      <form className="share-add-form" onSubmit={dialog.kind === "edit" ? saveEditor : (event) => {
+        event.preventDefault();
+        if (dialog.kind === "delete") void runMutation(() => mutateProtocolShare({ protocol: dialog.share.protocol, id: dialog.share.id, method: "DELETE", expectedUpdatedAt: dialog.snapshot.updatedAt }));
+      }}>
+        <div className="share-add-form-body">
+          {dialog.kind === "edit" ? <fieldset className="share-editor-fields" disabled={busy}>
+            <div className="share-directory-fields">
+              <label><span>{t("workspace.management.shares.fields.shareName")}</span><input autoFocus value={dialog.draft.name} onChange={(event) => updateDraft({ name: event.target.value })} /></label>
+              <label><span>{t("workspace.management.shares.fields.shareId")}</span><input value={dialog.draft.id} disabled={Boolean(dialog.originalId)} onChange={(event) => updateDraft({ id: event.target.value })} /></label>
+              <label><span>{t("workspace.management.shares.fields.root")}</span><CustomSelect value={dialog.draft.storagePoolId} options={storagePools.map((pool) => ({ value: pool.id, label: pool.name }))} onChange={(storagePoolId) => updateDraft({ storagePoolId })} ariaLabel={t("workspace.management.shares.fields.root")} disabled={busy} /></label>
+              <label><span>{t("workspace.management.shares.fields.path")}</span><input value={dialog.draft.path} onChange={(event) => updateDraft({ path: event.target.value })} /></label>
+              <label className="share-field-wide"><span>{t("workspace.management.shares.fields.description")}</span><input value={dialog.draft.description} onChange={(event) => updateDraft({ description: event.target.value })} /></label>
+            </div>
+            <Switch checked={dialog.draft.protocols[dialog.protocol].enabled} label={t("workspace.management.shares.states.enabled")} onCheckedChange={(enabled) => updateProtocol(dialog.protocol, { enabled })} />
+            <ShareProtocolFields protocol={dialog.protocol} share={dialog.draft} update={updateProtocol} t={t} />
+          </fieldset> : null}
+          {dialog.kind === "delete" ? <p className="share-delete-copy">{t("workspace.management.shares.deleteConfirm", { name: dialog.share.name })}</p> : null}
+          {dialogError ? <p className="share-add-form-error" role="alert"><CircleAlert size={15} aria-hidden="true" />{dialogError}</p> : null}
+        </div>
+        <footer className="share-add-form-actions"><button type="button" onClick={closeDialog} disabled={busy}>{t("common.actions.cancel")}</button>
+          <button type="submit" className={dialog.kind === "delete" ? "is-danger" : "is-primary"} disabled={busy} aria-busy={busy || undefined}>
+            {busy ? <LoaderCircle className="is-spinning" size={15} aria-hidden="true" /> : null}{t(dialog.kind === "delete" ? "workspace.management.shares.removeShare" : "common.actions.save")}
+          </button></footer>
       </form>
-    </section>
-  );
+    </ShareDialog> : null}
+  </section>;
 }
 
-function ShareMetric({
-  Icon,
-  label,
-  value,
-  detail,
-  state
-}: {
-  Icon: LucideIcon;
-  label: string;
-  value: string;
-  detail: string;
-  state: StatusTone;
+export function ShareProtocolSection({ protocol, shares, summary, disabled, createDisabled = false, t, onCreate, onEdit, onToggle, onDelete }: {
+  protocol: ShareProtocol; shares: ShareDefinitionFormState[]; summary: ShareSummary | null; disabled: boolean; createDisabled?: boolean; t: Translate;
+  onCreate: () => void; onEdit: (share: ShareDefinitionFormState) => void; onToggle: (share: ShareDefinitionFormState, enabled: boolean) => void; onDelete: (share: ShareDefinitionFormState) => void;
 }) {
-  return (
-    <article className="management-metric" data-state={state}>
-      <Icon aria-hidden="true" size={18} />
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </article>
-  );
-}
-
-function ProtocolCard({
-  protocol,
-  enabled,
-  t,
-  onEnabledChange,
-  children
-}: {
-  protocol: ShareProtocol;
-  enabled: boolean;
-  t: Translate;
-  onEnabledChange: (enabled: boolean) => void;
-  children: ReactNode;
-}) {
-  return (
-    <section className="share-protocol-card" data-enabled={enabled}>
-      <header>
-        <SwitchControl
-          className="share-protocol-toggle"
-          checked={enabled}
-          label={
-            <>
-              {protocolIcon(protocol, 15)}
-              <span>{t(`workspace.management.shares.protocolLabels.${protocol}`)}</span>
-            </>
-          }
-          accessibilityLabel={t(`workspace.management.shares.protocolLabels.${protocol}`)}
-          onChange={onEnabledChange}
-        />
-        <span className="management-row-status" data-state={enabled ? "ready" : "neutral"}>
-          {enabled ? t("workspace.management.shares.states.enabled") : t("workspace.management.shares.states.disabled")}
-        </span>
-      </header>
-      <div className="share-protocol-fields">{children}</div>
-    </section>
-  );
-}
-
-function TextField({
-  label,
-  value,
-  placeholder,
-  inputMode,
-  onChange
-}: {
-  label: string;
-  value: string;
-  placeholder?: string;
-  inputMode?: "numeric" | "text";
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label>
-      <span>{label}</span>
-      <input value={value} placeholder={placeholder} inputMode={inputMode} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  );
-}
-
-function CheckField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return <Switch checked={checked} label={label} onCheckedChange={onChange} />;
-}
-
-function SwitchField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return <SwitchControl checked={checked} label={label} accessibilityLabel={label} onChange={onChange} />;
-}
-
-function SwitchControl({
-  checked,
-  disabled = false,
-  label,
-  accessibilityLabel,
-  className,
-  onChange
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  label: ReactNode;
-  accessibilityLabel: string;
-  className?: string;
-  onChange: (checked: boolean) => void;
-}) {
-  return <Switch checked={checked} disabled={disabled} label={label} ariaLabel={accessibilityLabel} onCheckedChange={onChange} {...(className ? { className } : {})} />;
-}
-
-function SectionHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <header className="management-section-header">
-      <div>
-        <h3>{title}</h3>
-        <p>{description}</p>
-      </div>
+  return <section className="management-section share-protocol-section" data-protocol={protocol}>
+    <header className="management-section-header"><div className="share-protocol-heading">{protocolIcon(protocol, 18)}<h3>{t(`workspace.management.shares.protocolLabels.${protocol}`)}</h3>
+      <span className="management-row-status" data-state={protocolSummaryTone(summary, protocol)}>{protocolSummaryLabel(summary, protocol, t)}</span></div>
+      <button className="management-row-action" disabled={disabled || createDisabled} onClick={onCreate}><Plus size={14} aria-hidden="true" />{t("workspace.management.shares.addShare")}</button>
     </header>
-  );
+    {protocol === "ftp" ? <p className="share-protocol-hint">{t("workspace.management.shares.ftpLimit")}</p> : null}
+    {shares.length ? <div className="share-protocol-shares">{shares.map((share) => <article className="share-protocol-share-row" key={share.id}>
+      <div className="share-protocol-share-copy"><strong>{share.name || share.id}</strong><small>{share.storagePoolId} / {share.path}</small><code>{connectionIdentifier(share, protocol)}</code></div>
+      <div className="share-protocol-share-actions"><Switch checked={share.protocols[protocol].enabled} disabled={disabled} ariaLabel={`${t("workspace.management.shares.states.enabled")} · ${share.name}`} onCheckedChange={(enabled) => onToggle(share, enabled)} />
+        <button className="management-icon-action" disabled={disabled} onClick={() => onEdit(share)} title={t("common.actions.edit")} aria-label={`${t("common.actions.edit")} · ${share.name}`}><Pencil size={15} aria-hidden="true" /></button>
+        <button className="management-icon-action is-danger" disabled={disabled} onClick={() => onDelete(share)} title={t("workspace.management.shares.removeShare")} aria-label={`${t("workspace.management.shares.removeShare")} · ${share.name}`}><Trash2 size={15} aria-hidden="true" /></button>
+      </div>
+    </article>)}</div> : <p className="management-empty">{t("workspace.management.shares.noShares")}</p>}
+    {summary?.protocols[protocol].services.filter((service) => service.status !== "active" && service.status !== "disabled" && summary.enabled && summary.protocols[protocol].enabledShares > 0).map((service) => <p className="share-service-problem" key={service.name}><CircleAlert size={14} aria-hidden="true" />{service.name}: {t(`workspace.management.shares.serviceStates.${service.status}`)}{service.error ? ` · ${service.error}` : ""}</p>)}
+  </section>;
 }
 
-function protocolIcon(protocol: ShareProtocol, size: number) {
-  const Icon = PROTOCOL_ICONS[protocol];
-  return <Icon aria-hidden="true" size={size} />;
+function ShareDialog({ title, busy, onClose, children, returnFocus, closeLabel }: { title: string; busy: boolean; onClose: () => void; children: ReactNode; returnFocus: HTMLElement | null; closeLabel: string }) {
+  const ref = useRef<HTMLElement>(null);
+  const returnFocusRef = useRef(returnFocus);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const previous = returnFocusRef.current;
+    const root = ref.current;
+    const focusable = () => Array.from(root?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? []).filter((node) => node.getClientRects().length > 0);
+    (root?.querySelector<HTMLElement>('[autofocus]') ?? focusable()[0] ?? root)?.focus();
+    function keydown(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
+      if (event.key === "Tab") {
+        const nodes = focusable();
+        const first = nodes[0]; const last = nodes[nodes.length - 1];
+        if (!first) { event.preventDefault(); root?.focus(); }
+        else if (event.shiftKey && (document.activeElement === first || document.activeElement === root)) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !root?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+      }
+    }
+    document.addEventListener("keydown", keydown);
+    return () => { document.removeEventListener("keydown", keydown); if (previous?.isConnected) previous.focus(); };
+  }, []);
+  return <ModalPortal className="management-modal-backdrop share-add-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <section ref={ref} tabIndex={-1} className="management-modal share-add-modal share-protocol-modal" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title" aria-busy={busy || undefined}>
+      <header><h2 id="share-dialog-title">{title}</h2><button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={closeLabel}><X size={16} aria-hidden="true" /></button></header>
+      {children}
+    </section>
+  </ModalPortal>;
 }
 
+function connectionIdentifier(share: ShareDefinitionFormState, protocol: ShareProtocol): string {
+  switch (protocol) {
+    case "smb": return `cyberos-${share.id}`;
+    case "webdav": return `:${share.protocols.webdav.port}${share.protocols.webdav.pathPrefix}`;
+    case "ftp": return `:${share.protocols.ftp.port}`;
+    case "nfs": return `${share.storagePoolId}/${share.path}`;
+    case "dlna": return share.protocols.dlna.friendlyName;
+  }
+}
+function protocolIcon(protocol: ShareProtocol, size: number) { const Icon = PROTOCOL_ICONS[protocol]; return <Icon size={size} aria-hidden="true" />; }
+function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 export function shareStatusTone(summary: ShareSummary | null, loading: boolean, error: string | null): StatusTone {
   if (loading) {
     return "neutral";
@@ -903,7 +285,8 @@ export function shareStatusLabel(summary: ShareSummary | null, loading: boolean,
   if (error && !summary) {
     return t("common.states.unavailable");
   }
-  return summary?.enabled ? t("workspace.management.shares.states.enabled") : t("workspace.management.shares.states.disabled");
+  if (!summary) return t("common.states.unknown");
+  return summary.enabled ? t("workspace.management.shares.states.enabled") : t("workspace.management.shares.states.disabled");
 }
 
 export function shareStatusDetail(summary: ShareSummary | null, loading: boolean, error: string | null, t: Translate): string {
@@ -913,7 +296,8 @@ export function shareStatusDetail(summary: ShareSummary | null, loading: boolean
   if (error && !summary) {
     return error;
   }
-  if (!summary?.enabled) {
+  if (!summary) return t("workspace.management.shares.configurationUnavailable");
+  if (!summary.enabled) {
     return t("workspace.management.shares.disabledDetail");
   }
   if (summary.issues.length > 0 || hasUnhealthyEnabledShareServices(summary)) {
@@ -938,13 +322,14 @@ function hasUnhealthyEnabledShareServices(summary: ShareSummary | null): boolean
 
 function protocolSummaryTone(summary: ShareSummary | null, protocol: ShareProtocol): StatusTone {
   const protocolSummary = summary?.protocols[protocol];
-  if (!summary?.enabled || !protocolSummary || protocolSummary.enabledShares === 0) {
+  if (!summary || !protocolSummary) return "neutral";
+  if (!summary.enabled || protocolSummary.enabledShares === 0) {
     return "neutral";
   }
   if (protocolSummary.services.some((service) => service.status === "failed" || service.status === "unknown")) {
     return "warning";
   }
-  if (protocolSummary.services.every((service) => service.status === "active")) {
+  if (protocolSummary.services.length > 0 && protocolSummary.services.every((service) => service.status === "active")) {
     return "ready";
   }
   return "warning";
@@ -952,90 +337,13 @@ function protocolSummaryTone(summary: ShareSummary | null, protocol: ShareProtoc
 
 function protocolSummaryLabel(summary: ShareSummary | null, protocol: ShareProtocol, t: Translate): string {
   const protocolSummary = summary?.protocols[protocol];
-  if (!summary?.enabled || !protocolSummary || protocolSummary.enabledShares === 0) {
+  if (!summary || !protocolSummary) return t("common.states.unknown");
+  if (!summary.enabled) {
     return t("workspace.management.shares.serviceStates.disabled");
   }
-  if (protocolSummary.services.every((service) => service.status === "active")) {
+  if (protocolSummary.services.length > 0 && protocolSummary.services.every((service) => service.status === "active")) {
     return t("workspace.management.shares.serviceStates.active");
   }
   const firstProblem = protocolSummary.services.find((service) => service.status !== "active");
   return firstProblem ? t(`workspace.management.shares.serviceStates.${firstProblem.status}`) : t("common.states.unknown");
-}
-
-function settingsUpdatedAtLabel(updatedAt: string, locale: SupportedLocale, t: Translate): string {
-  if (!updatedAt || updatedAt === new Date(0).toISOString()) {
-    return t("workspace.management.shares.notSaved");
-  }
-  return formatDate(updatedAt, locale);
-}
-
-function storagePoolDisplayName(storagePoolId: string, storagePools: StoragePool[]): string {
-  return storagePools.find((pool) => pool.id === storagePoolId)?.name ?? (storagePoolId || "-");
-}
-
-function newShareValidationIssue(
-  form: ShareSettingsFormState,
-  share: ShareDefinitionFormState,
-  storagePools: StoragePool[]
-): ShareFormValidationIssue | null {
-  const [shareIssue] = validateShareForm(
-    {
-      ...form,
-      enabled: false,
-      account: {
-        ...form.account,
-        username: "cyberos-share"
-      },
-      shares: [share]
-    },
-    storagePools
-  );
-  if (shareIssue) {
-    return shareIssue;
-  }
-  const id = share.id.trim();
-  if (form.shares.some((existingShare) => existingShare.id.trim() === id)) {
-    return {
-      code: "duplicateId",
-      shareName: share.name.trim() || id || "share",
-      value: id
-    };
-  }
-  if (share.protocols.ftp.enabled && form.shares.some((existingShare) => existingShare.protocols.ftp.enabled)) {
-    return { code: "multipleFtp" };
-  }
-  return null;
-}
-
-function validationIssueText(issue: ShareFormValidationIssue, t: Translate): string {
-  return t(`workspace.management.shares.validation.${issue.code}`, {
-    share: issue.shareName ?? t("common.dash"),
-    value: issue.value ?? t("common.dash")
-  });
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function notifySummaryIssues(
-  issues: Array<{ source: string; message: string }>,
-  onNotifyError: (message: string | null) => void,
-  reportedIssueSignature: { current: string | null }
-): void {
-  const signature = issues.map((issue) => `${issue.source}:${issue.message}`).join("\u0000");
-  if (!signature) {
-    reportedIssueSignature.current = null;
-    return;
-  }
-  if (reportedIssueSignature.current === signature) {
-    return;
-  }
-  reportedIssueSignature.current = signature;
-  onNotifyError(
-    issues
-      .slice(0, 3)
-      .map((issue) => `${issue.source}: ${issue.message}`)
-      .join(" · ")
-  );
 }
