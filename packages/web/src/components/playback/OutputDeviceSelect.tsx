@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { BluetoothAudioDevice } from "../../api.js";
+import { CustomSelect } from "../common/CustomSelect.js";
 
 export function OutputDeviceSelect({
   value,
@@ -16,24 +17,22 @@ export function OutputDeviceSelect({
 }) {
   const { t } = useTranslation();
   return (
-    <select
-      aria-label={t("music.output")}
+    <CustomSelect
+      ariaLabel={t("music.output")}
       value={value ?? ""}
       disabled={disabled}
-      onChange={(e) => onChange(e.target.value || null)}
-    >
-      <option value="">{defaultLabel}</option>
-      {value && !devices.some((device) => device.id === value) ? (
-        <option value={value} disabled>
-          {t("music.unavailableOutput")}
-        </option>
-      ) : null}
-      {devices.map((device) => (
-        <option key={device.id} value={device.id} disabled={!device.connected}>
-          {device.name}
-          {device.connected ? "" : ` · ${t("music.disconnected")}`}
-        </option>
-      ))}
-    </select>
+      onChange={(deviceId) => onChange(deviceId || null)}
+      options={[
+        { value: "", label: defaultLabel },
+        ...(value && !devices.some((device) => device.id === value)
+          ? [{ value, label: t("music.unavailableOutput"), disabled: true }]
+          : []),
+        ...devices.map((device) => ({
+          value: device.id,
+          label: `${device.name}${device.connected ? "" : ` · ${t("music.disconnected")}`}`,
+          disabled: !device.connected,
+        })),
+      ]}
+    />
   );
 }

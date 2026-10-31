@@ -609,7 +609,7 @@
   min-width: 0;
   font-size: 12px;
 }
-.music-output-controls label select {
+.music-output-controls label > .custom-select {
   min-width: 0;
   flex: 1;
   width: 0;
