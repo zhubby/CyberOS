@@ -1,4 +1,5 @@
 import { PlaybackSlider } from "./PlaybackSlider.js";
+import { PlaybackTargetSelect } from "./PlaybackTargetSelect.js";
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import {
@@ -159,7 +160,7 @@ function BrowserPlayerSurface() {
       >
         <header>
           <strong>{b.title}</strong>
-          <span>{t("playback.browser")}</span>
+          <PlaybackTargetSelect onChange={() => p.setPlayerOpen(false)} />
           <button
             onClick={() => p.setPlayerOpen(false)}
             aria-label={t("video.minimize")}

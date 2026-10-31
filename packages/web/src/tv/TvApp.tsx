@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { MediaTitleSummary, VodPlayerCommand, VodPlayerStatus } from "@cyberos/shared";
 import { PlaybackProvider, usePlayback } from "../components/playback/PlaybackProvider.js";
 import { PlaybackBar } from "../components/playback/PlaybackBar.js";
+import { PlaybackRestoreButton } from "../components/playback/PlaybackRestoreButton.js";
 import { MusicProvider } from "../components/music/MusicProvider.js";
 import { VideoLibraryPanel } from "../components/video/VideoLibraryPanel.js";
 import { getTvModeStatus, mediaArtworkUrl, searchMedia } from "./api.js";
@@ -38,7 +39,7 @@ function TvLibrary() {
     onPlay: () => { const active = document.activeElement; if (active instanceof HTMLButtonElement) active.click(); }
   });
   return <div className="tv-app tv-library-shell">
-    <header className="tv-header"><button className="tv-brand" data-tv-focusable onClick={() => window.dispatchEvent(new Event("cyberos:video-back"))}><img src="/cyberos-icon.svg" alt="" /><span>CyberOS</span></button><div className="tv-header-actions"><button className="tv-icon-button" data-tv-focusable onClick={() => setSearchOpen(true)} aria-label={t("tv.search")}><Search /></button><span className="tv-clock"><Clock3 />{formatClock(clock, i18n.resolvedLanguage)}</span></div></header>
+    <header className="tv-header"><button className="tv-brand" data-tv-focusable onClick={() => window.dispatchEvent(new Event("cyberos:video-back"))}><img src="/cyberos-icon.svg" alt="" /><span>CyberOS</span></button><div className="tv-header-actions"><PlaybackRestoreButton className="tv-icon-button" /><button className="tv-icon-button" data-tv-focusable onClick={() => setSearchOpen(true)} aria-label={t("tv.search")}><Search /></button><span className="tv-clock"><Clock3 />{formatClock(clock, i18n.resolvedLanguage)}</span></div></header>
     <VideoLibraryPanel tv requestedTitleId={titleId} />
     <PlaybackBar onOpenBluetoothSettings={() => setNotice(t("video.manage"))} />
     {searchOpen ? <SearchOverlay onClose={back} onOpen={title => { setTitleId(title.id); setSearchOpen(false); }} /> : null}
@@ -209,9 +210,18 @@ function useRemoteNavigation({
           return;
         }
       }
+      const outputMenu = document.querySelector(".playback-output-menu");
+      const playbackControl = target instanceof HTMLElement && !!target.closest(".playback-shell, [data-playback-restore]");
+      if (outputMenu && (["Escape", "BrowserBack", "GoBack"].includes(event.key) || event.keyCode === 461)) return;
+      if (playbackControl && target.closest(".custom-select.is-open") && event.key === "Escape") return;
+      if (playbackControl && (
+        (!!target.closest(".custom-select") && ["ArrowUp", "ArrowDown", "Home", "End", "Enter", " "].includes(event.key)) ||
+        (target instanceof HTMLInputElement && target.type === "range" && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) ||
+        (target instanceof HTMLSelectElement && ["ArrowUp", "ArrowDown", "Home", "End", "Enter", " "].includes(event.key))
+      )) return;
       const modal = document.querySelector('[role="dialog"][aria-modal="true"]');
       if (modal && !directionForKey(event.key) && event.key !== "Enter") return;
-      const playbackCommand = modal ? null : playbackCommandForKey(state.playerStatus, event.key);
+      const playbackCommand = modal || outputMenu || playbackControl ? null : playbackCommandForKey(state.playerStatus, event.key);
       if (playbackCommand) {
         event.preventDefault();
         event.stopPropagation();
@@ -268,7 +278,8 @@ function directionForKey(key: string): Direction | null {
 
 function moveFocus(direction: Direction): void {
   const modal = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')].at(-1);
-  const candidates = [...(modal ?? document).querySelectorAll<HTMLElement>("[data-tv-focusable]:not(:disabled), button:not(:disabled), input:not(:disabled), select:not(:disabled), summary")]
+  const outputMenu = document.querySelector<HTMLElement>(".playback-output-menu");
+  const candidates = [...(modal ?? outputMenu ?? document).querySelectorAll<HTMLElement>("[data-tv-focusable]:not(:disabled), button:not(:disabled), input:not(:disabled), select:not(:disabled), summary")]
     .filter((element) => element.offsetParent !== null);
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   if (!active || !candidates.includes(active)) {

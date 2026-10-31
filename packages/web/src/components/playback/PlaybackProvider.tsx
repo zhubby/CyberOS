@@ -24,6 +24,7 @@ import {
   saveStreamProgress,
 } from "../../lib/video-api.js";
 import { acceptPlaybackRevision } from "../../lib/playback-state.js";
+import { getPlaybackDockState, readPlaybackBarExpanded, writePlaybackBarExpanded } from "../../lib/playback-dock-state.js";
 
 export interface BrowserPlayback {
   fileId: string;
@@ -36,6 +37,11 @@ export interface BrowserPlayback {
   muted: boolean;
 }
 interface PlaybackContextValue {
+  dock: ReturnType<typeof getPlaybackDockState>;
+  barExpanded: boolean;
+  barVisible: boolean;
+  collapseBar: () => void;
+  expandBar: () => void;
   nas: NasPlaybackStatus | null;
   error: string | null;
   browser: BrowserPlayback | null;
@@ -75,6 +81,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<"browser" | "nas">("nas");
   const [playerOpen, setPlayerOpenState] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [barExpanded, setBarExpanded] = useState(() => {
+    try { return readPlaybackBarExpanded(window.sessionStorage); } catch { return true; }
+  });
+  const setBarVisibility = useCallback((expanded: boolean) => {
+    setBarExpanded(expanded);
+    try { writePlaybackBarExpanded(window.sessionStorage, expanded); } catch { /* Browser storage may be unavailable. */ }
+    window.requestAnimationFrame(() => {
+      const selector = expanded ? "[data-playback-primary]:not(:disabled)" : "[data-playback-restore]";
+      [...document.querySelectorAll<HTMLElement>(selector)].find((element) => element.getClientRects().length > 0)?.focus({ preventScroll: true });
+    });
+  }, []);
+  const collapseBar = useCallback(() => setBarVisibility(false), [setBarVisibility]);
+  const expandBar = useCallback(() => setBarVisibility(true), [setBarVisibility]);
+  const dock = useMemo(() => getPlaybackDockState({ nas, browser, target, error }), [nas, browser, target, error]);
+  const barVisible = dock.available && barExpanded && !fullscreen;
   const setPlayerOpen = useCallback((open: boolean) => {
     if (
       !open &&
@@ -327,6 +348,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   );
   const value = useMemo(
     () => ({
+      dock,
+      barExpanded,
+      barVisible,
+      collapseBar,
+      expandBar,
       nas,
       error,
       browser,
@@ -344,6 +370,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       updateBrowser,
     }),
     [
+      dock,
+      barExpanded,
+      barVisible,
+      collapseBar,
+      expandBar,
       nas,
       error,
       browser,

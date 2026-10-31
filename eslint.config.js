@@ -43,6 +43,24 @@ export default tseslint.config(
   },
   {
     files: [
+      "packages/web/src/components/playback/PlaybackBar.tsx",
+      "packages/web/src/components/playback/OutputDeviceSelect.tsx",
+      "packages/web/src/components/playback/PlaybackTargetSelect.tsx"
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        modalPortalRestriction,
+        filterDropdownRestriction,
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message: "Playback output dropdowns must use CustomSelect, including device, audio and subtitle selectors. See docs/src/content/docs/reference/frontend-design.md."
+        }
+      ]
+    }
+  },
+  {
+    files: [
       "packages/web/src/components/settings/**/*.tsx",
       "packages/web/src/components/workspace/SystemWifiManagement.tsx"
     ],

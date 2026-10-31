@@ -1,6 +1,7 @@
 import { OutputDeviceSelect } from "../playback/OutputDeviceSelect.js";
 import { useOptionalPlayback } from "../playback/PlaybackProvider.js";
 import { PlaybackSlider } from "../playback/PlaybackSlider.js";
+import { PlaybackTargetSelect } from "../playback/PlaybackTargetSelect.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -9,8 +10,6 @@ import {
   Check,
   Disc3,
   Heart,
-  ListMusic,
-  LoaderCircle,
   MonitorPlay,
   Pause,
   Play,
@@ -62,12 +61,10 @@ export function MusicCover({
   );
 }
 
-export function MusicPlayer({
+export function MusicPlayerDetails({
   onOpenBluetoothSettings,
-  hideBar = false,
 }: {
   onOpenBluetoothSettings: () => void;
-  hideBar?: boolean;
 }) {
   const { t } = useTranslation();
   const playback = useOptionalPlayback();
@@ -194,102 +191,12 @@ export function MusicPlayer({
   };
   return (
     <>
-      <section hidden={hideBar} className="music-player-bar" aria-label={t("music.nasPlayer")}>
-        <button
-          type="button"
-          className="music-current"
-          onClick={() => setDrawerOpen(true)}
-          aria-label={t("music.nowPlaying")}
-        >
-          <MusicCover coverKey={current?.coverKey ?? null} />
-          <span>
-            <strong>{current?.title ?? t("music.queue")}</strong>
-            <small>
-              {status.owner === "video"
-                ? t("music.videoOwnsOutput")
-                : (current?.artist ?? t("music.nasPlayer"))}
-            </small>
-          </span>
-        </button>
-        <div className="music-transport">
-          <button
-            type="button"
-            disabled={busy || status.queue.length === 0}
-            onClick={() => void execute({ type: "previous" })}
-            aria-label={t("music.previous")}
-          >
-            <SkipBack size={18} />
-          </button>
-          <button
-            type="button"
-            className="music-play-button"
-            disabled={busy || status.queue.length === 0}
-            onClick={toggle}
-            aria-label={playing ? t("music.pause") : t("music.play")}
-          >
-            {busy ? (
-              <LoaderCircle className="is-spinning" size={20} />
-            ) : playing ? (
-              <Pause size={20} />
-            ) : (
-              <Play size={20} />
-            )}
-          </button>
-          <button
-            type="button"
-            disabled={busy || status.queue.length === 0}
-            onClick={() => void execute({ type: "next" })}
-            aria-label={t("music.next")}
-          >
-            <SkipForward size={18} />
-          </button>
-        </div>
-        <label className="music-progress">
-          <span>{musicTime(status.positionSeconds)}</span>
-          <PlaybackSlider
-            max={Math.max(1, status.durationSeconds ?? 1)}
-            step={0.1}
-            value={Math.min(
-              status.positionSeconds,
-              status.durationSeconds ?? status.positionSeconds,
-            )}
-            disabled={busy || !owned || !status.durationSeconds}
-            label={t("music.seek")}
-            onCommit={(seconds) => void execute({ type: "seek", seconds })}
-          />
-          <span>{musicTime(status.durationSeconds)}</span>
-        </label>
-        <button
-          type="button"
-          className="music-output-summary"
-          onClick={() => setDrawerOpen(true)}
-          aria-label={t("music.output")}
-        >
-          <Speaker size={16} />
-          <span>{outputName}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTab("queue");
-            setDrawerOpen(true);
-          }}
-          aria-label={t("music.queue")}
-        >
-          <ListMusic size={19} />
-          <span className="music-queue-count">{status.queue.length}</span>
-        </button>
-        {error || status.error ? (
-          <span className="music-player-warning" role="status">
-            {error ?? status.error}
-          </span>
-        ) : null}
-      </section>
       {drawerOpen ? (
         <MusicDialog
           title={t("music.nowPlaying")}
           onClose={() => setDrawerOpen(false)}
         >
+          {playback ? <PlaybackTargetSelect onChange={() => setDrawerOpen(false)} /> : null}
           <div className="music-now-playing">
             <MusicCover coverKey={current?.coverKey ?? null} />
             <div>

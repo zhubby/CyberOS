@@ -1,3 +1,4 @@
+import { PlaybackRestoreButton } from "../playback/PlaybackRestoreButton.js";
 import { ModalPortal } from "../common/ModalPortal.js";
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -1774,6 +1775,7 @@ export function WorkspacePane({
         </div>
 
         <nav className="workspace-panel-rail" aria-label={t("workspace.panelRail")}>
+          <PlaybackRestoreButton className="playback-restore--rail" />
           {WORKSPACE_PANELS.map((panel) => {
             const PanelIcon = panel.Icon;
             const isActive = activePanel === panel.id;
