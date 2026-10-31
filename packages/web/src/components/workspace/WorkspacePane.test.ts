@@ -3,8 +3,7 @@ import { isPathWithinStoragePool } from "../../App.js";
 import {
   defaultWorkspaceSearchOptions,
   hasWorkspaceSearchFilters,
-  storagePoolRootDepth,
-  storagePoolStateKey
+  storagePoolRootDepth
 } from "./WorkspacePane.js";
 
 describe("isPathWithinStoragePool", () => {
@@ -33,18 +32,7 @@ describe("workspace search options", () => {
   });
 });
 
-describe("storage pool HUD status", () => {
-  it("maps every pool state to a localized status key", () => {
-    expect(["ready", "warning", "offline", "unknown"].map((status) =>
-      storagePoolStateKey(status as Parameters<typeof storagePoolStateKey>[0])
-    )).toEqual([
-      "workspace.storagePoolStates.ready",
-      "workspace.storagePoolStates.warning",
-      "workspace.storagePoolStates.offline",
-      "workspace.storagePoolStates.unknown"
-    ]);
-  });
-
+describe("storage pool breadcrumbs", () => {
   it("keeps root-relative breadcrumbs visible for the canonical pool path", () => {
     expect(storagePoolRootDepth(".")).toBe(0);
     expect(storagePoolRootDepth("pool/nested")).toBe(2);

@@ -485,15 +485,6 @@ export function ChatPane({
           <div className="chat-header-copy">
             <h2>{activeSessionTitle}</h2>
           </div>
-          <div
-            className="chat-header-status"
-            data-state={status}
-            role="status"
-            aria-label={t(`status.${status}`)}
-          >
-            <span className="chat-header-status-dot" aria-hidden="true" />
-            <span>{t(`status.${status}`)}</span>
-          </div>
           <button
             type="button"
             className="icon-button chat-delete-session-button"

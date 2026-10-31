@@ -22,7 +22,6 @@ import {
   Settings2,
   Shuffle,
   SkipForward,
-  SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -51,6 +50,8 @@ import {
   type StorageFilePickerPool,
 } from "../workspace/StorageFilePickerDialog.js";
 import { Switch } from "../common/Switch.js";
+import { CustomSelect } from "../common/CustomSelect.js";
+import { SearchFilterPopover } from "../common/SearchFilterPopover.js";
 import { MusicCover } from "./MusicPlayer.js";
 import { MusicDialog, MusicNameDialog } from "./MusicDialogs.js";
 import { useMusicRemote } from "./MusicProvider.js";
@@ -85,6 +86,14 @@ const EMPTY: Content = {
   artistsNextCursor: null,
 };
 
+const DEFAULT_FILTERS = {
+  sourceId: "",
+  year: "",
+  genre: "",
+  favorite: false,
+  sort: "added" as NonNullable<MusicQuery["sort"]>,
+};
+
 export function MusicLibraryPanel({
   pools,
   locale,
@@ -98,14 +107,7 @@ export function MusicLibraryPanel({
   const [detail, setDetail] = useState<Detail | null>(null);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({
-    sourceId: "",
-    year: "",
-    genre: "",
-    favorite: false,
-    sort: "added" as NonNullable<MusicQuery["sort"]>,
-  });
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [draftFilters, setDraftFilters] = useState(filters);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -557,6 +559,14 @@ export function MusicLibraryPanel({
     setView(query.trim() ? "search" : "tracks");
     reload();
   };
+  const applyFilters = (next: typeof filters) => {
+    setLoading(true);
+    setContent(EMPTY);
+    setFilters(next);
+    setDetail(null);
+    if (view === "home") setView("tracks");
+    reload();
+  };
   const playlistReorder = (index: number, delta: -1 | 1) => {
     if (detail?.kind !== "playlist") return;
     const reordered = [...content.tracks];
@@ -843,29 +853,78 @@ export function MusicLibraryPanel({
           </PanelHeaderActions>
         }
       />
-      <form className="music-search" onSubmit={submitSearch}>
-        <Search size={17} aria-hidden="true" />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t("music.searchPlaceholder")}
-          aria-label={t("music.searchPlaceholder")}
-        />
-        <button type="submit" aria-label={t("music.search")}>
-          <ArrowUp className="music-search-submit" size={17} />
-        </button>
-        <button
-          type="button"
-          aria-label={t("music.filters")}
-          aria-pressed={filtersOpen}
-          onClick={() => {
-            setDraftFilters(filters);
-            setFiltersOpen(true);
-          }}
+      <div className="library-search-toolbar">
+        <form className="search" onSubmit={submitSearch}>
+          <Search size={17} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("music.searchPlaceholder")}
+            aria-label={t("music.searchPlaceholder")}
+          />
+        </form>
+        <SearchFilterPopover
+          label={t("music.filters")}
+          active={Boolean(filters.sourceId || filters.year || filters.genre || filters.favorite || filters.sort !== "added")}
+          onOpen={() => setDraftFilters(filters)}
+          onApply={() => applyFilters(draftFilters)}
+          onReset={() => applyFilters(DEFAULT_FILTERS)}
         >
-          <SlidersHorizontal size={17} />
-        </button>
-      </form>
+          <div className="workspace-search-field">
+            <span>{t("music.source")}</span>
+            <CustomSelect
+              value={draftFilters.sourceId}
+              ariaLabel={t("music.source")}
+              options={[
+                { value: "", label: t("music.allSources") },
+                ...sources.map((source) => ({ value: source.id, label: source.name })),
+              ]}
+              onChange={(sourceId) => setDraftFilters((current) => ({ ...current, sourceId }))}
+            />
+          </div>
+          <div className="workspace-search-field-grid">
+            <label className="workspace-search-field">
+              <span>{t("music.year")}</span>
+              <input
+                type="number"
+                min="1"
+                max="9999"
+                value={draftFilters.year}
+                onChange={(event) => setDraftFilters((current) => ({ ...current, year: event.target.value }))}
+              />
+            </label>
+            <label className="workspace-search-field">
+              <span>{t("music.genre")}</span>
+              <input
+                value={draftFilters.genre}
+                onChange={(event) => setDraftFilters((current) => ({ ...current, genre: event.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="workspace-search-field">
+            <span>{t("music.sort")}</span>
+            <CustomSelect
+              value={draftFilters.sort}
+              ariaLabel={t("music.sort")}
+              options={[
+                { value: "added", label: t("music.sortAdded") },
+                { value: "name", label: t("music.sortName") },
+                { value: "year", label: t("music.sortYear") },
+              ]}
+              onChange={(sort) => setDraftFilters((current) => ({ ...current, sort }))}
+            />
+          </div>
+          <label className="workspace-search-filter-check">
+            <input
+              type="checkbox"
+              checked={draftFilters.favorite}
+              onChange={(event) => setDraftFilters((current) => ({ ...current, favorite: event.target.checked }))}
+            />
+            <span>{t("music.onlyFavorites")}</span>
+          </label>
+        </SearchFilterPopover>
+      </div>
       <nav className="music-tabs" aria-label={t("music.navigation")}>
         {(["home", "albums", "artists", "tracks", "playlists"] as const).map(
           (tab) => (
@@ -1211,121 +1270,6 @@ export function MusicLibraryPanel({
           </button>
         ) : null}
       </div>
-      {filtersOpen ? (
-        <MusicDialog
-          title={t("music.filters")}
-          onClose={() => setFiltersOpen(false)}
-        >
-          <div className="music-filter-fields">
-            <label>
-              {t("music.source")}
-              <select
-                value={draftFilters.sourceId}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    sourceId: event.target.value,
-                  }))
-                }
-              >
-                <option value="">{t("music.allSources")}</option>
-                {sources.map((source) => (
-                  <option key={source.id} value={source.id}>
-                    {source.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t("music.year")}
-              <input
-                type="number"
-                min="1"
-                max="9999"
-                value={draftFilters.year}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    year: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              {t("music.genre")}
-              <input
-                value={draftFilters.genre}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    genre: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              {t("music.sort")}
-              <select
-                value={draftFilters.sort}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    sort: event.target.value as NonNullable<MusicQuery["sort"]>,
-                  }))
-                }
-              >
-                <option value="added">{t("music.sortAdded")}</option>
-                <option value="name">{t("music.sortName")}</option>
-                <option value="year">{t("music.sortYear")}</option>
-              </select>
-            </label>
-            <label className="music-check">
-              <input
-                type="checkbox"
-                checked={draftFilters.favorite}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    favorite: event.target.checked,
-                  }))
-                }
-              />
-              {t("music.onlyFavorites")}
-            </label>
-          </div>
-          <footer>
-            <button
-              type="button"
-              onClick={() =>
-                setDraftFilters({
-                  sourceId: "",
-                  year: "",
-                  genre: "",
-                  favorite: false,
-                  sort: "added",
-                })
-              }
-            >
-              {t("music.reset")}
-            </button>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => {
-                setLoading(true);
-                setContent(EMPTY);
-                setFilters(draftFilters);
-                setDetail(null);
-                if (view === "home") setView("tracks");
-                setFiltersOpen(false);
-                reload();
-              }}
-            >
-              {t("music.apply")}
-            </button>
-          </footer>
-        </MusicDialog>
-      ) : null}
       {sourcesOpen ? (
         <MusicDialog
           title={t("music.sources")}

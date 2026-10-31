@@ -5,6 +5,10 @@ const modalPortalRestriction = {
   selector: "JSXOpeningElement[name.name=/^(div|section|form)$/] > JSXAttribute[name.name='className'][value.value=/backdrop/][value.value!='notification-drawer-backdrop']",
   message: "Modal backdrops must use ModalPortal so dialogs center in the full viewport. See docs/src/content/docs/reference/frontend-design.md."
 };
+const filterDropdownRestriction = {
+  selector: "JSXElement:has(> JSXOpeningElement[name.name='SearchFilterPopover']) JSXOpeningElement[name.name='select']",
+  message: "Search filter dropdowns must use CustomSelect. See docs/src/content/docs/reference/frontend-design.md."
+};
 
 export default tseslint.config(
   {
@@ -34,7 +38,7 @@ export default tseslint.config(
   {
     files: ["packages/web/src/components/**/*.tsx"],
     rules: {
-      "no-restricted-syntax": ["error", modalPortalRestriction]
+      "no-restricted-syntax": ["error", modalPortalRestriction, filterDropdownRestriction]
     }
   },
   {
@@ -46,6 +50,7 @@ export default tseslint.config(
       "no-restricted-syntax": [
         "error",
         modalPortalRestriction,
+        filterDropdownRestriction,
         {
           selector: "JSXOpeningElement[name.name='select']",
           message: "Settings dropdowns must use CustomSelect, including nested dialogs and shared settings controls. See docs/src/content/docs/reference/frontend-design.md."

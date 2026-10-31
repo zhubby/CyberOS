@@ -22,6 +22,8 @@ sourceOfTruth:
   - packages/web/src/components/chat/ChatPane.tsx
   - packages/web/src/components/common/Switch.tsx
   - packages/web/src/components/common/CustomSelect.tsx
+  - packages/web/src/components/common/SearchFilterPopover.tsx
+  - packages/web/src/styles/search-filter.css
   - packages/web/src/components/common/ModalPortal.tsx
   - packages/web/src/styles/modal.css
   - packages/web/src/styles/select.css
@@ -169,6 +171,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 ### Agent 与聊天
 
 - Agent 导航保持黑色控制轨；会话使用编号层级，当前项黄底黑字并带红色左轨。
+- Agent 页头只展示会话编号、标题和会话操作，不重复显示“就绪”等运行状态徽标；连接状态保留在侧栏底部，任务反馈放在 Composer。
 - 消息是开放式分层记录，不使用圆角气泡。头像、左侧记录线、作者和时间共同区分用户与 Agent。
 - Composer 是黑色命令框，输入使用黄字，顶部青色短轨表示可输入状态；提交、取消和投递模式保持原业务语义。
 - 审批卡使用硬边框和明确的允许/拒绝操作，不能弱化风险信息或跳过确认。
@@ -176,7 +179,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 
 ### Workspace 与文件
 
-- `PanelHeader` 继续承载图标、标题/副标题和直接操作。页头不添加重复统计或状态徽标。
+- `PanelHeader` 继续承载图标、标题/副标题和直接操作。页头不添加重复统计或状态徽标；文件页头不展示存储池“就绪”等状态，也不保留状态占位列。
 - 文件列表使用硬分隔线和黑色表头。hover 反色为黑底黄字；选中行同时使用红色轨和选择语义。
 - 文件搜索保持紧凑单行；高级筛选使用 `SlidersHorizontal` 菜单，Escape 关闭并恢复焦点。
 - 搜索结果只渲染纯文本和结构化高亮，不注入服务端 HTML。加载更多不能重排已有结果。
@@ -201,6 +204,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 ### Music 音乐库
 
 - Music 与 Photo 并列，采用概览、专辑、艺术家、歌曲和歌单横向导航。以真实方形专辑封面为视觉主体，保持现有深色令牌、零圆角和紧凑密度。
+- 音乐与影视的查询工具栏统一参照文件面板：单行搜索框加右侧 `SlidersHorizontal` 图标按钮。来源、年份、类型、排序、收藏及观看状态等条件放入共享 `SearchFilterPopover`，不占常驻工具栏；所有下拉使用 `CustomSelect`，禁止原生 `<select>`。浮窗复用文件筛选的尺寸、字段、操作区与 HUD 样式，应用和重置后关闭并恢复触发器焦点；重置保留当前文本搜索及所在合集，Escape 或点击外部关闭时不提交草稿。嵌套下拉展开时，Escape 先关闭下拉，再关闭筛选浮窗；窄屏和短视口下内容在浮窗内滚动。
 - 音乐按面板容器宽度响应；容器小于 `620px` 隐藏歌曲专辑列，小于 `360px` 固定两列封面。队列和歌词放入可关闭抽屉，不创建常驻三栏。
 - 音乐控制遥控 NAS，公共播放条按“此设备 / NAS”区分浏览器影视与 NAS 音乐或影视，显示各自实际输出与播放状态；无恢复队列时隐藏，暂停或异常时保留控制入口。窄屏将设备、音量和模式收进正在播放抽屉。
 - 音乐与 NAS 影视共享一个播放会话；浏览器影视独立播放。NAS 跨类型接管前明确确认。音箱失联、NAS 或播放服务重启后保留队列并等待手动恢复，不自动改用其他音箱。

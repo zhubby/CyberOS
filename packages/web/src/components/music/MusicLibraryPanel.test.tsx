@@ -34,6 +34,10 @@ describe("Music workspace", () => {
       expect(html).toContain(songs);
       expect(html).toContain(playlists);
       expect(html).toContain('aria-busy="true"');
+      expect(html).toContain('class="library-search-toolbar"');
+      expect(html).toContain('aria-haspopup="dialog"');
+      expect(html).toContain('aria-expanded="false"');
+      expect(html).not.toContain('type="submit"');
       expect(html).not.toContain("<audio");
     }
   });

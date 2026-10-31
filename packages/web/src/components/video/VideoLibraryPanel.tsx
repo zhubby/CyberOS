@@ -1,4 +1,6 @@
 import { ModalPortal } from "../common/ModalPortal.js";
+import { CustomSelect } from "../common/CustomSelect.js";
+import { SearchFilterPopover } from "../common/SearchFilterPopover.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -46,6 +48,38 @@ import { PanelHeader, PanelHeaderAction } from "../workspace/PanelHeader.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
 
 type View = "home" | "movie" | "series" | "collections" | "watchlist";
+type VideoFilters = {
+  [Key in "sourceId" | "year" | "genre" | "sort" | "favorite" | "watched"]: VideoQuery[Key];
+};
+const DEFAULT_FILTERS: VideoFilters = {
+  sourceId: undefined,
+  year: undefined,
+  genre: undefined,
+  sort: "title",
+  favorite: undefined,
+  watched: undefined,
+};
+
+export function videoQueryWithFilters(query: VideoQuery, filters: VideoFilters): VideoQuery {
+  const {
+    sourceId: _source,
+    year: _year,
+    genre: _genre,
+    sort: _sort,
+    favorite: _favorite,
+    watched: _watched,
+    ...scope
+  } = query;
+  return {
+    ...scope,
+    sort: filters.sort ?? "title",
+    ...(filters.sourceId ? { sourceId: filters.sourceId } : {}),
+    ...(filters.year !== undefined ? { year: filters.year } : {}),
+    ...(filters.genre ? { genre: filters.genre } : {}),
+    ...(filters.favorite ? { favorite: true } : {}),
+    ...(filters.watched !== undefined ? { watched: filters.watched } : {}),
+  };
+}
 export function VideoLibraryPanel({
   tv = false,
   onManage,
@@ -61,6 +95,7 @@ export function VideoLibraryPanel({
   const [home, setHome] = useState<VideoHome | null>(null);
   const [page, setPage] = useState<VideoPage>({ titles: [], nextCursor: null });
   const [query, setQuery] = useState<VideoQuery>({ sort: "title" });
+  const [draftFilters, setDraftFilters] = useState<VideoFilters>(DEFAULT_FILTERS);
   const [sources, setSources] = useState<MediaSourceRecord[]>([]);
   const [collections, setCollections] = useState<MediaCollection[]>([]);
   const [detail, setDetail] = useState<VideoTitleDetail | null>(null);
@@ -158,7 +193,8 @@ export function VideoLibraryPanel({
     !!query.year ||
     !!query.genre ||
     !!query.sourceId ||
-    query.watched !== undefined;
+    query.watched !== undefined ||
+    (query.sort !== undefined && query.sort !== "title");
   const listMode =
     (view !== "home" && view !== "collections") ||
     searching ||
@@ -454,125 +490,106 @@ export function VideoLibraryPanel({
         )}
       </nav>
       {!detail ? (
-        <div className="video-toolbar">
-          <label className="video-search">
-            <Search size={17} />
+        <div className="library-search-toolbar">
+          <label className="search">
+            <Search size={17} aria-hidden="true" />
             <input
               data-tv-focusable
               type="search"
               aria-label={t("video.search")}
               placeholder={t("video.search")}
               value={query.query ?? ""}
-              onChange={(e) =>
-                setQuery((q) => ({ ...q, query: e.target.value }))
-              }
+              onChange={(event) => setQuery((current) => ({ ...current, query: event.target.value }))}
             />
           </label>
-          <select
-            data-tv-focusable
-            aria-label={t("video.sort")}
-            value={query.sort}
-            onChange={(e) =>
-              setQuery((q) => ({
-                ...q,
-                sort: e.target.value as NonNullable<VideoQuery["sort"]>,
-              }))
-            }
+          <SearchFilterPopover
+            label={t("video.filter")}
+            active={Boolean(query.sourceId || query.year || query.genre || query.favorite || query.watched !== undefined || (query.sort && query.sort !== "title"))}
+            onOpen={() => setDraftFilters({
+              sourceId: query.sourceId,
+              year: query.year,
+              genre: query.genre,
+              sort: query.sort ?? "title",
+              favorite: query.favorite,
+              watched: query.watched,
+            })}
+            onApply={() => setQuery((current) => videoQueryWithFilters(current, draftFilters))}
+            onReset={() => setQuery((current) => videoQueryWithFilters(current, DEFAULT_FILTERS))}
           >
-            {(["title", "year", "added", "rating", "recent"] as const).map(
-              (sort) => (
-                <option key={sort} value={sort}>
-                  {t(`video.sort_${sort}`)}
-                </option>
-              ),
-            )}
-          </select>
-          <details className="video-filters">
-            <summary data-tv-focusable tabIndex={0}>
-              {t("video.filter")}
-            </summary>
-            <label>
-              {t("video.source")}
-              <select
-                data-tv-focusable
-                value={query.sourceId ?? ""}
-                onChange={(e) =>
-                  setQuery((q) => ({ ...q, sourceId: e.target.value }))
-                }
-              >
-                <option value="">{t("video.all")}</option>
-                {sources.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t("video.year")}
+            <div className="workspace-search-field">
+              <span>{t("video.source")}</span>
+              <CustomSelect
+                value={draftFilters.sourceId ?? ""}
+                ariaLabel={t("video.source")}
+                options={[
+                  { value: "", label: t("video.all") },
+                  ...sources.map((source) => ({ value: source.id, label: source.name })),
+                ]}
+                onChange={(sourceId) => setDraftFilters((current) => ({ ...current, sourceId: sourceId || undefined }))}
+              />
+            </div>
+            <div className="workspace-search-field-grid">
+              <label className="workspace-search-field">
+                <span>{t("video.year")}</span>
+                <input
+                  data-tv-focusable
+                  type="number"
+                  min="1"
+                  max="9999"
+                  value={draftFilters.year ?? ""}
+                  onChange={(event) => setDraftFilters((current) => ({
+                    ...current,
+                    year: event.target.value ? Number(event.target.value) : undefined,
+                  }))}
+                />
+              </label>
+              <label className="workspace-search-field">
+                <span>{t("video.genre")}</span>
+                <input
+                  data-tv-focusable
+                  value={draftFilters.genre ?? ""}
+                  onChange={(event) => setDraftFilters((current) => ({ ...current, genre: event.target.value || undefined }))}
+                />
+              </label>
+              <div className="workspace-search-field">
+                <span>{t("video.sort")}</span>
+                <CustomSelect<NonNullable<VideoQuery["sort"]>>
+                  value={draftFilters.sort ?? "title"}
+                  ariaLabel={t("video.sort")}
+                  options={(["title", "year", "added", "rating", "recent"] as const).map((sort) => ({
+                    value: sort,
+                    label: t(`video.sort_${sort}`),
+                  }))}
+                  onChange={(sort) => setDraftFilters((current) => ({ ...current, sort }))}
+                />
+              </div>
+              <div className="workspace-search-field">
+                <span>{t("video.watched")}</span>
+                <CustomSelect
+                  value={draftFilters.watched === undefined ? "" : String(draftFilters.watched)}
+                  ariaLabel={t("video.watched")}
+                  options={[
+                    { value: "", label: t("video.all") },
+                    { value: "true", label: t("video.watched") },
+                    { value: "false", label: t("video.unwatched") },
+                  ]}
+                  onChange={(watched) => setDraftFilters((current) => ({
+                    ...current,
+                    watched: watched ? watched === "true" : undefined,
+                  }))}
+                />
+              </div>
+            </div>
+            <label className="workspace-search-filter-check">
               <input
                 data-tv-focusable
-                type="number"
-                value={query.year ?? ""}
-                onChange={(e) =>
-                  setQuery((q) => {
-                    const { year: _year, ...rest } = q;
-                    return e.target.value
-                      ? { ...rest, year: Number(e.target.value) }
-                      : rest;
-                  })
-                }
+                type="checkbox"
+                checked={draftFilters.favorite ?? false}
+                onChange={(event) => setDraftFilters((current) => ({ ...current, favorite: event.target.checked || undefined }))}
               />
+              <span>{t("video.favorites")}</span>
             </label>
-            <label>
-              {t("video.genre")}
-              <input
-                data-tv-focusable
-                value={query.genre ?? ""}
-                onChange={(e) =>
-                  setQuery((q) => ({ ...q, genre: e.target.value }))
-                }
-              />
-            </label>
-            <button
-              data-tv-focusable
-              aria-pressed={!!query.favorite}
-              onClick={() =>
-                setQuery((q) => {
-                  const { favorite, ...rest } = q;
-                  return favorite ? rest : { ...rest, favorite: true };
-                })
-              }
-            >
-              <Heart size={16} />
-              {t("video.favorites")}
-            </button>
-            <label>
-              {t("video.watched")}
-              <select
-                data-tv-focusable
-                value={query.watched === undefined ? "" : String(query.watched)}
-                onChange={(e) =>
-                  setQuery((q) => {
-                    const { watched: _watched, ...rest } = q;
-                    return e.target.value
-                      ? { ...rest, watched: e.target.value === "true" }
-                      : rest;
-                  })
-                }
-              >
-                <option value="">{t("video.all")}</option>
-                <option value="true">{t("video.watched")}</option>
-                <option value="false">{t("video.unwatched")}</option>
-              </select>
-            </label>
-            <button
-              data-tv-focusable
-              onClick={() => setQuery({ sort: "title" })}
-            >
-              {t("video.reset")}
-            </button>
-          </details>
+          </SearchFilterPopover>
         </div>
       ) : null}
       {error ? (
