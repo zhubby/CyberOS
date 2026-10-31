@@ -1,5 +1,6 @@
 import type { JsonSchema, JsonValue } from "./contracts.js";
 import { EMPTY_OBJECT_SCHEMA, strictObject } from "./schemas.js";
+import { MEDIA_CAPABILITY_SCHEMAS, type MediaCapabilityRequestMap, type MediaManageCapabilityRequest, type MusicManageCapabilityRequest, type MusicControlCapabilityRequest, type PlaybackControlCapabilityRequest } from "./media-contracts.js";
 
 const id = (maxLength = 256): JsonSchema => ({ type: "string", minLength: 1, maxLength });
 const text = (maxLength = 4096): JsonSchema => ({ type: "string", maxLength });
@@ -467,9 +468,14 @@ export type CapabilityMutationRequest =
   | StorageManageRequest
   | SettingsUpdateRequest
   | TerminalManageRequest
-  | VodControlRequest;
+  | VodControlRequest
+  | MediaManageCapabilityRequest
+  | MusicManageCapabilityRequest
+  | MusicControlCapabilityRequest
+  | PlaybackControlCapabilityRequest
+  | MediaCapabilityRequestMap["cyberos.media.play-propose"]["request"];
 
-export interface PlannedCapabilityRequestMap {
+export interface PlannedCapabilityRequestMap extends MediaCapabilityRequestMap {
   "cyberos.files.grep": FileGrepRequest;
   "cyberos.files.find": FileFindRequest;
   "cyberos.files.git": { storagePoolId: string; path?: string };
@@ -500,6 +506,7 @@ export interface PlannedCapabilityRequestMap {
 }
 
 const schemas: Record<string, JsonSchema> = {
+  ...MEDIA_CAPABILITY_SCHEMAS,
   "cyberos.catalog.get": EMPTY_OBJECT_SCHEMA,
   "cyberos.system.status": EMPTY_OBJECT_SCHEMA,
   "cyberos.system.power-propose": proposal(operationUnion(

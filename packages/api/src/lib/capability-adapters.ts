@@ -31,6 +31,7 @@ import {
   photoExportResourceRevision
 } from "./mcp-resources.js";
 import type { SystemManagementDependencies } from "./system-management.js";
+import { createMediaCapabilityAdapters } from "./media-capabilities.js";
 import {
   resolveStoragePoolScope,
   StorageScopeError
@@ -71,6 +72,7 @@ export function createCapabilityAdapters(
   options: { resourceBaseUrl: string; system?: SystemManagementDependencies }
 ): Readonly<Record<string, CapabilityDomainAdapter>> {
   const adapters: Record<string, CapabilityDomainAdapter> = {
+    ...createMediaCapabilityAdapters(server, options.system),
     "cyberos.shell.run": createRestrictedShellAdapter()
   };
   for (const capabilityId of MUTATION_CAPABILITIES) {

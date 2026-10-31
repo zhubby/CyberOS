@@ -33,6 +33,55 @@ CyberOS 内置 MCP 缺少设置记录时默认开启。**设置 > MCP** 可以�
 
 CyberOS 也保留 `/mcp` 作为已配对外部客户端的只读能力入口。API 仍绑定 loopback；需要 LAN 访问时使用专用 TLS listener，不能把本地 REST API 直接暴露到公网。
 
+### 音乐、影视与 NAS 播放
+
+媒体工具复用现有媒体库和共享播放器，不启动独立 MCP 服务，也不控制某个浏览器的播放。
+
+| 工具 | 用途 |
+| --- | --- |
+| `cyberos.music.query` | 按 `entity: tracks/albums/artists/playlists` 搜索，支持现有筛选、排序和游标分页 |
+| `cyberos.music.get` | 按实体和 ID 读取详情；`entity: lyrics` 读取有界歌词 |
+| `cyberos.music.status` | `view: home/sources/scans/library`，默认音乐库状态 |
+| `cyberos.music.manage-propose` | 收藏、歌单、媒体源和扫描审批 |
+| `cyberos.music.control-propose` | NAS 音乐播放、队列、音量、模式和已有音频输出控制审批 |
+| `cyberos.media.query` | 搜索影片／剧集，支持个人状态、合集及匹配状态筛选 |
+| `cyberos.media.get` | `entity: titles/next/match-candidates`，读取季集、文件版本、下一集及匹配候选 |
+| `cyberos.media.status` | `view: home/sources/scans/library/collections/settings`，默认影视库状态 |
+| `cyberos.media.manage-propose` | 个人状态、进度、合集、媒体源、扫描、匹配纠错及非敏感设置审批 |
+| `cyberos.media.play-propose` | 按 `fileId` 在 NAS 播放，可指定 `startPositionSeconds` |
+| `cyberos.playback.status` | 读取共享播放器 owner、实例、会话及音乐队列 |
+| `cyberos.playback.outputs` | 查询系统默认输出及已有可用蓝牙音频设备；不配对设备 |
+| `cyberos.playback.control-propose` | 暂停、恢复、停止、定位、音量、输出、音轨、字幕及音频延迟控制审批 |
+
+音乐、影视、播放分别使用 `cyberos:music:read`、`cyberos:media:read`、`cyberos:playback:read`。申请变更使用对应域的 `:propose` scope，且仅内置 Pi 可以调用；外部客户端即使误授予 propose scope 也没有写工具。既有外部身份不自动新增权限，管理员必须显式重新授权需要的只读 scopes。内置 Pi 沿用现有 capability 目录同步机制。
+
+查询默认每页 40、上限 100。音乐查询返回 `items/nextCursor`，影视查询返回 `titles/nextCursor`；查询下一页时原样传入 `cursor`。详情、首页及队列使用 `limit` 限制嵌套数组；长歌词、嵌套详情和达到总输出预算的结果会返回 `truncated: true` 和 `truncation` 路径／数量说明，不能把截断队列当作完整队列提交重排。媒体文件和图片二进制不进入工具结果。
+
+播放操作必须先读取 `cyberos.playback.status`，将 `status.serviceInstanceId` 和 `status.sessionId` 分别作为 `serviceInstanceId`、`playbackSessionId` 传入。音乐命令还必须携带 `status.music.queueVersion` 对应的 `expectedQueueVersion`；统一播放控制额外携带目标 `sessionId`。没有播放会话时 `playbackSessionId` 为 `null`。
+
+例如，搜索并申请播放歌曲：
+
+```json
+{"entity":"tracks","query":"歌曲名","limit":40}
+```
+
+```json
+{
+  "request": {
+    "operation": "replace",
+    "trackIds": ["查询得到的歌曲 ID"],
+    "serviceInstanceId": "刚读取的播放器实例 ID",
+    "playbackSessionId": null,
+    "expectedQueueVersion": 0
+  },
+  "idempotencyKey": "play-music-request-001"
+}
+```
+
+上述值必须取自实际状态，不能照抄示例。所有播放变更都要求第一方明确确认；跨音乐／影视接管会中断当前播放，但保留音乐队列。审批返回的 `runId` 沿用现有 `cyberos.runs.*` 查询流程。审批期间实例、会话、队列或目标文件改变后返回冲突，必须重新读取状态并发起新审批，不能自动更新抢占条件重试。正常播放进度推进不会使审批失效。
+
+管理操作使用明确的 `operation`：音乐支持 `favorite`、`playlist_create/update/delete`，两种库均支持 `source_create/update/delete` 和 `scan`；影视另支持 `title_state`、`episode_state`、`progress`、`collection_create/update/delete`、`match`、`settings`。移除媒体源不删除原始文件。`settings` 仅接受语言和地区；TMDB Token 仍在第一方设置中配置，不能通过 MCP 提交或读取。NAS 播放器不可用时仍可查询媒体库。
+
 ## 第三方 MCP Server
 
 第三方只支持 MCP Streamable HTTP，不支持旧 SSE、stdio 或自定义 transport。每个 Server 使用 1–63 位小写 slug 作为稳定工具命名空间，可选择：
