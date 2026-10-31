@@ -4,6 +4,7 @@
 @import "../styles/select.css";
 @import "../styles/search-filter.css";
 @import "../styles/modal.css";
+@import "../styles/playback-dock.css";
 
 :root {
   color-scheme: dark;

@@ -73,6 +73,10 @@ export const en = {
   playback: {
     "browser": "This device",
     "controlTarget": "Control device",
+    "nowPlaying": "Now playing",
+    "details": "Playback details",
+    "collapse": "Collapse player",
+    "state": { "idle": "Idle", "playing": "Playing", "paused": "Paused", "error": "Playback error" },
     "localOutput": "Browser audio output",
     "tvOutput": "TV configured output",
     "switchOutput": "Switch output",
@@ -3349,6 +3353,10 @@ export const zhCN = {
   playback: {
     "browser": "此设备",
     "controlTarget": "控制设备",
+    "nowPlaying": "正在播放",
+    "details": "播放详情",
+    "collapse": "收起播放器",
+    "state": { "idle": "空闲", "playing": "播放中", "paused": "已暂停", "error": "播放异常" },
     "localOutput": "浏览器本地输出",
     "tvOutput": "TV 配置的输出",
     "switchOutput": "切换输出",

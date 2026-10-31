@@ -1,6 +1,7 @@
 import { getMusicPlayer } from "./lib/music-api.js";
-import { MusicTakeoverDialog, MusicProvider, useMusicRemote } from "./components/music/MusicProvider.js";
+import { MusicTakeoverDialog, MusicProvider } from "./components/music/MusicProvider.js";
 import { PlaybackBar } from "./components/playback/PlaybackBar.js";
+import { PlaybackRestoreButton } from "./components/playback/PlaybackRestoreButton.js";
 import { PlaybackProvider, usePlayback } from "./components/playback/PlaybackProvider.js";
 import { BrowserPlayer } from "./components/playback/BrowserPlayer.js";
 import { FormEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
@@ -234,7 +235,6 @@ export function App() {
 }
 
 function AppContent() {
-  const musicRemote = useMusicRemote();
   const playback = usePlayback();
   const [videoTakeover, setVideoTakeover] = useState<string | null>(null);
   const { t } = useTranslation();
@@ -2584,7 +2584,7 @@ function AppContent() {
 
   return (
     <main
-      className={`app-shell${resizing ? " is-resizing" : ""}${!playback.fullscreen && (playback.browser || playback.nas?.owner || musicRemote.status?.queue.length) ? " has-music-player" : ""}`}
+      className={`app-shell${resizing ? " is-resizing" : ""}${playback.barVisible ? " has-playback-dock" : ""}`}
       style={appStyle}
     >
       <div className="mobile-tabs">
@@ -2608,6 +2608,7 @@ function AppContent() {
             <span>{t("chat.mobileWorkspace")}</span>
           </button>
         </div>
+        <PlaybackRestoreButton className="playback-restore--mobile" />
       </div>
 
       <ChatPane
