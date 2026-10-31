@@ -132,6 +132,44 @@ require the tag to be reachable from `main` and to match the Debian changelog.
 
 ## Deployment And Packaging
 
+### Rapid CM5 test deployment
+
+The developer uses macOS; CM5 is the Linux arm64 runtime and test device.
+After completing a feature, or when explicitly validating behavior that needs
+Linux or CM5 hardware, deploy the relevant components to CM5 and verify them
+there when a working management connection is available. This test deployment
+is authorized; do not ask for deployment permission again for each iteration.
+Use `npm run deploy:cm5 -- --components <names>` (or `make deploy-cm5
+ARGS='--components <names>'`); see `docs/src/content/docs/operations/cm5.md`.
+
+- Discover the CM5 Linux peer through `tailscale status --json` (default peer:
+  `scorpius`), without pinning an IP. Select the peer and SSH user with
+  `--peer`/`--user`, `CYBEROS_CM5_PEER`/`CYBEROS_CM5_USER`, or the ignored local
+  `.cyberos/cm5.json`; the SSH user otherwise defaults to the local OS user.
+  `--host`/`CYBEROS_CM5_HOST` remains an explicit administrator SSH override.
+  Use a permitted Tailscale SSH identity or existing normal SSH connection
+  with root or noninteractive sudo; never broaden the restricted
+  `cyberos-deploy` account's permissions or store credentials in Git.
+- Prefer building on the Mac: build static assets and TypeScript bundles
+  directly, and build Rust in the Mac's local Linux arm64 Docker/OrbStack
+  environment. `--build auto` and `--build local` both keep builds local;
+  remote builds require an explicit `--build remote`, with no automatic
+  fallback. CM5 normally only stages, replaces, restarts, and verifies.
+  Never copy macOS `node_modules` or Mach-O binaries into Linux. Deploy all
+  affected consumers when shared code changes. The local build container
+  does not change CyberOS's native systemd deployment.
+- Build and validate before stopping services. Back up replaced artifacts,
+  preserve existing data and configuration, restore previously active units,
+  and verify service stability, journal, API readiness, and the actual feature.
+- Dependency, schema/migration, unit, or installer changes require the package
+  upgrade procedure rather than a component swap. Artifact rollback does not
+  reverse database migrations.
+- Report the source commit and dirty state, deployed components, deployment
+  record, and verification results. If SSH access or a device prerequisite
+  blocks validation, report the specific blocker without claiming success.
+
+Test deployment does not authorize a Git commit, push, tag, or formal release.
+
 ### Debian package
 
 Build on the target architecture when possible. `build-deb.sh` copies the

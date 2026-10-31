@@ -45,6 +45,13 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
 
 ## Deployment Notes
 
+- After feature completion or explicit Linux/hardware validation, use the
+  authorized rapid CM5 test-deployment flow in `AGENTS.md` and
+  `docs/src/content/docs/operations/cm5.md`. Run `npm run deploy:cm5 --
+  --components <names>`; do not ask for deployment permission each iteration.
+  Prefer builds on the Mac, using local Linux arm64 Docker/OrbStack for Rust;
+  CM5 builds require explicit `--build remote`. Preserve data, verify the
+  feature on CM5, and report connection blockers.
 - Build Debian packages with `packaging/scripts/build-deb.sh` or `make deb`;
   build native modules on the target architecture and keep `.deb`, `.changes`,
   and `.buildinfo` artifacts.

@@ -4,12 +4,12 @@ description: 在 arm64 CM5 上原生构建、安装、验收和回滚 CyberOS。
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [packaging/scripts/build-deb.sh, packaging/scripts/install.sh, packaging/scripts/cyberos-deploy, packaging/scripts/cyberos-tv-mode, packaging/systemd/cyberos-tv.target, packaging/debian/rules]
+sourceOfTruth: [scripts/deploy-cm5.mjs, scripts/cm5-build-local.mjs, scripts/cm5-builder.Dockerfile, scripts/cm5-runtime.mjs, packaging/scripts/build-deb.sh, packaging/scripts/install.sh, packaging/scripts/cyberos-deploy, packaging/scripts/cyberos-tv-mode, packaging/systemd/cyberos-tv.target, packaging/debian/rules]
 sidebar:
   order: 2
 ---
 
-CM5 必须在目标 arm64 主机上构建 Debian 包，以匹配 `better-sqlite3` 原生模块和 Rust hostd/terminal 二进制。不要在 x64 开发机编译后直接复制 `node_modules` 或 Rust 二进制到 CM5。
+CM5 的 Debian 包和原生组件必须在兼容的 Linux arm64 环境构建，以匹配 `better-sqlite3` 原生模块和 Rust 二进制。日常开发优先在 Mac 完成构建：Web 和 TypeScript 直接构建，Rust 使用 Mac 本地的 Linux arm64 Docker/OrbStack 环境，再传到 CM5 替换验证。不要复制 macOS `node_modules` 或 Mach-O 二进制到 CM5。
 
 ## CM5 前置条件
 
@@ -19,6 +19,55 @@ CM5 必须在目标 arm64 主机上构建 Debian 包，以匹配 `better-sqlite3
 - 确保构建阶段可以访问 APT、Node.js release、npm registry 和 Cargo sparse registry，或传入内部镜像；
 - Wi-Fi 管理要求 NetworkManager、wpa_supplicant、dnsmasq-base、wireless-regdb 和 iw；Debian 包会声明这些依赖，但不会自动把现有 networkd 主机迁移到 NetworkManager；
 - 在根盘或其他持久文件系统预留足够空间用于 checkout、`.cyberos/deb-build`、`docs/node_modules` 和 Debian 产物；不要在容量较小的 `/tmp` tmpfs 中构建。
+
+## 从 Mac 快速部署测试组件
+
+功能完成后，或需要验证 Linux、硬件和 systemd 行为时，直接向已有 CyberOS 安装的 CM5 部署相关组件。此流程已获开发者授权，每轮无需重复确认；正式版本仍使用 Debian 包和 release 流程。
+
+本机需要 Node.js 22.12+、Tailscale、SSH 和 rsync。Rust 构建还需要本地 Docker CLI，以及通过本机 Unix socket 运行的 Linux arm64 Docker 环境（例如 OrbStack）；首次构建会获取 builder 镜像。CM5 需要 Node.js 22.12+、rsync，以及 root 或可执行 `sudo -n` 的管理员 SSH 连接。不要扩大正式部署专用 `cyberos-deploy` 用户的 sudo 权限。
+
+`--build auto` 和 `--build local` 都在 Mac 构建。Rust builder 使用 Debian bookworm（glibc 2.36）与 Rust 1.95，源码只读挂载，Cargo 依赖和构建缓存使用独立 Docker volume，不复用 macOS 的 `target`。CM5 只负责接收、备份、替换、重启和验收；Docker 用作本机构建工具，设备仍运行原生进程和 systemd units。本地 builder 不可用时会报错，不会自动转到 CM5 构建。
+
+默认读取 `tailscale status --json`，查找 Linux 节点 `scorpius` 并使用本机 OS 用户登录，不固定设备 IP。Tailnet 策略必须允许当前身份以目标用户使用 Tailscale SSH；节点在线不代表 SSH 获准。普通 sshd 的公钥认证和 Tailscale SSH 策略分别生效：安装公钥不能解决 Tailscale SSH 策略拒绝；已有普通 SSH 管理连接可用 `--host` 显式指定。
+
+在仓库根目录执行：
+
+```bash
+# 先查看计划；不会连接设备或构建
+npm run deploy:cm5 -- --components web,api --dry-run
+
+# 默认 auto：所有构建在 Mac；Rust 使用本地 Linux arm64 builder
+npm run deploy:cm5 -- --components web,api
+npm run deploy:cm5 -- --components photos,indexer
+
+# 共享 TypeScript 源码变更时重建所有运行消费者
+npm run deploy:cm5 -- --components runtime
+
+# make 入口同样默认在 Mac 构建
+make deploy-cm5 ARGS='--components web'
+
+# 显式选择 Tailnet 节点和已获准的管理用户
+npm run deploy:cm5 -- --peer scorpius --user zhubby --components web
+
+# 仅在明确需要时，改为在 CM5 构建（设备需对应 toolchain 与依赖）
+npm run deploy:cm5 -- --components photos --build remote
+```
+
+可通过 `CYBEROS_CM5_PEER` 和 `CYBEROS_CM5_USER` 设置默认节点与用户，或在本机忽略目录 `.cyberos/cm5.json` 保存 `{"peer":"scorpius","user":"zhubby"}`；用户名应对应已获准的管理身份。`--host admin@ssh-alias`、`CYBEROS_CM5_HOST` 或配置的 `host` 字段可覆盖发现流程，不保存密码和私钥。`--components all` 选择所有支持的组件，具体名称见 `--help`。
+
+部署先完成构建和上传，再取得与正式部署相同的锁，备份目标文件、替换组件并恢复此前运行的服务。Web 和文档无需重启 API；API 更新会处理其 worker 等依赖服务。备份、源码 commit/dirty 状态和部署记录保存在 CM5 的 `/cyberos/dev-deploy/<deployment-id>`，正式包的 `build-info.json` 保留原值；组件的实际测试来源以部署记录为准。
+
+默认保留 CM5 已安装的 Linux 原生 Node 依赖。后端部署会核对安装基线：依赖锁、schema/migration 或 packaging 变更需要走完整包升级与状态备份流程。快速替换不安装系统依赖、不运行安装器，也不修改 unit。
+
+脚本检查服务稳定性、`/health`、`/api/system/storage` 和 `/api/system/health`，并保存 journal 供排查；随后还需验证本次功能，并在交付时报告源码 commit/dirty 状态、组件、部署记录和验收结果。健康接口成功不能代替功能验收。连接失败时报告具体原因，保留已完成的本地验证。
+
+文件替换或健康检查失败时自动恢复旧组件。需要手动恢复某次部署前的组件时执行：
+
+```bash
+npm run deploy:cm5 -- --rollback <deployment-id>
+```
+
+此回滚只恢复程序文件，不回滚数据库或用户数据。涉及数据库迁移的升级按本页“升级、保留与回滚”操作。
 
 ## 原生构建与安装
 

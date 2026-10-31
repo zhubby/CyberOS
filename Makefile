@@ -3,7 +3,7 @@ NPM ?= npm
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev dev-api dev-web dev-worker dev-indexer dev-ops docs-dev docs-check docs-test docs-build docs-browser index health maintenance preview-web start-api start-worker start-indexer protocol-check typecheck lint test build check ci clean deb
+.PHONY: help install dev dev-api dev-web dev-worker dev-indexer dev-ops docs-dev docs-check docs-test docs-build docs-browser index health maintenance preview-web start-api start-worker start-indexer protocol-check typecheck lint test build check ci clean deb deploy-cm5
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-18s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -90,3 +90,6 @@ clean: ## Remove generated build and packaging artifacts.
 
 deb: ## Build the Debian package artifacts.
 	./packaging/scripts/build-deb.sh
+
+deploy-cm5: ## Deploy selected test components to CM5 (ARGS='--components web').
+	node scripts/deploy-cm5.mjs $(ARGS)
