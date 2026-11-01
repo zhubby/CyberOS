@@ -10,6 +10,7 @@ import { MusicCover, MusicPlayerDetails } from "../music/MusicPlayer.js";
 import { useMusicRemote } from "../music/MusicProvider.js";
 import { OutputDeviceSelect } from "./OutputDeviceSelect.js";
 import { PlaybackOutputPopover } from "./PlaybackOutputPopover.js";
+import { PlaybackRestoreButton } from "./PlaybackRestoreButton.js";
 import { usePlayback } from "./PlaybackProvider.js";
 import { PlaybackSlider } from "./PlaybackSlider.js";
 import { PlaybackTargetSelect } from "./PlaybackTargetSelect.js";
@@ -90,17 +91,17 @@ export function PlaybackBar({ onOpenBluetoothSettings }: { onOpenBluetoothSettin
     <span className="playback-time">{musicTime(duration || null)}</span>
   </div>;
   const transport = (detail = false) => <div className="playback-transport">
-    {musicBar ? <button className="playback-secondary" disabled={busy || !music.status?.queue.length} aria-label={t("music.previous")} onClick={() => void music.execute({ type: "previous" })}><SkipBack size={18} aria-hidden="true" /></button> : null}
-    <button data-playback-primary={detail ? undefined : true} disabled={!canPlay} aria-label={t(playing ? "music.pause" : "music.play")} onClick={toggle}>
+    {musicBar ? <button className="playback-secondary" disabled={busy || !music.status?.queue.length} aria-label={t("music.previous")} title={t("music.previous")} onClick={() => void music.execute({ type: "previous" })}><SkipBack size={18} aria-hidden="true" /></button> : null}
+    <button data-playback-primary={detail ? undefined : true} disabled={!canPlay} aria-busy={busy || undefined} aria-label={t(playing ? "music.pause" : "music.play")} title={t(playing ? "music.pause" : "music.play")} onClick={toggle}>
       {busy ? <LoaderCircle size={20} className="is-spinning" aria-hidden="true" /> : playing ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
     </button>
-    {musicBar ? <button className="playback-secondary" disabled={busy || !music.status?.queue.length} aria-label={t("music.next")} onClick={() => void music.execute({ type: "next" })}><SkipForward size={18} aria-hidden="true" /></button> : null}
+    {musicBar ? <button className="playback-secondary" disabled={busy || !music.status?.queue.length} aria-label={t("music.next")} title={t("music.next")} onClick={() => void music.execute({ type: "next" })}><SkipForward size={18} aria-hidden="true" /></button> : null}
   </div>;
 
   return <>
     <MusicPlayerDetails onOpenBluetoothSettings={onOpenBluetoothSettings} />
-    {p.barVisible ? <div id="playback-dock" className="playback-shell" data-playback-kind={browser ? "browser" : musicBar ? "music" : "video"}>
-      <section className="shared-player-bar" aria-label={t("playback.nowPlaying")} aria-busy={busy}>
+    {p.dockVisible ? <div id="playback-dock" className={`playback-shell${p.barVisible ? "" : " is-collapsed"}`} data-playback-kind={browser ? "browser" : musicBar ? "music" : "video"}>
+      {p.barVisible ? <section className="shared-player-bar" aria-label={t("playback.nowPlaying")} aria-busy={busy}>
         <button className="playback-title" title={title} aria-label={`${t("playback.details")}: ${title}`} onClick={() => {
           if (browser) p.setPlayerOpen(true);
           else if (musicBar) music.setDrawerOpen(true);
@@ -139,11 +140,11 @@ export function PlaybackBar({ onOpenBluetoothSettings }: { onOpenBluetoothSettin
         {!musicBar ? <button className="playback-secondary" disabled={busy} aria-label={t("video.stop")} title={t("video.stop")} onClick={stop}><Square size={17} aria-hidden="true" /></button> : null}
         <button className="playback-collapse" aria-label={t("playback.collapse")} title={t("playback.collapse")} onClick={p.collapseBar}><ChevronDown size={18} aria-hidden="true" /></button>
         {currentError ? <span className="visually-hidden" role="alert">{currentError}</span> : null}
-      </section>
+      </section> : <PlaybackRestoreButton />}
     </div> : null}
     {detailsOpen && !browser && !musicBar ? <MusicDialog title={t("playback.details")} onClose={() => setDetailsOpen(false)}>
       <h3>{title}</h3><PlaybackTargetSelect onChange={() => setDetailsOpen(false)} />
-      <div className="playback-detail-controls">{transport(true)}{progress(true)}<button disabled={busy} aria-label={t("video.stop")} onClick={stop}><Square size={18} aria-hidden="true" />{t("video.stop")}</button></div>
+      <div className="playback-detail-controls">{transport(true)}{progress(true)}<button disabled={busy} aria-label={t("video.stop")} title={t("video.stop")} onClick={stop}><Square size={18} aria-hidden="true" />{t("video.stop")}</button></div>
       {music.status?.queue.length ? <button onClick={() => { setDetailsOpen(false); music.setDrawerOpen(true); }}><ListMusic size={18} aria-hidden="true" />{t("music.queue")}</button> : null}
       {currentError ? <p role="alert">{currentError}</p> : null}
     </MusicDialog> : null}
