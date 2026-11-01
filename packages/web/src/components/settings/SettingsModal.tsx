@@ -1388,13 +1388,13 @@ export function SettingsDownloadsPage({
                       concurrency: Number(value)
                     }))}
                   />
-                  <small>{t("settings.downloads.concurrencyHelp")}</small>
                 </label>
                 <div className="settings-download-visual" aria-hidden="true">
                   <Download size={22} />
                   <strong>{draft.concurrency}</strong>
                   <span>{t("settings.downloads.connectionUnit")}</span>
                 </div>
+                <small className="settings-download-help">{t("settings.downloads.concurrencyHelp")}</small>
               </fieldset>
               <fieldset className="settings-field-grid settings-download-fields" disabled={loading || saving}>
                 <DownloadNumberField

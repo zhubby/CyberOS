@@ -103,7 +103,7 @@
   width: 100%;
   min-height: 38px;
   padding: 5px 8px;
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   cursor: pointer;
@@ -224,7 +224,7 @@
 .settings-content-header button {
   width: 38px;
   height: 38px;
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   cursor: pointer;
@@ -477,9 +477,9 @@
 
 .settings-operations-tabs button {
   min-width: 88px;
-  height: 30px;
+  height: 32px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   font-size: 11.5px;
@@ -1075,11 +1075,15 @@
 .settings-download-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(130px, 180px);
-  align-items: center;
-  gap: 18px;
+  align-items: end;
+  gap: 7px 18px;
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+.settings-download-control > .settings-preference-field {
+  margin: 0;
 }
 
 .settings-download-fields {
@@ -1091,20 +1095,20 @@
 }
 
 .settings-download-visual {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: flex;
   align-items: center;
-  gap: 2px 9px;
-  min-height: 74px;
-  padding: 12px 14px;
+  gap: 9px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--accent-soft-text);
   background: var(--subtle-bg);
 }
 
 .settings-download-visual svg {
-  grid-row: span 2;
+  flex: 0 0 auto;
 }
 
 .settings-download-visual strong {
@@ -1119,6 +1123,13 @@
   font-family: var(--font-emphasis);
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.settings-download-help {
+  grid-column: 1 / -1;
+  color: var(--muted-2);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .settings-version-page {
@@ -1225,10 +1236,11 @@
 .settings-version-copy {
   display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   margin-top: -3px;
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   cursor: pointer;
@@ -1429,7 +1441,7 @@
   width: 38px;
   height: 38px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   cursor: pointer;
@@ -1725,7 +1737,7 @@
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   background: rgb(0 0 0 / 12%);
   color: var(--muted);
   text-align: left;
@@ -2033,7 +2045,7 @@
   min-height: 32px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface-strong);
 }
@@ -2225,7 +2237,7 @@
   min-width: 0;
   padding: 10px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: rgb(0 0 0 / 10%);
   text-align: left;
