@@ -253,7 +253,7 @@ export function SettingsOperationsPage({
                 ref={confirmButtonRef}
                 className="danger-button"
                 type="button"
-                disabled={runningTask === "maintenance"}
+                disabled={runningTask === "maintenance"} aria-busy={runningTask === "maintenance" || undefined}
                 onClick={() => void trigger("maintenance", true)}
               >
                 {runningTask === "maintenance" ? <LoaderCircle aria-hidden="true" size={14} className="is-spinning" /> : <Play aria-hidden="true" size={14} />}

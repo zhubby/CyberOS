@@ -186,6 +186,7 @@ export function FileEditorModal({
             className="icon-button"
             onClick={() => void closeEditor()}
             disabled={saveStatus === "saving"}
+            aria-label={t("editor.close")}
             title={t("editor.close")}
           >
             <X aria-hidden="true" size={18} />

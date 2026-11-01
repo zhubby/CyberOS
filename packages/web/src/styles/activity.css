@@ -316,9 +316,9 @@
 .activity-popover button {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 5px;
+  width: 32px;
+  height: 32px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   cursor: pointer;

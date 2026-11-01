@@ -694,7 +694,7 @@
     justify-content: center;
     gap: 8px;
     min-height: 38px;
-    border-radius: 5px;
+    border-radius: 0;
     color: var(--muted);
     background: var(--surface);
     font-family: var(--font-emphasis);
@@ -1147,8 +1147,8 @@
   }
 
   .file-action-button {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
   }
 
   .management-row-action span {

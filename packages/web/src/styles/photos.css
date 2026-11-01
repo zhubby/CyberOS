@@ -37,7 +37,7 @@
   align-items: center;
   gap: 7px;
   min-width: 160px;
-  height: 31px;
+  height: 34px;
   padding: 0 9px;
   border: 1px solid var(--line-soft);
   border-radius: 5px;
@@ -47,13 +47,13 @@
 
 .photo-search-field > button {
   display: grid;
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   place-items: center;
   border: 0;
-  border-radius: 3px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
 }
@@ -93,10 +93,10 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-height: 27px;
+  min-height: 32px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   font-size: 10.5px;
@@ -125,10 +125,10 @@
 .photo-sort-field > button,
 .photo-common-filters input,
 .photo-condition-row input {
-  height: 29px;
+  height: 32px;
   min-width: 0;
   border: 1px solid var(--line-soft);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--text);
   background: var(--input-bg);
   font-size: 10.5px;
@@ -148,9 +148,9 @@
 .photo-sort-field .custom-select-trigger,
 .photo-common-filters .custom-select-trigger,
 .photo-condition-row .custom-select-trigger {
-  height: 29px;
-  min-height: 29px;
-  border-radius: 4px;
+  height: 32px;
+  min-height: 32px;
+  border-radius: 0;
   padding: 0 7px;
   gap: 5px;
   background: var(--input-bg);
@@ -164,7 +164,7 @@
 }
 
 .photo-sort-field > button {
-  width: 29px;
+  width: 32px;
   padding: 0;
 }
 
@@ -233,10 +233,10 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 25px;
+  min-height: 32px;
   padding: 0 7px;
   border: 1px solid var(--line-soft);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--subtle-bg);
   font-size: 10px;
@@ -296,11 +296,11 @@
 .photo-condition-row > button {
   grid-area: remove;
   display: grid;
-  width: 29px;
-  height: 29px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border: 1px solid var(--line-soft);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
 }
@@ -327,12 +327,13 @@
 .photo-runtime-alert,
 .photo-select-loaded {
   display: grid;
-  width: 31px;
-  height: 31px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   place-items: center;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
 }
@@ -363,7 +364,7 @@
 .photo-runtime-alert:focus-visible,
 .photo-select-loaded:focus-visible {
   outline: 2px solid var(--focus-ring, var(--accent));
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 .photo-runtime-alert-details {
@@ -396,8 +397,8 @@
 
 .photo-runtime-alert-heading button {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   place-items: center;
   border: 1px solid var(--line-soft);
@@ -489,9 +490,9 @@
 }
 
 .photo-filter-actions button {
-  min-height: 30px;
+  min-height: 32px;
   padding: 0 11px;
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 10.5px;
   font-family: var(--font-emphasis);
   font-weight: 800;
@@ -628,7 +629,7 @@
   gap: 7px;
   padding: 0 12px;
   border: 1px solid var(--accent);
-  border-radius: 5px;
+  border-radius: 0;
   color: white;
   background: var(--accent);
   font-size: 11px;
@@ -681,10 +682,10 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-height: 28px;
+  min-height: 32px;
   padding: 0 8px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font-size: 10.5px;
@@ -694,7 +695,7 @@
 }
 
 .photo-selection-actions button:last-child {
-  width: 28px;
+  width: 32px;
   padding: 0;
 }
 
@@ -768,7 +769,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   font-size: 11.5px;
   font-family: var(--font-emphasis);
   font-weight: 800;
@@ -916,12 +917,12 @@
   left: 6px;
   z-index: 2;
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: white;
   background: var(--modal-bg);
 }
@@ -958,10 +959,10 @@
 }
 
 .photo-pagination-error .secondary-button {
-  min-height: 30px;
+  min-height: 32px;
   padding: 0 10px;
   border: 1px solid var(--line-soft);
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 10.5px;
 }
 
@@ -1029,7 +1030,7 @@
   height: 32px;
   padding: 0 7px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font-size: 10px;
@@ -1306,7 +1307,7 @@
   }
 
   .photo-selection-actions button {
-    width: 28px;
+    width: 32px;
     padding: 0;
   }
 

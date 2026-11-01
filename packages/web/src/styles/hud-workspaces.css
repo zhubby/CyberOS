@@ -870,7 +870,7 @@
 .workspace-stage[data-panel="files"] :where(button, input, select, [tabindex="0"]):focus-visible,
 .workspace-panel-rail button:focus-visible,
 .mobile-tabs button:focus-visible {
-  outline: 2px solid var(--hud-cyan);
+  outline: 2px solid var(--control-focus);
   outline-offset: 3px;
 }
 

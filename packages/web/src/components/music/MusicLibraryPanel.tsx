@@ -614,6 +614,7 @@ export function MusicLibraryPanel({
             <button
               type="button"
               aria-label={t("music.favorite")}
+              title={t("music.favorite")}
               aria-pressed={album.favorite}
               disabled={busy}
               onClick={() => favorite("album", album)}
@@ -652,6 +653,7 @@ export function MusicLibraryPanel({
             disabled={busy}
             onClick={() => favorite("artist", artist)}
             aria-label={t("music.favorite")}
+            title={t("music.favorite")}
             aria-pressed={artist.favorite}
           >
             <Heart size={16} fill={artist.favorite ? "currentColor" : "none"} />
@@ -682,6 +684,7 @@ export function MusicLibraryPanel({
               className="music-track-play"
               disabled={track.missing || remote.busy || loading}
               aria-label={t("music.playTrack", { title: track.title })}
+              title={t("music.playTrack", { title: track.title })}
               onClick={() => play(tracks.slice(index))}
             >
               <Play size={15} />
@@ -713,6 +716,7 @@ export function MusicLibraryPanel({
               disabled={busy}
               className="music-track-favorite"
               aria-label={t("music.favorite")}
+              title={t("music.favorite")}
               aria-pressed={track.favorite}
               onClick={() => favorite("track", track)}
             >
@@ -729,6 +733,7 @@ export function MusicLibraryPanel({
                   onClick={() => playlistReorder(index, -1)}
                   className="music-track-reorder"
                   aria-label={t("music.moveUp")}
+                  title={t("music.moveUp")}
                   data-music-reorder="up"
                 >
                   <ArrowUp size={14} />
@@ -739,6 +744,7 @@ export function MusicLibraryPanel({
                   onClick={() => playlistReorder(index, 1)}
                   className="music-track-reorder"
                   aria-label={t("music.moveDown")}
+                  title={t("music.moveDown")}
                   data-music-reorder="down"
                 >
                   <ArrowDown size={14} />
@@ -756,6 +762,7 @@ export function MusicLibraryPanel({
                 }}
                 type="button"
                 aria-label={t("music.trackActions")}
+                title={t("music.trackActions")}
                 aria-expanded={rowMenu === rowKey}
                 onClick={() => setRowMenu(rowMenu === rowKey ? null : rowKey)}
               >

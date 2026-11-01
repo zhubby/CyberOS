@@ -370,6 +370,9 @@ export function StorageFilePickerDialog({
             aria-label={mode === "directory"
               ? t("common.actions.close")
               : t("workspace.management.virtualMachines.isoPickerClose")}
+            title={mode === "directory"
+              ? t("common.actions.close")
+              : t("workspace.management.virtualMachines.isoPickerClose")}
           >
             <X aria-hidden="true" size={16} />
           </button>

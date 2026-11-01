@@ -524,7 +524,7 @@ export function HttpDownloaderPanel({
                   <p>{t("workspace.downloads.createDescription")}</p>
                 </div>
               </div>
-              <button type="button" className="management-icon-action" onClick={closeCreateDialog} disabled={submitting} aria-label={t("common.actions.close")}>
+              <button type="button" className="management-icon-action" onClick={closeCreateDialog} disabled={submitting} aria-label={t("common.actions.close")} title={t("common.actions.close")}>
                 <X aria-hidden="true" size={16} />
               </button>
             </header>
@@ -564,7 +564,7 @@ export function HttpDownloaderPanel({
                       />
                     </label>
                     {isMagnetLink(url) ? (
-                      <button type="button" className="secondary-button download-resolve-button" disabled={resolvingTorrent || torrentReady} onClick={resolveMagnet}>
+                      <button type="button" className="secondary-button download-resolve-button" disabled={resolvingTorrent || torrentReady} aria-busy={resolvingTorrent || undefined} onClick={resolveMagnet}>
                         {resolvingTorrent ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Magnet aria-hidden="true" size={14} />}
                         <span>{t(torrentReady ? "workspace.downloads.metadataReady" : "workspace.downloads.resolveMetadata")}</span>
                       </button>
@@ -582,7 +582,7 @@ export function HttpDownloaderPanel({
                         event.target.value = "";
                       }}
                     />
-                    <button type="button" className="download-torrent-pick" disabled={resolvingTorrent} onClick={() => torrentFileInputRef.current?.click()}>
+                    <button type="button" className="download-torrent-pick" disabled={resolvingTorrent} aria-busy={resolvingTorrent || undefined} onClick={() => torrentFileInputRef.current?.click()}>
                       {resolvingTorrent ? <LoaderCircle className="is-spinning" aria-hidden="true" size={16} /> : <FileArchive aria-hidden="true" size={16} />}
                       <span>{torrentFileName || t("workspace.downloads.chooseTorrentFile")}</span>
                     </button>

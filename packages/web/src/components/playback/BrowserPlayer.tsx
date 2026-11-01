@@ -164,10 +164,11 @@ function BrowserPlayerSurface() {
           <button
             onClick={() => p.setPlayerOpen(false)}
             aria-label={t("video.minimize")}
+            title={t("video.minimize")}
           >
             <Minimize2 size={20} />
           </button>
-          <button onClick={p.stopBrowser} aria-label={t("video.stop")}>
+          <button onClick={p.stopBrowser} aria-label={t("video.stop")} title={t("video.stop")}>
             <Square size={18} />
           </button>
         </header>
@@ -205,6 +206,7 @@ function BrowserPlayerSurface() {
             disabled={b.session.state !== "ready"}
             onClick={toggle}
             aria-label={b.playing ? t("music.pause") : t("music.play")}
+            title={b.playing ? t("music.pause") : t("music.play")}
           >
             {b.playing ? <Pause size={20} /> : <Play size={20} />}
           </button>
@@ -220,6 +222,7 @@ function BrowserPlayerSurface() {
           <button
             onClick={() => p.updateBrowser({ muted: !b.muted })}
             aria-label={t("playback.mute")}
+            title={t("playback.mute")}
             aria-pressed={b.muted}
           >
             <Volume2 size={18} />
@@ -245,6 +248,7 @@ function BrowserPlayerSurface() {
                   .catch(() => setError(t("video.streamUnsupported")));
             }}
             aria-label={t("video.fullscreen")}
+            title={t("video.fullscreen")}
           >
             <Maximize size={18} />
           </button>
