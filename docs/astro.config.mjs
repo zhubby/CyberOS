@@ -14,6 +14,7 @@ export default defineConfig({
       description: "CyberOS Linux NAS appliance 的技术实现、架构与运维文档。",
       customCss: ["./src/styles/custom.css"],
       components: {
+        Head: "./src/components/Head.astro",
         ThemeProvider: "./src/components/FixedThemeProvider.astro",
         ThemeSelect: "./src/components/NoThemeSelect.astro"
       },
