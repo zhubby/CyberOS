@@ -18,3 +18,30 @@ test("does not expose a React fallback for an unknown documentation route", asyn
   expect(response.status()).toBe(404);
   expect(await response.text()).not.toContain("CyberOS current");
 });
+
+test("keeps compact toolbar buttons labeled and square at desktop and mobile widths", async ({ page }) => {
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/docs/operations/cm5/");
+    const toolbar = page.locator('site-search [data-open-modal], .sl-menu-button').filter({ visible: true });
+    await expect(toolbar).toHaveCount(width < 800 ? 2 : 1);
+    await expect(page.locator('.expressive-code .copy button').first()).toHaveAttribute("aria-label", /\S/);
+    const toolbarButtons = page.locator('site-search [data-open-modal], .sl-menu-button, .expressive-code .copy button').filter({ visible: true });
+    for (const button of await toolbarButtons.all()) {
+      await expect(button).toHaveAttribute("aria-label", /\S/);
+      await expect(button).toHaveAttribute("title", await button.getAttribute("aria-label") ?? "");
+      const geometry = await button.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return {
+          width: rect.width,
+          height: rect.height,
+          corners: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius]
+        };
+      });
+      expect(geometry.width).toBeGreaterThanOrEqual(32);
+      expect(geometry.height).toBeGreaterThanOrEqual(32);
+      expect(geometry.corners).toEqual(["0px", "0px", "0px", "0px"]);
+    }
+  }
+});

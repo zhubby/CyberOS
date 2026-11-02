@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import type { MediaTitleSummary, VodPlayerCommand, VodPlayerStatus } from "@cyberos/shared";
 import { PlaybackProvider, usePlayback } from "../components/playback/PlaybackProvider.js";
 import { PlaybackBar } from "../components/playback/PlaybackBar.js";
-import { PlaybackRestoreButton } from "../components/playback/PlaybackRestoreButton.js";
 import { MusicProvider } from "../components/music/MusicProvider.js";
 import { VideoLibraryPanel } from "../components/video/VideoLibraryPanel.js";
 import { getTvModeStatus, mediaArtworkUrl, searchMedia } from "./api.js";
@@ -39,7 +38,7 @@ function TvLibrary() {
     onPlay: () => { const active = document.activeElement; if (active instanceof HTMLButtonElement) active.click(); }
   });
   return <div className="tv-app tv-library-shell">
-    <header className="tv-header"><button className="tv-brand" data-tv-focusable onClick={() => window.dispatchEvent(new Event("cyberos:video-back"))}><img src="/cyberos-icon.svg" alt="" /><span>CyberOS</span></button><div className="tv-header-actions"><PlaybackRestoreButton className="tv-icon-button" /><button className="tv-icon-button" data-tv-focusable onClick={() => setSearchOpen(true)} aria-label={t("tv.search")}><Search /></button><span className="tv-clock"><Clock3 />{formatClock(clock, i18n.resolvedLanguage)}</span></div></header>
+    <header className="tv-header"><button className="tv-brand" data-tv-focusable onClick={() => window.dispatchEvent(new Event("cyberos:video-back"))}><img src="/cyberos-icon.svg" alt="" /><span>CyberOS</span></button><div className="tv-header-actions"><button className="tv-icon-button" data-tv-focusable onClick={() => setSearchOpen(true)} aria-label={t("tv.search")} title={t("tv.search")}><Search /></button><span className="tv-clock"><Clock3 />{formatClock(clock, i18n.resolvedLanguage)}</span></div></header>
     <VideoLibraryPanel tv requestedTitleId={titleId} />
     <PlaybackBar onOpenBluetoothSettings={() => setNotice(t("video.manage"))} />
     {searchOpen ? <SearchOverlay onClose={back} onOpen={title => { setTitleId(title.id); setSearchOpen(false); }} /> : null}
@@ -106,11 +105,11 @@ function SearchOverlay({
           data-tv-focusable
         />
         {query ? (
-          <button className="tv-icon-button" type="button" data-tv-focusable onClick={() => setQuery("")} aria-label={t("tv.clearSearch")}>
+          <button className="tv-icon-button" type="button" data-tv-focusable onClick={() => setQuery("")} aria-label={t("tv.clearSearch")} title={t("tv.clearSearch")}>
             <X aria-hidden="true" />
           </button>
         ) : null}
-        <button className="tv-icon-button" type="button" data-tv-focusable onClick={onClose} aria-label={t("tv.closeSearch")}>
+        <button className="tv-icon-button" type="button" data-tv-focusable onClick={onClose} aria-label={t("tv.closeSearch")} title={t("tv.closeSearch")}>
           <ArrowLeft aria-hidden="true" />
         </button>
       </div>
@@ -171,7 +170,7 @@ function VirtualKeyboard({
           <Languages aria-hidden="true" />{t("tv.keyboardLanguage")}
         </button>
         <button type="button" data-tv-focusable onClick={() => sendKey(" ")}>{t("tv.keyboardSpace")}</button>
-        <button type="button" data-tv-focusable onClick={() => sendKey("Backspace")} aria-label={t("tv.keyboardDelete")}>
+        <button type="button" data-tv-focusable onClick={() => sendKey("Backspace")} aria-label={t("tv.keyboardDelete")} title={t("tv.keyboardDelete")}>
           <Delete aria-hidden="true" />
         </button>
       </div>

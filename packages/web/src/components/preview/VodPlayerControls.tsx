@@ -65,7 +65,7 @@ export function VodPlayerControls({ status, busy, onCommand, onRetry }: {
         <div className={`vod-player-message${isError ? " is-error" : " is-recovering"}`} role={isError ? "alert" : "status"}>
           {isError ? <AlertTriangle aria-hidden="true" size={15} /> : <RefreshCw className="is-spinning" aria-hidden="true" size={14} />}
           <span>{isRecovering ? recoveryMessage : errorMessage}</span>
-          <button type="button" className="preview-tool-button" onClick={onRetry} disabled={busy || !sessionId} title={t("preview.retry")} aria-label={t("preview.retry")}>
+          <button type="button" className="preview-tool-button" onClick={onRetry} disabled={busy || !sessionId} aria-busy={busy || undefined} title={t("preview.retry")} aria-label={t("preview.retry")}>
             {busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <RefreshCw aria-hidden="true" size={14} />}
           </button>
         </div>
@@ -96,7 +96,7 @@ export function VodPlayerControls({ status, busy, onCommand, onRetry }: {
         <button type="button" className="preview-tool-button" onClick={() => command({ type: "seek", seconds: Math.max(0, status.positionSeconds - 10) })} disabled={controlsDisabled} title={t("preview.vodPlayer.rewind")} aria-label={t("preview.vodPlayer.rewind")}>
           <RotateCcw aria-hidden="true" size={15} />
         </button>
-        <button type="button" className="preview-tool-button is-primary" onClick={() => command({ type: isPlaying ? "pause" : "resume" })} disabled={controlsDisabled} title={isPlaying ? t("preview.vodPlayer.pause") : t("preview.vodPlayer.resume")} aria-label={isPlaying ? t("preview.vodPlayer.pause") : t("preview.vodPlayer.resume")}>
+        <button type="button" className="preview-tool-button is-primary" onClick={() => command({ type: isPlaying ? "pause" : "resume" })} disabled={controlsDisabled} aria-busy={busy || undefined} title={isPlaying ? t("preview.vodPlayer.pause") : t("preview.vodPlayer.resume")} aria-label={isPlaying ? t("preview.vodPlayer.pause") : t("preview.vodPlayer.resume")}>
           {busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : isPlaying ? <Pause aria-hidden="true" size={15} /> : <Play aria-hidden="true" size={15} />}
         </button>
         <button type="button" className="preview-tool-button" onClick={() => command({ type: "seek", seconds: status.positionSeconds + 10 })} disabled={controlsDisabled} title={t("preview.vodPlayer.forward")} aria-label={t("preview.vodPlayer.forward")}>

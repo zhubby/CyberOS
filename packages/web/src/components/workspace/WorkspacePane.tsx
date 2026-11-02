@@ -1,5 +1,5 @@
-import { PlaybackRestoreButton } from "../playback/PlaybackRestoreButton.js";
 import { ModalPortal } from "../common/ModalPortal.js";
+import { useModalDialog } from "./useModalDialog.js";
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -604,6 +604,12 @@ export function WorkspacePane({
   const folderUploadInputRef = useRef<HTMLInputElement | null>(null);
   const rowActionMenuRef = useRef<HTMLDivElement | null>(null);
   const rowActionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const actionDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const actionDialogRef = useModalDialog(
+    closeActionDialog,
+    operationSubmitting,
+    createFolderOpen || renameEntry !== null || deleteState !== null || transferState !== null
+  );
   const previewScopeRef = useRef(`${selectedStoragePoolId}\0${currentPath}`);
   const dragDepthRef = useRef(0);
   const selectedStoragePool = storagePools.find((pool) => pool.id === selectedStoragePoolId);
@@ -840,7 +846,8 @@ export function WorkspacePane({
     }
   }, [filesPanelActivationId]);
 
-  function openCreateFolderDialog() {
+  function openCreateFolderDialog(event: MouseEvent<HTMLButtonElement>) {
+    actionDialogTriggerRef.current = event.currentTarget;
     setRenameEntry(null);
     setDeleteState(null);
     setTransferState(null);
@@ -850,6 +857,7 @@ export function WorkspacePane({
 
   function openRenameDialog(event: MouseEvent<HTMLButtonElement>, entry: FileEntry) {
     event.stopPropagation();
+    actionDialogTriggerRef.current = rowActionMenu ? rowActionTriggerRef.current : event.currentTarget;
     setCreateFolderOpen(false);
     setDeleteState(null);
     setRenameEntry(entry);
@@ -858,6 +866,7 @@ export function WorkspacePane({
 
   function openDeleteDialog(event: MouseEvent<HTMLButtonElement>, entry: FileEntry) {
     event.stopPropagation();
+    actionDialogTriggerRef.current = rowActionMenu ? rowActionTriggerRef.current : event.currentTarget;
     setCreateFolderOpen(false);
     setRenameEntry(null);
     setDeleteState({ entries: [entry] });
@@ -865,6 +874,7 @@ export function WorkspacePane({
 
   function openTransferDialog(event: MouseEvent<HTMLButtonElement>, entry: FileEntry, operation: "move" | "copy") {
     event.stopPropagation();
+    actionDialogTriggerRef.current = rowActionMenu ? rowActionTriggerRef.current : event.currentTarget;
     setCreateFolderOpen(false);
     setRenameEntry(null);
     setDeleteState(null);
@@ -882,6 +892,10 @@ export function WorkspacePane({
     setDeleteState(null);
     setTransferState(null);
     setBatchMoveEntries(null);
+    const trigger = actionDialogTriggerRef.current;
+    window.requestAnimationFrame(() => {
+      if (trigger?.isConnected) trigger.focus();
+    });
   }
 
   function clearBatchSelection() {
@@ -898,8 +912,9 @@ export function WorkspacePane({
     setBatchMoveEntries(selectedEntries);
   }
 
-  function openBatchDeleteDialog() {
+  function openBatchDeleteDialog(event: MouseEvent<HTMLButtonElement>) {
     if (!selectedEntries.length || operationSubmitting) return;
+    actionDialogTriggerRef.current = event.currentTarget;
     setCreateFolderOpen(false);
     setRenameEntry(null);
     setTransferState(null);
@@ -1775,7 +1790,6 @@ export function WorkspacePane({
         </div>
 
         <nav className="workspace-panel-rail" aria-label={t("workspace.panelRail")}>
-          <PlaybackRestoreButton className="playback-restore--rail" />
           {WORKSPACE_PANELS.map((panel) => {
             const PanelIcon = panel.Icon;
             const isActive = activePanel === panel.id;
@@ -1869,8 +1883,10 @@ export function WorkspacePane({
       {createFolderOpen ? (
         <ModalPortal className="file-action-backdrop" role="presentation">
           <form
+            ref={(element) => { actionDialogRef.current = element; }}
             className="file-action-dialog"
             role="dialog"
+            tabIndex={-1}
             aria-modal="true"
             aria-labelledby="file-create-folder-title"
             onSubmit={(event) => void submitCreateFolder(event)}
@@ -1907,7 +1923,7 @@ export function WorkspacePane({
 
       {renameEntry ? (
         <ModalPortal className="file-action-backdrop" role="presentation">
-          <form className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="file-rename-title" onSubmit={submitRename}>
+          <form ref={(element) => { actionDialogRef.current = element; }} className="file-action-dialog" role="dialog" tabIndex={-1} aria-modal="true" aria-labelledby="file-rename-title" onSubmit={submitRename}>
             <header>
               <span className="eyebrow">{t("workspace.actions.rename")}</span>
               <h2 id="file-rename-title">{renameEntry.name}</h2>
@@ -1944,7 +1960,7 @@ export function WorkspacePane({
 
       {deleteState ? (
         <ModalPortal className="file-action-backdrop" role="presentation">
-          <section className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="file-delete-title">
+          <section ref={(element) => { actionDialogRef.current = element; }} className="file-action-dialog" role="dialog" tabIndex={-1} aria-modal="true" aria-labelledby="file-delete-title">
             <header>
               <span className="eyebrow">{t("workspace.actions.delete")}</span>
               <h2 id="file-delete-title">{deleteTitle}</h2>
@@ -1968,8 +1984,10 @@ export function WorkspacePane({
       {transferState ? (
         <ModalPortal className="file-action-backdrop" role="presentation">
           <form
+            ref={(element) => { actionDialogRef.current = element; }}
             className="file-action-dialog transfer-dialog"
             role="dialog"
+            tabIndex={-1}
             aria-modal="true"
             aria-labelledby="file-transfer-title"
             onSubmit={(event) => void submitTransfer(event)}

@@ -431,7 +431,7 @@ export function SettingsMediaContent({
               { value: "auto", label: t("settings.media.hwdec.auto") },
               { value: "no", label: t("settings.media.hwdec.no") }
             ]} onChange={(hardwareDecoding) => onTvSettingsChange({ hardwareDecoding })} /></div>
-            <button className="secondary-button" type="button" disabled={busy !== null} onClick={onSaveTvSettings}>{busy === "tv-settings" ? <LoaderCircle className="is-spinning" size={15} /> : <Check size={15} />}{t("common.actions.save")}</button>
+            <button className="secondary-button" type="button" disabled={busy !== null} aria-busy={busy === "tv-settings" || undefined} onClick={onSaveTvSettings}>{busy === "tv-settings" ? <LoaderCircle className="is-spinning" size={15} /> : <Check size={15} />}{t("common.actions.save")}</button>
           </div>
           <strong className={`settings-tv-overall is-${data.tvStatus.state}`}>
             {t(`settings.media.tvStates.${data.tvStatus.state}`)}

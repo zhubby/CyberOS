@@ -552,7 +552,7 @@ function IncidentDetailDialog({
               <label><span>{t("workspace.monitoring.alerts.incidents.silenceEnds")}</span><input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} /></label>
               <label className="span-2"><span>{t("workspace.monitoring.alerts.incidents.silenceReason")}</span><input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} /></label>
             </div>
-            <div className="monitoring-incident-detail-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => onShowSilence(false)}>{t("common.actions.cancel")}</button><button type="submit" className="primary-button" disabled={busy || !validSilence}>{busy ? <LoaderCircle className="is-spinning" size={15} /> : <BellOff size={15} />}{t("workspace.monitoring.alerts.incidents.silence")}</button></div>
+            <div className="monitoring-incident-detail-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => onShowSilence(false)}>{t("common.actions.cancel")}</button><button type="submit" className="primary-button" disabled={busy || !validSilence} aria-busy={busy || undefined}>{busy ? <LoaderCircle className="is-spinning" size={15} /> : <BellOff size={15} />}{t("workspace.monitoring.alerts.incidents.silence")}</button></div>
           </form> : null}
         </> : null}
       </div>

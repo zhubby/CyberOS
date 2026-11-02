@@ -9,7 +9,7 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])"
 ].join(",");
 
-export function useModalDialog(onClose: () => void, closeDisabled = false): RefObject<HTMLElement | null> {
+export function useModalDialog(onClose: () => void, closeDisabled = false, active = true): RefObject<HTMLElement | null> {
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const closeDisabledRef = useRef(closeDisabled);
@@ -20,6 +20,7 @@ export function useModalDialog(onClose: () => void, closeDisabled = false): RefO
   }, [closeDisabled, onClose]);
 
   useEffect(() => {
+    if (!active) return;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -62,7 +63,7 @@ export function useModalDialog(onClose: () => void, closeDisabled = false): RefO
         window.requestAnimationFrame(() => previouslyFocused.focus());
       }
     };
-  }, []);
+  }, [active]);
 
   return dialogRef;
 }

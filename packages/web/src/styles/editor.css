@@ -181,10 +181,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
+  min-height: 32px;
   margin-left: auto;
   padding: 0 9px;
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface);
   cursor: pointer;

@@ -748,7 +748,7 @@ function VirtualMachineManagementPanel({
                   <p>{t("workspace.management.virtualMachines.createDescription")}</p>
                 </div>
               </div>
-              <button type="button" className="management-icon-action" onClick={() => setCreateOpen(false)} aria-label={String(t("editor.close"))}><X size={16} /></button>
+              <button type="button" className="management-icon-action" onClick={() => setCreateOpen(false)} aria-label={String(t("editor.close"))} title={String(t("editor.close"))}><X size={16} /></button>
             </header>
             <div className="vm-create-dialog-body">
               <div className="vm-create-host-strip">
@@ -1819,7 +1819,7 @@ export function DockerContainerDetailsDialog({
           </div>
           <div className="docker-container-detail-header-actions">
             <span className="management-row-status" data-state={statusTone}>{container.state}</span>
-            <button type="button" className="management-icon-action" onClick={onClose} title={String(t("common.actions.dismissNotification"))}>
+            <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} title={t("common.actions.dismissNotification")}>
               <X aria-hidden="true" size={15} />
             </button>
           </div>
@@ -2027,7 +2027,7 @@ function DockerLogsDialog({
             <span className="eyebrow">{t("workspace.management.docker.logsEyebrow")}</span>
             <h2 id="docker-logs-title">{state.container.name}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} title={t("common.actions.dismissNotification")}>
+          <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} title={t("common.actions.dismissNotification")}>
             <X aria-hidden="true" size={14} />
           </button>
         </header>
@@ -2169,7 +2169,7 @@ function DockerConsoleDialog({ session, onClose, kind = "docker" }: { session: D
             <span className="eyebrow">{t("workspace.management.actions.console")}</span>
             <h2 id="management-console-title">{session.containerId}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} title={t("common.actions.dismissNotification")}>
+          <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} title={t("common.actions.dismissNotification")}>
             <X aria-hidden="true" size={14} />
           </button>
         </header>

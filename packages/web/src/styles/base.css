@@ -40,9 +40,9 @@
   --rail-border: var(--cyberos-color-danger);
   --split-handle-surface: var(--cyberos-color-canvas);
   --split-handle-surface-hover: var(--cyberos-color-surface-hover);
-  --split-handle-line: var(--cyberos-color-danger);
-  --split-handle-thumb: var(--cyberos-color-command);
-  --split-handle-thumb-hover: var(--cyberos-color-focus);
+  --split-handle-line: color-mix(in srgb, var(--cyberos-color-command) 25%, transparent);
+  --split-handle-thumb: color-mix(in srgb, var(--cyberos-color-command) 65%, transparent);
+  --split-handle-thumb-hover: var(--cyberos-color-command);
   --split-handle-thumb-border: var(--cyberos-color-canvas);
   --split-handle-thumb-shadow: transparent;
   --modal-backdrop: var(--cyberos-hud-overlay);

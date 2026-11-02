@@ -1,0 +1,25 @@
+---
+import StarlightHead from '@astrojs/starlight/components/Head.astro';
+---
+
+<StarlightHead {...Astro.props} />
+
+<script>
+  // Starlight does not forward button attributes through its toolbar components.
+  // Reuse its localized labels for the compact search and mobile menu controls.
+  function labelCompactButtons() {
+    for (const button of document.querySelectorAll<HTMLButtonElement>(
+      'site-search [data-open-modal], .sl-menu-button, .expressive-code .copy button'
+    )) {
+      const label = button.getAttribute('aria-label')
+        ?? button.querySelector('.sr-only')?.textContent?.trim()
+        ?? button.title;
+      if (!label) continue;
+      if (!button.hasAttribute('aria-label')) button.setAttribute('aria-label', label);
+      if (!button.title) button.title = label;
+    }
+  }
+
+  labelCompactButtons();
+  document.addEventListener('astro:page-load', labelCompactButtons);
+</script>

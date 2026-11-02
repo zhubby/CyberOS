@@ -338,7 +338,7 @@ export function DockerImageDetailsDialog({
               <h2 id="docker-image-detail-title">{dockerImageDisplayName(image)}</h2>
             </div>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={deleting} aria-label={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={deleting} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
         </header>
 
         {deleteConfirming ? (
@@ -442,7 +442,7 @@ function DockerImagePullDialog({
             <span className="eyebrow">{t("workspace.management.docker.images.pullEyebrow")}</span>
             <h2 id="docker-image-pull-title">{t("workspace.management.docker.images.pullTitle")}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} aria-label={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
         </header>
         <div className="docker-image-pull-body">
           <label className="docker-registry-field">
@@ -579,7 +579,7 @@ function DockerRegistryDialog({
             <span className="eyebrow">{t("workspace.management.docker.images.registryEyebrow")}</span>
             <h2 id="docker-registry-title">{t("workspace.management.docker.images.registryTitle")}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} aria-label={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
         </header>
 
         {deleteCandidate ? (

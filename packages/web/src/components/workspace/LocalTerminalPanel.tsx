@@ -438,7 +438,7 @@ export function LocalTerminalPanel({
           {actionError ? (
             <div className="workspace-terminal-error" role="alert">
               <span>{actionError}</span>
-              <button type="button" onClick={() => setActionError(null)} aria-label={t("common.actions.close")}>
+              <button type="button" onClick={() => setActionError(null)} aria-label={t("common.actions.close")} title={t("common.actions.close")}>
                 <X aria-hidden="true" size={14} />
               </button>
             </div>
@@ -823,7 +823,7 @@ function TerminalEmptyState({
       <strong>{title}</strong>
       {detail ? <span>{detail}</span> : null}
       {actionLabel && onAction ? (
-        <button type="button" className="secondary-button" onClick={onAction} disabled={disabled}>
+        <button type="button" className="secondary-button" onClick={onAction} disabled={disabled} aria-busy={disabled || undefined}>
           {disabled ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Plus aria-hidden="true" size={14} />}
           <span>{actionLabel}</span>
         </button>

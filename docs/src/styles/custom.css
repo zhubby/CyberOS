@@ -65,6 +65,12 @@ textarea {
 }
 
 button,
+summary,
+mobile-starlight-toc .toggle,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+[role="switch"],
 input,
 select,
 textarea,
@@ -75,6 +81,11 @@ pre,
 code,
 kbd,
 .pagination-links a {
+  border-radius: 0 !important;
+}
+
+:where(button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::before,
+:where(button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::after {
   border-radius: 0 !important;
 }
 

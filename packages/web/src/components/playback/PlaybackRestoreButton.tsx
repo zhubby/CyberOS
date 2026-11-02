@@ -1,8 +1,8 @@
-import { CirclePlay } from "lucide-react";
+import { ChevronUp, CirclePlay } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePlayback } from "./PlaybackProvider.js";
 
-export function PlaybackRestoreButton({ className = "" }: { className?: string }) {
+export function PlaybackRestoreButton() {
   const p = usePlayback();
   const { t } = useTranslation();
   if (!p.dock.available) return null;
@@ -10,7 +10,7 @@ export function PlaybackRestoreButton({ className = "" }: { className?: string }
   return (
     <button
       type="button"
-      className={`playback-restore ${className}`}
+      className="playback-restore"
       data-playback-restore
       data-playback-state={p.dock.state}
       data-tv-focusable
@@ -21,7 +21,9 @@ export function PlaybackRestoreButton({ className = "" }: { className?: string }
       onClick={p.expandBar}
     >
       <CirclePlay size={19} aria-hidden="true" />
-      <span className="playback-restore-dot" aria-hidden="true" />
+      <span className="playback-restore-label">{t("playback.nowPlaying")}</span>
+      <span className="playback-restore-state"><span className="playback-restore-dot" aria-hidden="true" />{t(`playback.state.${p.dock.state}`)}</span>
+      <ChevronUp className="playback-restore-chevron" size={18} aria-hidden="true" />
     </button>
   );
 }

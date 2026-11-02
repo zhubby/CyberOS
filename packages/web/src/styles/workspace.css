@@ -59,7 +59,7 @@
   min-height: 50px;
   padding: 7px 4px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   cursor: pointer;
@@ -139,9 +139,9 @@
   flex: 0 0 auto;
   min-width: 0;
   max-width: 170px;
-  height: 30px;
+  height: 32px;
   padding: 0 9px;
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   cursor: pointer;
@@ -180,7 +180,7 @@
   width: 38px;
   height: 38px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   background: var(--surface);
 }
 
@@ -374,7 +374,7 @@
 
 .file-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 218px 90px 132px;
+  grid-template-columns: minmax(150px, 1fr) 242px 90px 132px;
   align-items: center;
   width: 100%;
   min-height: 42px;
@@ -471,11 +471,11 @@
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  height: 26px;
+  height: 32px;
   margin-left: -7px;
   padding: 0 7px;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: 0;
   color: inherit;
   background: transparent;
   cursor: pointer;
@@ -755,10 +755,11 @@
 .file-action-button {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: rgb(255 255 255 / 4%);
   cursor: pointer;
@@ -819,7 +820,7 @@
   min-height: 34px;
   padding: 0 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   text-align: left;
@@ -978,10 +979,10 @@
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   cursor: pointer;
@@ -999,8 +1000,8 @@
 }
 
 .preview-tool-button:focus-visible {
-  outline: 2px solid rgb(142 161 255 / 72%);
-  outline-offset: 2px;
+  outline: 2px solid var(--control-focus);
+  outline-offset: 3px;
 }
 
 .file-preview-backdrop {
@@ -1206,10 +1207,10 @@
 }
 
 .downloads-filters button {
-  min-height: 28px;
+  min-height: 32px;
   padding: 0 9px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   font-size: 11px;
@@ -1508,7 +1509,7 @@
   gap: 6px;
   padding: 0 11px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--subtle-bg);
   font-size: 11px;
@@ -1745,11 +1746,11 @@
 .download-task-action {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
 }
@@ -1948,7 +1949,7 @@
   gap: 7px;
   padding: 0 10px;
   border: 0;
-  border-radius: 3px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   font-family: var(--font-emphasis);
@@ -1994,7 +1995,7 @@
   gap: 9px;
   padding: 0 12px;
   border: 1px dashed var(--line-strong);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--text);
   background: var(--input-deep-bg);
   font-size: 11px;
@@ -2199,7 +2200,7 @@
   min-height: 36px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--subtle-bg);
   font-size: 11px;
@@ -2313,7 +2314,7 @@
   bottom: 0;
   left: 8px;
   height: 2px;
-  border-radius: 2px 2px 0 0;
+  border-radius: 0;
   background: transparent;
   content: "";
 }
@@ -2558,10 +2559,10 @@
 
 .workspace-terminal-error button {
   display: inline-grid;
-  flex: 0 0 24px;
+  flex: 0 0 32px;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
   color: inherit;
@@ -2655,7 +2656,7 @@
   gap: 6px;
   min-height: 32px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font-size: 11.5px;
@@ -2707,11 +2708,11 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 28px;
+  min-height: 32px;
   margin-top: 8px;
   padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   font-size: 11px;
   background: var(--subtle-bg);
@@ -3034,7 +3035,7 @@
   height: 32px;
   flex: 0 0 32px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
 }
@@ -3074,7 +3075,7 @@
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   padding: 5px 9px 5px 6px;
   color: var(--text);
   background: var(--surface);
@@ -3173,7 +3174,7 @@
   align-items: center;
   gap: 9px;
   min-height: 45px;
-  border-radius: 5px;
+  border-radius: 0;
   padding: 6px 9px;
   color: var(--muted);
   background: transparent;
@@ -3266,7 +3267,7 @@
 
 .files-content-breadcrumbs button[aria-current="page"] {
   color: var(--text);
-  cursor: default;
+  cursor: not-allowed;
   opacity: 1;
 }
 
@@ -3406,11 +3407,11 @@
 .management-widget-drag-handle {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 1px solid var(--accent-soft-text);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--accent-soft-text);
   background: var(--modal-bg);
   box-shadow: var(--shadow);
@@ -3541,10 +3542,10 @@
 
 .monitoring-range button {
   flex: 0 0 46px;
-  height: 29px;
+  height: 32px;
   padding: 0 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   font-size: 10.5px;
@@ -4925,9 +4926,9 @@
 
 .storage-pool-name-button:focus-visible,
 .network-interface-name-button:focus-visible {
-  border-radius: 3px;
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  border-radius: 0;
+  outline: 2px solid var(--control-focus);
+  outline-offset: 3px;
 }
 
 .management-table th {
@@ -5719,7 +5720,7 @@
 .storage-pool-delete-confirmation label input {
   min-height: 34px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface);
   font: inherit;
@@ -6030,7 +6031,7 @@
   min-height: 34px;
   padding: 0 11px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font: inherit;
@@ -6070,11 +6071,12 @@
 .management-icon-action {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  flex: 0 0 32px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   padding: 0;
-  border-radius: 5px;
+  border-radius: 0;
 }
 
 .management-icon-action.is-danger {
@@ -6119,7 +6121,7 @@
 }
 
 .management-row-action {
-  min-height: 28px;
+  min-height: 32px;
   padding: 0 8px;
 }
 
@@ -6486,9 +6488,9 @@
 }
 
 .storage-disk-name-button:focus-visible {
-  border-radius: 3px;
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  border-radius: 0;
+  outline: 2px solid var(--control-focus);
+  outline-offset: 3px;
 }
 
 .system-storage-disk-row > small {
@@ -6618,7 +6620,7 @@
   min-height: 32px;
   padding: 0 9px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface-strong);
   font-size: 10.5px;
@@ -6765,7 +6767,7 @@
   min-height: 32px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface-strong);
 }
@@ -7222,7 +7224,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface-strong);
 }
@@ -8581,7 +8583,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font-size: 11.5px;
@@ -9092,10 +9094,10 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 31px;
+  min-height: 32px;
   padding: 0 9px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface);
   font: inherit;
@@ -9297,7 +9299,7 @@
   min-height: 34px;
   padding: 0 11px;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font: inherit;
@@ -9528,7 +9530,7 @@
   min-width: 0;
   padding: 7px 8px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted-2);
   text-align: left;
   background: transparent;
@@ -9808,7 +9810,7 @@
   min-height: 38px;
   padding: 0 12px;
   border: 1px solid var(--approval-border-hover);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--accent-soft-text);
   background: var(--accent-soft-bg);
 }
@@ -9831,7 +9833,7 @@
   min-width: 0;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   text-align: left;
   background: var(--subtle-bg);
@@ -9927,7 +9929,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--subtle-bg);
 }
@@ -10029,7 +10031,7 @@
   height: 34px;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--subtle-bg);
 }
@@ -10090,7 +10092,7 @@
   min-height: 42px;
   padding: 4px 8px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--text);
   background: transparent;
   text-align: left;
@@ -10159,7 +10161,7 @@
   gap: 6px;
   padding: 6px 9px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--subtle-bg);
 }
@@ -10198,7 +10200,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--subtle-bg);
 }
@@ -10271,7 +10273,7 @@
   gap: 8px;
   padding: 9px 8px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   text-align: left;
 }
@@ -10403,7 +10405,7 @@
   min-height: 34px;
   padding: 0 9px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font-size: 10.5px;
@@ -10436,11 +10438,11 @@
 
 .storage-file-picker-create-folder button {
   display: grid;
-  width: 30px;
+  width: 32px;
   height: 34px;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
 }
@@ -10497,7 +10499,7 @@
   height: 32px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font: inherit;
@@ -10859,7 +10861,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font-size: 11.5px;
@@ -11517,7 +11519,7 @@
   min-height: 34px;
   padding: 0 11px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font: inherit;

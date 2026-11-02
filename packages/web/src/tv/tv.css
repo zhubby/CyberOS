@@ -57,6 +57,33 @@ button {
   color: inherit;
 }
 
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], input[type="button"], input[type="submit"], input[type="reset"]),
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::before,
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::after {
+  border-radius: 0 !important;
+}
+
+:where(button, input, select, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], [tabindex]):focus-visible {
+  outline: 3px solid var(--tv-focus);
+  outline-offset: 4px;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+button:disabled {
+  opacity: 0.68;
+}
+
+button[aria-busy="true"] {
+  color: var(--tv-command);
+  background: var(--tv-bg);
+  cursor: progress;
+  opacity: 1;
+}
+
 .tv-app {
   position: relative;
   isolation: isolate;

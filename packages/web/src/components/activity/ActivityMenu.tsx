@@ -345,7 +345,7 @@ export function ActivityMenu({
                       </small>
                     </span>
                     {canRollback ? (
-                      <button type="button" onClick={() => onRollback(operation)} title={t("common.actions.rollback")}>
+                      <button type="button" onClick={() => onRollback(operation)} aria-label={t("common.actions.rollback")} title={t("common.actions.rollback")}>
                         <RotateCcw aria-hidden="true" size={14} />
                       </button>
                     ) : null}

@@ -1,7 +1,6 @@
 import { getMusicPlayer } from "./lib/music-api.js";
 import { MusicTakeoverDialog, MusicProvider } from "./components/music/MusicProvider.js";
 import { PlaybackBar } from "./components/playback/PlaybackBar.js";
-import { PlaybackRestoreButton } from "./components/playback/PlaybackRestoreButton.js";
 import { PlaybackProvider, usePlayback } from "./components/playback/PlaybackProvider.js";
 import { BrowserPlayer } from "./components/playback/BrowserPlayer.js";
 import { FormEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
@@ -2561,7 +2560,7 @@ function AppContent() {
 
   return (
     <main
-      className={`app-shell${resizing ? " is-resizing" : ""}${playback.barVisible ? " has-playback-dock" : ""}`}
+      className={`app-shell${resizing ? " is-resizing" : ""}${playback.dockVisible ? " has-playback-dock" : ""}`}
       style={appStyle}
     >
       <div className="mobile-tabs">
@@ -2585,7 +2584,6 @@ function AppContent() {
             <span>{t("chat.mobileWorkspace")}</span>
           </button>
         </div>
-        <PlaybackRestoreButton className="playback-restore--mobile" />
       </div>
 
       <ChatPane

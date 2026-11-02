@@ -38,6 +38,7 @@ export interface BrowserPlayback {
 }
 interface PlaybackContextValue {
   dock: ReturnType<typeof getPlaybackDockState>;
+  dockVisible: boolean;
   barExpanded: boolean;
   barVisible: boolean;
   collapseBar: () => void;
@@ -95,7 +96,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const collapseBar = useCallback(() => setBarVisibility(false), [setBarVisibility]);
   const expandBar = useCallback(() => setBarVisibility(true), [setBarVisibility]);
   const dock = useMemo(() => getPlaybackDockState({ nas, browser, target, error }), [nas, browser, target, error]);
-  const barVisible = dock.available && barExpanded && !fullscreen;
+  const dockVisible = dock.available && !fullscreen;
+  const barVisible = dockVisible && barExpanded;
   const setPlayerOpen = useCallback((open: boolean) => {
     if (
       !open &&
@@ -349,6 +351,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       dock,
+      dockVisible,
       barExpanded,
       barVisible,
       collapseBar,
@@ -371,6 +374,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }),
     [
       dock,
+      dockVisible,
       barExpanded,
       barVisible,
       collapseBar,

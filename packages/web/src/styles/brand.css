@@ -38,7 +38,9 @@ textarea {
 }
 
 /* Button geometry must also cover portals mounted outside the app shell. */
-:where(button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]),
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], input[type="button"], input[type="submit"], input[type="reset"]),
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::before,
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::after,
 .app-shell :where(input, select, textarea, [role="dialog"], [role="menu"], [role="listbox"]) {
   border-radius: 0 !important;
 }
@@ -340,23 +342,37 @@ textarea {
 }
 
 .split-handle {
-  width: 10px;
-  border-right: 2px solid var(--cyber-yellow);
-  border-left: 2px solid var(--cyber-yellow);
-  background: var(--cyber-ink);
+  border: 0;
+  background-color: var(--split-handle-surface);
 }
 
 .split-handle::after {
-  width: 2px;
-  height: 54px;
+  width: 4px;
+  height: 32px;
   border: 0;
-  background: var(--cyber-red);
-  box-shadow: 4px 0 0 var(--cyber-cyan);
+  background: var(--split-handle-thumb);
+  box-shadow: none;
 }
 
 .split-handle:hover,
+.split-handle:focus-visible {
+  --split-handle-line: color-mix(in srgb, var(--cyberos-color-command) 40%, transparent);
+  background-color: var(--split-handle-surface);
+}
+
+.app-shell .split-handle:focus-visible {
+  outline-color: var(--cyberos-color-command);
+  box-shadow: 0 0 0 1px var(--cyber-ink), 0 0 0 3px var(--cyberos-color-command);
+}
+
 .app-shell.is-resizing .split-handle {
-  background: var(--cyber-red);
+  --split-handle-line: color-mix(in srgb, var(--cyberos-color-command) 60%, transparent);
+  background-color: var(--split-handle-surface-hover);
+}
+
+.app-shell.is-resizing .split-handle::after {
+  background: var(--split-handle-thumb-hover);
+  opacity: 1;
 }
 
 /* Headers and open records */
@@ -1680,6 +1696,9 @@ textarea {
 }
 
 .settings-modal,
+.session-delete-dialog,
+.file-action-dialog,
+.storage-file-picker-dialog,
 .editor-modal,
 .management-dialog,
 .management-modal,

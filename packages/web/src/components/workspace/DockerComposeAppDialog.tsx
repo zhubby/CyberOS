@@ -300,7 +300,7 @@ export function DockerComposeAppDialog({
               </h2>
             </div>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")}>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} title={t("common.actions.close")}>
             <X aria-hidden="true" size={17} />
           </button>
         </header>
@@ -400,7 +400,7 @@ export function DockerComposeAppDialog({
                           <button type="button" className="management-icon-action is-danger" onClick={() => updateForm(
                             "environment",
                             form.environment.filter((_, entryIndex) => entryIndex !== index)
-                          )} disabled={busy} aria-label={t("workspace.management.docker.apps.removeEnvironment")}>
+                          )} disabled={busy} aria-label={t("workspace.management.docker.apps.removeEnvironment")} title={t("workspace.management.docker.apps.removeEnvironment")}>
                             <Trash2 aria-hidden="true" size={15} />
                           </button>
                         </div>
@@ -462,7 +462,7 @@ export function DockerComposeAppDialog({
           ) : confirmDelete && detail ? (
             <>
               <button type="button" onClick={() => { setConfirmDelete(false); setError(null); }} disabled={deleting}>{t("common.actions.cancel")}</button>
-              <button type="button" className="is-danger" onClick={() => void remove()} disabled={deleting || hasContainers || !engineReady}>
+              <button type="button" className="is-danger" onClick={() => void remove()} disabled={deleting || hasContainers || !engineReady} aria-busy={deleting || undefined}>
                 {deleting ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Trash2 aria-hidden="true" size={15} />}
                 <span>{t("workspace.management.docker.apps.confirmDelete")}</span>
               </button>
@@ -483,15 +483,15 @@ export function DockerComposeAppDialog({
                     <span>{t("workspace.management.docker.apps.reload")}</span>
                   </button>
                 ) : null}
-                <button type="button" onClick={() => void validate()} disabled={disableSave}>
+                <button type="button" onClick={() => void validate()} disabled={disableSave} aria-busy={validating || undefined}>
                   {validating ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Check aria-hidden="true" size={15} />}
                   <span>{t("workspace.management.docker.apps.validate")}</span>
                 </button>
-                <button type="button" onClick={() => void save("save")} disabled={disableSubmit}>
+                <button type="button" onClick={() => void save("save")} disabled={disableSubmit} aria-busy={submitAction === "save" || undefined}>
                   {submitAction === "save" ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Save aria-hidden="true" size={15} />}
                   <span>{t("workspace.management.docker.apps.save")}</span>
                 </button>
-                <button type="button" className="is-primary" onClick={() => void save("deploy")} disabled={disableSubmit || !canDeploy}>
+                <button type="button" className="is-primary" onClick={() => void save("deploy")} disabled={disableSubmit || !canDeploy} aria-busy={submitAction === "deploy" || undefined}>
                   {submitAction === "deploy" ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Rocket aria-hidden="true" size={15} />}
                   <span>{t("workspace.management.docker.apps.saveDeploy")}</span>
                 </button>
