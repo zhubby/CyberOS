@@ -337,6 +337,13 @@ type PersistedTranscriptMessage = Omit<TranscriptMessage, "sequence" | "turnSequ
   turnSequence: number;
 };
 
+export interface SessionTranscriptSnapshot {
+  transcript: PersistedTranscriptMessage[];
+  lastEventId: number;
+  activeJob: Job | null;
+  liveEvents: AgentEvent[];
+}
+
 export interface Job {
   id: string;
   sessionId: string;
@@ -1932,11 +1939,10 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await ensureOk(response);
 }
 
-export async function getTranscript(sessionId: string): Promise<TranscriptMessage[]> {
+export async function getTranscript(sessionId: string): Promise<SessionTranscriptSnapshot> {
   const response = await fetch(`/api/sessions/${sessionId}/transcript`);
   await ensureOk(response);
-  const body = (await response.json()) as { transcript: PersistedTranscriptMessage[] };
-  return body.transcript;
+  return (await response.json()) as SessionTranscriptSnapshot;
 }
 
 export async function getFiles(storagePoolId: string, currentPath: string): Promise<FileListing> {

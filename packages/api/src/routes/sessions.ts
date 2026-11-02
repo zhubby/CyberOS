@@ -11,6 +11,7 @@ import {
   expireCapabilityApprovals,
   getCurrentAgentJobForSession,
   getSession,
+  getSessionEventSnapshot,
   hasActiveJobsForSession,
   listEvents,
   listMessages,
@@ -122,10 +123,13 @@ export function registerSessionRoutes(server: FastifyInstance, { db, config }: A
       return;
     }
 
-    const transcript = listTranscriptItems(db, {
-      sessionId: session.id,
-      limit: 500
-    })
+    // The transcript, runtime state and SSE cursor must share one read snapshot:
+    // workers can append events from another process while this request loads.
+    const { items, ...eventSnapshot } = db.transaction(() => ({
+      items: listTranscriptItems(db, { sessionId: session.id, limit: null }),
+      ...getSessionEventSnapshot(db, session.id)
+    }))();
+    const transcript = items
       .map((item) => {
         if (item.message?.role === "user") {
           return {
@@ -153,7 +157,7 @@ export function registerSessionRoutes(server: FastifyInstance, { db, config }: A
       })
       .filter((message) => message !== null && message.content);
 
-    reply.send({ session, transcript });
+    reply.send({ session, transcript, ...eventSnapshot });
   });
 
   server.post<{

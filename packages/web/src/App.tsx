@@ -74,6 +74,7 @@ import {
   uploadFile,
   type AgentEvent,
   type AgentToolActivity,
+  type SessionTranscriptSnapshot,
   type BuildInfo,
   type FileEntry,
   type FileBatch,
@@ -145,7 +146,7 @@ import {
   writeStoredLanguagePreference,
   type LanguagePreference
 } from "./i18n/locale.js";
-import { eventToTranscriptMessage, getEventJobId } from "./lib/events.js";
+import { eventToTranscriptMessage, getEventJobId, reduceAgentToolActivities } from "./lib/events.js";
 import {
   EMPTY_ACTIVE_AGENT_JOB,
   markActiveAgentJobRunning,
@@ -217,17 +218,6 @@ function vodPlayerErrorCode(error: unknown): NonNullable<VodPlayerStatus["errorC
   return typeof candidate === "string" && VOD_PLAYER_ERROR_CODES.has(candidate)
     ? candidate as NonNullable<VodPlayerStatus["errorCode"]>
     : "INTERNAL";
-}
-
-function upsertToolActivity(
-  activities: AgentToolActivity[],
-  next: AgentToolActivity
-): AgentToolActivity[] {
-  const existingIndex = activities.findIndex(
-    (activity) => activity.id === next.id && activity.runId === next.runId
-  );
-  if (existingIndex === -1) return [...activities, next];
-  return activities.map((activity, index) => index === existingIndex ? next : activity);
 }
 
 export function App() {
@@ -338,7 +328,8 @@ function AppContent() {
     readStoredPreviewFileSizeLimitBytes()
   );
   const [codeFontSettings, setCodeFontSettings] = useState<CodeFontSettings>(() => readStoredCodeFontSettings());
-  const seenEvents = useRef(new Set<number>());
+  const [sessionEventCursor, setSessionEventCursor] = useState<{ sessionId: string; afterId: number } | null>(null);
+  const eventSessionId = session?.id ?? null;
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const fileListingRequestId = useRef(0);
   const sessionViewRequestId = useRef(0);
@@ -483,7 +474,6 @@ function AppContent() {
       }
 
       transcriptSessionId = nextSession.id;
-      seenEvents.current.clear();
       setSessions(nextSessionList);
       activeSessionIdRef.current = nextSession.id;
       setSession(nextSession);
@@ -496,8 +486,7 @@ function AppContent() {
         return;
       }
 
-      dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
-      restoreSessionJob(nextSession);
+      restoreTranscriptSnapshot(nextSession.id, nextTranscript);
       void refreshWorkQueues();
     }
 
@@ -586,26 +575,28 @@ function AppContent() {
   }, [selectedStoragePool]);
 
   useEffect(() => {
-    if (!session) {
+    if (!eventSessionId || sessionEventCursor?.sessionId !== eventSessionId) {
       return;
     }
 
-    setAgentToolActivities([]);
     setRetryJobId(null);
 
-    const source = new EventSource(`/api/sessions/${session.id}/events`);
+    const sessionId = eventSessionId;
+    const source = new EventSource(`/api/sessions/${sessionId}/events?after=${sessionEventCursor.afterId}`);
+    let lastEventId = sessionEventCursor.afterId;
     let connectionRevision = 0;
     let eventRevision = 0;
     let reconnectPending = false;
     let statusBeforeReconnect: AppStatus | null = null;
     let disposed = false;
     const handleEvent = (raw: MessageEvent<string>) => {
+      if (disposed || activeSessionIdRef.current !== sessionId) return;
       const parsed = JSON.parse(raw.data) as AgentEvent;
       const eventRunId = parsed.runId;
-      if (seenEvents.current.has(parsed.id)) {
+      if (parsed.id <= lastEventId) {
         return;
       }
-      seenEvents.current.add(parsed.id);
+      lastEventId = parsed.id;
       eventRevision += 1;
 
       if (parsed.audience === "notification") {
@@ -634,7 +625,7 @@ function AppContent() {
       if (transcriptMessage) {
         dispatchTranscript({
           type: "event",
-          sessionId: session.id,
+          sessionId,
           message: transcriptMessage,
           runId: eventRunId
         });
@@ -643,33 +634,10 @@ function AppContent() {
         || parsed.type === "message_update"
         || parsed.type === "message_end"
       ) {
-        dispatchTranscript({ type: "stream", sessionId: session.id, event: parsed });
+        dispatchTranscript({ type: "stream", sessionId, event: parsed });
       }
 
-      if (parsed.type === "tool_execution_start" || parsed.type === "tool_execution_update") {
-        const toolId = typeof parsed.payload.id === "string" ? parsed.payload.id : null;
-        const toolName = typeof parsed.payload.name === "string" ? parsed.payload.name : null;
-        if (toolId && toolName) {
-          setAgentToolActivities((current) => upsertToolActivity(current, {
-            id: toolId,
-            runId: eventRunId,
-            name: toolName,
-            status: "running"
-          }));
-        }
-      }
-      if (parsed.type === "tool_execution_end") {
-        const toolId = typeof parsed.payload.id === "string" ? parsed.payload.id : null;
-        const toolName = typeof parsed.payload.name === "string" ? parsed.payload.name : null;
-        if (toolId && toolName) {
-          setAgentToolActivities((current) => upsertToolActivity(current, {
-            id: toolId,
-            runId: eventRunId,
-            name: toolName,
-            status: parsed.payload.isError === true ? "failed" : "completed"
-          }));
-        }
-      }
+      setAgentToolActivities((current) => reduceAgentToolActivities(current, parsed));
 
       const eventJobId = getEventJobId(parsed);
       if (parsed.type === "job.running") {
@@ -744,6 +712,7 @@ function AppContent() {
       source.addEventListener(eventType, handleEvent);
     }
     source.onopen = () => {
+      if (disposed || activeSessionIdRef.current !== sessionId) return;
       if (!reconnectPending) return;
       reconnectPending = false;
       setStatus((current) => current === "reconnecting"
@@ -752,7 +721,7 @@ function AppContent() {
       statusBeforeReconnect = null;
       const expectedConnectionRevision = connectionRevision;
       const expectedEventRevision = eventRevision;
-      const expectedSessionId = session.id;
+      const expectedSessionId = sessionId;
       void getSessions().then((nextSessions) => {
         if (
           disposed
@@ -783,6 +752,7 @@ function AppContent() {
       });
     };
     source.onerror = () => {
+      if (disposed || activeSessionIdRef.current !== sessionId) return;
       reconnectPending = true;
       connectionRevision += 1;
       setStatus((current) => {
@@ -800,7 +770,7 @@ function AppContent() {
       }
       notificationFileListingRefreshRef.current = false;
     };
-  }, [session]);
+  }, [eventSessionId, sessionEventCursor]);
 
   useEffect(() => {
     void refreshWorkQueues();
@@ -1368,7 +1338,6 @@ function AppContent() {
     try {
       setStatus("loading");
       setError(null);
-      seenEvents.current.clear();
       activeSessionIdRef.current = nextSession.id;
       setCapabilityApprovals([]);
       commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
@@ -1380,8 +1349,7 @@ function AppContent() {
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
         return;
       }
-      dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
-      restoreSessionJob(nextSession);
+      restoreTranscriptSnapshot(nextSession.id, nextTranscript);
     } catch (nextError) {
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
         return;
@@ -1400,8 +1368,6 @@ function AppContent() {
     let nextSession: Session | null = null;
     try {
       nextSession = await createSession(sessionWorkspacePath(selectedStoragePoolId, currentPath));
-      const createdSessionId = nextSession.id;
-      seenEvents.current.clear();
       activeSessionIdRef.current = nextSession.id;
       setCapabilityApprovals([]);
       commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
@@ -1417,8 +1383,7 @@ function AppContent() {
         return;
       }
       setSessions(nextSessions);
-      dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
-      restoreSessionJob(nextSessions.find((item) => item.id === createdSessionId) ?? nextSession);
+      restoreTranscriptSnapshot(nextSession.id, nextTranscript);
       setMobileView("chat");
     } catch (nextError) {
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
@@ -1432,7 +1397,6 @@ function AppContent() {
 
   async function loadSessionIntoView(nextSession: Session | SessionSummary): Promise<void> {
     const sessionRequestId = beginSessionViewRequest();
-    seenEvents.current.clear();
     activeSessionIdRef.current = nextSession.id;
     setCapabilityApprovals([]);
     commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
@@ -1444,9 +1408,8 @@ function AppContent() {
       if (!isCurrentSessionViewRequest(sessionRequestId)) {
         return;
       }
-      dispatchTranscript({ type: "snapshot", sessionId: nextSession.id, messages: nextTranscript });
+      restoreTranscriptSnapshot(nextSession.id, nextTranscript);
       setComposerPath(null);
-      restoreSessionJob(nextSession);
     } catch (error) {
       if (isCurrentSessionViewRequest(sessionRequestId)) {
         dispatchTranscript({ type: "failed", sessionId: nextSession.id });
@@ -1482,8 +1445,20 @@ function AppContent() {
     }
   }
 
-  function restoreSessionJob(nextSession: Session | SessionSummary): void {
-    const activeJob = "activeJob" in nextSession ? nextSession.activeJob : null;
+  function restoreTranscriptSnapshot(sessionId: string, snapshot: SessionTranscriptSnapshot): void {
+    dispatchTranscript({ type: "snapshot", sessionId, messages: snapshot.transcript });
+    for (const event of snapshot.liveEvents) {
+      dispatchTranscript({ type: "stream", sessionId, event });
+    }
+    restoreSessionJob(snapshot);
+    setAgentToolActivities(snapshot.liveEvents.reduce(reduceAgentToolActivities, []));
+    setSessionEventCursor({ sessionId, afterId: snapshot.lastEventId });
+  }
+
+  function restoreSessionJob({ activeJob }: Pick<SessionSummary, "activeJob">): void {
+    if (!activeJob || activeJob.id !== activeAgentJobRef.current.id) {
+      setAgentToolActivities([]);
+    }
     commitActiveAgentJob({
       id: activeJob?.id ?? null,
       status: activeJob?.status ?? null
@@ -2366,6 +2341,8 @@ function AppContent() {
 
   function beginSessionViewRequest(): number {
     sessionViewRequestId.current += 1;
+    setSessionEventCursor(null);
+    setAgentToolActivities([]);
     return sessionViewRequestId.current;
   }
 

@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { eventToTranscriptMessage } from "./events.js";
+import { eventToTranscriptMessage, reduceAgentToolActivities } from "./events.js";
 import type { AgentEvent } from "../api.js";
 
 describe("event helpers", () => {
+  it("restores tool snapshots by call ID even when Pi completion has a different run ID", () => {
+    const event = (id: number, type: string, runId: string): AgentEvent => ({
+      id, sessionId: "session-1", jobId: "job-1", runId, sequence: id,
+      type, audience: "chat", transcriptSequence: null, transcriptTurnSequence: 1,
+      payload: { id: "tool-1", name: "status", isError: false },
+      createdAt: "2026-11-02T00:00:00.000Z"
+    });
+    const started = reduceAgentToolActivities([], event(1, "tool_execution_start", "live-run"));
+    expect(started).toMatchObject([{ id: "tool-1", status: "running" }]);
+    const completed = reduceAgentToolActivities(started, event(2, "tool_execution_end", "pi-entry:result"));
+    expect(completed).toEqual([{ id: "tool-1", runId: "pi-entry:result", name: "status", status: "completed" }]);
+    expect(reduceAgentToolActivities(completed, event(3, "turn_end", "live-run"))).toBe(completed);
+  });
+
   it("converts non-empty agent messages into transcript messages", () => {
     const event: AgentEvent = {
       id: 42,

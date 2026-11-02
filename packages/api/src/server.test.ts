@@ -4603,6 +4603,120 @@ describe("API server", () => {
     await server.close();
   });
 
+  it("loads a completed chat as a snapshot and only streams events after that snapshot", async () => {
+    const session = createSession(db, {});
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Hello" });
+    appendEvent(db, { sessionId: session.id, jobId: job.id, type: "job.running", payload: { jobId: job.id } });
+    for (let index = 0; index < 205; index += 1) {
+      appendEvent(db, {
+        sessionId: session.id, jobId: job.id, type: "message_update",
+        payload: { role: "assistant", content: `Partial reply ${index}` }
+      });
+    }
+    appendEvent(db, {
+      sessionId: session.id, jobId: job.id, type: "agent.message",
+      payload: { content: "Final reply" }
+    });
+    updateJobStatus(db, job.id, "completed");
+    const completed = appendEvent(db, {
+      sessionId: session.id, jobId: job.id, type: "job.completed", payload: { jobId: job.id }
+    });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    const snapshot = (await server.inject({ url: `/api/sessions/${session.id}/transcript` })).json();
+    expect(snapshot).toMatchObject({ lastEventId: completed.id, activeJob: null, liveEvents: [] });
+    expect(snapshot.transcript.map((message: { content: string }) => message.content)).toEqual(["Hello", "Final reply"]);
+
+    // A new event between the snapshot request and subscribing must still be delivered.
+    const next = appendEvent(db, {
+      sessionId: session.id, type: "agent.message", payload: { content: "New reply" }
+    });
+    await server.listen({ host: "127.0.0.1", port: 0 });
+    const address = server.server.address();
+    if (!address || typeof address === "string") throw new Error("Expected a TCP listener");
+    const controller = new AbortController();
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/sessions/${session.id}/events?after=${snapshot.lastEventId}`, {
+        signal: controller.signal
+      });
+      const reader = response.body!.getReader();
+      let streamText = "";
+      while (!streamText.includes("data: ")) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        streamText += new TextDecoder().decode(chunk.value, { stream: true });
+      }
+      const events = streamText.split("\n").filter((line) => line.startsWith("data: "))
+        .map((line) => JSON.parse(line.slice(6)) as { id: number });
+      expect(events.map((event) => event.id)).toEqual([next.id]);
+    } finally {
+      controller.abort();
+      await server.close();
+    }
+  });
+
+  it("restores only the latest text and tool states for the active job", async () => {
+    const session = createSession(db, {});
+    const previous = createUserMessageAndJob(db, { sessionId: session.id, content: "Previous", status: "completed" });
+    appendEvent(db, {
+      sessionId: session.id, jobId: previous.job.id, type: "tool_execution_start",
+      payload: { id: "old-tool", name: "old_tool" }
+    });
+    const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: "Current", status: "running" });
+    const emit = (type: "message_update" | "agent.message" | "tool_execution_start" | "tool_execution_end", payload: Record<string, unknown>, runId = "live-run") =>
+      appendEvent(db, { sessionId: session.id, jobId: job.id, type, payload, runId });
+    emit("message_update", { role: "assistant", content: "Earlier answer" });
+    emit("agent.message", { content: "Earlier answer" }, "pi-entry:answer");
+    emit("tool_execution_start", { id: "tool-1", name: "status" });
+    const toolEnd = emit("tool_execution_end", { id: "tool-1", name: "status", isError: false }, "pi-entry:tool-result");
+    const toolStart = emit("tool_execution_start", { id: "tool-2", name: "storage" });
+    emit("message_update", { role: "assistant", content: "Working" });
+    const latestText = emit("message_update", { role: "assistant", content: "Working on storage" });
+    const otherSession = createSession(db, {});
+    appendEvent(db, { sessionId: otherSession.id, type: "agent.message", payload: { content: "Other chat" } });
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    try {
+      const snapshot = (await server.inject({ url: `/api/sessions/${session.id}/transcript` })).json();
+      expect(snapshot.lastEventId).toBe(latestText.id);
+      expect(snapshot.activeJob).toMatchObject({ id: job.id, status: "running" });
+      expect(snapshot.liveEvents.map((event: { id: number }) => event.id)).toEqual([toolEnd.id, toolStart.id, latestText.id]);
+
+      // Persisting a stream under a Pi entry ID must prevent a duplicate stream on refresh.
+      const persisted = emit("agent.message", { content: "Working on storage" }, "pi-entry:latest-answer");
+      const settledSnapshot = (await server.inject({ url: `/api/sessions/${session.id}/transcript` })).json();
+      expect(settledSnapshot.lastEventId).toBe(persisted.id);
+      expect(settledSnapshot.liveEvents.map((event: { id: number }) => event.id)).toEqual([toolEnd.id, toolStart.id]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("includes the final replies of long chats without relying on historical SSE replay", async () => {
+    const session = createSession(db, {});
+    for (let index = 0; index < 251; index += 1) {
+      const { job } = createUserMessageAndJob(db, { sessionId: session.id, content: `Prompt ${index}`, status: "completed" });
+      appendEvent(db, { sessionId: session.id, jobId: job.id, type: "agent.message", payload: { content: `Reply ${index}` } });
+    }
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    try {
+      const response = await server.inject({ url: `/api/sessions/${session.id}/transcript` });
+      expect(response.json().transcript).toHaveLength(502);
+      expect(response.json().transcript.at(-1).content).toBe("Reply 250");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("returns a zero event cursor for an empty chat", async () => {
+    const session = createSession(db, {});
+    const server = await buildServer({ config: testConfig(tempDir), db });
+    try {
+      const response = await server.inject({ url: `/api/sessions/${session.id}/transcript` });
+      expect(response.json()).toMatchObject({ transcript: [], lastEventId: 0, activeJob: null, liveEvents: [] });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("includes failed jobs in chat transcripts without duplicating agent failure events", async () => {
     const session = createSession(db, { });
     const { job } = createUserMessageAndJob(db, {

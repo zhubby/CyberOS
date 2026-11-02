@@ -552,12 +552,7 @@ export function appendEvent<TPayload>(
   return tx.immediate();
 }
 
-export function listEvents(
-  db: CyberOsDatabase,
-  input: { sessionId: string; afterId?: number; limit?: number }
-): AgentEventRecord[] {
-  const rows = db
-    .prepare(`
+const EVENT_SELECT = `
       SELECT
         agent_events.id,
         agent_events.session_id,
@@ -577,6 +572,14 @@ export function listEvents(
       LEFT JOIN agent_messages ON agent_messages.id = jobs.message_id
       LEFT JOIN agent_transcript_items ON agent_transcript_items.event_id = agent_events.id
       LEFT JOIN agent_transcript_items AS job_transcript ON job_transcript.message_id = jobs.message_id
+`;
+
+export function listEvents(
+  db: CyberOsDatabase,
+  input: { sessionId: string; afterId?: number; limit?: number }
+): AgentEventRecord[] {
+  const rows = db
+    .prepare(`${EVENT_SELECT}
       WHERE agent_events.session_id = ? AND agent_events.id > ?
       ORDER BY agent_events.id ASC
       LIMIT ?
@@ -584,6 +587,37 @@ export function listEvents(
     .all(input.sessionId, input.afterId ?? 0, input.limit ?? 100) as DbEventRow[];
 
   return rows.map(mapEvent);
+}
+
+export function getSessionEventSnapshot(db: CyberOsDatabase, sessionId: string): {
+  lastEventId: number;
+  activeJob: JobRecord | null;
+  liveEvents: AgentEventRecord[];
+} {
+  const lastEventId = Number(db.prepare(`
+    SELECT COALESCE(MAX(id), 0) FROM agent_events WHERE session_id = ?
+  `).pluck().get(sessionId));
+  const activeJob = getCurrentAgentJobForSession(db, sessionId);
+  if (!activeJob) return { lastEventId, activeJob, liveEvents: [] };
+
+  // Pi projections can use a different run ID from the live stream. Pair tools
+  // by their call ID and select only the latest assistant state for this job.
+  const rows = db.prepare(`${EVENT_SELECT}
+    WHERE agent_events.id IN (
+      SELECT MAX(id) FROM agent_events
+      WHERE session_id = ? AND job_id = ?
+        AND type IN ('tool_execution_start', 'tool_execution_update', 'tool_execution_end')
+      GROUP BY json_extract(payload_json, '$.id')
+      UNION ALL
+      SELECT MAX(id) FROM agent_events
+      WHERE session_id = ? AND job_id = ?
+        AND type IN ('message_start', 'message_update', 'message_end', 'agent.message')
+        AND COALESCE(json_extract(payload_json, '$.role'), 'assistant') = 'assistant'
+    )
+      AND agent_events.type != 'agent.message'
+    ORDER BY agent_events.id ASC
+  `).all(sessionId, activeJob.id, sessionId, activeJob.id) as DbEventRow[];
+  return { lastEventId, activeJob, liveEvents: rows.map(mapEvent) };
 }
 
 function notificationStatusForJob(status: JobStatus): OperationNotificationStatus | null {

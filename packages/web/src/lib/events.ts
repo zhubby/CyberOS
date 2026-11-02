@@ -1,4 +1,25 @@
-import type { AgentEvent, TranscriptMessage } from "../api.js";
+import type { AgentEvent, AgentToolActivity, TranscriptMessage } from "../api.js";
+
+export function reduceAgentToolActivities(activities: AgentToolActivity[], event: AgentEvent): AgentToolActivity[] {
+  if (
+    event.type !== "tool_execution_start"
+    && event.type !== "tool_execution_update"
+    && event.type !== "tool_execution_end"
+  ) return activities;
+  const { id, name } = event.payload;
+  if (typeof id !== "string" || typeof name !== "string") return activities;
+  const next: AgentToolActivity = {
+    id,
+    runId: event.runId,
+    name,
+    status: event.type === "tool_execution_end"
+      ? event.payload.isError === true ? "failed" : "completed"
+      : "running"
+  };
+  const existingIndex = activities.findIndex((activity) => activity.id === id);
+  if (existingIndex === -1) return [...activities, next];
+  return activities.map((activity, index) => index === existingIndex ? next : activity);
+}
 
 export function eventToTranscriptMessage(event: AgentEvent): TranscriptMessage | null {
   if (event.audience !== "chat") {

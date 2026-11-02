@@ -33,7 +33,7 @@ type DbTranscriptRow = {
 
 export function listTranscriptItems(
   db: CyberOsDatabase,
-  input: { sessionId: string; limit?: number }
+  input: { sessionId: string; limit?: number | null }
 ): AgentTranscriptItemRecord[] {
   const rows = db.prepare(`
     SELECT
@@ -65,7 +65,7 @@ export function listTranscriptItems(
     WHERE transcript.session_id = ?
     ORDER BY turn_sequence ASC, transcript.sequence ASC
     LIMIT ?
-  `).all(input.sessionId, input.limit ?? 100) as DbTranscriptRow[];
+  `).all(input.sessionId, input.limit === null ? -1 : input.limit ?? 100) as DbTranscriptRow[];
 
   return rows.map((row) => ({
     sequence: row.sequence,
