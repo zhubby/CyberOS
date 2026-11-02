@@ -176,32 +176,34 @@ afterEach(async () => {
 });
 
 describe("API server", () => {
-  it("rate-limits repeated database requests", async () => {
+  it("allows 480 database requests per minute and rate-limits the next request", async () => {
     const server = await buildServer({ config: testConfig(tempDir), db });
-    const first = await server.inject({
-      method: "GET",
-      url: "/api/monitoring/alerts/summary"
-    });
-
-    expect(first.statusCode).toBe(200);
-    const limit = Number(first.headers["x-ratelimit-limit"]);
-    expect(limit).toBeGreaterThan(0);
-
-    for (let request = 1; request < limit; request += 1) {
-      const response = await server.inject({
+    try {
+      const first = await server.inject({
         method: "GET",
         url: "/api/monitoring/alerts/summary"
       });
-      expect(response.statusCode).toBe(200);
-    }
 
-    const blocked = await server.inject({
-      method: "GET",
-      url: "/api/monitoring/alerts/summary"
-    });
-    expect(blocked.statusCode).toBe(429);
-    expect(blocked.headers["retry-after"]).toBeDefined();
-    await server.close();
+      expect(first.statusCode).toBe(200);
+      for (let request = 1; request < 480; request += 1) {
+        const response = await server.inject({
+          method: "GET",
+          url: "/api/monitoring/alerts/summary"
+        });
+        expect(response.statusCode).toBe(200);
+      }
+      expect(first.headers["x-ratelimit-limit"]).toBe("480");
+
+      const blocked = await server.inject({
+        method: "GET",
+        url: "/api/monitoring/alerts/summary"
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
+      expect(Number(blocked.headers["retry-after"])).toBeLessThanOrEqual(60);
+    } finally {
+      await server.close();
+    }
   });
 
   it("reports indexer status for discovered storage pools", async () => {

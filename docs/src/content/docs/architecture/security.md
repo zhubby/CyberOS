@@ -11,6 +11,8 @@ sidebar:
 
 CyberOS 2.0 假设可信的单用户设备，没有多用户认证边界。API 强制绑定 loopback；Nginx 可以把它代理到局域网，但这不等于增加了认证。
 
+普通 API 请求按服务端识别的来源 IP 共享每分钟 `480` 次的额度；超额返回 `429`，并通过 `Retry-After` 响应头告知重试等待时间。当前 API 不信任转发的客户端 IP，因此经本机 Nginx 代理的页面请求会共享 loopback 来源额度，多个标签页与后台轮询都会累计计数。
+
 所有文件路径都相对于已挂载 storage pool 解析，拒绝 traversal、绝对路径和不安全的符号链接逃逸。Pi 的读取、编辑、写入与 shell 能力遵循 Agent 策略中的 `auto`、`approve`、`confirm`、`disabled` 四档；MCP mutation 统一通过 `capability_runs` 与 `capability_approvals`。Workspace 面板操作不会创建 capability approval，但仍执行服务端校验、危险确认和领域 operation 审计。trash 是可恢复隔离区，不会被维护任务永久删除。
 
 第三方 MCP Server 是明确的外部信任例外：用户测试并启用后，其工具调用直接执行，不创建逐次 CyberOS capability approval。连接层只支持 Streamable HTTP，公网强制 HTTPS；私有 HTTP 需要明文风险确认，并阻止 metadata、link-local、DNS rebinding、解析地址漂移、跨 origin 重定向和危险 Header。MCP secret 只存放在 `0600` state 文件，数据库、公开 API、Agent 上下文和日志不得包含值。

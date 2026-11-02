@@ -69,7 +69,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   }
 
   await server.register(rateLimit, {
-    max: 240,
+    max: 480,
     timeWindow: "1 minute"
   });
   await server.register(fastifyMultipart, {
