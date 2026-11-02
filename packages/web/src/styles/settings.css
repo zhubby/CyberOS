@@ -2023,6 +2023,7 @@
 .settings-device-toggle,
 .bluetooth-devices-card > header > button,
 .bluetooth-transfers-card > header > button,
+.bluetooth-discovery-toolbar > button,
 .bluetooth-inbox-controls > button,
 .bluetooth-device-actions > button:not(.management-icon-action),
 .settings-inline-actions button {
@@ -2033,7 +2034,7 @@
   min-height: 32px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface-strong);
 }
@@ -2312,6 +2313,78 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.bluetooth-device-actions > .bluetooth-device-action,
+.bluetooth-discovery-dialog > header > .bluetooth-device-action {
+  display: inline-grid;
+  flex: 0 0 32px;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface-strong);
+}
+
+.bluetooth-device-actions > .bluetooth-device-action.is-danger {
+  color: var(--danger-text);
+}
+
+.bluetooth-device-actions > .bluetooth-device-action:hover:not(:disabled),
+.bluetooth-discovery-dialog > header > .bluetooth-device-action:hover:not(:disabled),
+.bluetooth-discovery-toolbar > button:hover:not(:disabled) {
+  border-color: var(--focus-ring);
+  color: var(--focus-ring);
+  background: var(--surface-strong);
+}
+
+.management-modal.bluetooth-discovery-dialog {
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100dvh - 36px));
+  border-top: 3px solid var(--accent);
+  border-radius: 0;
+}
+
+.bluetooth-discovery-dialog > header {
+  align-items: flex-start;
+  background: var(--channel-bg);
+}
+
+.bluetooth-discovery-dialog > header p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.bluetooth-discovery-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px;
+}
+
+.bluetooth-discovery-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 12px;
+}
+
+.bluetooth-discovery-toolbar > span {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.bluetooth-discovery-body > .bluetooth-challenge {
+  margin: 12px;
 }
 
 .bluetooth-device-badges {

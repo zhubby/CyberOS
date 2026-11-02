@@ -279,6 +279,7 @@ export function SettingsModal({
   }, [activeSection, normalizedSearch]);
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.target instanceof Node && !event.currentTarget.contains(event.target)) return;
     if (event.key === "Escape" && !event.defaultPrevented) {
       event.preventDefault();
       onClose();

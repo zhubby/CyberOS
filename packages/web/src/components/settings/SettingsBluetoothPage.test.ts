@@ -4,6 +4,8 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { BluetoothStatus } from "../../api.js";
 import { i18n, initI18n } from "../../i18n/index.js";
 import { BluetoothAudioOutputField, SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
+import { BluetoothDeviceList } from "./BluetoothDeviceList.js";
+import { BluetoothDiscoveryDialog } from "./BluetoothDiscoveryDialog.js";
 
 beforeAll(async () => {
   await initI18n();
@@ -35,7 +37,7 @@ describe("SettingsBluetoothPage", () => {
     expect(html).toContain("Desk Headphones");
     expect(html).toContain("Trust");
     expect(html).toContain("Connect");
-    expect(html).toContain("Scan for 15 seconds");
+    expect(html).toContain('aria-haspopup="dialog"');
   });
 
   it("renders a dedicated gamepad icon and keeps device management actions", () => {
@@ -54,6 +56,74 @@ describe("SettingsBluetoothPage", () => {
     expect(html).toContain("lucide-gamepad-2");
     expect(html).toContain("Trust");
     expect(html).toContain("Connect");
+  });
+
+  it("keeps unremembered nearby devices out of the saved device panel", () => {
+    const html = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
+      status: {
+        ...status,
+        devices: [status.devices[0]!, { ...status.devices[0]!, address: "11:22:33:44:55:66", alias: "Nearby stranger", paired: false, trusted: false }]
+      },
+      pools: [],
+      locale: "en",
+      onStatus: vi.fn(),
+      onNotifySuccess: vi.fn(),
+      onNotifyError: vi.fn()
+    }));
+    expect(html).toContain("Desk Headphones");
+    expect(html).not.toContain("Nearby stranger");
+  });
+
+  it("uses an accessible icon button for disconnect and keeps remembered devices visible with radio off", () => {
+    const props = {
+      pools: [], locale: "en" as const, onStatus: vi.fn(), onNotifySuccess: vi.fn(), onNotifyError: vi.fn()
+    };
+    const connected = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
+      ...props, status: { ...status, devices: [{ ...status.devices[0]!, connected: true }] }
+    }));
+    expect(connected).toContain('aria-label="Disconnect"');
+    expect(connected).not.toContain(">Disconnect</button>");
+    const poweredOff = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
+      ...props, status: { ...status, adapters: [{ ...status.adapters[0]!, powered: false, state: "off" }] }
+    }));
+    expect(poweredOff).toContain("Desk Headphones");
+  });
+
+  it("includes connected and trusted devices even without a pairing record", () => {
+    const html = renderToStaticMarkup(createElement(SettingsBluetoothPage, {
+      status: { ...status, devices: [
+        { ...status.devices[0]!, alias: "Connected remote", paired: false, connected: true },
+        { ...status.devices[0]!, address: "11:22:33:44:55:66", alias: "Trusted keyboard", paired: false, trusted: true }
+      ] },
+      pools: [], locale: "en", onStatus: vi.fn(), onNotifySuccess: vi.fn(), onNotifyError: vi.fn()
+    }));
+    expect(html).toContain("Connected remote");
+    expect(html).toContain("Trusted keyboard");
+  });
+
+  it("shows nearby devices and scan controls in an accessible discovery dialog", () => {
+    const html = renderToStaticMarkup(createElement(BluetoothDiscoveryDialog, {
+      devices: [{ ...status.devices[0]!, alias: "Nearby stranger", paired: false }],
+      busyKey: null, scanning: true, disabled: false, challenge: null, error: "Discovery failed",
+      onScan: vi.fn(), onClose: vi.fn(), onAction: vi.fn()
+    }));
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain("Nearby stranger");
+    expect(html).toContain("Stop scan");
+    expect(html).toContain('aria-label="Close"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Discovery failed");
+  });
+
+  it("marks a connection in progress and disables duplicate device actions", () => {
+    const html = renderToStaticMarkup(createElement(BluetoothDeviceList, {
+      devices: status.devices,
+      busyKey: `connect-${status.devices[0]!.address}`, disabled: false, onAction: vi.fn()
+    }));
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain("Connecting");
+    expect(html).toContain('aria-label="Connect" disabled=""');
   });
 
   it("explains why controls are unavailable when no adapter exists", () => {
