@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Play, X } from "lucide-react";
 import { playbackMenuLayout } from "../../lib/playback-menu-layout.js";
 import { PlaybackControls, PlaybackDetails, usePlaybackControls } from "./PlaybackControls.js";
+import { PlaybackTargetSelect } from "./PlaybackTargetSelect.js";
 
 export function PlaybackMenu({ onOpenBluetoothSettings }: { onOpenBluetoothSettings: () => void }) {
   const [open, setOpen] = useState(false);
@@ -76,12 +77,16 @@ export function PlaybackMenu({ onOpenBluetoothSettings }: { onOpenBluetoothSetti
     <button ref={triggerRef} type="button" className="settings-button agent-settings-button agent-playback-button"
       data-playback-state={c.state} aria-label={label} title={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
       onClick={() => setOpen((current) => !current)}>
-      <Play size={18} aria-hidden="true" /><span className="playback-menu-indicator" aria-hidden="true" />
+      <Play size={18} aria-hidden="true" />
     </button>
     <PlaybackDetails c={c} onOpenBluetoothSettings={onOpenBluetoothSettings} />
     {open ? createPortal(
       <section id={id} ref={menuRef} tabIndex={-1} className="playback-menu" role="dialog" aria-label={c.t("playback.nowPlaying")} style={layout}>
-        <header><strong>{c.t("playback.nowPlaying")}</strong><button className="icon-button" type="button" aria-label={c.t("common.actions.close")} title={c.t("common.actions.close")} onClick={() => close(true)}><X size={18} aria-hidden="true" /></button></header>
+        <header>
+          <PlaybackTargetSelect />
+          <span className="playback-menu-state" data-playback-state={c.state}>{c.t(`playback.state.${c.state}`)}</span>
+          <button className="icon-button" type="button" aria-label={c.t("common.actions.close")} title={c.t("common.actions.close")} onClick={() => close(true)}><X size={18} aria-hidden="true" /></button>
+        </header>
         <PlaybackControls c={c} variant="menu" beforeDetails={() => close(true)} />
       </section>, document.querySelector(".app-shell") ?? document.body
     ) : null}

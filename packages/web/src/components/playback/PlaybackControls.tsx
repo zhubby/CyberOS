@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { CirclePlay, ListMusic, LoaderCircle, MonitorPlay, Pause, Play, SkipBack, SkipForward, Square } from "lucide-react";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { ChevronDown, CirclePlay, Headphones, ListMusic, LoaderCircle, MonitorPlay, Pause, Play, SkipBack, SkipForward, Square, Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { VodPlayerCommand } from "@cyberos/shared";
 import { getBluetoothSettings, type BluetoothAudioDevice } from "../../api.js";
@@ -117,20 +117,28 @@ function PlaybackTransport({ c, detail = false }: { c: Controls; detail?: boolea
   </div>;
 }
 
-function PlaybackOutput({ c }: { c: Controls }) {
-  const { t, browser, musicBar, music, nas, video, sessionId, busy, run } = c;
-  return <>
-    <label className="playback-output-volume"><span>{t("music.volume")}</span>
-      <PlaybackSlider max={100} value={browser ? browser.volume * 100 : musicBar ? music.status?.volume ?? 100 : video?.volume ?? 100} label={t("music.volume")} disabled={busy || !c.available} onCommit={(volume) => {
+function PlaybackVolume({ c, compact = false }: { c: Controls; compact?: boolean }) {
+  const { t, browser, musicBar, music, video, sessionId, busy, run } = c;
+  const volume = browser ? browser.volume * 100 : musicBar ? music.status?.volume ?? 100 : video?.volume ?? 100;
+  return <label className={`playback-output-volume${compact ? " is-compact" : ""}`}>
+      {compact ? <Volume2 size={17} aria-hidden="true" /> : <span>{t("music.volume")}</span>}
+      <PlaybackSlider max={100} value={volume} label={t("music.volume")} disabled={busy || !c.available} onCommit={(volume) => {
         if (browser) c.p.updateBrowser({ volume: volume / 100 });
         else if (musicBar) void music.execute({ type: "volume", volume });
         else if (sessionId) run({ type: "set-volume", sessionId, volume });
       }} />
-    </label>
+      {compact ? <span className="playback-volume-value">{Math.round(volume)}%</span> : null}
+    </label>;
+}
+
+function PlaybackOutput({ c, includeVolume = true }: { c: Controls; includeVolume?: boolean }) {
+  const { t, browser, musicBar, nas, video, sessionId, busy, run } = c;
+  return <>
+    {includeVolume ? <PlaybackVolume c={c} /> : null}
     {browser ? <p className="playback-output-device">{t("playback.localOutput")}</p> : <>
       <label>{t("music.output")}<OutputDeviceSelect value={c.output || null} devices={c.devices} disabled={busy} defaultLabel={t(musicBar ? "music.defaultOutput" : "playback.tvOutput")} onChange={(deviceId) => c.setOutput(deviceId ?? "")} /></label>
       <button disabled={busy || !c.available} onClick={() => {
-        if (musicBar) void music.execute({ type: "output", audioDeviceId: c.output || null });
+        if (musicBar) void c.music.execute({ type: "output", audioDeviceId: c.output || null });
         else if (sessionId) run({ type: "set-output", sessionId, audioDeviceId: c.output || null });
       }}>{t("playback.switchOutput")}</button>
       {!musicBar && sessionId ? <>
@@ -143,36 +151,77 @@ function PlaybackOutput({ c }: { c: Controls }) {
   </>;
 }
 
+function PlaybackTitle({ c, onClick, card = false }: { c: Controls; onClick: () => void; card?: boolean }) {
+  return <button className="playback-title" title={c.title} aria-label={`${c.t("playback.details")}: ${c.title}`} onClick={onClick}>
+    {c.musicBar ? <MusicCover coverKey={c.currentTrack?.coverKey ?? null} /> : card ? <span className="music-cover"><MonitorPlay size={22} aria-hidden="true" /></span> : <MonitorPlay size={22} aria-hidden="true" />}
+    <span><strong>{c.title}</strong><small>{c.browser ? c.t("playback.browser") : c.musicBar ? c.currentTrack?.artist ?? c.t("music.nasPlayer") : c.t("playback.tvOutput")}</small></span>
+  </button>;
+}
+
+function playbackOutputName(c: Controls) {
+  const { t, music, browser, musicBar } = c;
+  if (browser) return t("playback.localOutput");
+  const unavailable = musicBar ? music.status?.errorCode === "AUDIO_UNAVAILABLE" : c.nas?.output.effective.kind === "unavailable";
+  if (unavailable) return t("music.unavailableOutput");
+  const effectiveId = musicBar ? music.status?.effectiveAudioDeviceId : c.nas?.output.effective.deviceId;
+  if (effectiveId) {
+    const device = c.devices.find((item) => item.id === effectiveId);
+    return device ? `${device.name}${device.connected ? "" : ` · ${t("music.disconnected")}`}` : t("playback.bluetoothOutput");
+  }
+  const defaultOutput = musicBar ? music.status?.owner === "music" && ["playing", "paused"].includes(music.status.state) : c.nas?.output.effective.kind === "default";
+  return t(defaultOutput ? musicBar ? "music.defaultOutput" : "playback.tvOutput" : "playback.outputUnknown");
+}
+
+function PlaybackCard({ c, beforeDetails }: { c: Controls; beforeDetails: (() => void) | undefined }) {
+  const [outputOpen, setOutputOpen] = useState(false);
+  const outputId = useId();
+  const { t, music, browser, musicBar } = c;
+  const outputName = playbackOutputName(c);
+  return <section className="playback-menu-controls" aria-label={t("playback.nowPlaying")} aria-busy={c.busy} data-playback-kind={browser ? "browser" : musicBar ? "music" : "video"} data-playback-state={c.state}>
+    {c.available ? <>
+      <PlaybackTitle c={c} card onClick={() => { beforeDetails?.(); c.openDetails(); }} />
+      <PlaybackProgress c={c} />
+      <PlaybackTransport c={c} />
+      <PlaybackVolume c={c} compact />
+      <div className="playback-card-tools">
+        {browser ? <p className="playback-output-summary"><Headphones size={17} aria-hidden="true" /><span>{outputName}</span></p> : <button type="button" className="playback-output-summary" aria-label={`${t("music.output")}: ${outputName}`} title={`${t("music.output")}: ${outputName}`} aria-expanded={outputOpen} aria-controls={outputOpen ? outputId : undefined} onClick={() => {
+          if (!outputOpen) c.setOutput((musicBar ? music.status?.audioDeviceId : c.nas?.output.requested.deviceId) ?? "");
+          setOutputOpen((current) => !current);
+        }}>
+          <Headphones size={17} aria-hidden="true" /><span>{outputName}</span><ChevronDown size={15} aria-hidden="true" />
+        </button>}
+        {music.status?.queue.length ? <button type="button" className="playback-secondary playback-queue" aria-label={t("music.queue")} title={t("music.queue")} onClick={() => { beforeDetails?.(); music.setDrawerOpen(true); }}><ListMusic size={19} aria-hidden="true" /></button> : null}
+        {!musicBar ? <button type="button" className="playback-secondary playback-stop" disabled={c.busy} aria-label={t("video.stop")} title={t("video.stop")} onClick={c.stop}><Square size={15} aria-hidden="true" /><span>{t("video.stop")}</span></button> : null}
+      </div>
+      {outputOpen && !browser ? <div id={outputId} className="playback-output-fields"><PlaybackOutput c={c} includeVolume={false} /></div> : null}
+    </> : <div className="playback-menu-empty"><CirclePlay size={32} aria-hidden="true" /><p>{t("playback.empty")}</p></div>}
+    {c.currentError ? <p className="playback-error" role="alert">{c.currentError}</p> : null}
+  </section>;
+}
+
 export function PlaybackControls({ c, variant, beforeDetails, trailingControl }: {
   c: Controls;
   variant: "bar" | "menu";
   beforeDetails?: () => void;
   trailingControl?: ReactNode;
 }) {
-  const { t, music, browser, musicBar, title, currentTrack } = c;
+  const { t, music, browser, musicBar } = c;
+  if (variant === "menu") return <PlaybackCard key={`${c.p.target}:${browser?.session.id ?? c.sessionId}:${musicBar}`} c={c} beforeDetails={beforeDetails} />;
   const openDetails = () => { beforeDetails?.(); c.openDetails(); };
   const openQueue = () => { beforeDetails?.(); music.setDrawerOpen(true); };
-  return <section className={variant === "bar" ? "shared-player-bar" : "playback-menu-controls"} aria-label={t("playback.nowPlaying")} aria-busy={c.busy} data-playback-kind={browser ? "browser" : musicBar ? "music" : "video"}>
-    {variant === "menu" ? <div className="playback-menu-status">
-      <span data-playback-state={c.state}>{t(`playback.state.${c.state}`)}</span><PlaybackTargetSelect />
-    </div> : null}
-    {c.available || variant === "bar" ? <>
-      <button className="playback-title" title={title} aria-label={`${t("playback.details")}: ${title}`} onClick={openDetails}>
-        {musicBar ? <MusicCover coverKey={currentTrack?.coverKey ?? null} /> : <MonitorPlay size={22} aria-hidden="true" />}
-        <span><strong>{title}</strong><small>{browser ? t("playback.browser") : musicBar ? currentTrack?.artist ?? t("music.nasPlayer") : t("playback.tvOutput")}</small></span>
-      </button>
-      {variant === "bar" ? <div className="playback-target-compact"><PlaybackTargetSelect /></div> : null}
+  return <section className="shared-player-bar" aria-label={t("playback.nowPlaying")} aria-busy={c.busy} data-playback-kind={browser ? "browser" : musicBar ? "music" : "video"}>
+      <PlaybackTitle c={c} onClick={openDetails} />
+      <div className="playback-target-compact"><PlaybackTargetSelect /></div>
       <PlaybackTransport c={c} />
       <PlaybackProgress c={c} />
-      {variant === "bar" ? <PlaybackOutputPopover key={`${browser?.session.id ?? c.sessionId}:${musicBar}`} busy={c.busy}>
+      <PlaybackOutputPopover key={`${browser?.session.id ?? c.sessionId}:${musicBar}`} busy={c.busy}>
         <PlaybackOutput c={c} />
         {c.currentError ? <p role="alert" className="playback-error">{c.currentError}</p> : null}
-      </PlaybackOutputPopover> : <div className="playback-output-fields"><PlaybackOutput c={c} /></div>}
-    </> : <div className="playback-menu-empty"><CirclePlay size={28} aria-hidden="true" /><p>{t("playback.empty")}</p></div>}
-    {music.status?.queue.length ? <button className="playback-secondary playback-queue" aria-label={t("music.queue")} title={t("music.queue")} onClick={openQueue}><ListMusic size={18} aria-hidden="true" />{variant === "menu" ? t("music.queue") : null}</button> : null}
-    {!musicBar && c.available ? <button className="playback-secondary playback-stop" disabled={c.busy} aria-label={t("video.stop")} title={t("video.stop")} onClick={c.stop}><Square size={17} aria-hidden="true" />{variant === "menu" ? t("video.stop") : null}</button> : null}
+      </PlaybackOutputPopover>
+    {music.status?.queue.length ? <button className="playback-secondary playback-queue" aria-label={t("music.queue")} title={t("music.queue")} onClick={openQueue}><ListMusic size={18} aria-hidden="true" /></button> : null}
+    {!musicBar && c.available ? <button className="playback-secondary playback-stop" disabled={c.busy} aria-label={t("video.stop")} title={t("video.stop")} onClick={c.stop}><Square size={17} aria-hidden="true" /></button> : null}
     {trailingControl}
-    {c.currentError ? <p className={variant === "bar" ? "visually-hidden" : "playback-error"} role="alert">{c.currentError}</p> : null}
+    {c.currentError ? <p className="visually-hidden" role="alert">{c.currentError}</p> : null}
   </section>;
 }
 

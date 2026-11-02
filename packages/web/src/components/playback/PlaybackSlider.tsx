@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 export function PlaybackSlider({
   value,
@@ -34,6 +34,8 @@ export function PlaybackSlider({
       onCommit(latest.current);
     }
   };
+  const clamped = Math.max(min, Math.min(draft, max));
+  const fill = max > min ? (clamped - min) / (max - min) * 100 : 0;
   return (
     <input
       type="range"
@@ -41,7 +43,8 @@ export function PlaybackSlider({
       min={min}
       max={max}
       step={step}
-      value={Math.max(min, Math.min(draft, max))}
+      value={clamped}
+      style={{ "--playback-slider-fill": `${fill}%` } as CSSProperties}
       disabled={disabled}
       aria-label={label}
       onChange={(event) => {

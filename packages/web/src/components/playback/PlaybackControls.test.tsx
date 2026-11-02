@@ -46,6 +46,7 @@ describe("sidebar playback", () => {
     const html = renderToStaticMarkup(createElement(PlaybackMenu, { onOpenBluetoothSettings: vi.fn() }));
     expect(html).toContain(`data-playback-state="${state}"`);
     expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("playback-menu-indicator");
     expect(html).not.toContain('class="playback-menu"');
     expect(html).not.toContain('class="playback-shell"');
     expect(html).not.toContain('disabled=""');
@@ -71,6 +72,37 @@ describe("sidebar playback", () => {
     expect(html).toContain('aria-label="Play"');
     expect(html).toContain('aria-label="Queue"');
     expect(html).toMatch(/<input[^>]*disabled[^>]*aria-label="Playback position"/u);
+  });
+
+  it("starts with output settings collapsed and keeps volume and queue available", () => {
+    music.status = { ...status, owner: "music", state: "playing", queue: [track], currentItemId: track.id };
+    const html = renderToStaticMarkup(createElement(Surface));
+    expect(html).toContain('aria-label="Volume"');
+    expect(html).toContain('aria-label="Queue"');
+    expect(html).toContain('aria-label="Audio output: NAS default output"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Switch output");
+    expect(html).not.toContain('class="playback-output-fields"');
+    expect(playback.control).not.toHaveBeenCalled();
+    expect(music.execute).not.toHaveBeenCalled();
+  });
+
+  it("summarizes effective output instead of the requested device", () => {
+    music.status = { ...status, owner: "music", state: "paused", queue: [track], audioDeviceId: "bluetooth:pending-speaker", effectiveAudioDeviceId: null };
+    const html = renderToStaticMarkup(createElement(Surface));
+    expect(html).toContain('aria-label="Audio output: NAS default output"');
+    expect(html).not.toContain("pending-speaker");
+    music.status.effectiveAudioDeviceId = "bluetooth:actual-speaker";
+    expect(renderToStaticMarkup(createElement(Surface))).toContain('aria-label="Audio output: Bluetooth audio output"');
+  });
+
+  it("does not imply a default output when the device is unavailable or unreported", () => {
+    music.status = { ...status, state: "error", queue: [track], error: "Speaker lost", errorCode: "AUDIO_UNAVAILABLE", audioDeviceId: "bluetooth:lost-speaker" };
+    const unavailable = renderToStaticMarkup(createElement(Surface));
+    expect(unavailable).toContain('aria-label="Audio output: Configured speaker unavailable"');
+    expect(unavailable).toContain('role="alert">Speaker lost');
+    music.status = { ...status, queue: [track] };
+    expect(renderToStaticMarkup(createElement(Surface))).toContain('aria-label="Audio output: Output not reported"');
   });
 
   it("shows the selected browser target independently of NAS music", () => {

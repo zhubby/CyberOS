@@ -47,7 +47,7 @@
 }
 
 .brand {
-  height: 58px;
+  height: calc(var(--app-titlebar-height) - 10px);
   padding-bottom: 9px;
   border-bottom-color: var(--hud-line);
   background: transparent;
