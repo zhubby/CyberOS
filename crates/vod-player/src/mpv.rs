@@ -22,6 +22,7 @@ use crate::config::VodPlayerConfig;
 use crate::error::{ErrorCode, VodError};
 use crate::protocol::{Capabilities, HardwareDecode, MAX_FRAME_BYTES};
 use crate::storage::OpenedMedia;
+use crate::tv_controls::TvControlsScript;
 
 const MPV_IPC_FD: RawFd = 3;
 const MPV_MEDIA_FD: RawFd = 4;
@@ -86,6 +87,7 @@ pub struct MpvHandle {
     startup_timeout: Duration,
     stderr: Arc<Mutex<Vec<u8>>>,
     _media: File,
+    _tv_controls: Option<TvControlsScript>,
 }
 
 impl MpvHandle {
@@ -130,6 +132,11 @@ impl MpvHandle {
         let child_media_source = duplicate_for_child(&media.file)?;
         let child_ipc_source_fd = child_ipc_source.as_raw_fd();
         let child_media_source_fd = child_media_source.as_raw_fd();
+        let tv_controls = if config.video_output == "wayland" {
+            Some(TvControlsScript::create(&config.state_path)?)
+        } else {
+            None
+        };
         let mut args = vec![
             "--no-config".to_owned(),
             "--load-scripts=no".to_owned(),
@@ -157,6 +164,9 @@ impl MpvHandle {
             args.push("--vo=gpu".to_owned());
             args.push(format!("--gpu-context={}", config.video_output));
             append_video_output_args(&mut args, config);
+        }
+        if let Some(script) = &tv_controls {
+            args.push(format!("--script={}", script.path().display()));
         }
         if paused {
             args.push("--pause".to_owned());
@@ -267,6 +277,7 @@ impl MpvHandle {
             startup_timeout: Duration::from_millis(config.startup_timeout_ms),
             stderr,
             _media: media.file,
+            _tv_controls: tv_controls,
         };
         if let Err(error) = handle.wait_until_loaded().await {
             handle.shutdown().await;
@@ -454,6 +465,7 @@ fn append_video_output_args(args: &mut Vec<String>, config: &VodPlayerConfig) {
             "--wayland-app-id=cyberos-vod-player".to_owned(),
             "--osd-level=1".to_owned(),
             "--osd-on-seek=bar".to_owned(),
+            "--osc=no".to_owned(),
             format!("--input-conf={TV_INPUT_CONFIG_PATH}"),
         ]);
     } else if let Some(connector) = &config.drm_connector {
@@ -924,9 +936,11 @@ mod tests {
             r#"#!/bin/sh
 ipc_fd=
 media_fd=
+controls_path=
 for argument do
   case "$argument" in
     --input-ipc-client=fd://*) ipc_fd=${argument#--input-ipc-client=fd://} ;;
+    --script=*) controls_path=${argument#--script=} ;;
     fdclose://*) media_fd=${argument#fdclose://} ;;
   esac
 done
@@ -944,6 +958,12 @@ while IFS= read -r line <&5; do
   [ -n "$request_id" ] || continue
   printf '%s\n' '{"event":"property-change","name":"time-pos","data":12}' >&6
   case "$line" in
+    *'"verify-tv-controls"'*)
+      if [ -n "$controls_path" ] && [ -r "$controls_path" ]; then
+        printf '{"request_id":%s,"error":"success","data":true}\n' "$request_id" >&6
+      else
+        printf '{"request_id":%s,"error":"success","data":false}\n' "$request_id" >&6
+      fi ;;
     *'"pause",true'*) printf '{"request_id":%s,"error":"failure","data":null}\n' "$request_id" >&6 ;;
     *'"track-list"'*) printf '{"request_id":%s,"error":"success","data":[{"type":"audio","selected":true}]}\n' "$request_id" >&6 ;;
     *'"audio-out-params"'*) printf '{"request_id":%s,"error":"property unavailable","data":null}\n' "$request_id" >&6 ;;
@@ -1061,11 +1081,38 @@ done
         assert!(args.contains(&"--fullscreen=yes".to_owned()));
         assert!(args.contains(&"--wayland-app-id=cyberos-vod-player".to_owned()));
         assert!(args.contains(&format!("--input-conf={TV_INPUT_CONFIG_PATH}")));
+        assert!(args.contains(&"--osc=no".to_owned()));
         assert!(
             !args
                 .iter()
                 .any(|argument| argument.starts_with("--drm-connector="))
         );
+    }
+
+    #[tokio::test]
+    async fn wayland_player_receives_a_readable_embedded_controls_script() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut test_config = config(directory.path());
+        test_config.video_output = "wayland".to_owned();
+        let executable = fake_mpv(directory.path());
+        let mut handle = MpvHandle::start_with_executable(
+            &test_config,
+            media(directory.path()),
+            0.0,
+            80.0,
+            false,
+            None,
+            executable.as_os_str(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            handle.command(json!(["verify-tv-controls"])).await.unwrap(),
+            json!(true)
+        );
+        let script_path = handle._tv_controls.as_ref().unwrap().path().to_owned();
+        handle.shutdown().await;
+        assert!(!script_path.exists());
     }
 
     #[tokio::test]

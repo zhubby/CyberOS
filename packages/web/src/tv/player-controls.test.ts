@@ -38,4 +38,9 @@ describe("TV player controls", () => {
   it("does not control a terminal session", () => {
     expect(playbackCommandForKey({ ...status, state: "stopped" }, "MediaPlayPause")).toBeNull();
   });
+
+  it("returns from active playback with the remote Home key", () => {
+    expect(playbackCommandForKey(status, "BrowserHome")).toEqual({ type: "stop", sessionId: "session-1" });
+    expect(playbackCommandForKey(status, "Home")).toEqual({ type: "stop", sessionId: "session-1" });
+  });
 });

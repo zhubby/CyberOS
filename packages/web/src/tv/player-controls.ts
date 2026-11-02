@@ -15,7 +15,7 @@ export function playbackCommandForKey(
 ): Exclude<VodPlayerCommand, { type: "play" }> | null {
   const sessionId = status?.sessionId;
   if (!sessionId || !isActiveVodPlayback(status)) return null;
-  if (["Escape", "BrowserBack", "GoBack", "MediaStop"].includes(key)) return { type: "stop", sessionId };
+  if (["Escape", "BrowserBack", "GoBack", "BrowserHome", "Home", "MediaStop"].includes(key)) return { type: "stop", sessionId };
   if (["MediaPlayPause", "MediaPlay", " ", "Enter"].includes(key)) return { type: "toggle-pause", sessionId };
   if (["ArrowLeft", "F6"].includes(key)) return { type: "seek-relative", sessionId, seconds: -10 };
   if (["ArrowRight", "F7"].includes(key)) return { type: "seek-relative", sessionId, seconds: 10 };

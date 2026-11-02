@@ -36,6 +36,7 @@ sourceOfTruth:
   - packages/web/src/components/workspace/PhotoSearchFilterMenu.tsx
   - packages/web/src/components/settings/SettingsModal.tsx
   - packages/web/src/tv/tv.css
+  - crates/vod-player/src/tv-controls.lua
   - docs/src/styles/custom.css
   - packages/web/public/cyberos-icon.svg
 sidebar:
@@ -226,6 +227,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 - 影视公共播放条的音频输出入口统一使用带本地化 `aria-label` 和 `title` 的音量图标按钮，不使用常驻文字；音量滑杆放在音频输出浮窗内，浏览器与 NAS 播放、桌面与窄屏均保留入口。NAS 的设备选择、切换与音频设置仍在同一浮窗中；浮窗向上展开，保持在视口内，Escape 关闭并恢复图标焦点。
 - 音频输出浮窗内的设备、音轨、字幕等下拉统一使用共享 `CustomSelect`，禁止原生 `<select>`，不得仅用 CSS 隐藏原生外观；共享输出设备选择器也遵循此约束。展开选项在浮窗内保持可见，短视口允许内部滚动；Escape 先关闭下拉，再关闭浮窗并恢复入口焦点。`eslint.config.js` 对播放条及共享输出设备选择器执行此限制。
 - 播放、音量和进度控件复用提交式滑杆，拖动结束后提交；输出切换必须明确执行。遥控焦点使用共享青色焦点环，TV 增大操作面和文字密度。
+- TV 原生全屏视频的播放控制绘制在播放器画面内，采用同一 HUD 调色板、硬边结构与青色遥控焦点，水平居中并位于画面偏下位置；不能依赖被原生播放窗口遮住的 Web 播放条。浮层提供进度、前后跳转、暂停/继续、音轨、字幕与返回媒体库；音轨和字幕使用方向键选择真实轨道，字幕包含关闭项。播放中闲置 5 秒隐藏，暂停或轨道菜单打开时保持显示；确定或方向键可唤回，返回先关闭轨道菜单，再退出视频，Home 直接退出视频。这里的全屏临时浮层与占据应用骨架独立行的公共播放条分别服务播放和浏览场景。
 
 ### 设置、通知与弹窗
 
