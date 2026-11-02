@@ -44,6 +44,12 @@ import {
 import { sessionTitle } from "../../lib/session.js";
 import type { TranscriptPhase } from "../../lib/transcript.js";
 import { PowerControl } from "../power/PowerControl.js";
+import { MobileAppControls, useAppHeadingFocus } from "../../mobile/MobileHome.js";
+import { useAppScroll, useMobileNavigation } from "../../mobile/MobileNavigation.js";
+import { useModalDialog } from "../workspace/useModalDialog.js";
+import { PanelHeaderAction, PanelHeaderActions } from "../workspace/PanelHeader.js";
+import { hasActiveAgentTurn } from "../../lib/agent-composer.js";
+export { composeAgentMessage, hasActiveAgentTurn } from "../../lib/agent-composer.js";
 
 type CapabilityApprovalRisk = CapabilityApproval["risk"];
 type ComposerKeyDownEvent = Pick<KeyboardEvent<HTMLTextAreaElement>, "key" | "shiftKey" | "nativeEvent">;
@@ -62,14 +68,6 @@ type CapabilitySecretRequirement = {
 
 export function shouldSubmitComposerMessage(event: ComposerKeyDownEvent): boolean {
   return event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing;
-}
-
-export function composeAgentMessage(message: string, composerPath: string | null): string {
-  return [composerPath, message.trim()].filter(Boolean).join("\n");
-}
-
-export function hasActiveAgentTurn(activeJobId: string | null, activeJobStatus: JobStatus | null): boolean {
-  return activeJobId !== null && activeJobStatus === "running";
 }
 
 export function agentSessionHeaderTitle(
@@ -261,10 +259,16 @@ export function ChatPane({
 }) {
   const { t } = useTranslation();
   const translate = t as Translate;
+  const compact = useMobileNavigation()?.compact ?? false;
+  const headingRef = useAppHeadingFocus();
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const sessionsRef = useModalDialog(() => setSessionsOpen(false), false, sessionsOpen && active);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const deleteRef = useModalDialog(() => setDeleteConfirmOpen(false), false, deleteConfirmOpen && active);
   const [approvalDialog, setApprovalDialog] = useState<CapabilityApproval | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<Exclude<AgentDeliveryMode, "prompt">>("follow_up");
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAppScroll(transcriptRef, `agent:${activeSessionId}`, { ready: active && transcriptPhase !== "loading" });
   const approvalDialogRef = useRef<HTMLElement | null>(null);
   const approvalDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
   const workspaceAgentTitle = t("chat.workspaceAgent");
@@ -417,8 +421,8 @@ export function ChatPane({
   };
 
   return (
-    <section className={`chat-pane ${active ? "is-mobile-active" : ""}`} aria-label={t("chat.agents")}>
-      <aside className="agent-list" aria-label={t("chat.agentSessions")}>
+    <section className={`chat-pane ${active ? "is-mobile-active" : ""}`} aria-hidden={compact && !active ? true : undefined} inert={compact && !active ? true : undefined} aria-label={t("chat.agents")}>
+      {!compact ? <aside className="agent-list" aria-label={t("chat.agentSessions")}>
         <div className="brand">
           <img className="agent-brand-logo" src="/cyberos-icon.svg" alt="" aria-hidden="true" />
           <h1 className="visually-hidden">{t("common.appName")}</h1>
@@ -480,15 +484,16 @@ export function ChatPane({
           </button>
           <PowerControl onRequest={onRequestSystemPower} />
         </div>
-      </aside>
+      </aside> : null}
 
-      <section className="chat-main" aria-label={t("chat.agentChat")}>
+      {!compact || active ? <section className="chat-main" aria-label={t("chat.agentChat")}>
         <header className="chat-header app-titlebar">
+          <MobileAppControls control="back" />
           <span className="chat-header-index" aria-hidden="true">{activeSessionCode}</span>
           <div className="chat-header-copy">
-            <h2>{activeSessionTitle}</h2>
+            <h2 ref={headingRef} tabIndex={compact ? -1 : undefined}>{activeSessionTitle}</h2>
           </div>
-          <button
+          {compact ? <PanelHeaderActions label={t("mobile.more")}><PanelHeaderAction mobilePrimary label={t("mobile.sessions")} onClick={() => setSessionsOpen(true)}><MessageSquare size={20} aria-hidden="true" /></PanelHeaderAction><PanelHeaderAction label={t("chat.deleteSession")} disabled={deleteDisabled} onClick={() => setDeleteConfirmOpen(true)}><Trash2 size={18} aria-hidden="true" /></PanelHeaderAction></PanelHeaderActions> : <button
             type="button"
             className="icon-button chat-delete-session-button"
             onClick={() => setDeleteConfirmOpen(true)}
@@ -497,7 +502,8 @@ export function ChatPane({
             aria-label={t("chat.deleteSession")}
           >
             <Trash2 aria-hidden="true" size={17} />
-          </button>
+          </button>}
+          <MobileAppControls control="home" />
         </header>
 
         <div
@@ -693,11 +699,15 @@ export function ChatPane({
             </div>
           </div>
         </form>
-      </section>
+      </section> : null}
+
+      {compact && sessionsOpen ? <ModalPortal className="mobile-sessions-backdrop" onRequestClose={() => setSessionsOpen(false)} onMouseDown={() => setSessionsOpen(false)}><section ref={sessionsRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="mobile-sessions-title" className="mobile-sessions-dialog" onMouseDown={(event) => event.stopPropagation()}><header><h2 id="mobile-sessions-title">{t("mobile.sessions")}</h2><button type="button" onClick={() => setSessionsOpen(false)} aria-label={t("common.actions.close")}><X size={20} aria-hidden="true" /></button></header><button type="button" className="secondary-button" onClick={() => { onCreateAgent(); setSessionsOpen(false); }}><Plus size={18} aria-hidden="true" />{t("common.actions.newAgent")}</button><SessionList sessions={sessions} activeSessionId={activeSessionId} workspaceAgentTitle={workspaceAgentTitle} locale={locale} ariaLabel={t("chat.agentSessions")} onSelectSession={(item) => { onSelectSession(item); setSessionsOpen(false); }} /></section></ModalPortal> : null}
 
       {deleteConfirmOpen ? (
-        <ModalPortal className="session-delete-backdrop" role="presentation">
+        <ModalPortal className="session-delete-backdrop" role="presentation" onRequestClose={() => setDeleteConfirmOpen(false)}>
           <section
+            ref={deleteRef}
+            tabIndex={-1}
             className="session-delete-dialog"
             role="dialog"
             aria-modal="true"
@@ -732,6 +742,7 @@ export function ChatPane({
       {approvalDialog ? (
         <ModalPortal
           className="approval-dialog-backdrop"
+          onRequestClose={closeApprovalDialog}
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeApprovalDialog();

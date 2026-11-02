@@ -1,6 +1,6 @@
 import { PlaybackSlider } from "./PlaybackSlider.js";
 import { PlaybackTargetSelect } from "./PlaybackTargetSelect.js";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import {
   Maximize,
@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import type { StreamOptions } from "@cyberos/shared";
 import { usePlayback } from "./PlaybackProvider.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
+import { ModalDepthContext } from "../common/ModalPortal.js";
 import { musicTime } from "../../lib/music-state.js";
 import { mediaRequest, saveStreamProgress } from "../../lib/video-api.js";
 
@@ -27,7 +28,8 @@ function BrowserPlayerSurface() {
   const b = p.browser!;
   const [error, setError] = useState<string | null>(null);
   const surface = useRef<HTMLDivElement>(null);
-  const dialog = useModalDialog(() => p.setPlayerOpen(false));
+  const depth = useContext(ModalDepthContext);
+  const dialog = useModalDialog(() => p.setPlayerOpen(false), false, p.playerOpen);
   const current = useRef(b);
   current.current = b;
   const translate = useRef(t);
@@ -146,6 +148,7 @@ function BrowserPlayerSurface() {
     }
   };
   return (
+    <ModalDepthContext.Provider value={depth + 1}>
     <div
       ref={surface}
       className={`browser-player-backdrop${p.playerOpen ? "" : " is-minimized"}`}
@@ -321,5 +324,6 @@ function BrowserPlayerSurface() {
         </div>
       </section>
     </div>
+    </ModalDepthContext.Provider>
   );
 }

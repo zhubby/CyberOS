@@ -24,6 +24,7 @@ import type { BluetoothTransfer, MonitoringAlertIncident, OperationNotification 
 import { formatBytes } from "../../i18n/format.js";
 import { formatDate, formatRelativeTime } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { usePopoverBack } from "../common/ModalPortal.js";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -72,6 +73,7 @@ export function NotificationCenter({
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [activeTab, setActiveTab] = useState<"operations" | "bluetooth" | "alerts">("operations");
+  usePopoverBack(open, onClose, 9);
   const activeUnreadCount = activeTab === "operations"
     ? operationUnreadCount
     : activeTab === "bluetooth"

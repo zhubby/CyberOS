@@ -1,5 +1,7 @@
-import { ModalPortal } from "../common/ModalPortal.js";
+import { ModalDepthContext, ModalPortal } from "../common/ModalPortal.js";
+import { useMobileBack } from "../../mobile/MobileNavigation.js";
 import {
+  useContext,
   useEffect,
   useId,
   useMemo,
@@ -368,6 +370,8 @@ function ApplyCountdown({ transaction, seconds, busy, t, onConfirm, onRollback }
 function useDialogFocus(dialog: RefObject<HTMLElement | null>, onEscape?: () => void) {
   const escapeRef = useRef(onEscape);
   escapeRef.current = onEscape;
+  const depth = useContext(ModalDepthContext);
+  useMobileBack(() => { escapeRef.current?.(); return true; }, 100 + depth * 10);
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = window.requestAnimationFrame(() => dialog.current?.focus());

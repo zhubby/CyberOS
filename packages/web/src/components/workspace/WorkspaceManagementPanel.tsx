@@ -737,7 +737,7 @@ function VirtualMachineManagementPanel({
         />
       ) : null}
       {createOpen ? (
-        <ModalPortal className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setCreateOpen(false)}>
+        <ModalPortal className="management-dialog-backdrop" role="presentation" onRequestClose={() => setCreateOpen(false)} closeDisabled={Boolean(pendingAction)} onMouseDown={(event) => event.currentTarget === event.target && setCreateOpen(false)}>
           <form className="management-dialog vm-create-dialog" onSubmit={(event) => void createVm(event)} role="dialog" aria-modal="true" aria-labelledby="vm-create-title">
             <header className="vm-create-dialog-header">
               <div className="vm-create-heading">
@@ -880,6 +880,7 @@ export function VmInstanceDetailsDialog({
     <ModalPortal
       className="management-modal-backdrop"
       role="presentation"
+      onRequestClose={onClose}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -1804,7 +1805,7 @@ export function DockerContainerDetailsDialog({
   }
 
   return (
-    <ModalPortal className="management-modal-backdrop" role="presentation">
+    <ModalPortal className="management-modal-backdrop" role="presentation" onRequestClose={onClose}>
       <section className="management-modal docker-container-detail-modal" role="dialog" aria-modal="true" aria-labelledby="docker-container-detail-title">
         <header className="docker-container-detail-header">
           <div className="docker-container-detail-heading">
@@ -2020,7 +2021,7 @@ function DockerLogsDialog({
 }) {
   const { t } = useTranslation();
   return (
-    <ModalPortal className="management-modal-backdrop" role="presentation">
+    <ModalPortal className="management-modal-backdrop" role="presentation" onRequestClose={onClose}>
       <section className="management-modal" role="dialog" aria-modal="true" aria-labelledby="docker-logs-title">
         <header>
           <div>
@@ -2162,7 +2163,7 @@ function DockerConsoleDialog({ session, onClose, kind = "docker" }: { session: D
   }, [session.websocketUrl]);
 
   return (
-    <ModalPortal className="management-modal-backdrop" role="presentation">
+    <ModalPortal className="management-modal-backdrop" role="presentation" onRequestClose={onClose}>
       <section className="management-modal management-console-modal" role="dialog" aria-modal="true" aria-labelledby="management-console-title">
         <header>
           <div>

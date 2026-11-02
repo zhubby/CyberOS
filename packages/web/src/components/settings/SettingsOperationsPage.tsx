@@ -228,7 +228,7 @@ export function SettingsOperationsPage({
       </footer>
 
       {confirmOpen ? (
-        <ModalPortal className="settings-ops-confirm-backdrop" role="presentation" onMouseDown={closeConfirmation}>
+        <ModalPortal className="settings-ops-confirm-backdrop" role="presentation" onRequestClose={closeConfirmation} onMouseDown={closeConfirmation}>
           <section
             className="settings-ops-confirm-dialog"
             role="alertdialog"

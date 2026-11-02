@@ -91,6 +91,8 @@ const playerStatus: VodPlayerStatus = {
 function renderPreview(overrides: Partial<ComponentProps<typeof WorkspacePane>> = {}) {
   return renderToStaticMarkup(createElement(WorkspacePane, {
     active: true,
+    activePanel: "files",
+    onPanelChange: () => undefined,
     selectedStoragePoolId: "pool1",
     storagePools: [{ id: "pool1", name: "pool1", path: ".", mountpoint: "/pool1", filesystem: "btrfs", status: "ready" }],
     storageSummaryLoading: false,

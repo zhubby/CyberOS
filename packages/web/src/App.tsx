@@ -1,11 +1,16 @@
 import { getMusicPlayer } from "./lib/music-api.js";
 import { MusicTakeoverDialog, MusicProvider } from "./components/music/MusicProvider.js";
+import { PlaybackBar } from "./components/playback/PlaybackBar.js";
 import { PlaybackMenu } from "./components/playback/PlaybackMenu.js";
-import { PlaybackProvider } from "./components/playback/PlaybackProvider.js";
+import { PlaybackProvider, usePlayback } from "./components/playback/PlaybackProvider.js";
 import { BrowserPlayer } from "./components/playback/BrowserPlayer.js";
-import { FormEvent, KeyboardEvent, PointerEvent, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
+import { FormEvent, KeyboardEvent, PointerEvent, Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CircleAlert, CircleCheck, MessageSquare, PanelRight, X } from "lucide-react";
+import { AlertTriangle, CircleAlert, CircleCheck, X } from "lucide-react";
+import { MobileAppScope, MobileNavigationProvider, useMobileNavigation } from "./mobile/MobileNavigation.js";
+import { MobileAppLoading, MobileDock, MobileHome, useMobileConnection } from "./mobile/MobileHome.js";
+import { isWorkspacePanelId } from "./mobile/apps.js";
+import { readStoredWorkspacePanel, writeStoredWorkspacePanel, type WorkspacePanelId } from "./lib/workspace-panel-settings.js";
 import {
   applyFileMutation,
   cancelJob,
@@ -111,15 +116,12 @@ import {
   type VodPlayerCommand,
   type VodPlayerStatus
 } from "./api.js";
-import {
-  ChatPane,
-  composeAgentMessage,
-  hasActiveAgentTurn,
-  type AgentDeliveryMode
-} from "./components/chat/ChatPane.js";
+import type { AgentDeliveryMode } from "./components/chat/ChatPane.js";
+import { composeAgentMessage, hasActiveAgentTurn } from "./lib/agent-composer.js";
+const ChatPane = lazy(() => import("./components/chat/ChatPane.js").then((module) => ({ default: module.ChatPane })));
 import { NotificationCenter } from "./components/notifications/NotificationCenter.js";
 import { FileEditorModal } from "./components/editor/FileEditorModal.js";
-import { SettingsModal } from "./components/settings/SettingsModal.js";
+const SettingsModal = lazy(() => import("./components/settings/SettingsModal.js").then((module) => ({ default: module.SettingsModal })));
 import {
   WorkspacePane,
   defaultWorkspaceSearchOptions,
@@ -187,8 +189,6 @@ import { scheduleToastDismissal } from "./lib/toast.js";
 import { createTrailingSingleFlight } from "./lib/trailing-single-flight.js";
 import { acceptVodPlayerStatus } from "./lib/vod-player-status.js";
 
-type MobileView = "chat" | "workspace";
-
 const WORK_QUEUE_NOTIFICATION_DEBOUNCE_MS = 1_000;
 const MAX_UPLOAD_BATCHES = 8;
 const VOD_PLAYER_ERROR_CODES = new Set([
@@ -220,10 +220,24 @@ function vodPlayerErrorCode(error: unknown): NonNullable<VodPlayerStatus["errorC
 }
 
 export function App() {
-  return <PlaybackProvider><MusicProvider><AppContent /></MusicProvider></PlaybackProvider>;
+  return <MobileNavigationProvider><PlaybackProvider><MusicProvider><AppContent /></MusicProvider></PlaybackProvider></MobileNavigationProvider>;
 }
 
 function AppContent() {
+  const navigation = useMobileNavigation()!;
+  const connection = useMobileConnection(navigation.compact);
+  const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanelId>(readStoredWorkspacePanel);
+  const activePanel = isWorkspacePanelId(navigation.route) ? navigation.route : workspacePanel;
+  const workspaceActive = !navigation.compact || isWorkspacePanelId(navigation.route);
+  useEffect(() => {
+    setWorkspacePanel(activePanel);
+    writeStoredWorkspacePanel(activePanel);
+  }, [activePanel]);
+  function changePanel(panel: WorkspacePanelId) {
+    setWorkspacePanel(panel);
+    navigation.openApp(panel);
+  }
+  const playback = usePlayback();
   const [videoTakeover, setVideoTakeover] = useState<string | null>(null);
   const { t } = useTranslation();
   const [selectedStoragePoolId, setSelectedStoragePoolId] = useState("");
@@ -288,7 +302,10 @@ function AppContent() {
   const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
   const closeNotificationCenter = useCallback(() => setNotificationCenterOpen(false), []);
-  const [mobileView, setMobileView] = useState<MobileView>("chat");
+  function setMobileView(view: "chat" | "workspace") {
+    if (view === "workspace") changePanel("files");
+    else navigation.openApp("agent");
+  }
   const [filesPanelActivationId, setFilesPanelActivationId] = useState(0);
   const [splitWidth, setSplitWidth] = useState(() => readStoredSplitWidth());
   const [resizing, setResizing] = useState(false);
@@ -851,7 +868,7 @@ function AppContent() {
   useEffect(() => {
     const vodPlayerAreaVisible = Boolean(
       selectedFilePath &&
-        (typeof window === "undefined" || window.innerWidth > 860 || mobileView === "workspace")
+        (!navigation.compact || navigation.route === "files")
     );
     if (!vodPlayerAreaVisible) {
       return;
@@ -875,7 +892,7 @@ function AppContent() {
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, [mobileView, selectedFilePath]);
+  }, [navigation.compact, navigation.route, selectedFilePath]);
 
   useEffect(() => {
     if (!resizing) {
@@ -1038,7 +1055,25 @@ function AppContent() {
     void refreshNotifications(true);
   }
 
+  useEffect(() => {
+    if (!navigation.compact) return;
+    if (navigation.route === "settings") {
+      if (!settingsOpen) void openSettings();
+    } else setSettingsOpen(false);
+  }, [navigation.compact, navigation.route]);
+
+  useEffect(() => {
+    const sync = () => {
+      if (document.visibilityState !== "visible") return;
+      void Promise.all([refreshWorkQueues(), reloadSessions(), refreshNotifications()]).catch((nextError: unknown) => setError(toErrorMessage(nextError)));
+    };
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("online", sync);
+    return () => { document.removeEventListener("visibilitychange", sync); window.removeEventListener("online", sync); };
+  }, []);
+
   async function openSettings(section: SettingsSectionId = "overview") {
+    navigation.openApp("settings");
     setSettingsOpen(true);
     setActiveSettingsSection(section);
     setSettingsLoading(true);
@@ -2559,35 +2594,16 @@ function AppContent() {
 
   return (
     <main
-      className={`app-shell${resizing ? " is-resizing" : ""}`}
+      className={`app-shell${resizing ? " is-resizing" : ""}${navigation.compact && playback.dockVisible ? " has-playback-dock" : ""}`}
       style={appStyle}
+      data-mobile-route={navigation.compact ? navigation.route : undefined}
     >
-      <div className="mobile-tabs">
-        <div className="mobile-tab-buttons" role="group" aria-label={t("chat.primaryViews")}>
-          <button
-            type="button"
-            className={mobileView === "chat" ? "is-active" : ""}
-            aria-pressed={mobileView === "chat"}
-            onClick={() => setMobileView("chat")}
-          >
-            <MessageSquare aria-hidden="true" size={16} />
-            <span>{t("chat.mobileChat")}</span>
-          </button>
-          <button
-            type="button"
-            className={mobileView === "workspace" ? "is-active" : ""}
-            aria-pressed={mobileView === "workspace"}
-            onClick={() => setMobileView("workspace")}
-          >
-            <PanelRight aria-hidden="true" size={16} />
-            <span>{t("chat.mobileWorkspace")}</span>
-          </button>
-        </div>
-      </div>
-
+      {navigation.compact && navigation.route === "home" ? <MobileHome connection={connection} unreadCount={notificationUnreadCount} approvalCount={capabilityApprovals.length} onOpenApp={navigation.openApp} onOpenNotifications={openNotificationCenter} /> : null}
+      <MobileAppScope.Provider value="agent">
+      {!navigation.compact || navigation.route === "agent" ? <Suspense fallback={<MobileAppLoading app="agent" className="chat-pane is-mobile-active" />}>
       <ChatPane
-        playbackEntry={<PlaybackMenu onOpenBluetoothSettings={() => void openSettings("bluetooth")} />}
-        active={mobileView === "chat"}
+        playbackEntry={!navigation.compact ? <PlaybackMenu onOpenBluetoothSettings={() => void openSettings("bluetooth")} /> : null}
+        active={!navigation.compact || navigation.route === "agent"}
         selectedRoot={selectedStoragePool}
         activeSessionSummary={activeSessionSummary}
         sessions={sessions}
@@ -2623,6 +2639,8 @@ function AppContent() {
         onRetryInterruptedJob={() => void retryInterruptedJob()}
         onOpenWorkspacePath={(path) => void openWorkspacePath(path)}
       />
+      </Suspense> : null}
+      </MobileAppScope.Provider>
 
       {error || successNotice || warningNotice ? (
         <div className="app-notification-region" aria-live="polite" aria-atomic="false">
@@ -2693,8 +2711,11 @@ function AppContent() {
         onKeyDown={resizeWithKeyboard}
       />
 
+      <MobileAppScope.Provider value={activePanel}>
       <WorkspacePane
-        active={mobileView === "workspace"}
+        active={workspaceActive}
+        activePanel={activePanel}
+        onPanelChange={changePanel}
         storagePools={storagePoolOptions}
         storageSummaryLoading={storageSummaryLoading}
         photoLibrarySettingsUpdatedAt={photoSettings?.updatedAt ?? null}
@@ -2767,6 +2788,7 @@ function AppContent() {
         onClosePreview={() => setSelectedFilePath(null)}
         onRollback={(operation) => void handleRollback(operation)}
       />
+      </MobileAppScope.Provider>
 
       <NotificationCenter
         open={notificationCenterOpen}
@@ -2800,7 +2822,9 @@ function AppContent() {
         />
       ) : null}
 
-      {settingsOpen ? (
+      {settingsOpen && (!navigation.compact || navigation.route === "settings") ? (
+        <MobileAppScope.Provider value="settings">
+        <Suspense fallback={<MobileAppLoading app="settings" className="mobile-settings-page" />}>
         <SettingsModal
           activeSection={activeSettingsSection}
           activeSessionId={activeSessionId}
@@ -2829,7 +2853,8 @@ function AppContent() {
           networkSummary={settingsNetwork}
           bluetoothStatus={settingsBluetooth}
           resolvedLocale={resolvedLocale}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => navigation.compact ? navigation.goBack() : setSettingsOpen(false)}
+          onRequestSystemPower={handleSystemPower}
           onFormChange={setModelSettingsForm}
           onDockerFormChange={setDockerSettingsForm}
           onVmFormChange={setVmSettingsForm}
@@ -2851,8 +2876,12 @@ function AppContent() {
           onSectionChange={setActiveSettingsSection}
           onSubmit={(event) => void saveSettings(event)}
         />
+        </Suspense>
+        </MobileAppScope.Provider>
       ) : null}
       {videoTakeover ? <MusicTakeoverDialog title={t("music.takeoverTitle")} body={t("music.takeoverMusic")} busy={vodPlayerBusy} onCancel={() => setVideoTakeover(null)} onConfirm={() => void playSelectedOnVodPlayer(videoTakeover)} /> : null}
+      {navigation.compact ? <PlaybackBar onOpenBluetoothSettings={() => void openSettings("bluetooth")} /> : null}
+      {navigation.compact && navigation.route === "home" ? <MobileDock approvalCount={capabilityApprovals.length} onOpenApp={navigation.openApp} /> : null}
       <BrowserPlayer />
     </main>
   );

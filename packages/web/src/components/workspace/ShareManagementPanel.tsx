@@ -249,7 +249,7 @@ function ShareDialog({ title, busy, onClose, children, returnFocus, closeLabel }
     document.addEventListener("keydown", keydown);
     return () => { document.removeEventListener("keydown", keydown); if (previous?.isConnected) previous.focus(); };
   }, []);
-  return <ModalPortal className="management-modal-backdrop share-add-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  return <ModalPortal className="management-modal-backdrop share-add-modal-backdrop" role="presentation" onRequestClose={onClose} closeDisabled={busy} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section ref={ref} tabIndex={-1} className="management-modal share-add-modal share-protocol-modal" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title" aria-busy={busy || undefined}>
       <header><h2 id="share-dialog-title">{title}</h2><button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={closeLabel} title={closeLabel}><X size={16} aria-hidden="true" /></button></header>
       {children}

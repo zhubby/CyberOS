@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { usePopoverBack } from "./ModalPortal.js";
 
 export interface CustomSelectOption<T extends string = string> {
   value: T;
@@ -72,6 +73,7 @@ export function CustomSelect<T extends string = string>({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
+  usePopoverBack(open, () => { setOpen(false); triggerRef.current?.focus(); }, 7);
   const [menuLayout, setMenuLayout] = useState({ above: false, maxHeight: 240 });
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;

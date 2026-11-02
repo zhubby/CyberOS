@@ -1,4 +1,5 @@
 import { ModalPortal } from "../common/ModalPortal.js";
+import { useAppScroll, useAppViewState, useMobileBack } from "../../mobile/MobileNavigation.js";
 import {
   Check,
   CheckSquare,
@@ -117,11 +118,11 @@ export function PhotoLibraryPanel({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [facets, setFacets] = useState<PhotoQueryFacets | null>(null);
-  const [filters, setFilters] = useState<PhotoQueryFilters>({});
-  const [searchText, setSearchText] = useState("");
-  const [sortField, setSortField] = useState<PhotoQuerySortField>("captured_at");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [view, setView] = useState<"timeline" | "map">("timeline");
+  const [filters, setFilters] = useAppViewState<PhotoQueryFilters>("photos.filters", {});
+  const [searchText, setSearchText] = useAppViewState("photos.search", "");
+  const [sortField, setSortField] = useAppViewState<PhotoQuerySortField>("photos.sort", "captured_at");
+  const [sortDirection, setSortDirection] = useAppViewState<"asc" | "desc">("photos.direction", "desc");
+  const [view, setView] = useAppViewState<"timeline" | "map">("photos.view", "timeline");
   const [metadataFields, setMetadataFields] = useState<PhotoMetadataField[]>([]);
   const [metadata, setMetadata] = useState<PhotoMetadataDetail | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
@@ -134,7 +135,8 @@ export function PhotoLibraryPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [picker, setPicker] = useState<"move" | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [lightboxId, setLightboxId] = useAppViewState<string | null>("photos.detail", null);
+  const [restoredLightbox, setRestoredLightbox] = useState<PhotoQueryAsset | null>(null);
   const [zoom, setZoom] = useState(1);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -164,7 +166,7 @@ export function PhotoLibraryPanel({
   const selected = photos.filter((photo) => selectedIds.has(photo.id));
   const groupedPhotos = useMemo(() => groupPhotosByDate(photos, locale), [locale, photos]);
   const lightboxIndex = lightboxId ? photos.findIndex((photo) => photo.id === lightboxId) : -1;
-  const lightboxPhoto = lightboxIndex >= 0 ? photos[lightboxIndex] ?? null : null;
+  const lightboxPhoto = lightboxIndex >= 0 ? photos[lightboxIndex] ?? null : restoredLightbox?.id === lightboxId ? restoredLightbox : null;
   const lightboxMediaKind = lightboxPhoto ? photoMediaKindForAsset(lightboxPhoto) : null;
   const statusBusy = isPhotoBusy(status?.state);
   const queryFilters = useMemo(() => readyPhotoQueryFilters(filters, metadataFields), [filters, metadataFields]);
@@ -180,6 +182,13 @@ export function PhotoLibraryPanel({
       ].filter(Boolean).join(" · ")
     : null;
   const hasRuntimeAlert = runtimeAlert !== null;
+
+  useEffect(() => {
+    if (!lightboxId || lightboxIndex >= 0 || !initialLoadComplete) return;
+    let live = true;
+    void getPhotoRecord(lightboxId).then((asset) => { if (live) setRestoredLightbox(asset); }).catch(() => { if (live) setLightboxId(null); });
+    return () => { live = false; };
+  }, [initialLoadComplete, lightboxId, lightboxIndex]);
 
   useEffect(() => {
     if (!hasRuntimeAlert) setRuntimeAlertOpen(false);
@@ -405,6 +414,10 @@ export function PhotoLibraryPanel({
       setLoadingMore(false);
     }
   }, [loadTimeline, nextCursor, onNotifyError]);
+
+  useAppScroll(libraryContentRef, `photos.scroll:${queryKey}:${view}`, { ready: initialLoadComplete && !loading, canLoadMore: Boolean(nextCursor) && !paginationError, loadMore });
+  useMobileBack(() => { if (!lightboxId) return false; setLightboxId(null); return true; }, 30);
+  useMobileBack(() => { if (!selectedIds.size) return false; setSelectedIds(new Set()); return true; }, 20);
 
   useEffect(() => {
     const sentinel = loadMoreSentinelRef.current;
@@ -957,7 +970,7 @@ export function PhotoLibraryPanel({
       ) : null}
 
       {deleteOpen ? (
-        <ModalPortal className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation" onRequestClose={() => setDeleteOpen(false)} closeDisabled={Boolean(busyAction)}>
           <div
             ref={deleteDialogRef}
             className="file-action-dialog"
@@ -982,7 +995,7 @@ export function PhotoLibraryPanel({
       ) : null}
 
       {lightboxPhoto ? (
-        <ModalPortal className="photo-lightbox-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setLightboxId(null)}>
+        <ModalPortal className="photo-lightbox-backdrop" role="presentation" onRequestClose={() => setLightboxId(null)} onMouseDown={(event) => event.currentTarget === event.target && setLightboxId(null)}>
           <div ref={lightboxRef} className="photo-lightbox" role="dialog" aria-modal="true" aria-labelledby="photo-lightbox-title" tabIndex={-1} onKeyDown={handleLightboxKeyDown}>
             <header className="photo-lightbox-header">
               <div><span className="eyebrow">{t("workspace.photos.viewer")}</span><h2 id="photo-lightbox-title">{lightboxPhoto.name}</h2></div>

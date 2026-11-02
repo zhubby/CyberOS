@@ -1,4 +1,9 @@
 export const en = {
+  mobile: {
+    home: "Home screen", apps: "Apps", dock: "Favorite apps", agent: "Agent", settings: "Settings",
+    back: "Back", more: "More actions", sessions: "Conversations", select: "Select files", done: "Done",
+    connection: { connecting: "Connecting", online: "Connected", offline: "Disconnected" }
+  },
   video: {
     "title": "Video",
     "library": "Video library",
@@ -3290,6 +3295,11 @@ type LocaleResource<T> = {
 };
 
 export const zhCN = {
+  mobile: {
+    home: "主屏", apps: "应用", dock: "常用应用", agent: "Agent", settings: "设置",
+    back: "返回", more: "更多操作", sessions: "会话", select: "选择文件", done: "完成",
+    connection: { connecting: "正在连接", online: "已连接", offline: "连接已断开" }
+  },
   video: {
     "title": "影视",
     "library": "影视库",

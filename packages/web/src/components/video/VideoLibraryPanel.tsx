@@ -1,4 +1,5 @@
 import { ModalPortal } from "../common/ModalPortal.js";
+import { useAppScroll, useAppViewState, useMobileBack } from "../../mobile/MobileNavigation.js";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { SearchFilterPopover } from "../common/SearchFilterPopover.js";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -91,16 +92,17 @@ export function VideoLibraryPanel({
 }) {
   const { t } = useTranslation();
   const playback = usePlayback();
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useAppViewState<View>("video.view", "home");
   const [home, setHome] = useState<VideoHome | null>(null);
   const [page, setPage] = useState<VideoPage>({ titles: [], nextCursor: null });
-  const [query, setQuery] = useState<VideoQuery>({ sort: "title" });
+  const [query, setQuery] = useAppViewState<VideoQuery>("video.query", { sort: "title" });
   const [draftFilters, setDraftFilters] = useState<VideoFilters>(DEFAULT_FILTERS);
   const [sources, setSources] = useState<MediaSourceRecord[]>([]);
   const [collections, setCollections] = useState<MediaCollection[]>([]);
   const [detail, setDetail] = useState<VideoTitleDetail | null>(null);
-  const [selected, setSelected] = useState("");
-  const [season, setSeason] = useState<number | null>(null);
+  const [detailId, setDetailId] = useAppViewState<string | null>("video.detail", null);
+  const [selected, setSelected] = useAppViewState("video.selected", "");
+  const [season, setSeason] = useAppViewState<number | null>("video.season", null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,23 +122,29 @@ export function VideoLibraryPanel({
   const [version, setVersion] = useState(0);
   const moreRef = useRef(false);
   const detailSequence = useRef(0);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const activeDetailId = detailId ?? detail?.id;
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
-    const id = detail?.id;
+    const id = activeDetailId;
     if (!id) return;
     const controller = new AbortController();
     const sequence = detailSequence.current;
+    setError(null);
     void getVideoDetail(id, controller.signal)
       .then((next) => {
         if (controller.signal.aborted || sequence !== detailSequence.current)
           return;
         setDetail(next);
       })
-      .catch(() => {
-        /* Keep the current detail while a scan is completing. */
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || sequence !== detailSequence.current)
+          return;
+        // Retain the requested detail so a temporary failure can be retried.
+        setError(error instanceof Error ? error.message : String(error));
       });
     return () => controller.abort();
-  }, [version, detail?.id]);
+  }, [version, activeDetailId]);
   useEffect(() => {
     let live = true;
     void Promise.all([
@@ -252,6 +260,7 @@ export function VideoLibraryPanel({
       const next = await getVideoDetail(title.id);
       if (sequence !== detailSequence.current) return;
       setDetail(next);
+      setDetailId(next.id);
       setSeason(next.seasons[0]?.seasonNumber ?? null);
       const files = [
         ...next.files,
@@ -283,8 +292,10 @@ export function VideoLibraryPanel({
   const closeDetail = () => {
     detailSequence.current++;
     setDetail(null);
+    setDetailId(null);
     setMatching(false);
   };
+  useMobileBack(() => { if (detailId || detail) { closeDetail(); return true; } if (view !== "home") { setView("home"); return true; } return false; }, 10);
   useEffect(() => {
     if (!requestedTitleId) return;
     let live = true;
@@ -385,7 +396,7 @@ export function VideoLibraryPanel({
     if (!page.nextCursor || moreRef.current) return;
     moreRef.current = true;
     setBusy(true);
-    void getVideoPage({
+    return getVideoPage({
       ...query,
       ...(view === "movie" || view === "series" ? { kind: view } : {}),
       ...(view === "watchlist" ? { watchlist: true } : {}),
@@ -409,6 +420,7 @@ export function VideoLibraryPanel({
         setBusy(false);
       });
   };
+  useAppScroll(contentRef, `video.scroll:${view}:${detailId ?? ""}:${JSON.stringify(query)}`, { ready: !loading && !busy && (!detailId || Boolean(detail)), canLoadMore: Boolean(page.nextCursor) && !error && !detailId, loadMore: more });
   const files = detail
     ? [
         ...detail.files,
@@ -597,7 +609,7 @@ export function VideoLibraryPanel({
           {error}
         </p>
       ) : null}
-      <div className="video-content">
+      <div ref={contentRef} className="video-content">
         {detail ? (
           <article className="video-detail">
             <button data-tv-focusable onClick={closeDetail}>

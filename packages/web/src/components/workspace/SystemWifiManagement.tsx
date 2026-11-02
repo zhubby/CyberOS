@@ -789,7 +789,7 @@ function WifiDialog({ title, eyebrow, busy, obscured = false, className, onClose
   }
 
   return (
-    <ModalPortal className="management-modal-backdrop system-wifi-modal-backdrop" inert={obscured || undefined} aria-hidden={obscured || undefined} onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    <ModalPortal className="management-modal-backdrop system-wifi-modal-backdrop" onRequestClose={onClose} closeDisabled={busy || obscured} inert={obscured || undefined} aria-hidden={obscured || undefined} onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <section ref={dialogRef} className={["management-modal", "system-wifi-dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={handleKeyDown}>
         <header><div><span className="eyebrow">{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button></header>
         {children}
@@ -834,7 +834,7 @@ function WifiConfirmationDialog({ confirmation, busy, error, onClose, t }: { con
   }
 
   return (
-    <ModalPortal className="management-modal-backdrop system-wifi-modal-backdrop">
+    <ModalPortal className="management-modal-backdrop system-wifi-modal-backdrop" onRequestClose={onClose} closeDisabled={busy}>
       <section ref={dialogRef} className="management-modal system-wifi-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={handleKeyDown}>
         <header><div><span className="eyebrow">{t("workspace.management.network.wifi.confirm.eyebrow")}</span><h2 id={titleId}>{confirmation.title}</h2></div><button ref={closeButton} type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button></header>
         <div className="system-wifi-confirm-body"><AlertTriangle aria-hidden="true" size={24} /><div><p>{confirmation.description}</p>{error ? <p className="system-wifi-error" role="alert">{error}</p> : null}</div></div>

@@ -753,6 +753,7 @@ export function SystemStorageManagementPanel({
           className="management-modal-backdrop"
           role="presentation"
           onMouseDown={(event) => event.currentTarget === event.target && closePoolDetails()}
+          onRequestClose={closePoolDetails}
         >
           <section
             className="management-modal storage-pool-details-modal"
@@ -894,6 +895,8 @@ export function SystemStorageManagementPanel({
           className="management-modal-backdrop"
           role="presentation"
           onMouseDown={(event) => event.currentTarget === event.target && closeCreateModal()}
+          onRequestClose={closeCreateModal}
+          closeDisabled={submitting}
         >
           <section
             className="management-modal storage-pool-modal"
@@ -1214,6 +1217,7 @@ function StorageDiskDetailsModal({
       className="management-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => event.currentTarget === event.target && onClose()}
+      onRequestClose={onClose}
     >
       <section
         className="management-modal storage-disk-details-modal"
@@ -1811,6 +1815,7 @@ function NetworkInterfaceDetailsModal({
       className="management-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => event.currentTarget === event.target && onClose()}
+      onRequestClose={onClose}
     >
       <section
         className="management-modal network-interface-details-modal"

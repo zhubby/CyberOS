@@ -1,4 +1,7 @@
 import { ModalPortal } from "../common/ModalPortal.js";
+import { MobileAppControls, useAppHeadingFocus } from "../../mobile/MobileHome.js";
+import { useMobileBack, useMobileNavigation } from "../../mobile/MobileNavigation.js";
+import { PowerControl } from "../power/PowerControl.js";
 import { FormEvent, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsSecretField } from "./SettingsSecretField.js";
@@ -47,6 +50,7 @@ import type {
   PhotoLibraryStatus,
   PhotoProcessingSettings,
   SystemInfo,
+  SystemPowerAction,
   WifiStatus,
   BluetoothStatus
 } from "../../api.js";
@@ -125,6 +129,7 @@ interface SettingsModalProps {
   bluetoothStatus: BluetoothStatus | null;
   resolvedLocale: SupportedLocale;
   onClose: () => void;
+  onRequestSystemPower?: (action: SystemPowerAction) => Promise<boolean>;
   onFormChange: (form: ModelProviderFormState) => void;
   onDockerFormChange: (form: DockerSettingsFormState) => void;
   vmForm: VmSettingsFormState;
@@ -207,6 +212,7 @@ export function SettingsModal({
   bluetoothStatus,
   resolvedLocale,
   onClose,
+  onRequestSystemPower,
   onFormChange,
   onDockerFormChange,
   vmForm,
@@ -230,6 +236,11 @@ export function SettingsModal({
   onSubmit
 }: SettingsModalProps) {
   const { t } = useTranslation();
+  const compact = useMobileNavigation()?.compact ?? false;
+  const headingRef = useAppHeadingFocus();
+  const [mobileDetail, setMobileDetail] = useState(activeSection !== "overview");
+  useMobileBack(() => { if (!mobileDetail) return false; setMobileDetail(false); window.requestAnimationFrame(() => activeSectionButtonRef.current?.focus()); return true; }, 10);
+  useEffect(() => { if (activeSection !== "overview") setMobileDetail(true); }, [activeSection]);
   const [settingsSearch, setSettingsSearch] = useState("");
   const dialogRef = useRef<HTMLElement | null>(null);
   const activeSectionButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -254,7 +265,10 @@ export function SettingsModal({
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => {
+      if (compact) headingRef.current?.focus({ preventScroll: true });
+      else searchInputRef.current?.focus();
+    });
 
     return () => {
       window.cancelAnimationFrame(frame);
@@ -263,7 +277,7 @@ export function SettingsModal({
         window.requestAnimationFrame(() => previousFocus.focus());
       }
     };
-  }, []);
+  }, [compact, headingRef]);
 
   useEffect(() => {
     const revealActiveSection = () => {
@@ -279,6 +293,7 @@ export function SettingsModal({
   }, [activeSection, normalizedSearch]);
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (compact) return;
     if (event.target instanceof Node && !event.currentTarget.contains(event.target)) return;
     if (event.key === "Escape" && !event.defaultPrevented) {
       event.preventDefault();
@@ -310,18 +325,19 @@ export function SettingsModal({
     }
   }
 
-  return (
-    <ModalPortal className="settings-backdrop" role="presentation" onMouseDown={onClose}>
+  const content = (
       <section
         ref={dialogRef}
-        className="settings-modal settings-center"
-        role="dialog"
-        aria-modal="true"
+        className={`settings-modal settings-center${compact ? " mobile-settings-page" : ""}`}
+        data-settings-view={mobileDetail ? "detail" : "list"}
+        role={compact ? undefined : "dialog"}
+        aria-modal={compact ? undefined : "true"}
         aria-labelledby="settings-title"
         tabIndex={-1}
         onKeyDown={handleDialogKeyDown}
         onMouseDown={(event) => event.stopPropagation()}
       >
+        {compact ? <header className="mobile-settings-header app-titlebar"><MobileAppControls control="back" /><h2 ref={headingRef} tabIndex={-1}>{mobileDetail ? settingsSectionTitle(currentSection, t) : t("common.actions.systemSettings")}</h2><MobileAppControls control="home" /></header> : null}
         <aside className="settings-rail" aria-label={t("settings.sectionsLabel")}>
           <div className="settings-rail-brand">
             <img className="settings-brand-logo" src="/cyberos-icon.svg" alt={t("common.appName")} />
@@ -347,7 +363,7 @@ export function SettingsModal({
                     key={section.id}
                     type="button"
                     className={section.id === activeSection ? "is-active" : ""}
-                    onClick={() => onSectionChange(section.id)}
+                    onClick={() => { onSectionChange(section.id); setMobileDetail(true); }}
                   >
                     {settingsSectionIcon(section.id)}
                     <strong>{settingsSectionTitle(section, t)}</strong>
@@ -366,7 +382,7 @@ export function SettingsModal({
           </div>
         </aside>
 
-        <section className="settings-content">
+        {!compact || mobileDetail ? <section className="settings-content">
           <header className="settings-content-header">
             <div>
               <h2 id="settings-title">{settingsSectionTitle(currentSection, t)}</h2>
@@ -503,7 +519,7 @@ export function SettingsModal({
             />
           ) : null}
 
-          {activeSection === "system-profile" ? <SettingsSystemProfilePage /> : null}
+          {activeSection === "system-profile" ? <><SettingsSystemProfilePage />{compact && onRequestSystemPower ? <section className="settings-power-section"><PowerControl labelled onRequest={onRequestSystemPower} /></section> : null}</> : null}
 
           {activeSection === "appearance" ? (
             <SettingsAppearancePage
@@ -646,10 +662,10 @@ export function SettingsModal({
             />
           ) : null}
 
-        </section>
+        </section> : null}
       </section>
-    </ModalPortal>
   );
+  return compact ? content : <ModalPortal className="settings-backdrop" role="presentation" onMouseDown={onClose} onRequestClose={onClose}>{content}</ModalPortal>;
 }
 
 function SettingsOverview({

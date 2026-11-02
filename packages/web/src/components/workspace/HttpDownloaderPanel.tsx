@@ -105,7 +105,7 @@ export function HttpDownloaderPanel({
     : sourceMode === "link" && Boolean(url.trim());
   useEffect(() => {
     let active = true;
-    void getDownloads()
+    const refresh = () => getDownloads()
       .then((snapshot) => {
         if (!active) return;
         setTasks(snapshot.tasks);
@@ -118,8 +118,14 @@ export function HttpDownloaderPanel({
       .finally(() => {
         if (active) setLoading(false);
       });
+    const sync = () => { if (document.visibilityState === "visible") void refresh(); };
+    void refresh();
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("online", sync);
     return () => {
       active = false;
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("online", sync);
     };
   }, [onNotifyError]);
 
@@ -504,7 +510,7 @@ export function HttpDownloaderPanel({
       )}
 
       {createOpen ? (
-        <ModalPortal className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && closeCreateDialog()}>
+        <ModalPortal className="management-dialog-backdrop" role="presentation" onRequestClose={closeCreateDialog} closeDisabled={submitting} onMouseDown={(event) => event.currentTarget === event.target && closeCreateDialog()}>
           <form
             ref={createDialogRef}
             className="management-dialog download-create-dialog"

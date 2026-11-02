@@ -145,10 +145,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (live) setError(translate.current("playback.unavailable"));
     });
     const timer = window.setInterval(() => void refresh(), 15000);
+    const sync = () => { if (document.visibilityState === "visible") void refresh(); };
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("online", sync);
     return () => {
       live = false;
       events.close();
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("online", sync);
     };
   }, [refresh, commit]);
   useEffect(() => {

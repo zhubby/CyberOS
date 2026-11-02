@@ -1,0 +1,157 @@
+.mobile-action-label { display: none; }
+.mobile-app-loading { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; height: 100%; color: var(--muted); }
+.workspace-grid > .mobile-app-loading { grid-area: 1 / 1 / -1 / -1; }
+.mobile-loading-status { display: flex; align-items: center; justify-content: center; gap: 12px; }
+
+@media (max-width: 1040px) {
+  .app-shell,
+  .app-shell.has-playback-dock {
+    --app-titlebar-height: 64px;
+    position: fixed;
+    top: var(--mobile-viewport-top, 0px);
+    left: 0;
+    width: 100%;
+    height: var(--mobile-viewport-height, 100dvh);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    overflow: hidden;
+  }
+  .app-shell > :is(.chat-pane, .workspace-pane, .mobile-home, .mobile-settings-page),
+  .app-shell.has-playback-dock > :is(.chat-pane, .workspace-pane) { grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; }
+  .app-shell > .playback-shell { grid-row: 2; }
+  .app-shell > .mobile-home-dock { grid-row: 3; grid-column: 1; }
+  .app-shell :is(button, [role="button"], summary) { min-width: 44px; min-height: 44px; touch-action: manipulation; }
+  .app-shell :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select) { font-size: 16px; }
+  .app-shell > :is([data-modal-layer], .notification-drawer-backdrop, .browser-player-backdrop) { top: var(--mobile-viewport-top, 0px); bottom: auto; height: var(--mobile-viewport-height, 100dvh); }
+  .app-shell > [data-modal-layer] > :is([role="dialog"], [role="alertdialog"]) { max-height: calc(var(--mobile-viewport-height, 100dvh) - 32px); }
+  .app-shell :is(.split-handle, .mobile-tabs, .workspace-panel-rail) { display: none; }
+  .app-shell .chat-pane.is-mobile-active { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .app-shell .workspace-shell { grid-template-columns: minmax(0, 1fr); }
+  .app-shell .workspace-stage { overflow: hidden; }
+  .app-shell .workspace-stage[data-panel="files"] { grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; }
+  .app-shell .workspace-stage[data-panel="files"] .workspace-grid { min-height: 0; overflow: hidden; grid-template-rows: minmax(0, 1fr); }
+  .app-shell .workspace-stage[data-panel="files"] .file-browser { height: 100%; min-height: 0; overflow: auto; }
+  .app-shell:not(.has-playback-dock) > :is(.workspace-pane, .mobile-settings-page) { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .app-shell:not(.has-playback-dock) .composer { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .app-shell[data-mobile-route="home"] > .playback-shell { padding-bottom: 0; }
+  .app-shell .playback-shell.is-collapsed { padding-block: 6px; }
+  .app-shell:not([data-mobile-route="home"]) .playback-shell.is-collapsed { padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+  .app-shell .shared-player-bar { --playback-button-size: 44px; height: auto; min-height: 56px; }
+  .app-shell .playback-restore { height: 44px; }
+  .app-shell .playback-output-menu { width: min(320px, calc(100vw - 20px)); max-height: 65dvh; }
+
+  .mobile-home { display: flex; flex-direction: column; overflow-y: auto; padding: 20px 18px 16px; background: var(--app-bg); }
+  .mobile-home-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 22px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .mobile-home-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .mobile-home-brand img { width: 36px; height: 36px; filter: invert(1); }
+  .mobile-home-brand h1 { margin: 0; color: var(--accent); font: 700 30px/1 var(--font-display); letter-spacing: 1px; }
+  .mobile-connection { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+  .mobile-connection i { width: 5px; height: 5px; background: currentColor; }
+  .mobile-connection[data-state="online"] { color: var(--cyber-cyan); }
+  .mobile-connection[data-state="offline"] { color: var(--red); }
+  .mobile-notifications { position: relative; display: grid; place-items: center; width: 44px; height: 44px; color: var(--text); background: var(--surface); border: 1px solid var(--line); }
+  .mobile-app-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 24px 12px; align-content: start; }
+  .mobile-app-icon { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 11px; width: 100%; min-width: 0; padding: 4px 0; border: 0; color: var(--text); background: transparent; cursor: pointer; }
+  .mobile-app-art { position: relative; display: grid; place-items: center; width: 56px; height: 56px; color: var(--accent); background: transparent; isolation: isolate; }
+  .mobile-app-art::before, .mobile-app-art::after { position: absolute; inset: 0; content: ""; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); z-index: -1; }
+  .mobile-app-art::before { background: var(--red); transform: translate(4px, 4px); }
+  .mobile-app-art::after { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+  .mobile-app-icon:nth-child(3n + 2) .mobile-app-art { color: var(--cyber-cyan); }
+  .mobile-app-icon:hover .mobile-app-art::after { background: var(--surface-hover); }
+  .mobile-app-icon:active .mobile-app-art { translate: 1px 1px; }
+  .mobile-app-name { width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 20px; text-align: center; }
+  .mobile-app-badge { position: absolute; top: -4px; right: -5px; z-index: 1; min-width: 18px; padding: 2px 4px; color: var(--app-bg); background: var(--red); font: 700 11px/14px var(--font-mono); text-align: center; }
+  .mobile-home-signature { margin-top: auto; padding-top: 56px; display: grid; gap: 5px; color: var(--muted-2); font: 10px var(--font-mono); letter-spacing: 1px; }
+  .mobile-home-signature > span:first-child { font: 700 32px var(--font-display); letter-spacing: 6px; color: var(--line); }
+  .mobile-home-dock { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--surface); }
+  .mobile-home-dock .mobile-app-art::after { background: var(--app-bg); }
+
+  .app-shell :is(.management-header, .chat-header, .mobile-settings-header) {
+    position: relative; display: grid; grid-template-areas: "back copy actions home"; grid-template-columns: 44px minmax(0, 1fr) auto 44px;
+    align-items: center; gap: 4px; padding: 6px 8px; height: var(--app-titlebar-height); min-height: var(--app-titlebar-height); overflow: visible;
+  }
+  .app-shell :is(.management-title-icon, .chat-header-index) { display: none; }
+  .app-shell :is(.management-title-copy, .chat-header-copy) { grid-area: copy; min-width: 0; }
+  .app-shell :is(.management-title-copy, .chat-header-copy) h2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 18px; line-height: 24px; margin: 0; }
+  .app-shell .management-title-copy > p { display: none; }
+  .app-shell :is(.management-header, .chat-header) h2::before { display: none; }
+  .app-shell .mobile-app-back { grid-area: back; }
+  .app-shell .mobile-app-home { grid-area: home; }
+  .app-shell :is(.mobile-app-back, .mobile-app-home, .mobile-more-button) { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid transparent; color: var(--text); background: transparent; }
+  .app-shell :is(.mobile-app-back, .mobile-app-home, .mobile-more-button):hover { border-color: var(--cyber-cyan); }
+  .app-shell .management-actions.mobile-header-actions { grid-area: actions; position: relative; display: flex; flex-wrap: nowrap; width: auto; max-width: none; overflow: visible; gap: 0; padding: 0; }
+  .app-shell .mobile-header-actions > .panel-header-action { width: 44px; height: 44px; padding: 0; }
+  .mobile-header-meta { overflow: hidden; max-height: 17px; color: var(--muted); font-size: 10px; }
+  .mobile-header-meta :is(.download-header-stat, .download-header-stat-value) { min-width: 0; padding: 0; font-size: 10px; }
+  .mobile-action-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; display: grid; gap: 4px; width: min(250px, calc(100vw - 68px)); max-height: calc(var(--mobile-viewport-height, 100dvh) - 100px); overflow: auto; padding: 8px; border: 1px solid var(--line); color: var(--text); background: var(--dialog-bg); box-shadow: 4px 4px 0 var(--app-bg); }
+  .app-shell .mobile-action-menu :is(button, .panel-header-action) { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: auto; padding: 8px; text-align: left; }
+  .mobile-action-menu .mobile-action-label { display: inline; overflow-wrap: anywhere; }
+  .mobile-action-menu .activity-menu { width: 100%; }
+  .app-shell .files-header-actions .files-header-button { width: 44px; height: 44px; }
+  .app-shell .files-header-actions .mobile-action-menu .files-header-button { width: 100%; }
+  .app-shell .files-list-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+  .files-list-title-block { flex: 1; min-width: 0; }
+  .mobile-file-select { order: 2; flex: none; padding: 4px 10px; }
+  .app-shell .file-list { --file-actions-width: 44px; }
+  .app-shell .workspace-stage[data-panel="files"] .file-row { grid-template-columns: minmax(0, 1fr) 44px; min-height: 58px; padding-inline: 10px; }
+  .app-shell .file-row > span:nth-child(n + 3), .app-shell .file-row-expanded-actions, .app-shell .file-action-button-download { display: none; }
+  .app-shell .file-row-actions { width: 44px; padding: 0; opacity: 1; pointer-events: auto; translate: 0; }
+  .app-shell .file-action-button.file-action-button-more { display: inline-grid; width: 44px; height: 44px; }
+  .app-shell .file-name { gap: 8px; min-width: 0; overflow: hidden; }
+  .app-shell .file-search-copy { flex: 1; min-width: 0; overflow: hidden; }
+  .app-shell .file-name-text { display: block; font-size: 14px; }
+  .mobile-file-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; margin-top: 4px; }
+  .app-shell input.mobile-file-checkbox { flex: none; width: 28px; height: 44px; min-width: 44px; margin: 0; accent-color: var(--accent); }
+  .app-shell .file-row-action-menu { max-width: calc(100vw - 20px); }
+  .app-shell .file-row-action-menu button { width: 100%; }
+  .app-shell .file-batch-toolbar { flex-wrap: wrap; }
+  .app-shell .chat-main { min-width: 0; height: 100%; }
+  .app-shell .chat-header-copy { min-width: 0; }
+  .app-shell .transcript { padding: 16px 12px; }
+  .app-shell .composer { padding-inline: 12px; }
+  .app-shell .composer textarea { max-height: 28dvh; }
+  .mobile-sessions-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 12px; background: rgb(0 0 0 / 72%); }
+  .mobile-sessions-dialog { display: flex; flex-direction: column; width: min(420px, 100%); max-height: calc(var(--mobile-viewport-height, 100dvh) - 24px); min-height: 240px; padding: 16px; gap: 12px; border: 1px solid var(--line); background: var(--dialog-bg); overflow: auto; }
+  .mobile-sessions-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .mobile-sessions-dialog h2 { font-size: 20px; margin: 0; }
+  .mobile-sessions-dialog > header button { display: grid; place-items: center; background: var(--surface); color: var(--text); }
+  .mobile-sessions-dialog .session-list { display: grid; overflow: auto; }
+  .app-shell .mobile-settings-page { width: 100%; height: 100%; max-height: none; max-width: none; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); border: 0; box-shadow: none; }
+  .mobile-settings-header h2 { grid-area: copy; min-width: 0; margin: 0; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-shell .mobile-settings-page .settings-rail { grid-column: 1; grid-row: 2; display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; max-height: none; padding: 12px; border: 0; overflow: hidden; }
+  .mobile-settings-page[data-settings-view="detail"] .settings-rail { display: none; }
+  .mobile-settings-page :is(.settings-rail-brand, .settings-rail-footer, .settings-content-header) { display: none; }
+  .app-shell .mobile-settings-page .settings-nav { display: block; overflow-y: auto; overflow-x: hidden; }
+  .app-shell .mobile-settings-page .settings-nav section { display: grid; gap: 6px; margin-bottom: 20px; }
+  .app-shell .mobile-settings-page .settings-nav h3 { display: block; margin: 8px 4px; }
+  .app-shell .mobile-settings-page .settings-nav button { width: 100%; min-height: 52px; padding: 10px 12px; }
+  .app-shell .mobile-settings-page .settings-content { min-width: 0; min-height: 0; overflow: auto; }
+  .mobile-settings-page .settings-content-body { padding: 16px 12px; }
+  .settings-power-section { padding: 0 12px 20px; }
+  .settings-power-button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
+  .app-shell :is(.photo-library-panel, .music-panel, .video-panel) { min-width: 0; grid-area: 1 / 1 / -1 / -1; }
+  .app-shell .photo-library { grid-area: 1 / 1 / -1 / -1; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; min-height: 0; overflow: hidden; }
+  .app-shell .photo-library-content { min-height: 0; overflow: auto; }
+  .app-shell .music-track { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+  .app-shell .music-track-album, .app-shell .music-track-duration { display: none; }
+  .app-shell .music-detail-header { flex-wrap: wrap; }
+  .app-shell .video-detail-main { grid-template-columns: minmax(0, 1fr); }
+  .app-shell .video-actions { flex-wrap: wrap; }
+  .app-shell :is(.library-search-toolbar, .photo-library-toolbar) { min-width: 0; }
+  .app-shell .app-notification { grid-template-columns: 18px minmax(0, 1fr) 44px; }
+  .app-shell .app-notification button { width: 44px; height: 44px; }
+}
+
+@media (max-width: 560px) {
+  .mobile-app-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 26px 8px; }
+  .mobile-home { padding-inline: 16px; }
+  .app-shell .shared-player-bar .playback-progress { display: none; }
+  .app-shell .shared-player-bar .playback-title { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-app-icon, .mobile-app-art { transition: none; animation: none; }
+}

@@ -112,7 +112,7 @@ export function DockerCreateDialogs({ kind, summary, storagePools, onClose, onCo
   }
 
   return (
-    <ModalPortal className="management-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!submitting && event.target === event.currentTarget) onClose(); }}>
+    <ModalPortal className="management-dialog-backdrop" role="presentation" onRequestClose={onClose} closeDisabled={submitting} onMouseDown={(event) => { if (!submitting && event.target === event.currentTarget) onClose(); }}>
       <form className="management-dialog vm-create-dialog docker-create-dialog" onSubmit={(event) => void submit(event)} role="dialog" aria-modal="true" aria-labelledby="docker-create-title" aria-busy={submitting}>
         <header className="vm-create-dialog-header">
           <div className="vm-create-heading"><span className="vm-create-icon" aria-hidden="true">{kind === "container" ? <Container size={19} /> : kind === "volume" ? <Database size={19} /> : <Network size={19} />}</span><div><span className="eyebrow">{createT("eyebrow")}</span><h3 id="docker-create-title">{title}</h3><p>{description}</p></div></div>
