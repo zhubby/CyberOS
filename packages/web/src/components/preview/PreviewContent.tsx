@@ -10,7 +10,6 @@ import {
   Music,
   PanelRight,
   Presentation,
-  Play,
   RefreshCw,
   Video
 } from "lucide-react";
@@ -306,7 +305,7 @@ export function previewIcon(kind: FilePreviewKind) {
   if (kind === "directory") {
     return <Folder aria-hidden="true" size={15} />;
   }
-  return <Play aria-hidden="true" size={15} />;
+  return <File aria-hidden="true" size={15} />;
 }
 
 type TextPreviewMode = "rendered" | "table" | "source";

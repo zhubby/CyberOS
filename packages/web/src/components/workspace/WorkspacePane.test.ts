@@ -1,10 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { createElement, type ComponentProps } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import type { FileMeta, VodPlayerStatus } from "../../api.js";
 import { isPathWithinStoragePool } from "../../App.js";
+import { i18n, initI18n } from "../../i18n/index.js";
+import { defaultCodeFontSettings } from "../../lib/editor-settings.js";
 import {
   defaultWorkspaceSearchOptions,
   hasWorkspaceSearchFilters,
-  storagePoolRootDepth
+  storagePoolRootDepth,
+  WorkspacePane
 } from "./WorkspacePane.js";
+
+beforeAll(async () => {
+  await initI18n();
+  await i18n.changeLanguage("en");
+});
 
 describe("isPathWithinStoragePool", () => {
   it("allows nested paths when the pool is mounted at the storage pool", () => {
@@ -36,5 +47,162 @@ describe("storage pool breadcrumbs", () => {
   it("keeps root-relative breadcrumbs visible for the canonical pool path", () => {
     expect(storagePoolRootDepth(".")).toBe(0);
     expect(storagePoolRootDepth("pool/nested")).toBe(2);
+  });
+});
+
+const videoMeta: FileMeta = {
+  path: "movies/clip.mp4",
+  name: "clip.mp4",
+  kind: "file",
+  mimeType: "video/mp4",
+  previewKind: "video",
+  sizeBytes: 1024,
+  modifiedAt: "2026-11-02T00:00:00.000Z"
+};
+
+const playerStatus: VodPlayerStatus = {
+  state: "paused",
+  sessionId: "session-1",
+  serviceInstanceId: "instance-1",
+  revision: 1,
+  storagePoolId: "pool1",
+  relativePath: "movies/clip.mp4",
+  fileName: "clip.mp4",
+  mediaFileId: null,
+  videoOutput: "drm",
+  positionSeconds: 30,
+  durationSeconds: 120,
+  volume: 75,
+  retryCount: 0,
+  nextRetryAt: null,
+  audioDeviceId: null,
+  effectiveAudioDeviceId: null,
+  audioFallbackReason: null,
+  audioTracks: [],
+  subtitleTracks: [],
+  selectedAudioTrackId: null,
+  selectedSubtitleTrackId: null,
+  capabilities: { mpvAvailable: true, drmAvailable: true, audioAvailable: true, hardwareDecode: "enabled", error: null },
+  error: null,
+  errorCode: null,
+  updatedAt: "2026-11-02T00:00:00.000Z"
+};
+
+function renderPreview(overrides: Partial<ComponentProps<typeof WorkspacePane>> = {}) {
+  return renderToStaticMarkup(createElement(WorkspacePane, {
+    active: true,
+    selectedStoragePoolId: "pool1",
+    storagePools: [{ id: "pool1", name: "pool1", path: ".", mountpoint: "/pool1", filesystem: "btrfs", status: "ready" }],
+    storageSummaryLoading: false,
+    photoLibrarySettingsUpdatedAt: null,
+    currentPath: ".",
+    breadcrumbs: [],
+    entries: [],
+    fileListingLoading: false,
+    gitStatus: null,
+    selectedFilePath: "movies/clip.mp4",
+    previewMeta: videoMeta,
+    previewLoading: false,
+    previewError: null,
+    textPreview: null,
+    blobUrl: "/blob",
+    videoUrl: "/video",
+    vodPlayerStatus: playerStatus,
+    vodPlayerBusy: false,
+    previewFileSizeLimitBytes: 1024 * 1024,
+    searchQuery: "",
+    searchOptions: defaultWorkspaceSearchOptions(),
+    searchResults: null,
+    searchNextCursor: null,
+    operations: [],
+    fileBatches: [],
+    uploadBatches: [],
+    dockerOperations: [],
+    vmOperations: [],
+    operationsReady: true,
+    locale: "en",
+    codeFontSettings: defaultCodeFontSettings(),
+    filesPanelActivationId: 0,
+    onSelectStoragePool: vi.fn(),
+    onOpenDownloadedDirectory: vi.fn(),
+    onGoUp: vi.fn(),
+    onRefreshFiles: vi.fn(),
+    onSubmitSearch: vi.fn(),
+    onSearchQueryChange: vi.fn(),
+    onSearchOptionsChange: vi.fn(),
+    onApplySearchFilters: vi.fn(),
+    onLoadMoreSearchResults: vi.fn(),
+    onGoToBreadcrumb: vi.fn(),
+    onGoToStoragePool: vi.fn(),
+    onOpenEntry: vi.fn(),
+    onOpenWorkspacePath: vi.fn(),
+    onInsertWorkspacePath: vi.fn(),
+    onOpenEditor: vi.fn(),
+    onPlayToVodPlayer: vi.fn(),
+    onVodPlayerCommand: vi.fn(),
+    onRetryVodPlayer: vi.fn(),
+    onRequestCreateFolder: vi.fn(),
+    onRequestRename: vi.fn(),
+    onRequestTrash: vi.fn(),
+    onRequestTransfer: vi.fn(),
+    onRequestBatch: vi.fn(),
+    onRequestExtract: vi.fn(),
+    onUploadSources: vi.fn(),
+    onCancelUploadBatch: vi.fn(),
+    onCancelFileBatch: vi.fn(),
+    onWorkQueuesChanged: vi.fn(),
+    onNotifyError: vi.fn(),
+    onNotifySuccess: vi.fn(),
+    onNotifyWarning: vi.fn(),
+    onOpenDeviceSettings: vi.fn(),
+    onOpenPhotoSettings: vi.fn(),
+    onClosePreview: vi.fn(),
+    onRollback: vi.fn(),
+    ...overrides
+  }));
+}
+
+describe("file preview NAS playback controls", () => {
+  it.each(["unsupported", "text", "image", "audio", "pdf", "document", "spreadsheet", "presentation"] as const)(
+    "keeps an existing video session out of a %s preview",
+    (previewKind) => {
+      const html = renderPreview({
+        selectedFilePath: "documents/archive.tar.gz",
+        previewMeta: { ...videoMeta, path: "documents/archive.tar.gz", name: "archive.tar.gz", mimeType: "application/gzip", previewKind }
+      });
+      expect(html).toContain('id="file-preview-title"');
+      expect(html.includes('class="vod-player-controls"')).toBe(false);
+      expect(html).not.toContain('aria-label="Play on NAS"');
+    }
+  );
+
+  it("does not control another video with the same filename", () => {
+    const html = renderPreview({ vodPlayerStatus: { ...playerStatus, relativePath: "other/clip.mp4" } });
+    expect(html.includes('class="vod-player-controls"')).toBe(false);
+  });
+
+  it("does not control the same path in another storage pool", () => {
+    const html = renderPreview({ vodPlayerStatus: { ...playerStatus, storagePoolId: "pool2" } });
+    expect(html.includes('class="vod-player-controls"')).toBe(false);
+  });
+
+  it.each([
+    { previewLoading: true },
+    { previewError: "Preview unavailable" },
+    { previewMeta: null },
+    { vodPlayerStatus: null }
+  ])("hides controls while the current preview is unavailable: %j", (overrides) => {
+    expect(renderPreview(overrides).includes('class="vod-player-controls"')).toBe(false);
+  });
+
+  it.each(["playing", "paused", "recovering"] as const)("keeps %s controls for the video being previewed", (state) => {
+    const html = renderPreview({ vodPlayerStatus: { ...playerStatus, state } });
+    expect(html.includes('class="vod-player-controls"')).toBe(true);
+    expect(html).toContain("clip.mp4");
+  });
+
+  it("does not label an unsupported file with a playback icon", () => {
+    const html = renderPreview({ previewMeta: { ...videoMeta, previewKind: "unsupported" }, vodPlayerStatus: null });
+    expect(html.includes('lucide-play"')).toBe(false);
   });
 });

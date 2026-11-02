@@ -667,6 +667,12 @@ export function WorkspacePane({
   const isPreviewLoading = previewLoading || (hasPreview && !previewMeta && !previewError);
   const canEditPreview = previewMeta?.kind === "file" && previewMeta.previewKind === "text";
   const canExtractPreview = previewMeta?.kind === "file" && isArchiveFileName(previewMeta.name);
+  const previewVodPlayerStatus = !isPreviewLoading && !previewError
+    && previewMeta?.previewKind === "video"
+    && vodPlayerStatus?.storagePoolId === selectedStoragePoolId
+    && vodPlayerStatus?.relativePath === previewMeta.path
+    ? vodPlayerStatus
+    : null;
   const trimmedFolderName = folderName.trim();
   const folderNameInvalid =
     !trimmedFolderName ||
@@ -1728,8 +1734,8 @@ export function WorkspacePane({
                       </button>
                     ) : null}
                   </>}
-                  footer={vodPlayerStatus ? (
-                    <VodPlayerControls status={vodPlayerStatus} busy={vodPlayerBusy} onCommand={onVodPlayerCommand} onRetry={onRetryVodPlayer} />
+                  footer={previewVodPlayerStatus ? (
+                    <VodPlayerControls status={previewVodPlayerStatus} busy={vodPlayerBusy} onCommand={onVodPlayerCommand} onRetry={onRetryVodPlayer} />
                   ) : null}
                 />
               ) : null}
