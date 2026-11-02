@@ -205,7 +205,8 @@
         background: var(--boot-accent);
       }
 
-      #cyberos-boot[data-state="error"] .cyberos-boot-retry {
+      #cyberos-boot[data-state="error"] .cyberos-boot-retry,
+      #cyberos-boot[data-state="slow"] .cyberos-boot-retry {
         display: inline-flex;
         align-items: center;
       }
@@ -281,7 +282,15 @@
           if (bootDetail) bootDetail.textContent = isChinese ? "请重新加载页面后再试" : "Reload the page to try again";
         };
 
-        const timeout = window.setTimeout(showError, 15000);
+        const showSlowLoad = () => {
+          if (ready || bootScreen.dataset.state === "error") return;
+          bootScreen.dataset.state = "slow";
+          if (bootDetail) bootDetail.textContent = isChinese
+            ? "正在加载页面资源，请稍候"
+            : "Still loading application resources";
+        };
+
+        const timeout = window.setTimeout(showSlowLoad, 15000);
         const handleError = () => showError();
         const handleReady = () => {
           ready = true;
