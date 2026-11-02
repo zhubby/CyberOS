@@ -290,6 +290,7 @@
 }
 
 .file-browser {
+  --file-actions-width: 242px;
   container: file-browser / inline-size;
 }
 
@@ -374,7 +375,7 @@
 
 .file-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 242px 90px 132px;
+  grid-template-columns: minmax(0, 1fr) var(--file-actions-width) 90px 132px;
   align-items: center;
   width: 100%;
   min-height: 42px;
@@ -517,6 +518,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -608,7 +610,7 @@
 }
 
 .file-name span,
-.file-row > span {
+.file-row > span:not(.file-row-actions) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

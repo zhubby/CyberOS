@@ -651,9 +651,39 @@
   }
 }
 
-@media (max-width: 1580px) {
+@container file-browser (max-width: 760px) {
   .file-row {
-    grid-template-columns: minmax(150px, 1fr) 218px 90px 124px;
+    grid-template-columns: minmax(0, 1fr) var(--file-actions-width) 84px 124px;
+  }
+}
+
+@container file-browser (max-width: 620px) {
+  .file-list {
+    --file-actions-width: 88px;
+  }
+
+  .file-row {
+    grid-template-columns: minmax(0, 1fr) var(--file-actions-width);
+  }
+
+  .file-row > span:nth-child(3),
+  .file-row > span:nth-child(4) {
+    display: none;
+  }
+
+  .file-row-actions {
+    gap: 4px;
+    opacity: 1;
+    pointer-events: auto;
+    translate: 0;
+  }
+
+  .file-row-expanded-actions {
+    display: none;
+  }
+
+  .file-action-button.file-action-button-more {
+    display: inline-grid;
   }
 }
 
@@ -792,10 +822,6 @@
 
   .file-browser {
     height: 280px;
-  }
-
-  .file-row {
-    grid-template-columns: minmax(150px, 1fr) 218px 84px 124px;
   }
 
   .download-task-row {
@@ -1103,15 +1129,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .file-row {
-    grid-template-columns: minmax(120px, 1fr) 76px;
-  }
-
-  .file-row > span:nth-child(3),
-  .file-row > span:nth-child(4) {
-    display: none;
-  }
-
   .workspace-shell {
     grid-template-columns: minmax(0, 1fr) 44px;
   }
@@ -1128,27 +1145,6 @@
 
   .workspace-panel-tab span {
     display: none;
-  }
-
-  .file-row-actions {
-    gap: 4px;
-    padding-right: 16px;
-    opacity: 1;
-    pointer-events: auto;
-    translate: 0;
-  }
-
-  .file-row-expanded-actions {
-    display: none;
-  }
-
-  .file-action-button.file-action-button-more {
-    display: inline-grid;
-  }
-
-  .file-action-button {
-    width: 32px;
-    height: 32px;
   }
 
   .management-row-action span {
@@ -1304,6 +1300,10 @@
 }
 
 @media (hover: none), (pointer: coarse) {
+  .file-list {
+    --file-actions-width: 88px;
+  }
+
   .file-row-actions {
     opacity: 1;
     pointer-events: auto;
