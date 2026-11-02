@@ -1,7 +1,11 @@
 export function getInitialEventId(headerValue: string | string[] | undefined, queryValue: string | undefined): number {
   const rawHeader = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  const parsed = Number(queryValue ?? rawHeader ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
+  for (const value of [rawHeader, queryValue]) {
+    if (!value?.trim()) continue;
+    const parsed = Number(value);
+    if (Number.isSafeInteger(parsed) && parsed >= 0) return parsed;
+  }
+  return 0;
 }
 
 export function getAgentMessageRole(payload: unknown): "assistant" | "user" {
