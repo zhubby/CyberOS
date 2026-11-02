@@ -80,6 +80,8 @@ struct DesiredDevice {
     config: EthernetConfig,
     revision: String,
     applied_revision: Option<String>,
+    #[serde(default)]
+    apply_requested: Option<bool>,
     managed_profile_id: String,
     source_profile_id: Option<String>,
     #[serde(default)]
@@ -155,7 +157,10 @@ pub(super) async fn status(
             Some(profile_id) => Some(read_profile_config(profile_id, runner).await?),
             None => None,
         };
-        let saved = if active.is_none() && !desired.devices.contains_key(&id) {
+        let saved = if active.is_none()
+            && desired.devices.get(&id).is_none_or(|entry| {
+                entry.applied_revision.is_none() && entry.apply_requested.is_none()
+            }) {
             find_saved_profile(&device, runner).await?
         } else {
             None
@@ -197,6 +202,40 @@ pub(super) async fn status(
             }
         }
 
+        if let Some(entry) = desired.devices.get_mut(&id) {
+            // Older state also contains automatically imported drafts. Preserve actual
+            // edits while keeping untouched imports out of the apply transaction.
+            if entry.apply_requested.is_none() {
+                let baseline = source
+                    .as_ref()
+                    .map(|(_, profile)| profile.config.clone())
+                    .unwrap_or_else(|| {
+                        default_config(device.ipv4_gateway.is_some(), device.ipv6_gateway.is_some())
+                    });
+                entry.apply_requested = Some(
+                    entry.applied_revision.is_none()
+                        && (entry.config != baseline
+                            || device.connection_id.as_deref()
+                                == Some(entry.managed_profile_id.as_str())),
+                );
+                changed = true;
+            }
+            if entry.applied_revision.is_none()
+                && entry.apply_requested == Some(false)
+                && let Some((profile_id, profile)) =
+                    source.as_ref().filter(|(_, profile)| profile.supported)
+                && (entry.config != profile.config
+                    || entry.source_profile_id != *profile_id
+                    || entry.source_profile_revision.as_deref() != Some(profile.revision.as_str()))
+            {
+                entry.config = profile.config.clone();
+                entry.revision = config_revision(&entry.config, &entry.managed_profile_id)?;
+                entry.source_profile_id = profile_id.clone();
+                entry.source_profile_revision = Some(profile.revision.clone());
+                changed = true;
+            }
+        }
+
         if let Some(entry) = desired.devices.get_mut(&id)
             && entry.source_profile_revision.is_none()
             && entry.source_profile_id == device.connection_id
@@ -216,11 +255,8 @@ pub(super) async fn status(
         let runtime_matches =
             entry.is_some_and(|entry| desired_is_applied(entry, &device, active.as_ref()));
         let active_config = effective_active_config(active.as_ref(), entry, runtime_matches);
-        let needs_apply = entry.is_some_and(|entry| {
-            entry.applied_revision.as_deref() != Some(entry.revision.as_str())
-                || !managed_file
-                || !runtime_matches
-        });
+        let needs_apply =
+            entry.is_some_and(|entry| desired_needs_apply(entry, managed_file, runtime_matches));
         let mut warnings = Vec::new();
         if unsupported {
             warnings.push(
@@ -248,9 +284,11 @@ pub(super) async fn status(
             active_profile_name: device.connection_name,
             management_state: if unsupported {
                 "external_unsupported".to_owned()
-            } else if managed_file && runtime_matches {
+            } else if (managed_file && runtime_matches)
+                || entry.is_some_and(|entry| entry.applied_revision.is_some())
+            {
                 "managed".to_owned()
-            } else if entry.is_some() {
+            } else if needs_apply {
                 "pending".to_owned()
             } else {
                 "external".to_owned()
@@ -335,6 +373,7 @@ pub(super) async fn save(
     let mut replacement = current.clone();
     replacement.config = input.config.clone();
     replacement.revision = config_revision(&replacement.config, &replacement.managed_profile_id)?;
+    replacement.apply_requested = Some(true);
     desired.devices.insert(device_id.to_owned(), replacement);
     let runtime_ids = runtime
         .iter()
@@ -356,6 +395,7 @@ pub(super) async fn apply(
         ));
     }
     ensure_no_active_transaction(options).await?;
+    status(runner, options).await?;
     let desired = read_desired(options).await?;
     let runtime = collect_runtime_devices(runner, options).await?;
     let runtime_by_id = runtime
@@ -374,10 +414,11 @@ pub(super) async fn apply(
             None => None,
         };
         let profile_exists = regular_file_exists(&managed_profile_path(options, id)).await?;
-        if entry.applied_revision.as_deref() != Some(entry.revision.as_str())
-            || !profile_exists
-            || !desired_is_applied(entry, runtime, active.as_ref())
-        {
+        if desired_needs_apply(
+            entry,
+            profile_exists,
+            desired_is_applied(entry, runtime, active.as_ref()),
+        ) {
             device_ids.push(id.clone());
         }
     }
@@ -514,6 +555,7 @@ pub(super) async fn confirm(
     for id in &transaction.public.device_ids {
         if let Some(entry) = desired.devices.get_mut(id) {
             entry.applied_revision = Some(entry.revision.clone());
+            entry.apply_requested = Some(false);
             entry.source_profile_id = Some(entry.managed_profile_id.clone());
             entry.source_profile_revision = None;
         }
@@ -1265,6 +1307,13 @@ fn desired_is_applied(
     })
 }
 
+fn desired_needs_apply(entry: &DesiredDevice, managed_file: bool, runtime_matches: bool) -> bool {
+    (entry.apply_requested == Some(true) || entry.applied_revision.is_some())
+        && (entry.applied_revision.as_deref() != Some(entry.revision.as_str())
+            || !managed_file
+            || !runtime_matches)
+}
+
 fn effective_active_config(
     active: Option<&ProfileConfig>,
     entry: Option<&DesiredDevice>,
@@ -1817,6 +1866,7 @@ fn new_desired(
         config,
         revision,
         applied_revision: None,
+        apply_requested: Some(false),
         managed_profile_id,
         source_profile_id,
         source_profile_revision,
@@ -2110,6 +2160,261 @@ mod tests {
             ipv6_default_route_metric: None,
             dbus_path: "/org/freedesktop/NetworkManager/Devices/2".to_owned(),
         }
+    }
+
+    struct EthernetStatusRunner {
+        calls: Mutex<Vec<(String, Vec<String>)>>,
+        route_metric: AtomicUsize,
+    }
+
+    impl Default for EthernetStatusRunner {
+        fn default() -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+                route_metric: AtomicUsize::new(100),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl CommandRunner for EthernetStatusRunner {
+        async fn run(
+            &self,
+            command: &str,
+            args: &[String],
+            _input: Option<&[u8]>,
+            _timeout: StdDuration,
+            _output_limit: usize,
+        ) -> Result<CommandOutput, HostdError> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((command.to_owned(), args.to_vec()));
+            let stdout = if command == "busctl" {
+                if args.iter().any(|arg| arg == "CheckpointCreate") {
+                    return Err(HostdError::unavailable("Checkpoint unavailable in test"));
+                }
+                if args.get(2).is_some_and(|arg| arg.ends_with("/2")) {
+                    "s \"2C:CF:67:C9:68:07\"\n".to_owned()
+                } else {
+                    "s \"00:48:54:21:44:9A\"\n".to_owned()
+                }
+            } else if args.last().is_some_and(|arg| arg == "general") {
+                "running\n".to_owned()
+            } else if args
+                .iter()
+                .any(|arg| arg == "DEVICE,TYPE,STATE,CONNECTION,CON-UUID")
+            {
+                "eth0:ethernet:connected:netplan-eth0:75a1216a-9d1a-30cd-8aca-ace5526ec021\neth1:ethernet:disconnected::\n".to_owned()
+            } else if args.first().is_some_and(|arg| arg == "--get-values") {
+                if args.last().is_some_and(|arg| arg == "eth0") {
+                    "2C:CF:67:C9:68:07\nmacb\n1000\non\n/org/freedesktop/NetworkManager/Devices/2\n"
+                        .to_owned()
+                } else {
+                    "00:48:54:21:44:9A\nr8169\n1000\non\n/org/freedesktop/NetworkManager/Devices/3\n".to_owned()
+                }
+            } else if args.iter().any(|arg| arg == "uuid") {
+                format!(
+                    "connection.type:802-3-ethernet\nipv4.method:auto\nipv4.route-metric:{}\nipv6.method:auto\nipv6.route-metric:100\nconnection.interface-name:eth0\nconnection.autoconnect:yes\n",
+                    self.route_metric.load(Ordering::SeqCst)
+                )
+            } else if args.iter().any(|arg| arg == "UUID,TYPE") {
+                "75a1216a-9d1a-30cd-8aca-ace5526ec021:802-3-ethernet\n".to_owned()
+            } else if args.last().is_some_and(|arg| arg == "eth0") {
+                match args.get(4).map(String::as_str) {
+                    Some("IP4.ADDRESS") => "IP4.ADDRESS[1]:192.168.11.91/24\n",
+                    Some("IP4.GATEWAY") => "IP4.GATEWAY:192.168.11.1\n",
+                    _ => "",
+                }
+                .to_owned()
+            } else {
+                String::new()
+            };
+            Ok(CommandOutput {
+                stdout,
+                stderr: String::new(),
+                success: true,
+            })
+        }
+    }
+
+    async fn ethernet_options(temp: &TempDir) -> NetworkOptions {
+        let options = NetworkOptions {
+            connections_dir: temp.path().join("connections"),
+            state_dir: temp.path().join("state"),
+            sys_class_net: temp.path().join("sys/class/net"),
+        };
+        for name in ["eth0", "eth1"] {
+            fs::create_dir_all(options.sys_class_net.join(name).join("device"))
+                .await
+                .unwrap();
+        }
+        fs::create_dir_all(&options.connections_dir).await.unwrap();
+        options
+    }
+
+    #[tokio::test]
+    async fn does_not_stage_untouched_external_ports() {
+        let temp = TempDir::new().unwrap();
+        let options = ethernet_options(&temp).await;
+        let runner = EthernetStatusRunner::default();
+
+        let status = status(&runner, &options).await.unwrap();
+
+        assert_eq!(status.devices.len(), 2);
+        for device in &status.devices {
+            assert_eq!(device.management_state, "external");
+            assert!(!device.needs_apply, "{} was never saved", device.name);
+            assert!(device.desired_config.is_some());
+        }
+        assert_eq!(
+            status.devices[0].active_config,
+            status.devices[0].desired_config
+        );
+        let error = apply(true, &runner, &options).await.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("There are no pending Ethernet changes")
+        );
+        assert!(!options.state_dir.join(TRANSACTION_FILE).exists());
+        assert_eq!(
+            std::fs::read_dir(&options.connections_dir).unwrap().count(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn stages_only_the_port_explicitly_saved_for_takeover() {
+        let temp = TempDir::new().unwrap();
+        let options = ethernet_options(&temp).await;
+        let runner = EthernetStatusRunner::default();
+        let initial = status(&runner, &options).await.unwrap();
+        let port = &initial.devices[1];
+
+        let saved = save(
+            &port.id,
+            &EthernetUpdateInput {
+                expected_revision: port.revision.clone(),
+                config: port.desired_config.clone().unwrap(),
+            },
+            &runner,
+            &options,
+        )
+        .await
+        .unwrap();
+
+        assert!(!saved.devices[0].needs_apply);
+        assert_eq!(saved.devices[1].management_state, "pending");
+        assert!(saved.devices[1].needs_apply);
+        assert!(status(&runner, &options).await.unwrap().devices[1].needs_apply);
+        let error = apply(true, &runner, &options).await.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("checkpoint support is unavailable")
+        );
+        let calls = runner.calls.lock().unwrap();
+        let checkpoint = calls
+            .iter()
+            .find(|(_, args)| args.iter().any(|arg| arg == "CheckpointCreate"))
+            .unwrap();
+        assert_eq!(
+            &checkpoint.1[6..],
+            ["1", "/org/freedesktop/NetworkManager/Devices/3", "90", "0"]
+        );
+    }
+
+    #[tokio::test]
+    async fn preserves_legacy_edits_but_clears_automatic_takeover_drafts() {
+        let temp = TempDir::new().unwrap();
+        let options = ethernet_options(&temp).await;
+        let runner = EthernetStatusRunner::default();
+        status(&runner, &options).await.unwrap();
+        let mut legacy = serde_json::to_value(read_desired(&options).await.unwrap()).unwrap();
+        let devices = legacy["devices"].as_object_mut().unwrap();
+        for entry in devices.values_mut() {
+            entry.as_object_mut().unwrap().remove("applyRequested");
+        }
+        devices["00485421449a"]["config"]["ipv4"]["routeMetric"] = 700.into();
+        write_json(&options.state_dir.join(STATE_FILE), &legacy)
+            .await
+            .unwrap();
+
+        let status = status(&runner, &options).await.unwrap();
+
+        assert!(!status.devices[0].needs_apply);
+        assert!(status.devices[1].needs_apply);
+        assert_eq!(
+            status.devices[1]
+                .desired_config
+                .as_ref()
+                .unwrap()
+                .ipv4
+                .route_metric,
+            700
+        );
+    }
+
+    #[tokio::test]
+    async fn keeps_previously_managed_configuration_drift_pending() {
+        let temp = TempDir::new().unwrap();
+        let options = ethernet_options(&temp).await;
+        let runner = EthernetStatusRunner::default();
+        status(&runner, &options).await.unwrap();
+        let mut desired = read_desired(&options).await.unwrap();
+        let entry = desired.devices.get_mut("2ccf67c96807").unwrap();
+        entry.applied_revision = Some(entry.revision.clone());
+        write_desired(&options, &desired).await.unwrap();
+
+        assert!(status(&runner, &options).await.unwrap().devices[0].needs_apply);
+    }
+
+    #[tokio::test]
+    async fn refreshes_unsaved_external_settings_and_rejects_stale_editor_saves() {
+        let temp = TempDir::new().unwrap();
+        let options = ethernet_options(&temp).await;
+        let runner = EthernetStatusRunner::default();
+        let initial = status(&runner, &options).await.unwrap();
+        runner.route_metric.store(200, Ordering::SeqCst);
+
+        let refreshed = status(&runner, &options).await.unwrap();
+
+        assert!(!refreshed.devices[0].needs_apply);
+        assert_eq!(
+            refreshed.devices[0].active_config,
+            refreshed.devices[0].desired_config
+        );
+        assert_ne!(initial.devices[0].revision, refreshed.devices[0].revision);
+        let error = save(
+            &initial.devices[0].id,
+            &EthernetUpdateInput {
+                expected_revision: initial.devices[0].revision.clone(),
+                config: initial.devices[0].desired_config.clone().unwrap(),
+            },
+            &runner,
+            &options,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("reload before saving"));
+    }
+
+    #[tokio::test]
+    async fn preserves_legacy_takeover_that_is_already_active_but_unconfirmed() {
+        let temp = TempDir::new().unwrap();
+        let options = ethernet_options(&temp).await;
+        let runner = EthernetStatusRunner::default();
+        status(&runner, &options).await.unwrap();
+        let mut legacy = serde_json::to_value(read_desired(&options).await.unwrap()).unwrap();
+        let entry = &mut legacy["devices"]["2ccf67c96807"];
+        entry.as_object_mut().unwrap().remove("applyRequested");
+        entry["managedProfileId"] = "75a1216a-9d1a-30cd-8aca-ace5526ec021".into();
+        write_json(&options.state_dir.join(STATE_FILE), &legacy)
+            .await
+            .unwrap();
+
+        assert!(status(&runner, &options).await.unwrap().devices[0].needs_apply);
     }
 
     #[test]

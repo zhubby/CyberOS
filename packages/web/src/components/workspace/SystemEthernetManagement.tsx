@@ -217,7 +217,7 @@ export function SystemEthernetManagement({
                       <span className="management-status-pill" data-state={systemEthernetDeviceTone(device.state, reconnecting)}>
                         {t(`workspace.management.network.ethernet.states.${reconnecting ? "reconnecting" : device.state}`)}
                       </span>
-                      <span className="management-status-pill" data-state={device.managementState === "managed" ? "ready" : device.managementState === "external_unsupported" ? "offline" : "warning"}>
+                      <span className="management-status-pill" data-state={device.managementState === "managed" ? "ready" : device.managementState === "external" ? "neutral" : device.managementState === "external_unsupported" ? "offline" : "warning"}>
                         {t(`workspace.management.network.ethernet.management.${device.managementState}`)}
                       </span>
                     </div>
@@ -233,7 +233,7 @@ export function SystemEthernetManagement({
                 </dl>
                 <div className="system-ethernet-device-actions">
                   {device.needsApply ? <span>{t("workspace.management.network.ethernet.needsApply")}</span> : null}
-                  <button type="button" className="management-icon-action" onClick={() => openEditor(device, setEditor)} disabled={!device.desiredConfig || device.managementState === "external_unsupported" || busy || applying || reconnecting} aria-label={t("workspace.management.network.ethernet.edit", { name: device.name })} title={t("workspace.management.network.ethernet.edit", { name: device.name })}>
+                  <button type="button" className="management-icon-action" onClick={() => openEditor(device, setEditor)} disabled={!device.desiredConfig || device.managementState === "external_unsupported" || busy || applying || reconnecting} aria-label={t(`workspace.management.network.ethernet.${device.managementState === "external" ? "takeover" : "edit"}`, { name: device.name })} title={t(`workspace.management.network.ethernet.${device.managementState === "external" ? "takeover" : "edit"}`, { name: device.name })}>
                     <Settings2 aria-hidden="true" size={15} />
                   </button>
                 </div>
@@ -305,7 +305,7 @@ function EthernetEditor({ state, busy, unavailable, t, onChange, onClose, onSave
     <ModalPortal className="management-modal-backdrop system-ethernet-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <section ref={dialog} className="management-modal system-ethernet-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header>
-          <div><span className="eyebrow">{t("workspace.management.network.ethernet.dialogEyebrow")}</span><h2 id={titleId}>{state.device.name}</h2><p>{state.device.permanentMac}</p></div>
+          <div><span className="eyebrow">{t("workspace.management.network.ethernet.dialogEyebrow")}</span><h2 id={titleId}>{state.device.name}</h2><p>{state.device.permanentMac}</p>{state.device.managementState === "external" ? <p>{t("workspace.management.network.ethernet.takeoverDescription")}</p> : null}</div>
           <button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
         </header>
         <form onSubmit={(event: FormEvent) => { event.preventDefault(); onSave(); }}>
@@ -315,7 +315,7 @@ function EthernetEditor({ state, busy, unavailable, t, onChange, onClose, onSave
             <FamilyFields family="ipv6" config={state.config} busy={busy || unavailable} t={t} onChange={updateConfig} />
             {errors.length ? <p className="system-ethernet-form-error" role="alert">{t("workspace.management.network.ethernet.errors.invalid")}</p> : null}
           </div>
-          <footer className="system-ethernet-dialog-actions"><button type="button" onClick={onClose} disabled={busy}>{t("common.actions.cancel")}</button><button type="submit" className="is-primary" disabled={busy || unavailable || errors.length > 0} aria-busy={busy || undefined}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Save aria-hidden="true" size={14} />}<span>{t("common.actions.save")}</span></button></footer>
+          <footer className="system-ethernet-dialog-actions"><button type="button" onClick={onClose} disabled={busy}>{t("common.actions.cancel")}</button><button type="submit" className="is-primary" disabled={busy || unavailable || errors.length > 0} aria-busy={busy || undefined}>{busy ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Save aria-hidden="true" size={14} />}<span>{t(state.device.managementState === "external" ? "workspace.management.network.ethernet.saveTakeover" : "common.actions.save")}</span></button></footer>
         </form>
       </section>
     </ModalPortal>
