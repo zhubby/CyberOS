@@ -1,10 +1,25 @@
 import { createContext, useContext, type ComponentPropsWithRef } from "react";
 import { createPortal } from "react-dom";
+import { MobileAppScope, useMobileBack, useMobileNavigation } from "../../mobile/MobileNavigation.js";
 
-const ModalDepthContext = createContext(0);
+export const ModalDepthContext = createContext(0);
 
-export function ModalPortal({ children, className, style, onMouseDown, onClick, ...props }: ComponentPropsWithRef<"div">) {
+/** Popovers sit above their containing dialog and below the next modal layer. */
+export function usePopoverBack(open: boolean, onClose: () => void, layer = 5) {
   const depth = useContext(ModalDepthContext);
+  useMobileBack(() => { onClose(); return true; }, 90 + depth * 10 + layer, open);
+}
+
+export function ModalPortal({ children, className, style, onMouseDown, onClick, onRequestClose, closeDisabled = false, ...props }: ComponentPropsWithRef<"div"> & { onRequestClose?: () => void; closeDisabled?: boolean }) {
+  const depth = useContext(ModalDepthContext);
+  const navigation = useMobileNavigation();
+  const scope = useContext(MobileAppScope);
+  const visible = !navigation?.compact || !scope || navigation.route === scope;
+  useMobileBack(() => {
+    if (!closeDisabled) onRequestClose?.();
+    return true;
+  }, 100 + depth * 10, visible && Boolean(onRequestClose));
+  if (!visible) return null;
   const content = (
     <ModalDepthContext.Provider value={depth + 1}>
       <div

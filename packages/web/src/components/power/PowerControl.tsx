@@ -5,9 +5,11 @@ import { AlertTriangle, LoaderCircle, Power, RotateCw, X } from "lucide-react";
 import type { SystemPowerAction } from "../../api.js";
 
 export function PowerControl({
-  onRequest
+  onRequest,
+  labelled = false
 }: {
   onRequest: (action: SystemPowerAction) => Promise<boolean>;
+  labelled?: boolean;
 }) {
   const { t } = useTranslation();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -85,7 +87,7 @@ export function PowerControl({
     <>
       <button
         ref={triggerRef}
-        className="agent-power-button"
+        className={labelled ? "settings-power-button secondary-button" : "agent-power-button"}
         type="button"
         onClick={() => setOpen(true)}
         title={t("power.open")}
@@ -94,6 +96,7 @@ export function PowerControl({
         aria-expanded={open}
       >
         <Power aria-hidden="true" size={18} />
+        {labelled ? <span>{t("power.open")}</span> : null}
       </button>
       {open ? (
         <PowerDialog
@@ -134,6 +137,8 @@ export function PowerDialog({
   return (
     <ModalPortal
       className="power-dialog-backdrop"
+      onRequestClose={action ? onBack : onClose}
+      closeDisabled={busy}
       role="presentation"
       onMouseDown={(event) => {
         if (event.currentTarget === event.target && !action && !busy) onClose();

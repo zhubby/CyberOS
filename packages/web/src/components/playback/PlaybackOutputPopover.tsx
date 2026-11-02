@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { usePopoverBack } from "../common/ModalPortal.js";
 
 export function PlaybackOutputPopover({ children, busy }: { children: ReactNode; busy: boolean }) {
   const { t } = useTranslation();
@@ -10,6 +11,7 @@ export function PlaybackOutputPopover({ children, busy }: { children: ReactNode;
   const menuRef = useRef<HTMLDivElement>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
+  usePopoverBack(open, () => { setOpen(false); triggerRef.current?.focus(); });
   const [layout, setLayout] = useState<{ maxHeight: number; maxWidth: number }>();
 
   useEffect(() => {

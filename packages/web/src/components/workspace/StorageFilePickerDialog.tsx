@@ -331,6 +331,7 @@ export function StorageFilePickerDialog({
     <ModalPortal
       className="management-dialog-backdrop storage-file-picker-backdrop"
       role="presentation"
+      onRequestClose={onCancel}
       onMouseDown={(event) => event.currentTarget === event.target && onCancel()}
     >
       <div

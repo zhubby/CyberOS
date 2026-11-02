@@ -447,7 +447,7 @@ export function LocalTerminalPanel({
       </div>
 
       {renameCandidate ? (
-        <ModalPortal className="file-action-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && setRenameCandidate(null)}>
+        <ModalPortal className="file-action-backdrop" role="presentation" onRequestClose={() => setRenameCandidate(null)} closeDisabled={Boolean(pendingAction)} onMouseDown={(event) => event.currentTarget === event.target && setRenameCandidate(null)}>
           <form className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="terminal-rename-title" onSubmit={(event) => void submitRename(event)}>
             <header>
               <span className="eyebrow">{t("workspace.terminal.rename")}</span>
@@ -476,7 +476,7 @@ export function LocalTerminalPanel({
       ) : null}
 
       {closeCandidate ? (
-        <ModalPortal className="file-action-backdrop" role="presentation">
+        <ModalPortal className="file-action-backdrop" role="presentation" onRequestClose={() => setCloseCandidate(null)} closeDisabled={Boolean(pendingAction)}>
           <section className="file-action-dialog" role="dialog" aria-modal="true" aria-labelledby="terminal-close-title">
             <header>
               <span className="eyebrow">{t("workspace.terminal.close")}</span>

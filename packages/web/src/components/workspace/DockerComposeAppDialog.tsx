@@ -277,7 +277,7 @@ export function DockerComposeAppDialog({
   }
 
   return (
-    <ModalPortal className="management-modal-backdrop docker-compose-app-backdrop" onMouseDown={(event) => {
+    <ModalPortal className="management-modal-backdrop docker-compose-app-backdrop" onRequestClose={onClose} closeDisabled={busy} onMouseDown={(event) => {
       if (event.target === event.currentTarget && !busy) onClose();
     }}>
       <section

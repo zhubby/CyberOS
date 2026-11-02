@@ -137,6 +137,8 @@ export function DockerDaemonSettingsDialog({
   return (
     <ModalPortal
       className="management-modal-backdrop docker-daemon-settings-backdrop"
+      onRequestClose={onClose}
+      closeDisabled={submitting}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !submitting) onClose();
       }}

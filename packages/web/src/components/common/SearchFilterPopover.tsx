@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { usePopoverBack } from "./ModalPortal.js";
 
 export function SearchFilterPopover({
   label,
@@ -24,6 +25,7 @@ export function SearchFilterPopover({
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [layout, setLayout] = useState<{ maxHeight: number; maxWidth: number }>();
+  usePopoverBack(open, closeAndRestoreFocus);
 
   function closeAndRestoreFocus() {
     setOpen(false);

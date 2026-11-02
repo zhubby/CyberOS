@@ -1,4 +1,6 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useContext, useEffect, useRef, type RefObject } from "react";
+import { ModalDepthContext } from "../common/ModalPortal.js";
+import { useMobileBack } from "../../mobile/MobileNavigation.js";
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -13,6 +15,11 @@ export function useModalDialog(onClose: () => void, closeDisabled = false, activ
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const closeDisabledRef = useRef(closeDisabled);
+  const depth = useContext(ModalDepthContext);
+  useMobileBack(() => {
+    if (!closeDisabledRef.current) onCloseRef.current();
+    return true;
+  }, 100 + depth * 10, active);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -22,6 +29,8 @@ export function useModalDialog(onClose: () => void, closeDisabled = false, activ
   useEffect(() => {
     if (!active) return;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const returnMenu = previouslyFocused?.closest<HTMLElement>("[data-focus-return]")?.dataset.focusReturn;
+    const returnTarget = returnMenu ? [...document.querySelectorAll<HTMLButtonElement>("button[aria-controls]")].find((button) => button.getAttribute("aria-controls") === returnMenu) : null;
     const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
       const dialog = dialogRef.current;
@@ -34,7 +43,7 @@ export function useModalDialog(onClose: () => void, closeDisabled = false, activ
       if (event.key !== "Tab") return;
 
       const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
-        .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+        .filter((element) => element.getClientRects().length > 0 && element.getAttribute("aria-hidden") !== "true");
       if (!focusable.length) {
         event.preventDefault();
         dialog.focus();
@@ -59,9 +68,8 @@ export function useModalDialog(onClose: () => void, closeDisabled = false, activ
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
-      if (previouslyFocused?.isConnected) {
-        window.requestAnimationFrame(() => previouslyFocused.focus());
-      }
+      const target = previouslyFocused?.isConnected ? previouslyFocused : returnTarget;
+      if (target?.isConnected) window.requestAnimationFrame(() => { if (target.getClientRects().length) target.focus(); });
     };
   }, [active]);
 
@@ -69,7 +77,7 @@ export function useModalDialog(onClose: () => void, closeDisabled = false, activ
 }
 
 function topmostModal(): HTMLElement | null {
-  const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')]
-    .filter((dialog) => dialog.isConnected && !dialog.hidden);
+  const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]')]
+    .filter((dialog) => dialog.isConnected && dialog.getClientRects().length > 0);
   return dialogs.at(-1) ?? null;
 }

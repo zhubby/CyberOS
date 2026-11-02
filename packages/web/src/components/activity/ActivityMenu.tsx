@@ -5,6 +5,7 @@ import type { FileBatch, FileOperation } from "../../api.js";
 import { formatBytes } from "../../i18n/format.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { isUploadBatchActive, type UploadBatchState } from "../../lib/uploads.js";
+import { usePopoverBack } from "../common/ModalPortal.js";
 
 export function ActivityMenu({
   operations,
@@ -30,6 +31,10 @@ export function ActivityMenu({
   const [lastSeenOperationId, setLastSeenOperationId] = useState<string | null>(null);
   const hasBaseline = useRef(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  usePopoverBack(open, () => {
+    setOpen(false);
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  });
   const visibleOperations = useMemo(() => operations.slice(0, 8), [operations]);
   const visibleFileBatches = useMemo(
     () => [...fileBatches]

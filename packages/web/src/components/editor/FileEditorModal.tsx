@@ -169,7 +169,7 @@ export function FileEditorModal({
   }
 
   return (
-    <ModalPortal className="editor-backdrop">
+    <ModalPortal className="editor-backdrop" onRequestClose={() => void closeEditor()} closeDisabled={saveStatus === "saving"}>
       <section className="editor-modal" role="dialog" aria-modal="true" aria-labelledby="file-editor-title">
         <header className="editor-header">
           <div>

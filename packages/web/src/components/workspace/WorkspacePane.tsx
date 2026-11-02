@@ -1,16 +1,17 @@
-import { ModalPortal } from "../common/ModalPortal.js";
+import { ModalPortal, usePopoverBack } from "../common/ModalPortal.js";
 import { useModalDialog } from "./useModalDialog.js";
-import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { WORKSPACE_APPS } from "../../mobile/apps.js";
+import { useAppScroll, useMobileBack } from "../../mobile/MobileNavigation.js";
+import { MobileAppLoading } from "../../mobile/MobileHome.js";
 import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
   ArrowUp,
-  Activity,
   ArchiveRestore,
   Check,
   ChevronDown,
   ChevronLeft,
-  Container,
   Copy,
   Download,
   Ellipsis,
@@ -19,23 +20,16 @@ import {
   FolderPlus,
   GitBranch,
   HardDrive,
-  Images,
   MessageSquarePlus,
   MonitorPlay,
-  Music2,
-  MonitorCog,
-  Network,
   LoaderCircle,
   PencilLine,
   RefreshCw,
   Search,
-  Share2,
   SlidersHorizontal,
-  TerminalSquare,
   Trash2,
   FolderUp,
-  Upload,
-  type LucideIcon
+  Upload
 } from "lucide-react";
 import { createFileExport, getFileDownloadUrl, type DockerOperation, type FileBatch, type FileEntry, type FileListing, type FileMeta, type FileOperation, type IndexSearchCategory, type IndexSearchRequest, type IndexSearchResult, type StoragePool, type VodPlayerCommand, type VodPlayerStatus, type TextPreview, type VmOperation } from "../../api.js";
 import { describeFileVisual, isHiddenName } from "../../file-type-utils.js";
@@ -44,11 +38,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { sortEntries, type FileSortDirection, type FileSortKey, type FileSortState } from "../../lib/file-listing-sort.js";
 import { formatFileModifiedAt } from "../../lib/format.js";
 import { fileDownloadMode, isInvalidFileMoveDestination, reconcileFileSelection, updateFileSelection } from "../../lib/file-selection.js";
-import {
-  readStoredWorkspacePanel,
-  writeStoredWorkspacePanel,
-  type WorkspacePanelId
-} from "../../lib/workspace-panel-settings.js";
+import type { WorkspacePanelId } from "../../lib/workspace-panel-settings.js";
 import { ActivityMenu } from "../activity/ActivityMenu.js";
 import { CustomSelect, type CustomSelectOption } from "../common/CustomSelect.js";
 import { FileTypeIcon } from "../file/FileTypeIcon.js";
@@ -60,90 +50,20 @@ import {
   type UploadBatchState,
   type UploadSource
 } from "../../lib/uploads.js";
-import { WorkspaceManagementPanel } from "./WorkspaceManagementPanel.js";
-import { LocalTerminalPanel } from "./LocalTerminalPanel.js";
-import { HttpDownloaderPanel } from "./HttpDownloaderPanel.js";
-import { VideoLibraryPanel } from "../video/VideoLibraryPanel.js";
-import { MusicLibraryPanel } from "../music/MusicLibraryPanel.js";
-import { PhotoLibraryPanel } from "./PhotoLibraryPanel.js";
+const WorkspaceManagementPanel = lazy(() => import("./WorkspaceManagementPanel.js").then((module) => ({ default: module.WorkspaceManagementPanel })));
+const LocalTerminalPanel = lazy(() => import("./LocalTerminalPanel.js").then((module) => ({ default: module.LocalTerminalPanel })));
+const HttpDownloaderPanel = lazy(() => import("./HttpDownloaderPanel.js").then((module) => ({ default: module.HttpDownloaderPanel })));
+const VideoLibraryPanel = lazy(() => import("../video/VideoLibraryPanel.js").then((module) => ({ default: module.VideoLibraryPanel })));
+const MusicLibraryPanel = lazy(() => import("../music/MusicLibraryPanel.js").then((module) => ({ default: module.MusicLibraryPanel })));
+const PhotoLibraryPanel = lazy(() => import("./PhotoLibraryPanel.js").then((module) => ({ default: module.PhotoLibraryPanel })));
 import { FileListSkeleton, SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
 import type { CodeFontSettings } from "../../lib/editor-settings.js";
 import { StorageFilePickerDialog } from "./StorageFilePickerDialog.js";
 import { FilePreviewDialog } from "./FilePreviewDialog.js";
-import { MonitoringPanel } from "./MonitoringPanel.js";
+const MonitoringPanel = lazy(() => import("./MonitoringPanel.js").then((module) => ({ default: module.MonitoringPanel })));
 
 const EPOCH_DATE = new Date(0).toISOString();
-
-const WORKSPACE_PANELS = [
-  {
-    id: "files",
-    labelKey: "workspace.panels.files",
-    shortLabelKey: "workspace.panels.filesShort",
-    Icon: Files
-  },
-  {
-    id: "photos",
-    labelKey: "workspace.panels.photos",
-    shortLabelKey: "workspace.panels.photosShort",
-    Icon: Images
-  },
-  { id: "video", labelKey: "workspace.panels.video", shortLabelKey: "workspace.panels.videoShort", Icon: MonitorPlay },
-  { id: "music", labelKey: "workspace.panels.music", shortLabelKey: "workspace.panels.musicShort", Icon: Music2 },
-  {
-    id: "terminal",
-    labelKey: "workspace.panels.terminal",
-    shortLabelKey: "workspace.panels.terminalShort",
-    Icon: TerminalSquare
-  },
-  {
-    id: "downloads",
-    labelKey: "workspace.panels.downloads",
-    shortLabelKey: "workspace.panels.downloadsShort",
-    Icon: Download
-  },
-  {
-    id: "monitoring",
-    labelKey: "workspace.panels.monitoring",
-    shortLabelKey: "workspace.panels.monitoringShort",
-    Icon: Activity
-  },
-  {
-    id: "docker",
-    labelKey: "workspace.panels.docker",
-    shortLabelKey: "workspace.panels.dockerShort",
-    Icon: Container
-  },
-  {
-    id: "virtualMachines",
-    labelKey: "workspace.panels.virtualMachines",
-    shortLabelKey: "workspace.panels.virtualMachinesShort",
-    Icon: MonitorCog
-  },
-  {
-    id: "network",
-    labelKey: "workspace.panels.network",
-    shortLabelKey: "workspace.panels.networkShort",
-    Icon: Network
-  },
-  {
-    id: "storage",
-    labelKey: "workspace.panels.storage",
-    shortLabelKey: "workspace.panels.storageShort",
-    Icon: HardDrive
-  },
-  {
-    id: "shares",
-    labelKey: "workspace.panels.shares",
-    shortLabelKey: "workspace.panels.sharesShort",
-    Icon: Share2
-  }
-] as const satisfies ReadonlyArray<{
-  id: WorkspacePanelId;
-  labelKey: string;
-  shortLabelKey: string;
-  Icon: LucideIcon;
-}>;
 
 export interface FileStoragePoolOption {
   id: string;
@@ -197,6 +117,7 @@ function SearchFilterMenu({ options, disabled, onChange, onApply }: {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
+  usePopoverBack(open, () => { setOpen(false); triggerRef.current?.focus(); });
   const active = hasWorkspaceSearchFilters(options);
   const fileTypeOptions: CustomSelectOption<WorkspaceSearchOptions["fileType"]>[] = [
     { value: "", label: t("workspace.search.allFileTypes") },
@@ -355,6 +276,10 @@ function StoragePoolSwitcher({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const selectedPool = pools.find((pool) => pool.id === selectedPoolId);
+  usePopoverBack(open, () => {
+    setOpen(false);
+    containerRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  });
 
   useEffect(() => {
     if (!open) {
@@ -435,6 +360,8 @@ function StoragePoolSwitcher({
 
 export function WorkspacePane({
   active,
+  activePanel,
+  onPanelChange,
   selectedStoragePoolId,
   storagePools,
   storageSummaryLoading,
@@ -505,6 +432,8 @@ export function WorkspacePane({
   onRollback
 }: {
   active: boolean;
+  activePanel: WorkspacePanelId;
+  onPanelChange: (panel: WorkspacePanelId) => void;
   selectedStoragePoolId: string;
   storagePools: StoragePool[];
   storageSummaryLoading: boolean;
@@ -593,7 +522,7 @@ export function WorkspacePane({
   const [rowActionMenu, setRowActionMenu] = useState<{ entry: FileEntry; top: number; right: number } | null>(null);
   const [transferTargetDirectory, setTransferTargetDirectory] = useState(currentPath);
   const [operationSubmitting, setOperationSubmitting] = useState(false);
-  const [activePanel, setActivePanel] = useState<WorkspacePanelId>(() => readStoredWorkspacePanel());
+  const [mobileSelecting, setMobileSelecting] = useState(false);
   const [terminalMounted, setTerminalMounted] = useState(activePanel === "terminal");
   const [compactLayout, setCompactLayout] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 1040px)").matches
@@ -603,6 +532,11 @@ export function WorkspacePane({
   const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
   const folderUploadInputRef = useRef<HTMLInputElement | null>(null);
   const rowActionMenuRef = useRef<HTMLDivElement | null>(null);
+  const fileScrollRef = useRef<HTMLDivElement | null>(null);
+  useAppScroll(fileScrollRef, `files:${selectedStoragePoolId}:${currentPath}:${searchQuery}`, { ready: !fileListingLoading && activePanel === "files" && active, canLoadMore: Boolean(searchNextCursor), loadMore: onLoadMoreSearchResults });
+  useMobileBack(() => { if (!rowActionMenu) return false; closeRowActionMenu(true); return true; }, 40);
+  useMobileBack(() => { if (!mobileSelecting) return false; setMobileSelecting(false); clearBatchSelection(); return true; }, 20);
+  useMobileBack(() => { if (activePanel !== "files" || !selectedStoragePoolId || currentPath === (storagePools.find((pool) => pool.id === selectedStoragePoolId)?.path ?? ".")) return false; onGoUp(); return true; }, 5);
   const rowActionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const actionDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
   const actionDialogRef = useModalDialog(
@@ -754,9 +688,7 @@ export function WorkspacePane({
     input.setAttribute("directory", "");
   }, []);
 
-  useEffect(() => {
-    writeStoredWorkspacePanel(activePanel);
-  }, [activePanel]);
+  useEffect(() => { if (activePanel === "terminal") setTerminalMounted(true); }, [activePanel]);
 
   useEffect(() => {
     dragDepthRef.current = 0;
@@ -848,7 +780,7 @@ export function WorkspacePane({
 
   useEffect(() => {
     if (filesPanelActivationId > 0) {
-      setActivePanel("files");
+      onPanelChange("files");
     }
   }, [filesPanelActivationId]);
 
@@ -1006,6 +938,7 @@ export function WorkspacePane({
   }
 
   function handleRowClick(event: MouseEvent<HTMLDivElement>, entry: FileEntry) {
+    if (compactLayout && mobileSelecting) { updateBatchSelection(entry, "toggle"); return; }
     if (desktopMultiSelect && (event.metaKey || event.ctrlKey)) {
       updateBatchSelection(entry, "toggle");
       return;
@@ -1030,8 +963,7 @@ export function WorkspacePane({
     }
     clearBatchSelection();
     setRowActionMenu(null);
-    if (panel !== "files") onClosePreview();
-    setActivePanel(panel);
+    onPanelChange(panel);
   }
 
   function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>, entry: FileEntry) {
@@ -1258,7 +1190,8 @@ export function WorkspacePane({
       />
       <div className="workspace-shell">
         <div className="workspace-stage" data-panel={activePanel}>
-          {activePanel === "files" ? (
+          <Suspense fallback={<MobileAppLoading app={activePanel} />}>
+          {!workspaceVisible ? null : activePanel === "files" ? (
             <>
               <PanelHeader
                 className="files-header"
@@ -1297,6 +1230,7 @@ export function WorkspacePane({
                   <PanelHeaderAction
                     className="files-header-button"
                     label={t("workspace.uploadFiles")}
+                    mobilePrimary
                     type="button"
                     onClick={triggerFileUpload}
                     disabled={!hasStoragePool}
@@ -1418,6 +1352,7 @@ export function WorkspacePane({
                 ) : null}
                 <section className="file-browser" aria-label={t("workspace.fileBrowser")}>
                   <header className="management-section-header files-list-header">
+                    {compactLayout ? <button className="mobile-file-select secondary-button" type="button" aria-pressed={mobileSelecting} onClick={() => { setMobileSelecting((value) => !value); clearBatchSelection(); }}>{t(mobileSelecting ? "mobile.done" : "mobile.select")}</button> : null}
                     <div className="files-list-title-block">
                       {fileListingLoading ? (
                         <div className="breadcrumbs files-skeleton-breadcrumbs" aria-hidden="true">
@@ -1463,6 +1398,7 @@ export function WorkspacePane({
 
                   {fileListingLoading ? (
                     <div
+                      ref={fileScrollRef}
                       className="file-list"
                       role="table"
                       aria-label={t("workspace.table.files")}
@@ -1474,6 +1410,7 @@ export function WorkspacePane({
                     </div>
                   ) : hasStoragePool ? (
                     <div
+                      ref={fileScrollRef}
                       className="file-list"
                       role="table"
                       aria-label={t("workspace.table.files")}
@@ -1543,9 +1480,11 @@ export function WorkspacePane({
                           role="row"
                         >
                           <span className={`file-name${searchResult ? " is-search-result" : ""}`} role="cell">
+                            {compactLayout && mobileSelecting ? <input className="mobile-file-checkbox" type="checkbox" checked={selectedPaths.has(entry.path)} disabled={!entry.isSafe} aria-label={entry.name} onClick={(event) => event.stopPropagation()} onChange={() => updateBatchSelection(entry, "toggle")} /> : null}
                             <FileTypeIcon kind={fileVisual.kind} />
                             <span className="file-search-copy">
                               <span className="file-name-text">{entry.name}</span>
+                              {compactLayout ? <small className="mobile-file-meta">{displaySize} · {entry.modifiedAt === EPOCH_DATE ? t("common.dash") : formatFileModifiedAt(entry.modifiedAt)}</small> : null}
                               {searchResult ? (
                                 <span className="file-search-snippet">
                                   <HighlightedSnippet result={searchResult} />
@@ -1787,16 +1726,17 @@ export function WorkspacePane({
               onOpenDeviceSettings={onOpenDeviceSettings}
             />
           )}
-          {terminalMounted ? (
+          {terminalMounted && (!compactLayout || activePanel === "terminal" && workspaceVisible) ? (
             <LocalTerminalPanel
               active={activePanel === "terminal" && workspaceVisible}
               codeFontSettings={codeFontSettings}
             />
           ) : null}
+          </Suspense>
         </div>
 
         <nav className="workspace-panel-rail" aria-label={t("workspace.panelRail")}>
-          {WORKSPACE_PANELS.map((panel) => {
+          {WORKSPACE_APPS.map((panel) => {
             const PanelIcon = panel.Icon;
             const isActive = activePanel === panel.id;
             return (
@@ -1826,6 +1766,7 @@ export function WorkspacePane({
           style={{ top: rowActionMenu.top, right: rowActionMenu.right }}
           onKeyDown={handleRowActionMenuKeyDown}
         >
+          <button type="button" role="menuitem" disabled={Boolean(downloadKey)} onClick={() => { void downloadEntries([rowActionMenu.entry]); closeRowActionMenu(true); }}><Download size={15} aria-hidden="true" /><span>{t("workspace.downloadFile")}</span></button>
           <button
             type="button"
             role="menuitem"

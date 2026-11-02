@@ -25,6 +25,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useAppScroll, useAppViewState, useMobileBack } from "../../mobile/MobileNavigation.js";
 import type {
   MusicAlbum,
   MusicArtist,
@@ -103,11 +104,11 @@ export function MusicLibraryPanel({
 }) {
   const { t } = useTranslation();
   const remote = useMusicRemote();
-  const [view, setView] = useState<View>("home");
-  const [detail, setDetail] = useState<Detail | null>(null);
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [view, setView] = useAppViewState<View>("music.view", "home");
+  const [detail, setDetail] = useAppViewState<Detail | null>("music.detail", null);
+  const [query, setQuery] = useAppViewState("music.query", "");
+  const [search, setSearch] = useAppViewState("music.search", "");
+  const [filters, setFilters] = useAppViewState("music.filters", DEFAULT_FILTERS);
   const [draftFilters, setDraftFilters] = useState(filters);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -149,6 +150,9 @@ export function MusicLibraryPanel({
   const menuRoot = useRef<HTMLDivElement | null>(null);
   const rowActionButtons = useRef(new Map<string, HTMLButtonElement>());
   const trackListRoot = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useMobileBack(() => { if (detail) { setDetail(null); return true; } if (view !== "home") { setView("home"); return true; } return false; }, 10);
+  useMobileBack(() => { if (!rowMenu) return false; setRowMenu(null); return true; }, 40);
   const playlistChoicesRequestId = useRef(0);
   const playlistChoicesController = useRef<AbortController | null>(null);
   const playlistChoicesSession = useRef(0);
@@ -289,6 +293,7 @@ export function MusicLibraryPanel({
       requestId.current += 1;
     };
   }, [load, refreshVersion, remote.libraryVersion]);
+  useAppScroll(contentRef, `music.scroll:${view}:${detail?.id ?? ""}:${search}:${JSON.stringify(filters)}`, { ready: !loading, canLoadMore: Boolean(content.nextCursor) && !error, loadMore: () => content.nextCursor ? load(content.nextCursor) : undefined });
   useEffect(() => {
     if (!reorderFocus || loading || busy) return;
     if (detail?.kind === "playlist" && detail.id === reorderFocus.playlistId) {
@@ -955,7 +960,7 @@ export function MusicLibraryPanel({
           ),
         )}
       </nav>
-      <div className="music-content" aria-busy={loading}>
+      <div ref={contentRef} className="music-content" aria-busy={loading}>
         {error ? (
           <div className="music-error" role="alert">
             {error}
