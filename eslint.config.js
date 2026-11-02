@@ -44,6 +44,8 @@ export default tseslint.config(
   {
     files: [
       "packages/web/src/components/playback/PlaybackBar.tsx",
+      "packages/web/src/components/playback/PlaybackControls.tsx",
+      "packages/web/src/components/playback/PlaybackMenu.tsx",
       "packages/web/src/components/playback/OutputDeviceSelect.tsx",
       "packages/web/src/components/playback/PlaybackTargetSelect.tsx"
     ],

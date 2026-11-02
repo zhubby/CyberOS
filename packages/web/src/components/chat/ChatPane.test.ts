@@ -330,6 +330,7 @@ describe("ChatPane agent rail", () => {
         onOpenNotifications: noop,
         onRequestSystemPower: async () => true,
         notificationUnreadCount: 3,
+        playbackEntry: createElement("button", { "data-testid": "playback-entry" }, "Now playing"),
         onSelectSession: noop,
         onApproveCapability: noop,
         onRejectCapability: noop,
@@ -364,6 +365,9 @@ describe("ChatPane agent rail", () => {
     expect(html).not.toContain(">Model config</span>");
     expect(html.indexOf('class="session-list"')).toBeLessThan(html.indexOf('class="agent-footer"'));
     expect(html.indexOf('class="agent-notification-button"')).toBeLessThan(html.indexOf('class="settings-button agent-settings-button"'));
+    expect(html).toContain('data-testid="playback-entry"');
+    expect(html.indexOf('class="agent-notification-button"')).toBeLessThan(html.indexOf('data-testid="playback-entry"'));
+    expect(html.indexOf('data-testid="playback-entry"')).toBeLessThan(html.indexOf('class="settings-button agent-settings-button"'));
     expect(html.indexOf('class="settings-button agent-settings-button"')).toBeLessThan(html.indexOf('class="agent-power-button"'));
   });
 

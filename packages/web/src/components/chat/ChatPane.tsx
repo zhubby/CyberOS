@@ -211,6 +211,7 @@ export function ChatPane({
   onOpenNotifications,
   onRequestSystemPower,
   notificationUnreadCount,
+  playbackEntry,
   onSelectSession,
   onApproveCapability,
   onRejectCapability,
@@ -247,6 +248,7 @@ export function ChatPane({
   onOpenNotifications: () => void;
   onRequestSystemPower: (action: SystemPowerAction) => Promise<boolean>;
   notificationUnreadCount: number;
+  playbackEntry?: ReactNode;
   onSelectSession: (session: SessionSummary) => void;
   onApproveCapability: (approval: CapabilityApproval, options: CapabilityDecisionOptions) => void;
   onRejectCapability: (approval: CapabilityApproval) => void;
@@ -466,6 +468,7 @@ export function ChatPane({
               </span>
             ) : null}
           </button>
+          {playbackEntry}
           <button
             className="settings-button agent-settings-button"
             type="button"
