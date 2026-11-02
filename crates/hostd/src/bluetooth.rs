@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,7 +29,32 @@ struct BluetoothRuntime {
 #[derive(Default)]
 struct BluetoothRuntimeState {
     scans: HashMap<String, ScanWindow>,
-    error: Option<String>,
+    pairings: HashSet<String>,
+    error: Option<BluetoothOperationError>,
+}
+
+struct BluetoothOperationError {
+    message: String,
+    device: Option<(String, String, DeviceOperation)>,
+}
+
+#[derive(Clone, Copy)]
+enum DeviceOperation {
+    Pair,
+    Connect,
+    Disconnect,
+    GamepadSetup,
+}
+
+impl DeviceOperation {
+    fn satisfied(self, paired: bool, trusted: bool, connected: bool) -> bool {
+        match self {
+            Self::Pair => paired,
+            Self::Connect => connected,
+            Self::Disconnect => !connected,
+            Self::GamepadSetup => paired && trusted && connected,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -64,6 +89,25 @@ struct ChallengeResponse {
 }
 
 impl BluetoothRuntimeState {
+    fn reconcile_error(&mut self, devices: &[Device]) -> Option<String> {
+        let recovered = self.error.as_ref().is_some_and(|error| {
+            error
+                .device
+                .as_ref()
+                .is_some_and(|(adapter_id, address, operation)| {
+                    devices.iter().any(|device| {
+                        device.adapter_id == *adapter_id
+                            && device.address.eq_ignore_ascii_case(address)
+                            && operation.satisfied(device.paired, device.trusted, device.connected)
+                    })
+                })
+        });
+        if recovered {
+            self.error = None;
+        }
+        self.error.as_ref().map(|error| error.message.clone())
+    }
+
     fn reserve_scan(&mut self, adapter_id: &str, scan: ScanWindow) -> Result<(), HostdError> {
         if self.scans.contains_key(adapter_id) {
             return Err(HostdError::conflict(
@@ -350,11 +394,18 @@ impl BluetoothRuntime {
     }
 
     async fn record_error(&self, message: impl Into<String>) {
-        self.state.lock().await.error = Some(message.into());
+        self.state.lock().await.error = Some(BluetoothOperationError {
+            message: message.into(),
+            device: None,
+        });
     }
 
-    async fn error(&self) -> Option<String> {
-        self.state.lock().await.error.clone()
+    async fn record_device_error(&self, path: &str, operation: DeviceOperation, message: String) {
+        self.state.lock().await.error = Some(BluetoothOperationError {
+            message,
+            device: device_identity(path)
+                .map(|(adapter_id, address)| (adapter_id, address, operation)),
+        });
     }
 }
 
@@ -814,6 +865,10 @@ pub(crate) async fn handle(request: BluetoothRequest) -> Result<BluetoothResult,
             address,
         } => {
             let device = device_path(connection, &adapter_id, &address).await?;
+            let pairing_started = runtime.state.lock().await.pairings.insert(device.clone());
+            if !pairing_started {
+                return collect_status(&runtime).await;
+            }
             let pair_connection = connection.clone();
             let pair_runtime = Arc::clone(&runtime);
             tokio::spawn(async move {
@@ -821,15 +876,18 @@ pub(crate) async fn handle(request: BluetoothRequest) -> Result<BluetoothResult,
                 pair_runtime.agent.clear_for_device(&device).await;
                 if let Err(error) = result {
                     tracing::warn!(message = %error.message, "Bluetooth pairing failed");
-                    pair_runtime.record_error(error.message).await;
-                    return;
-                }
-                if let Err(error) =
+                    pair_runtime
+                        .record_device_error(&device, DeviceOperation::Pair, error.message)
+                        .await;
+                } else if let Err(error) =
                     configure_paired_gamepad(&pair_connection, &pair_runtime.agent, &device).await
                 {
                     tracing::warn!(message = %error.message, "Bluetooth gamepad setup needs attention");
-                    pair_runtime.record_error(error.message).await;
+                    pair_runtime
+                        .record_device_error(&device, DeviceOperation::GamepadSetup, error.message)
+                        .await;
                 }
+                pair_runtime.state.lock().await.pairings.remove(&device);
             });
             collect_status(&runtime).await
         }
@@ -970,6 +1028,7 @@ async fn collect_status(runtime: &BluetoothRuntime) -> Result<BluetoothResult, H
         .find(|adapter| adapter.discovering)
         .map(|adapter| adapter.id.clone());
     let scan_window = runtime.reconcile_scan(active_adapter.as_deref()).await;
+    let error = runtime.state.lock().await.reconcile_error(&devices);
     Ok(BluetoothResult {
         collected_at: format_timestamp(time::OffsetDateTime::now_utc()),
         backend: "BlueZ".to_owned(),
@@ -983,7 +1042,7 @@ async fn collect_status(runtime: &BluetoothRuntime) -> Result<BluetoothResult, H
             ends_at: scan_window.map(|scan| scan.ends_at),
         },
         challenge: runtime.agent.challenge().await,
-        error: runtime.error().await,
+        error,
     })
 }
 
@@ -1038,7 +1097,7 @@ async fn device_path(
         return Err(HostdError::validation("Invalid Bluetooth device address"));
     }
     let _ = adapter_path(connection, adapter_id).await?;
-    let suffix = address.replace(':', "_");
+    let suffix = address.to_ascii_uppercase().replace(':', "_");
     let path = format!(
         "/org/bluez/{}/dev_{suffix}",
         adapter_id.trim_start_matches("adapter-")
@@ -1060,10 +1119,29 @@ async fn adapter_call(connection: &Connection, path: &str, method: &str) -> Resu
     let proxy = Proxy::new(connection, BLUEZ, path, "org.bluez.Adapter1")
         .await
         .map_err(|_| HostdError::unavailable("BlueZ adapter is unavailable"))?;
-    proxy
-        .call::<_, _, ()>(method, &())
-        .await
-        .map_err(|_| HostdError::operation_failed("BlueZ adapter operation failed"))
+    if method == "StopDiscovery"
+        && proxy
+            .get_property::<bool>("Discovering")
+            .await
+            .is_ok_and(|discovering| !discovering)
+    {
+        return Ok(());
+    }
+    if let Err(error) = proxy.call::<_, _, ()>(method, &()).await {
+        if method == "StopDiscovery"
+            && proxy
+                .get_property::<bool>("Discovering")
+                .await
+                .is_ok_and(|discovering| !discovering)
+        {
+            return Ok(());
+        }
+        tracing::warn!(%path, %method, %error, "BlueZ adapter operation failed");
+        return Err(HostdError::operation_failed(format!(
+            "BlueZ {method} failed: {error}"
+        )));
+    }
+    Ok(())
 }
 
 async fn adapter_call_path(
@@ -1085,13 +1163,53 @@ async fn adapter_call_path(
 }
 
 async fn device_call(connection: &Connection, path: &str, method: &str) -> Result<(), HostdError> {
+    let operation = match method {
+        "Pair" => Some(DeviceOperation::Pair),
+        "Connect" => Some(DeviceOperation::Connect),
+        "Disconnect" => Some(DeviceOperation::Disconnect),
+        _ => None,
+    };
+    if let Some(operation) = operation
+        && device_operation_satisfied(connection, path, operation).await
+    {
+        return Ok(());
+    }
     let proxy = Proxy::new(connection, BLUEZ, path, "org.bluez.Device1")
         .await
         .map_err(|_| HostdError::unavailable("BlueZ device is unavailable"))?;
-    proxy
-        .call::<_, _, ()>(method, &())
+    if let Err(error) = proxy.call::<_, _, ()>(method, &()).await {
+        if let Some(operation) = operation
+            && device_operation_satisfied(connection, path, operation).await
+        {
+            return Ok(());
+        }
+        tracing::warn!(%path, %method, %error, "BlueZ device operation failed");
+        return Err(HostdError::operation_failed(format!(
+            "BlueZ {method} failed: {error}"
+        )));
+    }
+    Ok(())
+}
+
+async fn device_operation_satisfied(
+    connection: &Connection,
+    path: &str,
+    operation: DeviceOperation,
+) -> bool {
+    device_properties(connection, path)
         .await
-        .map_err(|_| HostdError::operation_failed("BlueZ device operation failed"))
+        .ok()
+        .flatten()
+        .is_some_and(|properties| {
+            let Some(connected) = bool_property(&properties, "Connected") else {
+                return false;
+            };
+            operation.satisfied(
+                bool_property(&properties, "Paired").unwrap_or(false),
+                bool_property(&properties, "Trusted").unwrap_or(false),
+                connected,
+            )
+        })
 }
 
 async fn configure_paired_gamepad(
@@ -1235,6 +1353,114 @@ pub(crate) fn export_protocol_bindings(config: &ts_rs::Config) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_commands_accept_already_reached_states() {
+        assert!(DeviceOperation::Pair.satisfied(true, false, false));
+        assert!(!DeviceOperation::Pair.satisfied(false, false, true));
+        assert!(DeviceOperation::Connect.satisfied(true, true, true));
+        assert!(DeviceOperation::Disconnect.satisfied(true, true, false));
+        assert!(!DeviceOperation::GamepadSetup.satisfied(true, false, true));
+    }
+
+    #[test]
+    fn pairing_error_resolves_only_when_its_own_device_is_paired() {
+        let mut state = BluetoothRuntimeState {
+            error: Some(BluetoothOperationError {
+                message: "Pairing failed".to_owned(),
+                device: Some((
+                    "adapter-hci0".to_owned(),
+                    "AA:BB:CC:DD:EE:FF".to_owned(),
+                    DeviceOperation::Pair,
+                )),
+            }),
+            ..Default::default()
+        };
+        let mut device = Device {
+            adapter_id: "adapter-hci1".to_owned(),
+            address: "AA:BB:CC:DD:EE:FF".to_owned(),
+            name: None,
+            alias: None,
+            device_type: "gamepad".to_owned(),
+            rssi: None,
+            paired: true,
+            trusted: true,
+            connected: true,
+            services_resolved: true,
+            last_seen_at: None,
+        };
+        assert_eq!(
+            state.reconcile_error(std::slice::from_ref(&device)),
+            Some("Pairing failed".to_owned())
+        );
+        device.adapter_id = "adapter-hci0".to_owned();
+        device.paired = false;
+        assert!(
+            state
+                .reconcile_error(std::slice::from_ref(&device))
+                .is_some()
+        );
+        device.paired = true;
+        assert_eq!(state.reconcile_error(&[device]), None);
+        assert!(state.error.is_none());
+    }
+
+    #[test]
+    fn gamepad_setup_error_requires_trust_and_connection_to_recover() {
+        let mut state = BluetoothRuntimeState {
+            error: Some(BluetoothOperationError {
+                message: "Gamepad connection failed".to_owned(),
+                device: Some((
+                    "adapter-hci0".to_owned(),
+                    "AA:BB:CC:DD:EE:FF".to_owned(),
+                    DeviceOperation::GamepadSetup,
+                )),
+            }),
+            ..Default::default()
+        };
+        let mut device = Device {
+            adapter_id: "adapter-hci0".to_owned(),
+            address: "aa:bb:cc:dd:ee:ff".to_owned(),
+            name: None,
+            alias: None,
+            device_type: "gamepad".to_owned(),
+            rssi: None,
+            paired: true,
+            trusted: false,
+            connected: true,
+            services_resolved: true,
+            last_seen_at: None,
+        };
+        assert!(
+            state
+                .reconcile_error(std::slice::from_ref(&device))
+                .is_some()
+        );
+        device.trusted = true;
+        device.connected = false;
+        assert!(
+            state
+                .reconcile_error(std::slice::from_ref(&device))
+                .is_some()
+        );
+        device.connected = true;
+        assert_eq!(state.reconcile_error(&[device]), None);
+    }
+
+    #[test]
+    fn general_bluetooth_errors_are_not_cleared_by_device_reconciliation() {
+        let mut state = BluetoothRuntimeState {
+            error: Some(BluetoothOperationError {
+                message: "Discovery failed".to_owned(),
+                device: None,
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            state.reconcile_error(&[]),
+            Some("Discovery failed".to_owned())
+        );
+    }
 
     fn agent() -> PairingAgent {
         PairingAgent {
