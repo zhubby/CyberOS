@@ -6,7 +6,7 @@
 @media (max-width: 1040px) {
   .app-shell,
   .app-shell.has-playback-dock {
-    --app-titlebar-height: 64px;
+    --app-titlebar-height: 104px;
     position: fixed;
     top: var(--mobile-viewport-top, 0px);
     left: 0;
@@ -69,24 +69,59 @@
   .mobile-home-dock { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--surface); }
   .mobile-home-dock .mobile-app-art::after { background: var(--app-bg); }
 
-  .app-shell :is(.management-header, .chat-header, .mobile-settings-header) {
-    position: relative; display: grid; grid-template-areas: "back copy actions home"; grid-template-columns: 44px minmax(0, 1fr) auto 44px;
-    align-items: center; gap: 4px; padding: 6px 8px; height: var(--app-titlebar-height); min-height: var(--app-titlebar-height); overflow: visible;
+  .app-shell .mobile-app-titlebar {
+    position: relative;
+    display: grid;
+    grid-template-areas: "icon copy" "toolbar toolbar";
+    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-rows: 44px 44px;
+    align-items: center;
+    gap: 3px 12px;
+    padding: 6px 12px;
+    height: var(--app-titlebar-height);
+    min-height: var(--app-titlebar-height);
+    overflow: visible;
+    color: var(--text);
+    background: linear-gradient(90deg, rgb(255 0 60 / 8%), transparent 46%), var(--surface);
+    box-shadow: none;
   }
-  .app-shell :is(.management-title-icon, .chat-header-index) { display: none; }
-  .app-shell :is(.management-title-copy, .chat-header-copy) { grid-area: copy; min-width: 0; }
-  .app-shell :is(.management-title-copy, .chat-header-copy) h2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 18px; line-height: 24px; margin: 0; }
-  .app-shell .management-title-copy > p { display: none; }
-  .app-shell :is(.management-header, .chat-header) h2::before { display: none; }
-  .app-shell .mobile-app-back { grid-area: back; }
-  .app-shell .mobile-app-home { grid-area: home; }
-  .app-shell :is(.mobile-app-back, .mobile-app-home, .mobile-more-button) { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid transparent; color: var(--text); background: transparent; }
+  .app-shell .mobile-app-titlebar .management-title-icon {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    border-radius: 0;
+    color: var(--accent-soft-text);
+    background: var(--accent-soft-bg);
+    box-shadow: inset 0 -2px 0 var(--cyberos-hud-red-soft);
+  }
+  .mobile-app-titlebar .management-title-icon svg { width: 20px; height: 20px; }
+  .app-shell .mobile-app-titlebar .management-title-copy { grid-area: copy; grid-template-rows: 24px 16px; gap: 2px; min-width: 0; height: auto; }
+  .app-shell .mobile-app-titlebar .management-title-copy h2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 20px; font-weight: 700; line-height: 24px; margin: 0; }
+  .app-shell .mobile-app-titlebar .management-title-copy h2::before { display: inline; margin-right: 7px; color: var(--cyber-red); content: "//"; }
+  .app-shell .mobile-app-titlebar .management-title-copy p { display: block; max-width: none; color: var(--muted); font-size: 12px; line-height: 16px; }
+  .mobile-app-titlebar h2:focus-visible { outline: 2px solid var(--cyber-cyan); outline-offset: 2px; }
+  .mobile-titlebar-toolbar {
+    position: relative;
+    grid-area: toolbar;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 44px;
+    margin-inline: -12px;
+    padding-inline: 12px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--app-bg);
+  }
+  .app-shell :is(.mobile-app-back, .mobile-app-home, .mobile-more-button) { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; gap: 6px; min-width: 44px; height: 44px; padding: 0 8px; border: 1px solid transparent; color: var(--text); background: transparent; font: 700 12px/16px var(--font-emphasis); white-space: nowrap; }
+  .app-shell .mobile-app-home { margin-left: auto; color: var(--accent-soft-text); background: var(--accent-soft-bg); }
   .app-shell :is(.mobile-app-back, .mobile-app-home, .mobile-more-button):hover { border-color: var(--cyber-cyan); }
-  .app-shell .management-actions.mobile-header-actions { grid-area: actions; position: relative; display: flex; flex-wrap: nowrap; width: auto; max-width: none; overflow: visible; gap: 0; padding: 0; }
-  .app-shell .mobile-header-actions > .panel-header-action { width: 44px; height: 44px; padding: 0; }
-  .mobile-header-meta { overflow: hidden; max-height: 17px; color: var(--muted); font-size: 10px; }
+  .app-shell .management-actions.mobile-header-actions { position: static; display: flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; max-width: none; margin-left: auto; overflow: visible; gap: 6px; padding: 0; }
+  .app-shell .mobile-header-actions + .mobile-app-home { margin-left: 0; }
+  .app-shell .mobile-header-actions > :is(.panel-header-action, .mobile-more-button) { width: 44px; height: 44px; padding: 0; }
+  .app-shell .mobile-header-actions > .panel-header-action { color: var(--accent-soft-text); background: var(--accent-soft-bg); }
+  .mobile-header-meta { overflow: hidden; min-width: 0; max-height: 17px; color: var(--muted); font-size: 10px; }
   .mobile-header-meta :is(.download-header-stat, .download-header-stat-value) { min-width: 0; padding: 0; font-size: 10px; }
-  .mobile-action-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; display: grid; gap: 4px; width: min(250px, calc(100vw - 68px)); max-height: calc(var(--mobile-viewport-height, 100dvh) - 100px); overflow: auto; padding: 8px; border: 1px solid var(--line); color: var(--text); background: var(--dialog-bg); box-shadow: 4px 4px 0 var(--app-bg); }
+  .mobile-action-menu { position: absolute; right: 12px; top: calc(100% + 8px); z-index: 50; display: grid; gap: 4px; width: min(280px, calc(100% - 24px)); max-height: calc(var(--mobile-viewport-height, 100dvh) - var(--app-titlebar-height) - 20px); overflow: auto; padding: 8px; border: 1px solid var(--line); color: var(--text); background: var(--dialog-bg); box-shadow: 4px 4px 0 var(--app-bg); }
   .app-shell .mobile-action-menu :is(button, .panel-header-action) { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: auto; padding: 8px; text-align: left; }
   .mobile-action-menu .mobile-action-label { display: inline; overflow-wrap: anywhere; }
   .mobile-action-menu .activity-menu { width: 100%; }
@@ -120,7 +155,6 @@
   .mobile-sessions-dialog > header button { display: grid; place-items: center; background: var(--surface); color: var(--text); }
   .mobile-sessions-dialog .session-list { display: grid; overflow: auto; }
   .app-shell .mobile-settings-page { width: 100%; height: 100%; max-height: none; max-width: none; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); border: 0; box-shadow: none; }
-  .mobile-settings-header h2 { grid-area: copy; min-width: 0; margin: 0; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .app-shell .mobile-settings-page .settings-rail { grid-column: 1; grid-row: 2; display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; max-height: none; padding: 12px; border: 0; overflow: hidden; }
   .mobile-settings-page[data-settings-view="detail"] .settings-rail { display: none; }
   .mobile-settings-page :is(.settings-rail-brand, .settings-rail-footer, .settings-content-header) { display: none; }

@@ -38,7 +38,7 @@ export function BluetoothDeviceList({ devices, busyKey, disabled, onAction }: {
         key={action}
         type="button"
         className={`management-icon-action bluetooth-device-action${danger ? " is-danger" : ""}`}
-        title={label}
+        data-tooltip={label}
         aria-label={label}
         disabled={disabled || busyKey !== null}
         onClick={() => onAction(action, device)}

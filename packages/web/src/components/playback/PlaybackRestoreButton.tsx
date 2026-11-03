@@ -15,7 +15,7 @@ export function PlaybackRestoreButton() {
       data-playback-state={p.dock.state}
       data-tv-focusable
       aria-label={label}
-      title={label}
+      data-tooltip={label}
       aria-expanded={p.barVisible}
       aria-controls={p.barVisible ? "playback-dock" : undefined}
       onClick={p.expandBar}

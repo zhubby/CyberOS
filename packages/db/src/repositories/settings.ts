@@ -653,8 +653,8 @@ export function savePhotosProcessingSettings(
 }
 
 function normalizeDownloadConcurrency(value: unknown): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 3) {
-    throw new Error("Download concurrency must be an integer between 1 and 3");
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 10) {
+    throw new Error("Download concurrency must be an integer between 1 and 10");
   }
   return value;
 }

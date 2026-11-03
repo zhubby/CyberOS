@@ -35,7 +35,7 @@ export function MusicDialog({
             type="button"
             onClick={onClose}
             aria-label={t("common.actions.close")}
-            title={t("common.actions.close")}
+            data-tooltip={t("common.actions.close")}
           >
             <X size={18} aria-hidden="true" />
           </button>

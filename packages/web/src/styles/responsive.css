@@ -293,22 +293,6 @@
   }
 }
 
-@container system-wifi-readonly-card (max-width: 250px) {
-  .system-wifi-readonly-header button {
-    width: 32px;
-    padding: 0;
-  }
-
-  .system-wifi-readonly-header button span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .system-wifi-readonly-signal-track > span {
     transition: none;
@@ -564,7 +548,8 @@
 
   .storage-file-picker-layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(180px, 1fr);
+    overflow-y: auto;
   }
 
   .storage-file-picker-pools {

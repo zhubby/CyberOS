@@ -9,6 +9,10 @@ const filterDropdownRestriction = {
   selector: "JSXElement:has(> JSXOpeningElement[name.name='SearchFilterPopover']) JSXOpeningElement[name.name='select']",
   message: "Search filter dropdowns must use CustomSelect. See docs/src/content/docs/reference/frontend-design.md."
 };
+const nativeTooltipRestriction = {
+  selector: "JSXOpeningElement[name.name=/^[a-z]/][name.name!=iframe] > JSXAttribute[name.name=title]",
+  message: "Hover hints must use data-tooltip or HelpTip with the shared HUD tooltip layer, not native title tooltips. Preserve iframe accessible titles. See docs/src/content/docs/reference/frontend-design.md."
+};
 
 export default tseslint.config(
   {
@@ -36,9 +40,9 @@ export default tseslint.config(
     }
   },
   {
-    files: ["packages/web/src/components/**/*.tsx"],
+    files: ["packages/web/src/**/*.tsx"],
     rules: {
-      "no-restricted-syntax": ["error", modalPortalRestriction, filterDropdownRestriction]
+      "no-restricted-syntax": ["error", modalPortalRestriction, filterDropdownRestriction, nativeTooltipRestriction]
     }
   },
   {
@@ -54,6 +58,7 @@ export default tseslint.config(
         "error",
         modalPortalRestriction,
         filterDropdownRestriction,
+        nativeTooltipRestriction,
         {
           selector: "JSXOpeningElement[name.name='select']",
           message: "Playback output dropdowns must use CustomSelect, including device, audio and subtitle selectors. See docs/src/content/docs/reference/frontend-design.md."
@@ -64,6 +69,7 @@ export default tseslint.config(
   {
     files: [
       "packages/web/src/components/settings/**/*.tsx",
+      "packages/web/src/components/workspace/SystemEthernetManagement.tsx",
       "packages/web/src/components/workspace/SystemWifiManagement.tsx"
     ],
     rules: {
@@ -71,6 +77,7 @@ export default tseslint.config(
         "error",
         modalPortalRestriction,
         filterDropdownRestriction,
+        nativeTooltipRestriction,
         {
           selector: "JSXOpeningElement[name.name='select']",
           message: "Settings dropdowns must use CustomSelect, including nested dialogs and shared settings controls. See docs/src/content/docs/reference/frontend-design.md."

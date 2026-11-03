@@ -1461,6 +1461,18 @@ export interface PublicBackupSettings extends BackupSettingsRecord {
   passwordConfigured: boolean;
 }
 
+export interface BackupDirectoryListing {
+  roots: Array<{ id: string; name: string; path: string; filesystem: string | null }>;
+  entries: Array<{
+    name: string;
+    path: string;
+    kind: "directory";
+    sizeBytes: number;
+    modifiedAt: string;
+    isSafe: boolean;
+  }>;
+}
+
 export interface TvSettingsRecord {
   enabled: boolean;
   videoOutput: "drm" | "wayland";

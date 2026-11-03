@@ -2,7 +2,7 @@ import { moveElement, verticalCompactor, type Layout, type LayoutItem } from "re
 
 export type ManagementDashboardId = "docker" | "virtualMachines" | "network" | "storage" | "shares" | "monitoring";
 export type ManagementDashboardBreakpoint = "desktop" | "tablet";
-export type ManagementDashboardWidgetSize = "overview" | "metric" | "status" | "full" | "wide" | "half" | "narrow" | "large" | "shareProtocol" | "shareOverview";
+export type ManagementDashboardWidgetSize = "overview" | "metric" | "full" | "wide" | "half" | "narrow" | "large" | "shareProtocol" | "shareOverview";
 
 export interface ManagementDashboardWidgetDefinition {
   id: string;
@@ -73,7 +73,7 @@ const MANAGEMENT_DASHBOARD_WIDGETS: Record<ManagementDashboardId, readonly Manag
     { id: "metric-addresses", size: "metric" },
     { id: "metric-defaultRoutes", size: "metric" },
     { id: "ethernet", size: "wide" },
-    { id: "wifi", size: "status" },
+    { id: "wifi", size: "wide" },
     { id: "traffic", size: "large" },
     { id: "interfaces", size: "wide" },
     { id: "routes", size: "half" },
@@ -290,6 +290,10 @@ function sanitizeLayoutItem(stored: LayoutItem | undefined, fallback: LayoutItem
   if (!stored) {
     return fallback;
   }
+  // Retire the fixed Wi-Fi preset while preserving the rest of the saved layout.
+  if (fallback.i === "wifi" && (stored.maxW === 3 || stored.maxW === 4) && stored.maxH === 10) {
+    return { ...fallback, y: stored.y };
+  }
   const minW = fallback.minW ?? 1;
   const minH = fallback.minH ?? 1;
   if (stored.w < minW || stored.h < minH) {
@@ -339,15 +343,6 @@ function gridSize(size: ManagementDashboardWidgetSize, breakpoint: ManagementDas
       return { w: tablet ? 8 : 6, h: 12, minW: tablet ? 4 : 4, minH: 9 };
     case "metric":
       return { w: tablet ? 4 : 3, h: 6, minW: 2, minH: 5 };
-    case "status":
-      return {
-        w: tablet ? 4 : 3,
-        h: 10,
-        minW: tablet ? 4 : 3,
-        minH: 8,
-        maxW: tablet ? 4 : 3,
-        maxH: 10
-      };
     case "shareOverview":
       return { w: colsFor(breakpoint), h: 25, minW: colsFor(breakpoint), minH: 12, maxW: colsFor(breakpoint) };
     case "shareProtocol":

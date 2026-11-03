@@ -635,6 +635,25 @@
   grid-column: 1 / -1;
 }
 
+.settings-backup-repository-picker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  text-align: left;
+}
+
+.settings-backup-repository-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  text-transform: none;
+}
+
 .settings-section-card {
   display: grid;
   gap: 16px;
@@ -1125,13 +1144,6 @@
   text-transform: uppercase;
 }
 
-.settings-download-help {
-  grid-column: 1 / -1;
-  color: var(--muted-2);
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
 .settings-version-page {
   display: grid;
   align-content: start;
@@ -1332,7 +1344,8 @@
   min-width: 0;
 }
 
-.settings-preference-field > span {
+.settings-preference-field > span,
+.settings-preference-field > label {
   color: var(--muted);
   font-size: 11.5px;
   font-family: var(--font-emphasis);
@@ -1408,24 +1421,6 @@
 .settings-check input {
   width: 16px;
   height: 16px;
-}
-
-.settings-secret-note {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgb(255 255 255 / 5%);
-  border-radius: 5px;
-  color: var(--muted);
-  background: rgb(0 0 0 / 14%);
-  font-size: 11.5px;
-}
-
-.settings-secret-note svg {
-  flex: 0 0 auto;
-  color: var(--yellow);
 }
 
 .settings-empty-note {
@@ -1535,6 +1530,38 @@
 
 .settings-overview-details {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-overview .settings-overview-card-header {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  justify-content: start;
+  column-gap: 10px;
+  row-gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settings-overview-card-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--accent);
+}
+
+.settings-overview-card-header h3 {
+  min-width: 0;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+}
+
+.settings-overview-card-header p {
+  grid-column: 2;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .settings-metric-grid {
@@ -1979,6 +2006,73 @@
   justify-content: flex-end;
 }
 
+.settings-section-card.settings-git-skill-dialog,
+.settings-section-card.settings-mcp-dialog {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+  width: min(600px, 100%);
+  max-height: calc(100dvh - 36px);
+  overflow: hidden;
+  padding: 0;
+  background: var(--dialog-bg);
+}
+
+.settings-section-card.settings-git-skill-dialog > header,
+.settings-section-card.settings-mcp-dialog > header {
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settings-git-skill-dialog > header > div,
+.settings-mcp-dialog > header > div {
+  min-width: 0;
+}
+
+.settings-git-skill-dialog > header > button,
+.settings-mcp-dialog > header > button {
+  flex: 0 0 auto;
+}
+
+.settings-git-skill-dialog h3,
+.settings-mcp-dialog h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-git-skill-dialog h3 svg,
+.settings-mcp-dialog h3 svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.settings-git-skill-form,
+.settings-mcp-form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.settings-git-skill-body,
+.settings-mcp-body {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.settings-git-skill-form > footer,
+.settings-mcp-form > footer {
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--footer-bg);
+}
+
 .settings-project-skill {
   grid-template-columns: 34px minmax(0, 1fr) auto;
 }
@@ -2223,53 +2317,6 @@
   margin: 0;
 }
 
-.bluetooth-adapter-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  padding: 12px;
-}
-
-.bluetooth-adapter-list button {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) 16px;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--line-soft);
-  border-radius: 0;
-  color: var(--muted);
-  background: rgb(0 0 0 / 10%);
-  text-align: left;
-}
-
-.bluetooth-adapter-list button.is-active {
-  border-color: var(--focus-ring-soft);
-  color: var(--text);
-  background: var(--selection-bg);
-}
-
-.bluetooth-adapter-list span,
-.bluetooth-adapter-list strong,
-.bluetooth-adapter-list small {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bluetooth-adapter-list strong {
-  font-size: 12px;
-}
-
-.bluetooth-adapter-list small {
-  margin-top: 2px;
-  color: var(--muted-2);
-  font-size: 10.5px;
-}
-
 .bluetooth-device-list {
   display: grid;
   padding: 0 12px 12px;
@@ -2469,5 +2516,80 @@
   .bluetooth-device-actions {
     grid-column: 2;
     flex-wrap: wrap;
+  }
+}
+
+
+.settings-music-library {
+  container: settings-music-library / inline-size;
+  border-radius: 0;
+}
+
+.settings-music-library h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-music-library h3 > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.settings-music-add {
+  flex: 0 0 auto;
+}
+
+.settings-music-source {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.settings-music-source strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-music-source .settings-media-source-icon {
+  border-radius: 0;
+}
+
+.settings-music-library .settings-music-scan-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--danger-text);
+  overflow-wrap: anywhere;
+}
+
+.settings-music-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--danger-text);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.settings-music-feedback > button {
+  min-height: 32px;
+}
+
+@container settings-music-library (max-width: 520px) {
+  .settings-music-library > header {
+    flex-wrap: wrap;
+  }
+
+  .settings-music-source {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settings-music-source-main {
+    grid-column: 1 / -1;
+  }
+
+  .settings-music-source > .settings-media-toggle {
+    justify-self: start;
   }
 }

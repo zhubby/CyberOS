@@ -189,8 +189,10 @@ export function ShareManagementPanel({ storagePools, locale, onWorkQueuesChanged
               <label><span>{t("workspace.management.shares.fields.path")}</span><input value={dialog.draft.path} onChange={(event) => updateDraft({ path: event.target.value })} /></label>
               <label className="share-field-wide"><span>{t("workspace.management.shares.fields.description")}</span><input value={dialog.draft.description} onChange={(event) => updateDraft({ description: event.target.value })} /></label>
             </div>
-            <Switch checked={dialog.draft.protocols[dialog.protocol].enabled} label={t("workspace.management.shares.states.enabled")} onCheckedChange={(enabled) => updateProtocol(dialog.protocol, { enabled })} />
-            <ShareProtocolFields protocol={dialog.protocol} share={dialog.draft} update={updateProtocol} t={t} />
+            <div className="share-editor-options">
+              <Switch checked={dialog.draft.protocols[dialog.protocol].enabled} label={t("workspace.management.shares.states.enabled")} onCheckedChange={(enabled) => updateProtocol(dialog.protocol, { enabled })} />
+              <ShareProtocolFields protocol={dialog.protocol} share={dialog.draft} update={updateProtocol} t={t} />
+            </div>
           </fieldset> : null}
           {dialog.kind === "delete" ? <p className="share-delete-copy">{t("workspace.management.shares.deleteConfirm", { name: dialog.share.name })}</p> : null}
           {dialogError ? <p className="share-add-form-error" role="alert"><CircleAlert size={15} aria-hidden="true" />{dialogError}</p> : null}
@@ -215,10 +217,20 @@ export function ShareProtocolSection({ protocol, shares, summary, disabled, crea
     </header>
     {protocol === "ftp" ? <p className="share-protocol-hint">{t("workspace.management.shares.ftpLimit")}</p> : null}
     {shares.length ? <div className="share-protocol-shares">{shares.map((share) => <article className="share-protocol-share-row" key={share.id}>
-      <div className="share-protocol-share-copy"><strong>{share.name || share.id}</strong><small>{share.storagePoolId} / {share.path}</small><code>{connectionIdentifier(share, protocol)}</code></div>
-      <div className="share-protocol-share-actions"><Switch checked={share.protocols[protocol].enabled} disabled={disabled} ariaLabel={`${t("workspace.management.shares.states.enabled")} · ${share.name}`} onCheckedChange={(enabled) => onToggle(share, enabled)} />
-        <button className="management-icon-action" disabled={disabled} onClick={() => onEdit(share)} title={t("common.actions.edit")} aria-label={`${t("common.actions.edit")} · ${share.name}`}><Pencil size={15} aria-hidden="true" /></button>
-        <button className="management-icon-action is-danger" disabled={disabled} onClick={() => onDelete(share)} title={t("workspace.management.shares.removeShare")} aria-label={`${t("workspace.management.shares.removeShare")} · ${share.name}`}><Trash2 size={15} aria-hidden="true" /></button>
+      <div className="share-protocol-share-copy">
+        <div className="share-protocol-share-name"><Share2 size={16} aria-hidden="true" /><strong>{share.name || share.id}</strong></div>
+        <div className="share-protocol-share-meta"><Folder size={13} aria-hidden="true" /><small>{share.storagePoolId} / {share.path}</small></div>
+        <div className="share-protocol-share-meta"><Network size={13} aria-hidden="true" /><code>{connectionIdentifier(share, protocol)}</code></div>
+      </div>
+      <div className="share-protocol-share-actions">
+        <div className="share-protocol-share-toggle">
+          <span aria-hidden="true">{t(`workspace.management.shares.states.${share.protocols[protocol].enabled ? "enabled" : "disabled"}`)}</span>
+          <Switch checked={share.protocols[protocol].enabled} disabled={disabled} ariaLabel={`${t("workspace.management.shares.states.enabled")} · ${share.name || share.id}`} onCheckedChange={(enabled) => onToggle(share, enabled)} />
+        </div>
+        <div className="share-protocol-share-tools">
+          <button className="management-row-action management-icon-action" disabled={disabled} onClick={() => onEdit(share)} data-tooltip={t("common.actions.edit")} aria-label={`${t("common.actions.edit")} · ${share.name || share.id}`}><Pencil size={15} aria-hidden="true" /></button>
+          <button className="management-row-action management-icon-action is-danger" disabled={disabled} onClick={() => onDelete(share)} data-tooltip={t("workspace.management.shares.removeShare")} aria-label={`${t("workspace.management.shares.removeShare")} · ${share.name || share.id}`}><Trash2 size={15} aria-hidden="true" /></button>
+        </div>
       </div>
     </article>)}</div> : <p className="management-empty">{t("workspace.management.shares.noShares")}</p>}
     {summary?.protocols[protocol].services.filter((service) => service.status !== "active" && service.status !== "disabled" && summary.enabled && summary.protocols[protocol].enabledShares > 0).map((service) => <p className="share-service-problem" key={service.name}><CircleAlert size={14} aria-hidden="true" />{service.name}: {t(`workspace.management.shares.serviceStates.${service.status}`)}{service.error ? ` · ${service.error}` : ""}</p>)}
@@ -251,7 +263,7 @@ function ShareDialog({ title, busy, onClose, children, returnFocus, closeLabel }
   }, []);
   return <ModalPortal className="management-modal-backdrop share-add-modal-backdrop" role="presentation" onRequestClose={onClose} closeDisabled={busy} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section ref={ref} tabIndex={-1} className="management-modal share-add-modal share-protocol-modal" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title" aria-busy={busy || undefined}>
-      <header><h2 id="share-dialog-title">{title}</h2><button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={closeLabel} title={closeLabel}><X size={16} aria-hidden="true" /></button></header>
+      <header><h2 id="share-dialog-title">{title}</h2><button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={closeLabel} data-tooltip={closeLabel}><X size={16} aria-hidden="true" /></button></header>
       {children}
     </section>
   </ModalPortal>;

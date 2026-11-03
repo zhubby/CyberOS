@@ -43,15 +43,20 @@ export function SystemWifiReadonly({
   const signal = radioOff || unavailable ? null : device.signal;
 
   return (
-    <section className="management-section system-wifi-readonly-card" data-state={tone}>
-      <header className="system-wifi-readonly-header">
-        <h3>{t("workspace.management.network.wifi.title")}</h3>
-        <button type="button" onClick={onOpenSettings}>
-          <Settings aria-hidden="true" size={14} />
-          <span>{t("workspace.management.network.wifi.openSettings")}</span>
-        </button>
+    <section className="management-section">
+      <header className="management-section-header">
+        <div>
+          <h3>{t("workspace.management.network.wifi.title")}</h3>
+          <p>{t("workspace.management.network.wifi.readOnlyDescription")}</p>
+        </div>
+        <div className="management-section-header-actions">
+          <button type="button" className="secondary-button" onClick={onOpenSettings}>
+            <Settings aria-hidden="true" size={14} />
+            <span>{t("workspace.management.network.wifi.openSettings")}</span>
+          </button>
+        </div>
       </header>
-      <div className="system-wifi-readonly-body" role="status" aria-live="polite">
+      <div className="system-wifi-readonly-body" data-state={tone} role="status" aria-live="polite">
         <div className="system-wifi-readonly-identity">
           <div className="system-wifi-readonly-icon" data-state={tone}>
             {radioOff || unavailable ? <WifiOff aria-hidden="true" size={20} /> : <Wifi aria-hidden="true" size={20} />}

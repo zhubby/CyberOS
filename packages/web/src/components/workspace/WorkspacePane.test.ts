@@ -208,3 +208,106 @@ describe("file preview NAS playback controls", () => {
     expect(html.includes('lucide-play"')).toBe(false);
   });
 });
+
+
+function filePaneProps(): ComponentProps<typeof WorkspacePane> {
+  const noop = () => undefined;
+  const complete = async () => undefined;
+  return {
+    active: true,
+    activePanel: "files",
+    onPanelChange: noop,
+    selectedStoragePoolId: "pool-1",
+    storagePools: [{ id: "pool-1", name: "NAS", mountpoint: "/cyberos/data", path: ".", filesystem: "ext4", status: "ready" }],
+    storageSummaryLoading: false,
+    photoLibrarySettingsUpdatedAt: null,
+    currentPath: "documents",
+    breadcrumbs: ["documents"],
+    entries: [{ name: "Projects", path: "documents/Projects", kind: "directory", sizeBytes: 0, modifiedAt: "2026-11-01T00:00:00Z", isSafe: true }],
+    fileListingLoading: false,
+    gitStatus: null,
+    selectedFilePath: null,
+    previewMeta: null,
+    previewLoading: false,
+    previewError: null,
+    textPreview: null,
+    blobUrl: "",
+    videoUrl: "",
+    vodPlayerStatus: null,
+    vodPlayerBusy: false,
+    previewFileSizeLimitBytes: 1048576,
+    searchQuery: "",
+    searchOptions: defaultWorkspaceSearchOptions(),
+    searchResults: null,
+    searchNextCursor: null,
+    operations: [],
+    fileBatches: [],
+    uploadBatches: [],
+    dockerOperations: [],
+    vmOperations: [],
+    operationsReady: true,
+    locale: "en",
+    codeFontSettings: defaultCodeFontSettings(),
+    filesPanelActivationId: 0,
+    onSelectStoragePool: noop,
+    onOpenDownloadedDirectory: noop,
+    onGoUp: noop,
+    onRefreshFiles: noop,
+    onSubmitSearch: noop,
+    onSearchQueryChange: noop,
+    onSearchOptionsChange: noop,
+    onApplySearchFilters: noop,
+    onLoadMoreSearchResults: noop,
+    onGoToBreadcrumb: noop,
+    onGoToStoragePool: noop,
+    onOpenEntry: noop,
+    onOpenWorkspacePath: noop,
+    onInsertWorkspacePath: noop,
+    onOpenEditor: noop,
+    onPlayToVodPlayer: noop,
+    onVodPlayerCommand: noop,
+    onRetryVodPlayer: noop,
+    onRequestCreateFolder: complete,
+    onRequestRename: complete,
+    onRequestTrash: complete,
+    onRequestTransfer: complete,
+    onRequestBatch: complete,
+    onRequestExtract: complete,
+    onUploadSources: noop,
+    onCancelUploadBatch: noop,
+    onCancelFileBatch: noop,
+    onWorkQueuesChanged: noop,
+    onNotifyError: noop,
+    onNotifySuccess: noop,
+    onNotifyWarning: noop,
+    onOpenDeviceSettings: noop,
+    onOpenPhotoSettings: noop,
+    onClosePreview: noop,
+    onRollback: noop
+  };
+}
+
+describe("file directory loading", () => {
+  it("keeps navigation and the current rows visible while a directory is loading", async () => {
+    await initI18n();
+    const html = renderToStaticMarkup(createElement(WorkspacePane, { ...filePaneProps(), fileListingLoading: true }));
+    expect(html).toContain('id="storage-pool-switcher"');
+    expect(html).toContain('class="breadcrumbs files-content-breadcrumbs"');
+    expect(html).toContain('>documents</span>');
+    expect(html).toContain('class="file-row file-row-head"');
+    expect(html).toContain('class="file-name-text">Projects</span>');
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('class="file-list-entries" role="rowgroup" inert=""');
+    expect(html).not.toContain('files-skeleton-');
+    expect(html).not.toContain('file-list-skeleton');
+  });
+
+  it("releases file controls after loading, including an empty directory", async () => {
+    await initI18n();
+    const html = renderToStaticMarkup(createElement(WorkspacePane, { ...filePaneProps(), entries: [] }));
+    expect(html).toContain('class="file-list-entries" role="rowgroup"');
+    expect(html).not.toContain('aria-busy="true"');
+    expect(html).not.toContain('inert=""');
+    expect(html).not.toContain('file-list-loading');
+  });
+});

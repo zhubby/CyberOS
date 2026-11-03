@@ -4,9 +4,13 @@
 @import "../styles/select.css";
 @import "../styles/search-filter.css";
 @import "../styles/modal.css";
+@import "../styles/tooltip.css";
 @import "../styles/playback-dock.css";
+@import "../styles/tooltip.css";
 
 :root {
+  --tooltip-font-size: 16px;
+  --tooltip-max-width: 420px;
   color-scheme: dark;
   font-family: var(--cyberos-font-ui);
   --tv-bg: var(--cyberos-color-canvas);

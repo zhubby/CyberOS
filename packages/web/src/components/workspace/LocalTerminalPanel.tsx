@@ -438,7 +438,7 @@ export function LocalTerminalPanel({
           {actionError ? (
             <div className="workspace-terminal-error" role="alert">
               <span>{actionError}</span>
-              <button type="button" onClick={() => setActionError(null)} aria-label={t("common.actions.close")} title={t("common.actions.close")}>
+              <button type="button" onClick={() => setActionError(null)} aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")}>
                 <X aria-hidden="true" size={14} />
               </button>
             </div>
@@ -554,7 +554,7 @@ export function TerminalTabBar({
               aria-selected={selected}
               aria-controls={`terminal-panel-${tab.id}`}
               tabIndex={selected ? 0 : -1}
-              title={terminalTabLabel(tab, t)}
+              data-tooltip={terminalTabLabel(tab, t)}
               onClick={() => onSelect(tab.id)}
               onDoubleClick={() => onRename?.(tab)}
               onKeyDown={(event) => handleKeyDown(event, tab.id)}
@@ -570,7 +570,7 @@ export function TerminalTabBar({
         className="workspace-terminal-new-tab"
         onClick={onCreate}
         disabled={createDisabled}
-        title={createDisabled && tabs.length >= maxSessions ? t("workspace.terminal.limitReached", { count: maxSessions }) : t("workspace.terminal.newTab")}
+        data-tooltip={createDisabled && tabs.length >= maxSessions ? t("workspace.terminal.limitReached", { count: maxSessions }) : t("workspace.terminal.newTab")}
         aria-label={t("workspace.terminal.newTab")}
       >
         <Plus aria-hidden="true" size={15} />

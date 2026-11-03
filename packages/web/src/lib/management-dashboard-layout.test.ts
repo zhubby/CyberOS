@@ -176,27 +176,45 @@ describe("management dashboard layouts", () => {
     expect(layouts.desktop.find((item) => item.i === "protocol-smb")?.w).toBe(MANAGEMENT_DASHBOARD_COLUMNS.desktop);
   });
 
-  it("keeps the Network Wi-Fi status widget compact", () => {
-    const definitions = managementDashboardWidgetDefinitions("network");
-    expect(definitions.find((widget) => widget.id === "wifi")?.size).toBe("status");
-
+  it.each([
+    { breakpoint: "desktop", columns: 12, smallerWidth: 10 },
+    { breakpoint: "tablet", columns: 8, smallerWidth: 6 }
+  ] as const)("starts Wi-Fi on a full row and preserves resizing on $breakpoint", ({ breakpoint, columns, smallerWidth }) => {
+    const storage = memoryStorage();
     const layouts = defaultManagementDashboardLayouts("network");
-    expect(layouts.desktop.find((item) => item.i === "wifi")).toMatchObject({ w: 3, h: 10, maxW: 3, maxH: 10 });
-    expect(layouts.tablet.find((item) => item.i === "wifi")).toMatchObject({ w: 4, h: 10, maxW: 4, maxH: 10 });
+    expect(layouts[breakpoint].find((item) => item.i === "wifi")).toMatchObject({ x: 0, w: columns });
+
+    const smaller = adjustManagementDashboardLayout(layouts, breakpoint, "wifi", { kind: "resize", dw: -2, dh: -2 });
+    expect(smaller[breakpoint].find((item) => item.i === "wifi")).toMatchObject({ w: smallerWidth, h: 12 });
+    writeManagementDashboardLayouts("network", smaller, storage);
+
+    const restored = readManagementDashboardLayouts("network", storage);
+    expect(restored[breakpoint].find((item) => item.i === "wifi")).toMatchObject({ w: smallerWidth, h: 12 });
+    const larger = adjustManagementDashboardLayout(restored, breakpoint, "wifi", { kind: "resize", dw: 2, dh: 6 });
+    expect(larger[breakpoint].find((item) => item.i === "wifi")).toMatchObject({ w: columns, h: 18 });
   });
 
-  it("shrinks a previously saved large Wi-Fi widget without resetting the Network layout", () => {
+  it("upgrades the old fixed-size Wi-Fi card without resetting other saved card sizes", () => {
     const storage = memoryStorage();
     const defaults = defaultManagementDashboardLayouts("network");
-    const oversized = {
-      desktop: defaults.desktop.map((item) => item.i === "wifi" ? { ...item, w: 12, h: 26 } : item),
-      tablet: defaults.tablet.map((item) => item.i === "wifi" ? { ...item, w: 8, h: 26 } : item)
+    const old = {
+      desktop: defaults.desktop.map((item) => item.i === "wifi"
+        ? { ...item, x: 9, w: 3, h: 10, minW: 3, maxW: 3, minH: 8, maxH: 10 }
+        : item.i === "metric-interfaces" ? { ...item, w: 2, h: 7 } : item),
+      tablet: defaults.tablet.map((item) => item.i === "wifi"
+        ? { ...item, x: 4, w: 4, h: 10, minW: 4, maxW: 4, minH: 8, maxH: 10 }
+        : item.i === "metric-interfaces" ? { ...item, w: 2, h: 7 } : item)
     };
 
-    writeManagementDashboardLayouts("network", oversized, storage);
+    writeManagementDashboardLayouts("network", old, storage);
     const restored = readManagementDashboardLayouts("network", storage);
-    expect(restored.desktop.find((item) => item.i === "wifi")).toMatchObject({ w: 3, h: 10 });
-    expect(restored.tablet.find((item) => item.i === "wifi")).toMatchObject({ w: 4, h: 10 });
+    expect(restored.desktop.find((item) => item.i === "wifi")).toMatchObject({ x: 0, w: 12, h: 14 });
+    expect(restored.tablet.find((item) => item.i === "wifi")).toMatchObject({ x: 0, w: 8, h: 14 });
+    for (const breakpoint of ["desktop", "tablet"] as const) {
+      const larger = adjustManagementDashboardLayout(restored, breakpoint, "wifi", { kind: "resize", dw: 0, dh: 4 });
+      expect(larger[breakpoint].find((item) => item.i === "wifi")?.h).toBe(18);
+      expect(restored[breakpoint].find((item) => item.i === "metric-interfaces")).toMatchObject({ w: 2, h: 7 });
+    }
   });
 
   it("keeps the three-chart storage health widget full width", () => {

@@ -29,7 +29,7 @@ test("keeps compact toolbar buttons labeled and square at desktop and mobile wid
     const toolbarButtons = page.locator('site-search [data-open-modal], .sl-menu-button, .expressive-code .copy button').filter({ visible: true });
     for (const button of await toolbarButtons.all()) {
       await expect(button).toHaveAttribute("aria-label", /\S/);
-      await expect(button).toHaveAttribute("title", await button.getAttribute("aria-label") ?? "");
+      await expect(button).toHaveAttribute("data-tooltip", await button.getAttribute("aria-label") ?? "");
       const geometry = await button.evaluate((element) => {
         const style = getComputedStyle(element);
         const rect = element.getBoundingClientRect();
@@ -43,5 +43,75 @@ test("keeps compact toolbar buttons labeled and square at desktop and mobile wid
       expect(geometry.height).toBeGreaterThanOrEqual(32);
       expect(geometry.corners).toEqual(["0px", "0px", "0px", "0px"]);
     }
+    await expect(page.locator('.pagefind-ui__search-input')).toHaveAttribute("data-tooltip", /\S/);
+    await expect(page.locator('.pagefind-ui__search-input')).toHaveAttribute("aria-label", /\S/);
+    await expect(page.locator('[title]')).toHaveCount(0);
+    await toolbarButtons.first().hover();
+    const tooltip = page.getByRole("tooltip");
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toHaveClass("hud-tooltip");
+    await expect(tooltip).toHaveText(await toolbarButtons.first().getAttribute("aria-label") ?? "");
+    await page.keyboard.press("Escape");
+    await expect(tooltip).toHaveCount(0);
   }
+});
+
+test("keeps tooltips open during unrelated scrolling and dismisses when their own container scrolls", async ({ page }) => {
+  await page.goto("/docs/");
+  await expect(page.locator('site-search [data-open-modal]')).toHaveAttribute("data-tooltip", /\S/);
+  await page.evaluate(() => {
+    const fixture = document.createElement("section");
+    fixture.style.cssText = "position:fixed;left:20px;top:200px;z-index:9999;width:260px";
+    fixture.innerHTML = '<div id="tooltip-own-scroll" style="height:80px;overflow:auto"><button id="tooltip-scroll-trigger" data-tooltip="Shared scrolling tooltip">Tooltip trigger</button><div style="height:500px"></div></div><div id="tooltip-unrelated-scroll" style="height:80px;overflow:auto"><div style="height:1000px"></div></div>';
+    document.body.append(fixture);
+  });
+  await page.locator("#tooltip-scroll-trigger").hover();
+  const timer = await page.evaluate(() => {
+    const scroller = document.getElementById("tooltip-unrelated-scroll")!;
+    return window.setInterval(() => { scroller.scrollTop = (scroller.scrollTop + 10) % 500; }, 20);
+  });
+  try {
+    const tooltip = page.getByRole("tooltip");
+    await expect(tooltip).toHaveText("Shared scrolling tooltip");
+    await page.waitForTimeout(600);
+    await expect(tooltip).toBeVisible();
+    await page.locator("#tooltip-own-scroll").evaluate((element) => { element.scrollTop = 10; });
+    await expect(tooltip).toHaveCount(0);
+  } finally {
+    await page.evaluate((timer) => window.clearInterval(timer), timer);
+  }
+});
+
+test("coordinates shared tooltips with other help layers", async ({ page }) => {
+  await page.goto("/docs/");
+  await expect(page.locator('site-search [data-open-modal]')).toHaveAttribute("data-tooltip", /\S/);
+  await page.evaluate(() => {
+    const trigger = document.createElement("button");
+    trigger.id = "tooltip-coordination-trigger";
+    trigger.dataset.tooltip = "Shared help";
+    trigger.textContent = "Help trigger";
+    trigger.style.cssText = "position:fixed;left:20px;top:200px;z-index:9999";
+    document.body.append(trigger);
+    document.addEventListener("cyberos:tooltip-open", (event) => {
+      if (event instanceof CustomEvent) trigger.dataset.openedTooltip = event.detail;
+    });
+  });
+  const trigger = page.locator("#tooltip-coordination-trigger");
+  const tooltip = page.getByRole("tooltip");
+  await trigger.focus();
+  await expect(tooltip).toHaveText("Shared help");
+  await expect(trigger).toHaveAttribute("data-opened-tooltip", await tooltip.getAttribute("id") ?? "");
+  await page.evaluate(() => {
+    document.dispatchEvent(new CustomEvent("cyberos:tooltip-open", { detail: "settings-help-tip" }));
+  });
+  await expect(tooltip).toHaveCount(0);
+  await expect(trigger).not.toHaveAttribute("aria-describedby");
+
+  await trigger.blur();
+  await trigger.hover();
+  await page.evaluate(() => {
+    document.dispatchEvent(new CustomEvent("cyberos:tooltip-open", { detail: "settings-help-tip" }));
+  });
+  await page.waitForTimeout(500);
+  await expect(tooltip).toHaveCount(0);
 });

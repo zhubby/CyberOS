@@ -90,7 +90,7 @@ export function PowerControl({
         className={labelled ? "settings-power-button secondary-button" : "agent-power-button"}
         type="button"
         onClick={() => setOpen(true)}
-        title={t("power.open")}
+        data-tooltip={t("power.open")}
         aria-label={t("power.open")}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -166,7 +166,7 @@ export function PowerDialog({
             className="icon-button"
             onClick={onClose}
             disabled={busy}
-            title={t("common.actions.close")}
+            data-tooltip={t("common.actions.close")}
             aria-label={t("common.actions.close")}
           >
             <X aria-hidden="true" size={17} />

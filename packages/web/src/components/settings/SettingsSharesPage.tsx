@@ -12,6 +12,7 @@ import {
   validateShareAccountDraft
 } from "../../config/share-settings.js";
 import { Switch } from "../common/Switch.js";
+import { HelpLabel } from "../common/HelpTip.js";
 
 type ShareSettingsOperation = "publishing" | "account" | null;
 
@@ -184,10 +185,7 @@ export function SettingsSharesContent({
             <Share2 aria-hidden="true" size={18} />
           </header>
           <div className="settings-switch-row">
-            <div>
-              <strong>{t("settings.shares.enabled")}</strong>
-              <span>{enabled ? t("settings.shares.enabledDescription") : t("settings.shares.disabledDescription")}</span>
-            </div>
+            <strong><HelpLabel label={t("settings.shares.enabled")} content={enabled ? t("settings.shares.enabledDescription") : t("settings.shares.disabledDescription")} /></strong>
             <Switch
               checked={enabled}
               disabled={disabled}
@@ -222,12 +220,10 @@ export function SettingsSharesContent({
           <div className="settings-credential-status" data-configured={settings?.account.passwordConfigured ?? false}>
             <KeyRound aria-hidden="true" size={16} />
             <div>
-              <strong>
-                {settings?.account.passwordConfigured
-                  ? t("settings.shares.passwordConfigured")
-                  : t("settings.shares.passwordNotConfigured")}
-              </strong>
-              <span>{t("settings.shares.passwordStatusDetail")}</span>
+              <strong><HelpLabel
+                label={settings?.account.passwordConfigured ? t("settings.shares.passwordConfigured") : t("settings.shares.passwordNotConfigured")}
+                content={t("settings.shares.passwordStatusDetail")}
+              /></strong>
             </div>
           </div>
 

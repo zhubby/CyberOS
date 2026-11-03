@@ -40,6 +40,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { Switch } from "../common/Switch.js";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { SettingsSecretField } from "./SettingsSecretField.js";
+import { SettingsMusicLibraryCard } from "./SettingsMusicLibraryCard.js";
 import {
   StorageFilePickerDialog,
   type StorageFilePickerPool,
@@ -225,62 +226,65 @@ export function SettingsMediaPage({
     }, candidate ? t("settings.media.matchSaved") : t("settings.media.titleExcluded"));
   }
 
-  if (!data) {
-    return (
-      <div className="settings-content-body settings-media-loading" role={error ? "alert" : "status"}>
-        {error ? error : <><LoaderCircle className="is-spinning" aria-hidden="true" size={18} />{t("settings.media.loading")}</>}
-      </div>
-    );
-  }
-
   return (
     <>
-      <SettingsMediaContent
-        data={data}
-        busy={busy}
-        deleteId={deleteId}
-        selectedTitleId={selectedTitleId}
-        candidates={candidates}
-        candidateQuery={candidateQuery}
-        tmdbToken={tmdbToken}
-        clearTmdbToken={clearTmdbToken}
-        language={language}
-        region={region}
-        onTmdbTokenChange={(value) => { setTmdbToken(value); setClearTmdbToken(false); }}
-        onClearTmdbTokenChange={(value) => { setClearTmdbToken(value); if (value) setTmdbToken(""); }}
-        onLanguageChange={setLanguage}
-        onRegionChange={setRegion}
-        onSaveSettings={saveSettings}
-        onAddSource={setPickerKind}
-        onToggleSource={(source) => void run(`source-${source.id}`, async () => {
-          await updateMediaSource(source.id, { enabled: !source.enabled });
-        }, t("settings.media.sourceUpdated"))}
-        onScanSource={(source) => void run(`scan-${source.id}`, async () => {
-          await requestMediaScan(source.id);
-        }, t("settings.media.scanQueued"))}
-        onDeleteSource={(source) => {
-          if (deleteId !== source.id) {
-            setDeleteId(source.id);
-            return;
-          }
-          setDeleteId(null);
-          void run(`delete-${source.id}`, async () => deleteMediaSource(source.id), t("settings.media.sourceDeleted"));
-        }}
-        onCancelDelete={() => setDeleteId(null)}
-        onCandidateQueryChange={setCandidateQuery}
-        onSearchCandidates={(title) => void searchCandidates(title)}
-        onSelectTitle={(title) => {
-          setCandidateQuery(title.title);
-          void searchCandidates(title, title.title);
-        }}
-        onApplyMatch={(title, candidate) => void applyMatch(title, candidate)}
-        onToggleTv={(enabled) => void toggleTv(enabled)}
-        onTvSettingsChange={(patch) => setData((current) => current ? {
-          ...current,
-          tvSettings: { ...current.tvSettings, ...patch }
-        } : current)}
-        onSaveTvSettings={() => void saveTvSettings()}
-      />
+      <div className="settings-content-body">
+        <div className="settings-page-grid settings-media-page">
+          <SettingsMusicLibraryCard pools={pools} locale={locale} onNotifySuccess={onNotifySuccess} onNotifyError={onNotifyError} />
+          {!data ? (
+            <div className="settings-media-loading" role={error ? "alert" : "status"}>
+              {error ? error : <><LoaderCircle className="is-spinning" aria-hidden="true" size={18} />{t("settings.media.loading")}</>}
+            </div>
+          ) : (
+            <SettingsMediaContent
+              data={data}
+              busy={busy}
+              deleteId={deleteId}
+              selectedTitleId={selectedTitleId}
+              candidates={candidates}
+              candidateQuery={candidateQuery}
+              tmdbToken={tmdbToken}
+              clearTmdbToken={clearTmdbToken}
+              language={language}
+              region={region}
+              onTmdbTokenChange={(value) => { setTmdbToken(value); setClearTmdbToken(false); }}
+              onClearTmdbTokenChange={(value) => { setClearTmdbToken(value); if (value) setTmdbToken(""); }}
+              onLanguageChange={setLanguage}
+              onRegionChange={setRegion}
+              onSaveSettings={saveSettings}
+              onAddSource={setPickerKind}
+              onToggleSource={(source) => void run(`source-${source.id}`, async () => {
+                await updateMediaSource(source.id, { enabled: !source.enabled });
+              }, t("settings.media.sourceUpdated"))}
+              onScanSource={(source) => void run(`scan-${source.id}`, async () => {
+                await requestMediaScan(source.id);
+              }, t("settings.media.scanQueued"))}
+              onDeleteSource={(source) => {
+                if (deleteId !== source.id) {
+                  setDeleteId(source.id);
+                  return;
+                }
+                setDeleteId(null);
+                void run(`delete-${source.id}`, async () => deleteMediaSource(source.id), t("settings.media.sourceDeleted"));
+              }}
+              onCancelDelete={() => setDeleteId(null)}
+              onCandidateQueryChange={setCandidateQuery}
+              onSearchCandidates={(title) => void searchCandidates(title)}
+              onSelectTitle={(title) => {
+                setCandidateQuery(title.title);
+                void searchCandidates(title, title.title);
+              }}
+              onApplyMatch={(title, candidate) => void applyMatch(title, candidate)}
+              onToggleTv={(enabled) => void toggleTv(enabled)}
+              onTvSettingsChange={(patch) => setData((current) => current ? {
+                ...current,
+                tvSettings: { ...current.tvSettings, ...patch }
+              } : current)}
+              onSaveTvSettings={() => void saveTvSettings()}
+            />
+          )}
+        </div>
+      </div>
       {pickerKind ? (
         <StorageFilePickerDialog
           pools={pools}
@@ -359,8 +363,7 @@ export function SettingsMediaContent({
     data.scans.find((scan) => scan.sourceId === source.id) ?? null
   ])), [data.scans, data.sources]);
   return (
-    <div className="settings-content-body">
-      <div className="settings-page-grid settings-media-page">
+    <>
         <form className="settings-section-card" onSubmit={onSaveSettings}>
           <header>
             <div>
@@ -443,7 +446,7 @@ export function SettingsMediaContent({
                 <div key={component}>
                   <dt>{t(`settings.media.tvComponents.${component}`)}</dt>
                   <dd className={`is-${health.state}`}>{t(`settings.media.componentStates.${health.state}`)}</dd>
-                  <small title={health.detail ?? undefined}>{health.detail ?? t("settings.media.noStatusDetail")}</small>
+                  <small data-tooltip={health.detail ?? undefined}>{health.detail ?? t("settings.media.noStatusDetail")}</small>
                 </div>
               );
             })}
@@ -476,7 +479,7 @@ export function SettingsMediaContent({
                       <span className="settings-media-source-icon">{source.kind === "movie" ? <Film aria-hidden="true" size={17} /> : <Tv aria-hidden="true" size={17} />}</span>
                       <div>
                         <strong>{source.name}</strong>
-                        <span title={source.path}>{source.path}</span>
+                        <span data-tooltip={source.path}>{source.path}</span>
                       </div>
                     </div>
                     <div className="settings-media-source-state">
@@ -492,14 +495,14 @@ export function SettingsMediaContent({
                       onCheckedChange={() => onToggleSource(source)}
                     />
                     <div className="settings-media-row-actions">
-                      <button type="button" title={t("settings.media.scan")} aria-label={t("settings.media.scan")} disabled={sourceBusy} onClick={() => onScanSource(source)}>
+                      <button type="button" data-tooltip={t("settings.media.scan")} aria-label={t("settings.media.scan")} disabled={sourceBusy} onClick={() => onScanSource(source)}>
                         <RefreshCw className={busy === `scan-${source.id}` ? "is-spinning" : undefined} aria-hidden="true" size={15} />
                       </button>
-                      <button className={deleteId === source.id ? "danger-button" : ""} type="button" title={t("common.actions.delete")} aria-label={t("common.actions.delete")} disabled={sourceBusy} onClick={() => onDeleteSource(source)}>
+                      <button className={deleteId === source.id ? "danger-button" : ""} type="button" data-tooltip={t("common.actions.delete")} aria-label={t("common.actions.delete")} disabled={sourceBusy} onClick={() => onDeleteSource(source)}>
                         {deleteId === source.id ? <Check aria-hidden="true" size={15} /> : <Trash2 aria-hidden="true" size={15} />}
                       </button>
                       {deleteId === source.id ? (
-                        <button type="button" title={t("common.actions.cancel")} aria-label={t("common.actions.cancel")} onClick={onCancelDelete}>
+                        <button type="button" data-tooltip={t("common.actions.cancel")} aria-label={t("common.actions.cancel")} onClick={onCancelDelete}>
                           <X aria-hidden="true" size={15} />
                         </button>
                       ) : null}
@@ -553,7 +556,6 @@ export function SettingsMediaContent({
             </div>
           )}
         </section>
-      </div>
-    </div>
+    </>
   );
 }

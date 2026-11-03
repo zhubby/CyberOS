@@ -396,6 +396,14 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.music-filter-feedback {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.music-filter-feedback > button {
+  min-height: 32px;
+  padding: 0 10px;
+}
 .music-scan-warning {
   color: var(--warning-text) !important;
   margin-bottom: 12px;

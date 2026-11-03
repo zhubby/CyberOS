@@ -1,6 +1,6 @@
 import { ModalPortal, usePopoverBack } from "../common/ModalPortal.js";
 import { useModalDialog } from "./useModalDialog.js";
-import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { WORKSPACE_APPS } from "../../mobile/apps.js";
 import { useAppScroll, useMobileBack } from "../../mobile/MobileNavigation.js";
 import { MobileAppLoading } from "../../mobile/MobileHome.js";
@@ -56,7 +56,7 @@ const HttpDownloaderPanel = lazy(() => import("./HttpDownloaderPanel.js").then((
 const VideoLibraryPanel = lazy(() => import("../video/VideoLibraryPanel.js").then((module) => ({ default: module.VideoLibraryPanel })));
 const MusicLibraryPanel = lazy(() => import("../music/MusicLibraryPanel.js").then((module) => ({ default: module.MusicLibraryPanel })));
 const PhotoLibraryPanel = lazy(() => import("./PhotoLibraryPanel.js").then((module) => ({ default: module.PhotoLibraryPanel })));
-import { FileListSkeleton, SkeletonBlock } from "./ManagementSkeleton.js";
+import { SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
 import type { CodeFontSettings } from "../../lib/editor-settings.js";
 import { StorageFilePickerDialog } from "./StorageFilePickerDialog.js";
@@ -161,7 +161,7 @@ function SearchFilterMenu({ options, disabled, onChange, onApply }: {
         type="button"
         className={`workspace-search-filter-trigger${active ? " is-active" : ""}`}
         aria-label={active ? t("workspace.search.filtersActive") : t("workspace.search.filters")}
-        title={t("workspace.search.filters")}
+        data-tooltip={t("workspace.search.filters")}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
@@ -529,11 +529,11 @@ export function WorkspacePane({
   );
   const [fileSort, setFileSort] = useState<FileSortState>({ key: "name", direction: "asc" });
   const [isDropActive, setIsDropActive] = useState(false);
+  const fileListRef = useRef<HTMLDivElement | null>(null);
   const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
   const folderUploadInputRef = useRef<HTMLInputElement | null>(null);
   const rowActionMenuRef = useRef<HTMLDivElement | null>(null);
-  const fileScrollRef = useRef<HTMLDivElement | null>(null);
-  useAppScroll(fileScrollRef, `files:${selectedStoragePoolId}:${currentPath}:${searchQuery}`, { ready: !fileListingLoading && activePanel === "files" && active, canLoadMore: Boolean(searchNextCursor), loadMore: onLoadMoreSearchResults });
+  useAppScroll(fileListRef, `files:${selectedStoragePoolId}:${currentPath}:${searchQuery}`, { ready: !fileListingLoading && activePanel === "files" && active, canLoadMore: Boolean(searchNextCursor), loadMore: onLoadMoreSearchResults });
   useMobileBack(() => { if (!rowActionMenu) return false; closeRowActionMenu(true); return true; }, 40);
   useMobileBack(() => { if (!mobileSelecting) return false; setMobileSelecting(false); clearBatchSelection(); return true; }, 20);
   useMobileBack(() => { if (activePanel !== "files" || !selectedStoragePoolId || currentPath === (storagePools.find((pool) => pool.id === selectedStoragePoolId)?.path ?? ".")) return false; onGoUp(); return true; }, 5);
@@ -711,6 +711,15 @@ export function WorkspacePane({
     setSelectionAnchorPath(null);
     setRowActionMenu(null);
   }, [activePanel, currentPath, searchOptions, searchQuery, selectedStoragePoolId]);
+
+  useLayoutEffect(() => {
+    const list = fileListRef.current;
+    if (!list) return;
+    list.scrollTop = 0;
+    if (document.activeElement === list) {
+      list.querySelector<HTMLElement>('.file-list-entries .file-row[tabindex="0"]')?.focus({ preventScroll: true });
+    }
+  }, [currentPath, selectedStoragePoolId]);
 
   useEffect(() => {
     const nextScope = `${selectedStoragePoolId}\0${currentPath}`;
@@ -922,9 +931,10 @@ export function WorkspacePane({
   }
 
   function openEntryFromRow(entry: FileEntry) {
-    if (operationSubmitting || !entry.isSafe) {
+    if (fileListingLoading || operationSubmitting || !entry.isSafe) {
       return;
     }
+    if (entry.kind === "directory") fileListRef.current?.focus({ preventScroll: true });
     clearBatchSelection();
     onOpenEntry(entry);
   }
@@ -1264,7 +1274,7 @@ export function WorkspacePane({
               >
                   <div className="storage-pool-control">
                     <label htmlFor="storage-pool-switcher">{t("workspace.storagePoolLabel")}</label>
-                    {fileListingLoading ? (
+                    {storageSummaryLoading ? (
                       <SkeletonBlock className="files-skeleton-select" />
                     ) : (
                       <StoragePoolSwitcher
@@ -1305,7 +1315,7 @@ export function WorkspacePane({
                         onClick={() => void downloadEntries(selectedEntries)}
                         disabled={Boolean(downloadKey)}
                         aria-busy={Boolean(downloadKey) || undefined}
-                        title={downloadKey ? t("workspace.batch.preparingDownload") : t("workspace.batch.download")}
+                        data-tooltip={downloadKey ? t("workspace.batch.preparingDownload") : t("workspace.batch.download")}
                         aria-label={downloadKey ? t("workspace.batch.preparingDownload") : t("workspace.batch.download")}
                       >
                         {downloadKey ? <LoaderCircle className="spin" aria-hidden="true" size={16} /> : <Download aria-hidden="true" size={16} />}
@@ -1315,7 +1325,7 @@ export function WorkspacePane({
                         className="file-batch-action"
                         onClick={openBatchMoveDialog}
                         disabled={operationSubmitting}
-                        title={t("workspace.batch.move")}
+                        data-tooltip={t("workspace.batch.move")}
                         aria-label={t("workspace.batch.move")}
                       >
                         <FolderInput aria-hidden="true" size={16} />
@@ -1325,7 +1335,7 @@ export function WorkspacePane({
                         className="file-batch-action is-danger"
                         onClick={openBatchDeleteDialog}
                         disabled={operationSubmitting}
-                        title={t("workspace.batch.delete")}
+                        data-tooltip={t("workspace.batch.delete")}
                         aria-label={t("workspace.batch.delete")}
                       >
                         <Trash2 aria-hidden="true" size={16} />
@@ -1354,65 +1364,48 @@ export function WorkspacePane({
                   <header className="management-section-header files-list-header">
                     {compactLayout ? <button className="mobile-file-select secondary-button" type="button" aria-pressed={mobileSelecting} onClick={() => { setMobileSelecting((value) => !value); clearBatchSelection(); }}>{t(mobileSelecting ? "mobile.done" : "mobile.select")}</button> : null}
                     <div className="files-list-title-block">
-                      {fileListingLoading ? (
-                        <div className="breadcrumbs files-skeleton-breadcrumbs" aria-hidden="true">
-                          <SkeletonBlock width="72%" />
-                        </div>
-                      ) : (
-                        <nav className="breadcrumbs files-content-breadcrumbs" aria-label={t("workspace.breadcrumbs")}>
+                      <nav className="breadcrumbs files-content-breadcrumbs" aria-label={t("workspace.breadcrumbs")}>
+                        <button
+                          type="button"
+                          onClick={onGoToStoragePool}
+                          disabled={!selectedStoragePool || visibleBreadcrumbs.length === 0}
+                          aria-current={visibleBreadcrumbs.length === 0 ? "page" : undefined}
+                        >
+                          <HardDrive aria-hidden="true" size={14} />
+                          <span>{selectedStoragePool?.name ?? t("workspace.storagePoolPlaceholder")}</span>
+                        </button>
+                        {visibleBreadcrumbs.map((crumb, index) => (
                           <button
+                            key={`${crumb}-${index}`}
                             type="button"
-                            onClick={onGoToStoragePool}
-                            disabled={!selectedStoragePool || visibleBreadcrumbs.length === 0}
-                            aria-current={visibleBreadcrumbs.length === 0 ? "page" : undefined}
+                            onClick={() => onGoToBreadcrumb(selectedStoragePool ? storagePoolPathDepth + index : index)}
+                            disabled={index === visibleBreadcrumbs.length - 1}
+                            aria-current={index === visibleBreadcrumbs.length - 1 ? "page" : undefined}
                           >
-                            <HardDrive aria-hidden="true" size={14} />
-                            <span>{selectedStoragePool?.name ?? t("workspace.storagePoolPlaceholder")}</span>
+                            <span>{crumb}</span>
                           </button>
-                          {visibleBreadcrumbs.map((crumb, index) => (
-                            <button
-                              key={`${crumb}-${index}`}
-                              type="button"
-                              onClick={() => onGoToBreadcrumb(selectedStoragePool ? storagePoolPathDepth + index : index)}
-                              disabled={index === visibleBreadcrumbs.length - 1}
-                              aria-current={index === visibleBreadcrumbs.length - 1 ? "page" : undefined}
-                            >
-                              <span>{crumb}</span>
-                            </button>
-                          ))}
-                        </nav>
-                      )}
+                        ))}
+                      </nav>
                       <p className="files-list-summary">
-                        {fileListingLoading
-                          ? <SkeletonBlock width="58%" />
-                          : t("workspace.filesListDescription", { total: entryCount })}
+                        {t("workspace.filesListDescription", { total: entryCount })}
                       </p>
                     </div>
                     {gitStatus ? (
-                      <span className="management-status-pill files-git-status" data-state={gitStatusState} title={gitTooltip} aria-label={gitTooltip}>
+                      <span className="management-status-pill files-git-status" data-state={gitStatusState} data-tooltip={gitTooltip} aria-label={gitTooltip}>
                         <GitBranch aria-hidden="true" size={13} />
                         <span>{gitSummaryText}</span>
                       </span>
                     ) : null}
                   </header>
 
-                  {fileListingLoading ? (
+                  {hasStoragePool || fileListingLoading ? (
+                    <div className="file-list-container" data-loading={fileListingLoading || undefined}>
                     <div
-                      ref={fileScrollRef}
+                      ref={fileListRef}
                       className="file-list"
                       role="table"
-                      aria-label={t("workspace.table.files")}
-                      onClick={(event) => {
-                        if (event.target === event.currentTarget) clearBatchSelection();
-                      }}
-                    >
-                      <FileListSkeleton />
-                    </div>
-                  ) : hasStoragePool ? (
-                    <div
-                      ref={fileScrollRef}
-                      className="file-list"
-                      role="table"
+                      tabIndex={-1}
+                      aria-busy={fileListingLoading || undefined}
                       aria-label={t("workspace.table.files")}
                       onClick={(event) => {
                         if (event.target === event.currentTarget) clearBatchSelection();
@@ -1429,7 +1422,7 @@ export function WorkspacePane({
                           className="file-sort-button"
                           onClick={() => setFileSort((current) => nextFileSort(current, "sizeBytes"))}
                           aria-label={t("workspace.table.size")}
-                          title={t("workspace.table.size")}
+                          data-tooltip={t("workspace.table.size")}
                         >
                           <span>{t("workspace.table.size")}</span>
                           {fileSort.key === "sizeBytes" ? <SortDirectionIcon direction={fileSort.direction} /> : null}
@@ -1441,14 +1434,20 @@ export function WorkspacePane({
                           className="file-sort-button"
                           onClick={() => setFileSort((current) => nextFileSort(current, "modifiedAt"))}
                           aria-label={t("workspace.table.modified")}
-                          title={t("workspace.table.modified")}
+                          data-tooltip={t("workspace.table.modified")}
                         >
                           <span>{t("workspace.table.modified")}</span>
                           {fileSort.key === "modifiedAt" ? <SortDirectionIcon direction={fileSort.direction} /> : null}
                         </button>
                       </span>
                     </div>
-                    {fileListingLoading ? <FileListSkeleton /> : sortedEntries.map((entry) => {
+                    <div
+                      key={`${selectedStoragePoolId}:${currentPath}`}
+                      className="file-list-entries"
+                      role="rowgroup"
+                      inert={fileListingLoading || undefined}
+                    >
+                    {sortedEntries.map((entry) => {
                       const fileVisual = describeFileVisual(entry);
                       const searchResult = searchResultByPath.get(entry.path);
                       const isHidden = isHiddenName(entry.name);
@@ -1495,7 +1494,7 @@ export function WorkspacePane({
                             {entry.gitStatus ? (
                               <span
                                 className={`git-file-status git-file-status-${entry.gitStatus}`}
-                                title={t(`workspace.git.statuses.${entry.gitStatus}`)}
+                                data-tooltip={t(`workspace.git.statuses.${entry.gitStatus}`)}
                                 aria-label={t(`workspace.git.statuses.${entry.gitStatus}`)}
                               >
                                 {gitFileStatusCode(entry.gitStatus)}
@@ -1512,7 +1511,7 @@ export function WorkspacePane({
                               }}
                               disabled={!entry.isSafe || Boolean(downloadKey)}
                               aria-busy={downloadKey === entry.path || undefined}
-                              title={downloadKey === entry.path
+                              data-tooltip={downloadKey === entry.path
                                 ? t("workspace.batch.preparingDownload")
                                 : entry.kind === "directory"
                                   ? t("workspace.actions.downloadFolder")
@@ -1534,7 +1533,7 @@ export function WorkspacePane({
                                   onInsertWorkspacePath(entry.path);
                                 }}
                                 disabled={!entry.isSafe}
-                                title={t("workspace.actions.sendPathToAgent")}
+                                data-tooltip={t("workspace.actions.sendPathToAgent")}
                                 aria-label={t("workspace.actions.sendPathToAgentEntry", { name: entry.name })}
                               >
                                 <MessageSquarePlus aria-hidden="true" size={14} />
@@ -1544,7 +1543,7 @@ export function WorkspacePane({
                                 className="file-action-button"
                                 onClick={(event) => openTransferDialog(event, entry, "move")}
                                 disabled={!entry.isSafe}
-                                title={t("workspace.actions.move")}
+                                data-tooltip={t("workspace.actions.move")}
                                 aria-label={t("workspace.actions.moveEntry", { name: entry.name })}
                               >
                                 <FolderInput aria-hidden="true" size={14} />
@@ -1554,7 +1553,7 @@ export function WorkspacePane({
                                 className="file-action-button"
                                 onClick={(event) => openTransferDialog(event, entry, "copy")}
                                 disabled={!entry.isSafe}
-                                title={t("workspace.actions.copy")}
+                                data-tooltip={t("workspace.actions.copy")}
                                 aria-label={t("workspace.actions.copyEntry", { name: entry.name })}
                               >
                                 <Copy aria-hidden="true" size={14} />
@@ -1564,7 +1563,7 @@ export function WorkspacePane({
                                 className="file-action-button"
                                 onClick={(event) => openRenameDialog(event, entry)}
                                 disabled={!entry.isSafe}
-                                title={t("workspace.actions.rename")}
+                                data-tooltip={t("workspace.actions.rename")}
                                 aria-label={t("workspace.actions.renameEntry", { name: entry.name })}
                               >
                                 <PencilLine aria-hidden="true" size={14} />
@@ -1574,7 +1573,7 @@ export function WorkspacePane({
                                 className="file-action-button is-danger"
                                 onClick={(event) => openDeleteDialog(event, entry)}
                                 disabled={!entry.isSafe}
-                                title={t("workspace.actions.delete")}
+                                data-tooltip={t("workspace.actions.delete")}
                                 aria-label={t("workspace.actions.deleteEntry", { name: entry.name })}
                               >
                                 <Trash2 aria-hidden="true" size={14} />
@@ -1585,7 +1584,7 @@ export function WorkspacePane({
                               className="file-action-button file-action-button-more"
                               onClick={(event) => openRowActionMenu(event, entry)}
                               disabled={!entry.isSafe}
-                              title={t("workspace.actions.more")}
+                              data-tooltip={t("workspace.actions.more")}
                               aria-label={t("workspace.actions.moreEntry", { name: entry.name })}
                               aria-haspopup="menu"
                               aria-expanded={rowActionMenu?.entry.path === entry.path}
@@ -1605,6 +1604,14 @@ export function WorkspacePane({
                         <button type="button" className="secondary-button" disabled={fileListingLoading} onClick={onLoadMoreSearchResults}>
                           {t("workspace.search.loadMore")}
                         </button>
+                      </div>
+                    ) : null}
+                    </div>
+                    </div>
+                    {fileListingLoading ? (
+                      <div className="file-list-loading" role="status">
+                        <LoaderCircle className="spin" aria-hidden="true" size={14} />
+                        <span>{t("status.loading")}</span>
                       </div>
                     ) : null}
                     </div>
@@ -1643,7 +1650,7 @@ export function WorkspacePane({
                         onClick={onPlayToVodPlayer}
                         disabled={vodPlayerBusy}
                         aria-busy={vodPlayerBusy || undefined}
-                        title={t("preview.vodPlayer.play")}
+                        data-tooltip={t("preview.vodPlayer.play")}
                         aria-label={t("preview.vodPlayer.play")}
                       >
                         <MonitorPlay aria-hidden="true" size={14} />
@@ -1654,7 +1661,7 @@ export function WorkspacePane({
                         type="button"
                         className="preview-tool-button"
                         onClick={() => onOpenEditor(previewMeta)}
-                        title={t("editor.open")}
+                        data-tooltip={t("editor.open")}
                         aria-label={t("editor.open")}
                       >
                         <PencilLine aria-hidden="true" size={14} />
@@ -1666,7 +1673,7 @@ export function WorkspacePane({
                         className="preview-tool-button"
                         onClick={() => void submitExtract(previewMeta)}
                         disabled={operationSubmitting}
-                        title={t("workspace.actions.extract")}
+                        data-tooltip={t("workspace.actions.extract")}
                         aria-label={t("workspace.actions.extractEntry", { name: previewMeta.name })}
                       >
                         <ArchiveRestore aria-hidden="true" size={14} />
@@ -1708,7 +1715,7 @@ export function WorkspacePane({
           ) : activePanel === "video" ? (
             <VideoLibraryPanel onManage={() => onOpenDeviceSettings("media")} />
           ) : activePanel === "music" ? (
-            <MusicLibraryPanel pools={storagePools} locale={locale} />
+            <MusicLibraryPanel onOpenSettings={() => onOpenDeviceSettings("media")} />
           ) : activePanel === "monitoring" ? (
             <MonitoringPanel locale={locale} visible={workspaceVisible} />
           ) : activePanel === "terminal" || !workspaceVisible ? null : (
@@ -1745,7 +1752,7 @@ export function WorkspacePane({
                 type="button"
                 className={isActive ? "workspace-panel-tab is-active" : "workspace-panel-tab"}
                 onClick={() => selectPanel(panel.id)}
-                title={t(panel.labelKey)}
+                data-tooltip={t(panel.labelKey)}
                 aria-label={t(panel.labelKey)}
                 aria-current={isActive ? "page" : undefined}
               >

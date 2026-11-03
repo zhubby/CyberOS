@@ -103,6 +103,10 @@ export interface MusicHome {
   mostPlayed: MusicTrack[];
   favorites: MusicTrack[];
 }
+export interface MusicFilterOptions {
+  years: number[];
+  genres: string[];
+}
 export interface MusicQuery {
   query?: string;
   sourceId?: string;

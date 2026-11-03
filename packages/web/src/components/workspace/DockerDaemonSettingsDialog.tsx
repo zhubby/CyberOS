@@ -160,7 +160,7 @@ export function DockerDaemonSettingsDialog({
             onClick={onClose}
             disabled={submitting}
             aria-label={t("common.actions.close")}
-            title={t("common.actions.close")}
+            data-tooltip={t("common.actions.close")}
           >
             <X aria-hidden="true" size={17} />
           </button>

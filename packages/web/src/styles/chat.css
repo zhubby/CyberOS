@@ -1273,62 +1273,21 @@
   color: var(--muted-2);
 }
 
-.composer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.composer-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  margin-left: auto;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  color: #ffd37a;
-  background: rgb(240 178 50 / 14%);
-  font-size: 11.5px;
-  font-family: var(--font-emphasis);
-  font-weight: 800;
-}
-
-.composer-status svg {
-  flex: 0 0 auto;
-}
-
-.composer-status span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.composer-status[data-state="running"] {
-  color: #78d89d;
-  background: rgb(35 165 89 / 14%);
-}
-
-.composer-status[data-state="reconnecting"] {
-  color: #ff9da1;
-  background: rgb(218 55 60 / 14%);
-}
-
 .composer-spinner {
   animation: activity-upload-spin 1.1s linear infinite;
 }
 
 .composer-footer {
   display: grid;
+  height: 40px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
-.composer-model-config {
+.composer-model-config,
+.composer-status {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1338,20 +1297,31 @@
   line-height: 1.25;
 }
 
-.composer-model-config svg {
+.composer-model-config svg,
+.composer-status svg {
   flex: 0 0 auto;
   color: var(--muted-2);
 }
 
-.composer-model-config span {
+.composer-model-config span,
+.composer-status span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.composer-status {
+  color: var(--accent);
+}
+
+.composer-status[data-state="reconnecting"] {
+  color: var(--red);
+}
+
 .composer-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
 }
@@ -1362,7 +1332,7 @@
   width: max-content;
   min-width: 76px;
   flex: 0 0 auto;
-  align-self: start;
+  align-self: center;
   padding: 2px;
   border: 1px solid var(--border);
   border-radius: 0;
@@ -1395,7 +1365,12 @@
 
 .composer-actions .primary-button,
 .composer-actions .secondary-button {
-  gap: 6px;
-  min-width: 80px;
-  padding: 0 10px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.composer-actions > button span {
+  display: none;
 }

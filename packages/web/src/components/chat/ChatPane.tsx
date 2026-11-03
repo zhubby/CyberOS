@@ -44,7 +44,7 @@ import {
 import { sessionTitle } from "../../lib/session.js";
 import type { TranscriptPhase } from "../../lib/transcript.js";
 import { PowerControl } from "../power/PowerControl.js";
-import { MobileAppControls, useAppHeadingFocus } from "../../mobile/MobileHome.js";
+import { MobileAppHeader, useAppHeadingFocus } from "../../mobile/MobileAppHeader.js";
 import { useAppScroll, useMobileNavigation } from "../../mobile/MobileNavigation.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
 import { PanelHeaderAction, PanelHeaderActions } from "../workspace/PanelHeader.js";
@@ -165,7 +165,7 @@ function SessionList({
             type="button"
             className={item.id === activeSessionId ? "session-item is-active" : "session-item"}
             onClick={() => onSelectSession(item)}
-            title={label}
+            data-tooltip={label}
             aria-label={label}
             aria-current={item.id === activeSessionId ? "page" : undefined}
           >
@@ -206,6 +206,7 @@ export function ChatPane({
   onCreateAgent,
   onDeleteSession,
   onOpenSettings,
+  settingsLoading = false,
   onOpenNotifications,
   onRequestSystemPower,
   notificationUnreadCount,
@@ -243,6 +244,7 @@ export function ChatPane({
   onCreateAgent: () => void;
   onDeleteSession: () => void;
   onOpenSettings: () => void;
+  settingsLoading?: boolean;
   onOpenNotifications: () => void;
   onRequestSystemPower: (action: SystemPowerAction) => Promise<boolean>;
   notificationUnreadCount: number;
@@ -375,7 +377,7 @@ export function ChatPane({
             {target ? (
               <div>
                 <dt>{t("chat.capabilityApproval.target")}</dt>
-                <dd title={target}>{target}</dd>
+                <dd data-tooltip={target}>{target}</dd>
               </div>
             ) : null}
             <div>
@@ -401,7 +403,7 @@ export function ChatPane({
               }
               else onApproveCapability(approval, { confirmed: false });
             }}
-            title={t("common.actions.approve")}
+            data-tooltip={t("common.actions.approve")}
           >
             <Check aria-hidden="true" size={15} />
             <span>{t("common.actions.approve")}</span>
@@ -410,7 +412,7 @@ export function ChatPane({
             type="button"
             className="approval-reject"
             onClick={() => onRejectCapability(approval)}
-            title={t("common.actions.reject")}
+            data-tooltip={t("common.actions.reject")}
           >
             <X aria-hidden="true" size={15} />
             <span>{t("common.actions.reject")}</span>
@@ -432,7 +434,7 @@ export function ChatPane({
           <button
             type="button"
             onClick={onCreateAgent}
-            title={t("common.actions.newAgent")}
+            data-tooltip={t("common.actions.newAgent")}
             aria-label={t("common.actions.newAgent")}
           >
             <Plus aria-hidden="true" size={18} />
@@ -453,7 +455,7 @@ export function ChatPane({
             className="agent-status-indicator"
             data-state={status}
             role="status"
-            title={t(`status.${status}`)}
+            data-tooltip={t(`status.${status}`)}
             aria-label={t(`status.${status}`)}
           >
             <span aria-hidden="true" />
@@ -462,7 +464,7 @@ export function ChatPane({
             className="agent-notification-button"
             type="button"
             onClick={onOpenNotifications}
-            title={t("notifications.center.open")}
+            data-tooltip={t("notifications.center.open")}
             aria-label={t("notifications.center.openWithCount", { count: notificationUnreadCount })}
           >
             <Bell aria-hidden="true" size={18} />
@@ -473,38 +475,49 @@ export function ChatPane({
             ) : null}
           </button>
           {playbackEntry}
+          {/* Keep focus on the trigger while loading so the dialog can restore it on close. */}
           <button
             className="settings-button agent-settings-button"
             type="button"
-            onClick={onOpenSettings}
-            title={t("common.actions.systemSettings")}
+            onClick={() => { if (!settingsLoading) onOpenSettings(); }}
+            aria-disabled={settingsLoading || undefined}
+            aria-busy={settingsLoading || undefined}
+            data-tooltip={t("common.actions.systemSettings")}
             aria-label={t("common.actions.systemSettings")}
           >
-            <Settings aria-hidden="true" size={18} />
+            {settingsLoading ? <LoaderCircle aria-hidden="true" className="spin" size={18} /> : <Settings aria-hidden="true" size={18} />}
           </button>
           <PowerControl onRequest={onRequestSystemPower} />
         </div>
       </aside> : null}
 
       {!compact || active ? <section className="chat-main" aria-label={t("chat.agentChat")}>
-        <header className="chat-header app-titlebar">
-          <MobileAppControls control="back" />
+        {compact ? <MobileAppHeader
+          className="chat-header"
+          icon={<Bot size={20} />}
+          title={t("mobile.agent")}
+          subtitle={activeSessionTitle}
+          headingRef={headingRef}
+          actions={<PanelHeaderActions label={t("mobile.more")}>
+            <PanelHeaderAction mobilePrimary label={t("mobile.sessions")} onClick={() => setSessionsOpen(true)}><MessageSquare size={20} aria-hidden="true" /></PanelHeaderAction>
+            <PanelHeaderAction label={t("chat.deleteSession")} disabled={deleteDisabled} onClick={() => setDeleteConfirmOpen(true)}><Trash2 size={18} aria-hidden="true" /></PanelHeaderAction>
+          </PanelHeaderActions>}
+        /> : <header className="chat-header app-titlebar">
           <span className="chat-header-index" aria-hidden="true">{activeSessionCode}</span>
           <div className="chat-header-copy">
             <h2 ref={headingRef} tabIndex={compact ? -1 : undefined}>{activeSessionTitle}</h2>
           </div>
-          {compact ? <PanelHeaderActions label={t("mobile.more")}><PanelHeaderAction mobilePrimary label={t("mobile.sessions")} onClick={() => setSessionsOpen(true)}><MessageSquare size={20} aria-hidden="true" /></PanelHeaderAction><PanelHeaderAction label={t("chat.deleteSession")} disabled={deleteDisabled} onClick={() => setDeleteConfirmOpen(true)}><Trash2 size={18} aria-hidden="true" /></PanelHeaderAction></PanelHeaderActions> : <button
+          <button
             type="button"
             className="icon-button chat-delete-session-button"
             onClick={() => setDeleteConfirmOpen(true)}
             disabled={deleteDisabled}
-            title={deleteDisabled && activeSessionSummary ? t("chat.deleteSessionBusy") : t("chat.deleteSession")}
+            data-tooltip={deleteDisabled && activeSessionSummary ? t("chat.deleteSessionBusy") : t("chat.deleteSession")}
             aria-label={t("chat.deleteSession")}
           >
             <Trash2 aria-hidden="true" size={17} />
-          </button>}
-          <MobileAppControls control="home" />
-        </header>
+          </button>
+        </header>}
 
         <div
           ref={transcriptRef}
@@ -585,53 +598,17 @@ export function ChatPane({
             <div className="composer-path-block" role="group" aria-label={t("workspace.actions.sendPathToAgent")}>
               <div className="composer-path-content">
                 <MessageSquarePlus aria-hidden="true" size={15} />
-                <code title={composerPath}>{composerPath}</code>
+                <code data-tooltip={composerPath}>{composerPath}</code>
               </div>
               <button
                 type="button"
                 className="composer-path-remove"
                 onClick={onClearComposerPath}
-                title={t("common.actions.removePath")}
+                data-tooltip={t("common.actions.removePath")}
                 aria-label={t("common.actions.removePath")}
               >
                 <X aria-hidden="true" size={14} />
               </button>
-            </div>
-          ) : null}
-          {composerStatusLabel || activeAgentTurn ? (
-            <div className="composer-toolbar">
-              {activeAgentTurn ? (
-                <div className="composer-delivery" role="group" aria-label={t("chat.deliveryMode")}>
-                  <button
-                    type="button"
-                    className={deliveryMode === "steer" ? "is-active" : ""}
-                    aria-pressed={deliveryMode === "steer"}
-                    onClick={() => setDeliveryMode("steer")}
-                    title={t("chat.steer")}
-                    aria-label={t("chat.steer")}
-                  >
-                    <CornerDownLeft aria-hidden="true" size={15} />
-                    <span className="visually-hidden">{t("chat.steer")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={deliveryMode === "follow_up" ? "is-active" : ""}
-                    aria-pressed={deliveryMode === "follow_up"}
-                    onClick={() => setDeliveryMode("follow_up")}
-                    title={t("chat.followUp")}
-                    aria-label={t("chat.followUp")}
-                  >
-                    <ListEnd aria-hidden="true" size={15} />
-                    <span className="visually-hidden">{t("chat.followUp")}</span>
-                  </button>
-                </div>
-              ) : null}
-              {composerStatusLabel ? (
-                <div id={composerStatusId} className="composer-status" role="status" aria-live="polite" data-state={composerFeedback}>
-                  <LoaderCircle aria-hidden="true" className="composer-spinner" size={13} />
-                  <span>{composerStatusLabel}</span>
-                </div>
-              ) : null}
             </div>
           ) : null}
           <textarea
@@ -646,22 +623,55 @@ export function ChatPane({
           />
           <div className="composer-footer">
             <div
-              className="composer-model-config"
-              role="group"
-              title={modelRoute}
-              aria-label={`${t("chat.modelConfiguration")}: ${modelRoute}`}
+              id={composerStatusId}
+              className={composerFeedback ? "composer-status" : "composer-model-config"}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              data-state={composerFeedback ?? undefined}
+              data-tooltip={composerStatusLabel ? `${composerStatusLabel} · ${modelRoute}` : modelRoute}
             >
-              <Bot aria-hidden="true" size={14} />
-              <span>{modelRoute}</span>
+              {composerFeedback ? (
+                <LoaderCircle aria-hidden="true" className="composer-spinner" size={14} />
+              ) : (
+                <Bot aria-hidden="true" size={14} />
+              )}
+              <span>{composerStatusLabel ?? modelRoute}</span>
             </div>
             <div className="composer-actions">
+              {activeAgentTurn ? (
+                <div className="composer-delivery" role="group" aria-label={t("chat.deliveryMode")}>
+                  <button
+                    type="button"
+                    className={deliveryMode === "steer" ? "is-active" : ""}
+                    aria-pressed={deliveryMode === "steer"}
+                    onClick={() => setDeliveryMode("steer")}
+                    data-tooltip={t("chat.steer")}
+                    aria-label={t("chat.steer")}
+                  >
+                    <CornerDownLeft aria-hidden="true" size={15} />
+                    <span className="visually-hidden">{t("chat.steer")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={deliveryMode === "follow_up" ? "is-active" : ""}
+                    aria-pressed={deliveryMode === "follow_up"}
+                    onClick={() => setDeliveryMode("follow_up")}
+                    data-tooltip={t("chat.followUp")}
+                    aria-label={t("chat.followUp")}
+                  >
+                    <ListEnd aria-hidden="true" size={15} />
+                    <span className="visually-hidden">{t("chat.followUp")}</span>
+                  </button>
+                </div>
+              ) : null}
               {retryJobId ? (
                 <button
                   className="secondary-button"
                   type="button"
                   onClick={onRetryInterruptedJob}
                   aria-label={t("chat.retryInterrupted")}
-                  title={t("chat.retryInterrupted")}
+                  data-tooltip={t("chat.retryInterrupted")}
                 >
                   <RotateCcw aria-hidden="true" size={16} />
                   <span>{t("chat.retry")}</span>
@@ -673,7 +683,7 @@ export function ChatPane({
                 onClick={onCancelActiveJob}
                 disabled={!activeJobId || status === "cancelling"}
                 aria-label={t("common.actions.stop")}
-                title={t("common.actions.stop")}
+                data-tooltip={t("common.actions.stop")}
               >
                 <CircleStop aria-hidden="true" size={16} />
                 <span>{t("common.actions.stop")}</span>
@@ -691,7 +701,7 @@ export function ChatPane({
                 }
                 aria-busy={messageSubmitting || undefined}
                 aria-label={t("common.actions.send")}
-                title={t("common.actions.send")}
+                data-tooltip={t("common.actions.send")}
               >
                 <ComposerIcon aria-hidden="true" className={composerIconClass} size={16} />
                 <span>{t("common.actions.send")}</span>

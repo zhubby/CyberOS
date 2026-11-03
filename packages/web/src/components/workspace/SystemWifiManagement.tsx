@@ -636,14 +636,14 @@ export function SystemWifiManagement({
                           </span>
                           <div className="system-wifi-row-actions">
                             {!profile.active ? (
-                              <button type="button" className="management-icon-action" onClick={() => connectSaved(profileNetwork(profile))} disabled={wifi.radioEnabled !== true || !canManageWifi || busy} aria-label={t("workspace.management.network.wifi.connectNetwork", { ssid: profile.ssid })} title={t("workspace.management.network.wifi.connect")}>
+                              <button type="button" className="management-icon-action" onClick={() => connectSaved(profileNetwork(profile))} disabled={wifi.radioEnabled !== true || !canManageWifi || busy} aria-label={t("workspace.management.network.wifi.connectNetwork", { ssid: profile.ssid })} data-tooltip={t("workspace.management.network.wifi.connect")}>
                                 <Wifi aria-hidden="true" size={14} />
                               </button>
                             ) : null}
-                            <button type="button" className="management-icon-action" onClick={() => editProfile(profile)} disabled={!canManageWifi || !profile.managed || profile.security === "unsupported" || busy} aria-label={t("workspace.management.network.wifi.editNetwork", { ssid: profile.ssid })} title={profile.managed ? t("common.actions.edit") : t("workspace.management.network.wifi.externalReadOnly")}>
+                            <button type="button" className="management-icon-action" onClick={() => editProfile(profile)} disabled={!canManageWifi || !profile.managed || profile.security === "unsupported" || busy} aria-label={t("workspace.management.network.wifi.editNetwork", { ssid: profile.ssid })} data-tooltip={profile.managed ? t("common.actions.edit") : t("workspace.management.network.wifi.externalReadOnly")}>
                               <Pencil aria-hidden="true" size={14} />
                             </button>
-                            <button type="button" className="management-icon-action is-danger" onClick={() => forgetProfile(profile)} disabled={!canManageWifi || !profile.managed || busy} aria-label={t("workspace.management.network.wifi.forgetNetwork", { ssid: profile.ssid })} title={profile.managed ? t("workspace.management.network.wifi.forget") : t("workspace.management.network.wifi.externalReadOnly")}>
+                            <button type="button" className="management-icon-action is-danger" onClick={() => forgetProfile(profile)} disabled={!canManageWifi || !profile.managed || busy} aria-label={t("workspace.management.network.wifi.forgetNetwork", { ssid: profile.ssid })} data-tooltip={profile.managed ? t("workspace.management.network.wifi.forget") : t("workspace.management.network.wifi.externalReadOnly")}>
                               <Trash2 aria-hidden="true" size={14} />
                             </button>
                           </div>
@@ -791,7 +791,7 @@ function WifiDialog({ title, eyebrow, busy, obscured = false, className, onClose
   return (
     <ModalPortal className="management-modal-backdrop system-wifi-modal-backdrop" onRequestClose={onClose} closeDisabled={busy || obscured} inert={obscured || undefined} aria-hidden={obscured || undefined} onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <section ref={dialogRef} className={["management-modal", "system-wifi-dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={handleKeyDown}>
-        <header><div><span className="eyebrow">{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button></header>
+        <header><div><span className="eyebrow">{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")}><X aria-hidden="true" size={17} /></button></header>
         {children}
       </section>
     </ModalPortal>
@@ -836,7 +836,7 @@ function WifiConfirmationDialog({ confirmation, busy, error, onClose, t }: { con
   return (
     <ModalPortal className="management-modal-backdrop system-wifi-modal-backdrop" onRequestClose={onClose} closeDisabled={busy}>
       <section ref={dialogRef} className="management-modal system-wifi-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={handleKeyDown}>
-        <header><div><span className="eyebrow">{t("workspace.management.network.wifi.confirm.eyebrow")}</span><h2 id={titleId}>{confirmation.title}</h2></div><button ref={closeButton} type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button></header>
+        <header><div><span className="eyebrow">{t("workspace.management.network.wifi.confirm.eyebrow")}</span><h2 id={titleId}>{confirmation.title}</h2></div><button ref={closeButton} type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")}><X aria-hidden="true" size={17} /></button></header>
         <div className="system-wifi-confirm-body"><AlertTriangle aria-hidden="true" size={24} /><div><p>{confirmation.description}</p>{error ? <p className="system-wifi-error" role="alert">{error}</p> : null}</div></div>
         <footer><button type="button" onClick={onClose} disabled={busy}>{t("common.actions.cancel")}</button><button type="button" className={confirmation.danger ? "is-danger" : "is-primary"} disabled={busy} aria-busy={busy || undefined} onClick={() => void confirmation.run().then(onClose).catch(() => undefined)}>{busy ? <LoaderCircle aria-hidden="true" size={14} /> : <Check aria-hidden="true" size={14} />}<span>{t("workspace.management.network.wifi.confirm.continue")}</span></button></footer>
       </section>

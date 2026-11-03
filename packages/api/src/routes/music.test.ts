@@ -132,6 +132,39 @@ function seed() {
   });
 }
 describe("Music API", () => {
+  it("returns complete, deduplicated year and genre choices scoped to a music source", async () => {
+    const empty = await server.inject({ method: "GET", url: "/api/music/filter-options" });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toEqual({ years: [], genres: [] });
+    const first = createMusicSource(db, { name: "First", storagePoolId: "pool-1", path: "Music" });
+    const second = createMusicSource(db, { name: "Second", storagePoolId: "pool-1", path: "Other" });
+    for (let index = 0; index < 61; index += 1) {
+      upsertMusicTrack(db, {
+        sourceId: first.id, storagePoolId: "pool-1", relativePath: `Music/${index}.flac`,
+        title: `Track ${index}`, albumId: "album", album: "Album", artists: ["Artist"],
+        albumArtists: ["Artist"], generation: "first", year: index === 60 ? 1990 : 2025,
+        genres: index === 60 ? ["Jazz", "Jazz", "", " "] : ["Rock"]
+      });
+    }
+    upsertMusicTrack(db, {
+      sourceId: second.id, storagePoolId: "pool-1", relativePath: "Other/track.flac",
+      title: "Other", albumId: "other", album: "Other", artists: [], albumArtists: [],
+      generation: "first", year: 2000, genres: ["Ambient", "摇滚"]
+    });
+    const all = await server.inject({ method: "GET", url: "/api/music/filter-options" });
+    expect(all.json()).toEqual({ years: [2025, 2000, 1990], genres: ["Ambient", "Jazz", "Rock", "摇滚"] });
+    const scoped = await server.inject({ method: "GET", url: `/api/music/filter-options?sourceId=${first.id}` });
+    expect(scoped.json()).toEqual({ years: [2025, 1990], genres: ["Jazz", "Rock"] });
+    expect((await server.inject({ method: "GET", url: "/api/music/filter-options?sourceId=unknown" })).json()).toEqual({ years: [], genres: [] });
+    expect(commands).toEqual([]);
+  });
+
+  it("rejects invalid music filter-option queries", async () => {
+    for (const suffix of ["sourceId=", "sourceId=a&sourceId=b", "genre=Rock", "year=2025"]) {
+      expect((await server.inject({ method: "GET", url: `/api/music/filter-options?${suffix}` })).statusCode).toBe(400);
+    }
+  });
+
   it("validates sources against real storage scopes and enqueues the initial scan", async () => {
     const unsafe = await server.inject({
       method: "POST",

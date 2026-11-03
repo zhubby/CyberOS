@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  Bluetooth, Check, FileUp, FolderOpen, Inbox, LoaderCircle,
+  Bluetooth, FileUp, FolderOpen, Inbox, LoaderCircle,
   RefreshCw, Send, Volume2, X
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -17,6 +17,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { useBluetoothTransfers } from "../../lib/use-bluetooth-transfers.js";
 import { useSystemBluetoothStatus } from "../../lib/use-system-bluetooth-status.js";
 import { CustomSelect } from "../common/CustomSelect.js";
+import { HelpLabel, HelpTip } from "../common/HelpTip.js";
 import { Switch } from "../common/Switch.js";
 import { BluetoothDeviceList, type BluetoothDevice, type BluetoothDeviceAction } from "./BluetoothDeviceList.js";
 import { BluetoothDiscoveryDialog } from "./BluetoothDiscoveryDialog.js";
@@ -49,6 +50,7 @@ export function SettingsBluetoothPage({
   const scanBusyRef = useRef(false);
   const discoveryOpenRef = useRef(false);
   const ownedScanRef = useRef<string | null>(null);
+  const adapterSelectId = useId();
   const challengeRef = useRef<HTMLElement | null>(null);
   const reconnecting = useSystemBluetoothStatus(onStatus);
   const transfers = useBluetoothTransfers(true);
@@ -198,6 +200,17 @@ export function SettingsBluetoothPage({
     void runDevice(`${action}-${device.address}`, perform, action !== "pair");
   }
 
+  async function selectAdapter(adapterId: string) {
+    const candidate = status?.adapters.find((entry) => entry.id === adapterId);
+    if (!candidate || busyKey !== null) return;
+    setSelectedAdapterId(candidate.id);
+    if (candidate.defaultAdapter) return;
+    await runDevice("default", () => setDefaultBluetoothAdapter({ adapterId: candidate.id }));
+    window.requestAnimationFrame(() => {
+      if (document.activeElement === document.body) document.getElementById(adapterSelectId)?.focus();
+    });
+  }
+
   async function updateSettings(patch: Partial<Omit<BluetoothSettings, "updatedAt">>, key: string) {
     if (busyKey) return;
     setBusyKey(key);
@@ -279,10 +292,22 @@ export function SettingsBluetoothPage({
           {adapter ? <button type="button" className="settings-device-toggle" aria-pressed={adapter.powered} disabled={busyKey !== null} onClick={() => void runDevice("power", () => setBluetoothAdapterPower({ adapterId: adapter.id, powered: !adapter.powered }))}><Bluetooth aria-hidden="true" size={15} /><span>{adapter.powered ? t("settings.bluetooth.turnOff") : t("settings.bluetooth.turnOn")}</span></button> : null}
         </header>
         {unavailableReason ? <div className="settings-device-unavailable" role="status"><Bluetooth aria-hidden="true" size={20} /><p>{unavailableReason}</p></div> : null}
-        {status?.adapters.length ? <div className="bluetooth-adapter-list">{status.adapters.map((candidate) => <button type="button" key={candidate.id} className={candidate.id === adapter?.id ? "is-active" : ""} onClick={() => {
-          setSelectedAdapterId(candidate.id);
-          if (!candidate.defaultAdapter) void runDevice("default", () => setDefaultBluetoothAdapter({ adapterId: candidate.id }));
-        }}><Bluetooth aria-hidden="true" size={17} /><span><strong>{candidate.alias}</strong><small>{candidate.address}</small></span>{candidate.defaultAdapter ? <Check aria-label={String(t("settings.bluetooth.defaultAdapter"))} size={15} /> : null}</button>)}</div> : null}
+        {status?.adapters.length ? (
+          <label className="bluetooth-field-row">
+            <span>{t("settings.bluetooth.defaultAdapter")}</span>
+            <CustomSelect
+              id={adapterSelectId}
+              value={adapter?.id ?? ""}
+              ariaLabel={t("settings.bluetooth.defaultAdapter")}
+              disabled={busyKey !== null}
+              onChange={(value) => void selectAdapter(value)}
+              options={status.adapters.map((candidate) => ({
+                value: candidate.id,
+                label: `${candidate.alias} · ${candidate.address}${candidate.defaultAdapter ? ` · ${t("settings.bluetooth.defaultAdapter")}` : ""}`
+              }))}
+            />
+          </label>
+        ) : null}
       </section>
 
       {adapter ? <section className="settings-section-card bluetooth-devices-card">
@@ -301,18 +326,18 @@ export function SettingsBluetoothPage({
 
       <section className="settings-section-card bluetooth-inbox-card">
         <header><div><h3>{t("settings.bluetooth.inbox.title")}</h3><p>{t("settings.bluetooth.inbox.description")}</p></div><Inbox aria-hidden="true" size={19} /></header>
-        <div className="bluetooth-inbox-controls"><button type="button" disabled={busyKey !== null || pools.length === 0} onClick={() => setPicker("inbox")}><FolderOpen aria-hidden="true" size={15} /><span>{inboxConfigured ? settings?.inboxPath : t("settings.bluetooth.inbox.choose")}</span></button><Switch className="bluetooth-switch-row" checked={settings?.receiveEnabled ?? false} disabled={busyKey !== null || !inboxConfigured} label={<strong>{t("settings.bluetooth.inbox.receive")}</strong>} description={t("settings.bluetooth.inbox.trustedOnly")} onCheckedChange={(receiveEnabled) => void updateSettings({ receiveEnabled }, "receive")} /></div>
+        <div className="bluetooth-inbox-controls"><button type="button" disabled={busyKey !== null || pools.length === 0} onClick={() => setPicker("inbox")}><FolderOpen aria-hidden="true" size={15} /><span>{inboxConfigured ? settings?.inboxPath : t("settings.bluetooth.inbox.choose")}</span></button><div className="bluetooth-switch-row help-label"><Switch checked={settings?.receiveEnabled ?? false} disabled={busyKey !== null || !inboxConfigured} label={<strong>{t("settings.bluetooth.inbox.receive")}</strong>} onCheckedChange={(receiveEnabled) => void updateSettings({ receiveEnabled }, "receive")} /><HelpTip label={t("settings.bluetooth.inbox.receive")} content={t("settings.bluetooth.inbox.trustedOnly")} /></div></div>
         {!inboxConfigured ? <p className="settings-device-disabled">{t("settings.bluetooth.inbox.required")}</p> : null}
         {settings?.receiveEnabled && inboxStatus.status === "paused" && inboxStatus.reason ? <div className="settings-device-unavailable" role="status"><Inbox aria-hidden="true" size={18} /><p>{t(`settings.bluetooth.inbox.pauseReasons.${inboxStatus.reason}`)}</p></div> : null}
       </section>
 
       <section className="settings-section-card bluetooth-transfers-card">
-        <header><div><h3>{t("settings.bluetooth.transfers.title")}</h3><p>{t("settings.bluetooth.transfers.description")}</p></div><button type="button" disabled={transfers.loading} onClick={() => void transfers.refresh()} title={String(t("common.actions.refresh"))} aria-label={String(t("common.actions.refresh"))}><RefreshCw aria-hidden="true" size={15} /></button></header>
+        <header><div><h3>{t("settings.bluetooth.transfers.title")}</h3><p>{t("settings.bluetooth.transfers.description")}</p></div><button type="button" disabled={transfers.loading} onClick={() => void transfers.refresh()} data-tooltip={String(t("common.actions.refresh"))} aria-label={String(t("common.actions.refresh"))}><RefreshCw aria-hidden="true" size={15} /></button></header>
         {transfers.health.status !== "ready" ? <div className="settings-device-unavailable"><FileUp aria-hidden="true" size={18} /><p>{transfers.health.error ?? t(`settings.bluetooth.transfers.health.${transfers.health.status}`)}</p></div> : null}
         {transfers.transfers.length === 0 ? <p className="management-empty">{transfers.loading ? t("common.states.loading") : t("settings.bluetooth.transfers.empty")}</p> : <div className="bluetooth-transfer-list">{transfers.transfers.map((transfer) => {
           const progress = transfer.totalBytes && transfer.totalBytes > 0 ? Math.min(100, Math.round((transfer.transferredBytes / transfer.totalBytes) * 100)) : null;
           const cancellable = transfer.status === "queued" || transfer.status === "running" || transfer.status === "paused";
-          return <article key={transfer.id} className="bluetooth-transfer-row" data-status={transfer.status}><span className="bluetooth-transfer-icon">{transfer.direction === "send" ? <Send size={16} /> : <Inbox size={16} />}</span><span className="bluetooth-transfer-copy"><strong>{transfer.displayName}</strong><small>{t(`settings.bluetooth.transfers.directions.${transfer.direction}`)} · {t(`settings.bluetooth.transfers.statuses.${transfer.status}`)} · {transfer.deviceAddress}</small>{progress !== null ? <span className="bluetooth-transfer-progress"><span style={{ width: `${progress}%` }} /></span> : null}<small>{formatBytes(transfer.transferredBytes, locale)}{transfer.totalBytes === null ? "" : ` / ${formatBytes(transfer.totalBytes, locale)}`}</small>{transfer.error ? <span className="bluetooth-transfer-error">{transfer.error}</span> : null}</span>{cancellable ? <button type="button" className="management-icon-action is-danger" disabled={busyKey !== null} onClick={() => void cancelTransfer(transfer)} title={String(t("common.actions.cancel"))} aria-label={String(t("common.actions.cancel"))}><X size={15} /></button> : null}</article>;
+          return <article key={transfer.id} className="bluetooth-transfer-row" data-status={transfer.status}><span className="bluetooth-transfer-icon">{transfer.direction === "send" ? <Send size={16} /> : <Inbox size={16} />}</span><span className="bluetooth-transfer-copy"><strong>{transfer.displayName}</strong><small>{t(`settings.bluetooth.transfers.directions.${transfer.direction}`)} · {t(`settings.bluetooth.transfers.statuses.${transfer.status}`)} · {transfer.deviceAddress}</small>{progress !== null ? <span className="bluetooth-transfer-progress"><span style={{ width: `${progress}%` }} /></span> : null}<small>{formatBytes(transfer.transferredBytes, locale)}{transfer.totalBytes === null ? "" : ` / ${formatBytes(transfer.totalBytes, locale)}`}</small>{transfer.error ? <span className="bluetooth-transfer-error">{transfer.error}</span> : null}</span>{cancellable ? <button type="button" className="management-icon-action is-danger" disabled={busyKey !== null} onClick={() => void cancelTransfer(transfer)} data-tooltip={String(t("common.actions.cancel"))} aria-label={String(t("common.actions.cancel"))}><X size={15} /></button> : null}</article>;
         })}</div>}
       </section>
 
@@ -333,10 +358,12 @@ export function BluetoothAudioOutputField({
   const { t } = useTranslation();
   const configuredDeviceUnavailable = defaultAudioDeviceId !== null
     && !audioDevices.some((device) => device.id === defaultAudioDeviceId);
+  const id = useId();
   return (
-    <label className="bluetooth-field-row">
-      <span>{t("settings.bluetooth.audio.output")}</span>
+    <div className="bluetooth-field-row">
+      <HelpLabel label={t("settings.bluetooth.audio.output")} content={t("settings.bluetooth.audio.nextPlayback")} htmlFor={id} />
       <CustomSelect
+        id={id}
         value={defaultAudioDeviceId ?? ""}
         ariaLabel={t("settings.bluetooth.audio.output")}
         disabled={disabled}
@@ -354,7 +381,6 @@ export function BluetoothAudioOutputField({
           }))
         ]}
       />
-      <small>{t("settings.bluetooth.audio.nextPlayback")}</small>
-    </label>
+    </div>
   );
 }

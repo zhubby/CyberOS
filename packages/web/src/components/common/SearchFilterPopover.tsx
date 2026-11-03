@@ -97,7 +97,7 @@ export function SearchFilterPopover({
         type="button"
         className={`workspace-search-filter-trigger${active ? " is-active" : ""}`}
         aria-label={active ? `${label}: ${t("workspace.search.filtersActive")}` : label}
-        title={label}
+        data-tooltip={label}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}

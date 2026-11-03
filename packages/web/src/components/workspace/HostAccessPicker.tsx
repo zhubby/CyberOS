@@ -131,7 +131,7 @@ export function HostAccessPicker({
           onClick={() => void copyCoverage()}
           disabled={disabled || !catalog}
           aria-label={t("workspace.management.docker.hostAccess.copyReport")}
-          title={t("workspace.management.docker.hostAccess.copyReport")}
+          data-tooltip={t("workspace.management.docker.hostAccess.copyReport")}
         >
           {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
         </button>

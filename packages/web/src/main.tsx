@@ -7,6 +7,7 @@ import "@fontsource/rajdhani/500.css";
 import "@fontsource/rajdhani/600.css";
 import "@fontsource/rajdhani/700.css";
 import { App } from "./App.js";
+import { TooltipLayer } from "./components/common/TooltipLayer.js";
 import { initI18n } from "./i18n/index.js";
 import "./styles.css";
 
@@ -56,6 +57,7 @@ void initI18n()
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
         <App />
+        <TooltipLayer />
       </StrictMode>
     );
     window.dispatchEvent(new Event("cyberos:ready"));

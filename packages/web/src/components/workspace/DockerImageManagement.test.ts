@@ -25,6 +25,24 @@ function image(name: string, id: string, containerCount: number | null): DockerI
 }
 
 describe("DockerImageManagement", () => {
+  it.each(["en", "zh-CN"] as const)("uses a fixed 24-hour creation date in %s", (locale) => {
+    const target = {
+      ...image("team/app:latest", "sha256:abcdef", 0),
+      createdAt: new Date(2026, 0, 2, 3, 4).toISOString()
+    };
+    const html = renderToStaticMarkup(createElement(DockerImageManagement, {
+      images: [target],
+      engineReady: true,
+      engineError: null,
+      locale,
+      onRefreshSummary: vi.fn(),
+      onNotifySuccess: vi.fn(),
+      onNotifyError: vi.fn()
+    }));
+
+    expect(html).toContain('data-label="Created">2026/01/02 03:04</td>');
+  });
+
   it("renders architecture and three-state usage without container counts", () => {
     const html = renderToStaticMarkup(createElement(DockerImageManagement, {
       images: [
@@ -53,7 +71,10 @@ describe("DockerImageManagement", () => {
 
 describe("DockerImageDetailsDialog", () => {
   it("shows architecture and usage while keeping occupancy counts private", () => {
-    const target = image("team/app:latest", "sha256:abcdef", 7);
+    const target = {
+      ...image("team/app:latest", "sha256:abcdef", 7),
+      createdAt: new Date(2026, 0, 2, 3, 4).toISOString()
+    };
     const html = renderToStaticMarkup(createElement(DockerImageDetailsDialog, {
       image: target,
       locale: "en",
@@ -73,6 +94,7 @@ describe("DockerImageDetailsDialog", () => {
     expect(html).toContain("arm64");
     expect(html).toContain("Usage");
     expect(html).toContain("In use");
+    expect(html).toContain("2026/01/02 03:04");
     expect(html).not.toContain("Containers");
     expect(html).not.toContain(">7<");
   });

@@ -1,0 +1,61 @@
+.help-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.help-label > label,
+.help-label > span:first-child {
+  display: inline;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.settings-switch-row .help-label,
+.settings-credential-status .help-label {
+  color: inherit;
+  font: inherit;
+}
+
+.help-tip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  vertical-align: middle;
+}
+
+button.help-tip-trigger {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: help;
+}
+
+button.help-tip-trigger:hover,
+button.help-tip-trigger[aria-expanded="true"] {
+  border-color: var(--line);
+  color: var(--cyber-yellow);
+  background: var(--surface-hover);
+}
+
+button.help-tip-trigger:focus-visible {
+  outline: 2px solid var(--cyber-cyan);
+  outline-offset: 2px;
+}
+
+.help-tip-content {
+  width: min(320px, calc(var(--tooltip-viewport-width, 100vw) - 24px));
+}

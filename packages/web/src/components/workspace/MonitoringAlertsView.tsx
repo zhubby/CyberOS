@@ -205,7 +205,7 @@ function RulesView() {
       <header className="monitoring-alert-page-header">
         <div><h3>{t("workspace.monitoring.alerts.rules.title")}</h3><p>{t("workspace.monitoring.alerts.rules.description")}</p></div>
         <div>
-          <button className="icon-button" type="button" onClick={() => void refresh()} title={t("common.actions.refresh")} aria-label={t("common.actions.refresh")}>
+          <button className="icon-button" type="button" onClick={() => void refresh()} data-tooltip={t("common.actions.refresh")} aria-label={t("common.actions.refresh")}>
             <RefreshCw aria-hidden="true" size={16} />
           </button>
           <button className="primary-button monitoring-alert-add" type="button" onClick={() => beginEdit("new")}>
@@ -222,7 +222,7 @@ function RulesView() {
               <tr key={rule.id} data-enabled={rule.enabled ? "true" : "false"}>
                 <td>
                   <strong>{rule.name}</strong><small>{rule.metric}</small>
-                  {rule.evaluationError ? <small className="monitoring-alert-rule-error" title={rule.evaluationError}>
+                  {rule.evaluationError ? <small className="monitoring-alert-rule-error" data-tooltip={rule.evaluationError}>
                     <CircleAlert aria-hidden="true" size={12} />
                     <span>{t("workspace.monitoring.alerts.rules.evaluationError")}: {rule.evaluationError}</span>
                   </small> : null}
@@ -231,8 +231,8 @@ function RulesView() {
                 <td><span className="monitoring-alert-severity" data-severity={rule.severity}>{t(`workspace.monitoring.alerts.severity.${rule.severity}`)}</span></td>
                 <td><Switch className="monitoring-alert-switch" compact checked={rule.enabled} disabled={busyId === rule.id} label={rule.enabled ? t("workspace.monitoring.alerts.enabled") : t("workspace.monitoring.alerts.disabled")} onCheckedChange={() => void toggleRule(rule)} /></td>
                 <td><div className="monitoring-alert-row-actions">
-                  <button type="button" onClick={() => beginEdit(rule)} title={t("common.actions.edit")} aria-label={t("common.actions.edit")}><Pencil size={15} /></button>
-                  {!rule.builtin ? <button type="button" data-danger="true" disabled={busyId === rule.id} onClick={() => void removeRule(rule)} title={t("common.actions.delete")} aria-label={t("common.actions.delete")}><Trash2 size={15} /></button> : null}
+                  <button type="button" onClick={() => beginEdit(rule)} data-tooltip={t("common.actions.edit")} aria-label={t("common.actions.edit")}><Pencil size={15} /></button>
+                  {!rule.builtin ? <button type="button" data-danger="true" disabled={busyId === rule.id} onClick={() => void removeRule(rule)} data-tooltip={t("common.actions.delete")} aria-label={t("common.actions.delete")}><Trash2 size={15} /></button> : null}
                 </div></td>
               </tr>
             ))}</tbody>
@@ -418,7 +418,7 @@ function IncidentsView({ locale }: { locale: SupportedLocale }) {
     <div className="monitoring-alert-page" role="tabpanel">
       <header className="monitoring-alert-page-header">
         <div><h3>{t("workspace.monitoring.alerts.incidents.title")}</h3><p>{t("workspace.monitoring.alerts.incidents.description", counts)}</p></div>
-        <button className="icon-button" type="button" onClick={() => void refresh()} title={t("common.actions.refresh")} aria-label={t("common.actions.refresh")}><RefreshCw size={16} /></button>
+        <button className="icon-button" type="button" onClick={() => void refresh()} data-tooltip={t("common.actions.refresh")} aria-label={t("common.actions.refresh")}><RefreshCw size={16} /></button>
       </header>
       <div className="monitoring-alert-filters" role="group" aria-label={t("workspace.monitoring.alerts.incidents.filterLabel")}>
         {(["all", "firing", "resolved"] as const).map((item) => <button key={item} type="button" aria-pressed={filter === item} className={filter === item ? "is-active" : ""} onClick={() => setFilter(item)}>{t(`workspace.monitoring.alerts.incidents.filters.${item}`)}</button>)}
@@ -434,10 +434,10 @@ function IncidentsView({ locale }: { locale: SupportedLocale }) {
               <time dateTime={incident.firingAt}>{formatDate(incident.firingAt, locale)}</time>
             </div>
             <div className="monitoring-alert-row-actions">
-              {incident.readAt === null ? <button type="button" disabled={busyId === incident.id} onClick={() => void apply(incident, "read")} title={t("workspace.monitoring.alerts.incidents.markRead")} aria-label={t("workspace.monitoring.alerts.incidents.markRead")}><Check size={15} /></button> : null}
-              {incident.status === "firing" && incident.acknowledgedAt === null ? <button type="button" disabled={busyId === incident.id} onClick={() => void apply(incident, "ack")} title={t("workspace.monitoring.alerts.incidents.acknowledge")} aria-label={t("workspace.monitoring.alerts.incidents.acknowledge")}><CheckCheck size={15} /></button> : null}
-              <button type="button" disabled={busyId === incident.id} onClick={() => void openDetail(incident)} title={t("workspace.monitoring.alerts.incidents.details")} aria-label={t("workspace.monitoring.alerts.incidents.details")}><Eye size={15} /></button>
-              {incident.status === "firing" && incident.ruleId ? <button type="button" disabled={busyId === incident.id} onClick={() => void openDetail(incident, true)} title={t("workspace.monitoring.alerts.incidents.silence")} aria-label={t("workspace.monitoring.alerts.incidents.silence")}><BellOff size={15} /></button> : null}
+              {incident.readAt === null ? <button type="button" disabled={busyId === incident.id} onClick={() => void apply(incident, "read")} data-tooltip={t("workspace.monitoring.alerts.incidents.markRead")} aria-label={t("workspace.monitoring.alerts.incidents.markRead")}><Check size={15} /></button> : null}
+              {incident.status === "firing" && incident.acknowledgedAt === null ? <button type="button" disabled={busyId === incident.id} onClick={() => void apply(incident, "ack")} data-tooltip={t("workspace.monitoring.alerts.incidents.acknowledge")} aria-label={t("workspace.monitoring.alerts.incidents.acknowledge")}><CheckCheck size={15} /></button> : null}
+              <button type="button" disabled={busyId === incident.id} onClick={() => void openDetail(incident)} data-tooltip={t("workspace.monitoring.alerts.incidents.details")} aria-label={t("workspace.monitoring.alerts.incidents.details")}><Eye size={15} /></button>
+              {incident.status === "firing" && incident.ruleId ? <button type="button" disabled={busyId === incident.id} onClick={() => void openDetail(incident, true)} data-tooltip={t("workspace.monitoring.alerts.incidents.silence")} aria-label={t("workspace.monitoring.alerts.incidents.silence")}><BellOff size={15} /></button> : null}
             </div>
           </article>
         ))}</div>
@@ -515,7 +515,7 @@ function IncidentDetailDialog({
     <section ref={dialogRef} tabIndex={-1} className="management-modal monitoring-incident-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="monitoring-incident-detail-title">
       <header>
         <div><span className="eyebrow">{t("workspace.monitoring.alerts.incidents.detailEyebrow")}</span><h2 id="monitoring-incident-detail-title">{incident.title}</h2></div>
-        <button type="button" className="management-icon-action" onClick={onClose} disabled={busy} title={t("common.actions.close")} aria-label={t("common.actions.close")}><X size={16} /></button>
+        <button type="button" className="management-icon-action" onClick={onClose} disabled={busy} data-tooltip={t("common.actions.close")} aria-label={t("common.actions.close")}><X size={16} /></button>
       </header>
       <div className="monitoring-incident-detail-body">
         {error ? <div className="monitoring-alert-error" role="alert"><CircleAlert size={16} />{error}</div> : null}

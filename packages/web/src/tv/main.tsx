@@ -10,12 +10,14 @@ import "pinyin-ime";
 import "pinyin-ime/pinyin-ime.css";
 import { initI18n } from "../i18n/index.js";
 import { TvApp } from "./TvApp.js";
+import { TooltipLayer } from "../components/common/TooltipLayer.js";
 import "./tv.css";
 
 void initI18n().then(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <TvApp />
+      <TooltipLayer />
     </StrictMode>
   );
 });

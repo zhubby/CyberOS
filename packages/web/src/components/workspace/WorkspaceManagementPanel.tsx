@@ -701,7 +701,7 @@ function VirtualMachineManagementPanel({
                         <thead><tr><th>{t("workspace.management.columns.name")}</th><th>{t("workspace.management.columns.status")}</th><th>{t("workspace.management.columns.cpu")}</th><th>{t("workspace.management.columns.memory")}</th><th>{t("workspace.management.virtualMachines.columns.disk")}</th><th>{t("workspace.management.columns.network")}</th></tr></thead>
                         <tbody>{summary.instances.map((vm) => (
                           <tr key={vm.id}>
-                            <td title={vm.name}>
+                            <td data-tooltip={vm.name}>
                               <button
                                 type="button"
                                 className="docker-container-name-trigger vm-instance-name-trigger"
@@ -748,7 +748,7 @@ function VirtualMachineManagementPanel({
                   <p>{t("workspace.management.virtualMachines.createDescription")}</p>
                 </div>
               </div>
-              <button type="button" className="management-icon-action" onClick={() => setCreateOpen(false)} aria-label={String(t("editor.close"))} title={String(t("editor.close"))}><X size={16} /></button>
+              <button type="button" className="management-icon-action" onClick={() => setCreateOpen(false)} aria-label={String(t("editor.close"))} data-tooltip={String(t("editor.close"))}><X size={16} /></button>
             </header>
             <div className="vm-create-dialog-body">
               <div className="vm-create-host-strip">
@@ -808,7 +808,7 @@ function VirtualMachineManagementPanel({
                   <div className="vm-create-section-heading"><span>04</span><div><h4>{t("workspace.management.virtualMachines.createAdvanced")}</h4><p>{t("workspace.management.virtualMachines.createAdvancedDetail")}</p></div></div>
                   <div className="vm-create-field-grid"><label className="vm-create-field">{t("workspace.management.virtualMachines.firmware")}<select value={form.firmware} onChange={(event) => updateCreateForm("firmware", event.target.value as VmCreateForm["firmware"])}><option value="bios" disabled={isArmHost}>BIOS</option><option value="uefi">UEFI</option></select>{isArmHost ? <small>{t("workspace.management.virtualMachines.firmwareArmHint")}</small> : null}</label><label className="vm-create-field">{t("workspace.management.virtualMachines.machineType")}<input value={form.machineType} onChange={(event) => updateCreateForm("machineType", event.target.value)} placeholder="q35" /><small>{t("workspace.management.virtualMachines.machineTypeHint")}</small></label><label className="vm-create-field">{t("workspace.management.virtualMachines.graphics")}<select value={form.graphics} onChange={(event) => updateCreateForm("graphics", event.target.value as VmCreateForm["graphics"])}><option value="none">none</option><option value="spice">SPICE</option><option value="vnc">VNC</option></select></label><label className="vm-create-field">{t("workspace.management.virtualMachines.videoModel")}<select value={form.videoModel} onChange={(event) => updateCreateForm("videoModel", event.target.value as VmCreateForm["videoModel"])}>{["none", "virtio", "qxl", "vga"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
                   <div className="vm-create-toggle-grid"><Switch className="vm-create-toggle" checked={form.bootMenu} onCheckedChange={(bootMenu) => updateCreateForm("bootMenu", bootMenu)} label={<strong>{t("workspace.management.virtualMachines.bootMenu")}</strong>} description={t("workspace.management.virtualMachines.bootMenuHint")} /><Switch className="vm-create-toggle" checked={form.autostart} onCheckedChange={(autostart) => updateCreateForm("autostart", autostart)} label={<strong>{t("workspace.management.virtualMachines.autostart")}</strong>} description={t("workspace.management.virtualMachines.autostartHint")} /></div>
-                  <div className="vm-create-summary"><div><span>{t("workspace.management.virtualMachines.name")}</span><strong>{form.name}</strong></div><div><span>{t("workspace.management.virtualMachines.createResources")}</span><strong>{form.vcpu} vCPU · {form.memoryGiB} GiB</strong></div><div><span>{t("workspace.management.virtualMachines.createSource")}</span><strong title={form.mediaMode === "iso" ? form.isoPath : form.diskPath}>{form.mediaMode === "iso" ? form.isoPath : form.diskPath}</strong></div><div><span>{t("workspace.management.virtualMachines.network")}</span><strong>{form.network} · {form.networkModel}</strong></div><div><span>{t("workspace.management.virtualMachines.firmware")}</span><strong>{form.firmware.toUpperCase()} · {form.graphics}</strong></div></div>
+                  <div className="vm-create-summary"><div><span>{t("workspace.management.virtualMachines.name")}</span><strong>{form.name}</strong></div><div><span>{t("workspace.management.virtualMachines.createResources")}</span><strong>{form.vcpu} vCPU · {form.memoryGiB} GiB</strong></div><div><span>{t("workspace.management.virtualMachines.createSource")}</span><strong data-tooltip={form.mediaMode === "iso" ? form.isoPath : form.diskPath}>{form.mediaMode === "iso" ? form.isoPath : form.diskPath}</strong></div><div><span>{t("workspace.management.virtualMachines.network")}</span><strong>{form.network} · {form.networkModel}</strong></div><div><span>{t("workspace.management.virtualMachines.firmware")}</span><strong>{form.firmware.toUpperCase()} · {form.graphics}</strong></div></div>
                   <div className="vm-create-review"><Info size={16} /><div><strong>{t("workspace.management.virtualMachines.createDirectTitle")}</strong><p>{t("workspace.management.virtualMachines.createDirectDetail")}</p></div></div>
                 </section>
               ) : null}
@@ -906,12 +906,12 @@ export function VmInstanceDetailsDialog({
             <div>
               <span className="eyebrow">{t("workspace.management.virtualMachines.detailsEyebrow")}</span>
               <h2 id="vm-instance-detail-title">{vm.name}</h2>
-              <p title={vm.uuid ?? vm.id}>{vm.uuid ?? vm.id}</p>
+              <p data-tooltip={vm.uuid ?? vm.id}>{vm.uuid ?? vm.id}</p>
             </div>
           </div>
           <div className="docker-container-detail-header-actions">
             <span className="management-row-status" data-state={vmStateTone(vm.state)}>{vmStateLabel(vm.state, t)}</span>
-            <button type="button" className="management-icon-action" onClick={onClose} title={String(t("common.actions.close"))} aria-label={String(t("common.actions.close"))}>
+            <button type="button" className="management-icon-action" onClick={onClose} data-tooltip={String(t("common.actions.close"))} aria-label={String(t("common.actions.close"))}>
               <X aria-hidden="true" size={15} />
             </button>
           </div>
@@ -959,7 +959,7 @@ export function VmInstanceDetailsDialog({
               </div>
               <dl className="docker-container-detail-list">
                 <div><dt>{t("workspace.management.virtualMachines.fields.name")}</dt><dd>{vm.name}</dd></div>
-                <div><dt>{t("workspace.management.virtualMachines.fields.uuid")}</dt><dd className="is-mono" title={vm.uuid ?? vm.id}>{vm.uuid ?? vm.id}</dd></div>
+                <div><dt>{t("workspace.management.virtualMachines.fields.uuid")}</dt><dd className="is-mono" data-tooltip={vm.uuid ?? vm.id}>{vm.uuid ?? vm.id}</dd></div>
                 <div><dt>{t("workspace.management.virtualMachines.fields.os")}</dt><dd>{vm.os || t("common.dash")}</dd></div>
                 <div><dt>{t("workspace.management.virtualMachines.fields.architecture")}</dt><dd>{hostArchitecture || t("common.dash")}</dd></div>
               </dl>
@@ -977,7 +977,7 @@ export function VmInstanceDetailsDialog({
                   {vm.networks.map((network, index) => (
                     <div key={`${network.name}-${network.mac ?? index}`}>
                       <strong>{network.name || t("workspace.management.virtualMachines.interfaceLabel", { index: index + 1 })}</strong>
-                      <span title={network.source ?? undefined}>{network.source || t("common.dash")}</span>
+                      <span data-tooltip={network.source ?? undefined}>{network.source || t("common.dash")}</span>
                       <em>{network.mac || t("common.dash")}</em>
                     </div>
                   ))}
@@ -998,7 +998,7 @@ export function VmInstanceDetailsDialog({
                 {vm.disks.map((disk, index) => (
                   <div key={`${disk.source}-${index}`}>
                     <strong>{t("workspace.management.virtualMachines.diskLabel", { index: index + 1 })}</strong>
-                    <span title={disk.source}>{disk.source}</span>
+                    <span data-tooltip={disk.source}>{disk.source}</span>
                     <em>{disk.capacityBytes === null ? t("common.dash") : formatBytes(disk.capacityBytes, locale)}</em>
                   </div>
                 ))}
@@ -1509,7 +1509,7 @@ function DockerManagementPanel({
                 <tbody>
                   {pendingContainerCreates.map((operation) => (
                     <tr key={`pending:${operation.id}`} aria-busy="true">
-                      <td title={operation.targetId}>{operation.targetId}</td>
+                      <td data-tooltip={operation.targetId}>{operation.targetId}</td>
                       <td>
                         <DockerContainerStatusIndicator
                           state="creating"
@@ -1525,7 +1525,7 @@ function DockerManagementPanel({
                   ))}
                   {containers.map((container) => (
                     <tr key={container.id}>
-                      <td title={container.name}>
+                      <td data-tooltip={container.name}>
                         <button
                           type="button"
                           className="docker-container-name-trigger"
@@ -1541,10 +1541,10 @@ function DockerManagementPanel({
                           status={container.status || container.state}
                         />
                       </td>
-                      <td title={container.image}>{container.image}</td>
+                      <td data-tooltip={container.image}>{container.image}</td>
                       <td>{formatPercent(container.cpuPercent, locale)}</td>
                       <td>{formatContainerMemory(container, locale)}</td>
-                      <td title={container.ports.join(", ")}>{container.ports.join(", ") || t("common.dash")}</td>
+                      <td data-tooltip={container.ports.join(", ")}>{container.ports.join(", ") || t("common.dash")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1742,7 +1742,7 @@ function ActionIconButton({
       className={danger ? "management-icon-action is-danger" : "management-icon-action"}
       disabled={disabled}
       aria-busy={pending || undefined}
-      title={label}
+      data-tooltip={label}
       aria-label={label}
       onClick={() => void onClick()}
     >
@@ -1820,7 +1820,7 @@ export function DockerContainerDetailsDialog({
           </div>
           <div className="docker-container-detail-header-actions">
             <span className="management-row-status" data-state={statusTone}>{container.state}</span>
-            <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} title={t("common.actions.dismissNotification")}>
+            <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} data-tooltip={t("common.actions.dismissNotification")}>
               <X aria-hidden="true" size={15} />
             </button>
           </div>
@@ -1864,9 +1864,9 @@ export function DockerContainerDetailsDialog({
                 </div>
               </div>
               <dl className="docker-container-detail-list">
-                <div><dt>{t("workspace.management.docker.fields.image")}</dt><dd title={container.image}>{container.image || t("common.dash")}</dd></div>
+                <div><dt>{t("workspace.management.docker.fields.image")}</dt><dd data-tooltip={container.image}>{container.image || t("common.dash")}</dd></div>
                 <div><dt>{t("workspace.management.docker.fields.created")}</dt><dd>{container.createdAt ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(container.createdAt)) : t("common.dash")}</dd></div>
-                <div><dt>{t("workspace.management.docker.fields.command")}</dt><dd title={state.details?.command ?? undefined}>{state.details?.command || t("common.dash")}</dd></div>
+                <div><dt>{t("workspace.management.docker.fields.command")}</dt><dd data-tooltip={state.details?.command ?? undefined}>{state.details?.command || t("common.dash")}</dd></div>
                 <div><dt>{t("workspace.management.docker.fields.restartPolicy")}</dt><dd>{state.details?.restartPolicy || t("common.dash")}</dd></div>
                 <div><dt>{t("workspace.management.docker.fields.workingDir")}</dt><dd>{state.details?.workingDir || t("common.dash")}</dd></div>
               </dl>
@@ -1880,7 +1880,7 @@ export function DockerContainerDetailsDialog({
                 </div>
               </div>
               <dl className="docker-container-detail-list">
-                <div><dt>{t("workspace.management.docker.fields.containerId")}</dt><dd className="is-mono" title={container.id}>{container.id}</dd></div>
+                <div><dt>{t("workspace.management.docker.fields.containerId")}</dt><dd className="is-mono" data-tooltip={container.id}>{container.id}</dd></div>
                 <div><dt>{t("workspace.management.docker.fields.compose")}</dt><dd>{container.composeProject ? `${container.composeProject}${container.composeService ? ` / ${container.composeService}` : ""}` : t("common.dash")}</dd></div>
                 <div><dt>{t("workspace.management.docker.fields.hostname")}</dt><dd>{state.details?.hostname || t("common.dash")}</dd></div>
                 <div><dt>{t("workspace.management.docker.fields.networks")}</dt><dd>{state.details?.networks?.join(", ") || t("common.dash")}</dd></div>
@@ -1909,7 +1909,7 @@ export function DockerContainerDetailsDialog({
                     window.setTimeout(() => setHostAccessCopied(false), 2_000);
                   })}
                   aria-label={t("workspace.management.docker.hostAccess.copyReport")}
-                  title={t("workspace.management.docker.hostAccess.copyReport")}
+                  data-tooltip={t("workspace.management.docker.hostAccess.copyReport")}
                 >
                   {hostAccessCopied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
                 </button>
@@ -2005,7 +2005,7 @@ function ManagementDetailActionButton({
 }) {
   const ButtonIcon = pending ? LoaderCircle : Icon;
   return (
-    <button type="button" className={danger ? "docker-detail-action is-danger" : "docker-detail-action"} disabled={disabled} aria-busy={pending || undefined} onClick={onClick} title={label}>
+    <button type="button" className={danger ? "docker-detail-action is-danger" : "docker-detail-action"} disabled={disabled} aria-busy={pending || undefined} onClick={onClick} data-tooltip={label}>
       <ButtonIcon className={pending ? "spin" : undefined} aria-hidden="true" size={14} />
       <span>{label}</span>
     </button>
@@ -2028,7 +2028,7 @@ function DockerLogsDialog({
             <span className="eyebrow">{t("workspace.management.docker.logsEyebrow")}</span>
             <h2 id="docker-logs-title">{state.container.name}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} title={t("common.actions.dismissNotification")}>
+          <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} data-tooltip={t("common.actions.dismissNotification")}>
             <X aria-hidden="true" size={14} />
           </button>
         </header>
@@ -2170,7 +2170,7 @@ function DockerConsoleDialog({ session, onClose, kind = "docker" }: { session: D
             <span className="eyebrow">{t("workspace.management.actions.console")}</span>
             <h2 id="management-console-title">{session.containerId}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} title={t("common.actions.dismissNotification")}>
+          <button type="button" className="management-icon-action" onClick={onClose} aria-label={t("common.actions.dismissNotification")} data-tooltip={t("common.actions.dismissNotification")}>
             <X aria-hidden="true" size={14} />
           </button>
         </header>
@@ -2334,7 +2334,7 @@ function DockerNetworkInventory({
           <article className="docker-inventory-row" key={network.id}>
             <Network aria-hidden="true" size={16} />
             <div>
-              <button type="button" className="docker-inventory-name-trigger" title={network.name} onClick={() => onOpen(network)}>
+              <button type="button" className="docker-inventory-name-trigger" data-tooltip={network.name} onClick={() => onOpen(network)}>
                 <span>{network.name}</span>
                 <ArrowUpRight aria-hidden="true" size={13} />
               </button>
@@ -2372,13 +2372,13 @@ function DockerStorageInventory({ summary, t, action, onOpen }: {
           <article className="docker-inventory-row docker-storage-row" key={volume.name}>
             <HardDrive aria-hidden="true" size={16} />
             <div>
-              <button type="button" className="docker-inventory-name-trigger" title={volume.name} onClick={() => onOpen(volume)}>
+              <button type="button" className="docker-inventory-name-trigger" data-tooltip={volume.name} onClick={() => onOpen(volume)}>
                 <span>{volume.name}</span>
                 <ArrowUpRight aria-hidden="true" size={13} />
               </button>
               <span>{volume.driver} · {volume.scope}</span>
             </div>
-            <small title={volume.mountpoint}>{volume.mountpoint || String(t("common.dash"))}</small>
+            <small data-tooltip={volume.mountpoint}>{volume.mountpoint || String(t("common.dash"))}</small>
           </article>
         )) : (
           <p className="management-empty">{String(t(count ? "workspace.management.docker.inventoryUnavailable" : "workspace.management.docker.noVolumes"))}</p>
@@ -2712,7 +2712,7 @@ function renderCell(row: ManagementRow, column: ManagementColumn, t: Translate) 
         type="button"
         className="management-row-action"
         disabled
-        title={String(t("workspace.management.actions.disabledReason"))}
+        data-tooltip={String(t("workspace.management.actions.disabledReason"))}
         aria-label={String(t(row.actionKey))}
       >
         <TerminalSquare aria-hidden="true" size={13} />

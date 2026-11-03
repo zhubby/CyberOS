@@ -116,11 +116,11 @@ export function DockerCreateDialogs({ kind, summary, storagePools, onClose, onCo
       <form className="management-dialog vm-create-dialog docker-create-dialog" onSubmit={(event) => void submit(event)} role="dialog" aria-modal="true" aria-labelledby="docker-create-title" aria-busy={submitting}>
         <header className="vm-create-dialog-header">
           <div className="vm-create-heading"><span className="vm-create-icon" aria-hidden="true">{kind === "container" ? <Container size={19} /> : kind === "volume" ? <Database size={19} /> : <Network size={19} />}</span><div><span className="eyebrow">{createT("eyebrow")}</span><h3 id="docker-create-title">{title}</h3><p>{description}</p></div></div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} title={createT("actions.close")} aria-label={createT("actions.close")}><X aria-hidden="true" size={16} /></button>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} data-tooltip={createT("actions.close")} aria-label={createT("actions.close")}><X aria-hidden="true" size={16} /></button>
         </header>
         <div className="vm-create-dialog-body">
           <div className="vm-create-host-strip docker-create-host-strip">
-            <span className="management-status-pill" data-state={runtimeState} aria-live="polite" title={summary.engine.error ?? undefined}>{runtimeStatus === "ready" ? <CircleCheck aria-hidden="true" size={13} /> : <CircleAlert aria-hidden="true" size={13} />}{createT(`runtime.${runtimeStatus}`)}</span>
+            <span className="management-status-pill" data-state={runtimeState} aria-live="polite" data-tooltip={summary.engine.error ?? undefined}>{runtimeStatus === "ready" ? <CircleCheck aria-hidden="true" size={13} /> : <CircleAlert aria-hidden="true" size={13} />}{createT(`runtime.${runtimeStatus}`)}</span>
             <span><Container aria-hidden="true" size={14} />{createT("runtime.engine", { version: summary.engine.version ?? createT("runtime.unknownVersion") })}</span>
             <span><Settings2 aria-hidden="true" size={14} />{createT("runtime.api", { version: summary.engine.negotiatedApiVersion ?? summary.engine.apiVersion ?? "-" })}</span>
             <span><Database aria-hidden="true" size={14} />{createT("runtime.inventory", { containers: summary.metrics.containers.total, volumes: summary.metrics.volumes, networks: summary.metrics.networks })}</span>
@@ -144,7 +144,7 @@ export function DockerCreateDialogs({ kind, summary, storagePools, onClose, onCo
 
 function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) { return <label className="vm-create-field"><span>{label}</span>{children}{hint ? <small>{hint}</small> : null}</label>; }
 function Toggle({ label, checked, onChange, disabled = false }: { label: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) { return <Switch className="vm-create-toggle" checked={checked} onCheckedChange={onChange} disabled={disabled} label={<strong>{label}</strong>} />; }
-function RowButton({ onClick, label, disabled = false }: { onClick: () => void; label?: string; disabled?: boolean }) { const t = useCreateText(); const text = label ?? t("actions.remove"); return <button type="button" className="management-icon-action is-danger docker-create-row-remove" onClick={onClick} title={text} aria-label={text} disabled={disabled}><Trash2 size={13} /></button>; }
+function RowButton({ onClick, label, disabled = false }: { onClick: () => void; label?: string; disabled?: boolean }) { const t = useCreateText(); const text = label ?? t("actions.remove"); return <button type="button" className="management-icon-action is-danger docker-create-row-remove" onClick={onClick} data-tooltip={text} aria-label={text} disabled={disabled}><Trash2 size={13} /></button>; }
 function AddButton({ onClick, label, disabled = false }: { onClick: () => void; label?: string; disabled?: boolean }) { const t = useCreateText(); return <button type="button" className="docker-create-add" onClick={onClick} disabled={disabled}><Plus size={13} />{label ?? t("actions.addRow")}</button>; }
 
 function ContainerBasics({ form, update }: { form: DockerCreateForm; update: <K extends keyof DockerCreateForm>(key: K, value: DockerCreateForm[K]) => void }) {

@@ -72,7 +72,7 @@ export function PlaybackOutputPopover({ children, busy }: { children: ReactNode;
         className="icon-button"
         data-tv-focusable
         aria-label={t("music.output")}
-        title={t("music.output")}
+        data-tooltip={t("music.output")}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}

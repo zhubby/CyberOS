@@ -92,7 +92,7 @@ export function OfficePreview({ blobUrl, meta }: { blobUrl: string; meta: FileMe
             type="button"
             className="preview-tool-button"
             onClick={() => setRevision((current) => current + 1)}
-            title={t("preview.retry")}
+            data-tooltip={t("preview.retry")}
             aria-label={t("preview.retry")}
           >
             <RefreshCw aria-hidden="true" size={14} />

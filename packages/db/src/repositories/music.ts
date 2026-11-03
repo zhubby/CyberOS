@@ -3,6 +3,7 @@ import type {
   MusicAlbum,
   MusicArtist,
   MusicFavoriteKind,
+  MusicFilterOptions,
   MusicHome,
   MusicLibraryStatus,
   MusicPage,
@@ -335,6 +336,25 @@ export function getMusicTrack(
 ): MusicTrack | null {
   const r = row(db, `${TRACK_SELECT} WHERE t.id=?`, id);
   return r ? track(r) : null;
+}
+export function listMusicFilterOptions(
+  db: CyberOsDatabase,
+  sourceId?: string
+): MusicFilterOptions {
+  const source = sourceId === undefined ? "" : " AND t.source_id=?";
+  const args = sourceId === undefined ? [] : [sourceId];
+  return {
+    years: rows(
+      db,
+      `SELECT DISTINCT t.year FROM music_tracks t WHERE t.year BETWEEN 0 AND 9999${source} ORDER BY t.year DESC`,
+      ...args
+    ).map((item) => Number(item.year)),
+    genres: rows(
+      db,
+      `SELECT DISTINCT g.value AS genre FROM music_tracks t,json_each(t.genres_json) g WHERE g.type='text' AND length(trim(g.value))>0${source} ORDER BY genre COLLATE NOCASE,genre`,
+      ...args
+    ).map((item) => string(item, "genre"))
+  };
 }
 function filters(
   q: MusicQuery,

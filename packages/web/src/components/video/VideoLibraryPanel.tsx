@@ -461,7 +461,7 @@ export function VideoLibraryPanel({
       <PanelHeader
         icon={<MonitorPlay size={22} />}
         title={t("video.title")}
-        subtitle={tv ? t("playback.tvOutput") : t("video.library")}
+        subtitle={tv ? t("playback.tvOutput") : t("video.subtitle")}
         actions={
           <PanelHeaderActions className="library-header-actions" label={t("video.library")}>
             <PanelHeaderAction
@@ -773,7 +773,7 @@ export function VideoLibraryPanel({
                         data-tv-focusable
                         disabled={busy}
                         aria-label={t("video.watched")}
-                        title={t("video.watched")}
+                        data-tooltip={t("video.watched")}
                         aria-pressed={
                           detail.episodeWatched[e.id] ??
                           e.files.some(
@@ -958,14 +958,14 @@ export function VideoLibraryPanel({
                   <>
                     <button
                       aria-label={t("video.rename")}
-                      title={t("video.rename")}
+                      data-tooltip={t("video.rename")}
                       onClick={() => setEditingCollection(c)}
                     >
                       <Pencil size={17} />
                     </button>
                     <button
                       aria-label={t("video.delete")}
-                      title={t("video.delete")}
+                      data-tooltip={t("video.delete")}
                       onClick={() => setDeletingCollection(c)}
                     >
                       <Trash2 size={17} />
@@ -1136,7 +1136,7 @@ function CollectionDialog({
       >
         <header>
           <h2>{t(initialName ? "video.rename" : "video.newCollection")}</h2>
-          <button onClick={onClose} aria-label={t("video.close")} title={t("video.close")}>
+          <button onClick={onClose} aria-label={t("video.close")} data-tooltip={t("video.close")}>
             <X size={20} />
           </button>
         </header>
@@ -1192,7 +1192,7 @@ function DeleteCollectionDialog({
             disabled={busy}
             onClick={onClose}
             aria-label={t("video.close")}
-            title={t("video.close")}
+            data-tooltip={t("video.close")}
           >
             <X size={20} />
           </button>

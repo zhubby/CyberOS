@@ -136,7 +136,7 @@ impl Default for DownloadSettings {
 
 impl DownloadSettings {
     fn validate(self) -> DbResult<Self> {
-        validate_range("concurrency", self.concurrency as u64, 1, 3)?;
+        validate_range("concurrency", self.concurrency as u64, 1, 10)?;
         validate_range(
             "parallelRequestsPerTask",
             self.parallel_requests_per_task as u64,
@@ -1433,6 +1433,24 @@ CREATE TABLE download_task_files (
 mod tests {
     use super::*;
 
+    #[test]
+    fn download_settings_support_one_to_ten_http_downloads() {
+        for concurrency in 1..=10 {
+            let settings = DownloadSettings {
+                concurrency,
+                ..DownloadSettings::default()
+            };
+            assert_eq!(settings.validate().unwrap().concurrency, concurrency);
+        }
+        for concurrency in [0, 11] {
+            let settings = DownloadSettings {
+                concurrency,
+                ..DownloadSettings::default()
+            };
+            assert!(settings.validate().is_err());
+        }
+    }
+
     async fn segment_contention_fixture() -> (tempfile::TempDir, Db, Connection) {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("test.sqlite");
@@ -1647,7 +1665,7 @@ mod tests {
             connection
                 .execute(
                     "INSERT INTO system_settings (key, value_json, updated_at) \
-                 VALUES ('download_settings', '{\"concurrency\":2}', '2026-01-01T00:00:00Z')",
+                 VALUES ('download_settings', '{\"concurrency\":10}', '2026-01-01T00:00:00Z')",
                     [],
                 )
                 .map_err(DownloadError::database)?;
@@ -1658,7 +1676,7 @@ mod tests {
         .unwrap();
 
         let settings = db.settings().await.unwrap();
-        assert_eq!(settings.concurrency, 2);
+        assert_eq!(settings.concurrency, 10);
         assert_eq!(settings.parallel_requests_per_task, 4);
         db.register_worker("worker", "test").await.unwrap();
         db.heartbeat_worker("worker").await.unwrap();

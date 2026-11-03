@@ -63,6 +63,8 @@ import {
 import { collectSystemInfo } from "../lib/system-info.js";
 import { collectSystemStorage } from "../lib/system-management.js";
 import { loadEffectiveShareSettings } from "../lib/share-credentials.js";
+import { PathSafetyError } from "@cyberos/storage-tools";
+import { listBackupDirectories } from "../lib/backup-directories.js";
 
 export function registerSettingsRoutes(server: FastifyInstance, { config, db, system, tvMode }: ApiRouteContext): void {
   server.get("/api/settings/system-profile", async (_request, reply) => {
@@ -124,6 +126,17 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db, sy
       reply.send({ settings: await publicBackupSettings(settings, config.paths.backupPasswordPath) });
     } catch (error) {
       reply.status(409).send({ error: settingError(error), state: "attention" });
+    }
+  });
+
+  server.get<{ Querystring: { root?: string; path?: string } }>("/api/settings/backup/directories", async (request, reply) => {
+    try {
+      const settings = getBackupSettings(db) ?? defaultBackupSettings(config.paths.backupRoot, config.environment === "production");
+      reply.send(await listBackupDirectories(config, settings.repositoryPath, request.query));
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      reply.status(error instanceof PathSafetyError || code === "EACCES" || code === "EPERM" ? 403 : code === "ENOENT" || code === "ENOTDIR" ? 404 : 500)
+        .send({ error: settingError(error) });
     }
   });
 

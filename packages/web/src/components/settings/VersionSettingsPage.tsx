@@ -87,13 +87,13 @@ export function VersionSettingsPage({ buildInfo, error, loading, locale }: Versi
         <dl className="settings-version-details">
           <div>
             <dt><GitCommitHorizontal aria-hidden="true" size={15} />{t("settings.version.commit")}</dt>
-            <dd className="is-mono" title={commitSha}>{commitSha}</dd>
+            <dd className="is-mono" data-tooltip={commitSha}>{commitSha}</dd>
             {buildInfo.commitSha ? (
               <button
                 className="settings-version-copy"
                 type="button"
                 onClick={() => void copyCommitSha()}
-                title={copyLabel}
+                data-tooltip={copyLabel}
                 aria-label={copyLabel}
                 data-state={copyState}
               >

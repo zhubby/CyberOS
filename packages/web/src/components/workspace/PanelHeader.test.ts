@@ -54,7 +54,8 @@ describe("PanelHeader", () => {
     expect(html).toContain('class="management-actions panel-header-actions"');
     expect(html).toContain('role="group" aria-label="Panel actions"');
     expect(button).toContain('aria-label="Refresh"');
-    expect(button).toContain('title="Refresh"');
+    expect(button).toContain('data-tooltip="Refresh"');
+    expect(button).not.toMatch(/\stitle=/u);
     expect(button.replace(/<[^>]+>/gu, "").trim()).toBe("");
   });
 

@@ -89,8 +89,8 @@ describe("DockerContainerDetailsDialog", () => {
     }));
 
     expect(html).toContain("Exited (0) 1 minute ago");
-    expect(html).toContain('title="Start"');
-    expect(html).not.toContain('title="Stop"');
+    expect(html).toContain('data-tooltip="Start"');
+    expect(html).not.toContain('data-tooltip="Stop"');
     expect(html).toContain("rustfs /data");
   });
 });
@@ -149,9 +149,9 @@ describe("VmInstanceDetailsDialog", () => {
     expect(html).toContain("20.0 GB");
     expect(html).toContain("VM actions run immediately");
     expect(html).not.toContain("approval");
-    expect(html).toContain('title="Stop"');
-    expect(html).toContain('title="Console"');
-    expect(html).toContain('title="Remove"');
+    expect(html).toContain('data-tooltip="Stop"');
+    expect(html).toContain('data-tooltip="Console"');
+    expect(html).toContain('data-tooltip="Remove"');
   });
 });
 
@@ -179,27 +179,27 @@ describe("VmInstanceActions", () => {
   it("shows the complete running lifecycle without invalid start or resume actions", () => {
     const html = renderToStaticMarkup(createElement(VmInstanceActions, { ...props, vm }));
 
-    expect(html).toContain('title="Stop"');
-    expect(html).toContain('title="Pause"');
-    expect(html).toContain('title="Force stop"');
-    expect(html).toContain('title="Restart"');
-    expect(html).toContain('title="Hard reset"');
-    expect(html).toContain('title="Snapshot"');
-    expect(html).toContain('title="Console"');
-    expect(html).not.toContain('title="Start"');
-    expect(html).not.toContain('title="Resume"');
+    expect(html).toContain('data-tooltip="Stop"');
+    expect(html).toContain('data-tooltip="Pause"');
+    expect(html).toContain('data-tooltip="Force stop"');
+    expect(html).toContain('data-tooltip="Restart"');
+    expect(html).toContain('data-tooltip="Hard reset"');
+    expect(html).toContain('data-tooltip="Snapshot"');
+    expect(html).toContain('data-tooltip="Console"');
+    expect(html).not.toContain('data-tooltip="Start"');
+    expect(html).not.toContain('data-tooltip="Resume"');
   });
 
   it("resumes paused guests and limits stopped guests to valid actions", () => {
     const paused = renderToStaticMarkup(createElement(VmInstanceActions, { ...props, vm: { ...vm, state: "paused" } }));
     const stopped = renderToStaticMarkup(createElement(VmInstanceActions, { ...props, vm: { ...vm, state: "shutoff" } }));
 
-    expect(paused).toContain('title="Resume"');
-    expect(paused).not.toContain('title="Start"');
-    expect(paused).not.toContain('title="Restart"');
-    expect(stopped).toContain('title="Start"');
-    expect(stopped).toContain('title="Remove"');
-    expect(stopped).not.toContain('title="Console"');
-    expect(stopped).not.toContain('title="Snapshot"');
+    expect(paused).toContain('data-tooltip="Resume"');
+    expect(paused).not.toContain('data-tooltip="Start"');
+    expect(paused).not.toContain('data-tooltip="Restart"');
+    expect(stopped).toContain('data-tooltip="Start"');
+    expect(stopped).toContain('data-tooltip="Remove"');
+    expect(stopped).not.toContain('data-tooltip="Console"');
+    expect(stopped).not.toContain('data-tooltip="Snapshot"');
   });
 });

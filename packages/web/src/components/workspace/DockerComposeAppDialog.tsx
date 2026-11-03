@@ -300,7 +300,7 @@ export function DockerComposeAppDialog({
               </h2>
             </div>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} title={t("common.actions.close")}>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={busy} aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")}>
             <X aria-hidden="true" size={17} />
           </button>
         </header>
@@ -400,7 +400,7 @@ export function DockerComposeAppDialog({
                           <button type="button" className="management-icon-action is-danger" onClick={() => updateForm(
                             "environment",
                             form.environment.filter((_, entryIndex) => entryIndex !== index)
-                          )} disabled={busy} aria-label={t("workspace.management.docker.apps.removeEnvironment")} title={t("workspace.management.docker.apps.removeEnvironment")}>
+                          )} disabled={busy} aria-label={t("workspace.management.docker.apps.removeEnvironment")} data-tooltip={t("workspace.management.docker.apps.removeEnvironment")}>
                             <Trash2 aria-hidden="true" size={15} />
                           </button>
                         </div>

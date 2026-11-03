@@ -116,7 +116,7 @@ export function PreviewContent({
     return <VideoPreview src={videoUrl} identity={{ storagePoolId, path: meta.path, sizeBytes: meta.sizeBytes, modifiedAt: meta.modifiedAt }} />;
   }
   if (meta.previewKind === "pdf") {
-    return <iframe className="pdf-preview" title={meta.name} src={blobUrl} />;
+    return <iframe className="pdf-preview" aria-label={meta.name} src={blobUrl} />;
   }
   if (isOfficePreviewKind(meta.previewKind)) {
     return <OfficePreview blobUrl={blobUrl} meta={meta} />;
@@ -231,7 +231,7 @@ function VideoPreview({ src, identity }: { src: string; identity: VideoProgressI
             setStatus("loading");
             setSourceRevision((current) => current + 1);
           }}
-          title={t("preview.retry")}
+          data-tooltip={t("preview.retry")}
           aria-label={t("preview.retry")}
         >
           <RefreshCw aria-hidden="true" size={14} />

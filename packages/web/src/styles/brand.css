@@ -569,7 +569,6 @@ textarea {
   background: rgb(0 240 255 / 9%);
 }
 
-.composer-status,
 .risk-pill,
 .panel-inline-status,
 .status-pill {
@@ -580,13 +579,11 @@ textarea {
   text-transform: uppercase;
 }
 
-.composer-status[data-state="running"],
 .risk-pill[data-risk="low"] {
   color: var(--cyber-cyan);
   background: rgb(0 240 255 / 9%);
 }
 
-.composer-status[data-state="reconnecting"],
 .risk-pill[data-risk="high"] {
   color: var(--cyber-ink);
   background: var(--cyber-red);
@@ -758,7 +755,8 @@ textarea {
 .management-skeleton-block,
 .skeleton-block {
   border-radius: 0;
-  background: linear-gradient(90deg, rgb(5 10 14 / 14%), rgb(5 10 14 / 30%), rgb(5 10 14 / 14%));
+  background-color: var(--skeleton-base);
+  background-image: linear-gradient(90deg, var(--skeleton-base), var(--skeleton-highlight), var(--skeleton-base));
   background-size: 220% 100%;
 }
 

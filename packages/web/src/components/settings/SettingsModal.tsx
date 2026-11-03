@@ -1,8 +1,8 @@
 import { ModalPortal } from "../common/ModalPortal.js";
-import { MobileAppControls, useAppHeadingFocus } from "../../mobile/MobileHome.js";
+import { MobileAppHeader, useAppHeadingFocus } from "../../mobile/MobileAppHeader.js";
 import { useMobileBack, useMobileNavigation } from "../../mobile/MobileNavigation.js";
 import { PowerControl } from "../power/PowerControl.js";
-import { FormEvent, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { FormEvent, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsSecretField } from "./SettingsSecretField.js";
 import {
@@ -21,7 +21,6 @@ import {
   Image as ImageIcon,
   Images,
   KeyRound,
-  Lock,
   MemoryStick,
   MonitorCog,
   UserRound,
@@ -32,6 +31,7 @@ import {
   Server,
   Share2,
   ShieldCheck,
+  Settings,
   Wifi,
   X
 } from "lucide-react";
@@ -82,6 +82,7 @@ import {
 } from "../../lib/preview-settings.js";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { Switch } from "../common/Switch.js";
+import { HelpLabel, HelpTip } from "../common/HelpTip.js";
 import { VersionSettingsPage } from "./VersionSettingsPage.js";
 import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
 import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
@@ -294,6 +295,9 @@ export function SettingsModal({
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (compact) return;
+    const topmostDialog = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')]
+      .filter((dialog) => dialog.isConnected && !dialog.hidden).at(-1);
+    if (topmostDialog && topmostDialog !== event.currentTarget) return;
     if (event.target instanceof Node && !event.currentTarget.contains(event.target)) return;
     if (event.key === "Escape" && !event.defaultPrevented) {
       event.preventDefault();
@@ -337,7 +341,14 @@ export function SettingsModal({
         onKeyDown={handleDialogKeyDown}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        {compact ? <header className="mobile-settings-header app-titlebar"><MobileAppControls control="back" /><h2 ref={headingRef} tabIndex={-1}>{mobileDetail ? settingsSectionTitle(currentSection, t) : t("common.actions.systemSettings")}</h2><MobileAppControls control="home" /></header> : null}
+        {compact ? <MobileAppHeader
+          className="mobile-settings-header"
+          icon={mobileDetail ? settingsSectionIcon(currentSection.id) : <Settings size={20} />}
+          title={mobileDetail ? settingsSectionTitle(currentSection, t) : t("common.actions.systemSettings")}
+          subtitle={mobileDetail ? settingsSectionDescription(currentSection, t) : t("mobile.settingsDescription")}
+          headingRef={headingRef}
+          titleId="settings-title"
+        /> : null}
         <aside className="settings-rail" aria-label={t("settings.sectionsLabel")}>
           <div className="settings-rail-brand">
             <img className="settings-brand-logo" src="/cyberos-icon.svg" alt={t("common.appName")} />
@@ -385,13 +396,13 @@ export function SettingsModal({
         {!compact || mobileDetail ? <section className="settings-content">
           <header className="settings-content-header">
             <div>
-              <h2 id="settings-title">{settingsSectionTitle(currentSection, t)}</h2>
+              <h2 id={compact ? undefined : "settings-title"}>{settingsSectionTitle(currentSection, t)}</h2>
               <p>{settingsSectionDescription(currentSection, t)}</p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              title={t("common.actions.closeSettings")}
+              data-tooltip={t("common.actions.closeSettings")}
               aria-label={t("common.actions.closeSettings")}
             >
               <X aria-hidden="true" size={18} />
@@ -477,6 +488,7 @@ export function SettingsModal({
                       <SettingsSecretField
                         id="model-provider-api-key"
                         label={t("settings.modelProvider.apiKey")}
+                        help={t("settings.modelProvider.apiKeyNote")}
                         value={form.apiKey}
                         configured={settings?.apiKeyConfigured ?? false}
                         clearSaved={form.clearApiKey}
@@ -488,10 +500,6 @@ export function SettingsModal({
                       />
                     </fieldset>
 
-                    <div className="settings-secret-note">
-                      <Lock aria-hidden="true" size={15} />
-                      <span>{t("settings.modelProvider.apiKeyNote")}</span>
-                    </div>
                   </section>
                 </div>
               </div>
@@ -632,7 +640,7 @@ export function SettingsModal({
 
           {activeSection === "monitoring" ? <SettingsMonitoringPage /> : null}
 
-          {activeSection === "backup" ? <SettingsBackupPage /> : null}
+          {activeSection === "backup" ? <SettingsBackupPage locale={resolvedLocale} /> : null}
 
           {activeSection === "alerts" ? (
             <SettingsAlertsPage locale={resolvedLocale} />
@@ -798,12 +806,11 @@ function SettingsOverview({
   return (
     <div className="settings-content-body settings-overview">
       <section className="settings-section-card settings-identity-card">
-        <header>
-          <div>
-            <h3>{t("settings.overview.systemProfile")}</h3>
-            <p>{t("settings.overview.systemProfileDescription")}</p>
-          </div>
-        </header>
+        <SettingsOverviewCardHeader
+          icon={<MonitorCog aria-hidden="true" size={18} />}
+          title={t("settings.overview.systemProfile")}
+          description={t("settings.overview.systemProfileDescription")}
+        />
         <div className="settings-metric-grid settings-system-metric-grid">
           {metricItems.map((item) => (
             <article key={String(item.label)}>
@@ -816,7 +823,7 @@ function SettingsOverview({
 
       <div className="settings-page-grid settings-overview-details">
         <SettingsInfoCard
-          icon={<Cpu aria-hidden="true" size={17} />}
+          icon={<Cpu aria-hidden="true" size={18} />}
           title={t("settings.overview.hardwareTitle")}
           description={t("settings.overview.hardwareDescription")}
           rows={hardwareRows}
@@ -829,27 +836,45 @@ function SettingsOverview({
         </SettingsInfoCard>
 
         <SettingsInfoCard
-          icon={<Server aria-hidden="true" size={17} />}
+          icon={<Server aria-hidden="true" size={18} />}
           title={t("settings.overview.serviceTitle")}
           description={t("settings.overview.serviceDescription")}
           rows={serviceRows}
         />
 
         <SettingsInfoCard
-          icon={<MemoryStick aria-hidden="true" size={17} />}
+          icon={<MemoryStick aria-hidden="true" size={18} />}
           title={t("settings.overview.processTitle")}
           description={t("settings.overview.processDescription")}
           rows={processRows}
         />
 
         <SettingsInfoCard
-          icon={<HardDrive aria-hidden="true" size={17} />}
+          icon={<HardDrive aria-hidden="true" size={18} />}
           title={t("settings.overview.pathsTitle")}
           description={t("settings.overview.pathsDescription")}
           rows={pathRows}
         />
       </div>
     </div>
+  );
+}
+
+function SettingsOverviewCardHeader({
+  icon,
+  title,
+  description
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <header className="settings-overview-card-header">
+      <span className="settings-overview-card-icon">{icon}</span>
+      <h3>{title}</h3>
+      <p>{description}</p>
+    </header>
   );
 }
 
@@ -875,15 +900,7 @@ function SettingsInfoCard({
 }) {
   return (
     <section className="settings-section-card settings-system-card">
-      <header>
-        <div className="settings-system-card-heading">
-          {icon}
-          <div>
-            <h3>{title}</h3>
-            <p>{description}</p>
-          </div>
-        </div>
-      </header>
+      <SettingsOverviewCardHeader icon={icon} title={title} description={description} />
       <SettingsInfoList rows={rows} />
       {children}
     </section>
@@ -896,7 +913,7 @@ function SettingsInfoList({ rows }: { rows: SettingsInfoRow[] }) {
       {rows.map((row, index) => (
         <div key={`${row.label}-${index}`}>
           <dt>{row.label}</dt>
-          <dd className={row.mono ? "is-mono" : undefined} title={row.value}>
+          <dd className={row.mono ? "is-mono" : undefined} data-tooltip={row.value}>
             {row.value}
             {row.detail ? <small>{row.detail}</small> : null}
           </dd>
@@ -933,7 +950,7 @@ function SettingsAppearancePage({
             </div>
           </header>
           <div className="settings-preference-field">
-            <span>{t("settings.appearance.languageField")}</span>
+            <HelpLabel label={t("settings.appearance.languageField")} content={t("settings.appearance.languageHelp")} htmlFor="language-select" />
             <CustomSelect
               id="language-select"
               value={languagePreference}
@@ -941,7 +958,6 @@ function SettingsAppearancePage({
               ariaLabel={`${t("settings.appearance.languageField")}: ${selectedLanguageLabel}`}
               onChange={onLanguagePreferenceChange}
             />
-            <small>{t("settings.appearance.languageHelp")}</small>
           </div>
         </section>
 
@@ -1019,7 +1035,7 @@ function SettingsFilesPage({
           </header>
           <div className="settings-editor-font-grid">
             <div className="settings-preference-field">
-              <span>{t("settings.files.monoFont")}</span>
+              <HelpLabel label={t("settings.files.monoFont")} content={t("settings.files.monoFontHelp")} htmlFor="code-font-family" />
               <CustomSelect
                 id="code-font-family"
                 value={codeFontSettings.familyId}
@@ -1032,10 +1048,9 @@ function SettingsFilesPage({
                   })
                 }
               />
-              <small>{t("settings.files.monoFontHelp")}</small>
             </div>
-            <label className="settings-preference-field settings-size-field">
-              <span>{t("settings.files.fontSize")}</span>
+            <div className="settings-preference-field settings-size-field">
+              <HelpLabel label={t("settings.files.fontSize")} content={t("settings.files.fontSizeHelp")} htmlFor="code-font-size" helpId="code-font-size-help" />
               <div className="settings-unit-input">
                 <input
                   id="code-font-size"
@@ -1051,8 +1066,7 @@ function SettingsFilesPage({
                 />
                 <span>{t("settings.files.pixels")}</span>
               </div>
-              <small id="code-font-size-help">{t("settings.files.fontSizeHelp")}</small>
-            </label>
+            </div>
           </div>
           <pre className="settings-editor-sample" aria-hidden="true">
             <code>{'const status: "ready" = "ready";'}</code>
@@ -1065,8 +1079,13 @@ function SettingsFilesPage({
               <p>{t("settings.files.previewDescription")}</p>
             </div>
           </header>
-          <label className="settings-preference-field settings-size-field">
-            <span>{t("settings.files.previewFileSizeLimit")}</span>
+          <div className="settings-preference-field settings-size-field">
+            <HelpLabel
+              label={t("settings.files.previewFileSizeLimit")}
+              content={t("settings.files.previewFileSizeLimitHelp", { limit: formatBytes(previewFileSizeLimitBytes, locale) })}
+              htmlFor="preview-file-size-limit"
+              helpId="preview-file-size-limit-help"
+            />
             <div className="settings-unit-input">
               <input
                 id="preview-file-size-limit"
@@ -1080,12 +1099,7 @@ function SettingsFilesPage({
               />
               <span>{t("settings.files.megabytes")}</span>
             </div>
-            <small id="preview-file-size-limit-help">
-              {t("settings.files.previewFileSizeLimitHelp", {
-                limit: formatBytes(previewFileSizeLimitBytes, locale)
-              })}
-            </small>
-          </label>
+          </div>
         </section>
 
       </div>
@@ -1390,13 +1404,14 @@ export function SettingsDownloadsPage({
               </header>
 
               <fieldset className="settings-download-control" disabled={loading || saving}>
-                <label className="settings-preference-field">
-                  <span>{t("settings.downloads.concurrencyField")}</span>
+                <div className="settings-preference-field">
+                  <HelpLabel label={t("settings.downloads.concurrencyField")} content={t("settings.downloads.concurrencyHelp")} htmlFor="download-concurrency" />
                   <CustomSelect
+                    id="download-concurrency"
                     value={String(draft.concurrency)}
                     ariaLabel={t("settings.downloads.concurrencyField")}
                     disabled={loading || saving}
-                    options={[1, 2, 3].map((value) => ({
+                    options={Array.from({ length: 10 }, (_, index) => index + 1).map((value) => ({
                       value: String(value),
                       label: t("settings.downloads.connectionCount", { count: value })
                     }))}
@@ -1405,13 +1420,12 @@ export function SettingsDownloadsPage({
                       concurrency: Number(value)
                     }))}
                   />
-                </label>
+                </div>
                 <div className="settings-download-visual" aria-hidden="true">
                   <Download size={22} />
                   <strong>{draft.concurrency}</strong>
                   <span>{t("settings.downloads.connectionUnit")}</span>
                 </div>
-                <small className="settings-download-help">{t("settings.downloads.concurrencyHelp")}</small>
               </fieldset>
               <fieldset className="settings-field-grid settings-download-fields" disabled={loading || saving}>
                 <DownloadNumberField
@@ -1532,8 +1546,8 @@ function DownloadNumberField({
   nullable = false,
   onChange
 }: {
-  label: ReactNode;
-  help?: ReactNode;
+  label: string;
+  help?: string;
   value: number | null;
   min: number;
   max: number;
@@ -1541,10 +1555,12 @@ function DownloadNumberField({
   nullable?: boolean;
   onChange: (value: number | null) => void;
 }) {
+  const id = useId();
   return (
-    <label className="settings-preference-field">
-      <span>{label}</span>
+    <div className="settings-preference-field">
+      {help ? <HelpLabel label={label} content={help} htmlFor={id} /> : <label htmlFor={id}>{label}</label>}
       <input
+        id={id}
         type="number"
         value={value ?? ""}
         min={min}
@@ -1556,8 +1572,7 @@ function DownloadNumberField({
           onChange(next === "" && nullable ? null : Number(next));
         }}
       />
-      {help ? <small>{help}</small> : null}
-    </label>
+    </div>
   );
 }
 
@@ -1699,18 +1714,15 @@ function SettingsDockerPage({
               </header>
 
               <fieldset className="settings-field-grid settings-docker-runtime-grid" disabled={loading || saving}>
-                <Switch
-                  className="settings-field-wide"
-                  checked={form.enabled}
-                  label={t("settings.docker.enabledField")}
-                  onCheckedChange={(enabled) => onChange({ ...form, enabled })}
-                />
+                <span className="help-label settings-field-wide">
+                  <Switch
+                    checked={form.enabled}
+                    label={t("settings.docker.enabledField")}
+                    onCheckedChange={(enabled) => onChange({ ...form, enabled })}
+                  />
+                  <HelpTip label={t("settings.docker.enabledField")} content={t("settings.docker.socketNote")} />
+                </span>
               </fieldset>
-
-              <div className="settings-secret-note">
-                <Lock aria-hidden="true" size={15} />
-                <span>{t("settings.docker.socketNote")}</span>
-              </div>
             </section>
         </div>
       </div>
@@ -1760,19 +1772,15 @@ function SettingsVmPage({
             </header>
 
             <fieldset className="settings-field-grid" disabled={loading || saving}>
-              <Switch
-                className="settings-field-wide"
-                checked={form.enabled}
-                label={t("settings.virtualMachines.enabledField")}
-                description={t("settings.virtualMachines.enabledDescription")}
-                onCheckedChange={(enabled) => onChange({ ...form, enabled })}
-              />
+              <span className="help-label settings-field-wide">
+                <Switch
+                  checked={form.enabled}
+                  label={t("settings.virtualMachines.enabledField")}
+                  onCheckedChange={(enabled) => onChange({ ...form, enabled })}
+                />
+                <HelpTip label={t("settings.virtualMachines.enabledField")} content={`${t("settings.virtualMachines.enabledDescription")} ${t("settings.virtualMachines.runtimeNote")}`} />
+              </span>
             </fieldset>
-
-            <div className="settings-secret-note">
-              <MonitorCog aria-hidden="true" size={15} />
-              <span>{t("settings.virtualMachines.runtimeNote")}</span>
-            </div>
           </section>
         </div>
       </div>

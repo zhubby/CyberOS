@@ -48,7 +48,7 @@ describe("HttpDownloaderPanel download creation", () => {
     expect(button).toContain("disabled");
     expect(button).toContain('aria-busy="true"');
     expect(button).toContain('aria-label="Loading"');
-    expect(button).toContain('title="Loading"');
+    expect(button).toContain('data-tooltip="Loading"');
     expect(button).toContain('data-state="loading"');
     expect(button).toContain("is-spinning");
     expect(visibleButtonText(button)).toBe("");
@@ -145,6 +145,35 @@ describe("DownloadTaskRow progress states", () => {
     expect(html).toContain("Retry 2 in");
     expect(html).toContain("SHA-256 mismatch");
     expect(html).toContain("Checksum mismatch");
+  });
+});
+
+describe("DownloadTaskRow target directory", () => {
+  it.each(["queued", "running", "paused", "failed", "cancelled"] as const)(
+    "hides the directory action before a %s task has published its files",
+    (status) => {
+      expect(renderDownloadRow({ status })).not.toContain('aria-label="Open target directory"');
+    }
+  );
+
+  it.each(["verifying", "publishing"] as const)(
+    "keeps the directory action hidden at 100 percent during %s",
+    (phase) => {
+      expect(renderDownloadRow({ phase, receivedBytes: 100, totalBytes: 100 }))
+        .not.toContain('aria-label="Open target directory"');
+    }
+  );
+
+  it.each(["completed", "seeding"] as const)("opens the directory after %s", (status) => {
+    expect(renderDownloadRow({ status })).toContain('aria-label="Open target directory"');
+  });
+
+  it("keeps published torrent files accessible when seeding is paused", () => {
+    expect(renderDownloadRow({
+      sourceKind: "magnet",
+      status: "paused",
+      contentCompletedAt: "2026-09-24T00:01:00.000Z"
+    })).toContain('aria-label="Open target directory"');
   });
 });
 

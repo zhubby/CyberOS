@@ -21,7 +21,7 @@ export function BluetoothDiscoveryDialog({ devices, busyKey, scanning, disabled,
   const dialogRef = useModalDialog(onClose);
   return <ModalPortal className="management-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} className="management-modal bluetooth-discovery-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
-      <header><div><h2 id={titleId}>{t("settings.bluetooth.discoveryTitle")}</h2><p>{t("settings.bluetooth.discoveryDescription")}</p></div><button type="button" className="management-icon-action bluetooth-device-action" aria-label={t("common.actions.close")} title={t("common.actions.close")} onClick={onClose}><X aria-hidden="true" size={17} /></button></header>
+      <header><div><h2 id={titleId}>{t("settings.bluetooth.discoveryTitle")}</h2><p>{t("settings.bluetooth.discoveryDescription")}</p></div><button type="button" className="management-icon-action bluetooth-device-action" aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")} onClick={onClose}><X aria-hidden="true" size={17} /></button></header>
       <div className="bluetooth-discovery-body">
         {error ? <div className="settings-device-unavailable" role="alert"><Bluetooth aria-hidden="true" size={18} /><p>{error}</p></div> : null}
         {challenge}

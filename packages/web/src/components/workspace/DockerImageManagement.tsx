@@ -217,7 +217,7 @@ export function DockerImageManagement({
               <tbody>
                 {visibleImages.map((image) => (
                   <tr key={image.id}>
-                    <td data-label={t("workspace.management.docker.images.columns.repository")} title={dockerImageDisplayName(image)}>
+                    <td data-label={t("workspace.management.docker.images.columns.repository")} data-tooltip={dockerImageDisplayName(image)}>
                       <button type="button" className="docker-image-name-trigger" onClick={() => openDetails(image)}>
                         <span>{dockerImageDisplayName(image)}</span>
                         <ArrowUpRight aria-hidden="true" size={13} />
@@ -227,7 +227,7 @@ export function DockerImageManagement({
                       ) : null}
                     </td>
                     <td data-label={t("workspace.management.docker.images.columns.id")}><code>{image.shortId}</code></td>
-                    <td data-label={t("workspace.management.docker.images.columns.created")}>{formatDockerDate(image.createdAt, locale, String(t("common.dash")))}</td>
+                    <td data-label={t("workspace.management.docker.images.columns.created")}>{formatDockerDate(image.createdAt, String(t("common.dash")))}</td>
                     <td data-label={t("workspace.management.docker.images.columns.size")}>{formatBytes(image.sizeBytes, locale)}</td>
                     <td data-label={t("workspace.management.docker.images.columns.architecture")}>{image.architecture ?? t("common.dash")}</td>
                     <td data-label={t("workspace.management.docker.images.columns.usage")}>{t(dockerImageUsageTranslationKey(image))}</td>
@@ -333,12 +333,10 @@ export function DockerImageDetailsDialog({
         <header>
           <div className="docker-image-dialog-heading">
             <span className="docker-image-dialog-icon"><ImageIcon aria-hidden="true" size={19} /></span>
-            <div>
-              <span className="eyebrow">{t("workspace.management.docker.images.detailsEyebrow")}</span>
-              <h2 id="docker-image-detail-title">{dockerImageDisplayName(image)}</h2>
-            </div>
+            <h2 id="docker-image-detail-title">{t("workspace.management.docker.images.detailsEyebrow")}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={deleting} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={deleting} aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
+          <p className="docker-image-detail-name">{dockerImageDisplayName(image)}</p>
         </header>
 
         {deleteConfirming ? (
@@ -364,7 +362,7 @@ export function DockerImageDetailsDialog({
           <div className="docker-image-detail-body">
             <dl className="docker-image-detail-grid">
               <div><dt>{t("workspace.management.docker.images.fullId")}</dt><dd><code>{image.id}</code></dd></div>
-              <div><dt>{t("workspace.management.docker.images.columns.created")}</dt><dd>{formatDockerDate(image.createdAt, locale, String(t("common.dash")))}</dd></div>
+              <div><dt>{t("workspace.management.docker.images.columns.created")}</dt><dd>{formatDockerDate(image.createdAt, String(t("common.dash")))}</dd></div>
               <div><dt>{t("workspace.management.docker.images.columns.size")}</dt><dd>{formatBytes(image.sizeBytes, locale)}</dd></div>
               <div><dt>{t("workspace.management.docker.images.sharedSize")}</dt><dd>{image.sharedSizeBytes === null ? t("common.dash") : formatBytes(image.sharedSizeBytes, locale)}</dd></div>
               <div><dt>{t("workspace.management.docker.images.columns.architecture")}</dt><dd>{image.architecture ?? t("common.dash")}</dd></div>
@@ -442,7 +440,7 @@ function DockerImagePullDialog({
             <span className="eyebrow">{t("workspace.management.docker.images.pullEyebrow")}</span>
             <h2 id="docker-image-pull-title">{t("workspace.management.docker.images.pullTitle")}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
         </header>
         <div className="docker-image-pull-body">
           <label className="docker-registry-field">
@@ -579,7 +577,7 @@ function DockerRegistryDialog({
             <span className="eyebrow">{t("workspace.management.docker.images.registryEyebrow")}</span>
             <h2 id="docker-registry-title">{t("workspace.management.docker.images.registryTitle")}</h2>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} aria-label={t("common.actions.close")} title={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
+          <button type="button" className="management-icon-action" onClick={onClose} disabled={submitting} aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")}><X aria-hidden="true" size={17} /></button>
         </header>
 
         {deleteCandidate ? (
@@ -619,8 +617,8 @@ function DockerRegistryDialog({
                     <div><strong>{registry.name}</strong><span>{registry.serverAddress}</span><small>{registry.username}</small></div>
                     <em>{registry.credentialConfigured ? t("workspace.management.docker.images.configured") : t("workspace.management.docker.images.notConfigured")}</em>
                     <div className="management-action-cluster">
-                      <button type="button" className="management-icon-action" onClick={() => startEdit(registry)} aria-label={t("workspace.management.docker.images.editRegistry")} title={t("workspace.management.docker.images.editRegistry")}><Pencil aria-hidden="true" size={14} /></button>
-                      <button type="button" className="management-icon-action is-danger" onClick={() => { setDeleteCandidate(registry); setError(null); }} aria-label={t("workspace.management.docker.images.deleteRegistry")} title={t("workspace.management.docker.images.deleteRegistry")}><Trash2 aria-hidden="true" size={14} /></button>
+                      <button type="button" className="management-icon-action" onClick={() => startEdit(registry)} aria-label={t("workspace.management.docker.images.editRegistry")} data-tooltip={t("workspace.management.docker.images.editRegistry")}><Pencil aria-hidden="true" size={14} /></button>
+                      <button type="button" className="management-icon-action is-danger" onClick={() => { setDeleteCandidate(registry); setError(null); }} aria-label={t("workspace.management.docker.images.deleteRegistry")} data-tooltip={t("workspace.management.docker.images.deleteRegistry")}><Trash2 aria-hidden="true" size={14} /></button>
                     </div>
                   </article>
                 ))}
@@ -654,12 +652,12 @@ function DockerRegistryDialog({
   );
 }
 
-function formatDockerDate(value: string | null, locale: SupportedLocale, fallback: string): string {
+function formatDockerDate(value: string | null, fallback: string): string {
   if (!value) return fallback;
   const timestamp = new Date(value);
-  return Number.isNaN(timestamp.getTime())
-    ? fallback
-    : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(timestamp);
+  if (Number.isNaN(timestamp.getTime())) return fallback;
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${String(timestamp.getFullYear()).padStart(4, "0")}/${pad(timestamp.getMonth() + 1)}/${pad(timestamp.getDate())} ${pad(timestamp.getHours())}:${pad(timestamp.getMinutes())}`;
 }
 
 function dockerImageUsageTranslationKey(image: DockerImageSummary):

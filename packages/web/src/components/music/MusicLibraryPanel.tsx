@@ -10,7 +10,6 @@ import {
   ArrowLeft,
   ArrowUp,
   Disc3,
-  FolderPlus,
   Heart,
   ListMusic,
   LoaderCircle,
@@ -19,7 +18,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Settings2,
   Shuffle,
   SkipForward,
   Trash2,
@@ -38,7 +36,6 @@ import type {
   MusicSource,
   MusicTrack,
 } from "@cyberos/shared";
-import type { SupportedLocale } from "../../i18n/locale.js";
 import { musicRequest } from "../../lib/music-api.js";
 import { musicTime } from "../../lib/music-state.js";
 import {
@@ -46,14 +43,10 @@ import {
   PanelHeaderAction,
   PanelHeaderActions,
 } from "../workspace/PanelHeader.js";
-import {
-  StorageFilePickerDialog,
-  type StorageFilePickerPool,
-} from "../workspace/StorageFilePickerDialog.js";
-import { Switch } from "../common/Switch.js";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { SearchFilterPopover } from "../common/SearchFilterPopover.js";
 import { MusicCover } from "./MusicPlayer.js";
+import { MusicMetadataFilters } from "./MusicMetadataFilters.js";
 import { MusicDialog, MusicNameDialog } from "./MusicDialogs.js";
 import { useMusicRemote } from "./MusicProvider.js";
 import { focusMusicReorderRow } from "./music-focus.js";
@@ -96,11 +89,9 @@ const DEFAULT_FILTERS = {
 };
 
 export function MusicLibraryPanel({
-  pools,
-  locale,
+  onOpenSettings,
 }: {
-  pools: StorageFilePickerPool[];
-  locale: SupportedLocale;
+  onOpenSettings: () => void;
 }) {
   const { t } = useTranslation();
   const remote = useMusicRemote();
@@ -110,12 +101,7 @@ export function MusicLibraryPanel({
   const [search, setSearch] = useAppViewState("music.search", "");
   const [filters, setFilters] = useAppViewState("music.filters", DEFAULT_FILTERS);
   const [draftFilters, setDraftFilters] = useState(filters);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<{
-    kind: "playlist" | "source";
-    id: string;
-  } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [sources, setSources] = useState<MusicSource[]>([]);
   const [library, setLibrary] = useState<MusicLibraryStatus | null>(null);
   const [content, setContent] = useState<Content>(EMPTY);
@@ -609,8 +595,8 @@ export function MusicLibraryPanel({
             onClick={() => openDetail("album", album.id, album.title)}
           >
             <MusicCover coverKey={album.coverKey} />
-            <strong title={album.title}>{album.title}</strong>
-            <small title={album.artists.join(" · ")}>
+            <strong data-tooltip={album.title}>{album.title}</strong>
+            <small data-tooltip={album.artists.join(" · ")}>
               {album.artists.join(" · ") || t("music.unknownArtist")}
             </small>
           </button>
@@ -619,7 +605,7 @@ export function MusicLibraryPanel({
             <button
               type="button"
               aria-label={t("music.favorite")}
-              title={t("music.favorite")}
+              data-tooltip={t("music.favorite")}
               aria-pressed={album.favorite}
               disabled={busy}
               onClick={() => favorite("album", album)}
@@ -658,7 +644,7 @@ export function MusicLibraryPanel({
             disabled={busy}
             onClick={() => favorite("artist", artist)}
             aria-label={t("music.favorite")}
-            title={t("music.favorite")}
+            data-tooltip={t("music.favorite")}
             aria-pressed={artist.favorite}
           >
             <Heart size={16} fill={artist.favorite ? "currentColor" : "none"} />
@@ -689,7 +675,7 @@ export function MusicLibraryPanel({
               className="music-track-play"
               disabled={track.missing || remote.busy || loading}
               aria-label={t("music.playTrack", { title: track.title })}
-              title={t("music.playTrack", { title: track.title })}
+              data-tooltip={t("music.playTrack", { title: track.title })}
               onClick={() => play(tracks.slice(index))}
             >
               <Play size={15} />
@@ -699,7 +685,7 @@ export function MusicLibraryPanel({
               tabIndex={detail?.kind === "playlist" ? -1 : undefined}
               data-music-reorder-title=""
             >
-              <strong title={track.title}>{track.title}</strong>
+              <strong data-tooltip={track.title}>{track.title}</strong>
               <span>
                 {track.artists.join(" · ") || t("music.unknownArtist")}
                 {track.missing ? ` · ${t("music.missing")}` : ""}
@@ -708,7 +694,7 @@ export function MusicLibraryPanel({
             <button
               type="button"
               className="music-track-album"
-              title={track.album}
+              data-tooltip={track.album}
               onClick={() => openDetail("album", track.albumId, track.album)}
             >
               {track.album}
@@ -721,7 +707,7 @@ export function MusicLibraryPanel({
               disabled={busy}
               className="music-track-favorite"
               aria-label={t("music.favorite")}
-              title={t("music.favorite")}
+              data-tooltip={t("music.favorite")}
               aria-pressed={track.favorite}
               onClick={() => favorite("track", track)}
             >
@@ -738,7 +724,7 @@ export function MusicLibraryPanel({
                   onClick={() => playlistReorder(index, -1)}
                   className="music-track-reorder"
                   aria-label={t("music.moveUp")}
-                  title={t("music.moveUp")}
+                  data-tooltip={t("music.moveUp")}
                   data-music-reorder="up"
                 >
                   <ArrowUp size={14} />
@@ -749,7 +735,7 @@ export function MusicLibraryPanel({
                   onClick={() => playlistReorder(index, 1)}
                   className="music-track-reorder"
                   aria-label={t("music.moveDown")}
-                  title={t("music.moveDown")}
+                  data-tooltip={t("music.moveDown")}
                   data-music-reorder="down"
                 >
                   <ArrowDown size={14} />
@@ -767,7 +753,7 @@ export function MusicLibraryPanel({
                 }}
                 type="button"
                 aria-label={t("music.trackActions")}
-                title={t("music.trackActions")}
+                data-tooltip={t("music.trackActions")}
                 aria-expanded={rowMenu === rowKey}
                 onClick={() => setRowMenu(rowMenu === rowKey ? null : rowKey)}
               >
@@ -856,12 +842,6 @@ export function MusicLibraryPanel({
             >
               <RefreshCw size={17} />
             </PanelHeaderAction>
-            <PanelHeaderAction
-              label={t("music.sources")}
-              onClick={() => setSourcesOpen(true)}
-            >
-              <Settings2 size={17} />
-            </PanelHeaderAction>
           </PanelHeaderActions>
         }
       />
@@ -895,25 +875,14 @@ export function MusicLibraryPanel({
               onChange={(sourceId) => setDraftFilters((current) => ({ ...current, sourceId }))}
             />
           </div>
-          <div className="workspace-search-field-grid">
-            <label className="workspace-search-field">
-              <span>{t("music.year")}</span>
-              <input
-                type="number"
-                min="1"
-                max="9999"
-                value={draftFilters.year}
-                onChange={(event) => setDraftFilters((current) => ({ ...current, year: event.target.value }))}
-              />
-            </label>
-            <label className="workspace-search-field">
-              <span>{t("music.genre")}</span>
-              <input
-                value={draftFilters.genre}
-                onChange={(event) => setDraftFilters((current) => ({ ...current, genre: event.target.value }))}
-              />
-            </label>
-          </div>
+          <MusicMetadataFilters
+            sourceId={draftFilters.sourceId}
+            revision={library?.revision}
+            year={draftFilters.year}
+            genre={draftFilters.genre}
+            onYearChange={(year) => setDraftFilters((current) => ({ ...current, year }))}
+            onGenreChange={(genre) => setDraftFilters((current) => ({ ...current, genre }))}
+          />
           <div className="workspace-search-field">
             <span>{t("music.sort")}</span>
             <CustomSelect
@@ -979,7 +948,7 @@ export function MusicLibraryPanel({
           <button
             className="music-scan-warning"
             type="button"
-            onClick={() => setSourcesOpen(true)}
+            onClick={onOpenSettings}
           >
             {t("music.scanNeedsAttention")}
           </button>
@@ -1065,7 +1034,7 @@ export function MusicLibraryPanel({
                       <button
                         type="button"
                         onClick={() =>
-                          setConfirmDelete({ kind: "playlist", id: detail.id })
+                          setConfirmDelete(detail.id)
                         }
                       >
                         <Trash2 size={15} />
@@ -1249,11 +1218,9 @@ export function MusicLibraryPanel({
             <button
               className="primary-button"
               type="button"
-              onClick={() => setPickerOpen(true)}
-              disabled={!pools.length}
+              onClick={onOpenSettings}
             >
-              <FolderPlus size={16} />
-              {t("music.addSource")}
+              {t("music.manageLibrary")}
             </button>
           </div>
         ) : !loading &&
@@ -1282,102 +1249,13 @@ export function MusicLibraryPanel({
           </button>
         ) : null}
       </div>
-      {sourcesOpen ? (
-        <MusicDialog
-          title={t("music.sources")}
-          onClose={() => setSourcesOpen(false)}
-        >
-          <div className="music-source-list">
-            {sources.map((source) => (
-              <section key={source.id}>
-                <header>
-                  <strong>{source.name}</strong>
-                  <Switch
-                    checked={source.enabled}
-                    disabled={busy}
-                    onCheckedChange={(enabled) =>
-                      void action(() =>
-                        musicRequest(
-                          `/sources/${encodeURIComponent(source.id)}`,
-                          "PATCH",
-                          { enabled },
-                        ),
-                      )
-                    }
-                    label={t("music.sourceEnabled")}
-                  />
-                </header>
-                <p>{source.path}</p>
-                <div className="music-detail-actions">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void action(() =>
-                        musicRequest(
-                          `/sources/${encodeURIComponent(source.id)}/scan`,
-                          "POST",
-                        ),
-                      )
-                    }
-                  >
-                    <RefreshCw size={14} />
-                    {t("music.scan")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      setConfirmDelete({ kind: "source", id: source.id })
-                    }
-                  >
-                    <Trash2 size={14} />
-                    {t("music.remove")}
-                  </button>
-                </div>
-                {library?.scans
-                  .filter((scan) => scan.sourceId === source.id)
-                  .slice(0, 1)
-                  .map((scan) => (
-                    <p
-                      className={
-                        scan.status === "failed"
-                          ? "music-error"
-                          : "music-inline-state"
-                      }
-                      key={scan.id}
-                    >
-                      {t(`music.scanStates.${scan.status}`)} · {scan.scanned}
-                      {scan.error ? ` · ${scan.error}` : ""}
-                    </p>
-                  ))}
-              </section>
-            ))}
-          </div>
-          <footer>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={!pools.length}
-              onClick={() => setPickerOpen(true)}
-            >
-              <FolderPlus size={16} />
-              {t("music.addSource")}
-            </button>
-          </footer>
-        </MusicDialog>
-      ) : null}
       {confirmDelete ? (
         <MusicDialog
           title={t("common.actions.delete")}
           onClose={() => setConfirmDelete(null)}
         >
           <p>
-            {t(
-              confirmDelete.kind === "playlist"
-                ? "music.deletePlaylistConfirm"
-                : "music.removeSourceConfirm",
-            )}
+            {t("music.deletePlaylistConfirm")}
           </p>
           <footer>
             <button
@@ -1393,12 +1271,8 @@ export function MusicLibraryPanel({
               className="danger-button"
               onClick={() =>
                 void action(async () => {
-                  const pending = confirmDelete;
-                  await musicRequest(
-                    `/${pending.kind === "playlist" ? "playlists" : "sources"}/${encodeURIComponent(pending.id)}`,
-                    "DELETE",
-                  );
-                  if (pending.kind === "playlist") setDetail(null);
+                  await musicRequest(`/playlists/${encodeURIComponent(confirmDelete)}`, "DELETE");
+                  setDetail(null);
                   setConfirmDelete(null);
                 })
               }
@@ -1407,26 +1281,6 @@ export function MusicLibraryPanel({
             </button>
           </footer>
         </MusicDialog>
-      ) : null}
-      {pickerOpen ? (
-        <StorageFilePickerDialog
-          pools={pools}
-          initialPoolId={pools[0]?.id ?? ""}
-          locale={locale}
-          mode="directory"
-          directoryPurpose="musicLibrary"
-          onCancel={() => setPickerOpen(false)}
-          onSelect={(selection) => {
-            setPickerOpen(false);
-            void action(() =>
-              musicRequest("/sources", "POST", {
-                name: selection.name,
-                storagePoolId: selection.storagePoolId,
-                path: selection.path,
-              }),
-            );
-          }}
-        />
       ) : null}
       {nameDialog ? (
         <MusicNameDialog

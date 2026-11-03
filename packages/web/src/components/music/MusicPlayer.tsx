@@ -230,7 +230,7 @@ export function MusicPlayerDetails({
                       );
                   }}
                   aria-label={t("music.favorite")}
-                  title={t("music.favorite")}
+                  data-tooltip={t("music.favorite")}
                 >
                   <Heart
                     size={17}
@@ -248,7 +248,7 @@ export function MusicPlayerDetails({
                       shuffle: !status.shuffle,
                     })
                   }
-                  title={t("music.shuffle")}
+                  data-tooltip={t("music.shuffle")}
                   aria-label={t("music.shuffle")}
                 >
                   <Shuffle size={17} />
@@ -257,7 +257,7 @@ export function MusicPlayerDetails({
                   type="button"
                   disabled={busy}
                   aria-label={t(`music.repeat.${status.repeat}`)}
-                  title={t(`music.repeat.${status.repeat}`)}
+                  data-tooltip={t(`music.repeat.${status.repeat}`)}
                   onClick={() =>
                     void execute({
                       type: "mode",
@@ -288,7 +288,7 @@ export function MusicPlayerDetails({
                 disabled={busy || !status.queue.length}
                 onClick={() => void execute({ type: "previous" })}
                 aria-label={t("music.previous")}
-                title={t("music.previous")}
+                data-tooltip={t("music.previous")}
               >
                 <SkipBack size={20} />
               </button>
@@ -306,7 +306,7 @@ export function MusicPlayerDetails({
                 disabled={busy || !status.queue.length}
                 onClick={() => void execute({ type: "next" })}
                 aria-label={t("music.next")}
-                title={t("music.next")}
+                data-tooltip={t("music.next")}
               >
                 <SkipForward size={20} />
               </button>
@@ -463,7 +463,7 @@ export function MusicPlayerDetails({
                     <button
                       type="button"
                       aria-label={t("music.moveUp")}
-                      title={t("music.moveUp")}
+                      data-tooltip={t("music.moveUp")}
                       data-music-reorder="up"
                       disabled={busy || index === 0}
                       onClick={() => void reorder(item, -1)}
@@ -473,7 +473,7 @@ export function MusicPlayerDetails({
                     <button
                       type="button"
                       aria-label={t("music.moveDown")}
-                      title={t("music.moveDown")}
+                      data-tooltip={t("music.moveDown")}
                       data-music-reorder="down"
                       disabled={busy || index === status.queue.length - 1}
                       onClick={() => void reorder(item, 1)}
@@ -483,7 +483,7 @@ export function MusicPlayerDetails({
                     <button
                       type="button"
                       aria-label={t("music.remove")}
-                      title={t("music.remove")}
+                      data-tooltip={t("music.remove")}
                       disabled={busy}
                       onClick={() =>
                         void execute({ type: "remove", itemId: item.id })

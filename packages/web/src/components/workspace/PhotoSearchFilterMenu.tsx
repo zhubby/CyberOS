@@ -89,7 +89,7 @@ export function PhotoSearchFilterMenu({
         type="button"
         className={`photo-filter-trigger${active ? " is-active" : ""}`}
         aria-label={active ? t("workspace.photos.filtersActive") : t("workspace.photos.filters")}
-        title={t("workspace.photos.filters")}
+        data-tooltip={t("workspace.photos.filters")}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
@@ -205,7 +205,7 @@ export function PhotoSearchFilterMenu({
                 <button type="button" onClick={() => {
                   const remaining = draft.advanced?.conditions.filter((_, conditionIndex) => conditionIndex !== index) ?? [];
                   updateFilter("advanced", remaining.length ? { mode: draft.advanced?.mode ?? "all", conditions: remaining } : undefined);
-                }} title={t("workspace.photos.removeCondition")} aria-label={t("workspace.photos.removeCondition")}>
+                }} data-tooltip={t("workspace.photos.removeCondition")} aria-label={t("workspace.photos.removeCondition")}>
                   <X aria-hidden="true" size={14} />
                 </button>
               </div>

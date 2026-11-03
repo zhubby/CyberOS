@@ -530,7 +530,7 @@ export function HttpDownloaderPanel({
                   <p>{t("workspace.downloads.createDescription")}</p>
                 </div>
               </div>
-              <button type="button" className="management-icon-action" onClick={closeCreateDialog} disabled={submitting} aria-label={t("common.actions.close")} title={t("common.actions.close")}>
+              <button type="button" className="management-icon-action" onClick={closeCreateDialog} disabled={submitting} aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")}>
                 <X aria-hidden="true" size={16} />
               </button>
             </header>
@@ -646,7 +646,7 @@ export function HttpDownloaderPanel({
                 <div className="download-target-field">
                   <span>{t("workspace.downloads.targetDirectory")}</span>
                   <div className="download-target-control">
-                    <div className="download-target-value" title={target?.path ?? undefined}>
+                    <div className="download-target-value" data-tooltip={target?.path ?? undefined}>
                       <FolderOpen aria-hidden="true" size={15} />
                       <span>{target?.path ?? t("workspace.downloads.chooseDirectory")}</span>
                     </div>
@@ -783,7 +783,7 @@ export function TorrentFileSelector({
       </div>
       <div className="torrent-file-list">
         {files.map((file) => (
-          <label key={file.fileIndex} title={file.path}>
+          <label key={file.fileIndex} data-tooltip={file.path}>
             <input
               type="checkbox"
               checked={selected.has(file.fileIndex)}
@@ -834,6 +834,7 @@ export function DownloadTaskRow({
   const canCancel = task.status === "queued" || task.status === "running" || task.status === "paused";
   const canStopSeeding = task.status === "seeding";
   const canRetry = task.status === "failed" || task.status === "cancelled";
+  const canOpenDirectory = task.status === "completed" || task.status === "seeding" || Boolean(task.contentCompletedAt);
   const actionBusy = pendingAction?.endsWith(`:${task.id}`) === true;
   const retryLabel = formatRetry(task, locale, t);
   const checksumLabel = formatChecksum(task, t);
@@ -854,12 +855,12 @@ export function DownloadTaskRow({
                     : <Download size={17} />}
           </span>
           <div>
-            <strong title={task.targetFileName}>{task.targetFileName}</strong>
-            <span title={task.url}>{host}</span>
+            <strong data-tooltip={task.targetFileName}>{task.targetFileName}</strong>
+            <span data-tooltip={task.url}>{host}</span>
           </div>
           <span className="download-task-status">{t(`workspace.downloads.status.${task.status}`)}</span>
         </div>
-        <div className="download-task-path" title={task.targetPath}>{task.targetPath}</div>
+        <div className="download-task-path" data-tooltip={task.targetPath}>{task.targetPath}</div>
         <div
           className={`download-progress-track${isIndeterminate ? " is-indeterminate" : ""}`}
           data-indeterminate={isIndeterminate ? "true" : undefined}
@@ -892,11 +893,11 @@ export function DownloadTaskRow({
             ? <span>{t(`workspace.downloads.control.${task.controlRequested}`)}</span>
             : null}
           {retryLabel ? <span>{retryLabel}</span> : null}
-          {checksumLabel ? <span title={task.actualSha256 ?? task.expectedSha256 ?? undefined}>{checksumLabel}</span> : null}
+          {checksumLabel ? <span data-tooltip={task.actualSha256 ?? task.expectedSha256 ?? undefined}>{checksumLabel}</span> : null}
           {task.errorCode
-            ? <span className="download-task-error" title={task.error ?? undefined}>{t(`workspace.downloads.errorCode.${task.errorCode}`)}</span>
+            ? <span className="download-task-error" data-tooltip={task.error ?? undefined}>{t(`workspace.downloads.errorCode.${task.errorCode}`)}</span>
             : task.error
-              ? <span className="download-task-error" title={task.error}>{task.error}</span>
+              ? <span className="download-task-error" data-tooltip={task.error}>{task.error}</span>
               : null}
         </div>
       </div>
@@ -916,7 +917,9 @@ export function DownloadTaskRow({
         {canStopSeeding ? (
           <IconAction icon={<Square aria-hidden="true" size={13} />} label={t("workspace.downloads.stopSeeding")} disabled={actionBusy} busy={actionBusy} onClick={() => onAction("stop-seeding")} />
         ) : null}
-        <IconAction icon={<FolderOpen aria-hidden="true" size={14} />} label={t("workspace.downloads.openDirectory")} onClick={onOpenDirectory} />
+        {canOpenDirectory ? (
+          <IconAction icon={<FolderOpen aria-hidden="true" size={14} />} label={t("workspace.downloads.openDirectory")} onClick={onOpenDirectory} />
+        ) : null}
         {task.status !== "running" && task.status !== "seeding" ? (
           <IconAction icon={<Trash2 aria-hidden="true" size={14} />} label={t("workspace.downloads.remove")} disabled={actionBusy} busy={actionBusy} onClick={onDelete} />
         ) : null}
@@ -927,7 +930,7 @@ export function DownloadTaskRow({
 
 function IconAction({ icon, label, disabled, busy, onClick }: { icon: ReactNode; label: string; disabled?: boolean; busy?: boolean; onClick: () => void }) {
   return (
-    <button type="button" className="download-task-action" title={label} aria-label={label} aria-busy={busy || undefined} disabled={disabled} onClick={onClick}>
+    <button type="button" className="download-task-action" data-tooltip={label} aria-label={label} aria-busy={busy || undefined} disabled={disabled} onClick={onClick}>
       {icon}
     </button>
   );

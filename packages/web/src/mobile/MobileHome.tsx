@@ -1,8 +1,9 @@
-import { Bell, ChevronLeft, Grid2X2, LoaderCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Bell, LoaderCircle } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { APP_REGISTRY, MOBILE_DOCK_APPS, MOBILE_GRID_APPS, type AppDefinition, type MobileAppId } from "./apps.js";
 import { useMobileNavigation } from "./MobileNavigation.js";
+import { MobileAppHeader, useAppHeadingFocus } from "./MobileAppHeader.js";
 
 export type ConnectionState = "connecting" | "online" | "offline";
 
@@ -101,27 +102,6 @@ export function MobileDock({ approvalCount, onOpenApp }: { approvalCount: number
   return <nav className="mobile-home-dock" aria-label={t("mobile.dock")}>{MOBILE_DOCK_APPS.map((app) => <AppButton key={app.id} app={app} approvalCount={approvalCount} onOpenApp={onOpenApp} />)}</nav>;
 }
 
-export function MobileAppControls({ control }: { control?: "back" | "home" }) {
-  const navigation = useMobileNavigation();
-  const { t } = useTranslation();
-  if (!navigation?.compact) return null;
-  return <>
-    {control !== "home" ? <button type="button" className="mobile-app-back" aria-label={t("mobile.back")} title={t("mobile.back")} onClick={navigation.goBack}><ChevronLeft size={22} aria-hidden="true" /></button> : null}
-    {control !== "back" ? <button type="button" className="mobile-app-home" aria-label={t("mobile.home")} title={t("mobile.home")} onClick={navigation.goHome}><Grid2X2 size={20} aria-hidden="true" /></button> : null}
-  </>;
-}
-
-export function useAppHeadingFocus() {
-  const navigation = useMobileNavigation();
-  const ref = useRef<HTMLHeadingElement | null>(null);
-  useEffect(() => {
-    if (!navigation?.compact) return;
-    const frame = window.requestAnimationFrame(() => ref.current?.focus({ preventScroll: true }));
-    return () => window.cancelAnimationFrame(frame);
-  }, [navigation?.compact, navigation?.route]);
-  return ref;
-}
-
 export function MobileAppLoading({ app, className = "" }: { app: MobileAppId; className?: string }) {
   const { t } = useTranslation();
   const compact = useMobileNavigation()?.compact ?? false;
@@ -129,11 +109,7 @@ export function MobileAppLoading({ app, className = "" }: { app: MobileAppId; cl
   const definition = APP_REGISTRY.find((item) => item.id === app)!;
   return (
     <section className={`mobile-app-loading ${className}`}>
-      {compact ? <header className="management-header app-titlebar">
-        <MobileAppControls control="back" />
-        <div className="management-title-copy"><h2 ref={headingRef} tabIndex={-1}>{t(definition.labelKey)}</h2></div>
-        <MobileAppControls control="home" />
-      </header> : null}
+      {compact ? <MobileAppHeader icon={<definition.Icon size={20} />} title={t(definition.labelKey)} subtitle={t("status.loading")} headingRef={headingRef} /> : null}
       <div className="mobile-loading-status" role="status"><LoaderCircle className="spin" aria-hidden="true" />{t("status.loading")}</div>
     </section>
   );

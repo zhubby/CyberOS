@@ -737,12 +737,14 @@ describe("core repositories", () => {
     const { updatedAt: _updatedAt, ...defaultValues } = defaults;
     expect(defaults).toMatchObject({ concurrency: 1 });
 
-    expect(saveDownloadSettings(db, { ...defaultValues, concurrency: 3 })).toMatchObject({
-      concurrency: 3
-    });
-    expect(getDownloadSettings(db)).toMatchObject({ concurrency: 3 });
-    expect(() => saveDownloadSettings(db, { ...defaultValues, concurrency: 0 })).toThrow(/between 1 and 3/);
-    expect(() => saveDownloadSettings(db, { ...defaultValues, concurrency: 4 })).toThrow(/between 1 and 3/);
+    for (let concurrency = 1; concurrency <= 10; concurrency += 1) {
+      expect(saveDownloadSettings(db, { ...defaultValues, concurrency })).toMatchObject({ concurrency });
+      expect(getDownloadSettings(db)).toMatchObject({ concurrency });
+    }
+    for (const concurrency of [0, 11, 1.5]) {
+      expect(() => saveDownloadSettings(db, { ...defaultValues, concurrency })).toThrow(/between 1 and 10/);
+      expect(getDownloadSettings(db)).toMatchObject({ concurrency: 10 });
+    }
 
     db.prepare("UPDATE system_settings SET value_json = ? WHERE key = 'download_settings'")
       .run(JSON.stringify({ concurrency: 2 }));

@@ -1,0 +1,34 @@
+.hud-tooltip {
+  position: fixed;
+  z-index: 10000;
+  width: max-content;
+  max-width: min(360px, calc(100dvw - 16px));
+  max-height: calc(100dvh - 16px);
+  padding: 7px 10px;
+  overflow: auto;
+  border: 1px solid var(--cyberos-color-border);
+  border-left: 2px solid var(--cyberos-color-command);
+  border-radius: 0;
+  color: var(--cyberos-color-text);
+  background: var(--cyberos-color-surface-strong);
+  box-shadow: 3px 3px 0 rgb(255 0 60 / 28%);
+  font-family: var(--cyberos-font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  pointer-events: auto;
+  animation: hud-tooltip-enter 140ms ease-out both;
+}
+
+@keyframes hud-tooltip-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-tooltip {
+    animation: none;
+  }
+}

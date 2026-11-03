@@ -106,7 +106,7 @@ function StatusIcon({ tone, label }: { tone: StatusTone; label: string }) {
         : CircleHelp;
 
   return (
-    <span className="management-row-status-icon" data-state={tone} title={label} aria-label={label}>
+    <span className="management-row-status-icon" data-state={tone} data-tooltip={label} aria-label={label}>
       <Icon aria-hidden="true" size={17} strokeWidth={2.2} />
     </span>
   );
@@ -283,7 +283,7 @@ export function SystemNetworkManagementPanel({
                       <div>
                         <span className="management-status-pill" data-state={systemStatusTone(status, loading, error)}>{systemStatusLabel(status, loading, error, translate)}</span>
                         <h3>{t("workspace.management.network.title")}</h3>
-                        <p title={systemDiagnosticTitle(error, summary?.issues)}>{networkStatusDetail(summary, loading, error, translate)}</p>
+                        <p data-tooltip={systemDiagnosticTitle(error, summary?.issues)}>{networkStatusDetail(summary, loading, error, translate)}</p>
                       </div>
                       <dl className="management-fact-list">
                         <Fact label={t("workspace.management.network.facts.backend")} value={summary?.capabilities.backend ?? t("common.dash")} />
@@ -356,11 +356,11 @@ export function SystemNetworkManagementPanel({
                           <thead><tr><th>{t("workspace.management.columns.name")}</th><th>{t("workspace.management.columns.status")}</th><th>{t("workspace.management.network.columns.kind")}</th><th>{t("workspace.management.network.columns.addresses")}</th><th>{t("workspace.management.network.columns.mac")}</th><th>{t("workspace.management.network.columns.speed")}</th><th>{t("workspace.management.network.columns.mtu")}</th><th>{t("workspace.management.network.columns.defaultRoute")}</th></tr></thead>
                           <tbody>{interfaces.map((networkInterface) => (
                             <tr key={networkInterface.id}>
-                              <td title={networkInterface.name}><button type="button" className="network-interface-name-button" onClick={() => setSelectedInterfaceId(networkInterface.id)} aria-label={t("workspace.management.network.openInterfaceDetails", { name: networkInterface.name })}>{networkInterface.name}</button></td>
+                              <td data-tooltip={networkInterface.name}><button type="button" className="network-interface-name-button" onClick={() => setSelectedInterfaceId(networkInterface.id)} aria-label={t("workspace.management.network.openInterfaceDetails", { name: networkInterface.name })}>{networkInterface.name}</button></td>
                               <td><StatusIcon tone={networkInterfaceTone(networkInterface)} label={networkInterfaceStateLabel(networkInterface, translate)} /></td>
                               <td>{translate(`workspace.management.network.kinds.${networkInterface.kind}`)}</td>
-                              <td title={formatAddresses(networkInterface)}>{formatAddresses(networkInterface)}</td>
-                              <td title={networkInterface.mac ?? t("common.dash")}>{networkInterface.mac ?? t("common.dash")}</td>
+                              <td data-tooltip={formatAddresses(networkInterface)}>{formatAddresses(networkInterface)}</td>
+                              <td data-tooltip={networkInterface.mac ?? t("common.dash")}>{networkInterface.mac ?? t("common.dash")}</td>
                               <td>{formatSpeed(networkInterface.speedMbps, locale, translate)}</td>
                               <td>{formatNullableNumber(networkInterface.mtu, locale, translate)}</td>
                               <td>{networkInterface.hasDefaultRoute ? translate("common.yes") : translate("common.no")}</td>
@@ -672,7 +672,7 @@ export function SystemStorageManagementPanel({
                       <div>
                         <span className="management-status-pill" data-state={systemStatusTone(status, loading, error)}>{systemStatusLabel(status, loading, error, translate)}</span>
                         <h3>{t("workspace.management.storage.title")}</h3>
-                        <p title={systemDiagnosticTitle(error, summary?.issues)}>{storageStatusDetail(summary, loading, error, translate)}</p>
+                        <p data-tooltip={systemDiagnosticTitle(error, summary?.issues)}>{storageStatusDetail(summary, loading, error, translate)}</p>
                       </div>
                       <dl className="management-fact-list">
                         <Fact label={t("workspace.management.storage.facts.backend")} value="mdadm" />
@@ -704,12 +704,12 @@ export function SystemStorageManagementPanel({
                           <thead><tr><th>{t("workspace.management.columns.name")}</th><th>{t("workspace.management.columns.status")}</th><th>{t("workspace.management.storage.columns.raid")}</th><th>{t("workspace.management.storage.columns.usage")}</th><th>{t("workspace.management.storage.columns.mount")}</th><th>{t("workspace.management.storage.columns.members")}</th></tr></thead>
                           <tbody>{pools.map((pool) => (
                             <tr key={pool.id}>
-                              <td title={pool.name}><button type="button" className="storage-pool-name-button" onClick={() => openPoolDetails(pool)} aria-label={t("workspace.management.storage.openPoolDetails", { name: pool.name })}>{pool.name}</button></td>
+                              <td data-tooltip={pool.name}><button type="button" className="storage-pool-name-button" onClick={() => openPoolDetails(pool)} aria-label={t("workspace.management.storage.openPoolDetails", { name: pool.name })}>{pool.name}</button></td>
                               <td><StatusIcon tone={storagePoolTone(pool)} label={storagePoolStatusLabel(pool, translate)} /></td>
-                              <td title={pool.raidPath}>{pool.raidLevel ?? t("common.dash")}</td>
+                              <td data-tooltip={pool.raidPath}>{pool.raidLevel ?? t("common.dash")}</td>
                               <td>{formatStorageUsage(pool, locale, translate)}</td>
-                              <td title={pool.mountpoint ?? t("common.dash")}>{pool.mountpoint ?? t("common.dash")}</td>
-                              <td title={pool.memberDevices.join(", ")}>{pool.memberDevices.length}</td>
+                              <td data-tooltip={pool.mountpoint ?? t("common.dash")}>{pool.mountpoint ?? t("common.dash")}</td>
+                              <td data-tooltip={pool.memberDevices.join(", ")}>{pool.memberDevices.length}</td>
                             </tr>
                           ))}</tbody>
                         </table>
@@ -764,7 +764,7 @@ export function SystemStorageManagementPanel({
             <header>
               <div className="storage-pool-details-heading">
                 <span className="eyebrow">{t("workspace.management.storage.detailsEyebrow")}</span>
-                <h2 id="storage-pool-details-title" title={selectedPool.name}>{selectedPool.name}</h2>
+                <h2 id="storage-pool-details-title" data-tooltip={selectedPool.name}>{selectedPool.name}</h2>
                 <span className="management-row-status" data-state={storagePoolTone(selectedPool)}>
                   {storagePoolStatusLabel(selectedPool, translate)}
                 </span>
@@ -774,7 +774,7 @@ export function SystemStorageManagementPanel({
                 className="management-icon-action"
                 onClick={closePoolDetails}
                 disabled={deleting}
-                title={t("common.actions.cancel")}
+                data-tooltip={t("common.actions.cancel")}
                 aria-label={t("common.actions.cancel")}
               >
                 <X aria-hidden="true" size={15} />
@@ -914,7 +914,7 @@ export function SystemStorageManagementPanel({
                 className="management-icon-action"
                 onClick={closeCreateModal}
                 disabled={submitting}
-                title={t("common.actions.cancel")}
+                data-tooltip={t("common.actions.cancel")}
                 aria-label={t("common.actions.cancel")}
               >
                 <X aria-hidden="true" size={15} />
@@ -1141,7 +1141,7 @@ function SmartStatusChart({
       data-state={tone}
       role="img"
       aria-label={label}
-      title={label}
+      data-tooltip={label}
     >
       <ResponsiveContainer width="100%" height="100%">
         <RadialBarChart
@@ -1234,7 +1234,7 @@ function StorageDiskDetailsModal({
             type="button"
             className="management-icon-action"
             onClick={onClose}
-            title={t("common.actions.cancel")}
+            data-tooltip={t("common.actions.cancel")}
             aria-label={t("common.actions.cancel")}
           >
             <X aria-hidden="true" size={15} />
@@ -1385,11 +1385,11 @@ function SmartAttributesTable({ disk, locale, t }: { disk: StorageDisk; locale: 
             {attributes.map((attribute, index) => (
               <tr key={`${attribute.id ?? "attribute"}-${attribute.name}-${index}`} data-state={attribute.whenFailed ? "danger" : "ready"}>
                 <td>{formatNullableNumber(attribute.id, locale, t)}</td>
-                <td title={attribute.name}>{attribute.name}</td>
+                <td data-tooltip={attribute.name}>{attribute.name}</td>
                 <td>{formatNullableNumber(attribute.current, locale, t)}</td>
                 <td>{formatNullableNumber(attribute.worst, locale, t)}</td>
                 <td>{formatNullableNumber(attribute.threshold, locale, t)}</td>
-                <td title={attribute.raw ?? t("common.dash")}>{attribute.raw ?? t("common.dash")}</td>
+                <td data-tooltip={attribute.raw ?? t("common.dash")}>{attribute.raw ?? t("common.dash")}</td>
                 <td>{attribute.flags ?? t("common.dash")}</td>
                 <td>{attribute.whenFailed ?? t("common.dash")}</td>
               </tr>
@@ -1469,10 +1469,10 @@ function DiskPartitionsTable({ disk, locale, t }: { disk: StorageDisk; locale: S
             <tbody>
               {disk.partitions.map((partition) => (
                 <tr key={partition.id}>
-                  <td title={partition.path}>{partition.path}</td>
+                  <td data-tooltip={partition.path}>{partition.path}</td>
                   <td>{partition.filesystem ?? t("common.dash")}</td>
                   <td>{formatNullableBytes(partition.sizeBytes, locale, t)}</td>
-                  <td title={partition.mountpoints.join(", ")}>{partition.mountpoints.join(", ") || t("common.dash")}</td>
+                  <td data-tooltip={partition.mountpoints.join(", ")}>{partition.mountpoints.join(", ") || t("common.dash")}</td>
                 </tr>
               ))}
             </tbody>
@@ -1489,7 +1489,7 @@ function StoragePoolDetailFact({ label, value }: { label: string; value: string 
   return (
     <div>
       <span>{label}</span>
-      <strong title={value}>{value}</strong>
+      <strong data-tooltip={value}>{value}</strong>
     </div>
   );
 }
@@ -1502,7 +1502,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt>{label}</dt>
-      <dd title={value}>{value}</dd>
+      <dd data-tooltip={value}>{value}</dd>
     </div>
   );
 }
@@ -1765,7 +1765,7 @@ function NetworkRouteRow({ route }: { route: NetworkRoute }) {
       {statusIcon(tone)}
       <div>
         <strong>{route.destination}</strong>
-        <span title={target}>{target}</span>
+        <span data-tooltip={target}>{target}</span>
       </div>
       <em data-state={tone}>{isDefault ? t("workspace.management.network.defaultRoute") : route.family}</em>
       <small>{route.device ?? t("common.dash")}</small>
@@ -1841,7 +1841,7 @@ function NetworkInterfaceDetailsModal({
             className="management-icon-action"
             onClick={onClose}
             autoFocus
-            title={t("common.actions.cancel")}
+            data-tooltip={t("common.actions.cancel")}
             aria-label={t("common.actions.cancel")}
           >
             <X aria-hidden="true" size={15} />
@@ -1882,7 +1882,7 @@ function NetworkInterfaceDetailsModal({
                     <article key={`${address.family}-${address.address}-${index}`}>
                       <span className="network-interface-family">{address.family}</span>
                       <div>
-                        <strong title={address.cidr ?? address.address}>{address.cidr ?? address.address}</strong>
+                        <strong data-tooltip={address.cidr ?? address.address}>{address.cidr ?? address.address}</strong>
                         <span>{[address.scope, address.label].filter(Boolean).join(" · ") || t("common.dash")}</span>
                       </div>
                     </article>
@@ -1907,8 +1907,8 @@ function NetworkInterfaceDetailsModal({
                     <article key={`${route.destination}-${route.gateway}-${index}`}>
                       <Route aria-hidden="true" size={15} />
                       <div>
-                        <strong title={route.destination}>{route.destination}</strong>
-                        <span title={route.gateway ?? route.preferredSource ?? t("common.dash")}>
+                        <strong data-tooltip={route.destination}>{route.destination}</strong>
+                        <span data-tooltip={route.gateway ?? route.preferredSource ?? t("common.dash")}>
                           {route.gateway ?? route.preferredSource ?? t("common.dash")}
                         </span>
                       </div>
@@ -1968,11 +1968,11 @@ function StorageDiskRow({
           >
             {disk.path}
           </button>
-          <span title={model}>{model}</span>
+          <span data-tooltip={model}>{model}</span>
         </div>
       </div>
       <SmartStatusChart health={disk.smart.health} t={translate} />
-      <small title={formatNullableBytes(disk.sizeBytes, locale, translate)}>
+      <small data-tooltip={formatNullableBytes(disk.sizeBytes, locale, translate)}>
         {formatNullableBytes(disk.sizeBytes, locale, translate)}
       </small>
     </article>
@@ -2200,7 +2200,7 @@ export function StorageHealthCharts({
               <div className="storage-health-pool-track" role="list" aria-label={t("workspace.management.storage.healthPoolsChartLabel")}>
                 {pools.map((pool) => {
                   const label = `${pool.name}: ${storagePoolStatusLabel(pool, t)}`;
-                  return <span key={pool.id} role="listitem" data-state={storagePoolTone(pool)} aria-label={label} title={label} />;
+                  return <span key={pool.id} role="listitem" data-state={storagePoolTone(pool)} aria-label={label} data-tooltip={label} />;
                 })}
               </div>
             ) : <div className="storage-health-pool-empty">{t("workspace.management.storage.noPools")}</div>}

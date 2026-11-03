@@ -18,6 +18,7 @@ import {
   getMusicTrack,
   listMusicAlbums,
   listMusicArtists,
+  listMusicFilterOptions,
   listMusicPlaylists,
   listMusicScans,
   listMusicSources,
@@ -269,6 +270,15 @@ export function registerMusicRoutes(
   server.get("/api/music/status", async () => ({
     status: getMusicLibraryStatus(db)
   }));
+  server.get<{ Querystring: Input }>("/api/music/filter-options", async (request, reply) =>
+    guarded(reply, () => {
+      only(request.query, ["sourceId"]);
+      const sourceId = request.query.sourceId === undefined
+        ? undefined
+        : text(request.query.sourceId, "sourceId", 512);
+      return listMusicFilterOptions(db, sourceId);
+    })
+  );
   server.get("/api/music/home", async () => getMusicHome(db));
   server.get<{
     Querystring: Input;

@@ -1,5 +1,5 @@
 import { ModalPortal } from "../common/ModalPortal.js";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import {
   ArrowUp,
   Check,
@@ -42,6 +42,8 @@ export function StorageFilePickerDialog({
   boundaryPath,
   directorySelectionDisabled,
   directorySelectionDisabledReason,
+  loadEntries,
+  returnFocusRef,
   onCancel,
   onSelect,
   onSelectMany,
@@ -51,11 +53,13 @@ export function StorageFilePickerDialog({
   initialPoolId: string;
   locale: SupportedLocale;
   mode?: "iso" | "directory" | "files" | "skill-zip";
-  directoryPurpose?: "downloads" | "photoLibrary" | "photoMove" | "fileMove" | "bluetoothInbox" | "mediaLibrary" | "musicLibrary";
+  directoryPurpose?: "downloads" | "photoLibrary" | "photoMove" | "fileMove" | "bluetoothInbox" | "mediaLibrary" | "musicLibrary" | "backupRepository";
   initialPath?: string;
   boundaryPath?: string;
   directorySelectionDisabled?: (path: string) => boolean;
   directorySelectionDisabledReason?: string;
+  loadEntries?: (rootId: string, directory: string) => Promise<FileEntry[]>;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   onCancel: () => void;
   onSelect: (selection: StorageFileSelection) => void;
   onSelectMany?: (selections: StorageFileSelection[]) => void;
@@ -81,7 +85,10 @@ export function StorageFilePickerDialog({
   const [createFolderSubmitting, setCreateFolderSubmitting] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const loadRequestId = useRef(0);
-  const directoryCopy = directoryPurpose === "musicLibrary"
+  const backupPicker = directoryPurpose === "backupRepository";
+  const directoryCopy = backupPicker
+    ? { eyebrow: t("settings.backup.repository"), title: t("settings.backup.pickerTitle"), description: t("settings.backup.pickerDescription"), list: t("settings.backup.pickerList"), empty: t("settings.backup.pickerEmpty"), select: t("settings.backup.useDirectory") }
+    : directoryPurpose === "musicLibrary"
     ? { eyebrow: t("music.pickerEyebrow"), title: t("music.pickerTitle"), description: t("music.pickerDescription"), list: t("music.pickerList"), empty: t("music.pickerEmpty"), select: t("music.useDirectory") }
     : directoryPurpose === "bluetoothInbox"
     ? {
@@ -176,7 +183,9 @@ export function StorageFilePickerDialog({
     setLoading(true);
     setError(null);
     try {
-      const listing = await getFiles(selectedPool.id, currentPath);
+      const listing = loadEntries
+        ? { entries: await loadEntries(selectedPool.id, currentPath) }
+        : await getFiles(selectedPool.id, currentPath);
       if (requestId !== loadRequestId.current) return;
       setEntries(listing.entries.filter((entry) => mode === "directory"
         ? isDirectoryPickerEntry(entry)
@@ -192,7 +201,7 @@ export function StorageFilePickerDialog({
     } finally {
       if (requestId === loadRequestId.current) setLoading(false);
     }
-  }, [currentPath, mode, selectedPool]);
+  }, [currentPath, loadEntries, mode, selectedPool]);
 
   useEffect(() => {
     void loadDirectory();
@@ -207,11 +216,12 @@ export function StorageFilePickerDialog({
     const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
     return () => {
       window.cancelAnimationFrame(frame);
-      if (previouslyFocused?.isConnected) {
-        window.requestAnimationFrame(() => previouslyFocused.focus());
+      const focusTarget = returnFocusRef?.current ?? previouslyFocused;
+      if (focusTarget?.isConnected) {
+        window.requestAnimationFrame(() => focusTarget.focus());
       }
     };
-  }, []);
+  }, [returnFocusRef]);
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -371,7 +381,7 @@ export function StorageFilePickerDialog({
             aria-label={mode === "directory"
               ? t("common.actions.close")
               : t("workspace.management.virtualMachines.isoPickerClose")}
-            title={mode === "directory"
+            data-tooltip={mode === "directory"
               ? t("common.actions.close")
               : t("workspace.management.virtualMachines.isoPickerClose")}
           >
@@ -382,14 +392,14 @@ export function StorageFilePickerDialog({
         <div className="storage-file-picker-layout">
           <aside className="storage-file-picker-pools">
             <div className="storage-file-picker-pools-heading">
-              <span>{t("workspace.storagePoolLabel")}</span>
-              <small>{t("workspace.selectStoragePoolBody")}</small>
+              <span>{backupPicker ? t("settings.backup.locations") : t("workspace.storagePoolLabel")}</span>
+              <small>{backupPicker ? t("settings.backup.locationsHelp") : t("workspace.selectStoragePoolBody")}</small>
             </div>
-            <div className="storage-file-picker-pool-list" role="listbox" aria-label={t("workspace.storagePoolLabel")}>
+            <div className="storage-file-picker-pool-list" role="listbox" aria-label={backupPicker ? t("settings.backup.locations") : t("workspace.storagePoolLabel")}>
               {availablePools.length === 0 ? (
                 <div className="storage-file-picker-pool-empty">
                   <HardDrive aria-hidden="true" size={18} />
-                  <span>{t("workspace.management.virtualMachines.isoPickerNoPools")}</span>
+                  <span>{backupPicker ? t("settings.backup.noLocations") : t("workspace.management.virtualMachines.isoPickerNoPools")}</span>
                 </div>
               ) : (
                 availablePools.map((pool) => (
@@ -446,15 +456,15 @@ export function StorageFilePickerDialog({
                         aria-label={t("workspace.actions.folderName")}
                         disabled={createFolderSubmitting}
                       />
-                      <button type="submit" disabled={createFolderSubmitting || !createFolderName.trim()} aria-busy={createFolderSubmitting || undefined} title={t("workspace.downloads.requestCreateFolder")} aria-label={t("workspace.downloads.requestCreateFolder")}>
+                      <button type="submit" disabled={createFolderSubmitting || !createFolderName.trim()} aria-busy={createFolderSubmitting || undefined} data-tooltip={t("workspace.downloads.requestCreateFolder")} aria-label={t("workspace.downloads.requestCreateFolder")}>
                         {createFolderSubmitting ? <LoaderCircle className="is-spinning" aria-hidden="true" size={14} /> : <Check aria-hidden="true" size={14} />}
                       </button>
-                      <button type="button" onClick={() => { setCreateFolderOpen(false); setCreateFolderName(""); }} disabled={createFolderSubmitting} title={t("common.actions.cancel")} aria-label={t("common.actions.cancel")}>
+                      <button type="button" onClick={() => { setCreateFolderOpen(false); setCreateFolderName(""); }} disabled={createFolderSubmitting} data-tooltip={t("common.actions.cancel")} aria-label={t("common.actions.cancel")}>
                         <X aria-hidden="true" size={14} />
                       </button>
                     </form>
                   ) : (
-                    <button type="button" className="storage-file-picker-create-folder-trigger" onClick={() => setCreateFolderOpen(true)} disabled={!selectedPool || loading} title={t("workspace.downloads.newFolder")} aria-label={t("workspace.downloads.newFolder")}>
+                    <button type="button" className="storage-file-picker-create-folder-trigger" onClick={() => setCreateFolderOpen(true)} disabled={!selectedPool || loading} data-tooltip={t("workspace.downloads.newFolder")} aria-label={t("workspace.downloads.newFolder")}>
                       <FolderPlus aria-hidden="true" size={15} />
                       <span>{t("workspace.downloads.newFolder")}</span>
                     </button>
@@ -465,7 +475,7 @@ export function StorageFilePickerDialog({
                   className="storage-file-picker-up"
                   onClick={() => selectedPool && openDirectory(parentPickerPath(pickerRootPath, currentPath))}
                   disabled={!selectedPool || currentPath === pickerRootPath || loading}
-                  title={t("common.actions.up")}
+                  data-tooltip={t("common.actions.up")}
                   aria-label={t("common.actions.up")}
                 >
                   <ArrowUp aria-hidden="true" size={15} />
@@ -541,9 +551,9 @@ export function StorageFilePickerDialog({
 
         <footer className="storage-file-picker-footer">
           {mode === "directory" ? (
-            <span title={currentPath}>{currentPath}</span>
+            <span data-tooltip={currentPath}>{currentPath}</span>
           ) : (
-            <span title={selection?.path}>{mode === "files"
+            <span data-tooltip={selection?.path}>{mode === "files"
               ? multiSelection.length > 0
                 ? t("settings.bluetooth.transfers.filesSelected", { count: multiSelection.length })
                 : activeFileCopy.none
@@ -555,8 +565,8 @@ export function StorageFilePickerDialog({
               type="button"
               className="vm-create-submit"
               onClick={confirmSelection}
-              disabled={currentDirectoryDisabled || (mode === "files" ? multiSelection.length === 0 : mode !== "directory" && !selection)}
-              title={currentDirectoryDisabled ? directorySelectionDisabledReason : undefined}
+              disabled={!selectedPool || loading || Boolean(error) || currentDirectoryDisabled || (mode === "files" ? multiSelection.length === 0 : mode !== "directory" && !selection)}
+              data-tooltip={currentDirectoryDisabled ? directorySelectionDisabledReason : undefined}
             >
               {mode === "directory" ? directoryCopy.select : activeFileCopy.select}
             </button>

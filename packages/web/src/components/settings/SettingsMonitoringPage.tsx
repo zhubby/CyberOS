@@ -7,6 +7,7 @@ import {
   type MonitoringSettings
 } from "../../api.js";
 import { Switch } from "../common/Switch.js";
+import { HelpLabel } from "../common/HelpTip.js";
 
 const MIB = 1024 * 1024;
 
@@ -69,7 +70,7 @@ export function SettingsMonitoringContent({
       {form ? <div className="settings-page-grid">
         <section className="settings-section-card settings-field-wide">
           <header><div><h3>{t("settings.monitoring.title")}</h3><p>{t("settings.monitoring.description")}</p></div><Activity size={18} aria-hidden="true" /></header>
-          <div className="settings-switch-row"><div><strong>{t("settings.monitoring.enabled")}</strong><span>{t("settings.monitoring.enabledDescription")}</span></div><Switch checked={form.enabled} disabled={busy} ariaLabel={t("settings.monitoring.enabled")} onCheckedChange={(enabled) => onFormChange({ ...form, enabled })} /></div>
+          <div className="settings-switch-row"><strong><HelpLabel label={t("settings.monitoring.enabled")} content={t("settings.monitoring.enabledDescription")} /></strong><Switch checked={form.enabled} disabled={busy} ariaLabel={t("settings.monitoring.enabled")} onCheckedChange={(enabled) => onFormChange({ ...form, enabled })} /></div>
           <fieldset className="settings-field-grid" disabled={busy}>
             <NumberField label={t("settings.monitoring.rawRetention")} value={form.rawRetentionDays} min={1} max={14} onChange={(rawRetentionDays) => onFormChange({ ...form, rawRetentionDays })} />
             <NumberField label={t("settings.monitoring.minuteRetention")} value={form.minuteRetentionDays} min={7} max={180} onChange={(minuteRetentionDays) => onFormChange({ ...form, minuteRetentionDays })} />

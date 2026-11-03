@@ -10,6 +10,7 @@ beforeAll(async () => {
 });
 
 const handlers = {
+  onChooseRepository: vi.fn(),
   onFormChange: vi.fn(),
   onPasswordChange: vi.fn(),
   onSubmit: vi.fn(),
@@ -46,6 +47,9 @@ describe("SettingsBackupContent", () => {
     expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/u);
     expect(html).not.toContain('class="hud-switch-copy"');
     expect(html).not.toContain("restic-password");
+    expect(html).toContain('aria-label="Choose directory"');
+    expect(html).toContain('class="settings-backup-repository-path">/cyberos/backup</span>');
+    expect(html).not.toContain('value="/cyberos/backup"');
   });
 
   it("disables credential-dependent actions when no password is configured", () => {

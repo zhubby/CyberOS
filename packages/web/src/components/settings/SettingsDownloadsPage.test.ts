@@ -12,7 +12,7 @@ describe("SettingsDownloadsPage", () => {
   it("exposes concurrency, segmentation, retry, timeout, and storage reliability settings", () => {
     const html = renderToStaticMarkup(createElement(SettingsDownloadsPage, {
       settings: {
-        concurrency: 1,
+        concurrency: 10,
         parallelRequestsPerTask: 4,
         segmentedDownloadMinBytes: 64 * 1024 * 1024,
         maxAutoRetries: 5,
@@ -31,6 +31,7 @@ describe("SettingsDownloadsPage", () => {
       onClose: vi.fn()
     }));
 
+    expect(html).toContain("10 connection");
     expect(html).toContain("Range requests per task");
     expect(html).toContain("Segmentation threshold (bytes)");
     expect(html).toContain("Maximum automatic retries");

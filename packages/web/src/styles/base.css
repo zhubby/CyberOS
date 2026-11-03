@@ -64,6 +64,8 @@
   --subtle-bg-strong: rgb(244 236 231 / 8%);
   --subtle-bg-inverse: rgb(244 236 231 / 6%);
   --subtle-border-inverse: var(--cyberos-color-border);
+  --skeleton-base: color-mix(in srgb, var(--text) 14%, var(--surface));
+  --skeleton-highlight: color-mix(in srgb, var(--text) 28%, var(--surface));
   --table-border: var(--cyberos-color-border);
   --hover-wash: var(--cyberos-hud-cyan-wash);
   --control-overlay: rgb(244 236 231 / 8%);

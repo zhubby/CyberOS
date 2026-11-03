@@ -450,18 +450,20 @@ describe("download API", () => {
     expect(initial.statusCode).toBe(200);
     expect(initial.json().settings.concurrency).toBe(1);
 
-    const invalid = await app.inject({
-      method: "PATCH",
-      url: "/api/settings/downloads",
-      payload: { concurrency: 4 }
-    });
-    expect(invalid.statusCode).toBe(400);
+    for (const concurrency of [0, 11, 1.5]) {
+      const invalid = await app.inject({
+        method: "PATCH",
+        url: "/api/settings/downloads",
+        payload: { concurrency }
+      });
+      expect(invalid.statusCode).toBe(400);
+    }
 
     const updated = await app.inject({
       method: "PATCH",
       url: "/api/settings/downloads",
       payload: {
-        concurrency: 3,
+        concurrency: 10,
         parallelRequestsPerTask: 8,
         segmentedDownloadMinBytes: 128 * 1024 * 1024,
         maxAutoRetries: 9,
@@ -477,7 +479,7 @@ describe("download API", () => {
     });
     expect(updated.statusCode).toBe(200);
     expect(updated.json().settings).toMatchObject({
-      concurrency: 3,
+      concurrency: 10,
       parallelRequestsPerTask: 8,
       segmentedDownloadMinBytes: 128 * 1024 * 1024,
       maxAutoRetries: 9,
@@ -490,6 +492,9 @@ describe("download API", () => {
       minFreeSpaceBytes: 1024 * 1024 * 1024,
       maxFileSizeBytes: 4 * 1024 * 1024 * 1024
     });
+    const stored = await app.inject({ method: "GET", url: "/api/settings/downloads" });
+    expect(stored.statusCode).toBe(200);
+    expect(stored.json().settings.concurrency).toBe(10);
 
     await app.close();
   });

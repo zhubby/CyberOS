@@ -81,7 +81,7 @@ export function FilePreviewDialog({
         <header className="file-preview-header">
           <div className="file-preview-title">
             <span className="eyebrow">{t("workspace.preview")}</span>
-            <h2 id="file-preview-title" title={title}>{title || t("workspace.selectFile")}</h2>
+            <h2 id="file-preview-title" data-tooltip={title}>{title || t("workspace.selectFile")}</h2>
           </div>
           <div className="file-preview-actions">
             {meta ? (
@@ -96,7 +96,7 @@ export function FilePreviewDialog({
               className="preview-tool-button"
               onClick={requestClose}
               disabled={closing}
-              title={t("common.actions.close")}
+              data-tooltip={t("common.actions.close")}
               aria-label={t("common.actions.close")}
             >
               <X aria-hidden="true" size={15} />

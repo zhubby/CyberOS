@@ -1,10 +1,12 @@
 import { useRef } from "react";
 import { Undo2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { HelpLabel } from "../common/HelpTip.js";
 
 export function SettingsSecretField({
   id,
   label,
+  help,
   value,
   configured,
   clearSaved,
@@ -14,6 +16,7 @@ export function SettingsSecretField({
 }: {
   id: string;
   label: string;
+  help?: string;
   value: string;
   configured: boolean;
   clearSaved: boolean;
@@ -29,7 +32,7 @@ export function SettingsSecretField({
 
   return (
     <div className="settings-field-wide settings-secret-field">
-      <label htmlFor={id}><span>{label}</span></label>
+      {help ? <HelpLabel htmlFor={id} label={label} content={help} /> : <label htmlFor={id}><span>{label}</span></label>}
       <div className="settings-secret-input" data-clear-pending={clearSaved || undefined}>
         <input
           ref={inputRef}
@@ -45,7 +48,7 @@ export function SettingsSecretField({
           className="settings-icon-button settings-secret-action"
           type="button"
           aria-label={actionLabel}
-          title={actionLabel}
+          data-tooltip={actionLabel}
           aria-pressed={clearSaved}
           disabled={!configured && !value && !clearSaved}
           onClick={() => {

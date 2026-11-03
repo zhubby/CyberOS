@@ -260,7 +260,7 @@ export function PhotoMapView({
       <div className="photo-map-toolbar">
         <span>{mapLabel}</span>
         <div>
-          <button type="button" onClick={useCurrentLocation} disabled={!mapReady} title={t("workspace.photos.myLocation")} aria-label={t("workspace.photos.myLocation")}>
+          <button type="button" onClick={useCurrentLocation} disabled={!mapReady} data-tooltip={t("workspace.photos.myLocation")} aria-label={t("workspace.photos.myLocation")}>
             <Crosshair aria-hidden="true" size={15} />
           </button>
           <button type="button" onClick={() => void loadPoints(pendingBounds ?? bounds, true)} disabled={!mapReady || !pendingBounds || loading}>

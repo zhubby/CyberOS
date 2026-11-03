@@ -123,7 +123,7 @@ export function ActivityMenu({
             : "icon-button activity-menu-button"
         }
         onClick={toggleOpen}
-        title={t("workspace.recentOperations")}
+        data-tooltip={t("workspace.recentOperations")}
         aria-label={t("workspace.recentOperations")}
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -201,7 +201,7 @@ export function ActivityMenu({
                       </div>
                       <div className="activity-upload-body">
                         <div className="activity-upload-head">
-                          <strong title={fileCountLabel}>{fileCountLabel}</strong>
+                          <strong data-tooltip={fileCountLabel}>{fileCountLabel}</strong>
                           <span className="management-status-pill activity-upload-status" data-state={statusTone}>
                             {statusLabel}
                           </span>
@@ -231,7 +231,7 @@ export function ActivityMenu({
                           type="button"
                           className="activity-upload-cancel"
                           onClick={() => onCancelUploadBatch(batch.id)}
-                          title={t("workspace.cancelUpload")}
+                          data-tooltip={t("workspace.cancelUpload")}
                           aria-label={t("workspace.cancelUpload")}
                         >
                           <X aria-hidden="true" size={14} />
@@ -281,7 +281,7 @@ export function ActivityMenu({
                         </small>
                         {batch.currentSourcePath ? <small className="activity-upload-current">{batch.currentSourcePath}</small> : null}
                         {batch.failures[0] ? (
-                          <small className="activity-upload-error" title={batch.failures[0].error}>
+                          <small className="activity-upload-error" data-tooltip={batch.failures[0].error}>
                             {batch.failures[0].sourcePath}: {batch.failures[0].error}
                           </small>
                         ) : batch.error ? <small className="activity-upload-error">{batch.error}</small> : null}
@@ -301,7 +301,7 @@ export function ActivityMenu({
                           type="button"
                           className="activity-upload-cancel"
                           onClick={() => onCancelFileBatch(batch.id)}
-                          title={t("workspace.batch.cancel")}
+                          data-tooltip={t("workspace.batch.cancel")}
                           aria-label={t("workspace.batch.cancel")}
                         >
                           <X aria-hidden="true" size={14} />
@@ -350,7 +350,7 @@ export function ActivityMenu({
                       </small>
                     </span>
                     {canRollback ? (
-                      <button type="button" onClick={() => onRollback(operation)} aria-label={t("common.actions.rollback")} title={t("common.actions.rollback")}>
+                      <button type="button" onClick={() => onRollback(operation)} aria-label={t("common.actions.rollback")} data-tooltip={t("common.actions.rollback")}>
                         <RotateCcw aria-hidden="true" size={14} />
                       </button>
                     ) : null}

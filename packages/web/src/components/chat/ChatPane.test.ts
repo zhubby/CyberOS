@@ -230,7 +230,7 @@ describe("ChatMessageContent", () => {
 
 describe("ChatPane agent rail", () => {
   it.each(["running", "queued", "sending", "reconnecting", "idle"] as const)(
-    "keeps %s feedback and delivery icons in one toolbar above the input",
+    "keeps %s feedback in the existing footer with accessible delivery controls",
     async (state) => {
       await initI18n();
       const noop = () => undefined;
@@ -268,30 +268,33 @@ describe("ChatPane agent rail", () => {
         onCancelActiveJob: noop,
         onOpenWorkspacePath: noop
       }));
-      const toolbar = html.match(/<div class="composer-toolbar">(.*?)<\/div><textarea/su)?.[1];
+      const footer = html.slice(html.indexOf('<div class="composer-footer">'), html.indexOf('</form>'));
+      expect(html).not.toContain('class="composer-toolbar"');
+      expect(footer).toContain('id="composer-status"');
+      expect(footer).toContain('role="status" aria-live="polite"');
 
       if (state === "idle") {
-        expect(toolbar).toBeUndefined();
+        expect(footer).toContain('class="composer-model-config"');
+        expect(footer).not.toContain('class="composer-delivery"');
         expect(html).not.toContain('aria-describedby="composer-status"');
         return;
       }
 
-      expect(toolbar).toBeDefined();
-      expect(toolbar).toContain(`data-state="${state}"`);
+      expect(footer).toContain(`data-state="${state}"`);
       expect(html).toContain('aria-describedby="composer-status"');
       expect(html).not.toContain('class="composer-meta"');
       if (state === "queued") {
-        expect(toolbar).not.toContain('class="composer-delivery"');
+        expect(footer).not.toContain('class="composer-delivery"');
       } else {
-        expect(toolbar).toContain('aria-pressed="false" title="Steer" aria-label="Steer"');
-        expect(toolbar).toContain('aria-pressed="true" title="Follow-up" aria-label="Follow-up"');
-        expect(toolbar).toContain('class="visually-hidden">Steer</span>');
-        expect(toolbar).toContain('class="visually-hidden">Follow-up</span>');
+        expect(footer).toContain('aria-pressed="false" data-tooltip="Steer" aria-label="Steer"');
+        expect(footer).toContain('aria-pressed="true" data-tooltip="Follow-up" aria-label="Follow-up"');
+        expect(footer).toContain('class="visually-hidden">Steer</span>');
+        expect(footer).toContain('class="visually-hidden">Follow-up</span>');
       }
     }
   );
 
-  it("keeps the compact icon navigation and settings action in the footer", async () => {
+  it.each([false, true])("keeps the footer settings action accessible while loading=%s", async (settingsLoading) => {
     await initI18n();
     const session = {
       id: "session-1",
@@ -327,6 +330,7 @@ describe("ChatPane agent rail", () => {
         onCreateAgent: noop,
         onDeleteSession: noop,
         onOpenSettings: noop,
+        settingsLoading,
         onOpenNotifications: noop,
         onRequestSystemPower: async () => true,
         notificationUnreadCount: 3,
@@ -360,8 +364,14 @@ describe("ChatPane agent rail", () => {
     expect(html).toContain('class="agent-notification-button"');
     expect(html).toContain('class="notification-badge"');
     expect(html).toContain('class="settings-button agent-settings-button"');
+    const settingsButton = html.match(/<button class="settings-button agent-settings-button"[\s\S]*?<\/button>/u)?.[0] ?? "";
+    expect(settingsButton).toContain('aria-label="System settings"');
+    expect(settingsButton.includes('aria-busy="true"')).toBe(settingsLoading);
+    expect(settingsButton.includes('aria-disabled="true"')).toBe(settingsLoading);
+    expect(settingsButton.includes("lucide-loader-circle")).toBe(settingsLoading);
+    expect(settingsButton).not.toContain(" disabled=");
     expect(html).toContain('class="agent-power-button"');
-    expect(html).toContain('class="composer-model-config" role="group" title="Not loaded" aria-label="Model config: Not loaded"');
+    expect(html).toContain('class="composer-model-config" role="status" aria-live="polite" aria-atomic="true" data-tooltip="Not loaded"');
     expect(html).not.toContain(">Model config</span>");
     expect(html.indexOf('class="session-list"')).toBeLessThan(html.indexOf('class="agent-footer"'));
     expect(html.indexOf('class="agent-notification-button"')).toBeLessThan(html.indexOf('class="settings-button agent-settings-button"'));

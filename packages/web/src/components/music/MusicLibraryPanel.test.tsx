@@ -26,8 +26,7 @@ describe("Music workspace", () => {
       const html = renderToStaticMarkup(
         createElement(MusicProvider, {
           children: createElement(MusicLibraryPanel, {
-            pools: [],
-            locale: language === "en" ? "en" : "zh-CN",
+            onOpenSettings: () => undefined,
           }),
         }),
       );
@@ -39,6 +38,7 @@ describe("Music workspace", () => {
       expect(html).toContain('aria-expanded="false"');
       expect(html).not.toContain('type="submit"');
       expect(html).not.toContain("<audio");
+      expect(html).not.toContain(`aria-label="${language === "en" ? "Music folders" : "音乐文件夹"}"`);
     }
   });
 

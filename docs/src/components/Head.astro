@@ -5,6 +5,8 @@ import StarlightHead from '@astrojs/starlight/components/Head.astro';
 <StarlightHead {...Astro.props} />
 
 <script>
+  import { mountTooltipLayer } from '../../../packages/web/src/lib/tooltip-layer';
+
   // Starlight does not forward button attributes through its toolbar components.
   // Reuse its localized labels for the compact search and mobile menu controls.
   function labelCompactButtons() {
@@ -16,10 +18,34 @@ import StarlightHead from '@astrojs/starlight/components/Head.astro';
         ?? button.title;
       if (!label) continue;
       if (!button.hasAttribute('aria-label')) button.setAttribute('aria-label', label);
-      if (!button.title) button.title = label;
+      if (!button.hasAttribute('data-tooltip')) button.setAttribute('data-tooltip', label);
+    }
+    migrateNativeTooltips(document);
+  }
+
+  function migrateNativeTooltips(root: ParentNode) {
+    const elements = [...root.querySelectorAll('[title]')];
+    if (root instanceof Element && root.hasAttribute('title')) elements.unshift(root);
+    for (const element of elements) {
+      const title = element.getAttribute('title');
+      if (title) {
+        element.setAttribute('data-tooltip', title);
+        if (element.matches('input, textarea, iframe, abbr') && !element.hasAttribute('aria-label') && !element.hasAttribute('aria-labelledby')) element.setAttribute('aria-label', title);
+      }
+      element.removeAttribute('title');
     }
   }
 
+  mountTooltipLayer();
   labelCompactButtons();
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === 'attributes' && record.target instanceof Element) migrateNativeTooltips(record.target);
+      for (const node of record.addedNodes) {
+        if (node instanceof Element) migrateNativeTooltips(node);
+      }
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['title'] });
   document.addEventListener('astro:page-load', labelCompactButtons);
 </script>

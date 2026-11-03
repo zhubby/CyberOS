@@ -5,6 +5,7 @@ import {
   Responsive,
   useContainerWidth,
   verticalCompactor,
+  type Layout,
   type ResponsiveGridLayoutProps,
   type ResponsiveLayouts
 } from "react-grid-layout";
@@ -171,7 +172,8 @@ export function ManagementDashboardGrid({
   const { t } = useTranslation();
   const { width, containerRef, mounted } = useContainerWidth({ initialWidth: 900 });
   const compact = mounted && width < MANAGEMENT_DASHBOARD_MOBILE_MAX_WIDTH;
-  const { editing, layouts, setCompact, setEditing } = dashboard;
+  const { editing, layouts, setBreakpoint, setCompact, setEditing, setLayouts } = dashboard;
+  const breakpoint = width > MANAGEMENT_DASHBOARD_BREAKPOINTS.desktop ? "desktop" : "tablet";
   const editable = editing && !loading;
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const orderedItems = useMemo(() => {
@@ -189,11 +191,17 @@ export function ManagementDashboardGrid({
   }, [itemById, items, layouts]);
 
   useEffect(() => {
+    setBreakpoint(breakpoint);
     setCompact(compact);
     if (compact && editing) {
       setEditing(false);
     }
-  }, [compact, editing, setCompact, setEditing]);
+  }, [breakpoint, compact, editing, setBreakpoint, setCompact, setEditing]);
+
+  // Keyboard edits already update controlled state; layout echoes can overwrite them.
+  const commitLayout = useCallback((layout: Layout) => {
+    setLayouts({ [breakpoint]: layout });
+  }, [breakpoint, setLayouts]);
 
   return (
     <div
@@ -224,7 +232,8 @@ export function ManagementDashboardGrid({
           positionStrategy={absoluteStrategy}
           compactor={verticalCompactor}
           onBreakpointChange={dashboard.setBreakpoint}
-          onLayoutChange={(_layout, layouts) => dashboard.setLayouts(layouts)}
+          onDragStop={commitLayout}
+          onResizeStop={commitLayout}
         >
           {items.map((item) => (
             <div key={item.id}>
@@ -277,7 +286,7 @@ function DashboardWidget({
             type="button"
             className="management-widget-drag-handle"
             onKeyDown={handleKeyDown}
-            title={t("workspace.management.layout.dragHandle", { title: item.title })}
+            data-tooltip={t("workspace.management.layout.dragHandle", { title: item.title })}
             aria-label={t("workspace.management.layout.dragHandle", { title: item.title })}
             aria-describedby={`${dashboard.dashboardId}-layout-instructions`}
           >

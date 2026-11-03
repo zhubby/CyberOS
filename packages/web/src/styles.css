@@ -22,6 +22,8 @@
 
 @import "./styles/video.css";
 @import "./styles/modal.css";
+@import "./styles/tooltip.css";
 
 @import "./styles/playback-dock.css";
 @import "./styles/mobile.css";
+@import "./styles/help-tip.css";

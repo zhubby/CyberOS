@@ -302,7 +302,7 @@ function TaskRow({ icon, task, overview, schedule, locale, busy, disabled, butto
         disabled={disabled}
         aria-busy={busy || undefined}
         aria-label={busy ? t("settings.operations.starting") : t("settings.operations.runNow")}
-        title={busy ? t("settings.operations.starting") : t("settings.operations.runNow")}
+        data-tooltip={busy ? t("settings.operations.starting") : t("settings.operations.runNow")}
         onClick={onRun}
       >
         {busy ? <LoaderCircle aria-hidden="true" size={14} className="is-spinning" /> : <Play aria-hidden="true" size={14} />}

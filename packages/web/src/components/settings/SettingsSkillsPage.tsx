@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { AlertTriangle, GitBranch, LoaderCircle, Package, Plus, RefreshCw, ShieldCheck, Trash2, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -13,6 +13,9 @@ import {
 } from "../../api.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { Switch } from "../common/Switch.js";
+import { ModalPortal } from "../common/ModalPortal.js";
+import { HelpTip } from "../common/HelpTip.js";
+import { useModalDialog } from "../workspace/useModalDialog.js";
 import {
   StorageFilePickerDialog,
   type StorageFilePickerPool,
@@ -36,6 +39,13 @@ export function SettingsSkillsPage({
   const [pickerTarget, setPickerTarget] = useState<AgentSkill | "new" | null>(null);
   const [gitTarget, setGitTarget] = useState<AgentSkill | "new" | null>(null);
   const [gitDraft, setGitDraft] = useState({ url: "https://", ref: "", subdirectory: "" });
+  const gitTitleId = useId();
+  const gitDescriptionId = useId();
+  const gitDialogRef = useModalDialog(closeGitDialog, busyId !== null, gitTarget !== null);
+
+  function closeGitDialog() {
+    if (busyId === null) setGitTarget(null);
+  }
 
   async function load() {
     setLoading(true);
@@ -89,6 +99,7 @@ export function SettingsSkillsPage({
 
   async function installGit(event: FormEvent) {
     event.preventDefault();
+    if (busyId !== null || !gitTarget) return;
     if (!window.confirm(t("settings.skills.confirmInstall"))) return;
     const target = gitTarget;
     await run(target === "new" ? "install" : target?.id ?? "install", async () => {
@@ -126,6 +137,7 @@ export function SettingsSkillsPage({
   function replace(skill: AgentSkill) {
     if (skill.sourceType === "zip") setPickerTarget(skill);
     else {
+      setError(null);
       setGitDraft({
         url: skill.sourceUrl ?? "https://",
         ref: skill.sourceRef ?? "",
@@ -141,13 +153,13 @@ export function SettingsSkillsPage({
 
   return (
     <div className="settings-content-body settings-resource-page">
-      {error ? <p className="settings-inline-alert" role="alert"><AlertTriangle aria-hidden="true" size={16} />{error}</p> : null}
+      {error && !gitTarget ? <p className="settings-inline-alert" role="alert"><AlertTriangle aria-hidden="true" size={16} />{error}</p> : null}
       <section className="settings-section-card">
         <header>
           <div><h3>{t("settings.skills.globalTitle")}</h3><p>{t("settings.skills.globalDescription")}</p></div>
           <div className="settings-inline-actions">
             <button type="button" onClick={() => setPickerTarget("new")} disabled={storagePools.length === 0}><Upload aria-hidden="true" size={15} />{t("settings.skills.importZip")}</button>
-            <button type="button" onClick={() => { setGitDraft({ url: "https://", ref: "", subdirectory: "" }); setGitTarget("new"); }}><Plus aria-hidden="true" size={15} />{t("settings.skills.installGit")}</button>
+            <button type="button" disabled={busyId !== null} onClick={() => { setError(null); setGitDraft({ url: "https://", ref: "", subdirectory: "" }); setGitTarget("new"); }}><Plus aria-hidden="true" size={15} />{t("settings.skills.installGit")}</button>
           </div>
         </header>
         <div className="settings-resource-list">
@@ -161,9 +173,9 @@ export function SettingsSkillsPage({
                 {skill.diagnostics.map((diagnostic) => <em key={diagnostic} role="alert">{diagnostic}</em>)}
               </div>
               <div className="settings-resource-actions">
-                {skill.sourceType === "git" ? <button type="button" title={t("common.actions.update")} aria-label={t("common.actions.update")} onClick={() => void update(skill)} disabled={busyId === skill.id}><RefreshCw aria-hidden="true" size={15} /></button> : null}
-                <button type="button" title={t("settings.skills.replace")} aria-label={t("settings.skills.replace")} onClick={() => replace(skill)} disabled={busyId === skill.id}><Upload aria-hidden="true" size={15} /></button>
-                <button className="is-danger" type="button" title={t("common.actions.delete")} aria-label={t("common.actions.delete")} onClick={() => void remove(skill)} disabled={busyId === skill.id}><Trash2 aria-hidden="true" size={15} /></button>
+                {skill.sourceType === "git" ? <button type="button" data-tooltip={t("common.actions.update")} aria-label={t("common.actions.update")} onClick={() => void update(skill)} disabled={busyId === skill.id}><RefreshCw aria-hidden="true" size={15} /></button> : null}
+                <button type="button" data-tooltip={t("settings.skills.replace")} aria-label={t("settings.skills.replace")} onClick={() => replace(skill)} disabled={busyId === skill.id}><Upload aria-hidden="true" size={15} /></button>
+                <button className="is-danger" type="button" data-tooltip={t("common.actions.delete")} aria-label={t("common.actions.delete")} onClick={() => void remove(skill)} disabled={busyId === skill.id}><Trash2 aria-hidden="true" size={15} /></button>
               </div>
               <Switch checked={skill.enabled} onCheckedChange={(checked) => void toggle(skill, checked)} ariaLabel={t("settings.skills.toggle", { name: skill.name })} compact busy={busyId === skill.id} />
             </article>
@@ -184,7 +196,42 @@ export function SettingsSkillsPage({
         </div>
       </section>
 
-      {gitTarget ? <form className="settings-section-card settings-resource-editor" onSubmit={(event) => void installGit(event)}><header><div><h3>{gitTarget === "new" ? t("settings.skills.installGit") : t("settings.skills.replace")}</h3><p>{t("settings.skills.securityNotice")}</p></div><button type="button" aria-label={t("common.actions.close")} title={t("common.actions.close")} onClick={() => setGitTarget(null)}><X aria-hidden="true" size={16} /></button></header><div className="settings-field-grid settings-resource-fields"><label className="settings-field-wide"><span>{t("settings.skills.gitUrl")}</span><input type="url" required value={gitDraft.url} onChange={(event) => setGitDraft((current) => ({ ...current, url: event.target.value }))} /></label><label><span>{t("settings.skills.gitRef")}</span><input value={gitDraft.ref} onChange={(event) => setGitDraft((current) => ({ ...current, ref: event.target.value }))} /></label><label><span>{t("settings.skills.gitSubdirectory")}</span><input value={gitDraft.subdirectory} onChange={(event) => setGitDraft((current) => ({ ...current, subdirectory: event.target.value }))} /></label></div><footer className="settings-inline-actions"><button type="button" className="secondary-button" onClick={() => setGitTarget(null)}>{t("common.actions.cancel")}</button><button type="submit" className="primary-button" disabled={busyId !== null}>{t("settings.skills.install")}</button></footer></form> : null}
+      {gitTarget ? (
+        <ModalPortal className="management-modal-backdrop" role="presentation" onMouseDown={closeGitDialog}>
+          <section
+            ref={gitDialogRef}
+            className="settings-section-card settings-resource-editor settings-git-skill-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={gitTitleId}
+            aria-describedby={gitDescriptionId}
+            tabIndex={-1}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div className="help-label">
+                <h3 id={gitTitleId}><GitBranch aria-hidden="true" size={18} />{gitTarget === "new" ? t("settings.skills.installGit") : t("settings.skills.replace")}</h3>
+                <HelpTip label={gitTarget === "new" ? t("settings.skills.installGit") : t("settings.skills.replace")} content={t("settings.skills.securityNotice")} id={gitDescriptionId} />
+              </div>
+              <button type="button" aria-label={t("common.actions.close")} data-tooltip={t("common.actions.close")} onClick={closeGitDialog} disabled={busyId !== null}><X aria-hidden="true" size={16} /></button>
+            </header>
+            <form className="settings-git-skill-form" onSubmit={(event) => void installGit(event)} aria-busy={busyId !== null || undefined}>
+              <div className="settings-git-skill-body">
+                {error ? <p className="settings-inline-alert" role="alert"><AlertTriangle aria-hidden="true" size={16} />{error}</p> : null}
+                <div className="settings-field-grid settings-resource-fields">
+                  <label className="settings-field-wide"><span>{t("settings.skills.gitUrl")}</span><input type="url" required value={gitDraft.url} disabled={busyId !== null} onChange={(event) => setGitDraft((current) => ({ ...current, url: event.target.value }))} /></label>
+                  <label><span>{t("settings.skills.gitRef")}</span><input value={gitDraft.ref} disabled={busyId !== null} onChange={(event) => setGitDraft((current) => ({ ...current, ref: event.target.value }))} /></label>
+                  <label><span>{t("settings.skills.gitSubdirectory")}</span><input value={gitDraft.subdirectory} disabled={busyId !== null} onChange={(event) => setGitDraft((current) => ({ ...current, subdirectory: event.target.value }))} /></label>
+                </div>
+              </div>
+              <footer className="settings-inline-actions">
+                <button type="button" className="secondary-button" onClick={closeGitDialog} disabled={busyId !== null}>{t("common.actions.cancel")}</button>
+                <button type="submit" className="primary-button" disabled={busyId !== null}>{busyId !== null ? <LoaderCircle aria-hidden="true" size={14} className="is-spinning" /> : null}{t("settings.skills.install")}</button>
+              </footer>
+            </form>
+          </section>
+        </ModalPortal>
+      ) : null}
 
       {pickerTarget ? <StorageFilePickerDialog pools={storagePools} initialPoolId={storagePools[0]?.id ?? ""} locale={locale} mode="skill-zip" onCancel={() => setPickerTarget(null)} onSelect={(selection) => void chooseZip(selection)} /> : null}
     </div>

@@ -181,6 +181,7 @@ import type {
   TvSettingsRecord as SharedTvSettings
 } from "@cyberos/shared";
 import { createClientId } from "./lib/client-id.js";
+import type { BackupDirectoryListing } from "@cyberos/shared";
 
 export interface StoragePool {
   id: string;
@@ -331,6 +332,8 @@ export interface TranscriptMessage {
   turnSequence: number | null;
   streaming?: boolean;
 }
+
+
 
 type PersistedTranscriptMessage = Omit<TranscriptMessage, "sequence" | "turnSequence"> & {
   sequence: number;
@@ -1384,6 +1387,13 @@ export async function updateMonitoringSettings(
 export async function getBackupSettings(): Promise<BackupSettings> {
   return fetchJson<{ settings: BackupSettings }>("/api/settings/backup")
     .then((body) => body.settings);
+}
+
+export async function getBackupDirectories(root?: string, directory?: string): Promise<BackupDirectoryListing> {
+  const query = new URLSearchParams();
+  if (root !== undefined) query.set("root", root);
+  if (directory !== undefined) query.set("path", directory);
+  return fetchJson<BackupDirectoryListing>(`/api/settings/backup/directories${query.size ? `?${query}` : ""}`);
 }
 
 export async function updateBackupSettings(

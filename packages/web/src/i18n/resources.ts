@@ -2,10 +2,12 @@ export const en = {
   mobile: {
     home: "Home screen", apps: "Apps", dock: "Favorite apps", agent: "Agent", settings: "Settings",
     back: "Back", more: "More actions", sessions: "Conversations", select: "Select files", done: "Done",
+    settingsDescription: "System preferences and services.",
     connection: { connecting: "Connecting", online: "Connected", offline: "Disconnected" }
   },
   video: {
     "title": "Video",
+    "subtitle": "Browse movies and series · Continue watching",
     "library": "Video library",
     "home": "Home",
     "movie": "Movies",
@@ -95,12 +97,13 @@ export const en = {
     "stale": "Playback changed. Start again to confirm the current session."
 },
   music: {
-    "subtitle": "Local library · NAS playback",
+    "subtitle": "Browse songs and albums · Manage playlists",
     "missing": "Unavailable",
     "nasPlayer": "NAS music player",
     "nowPlaying": "Now playing",
     "libraryActions": "Music library actions",
     "sources": "Music folders",
+    "manageLibrary": "Manage music library",
     "addSource": "Add music folder",
     "source": "Source",
     "sourceEnabled": "Enabled",
@@ -191,6 +194,11 @@ export const en = {
     "createPlaylistFirst": "Create a playlist to add this song.",
     "year": "Year",
     "genre": "Genre",
+    "allYears": "All years",
+    "allGenres": "All genres",
+    "filterOptionsLoading": "Loading filter options…",
+    "filterOptionsFailed": "Could not load filter options.",
+    "retryFilterOptions": "Retry",
     "sort": "Sort by",
     "sortAdded": "Recently added",
     "sortName": "Name",
@@ -219,6 +227,7 @@ export const en = {
     dash: "-",
     yes: "Yes",
     no: "No",
+    helpFor: "About {{label}}",
     actions: {
       approve: "Approve",
       cancel: "Cancel",
@@ -2489,7 +2498,7 @@ export const en = {
       },
       media: {
         title: "Media",
-        description: "Movie and series sources, matching, scans, and TV metadata."
+        description: "Music, movie and series sources, scanning, matching, and TV settings."
       },
       appearance: {
         title: "Appearance",
@@ -2502,6 +2511,16 @@ export const en = {
     },
     media: {
       loading: "Loading media library settings",
+      musicTitle: "Music library",
+      musicDescription: "Manage music folders and scanning.",
+      musicLoading: "Loading music library…",
+      musicRetry: "Retry",
+      musicEmpty: "No music folders. Add a folder to build your library.",
+      musicSourceAdded: "Music folder added and scan queued.",
+      musicSourceUpdated: "Music folder updated.",
+      musicScanQueued: "Music scan queued.",
+      musicSourceRemoved: "Music folder removed. Original files are kept.",
+      removeMusicSource: "Remove music folder?",
       metadataTitle: "Metadata",
       metadataDescription: "TMDB is optional. Local NFO and filename metadata remain available without it.",
       tmdbToken: "TMDB read access token",
@@ -2615,6 +2634,16 @@ export const en = {
       validated: "Repository and credential have been validated.",
       validationRequired: "Validate the repository before enabling scheduled backups.",
       repository: "Repository path",
+      chooseDirectory: "Choose directory",
+      directoryPending: "Save this path before validating or initializing the repository.",
+      locations: "Backup locations",
+      locationsHelp: "Backup directories and available mounted filesystems.",
+      noLocations: "No backup location is available. Mount a backup disk first.",
+      pickerTitle: "Choose backup repository directory",
+      pickerDescription: "Choose a directory outside NAS data and system state. The exact-mount requirement still applies after selection.",
+      pickerList: "Backup directories",
+      pickerEmpty: "No subdirectories. You can use the current directory.",
+      useDirectory: "Use this directory",
       keepDaily: "Daily snapshots",
       keepWeekly: "Weekly snapshots",
       requireMount: "Require an exact mount",
@@ -3300,10 +3329,12 @@ export const zhCN = {
   mobile: {
     home: "主屏", apps: "应用", dock: "常用应用", agent: "Agent", settings: "设置",
     back: "返回", more: "更多操作", sessions: "会话", select: "选择文件", done: "完成",
+    settingsDescription: "系统偏好与服务配置。",
     connection: { connecting: "正在连接", online: "已连接", offline: "连接已断开" }
   },
   video: {
     "title": "影视",
+    "subtitle": "浏览电影与剧集，继续上次观看",
     "library": "影视库",
     "home": "首页",
     "movie": "电影",
@@ -3393,12 +3424,13 @@ export const zhCN = {
     "stale": "播放会话已变化，请重新发起播放。"
 },
   music: {
-    "subtitle": "本地音乐库 · NAS 播放",
+    "subtitle": "浏览歌曲与专辑，管理个人歌单",
     "missing": "文件不可用",
     "nasPlayer": "NAS 音乐播放器",
     "nowPlaying": "正在播放",
     "libraryActions": "音乐库操作",
     "sources": "音乐文件夹",
+    "manageLibrary": "管理音乐库",
     "addSource": "添加音乐文件夹",
     "source": "来源",
     "sourceEnabled": "启用",
@@ -3489,6 +3521,11 @@ export const zhCN = {
     "createPlaylistFirst": "先创建一个歌单，再加入这首歌曲。",
     "year": "年份",
     "genre": "流派",
+    "allYears": "全部年份",
+    "allGenres": "全部流派",
+    "filterOptionsLoading": "正在加载筛选选项…",
+    "filterOptionsFailed": "无法加载筛选选项。",
+    "retryFilterOptions": "重试",
     "sort": "排序",
     "sortAdded": "最近添加",
     "sortName": "名称",
@@ -3517,6 +3554,7 @@ export const zhCN = {
     dash: "-",
     yes: "是",
     no: "否",
+    helpFor: "{{label}}的提示",
     actions: {
       approve: "批准",
       cancel: "取消",
@@ -5787,7 +5825,7 @@ export const zhCN = {
       },
       media: {
         title: "媒体库",
-        description: "管理电影与剧集目录、匹配、扫描和电视元数据。"
+        description: "管理音乐、电影与剧集目录、扫描、匹配和电视设置。"
       },
       appearance: {
         title: "外观",
@@ -5800,6 +5838,16 @@ export const zhCN = {
     },
     media: {
       loading: "正在加载媒体库设置",
+      musicTitle: "音乐库",
+      musicDescription: "管理音乐文件夹与扫描状态。",
+      musicLoading: "正在加载音乐库…",
+      musicRetry: "重试",
+      musicEmpty: "尚未添加音乐文件夹，添加目录后即可建立音乐库。",
+      musicSourceAdded: "音乐文件夹已添加，扫描已排队。",
+      musicSourceUpdated: "音乐文件夹已更新。",
+      musicScanQueued: "音乐扫描已排队。",
+      musicSourceRemoved: "音乐文件夹已移除，原始文件保留。",
+      removeMusicSource: "移除音乐文件夹？",
       metadataTitle: "元数据",
       metadataDescription: "TMDB 为可选服务；未配置时仍可使用本地 NFO 和文件名元数据。",
       tmdbToken: "TMDB 读取令牌",
@@ -5913,6 +5961,16 @@ export const zhCN = {
       validated: "仓库和凭据已经验证。",
       validationRequired: "启用定时备份前必须验证仓库。",
       repository: "仓库路径",
+      chooseDirectory: "选择目录",
+      directoryPending: "请先保存仓库路径，再验证或初始化仓库。",
+      locations: "备份位置",
+      locationsHelp: "备份目录和可用的已挂载文件系统。",
+      noLocations: "没有可用的备份位置，请先挂载备份磁盘。",
+      pickerTitle: "选择备份仓库目录",
+      pickerDescription: "选择 NAS 数据和系统状态之外的目录；选择后仍需满足独立挂载要求。",
+      pickerList: "备份目录",
+      pickerEmpty: "此位置没有子目录，可以使用当前目录。",
+      useDirectory: "使用此目录",
       keepDaily: "每日快照数",
       keepWeekly: "每周快照数",
       requireMount: "要求独立挂载",

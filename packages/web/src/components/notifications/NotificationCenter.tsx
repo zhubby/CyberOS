@@ -146,7 +146,7 @@ export function NotificationCenter({
               type="button"
               onClick={activeTab === "operations" ? onReadAll : activeTab === "bluetooth" ? onReadAllBluetooth : onReadAllAlerts}
               disabled={activeUnreadCount === 0}
-              title={t("notifications.center.markAllRead")}
+              data-tooltip={t("notifications.center.markAllRead")}
               aria-label={t("notifications.center.markAllRead")}
             >
               <CheckCheck aria-hidden="true" size={17} />
@@ -155,7 +155,7 @@ export function NotificationCenter({
               ref={closeButtonRef}
               type="button"
               onClick={onClose}
-              title={t("common.actions.close")}
+              data-tooltip={t("common.actions.close")}
               aria-label={t("common.actions.close")}
             >
               <X aria-hidden="true" size={17} />
@@ -241,7 +241,7 @@ function BluetoothTransfersList({ loading, transfers, locale, now, onRead, t }: 
         <span className="notification-item-title"><Bluetooth aria-hidden="true" size={14} /><strong>{transfer.displayName}</strong></span>
         <span className="notification-item-summary">{t(`settings.bluetooth.transfers.directions.${transfer.direction}`)} · {t(`settings.bluetooth.transfers.statuses.${transfer.status}`)} · {formatBytes(transfer.transferredBytes, locale)}{transfer.totalBytes === null ? "" : ` / ${formatBytes(transfer.totalBytes, locale)}`}</span>
         {transfer.error ? <span className="notification-item-error">{transfer.error}</span> : null}
-        <time dateTime={timestamp} title={absoluteTime}>{relativeTime}</time>
+        <time dateTime={timestamp} data-tooltip={absoluteTime}>{relativeTime}</time>
       </span>
       {transfer.readAt === null ? <span className="notification-unread-dot" aria-hidden="true" /> : null}
     </button>;
@@ -294,7 +294,7 @@ function OperationsList({ loading, notifications, locale, now, onRead, t }: {
                     </span>
                     <span className="notification-item-summary">{notification.summary}</span>
                     {notification.error ? <span className="notification-item-error">{notification.error}</span> : null}
-                    <time dateTime={notification.updatedAt} title={absoluteTime}>{relativeTime}</time>
+                    <time dateTime={notification.updatedAt} data-tooltip={absoluteTime}>{relativeTime}</time>
                   </span>
                   {notification.readAt === null ? <span className="notification-unread-dot" aria-hidden="true" /> : null}
                 </button>
@@ -328,7 +328,7 @@ function AlertsList({ loading, incidents, locale, now, onRead, onAcknowledge, t 
       <button type="button" className="notification-alert-content" onClick={() => onRead(incident.id)} aria-label={`${incident.title}. ${t(`notifications.center.alerts.statuses.${incident.status}`)}`}>
         <span className="notification-item-title"><strong>{incident.title}</strong></span>
         <span className="notification-item-summary">{t(`notifications.center.alerts.statuses.${incident.status}`)} · {t(`notifications.center.alerts.severity.${incident.severity}`)}{incident.occurrenceCount > 1 ? ` · ${t("notifications.center.alerts.occurrences", { count: incident.occurrenceCount })}` : ""}</span>
-        <time dateTime={timestamp} title={absoluteTime}>{relativeTime}</time>
+        <time dateTime={timestamp} data-tooltip={absoluteTime}>{relativeTime}</time>
       </button>
       <span className="notification-alert-actions">
         {incident.status === "firing" && incident.acknowledgedAt === null ? <button type="button" onClick={() => onAcknowledge(incident.id)}>{t("notifications.center.alerts.acknowledge")}</button> : null}

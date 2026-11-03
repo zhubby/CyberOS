@@ -109,11 +109,11 @@ function PlaybackProgress({ c, detail = false }: { c: Controls; detail?: boolean
 
 function PlaybackTransport({ c, detail = false }: { c: Controls; detail?: boolean }) {
   return <div className="playback-transport">
-    {c.musicBar ? <button className="playback-secondary" disabled={c.busy || !c.music.status?.queue.length} aria-label={c.t("music.previous")} title={c.t("music.previous")} onClick={() => void c.music.execute({ type: "previous" })}><SkipBack size={18} aria-hidden="true" /></button> : null}
-    <button data-playback-primary={detail ? undefined : true} disabled={!c.canPlay} aria-busy={c.busy || undefined} aria-label={c.t(c.playing ? "music.pause" : "music.play")} title={c.t(c.playing ? "music.pause" : "music.play")} onClick={c.toggle}>
+    {c.musicBar ? <button className="playback-secondary" disabled={c.busy || !c.music.status?.queue.length} aria-label={c.t("music.previous")} data-tooltip={c.t("music.previous")} onClick={() => void c.music.execute({ type: "previous" })}><SkipBack size={18} aria-hidden="true" /></button> : null}
+    <button data-playback-primary={detail ? undefined : true} disabled={!c.canPlay} aria-busy={c.busy || undefined} aria-label={c.t(c.playing ? "music.pause" : "music.play")} data-tooltip={c.t(c.playing ? "music.pause" : "music.play")} onClick={c.toggle}>
       {c.busy ? <LoaderCircle size={20} className="is-spinning" aria-hidden="true" /> : c.playing ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
     </button>
-    {c.musicBar ? <button className="playback-secondary" disabled={c.busy || !c.music.status?.queue.length} aria-label={c.t("music.next")} title={c.t("music.next")} onClick={() => void c.music.execute({ type: "next" })}><SkipForward size={18} aria-hidden="true" /></button> : null}
+    {c.musicBar ? <button className="playback-secondary" disabled={c.busy || !c.music.status?.queue.length} aria-label={c.t("music.next")} data-tooltip={c.t("music.next")} onClick={() => void c.music.execute({ type: "next" })}><SkipForward size={18} aria-hidden="true" /></button> : null}
   </div>;
 }
 
@@ -152,7 +152,7 @@ function PlaybackOutput({ c, includeVolume = true }: { c: Controls; includeVolum
 }
 
 function PlaybackTitle({ c, onClick, card = false }: { c: Controls; onClick: () => void; card?: boolean }) {
-  return <button className="playback-title" title={c.title} aria-label={`${c.t("playback.details")}: ${c.title}`} onClick={onClick}>
+  return <button className="playback-title" data-tooltip={c.title} aria-label={`${c.t("playback.details")}: ${c.title}`} onClick={onClick}>
     {c.musicBar ? <MusicCover coverKey={c.currentTrack?.coverKey ?? null} /> : card ? <span className="music-cover"><MonitorPlay size={22} aria-hidden="true" /></span> : <MonitorPlay size={22} aria-hidden="true" />}
     <span><strong>{c.title}</strong><small>{c.browser ? c.t("playback.browser") : c.musicBar ? c.currentTrack?.artist ?? c.t("music.nasPlayer") : c.t("playback.tvOutput")}</small></span>
   </button>;
@@ -184,14 +184,14 @@ function PlaybackCard({ c, beforeDetails }: { c: Controls; beforeDetails: (() =>
       <PlaybackTransport c={c} />
       <PlaybackVolume c={c} compact />
       <div className="playback-card-tools">
-        {browser ? <p className="playback-output-summary"><Headphones size={17} aria-hidden="true" /><span>{outputName}</span></p> : <button type="button" className="playback-output-summary" aria-label={`${t("music.output")}: ${outputName}`} title={`${t("music.output")}: ${outputName}`} aria-expanded={outputOpen} aria-controls={outputOpen ? outputId : undefined} onClick={() => {
+        {browser ? <p className="playback-output-summary"><Headphones size={17} aria-hidden="true" /><span>{outputName}</span></p> : <button type="button" className="playback-output-summary" aria-label={`${t("music.output")}: ${outputName}`} data-tooltip={`${t("music.output")}: ${outputName}`} aria-expanded={outputOpen} aria-controls={outputOpen ? outputId : undefined} onClick={() => {
           if (!outputOpen) c.setOutput((musicBar ? music.status?.audioDeviceId : c.nas?.output.requested.deviceId) ?? "");
           setOutputOpen((current) => !current);
         }}>
           <Headphones size={17} aria-hidden="true" /><span>{outputName}</span><ChevronDown size={15} aria-hidden="true" />
         </button>}
-        {music.status?.queue.length ? <button type="button" className="playback-secondary playback-queue" aria-label={t("music.queue")} title={t("music.queue")} onClick={() => { beforeDetails?.(); music.setDrawerOpen(true); }}><ListMusic size={19} aria-hidden="true" /></button> : null}
-        {!musicBar ? <button type="button" className="playback-secondary playback-stop" disabled={c.busy} aria-label={t("video.stop")} title={t("video.stop")} onClick={c.stop}><Square size={15} aria-hidden="true" /><span>{t("video.stop")}</span></button> : null}
+        {music.status?.queue.length ? <button type="button" className="playback-secondary playback-queue" aria-label={t("music.queue")} data-tooltip={t("music.queue")} onClick={() => { beforeDetails?.(); music.setDrawerOpen(true); }}><ListMusic size={19} aria-hidden="true" /></button> : null}
+        {!musicBar ? <button type="button" className="playback-secondary playback-stop" disabled={c.busy} aria-label={t("video.stop")} data-tooltip={t("video.stop")} onClick={c.stop}><Square size={15} aria-hidden="true" /><span>{t("video.stop")}</span></button> : null}
       </div>
       {outputOpen && !browser ? <div id={outputId} className="playback-output-fields"><PlaybackOutput c={c} includeVolume={false} /></div> : null}
     </> : <div className="playback-menu-empty"><CirclePlay size={32} aria-hidden="true" /><p>{t("playback.empty")}</p></div>}
@@ -218,8 +218,8 @@ export function PlaybackControls({ c, variant, beforeDetails, trailingControl }:
         <PlaybackOutput c={c} />
         {c.currentError ? <p role="alert" className="playback-error">{c.currentError}</p> : null}
       </PlaybackOutputPopover>
-    {music.status?.queue.length ? <button className="playback-secondary playback-queue" aria-label={t("music.queue")} title={t("music.queue")} onClick={openQueue}><ListMusic size={18} aria-hidden="true" /></button> : null}
-    {!musicBar && c.available ? <button className="playback-secondary playback-stop" disabled={c.busy} aria-label={t("video.stop")} title={t("video.stop")} onClick={c.stop}><Square size={17} aria-hidden="true" /></button> : null}
+    {music.status?.queue.length ? <button className="playback-secondary playback-queue" aria-label={t("music.queue")} data-tooltip={t("music.queue")} onClick={openQueue}><ListMusic size={18} aria-hidden="true" /></button> : null}
+    {!musicBar && c.available ? <button className="playback-secondary playback-stop" disabled={c.busy} aria-label={t("video.stop")} data-tooltip={t("video.stop")} onClick={c.stop}><Square size={17} aria-hidden="true" /></button> : null}
     {trailingControl}
     {c.currentError ? <p className="visually-hidden" role="alert">{c.currentError}</p> : null}
   </section>;
@@ -231,7 +231,7 @@ export function PlaybackDetails({ c, onOpenBluetoothSettings }: { c: Controls; o
     <MusicPlayerDetails onOpenBluetoothSettings={onOpenBluetoothSettings} />
     {c.detailsOpen && !c.browser && !c.musicBar ? <MusicDialog title={t("playback.details")} onClose={() => c.setDetailsOpen(false)}>
       <h3>{c.title}</h3><PlaybackTargetSelect onChange={() => c.setDetailsOpen(false)} />
-      <div className="playback-detail-controls"><PlaybackTransport c={c} detail /><PlaybackProgress c={c} detail /><button disabled={c.busy} aria-label={t("video.stop")} title={t("video.stop")} onClick={c.stop}><Square size={18} aria-hidden="true" />{t("video.stop")}</button></div>
+      <div className="playback-detail-controls"><PlaybackTransport c={c} detail /><PlaybackProgress c={c} detail /><button disabled={c.busy} aria-label={t("video.stop")} data-tooltip={t("video.stop")} onClick={c.stop}><Square size={18} aria-hidden="true" />{t("video.stop")}</button></div>
       {c.music.status?.queue.length ? <button onClick={() => { c.setDetailsOpen(false); c.music.setDrawerOpen(true); }}><ListMusic size={18} aria-hidden="true" />{t("music.queue")}</button> : null}
       {c.currentError ? <p role="alert">{c.currentError}</p> : null}
     </MusicDialog> : null}

@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +25,24 @@ afterEach(async () => {
 });
 
 describe("settings routes", () => {
+  it("offers backup directory browsing within available backup roots", async () => {
+    const server = createServer(db);
+    const backupRoot = testConfig().paths.backupRoot;
+    await mkdir(path.join(backupRoot, "repository"), { recursive: true });
+    const canonicalRoot = await realpath(backupRoot);
+    const roots = await server.inject({ method: "GET", url: "/api/settings/backup/directories" });
+    expect(roots.statusCode).toBe(200);
+    expect(roots.json().roots).toContainEqual(expect.objectContaining({ id: canonicalRoot, path: canonicalRoot }));
+    const query = new URLSearchParams({ root: canonicalRoot, path: canonicalRoot });
+    const listing = await server.inject({ method: "GET", url: `/api/settings/backup/directories?${query}` });
+    expect(listing.statusCode).toBe(200);
+    expect(listing.json().entries).toEqual([expect.objectContaining({ name: "repository", kind: "directory" })]);
+    query.set("path", testConfig().paths.stateDir);
+    const escaped = await server.inject({ method: "GET", url: `/api/settings/backup/directories?${query}` });
+    expect(escaped.statusCode).toBe(403);
+    await server.close();
+  });
+
   it("uses lazy defaults and repairs corrupted monitoring settings", async () => {
     const server = createServer(db);
     const initial = await server.inject({ method: "GET", url: "/api/settings/monitoring" });

@@ -4,7 +4,7 @@ import { PlaybackBar } from "./components/playback/PlaybackBar.js";
 import { PlaybackMenu } from "./components/playback/PlaybackMenu.js";
 import { PlaybackProvider, usePlayback } from "./components/playback/PlaybackProvider.js";
 import { BrowserPlayer } from "./components/playback/BrowserPlayer.js";
-import { FormEvent, KeyboardEvent, PointerEvent, Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
+import { FormEvent, KeyboardEvent, PointerEvent, Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CircleAlert, CircleCheck, X } from "lucide-react";
 import { MobileAppScope, MobileNavigationProvider, useMobileNavigation } from "./mobile/MobileNavigation.js";
@@ -310,6 +310,7 @@ function AppContent() {
   const [splitWidth, setSplitWidth] = useState(() => readStoredSplitWidth());
   const [resizing, setResizing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPending, startSettingsTransition] = useTransition();
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("model-providers");
   const [modelSettings, setModelSettings] = useState<ModelProviderSettings | null>(null);
   const [dockerSettings, setDockerSettings] = useState<DockerSettings | null>(null);
@@ -1074,7 +1075,8 @@ function AppContent() {
 
   async function openSettings(section: SettingsSectionId = "overview") {
     navigation.openApp("settings");
-    setSettingsOpen(true);
+    if (navigation.compact) setSettingsOpen(true);
+    else startSettingsTransition(() => setSettingsOpen(true));
     setActiveSettingsSection(section);
     setSettingsLoading(true);
     setError(null);
@@ -2350,6 +2352,7 @@ function AppContent() {
 
   function openDownloadedDirectory(storagePoolId: string, pathname: string) {
     setMobileView("workspace");
+    setFilesPanelActivationId((current) => current + 1);
     if (selectedStoragePoolIdRef.current !== storagePoolId) {
       pendingDownloadedDirectoryRef.current = { storagePoolId, path: pathname };
       selectStoragePool(storagePoolId);
@@ -2626,6 +2629,7 @@ function AppContent() {
         onCreateAgent={() => void createAgent()}
         onDeleteSession={() => void deleteActiveSession()}
         onOpenSettings={() => void openSettings()}
+        settingsLoading={settingsPending || settingsLoading}
         onOpenNotifications={openNotificationCenter}
         onRequestSystemPower={handleSystemPower}
         notificationUnreadCount={notificationUnreadCount}
@@ -2655,7 +2659,7 @@ function AppContent() {
                 type="button"
                 onClick={() => setError(null)}
                 aria-label={t("common.actions.dismissNotification")}
-                title={t("common.actions.dismissNotification")}
+                data-tooltip={t("common.actions.dismissNotification")}
               >
                 <X aria-hidden="true" size={15} />
               </button>
@@ -2672,7 +2676,7 @@ function AppContent() {
                 type="button"
                 onClick={() => setSuccessNotice(null)}
                 aria-label={t("common.actions.dismissNotification")}
-                title={t("common.actions.dismissNotification")}
+                data-tooltip={t("common.actions.dismissNotification")}
               >
                 <X aria-hidden="true" size={15} />
               </button>
@@ -2689,7 +2693,7 @@ function AppContent() {
                 type="button"
                 onClick={() => setWarningNotice(null)}
                 aria-label={t("common.actions.dismissNotification")}
-                title={t("common.actions.dismissNotification")}
+                data-tooltip={t("common.actions.dismissNotification")}
               >
                 <X aria-hidden="true" size={15} />
               </button>
@@ -2822,9 +2826,10 @@ function AppContent() {
         />
       ) : null}
 
+      <MobileAppScope.Provider value="settings">
+      {/* Keep the boundary mounted so desktop transitions retain the workspace while settings load. */}
+      <Suspense fallback={navigation.compact ? <MobileAppLoading app="settings" className="mobile-settings-page" /> : null}>
       {settingsOpen && (!navigation.compact || navigation.route === "settings") ? (
-        <MobileAppScope.Provider value="settings">
-        <Suspense fallback={<MobileAppLoading app="settings" className="mobile-settings-page" />}>
         <SettingsModal
           activeSection={activeSettingsSection}
           activeSessionId={activeSessionId}
@@ -2876,9 +2881,9 @@ function AppContent() {
           onSectionChange={setActiveSettingsSection}
           onSubmit={(event) => void saveSettings(event)}
         />
-        </Suspense>
-        </MobileAppScope.Provider>
       ) : null}
+      </Suspense>
+      </MobileAppScope.Provider>
       {videoTakeover ? <MusicTakeoverDialog title={t("music.takeoverTitle")} body={t("music.takeoverMusic")} busy={vodPlayerBusy} onCancel={() => setVideoTakeover(null)} onConfirm={() => void playSelectedOnVodPlayer(videoTakeover)} /> : null}
       {navigation.compact ? <PlaybackBar onOpenBluetoothSettings={() => void openSettings("bluetooth")} /> : null}
       {navigation.compact && navigation.route === "home" ? <MobileDock approvalCount={capabilityApprovals.length} onOpenApp={navigation.openApp} /> : null}

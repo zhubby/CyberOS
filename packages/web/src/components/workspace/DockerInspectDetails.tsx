@@ -93,7 +93,7 @@ export function DockerNetworkDetailsDialog({
                 {state.details.containers.map((container) => (
                   <article key={container.id}>
                     <strong>{container.name}</strong>
-                    <code title={container.id}>{container.id}</code>
+                    <code data-tooltip={container.id}>{container.id}</code>
                     <dl>
                       <div><dt>{t("workspace.management.docker.inspect.endpointId")}</dt><dd>{container.endpointId ?? t("common.dash")}</dd></div>
                       <div><dt>{t("workspace.management.docker.inspect.macAddress")}</dt><dd>{container.macAddress ?? t("common.dash")}</dd></div>
@@ -210,7 +210,7 @@ function DockerInspectDialog({
               <p>{subtitle}</p>
             </div>
           </div>
-          <button type="button" className="management-icon-action" onClick={onClose} title={String(t("common.actions.close"))} aria-label={String(t("common.actions.close"))}>
+          <button type="button" className="management-icon-action" onClick={onClose} data-tooltip={String(t("common.actions.close"))} aria-label={String(t("common.actions.close"))}>
             <X aria-hidden="true" size={15} />
           </button>
         </header>
@@ -252,7 +252,7 @@ function InspectList({ entries }: { entries: InspectEntry[] }) {
   return (
     <dl className="docker-container-detail-list">
       {entries.map(([label, value, mono]) => (
-        <div key={label}><dt>{label}</dt><dd className={mono ? "is-mono" : undefined} title={value}>{value}</dd></div>
+        <div key={label}><dt>{label}</dt><dd className={mono ? "is-mono" : undefined} data-tooltip={value}>{value}</dd></div>
       ))}
     </dl>
   );

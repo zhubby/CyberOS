@@ -16,4 +16,18 @@ describe("shared HUD theme", () => {
     expect(imports).not.toContain("hud-sample.css");
     expect(workspaces).toContain("--hud-void: var(--cyberos-hud-void)");
   });
+
+  it("keeps loading skeletons visible against dark panel surfaces", async () => {
+    const [base, brand] = await Promise.all([
+      readFile(new URL("./base.css", import.meta.url), "utf8"),
+      readFile(new URL("./brand.css", import.meta.url), "utf8")
+    ]);
+    const skeletonStyles = brand.match(/\.management-skeleton-block,\s*\.skeleton-block\s*\{([^}]+)\}/)?.[1];
+
+    expect(base).toContain("--skeleton-base: color-mix(in srgb, var(--text) 14%, var(--surface))");
+    expect(base).toContain("--skeleton-highlight: color-mix(in srgb, var(--text) 28%, var(--surface))");
+    expect(skeletonStyles).toContain("background-color: var(--skeleton-base)");
+    expect(skeletonStyles).toContain("background-image: linear-gradient(90deg, var(--skeleton-base), var(--skeleton-highlight), var(--skeleton-base))");
+    expect(skeletonStyles).not.toContain("rgb(5 10 14");
+  });
 });
