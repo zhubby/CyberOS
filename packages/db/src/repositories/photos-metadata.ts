@@ -151,7 +151,7 @@ export function replacePhotosAssetMetadata(
   }
   db.prepare("DELETE FROM photos_metadata_values WHERE asset_id = ?").run(asset.id);
   db.prepare("DELETE FROM photos_keywords WHERE asset_id = ?").run(asset.id);
-  db.prepare("DELETE FROM photos_metadata_fts WHERE asset_id = ?").run(asset.id);
+  db.prepare("DELETE FROM photos_metadata_fts WHERE rowid = (SELECT fts_rowid FROM photos_asset_metadata WHERE asset_id = ?)").run(asset.id);
 
   db.prepare(`
     INSERT INTO photos_asset_metadata (
@@ -238,7 +238,7 @@ export function replacePhotosAssetMetadata(
     );
   }
 
-  db.prepare(`
+  const document = db.prepare(`
     INSERT INTO photos_metadata_fts (
       asset_id, name, path, title, description, creator, copyright, keywords, camera, lens
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -254,6 +254,8 @@ export function replacePhotosAssetMetadata(
     [input.cameraMake, input.cameraModel].filter(Boolean).join(" "),
     [input.lensMake, input.lensModel].filter(Boolean).join(" ")
   );
+  db.prepare("UPDATE photos_asset_metadata SET fts_rowid = ? WHERE asset_id = ?")
+    .run(document.lastInsertRowid, asset.id);
 
   if (input.gpsLatitude !== null && input.gpsLongitude !== null) {
     const metadataRowId = db.prepare("SELECT rowid FROM photos_asset_metadata WHERE asset_id = ?")

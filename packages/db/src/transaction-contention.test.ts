@@ -88,22 +88,22 @@ const unrelatedWrite = {
 };
 
 describe("repository writes under WAL contention", () => {
-  it("waits before checking Photos scan deduplication and keeps library/path scope", async () => {
+  it("waits before checking Photos refresh deduplication and keeps library/path scope", async () => {
     const settings = savePhotosLibrarySettings(db, { storagePoolId: "pool-a", path: "Photos" });
-    const other = enqueuePhotosJob(db, { settings, path: "Photos/other" });
+    const other = enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/other" });
     const timestamp = "2026-10-30T00:00:00.000Z";
 
     const result = await withConcurrentWriter([{
       sql: `INSERT INTO photos_jobs(
         id, kind, status, storage_pool_id, path, library_updated_at, scan_generation, created_at, updated_at
-      ) VALUES (?, 'full_scan', 'queued', ?, ?, ?, ?, ?, ?)`,
-      parameters: ["concurrent-scan", settings.storagePoolId, settings.path, settings.updatedAt,
+      ) VALUES (?, 'path_refresh', 'queued', ?, ?, ?, ?, ?, ?)`,
+      parameters: ["concurrent-scan", settings.storagePoolId, "Photos/target", settings.updatedAt,
         "concurrent-scan", timestamp, timestamp]
-    }], () => enqueuePhotosJob(db, { settings }));
+    }], () => enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/target/nested" }));
 
-    expect(result).toMatchObject({ id: "concurrent-scan", status: "queued", path: "Photos" });
-    expect(enqueuePhotosJob(db, { settings })).toEqual(result);
-    expect(enqueuePhotosJob(db, { settings, path: "Photos/other" }).id).toBe(other.id);
+    expect(result).toMatchObject({ id: "concurrent-scan", kind: "path_refresh", status: "queued", path: "Photos/target" });
+    expect(enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/target/nested" })).toEqual(result);
+    expect(enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/other" }).id).toBe(other.id);
     expect(db.prepare("SELECT COUNT(*) FROM photos_jobs").pluck().get()).toBe(2);
   });
 

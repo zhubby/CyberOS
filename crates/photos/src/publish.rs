@@ -96,6 +96,13 @@ pub fn derivatives_published(record: &PublishRecord, cache_root: &Path) -> bool 
     )
 }
 
+pub(crate) fn cached_identity(cache_root: &Path, key: &str) -> Option<FileIdentity> {
+    let path = cache_root.join(key);
+    validate_cache_path(&path, cache_root).ok()?;
+    let identity = FileIdentity::from_file(&open_regular_nofollow(&path).ok()?).ok()?;
+    (identity.size > 0).then_some(identity)
+}
+
 fn publish_one(
     source: &Path,
     target: &Path,

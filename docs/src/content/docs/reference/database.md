@@ -4,7 +4,7 @@ description: SQLite WAL、表域和 migration policy。
 type: reference
 status: current
 audience: [developer, operator]
-sourceOfTruth: [packages/db/src/schema.ts, packages/db/src/connection.ts, packages/db/src/migrations/current.ts, packages/db/src/migrations/photos-metadata-lookup.ts, packages/monitoring/contracts/migrations, crates/monitor/src/adapters/metrics_sqlite.rs, crates/alerter/src/adapters/alert_store]
+sourceOfTruth: [packages/db/src/schema.ts, packages/db/src/connection.ts, packages/db/src/migrations/current.ts, packages/db/src/migrations/photos-metadata-lookup.ts, packages/db/src/migrations/photos-index-performance.ts, crates/photos/src/db.rs, crates/photos/src/db/scan.rs, packages/monitoring/contracts/migrations, crates/monitor/src/adapters/metrics_sqlite.rs, crates/alerter/src/adapters/alert_store]
 sidebar:
   order: 5
 ---
@@ -30,3 +30,11 @@ Photos worker 中先验证租约或查询状态、再写入的事务使用 `BEGI
 `006_photos_scan_contention` 为 pending 与可重试失败条目分别增加 partial index。worker 必须等此迁移完成后启动，领取条目时分别通过对应索引取候选，再按路径比较，保持原有顺序，避免在写事务中反复遍历已完成条目。目录发现结果每批最多 128 条提交，整批校验租约并原子写入；中断后重读目录时按主键幂等去重。不要把文件遍历放进批量事务，也不要通过延长 busy timeout 掩盖持续抢占写锁。
 
 `007_photos_metadata_lookup` 为 EAV 增加非唯一覆盖索引 `(asset_id, sensitive, key, value_type)`，支持时间线和详情按资源检查敏感字段，以及元数据替换、删除时的资源定位；同一字段的多个 ordinal 继续分别保存。字段列表先通过 `IN` 子查询一次构造当前图库、ready 资源和当前 metadata schema 的范围，再聚合公开值，按不同资源计数，不能将数组长度当作资源数量。当前 schema 的 partial metadata 仍参与字段列表，敏感值始终排除。API 使用同步 SQLite，相关子查询不得对每张照片重复扫描整张 EAV 表；应以真实 repository SQL 的查询计划回归约束索引查找，而非增加请求超时。字段列表仍需聚合范围内的公开值，索引不代表其成本与图库规模无关。
+
+`008_photos_index_performance` 为待处理、到期重试、同目录名称/主名查询和 EAV 资源删除增加索引，并将已有 FTS 文档 rowid 关联到元数据记录。新 worker 等待该迁移完成；旧任务的名称字段由 worker 每批最多 256 条补齐。迁移保留资源、断点和发布 journal，不执行历史删除或 `VACUUM`。
+
+目录发现流式读取，最多 256 条一次提交；目录同级媒体和 XMP 发现完成后才处理媒体，并持久化目录处理断点。未变化资源的扫描标记与进度批量提交。原媒体身份和衍生图版本有效、缓存完整时，XMP 或元数据版本变化只更新元数据及检索索引；缺失缓存会补建。默认处理并发仍为 1。
+
+同一图库的任务按入队顺序串行执行，等待重试的任务也阻止后续任务越过。仅合并未开始的排队任务；运行或恢复中的任务收到文件变化时追加后续目录刷新。局部刷新递归覆盖选定目录，只清理已完整遍历的范围，并以存储池、图库版本及严格目录边界限制删除。目录消失时退回图库内最近存在的祖先；遍历失败、挂载变化或租约丢失均不执行失效资源清理。周期完整扫描默认在上次完整扫描结束后等待 30 分钟。
+
+历史维护独立于扫描运行，每个删除事务最多 1,000 条：已完成任务的扫描明细逐批移除，终止失败任务明细保留 7 天，终态任务摘要保留 30 天。当前图库最新任务和最近一次成功完整扫描的摘要始终保留；运行、排队、等待重试及仍有关联发布 journal 的任务不清理。清理后 SQLite 可以复用页，不承诺数据库文件立即缩小。规模验证与设备测量步骤见[照片索引性能验收](/docs/how-to/photos-index-performance/)。

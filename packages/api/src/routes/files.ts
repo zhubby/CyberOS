@@ -25,7 +25,7 @@ import {
   cancelFileBatch,
   createFileBatch,
   createTrashEntry,
-  enqueuePhotosJob,
+  enqueuePhotosRefreshForPaths,
   FileBatchConflictError,
   getPhotosLibrarySettings,
   listFileBatches,
@@ -271,6 +271,10 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       }
 
       const meta = await getFilePreviewMeta(root.path, target.safe.relativePath);
+      const photoSettings = getPhotosLibrarySettings(db);
+      if (photoSettings?.storagePoolId === scope.pool.id) {
+        enqueuePhotosRefreshForPaths(db, photoSettings, [meta.path]);
+      }
       const operation = recordAppliedOperation(db, {
         operation: "upload",
         sourcePath: null,
@@ -363,15 +367,11 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
       if (
         photoSettings?.storagePoolId === scope.pool.id &&
         [result.sourcePath, result.targetPath].some((candidate) =>
-          candidate ? isPathWithin(photoSettings.path, candidate) : false
+          candidate ? isPathWithin(photoSettings.path, candidate) || isPathWithin(candidate, photoSettings.path) : false
         )
       ) {
         try {
-          enqueuePhotosJob(db, {
-            settings: photoSettings,
-            kind: "full_scan",
-            path: photoSettings.path
-          });
+          enqueuePhotosRefreshForPaths(db, photoSettings, [result.sourcePath, result.targetPath]);
         } catch (error) {
           server.log.error({ err: error }, "Failed to queue photo library refresh after file mutation");
         }
@@ -382,6 +382,14 @@ export function registerFileRoutes(server: FastifyInstance, { config, db, system
         targetPath: result.targetPath
       });
     } catch (error) {
+      const photoSettings = getPhotosLibrarySettings(db);
+      if (photoSettings?.storagePoolId === scope.pool.id) {
+        try {
+          enqueuePhotosRefreshForPaths(db, photoSettings, [proposal.proposal.sourcePath, proposal.proposal.targetPath]);
+        } catch (refreshError) {
+          server.log.error({ err: refreshError }, "Failed to queue photo refresh after partial file mutation");
+        }
+      }
       const message = error instanceof Error ? error.message : String(error);
       reply.status(400).send({ error: message });
     }

@@ -155,7 +155,31 @@ impl Library {
 
     pub fn read_directory(&self, root_relative_path: &Path) -> Result<ReadDir, PhotosError> {
         let directory = self.open_directory(root_relative_path)?;
+        #[cfg(target_os = "linux")]
         let path = process_fd_path(&directory);
+        // macOS fdescfs cannot enumerate a directory through /dev/fd. Development
+        // uses the verified pool path; production Linux always enumerates the held fd.
+        #[cfg(not(target_os = "linux"))]
+        let path = {
+            let path = self.mountpoint.join(normalize_relative(root_relative_path));
+            if std::fs::canonicalize(&path).map_err(PhotosError::storage)? != path {
+                return Err(PhotosError::new(
+                    ErrorCode::InvalidPath,
+                    "Photos directory crosses a symlink boundary",
+                    false,
+                ));
+            }
+            let metadata = std::fs::metadata(&path).map_err(PhotosError::storage)?;
+            let held = directory.metadata().map_err(PhotosError::storage)?;
+            if (metadata.dev(), metadata.ino()) != (held.dev(), held.ino()) {
+                return Err(PhotosError::new(
+                    ErrorCode::SourceChanged,
+                    "Photos directory changed during discovery",
+                    false,
+                ));
+            }
+            path
+        };
         std::fs::read_dir(path).map_err(PhotosError::storage)
     }
 

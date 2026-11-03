@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import type {
   PhotosAssetRecord,
   PhotosAssetStatus,
@@ -140,17 +141,31 @@ export function enqueuePhotosJob(
   }
 ): PhotosJobRecord {
   const kind = input.kind ?? "full_scan";
-  const jobPath = input.path ?? input.settings.path;
+  const jobPath = path.posix.normalize(input.path ?? input.settings.path);
+  if (!photosScopeContains(input.settings.path, jobPath) || path.posix.isAbsolute(jobPath) || jobPath === ".." || jobPath.startsWith("../")) {
+    throw new Error("Photo refresh must stay inside the library");
+  }
+  if (kind === "full_scan" && jobPath !== input.settings.path) throw new Error("Full photo scans must cover the library");
   const now = (input.now ?? new Date()).toISOString();
   const tx = db.transaction(() => {
-    const existing = db.prepare(`
+    const queued = db.prepare(`
       SELECT ${PHOTOS_JOB_COLUMNS}
       FROM photos_jobs
-      WHERE library_updated_at = ? AND kind = ? AND path = ?
-        AND ${input.queueAfterRunning ? "status = 'queued'" : "status IN ('queued', 'running')"}
-      ORDER BY created_at ASC LIMIT 1
-    `).get(input.settings.updatedAt, kind, jobPath) as DbPhotosJobRow | undefined;
-    if (existing) return mapPhotosJob(existing);
+      WHERE library_updated_at = ? AND status = 'queued' AND started_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM photos_scan_entries e WHERE e.job_id = photos_jobs.id)
+        AND NOT EXISTS (SELECT 1 FROM photos_publish_journal p WHERE p.job_id = photos_jobs.id)
+      ORDER BY created_at ASC
+    `).all(input.settings.updatedAt) as DbPhotosJobRow[];
+    const covering = queued.find((job) => photosScopeContains(job.path, jobPath) && (kind !== "full_scan" || job.kind === "full_scan"));
+    if (covering) return mapPhotosJob(covering);
+    const covered = queued.filter((job) => photosScopeContains(jobPath, job.path));
+    if (covered.length) {
+      const first = covered[0]!;
+      db.prepare("UPDATE photos_jobs SET path = ?, kind = ?, updated_at = ? WHERE id = ?")
+        .run(jobPath, kind, now, first.id);
+      for (const redundant of covered.slice(1)) db.prepare("DELETE FROM photos_jobs WHERE id = ?").run(redundant.id);
+      return getRequiredPhotosJob(db, first.id);
+    }
 
     const id = randomUUID();
     db.prepare(`
@@ -173,6 +188,28 @@ export function enqueuePhotosJob(
   return tx.immediate();
 }
 
+function photosScopeContains(root: string, candidate: string): boolean {
+  return root === "." || candidate === root || candidate.startsWith(`${root}/`);
+}
+
+/** File mutations refresh both parents, including descendants affected by directory moves. */
+export function enqueuePhotosRefreshForPaths(
+  db: CyberOsDatabase,
+  settings: PhotosLibrarySettingsRecord,
+  paths: Array<string | null | undefined>
+): void {
+  for (const candidate of paths) {
+    if (!candidate) continue;
+    if (photosScopeContains(candidate, settings.path)) {
+      enqueuePhotosJob(db, { settings, kind: "path_refresh", path: settings.path });
+      continue;
+    }
+    if (!photosScopeContains(settings.path, candidate)) continue;
+    const parent = candidate === settings.path ? settings.path : path.posix.dirname(candidate);
+    enqueuePhotosJob(db, { settings, kind: "path_refresh", path: parent });
+  }
+}
+
 export function ensurePeriodicPhotosScan(
   db: CyberOsDatabase,
   settings: PhotosLibrarySettingsRecord,
@@ -185,9 +222,9 @@ export function ensurePeriodicPhotosScan(
     WHERE library_updated_at = ? AND kind = 'full_scan'
     ORDER BY created_at DESC LIMIT 1
   `).get(settings.updatedAt) as DbPhotosJobRow | undefined;
-  if (latest && (latest.status === "queued" || latest.status === "running")) return mapPhotosJob(latest);
+  if (latest && ["queued", "running", "retrying"].includes(latest.status)) return mapPhotosJob(latest);
   if (hasStalePhotosMetadata(db, settings.updatedAt)) return enqueuePhotosJob(db, { settings, now });
-  if (latest && now.getTime() - new Date(latest.created_at).getTime() < input.intervalMs) return null;
+  if (latest && now.getTime() - new Date(latest.finished_at ?? latest.created_at).getTime() < input.intervalMs) return null;
   return enqueuePhotosJob(db, { settings, now });
 }
 
@@ -216,14 +253,24 @@ export function claimNextPhotosJob(
         phase = COALESCE(phase, 'discovering'), error = NULL, error_code = NULL,
         error_retryable = 0, next_retry_at = NULL, updated_at = ?
     WHERE id = (
-      SELECT id FROM photos_jobs
-      WHERE status = 'queued' OR (status = 'retrying' AND next_retry_at <= ?)
-      ORDER BY created_at ASC LIMIT 1
+      SELECT id FROM photos_jobs candidate
+      WHERE (status = 'queued' OR (status = 'retrying' AND next_retry_at <= ?))
+        AND NOT EXISTS (
+          SELECT 1 FROM photos_jobs active WHERE active.library_updated_at = candidate.library_updated_at
+            AND active.status = 'running' AND active.lease_expires_at > ?
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM photos_jobs earlier WHERE earlier.library_updated_at = candidate.library_updated_at
+            AND earlier.status IN ('queued','running','retrying')
+            AND earlier.rowid < candidate.rowid
+        )
+      ORDER BY created_at ASC, candidate.rowid ASC LIMIT 1
     ) AND (status = 'queued' OR (status = 'retrying' AND next_retry_at <= ?))
     RETURNING ${PHOTOS_JOB_COLUMNS}
   `).get(
     input.workerId,
     new Date(now.getTime() + input.leaseMs).toISOString(),
+    nowIso,
     nowIso,
     nowIso,
     nowIso,

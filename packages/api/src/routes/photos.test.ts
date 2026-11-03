@@ -395,7 +395,7 @@ describe("photos API", () => {
     expect(db!.prepare("SELECT COUNT(*) FROM jobs").pluck().get()).toBe(0);
     expect(db!.prepare("SELECT COUNT(*) FROM agent_messages").pluck().get()).toBe(0);
     expect(db!.prepare("SELECT COUNT(*) FROM capability_approvals").pluck().get()).toBe(0);
-    expect(claimNextPhotosJob(db!, { workerId: "test", leaseMs: 30_000 })).toMatchObject({ kind: "full_scan" });
+    expect(claimNextPhotosJob(db!, { workerId: "test", leaseMs: 30_000 })).toMatchObject({ kind: "path_refresh", path: "Photos" });
     await app.close();
   });
 

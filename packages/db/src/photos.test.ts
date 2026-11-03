@@ -8,6 +8,7 @@ import type { PhotosMetadataWriteInput } from "./index.js";
 import {
   claimNextPhotosJob,
   enqueuePhotosJob,
+  enqueuePhotosRefreshForPaths,
   ensurePeriodicPhotosScan,
   findPhotosAssetByHash,
   finishPhotosJob,
@@ -45,6 +46,66 @@ afterEach(async () => {
 });
 
 describe("photos repositories", () => {
+  it("indexes metadata deletion and tracks the FTS document through replacement and asset removal", () => {
+    const settings = saveSettings();
+    const asset = upsertReady(settings, "Photos/search.jpg", "search", "2026-01-01T00:00:00Z", undefined, metadata({ title: "Original" }));
+    const document = db.prepare("SELECT fts_rowid FROM photos_asset_metadata WHERE asset_id = ?").pluck().get(asset.id);
+    expect(document).toBeTypeOf("number");
+    expect(db.prepare("SELECT asset_id FROM photos_metadata_fts WHERE rowid = ?").pluck().get(document)).toBe(asset.id);
+    const plan = db.prepare("EXPLAIN QUERY PLAN DELETE FROM photos_metadata_values WHERE asset_id = ?").all(asset.id) as { detail: string }[];
+    expect(plan.some((row) => row.detail.includes("SEARCH"))).toBe(true);
+    upsertReady(settings, "Photos/search.jpg", "search", "2026-01-01T00:00:00Z", undefined, metadata({ title: "Replacement" }));
+    expect(queryPhotosAssets(db, { libraryUpdatedAt: settings.updatedAt, request: { filters: { text: "Original" } } }).total).toBe(0);
+    expect(queryPhotosAssets(db, { libraryUpdatedAt: settings.updatedAt, request: { filters: { text: "Replacement" } } }).total).toBe(1);
+    db.prepare("DELETE FROM photos_assets WHERE id = ?").run(asset.id);
+    expect(db.prepare("SELECT COUNT(*) FROM photos_metadata_fts").pluck().get()).toBe(0);
+  });
+
+  it("coalesces unstarted refresh scopes and queues changes arriving during an active scan", () => {
+    const settings = saveSettings();
+    const child = enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/2026/day" });
+    const parent = enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/2026" });
+    expect(parent.id).toBe(child.id);
+    expect(parent.path).toBe("Photos/2026");
+    claimNextPhotosJob(db, { workerId: "one", leaseMs: 30_000 });
+    const followup = enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/2026" });
+    expect(followup.id).not.toBe(parent.id);
+    expect(claimNextPhotosJob(db, { workerId: "two", leaseMs: 30_000 })).toBeNull();
+    expect(enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/2026/day" }).id).toBe(followup.id);
+  });
+
+  it("starts the periodic interval after a long full scan finishes", () => {
+    const settings = saveSettings();
+    const start = new Date("2026-01-01T00:00:00Z");
+    const job = enqueuePhotosJob(db, { settings, now: start });
+    claimNextPhotosJob(db, { workerId: "one", leaseMs: 60_000, now: start });
+    finishPhotosJob(db, { id: job.id, workerId: "one", now: new Date("2026-01-01T01:00:00Z") });
+    expect(ensurePeriodicPhotosScan(db, settings, { intervalMs: 1_800_000, now: new Date("2026-01-01T01:01:00Z") })).toBeNull();
+  });
+
+  it("keeps retrying and resumed scans ahead of followups even with identical creation times", () => {
+    const settings = saveSettings();
+    const now = new Date();
+    const first = enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/a", now });
+    claimNextPhotosJob(db, { workerId: "one", leaseMs: 30_000, now });
+    const next = enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/a", now });
+    db.prepare("UPDATE photos_jobs SET status='retrying',worker_id=NULL,lease_expires_at=NULL,next_retry_at=? WHERE id=?")
+      .run(new Date(now.getTime()+60_000).toISOString(),first.id);
+    expect(claimNextPhotosJob(db, { workerId: "two", leaseMs: 30_000, now })).toBeNull();
+    db.prepare("UPDATE photos_jobs SET status='queued' WHERE id=?").run(first.id);
+    expect(enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/a", now }).id).toBe(next.id);
+    expect(claimNextPhotosJob(db, { workerId: "two", leaseMs: 30_000, now })?.id).toBe(first.id);
+  });
+
+  it("refreshes source and target parents with strict boundaries, including ancestor directory operations", () => {
+    const settings = saveSettings();
+    enqueuePhotosRefreshForPaths(db, settings, ["Photos/a/photo.jpg", "Photos/b/photo.jpg", "Photos-other/no.jpg"]);
+    expect(db.prepare("SELECT path FROM photos_jobs ORDER BY path").pluck().all()).toEqual(["Photos/a", "Photos/b"]);
+    enqueuePhotosRefreshForPaths(db, settings, ["."]);
+    expect(db.prepare("SELECT path,kind FROM photos_jobs").all()).toEqual([{ path: "Photos", kind: "path_refresh" }]);
+    expect(() => enqueuePhotosJob(db, { settings, kind: "path_refresh", path: "Photos/../../escape" })).toThrow();
+  });
+
   it("rejects incomplete library settings", () => {
     db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)").run(
       "photos_library_settings",

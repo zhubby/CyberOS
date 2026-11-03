@@ -12,10 +12,10 @@ use uuid::Uuid;
 use crate::command::CommandRunner;
 use crate::config::{Config, verify_tools};
 use crate::db::{
-    Db, DiscoveredEntry, Job, ProcessingSettings, PublishRecord, SCAN_ENTRY_BATCH_SIZE, ScanEntry,
+    Db, DiscoveredEntry, Job, ProcessingSettings, PublishRecord, SCAN_BATCH_SIZE, ScanEntry,
 };
 use crate::error::{ErrorCode, PhotosError};
-use crate::media::{Sidecar, candidate_kind, process_media};
+use crate::media::{METADATA_SCHEMA_VERSION, Sidecar, candidate_kind, process_media_reusing};
 use crate::publish::{
     CacheLock, cleanup_orphan_derivatives, cleanup_orphan_temps, cleanup_publish_temps,
     publish_derivatives,
@@ -83,6 +83,8 @@ impl Photos {
             self.shutdown.clone(),
         ));
         let watchdog = tokio::spawn(watchdog_loop(self.shutdown.clone()));
+        let maintenance =
+            tokio::spawn(history_cleanup_loop(self.db.clone(), self.shutdown.clone()));
 
         let mut poll = tokio::time::interval(Duration::from_secs(1));
         poll.tick().await;
@@ -100,6 +102,7 @@ impl Photos {
         self.shutdown.cancel();
         let _ = heartbeat.await;
         let _ = watchdog.await;
+        let _ = maintenance.await;
         self.db.release_worker(&self.worker_id).await?;
         Ok(())
     }
@@ -144,6 +147,20 @@ impl Photos {
     }
 }
 
+async fn history_cleanup_loop(db: Db, shutdown: CancellationToken) {
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            _ = shutdown.cancelled() => break,
+            _ = interval.tick() => {
+                if let Err(error) = db.prune_history_batch().await {
+                    tracing::warn!(code = error.code.as_str(), message = %error.message, "Photos history cleanup failed");
+                }
+            }
+        }
+    }
+}
+
 async fn heartbeat_loop(db: Db, worker_id: String, shutdown: CancellationToken) {
     let mut interval = tokio::time::interval(Duration::from_secs(5));
     interval.tick().await;
@@ -177,15 +194,58 @@ async fn run_job(
     config: &Config,
     shutdown: &CancellationToken,
 ) -> Result<(), PhotosError> {
+    let started = std::time::Instant::now();
     let cache_root = &config.cache_root;
+    let (current, _) = db.settings().await?;
+    let current = current
+        .filter(|current| {
+            current.updated_at == job.library_updated_at
+                && current.storage_pool_id == job.storage_pool_id
+        })
+        .ok_or_else(|| {
+            PhotosError::new(
+                ErrorCode::SourceChanged,
+                "Photos library configuration changed",
+                false,
+            )
+        })?;
     let library = Arc::new(Library::resolve(
         &config.data_root,
         &job.storage_pool_id,
-        Path::new(&job.path),
+        Path::new(&current.path),
         config.production,
     )?);
     tracing::debug!(mountpoint = %library.mountpoint().display(), job_id = %job.id, "Photos storage verified");
-    db.initialize_scan(job, worker_id).await?;
+    let original_path = job.path.clone();
+    let mut job = job.clone();
+    // Keep the path spelling used by existing pool-root scans, preserving asset IDs.
+    if current.path == "." && job.path != "." && !job.path.starts_with("./") {
+        job.path = format!("./{}", job.path);
+    }
+    // A deleted/moved refresh directory is covered by its nearest existing ancestor.
+    // Resolve through Library so symlink, mount and configured-root checks still apply.
+    loop {
+        match library.open_directory(Path::new(&job.path)) {
+            Ok(_) => break,
+            Err(error)
+                if job.kind == "path_refresh"
+                    && error.code == ErrorCode::SourceChanged
+                    && job.path != current.path =>
+            {
+                let parent = Path::new(&job.path)
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .unwrap_or_else(|| Path::new("."));
+                let path = parent.to_string_lossy().into_owned();
+                job.path = path;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    if job.path != original_path {
+        job.scan_generation = Uuid::new_v4().to_string();
+    }
+    let job = &job;
     let lease_shutdown = CancellationToken::new();
     let lease_lost = CancellationToken::new();
     let lease_task = {
@@ -209,24 +269,50 @@ async fn run_job(
         })
     };
     let work = async {
-        discover(db, worker_id, job, &library, shutdown, &lease_lost).await?;
-        library.verify_unchanged()?;
-        if !db.set_phase(&job.id, worker_id, "processing", None).await? {
-            return Err(lease_lost_error());
+        if job.path != original_path {
+            db.restart_refresh_scope(job, worker_id).await?;
         }
-        process_entries(
-            db,
-            worker_id,
-            job,
-            settings,
-            library,
-            cache_root,
-            shutdown,
-            &lease_lost,
-        )
-        .await?;
+        db.initialize_scan(job, worker_id).await?;
+        db.backfill_lookup_keys(job, worker_id).await?;
+        loop {
+            check_control(shutdown, &lease_lost)?;
+            if let Some(directory) = db.completed_directory(job, worker_id).await? {
+                db.set_phase(&job.id, worker_id, "processing", Some(&directory))
+                    .await?;
+                process_entries(
+                    db,
+                    worker_id,
+                    job,
+                    &directory,
+                    settings,
+                    Arc::clone(&library),
+                    cache_root,
+                    shutdown,
+                    &lease_lost,
+                )
+                .await?;
+                db.finish_directory(job, &directory, worker_id).await?;
+            } else if let Some(directory) = db.claim_entry(&job.id, "directory", worker_id).await? {
+                db.set_phase(&job.id, worker_id, "discovering", Some(&directory.path))
+                    .await?;
+                discover(
+                    db,
+                    worker_id,
+                    job,
+                    &directory,
+                    &library,
+                    shutdown,
+                    &lease_lost,
+                )
+                .await?;
+            } else {
+                break;
+            }
+        }
+        library.verify_unchanged()?;
         db.set_phase(&job.id, worker_id, "cleanup", None).await?;
         db.finish_job(job, worker_id).await?;
+        tracing::info!(job_id = %job.id, scope = %job.path, elapsed_ms = started.elapsed().as_millis() as u64, "Photos scan completed");
         if job.kind == "full_scan" {
             let cleanup = async {
                 let cleanup_lock = CacheLock::exclusive(cache_root).await?;
@@ -257,82 +343,67 @@ async fn discover(
     db: &Db,
     worker_id: &str,
     job: &Job,
+    entry: &ScanEntry,
     library: &Library,
     shutdown: &CancellationToken,
     lease_lost: &CancellationToken,
 ) -> Result<(), PhotosError> {
-    while let Some(entry) = db.claim_entry(&job.id, "directory", worker_id).await? {
+    check_control(shutdown, lease_lost)?;
+    let directory = library.read_directory(Path::new(&entry.path))?;
+    let mut batch = Vec::with_capacity(SCAN_BATCH_SIZE);
+    for child in directory {
         check_control(shutdown, lease_lost)?;
-        let directory = match library.read_directory(Path::new(&entry.path)) {
-            Ok(directory) => directory,
-            Err(error)
-                if matches!(
-                    error.code,
-                    ErrorCode::InvalidPath | ErrorCode::SourceChanged
-                ) =>
-            {
-                db.skip_entry(&job.id, &entry.path, worker_id).await?;
-                continue;
-            }
-            Err(error) => return Err(error),
-        };
-        let mut discovered = Vec::with_capacity(SCAN_ENTRY_BATCH_SIZE);
-        for child in directory {
-            check_control(shutdown, lease_lost)?;
-            let child = child.map_err(PhotosError::storage)?;
-            let name = child.file_name().into_string().map_err(|_| {
-                PhotosError::new(
-                    ErrorCode::InvalidPath,
-                    "Photos paths must be valid UTF-8",
-                    false,
-                )
-            })?;
-            let child_path = Path::new(&entry.path)
-                .join(&name)
-                .to_string_lossy()
-                .into_owned();
-            let file_type = child.file_type().map_err(PhotosError::storage)?;
-            if file_type.is_symlink() {
-                continue;
-            }
-            let entry_type = if file_type.is_dir() {
-                match library.open_directory(Path::new(&child_path)) {
-                    Ok(directory) => drop(directory),
-                    Err(error)
-                        if matches!(
-                            error.code,
-                            ErrorCode::InvalidPath | ErrorCode::SourceChanged
-                        ) =>
-                    {
-                        continue;
-                    }
-                    Err(error) => return Err(error),
-                }
-                "directory"
-            } else if file_type.is_file() && candidate_kind(&name).is_some() {
-                "media"
-            } else if file_type.is_file() && name.to_ascii_lowercase().ends_with(".xmp") {
-                "sidecar"
-            } else {
-                continue;
-            };
-            discovered.push(DiscoveredEntry {
-                path: child_path,
-                entry_type: entry_type.into(),
-            });
-            if discovered.len() == SCAN_ENTRY_BATCH_SIZE {
-                db.add_scan_entries(&job.id, &entry.path, &discovered, worker_id)
-                    .await?;
-                discovered.clear();
-                tokio::task::yield_now().await;
-            }
+        let child = child.map_err(PhotosError::storage)?;
+        let name = child.file_name().into_string().map_err(|_| {
+            PhotosError::new(
+                ErrorCode::InvalidPath,
+                "Photos paths must be valid UTF-8",
+                false,
+            )
+        })?;
+        let child_path = Path::new(&entry.path)
+            .join(&name)
+            .to_string_lossy()
+            .into_owned();
+        let file_type = child.file_type().map_err(PhotosError::storage)?;
+        if file_type.is_symlink() {
+            continue;
         }
-        check_control(shutdown, lease_lost)?;
-        db.add_scan_entries(&job.id, &entry.path, &discovered, worker_id)
-            .await?;
-        db.complete_entry(&job.id, &entry.path, false, worker_id)
-            .await?;
+        let entry_type = if file_type.is_dir() {
+            match library.open_directory(Path::new(&child_path)) {
+                Ok(directory) => drop(directory),
+                Err(error)
+                    if matches!(
+                        error.code,
+                        ErrorCode::InvalidPath | ErrorCode::SourceChanged
+                    ) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+            "directory"
+        } else if file_type.is_file() && candidate_kind(&name).is_some() {
+            "media"
+        } else if file_type.is_file() && name.to_ascii_lowercase().ends_with(".xmp") {
+            "sidecar"
+        } else {
+            continue;
+        };
+        batch.push(DiscoveredEntry {
+            path: child_path,
+            entry_type: entry_type.into(),
+        });
+        if batch.len() == SCAN_BATCH_SIZE {
+            db.add_scan_entries(&job.id, &entry.path, std::mem::take(&mut batch), worker_id)
+                .await?;
+        }
     }
+    check_control(shutdown, lease_lost)?;
+    db.add_scan_entries(&job.id, &entry.path, batch, worker_id)
+        .await?;
+    db.complete_entry(&job.id, &entry.path, false, worker_id)
+        .await?;
     Ok(())
 }
 
@@ -341,48 +412,64 @@ async fn process_entries(
     db: &Db,
     worker_id: &str,
     job: &Job,
+    parent: &str,
     settings: &ProcessingSettings,
     library: Arc<Library>,
     cache_root: &Path,
     shutdown: &CancellationToken,
     lease_lost: &CancellationToken,
 ) -> Result<(), PhotosError> {
-    let mut running = FuturesUnordered::new();
-    let mut exhausted = false;
     loop {
         check_control(shutdown, lease_lost)?;
-        while running.len() < settings.processing_concurrency && !exhausted {
-            match db.claim_entry(&job.id, "media", worker_id).await? {
-                Some(entry) => {
-                    let db = db.clone();
-                    let worker_id = worker_id.to_owned();
-                    let job = job.clone();
-                    let settings = settings.clone();
-                    let library = Arc::clone(&library);
-                    let cache_root = cache_root.to_owned();
-                    running.push(async move {
-                        process_entry(
-                            &db,
-                            &worker_id,
-                            &job,
-                            &entry,
-                            &settings,
-                            &library,
-                            &cache_root,
-                            lease_lost,
-                        )
-                        .await
-                    });
-                }
-                None => exhausted = true,
-            }
-        }
-        if running.is_empty() {
+        let entries = db.claim_media_batch(job, parent, worker_id).await?;
+        if entries.is_empty() {
             break;
         }
-        if let Some(result) = running.next().await {
-            result?;
+        let mut entries = entries.into_iter();
+        let mut running = FuturesUnordered::new();
+        let mut unchanged = Vec::new();
+        loop {
+            while running.len() < settings.processing_concurrency {
+                let Some(entry) = entries.next() else {
+                    break;
+                };
+                let db = db.clone();
+                let worker_id = worker_id.to_owned();
+                let job = job.clone();
+                let settings = settings.clone();
+                let library = Arc::clone(&library);
+                let cache_root = cache_root.to_owned();
+                running.push(async move {
+                    process_entry(
+                        &db,
+                        &worker_id,
+                        &job,
+                        &entry,
+                        &settings,
+                        &library,
+                        &cache_root,
+                        lease_lost,
+                    )
+                    .await
+                });
+            }
+            if running.is_empty() {
+                break;
+            }
+            if let Some(result) = running.next().await {
+                match result {
+                    Ok(Some(path)) => unchanged.push(path),
+                    Ok(None) => {}
+                    Err(error) => {
+                        db.complete_unchanged_batch(job, unchanged, worker_id)
+                            .await?;
+                        return Err(error);
+                    }
+                }
+            }
         }
+        db.complete_unchanged_batch(job, unchanged, worker_id)
+            .await?;
     }
     library.verify_unchanged()
 }
@@ -397,18 +484,18 @@ async fn process_entry(
     library: &Library,
     cache_root: &Path,
     lease_lost: &CancellationToken,
-) -> Result<(), PhotosError> {
+) -> Result<Option<String>, PhotosError> {
     check_lease(lease_lost)?;
     let source_result = library.open_media(Path::new(&entry.path));
     let (mut source, source_identity) = match source_result {
         Ok(value) => value,
         Err(error) if !error.retryable => {
             db.fail_entry(job, entry, &error, None, worker_id).await?;
-            return Ok(());
+            return Ok(None);
         }
         Err(error) => return Err(error),
     };
-    let sidecar_resolution = db.sidecar_for(&job.id, &entry.path).await?;
+    let sidecar_resolution = db.indexed_sidecar_for(&job.id, &entry.path).await?;
     let (sidecar_file, sidecar_path, sidecar_identity, sidecar_warning) = match sidecar_resolution {
         Ok(Some(path)) => {
             let (file, identity) = library.open_media(Path::new(&path))?;
@@ -417,34 +504,45 @@ async fn process_entry(
         Ok(None) => (None, None, None, None),
         Err(warning) => (None, None, None, Some(warning)),
     };
-    if db
-        .mark_current_if_unchanged(
-            job,
-            &entry.path,
-            source_identity,
-            sidecar_path.as_deref().zip(sidecar_identity),
-            worker_id,
-        )
-        .await?
+    let current = db.current_asset(job, &entry.path).await?;
+    let reusable = current.as_ref().filter(|asset| {
+        asset.source == source_identity && asset.media.cached_identities(cache_root).is_some()
+    });
+    if let Some(asset) = reusable
+        && asset.sidecar_path == sidecar_path
+        && asset.sidecar == sidecar_identity
+        && asset.metadata_version == METADATA_SCHEMA_VERSION
+        && asset.sidecar_warning == sidecar_warning
     {
-        db.complete_entry(&job.id, &entry.path, true, worker_id)
-            .await?;
-        return Ok(());
+        verify_sources(
+            library,
+            entry,
+            &source,
+            source_identity,
+            sidecar_file.as_ref(),
+            sidecar_path.as_deref(),
+            sidecar_identity,
+        )?;
+        return Ok(Some(entry.path.clone()));
     }
-    let available = cache_available_bytes(cache_root)?;
     // A decode scratch file and both derivatives can coexist until publication.
     let estimate = settings.max_intermediate_bytes.saturating_mul(3);
-    let reservation = db
-        .reserve_space(
-            job,
-            &entry.path,
-            CACHE_RESERVATION_SCOPE,
-            estimate,
-            available,
-            settings.min_free_space_bytes,
-            worker_id,
+    let reservation = if reusable.is_none() {
+        Some(
+            db.reserve_space(
+                job,
+                &entry.path,
+                CACHE_RESERVATION_SCOPE,
+                estimate,
+                cache_available_bytes(cache_root)?,
+                settings.min_free_space_bytes,
+                worker_id,
+            )
+            .await?,
         )
-        .await?;
+    } else {
+        None
+    };
     let result: Result<(), PhotosError> = async {
         let cache_lock = CacheLock::shared(cache_root).await?;
         let runner = CommandRunner;
@@ -465,7 +563,7 @@ async fn process_entry(
             })?;
         let mut processed = tokio::select! {
             _ = lease_lost.cancelled() => return Err(lease_lost_error()),
-            result = process_media(
+            result = process_media_reusing(
                 &mut source,
                 name,
                 source_identity,
@@ -473,6 +571,7 @@ async fn process_entry(
                 cache_root,
                 settings,
                 &runner,
+                reusable.map(|asset| &asset.media),
             ) => result?,
         };
         verify_sources(
@@ -489,7 +588,7 @@ async fn process_entry(
             processed.metadata.warnings.push(warning);
             processed.metadata.status = "partial".into();
         }
-        let asset_id = db.asset_id(job, &entry.path).await?;
+        let asset_id = match &current { Some(asset) => asset.id.clone(), None => db.asset_id(job, &entry.path).await? };
         let record = PublishRecord {
             operation_id: Uuid::new_v4().to_string(),
             job_id: job.id.clone(),
@@ -504,6 +603,10 @@ async fn process_entry(
             sidecar_path: sidecar_path.clone(),
             processed,
         };
+        if reusable.is_some() {
+            db.complete_metadata_only(&record, worker_id).await?;
+            return Ok(());
+        }
         if !db
             .set_phase(&job.id, worker_id, "publishing", Some(&entry.path))
             .await?
@@ -552,9 +655,11 @@ async fn process_entry(
         Ok(())
     }
     .await;
-    db.release_space(&reservation).await?;
+    if let Some(reservation) = reservation {
+        db.release_space(&reservation).await?;
+    }
     match result {
-        Ok(()) => Ok(()),
+        Ok(()) => Ok(None),
         Err(error) if error.retryable => Err(error),
         Err(error) => {
             let name = Path::new(&entry.path)
@@ -564,7 +669,7 @@ async fn process_entry(
             db.record_failed_asset(job, &entry.path, name, source_identity, &error, worker_id)
                 .await?;
             db.fail_entry(job, entry, &error, None, worker_id).await?;
-            Ok(())
+            Ok(None)
         }
     }
 }
@@ -660,7 +765,15 @@ async fn recover_journals(
     cache_root: &Path,
     require_mount: bool,
 ) -> Result<(), PhotosError> {
+    let (current, _) = db.settings().await?;
     for record in db.recoverable_journals().await? {
+        if !current.as_ref().is_some_and(|settings| {
+            settings.updated_at == record.library_updated_at
+                && settings.storage_pool_id == record.storage_pool_id
+        }) {
+            db.abort_journal(&record.operation_id, false).await?;
+            continue;
+        }
         let cache_lock = CacheLock::shared(cache_root).await?;
         let sources = match open_journal_sources(data_root, &record, require_mount).await {
             Ok(sources) => sources,

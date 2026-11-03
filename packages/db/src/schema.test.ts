@@ -39,7 +39,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "004_music_library",
         "005_video_library",
         "006_photos_scan_contention",
-        "007_photos_metadata_lookup"
+        "007_photos_metadata_lookup",
+        "008_photos_index_performance"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
@@ -58,7 +59,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "004_music_library",
         "005_video_library",
         "006_photos_scan_contention",
-        "007_photos_metadata_lookup"
+        "007_photos_metadata_lookup",
+        "008_photos_index_performance"
     ]);
   });
 
@@ -191,7 +193,9 @@ describe("CyberOS 2.0 SQLite schema", () => {
     const databasePath = path.join(tempDir, "metadata-upgrade.sqlite");
     const snapshot = (database: Database.Database) => ({
       assets: database.prepare("SELECT * FROM photos_assets ORDER BY id").all(),
-      metadata: database.prepare("SELECT * FROM photos_asset_metadata ORDER BY asset_id").all(),
+      metadata: database.prepare("SELECT * FROM photos_asset_metadata ORDER BY asset_id").all()
+        .map((row) => Object.fromEntries(Object.entries(row as Record<string, unknown>)
+          .filter(([key]) => key !== "fts_rowid"))),
       values: database.prepare("SELECT * FROM photos_metadata_values ORDER BY id").all(),
       settings: database.prepare("SELECT * FROM system_settings ORDER BY key").all()
     });
@@ -254,6 +258,28 @@ describe("CyberOS 2.0 SQLite schema", () => {
     } finally {
       reopened.close();
     }
+  });
+
+  it("links existing photo search documents without discarding assets or recovery state", () => {
+    const database = new Database(":memory:");
+    try {
+      database.pragma("foreign_keys = ON");
+      database.exec(migrations[0]!.sql);
+      database.prepare(`INSERT INTO photos_assets(id,storage_pool_id,path,name,mime_type,size_bytes,mtime_ms,taken_at,taken_at_source,status,library_updated_at,indexed_at)
+        VALUES('asset','pool-1','Pictures/a.jpg','a.jpg','image/jpeg',1,1,'2026','file_mtime','ready','version','2026')`).run();
+      database.prepare("INSERT INTO photos_asset_metadata(asset_id,schema_version,status,media_kind,capture_source,raw_metadata_json,warnings_json,updated_at) VALUES('asset',2,'ready','image','file_mtime','{}','[]','2026')").run();
+      database.prepare("INSERT INTO photos_metadata_fts(rowid,asset_id,name,path) VALUES(123,'asset','a.jpg','Pictures/a.jpg')").run();
+      database.prepare("INSERT INTO photos_jobs(id,kind,status,storage_pool_id,path,library_updated_at,scan_generation,created_at,updated_at) VALUES('job','full_scan','retrying','pool-1','Pictures','version','generation','2026','2026')").run();
+      database.prepare("INSERT INTO photos_scan_entries(job_id,path,entry_type,status,updated_at) VALUES('job','Pictures/a.jpg','media','processing','2026')").run();
+      database.prepare("INSERT INTO photos_publish_journal(operation_id,job_id,asset_id,source_path,source_device,source_inode,source_size_bytes,result_json,created_at) VALUES('op','job','asset','Pictures/a.jpg',1,2,3,'{}','2026')").run();
+      database.exec(migrations.find((migration) => migration.id === "008_photos_index_performance")!.sql);
+      expect(database.prepare("SELECT fts_rowid FROM photos_asset_metadata").pluck().get()).toBe(123);
+      expect(database.prepare("SELECT name_key,children_processed,status FROM photos_scan_entries").get()).toEqual({ name_key: null, children_processed: 0, status: "processing" });
+      expect(database.prepare("SELECT COUNT(*) FROM photos_publish_journal").pluck().get()).toBe(1);
+      expect(database.pragma("foreign_key_check")).toEqual([]);
+      database.prepare("DELETE FROM photos_assets WHERE id='asset'").run();
+      expect(database.prepare("SELECT COUNT(*) FROM photos_metadata_fts").pluck().get()).toBe(0);
+    } finally { database.close(); }
   });
 
   it("rejects an unmarked non-empty database without changing it", () => {
@@ -372,7 +398,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "004_music_library",
         "005_video_library",
         "006_photos_scan_contention",
-        "007_photos_metadata_lookup"
+        "007_photos_metadata_lookup",
+        "008_photos_index_performance"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {

@@ -22,7 +22,8 @@ import {
   PHOTO_ACCEPT,
   readyPhotoQueryFilters,
   retryCountdown,
-  shouldAutoLoadPhotos
+  shouldAutoLoadPhotos,
+  shouldRefreshPhotoSnapshot
 } from "./PhotoLibraryPanel.js";
 import {
   mergePhotoFilterDraft,
@@ -114,6 +115,14 @@ describe("Photo offline map states", () => {
 });
 
 describe("photo timeline grouping", () => {
+  it("refreshes an idle first page at most every five seconds and preserves active snapshots", () => {
+    const idle = { view: "timeline", selectedCount: 0, lightboxOpen: false, paginated: false, loading: false, scrollTop: 0, now: 10_000, lastRefreshAt: 5_000 };
+    expect(shouldRefreshPhotoSnapshot(idle)).toBe(true);
+    for (const patch of [
+      { now: 9_999 }, { selectedCount: 1 }, { lightboxOpen: true },
+      { paginated: true }, { loading: true }, { scrollTop: 200 }, { view: "map" }
+    ]) expect(shouldRefreshPhotoSnapshot({ ...idle, ...patch })).toBe(false);
+  });
   it("renders the full library skeleton instead of an initial centered spinner", () => {
     const html = renderToStaticMarkup(createElement(PhotoLibraryPanel, {
       pools: [],

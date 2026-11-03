@@ -84,6 +84,15 @@ import { PhotoSearchFilterMenu } from "./PhotoSearchFilterMenu.js";
 
 export const PHOTO_ACCEPT = PHOTOS_UPLOAD_EXTENSIONS.join(",");
 
+export function shouldRefreshPhotoSnapshot(input: {
+  view: string; selectedCount: number; lightboxOpen: boolean; paginated: boolean;
+  loading: boolean; scrollTop: number; now: number; lastRefreshAt: number;
+}): boolean {
+  return input.view === "timeline" && input.selectedCount === 0 && !input.lightboxOpen
+    && !input.paginated && !input.loading && input.scrollTop <= 1
+    && input.now - input.lastRefreshAt >= 5_000;
+}
+
 export function PhotoLibraryPanel({
   pools,
   locale,
@@ -161,6 +170,19 @@ export function PhotoLibraryPanel({
   const queryKeyRef = useRef("");
   const loadingMoreRef = useRef(false);
   const metadataRequestRef = useRef(0);
+  const paginatedRef = useRef(false);
+  const timelinePendingRef = useRef(false);
+  const lastSnapshotRefreshRef = useRef(0);
+  const lastSnapshotVersionRef = useRef<string | null>(null);
+  const catalogDirtyRef = useRef(false);
+  const canRefreshSnapshotRef = useRef<() => boolean>(() => false);
+  // Recheck interaction state when a response arrives; the poll loop owns timing.
+  canRefreshSnapshotRef.current = () => shouldRefreshPhotoSnapshot({
+    view, selectedCount: selectedIds.size, lightboxOpen: lightboxId !== null,
+    paginated: paginatedRef.current, loading: loading || loadingMoreRef.current || busyAction !== null,
+    scrollTop: Math.max(libraryContentRef.current?.scrollTop ?? 0, libraryRef.current?.scrollTop ?? 0),
+    now: 5_000, lastRefreshAt: 0
+  });
 
   const configuredPool = pools.find((pool) => pool.id === settings?.storagePoolId) ?? null;
   const selected = photos.filter((photo) => selectedIds.has(photo.id));
@@ -216,20 +238,32 @@ export function PhotoLibraryPanel({
     };
   }, [runtimeAlertOpen]);
 
-  const loadTimeline = useCallback(async (cursor: string | null = null) => {
+  const loadTimeline = useCallback(async (cursor: string | null = null, background = false) => {
+    if (background && (timelinePendingRef.current || !canRefreshSnapshotRef.current())) return;
+    if (cursor) paginatedRef.current = true;
     const requestId = cursor ? timelineRequestRef.current : ++timelineRequestRef.current;
-    const page = await queryPhotos({
-      filters: queryFilters,
-      sort: { field: sortField, direction: sortDirection },
-      cursor,
-      limit: 60,
-      includeFacets: !cursor
-    });
-    if (requestId !== timelineRequestRef.current) return;
-    setPhotos((current) => cursor ? mergePhotos(current, page.photos) : page.photos);
-    setNextCursor(page.nextCursor);
-    setTotal(page.total);
-    if (!cursor) setFacets(page.facets);
+    timelinePendingRef.current = true;
+    lastSnapshotRefreshRef.current = Date.now();
+    try {
+      const page = await queryPhotos({
+        filters: queryFilters,
+        sort: { field: sortField, direction: sortDirection },
+        cursor,
+        limit: 60,
+        includeFacets: !cursor && !background
+      });
+      if (requestId !== timelineRequestRef.current) return;
+      if (background && !canRefreshSnapshotRef.current()) return;
+      setPhotos((current) => cursor ? mergePhotos(current, page.photos) : page.photos);
+      setNextCursor(page.nextCursor);
+      setTotal(page.total);
+      if (!cursor && !background) {
+        paginatedRef.current = false;
+        setFacets(page.facets);
+      }
+    } finally {
+      if (requestId === timelineRequestRef.current) timelinePendingRef.current = false;
+    }
   }, [queryFilters, sortDirection, sortField]);
   timelineLoadRef.current = loadTimeline;
   queryKeyRef.current = queryKey;
@@ -312,10 +346,28 @@ export function PhotoLibraryPanel({
         const snapshot = await getPhotoStatus();
         if (!active) return;
         nextBusy = isPhotoBusy(snapshot.status.state);
-        const timelineChanged = snapshot.status.updatedAt !== status?.updatedAt;
+        const version = JSON.stringify([snapshot.status.updatedAt, snapshot.status.total, snapshot.status.processed, snapshot.status.state]);
+        const timelineChanged = version !== lastSnapshotVersionRef.current;
+        if (nextBusy || statusBusy) catalogDirtyRef.current = true;
         setStatus(snapshot.status);
         setWorkerHealth(snapshot.workerHealth);
-        if (!nextBusy && timelineChanged) await loadTimeline();
+        if (timelineChanged && Date.now() - lastSnapshotRefreshRef.current >= 5_000
+            && !timelinePendingRef.current && canRefreshSnapshotRef.current()) {
+          await loadTimeline(null, true);
+          if (active && canRefreshSnapshotRef.current()) lastSnapshotVersionRef.current = version;
+        }
+        if (!nextBusy && catalogDirtyRef.current) {
+          const requestKey = queryKeyRef.current;
+          const [page, fields] = await Promise.all([
+            queryPhotos({ filters: queryFilters, sort: { field: sortField, direction: sortDirection }, limit: 1, includeFacets: true }),
+            getPhotoMetadataFields()
+          ]);
+          if (active && queryKeyRef.current === requestKey) {
+            setFacets(page.facets);
+            setMetadataFields((current) => samePhotoMetadataFields(current, fields) ? current : fields);
+            catalogDirtyRef.current = false;
+          }
+        }
       } catch (error) {
         if (active) onNotifyError(errorMessage(error));
       } finally {
@@ -327,7 +379,7 @@ export function PhotoLibraryPanel({
       active = false;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [loadTimeline, onNotifyError, settings, status?.updatedAt, statusBusy]);
+  }, [loadTimeline, onNotifyError, queryFilters, settings, sortDirection, sortField, statusBusy]);
 
   useEffect(() => {
     if (!status?.nextRetryAt) return undefined;
@@ -730,7 +782,7 @@ export function PhotoLibraryPanel({
         <div className="photo-query-panel">
           <div className="photo-query-toolbar">
             <form className="photo-search-field" role="search" onSubmit={submitSearch}>
-              <button type="submit" title={t("workspace.photos.search")} aria-label={t("workspace.photos.search")}>
+              <button type="submit" data-tooltip={t("workspace.photos.search")} aria-label={t("workspace.photos.search")}>
                 <Search aria-hidden="true" size={15} />
               </button>
               <input
@@ -742,10 +794,10 @@ export function PhotoLibraryPanel({
               />
             </form>
             <div className="photo-view-switch" role="tablist" aria-label={t("workspace.photos.views")}>
-              <button type="button" role="tab" aria-selected={view === "timeline"} onClick={() => setView("timeline")} title={t("workspace.photos.timelineView")}>
+              <button type="button" role="tab" aria-selected={view === "timeline"} onClick={() => setView("timeline")} data-tooltip={t("workspace.photos.timelineView")}>
                 <List aria-hidden="true" size={15} /><span>{t("workspace.photos.timelineView")}</span>
               </button>
-              <button type="button" role="tab" aria-selected={view === "map"} onClick={() => setView("map")} title={t("workspace.photos.mapView")}>
+              <button type="button" role="tab" aria-selected={view === "map"} onClick={() => setView("map")} data-tooltip={t("workspace.photos.mapView")}>
                 <Map aria-hidden="true" size={15} /><span>{t("workspace.photos.mapView")}</span>
               </button>
             </div>
@@ -765,7 +817,7 @@ export function PhotoLibraryPanel({
                 ariaLabel={t("workspace.photos.sort")}
                 className="photo-sort-select"
               />
-              <button type="button" onClick={reverseSortDirection} title={t("workspace.photos.sortDirection")} aria-label={t("workspace.photos.sortDirection")}>
+              <button type="button" onClick={reverseSortDirection} data-tooltip={t("workspace.photos.sortDirection")} aria-label={t("workspace.photos.sortDirection")}>
                 {sortDirection === "asc" ? "↑" : "↓"}
               </button>
             </label>
@@ -776,7 +828,7 @@ export function PhotoLibraryPanel({
                   className={`photo-runtime-alert${runtimeAlertOpen ? " is-open" : ""}`}
                   data-tone={runtimeAlert.tone}
                   type="button"
-                  title={runtimeAlertLabel}
+                  data-tooltip={runtimeAlertLabel}
                   aria-label={t("workspace.photos.runtimeAlert", { details: runtimeAlertLabel })}
                   aria-haspopup="dialog"
                   aria-expanded={runtimeAlertOpen}
@@ -801,7 +853,7 @@ export function PhotoLibraryPanel({
                           setRuntimeAlertOpen(false);
                           runtimeAlertTriggerRef.current?.focus();
                         }}
-                        title={t("workspace.photos.closeRuntimeAlert")}
+                        data-tooltip={t("workspace.photos.closeRuntimeAlert")}
                         aria-label={t("workspace.photos.closeRuntimeAlert")}
                       >
                         <X aria-hidden="true" size={14} />
@@ -846,7 +898,7 @@ export function PhotoLibraryPanel({
                 className="photo-select-loaded"
                 onClick={selectAllLoaded}
                 aria-pressed={selectedIds.size === photos.length}
-                title={t("workspace.photos.selectLoaded")}
+                data-tooltip={t("workspace.photos.selectLoaded")}
                 aria-label={t("workspace.photos.selectLoaded")}
               >
                 {selectedIds.size === photos.length ? <CheckSquare aria-hidden="true" size={15} /> : <Square aria-hidden="true" size={15} />}
@@ -856,16 +908,16 @@ export function PhotoLibraryPanel({
           {selected.length ? (
             <div className="photo-selection-actions" aria-label={t("workspace.photos.selectionActions")}>
               <span>{t("workspace.photos.selected", { count: selected.length })}</span>
-              <button type="button" onClick={() => void downloadSelection()} disabled={Boolean(busyAction)} title={t("workspace.photos.downloadSelected")} aria-label={t("workspace.photos.downloadSelected")}>
+              <button type="button" onClick={() => void downloadSelection()} disabled={Boolean(busyAction)} data-tooltip={t("workspace.photos.downloadSelected")} aria-label={t("workspace.photos.downloadSelected")}>
                 <Download aria-hidden="true" size={15} /><span>{t("workspace.photos.downloadSelected")}</span>
               </button>
-              <button type="button" onClick={() => setPicker("move")} disabled={Boolean(busyAction)} title={t("workspace.photos.moveSelected")} aria-label={t("workspace.photos.moveSelected")}>
+              <button type="button" onClick={() => setPicker("move")} disabled={Boolean(busyAction)} data-tooltip={t("workspace.photos.moveSelected")} aria-label={t("workspace.photos.moveSelected")}>
                 <FolderInput aria-hidden="true" size={15} /><span>{t("workspace.photos.moveSelected")}</span>
               </button>
-              <button ref={deleteTriggerRef} className="is-danger" type="button" onClick={() => setDeleteOpen(true)} disabled={Boolean(busyAction)} title={t("workspace.photos.deleteSelected")} aria-label={t("workspace.photos.deleteSelected")}>
+              <button ref={deleteTriggerRef} className="is-danger" type="button" onClick={() => setDeleteOpen(true)} disabled={Boolean(busyAction)} data-tooltip={t("workspace.photos.deleteSelected")} aria-label={t("workspace.photos.deleteSelected")}>
                 <Trash2 aria-hidden="true" size={15} /><span>{t("workspace.photos.deleteSelected")}</span>
               </button>
-              <button type="button" onClick={() => setSelectedIds(new Set())} title={t("workspace.photos.clearSelection")} aria-label={t("workspace.photos.clearSelection")}>
+              <button type="button" onClick={() => setSelectedIds(new Set())} data-tooltip={t("workspace.photos.clearSelection")} aria-label={t("workspace.photos.clearSelection")}>
                 <X aria-hidden="true" size={15} />
               </button>
             </div>
@@ -942,7 +994,7 @@ export function PhotoLibraryPanel({
               <div ref={loadMoreSentinelRef} className="photo-pagination-sentinel" aria-live="polite">
                 {paginationError ? (
                   <div className="photo-pagination-error" role="alert">
-                    <span title={paginationError}>{t("workspace.photos.loadMoreFailed")}</span>
+                    <span data-tooltip={paginationError}>{t("workspace.photos.loadMoreFailed")}</span>
                     <button className="secondary-button" type="button" onClick={() => void loadMore()}>{t("workspace.photos.retryLoadMore")}</button>
                   </div>
                 ) : loadingMore ? (
@@ -1001,15 +1053,15 @@ export function PhotoLibraryPanel({
               <div><span className="eyebrow">{t("workspace.photos.viewer")}</span><h2 id="photo-lightbox-title">{lightboxPhoto.name}</h2></div>
               <div className="photo-lightbox-tools">
                 {lightboxMediaKind !== "video" ? <>
-                  <button type="button" onClick={() => setZoom((current) => Math.max(1, current - 0.5))} disabled={zoom <= 1} title={t("workspace.photos.zoomOut")} aria-label={t("workspace.photos.zoomOut")}><Minus aria-hidden="true" size={17} /></button>
-                  <button type="button" onClick={() => setZoom(1)} title={t("workspace.photos.resetZoom")} aria-label={t("workspace.photos.resetZoom")}><Maximize2 aria-hidden="true" size={17} /><span>{Math.round(zoom * 100)}%</span></button>
-                  <button type="button" onClick={() => setZoom((current) => Math.min(4, current + 0.5))} disabled={zoom >= 4} title={t("workspace.photos.zoomIn")} aria-label={t("workspace.photos.zoomIn")}><Plus aria-hidden="true" size={17} /></button>
+                  <button type="button" onClick={() => setZoom((current) => Math.max(1, current - 0.5))} disabled={zoom <= 1} data-tooltip={t("workspace.photos.zoomOut")} aria-label={t("workspace.photos.zoomOut")}><Minus aria-hidden="true" size={17} /></button>
+                  <button type="button" onClick={() => setZoom(1)} data-tooltip={t("workspace.photos.resetZoom")} aria-label={t("workspace.photos.resetZoom")}><Maximize2 aria-hidden="true" size={17} /><span>{Math.round(zoom * 100)}%</span></button>
+                  <button type="button" onClick={() => setZoom((current) => Math.min(4, current + 0.5))} disabled={zoom >= 4} data-tooltip={t("workspace.photos.zoomIn")} aria-label={t("workspace.photos.zoomIn")}><Plus aria-hidden="true" size={17} /></button>
                 </> : null}
-                <button type="button" onClick={() => setLightboxId(null)} title={t("common.actions.close")} aria-label={t("common.actions.close")}><X aria-hidden="true" size={18} /></button>
+                <button type="button" onClick={() => setLightboxId(null)} data-tooltip={t("common.actions.close")} aria-label={t("common.actions.close")}><X aria-hidden="true" size={18} /></button>
               </div>
             </header>
             <div className="photo-lightbox-body">
-              <button className="photo-lightbox-nav is-previous" type="button" onClick={() => showAdjacent(-1)} disabled={lightboxIndex <= 0} title={t("workspace.photos.previous")} aria-label={t("workspace.photos.previous")}><ChevronLeft aria-hidden="true" size={24} /></button>
+              <button className="photo-lightbox-nav is-previous" type="button" onClick={() => showAdjacent(-1)} disabled={lightboxIndex <= 0} data-tooltip={t("workspace.photos.previous")} aria-label={t("workspace.photos.previous")}><ChevronLeft aria-hidden="true" size={24} /></button>
               <div className="photo-lightbox-canvas">
                 {lightboxMediaKind === "video" ? (
                   <video
@@ -1024,14 +1076,14 @@ export function PhotoLibraryPanel({
                   <img src={`/api/photos/${encodeURIComponent(lightboxPhoto.id)}/preview`} alt={lightboxPhoto.name} style={{ width: `${zoom * 100}%` }} />
                 )}
               </div>
-              <button className="photo-lightbox-nav is-next" type="button" onClick={() => showAdjacent(1)} disabled={lightboxIndex >= photos.length - 1} title={t("workspace.photos.next")} aria-label={t("workspace.photos.next")}><ChevronRight aria-hidden="true" size={24} /></button>
+              <button className="photo-lightbox-nav is-next" type="button" onClick={() => showAdjacent(1)} disabled={lightboxIndex >= photos.length - 1} data-tooltip={t("workspace.photos.next")} aria-label={t("workspace.photos.next")}><ChevronRight aria-hidden="true" size={24} /></button>
               <aside className="photo-lightbox-meta">
                 <dl>
                   <div><dt>{t("workspace.photos.takenAt")}</dt><dd>{formatPhotoDateTime(lightboxPhoto.metadata?.capturedAtLocal ?? lightboxPhoto.takenAt, locale)}</dd></div>
                   <div><dt>{t("workspace.photos.dimensions")}</dt><dd>{lightboxPhoto.width && lightboxPhoto.height ? `${lightboxPhoto.width} × ${lightboxPhoto.height}` : t("common.states.unknown")}</dd></div>
                   <div><dt>{t("workspace.photos.fileSize")}</dt><dd>{formatBytes(lightboxPhoto.sizeBytes, locale)}</dd></div>
                   <div><dt>{t("workspace.photos.format")}</dt><dd>{lightboxPhoto.mimeType}</dd></div>
-                  <div><dt>{t("workspace.photos.path")}</dt><dd title={lightboxPhoto.path}>{lightboxPhoto.path}</dd></div>
+                  <div><dt>{t("workspace.photos.path")}</dt><dd data-tooltip={lightboxPhoto.path}>{lightboxPhoto.path}</dd></div>
                   {lightboxPhoto.metadata?.cameraModel ? <div><dt>{t("workspace.photos.camera")}</dt><dd>{lightboxPhoto.metadata.cameraModel}</dd></div> : null}
                   {lightboxPhoto.metadata?.lensModel ? <div><dt>{t("workspace.photos.lens")}</dt><dd>{lightboxPhoto.metadata.lensModel}</dd></div> : null}
                   {lightboxPhoto.metadata?.iso ? <div><dt>ISO</dt><dd>{lightboxPhoto.metadata.iso}</dd></div> : null}

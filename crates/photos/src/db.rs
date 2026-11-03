@@ -17,7 +17,7 @@ use crate::storage::FileIdentity;
 type DbResult<T> = Result<T, PhotosError>;
 type DbJob = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
 
-pub const SCAN_ENTRY_BATCH_SIZE: usize = 128;
+pub const SCAN_ENTRY_BATCH_SIZE: usize = SCAN_BATCH_SIZE;
 const DB_ACTIVE_BUDGET: Duration = Duration::from_millis(100);
 // SQLite's busy handler eventually polls every 100ms. Leave a full polling
 // interval between bursts so other processes can acquire the shared writer.
@@ -47,11 +47,10 @@ impl DbPacing {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct DiscoveredEntry {
-    pub path: String,
-    pub entry_type: String,
-}
+mod scan;
+#[cfg(test)]
+mod scan_tests;
+pub use scan::{DiscoveredEntry, SCAN_BATCH_SIZE};
 
 #[derive(Clone)]
 pub struct Db {
@@ -252,7 +251,7 @@ impl Db {
                 .call(|connection| {
                     Ok(connection
                         .query_row(
-                            "SELECT 1 FROM schema_migrations WHERE id = '006_photos_scan_contention'",
+                            "SELECT 1 FROM schema_migrations WHERE id = '008_photos_index_performance'",
                             [],
                             |_| Ok(()),
                         )
@@ -318,12 +317,12 @@ impl Db {
         self.call(move |connection| {
             let cutoff = iso_after(-(interval_ms as i128));
             let pending: bool = connection.query_row(
-                "SELECT EXISTS(SELECT 1 FROM photos_jobs WHERE library_updated_at = ? AND status IN ('queued','running','retrying'))",
+                "SELECT EXISTS(SELECT 1 FROM photos_jobs WHERE library_updated_at = ? AND kind = 'full_scan' AND status IN ('queued','running','retrying'))",
                 [&settings.updated_at], |row| row.get(0),
             ).map_err(PhotosError::database)?;
             if pending { return Ok(()); }
             let recent: bool = connection.query_row(
-                "SELECT EXISTS(SELECT 1 FROM photos_jobs WHERE library_updated_at = ? AND kind = 'full_scan' AND created_at > ?)",
+                "SELECT EXISTS(SELECT 1 FROM photos_jobs WHERE library_updated_at = ? AND kind = 'full_scan' AND COALESCE(finished_at, created_at) > ?)",
                 params![settings.updated_at, cutoff], |row| row.get(0),
             ).map_err(PhotosError::database)?;
             if recent { return Ok(()); }
@@ -342,8 +341,8 @@ impl Db {
                 params![now, now],
             ).map_err(PhotosError::database)?;
             let id: Option<String> = transaction.query_row(
-                "SELECT id FROM photos_jobs WHERE status = 'queued' OR (status = 'retrying' AND next_retry_at <= ?) ORDER BY created_at LIMIT 1",
-                [&now], |row| row.get(0),
+                "SELECT id FROM photos_jobs candidate WHERE (status = 'queued' OR (status = 'retrying' AND next_retry_at <= ?)) AND NOT EXISTS (SELECT 1 FROM photos_jobs active WHERE active.library_updated_at = candidate.library_updated_at AND active.status = 'running' AND active.lease_expires_at > ?) AND NOT EXISTS (SELECT 1 FROM photos_jobs earlier WHERE earlier.library_updated_at=candidate.library_updated_at AND earlier.status IN ('queued','running','retrying') AND earlier.rowid<candidate.rowid) ORDER BY created_at, candidate.rowid LIMIT 1",
+                params![now, now], |row| row.get(0),
             ).optional().map_err(PhotosError::database)?;
             let Some(id) = id else { transaction.commit().map_err(PhotosError::database)?; return Ok(None); };
             transaction.execute(
@@ -419,53 +418,13 @@ impl Db {
         self.add_scan_entries(
             job_id,
             parent_path,
-            &[DiscoveredEntry {
+            vec![DiscoveredEntry {
                 path: path.to_owned(),
                 entry_type: entry_type.to_owned(),
             }],
             worker_id,
         )
         .await
-    }
-
-    pub async fn add_scan_entries(
-        &self,
-        job_id: &str,
-        parent_path: &str,
-        entries: &[DiscoveredEntry],
-        worker_id: &str,
-    ) -> DbResult<()> {
-        if entries.len() > SCAN_ENTRY_BATCH_SIZE {
-            return Err(PhotosError::new(
-                ErrorCode::Internal,
-                "Photos discovery batch is too large",
-                false,
-            ));
-        }
-        if entries.is_empty() {
-            return Ok(());
-        }
-        let job_id = job_id.to_owned();
-        let parent_path = parent_path.to_owned();
-        let entries = entries.to_vec();
-        let worker_id = worker_id.to_owned();
-        self.call(move |connection| {
-            // Acquire the write lock before reading the lease. A deferred
-            // read-to-write upgrade can fail immediately under WAL contention,
-            // bypassing busy_timeout when another service is writing.
-            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
-            ensure_job_owned(&transaction, &job_id, &worker_id)?;
-            {
-                let mut statement = transaction.prepare(
-                    "INSERT INTO photos_scan_entries (job_id,path,entry_type,status,parent_path,updated_at) VALUES (?,?,?,CASE WHEN ? = 'sidecar' THEN 'completed' ELSE 'pending' END,?,?) ON CONFLICT(job_id,path) DO NOTHING"
-                ).map_err(PhotosError::database)?;
-                let now = now_iso();
-                for entry in entries {
-                    statement.execute(params![job_id, entry.path, entry.entry_type, entry.entry_type, parent_path, now]).map_err(PhotosError::database)?;
-                }
-            }
-            transaction.commit().map_err(PhotosError::database)
-        }).await
     }
 
     pub async fn complete_entry(
@@ -895,16 +854,17 @@ impl Db {
             let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(PhotosError::database)?;
             ensure_job_owned(&transaction, &job.id, &worker_id)?;
             let incomplete: bool = transaction.query_row(
-                "SELECT EXISTS(SELECT 1 FROM photos_scan_entries WHERE job_id = ? AND status IN ('pending','processing'))",
-                [&job.id],
+                "SELECT EXISTS(SELECT 1 FROM photos_scan_entries WHERE job_id = ?1 AND (status IN ('pending','processing','skipped') OR (status = 'failed' AND error_retryable = 1) OR (entry_type='directory' AND (status<>'completed' OR children_processed=0)))) OR NOT EXISTS(SELECT 1 FROM photos_scan_entries WHERE job_id=?1 AND path=?2 AND entry_type='directory' AND status='completed' AND children_processed=1)",
+                params![job.id,job.path],
                 |row| row.get(0),
             ).map_err(PhotosError::database)?;
             if incomplete {
                 return Err(PhotosError::new(ErrorCode::Database, "Photos job still has incomplete scan entries", true));
             }
-            if job.kind == "full_scan" {
-                transaction.execute("DELETE FROM photos_assets WHERE library_updated_at = ? AND scan_generation IS NOT ?", params![job.library_updated_at, job.scan_generation]).map_err(PhotosError::database)?;
-            }
+            let prefix = if job.path == "." { String::new() } else { format!("{}/", job.path.trim_end_matches('/')) };
+            // BINARY path range excludes similarly named sibling directories and literal LIKE metacharacters.
+            let upper = if prefix.is_empty() { String::from("\u{10ffff}") } else { format!("{}0", job.path.trim_end_matches('/')) };
+            transaction.execute("DELETE FROM photos_assets WHERE storage_pool_id = ? AND library_updated_at = ? AND path >= ? AND path < ? AND scan_generation IS NOT ?", params![job.storage_pool_id, job.library_updated_at, prefix, upper, job.scan_generation]).map_err(PhotosError::database)?;
             let updated = transaction.execute("UPDATE photos_jobs SET status = 'completed', phase = NULL, current_path = NULL, worker_id = NULL, lease_expires_at = NULL, error = NULL, error_code = NULL, error_retryable = 0, next_retry_at = NULL, finished_at = ?, updated_at = ? WHERE id = ? AND worker_id = ? AND status = 'running'", params![now_iso(), now_iso(), job.id, worker_id]).map_err(PhotosError::database)?;
             if updated != 1 {
                 return Err(PhotosError::new(ErrorCode::Database, "Photos job lease was lost before completion", true));
@@ -1003,6 +963,33 @@ fn complete_publish_transaction(
             true,
         ));
     }
+    let current = setting_json(&transaction, "photos_library_settings")?
+        .and_then(|json| serde_json::from_str::<LibrarySettings>(&json).ok());
+    if !current.is_some_and(|settings| {
+        settings.updated_at == record.library_updated_at
+            && settings.storage_pool_id == record.storage_pool_id
+    }) {
+        transaction
+            .execute(
+                "DELETE FROM photos_publish_journal WHERE operation_id=?",
+                [&record.operation_id],
+            )
+            .map_err(PhotosError::database)?;
+        transaction.commit().map_err(PhotosError::database)?;
+        return Ok(false);
+    }
+    write_record(&transaction, record)?;
+    transaction
+        .execute(
+            "DELETE FROM photos_publish_journal WHERE operation_id = ?",
+            [&record.operation_id],
+        )
+        .map_err(PhotosError::database)?;
+    transaction.commit().map_err(PhotosError::database)?;
+    Ok(true)
+}
+
+fn write_record(transaction: &rusqlite::Transaction<'_>, record: &PublishRecord) -> DbResult<()> {
     let metadata = &record.processed.metadata;
     transaction.execute(
         "INSERT INTO photos_assets (id,storage_pool_id,path,name,mime_type,size_bytes,mtime_ms,content_hash,width,height,orientation,taken_at,taken_at_source,thumbnail_key,preview_key,status,error,error_code,error_retryable,source_device,source_inode,source_size_bytes,source_mtime_ns,source_ctime_ns,sidecar_path,sidecar_device,sidecar_inode,sidecar_size_bytes,sidecar_mtime_ns,sidecar_ctime_ns,derivative_schema_version,scan_generation,library_updated_at,indexed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'ready',NULL,NULL,0,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?) ON CONFLICT(storage_pool_id,path) DO UPDATE SET name=excluded.name,mime_type=excluded.mime_type,size_bytes=excluded.size_bytes,mtime_ms=excluded.mtime_ms,content_hash=excluded.content_hash,width=excluded.width,height=excluded.height,orientation=excluded.orientation,taken_at=excluded.taken_at,taken_at_source=excluded.taken_at_source,thumbnail_key=excluded.thumbnail_key,preview_key=excluded.preview_key,status='ready',error=NULL,error_code=NULL,error_retryable=0,source_device=excluded.source_device,source_inode=excluded.source_inode,source_size_bytes=excluded.source_size_bytes,source_mtime_ns=excluded.source_mtime_ns,source_ctime_ns=excluded.source_ctime_ns,sidecar_path=excluded.sidecar_path,sidecar_device=excluded.sidecar_device,sidecar_inode=excluded.sidecar_inode,sidecar_size_bytes=excluded.sidecar_size_bytes,sidecar_mtime_ns=excluded.sidecar_mtime_ns,sidecar_ctime_ns=excluded.sidecar_ctime_ns,derivative_schema_version=1,scan_generation=excluded.scan_generation,library_updated_at=excluded.library_updated_at,indexed_at=excluded.indexed_at",
@@ -1043,13 +1030,14 @@ fn complete_publish_transaction(
     for value in &metadata.values {
         transaction.execute("INSERT INTO photos_metadata_values (asset_id,source,key,value_type,text_value,normalized_text_value,number_value,date_value,boolean_value,sensitive,ordinal) VALUES (?,?,?,?,?,?,?,?,?,?,?)", params![asset_id,value.source,value.key,value.value_type,value.text_value,value.text_value.as_ref().map(|v|v.to_lowercase()),value.number_value,value.date_value,value.boolean_value.map(i64::from),i64::from(value.sensitive),value.ordinal as i64]).map_err(PhotosError::database)?;
     }
+    transaction.execute("INSERT INTO photos_metadata_fts (asset_id,name,path,title,description,creator,copyright,keywords,camera,lens) VALUES (?,?,?,?,?,?,?,?,?,?)", params![asset_id,record.name,record.path,metadata.title,metadata.description,metadata.creator,metadata.copyright,metadata.keywords.join(" "),metadata.camera_model,metadata.lens_model]).map_err(PhotosError::database)?;
+    let document_rowid = transaction.last_insert_rowid();
     transaction
         .execute(
-            "DELETE FROM photos_metadata_fts WHERE asset_id = ?",
-            [&asset_id],
+            "UPDATE photos_asset_metadata SET fts_rowid=? WHERE asset_id=?",
+            params![document_rowid, asset_id],
         )
         .map_err(PhotosError::database)?;
-    transaction.execute("INSERT INTO photos_metadata_fts (asset_id,name,path,title,description,creator,copyright,keywords,camera,lens) VALUES (?,?,?,?,?,?,?,?,?,?)", params![asset_id,record.name,record.path,metadata.title,metadata.description,metadata.creator,metadata.copyright,metadata.keywords.join(" "),metadata.camera_model,metadata.lens_model]).map_err(PhotosError::database)?;
     let rowid: i64 = transaction
         .query_row(
             "SELECT rowid FROM photos_asset_metadata WHERE asset_id = ?",
@@ -1073,16 +1061,7 @@ fn complete_publish_transaction(
     }
     transaction.execute("UPDATE photos_scan_entries SET status='completed',error=NULL,error_code=NULL,error_retryable=0,next_retry_at=NULL,updated_at=? WHERE job_id=? AND path=?", params![now_iso(),record.job_id,record.path]).map_err(PhotosError::database)?;
     transaction.execute("UPDATE photos_jobs SET scanned=scanned+1,processed=processed+1,current_path=?,phase='processing',updated_at=? WHERE id=?", params![record.path,now_iso(),record.job_id]).map_err(PhotosError::database)?;
-    transaction
-        .execute(
-            "DELETE FROM photos_publish_journal WHERE operation_id = ?",
-            [&record.operation_id],
-        )
-        .map_err(PhotosError::database)?;
-    transaction
-        .commit()
-        .map_err(PhotosError::database)
-        .map(|_| true)
+    Ok(())
 }
 
 fn map_scan_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScanEntry> {
@@ -1238,6 +1217,70 @@ fn check(name: &str, value: u64, minimum: u64, maximum: u64) -> DbResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn migration_sql(source: &str) -> &str {
+        source
+            .split("sql: `")
+            .nth(1)
+            .unwrap()
+            .split('`')
+            .next()
+            .unwrap()
+    }
+
+    pub(super) fn full_schema(connection: &Connection) {
+        connection
+            .execute_batch(migration_sql(include_str!(
+                "../../../packages/db/src/migrations/current.ts"
+            )))
+            .unwrap();
+        connection
+            .execute_batch(migration_sql(include_str!(
+                "../../../packages/db/src/migrations/photos-scan-contention.ts"
+            )))
+            .unwrap();
+        connection
+            .execute_batch(migration_sql(include_str!(
+                "../../../packages/db/src/migrations/photos-index-performance.ts"
+            )))
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn scan_claim_cost_stays_bounded_after_ninety_nine_thousand_completions() {
+        let temporary = tempfile::tempdir().unwrap();
+        let db = Db::open(&temporary.path().join("db.sqlite")).unwrap();
+        db.call(|connection| {
+            full_schema(connection);
+            connection.execute("INSERT INTO photos_jobs(id,kind,status,storage_pool_id,path,library_updated_at,scan_generation,created_at,updated_at,worker_id,lease_expires_at) VALUES('job-1','full_scan','running','pool-1','Pictures','2026','generation-1','2026','2026','worker-1','9999-01-01T00:00:00Z')", []).unwrap();
+            let transaction = connection.transaction().unwrap();
+            for i in 0..100_000 {
+                transaction.execute("INSERT INTO photos_scan_entries(job_id,path,entry_type,status,parent_path,updated_at) VALUES('job-1',?,'media',?,'Pictures','2026')", params![format!("Pictures/{i:06}.jpg"), if i < 99_999 { "completed" } else { "pending" }]).unwrap();
+            }
+            transaction.commit().unwrap();
+            Ok(())
+        }).await.unwrap();
+        assert_eq!(
+            db.claim_entry("job-1", "media", "worker-1")
+                .await
+                .unwrap()
+                .unwrap()
+                .path,
+            "Pictures/099999.jpg"
+        );
+        // The production claim query must use the pending index even at the end of a large job.
+        db.call(|connection| {
+            let mut statement = connection.prepare(PENDING_SCAN_ENTRY_SQL).unwrap();
+            let _ = statement
+                .query_row(params!["job-1", "media"], |_| Ok(()))
+                .optional()
+                .unwrap();
+            assert!(statement.get_status(rusqlite::StatementStatus::VmStep) < 100);
+            Ok(())
+        })
+        .await
+        .unwrap();
+    }
     use crate::media::{MetadataRecord, MetadataValue};
     use std::collections::BTreeMap;
     use std::path::PathBuf;
@@ -1314,7 +1357,7 @@ mod tests {
         seed_job(&connection);
         let record = publish_record();
         connection.execute(
-            "INSERT INTO photos_publish_journal (operation_id,job_id,asset_id,source_path,result_json,created_at) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO photos_publish_journal (operation_id,job_id,asset_id,source_path,source_device,source_inode,source_size_bytes,result_json,created_at) VALUES (?,?,?,?,1,1,1,?,?)",
             params![record.operation_id, record.job_id, record.asset_id, record.path, "{}", now_iso()],
         ).unwrap();
 
@@ -1379,7 +1422,7 @@ mod tests {
         seed_job(&connection);
         let record = publish_record();
         connection.execute(
-            "INSERT INTO photos_publish_journal (operation_id,job_id,asset_id,source_path,result_json,created_at) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO photos_publish_journal (operation_id,job_id,asset_id,source_path,source_device,source_inode,source_size_bytes,result_json,created_at) VALUES (?,?,?,?,1,1,1,?,?)",
             params![record.operation_id, record.job_id, record.asset_id, record.path, "{}", now_iso()],
         ).unwrap();
 
@@ -1400,7 +1443,7 @@ mod tests {
         seed_job(&connection);
         let record = publish_record();
         connection.execute(
-            "INSERT INTO photos_publish_journal (operation_id,job_id,asset_id,source_path,result_json,created_at) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO photos_publish_journal (operation_id,job_id,asset_id,source_path,source_device,source_inode,source_size_bytes,result_json,created_at) VALUES (?,?,?,?,1,1,1,?,?)",
             params![record.operation_id, record.job_id, record.asset_id, record.path, "{}", now_iso()],
         ).unwrap();
 
@@ -1484,7 +1527,7 @@ mod tests {
                 .execute_batch(
                     "CREATE TABLE photos_scan_entries (
                         job_id TEXT NOT NULL, path TEXT NOT NULL, entry_type TEXT NOT NULL,
-                        status TEXT NOT NULL, parent_path TEXT, updated_at TEXT NOT NULL,
+                        status TEXT NOT NULL, parent_path TEXT, name_key TEXT, stem_key TEXT, media_kind TEXT, updated_at TEXT NOT NULL,
                         PRIMARY KEY (job_id, path)
                     );
                     BEGIN IMMEDIATE;
@@ -1622,6 +1665,13 @@ mod tests {
                 [],
             )
             .unwrap();
+        assert!(db.wait_for_schema(Duration::ZERO).await.is_err());
+        connection
+            .execute(
+                "INSERT INTO schema_migrations VALUES ('008_photos_index_performance')",
+                [],
+            )
+            .unwrap();
         db.wait_for_schema(Duration::ZERO).await.unwrap();
     }
 
@@ -1712,7 +1762,7 @@ mod tests {
                     entry_type: "media".into(),
                 })
                 .collect();
-            db.add_scan_entries("job-1", "Pictures", &entries, "current-worker")
+            db.add_scan_entries("job-1", "Pictures", entries.clone(), "current-worker")
                 .await
                 .unwrap();
             advance.send(()).unwrap();
@@ -1736,7 +1786,7 @@ mod tests {
             },
         ];
         assert!(
-            db.add_scan_entries("job-1", "Pictures", &invalid, "current-worker")
+            db.add_scan_entries("job-1", "Pictures", invalid.to_vec(), "current-worker")
                 .await
                 .is_err()
         );
@@ -1752,7 +1802,7 @@ mod tests {
             SCAN_ENTRY_BATCH_SIZE + 1
         ];
         assert!(
-            db.add_scan_entries("job-1", "Pictures", &oversized, "current-worker")
+            db.add_scan_entries("job-1", "Pictures", oversized.clone(), "current-worker")
                 .await
                 .is_err()
         );
@@ -1761,7 +1811,7 @@ mod tests {
             entry_type: "media".into(),
         }];
         assert!(
-            db.add_scan_entries("job-1", "Pictures", &entry, "stale-worker")
+            db.add_scan_entries("job-1", "Pictures", entry.to_vec(), "stale-worker")
                 .await
                 .is_err()
         );
@@ -1803,7 +1853,7 @@ mod tests {
                             entry_type: "media".into(),
                         })
                         .collect();
-                    db.add_scan_entries("job-1", "Pictures", &entries, "current-worker")
+                    db.add_scan_entries("job-1", "Pictures", entries.clone(), "current-worker")
                         .await
                         .unwrap();
                     progress.fetch_add(1, Ordering::Release);
@@ -1877,7 +1927,8 @@ mod tests {
             "CREATE TABLE photos_scan_entries (
               job_id TEXT NOT NULL, path TEXT NOT NULL,
               entry_type TEXT NOT NULL CHECK(entry_type IN ('directory','media','sidecar')),
-              status TEXT NOT NULL, parent_path TEXT, error_retryable INTEGER NOT NULL DEFAULT 0,
+              status TEXT NOT NULL, parent_path TEXT, name_key TEXT, stem_key TEXT, media_kind TEXT,
+              error_retryable INTEGER NOT NULL DEFAULT 0,
               retry_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT, updated_at TEXT NOT NULL,
               PRIMARY KEY(job_id,path)
             );
@@ -1955,90 +2006,25 @@ mod tests {
 
     fn test_connection() -> Connection {
         let connection = Connection::open_in_memory().unwrap();
-        connection
-            .execute_batch(
-                r#"
-            CREATE TABLE photos_assets (
-              id TEXT PRIMARY KEY, storage_pool_id TEXT NOT NULL,
-              path TEXT NOT NULL, name TEXT NOT NULL, mime_type TEXT NOT NULL,
-              size_bytes INTEGER NOT NULL, mtime_ms INTEGER NOT NULL, content_hash TEXT,
-              width INTEGER, height INTEGER, orientation INTEGER, taken_at TEXT NOT NULL,
-              taken_at_source TEXT NOT NULL, thumbnail_key TEXT, preview_key TEXT,
-              status TEXT NOT NULL, error TEXT, error_code TEXT, error_retryable INTEGER NOT NULL,
-              source_device INTEGER, source_inode INTEGER, source_size_bytes INTEGER,
-              source_mtime_ns INTEGER, source_ctime_ns INTEGER, sidecar_path TEXT,
-              sidecar_device INTEGER, sidecar_inode INTEGER, sidecar_size_bytes INTEGER,
-              sidecar_mtime_ns INTEGER, sidecar_ctime_ns INTEGER,
-              derivative_schema_version INTEGER NOT NULL, scan_generation TEXT,
-              library_updated_at TEXT NOT NULL, indexed_at TEXT NOT NULL,
-              UNIQUE(storage_pool_id,path)
-            );
-            CREATE TABLE photos_jobs (
-              id TEXT PRIMARY KEY, scanned INTEGER NOT NULL DEFAULT 0,
-              processed INTEGER NOT NULL DEFAULT 0, current_path TEXT, phase TEXT,
-              updated_at TEXT, status TEXT NOT NULL DEFAULT 'running',
-              worker_id TEXT, lease_expires_at TEXT
-            );
-            CREATE TABLE photos_scan_entries (
-              job_id TEXT NOT NULL, path TEXT NOT NULL, status TEXT NOT NULL,
-              error TEXT, error_code TEXT, error_retryable INTEGER NOT NULL DEFAULT 0,
-              next_retry_at TEXT, updated_at TEXT NOT NULL, PRIMARY KEY(job_id,path)
-            );
-            CREATE TABLE photos_publish_journal (
-              operation_id TEXT PRIMARY KEY, job_id TEXT NOT NULL, asset_id TEXT NOT NULL,
-              source_path TEXT NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL
-            );
-            CREATE TABLE photos_asset_metadata (
-              asset_id TEXT PRIMARY KEY, schema_version INTEGER NOT NULL, status TEXT NOT NULL,
-              media_kind TEXT NOT NULL, captured_at TEXT, captured_at_local TEXT,
-              capture_offset_minutes INTEGER, capture_source TEXT NOT NULL, duration_ms INTEGER,
-              container TEXT, video_codec TEXT, audio_codec TEXT, camera_make TEXT,
-              camera_model TEXT, software TEXT, body_serial TEXT, lens_make TEXT,
-              lens_model TEXT, lens_serial TEXT, iso REAL, exposure_time_seconds REAL,
-              aperture REAL, focal_length_mm REAL, focal_length_35_mm REAL,
-              exposure_bias_ev REAL, exposure_program TEXT, metering_mode TEXT, flash TEXT,
-              white_balance TEXT, title TEXT, description TEXT, creator TEXT, copyright TEXT,
-              rating REAL, gps_latitude REAL, gps_longitude REAL, gps_altitude_m REAL,
-              gps_direction_deg REAL, raw_metadata_json TEXT NOT NULL, warnings_json TEXT NOT NULL,
-              sidecar_path TEXT, sidecar_size_bytes INTEGER, sidecar_mtime_ms INTEGER,
-              updated_at TEXT NOT NULL
-            );
-            CREATE TABLE photos_keywords (
-              asset_id TEXT NOT NULL, keyword TEXT NOT NULL, normalized_keyword TEXT NOT NULL,
-              PRIMARY KEY(asset_id,normalized_keyword)
-            );
-            CREATE TABLE photos_metadata_values (
-              id INTEGER PRIMARY KEY AUTOINCREMENT, asset_id TEXT NOT NULL, source TEXT NOT NULL,
-              key TEXT NOT NULL, value_type TEXT NOT NULL, text_value TEXT,
-              normalized_text_value TEXT, number_value REAL, date_value TEXT,
-              boolean_value INTEGER, sensitive INTEGER NOT NULL, ordinal INTEGER NOT NULL
-            );
-            CREATE VIRTUAL TABLE photos_metadata_fts USING fts5(
-              asset_id UNINDEXED,name,path,title,description,creator,copyright,keywords,camera,lens
-            );
-            CREATE VIRTUAL TABLE photos_geo_index USING rtree(
-              metadata_rowid,min_latitude,max_latitude,min_longitude,max_longitude
-            );
-        "#,
-            )
-            .unwrap();
+        full_schema(&connection);
         connection
     }
 
-    fn seed_job(connection: &Connection) {
+    pub(super) fn seed_job(connection: &Connection) {
+        connection.execute("INSERT INTO system_settings(key,value_json,updated_at) VALUES('photos_library_settings',?, '2026')", [r#"{"storagePoolId":"pool-1","path":"Pictures","updatedAt":"2026-10-11T00:00:00Z"}"#]).unwrap();
         connection
             .execute(
-                "INSERT INTO photos_jobs (id,worker_id,lease_expires_at) VALUES ('job-1','worker-1','9999-01-01T00:00:00Z')",
+                "INSERT INTO photos_jobs (id,kind,status,storage_pool_id,path,library_updated_at,scan_generation,created_at,updated_at,worker_id,lease_expires_at) VALUES ('job-1','full_scan','running','pool-1','Pictures','2026-10-11T00:00:00Z','generation-1','2026','2026','worker-1','9999-01-01T00:00:00Z')",
                 [],
             )
             .unwrap();
         connection.execute(
-            "INSERT INTO photos_scan_entries (job_id,path,status,updated_at) VALUES ('job-1','Pictures/coast.jpg','processing',?)",
+            "INSERT INTO photos_scan_entries (job_id,path,entry_type,status,updated_at) VALUES ('job-1','Pictures/coast.jpg','media','processing',?)",
             [now_iso()],
         ).unwrap();
     }
 
-    fn test_job() -> Job {
+    pub(super) fn test_job() -> Job {
         Job {
             id: "job-1".into(),
             kind: "full_scan".into(),
@@ -2050,7 +2036,7 @@ mod tests {
         }
     }
 
-    fn publish_record() -> PublishRecord {
+    pub(super) fn publish_record() -> PublishRecord {
         let mut raw_metadata = BTreeMap::new();
         raw_metadata.insert("exif".into(), BTreeMap::new());
         PublishRecord {

@@ -17,7 +17,7 @@ use crate::error::{ErrorCode, PhotosError};
 use crate::storage::FileIdentity;
 
 const PIPELINE_VERSION: u32 = 1;
-const METADATA_SCHEMA_VERSION: u32 = 2;
+pub const METADATA_SCHEMA_VERSION: u32 = 2;
 const MAX_METADATA_LEAVES: usize = 4096;
 const MAX_METADATA_SCALAR_BYTES: usize = 64 * 1024;
 const MAX_METADATA_JSON_BYTES: usize = 512 * 1024;
@@ -113,6 +113,26 @@ pub struct ProcessedMedia {
 }
 
 #[derive(Debug, Clone)]
+pub struct ReusableMedia {
+    pub content_hash: String,
+    pub mime_type: String,
+    pub width: u32,
+    pub height: u32,
+    pub orientation: Option<i32>,
+    pub thumbnail_key: String,
+    pub preview_key: String,
+}
+
+impl ReusableMedia {
+    pub fn cached_identities(&self, root: &Path) -> Option<(FileIdentity, FileIdentity)> {
+        Some((
+            crate::publish::cached_identity(root, &self.thumbnail_key)?,
+            crate::publish::cached_identity(root, &self.preview_key)?,
+        ))
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Sidecar<'a> {
     pub file: &'a File,
     pub path: String,
@@ -155,6 +175,30 @@ pub async fn process_media(
     settings: &ProcessingSettings,
     runner: &CommandRunner,
 ) -> Result<ProcessedMedia, PhotosError> {
+    process_media_reusing(
+        source,
+        source_name,
+        source_identity,
+        sidecar,
+        cache_root,
+        settings,
+        runner,
+        None,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn process_media_reusing(
+    source: &mut File,
+    source_name: &str,
+    source_identity: FileIdentity,
+    sidecar: Option<Sidecar<'_>>,
+    cache_root: &Path,
+    settings: &ProcessingSettings,
+    runner: &CommandRunner,
+    reusable: Option<&ReusableMedia>,
+) -> Result<ProcessedMedia, PhotosError> {
     if source_identity.size > settings.max_file_size_bytes {
         return Err(PhotosError::new(
             ErrorCode::SizeLimit,
@@ -169,7 +213,10 @@ pub async fn process_media(
             false,
         )
     })?;
-    let content_hash = hash_file(source).await?;
+    let content_hash = match reusable {
+        Some(media) => media.content_hash.clone(),
+        None => hash_file(source).await?,
+    };
     verify_identity(source, source_identity)?;
     let limits = command_limits(settings);
     let embedded = exiftool(source, runner, &limits).await?;
@@ -218,6 +265,50 @@ pub async fn process_media(
         std::mem::swap(&mut width, &mut height);
     }
     validate_pixel_limit(width, height, settings.max_decoded_pixels)?;
+
+    if let Some(media) = reusable {
+        let (thumbnail_identity, preview_identity) =
+            media.cached_identities(cache_root).ok_or_else(|| {
+                PhotosError::new(
+                    ErrorCode::SourceChanged,
+                    "Cached derivatives changed during metadata refresh",
+                    true,
+                )
+            })?;
+        verify_identity(source, source_identity)?;
+        if let Some(sidecar) = &sidecar {
+            verify_identity(sidecar.file, sidecar.identity)?;
+        }
+        let taken_at = metadata
+            .captured_at
+            .clone()
+            .or_else(|| metadata.captured_at_local.clone())
+            .unwrap_or_else(|| iso_from_ns(source_identity.mtime_ns));
+        let taken_at_source = if metadata.capture_source == "file_mtime" {
+            "file_mtime"
+        } else {
+            "exif"
+        }
+        .into();
+        return Ok(ProcessedMedia {
+            content_hash,
+            mime_type: media.mime_type.clone(),
+            width: media.width,
+            height: media.height,
+            orientation: media.orientation,
+            taken_at,
+            taken_at_source,
+            thumbnail_key: media.thumbnail_key.clone(),
+            preview_key: media.preview_key.clone(),
+            thumbnail_temp_path: cache_root.join(&media.thumbnail_key),
+            thumbnail_path: cache_root.join(&media.thumbnail_key),
+            thumbnail_identity,
+            preview_temp_path: cache_root.join(&media.preview_key),
+            preview_path: cache_root.join(&media.preview_key),
+            preview_identity,
+            metadata,
+        });
+    }
 
     let scratch = cache_root.join("scratch");
     let thumbnail_dir = cache_root.join("thumbnail");

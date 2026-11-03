@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   createTrashEntry,
   enqueuePhotosJob,
+  enqueuePhotosRefreshForPaths,
   getPhotosAsset,
   getPhotosLibrarySettings,
   getPhotosLibraryStatus,
@@ -508,8 +509,7 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         enqueuePhotosJob(db, {
           settings,
           kind: "path_refresh",
-          path: settings.path,
-          queueAfterRunning: isSidecar
+          path: directory.relativePath
         });
         const operation = recordAppliedOperation(db, {
           operation: "upload",
@@ -604,9 +604,15 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
 
     const scope = await resolveStoragePoolScope(dataRoot, system, settings.storagePoolId);
     const applied: ReturnType<typeof recordAppliedOperation>[] = [];
+    const refreshPaths: string[] = [];
     try {
       for (const proposal of proposals) {
         await validateStoragePoolProposal(scope, proposal);
+        // Include the attempted operation: a filesystem mutation can precede a
+        // later bookkeeping failure, so partial batches need a refresh as well.
+        for (const candidate of [proposal.sourcePath, proposal.targetPath]) {
+          if (candidate) refreshPaths.push(candidate);
+        }
         const result = await applyFileMutation(scope.workspace, proposal, path.join(context.config.paths.stateDir, "trash"));
         if (result.proposal.operation === "trash" && result.metadata.trashEntryId && result.targetPath) {
           createTrashEntry(db, {
@@ -630,14 +636,12 @@ export function registerPhotoRoutes(server: FastifyInstance, context: ApiRouteCo
         }));
       }
     } catch (error) {
-      if (applied.length) {
-        enqueuePhotosJob(db, { settings, kind: "full_scan", path: settings.path });
-      }
+      enqueuePhotosRefreshForPaths(db, settings, refreshPaths);
       const statusCode = error instanceof StorageScopeError ? error.statusCode : 400;
       reply.status(statusCode).send({ error: error instanceof Error ? error.message : String(error), operations: applied });
       return;
     }
-    enqueuePhotosJob(db, { settings, kind: "full_scan", path: settings.path });
+    enqueuePhotosRefreshForPaths(db, settings, refreshPaths);
     reply.send({ operations: applied });
   });
 
