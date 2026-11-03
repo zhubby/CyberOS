@@ -45,10 +45,12 @@ import { sessionTitle } from "../../lib/session.js";
 import type { TranscriptPhase } from "../../lib/transcript.js";
 import { PowerControl } from "../power/PowerControl.js";
 import { MobileAppHeader, useAppHeadingFocus } from "../../mobile/MobileAppHeader.js";
-import { useAppScroll, useMobileNavigation } from "../../mobile/MobileNavigation.js";
+import { useMobileNavigation } from "../../mobile/MobileNavigation.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
 import { PanelHeaderAction, PanelHeaderActions } from "../workspace/PanelHeader.js";
 import { hasActiveAgentTurn } from "../../lib/agent-composer.js";
+import { ChatPaneSkeleton } from "./ChatPaneSkeleton.js";
+import { useTranscriptScroll } from "./useTranscriptScroll.js";
 export { composeAgentMessage, hasActiveAgentTurn } from "../../lib/agent-composer.js";
 
 type CapabilityApprovalRisk = CapabilityApproval["risk"];
@@ -182,7 +184,14 @@ function SessionList({
   );
 }
 
-export function ChatPane({
+export function ChatPane(props: Parameters<typeof ChatPaneContent>[0] & { initialDataLoading?: boolean }) {
+  if (props.initialDataLoading || props.transcriptPhase === "idle" || props.transcriptPhase === "loading") {
+    return <ChatPaneSkeleton active={props.active} />;
+  }
+  return <ChatPaneContent {...props} />;
+}
+
+function ChatPaneContent({
   active,
   selectedRoot,
   activeSessionSummary,
@@ -270,7 +279,7 @@ export function ChatPane({
   const [approvalDialog, setApprovalDialog] = useState<CapabilityApproval | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<Exclude<AgentDeliveryMode, "prompt">>("follow_up");
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  useAppScroll(transcriptRef, `agent:${activeSessionId}`, { ready: active && transcriptPhase !== "loading" });
+  useTranscriptScroll(transcriptRef, activeSessionId, active, transcript.at(-1));
   const approvalDialogRef = useRef<HTMLElement | null>(null);
   const approvalDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
   const workspaceAgentTitle = t("chat.workspaceAgent");
@@ -524,11 +533,10 @@ export function ChatPane({
           className="transcript"
           role="log"
           aria-label={t("chat.transcript")}
-          aria-busy={transcriptPhase === "loading"}
+          aria-busy={false}
         >
-          {transcriptPhase === "loading" ? (
-            <TranscriptSkeleton />
-          ) : hasConversationContent ? (
+          <div className="transcript-content">
+          {hasConversationContent ? (
             <>
               {transcript.map((item) => (
                 <article key={item.id} className={`message message-${item.role}${item.streaming ? " is-streaming" : ""}`}>
@@ -587,6 +595,7 @@ export function ChatPane({
               <span>{t("chat.emptyBody")}</span>
             </div>
           ) : null}
+          </div>
         </div>
 
         <form
@@ -842,23 +851,6 @@ function formatApprovalValue(value: unknown): string | null {
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
   if (value && typeof value === "object") return JSON.stringify(value);
   return null;
-}
-
-function TranscriptSkeleton() {
-  return (
-    <div className="transcript-skeleton" aria-hidden="true">
-      {["assistant", "user", "assistant", "user"].map((role, index) => (
-        <div key={`${role}-${index}`} className={`transcript-skeleton-row is-${role}`}>
-          <span className="transcript-skeleton-avatar" />
-          <span className="transcript-skeleton-copy">
-            <span className="transcript-skeleton-heading" />
-            <span className="transcript-skeleton-line" />
-            <span className="transcript-skeleton-line is-short" />
-          </span>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function ChatMessageContent({

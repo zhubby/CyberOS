@@ -612,6 +612,24 @@
   gap: 2px;
 }
 
+.chat-loading .management-skeleton-block {
+  width: 100%;
+  border-radius: 0;
+}
+
+.chat-loading .chat-skeleton-control { width: 40px; height: 40px; }
+.chat-loading .chat-skeleton-title { width: min(160px, 100%); height: 14px; }
+.chat-loading .chat-skeleton-input {
+  /* Match the composer's three text rows and vertical padding. */
+  height: max(68px, calc(3 * 1.42em + 12px));
+  min-height: 68px;
+  max-height: 180px;
+}
+
+@media (max-width: 1040px) {
+  .chat-loading .chat-skeleton-input { font-size: 16px; max-height: 28dvh; }
+}
+
 .transcript-skeleton-row {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
@@ -681,6 +699,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat-loading .composer-spinner,
   .transcript-skeleton-avatar::after,
   .transcript-skeleton-heading::after,
   .transcript-skeleton-line::after {
