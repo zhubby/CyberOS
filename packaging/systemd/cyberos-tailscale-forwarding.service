@@ -1,0 +1,22 @@
+[Unit]
+Description=CyberOS Tailscale gateway forwarding
+After=systemd-sysctl.service
+Before=tailscaled.service
+ConditionPathExists=/etc/sysctl.d/99-cyberos-tailscale.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -B /usr/lib/cyberos/helpers/tailscale_forwarding.py
+User=root
+Group=root
+RemainAfterExit=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+CapabilityBoundingSet=CAP_NET_ADMIN
+RestrictAddressFamilies=AF_UNIX
+MemoryMax=32M
+TasksMax=16

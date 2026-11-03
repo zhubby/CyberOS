@@ -2,6 +2,7 @@ export * from "./config.js";
 export * from "./docker-images.js";
 export * from "./docker-resources.js";
 export * from "./hostd-protocol.js";
+export * from "./tailscale.js";
 export * from "./iscsi.js";
 export * from "./monitoring.js";
 export * from "./monitoring-alerts.js";

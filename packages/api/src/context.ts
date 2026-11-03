@@ -18,6 +18,7 @@ import type { FileBatchRuntime } from "./lib/file-batch-runner.js";
 import type { DockerHostAccessRuntime } from "./lib/docker-host-access.js";
 import type { MonitoringEventBroker } from "./lib/monitoring-events.js";
 import type { TvModeRuntime } from "./lib/tv-mode.js";
+import type { TailscaleManagerRuntime } from "./lib/tailscale-manager.js";
 import type { MediaStreamRuntime } from "@cyberos/shared";
 
 export interface ApiRouteContext {
@@ -37,6 +38,7 @@ export interface ApiRouteContext {
   system?: SystemManagementDependencies & {
     power?: SystemPowerRuntime;
     operations?: SystemOperationsRuntime;
+    tailscaleManager?: TailscaleManagerRuntime;
   };
   terminal?: TerminalRuntime;
   videoTranscoder?: VideoTranscoder;

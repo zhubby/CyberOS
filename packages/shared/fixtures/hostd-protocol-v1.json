@@ -259,6 +259,21 @@
       "operation": "system.tv",
       "request": { "enabled": true, "confirmed": true },
       "result": { "enabled": true, "applied": true }
+    },
+    {
+      "operation": "tailscale.manager",
+      "request": { "action": "status" },
+      "result": {
+        "collectedAt": "2026-11-03T00:00:00Z", "available": true,
+        "service": { "installed": true, "active": true, "autoStart": true, "state": "active" },
+        "version": "1.102.4", "backendState": "Running", "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "controlUrl": "https://controlplane.tailscale.com", "loginUrl": null,
+        "hostname": "cyberos", "dnsName": "cyberos.example.ts.net.", "ips": ["100.64.0.1", "fd7a:115c:a1e0::1"],
+        "account": "user@example.com", "tailnet": "example.ts.net", "keyExpiry": "2027-01-01T00:00:00Z",
+        "settings": { "hostname": "", "acceptDns": true, "acceptRoutes": false, "exitNodeId": "", "exitNodeAllowLanAccess": false, "advertisedRoutes": [], "advertiseExitNode": false },
+        "peers": [], "peersTruncated": false, "primaryRoutes": [], "exitNodeApproved": null,
+        "ipv4Forwarding": false, "ipv6Forwarding": false, "health": [], "transaction": null, "error": null
+      }
     }
   ]
 }

@@ -2457,6 +2457,7 @@ export const en = {
         description: "Wi-Fi adapters, radio, saved networks, and hotspot configuration."
       },
       proxy: { title: "Proxy", description: "Shared proxy configuration for supported services." },
+      tailscale: { title: "Tailscale", description: "Private network, peers, exit nodes, and subnet routing." },
       bluetooth: {
         title: "Bluetooth",
         description: "Adapters, discovery, pairing, trust, and device connections."
@@ -2774,6 +2775,47 @@ export const en = {
     },
     wireless: {
       statusUnavailable: "Wireless status is unavailable."
+    },
+    tailscale: {
+      connection: "Status & connection", version: "Installed version", service: "Service", autoStart: "Start at boot", connected: "Connected",
+      localInfo: "This device", device: "Device name", account: "Account", controlUrl: "Control server", keyExpiry: "Node key expiry", health: "Health warnings",
+      nodes: "Network peers", nodeCount: "{{count}} peers", search: "Search peers", refresh: "Refresh", online: "Online", offline: "Offline",
+      direct: "Direct", relay: "Relay", noTraffic: "No active connection", traffic: "Received {{rx}} · Sent {{tx}}", exitEligible: "Exit node available",
+      noNodes: "No matching peers.", truncated: "Showing the first 1,000 peers.", noHealth: "No health warnings reported.",
+      network: "Network settings", hostname: "Tailscale hostname", acceptDns: "Accept DNS", acceptRoutes: "Accept subnet routes",
+      exitNode: "Use exit node", noExit: "None", allowLan: "Allow local LAN access while using an exit node",
+      gateway: "Gateway settings", subnets: "Advertise subnet routes", advertiseExit: "Offer this device as an exit node",
+      subnetHelp: "One IPv4 or IPv6 network CIDR per line. Use the exit node switch for default routes.",
+      forwardingV4: "IPv4 forwarding", forwardingV6: "IPv6 forwarding", published: "Advertised subnets",
+      approvalHelp: "Verify approval in the Tailscale or Headscale console. Advertisement alone does not confirm a route is usable.",
+      primaryRoutes: "Control plane reports primary routes: {{routes}}",
+      forwardingHelp: "Gateway mode enables forwarding and preserves IPv6 router advertisements. Disabling it withdraws routes and keeps shared host forwarding available.",
+      login: "Log in", loginMethod: "Login method", browserLogin: "Web authorization", authorize: "Open authorization page", authWaiting: "Waiting for authorization and connection…",
+      keyHelp: "Used for this login only. Cleared on submission.", headscaleHelp: "For Headscale, enter its server URL. Log out before switching control servers.",
+      notInstalled: "Tailscale is not installed. Run the updated CyberOS installer.", serviceStopped: "Start the Tailscale service to read its current state.",
+      enabled: "Enabled", disabled: "Disabled", unknown: "Unknown", reconnecting: "Live updates reconnecting. Checking status periodically…",
+      pending: "Confirm network changes", countdown: "Keep these changes within {{seconds}} seconds, or the changed fields will be restored automatically.",
+      keep: "Keep changes", rollback: "Restore previous settings", kept: "Tailscale changes confirmed", discard: "Discard draft & reload",
+      applyHelp: "Saving starts a 60-second confirmation window. Reopen this page and confirm after checking your connection.",
+      draftConflict: "Configuration changed while you were editing. Discard the draft, reload, and review before saving.", confirmAction: "Confirm",
+      transaction: { rolled_back: "The previous network changes were restored.", conflict: "Recovery detected an external change. Review the current settings; external changes were preserved." },
+      states: { Running: "Connected", Stopped: "Disconnected", NeedsLogin: "Login required", NeedsMachineAuth: "Waiting for device approval", Starting: "Connecting…", NoState: "Waiting for status", Unavailable: "Unavailable" },
+      serviceStates: { active: "Running", inactive: "Stopped", failed: "Failed", activating: "Starting", deactivating: "Stopping", unknown: "Unknown" },
+      actions: { start: "Start service", restart: "Restart service", logout: "Log out" },
+      confirm: {
+        disconnect: { title: "Disconnect Tailscale?", description: "Connections through Tailscale will be interrupted. Use a LAN connection to reconnect." },
+        logout: { title: "Log out of Tailscale?", description: "This device will leave its current session. You will need to authorize it again. Tailscale management access will be lost." },
+        restart: { title: "Restart Tailscale?", description: "Tailscale connections, including remote management, will be interrupted briefly." },
+        apply: { title: "Apply network settings?", description: "Your connection may be interrupted. Confirm within 60 seconds to keep the changes. Only submitted fields will be restored on timeout." }
+      },
+      errors: {
+        unavailable: "Tailscale is unavailable. Check the service and refresh.",
+        recovery: "Configuration recovery needs attention. Check the service and review the pending changes.",
+        "400": "Configuration or authentication was rejected. Check the supplied values.", "403": "This operation is not permitted.",
+        "404": "This configuration transaction no longer exists. Refresh the status.", "409": "Configuration changed or is awaiting confirmation. Refresh and review the current state.",
+        "501": "Update the Tailscale system package to manage this configuration.", "502": "The operation failed. Refresh to check configuration recovery.",
+        "504": "The operation timed out. Refresh to check the actual state."
+      }
     },
     proxy: {
       title: "System proxy",
@@ -5809,6 +5851,7 @@ export const zhCN = {
         description: "管理 Wi-Fi 网卡、射频、已保存网络和热点。"
       },
       proxy: { title: "代理", description: "配置供支持的服务使用的系统代理。" },
+      tailscale: { title: "Tailscale", description: "私有网络、节点、出口节点与子网路由。" },
       bluetooth: {
         title: "蓝牙",
         description: "管理适配器、扫描、配对、信任和设备连接。"
@@ -6126,6 +6169,47 @@ export const zhCN = {
     },
     wireless: {
       statusUnavailable: "无线网络状态不可用。"
+    },
+    tailscale: {
+      connection: "状态与连接", version: "安装版本", service: "服务状态", autoStart: "开机启动", connected: "连接",
+      localInfo: "本机信息", device: "设备名称", account: "账号", controlUrl: "控制服务器", keyExpiry: "节点密钥有效期", health: "健康异常",
+      nodes: "网络节点", nodeCount: "{{count}} 个节点", search: "搜索节点", refresh: "刷新", online: "在线", offline: "离线",
+      direct: "直连", relay: "中继", noTraffic: "当前无活动连接", traffic: "接收 {{rx}} · 发送 {{tx}}", exitEligible: "可用作出口节点",
+      noNodes: "没有匹配的节点。", truncated: "仅显示前 1,000 个节点。", noHealth: "未报告健康异常。",
+      network: "网络配置", hostname: "Tailscale 设备名称", acceptDns: "接受 DNS", acceptRoutes: "接受子网路由",
+      exitNode: "使用出口节点", noExit: "不使用", allowLan: "使用出口节点时允许访问本地 LAN",
+      gateway: "网关配置", subnets: "发布子网路由", advertiseExit: "将本机作为出口节点",
+      subnetHelp: "每行一个 IPv4 或 IPv6 网络 CIDR。默认路由由出口节点开关管理。",
+      forwardingV4: "IPv4 转发", forwardingV6: "IPv6 转发", published: "已发布的子网",
+      approvalHelp: "需在 Tailscale 或 Headscale 控制台核验审批。已发布不代表路由已生效。",
+      primaryRoutes: "控制面报告的主路由：{{routes}}",
+      forwardingHelp: "启用网关会开启转发并保留 IPv6 路由通告。关闭时撤销路由发布，保留主机共享转发能力。",
+      login: "登录", loginMethod: "登录方式", browserLogin: "网页授权", authorize: "打开授权页面", authWaiting: "等待授权与连接…",
+      keyHelp: "仅用于本次登录，提交后立即清除。", headscaleHelp: "使用 Headscale 时填写其服务器地址。切换控制服务器前须先注销。",
+      notInstalled: "尚未安装 Tailscale，请运行更新后的 CyberOS 安装器。", serviceStopped: "启动 Tailscale 服务后可读取当前状态。",
+      enabled: "已启用", disabled: "未启用", unknown: "未知", reconnecting: "正在恢复实时更新，期间定时检查状态…",
+      pending: "确认网络变更", countdown: "请在 {{seconds}} 秒内保留变更，否则将自动恢复本次修改的字段。",
+      keep: "保留变更", rollback: "恢复原设置", kept: "已确认 Tailscale 变更", discard: "放弃草稿并重新加载",
+      applyHelp: "保存后有 60 秒确认时间。请在检查连接后重新打开本页，确认保留变更。",
+      draftConflict: "编辑期间配置已被修改。请放弃草稿、重新加载并核对后保存。", confirmAction: "确认",
+      transaction: { rolled_back: "上一次网络变更已恢复。", conflict: "恢复时检测到外部修改。请核对当前配置，外部修改已保留。" },
+      states: { Running: "已连接", Stopped: "已断开", NeedsLogin: "需要登录", NeedsMachineAuth: "等待设备审批", Starting: "正在连接…", NoState: "等待状态", Unavailable: "不可用" },
+      serviceStates: { active: "运行中", inactive: "已停止", failed: "失败", activating: "启动中", deactivating: "停止中", unknown: "未知" },
+      actions: { start: "启动服务", restart: "重启服务", logout: "注销" },
+      confirm: {
+        disconnect: { title: "断开 Tailscale？", description: "通过 Tailscale 建立的连接将中断。请通过局域网重新连接。" },
+        logout: { title: "注销 Tailscale？", description: "本机将退出当前会话，之后需要重新授权。通过 Tailscale 的管理连接将中断。" },
+        restart: { title: "重启 Tailscale？", description: "Tailscale 连接和远程管理会短暂中断。" },
+        apply: { title: "应用网络配置？", description: "连接可能中断，请在 60 秒内确认保留变更。超时仅恢复本次提交的字段。" }
+      },
+      errors: {
+        unavailable: "Tailscale 不可用，请检查服务后刷新。",
+        recovery: "配置恢复需要处理，请检查服务并核对待确认的变更。",
+        "400": "配置或身份验证被拒绝，请检查输入内容。", "403": "无权执行此操作。",
+        "404": "此配置事务已不存在，请刷新状态。", "409": "配置已变化或正在等待确认，请刷新并核对当前状态。",
+        "501": "请更新 Tailscale 系统包后再管理此配置。", "502": "操作失败，请刷新并检查配置恢复情况。",
+        "504": "操作超时，请刷新检查实际状态。"
+      }
     },
     proxy: {
       title: "系统代理",

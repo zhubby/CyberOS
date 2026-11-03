@@ -35,6 +35,9 @@ packaging/scripts/cyberos-tv-chromium usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-tv-cec usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-tv-write-status usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-deploy-bootstrap.sh usr/lib/cyberos/scripts/
+packaging/scripts/cyberos-configure-tailscale.sh usr/lib/cyberos/scripts/
+packaging/helpers/tailscale_forwarding.py usr/lib/cyberos/helpers/
+packaging/systemd/tailscaled.service.d/cyberos.conf lib/systemd/system/tailscaled.service.d/
 packaging/scripts/cyberos-deploy usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-mcp usr/lib/cyberos/scripts/
 scripts/check-node-version.mjs usr/lib/cyberos/scripts/

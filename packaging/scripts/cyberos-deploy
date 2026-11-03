@@ -743,6 +743,16 @@ NODE
   esac
 fi
 
+log "checking Tailscale repository and package dependencies before stopping services"
+[ -f /usr/lib/cyberos/scripts/cyberos-configure-tailscale.sh ] \
+  || die "first upgrade with Tailscale requires the updated host installer"
+sh /usr/lib/cyberos/scripts/cyberos-configure-tailscale.sh
+DEBIAN_FRONTEND=noninteractive apt-get --simulate install --yes --no-remove "$work_dir/package.deb" \
+  || die "package dependencies are unavailable; running services were not stopped"
+DEBIAN_FRONTEND=noninteractive apt-get --download-only install --yes --no-remove "$work_dir/package.deb" \
+  || die "package dependencies could not be downloaded; running services were not stopped"
+tailscale_preexisting=0
+if dpkg-query -W -f='${Status}' tailscale 2>/dev/null | grep -Fxq 'install ok installed'; then tailscale_preexisting=1; fi
 log "stopping scheduled writers and services"
 for unit in $STATEFUL_RUNTIME_UNITS; do
   stop_unit "$unit"
@@ -760,6 +770,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-remove \
   -o Dpkg::Options::=--force-confold \
   "$work_dir/package.deb"
 systemctl daemon-reload
+if [ "$tailscale_preexisting" -eq 0 ]; then systemctl enable --now tailscaled.service; fi
 
 log "activating runtime with the newly installed deployment helper"
 /usr/lib/cyberos/scripts/cyberos-deploy --activate-runtime "$work_dir" "$state_dir"

@@ -38,6 +38,7 @@ struct HostdState {
     docker_lock: Mutex<()>,
     network_lock: Mutex<()>,
     bluetooth_lock: Mutex<()>,
+    tailscale_lock: Mutex<()>,
     power_lock: Mutex<()>,
     ops_lock: Mutex<()>,
     tv_lock: Mutex<()>,
@@ -60,6 +61,7 @@ impl HostdServer {
                 docker_lock: Mutex::new(()),
                 network_lock: Mutex::new(()),
                 bluetooth_lock: Mutex::new(()),
+                tailscale_lock: Mutex::new(()),
                 power_lock: Mutex::new(()),
                 ops_lock: Mutex::new(()),
                 tv_lock: Mutex::new(()),
@@ -85,6 +87,9 @@ impl HostdServer {
         let mut iscsi_reconciliation = interval(Duration::from_secs(30));
         iscsi_reconciliation.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut iscsi_task: Option<tokio::task::JoinHandle<()>> = None;
+        let mut tailscale_recovery = interval(Duration::from_secs(1));
+        tailscale_recovery.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut tailscale_task: Option<tokio::task::JoinHandle<()>> = None;
         let mut host_access_reconciliation = interval(Duration::from_secs(30));
         host_access_reconciliation.set_missed_tick_behavior(MissedTickBehavior::Skip);
         host_access_reconciliation.tick().await;
@@ -122,6 +127,17 @@ impl HostdServer {
                         }));
                     }
                 }
+                _ = tailscale_recovery.tick() => {
+                    if tailscale_task.as_ref().is_none_or(|task| task.is_finished()) {
+                        let state = Arc::clone(&self.state);
+                        tailscale_task = Some(tokio::spawn(async move {
+                            let _guard = state.tailscale_lock.lock().await;
+                            if let Err(error) = crate::tailscale::recover(state.runner.as_ref()).await {
+                                tracing::warn!(code = ?error.code, "Tailscale configuration recovery needs attention");
+                            }
+                        }));
+                    }
+                }
                 _ = host_access_reconciliation.tick() => {
                     crate::host_access::reconcile_capacity_anchors(&self.state.data_root).await;
                 }
@@ -132,6 +148,9 @@ impl HostdServer {
             }
         }
         if let Some(task) = iscsi_task {
+            task.abort();
+        }
+        if let Some(task) = tailscale_task {
             task.abort();
         }
         drop(listener);
@@ -368,6 +387,13 @@ async fn dispatch(request: RequestEnvelope, state: &HostdState) -> Result<HostdR
                 .await
                 .map(HostdResult::BluetoothManager)
         }
+        HostdRequest::TailscaleManager(request) => {
+            let _guard = state.tailscale_lock.lock().await;
+            crate::tailscale::handle(request, state.runner.as_ref())
+                .await
+                .map(Box::new)
+                .map(HostdResult::TailscaleManager)
+        }
         HostdRequest::SystemPower(request) => {
             let _guard = state.power_lock.lock().await;
             crate::power::command(request, state.runner.as_ref())
@@ -464,6 +490,7 @@ mod tests {
             docker_lock: Mutex::new(()),
             network_lock: Mutex::new(()),
             bluetooth_lock: Mutex::new(()),
+            tailscale_lock: Mutex::new(()),
             power_lock: Mutex::new(()),
             ops_lock: Mutex::new(()),
             tv_lock: Mutex::new(()),

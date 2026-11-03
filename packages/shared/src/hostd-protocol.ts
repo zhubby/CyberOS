@@ -24,6 +24,7 @@ import type {
   BluetoothStatus
 } from "./types.js";
 import { parseIscsiSummary, type IscsiSummary } from "./iscsi.js";
+import { parseTailscaleStatus, type TailscaleStatus } from "./tailscale.js";
 
 export type { HostdOperation, HostdRequestContract, HostdResultContract } from "./generated/hostd.js";
 
@@ -84,6 +85,7 @@ export type HostdResult<Operation extends HostdOperation, Request extends HostdR
             : Operation extends "docker.daemon" ? HostdDockerResult<Request>
               : Operation extends "network.manager" ? HostdNetworkResult<Request>
                 : Operation extends "bluetooth.manager" ? HostdBluetoothManagerResult
+                : Operation extends "tailscale.manager" ? TailscaleStatus
                 : Operation extends "system.power" ? HostdPowerResult
                 : Operation extends "system.ops" ? HostdOpsResult
                   : Operation extends "system.tv" ? HostdTvResult
@@ -115,6 +117,9 @@ export function parseHostdResult<
       break;
     case "bluetooth.manager":
       parsed = parseBluetoothStatus(value);
+      break;
+    case "tailscale.manager":
+      parsed = parseTailscaleStatus(value);
       break;
     case "system.power":
       parsed = parsePowerResult(request, value);

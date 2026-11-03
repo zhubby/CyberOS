@@ -1,3 +1,4 @@
+export * from "./lib/tailscale-api.js";
 import type {
   AudioSettingsRecord,
   IscsiAction,
