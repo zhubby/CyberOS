@@ -2,6 +2,7 @@ import path from "node:path";
 import type {
   AgentCapabilityPolicySettingsRecord,
   AgentMcpSettingsRecord,
+  AudioSettingsRecord,
   BluetoothSettingsRecord,
   BackupSettingsRecord,
   DownloadSettingsRecord,
@@ -18,6 +19,7 @@ import type {
   VmSettingsRecord
 } from "@cyberos/shared";
 import {
+  normalizeCyberAudioBaseUrl,
   normalizeSystemProxySettings,
   PHOTOS_DEFAULT_COMMAND_TIMEOUT_MS,
   PHOTOS_DEFAULT_MAX_AUTO_RETRIES,
@@ -45,6 +47,7 @@ import { DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS } from "./settings-constants.j
 import type { DbSystemSettingRow } from "./repository-rows.js";
 
 const MODEL_PROVIDER_SETTING_KEY = "model_provider";
+const AUDIO_SETTING_KEY = "audio_settings";
 const AGENT_CAPABILITY_POLICY_SETTING_KEY = "agent_capability_policy";
 const AGENT_MCP_SETTING_KEY = "agent_mcp";
 const DOCKER_SETTING_KEY = "docker_settings";
@@ -61,6 +64,27 @@ const BACKUP_SETTING_KEY = "backup_settings";
 const TV_SETTING_KEY = "tv_settings";
 
 const EPOCH = new Date(0).toISOString();
+
+export function defaultAudioSettings(): AudioSettingsRecord {
+  return { cyberAudioBaseUrl: null, updatedAt: EPOCH };
+}
+
+export function getAudioSettings(db: CyberOsDatabase): AudioSettingsRecord | null {
+  const row = settingRow(db, AUDIO_SETTING_KEY);
+  if (!row) return null;
+  const value = currentSettingsObject(JSON.parse(row.value_json), ["cyberAudioBaseUrl", "updatedAt"], "Audio");
+  return {
+    cyberAudioBaseUrl: normalizeCyberAudioBaseUrl(value.cyberAudioBaseUrl),
+    updatedAt: currentSettingsUpdatedAt(value, "Audio")
+  };
+}
+
+export function saveAudioSettings(db: CyberOsDatabase, input: Omit<AudioSettingsRecord, "updatedAt">): AudioSettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = { cyberAudioBaseUrl: normalizeCyberAudioBaseUrl(input.cyberAudioBaseUrl), updatedAt };
+  saveSetting(db, AUDIO_SETTING_KEY, record, updatedAt);
+  return record;
+}
 
 export function defaultSystemProxySettings(): SystemProxySettingsRecord {
   return { protocol: "http", host: null, port: null, updatedAt: EPOCH };

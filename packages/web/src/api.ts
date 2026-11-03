@@ -1,4 +1,5 @@
 import type {
+  AudioSettingsRecord,
   IscsiAction,
   IscsiSummary,
   AgentCapabilityId as SharedAgentCapabilityId,
@@ -524,6 +525,7 @@ export type AgentCapabilityId = SharedAgentCapabilityId;
 export type AgentCapabilityPolicyMode = SharedAgentCapabilityPolicyMode;
 
 export type ModelProviderSettings = PublicModelProviderSettings;
+export type AudioSettings = AudioSettingsRecord;
 
 export interface ModelProviderSettingsInput {
   providerName?: ModelProviderName;
@@ -1359,6 +1361,15 @@ export async function getDockerSettings(): Promise<DockerSettings> {
 
 export async function getSystemProfileSettings(): Promise<SystemProfileSettings> {
   return fetchJson<{ settings: SystemProfileSettings }>("/api/settings/system-profile")
+    .then((body) => body.settings);
+}
+
+export async function getAudioSettings(): Promise<AudioSettings> {
+  return fetchJson<{ settings: AudioSettings }>("/api/settings/audio").then((body) => body.settings);
+}
+
+export async function updateAudioSettings(input: Omit<AudioSettings, "updatedAt">): Promise<AudioSettings> {
+  return fetchJson<{ settings: AudioSettings }>("/api/settings/audio", jsonRequest("PATCH", input))
     .then((body) => body.settings);
 }
 

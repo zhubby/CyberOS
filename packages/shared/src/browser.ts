@@ -13,3 +13,4 @@ export * from "./iscsi.js";
 export type * from "./video.js";
 export type * from "./playback.js";
 export type * from "./media-stream.js";
+export * from "./audio-settings.js";

@@ -25,6 +25,81 @@ afterEach(async () => {
 });
 
 describe("settings routes", () => {
+  it("persists the CyberAudio address across database reopen and allows clearing it", async () => {
+    let server = createServer(db);
+    const initial = await server.inject({ method: "GET", url: "/api/settings/audio" });
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json().settings).toEqual({
+      cyberAudioBaseUrl: null,
+      updatedAt: new Date(0).toISOString()
+    });
+
+    const saved = await server.inject({
+      method: "PATCH", url: "/api/settings/audio",
+      payload: { cyberAudioBaseUrl: "  https://audio.example.com:8443/  " }
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().settings.cyberAudioBaseUrl).toBe("https://audio.example.com:8443");
+    expect(Date.parse(saved.json().settings.updatedAt)).toBeGreaterThan(0);
+    await server.close();
+    db.close();
+    db = openCyberOsDb(path.join(tempDir, "state", "cyberos.sqlite"));
+    server = createServer(db);
+    expect((await server.inject({ method: "GET", url: "/api/settings/audio" })).json()).toEqual(saved.json());
+
+    for (const cyberAudioBaseUrl of ["http://192.168.1.2:8765", "https://audio.example.com/voice", "http://[::1]:8765"]) {
+      const response = await server.inject({ method: "PATCH", url: "/api/settings/audio", payload: { cyberAudioBaseUrl } });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().settings.cyberAudioBaseUrl).toBe(cyberAudioBaseUrl);
+    }
+    for (const cyberAudioBaseUrl of [null, "   "]) {
+      const cleared = await server.inject({ method: "PATCH", url: "/api/settings/audio", payload: { cyberAudioBaseUrl } });
+      expect(cleared.statusCode).toBe(200);
+      expect(cleared.json().settings.cyberAudioBaseUrl).toBeNull();
+    }
+    await server.close();
+  });
+
+  it("rejects invalid audio edits without replacing the saved address", async () => {
+    const server = createServer(db);
+    const payload = { cyberAudioBaseUrl: "http://audio.local:8765" };
+    const saved = await server.inject({ method: "PATCH", url: "/api/settings/audio", payload });
+    expect(saved.statusCode).toBe(200);
+    for (const cyberAudioBaseUrl of [
+      "audio.local:8765", "ftp://audio.local", "javascript:alert(1)", "https://user:secret@audio.local",
+      "https://audio.local?token=secret", "https://audio.local/#fragment", "http://audio.local:65536",
+      "http://audio.local/a b", "http://audio.local/\npath", "https://audio.local/\\path",
+      `https://audio.local/${"a".repeat(2048)}`, `https://audio.local/${"中".repeat(240)}`, 123, true, [], {}
+    ]) {
+      const invalid = await server.inject({ method: "PATCH", url: "/api/settings/audio", payload: { cyberAudioBaseUrl } });
+      expect(invalid.statusCode, JSON.stringify(cyberAudioBaseUrl)).toBe(400);
+      expect(invalid.body).not.toContain("secret");
+    }
+    for (const invalidBody of [{ extra: true }, { updatedAt: "2026-01-01" }, [], null, "invalid"]) {
+      expect((await server.inject({
+        method: "PATCH", url: "/api/settings/audio",
+        headers: { "content-type": "application/json" }, payload: JSON.stringify(invalidBody)
+      })).statusCode).toBe(400);
+    }
+    expect((await server.inject({ method: "GET", url: "/api/settings/audio" })).json()).toEqual(saved.json());
+    await server.close();
+  });
+
+  it("reports corrupted audio settings and lets a valid edit repair them", async () => {
+    db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)")
+      .run("audio_settings", JSON.stringify({ cyberAudioBaseUrl: 42 }), new Date().toISOString());
+    const server = createServer(db);
+    const corrupted = await server.inject({ method: "GET", url: "/api/settings/audio" });
+    expect(corrupted.statusCode).toBe(409);
+    expect(corrupted.json()).toMatchObject({ state: "attention" });
+    const repaired = await server.inject({
+      method: "PATCH", url: "/api/settings/audio", payload: { cyberAudioBaseUrl: "https://audio.example.com" }
+    });
+    expect(repaired.statusCode).toBe(200);
+    expect((await server.inject({ method: "GET", url: "/api/settings/audio" })).json()).toEqual(repaired.json());
+    await server.close();
+  });
+
   it("persists one proxy endpoint and rejects invalid edits without replacing it", async () => {
     const server = createServer(db);
     const initial = await server.inject({ method: "GET", url: "/api/settings/proxy" });

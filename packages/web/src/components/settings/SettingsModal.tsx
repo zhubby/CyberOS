@@ -8,6 +8,7 @@ import { SettingsSecretField } from "./SettingsSecretField.js";
 import {
   AlertTriangle,
   Activity,
+  AudioLines,
   Bot,
   Bluetooth,
   BellRing,
@@ -90,6 +91,7 @@ import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
 import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
 import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
 import { SettingsProxyPage } from "./SettingsProxyPage.js";
+import { SettingsAudioPage } from "./SettingsAudioPage.js";
 import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
 import { SettingsMediaPage } from "./SettingsMediaPage.js";
 import { SettingsSystemProfilePage } from "./SettingsSystemProfilePage.js";
@@ -550,6 +552,8 @@ export function SettingsModal({
           ) : null}
 
           {activeSection === "mcp" ? <SettingsMcpPage /> : null}
+
+          {activeSection === "audio" ? <SettingsAudioPage onNotifySuccess={onNotifySuccess} /> : null}
 
           {activeSection === "skills" ? (
             <SettingsSkillsPage activeSessionId={activeSessionId} storagePools={storagePools} locale={resolvedLocale} />
@@ -1851,6 +1855,8 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <KeyRound aria-hidden="true" size={16} />;
     case "pi-agent":
       return <Bot aria-hidden="true" size={16} />;
+    case "audio":
+      return <AudioLines aria-hidden="true" size={16} />;
     case "mcp":
       return <Server aria-hidden="true" size={16} />;
     case "skills":
