@@ -30,7 +30,7 @@ source-layout work.
 - `.github/workflows/package-release.yml`: CI quality, package, browser smoke,
   and tagged release workflow.
 
-Node.js 22 (the documented minimum is 22.12+) and npm are required for local
+Node.js 22 (minimum 22.19.0) and npm are required for local
 development and CI. Production packages support Debian-family `amd64` and
 `arm64`; native modules such as `better-sqlite3` and Rust daemons must be built
 for the target architecture.

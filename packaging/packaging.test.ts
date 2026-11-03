@@ -351,9 +351,7 @@ describe("native packaging artifacts", () => {
     expect(install).toContain("target/release/cyberos-downloader usr/lib/cyberos/bin/");
     expect(install).not.toContain("crates/downloader/dist/");
     expect(install).toContain("node_modules/* usr/lib/cyberos/node_modules/");
-    expect(install).toContain(
-      "packages/agent/node_modules/* usr/lib/cyberos/packages/agent/node_modules/"
-    );
+    expect(install).not.toContain("packages/agent/node_modules/*");
     expect(links).toContain(
       "usr/lib/cyberos/packages/agent/node_modules/@earendil-works/pi-coding-agent usr/lib/cyberos/node_modules/@earendil-works/pi-coding-agent"
     );

@@ -18,10 +18,7 @@ target/release/cyberos-tv-gamepad usr/lib/cyberos/bin/
 packages/web/dist/* usr/lib/cyberos/apps/web/dist/
 docs/dist/* usr/lib/cyberos/docs/dist/
 node_modules/* usr/lib/cyberos/node_modules/
-# The worker bundle keeps the Pi SDK external so it can share the packaged
-# runtime. Preserve the agent workspace node_modules tree because Pi pins
-# dependencies such as highlight.js to versions that differ from the web app.
-packages/agent/node_modules/* usr/lib/cyberos/packages/agent/node_modules/
+# The Pi SDK is relocated during dh_install to retain the installed SDK path.
 package.json usr/lib/cyberos/
 package-lock.json usr/lib/cyberos/
 .cyberos/build-info.json usr/lib/cyberos/
@@ -40,6 +37,8 @@ packaging/scripts/cyberos-tv-write-status usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-deploy-bootstrap.sh usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-deploy usr/lib/cyberos/scripts/
 packaging/scripts/cyberos-mcp usr/lib/cyberos/scripts/
+scripts/check-node-version.mjs usr/lib/cyberos/scripts/
+scripts/verify-pi-runtime.mjs usr/lib/cyberos/scripts/
 packaging/nginx/cyberos.conf usr/share/cyberos/nginx/
 packaging/etc/samba.conf usr/share/cyberos/
 packaging/helpers/iscsi.py usr/lib/cyberos/helpers/

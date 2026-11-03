@@ -24,7 +24,7 @@ cybermachine 基于 Raspberry Pi Compute Module 5，运行 Linux arm64。Debian 
 
 功能完成后，或需要验证 Linux、硬件和 systemd 行为时，直接向已有 CyberOS 安装的 cybermachine 部署相关组件。此流程已获开发者授权，每轮无需重复确认；正式版本仍使用 Debian 包和 release 流程。
 
-本机需要 Node.js 22.12+、Tailscale、SSH 和 rsync。Rust 构建还需要本地 Docker CLI，以及通过本机 Unix socket 运行的 Linux arm64 Docker 环境（例如 OrbStack）；首次构建会获取 builder 镜像。cybermachine 需要 Node.js 22.12+、rsync，以及 root 或可执行 `sudo -n` 的管理员 SSH 连接。不要扩大正式部署专用 `cyberos-deploy` 用户的 sudo 权限。
+本机需要 Node.js 22.19.0+、Tailscale、SSH 和 rsync。Rust 构建还需要本地 Docker CLI，以及通过本机 Unix socket 运行的 Linux arm64 Docker 环境（例如 OrbStack）；首次构建会获取 builder 镜像。cybermachine 需要 Node.js 22.19.0+、rsync，以及 root 或可执行 `sudo -n` 的管理员 SSH 连接。不要扩大正式部署专用 `cyberos-deploy` 用户的 sudo 权限。
 
 `--build auto` 和 `--build local` 都在 Mac 构建。Rust builder 使用 Debian bookworm（glibc 2.36）与 Rust 1.95，源码只读挂载，Cargo 依赖和构建缓存使用独立 Docker volume，不复用 macOS 的 `target`。cybermachine 只负责接收、备份、替换、重启和验收；Docker 用作本机构建工具，设备仍运行原生进程和 systemd units。本地 builder 不可用时会报错，不会自动转到 cybermachine 构建。
 

@@ -12,6 +12,7 @@ import { isDeepStrictEqual } from "node:util";
 import { collectBuildInfo } from "./generate-build-info.mjs";
 import { COMPONENTS } from "./cybermachine-runtime.mjs";
 import { buildLocalRust } from "./cybermachine-build-local.mjs";
+import { assertMinimumNodeVersion } from "./check-node-version.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const runtimeComponents = ["api", "worker", "ops", "backup", "media-streamer", "mcp-cli"];
@@ -128,6 +129,7 @@ async function buildLocal(name) {
 }
 
 async function main() {
+  assertMinimumNodeVersion(process.versions.node);
   const options = parseOptions(process.argv.slice(2));
   if (options.help) {
     console.log("Usage: npm run deploy:cybermachine -- --components web,api,photos [--peer cybermachine --user zhubby | --host user@cybermachine] [--build auto|local|remote] [--dry-run]\n       npm run deploy:cybermachine -- --rollback dev-ID [--host user@cybermachine]\nComponents: " + [...Object.keys(COMPONENTS), "runtime", "all"].join(", "));
@@ -153,8 +155,7 @@ async function main() {
   const probeCode = `const fs=require("node:fs"),os=require("node:os");const p="/usr/lib/cyberos/";console.log(JSON.stringify({home:os.homedir(),platform:process.platform,arch:process.arch,node:process.execPath,nodeVersion:process.versions.node,uid:process.getuid(),build:JSON.parse(fs.readFileSync(p+"build-info.json","utf8"))}));`;
   const probe = JSON.parse(await ssh(host, `set -eu; if [ "$(id -u)" -ne 0 ]; then sudo -n true; fi; node -e ${shellQuote(probeCode)}`, true));
   if (probe.platform !== "linux" || probe.arch !== "arm64") throw new Error("cybermachine target must be Linux arm64");
-  const [nodeMajor, nodeMinor] = probe.nodeVersion.split(".").map(Number);
-  if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 12)) throw new Error("cybermachine requires Node.js 22.12+");
+  assertMinimumNodeVersion(probe.nodeVersion);
   if (!/^\/[a-zA-Z0-9/_.-]+$/u.test(probe.home)) throw new Error("Remote home must be an absolute path without shell metacharacters");
   const id = `dev-${new Date().toISOString().replace(/[^0-9]/gu, "")}-${process.pid}`;
   const cache = path.posix.join(probe.home, ".cache/cyberos-dev-deploy");
