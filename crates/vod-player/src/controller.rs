@@ -53,6 +53,7 @@ struct DesiredSession {
 }
 
 struct Controller {
+    audio_focus: Option<AudioFocus>,
     config: Arc<VodPlayerConfig>,
     receiver: mpsc::Receiver<Message>,
     status_sender: watch::Sender<Status>,
@@ -72,6 +73,13 @@ struct Controller {
     music_history_flush: Option<tokio::task::JoinHandle<Vec<String>>>,
     music_last_tick: Instant,
     music_failed_items: HashSet<String>,
+}
+
+struct AudioFocus {
+    lease_id: String,
+    expires: Instant,
+    session_id: Option<String>,
+    was_playing: bool,
 }
 
 impl ControllerHandle {
@@ -155,6 +163,7 @@ impl ControllerHandle {
         let (done_sender, done_receiver) = watch::channel(false);
         let progress = ProgressStore::new(config.database_path.clone());
         let mut controller = Controller {
+            audio_focus: None,
             config,
             receiver,
             status_sender,
@@ -260,8 +269,17 @@ impl Controller {
     }
 
     async fn handle_command(&mut self, command: Command) -> Result<Status, VodError> {
+        if !matches!(
+            &command,
+            Command::Status | Command::Guarded { .. } | Command::AudioFocus { .. }
+        ) {
+            self.audio_focus = None;
+        }
         match command {
             Command::Status => {}
+            Command::AudioFocus { lease_id, action } => {
+                self.handle_audio_focus(lease_id, &action).await?;
+            }
             Command::Guarded {
                 service_instance_id,
                 expected_session_id,
@@ -405,8 +423,10 @@ impl Controller {
             }
             Command::Pause { session_id } => {
                 self.assert_session(&session_id)?;
-                self.execute_mpv_command(json!(["set_property", "pause", true]))
-                    .await?;
+                if self.mpv.is_some() {
+                    self.execute_mpv_command(json!(["set_property", "pause", true]))
+                        .await?;
+                }
                 if let Some(desired) = self.desired.as_mut() {
                     desired.paused = true;
                 }
@@ -435,18 +455,12 @@ impl Controller {
             Command::TogglePause { session_id } => {
                 self.assert_session(&session_id)?;
                 let paused = !self.desired.as_ref().is_some_and(|desired| desired.paused);
-                self.execute_mpv_command(json!(["set_property", "pause", paused]))
-                    .await?;
-                if let Some(desired) = self.desired.as_mut() {
-                    desired.paused = paused;
-                }
-                self.status.state = if paused {
-                    PlayerState::Paused
+                return Box::pin(self.handle_command(if paused {
+                    Command::Pause { session_id }
                 } else {
-                    PlayerState::Playing
-                };
-                self.stable_since = (!paused).then(Instant::now);
-                self.transition_checkpoint()?;
+                    Command::Resume { session_id }
+                }))
+                .await;
             }
             Command::Stop { session_id } => {
                 self.assert_session(&session_id)?;
@@ -576,6 +590,9 @@ impl Controller {
     }
 
     async fn try_start_or_schedule(&mut self) {
+        if self.audio_focus.is_some() {
+            return;
+        }
         match self.attempt_start().await {
             Ok(()) => {}
             Err(error) if error.retryable() => self.schedule_recovery(error),
@@ -786,6 +803,13 @@ impl Controller {
     }
 
     async fn tick(&mut self) {
+        if let Some(focus) = &self.audio_focus {
+            if focus.expires > Instant::now() {
+                return;
+            }
+            let lease_id = focus.lease_id.clone();
+            let _ = self.handle_audio_focus(lease_id, "release").await;
+        }
         self.record_music_listening();
         self.flush_music_history().await;
         let event_session = self.status.session_id.clone();
@@ -1267,6 +1291,51 @@ impl Controller {
         }
     }
 
+    async fn handle_audio_focus(&mut self, lease_id: String, action: &str) -> Result<(), VodError> {
+        if action == "acquire" && self.audio_focus.is_none() {
+            self.record_music_listening();
+            let was_playing = self.desired.as_ref().is_some_and(|desired| !desired.paused);
+            let focus = AudioFocus {
+                lease_id,
+                expires: Instant::now() + Duration::from_secs(15),
+                session_id: self.status.session_id.clone(),
+                was_playing,
+            };
+            self.stop_mpv().await;
+            self.retry_at = None;
+            if let Some(desired) = self.desired.as_mut() {
+                desired.paused = true;
+                self.status.state = PlayerState::Paused;
+            }
+            self.audio_focus = Some(focus);
+            self.transition_checkpoint()?;
+            return Ok(());
+        }
+        let Some(focus) = self
+            .audio_focus
+            .as_mut()
+            .filter(|focus| focus.lease_id == lease_id)
+        else {
+            return Err(VodError::new(
+                ErrorCode::SessionConflict,
+                "Audio focus ownership changed",
+                409,
+            ));
+        };
+        if action == "renew" || action == "acquire" {
+            focus.expires = Instant::now() + Duration::from_secs(15);
+        } else if action == "release" {
+            let focus = self.audio_focus.take().expect("focus was checked");
+            if focus.session_id == self.status.session_id
+                && let Some(desired) = self.desired.as_mut()
+            {
+                desired.paused = !focus.was_playing;
+                self.try_start_or_schedule().await;
+            }
+        }
+        Ok(())
+    }
+
     async fn shutdown(&mut self) {
         self.record_music_listening();
         self.stop_mpv().await;
@@ -1447,6 +1516,7 @@ mod tests {
         let (done, done_receiver) = watch::channel(false);
         (
             Controller {
+                audio_focus: None,
                 config: test_config(directory),
                 receiver,
                 status_sender,
@@ -1470,6 +1540,91 @@ mod tests {
             sender,
             done_receiver,
         )
+    }
+
+    #[tokio::test]
+    async fn audio_focus_rejects_stale_release_after_user_control() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller
+            .handle_command(Command::AudioFocus {
+                lease_id: "voice".into(),
+                action: "acquire".into(),
+            })
+            .await
+            .unwrap();
+        controller
+            .handle_command(Command::AudioFocus {
+                lease_id: "voice".into(),
+                action: "renew".into(),
+            })
+            .await
+            .unwrap();
+        controller.status.session_id = Some("user-media".into());
+        controller
+            .handle_command(Command::Stop {
+                session_id: "user-media".into(),
+            })
+            .await
+            .unwrap();
+        assert!(
+            controller
+                .handle_command(Command::AudioFocus {
+                    lease_id: "voice".into(),
+                    action: "release".into()
+                })
+                .await
+                .is_err()
+        );
+        assert_eq!(controller.status.state, PlayerState::Stopped);
+        assert!(controller.desired.is_none());
+    }
+
+    #[tokio::test]
+    async fn audio_focus_expires_and_restores_only_unchanged_music() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        prepare_music_process(&mut controller, directory.path());
+        start_test_music(&mut controller).await;
+        let session_id = controller.status.session_id.clone();
+        controller
+            .handle_audio_focus("voice".into(), "acquire")
+            .await
+            .unwrap();
+        assert!(controller.mpv.is_none());
+        assert_eq!(controller.status.state, PlayerState::Paused);
+        controller.audio_focus.as_mut().unwrap().expires = Instant::now();
+        controller.tick().await;
+        assert_eq!(controller.status.session_id, session_id);
+        assert_eq!(controller.status.state, PlayerState::Playing);
+        assert!(controller.mpv.is_some());
+        controller.stop_mpv().await;
+    }
+
+    #[tokio::test]
+    async fn user_pause_during_audio_focus_is_preserved() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        prepare_music_process(&mut controller, directory.path());
+        start_test_music(&mut controller).await;
+        let session_id = controller.status.session_id.clone().unwrap();
+        controller
+            .handle_audio_focus("voice".into(), "acquire")
+            .await
+            .unwrap();
+        controller
+            .handle_command(Command::Pause { session_id })
+            .await
+            .unwrap();
+        assert!(
+            controller
+                .handle_audio_focus("voice".into(), "release")
+                .await
+                .is_err()
+        );
+        assert_eq!(controller.status.state, PlayerState::Paused);
+        assert!(controller.desired.as_ref().unwrap().paused);
+        assert!(controller.mpv.is_none());
     }
 
     #[tokio::test]

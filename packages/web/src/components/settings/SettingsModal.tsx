@@ -135,6 +135,7 @@ interface SettingsModalProps {
   bluetoothStatus: BluetoothStatus | null;
   resolvedLocale: SupportedLocale;
   onClose: () => void;
+  onOpenVoiceSession?: (sessionId: string) => void;
   onRequestSystemPower?: (action: SystemPowerAction) => Promise<boolean>;
   onFormChange: (form: ModelProviderFormState) => void;
   onDockerFormChange: (form: DockerSettingsFormState) => void;
@@ -237,6 +238,7 @@ export function SettingsModal({
   onBluetoothStatus,
   onNetworkRefresh,
   onNotifySuccess,
+  onOpenVoiceSession,
   onNotifyError,
   onSectionChange,
   onSubmit
@@ -554,7 +556,7 @@ export function SettingsModal({
 
           {activeSection === "mcp" ? <SettingsMcpPage /> : null}
 
-          {activeSection === "audio" ? <SettingsAudioPage onNotifySuccess={onNotifySuccess} /> : null}
+          {activeSection === "audio" ? <SettingsAudioPage onNotifySuccess={onNotifySuccess} {...(onOpenVoiceSession ? { onOpenVoiceSession } : {})} /> : null}
 
           {activeSection === "skills" ? (
             <SettingsSkillsPage activeSessionId={activeSessionId} storagePools={storagePools} locale={resolvedLocale} />

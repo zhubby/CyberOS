@@ -40,7 +40,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "005_video_library",
         "006_photos_scan_contention",
         "007_photos_metadata_lookup",
-        "008_photos_index_performance"
+        "008_photos_index_performance",
+        "009_audio_voice_channel"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {
@@ -60,7 +61,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "005_video_library",
         "006_photos_scan_contention",
         "007_photos_metadata_lookup",
-        "008_photos_index_performance"
+      "008_photos_index_performance",
+      "009_audio_voice_channel"
     ]);
   });
 
@@ -399,7 +401,8 @@ describe("CyberOS 2.0 SQLite schema", () => {
         "005_video_library",
         "006_photos_scan_contention",
         "007_photos_metadata_lookup",
-        "008_photos_index_performance"
+        "008_photos_index_performance",
+        "009_audio_voice_channel"
       ]);
       expect(database.pragma("foreign_key_check")).toEqual([]);
     } finally {

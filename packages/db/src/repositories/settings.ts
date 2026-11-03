@@ -3,6 +3,7 @@ import type {
   AgentCapabilityPolicySettingsRecord,
   AgentMcpSettingsRecord,
   AudioSettingsRecord,
+  EffectiveAudioSettings,
   BluetoothSettingsRecord,
   BackupSettingsRecord,
   DownloadSettingsRecord,
@@ -19,7 +20,8 @@ import type {
   VmSettingsRecord
 } from "@cyberos/shared";
 import {
-  normalizeCyberAudioBaseUrl,
+  normalizeAudioSettings,
+  AUDIO_SETTING_FIELDS,
   normalizeSystemProxySettings,
   PHOTOS_DEFAULT_COMMAND_TIMEOUT_MS,
   PHOTOS_DEFAULT_MAX_AUTO_RETRIES,
@@ -65,23 +67,23 @@ const TV_SETTING_KEY = "tv_settings";
 
 const EPOCH = new Date(0).toISOString();
 
-export function defaultAudioSettings(): AudioSettingsRecord {
-  return { cyberAudioBaseUrl: null, updatedAt: EPOCH };
+export function defaultAudioSettings(): EffectiveAudioSettings {
+  return normalizeAudioSettings({}, EPOCH);
 }
 
-export function getAudioSettings(db: CyberOsDatabase): AudioSettingsRecord | null {
+export function getAudioSettings(db: CyberOsDatabase): EffectiveAudioSettings | null {
   const row = settingRow(db, AUDIO_SETTING_KEY);
   if (!row) return null;
   const value = currentSettingsObject(JSON.parse(row.value_json), ["cyberAudioBaseUrl", "updatedAt"], "Audio");
-  return {
-    cyberAudioBaseUrl: normalizeCyberAudioBaseUrl(value.cyberAudioBaseUrl),
-    updatedAt: currentSettingsUpdatedAt(value, "Audio")
-  };
+  if (Object.keys(value).some((key) => key !== "updatedAt" && !(AUDIO_SETTING_FIELDS as readonly string[]).includes(key))) throw new Error("Invalid Audio settings fields");
+  return normalizeAudioSettings(value, currentSettingsUpdatedAt(value, "Audio"));
 }
 
-export function saveAudioSettings(db: CyberOsDatabase, input: Omit<AudioSettingsRecord, "updatedAt">): AudioSettingsRecord {
+export function saveAudioSettings(db: CyberOsDatabase, input: Partial<Omit<AudioSettingsRecord, "updatedAt">>): EffectiveAudioSettings {
   const updatedAt = new Date().toISOString();
-  const record = { cyberAudioBaseUrl: normalizeCyberAudioBaseUrl(input.cyberAudioBaseUrl), updatedAt };
+  let current: EffectiveAudioSettings;
+  try { current = getAudioSettings(db) ?? defaultAudioSettings(); } catch { current = defaultAudioSettings(); }
+  const record = normalizeAudioSettings({ ...current, ...input }, updatedAt);
   saveSetting(db, AUDIO_SETTING_KEY, record, updatedAt);
   return record;
 }

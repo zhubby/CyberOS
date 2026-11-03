@@ -1510,7 +1510,65 @@ export interface ModelProviderSettingsRecord {
 
 export interface AudioSettingsRecord {
   cyberAudioBaseUrl: string | null;
+  cyberAudioToken?: string | null;
+  enabled?: boolean;
+  inputDeviceId?: string | null;
+  maxRecordingSeconds?: number;
+  sttLanguage?: "auto" | "zh" | "en";
+  ttsLanguage?: "auto" | "zh" | "en";
+  ttsVoice?: string;
+  ttsInstructions?: string;
+  speechEnabled?: boolean;
+  outputDeviceId?: string | null;
+  volume?: number;
   updatedAt: string;
+}
+
+export type EffectiveAudioSettings = Required<AudioSettingsRecord>;
+export type PublicAudioSettings = Omit<EffectiveAudioSettings, "cyberAudioToken"> & { tokenConfigured: boolean };
+export type AudioSettingsPatch = Partial<Omit<EffectiveAudioSettings, "updatedAt">>;
+
+export type VoiceTurnStatus = "transcribing" | "queued" | "agent" | "synthesizing" | "speaking" | "completed" | "interrupted" | "failed";
+export interface VoiceTurnRecord {
+  recordingId: string;
+  deviceId: string;
+  sessionId: string | null;
+  messageId: string | null;
+  jobId: string | null;
+  status: VoiceTurnStatus;
+  speechSuppressed: boolean;
+  error: string | null;
+  timings: Record<string, number>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AudioDevice { id: string; name: string; connected: boolean }
+export interface AudioServiceStatus {
+  reachable: boolean;
+  authenticated: boolean;
+  sttReady: boolean;
+  ttsReady: boolean;
+  voices: string[];
+  error: string | null;
+}
+export interface AudioDaemonStatus {
+  available: boolean;
+  protocol: string;
+  connected: boolean;
+  recordingId: string | null;
+  generation: number;
+  recordings: string[];
+  playing: boolean;
+  error: string | null;
+}
+export interface AudioStatus {
+  daemon: AudioDaemonStatus;
+  sessionId: string | null;
+  awaitingApproval: boolean;
+  turns: VoiceTurnRecord[];
+  error: string | null;
+  test: { armed: boolean; transcript: string | null; error: string | null };
 }
 
 export interface PublicModelProviderSettings {
@@ -2340,6 +2398,8 @@ export type PublicPiToolPolicySettings = PiToolPolicySettingsRecord;
 
 export interface AgentSessionRecord {
   id: string;
+  kind?: "chat" | "voice";
+  contextGeneration?: number;
   currentPath: string;
   piResourcesTrusted?: boolean;
   createdAt: string;

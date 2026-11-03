@@ -28,7 +28,9 @@ function sessionColumns(db: CyberOsDatabase): string {
   const trustColumn = hasSessionResourceTrust(db)
     ? "pi_resources_trusted"
     : "0 AS pi_resources_trusted";
-  return `id, current_path, ${trustColumn}, created_at, updated_at`;
+  const voiceColumns = db.prepare("SELECT 1 FROM pragma_table_info('agent_sessions') WHERE name = 'kind'").get()
+    ? "kind, context_generation" : "'chat' AS kind, 0 AS context_generation";
+  return `id, current_path, ${trustColumn}, ${voiceColumns}, created_at, updated_at`;
 }
 
 export function createSession(
@@ -38,6 +40,8 @@ export function createSession(
   const now = new Date().toISOString();
   const session: AgentSessionRecord = {
     id: randomUUID(),
+    kind: "chat",
+    contextGeneration: 0,
     currentPath: input.currentPath ?? ".",
     piResourcesTrusted: false,
     createdAt: now,
@@ -80,7 +84,7 @@ export function listSessions(
     .prepare(`
       SELECT ${sessionColumns(db)}
       FROM agent_sessions
-      ORDER BY updated_at DESC
+      ORDER BY kind = 'voice' DESC, updated_at DESC
       LIMIT ?
     `)
     .all(limit) as DbSessionRow[];
@@ -140,6 +144,7 @@ export function hasActiveJobsForSession(db: CyberOsDatabase, sessionId: string):
 }
 
 export function deleteSession(db: CyberOsDatabase, sessionId: string): boolean {
+  if (getSession(db, sessionId)?.kind === "voice") throw new Error("System voice session cannot be deleted");
   const result = db.prepare("DELETE FROM agent_sessions WHERE id = ?").run(sessionId);
   return result.changes === 1;
 }

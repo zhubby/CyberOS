@@ -512,6 +512,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyberos-audiod"
+version = "2.2.9"
+dependencies = [
+ "base64 0.22.1",
+ "futures-util",
+ "nix 0.30.1",
+ "sd-notify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zbus",
+]
+
+[[package]]
 name = "cyberos-bluetoothd"
 version = "2.2.9"
 dependencies = [

@@ -20,7 +20,11 @@ import {
 } from "@cyberos/db";
 import { MonitoringReader } from "@cyberos/monitoring";
 import type { ApiRouteContext, ServerDependencies } from "./context.js";
-import type { MonitoringQueryRequest } from "@cyberos/shared";
+import { createVodPlayerRuntime, type MonitoringQueryRequest } from "@cyberos/shared";
+import { AudioCoordinator } from "./lib/audio-coordinator.js";
+import { UnixAudioRuntime, audioSocketPath } from "./lib/audio-runtime.js";
+import { MediaAudioFocus } from "./lib/audio-focus.js";
+import { CyberAudioClient } from "./lib/audio-client.js";
 import { CapabilityError, type JsonValue } from "@cyberos/capabilities";
 import { registerErrorHandler } from "./errors.js";
 import { DockerComposeService } from "./lib/docker-compose.js";
@@ -51,7 +55,7 @@ import { reconcileAgentMcp } from "./lib/agent-mcp-settings.js";
 
 export type { ServerDependencies } from "./context.js";
 
-export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, monitoringEvents: monitoringEventsDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photosMap, hostAccess, tvMode }: ServerDependencies): Promise<FastifyInstance> {
+export async function buildServer({ buildInfo, config, db, monitoring: monitoringDependency, monitoringEvents: monitoringEventsDependency, docker, vm, shares, system, terminal, videoTranscoder, vodPlayer, photosMap, hostAccess, tvMode, audio: audioDependency, audioRuntime }: ServerDependencies): Promise<FastifyInstance> {
   if (!isLoopbackHost(config.api.host)) {
     throw new Error("CyberOS API must bind to a loopback host");
   }
@@ -125,7 +129,11 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
     ...(system ? { system } : {})
   });
   const capabilityRuntime = { db, config, adapters: capabilityAdapters };
+  const audio = audioDependency ?? new AudioCoordinator(db,
+    audioRuntime ?? new UnixAudioRuntime(audioSocketPath(config.paths.runDir)),
+    new CyberAudioClient(), new MediaAudioFocus(vodPlayer ?? createVodPlayerRuntime({ ...config.vodPlayer, enabled: true })));
   const routeContext: ApiRouteContext = {
+    audio,
     ...(buildInfo ? { buildInfo } : {}),
     config,
     db,
@@ -263,6 +271,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
       server.log.info(recoveredRuns, "Recovered capability runs");
     }
     fileBatches.start();
+    audio.start();
     const currentDockerConfig = effectiveDockerConfig(config, getDockerSettings(db)).docker;
     const engine = currentDockerConfig.enabled ? dockerEngine(currentDockerConfig, dockerRuntime) : null;
     if (engine) {
@@ -293,6 +302,7 @@ export async function buildServer({ buildInfo, config, db, monitoring: monitorin
   });
 
   server.addHook("onClose", async () => {
+    await audio.close();
     clearInterval(hostAccessDraftCleanup);
     await fileBatches.stop();
     monitoring.close();

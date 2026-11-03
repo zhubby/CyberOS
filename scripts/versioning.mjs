@@ -4,6 +4,7 @@ import path from "node:path";
 const INTERNAL_PACKAGE_PREFIX = "@cyberos/";
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 const PRODUCT_CARGO_PACKAGES = [
+  { manifestPath: "crates/audiod/Cargo.toml", packageName: "cyberos-audiod" },
   { manifestPath: "crates/alerter/Cargo.toml", packageName: "cyberos-alerter" },
   { manifestPath: "crates/bluetoothd/Cargo.toml", packageName: "cyberos-bluetoothd" },
   { manifestPath: "crates/downloader/Cargo.toml", packageName: "cyberos-downloader" },

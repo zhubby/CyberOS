@@ -14,6 +14,7 @@ packages/ops/dist/* usr/lib/cyberos/apps/ops/dist/
 target/release/cyberos-downloader usr/lib/cyberos/bin/
 target/release/cyberos-vod-player usr/lib/cyberos/bin/
 target/release/cyberos-bluetoothd usr/lib/cyberos/bin/
+target/release/cyberos-audiod usr/lib/cyberos/bin/
 target/release/cyberos-tv-gamepad usr/lib/cyberos/bin/
 packages/web/dist/* usr/lib/cyberos/apps/web/dist/
 docs/dist/* usr/lib/cyberos/docs/dist/

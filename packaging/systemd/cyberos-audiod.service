@@ -1,0 +1,35 @@
+[Unit]
+Description=CyberOS Bluetooth voice input and host speech output
+Documentation=file:///usr/share/doc/cyberos/README.md
+After=dbus.service bluetooth.service cyberos-state-init.service
+Wants=bluetooth.service
+Requires=cyberos-state-init.service
+
+[Service]
+Type=notify
+User=cyberos
+Group=cyberos
+SupplementaryGroups=audio
+Environment=CYBEROS_AUDIO_SOCKET=/run/cyberos/audiod.sock
+ExecStart=/usr/lib/cyberos/bin/cyberos-audiod
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+KillMode=control-group
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/cyberos
+NoNewPrivileges=yes
+PrivateTmp=yes
+DevicePolicy=closed
+DeviceAllow=char-alsa rw
+RestrictAddressFamilies=AF_UNIX AF_BLUETOOTH
+IPAddressDeny=any
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+MemoryMax=256M
+CPUQuota=100%
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
