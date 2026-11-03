@@ -324,6 +324,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn grants_traversal_through_data_root_for_root_and_nested_shares() {
+        let temp = TempDir::new().unwrap();
+        fs::create_dir_all(temp.path().join("data/pool-1/media"))
+            .await
+            .unwrap();
+        fs::create_dir_all(temp.path().join("data/other"))
+            .await
+            .unwrap();
+        for share_path in [".", "media"] {
+            let mut request = fixture(&temp.path().join("data"));
+            request.settings.shares[0].path = share_path.into();
+            let resolved = resolve_shares(&request.settings, &request.data_root)
+                .await
+                .unwrap();
+            let grants =
+                serde_json::to_value(acl::grants_for(&request.settings, &resolved).unwrap())
+                    .unwrap();
+            let grants = grants.as_array().unwrap();
+            for principal in ["cyberos_share", "www-data", "minidlna", "cyberos-nfs"] {
+                assert!(
+                    grants.contains(&serde_json::json!({
+                        "path": request.data_root,
+                        "principal": principal,
+                        "access": "traverse",
+                        "scope": "parent"
+                    })),
+                    "{principal} cannot traverse the data root for share {share_path}"
+                );
+            }
+            assert!(grants.iter().all(|grant| {
+                let path = Path::new(grant["path"].as_str().unwrap());
+                path.starts_with(&request.data_root) && path != request.data_root.join("other")
+            }));
+        }
+    }
+
+    #[tokio::test]
     async fn renders_configs_and_reloads_only_enabled_services() {
         let temp = TempDir::new().unwrap();
         fs::create_dir_all(temp.path().join("data/pool-1/media"))

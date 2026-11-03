@@ -113,6 +113,7 @@ pub(super) fn grants_for(
                 },
             ));
         }
+        let data_root = resolved.root_path.parent().unwrap_or(&resolved.root_path);
         for (principal, access) in identities {
             insert(
                 &mut grants,
@@ -123,7 +124,7 @@ pub(super) fn grants_for(
             );
             let mut parent = resolved.absolute_path.parent();
             while let Some(path) = parent {
-                if !path.starts_with(&resolved.root_path) {
+                if !path.starts_with(data_root) {
                     break;
                 }
                 insert(&mut grants, path, principal, "traverse", "parent");
