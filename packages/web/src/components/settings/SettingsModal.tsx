@@ -300,7 +300,7 @@ export function SettingsModal({
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (compact) return;
-    const topmostDialog = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')]
+    const topmostDialog = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]')]
       .filter((dialog) => dialog.isConnected && !dialog.hidden).at(-1);
     if (topmostDialog && topmostDialog !== event.currentTarget) return;
     if (event.target instanceof Node && !event.currentTarget.contains(event.target)) return;
