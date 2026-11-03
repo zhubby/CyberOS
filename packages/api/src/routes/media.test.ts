@@ -2,6 +2,9 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createServer } from "node:http";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   openCyberOsDb,
@@ -64,6 +67,22 @@ afterEach(async () => {
 });
 
 describe("Media API", () => {
+  it("defaults old TMDB settings to direct and requires a configured proxy before enabling", async () => {
+    const initial = await server.inject({ method: "GET", url: "/api/media/settings" });
+    expect(initial.json().settings.tmdbUseProxy).toBe(false);
+    const missing = await server.inject({ method: "PATCH", url: "/api/media/settings", payload: { tmdbUseProxy: true } });
+    expect(missing.statusCode).toBe(409);
+    db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)").run(
+      "system_proxy_settings", JSON.stringify({ protocol: "http", host: "127.0.0.1", port: 7890, updatedAt: new Date().toISOString() }), new Date().toISOString()
+    );
+    const saved = await server.inject({ method: "PATCH", url: "/api/media/settings", payload: { tmdbUseProxy: true, tmdbReadAccessToken: "secret-token" } });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().settings.tmdbUseProxy).toBe(true);
+    const edit = await server.inject({ method: "PATCH", url: "/api/media/settings", payload: { language: "en-US" } });
+    expect(edit.json().settings).toMatchObject({ tmdbUseProxy: true, tmdbTokenConfigured: true });
+    expect((await server.inject({ method: "PATCH", url: "/api/media/settings", payload: { tmdbUseProxy: "yes" } })).statusCode).toBe(400);
+  });
+
   it("reports damaged settings and allows PATCH repair", async () => {
     db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?)").run(
       "media_library_settings",
@@ -158,6 +177,7 @@ describe("Media API", () => {
     });
     expect(candidates.statusCode).toBe(200);
     expect(candidates.json().candidates).toEqual([expect.objectContaining({ tmdbId: 329865 })]);
+    expect(candidates.json().candidates[0].posterUrl).toBe("/api/media/tmdb/images/w500/arrival.jpg");
     expect(candidateSearches).toEqual([expect.objectContaining({
       token: "secret-token",
       kind: "movie",
@@ -241,6 +261,61 @@ describe("Media API", () => {
     db.prepare("UPDATE media_artwork SET cache_key = ? WHERE id = ?")
       .run(`local/${source.id}/../outside.jpg`, artwork!.id);
     expect((await server.inject({ method: "GET", url: `/api/media/artwork/${artwork!.id}` })).statusCode).toBe(404);
+  });
+
+  it("routes search, candidate images and uncached artwork through the configured proxy", async () => {
+    const destinations: string[] = [];
+    const proxy = createServer();
+    proxy.on("connect", (request, socket) => {
+      destinations.push(request.url!);
+      socket.end("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    });
+    proxy.listen(0, "127.0.0.1");
+    await once(proxy, "listening");
+    const port = (proxy.address() as AddressInfo).port;
+    db.prepare("INSERT INTO system_settings (key,value_json,updated_at) VALUES ('system_proxy_settings',?,'now')").run(JSON.stringify({ protocol: "http", host: "127.0.0.1", port, updatedAt: new Date().toISOString() }));
+    await server.inject({ method: "PATCH", url: "/api/media/settings", payload: { tmdbReadAccessToken: "test-only-token", tmdbUseProxy: true } });
+    const source = (await createSource()).json().source;
+    const stored = upsertMediaCatalogEntry(db, {
+      sourceId: source.id, generation: "proxy-test",
+      title: { kind: "movie", sourcePath: "Movies/Proxy", title: "Proxy", metadataSource: "filename", matchStatus: "unmatched" },
+      file: { relativePath: "Movies/proxy.mkv", name: "proxy.mkv", mimeType: "video/x-matroska", sizeBytes: 1, mtimeMs: 1 }
+    });
+    const [art] = replaceMediaArtwork(db, { titleId: stored.title.id, artwork: [{ kind: "poster", source: "tmdb", sourceUrl: "https://image.tmdb.org/t/p/w500/test.jpg", cacheKey: "tmdb/w500/test.jpg", width: null, height: null, language: null, primary: true }] });
+    const actual = Fastify();
+    registerMediaRoutes(actual, { config: testConfig(), db, system: storageSystem() } as unknown as ApiRouteContext);
+    try {
+      for (const url of [`/api/media/titles/${stored.title.id}/match-candidates`, "/api/media/tmdb/images/w500/test.jpg", `/api/media/artwork/${art!.id}`]) {
+        expect((await actual.inject({ method: "GET", url })).statusCode).toBe(502);
+      }
+      expect(destinations).toEqual(["api.themoviedb.org:443", "image.tmdb.org:443", "image.tmdb.org:443"]);
+    } finally {
+      await actual.close();
+      await new Promise<void>((resolve) => proxy.close(() => resolve()));
+    }
+  });
+
+  it("bounds candidate images and rejects arbitrary hosts and traversal paths", async () => {
+    const requests: string[] = [];
+    const actual = Fastify();
+    registerMediaRoutes(actual, { config: testConfig(), db } as unknown as ApiRouteContext, {
+      fetchTmdb: async (url) => {
+        requests.push(String(url));
+        return requests.length === 1 ? new Response("test-image") : new Response("x", { headers: { "content-length": String(16 * 1024 * 1024) } });
+      }
+    });
+    try {
+      const image = await actual.inject({ method: "GET", url: "/api/media/tmdb/images/w500/test.jpg" });
+      expect(image.statusCode).toBe(200);
+      expect(image.payload).toBe("test-image");
+      expect((await actual.inject({ method: "GET", url: "/api/media/tmdb/images/w500/large.jpg" })).statusCode).toBe(502);
+      for (const url of ["/api/media/tmdb/images/original/test.jpg", "/api/media/tmdb/images/w500/http%3A%2F%2F127.0.0.1.jpg", "/api/media/tmdb/images/w500/..%2Ftest.jpg"]) {
+        expect((await actual.inject({ method: "GET", url })).statusCode).toBe(400);
+      }
+      expect(requests).toEqual(["https://image.tmdb.org/t/p/w500/test.jpg", "https://image.tmdb.org/t/p/w500/large.jpg"]);
+    } finally {
+      await actual.close();
+    }
   });
 });
 

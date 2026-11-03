@@ -405,6 +405,7 @@ export interface MediaScanRunRecord {
 
 export interface MediaLibrarySettingsRecord {
   tmdbReadAccessToken: string | null;
+  tmdbUseProxy: boolean;
   language: string;
   region: string | null;
   updatedAt: string;
@@ -412,8 +413,18 @@ export interface MediaLibrarySettingsRecord {
 
 export interface PublicMediaLibrarySettings {
   tmdbTokenConfigured: boolean;
+  tmdbUseProxy: boolean;
   language: string;
   region: string | null;
+  updatedAt: string;
+}
+
+export type SystemProxyProtocol = "http" | "https" | "socks5";
+
+export interface SystemProxySettingsRecord {
+  protocol: SystemProxyProtocol;
+  host: string | null;
+  port: number | null;
   updatedAt: string;
 }
 

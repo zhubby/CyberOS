@@ -60,6 +60,7 @@ describe("media library persistence", () => {
     expect(getMediaLibrarySettings(db)).toEqual(saved);
     expect(toPublicMediaLibrarySettings(saved)).toEqual({
       tmdbTokenConfigured: true,
+      tmdbUseProxy: false,
       language: "zh-CN",
       region: "CN",
       updatedAt: "2026-01-01T00:00:00.000Z"

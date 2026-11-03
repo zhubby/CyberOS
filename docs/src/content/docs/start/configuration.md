@@ -41,6 +41,7 @@ npm run dev
 以下设置通过 Web 设置页或 `/api/settings/*` 管理，并由 API、worker、Agent/MCP 与对应 daemon 在操作时读取：
 
 - System Profile：管理员显示名。
+- Proxy：单组 HTTP、HTTPS 或 SOCKS5 代理地址与端口，支持域名、IPv4、IPv6；地址必须能从 NAS 访问，`localhost` 指 NAS 本机。各模块按自己的开关使用，首版不支持账号密码。
 - Model Providers：模型端点和密钥。
 - Pi Agent：capability 执行/审批策略与项目资源信任。
 - MCP：默认开启的 CyberOS 内置 MCP，以及经测试和确认的第三方 Streamable HTTP Server。第三方凭据只写 `/cyberos/state/secrets/mcp`。
@@ -49,6 +50,7 @@ npm run dev
 - Monitoring：启用状态、raw/minute/hour 保留周期和指标库空间上限。采样频率固定，monitor 根据 `updated_at` 热重载。
 - Backup：启用状态、仓库、挂载要求和 daily/weekly 保留策略。密码只写 `/cyberos/state/secrets/backup/restic-password`，读取响应只返回 `passwordConfigured`。
 - Media / TV：TV 开关、输出模式、DRM connector、音频设备和硬件解码。TV 切换由 typed hostd 操作原子应用，失败不写库。
+- Media / TMDB：“使用系统代理”默认关闭；开启前需保存 Proxy 配置。手动搜索、自动刮削和远程图片使用同一配置，SOCKS5 由代理解析目标域名。API 后续请求立即使用新配置，运行中的扫描保留领取任务时的快照；代理失败会报错，不回退直连。
 - Shares、Indexer、Photos 与 Downloads：继续使用各自的 typed SQLite 设置。共享账户密码只写 `/cyberos/state/secrets/share/account-password`，数据库、operation metadata 和读取响应均不保存或返回明文。
 
 存储池不是设置记录。CyberOS 发现 `${CYBEROS_ROOT}/data` 下的一级真实目录，并使用目录名作为 `storagePoolId`；生产池必须直接挂载到 `/cyberos/data/<pool-id>`。

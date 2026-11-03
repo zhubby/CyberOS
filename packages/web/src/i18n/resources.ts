@@ -2452,6 +2452,7 @@ export const en = {
         title: "Wireless",
         description: "Wi-Fi adapters, radio, saved networks, and hotspot configuration."
       },
+      proxy: { title: "Proxy", description: "Shared proxy configuration for supported services." },
       bluetooth: {
         title: "Bluetooth",
         description: "Adapters, discovery, pairing, trust, and device connections."
@@ -2522,6 +2523,9 @@ export const en = {
       musicSourceRemoved: "Music folder removed. Original files are kept.",
       removeMusicSource: "Remove music folder?",
       metadataTitle: "Metadata",
+      tmdbUseProxy: "Use system proxy",
+      proxyMissing: "Configure the system proxy before enabling.",
+      configureProxy: "Configure proxy",
       metadataDescription: "TMDB is optional. Local NFO and filename metadata remain available without it.",
       tmdbToken: "TMDB read access token",
       tokenConfigured: "Configured; leave blank to keep",
@@ -2766,6 +2770,15 @@ export const en = {
     },
     wireless: {
       statusUnavailable: "Wireless status is unavailable."
+    },
+    proxy: {
+      title: "System proxy",
+      description: "Services use this proxy when their proxy option is enabled.",
+      protocol: "Proxy protocol",
+      host: "Proxy address",
+      port: "Port",
+      addressHint: "Use an address reachable from the NAS. localhost refers to the NAS itself.",
+      saved: "Proxy settings saved."
     },
     alerts: {
       saved: "Alert settings saved.",
@@ -5779,6 +5792,7 @@ export const zhCN = {
         title: "无线网卡",
         description: "管理 Wi-Fi 网卡、射频、已保存网络和热点。"
       },
+      proxy: { title: "代理", description: "配置供支持的服务使用的系统代理。" },
       bluetooth: {
         title: "蓝牙",
         description: "管理适配器、扫描、配对、信任和设备连接。"
@@ -5849,6 +5863,9 @@ export const zhCN = {
       musicSourceRemoved: "音乐文件夹已移除，原始文件保留。",
       removeMusicSource: "移除音乐文件夹？",
       metadataTitle: "元数据",
+      tmdbUseProxy: "使用系统代理",
+      proxyMissing: "请先配置系统代理，再启用此选项。",
+      configureProxy: "配置代理",
       metadataDescription: "TMDB 为可选服务；未配置时仍可使用本地 NFO 和文件名元数据。",
       tmdbToken: "TMDB 读取令牌",
       tokenConfigured: "已配置，留空保持不变",
@@ -6093,6 +6110,15 @@ export const zhCN = {
     },
     wireless: {
       statusUnavailable: "无线网络状态不可用。"
+    },
+    proxy: {
+      title: "系统代理",
+      description: "各服务开启代理选项后使用此配置。",
+      protocol: "代理协议",
+      host: "代理地址",
+      port: "端口",
+      addressHint: "请填写 NAS 可访问的地址；localhost 指 NAS 本机。",
+      saved: "代理设置已保存。"
     },
     alerts: {
       saved: "告警设置已保存。",

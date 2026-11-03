@@ -2,6 +2,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod extractor;
+mod http_proxy;
 pub mod media;
 pub mod music;
 mod music_db;
