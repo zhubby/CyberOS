@@ -6,6 +6,9 @@ import { initBackup, validateBackup } from "@cyberos/backup";
 import {
   DEFAULT_AGENT_CAPABILITY_POLICY_SETTINGS,
   defaultAgentCapabilityPolicySettings,
+  defaultAudioSettings,
+  getAudioSettings,
+  saveAudioSettings,
   defaultIndexerSettings,
   defaultDownloadSettings,
   getDockerSettings,
@@ -41,6 +44,7 @@ import type {
   AgentCapabilityId,
   AgentCapabilityPolicyMode,
   AgentCapabilityPolicySettingsRecord,
+  AudioSettingsRecord,
   DownloadSettingsRecord,
   IndexerSettingsRecord,
   BackupSettingsRecord,
@@ -71,6 +75,29 @@ import { PathSafetyError } from "@cyberos/storage-tools";
 import { listBackupDirectories } from "../lib/backup-directories.js";
 
 export function registerSettingsRoutes(server: FastifyInstance, { config, db, system, tvMode }: ApiRouteContext): void {
+  server.get("/api/settings/audio", async (_request, reply) => {
+    try {
+      return { settings: getAudioSettings(db) ?? defaultAudioSettings() };
+    } catch (error) {
+      return reply.status(409).send({ error: settingError(error), state: "attention" });
+    }
+  });
+
+  server.patch<{ Body: Partial<Omit<AudioSettingsRecord, "updatedAt">> }>("/api/settings/audio", async (request, reply) => {
+    if (
+      !request.body
+      || typeof request.body !== "object"
+      || Array.isArray(request.body)
+      || hasUnknownFields(request.body, ["cyberAudioBaseUrl"])
+    ) return reply.status(400).send({ error: "Invalid audio settings fields" });
+    try {
+      const current = readForRepair(() => getAudioSettings(db), defaultAudioSettings);
+      return { settings: saveAudioSettings(db, { ...current, ...request.body }) };
+    } catch (error) {
+      return reply.status(400).send({ error: settingError(error) });
+    }
+  });
+
   server.get("/api/settings/proxy", async (_request, reply) => {
     try {
       return { settings: getSystemProxySettings(db) ?? defaultSystemProxySettings() };

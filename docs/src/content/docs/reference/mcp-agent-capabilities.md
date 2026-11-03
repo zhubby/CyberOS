@@ -15,9 +15,14 @@ sourceOfTruth:
   - packages/mcp/src/server.ts
   - packages/web/src/components/settings/SettingsMcpPage.tsx
   - packages/web/src/components/settings/SettingsSkillsPage.tsx
+  - packages/web/src/components/settings/SettingsAudioPage.tsx
 ---
 
-CyberOS 把 AI 设置拆成模型 Provider、Pi Agent、MCP 和 Skills 四个同级页面。所有产品设置保存在 SQLite；MCP secret 和已安装 Skill 使用固定的受限 state 目录，不需要产品配置文件。
+CyberOS 把 AI 设置拆成模型 Provider、Pi Agent、Audio、MCP 和 Skills 五个同级页面。所有产品设置保存在 SQLite；MCP secret 和已安装 Skill 使用固定的受限 state 目录，不需要产品配置文件。
+
+## Audio
+
+**设置 > AI > Audio** 目前只配置 CyberAudio 服务地址。填写 NAS 可访问的 HTTP/HTTPS 基础地址，例如 `https://audio.example.com:8443`，保存后重新打开页面仍会保留；留空保存可清除。`localhost` 指 NAS 本机。当前只保存地址，尚未接入 STT/TTS 调用、认证或连接检测。
 
 ## Pi Agent
 

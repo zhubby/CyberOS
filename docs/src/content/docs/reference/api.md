@@ -15,6 +15,7 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 
 ## Pi Agent、MCP 与 Skills
 
+- `GET/PATCH /api/settings/audio` 管理 CyberAudio 服务地址；PATCH 接受 `cyberAudioBaseUrl: string | null`，读取响应包含 `updatedAt`。仅接受 HTTP/HTTPS 基础地址，不接受 URL 凭据、查询参数或片段；空字符串或 `null` 清除配置。首版只保存地址，不发起语音识别、合成或连接检测。
 - `GET/PATCH /api/settings/agent-capability-policy` 管理 Pi Agent 每项 CyberOS capability 的自动、审批、二次确认和禁用策略。
 - `GET/PATCH /api/settings/proxy` 管理单组系统代理，字段为 `protocol: http|https|socks5`、`host` 和 `port`；读取响应包含 `updatedAt`。未配置时地址、端口均为 `null`，端口范围为 1–65535，首版不接受认证信息。
 - `GET/PATCH /api/media/settings` 的 `tmdbUseProxy` 默认 `false`；开启前必须配置系统代理。搜索候选中的图片地址指向 `/api/media/tmdb/images/:size/:file`，只允许固定 TMDB 图片来源、指定尺寸与图片扩展名，禁止上游重定向。

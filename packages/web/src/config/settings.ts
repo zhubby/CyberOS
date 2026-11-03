@@ -17,6 +17,7 @@ export type SettingsSectionId =
   | "system-profile"
   | "version"
   | "model-providers"
+  | "audio"
   | "pi-agent"
   | "mcp"
   | "skills"
@@ -88,6 +89,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   },
   {
     id: "pi-agent",
+    group: "ai"
+  },
+  {
+    id: "audio",
     group: "ai"
   },
   {
@@ -169,6 +174,7 @@ const SECTION_TITLE_KEYS = {
   "system-profile": "settings.sections.systemProfile.title",
   version: "settings.sections.version.title",
   "model-providers": "settings.sections.modelProviders.title",
+  audio: "settings.sections.audio.title",
   "pi-agent": "settings.sections.piAgent.title",
   mcp: "settings.sections.mcp.title",
   skills: "settings.sections.skills.title",
@@ -195,6 +201,7 @@ const SECTION_DESCRIPTION_KEYS = {
   "system-profile": "settings.sections.systemProfile.description",
   version: "settings.sections.version.description",
   "model-providers": "settings.sections.modelProviders.description",
+  audio: "settings.sections.audio.description",
   "pi-agent": "settings.sections.piAgent.description",
   mcp: "settings.sections.mcp.description",
   skills: "settings.sections.skills.description",

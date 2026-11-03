@@ -1508,6 +1508,11 @@ export interface ModelProviderSettingsRecord {
   updatedAt: string;
 }
 
+export interface AudioSettingsRecord {
+  cyberAudioBaseUrl: string | null;
+  updatedAt: string;
+}
+
 export interface PublicModelProviderSettings {
   generation: number;
   providerName: ModelProviderName;

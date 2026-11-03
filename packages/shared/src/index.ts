@@ -21,3 +21,4 @@ export * from "./playback.js";
 export * from "./playback-client.js";
 export * from "./media-stream.js";
 export * from "./media-stream-client.js";
+export * from "./audio-settings.js";

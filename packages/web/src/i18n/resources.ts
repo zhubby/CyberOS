@@ -2436,6 +2436,10 @@ export const en = {
         title: "Model Providers",
         description: "Third-party model provider credentials and endpoint routing."
       },
+      audio: {
+        title: "Audio",
+        description: "Configure the CyberAudio service address."
+      },
       piAgent: {
         title: "Pi Agent",
         description: "Pi execution policy, approvals, and project resource trust."
@@ -2779,6 +2783,14 @@ export const en = {
       port: "Port",
       addressHint: "Use an address reachable from the NAS. localhost refers to the NAS itself.",
       saved: "Proxy settings saved."
+    },
+    audio: {
+      serviceAddress: "Service address",
+      addressHint: "Enter the CyberAudio HTTP/HTTPS base URL reachable from the NAS. localhost refers to the NAS itself. Leave blank to clear the configuration.",
+      saved: "Audio settings saved.",
+      loadFailed: "Unable to load Audio settings. Try again.",
+      saveFailed: "Unable to save Audio settings. Your changes are kept; try again.",
+      invalidAddress: "Enter an HTTP/HTTPS address without credentials, query parameters, or a fragment."
     },
     alerts: {
       saved: "Alert settings saved.",
@@ -5776,6 +5788,10 @@ export const zhCN = {
         title: "模型 Provider",
         description: "第三方模型 provider 凭据和端点路由。"
       },
+      audio: {
+        title: "Audio",
+        description: "配置 CyberAudio 服务地址。"
+      },
       piAgent: {
         title: "Pi Agent",
         description: "管理 Pi 执行策略、审批与项目资源信任。"
@@ -6119,6 +6135,14 @@ export const zhCN = {
       port: "端口",
       addressHint: "请填写 NAS 可访问的地址；localhost 指 NAS 本机。",
       saved: "代理设置已保存。"
+    },
+    audio: {
+      serviceAddress: "服务地址",
+      addressHint: "填写 NAS 可访问的 CyberAudio HTTP/HTTPS 基础地址；localhost 指 NAS 本机。留空可清除配置。",
+      saved: "Audio 设置已保存。",
+      loadFailed: "无法加载 Audio 设置，请重试。",
+      saveFailed: "无法保存 Audio 设置，已保留修改，请重试。",
+      invalidAddress: "请填写 HTTP/HTTPS 地址，不包含用户名、密码、查询参数或片段。"
     },
     alerts: {
       saved: "告警设置已保存。",
