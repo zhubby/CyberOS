@@ -15,6 +15,7 @@ import { Switch } from "../common/Switch.js";
 import { HelpLabel } from "../common/HelpTip.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { StorageFilePickerDialog, type StorageFilePickerPool } from "../workspace/StorageFilePickerDialog.js";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 
 async function loadBackupDirectoryEntries(rootId: string, directory: string) {
   return (await getBackupDirectories(rootId, directory)).entries;
@@ -78,7 +79,7 @@ export function SettingsBackupPage({ locale }: { locale: SupportedLocale }) {
     }
   }
 
-  if (!form && !error) return <div className="settings-content-body" role="status"><LoaderCircle className="is-spinning" size={18} />{t("status.loading")}</div>;
+  if (!form && !error) return <div className="settings-content-body"><PanelContentSkeleton /></div>;
 
   const initialRoot = pickerRoots?.find((root) => form?.repositoryPath === root.path)
     ?? pickerRoots?.find((root) => form?.repositoryPath.startsWith(`${root.path}/`))

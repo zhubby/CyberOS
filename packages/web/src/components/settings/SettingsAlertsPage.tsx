@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 import { BellRing, Check, CircleAlert, LoaderCircle, Mail, Pencil, Plus, Send, Trash2, Users, X } from "lucide-react";
 import {
   createMonitoringAlertContact,
@@ -144,7 +145,7 @@ export function SettingsAlertsPage({ locale }: { locale: SupportedLocale }) {
     });
   }
 
-  if (loading) return <div className="settings-content-body settings-alerts-loading" role="status"><LoaderCircle className="is-spinning" size={20} />{t("common.states.loading")}</div>;
+  if (loading) return <div className="settings-content-body"><PanelContentSkeleton /></div>;
 
   return (
     <div className="settings-content-body settings-alerts-page">

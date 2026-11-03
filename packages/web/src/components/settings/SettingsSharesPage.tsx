@@ -13,6 +13,7 @@ import {
 } from "../../config/share-settings.js";
 import { Switch } from "../common/Switch.js";
 import { HelpLabel } from "../common/HelpTip.js";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 
 type ShareSettingsOperation = "publishing" | "account" | null;
 
@@ -106,10 +107,7 @@ export function SettingsSharesPage({
 
   if (!settings && !error) {
     return (
-      <div className="settings-content-body settings-loading-state" role="status">
-        <LoaderCircle className="is-spinning" aria-hidden="true" size={18} />
-        <span>{t("common.states.loading")}</span>
-      </div>
+      <div className="settings-content-body"><PanelContentSkeleton /></div>
     );
   }
 

@@ -8,11 +8,11 @@ import {
 } from "../../api.js";
 import { Switch } from "../common/Switch.js";
 import { HelpLabel } from "../common/HelpTip.js";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 
 const MIB = 1024 * 1024;
 
 export function SettingsMonitoringPage() {
-  const { t } = useTranslation();
   const [form, setForm] = useState<MonitoringSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export function SettingsMonitoringPage() {
     }
   }
 
-  if (!form && !error) return <div className="settings-content-body" role="status"><LoaderCircle className="is-spinning" size={18} />{t("status.loading")}</div>;
+  if (!form && !error) return <div className="settings-content-body"><PanelContentSkeleton /></div>;
 
   return <SettingsMonitoringContent form={form} busy={busy} error={error} onFormChange={setForm} onSubmit={save} />;
 }

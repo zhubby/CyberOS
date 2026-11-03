@@ -16,6 +16,7 @@ import { Switch } from "../common/Switch.js";
 import { ModalPortal } from "../common/ModalPortal.js";
 import { HelpTip } from "../common/HelpTip.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 import {
   StorageFilePickerDialog,
   type StorageFilePickerPool,
@@ -148,7 +149,7 @@ export function SettingsSkillsPage({
   }
 
   if (loading && !settings) {
-    return <div className="settings-resource-state" role="status"><LoaderCircle className="spin" aria-hidden="true" />{t("common.states.loading")}</div>;
+    return <div className="settings-content-body"><PanelContentSkeleton /></div>;
   }
 
   return (

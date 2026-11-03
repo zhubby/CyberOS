@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { AlertTriangle, CheckCircle2, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Server, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 import {
   createAgentMcpServer,
   deleteAgentMcpCredentials,
@@ -183,7 +184,7 @@ export function SettingsMcpPage() {
   }
 
   if (loading && !settings) {
-    return <div className="settings-resource-state" role="status"><LoaderCircle className="spin" aria-hidden="true" />{t("common.states.loading")}</div>;
+    return <div className="settings-content-body"><PanelContentSkeleton /></div>;
   }
 
   return (

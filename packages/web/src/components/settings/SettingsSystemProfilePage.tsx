@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Check, LoaderCircle, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 import {
   getSystemProfileSettings,
   updateSystemProfileSettings,
@@ -8,7 +9,6 @@ import {
 } from "../../api.js";
 
 export function SettingsSystemProfilePage() {
-  const { t } = useTranslation();
   const [settings, setSettings] = useState<SystemProfileSettings | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -45,7 +45,7 @@ export function SettingsSystemProfilePage() {
   }
 
   if (!settings && !error) {
-    return <div className="settings-content-body" role="status"><LoaderCircle className="is-spinning" size={18} />{t("status.loading")}</div>;
+    return <div className="settings-content-body"><PanelContentSkeleton /></div>;
   }
 
   return <SettingsSystemProfileContent
