@@ -407,7 +407,11 @@ export class PiAgentSessionHost {
     };
   }
 
-  private async reconcileProjection(hosted: HostedPiSession, input: PiAgentRuntimeInput): Promise<void> {
+  private async reconcileProjection(
+    hosted: HostedPiSession,
+    input: PiAgentRuntimeInput,
+    turn?: HostedTurn
+  ): Promise<void> {
     const branch = hosted.piSession.sessionManager.getBranch();
     const cursorIndex = hosted.projectionCursor === PI_PROJECTION_ROOT
       ? -1
@@ -429,7 +433,9 @@ export class PiAgentSessionHost {
     }
 
     for (const entry of branch.slice(cursorIndex + 1)) {
-      await projectPiSessionEntry(entry, input.emit);
+      await projectPiSessionEntry(entry, turn
+        ? (projected) => this.emitTurnEvent(turn, { ...projected, runId: turn.runId, sequence: ++turn.sequence })
+        : input.emit);
       hosted.projectionCursor = entry.id;
       await input.saveProviderSession(providerSessionSnapshot(hosted));
     }
@@ -589,6 +595,9 @@ export class PiAgentSessionHost {
       await hosted.piSession.waitForIdle();
       await turn.eventChain;
       if (turn.eventError) throw turn.eventError;
+      // Ordinary SDK messages are appended after message_end without entry_appended.
+      // Flush the branch before this job completes so its reply stays in this turn.
+      await this.reconcileProjection(hosted, input, turn);
       if (input.isCancelled()) return { status: "cancelled", runId: turn.runId };
       const pendingRunId = turn.pendingRunIds.values().next().value as string | undefined;
       if (pendingRunId) return { status: "waiting_approval", runId: pendingRunId };
@@ -607,6 +616,10 @@ export class PiAgentSessionHost {
       });
       return { status: "completed", summary: turn.latestAssistantText, runId: turn.runId };
     } catch (error) {
+      await turn.eventChain;
+      if (!turn.eventError && hosted.piSession.isIdle) {
+        await this.reconcileProjection(hosted, input, turn);
+      }
       if (input.isCancelled()) return { status: "cancelled", runId: turn.runId };
       const pendingRunId = turn.pendingRunIds.values().next().value as string | undefined;
       if (pendingRunId) return { status: "waiting_approval", runId: pendingRunId };
@@ -639,13 +652,9 @@ export class PiAgentSessionHost {
           turn.latestAssistantText = "";
           turn.assistantFailure = error;
         },
-        onEntryAppended: async (entry) => {
-          await projectPiSessionEntry(entry, (projected) => this.emitTurnEvent(turn, {
-            ...projected,
-            runId: turn.runId
-          }));
-          hosted.projectionCursor = entry.id;
-          await turn.input.saveProviderSession(providerSessionSnapshot(hosted));
+        onEntryAppended: async () => {
+          // A later usage/config entry must not advance past unprojected messages.
+          await this.reconcileProjection(hosted, turn.input, turn);
         },
         onCapabilityRunPending: async (runId) => {
           if (turn.pendingRunIds.has(runId)) return;

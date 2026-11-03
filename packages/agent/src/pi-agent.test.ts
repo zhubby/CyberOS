@@ -1,5 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
+import { createServer } from "node:http";
 import path from "node:path";
 import {
   createAgentSession,
@@ -9,7 +10,7 @@ import {
   SettingsManager,
   type ToolDefinition
 } from "@earendil-works/pi-coding-agent";
-import type { ModelProviderSettingsRecord } from "@cyberos/shared";
+import type { AgentProviderSessionRecord, ModelProviderSettingsRecord } from "@cyberos/shared";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -18,6 +19,9 @@ import {
   loadControlledPiMcpConfig,
   mapPiAssistantMessageEnd,
   piAgentToolNames,
+  PiAgentSessionHost,
+  type PiAgentEmitEvent,
+  type PiAgentRuntimeInput,
   projectPiSessionEntry,
   publicPiSessionFile,
   redactPiToolArgs,
@@ -81,6 +85,76 @@ describe("Pi agent provider configuration", () => {
 });
 
 describe("Pi agent response handling", () => {
+  it("persists ordinary SDK replies in their own turn before completion and after reopening", async () => {
+    let requestCount = 0;
+    const server = createServer(async (request, response) => {
+      for await (const chunk of request) void chunk;
+      requestCount += 1;
+      response.writeHead(200, { "Content-Type": "text/event-stream" });
+      for (const choice of [
+        { delta: { role: "assistant", content: `Answer ${requestCount}` }, finish_reason: null },
+        { delta: {}, finish_reason: "stop" }
+      ]) {
+        response.write(`data: ${JSON.stringify({
+          id: `reply-${requestCount}`, object: "chat.completion.chunk", created: 0,
+          model: "test-model", choices: [{ index: 0, ...choice }]
+        })}\n\n`);
+      }
+      response.end("data: [DONE]\n\n");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Missing test server port");
+    let host = new PiAgentSessionHost(tempDir);
+    let providerSession: AgentProviderSessionRecord | null = null;
+    const timestamp = new Date().toISOString();
+    try {
+      for (let turn = 1; turn <= 3; turn += 1) {
+        const events: PiAgentEmitEvent[] = [];
+        const input: PiAgentRuntimeInput = {
+          session: { id: "test-session", currentPath: ".", createdAt: timestamp, updatedAt: timestamp },
+          root: { path: tempDir }, workingPath: ".", dataDir: tempDir,
+          message: `Question ${turn}`,
+          modelSettings: modelProviderSettings({
+            baseUrl: `http://127.0.0.1:${address.port}/v1`, model: "test-model"
+          }),
+          toolPolicy: {
+            read: "disabled", grep: "disabled", find: "disabled", ls: "disabled",
+            bash: "disabled", edit: "disabled", write: "disabled", updatedAt: timestamp
+          },
+          mcp: { generation: 1, servers: [] },
+          providerSession,
+          isCancelled: () => false,
+          emit: (event) => { events.push(event); },
+          saveProviderSession: (snapshot) => {
+            providerSession = {
+              sessionId: "test-session", createdAt: timestamp, updatedAt: timestamp,
+              runtimeGeneration: 1, runtimeProvider: "openai", runtimeModel: "test-model",
+              projectionCursor: null, ...snapshot
+            };
+          }
+        };
+        const result = await host.run(input);
+        expect(result).toMatchObject({ status: "completed", summary: `Answer ${turn}` });
+        const replies = events.filter((event) => event.type === "agent.message");
+        expect(replies).toEqual([expect.objectContaining({
+          sourceId: expect.stringMatching(/^entry:.+:assistant$/),
+          runId: result.runId,
+          payload: expect.objectContaining({ content: `Answer ${turn}` })
+        })]);
+        expect(events.indexOf(replies[0]!)).toBeLessThan(events.findIndex((event) => event.type === "agent.completed"));
+        if (turn === 2) {
+          await host.dispose();
+          host = new PiAgentSessionHost(tempDir);
+        }
+      }
+      expect(requestCount).toBe(3);
+    } finally {
+      await host.dispose();
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  }, 20_000);
+
   it("projects persisted Pi entries with stable source identities", async () => {
     const emit = vi.fn(async () => undefined);
     await projectPiSessionEntry({
