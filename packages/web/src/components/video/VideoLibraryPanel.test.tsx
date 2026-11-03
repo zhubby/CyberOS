@@ -46,6 +46,9 @@ it("shares localized Web and TV library navigation with explicit management on W
       expect(html).toContain(movies);
       expect(html).toContain(series);
       expect(html).toContain(collections);
+      expect(html).toMatch(/<button[^>]*aria-busy="true"[^>]*>[\s\S]*?is-spinning/u);
+      expect(html).toContain('class="panel-content-skeleton"');
+      expect(html).not.toContain(`<p role="status">${i18n.t("video.loading")}</p>`);
       expect(html.includes(i18n.t("video.manage"))).toBe(!tv);
       expect(html).toContain('class="library-search-toolbar"');
       expect(html).toContain('aria-haspopup="dialog"');

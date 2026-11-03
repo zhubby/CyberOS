@@ -26,7 +26,7 @@
   border-color: var(--cyber-cyan);
   background: var(--surface-hover);
 }
-.music-panel button:disabled,
+.music-panel button:disabled:not([aria-busy="true"]),
 .music-dialog button:disabled {
   cursor: not-allowed;
   opacity: 0.45;

@@ -9,6 +9,7 @@ import {
   Film,
   Heart,
   ListPlus,
+  LoaderCircle,
   MonitorPlay,
   Pencil,
   Play,
@@ -46,6 +47,7 @@ import {
 import { usePlayback } from "../playback/PlaybackProvider.js";
 import { MusicTakeoverDialog } from "../music/MusicProvider.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "../workspace/PanelHeader.js";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
 
 type View = "home" | "movie" | "series" | "collections" | "watchlist";
@@ -456,7 +458,7 @@ export function VideoLibraryPanel({
   return (
     <div
       className={`video-panel${tv ? " video-panel-tv" : ""}`}
-      aria-busy={busy}
+      aria-busy={busy || loading}
     >
       <PanelHeader
         icon={<MonitorPlay size={22} />}
@@ -467,10 +469,12 @@ export function VideoLibraryPanel({
             <PanelHeaderAction
               data-tv-focusable
               label={t("video.refresh")}
-              disabled={busy}
+              disabled={busy || loading}
+              aria-busy={busy || loading || undefined}
+              mobilePrimary
               onClick={reload}
             >
-              <RefreshCw size={17} />
+              {busy || loading ? <LoaderCircle className="is-spinning" size={17} aria-hidden="true" /> : <RefreshCw size={17} />}
             </PanelHeaderAction>
             {!tv && onManage ? (
               <PanelHeaderAction label={t("video.manage")} onClick={onManage}>
@@ -918,7 +922,7 @@ export function VideoLibraryPanel({
             ) : null}
           </article>
         ) : loading ? (
-          <p role="status">{t("video.loading")}</p>
+          <PanelContentSkeleton />
         ) : listMode ? (
           <>
             {posters(page.titles)}

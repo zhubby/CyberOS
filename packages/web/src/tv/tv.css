@@ -1,6 +1,7 @@
 @import "@cyberos/shared/hud-tokens.css";
 @import "../styles/music.css";
 @import "../styles/video.css";
+@import "../styles/panel-loading.css";
 @import "../styles/select.css";
 @import "../styles/search-filter.css";
 @import "../styles/modal.css";
@@ -955,6 +956,10 @@ pinyin-ime-editor::part(candidate-row) {
 .video-panel-tv .video-poster-wall { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 24px; }
 .video-panel-tv .video-poster strong, .video-panel-tv h3 { font-size: 21px; }
 .video-panel-tv button, .video-panel-tv input, .video-panel-tv select { min-height: 44px; }
+.video-panel-tv button[aria-busy="true"] .is-spinning { animation: tv-spin 800ms linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .video-panel-tv button[aria-busy="true"] .is-spinning { animation: none; }
+}
 .video-panel-tv .video-detail-main { grid-template-columns: 200px minmax(0, 1fr); }
 .video-panel-tv .video-detail-main h2 { font-size: 28px; }
 .video-panel-tv .video-detail-main p { font-size: 18px; }

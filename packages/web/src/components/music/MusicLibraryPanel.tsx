@@ -43,6 +43,7 @@ import {
   PanelHeaderAction,
   PanelHeaderActions,
 } from "../workspace/PanelHeader.js";
+import { PanelContentSkeleton } from "../workspace/ManagementSkeleton.js";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { SearchFilterPopover } from "../common/SearchFilterPopover.js";
 import { MusicCover } from "./MusicPlayer.js";
@@ -835,12 +836,14 @@ export function MusicLibraryPanel({
             <PanelHeaderAction
               label={t("common.actions.refresh")}
               disabled={loading}
+              aria-busy={loading || undefined}
+              mobilePrimary
               onClick={() => {
                 reload();
                 void remote.refresh();
               }}
             >
-              <RefreshCw size={17} />
+              {loading ? <LoaderCircle className="is-spinning" size={17} aria-hidden="true" /> : <RefreshCw size={17} />}
             </PanelHeaderAction>
           </PanelHeaderActions>
         }
@@ -1232,12 +1235,7 @@ export function MusicLibraryPanel({
               !content.home.favorites.length)) ? (
           <p className="music-empty">{t("music.noResults")}</p>
         ) : null}
-        {loading ? (
-          <p className="music-loading" role="status">
-            <LoaderCircle className="is-spinning" size={18} />
-            {t("common.states.loading")}
-          </p>
-        ) : null}
+        {loading && empty ? <PanelContentSkeleton /> : null}
         {content.nextCursor && !detail ? (
           <button
             className="music-load-more"

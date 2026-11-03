@@ -36,7 +36,7 @@
   color: var(--app-bg);
   border-left: 3px solid var(--red);
 }
-.video-panel button:disabled,
+.video-panel button:disabled:not([aria-busy="true"]),
 .playback-shell button:disabled,
 .browser-player button:disabled {
   opacity: 0.45;

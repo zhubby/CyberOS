@@ -436,6 +436,7 @@ export function HttpDownloaderPanel({
             onClick={openCreateDialog}
             disabled={createControlState === "loading"}
             aria-busy={createControlState === "loading" || undefined}
+            mobilePrimary
             data-state={createControlState}
           >
             {createControlState === "loading"
