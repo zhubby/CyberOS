@@ -11,6 +11,22 @@ export function SkeletonBlock({ className = "", width }: { className?: string; w
   return <span className={`management-skeleton-block ${className}`.trim()} style={style} aria-hidden="true" />;
 }
 
+export function PanelContentSkeleton() {
+  const { t } = useTranslation();
+  return (
+    <div className="panel-content-skeleton" role="status" aria-label={t("common.states.loading")}>
+      <SkeletonBlock className="panel-skeleton-toolbar" />
+      {Array.from({ length: 6 }, (_, index) => (
+        <div className="panel-skeleton-row" key={index} aria-hidden="true">
+          <SkeletonBlock className="panel-skeleton-icon" />
+          <div><SkeletonBlock width={index % 2 ? "58%" : "74%"} /><SkeletonBlock width="42%" /></div>
+          <SkeletonBlock width="48px" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 type WidgetSkeletonKind = "table" | "list" | "chart" | "inventory" | "resources" | "form" | "health";
 
 interface WidgetSkeletonSpec {

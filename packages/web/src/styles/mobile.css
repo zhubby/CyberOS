@@ -1,7 +1,6 @@
 .mobile-action-label { display: none; }
-.mobile-app-loading { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; height: 100%; color: var(--muted); }
-.workspace-grid > .mobile-app-loading { grid-area: 1 / 1 / -1 / -1; }
-.mobile-loading-status { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.mobile-app-loading { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; height: 100%; color: var(--muted); }
+.workspace-stage > .mobile-app-loading { grid-area: 1 / 1 / -1 / -1; }
 
 @media (max-width: 1040px) {
   .app-shell,

@@ -1,9 +1,10 @@
-import { Bell, LoaderCircle } from "lucide-react";
+import { Bell, Database, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { APP_REGISTRY, MOBILE_DOCK_APPS, MOBILE_GRID_APPS, type AppDefinition, type MobileAppId } from "./apps.js";
 import { useMobileNavigation } from "./MobileNavigation.js";
-import { MobileAppHeader, useAppHeadingFocus } from "./MobileAppHeader.js";
+import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "../components/workspace/PanelHeader.js";
+import { PanelContentSkeleton } from "../components/workspace/ManagementSkeleton.js";
 
 export type ConnectionState = "connecting" | "online" | "offline";
 
@@ -102,15 +103,41 @@ export function MobileDock({ approvalCount, onOpenApp }: { approvalCount: number
   return <nav className="mobile-home-dock" aria-label={t("mobile.dock")}>{MOBILE_DOCK_APPS.map((app) => <AppButton key={app.id} app={app} approvalCount={approvalCount} onOpenApp={onOpenApp} />)}</nav>;
 }
 
+const APP_LOADING_COPY = {
+  files: ["workspace.files", "workspace.filesManagementDescription"],
+  photos: ["workspace.photos.title", "workspace.photos.description"],
+  video: ["video.title", "video.subtitle"],
+  music: ["workspace.panels.music", "music.subtitle"],
+  terminal: ["workspace.terminal.title", "workspace.terminal.description"],
+  downloads: ["workspace.downloads.title", "workspace.downloads.description"],
+  monitoring: ["workspace.monitoring.title", "workspace.monitoring.description"],
+  docker: ["workspace.management.docker.title", "workspace.management.docker.description"],
+  virtualMachines: ["workspace.management.virtualMachines.title", "workspace.management.virtualMachines.description"],
+  network: ["workspace.management.network.title", "workspace.management.network.description"],
+  storage: ["workspace.management.storage.title", "workspace.management.storage.description"],
+  shares: ["workspace.management.shares.title", "workspace.management.shares.description"],
+  agent: ["mobile.agent", "chat.workspaceAgent"],
+  settings: ["common.actions.systemSettings", "mobile.settingsDescription"]
+} as const satisfies Record<MobileAppId, readonly [string, string]>;
+
 export function MobileAppLoading({ app, className = "" }: { app: MobileAppId; className?: string }) {
   const { t } = useTranslation();
-  const compact = useMobileNavigation()?.compact ?? false;
-  const headingRef = useAppHeadingFocus();
   const definition = APP_REGISTRY.find((item) => item.id === app)!;
+  const Icon = app === "storage" ? Database : definition.Icon;
+  const [titleKey, subtitleKey] = APP_LOADING_COPY[app];
   return (
     <section className={`mobile-app-loading ${className}`}>
-      {compact ? <MobileAppHeader icon={<definition.Icon size={20} />} title={t(definition.labelKey)} subtitle={t("status.loading")} headingRef={headingRef} /> : null}
-      <div className="mobile-loading-status" role="status"><LoaderCircle className="spin" aria-hidden="true" />{t("status.loading")}</div>
+      <PanelHeader
+        icon={<Icon size={20} aria-hidden="true" />}
+        title={app === "music" ? "Music" : t(titleKey)}
+        subtitle={t(subtitleKey)}
+        actions={<PanelHeaderActions label={t("workspace.management.actions.label")}>
+          <PanelHeaderAction type="button" label={t("status.loading")} disabled aria-busy="true" mobilePrimary>
+            <LoaderCircle className="is-spinning" size={17} aria-hidden="true" />
+          </PanelHeaderAction>
+        </PanelHeaderActions>}
+      />
+      <PanelContentSkeleton />
     </section>
   );
 }

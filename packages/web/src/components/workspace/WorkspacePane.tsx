@@ -1733,13 +1733,15 @@ export function WorkspacePane({
               onOpenDeviceSettings={onOpenDeviceSettings}
             />
           )}
-          {terminalMounted && (!compactLayout || activePanel === "terminal" && workspaceVisible) ? (
-            <LocalTerminalPanel
-              active={activePanel === "terminal" && workspaceVisible}
-              codeFontSettings={codeFontSettings}
-            />
-          ) : null}
           </Suspense>
+          {terminalMounted && (!compactLayout || activePanel === "terminal" && workspaceVisible) ? (
+            <Suspense fallback={activePanel === "terminal" && workspaceVisible ? <MobileAppLoading app="terminal" /> : null}>
+              <LocalTerminalPanel
+                active={activePanel === "terminal" && workspaceVisible}
+                codeFontSettings={codeFontSettings}
+              />
+            </Suspense>
+          ) : null}
         </div>
 
         <nav className="workspace-panel-rail" aria-label={t("workspace.panelRail")}>

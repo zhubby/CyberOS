@@ -30,6 +30,7 @@ sourceOfTruth:
   - packages/web/src/styles/help-tip.css
   - packages/web/src/styles/playback-dock.css
   - packages/web/src/styles/mobile.css
+  - packages/web/src/styles/panel-loading.css
   - packages/web/src/mobile/apps.ts
   - packages/web/src/mobile/MobileNavigation.tsx
   - packages/web/src/mobile/MobileHome.tsx
@@ -169,6 +170,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 - **Disabled**：降低对比但保持文本可读、尺寸稳定和 `not-allowed` 指针。
 - **Busy**：使用黑底黄字、稳定尺寸、`aria-busy="true"` 和 spinner 或忙碌图标。
 - **加载骨架**：复用 `--skeleton-base` / `--skeleton-highlight`，由正文暖白与深色表面混合，保持直角、稳定占位和可见对比；禁止使用接近黑色的透明渐变覆盖深色面板。保留现有扫光与呼吸动效，减少动态效果时关闭动画但仍显示骨架。
+- **首次加载**：桌面与移动 App 的按需模块加载均保留同高 `PanelHeader`、原面板标题和说明，忙碌图标放在页头按钮内，内容区使用共享骨架；不得用独立 Loading 文本替代整个面板。音乐与影视的数据加载复用刷新按钮的忙碌态，下载复用创建按钮的忙碌态，移动端将这些按钮保留为直接主操作。后台终端的模块加载不能阻塞当前面板。
 - **Error**：红色边框或轨道必须配合错误图标、文案或 `role="alert"`。
 
 常见操作使用 `lucide-react` 图标。纯工具操作优先图标按钮并提供本地化的 `aria-label` 和 `data-tooltip`；明确命令可使用图标加短文本。所有操作使用真实语义元素。
