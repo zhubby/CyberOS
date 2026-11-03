@@ -281,6 +281,7 @@ describe("native packaging artifacts", () => {
     expect(indexerUnit).toContain("Restart=on-failure");
     expect(indexerUnit).toContain("Environment=CYBEROS_ENVIRONMENT=production");
     expect(indexerUnit).toContain("ReadOnlyPaths=/cyberos/data");
+    expect(indexerUnit).toContain("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6");
     expect(indexerUnit).toContain("MemoryMax=1G");
     expect(indexerUnit).toContain("KillMode=control-group");
     await expect(readPackagingFile("systemd", "cyberos-indexer.timer")).rejects.toMatchObject({ code: "ENOENT" });

@@ -5,7 +5,7 @@ const TMDB_IMAGE_ORIGIN = "https://image.tmdb.org/t/p/w500";
 const TMDB_SEARCH_TIMEOUT_MS = 8_000;
 const TMDB_SEARCH_MAX_BYTES = 1024 * 1024;
 
-type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 interface TmdbSearchResult {
   id?: unknown;

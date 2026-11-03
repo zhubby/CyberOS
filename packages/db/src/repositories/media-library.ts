@@ -198,6 +198,7 @@ export interface MediaCatalogEntryInput {
 export function defaultMediaLibrarySettings(): MediaLibrarySettingsRecord {
   return {
     tmdbReadAccessToken: null,
+    tmdbUseProxy: false,
     language: "zh-CN",
     region: "CN",
     updatedAt: new Date(0).toISOString()
@@ -216,6 +217,7 @@ export function getMediaLibrarySettings(db: CyberOsDatabase): MediaLibrarySettin
   }
   if (
     !isNullableNonEmptyString(parsed.tmdbReadAccessToken)
+    || (parsed.tmdbUseProxy !== undefined && typeof parsed.tmdbUseProxy !== "boolean")
     || typeof parsed.language !== "string"
     || !isNullableNonEmptyString(parsed.region)
     || typeof parsed.updatedAt !== "string"
@@ -225,6 +227,7 @@ export function getMediaLibrarySettings(db: CyberOsDatabase): MediaLibrarySettin
   }
   return {
     tmdbReadAccessToken: textOrNull(parsed.tmdbReadAccessToken),
+    tmdbUseProxy: parsed.tmdbUseProxy ?? false,
     language: normalizeLanguage(parsed.language),
     region: normalizeRegion(parsed.region),
     updatedAt: parsed.updatedAt
@@ -233,11 +236,13 @@ export function getMediaLibrarySettings(db: CyberOsDatabase): MediaLibrarySettin
 
 export function saveMediaLibrarySettings(
   db: CyberOsDatabase,
-  input: Omit<MediaLibrarySettingsRecord, "updatedAt">,
+  input: Omit<MediaLibrarySettingsRecord, "updatedAt" | "tmdbUseProxy"> & { tmdbUseProxy?: boolean },
   now = new Date()
 ): MediaLibrarySettingsRecord {
+  if (input.tmdbUseProxy !== undefined && typeof input.tmdbUseProxy !== "boolean") throw new Error("TMDB proxy setting must be a boolean");
   const record: MediaLibrarySettingsRecord = {
     tmdbReadAccessToken: textOrNull(input.tmdbReadAccessToken),
+    tmdbUseProxy: input.tmdbUseProxy ?? false,
     language: normalizeLanguage(input.language),
     region: normalizeRegion(input.region),
     updatedAt: now.toISOString()
@@ -252,6 +257,7 @@ export function saveMediaLibrarySettings(
 export function toPublicMediaLibrarySettings(settings: MediaLibrarySettingsRecord): PublicMediaLibrarySettings {
   return {
     tmdbTokenConfigured: Boolean(settings.tmdbReadAccessToken),
+    tmdbUseProxy: settings.tmdbUseProxy,
     language: settings.language,
     region: settings.region,
     updatedAt: settings.updatedAt

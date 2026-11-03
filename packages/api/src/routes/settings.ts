@@ -15,6 +15,9 @@ import {
   getBackupSettings,
   getMonitoringSettings,
   getSystemProfileSettings,
+  defaultSystemProxySettings,
+  getSystemProxySettings,
+  saveSystemProxySettings,
   getTvSettings,
   getAgentCapabilityPolicySettings,
   getVmSettings,
@@ -44,6 +47,7 @@ import type {
   MonitoringSettingsRecord,
   ModelProviderName,
   SystemProfileSettingsRecord,
+  SystemProxySettingsRecord,
   TvSettingsRecord
 } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
@@ -67,6 +71,24 @@ import { PathSafetyError } from "@cyberos/storage-tools";
 import { listBackupDirectories } from "../lib/backup-directories.js";
 
 export function registerSettingsRoutes(server: FastifyInstance, { config, db, system, tvMode }: ApiRouteContext): void {
+  server.get("/api/settings/proxy", async (_request, reply) => {
+    try {
+      return { settings: getSystemProxySettings(db) ?? defaultSystemProxySettings() };
+    } catch {
+      return reply.status(409).send({ error: "System proxy settings are invalid", state: "attention" });
+    }
+  });
+
+  server.patch<{ Body: Partial<Omit<SystemProxySettingsRecord, "updatedAt">> }>("/api/settings/proxy", async (request, reply) => {
+    if (hasUnknownFields(request.body, ["protocol", "host", "port"])) return reply.status(400).send({ error: "Proxy settings contain unknown fields" });
+    try {
+      const current = readForRepair(() => getSystemProxySettings(db), defaultSystemProxySettings);
+      return { settings: saveSystemProxySettings(db, { ...current, ...request.body }) };
+    } catch (error) {
+      return reply.status(400).send({ error: settingError(error) });
+    }
+  });
+
   server.get("/api/settings/system-profile", async (_request, reply) => {
     try {
       reply.send({ settings: getSystemProfileSettings(db) ?? defaultSystemProfileSettings() });

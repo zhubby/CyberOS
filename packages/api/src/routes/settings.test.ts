@@ -25,6 +25,24 @@ afterEach(async () => {
 });
 
 describe("settings routes", () => {
+  it("persists one proxy endpoint and rejects invalid edits without replacing it", async () => {
+    const server = createServer(db);
+    const initial = await server.inject({ method: "GET", url: "/api/settings/proxy" });
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json().settings).toMatchObject({ protocol: "http", host: null, port: null });
+    for (const host of ["proxy.example.com", "192.168.1.2", "::1"]) {
+      const saved = await server.inject({ method: "PATCH", url: "/api/settings/proxy", payload: { protocol: "socks5", host, port: 1080 } });
+      expect(saved.statusCode).toBe(200);
+      expect(saved.json().settings).toMatchObject({ protocol: "socks5", host, port: 1080 });
+    }
+    for (const payload of [{ port: 0 }, { port: 65536 }, { port: "1080" }, { protocol: "ftp" }, { protocol: ["http"] }, { host: "[proxy.local" }, { host: "user:password@proxy.local" }, { host: "proxy.local/path" }, { host: Array(5).fill("中".repeat(49)).join(".") }, { extra: true }]) {
+      expect((await server.inject({ method: "PATCH", url: "/api/settings/proxy", payload })).statusCode).toBe(400);
+    }
+    expect((await server.inject({ method: "GET", url: "/api/settings/proxy" })).json().settings)
+      .toMatchObject({ protocol: "socks5", host: "::1", port: 1080 });
+    await server.close();
+  });
+
   it("offers backup directory browsing within available backup roots", async () => {
     const server = createServer(db);
     const backupRoot = testConfig().paths.backupRoot;

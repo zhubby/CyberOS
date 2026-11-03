@@ -22,6 +22,7 @@ import {
   Images,
   KeyRound,
   MemoryStick,
+  Network,
   MonitorCog,
   UserRound,
   ChartNoAxesCombined,
@@ -88,6 +89,7 @@ import { SettingsIndexerPage } from "./SettingsIndexerPage.js";
 import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
 import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
 import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
+import { SettingsProxyPage } from "./SettingsProxyPage.js";
 import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
 import { SettingsMediaPage } from "./SettingsMediaPage.js";
 import { SettingsSystemProfilePage } from "./SettingsSystemProfilePage.js";
@@ -574,6 +576,8 @@ export function SettingsModal({
             />
           ) : null}
 
+          {activeSection === "proxy" ? <SettingsProxyPage onNotifySuccess={onNotifySuccess} /> : null}
+
           {activeSection === "docker" ? (
             <SettingsDockerPage
               form={dockerForm}
@@ -667,6 +671,7 @@ export function SettingsModal({
               locale={resolvedLocale}
               onNotifySuccess={onNotifySuccess}
               onNotifyError={onNotifyError}
+              onOpenProxy={() => onSectionChange("proxy")}
             />
           ) : null}
 
@@ -1852,6 +1857,8 @@ function settingsSectionIcon(section: SettingsSectionId) {
       return <Package aria-hidden="true" size={16} />;
     case "wireless":
       return <Wifi aria-hidden="true" size={16} />;
+    case "proxy":
+      return <Network aria-hidden="true" size={16} />;
     case "bluetooth":
       return <Bluetooth aria-hidden="true" size={16} />;
     case "docker":

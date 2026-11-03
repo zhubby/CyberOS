@@ -13,10 +13,12 @@ import type {
   PiToolPolicySettingsRecord,
   ShareSettingsRecord,
   SystemProfileSettingsRecord,
+  SystemProxySettingsRecord,
   TvSettingsRecord,
   VmSettingsRecord
 } from "@cyberos/shared";
 import {
+  normalizeSystemProxySettings,
   PHOTOS_DEFAULT_COMMAND_TIMEOUT_MS,
   PHOTOS_DEFAULT_MAX_AUTO_RETRIES,
   PHOTOS_DEFAULT_MAX_DECODED_PIXELS,
@@ -53,11 +55,31 @@ const PHOTOS_PROCESSING_SETTING_KEY = "photos_processing_settings";
 const INDEXER_SETTING_KEY = "indexer_settings";
 const BLUETOOTH_SETTING_KEY = "bluetooth_settings";
 const SYSTEM_PROFILE_SETTING_KEY = "system_profile_settings";
+const SYSTEM_PROXY_SETTING_KEY = "system_proxy_settings";
 const MONITORING_SETTING_KEY = "monitoring_settings";
 const BACKUP_SETTING_KEY = "backup_settings";
 const TV_SETTING_KEY = "tv_settings";
 
 const EPOCH = new Date(0).toISOString();
+
+export function defaultSystemProxySettings(): SystemProxySettingsRecord {
+  return { protocol: "http", host: null, port: null, updatedAt: EPOCH };
+}
+
+export function getSystemProxySettings(db: CyberOsDatabase): SystemProxySettingsRecord | null {
+  const row = settingRow(db, SYSTEM_PROXY_SETTING_KEY);
+  if (!row) return null;
+  const value: unknown = JSON.parse(row.value_json);
+  const object = currentSettingsObject(value, ["protocol", "host", "port", "updatedAt"], "Proxy");
+  return normalizeSystemProxySettings(object, currentSettingsUpdatedAt(object, "Proxy"));
+}
+
+export function saveSystemProxySettings(db: CyberOsDatabase, input: Omit<SystemProxySettingsRecord, "updatedAt">): SystemProxySettingsRecord {
+  const updatedAt = new Date().toISOString();
+  const record = normalizeSystemProxySettings(input, updatedAt);
+  saveSetting(db, SYSTEM_PROXY_SETTING_KEY, record, updatedAt);
+  return record;
+}
 
 export const DEFAULT_SYSTEM_PROFILE_SETTINGS: Omit<SystemProfileSettingsRecord, "updatedAt"> = {
   adminDisplayName: "CyberOS Admin"

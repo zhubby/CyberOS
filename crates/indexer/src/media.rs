@@ -32,6 +32,7 @@ pub struct MediaScanTask {
     pub expected_uuid: Option<String>,
     pub expected_fstype: Option<String>,
     pub settings_json: Option<String>,
+    pub proxy_settings_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -120,6 +121,7 @@ pub struct MediaCatalogEntry {
 #[serde(rename_all = "camelCase", default)]
 struct MediaSettings {
     tmdb_read_access_token: Option<String>,
+    tmdb_use_proxy: bool,
     language: String,
     region: Option<String>,
 }
@@ -128,6 +130,7 @@ impl Default for MediaSettings {
     fn default() -> Self {
         Self {
             tmdb_read_access_token: None,
+            tmdb_use_proxy: false,
             language: "zh-CN".to_owned(),
             region: Some("CN".to_owned()),
         }
@@ -224,7 +227,12 @@ impl TmdbClient {
         }
         serde_json::from_slice(&bytes).map_err(|_| tmdb_error("Invalid TMDB details"))
     }
-    fn new(settings: &MediaSettings) -> Result<Option<Self>, IndexerError> {
+    fn new(
+        settings: &MediaSettings,
+        proxy_settings_json: Option<&str>,
+    ) -> Result<Option<Self>, IndexerError> {
+        let builder =
+            crate::http_proxy::client_builder(settings.tmdb_use_proxy, proxy_settings_json)?;
         let Some(token) = settings
             .tmdb_read_access_token
             .as_deref()
@@ -236,7 +244,8 @@ impl TmdbClient {
         if rustls::crypto::CryptoProvider::get_default().is_none() {
             let _ = rustls::crypto::ring::default_provider().install_default();
         }
-        let client = reqwest::Client::builder()
+        let client = builder
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(12))
             .build()
@@ -314,12 +323,12 @@ pub async fn run_media_scan(
     worker_id: &str,
     shutdown: &CancellationToken,
 ) -> Result<(), IndexerError> {
-    let settings = task
-        .settings_json
-        .as_deref()
-        .and_then(|json| serde_json::from_str::<MediaSettings>(json).ok())
-        .unwrap_or_default();
-    let tmdb = TmdbClient::new(&settings)?;
+    let settings = match task.settings_json.as_deref() {
+        Some(json) => serde_json::from_str::<MediaSettings>(json)
+            .map_err(|_| tmdb_error("Media settings are invalid"))?,
+        None => MediaSettings::default(),
+    };
+    let tmdb = TmdbClient::new(&settings, task.proxy_settings_json.as_deref())?;
     let storage = StoragePoolStorage::open(Path::new(&task.storage_pool_path))?;
     let source_path = PathBuf::from(&task.source_path);
     let initial_mount = probe_mount_identity(
@@ -359,7 +368,12 @@ pub async fn run_media_scan(
         }
         if let (Some(client), Some(id)) = (tmdb.as_ref(), entry.title.tmdb_id) {
             if let std::collections::hash_map::Entry::Vacant(slot) = details_cache.entry(id) {
-                slot.insert(client.details(&task.kind, id).await.ok());
+                let details = client.details(&task.kind, id).await;
+                slot.insert(if settings.tmdb_use_proxy {
+                    Some(details?)
+                } else {
+                    details.ok()
+                });
             }
             if let Some(Some(value)) = details_cache.get(&id) {
                 apply_tmdb_details(&mut entry.title, value, overridden.is_some());

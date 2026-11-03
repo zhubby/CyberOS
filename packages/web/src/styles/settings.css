@@ -757,6 +757,10 @@
   font-size: 13px;
 }
 
+.settings-proxy-summary {
+  overflow-wrap: anywhere;
+}
+
 .settings-switch-row span,
 .settings-inline-error {
   color: var(--muted);

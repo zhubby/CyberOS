@@ -291,6 +291,7 @@ export type PhotoQueryPage = SharedPhotoQueryPage;
 export type PhotoQueryRequest = SharedPhotoQueryRequest;
 export type PhotoTimelinePage = SharedPhotoTimelinePage;
 export type MediaLibrarySettings = SharedPublicMediaLibrarySettings;
+export type { SystemProxySettingsRecord as SystemProxySettings, SystemProxyProtocol } from "@cyberos/shared";
 export type MediaLibraryStatus = SharedMediaLibraryStatus;
 export type MediaMatchCandidate = SharedMediaMatchCandidate;
 export type MediaMatchStatus = SharedMediaMatchStatus;
@@ -2073,8 +2074,17 @@ export async function getMediaLibrarySettings(): Promise<MediaLibrarySettings> {
   return fetchJson<{ settings: MediaLibrarySettings }>("/api/media/settings").then((body) => body.settings);
 }
 
+export async function getSystemProxySettings(): Promise<import("@cyberos/shared").SystemProxySettingsRecord> {
+  return fetchJson<{ settings: import("@cyberos/shared").SystemProxySettingsRecord }>("/api/settings/proxy").then((body) => body.settings);
+}
+
+export async function updateSystemProxySettings(input: Omit<import("@cyberos/shared").SystemProxySettingsRecord, "updatedAt">): Promise<import("@cyberos/shared").SystemProxySettingsRecord> {
+  return fetchJson<{ settings: import("@cyberos/shared").SystemProxySettingsRecord }>("/api/settings/proxy", jsonRequest("PATCH", input)).then((body) => body.settings);
+}
+
 export async function updateMediaLibrarySettings(input: {
   tmdbReadAccessToken?: string | null;
+  tmdbUseProxy?: boolean;
   language?: string;
   region?: string | null;
 }): Promise<MediaLibrarySettings> {

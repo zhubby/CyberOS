@@ -14,6 +14,7 @@ import {
   createMediaSource,
   deleteMediaSource,
   getMediaLibrarySettings,
+  getSystemProxySettings,
   getMediaLibraryStatus,
   getMediaMatchCandidates,
   getMediaScans,
@@ -36,6 +37,8 @@ import {
   type TvModeStatus,
   type TvSettings
 } from "../../api.js";
+import type { SystemProxySettings } from "../../api.js";
+import { systemProxyUrl } from "@cyberos/shared";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { Switch } from "../common/Switch.js";
 import { CustomSelect } from "../common/CustomSelect.js";
@@ -61,12 +64,14 @@ export function SettingsMediaPage({
   pools,
   locale,
   onNotifySuccess,
-  onNotifyError
+  onNotifyError,
+  onOpenProxy
 }: {
   pools: StorageFilePickerPool[];
   locale: SupportedLocale;
   onNotifySuccess: (message: string) => void;
   onNotifyError: (message: string) => void;
+  onOpenProxy: () => void;
 }) {
   const { t } = useTranslation();
   const [data, setData] = useState<MediaPageData | null>(null);
@@ -79,6 +84,8 @@ export function SettingsMediaPage({
   const [candidates, setCandidates] = useState<MediaMatchCandidate[]>([]);
   const [tmdbToken, setTmdbToken] = useState("");
   const [clearTmdbToken, setClearTmdbToken] = useState(false);
+  const [tmdbUseProxy, setTmdbUseProxy] = useState(false);
+  const [proxy, setProxy] = useState<SystemProxySettings | null>(null);
   const [language, setLanguage] = useState("zh-CN");
   const [region, setRegion] = useState("CN");
   const loadSequence = useRef(0);
@@ -87,7 +94,7 @@ export function SettingsMediaPage({
   const load = useCallback(async (reportError = true, syncForm = false) => {
     const sequence = ++loadSequence.current;
     try {
-      const [settings, sources, status, scans, pending, unmatched, tvStatus, tvSettings] = await Promise.all([
+      const [settings, sources, status, scans, pending, unmatched, tvStatus, tvSettings, proxySettings] = await Promise.all([
         getMediaLibrarySettings(),
         getMediaSources(),
         getMediaLibraryStatus(),
@@ -95,9 +102,11 @@ export function SettingsMediaPage({
         getMediaTitles({ matchStatus: "pending", limit: 100 }),
         getMediaTitles({ matchStatus: "unmatched", limit: 100 }),
         getTvStatus(),
-        getTvSettings()
+        getTvSettings(),
+        getSystemProxySettings().catch(() => null)
       ]);
       if (sequence !== loadSequence.current) return;
+      setProxy(proxySettings);
       setData({
         settings,
         sources,
@@ -109,6 +118,7 @@ export function SettingsMediaPage({
         tvSettings
       });
       if (syncForm) {
+        setTmdbUseProxy(settings.tmdbUseProxy);
         setLanguage(settings.language);
         setRegion(settings.region ?? "");
       }
@@ -148,6 +158,7 @@ export function SettingsMediaPage({
     event.preventDefault();
     await run("settings", async () => {
       const nextSettings = await updateMediaLibrarySettings({
+        tmdbUseProxy,
         ...(clearTmdbToken
           ? { tmdbReadAccessToken: null }
           : tmdbToken.trim()
@@ -245,6 +256,10 @@ export function SettingsMediaPage({
               candidateQuery={candidateQuery}
               tmdbToken={tmdbToken}
               clearTmdbToken={clearTmdbToken}
+              tmdbUseProxy={tmdbUseProxy}
+              proxy={proxy}
+              onTmdbUseProxyChange={setTmdbUseProxy}
+              onOpenProxy={onOpenProxy}
               language={language}
               region={region}
               onTmdbTokenChange={(value) => { setTmdbToken(value); setClearTmdbToken(false); }}
@@ -309,6 +324,10 @@ export function SettingsMediaContent({
   candidateQuery,
   tmdbToken,
   clearTmdbToken,
+  tmdbUseProxy,
+  proxy,
+  onTmdbUseProxyChange,
+  onOpenProxy,
   language,
   region,
   onTmdbTokenChange,
@@ -337,6 +356,10 @@ export function SettingsMediaContent({
   candidateQuery: string;
   tmdbToken: string;
   clearTmdbToken: boolean;
+  tmdbUseProxy: boolean;
+  proxy: SystemProxySettings | null;
+  onTmdbUseProxyChange: (value: boolean) => void;
+  onOpenProxy: () => void;
   language: string;
   region: string;
   onTmdbTokenChange: (value: string) => void;
@@ -395,8 +418,13 @@ export function SettingsMediaContent({
               <span>{t("settings.media.region")}</span>
               <input value={region} onChange={(event) => onRegionChange(event.target.value)} />
             </label>
+            <div className="settings-field-wide settings-switch-row">
+              <div className="settings-proxy-summary"><strong>{t("settings.media.tmdbUseProxy")}</strong><span>{proxy?.host && proxy.port !== null ? systemProxyUrl(proxy) : t("settings.media.proxyMissing")}</span></div>
+              <Switch checked={tmdbUseProxy} disabled={busy === "settings" || (!proxy?.host && !tmdbUseProxy)} ariaLabel={t("settings.media.tmdbUseProxy")} onCheckedChange={onTmdbUseProxyChange} />
+            </div>
           </fieldset>
           <div className="settings-card-actions">
+            <button className="secondary-button" type="button" disabled={busy === "settings"} onClick={onOpenProxy}>{t("settings.media.configureProxy")}</button>
             <button className="primary-button" type="submit" disabled={busy === "settings"} aria-busy={busy === "settings" || undefined}>
               {busy === "settings" ? t("common.actions.saving") : t("common.actions.saveChanges")}
             </button>

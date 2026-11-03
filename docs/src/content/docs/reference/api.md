@@ -16,6 +16,8 @@ Agent 事件通过 session SSE stream 传递；terminal、Docker console 和 VM 
 ## Pi Agent、MCP 与 Skills
 
 - `GET/PATCH /api/settings/agent-capability-policy` 管理 Pi Agent 每项 CyberOS capability 的自动、审批、二次确认和禁用策略。
+- `GET/PATCH /api/settings/proxy` 管理单组系统代理，字段为 `protocol: http|https|socks5`、`host` 和 `port`；读取响应包含 `updatedAt`。未配置时地址、端口均为 `null`，端口范围为 1–65535，首版不接受认证信息。
+- `GET/PATCH /api/media/settings` 的 `tmdbUseProxy` 默认 `false`；开启前必须配置系统代理。搜索候选中的图片地址指向 `/api/media/tmdb/images/:size/:file`，只允许固定 TMDB 图片来源、指定尺寸与图片扩展名，禁止上游重定向。
 - `GET /api/settings/mcp` 返回内置 MCP、第三方 Streamable HTTP Server 的脱敏状态及共享 generation；`PATCH /api/settings/mcp/servers/builtin` 只允许启停内置 MCP。
 - `POST /api/settings/mcp/servers` 与 `PATCH/DELETE /api/settings/mcp/servers/:id` 管理第三方 Server。`POST .../:id/test` 完成工具发现并建立信任；测试成功且凭据就绪后才能启用。
 - `PUT/DELETE /api/settings/mcp/servers/:id/credentials` 管理受限 secret 文件。响应只返回 `credentialsConfigured` 和 Header 名称，不返回 Bearer Token 或 Header 值。

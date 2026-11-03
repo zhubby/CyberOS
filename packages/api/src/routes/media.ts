@@ -12,6 +12,7 @@ import {
   getMediaArtwork,
   getMediaFile,
   getMediaLibrarySettings,
+  getSystemProxySettings,
   getMediaLibraryStatus,
   getMediaSource,
   getMediaTitle,
@@ -31,8 +32,10 @@ import {
   type MediaPersonalState, type VideoQuery,
   type MediaSourceKind
 } from "@cyberos/shared";
+import { systemProxyUrl } from "@cyberos/shared";
 import type { ApiRouteContext } from "../context.js";
-import { searchTmdbCandidates, type TmdbCandidateSearchInput } from "../lib/tmdb-client.js";
+import { searchTmdbCandidates, type FetchLike, type TmdbCandidateSearchInput } from "../lib/tmdb-client.js";
+import { ProxyHttpClient } from "../lib/proxy-http.js";
 import { playbackRuntime } from "./playback.js";
 import { resolveVodPlayerRuntime } from "../lib/vod-player.js";
 import { StorageScopeError, resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
@@ -42,6 +45,7 @@ const DEFAULT_PROFILE_ID = "local-admin";
 
 interface MediaRouteDependencies {
   searchTmdb?: (input: TmdbCandidateSearchInput) => Promise<MediaMatchCandidate[]>;
+  fetchTmdb?: FetchLike;
 }
 
 export function registerMediaRoutes(
@@ -53,7 +57,33 @@ export function registerMediaRoutes(
   server.addHook("preClose", async () => { for (const close of eventClients) close(); });
   const { db } = context;
   const dataRoot = context.config.paths.dataRoot;
-  const searchTmdb = dependencies.searchTmdb ?? searchTmdbCandidates;
+  const tmdbHttp = new ProxyHttpClient(() => {
+    const settings = getMediaLibrarySettings(db) ?? defaultMediaLibrarySettings();
+    if (!settings.tmdbUseProxy) return null;
+    const proxy = getSystemProxySettings(db);
+    if (!proxy?.host || proxy.port === null) throw new Error("System proxy is not configured");
+    systemProxyUrl(proxy);
+    return proxy;
+  });
+  server.addHook("onClose", () => tmdbHttp.close());
+  const fetchTmdb: FetchLike = dependencies.fetchTmdb ?? ((url, init) => tmdbHttp.fetch(url, init));
+  const searchTmdb = dependencies.searchTmdb ?? ((input) => searchTmdbCandidates(input, fetchTmdb));
+
+  server.get<{ Params: { size: string; file: string } }>("/api/media/tmdb/images/:size/:file", async (request, reply) => {
+    const { size, file } = request.params;
+    if (!["w500", "w1280"].includes(size) || !/^[A-Za-z0-9_-][A-Za-z0-9_-]*\.(?:jpg|jpeg|png|webp)$/u.test(file) || file.length > 255) {
+      return reply.status(400).send({ error: "TMDB image path is invalid" });
+    }
+    try {
+      const response = await fetchTmdb(`https://image.tmdb.org/t/p/${size}/${file}`, { signal: AbortSignal.timeout(10_000) });
+      const bytes = await readTmdbArtwork(response);
+      reply.header("Content-Type", inferMimeType(file));
+      reply.header("Cache-Control", "private, max-age=3600");
+      return reply.send(bytes);
+    } catch {
+      return reply.status(502).send({ error: "TMDB image is unavailable" });
+    }
+  });
 
   server.get("/api/media/settings", async (_request, reply) => {
     try {
@@ -69,7 +99,7 @@ export function registerMediaRoutes(
   });
 
   server.patch<{
-    Body: { tmdbReadAccessToken?: string | null; language?: string; region?: string | null };
+    Body: { tmdbReadAccessToken?: string | null; tmdbUseProxy?: boolean; language?: string; region?: string | null };
   }>("/api/media/settings", async (request, reply) => {
     try {
       let current;
@@ -78,7 +108,14 @@ export function registerMediaRoutes(
       } catch {
         current = defaultMediaLibrarySettings();
       }
+      const tmdbUseProxy = request.body?.tmdbUseProxy === undefined ? current.tmdbUseProxy : request.body.tmdbUseProxy;
+      if (typeof tmdbUseProxy !== "boolean") return reply.status(400).send({ error: "TMDB proxy setting must be a boolean" });
+      if (tmdbUseProxy) {
+        const proxy = getSystemProxySettings(db);
+        if (!proxy?.host || proxy.port === null) return reply.status(409).send({ error: "Configure the system proxy before enabling TMDB proxy" });
+      }
       const settings = saveMediaLibrarySettings(db, {
+        tmdbUseProxy,
         tmdbReadAccessToken: request.body?.tmdbReadAccessToken === undefined
           ? current.tmdbReadAccessToken
           : request.body.tmdbReadAccessToken,
@@ -209,7 +246,11 @@ export function registerMediaRoutes(
         region: settings.region,
         limit: 10
       });
-      reply.send({ candidates });
+      reply.send({ candidates: candidates.map((candidate) => ({
+        ...candidate,
+        posterUrl: tmdbImagePath(candidate.posterUrl),
+        backdropUrl: tmdbImagePath(candidate.backdropUrl)
+      })) });
     } catch {
       reply.status(502).send({ error: "TMDB search is unavailable" });
     }
@@ -226,7 +267,7 @@ export function registerMediaRoutes(
       ?? title?.artwork.find((item) => item.kind === request.params.kind);
     if (!artwork) return reply.status(404).send({ error: "Artwork not found" });
     try {
-      return await sendArtwork(context, artwork.id, reply);
+      return await sendArtwork(context, artwork.id, reply, fetchTmdb);
     } catch (error) {
       sendMediaError(reply, error, "Artwork is unavailable");
     }
@@ -308,7 +349,7 @@ export function registerMediaRoutes(
 
   server.get<{ Params: { id: string } }>("/api/media/artwork/:id", async (request, reply) => {
     try {
-      return await sendArtwork(context, request.params.id, reply);
+      return await sendArtwork(context, request.params.id, reply, fetchTmdb);
     } catch (error) {
       sendMediaError(reply, error, "Artwork is unavailable");
     }
@@ -349,7 +390,7 @@ export function registerMediaRoutes(
   });
 }
 
-async function sendArtwork(context: ApiRouteContext, id: string, reply: FastifyReply): Promise<unknown> {
+async function sendArtwork(context: ApiRouteContext, id: string, reply: FastifyReply, fetchTmdb: FetchLike): Promise<unknown> {
   const artwork = getMediaArtwork(context.db, id);
   if (!artwork) return reply.status(404).send({ error: "Artwork not found" });
   if (artwork.source === "local") {
@@ -376,7 +417,9 @@ async function sendArtwork(context: ApiRouteContext, id: string, reply: FastifyR
     return reply.send(createReadStream(safe.realPath));
   }
 
-  const cachePath = await cacheTmdbArtwork(context, artwork.id, artwork.sourceUrl);
+  const cachePath = await cacheTmdbArtwork(context, artwork.id, artwork.sourceUrl, fetchTmdb).catch(() => {
+    throw Object.assign(new Error("TMDB artwork is unavailable"), { statusCode: 502 });
+  });
   const metadata = await stat(cachePath);
   reply.header("Content-Type", inferMimeType(cachePath));
   reply.header("Content-Length", String(metadata.size));
@@ -384,10 +427,10 @@ async function sendArtwork(context: ApiRouteContext, id: string, reply: FastifyR
   return reply.send(createReadStream(cachePath));
 }
 
-async function cacheTmdbArtwork(context: ApiRouteContext, artworkId: string, sourceUrl: string | null): Promise<string> {
+async function cacheTmdbArtwork(context: ApiRouteContext, artworkId: string, sourceUrl: string | null, fetchTmdb: FetchLike): Promise<string> {
   if (!sourceUrl) throw new Error("TMDB artwork URL is missing");
   const url = new URL(sourceUrl);
-  if (url.protocol !== "https:" || url.hostname !== "image.tmdb.org") throw new Error("TMDB artwork URL is invalid");
+  if (!tmdbImagePath(sourceUrl)) throw new Error("TMDB artwork URL is invalid");
   const extension = imageExtension(url.pathname);
   const directory = path.join(context.config.paths.stateDir, "media-cache", "tv");
   const outputPath = path.join(directory, `${artworkId}${extension}`);
@@ -396,10 +439,36 @@ async function cacheTmdbArtwork(context: ApiRouteContext, artworkId: string, sou
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  if (!response.ok || !response.body) throw new Error(`TMDB artwork returned HTTP ${response.status}`);
+  const response = await fetchTmdb(url, { signal: AbortSignal.timeout(10_000) });
+  const bytes = await readTmdbArtwork(response);
+  await mkdir(directory, { recursive: true });
+  const temporaryPath = path.join(directory, `.${artworkId}.${randomUUID()}.part`);
+  const handle = await open(temporaryPath, "wx", 0o600);
+  try {
+    await handle.writeFile(bytes);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporaryPath, outputPath);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
+  return outputPath;
+}
+
+async function readTmdbArtwork(response: Response): Promise<Buffer> {
+  if (!response.ok || !response.body) {
+    await response.body?.cancel();
+    throw new Error(`TMDB artwork returned HTTP ${response.status}`);
+  }
   const declaredLength = Number(response.headers.get("content-length") ?? "0");
-  if (declaredLength > ARTWORK_MAX_BYTES) throw new Error("TMDB artwork exceeds the size limit");
+  if (declaredLength > ARTWORK_MAX_BYTES) {
+    await response.body.cancel();
+    throw new Error("TMDB artwork exceeds the size limit");
+  }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -413,22 +482,19 @@ async function cacheTmdbArtwork(context: ApiRouteContext, artworkId: string, sou
     }
     chunks.push(value);
   }
-  await mkdir(directory, { recursive: true });
-  const temporaryPath = path.join(directory, `.${artworkId}.${randomUUID()}.part`);
-  const handle = await open(temporaryPath, "wx", 0o600);
+  return Buffer.concat(chunks);
+}
+
+function tmdbImagePath(sourceUrl: string | null): string | null {
+  if (!sourceUrl) return null;
   try {
-    for (const chunk of chunks) await handle.write(chunk);
-    await handle.sync();
-  } finally {
-    await handle.close();
+    const url = new URL(sourceUrl);
+    if (url.origin !== "https://image.tmdb.org" || url.username || url.password || url.search || url.hash) return null;
+    const match = /^\/t\/p\/(w500|w1280)\/([A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp))$/u.exec(url.pathname);
+    return match ? `/api/media/tmdb/images/${match[1]}/${match[2]}` : null;
+  } catch {
+    return null;
   }
-  try {
-    await rename(temporaryPath, outputPath);
-  } catch (error) {
-    await unlink(temporaryPath).catch(() => undefined);
-    throw error;
-  }
-  return outputPath;
 }
 
 function imageExtension(pathname: string): string {

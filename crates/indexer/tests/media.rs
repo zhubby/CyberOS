@@ -38,6 +38,74 @@ async fn claim_and_run(
 }
 
 #[tokio::test]
+async fn scan_captures_proxy_settings_when_claimed() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("root");
+    std::fs::create_dir_all(root.join("Movies")).unwrap();
+    let database = directory.path().join("cyberos.sqlite");
+    common::create_schema(&database, &root);
+    queue_scan(&database, "Movies", "scan-proxy", "generation-1");
+    let connection = Connection::open(&database).unwrap();
+    let snapshot = r#"{"protocol":"socks5","host":"127.0.0.1","port":1080}"#;
+    connection.execute("INSERT INTO system_settings (key,value_json,updated_at) VALUES ('system_proxy_settings',?,'now')", [snapshot]).unwrap();
+    let db = Db::open(&database).unwrap();
+    let task = db
+        .claim_media_scan("media-worker", &[common::storage_pool(&root)])
+        .await
+        .unwrap()
+        .unwrap();
+    connection
+        .execute(
+            "UPDATE system_settings SET value_json='{}' WHERE key='system_proxy_settings'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(task.proxy_settings_json.as_deref(), Some(snapshot));
+}
+
+#[tokio::test]
+async fn proxy_failure_during_details_preserves_the_previous_catalog() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("root");
+    let movies = root.join("Movies");
+    std::fs::create_dir_all(&movies).unwrap();
+    std::fs::write(movies.join("Arrival.2016.mkv"), b"video").unwrap();
+    std::fs::write(
+        movies.join("movie.nfo"),
+        r#"<movie><title>Arrival</title><uniqueid type="tmdb">329865</uniqueid></movie>"#,
+    )
+    .unwrap();
+    let database = directory.path().join("cyberos.sqlite");
+    common::create_schema(&database, &root);
+    queue_scan(&database, "Movies", "scan-direct", "generation-1");
+    let db = Db::open(&database).unwrap();
+    claim_and_run(&db, "media-worker", &root).await.unwrap();
+
+    let connection = Connection::open(&database).unwrap();
+    let unused_port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    connection.execute("INSERT INTO system_settings (key,value_json,updated_at) VALUES ('media_library_settings',?,'now')", [r#"{"tmdbReadAccessToken":"test-token","tmdbUseProxy":true}"#]).unwrap();
+    connection.execute("INSERT INTO system_settings (key,value_json,updated_at) VALUES ('system_proxy_settings',?,'now')", [format!(r#"{{"protocol":"http","host":"127.0.0.1","port":{unused_port}}}"#)]).unwrap();
+    queue_scan(&database, "Movies", "scan-proxy-failure", "generation-2");
+    let error = claim_and_run(&db, "media-worker", &root)
+        .await
+        .expect_err("Proxy failure during details must fail the scan");
+    assert!(error.to_string().contains("TMDB details unavailable"));
+    assert_eq!(
+        connection
+            .query_row("SELECT scan_generation FROM media_files", [], |row| row
+                .get::<_, String>(
+                0
+            ))
+            .unwrap(),
+        "generation-1"
+    );
+}
+
+#[tokio::test]
 async fn scan_prefers_nfo_and_ignores_symlinked_media() {
     use std::os::unix::fs::symlink;
 

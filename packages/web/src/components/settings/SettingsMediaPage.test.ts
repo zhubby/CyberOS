@@ -13,7 +13,7 @@ describe("SettingsMediaContent", () => {
   it("renders write-only TMDB settings, sources, scans, and match correction", () => {
     const html = renderToStaticMarkup(createElement(SettingsMediaContent, {
       data: {
-        settings: { tmdbTokenConfigured: true, language: "zh-CN", region: "CN", updatedAt: "2026-10-21T00:00:00.000Z" },
+        settings: { tmdbTokenConfigured: true, tmdbUseProxy: false, language: "zh-CN", region: "CN", updatedAt: "2026-10-21T00:00:00.000Z" },
         sources: [{
           id: "source-1", name: "Movies", kind: "movie",  storagePoolId: "pool-1",
           path: "Media/Movies", enabled: true, createdAt: "2026-10-21T00:00:00.000Z", updatedAt: "2026-10-21T00:00:00.000Z"
@@ -56,6 +56,10 @@ describe("SettingsMediaContent", () => {
       candidateQuery: "Arrival",
       tmdbToken: "",
       clearTmdbToken: false,
+      tmdbUseProxy: false,
+      proxy: { protocol: "http", host: null, port: null, updatedAt: "2026-10-21T00:00:00.000Z" },
+      onTmdbUseProxyChange: vi.fn(),
+      onOpenProxy: vi.fn(),
       language: "zh-CN",
       region: "CN",
       onTmdbTokenChange: vi.fn(), onClearTmdbTokenChange: vi.fn(), onLanguageChange: vi.fn(), onRegionChange: vi.fn(),
@@ -65,6 +69,8 @@ describe("SettingsMediaContent", () => {
     }));
 
     expect(html).toContain("Configured; leave blank to keep");
+    expect(html).toContain("Use system proxy");
+    expect(html).toContain("Configure proxy");
     expect(html).not.toContain("secret-token");
     expect(html).toContain("Media/Movies");
     expect(html).toContain("Completed");

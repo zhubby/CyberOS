@@ -839,6 +839,11 @@ impl Db {
                 [],
                 |row| row.get(0),
             ).optional().map_err(IndexerError::database)?;
+            let proxy_settings_json: Option<String> = transaction.query_row(
+                "SELECT value_json FROM system_settings WHERE key = 'system_proxy_settings'",
+                [],
+                |row| row.get(0),
+            ).optional().map_err(IndexerError::database)?;
             let row = transaction.query_row(
                 "SELECT r.id, r.generation, s.id, s.kind, s.storage_pool_id, s.path \
                  FROM media_scan_runs r \
@@ -874,6 +879,7 @@ impl Db {
                 expected_uuid: storage_pool.expected_uuid.clone(),
                 expected_fstype: storage_pool.expected_fstype.clone(),
                 settings_json,
+                proxy_settings_json,
             };
             transaction.commit().map_err(IndexerError::database)?;
             Ok(Some(task))
