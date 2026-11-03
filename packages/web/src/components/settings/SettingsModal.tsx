@@ -91,6 +91,7 @@ import { SettingsOperationsPage } from "./SettingsOperationsPage.js";
 import { SettingsAlertsPage } from "./SettingsAlertsPage.js";
 import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
 import { SettingsProxyPage } from "./SettingsProxyPage.js";
+import { SettingsTailscalePage } from "./SettingsTailscalePage.js";
 import { SettingsAudioPage } from "./SettingsAudioPage.js";
 import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
 import { SettingsMediaPage } from "./SettingsMediaPage.js";
@@ -581,6 +582,7 @@ export function SettingsModal({
           ) : null}
 
           {activeSection === "proxy" ? <SettingsProxyPage onNotifySuccess={onNotifySuccess} /> : null}
+          {activeSection === "tailscale" ? <SettingsTailscalePage onNotifySuccess={onNotifySuccess} /> : null}
 
           {activeSection === "docker" ? (
             <SettingsDockerPage
@@ -1864,6 +1866,7 @@ function settingsSectionIcon(section: SettingsSectionId) {
     case "wireless":
       return <Wifi aria-hidden="true" size={16} />;
     case "proxy":
+    case "tailscale":
       return <Network aria-hidden="true" size={16} />;
     case "bluetooth":
       return <Bluetooth aria-hidden="true" size={16} />;

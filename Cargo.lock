@@ -576,6 +576,8 @@ version = "2.2.8"
 dependencies = [
  "async-trait",
  "nix 0.30.1",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -586,6 +588,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ts-rs",
+ "url",
  "uuid",
  "zbus",
 ]

@@ -34,7 +34,7 @@
     "version:check": "node scripts/version-check.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run docs:check",
     "test": "npm run test:iscsi-helper && cargo test --locked --workspace && vitest run && npm run docs:test",
-    "test:iscsi-helper": "python3 -B -m unittest discover -s packaging/helpers -p test_iscsi.py",
+    "test:iscsi-helper": "python3 -B -m unittest discover -s packaging/helpers -p 'test_*.py'",
     "lint": "cargo fmt --all --check && cargo clippy --locked --workspace --all-targets -- -D warnings && eslint ."
   },
   "devDependencies": {

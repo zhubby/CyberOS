@@ -14,6 +14,7 @@ import { registerSessionRoutes } from "./sessions.js";
 import { registerSettingsRoutes } from "./settings.js";
 import { registerShareRoutes } from "./shares.js";
 import { registerSystemRoutes } from "./system.js";
+import { registerTailscaleRoutes } from "./tailscale.js";
 import { registerSystemOperationsRoutes } from "./system-operations.js";
 import { registerStorageRoutes } from "./storage.js";
 import { registerIscsiRoutes } from "./iscsi.js";
@@ -40,6 +41,7 @@ export function registerApiRoutes(server: FastifyInstance, context: ApiRouteCont
   registerSettingsRoutes(server, context);
   registerAgentResourceRoutes(server, context);
   registerSystemRoutes(server, context);
+  registerTailscaleRoutes(server, context);
   registerBluetoothTransferRoutes(server, context);
   registerSystemOperationsRoutes(server, context);
   registerStorageRoutes(server, context);

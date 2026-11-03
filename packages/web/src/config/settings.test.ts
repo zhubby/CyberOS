@@ -103,8 +103,8 @@ describe("settings helpers", () => {
     expect(SETTINGS_SECTIONS.map((section) => section.id)).not.toContain("advanced");
   });
 
-  it("groups wireless, proxy and Bluetooth settings under devices", () => {
+  it("groups wireless, proxy, Tailscale and Bluetooth settings under devices", () => {
     expect(SETTINGS_SECTIONS.filter((section) => section.group === "devices").map((section) => section.id))
-      .toEqual(["wireless", "proxy", "bluetooth"]);
+      .toEqual(["wireless", "proxy", "tailscale", "bluetooth"]);
   });
 });

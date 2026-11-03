@@ -23,6 +23,7 @@ export type SettingsSectionId =
   | "skills"
   | "wireless"
   | "proxy"
+  | "tailscale"
   | "bluetooth"
   | "docker"
   | "virtual-machines"
@@ -112,6 +113,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "devices"
   },
   {
+    id: "tailscale",
+    group: "devices"
+  },
+  {
     id: "bluetooth",
     group: "devices"
   },
@@ -180,6 +185,7 @@ const SECTION_TITLE_KEYS = {
   skills: "settings.sections.skills.title",
   wireless: "settings.sections.wireless.title",
   proxy: "settings.sections.proxy.title",
+  tailscale: "settings.sections.tailscale.title",
   bluetooth: "settings.sections.bluetooth.title",
   docker: "settings.sections.docker.title",
   "virtual-machines": "settings.sections.virtualMachines.title",
@@ -207,6 +213,7 @@ const SECTION_DESCRIPTION_KEYS = {
   skills: "settings.sections.skills.description",
   wireless: "settings.sections.wireless.description",
   proxy: "settings.sections.proxy.description",
+  tailscale: "settings.sections.tailscale.description",
   bluetooth: "settings.sections.bluetooth.description",
   docker: "settings.sections.docker.description",
   "virtual-machines": "settings.sections.virtualMachines.description",

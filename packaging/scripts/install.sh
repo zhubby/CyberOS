@@ -258,6 +258,11 @@ fi
 node_22_supported || die "Node.js 22.19.0 or newer within 22.x is required; found $(node --version 2>/dev/null || printf 'none')"
 install_build_dependencies
 install_rust_toolchain
+tailscale_preexisting=0
+if dpkg-query -W -f='${Status}' tailscale 2>/dev/null | grep -Fxq 'install ok installed'; then
+  tailscale_preexisting=1
+fi
+sh "$ROOT_DIR/packaging/scripts/cyberos-configure-tailscale.sh"
 # Only kernels without native LIO need external modules. Never replace a kernel
 # or silently build against headers for a different running kernel.
 if ! /usr/sbin/modinfo target_core_mod >/dev/null 2>&1; then
@@ -287,6 +292,7 @@ apt_install install -y --no-install-recommends --reinstall "$DEB_PATH"
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload
+  if [ "$tailscale_preexisting" -eq 0 ]; then systemctl enable --now tailscaled.service; fi
   /usr/lib/cyberos/scripts/cyberos-refresh-groups.sh
   systemctl enable --now docker.service
   systemctl enable cyberos-host-accessd.service

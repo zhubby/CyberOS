@@ -7,7 +7,7 @@ use crate::power::{PowerRequest, PowerResult};
 use crate::shares::{ShareApplyRequest, ShareApplyResult};
 use crate::storage::{StorageCommand, StorageCommandResult, StorageOperation, StorageResult};
 use crate::tv::{TvRequest, TvResult};
-use crate::{bluetooth, docker_daemon, iscsi, network_manager};
+use crate::{bluetooth, docker_daemon, iscsi, network_manager, tailscale};
 
 pub const PROTOCOL_VERSION: u8 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -39,6 +39,8 @@ pub(crate) enum HostdOperation {
     NetworkManager,
     #[serde(rename = "bluetooth.manager")]
     BluetoothManager,
+    #[serde(rename = "tailscale.manager")]
+    TailscaleManager,
     #[serde(rename = "system.power")]
     SystemPower,
     #[serde(rename = "system.ops")]
@@ -66,6 +68,8 @@ pub(crate) enum HostdRequest {
     NetworkManager(network_manager::NetworkRequest),
     #[serde(rename = "bluetooth.manager")]
     BluetoothManager(bluetooth::BluetoothRequest),
+    #[serde(rename = "tailscale.manager")]
+    TailscaleManager(tailscale::TailscaleRequest),
     #[serde(rename = "system.power")]
     SystemPower(PowerRequest),
     #[serde(rename = "system.ops")]
@@ -84,6 +88,7 @@ pub(crate) enum HostdResult {
     DockerDaemon(docker_daemon::DockerResult),
     NetworkManager(network_manager::NetworkResult),
     BluetoothManager(bluetooth::BluetoothResult),
+    TailscaleManager(Box<tailscale::Status>),
     SystemPower(PowerResult),
     SystemOps(OpsResult),
     SystemTv(TvResult),
@@ -167,6 +172,7 @@ impl HostdOperation {
             Self::DockerDaemon => "Invalid Docker daemon request",
             Self::NetworkManager => "Invalid NetworkManager request",
             Self::BluetoothManager => "Invalid Bluetooth request",
+            Self::TailscaleManager => "Invalid Tailscale request",
             Self::SystemPower => "A confirmed power action is required",
             Self::SystemOps => "Invalid system.ops payload",
             Self::SystemTv => "Invalid system.tv payload",
@@ -237,6 +243,8 @@ mod tests {
         NetworkManager(network_manager::NetworkResult),
         #[serde(rename = "bluetooth.manager")]
         BluetoothManager(bluetooth::BluetoothResult),
+        #[serde(rename = "tailscale.manager")]
+        TailscaleManager(Box<tailscale::Status>),
         #[serde(rename = "system.power")]
         SystemPower(PowerResult),
         #[serde(rename = "system.ops")]
@@ -259,9 +267,35 @@ mod tests {
         crate::docker_daemon::export_protocol_bindings(&config);
         crate::network_manager::export_protocol_bindings(&config);
         crate::bluetooth::export_protocol_bindings(&config);
+        crate::tailscale::export_protocol_bindings(&config);
         crate::power::export_protocol_bindings(&config);
         crate::ops::export_protocol_bindings(&config);
         crate::tv::export_protocol_bindings(&config);
+    }
+
+    #[test]
+    fn accepts_typed_tailscale_requests_and_rejects_unrestricted_operations() {
+        let envelope = |payload| RequestEnvelope {
+            version: PROTOCOL_VERSION,
+            id: "67e55044-10b1-426f-9247-bb680e5fe0c8".to_owned(),
+            operation: "tailscale.manager".to_owned(),
+            payload,
+        };
+        assert!(
+            envelope(serde_json::json!({"action":"status"}))
+                .into_contract()
+                .is_ok()
+        );
+        assert!(
+            envelope(serde_json::json!({"action":"status","socket":"/tmp/other.sock"}))
+                .into_contract()
+                .is_err()
+        );
+        assert!(
+            envelope(serde_json::json!({"action":"command","args":["--operator=cyberos"]}))
+                .into_contract()
+                .is_err()
+        );
     }
 
     #[test]
@@ -292,7 +326,7 @@ mod tests {
             "/../../packages/shared/fixtures/hostd-protocol-v1.json"
         )))
         .unwrap();
-        assert_eq!(fixtures.contracts.len(), 29);
+        assert_eq!(fixtures.contracts.len(), 30);
 
         for contract in fixtures.contracts {
             let frame = serde_json::to_vec(&serde_json::json!({

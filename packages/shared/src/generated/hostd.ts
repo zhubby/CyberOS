@@ -98,7 +98,7 @@ export type HostdNetworkScanResult = { device: string, scannedAt: string, access
 
 export type HostdNfsConfig = { enabled: boolean, readOnly: boolean, allowedCidrs: Array<string>, rootSquash: boolean, };
 
-export type HostdOperation = "shares.apply" | "iscsi.manager" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "system.power" | "system.ops" | "system.tv";
+export type HostdOperation = "shares.apply" | "iscsi.manager" | "storage.command" | "storage.operation" | "docker.daemon" | "network.manager" | "bluetooth.manager" | "tailscale.manager" | "system.power" | "system.ops" | "system.tv";
 
 export type HostdOpsRequest = { task: HostdOpsTask, confirmed: boolean | null, };
 
@@ -112,9 +112,9 @@ export type HostdPowerRequest = { action: HostdPowerAction, confirmed: boolean, 
 
 export type HostdPowerResult = { action: HostdPowerAction, accepted: true, };
 
-export type HostdRequestContract = { "operation": "shares.apply", "payload": HostdShareApplyRequest } | { "operation": "iscsi.manager", "payload": HostdIscsiRequest } | { "operation": "storage.command", "payload": HostdStorageCommand } | { "operation": "storage.operation", "payload": HostdStorageOperation } | { "operation": "docker.daemon", "payload": HostdDockerDaemonRequest } | { "operation": "network.manager", "payload": HostdNetworkManagerRequest } | { "operation": "bluetooth.manager", "payload": HostdBluetoothManagerRequest } | { "operation": "system.power", "payload": HostdPowerRequest } | { "operation": "system.ops", "payload": HostdOpsRequest } | { "operation": "system.tv", "payload": HostdTvRequest };
+export type HostdRequestContract = { "operation": "shares.apply", "payload": HostdShareApplyRequest } | { "operation": "iscsi.manager", "payload": HostdIscsiRequest } | { "operation": "storage.command", "payload": HostdStorageCommand } | { "operation": "storage.operation", "payload": HostdStorageOperation } | { "operation": "docker.daemon", "payload": HostdDockerDaemonRequest } | { "operation": "network.manager", "payload": HostdNetworkManagerRequest } | { "operation": "bluetooth.manager", "payload": HostdBluetoothManagerRequest } | { "operation": "tailscale.manager", "payload": HostdTailscaleRequest } | { "operation": "system.power", "payload": HostdPowerRequest } | { "operation": "system.ops", "payload": HostdOpsRequest } | { "operation": "system.tv", "payload": HostdTvRequest };
 
-export type HostdResultContract = { "operation": "shares.apply", "result": HostdShareApplyResult } | { "operation": "iscsi.manager", "result": HostdIscsiSummary } | { "operation": "storage.command", "result": HostdStorageCommandResult } | { "operation": "storage.operation", "result": HostdStorageOperationResult } | { "operation": "docker.daemon", "result": HostdDockerDaemonResult } | { "operation": "network.manager", "result": HostdNetworkManagerResult } | { "operation": "bluetooth.manager", "result": HostdBluetoothManagerResult } | { "operation": "system.power", "result": HostdPowerResult } | { "operation": "system.ops", "result": HostdOpsResult } | { "operation": "system.tv", "result": HostdTvResult };
+export type HostdResultContract = { "operation": "shares.apply", "result": HostdShareApplyResult } | { "operation": "iscsi.manager", "result": HostdIscsiSummary } | { "operation": "storage.command", "result": HostdStorageCommandResult } | { "operation": "storage.operation", "result": HostdStorageOperationResult } | { "operation": "docker.daemon", "result": HostdDockerDaemonResult } | { "operation": "network.manager", "result": HostdNetworkManagerResult } | { "operation": "bluetooth.manager", "result": HostdBluetoothManagerResult } | { "operation": "tailscale.manager", "result": TailscaleStatus } | { "operation": "system.power", "result": HostdPowerResult } | { "operation": "system.ops", "result": HostdOpsResult } | { "operation": "system.tv", "result": HostdTvResult };
 
 export type HostdShareAccount = { username: string, password: string | null, };
 
@@ -138,8 +138,36 @@ export type HostdStorageOperation = { "action": "create_pool", name: string, rai
 
 export type HostdStorageOperationResult = { "action": "create_pool", name: string, raidLevel: string, devices: Array<string>, filesystem: string, mountpoint: string, mdDevice: string, uuid: string, } | { "action": "delete_pool", name: string, mountpoint: string, mdDevice: string, devices: Array<string>, };
 
+export type HostdTailscaleRequest = { "action": "status", } | { "action": "login", input: TailscaleLoginInput, } | { "action": "service", input: TailscaleServiceInput, } | { "action": "action", input: TailscaleActionInput, } | { "action": "settings", input: TailscaleSettingsInput, } | { "action": "confirm", id: string, } | { "action": "rollback", id: string, };
+
 export type HostdTvRequest = { enabled: boolean, confirmed: boolean, };
 
 export type HostdTvResult = { enabled: boolean, applied: true, };
 
 export type HostdWebDavConfig = { enabled: boolean, readOnly: boolean, allowGuest: boolean, port: number, pathPrefix: string, };
+
+export type TailscaleAction = "connect" | "disconnect" | "logout" | "start" | "restart";
+
+export type TailscaleActionInput = { action: TailscaleAction, expectedRevision: string, confirmed: boolean, };
+
+export type TailscaleApplyTransaction = { id: string, deadlineAt: string, state: TailscaleTransactionState, error: string | null, };
+
+export type TailscaleLoginInput = { controlUrl: string, method: TailscaleLoginMethod, authKey: string | null, expectedRevision: string, confirmed: boolean, };
+
+export type TailscaleLoginMethod = "browser" | "auth_key";
+
+export type TailscalePeer = { id: string, hostname: string, dnsName: string, os: string, ips: Array<string>, online: boolean, active: boolean, directAddress: string | null, relay: string | null, rxBytes: number, txBytes: number, lastSeen: string | null, exitNodeOption: boolean, };
+
+export type TailscaleServiceInput = { autoStart: boolean, expectedRevision: string, confirmed: boolean, };
+
+export type TailscaleServiceStatus = { installed: boolean, active: boolean, autoStart: boolean, state: string, };
+
+export type TailscaleSettings = { hostname: string, acceptDns: boolean, acceptRoutes: boolean, exitNodeId: string, exitNodeAllowLanAccess: boolean, advertisedRoutes: Array<string>, advertiseExitNode: boolean, };
+
+export type TailscaleSettingsInput = { settings: TailscaleSettingsPatch, expectedRevision: string, confirmed: boolean, };
+
+export type TailscaleSettingsPatch = { hostname?: string | null, acceptDns?: boolean | null, acceptRoutes?: boolean | null, exitNodeId?: string | null, exitNodeAllowLanAccess?: boolean | null, advertisedRoutes?: Array<string> | null, advertiseExitNode?: boolean | null, };
+
+export type TailscaleStatus = { collectedAt: string, available: boolean, service: TailscaleServiceStatus, version: string | null, backendState: string, revision: string, controlUrl: string, loginUrl: string | null, hostname: string, dnsName: string, ips: Array<string>, account: string | null, tailnet: string | null, keyExpiry: string | null, settings: TailscaleSettings, peers: Array<TailscalePeer>, peersTruncated: boolean, primaryRoutes: Array<string>, exitNodeApproved: boolean | null, ipv4Forwarding: boolean, ipv6Forwarding: boolean, health: Array<string>, transaction: TailscaleApplyTransaction | null, error: string | null, };
+
+export type TailscaleTransactionState = "pending" | "confirmed" | "rolled_back" | "conflict";
