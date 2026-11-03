@@ -4,20 +4,20 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
-import { assertCompatible, buildPlan, parseOptions, resolvePeerHost, shellQuote } from "./deploy-cm5.mjs";
+import { assertCompatible, buildPlan, parseOptions, resolvePeerHost, shellQuote } from "./deploy-cybermachine.mjs";
 
 const roots = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
-describe("CM5 development deployment", () => {
+describe("cybermachine development deployment", () => {
   it("discovers the named Linux peer without persisting its address", () => {
     const status = { Peer: {
       first: { HostName: "other", DNSName: "other.example.ts.net.", OS: "linux", Online: true },
-      cm5: { HostName: "Scorpius", DNSName: "scorpius.example.ts.net.", OS: "linux", Online: true, TailscaleIPs: ["100.64.1.2"] }
+      cybermachine: { HostName: "CyberMachine", DNSName: "cybermachine.example.ts.net.", OS: "linux", Online: true, TailscaleIPs: ["100.64.1.2"] }
     } };
-    expect(resolvePeerHost(status, { peer: "scorpius", user: "zhubby" })).toBe("zhubby@scorpius.example.ts.net");
-    status.Peer.cm5.Online = false;
-    expect(() => resolvePeerHost(status, { peer: "scorpius", user: "zhubby" })).toThrow(/offline/u);
+    expect(resolvePeerHost(status, { peer: "cybermachine", user: "zhubby" })).toBe("zhubby@cybermachine.example.ts.net");
+    status.Peer.cybermachine.Online = false;
+    expect(() => resolvePeerHost(status, { peer: "cybermachine", user: "zhubby" })).toThrow(/offline/u);
     expect(() => resolvePeerHost(status, { peer: "missing", user: "zhubby" })).toThrow(/exactly one/u);
   });
   it("builds every component on the development Mac unless remote is explicitly selected", () => {
@@ -44,9 +44,9 @@ describe("CM5 development deployment", () => {
   });
 
   it("prints a plan without contacting SSH or building", () => {
-    const result = spawnSync(process.execPath, ["scripts/deploy-cm5.mjs", "--host", "test@cm5.invalid", "--components", "web,photos", "--dry-run"], { encoding: "utf8" });
+    const result = spawnSync(process.execPath, ["scripts/deploy-cybermachine.mjs", "--host", "test@cybermachine.invalid", "--components", "web,photos", "--dry-run"], { encoding: "utf8" });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("test@cm5.invalid");
+    expect(result.stdout).toContain("test@cybermachine.invalid");
     expect(result.stdout).toContain('"remote": []');
     expect(result.stdout).toContain('"photos"');
   });
@@ -71,7 +71,7 @@ describe("CM5 development deployment", () => {
     await writeFile(path.join(root, "package-lock.json"), "{\"changed\":true}\n");
     await expect(assertCompatible({ repoRoot: root, baselineCommit, components: ["worker"] })).rejects.toThrow(/package.*deploy|package.*workflow/u);
     await writeFile(path.join(root, "package-lock.json"), "{}\n");
-    await writeFile(path.join(root, "package.json"), JSON.stringify({ dependencies: { fastify: "5.0.0" }, scripts: { "deploy:cm5": "node scripts/deploy-cm5.mjs" } }));
+    await writeFile(path.join(root, "package.json"), JSON.stringify({ dependencies: { fastify: "5.0.0" }, scripts: { "deploy:cybermachine": "node scripts/deploy-cybermachine.mjs" } }));
     await expect(assertCompatible({ repoRoot: root, baselineCommit, components: ["api"] })).resolves.toBeUndefined();
     await writeFile(path.join(root, "package.json"), JSON.stringify({ dependencies: { fastify: "6.0.0" } }));
     await expect(assertCompatible({ repoRoot: root, baselineCommit, components: ["api"] })).rejects.toThrow(/package.*deploy|package.*workflow/u);

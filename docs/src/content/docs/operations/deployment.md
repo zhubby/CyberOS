@@ -1,6 +1,6 @@
 ---
 title: Debian 部署
-description: 原生 Debian 包、systemd 服务、Nginx 和 CM5 部署。
+description: 原生 Debian 包、systemd 服务、Nginx 和 cybermachine 部署。
 type: operation
 status: current
 audience: [operator]
@@ -132,9 +132,9 @@ sudo journalctl -u cyberos-hostd.service -u cyberos-terminald.service -n 100 --n
 
 ## GitHub Actions 与 Tailscale 自动升级
 
-公开仓库使用 GitHub-hosted runner 构建并发布双架构 Debian 包，再由独立 workflow 通过 Tailscale OIDC 临时节点连接 CM5。CM5 不运行 self-hosted runner，不需要公网 IP、端口转发、SSH 私钥或保存在 GitHub 中的主机密码。
+公开仓库使用 GitHub-hosted runner 构建并发布双架构 Debian 包，再由独立 workflow 通过 Tailscale OIDC 临时节点连接 cybermachine。cybermachine 不运行 self-hosted runner，不需要公网 IP、端口转发、SSH 私钥或保存在 GitHub 中的主机密码。
 
-完整的一次性配置、tag 发布步骤、manifest 校验链、幂等重试和故障处理见[GitHub Actions 发布与 CM5 自动部署](/docs/operations/github-actions-release/)。自动部署只接受稳定的 `vX.Y.Z` tag；不要使用 `latest`、移动已发布 tag 或绕过部署程序的 checksum、版本与数据库回滚边界。
+完整的一次性配置、tag 发布步骤、manifest 校验链、幂等重试和故障处理见[GitHub Actions 发布与 cybermachine 自动部署](/docs/operations/github-actions-release/)。自动部署只接受稳定的 `vX.Y.Z` tag；不要使用 `latest`、移动已发布 tag 或绕过部署程序的 checksum、版本与数据库回滚边界。
 
 若依赖配置失败，CyberOS 可能已解包但尚未完成 Debian 配置。部署流程只允许对版本与随包 release 构建信息一致、数据库校验通过的 `unpacked` / `half-configured` 安装重试；移除中、损坏或未知安装仍拒绝部署。`verify_only` 始终要求包已完整配置，不会把服务能够响应当作安装成功。
 

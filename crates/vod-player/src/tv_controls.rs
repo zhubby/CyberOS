@@ -71,7 +71,9 @@ mod tests {
         {
             Ok(result) => result,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                eprintln!("Lua is unavailable; run the native TV controls contract on CM5");
+                eprintln!(
+                    "Lua is unavailable; run the native TV controls contract on cybermachine"
+                );
                 return;
             }
             Err(error) => panic!("Could not run Lua: {error}"),

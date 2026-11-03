@@ -43,7 +43,7 @@ async function output(run, command, args) {
 
 async function ensureHost(run) {
   if (await output(run, "uname", ["-s"]) !== "Linux" || !["aarch64", "arm64"].includes(await output(run, "uname", ["-m"]))) {
-    throw new Error("CM5 runtime deployment requires Linux arm64");
+    throw new Error("cybermachine runtime deployment requires Linux arm64");
   }
 }
 
@@ -205,7 +205,7 @@ async function restoreActive(run, before) {
 // Replacing the inode avoids ETXTBSY for running ELF binaries. Copy to the
 // destination filesystem first; restore the previous name if a rename fails.
 async function replaceComponent(source, destination) {
-  const suffix = `.cm5-${randomUUID()}`;
+  const suffix = `.cybermachine-${randomUUID()}`;
   const temporary = `${destination}${suffix}.new`;
   const previous = `${destination}${suffix}.old`;
   let moved = false;
@@ -425,9 +425,9 @@ export async function rollbackDeployment({ id, runtimeRoot = RUNTIME_ROOT, deplo
 }
 
 async function main() {
-  if (process.getuid?.() !== 0) throw new Error("CM5 runtime apply/rollback requires a maintenance login with root privileges");
+  if (process.getuid?.() !== 0) throw new Error("cybermachine runtime apply/rollback requires a maintenance login with root privileges");
   const [action, argument, ...extra] = process.argv.slice(2);
-  if (!argument || extra.length || !["apply", "rollback"].includes(action)) throw new Error("Usage: cm5-runtime.mjs apply STAGE | rollback ID (run under flock /run/lock/cyberos-deploy.lock)");
+  if (!argument || extra.length || !["apply", "rollback"].includes(action)) throw new Error("Usage: cybermachine-runtime.mjs apply STAGE | rollback ID (run under flock /run/lock/cyberos-deploy.lock)");
   const result = action === "apply" ? await applyDeployment({ stage: argument }) : await rollbackDeployment({ id: argument });
   console.log(JSON.stringify({ id: result.receipt.id, status: result.receipt.status, recordRoot: result.recordRoot }));
 }

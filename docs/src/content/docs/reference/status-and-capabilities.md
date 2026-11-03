@@ -61,6 +61,6 @@ Registry 凭证会自动用于手动拉取、容器创建时的 `always/missing`
 
 ## Docker 资源与镜像占用
 
-Engine ready 不代表内核支持全部资源控制。资源区和创建向导显示 CPU quota/shares、cpuset、内存、swap、PID 能力的可用、不支持、未知状态；只有明确可用的限制才能填写和提交。内存统计可能为 `null`，不应推断容器停止或使用量为零。CM5 上的缺失能力需要单独检查内核/cgroup 配置，不能靠填写容器内存值解决，也不会由 CyberOS 自动修改启动参数或重启设备。
+Engine ready 不代表内核支持全部资源控制。资源区和创建向导显示 CPU quota/shares、cpuset、内存、swap、PID 能力的可用、不支持、未知状态；只有明确可用的限制才能填写和提交。内存统计可能为 `null`，不应推断容器停止或使用量为零。cybermachine 上的缺失能力需要单独检查内核/cgroup 配置，不能靠填写容器内存值解决，也不会由 CyberOS 自动修改启动参数或重启设备。
 
 镜像占用按容器 ImageID 统计，包括停止的容器；镜像 tag 变化不解除引用。ImageID 元数据不完整时保留 Engine 的计数，未知计数会禁用 UI 删除。服务端删除仍重新检查实时容器引用，Engine 的最终非强制删除是并发变化时的保护边界。

@@ -370,7 +370,8 @@
 .transcript-skeleton-avatar,
 .transcript-skeleton-heading,
 .transcript-skeleton-line {
-  background: var(--hud-panel-raised);
+  background: var(--skeleton-base);
+  border-radius: 0;
 }
 
 .agent-tool-activity > div {

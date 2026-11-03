@@ -132,21 +132,21 @@ require the tag to be reachable from `main` and to match the Debian changelog.
 
 ## Deployment And Packaging
 
-### Rapid CM5 test deployment
+### Rapid cybermachine test deployment
 
-The developer uses macOS; CM5 is the Linux arm64 runtime and test device.
+The developer uses macOS; cybermachine is the Linux arm64 runtime and test device.
 After completing a feature, or when explicitly validating behavior that needs
-Linux or CM5 hardware, deploy the relevant components to CM5 and verify them
+Linux or cybermachine hardware, deploy the relevant components to cybermachine and verify them
 there when a working management connection is available. This test deployment
 is authorized; do not ask for deployment permission again for each iteration.
-Use `npm run deploy:cm5 -- --components <names>` (or `make deploy-cm5
-ARGS='--components <names>'`); see `docs/src/content/docs/operations/cm5.md`.
+Use `npm run deploy:cybermachine -- --components <names>` (or `make deploy-cybermachine
+ARGS='--components <names>'`); see `docs/src/content/docs/operations/cybermachine.md`.
 
-- Discover the CM5 Linux peer through `tailscale status --json` (default peer:
-  `scorpius`), without pinning an IP. Select the peer and SSH user with
-  `--peer`/`--user`, `CYBEROS_CM5_PEER`/`CYBEROS_CM5_USER`, or the ignored local
-  `.cyberos/cm5.json`; the SSH user otherwise defaults to the local OS user.
-  `--host`/`CYBEROS_CM5_HOST` remains an explicit administrator SSH override.
+- Discover the cybermachine Linux peer through `tailscale status --json` (default peer:
+  `cybermachine`), without pinning an IP. Select the peer and SSH user with
+  `--peer`/`--user`, `CYBEROS_CYBERMACHINE_PEER`/`CYBEROS_CYBERMACHINE_USER`, or the ignored local
+  `.cyberos/cybermachine.json`; the SSH user otherwise defaults to the local OS user.
+  `--host`/`CYBEROS_CYBERMACHINE_HOST` remains an explicit administrator SSH override.
   Use a permitted Tailscale SSH identity or existing normal SSH connection
   with root or noninteractive sudo; never broaden the restricted
   `cyberos-deploy` account's permissions or store credentials in Git.
@@ -154,7 +154,7 @@ ARGS='--components <names>'`); see `docs/src/content/docs/operations/cm5.md`.
   directly, and build Rust in the Mac's local Linux arm64 Docker/OrbStack
   environment. `--build auto` and `--build local` both keep builds local;
   remote builds require an explicit `--build remote`, with no automatic
-  fallback. CM5 normally only stages, replaces, restarts, and verifies.
+  fallback. cybermachine normally only stages, replaces, restarts, and verifies.
   Never copy macOS `node_modules` or Mach-O binaries into Linux. Deploy all
   affected consumers when shared code changes. The local build container
   does not change CyberOS's native systemd deployment.
@@ -241,7 +241,7 @@ backup as well as the old package.
 
 CyberOS 2.0 supports clean installation only. Do not discover, import, or
 translate databases, configuration, paths, users, backups, or service state
-from earlier products. The CM5 deployment workflow accepts only an existing
+from earlier products. The cybermachine deployment workflow accepts only an existing
 CyberOS installation created with the current `/cyberos` layout.
 
 ## Safety Boundaries

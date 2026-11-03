@@ -3218,7 +3218,7 @@ describe("API server", () => {
     await server.close();
   });
 
-  it("resolves CM5 image occupancy and rejects unavailable limits through the real socket/API chain", async () => {
+  it("resolves cybermachine image occupancy and rejects unavailable limits through the real socket/API chain", async () => {
     const socketPath = path.join(tempDir, "engine.sock");
     const mutations: string[] = [];
     const upstream = http.createServer((request, response) => {

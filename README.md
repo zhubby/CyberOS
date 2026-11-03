@@ -274,7 +274,7 @@ Tagged releases publish `amd64` and `arm64` Debian artifacts with checksums thro
 
 ### Install on a Raspberry Pi OS or Debian host
 
-For an `arm64` CM5 (or an `amd64` Debian host), run the host installer from a checkout as root:
+For cybermachine (Raspberry Pi Compute Module 5, `arm64`) or an `amd64` Debian host, run the host installer from a checkout as root:
 
 ```bash
 sudo packaging/scripts/install.sh

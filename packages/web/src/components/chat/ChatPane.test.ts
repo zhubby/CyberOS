@@ -381,7 +381,11 @@ describe("ChatPane agent rail", () => {
     expect(html.indexOf('class="settings-button agent-settings-button"')).toBeLessThan(html.indexOf('class="agent-power-button"'));
   });
 
-  it("shows an accessible transcript skeleton while keeping the composer editable", async () => {
+  it.each([
+    { phase: "idle", initialDataLoading: false },
+    { phase: "loading", initialDataLoading: false },
+    { phase: "ready", initialDataLoading: true }
+  ] as const)("holds the entire chat behind a skeleton while $phase and initialDataLoading=$initialDataLoading", async ({ phase, initialDataLoading }) => {
     await initI18n();
     const session = {
       id: "session-1",
@@ -389,7 +393,7 @@ describe("ChatPane agent rail", () => {
       currentPath: ".",
       createdAt: "2026-09-17T10:00:00.000Z",
       updatedAt: "2026-09-17T10:00:00.000Z",
-      firstMessage: null,
+      firstMessage: "Partially loaded session title",
       lastMessage: null,
       pendingApprovalCount: 0
     };
@@ -401,10 +405,11 @@ describe("ChatPane agent rail", () => {
         activeSessionSummary: session,
         sessions: [session],
         activeSessionId: session.id,
-        transcript: [],
-        transcriptPhase: "loading",
+        transcript: [{ id: "message-1", role: "user", content: "Partially loaded history", createdAt: session.createdAt, sequence: 1, turnSequence: 1 }],
+        transcriptPhase: phase,
+        initialDataLoading,
         activeCapabilityApprovals: [],
-        message: "Draft stays editable",
+        message: "Preserved draft",
         composerPath: null,
         status: "loading",
         locale: "en",
@@ -431,12 +436,15 @@ describe("ChatPane agent rail", () => {
       })
     );
 
-    expect(html).toContain('class="transcript" role="log" aria-label="Transcript" aria-busy="true"');
+    expect(html).toContain('aria-busy="true"');
     expect(html).toContain('class="transcript-skeleton" aria-hidden="true"');
     expect(html.match(/class="transcript-skeleton-row/gu)).toHaveLength(4);
     expect(html).not.toContain('class="empty-state"');
-    expect(html).not.toMatch(/<textarea[^>]*disabled/gu);
-    expect(html).toMatch(/<button class="primary-button" type="submit" disabled=""/gu);
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("Partially loaded session title");
+    expect(html).not.toContain("Partially loaded history");
+    expect(html).not.toContain("Preserved draft");
+    expect(html).not.toContain("Not loaded");
   });
 
   it("renders first-party capability approval provenance and revision", async () => {

@@ -157,6 +157,7 @@ import {
   type ActiveAgentJobState
 } from "./lib/agent-job-state.js";
 import { initialTranscriptState, transcriptReducer } from "./lib/transcript.js";
+import { ChatPaneSkeleton } from "./components/chat/ChatPaneSkeleton.js";
 import { workspaceAbsolutePath, workspaceParentPath } from "./lib/chat-paths.js";
 import {
   codeFontFamilyValue,
@@ -313,6 +314,7 @@ function AppContent() {
   const [settingsPending, startSettingsTransition] = useTransition();
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("model-providers");
   const [modelSettings, setModelSettings] = useState<ModelProviderSettings | null>(null);
+  const [initialModelSettingsLoading, setInitialModelSettingsLoading] = useState(true);
   const [dockerSettings, setDockerSettings] = useState<DockerSettings | null>(null);
   const [vmSettings, setVmSettings] = useState<VmSettings | null>(null);
   const [downloadSettings, setDownloadSettings] = useState<DownloadSettings | null>(null);
@@ -462,6 +464,9 @@ function AppContent() {
       })
       .catch(() => {
         // Opening settings retries the request and exposes any error details.
+      })
+      .finally(() => {
+        if (active) setInitialModelSettingsLoading(false);
       });
     return () => {
       active = false;
@@ -496,13 +501,19 @@ function AppContent() {
       setActiveSessionId(nextSession.id);
       setComposerPath(null);
       dispatchTranscript({ type: "begin", sessionId: nextSession.id });
-      const nextTranscript = await getTranscript(nextSession.id);
+      const [nextTranscript, nextApprovals] = await Promise.allSettled([
+        getTranscript(nextSession.id),
+        getApprovals(nextSession.id)
+      ]);
 
       if (!active || !isCurrentSessionViewRequest(sessionRequestId)) {
         return;
       }
 
-      restoreTranscriptSnapshot(nextSession.id, nextTranscript);
+      if (nextTranscript.status === "rejected") throw nextTranscript.reason;
+      restoreTranscriptSnapshot(nextSession.id, nextTranscript.value);
+      if (nextApprovals.status === "fulfilled") setCapabilityApprovals(nextApprovals.value.capabilityApprovals);
+      else setError(toErrorMessage(nextApprovals.reason));
       void refreshWorkQueues();
     }
 
@@ -815,13 +826,6 @@ function AppContent() {
       void Promise.all([refreshCurrentFileListing(), refreshNotifications()]);
     }
   }, [fileBatches]);
-
-  useEffect(() => {
-    transcriptRef.current?.scrollTo({
-      top: transcriptRef.current.scrollHeight,
-      behavior: "smooth"
-    });
-  }, [capabilityApprovals.length, transcript.length]);
 
   useEffect(() => {
     if (!selectedStoragePoolId || !selectedFilePath) {
@@ -2603,7 +2607,7 @@ function AppContent() {
     >
       {navigation.compact && navigation.route === "home" ? <MobileHome connection={connection} unreadCount={notificationUnreadCount} approvalCount={capabilityApprovals.length} onOpenApp={navigation.openApp} onOpenNotifications={openNotificationCenter} /> : null}
       <MobileAppScope.Provider value="agent">
-      {!navigation.compact || navigation.route === "agent" ? <Suspense fallback={<MobileAppLoading app="agent" className="chat-pane is-mobile-active" />}>
+      {!navigation.compact || navigation.route === "agent" ? <Suspense fallback={<ChatPaneSkeleton active />}>
       <ChatPane
         playbackEntry={!navigation.compact ? <PlaybackMenu onOpenBluetoothSettings={() => void openSettings("bluetooth")} /> : null}
         active={!navigation.compact || navigation.route === "agent"}
@@ -2613,6 +2617,7 @@ function AppContent() {
         activeSessionId={activeSessionId}
         transcript={transcript}
         transcriptPhase={transcriptState.phase}
+        initialDataLoading={initialModelSettingsLoading}
         activeCapabilityApprovals={capabilityApprovals}
         agentToolActivities={agentToolActivities}
         message={message}

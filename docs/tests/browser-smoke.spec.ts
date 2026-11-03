@@ -22,7 +22,7 @@ test("does not expose a React fallback for an unknown documentation route", asyn
 test("keeps compact toolbar buttons labeled and square at desktop and mobile widths", async ({ page }) => {
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto("/docs/operations/cm5/");
+    await page.goto("/docs/operations/cybermachine/");
     const toolbar = page.locator('site-search [data-open-modal], .sl-menu-button').filter({ visible: true });
     await expect(toolbar).toHaveCount(width < 800 ? 2 : 1);
     await expect(page.locator('.expressive-code .copy button').first()).toHaveAttribute("aria-label", /\S/);
