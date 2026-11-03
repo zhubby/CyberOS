@@ -3,7 +3,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "n
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyDeployment, rollbackDeployment } from "./cm5-runtime.mjs";
+import { applyDeployment, rollbackDeployment } from "./cybermachine-runtime.mjs";
 
 let fixture;
 let runtimeRoot;
@@ -14,7 +14,7 @@ const lock = "installed dependency lock\n";
 const lockHash = createHash("sha256").update(lock).digest("hex");
 
 beforeEach(async () => {
-  fixture = await mkdtemp(path.join(os.tmpdir(), "cyberos-cm5-runtime-"));
+  fixture = await mkdtemp(path.join(os.tmpdir(), "cyberos-cybermachine-runtime-"));
   runtimeRoot = path.join(fixture, "runtime");
   deployRoot = path.join(fixture, "deployments");
   stage = path.join(fixture, "stage");
@@ -91,7 +91,7 @@ function host({ active = ["cyberos-api.service"], failHealth = false, failNewSta
   return { run, units, calls };
 }
 
-describe("CM5 component runtime deployment", () => {
+describe("cybermachine component runtime deployment", () => {
   it("replaces only selected static assets, preserving official build metadata and recording a reversible backup", async () => {
     await prepare();
     const machine = host();

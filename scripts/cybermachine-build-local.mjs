@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, open, readFile, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { COMPONENTS } from "./cm5-runtime.mjs";
+import { COMPONENTS } from "./cybermachine-runtime.mjs";
 
 const RUST_VERSION = "1.95.0";
 const DEFAULT_RUST_IMAGE = `rust:${RUST_VERSION}-bookworm`;
@@ -79,15 +79,15 @@ export async function buildLocalRust({ repoRoot, names, outputRoot, run = defaul
   if ([repoRoot, outputRoot].some((value) => /[,\r\n\0]/u.test(value))) throw new Error("Docker bind mount paths cannot contain commas or newlines");
   if (repoRoot === outputRoot || repoRoot.startsWith(`${outputRoot}${path.sep}`)) throw new Error("Build output must be a dedicated artifact directory");
   const toolchain = await readFile(path.join(repoRoot, "rust-toolchain.toml"), "utf8");
-  if (toolchain.match(/channel\s*=\s*"([^"]+)"/u)?.[1] !== RUST_VERSION) throw new Error(`Update the CM5 builder for the repository Rust toolchain; expected ${RUST_VERSION}`);
-  const dockerfile = path.join(repoRoot, "scripts/cm5-builder.Dockerfile");
+  if (toolchain.match(/channel\s*=\s*"([^"]+)"/u)?.[1] !== RUST_VERSION) throw new Error(`Update the cybermachine builder for the repository Rust toolchain; expected ${RUST_VERSION}`);
+  const dockerfile = path.join(repoRoot, "scripts/cybermachine-builder.Dockerfile");
   const dockerfileContents = await readFile(dockerfile);
-  const rustImage = env.CYBEROS_CM5_RUST_IMAGE || DEFAULT_RUST_IMAGE;
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9_./:@-]*$/u.test(rustImage)) throw new Error("Invalid CYBEROS_CM5_RUST_IMAGE reference");
+  const rustImage = env.CYBEROS_CYBERMACHINE_RUST_IMAGE || DEFAULT_RUST_IMAGE;
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_./:@-]*$/u.test(rustImage)) throw new Error("Invalid CYBEROS_CYBERMACHINE_RUST_IMAGE reference");
   const context = await output(run, "docker", ["context", "show"]);
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/u.test(context)) throw new Error("Cannot determine the current local Docker context");
   const endpoint = JSON.parse(await output(run, "docker", ["context", "inspect", context, "--format", "{{json .Endpoints.docker.Host}}"]));
-  if (typeof endpoint !== "string" || !endpoint.startsWith("unix:///")) throw new Error("CM5 builds require a local Docker context with a Unix socket; remote Docker engines are refused");
+  if (typeof endpoint !== "string" || !endpoint.startsWith("unix:///")) throw new Error("cybermachine builds require a local Docker context with a Unix socket; remote Docker engines are refused");
   await mkdir(outputRoot, { recursive: true, mode: 0o700 });
   outputRoot = await realpath(outputRoot);
   // Remove only this invocation's known artifact names. A failed new build
@@ -95,17 +95,17 @@ export async function buildLocalRust({ repoRoot, names, outputRoot, run = defaul
   for (const name of names) await rm(path.join(outputRoot, `cyberos-${name}`), { force: true });
   const contextArgs = ["--context", context];
   const imageHash = createHash("sha256").update(dockerfileContents).update(rustImage).digest("hex").slice(0, 16);
-  const image = `cyberos-cm5-builder:${imageHash}`;
+  const image = `cyberos-cybermachine-builder:${imageHash}`;
   await run("docker", [...contextArgs, "build", "--platform", "linux/arm64", "--file", dockerfile, "--tag", image,
     "--build-arg", `RUST_IMAGE=${rustImage}`, path.join(repoRoot, "scripts")]);
   const cacheKey = createHash("sha256").update(repoRoot).digest("hex").slice(0, 16);
   await run("docker", [...contextArgs, "run", "--rm", "--platform", "linux/arm64", "--cpus", "4", "--memory", "6g",
     "--mount", `type=bind,src=${repoRoot},dst=/source,readonly`,
     "--mount", `type=bind,src=${outputRoot},dst=/output`,
-    "--mount", `type=volume,src=cyberos-cm5-cargo-${cacheKey},dst=/cargo`,
-    "--mount", `type=volume,src=cyberos-cm5-target-${cacheKey},dst=/target`,
+    "--mount", `type=volume,src=cyberos-cybermachine-cargo-${cacheKey},dst=/cargo`,
+    "--mount", `type=volume,src=cyberos-cybermachine-target-${cacheKey},dst=/target`,
     "--env", "CARGO_BUILD_JOBS=4", "--workdir", "/source", image,
-    "bash", "-c", buildScript, "cyberos-cm5-build", ...names]);
+    "bash", "-c", buildScript, "cyberos-cybermachine-build", ...names]);
   const artifacts = {};
   for (const name of names) {
     const artifact = path.join(outputRoot, `cyberos-${name}`);

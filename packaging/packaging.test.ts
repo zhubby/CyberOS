@@ -457,7 +457,7 @@ describe("native packaging artifacts", () => {
     const control = await readPackagingFile("debian", "control");
     const postinst = await readPackagingFile("debian", "postinst");
     const releaseWorkflow = await readRepoFile(".github", "workflows", "package-release.yml");
-    const deployWorkflow = await readRepoFile(".github", "workflows", "deploy-cm5.yml");
+    const deployWorkflow = await readRepoFile(".github", "workflows", "deploy-cybermachine.yml");
 
     expect(installer).toContain("dpkg --print-architecture");
     expect(installer).toContain("CYBEROS_APT_MIRROR");
@@ -577,7 +577,7 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain('failed_units="$(systemctl --failed --no-legend --plain || true)"');
     expect(deployWorkflow).toContain("awk '$1 ~ /^cyberos-/ { print }'");
     expect(deployWorkflow).toContain("[ -x /usr/local/bin/node ]");
-    expect(deployWorkflow).toContain("CM5 runtime requires Node.js 22");
+    expect(deployWorkflow).toContain("cybermachine runtime requires Node.js 22");
     expect(deployWorkflow).toContain("cyberos-indexer.service");
     expect(deployWorkflow.match(/cyberos-monitor\.service/gu)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(deployWorkflow.match(/cyberos-alerter\.service/gu)?.length ?? 0).toBeGreaterThanOrEqual(3);
@@ -587,11 +587,11 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).toContain("payload?.queue?.stalled === false");
     expect(deployWorkflow).toContain("wait_for_indexer_ready()");
     expect(deployWorkflow).toContain('while [ "$attempt" -le 120 ]');
-    expect(deployWorkflow).toMatch(/- name: Verify CM5 services and build metadata\n\s+timeout-minutes: 20/u);
+    expect(deployWorkflow).toMatch(/- name: Verify cybermachine services and build metadata\n\s+timeout-minutes: 20/u);
     expect(deployWorkflow).not.toContain("releases/download/$RELEASE_TAG/$RELEASE_ASSET");
     expect(deployWorkflow).toContain("ensure_deploy_traversal()");
-    expect(deployWorkflow).toContain('ssh "${ssh_options[@]}" "cyberos@$CM5_HOST"');
-    expect(deployWorkflow).toContain('ssh "${ssh_options[@]}" "root@$CM5_HOST"');
+    expect(deployWorkflow).toContain('ssh "${ssh_options[@]}" "cyberos@$CYBERMACHINE_HOST"');
+    expect(deployWorkflow).toContain('ssh "${ssh_options[@]}" "root@$CYBERMACHINE_HOST"');
     expect(deployWorkflow).toContain("/usr/lib/cyberos/scripts/cyberos-deploy-bootstrap.sh");
     expect(deployWorkflow).toContain('chmod o+x "$deploy_path"');
     expect(deployWorkflow).toContain(
@@ -638,8 +638,8 @@ describe("native packaging artifacts", () => {
     expect(deployWorkflow).not.toContain("/usr/local/sbin/cyberos-deploy --no-upgrade-backup");
     expect(deployWorkflow).toContain("grep -Fq -- '  --settings-sha256)' /usr/local/sbin/cyberos-deploy");
     expect(deployWorkflow).toContain("settings_baseline_mode=database-only");
-    expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-settings-baseline-mode"');
-    expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cm5-settings.sha256"');
+    expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cybermachine-settings-baseline-mode"');
+    expect(deployWorkflow).toContain('> "$RUNNER_TEMP/cybermachine-settings.sha256"');
     expect(deployWorkflow).not.toContain("allow_legacy_migration");
     expect(deployWorkflow).not.toContain("migration-status");
     expect(deployWorkflow).not.toContain("staging_channel");
@@ -676,8 +676,8 @@ describe("native packaging artifacts", () => {
     { environment: "XHOME=/home/cyberos", directory: "/home/cyberos", accepted: false },
     { environment: "HOME=/home/cyberos HOME=/cyberos/home/terminal", directory: "/home/cyberos", accepted: false },
   ])("checks effective terminald properties after deployment: $environment / $directory", async ({ environment, directory, accepted }) => {
-    const workflow = await readRepoFile(".github", "workflows", "deploy-cm5.yml");
-    const verification = workflow.split("- name: Verify CM5 services and build metadata")[1]!;
+    const workflow = await readRepoFile(".github", "workflows", "deploy-cybermachine.yml");
+    const verification = workflow.split("- name: Verify cybermachine services and build metadata")[1]!;
     const identityCheck = verification.match(/terminal_environment="[\s\S]*?(?=\n\s+failed_units=)/u)?.[0];
     expect(identityCheck).toBeDefined();
     expect(identityCheck).toContain("--property=Environment --value cyberos-terminald.service");
@@ -714,10 +714,10 @@ describe("native packaging artifacts", () => {
     { exists: true, home: "/var/lib/cyberos", accepted: false },
     { exists: true, home: "", accepted: false },
     { exists: false, home: "/home/cyberos", accepted: false },
-  ])("checks the CM5 terminal identity before upgrade actions: $exists / $home", async ({ exists, home, accepted }) => {
-    const workflow = await readRepoFile(".github", "workflows", "deploy-cm5.yml");
-    const baseline = workflow.split("- name: Capture CM5 upgrade baseline")[1]!
-      .split("- name: Stage and deploy release on CM5")[0]!;
+  ])("checks the cybermachine terminal identity before upgrade actions: $exists / $home", async ({ exists, home, accepted }) => {
+    const workflow = await readRepoFile(".github", "workflows", "deploy-cybermachine.yml");
+    const baseline = workflow.split("- name: Capture cybermachine upgrade baseline")[1]!
+      .split("- name: Stage and deploy release on cybermachine")[0]!;
     const remote = baseline.match(/<<'REMOTE'\n([\s\S]*?)\n\s+REMOTE/u)?.[1];
     expect(remote).toBeDefined();
     const identityCheck = remote!.slice(0, remote!.indexOf("[ -x /usr/local/bin/node ]"));
@@ -868,7 +868,7 @@ describe("native packaging artifacts", () => {
     expect(await readPackagingFile("scripts", "cyberos-nas-acl.sh")).toContain("getfacl --absolute-names");
   });
 
-  it("ships a constrained CM5 deployment helper", async () => {
+  it("ships a constrained cybermachine deployment helper", async () => {
     const deploy = await readPackagingFile("scripts", "cyberos-deploy");
     const bootstrap = await readPackagingFile("scripts", "cyberos-deploy-bootstrap.sh");
     const nasAcl = await readPackagingFile("scripts", "cyberos-nas-acl.sh");

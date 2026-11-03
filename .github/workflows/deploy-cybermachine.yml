@@ -1,4 +1,4 @@
-name: Deploy CM5
+name: Deploy cybermachine
 
 'on':
   workflow_run:
@@ -21,7 +21,7 @@ name: Deploy CM5
 permissions: {}
 
 concurrency:
-  group: cm5-production
+  group: cybermachine-production
   cancel-in-progress: false
 
 jobs:
@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          work_dir="$RUNNER_TEMP/cm5-release"
+          work_dir="$RUNNER_TEMP/cybermachine-release"
           rm -rf "$work_dir"
           mkdir -p "$work_dir"
 
@@ -73,7 +73,7 @@ jobs:
 
             if ! gh run download "$WORKFLOW_RUN_ID" \
               --repo "$REPOSITORY" \
-              --name cm5-release-manifest \
+              --name cybermachine-release-manifest \
               --dir "$work_dir" >"$work_dir/download.log" 2>&1; then
               # Branch pushes do not publish a release manifest and are expected
               # to produce a no-op deploy workflow run.
@@ -163,7 +163,7 @@ jobs:
           printf 'sha256=%s\n' "$sha256" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Deploy CM5
+    name: Deploy cybermachine
     needs: select-release
     if: needs.select-release.outputs.deploy == 'true'
     runs-on: ubuntu-24.04
@@ -178,8 +178,8 @@ jobs:
       RELEASE_COMMIT_SHA: ${{ needs.select-release.outputs.commit_sha }}
       RELEASE_ASSET: ${{ needs.select-release.outputs.asset }}
       RELEASE_SHA256: ${{ needs.select-release.outputs.sha256 }}
-      CM5_HOST: ${{ vars.CM5_HOST }}
-      CM5_DEPLOY_USER: ${{ vars.CM5_DEPLOY_USER }}
+      CYBERMACHINE_HOST: ${{ vars.CYBERMACHINE_HOST }}
+      CYBERMACHINE_DEPLOY_USER: ${{ vars.CYBERMACHINE_DEPLOY_USER }}
     steps:
       - name: Download and verify release asset
         env:
@@ -187,7 +187,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          release_dir="$RUNNER_TEMP/cm5-release"
+          release_dir="$RUNNER_TEMP/cybermachine-release"
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
           gh release download "$RELEASE_TAG" \
@@ -222,14 +222,14 @@ jobs:
           [[ "$package_version" == "$RELEASE_VERSION" ]]
           [[ "$package_architecture" == arm64 ]]
 
-      - name: Validate CM5 target
+      - name: Validate cybermachine target
         run: |
           set -euo pipefail
-          : "${CM5_HOST:?production variable CM5_HOST is required}"
-          [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
-          [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
-          [[ "$CM5_DEPLOY_USER" != root ]]
+          : "${CYBERMACHINE_HOST:?production variable CYBERMACHINE_HOST is required}"
+          [[ "$CYBERMACHINE_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
+          CYBERMACHINE_DEPLOY_USER="${CYBERMACHINE_DEPLOY_USER:-cyberos-deploy}"
+          [[ "$CYBERMACHINE_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$CYBERMACHINE_DEPLOY_USER" != root ]]
 
       - name: Verify GitHub OIDC identity
         env:
@@ -299,15 +299,15 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           audience: ${{ secrets.TS_AUDIENCE }}
           tags: tag:github-actions
-          ping: ${{ vars.CM5_HOST }}
+          ping: ${{ vars.CYBERMACHINE_HOST }}
 
-      - name: Capture CM5 upgrade baseline
+      - name: Capture cybermachine upgrade baseline
         env:
           VERIFY_ONLY: ${{ inputs.verify_only }}
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
+          CYBERMACHINE_DEPLOY_USER="${CYBERMACHINE_DEPLOY_USER:-cyberos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -316,26 +316,26 @@ jobs:
             -o StrictHostKeyChecking=accept-new
           )
           mapfile -t baseline < <(
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+            ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" sh -s -- \
               "${VERIFY_ONLY:-false}" "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" <<'REMOTE'
           set -eu
           verify_only=$1
           target_version=$2
           target_commit=$3
           if ! terminal_account="$(getent passwd cyberos)"; then
-            printf 'CM5 clean installation required; cyberos runtime account is missing. In-place account recreation is not supported.\n' >&2
+            printf 'cybermachine clean installation required; cyberos runtime account is missing. In-place account recreation is not supported.\n' >&2
             exit 1
           fi
           terminal_home="$(printf '%s\n' "$terminal_account" | cut -d: -f6)"
           if [ "$terminal_home" != /home/cyberos ]; then
-            printf 'CM5 clean installation required; cyberos home must be /home/cyberos (found %s). No home migration is supported.\n' "$terminal_home" >&2
+            printf 'cybermachine clean installation required; cyberos home must be /home/cyberos (found %s). No home migration is supported.\n' "$terminal_home" >&2
             exit 1
           fi
           [ -x /usr/local/bin/node ]
           runtime_node_version="$(/usr/local/bin/node --version)"
           case "$runtime_node_version" in
             v22.*) ;;
-            *) printf 'CM5 runtime requires Node.js 22; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
+            *) printf 'cybermachine runtime requires Node.js 22; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
           esac
           package_status="$(dpkg-query -W -f='${Status}' cyberos 2>/dev/null || true)"
           package_version="$(dpkg-query -W -f='${Version}' cyberos)"
@@ -367,7 +367,7 @@ jobs:
               printf 'Recovering interrupted CyberOS package configuration: %s\n' "$package_version" >&2
               ;;
             *)
-              printf 'CM5 does not have a valid CyberOS installation: %s\n' "$package_status" >&2
+              printf 'cybermachine does not have a valid CyberOS installation: %s\n' "$package_status" >&2
               exit 1
               ;;
           esac
@@ -398,26 +398,26 @@ jobs:
               [[ "${baseline[1]:-}" == unavailable ]]
               ;;
             *)
-              printf 'Unsupported CM5 settings baseline mode: %s\n' "${baseline[0]:-missing}" >&2
+              printf 'Unsupported cybermachine settings baseline mode: %s\n' "${baseline[0]:-missing}" >&2
               exit 1
               ;;
           esac
-          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cm5-settings-baseline-mode"
-          printf '%s\n' "${baseline[1]}" > "$RUNNER_TEMP/cm5-settings.sha256"
-          printf 'CM5 upgrade baseline: version=%s status=%s node=%s\n' \
+          printf '%s\n' "${baseline[0]}" > "$RUNNER_TEMP/cybermachine-settings-baseline-mode"
+          printf '%s\n' "${baseline[1]}" > "$RUNNER_TEMP/cybermachine-settings.sha256"
+          printf 'cybermachine upgrade baseline: version=%s status=%s node=%s\n' \
             "${baseline[2]:-unknown}" "${baseline[3]:-unknown}" "${baseline[4]:-unknown}"
 
-      - name: Stage and deploy release on CM5
+      - name: Stage and deploy release on cybermachine
         if: inputs.verify_only != true
         timeout-minutes: 75
         run: |
           set -euo pipefail
 
-          : "${CM5_HOST:?production variable CM5_HOST is required}"
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
-          [[ "$CM5_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
-          [[ "$CM5_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
-          [[ "$CM5_DEPLOY_USER" != root ]]
+          : "${CYBERMACHINE_HOST:?production variable CYBERMACHINE_HOST is required}"
+          CYBERMACHINE_DEPLOY_USER="${CYBERMACHINE_DEPLOY_USER:-cyberos-deploy}"
+          [[ "$CYBERMACHINE_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
+          [[ "$CYBERMACHINE_DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$CYBERMACHINE_DEPLOY_USER" != root ]]
 
           ssh_options=(
             -o BatchMode=yes
@@ -426,10 +426,10 @@ jobs:
             -o ServerAliveCountMax=4
             -o StrictHostKeyChecking=accept-new
           )
-          release_dir="$RUNNER_TEMP/cm5-release"
+          release_dir="$RUNNER_TEMP/cybermachine-release"
 
           ensure_deploy_traversal() {
-            if ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
+            if ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" \
                 "test -x /cyberos/deploy"; then
               return 0
             fi
@@ -437,7 +437,7 @@ jobs:
             # CyberOS 2.0.1 postinst could reset this parent to cyberos:cyberos
             # 0750 after deployment bootstrap. The owning runtime account may
             # restore traverse-only access; incoming remains root:deploy 0730.
-            if ! ssh "${ssh_options[@]}" "cyberos@$CM5_HOST" sh -s <<'REMOTE'
+            if ! ssh "${ssh_options[@]}" "cyberos@$CYBERMACHINE_HOST" sh -s <<'REMOTE'
           set -eu
           deploy_path=/cyberos/deploy
           [ "$(id -un)" = cyberos ]
@@ -446,7 +446,7 @@ jobs:
           chmod o+x "$deploy_path"
           REMOTE
             then
-              ssh "${ssh_options[@]}" "root@$CM5_HOST" sh -s -- "$CM5_DEPLOY_USER" <<'REMOTE'
+              ssh "${ssh_options[@]}" "root@$CYBERMACHINE_HOST" sh -s -- "$CYBERMACHINE_DEPLOY_USER" <<'REMOTE'
           set -eu
           deploy_user=$1
           [ "$(id -u)" -eq 0 ]
@@ -457,12 +457,12 @@ jobs:
             /usr/lib/cyberos/scripts/cyberos-deploy-bootstrap.sh
           REMOTE
             fi
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
+            ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" \
               "test -x /cyberos/deploy && test -x /cyberos/deploy/incoming && test -w /cyberos/deploy/incoming"
           }
 
           prepare_incoming() {
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+            ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" sh -s -- \
               "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$RELEASE_SHA256" <<'REMOTE'
           set -eu
           target_version=$1
@@ -575,14 +575,14 @@ jobs:
             local partial_package="$incoming_dir/package.deb.$RELEASE_SHA256.download"
 
             scp "${ssh_options[@]}" "$manifest_path" \
-              "$CM5_DEPLOY_USER@$CM5_HOST:$incoming_dir/release-manifest.json"
+              "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST:$incoming_dir/release-manifest.json"
             rm -rf "$local_parts_dir"
             mkdir -p "$local_parts_dir"
             split -b 4m -d -a 4 "$release_dir/$RELEASE_ASSET" "$local_parts_dir/part-"
             mapfile -t part_paths < <(find "$local_parts_dir" -type f -name 'part-*' -print | sort)
             ((${#part_paths[@]} > 0))
 
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+            ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" sh -s -- \
               "$remote_parts_dir" "${part_paths[@]##*/}" <<'REMOTE'
           set -eu
           remote_parts_dir=$1
@@ -619,7 +619,7 @@ jobs:
               expected_sha256="$(sha256sum "$part_path" | awk '{print $1}')"
               for attempt in 1 2 3; do
                 remote_state="$(
-                  ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+                  ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" sh -s -- \
                     "$remote_parts_dir/$part_name" "$expected_size" "$expected_sha256" <<'REMOTE'
           set -eu
           remote_part_path=$1
@@ -649,7 +649,7 @@ jobs:
                 [ "$remote_state" = upload ]
                 if timeout --signal=TERM --kill-after=30s 900 \
                     sftp -B 131072 -R 16 -b - "${ssh_options[@]}" \
-                    "$CM5_DEPLOY_USER@$CM5_HOST" <<SFTP
+                    "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" <<SFTP
           reput "$part_path" "$remote_parts_dir/$part_name"
           SFTP
                 then
@@ -678,7 +678,7 @@ jobs:
               ((batch_failed == 0))
             done
 
-            ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+            ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" sh -s -- \
               "$remote_parts_dir" "$partial_package" "$RELEASE_SHA256" \
               "${#part_paths[@]}" "$incoming_dir" <<'REMOTE'
           set -eu
@@ -726,15 +726,15 @@ jobs:
           ensure_deploy_traversal
           prepare_incoming
           stage_release /cyberos/deploy/incoming "$release_dir/release-manifest.json" cyberos
-          ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" \
+          ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" \
             "printf 'N\\n' | sudo -n /usr/local/sbin/cyberos-deploy"
 
-      - name: Verify CM5 services and build metadata
+      - name: Verify cybermachine services and build metadata
         timeout-minutes: 20
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
+          CYBERMACHINE_DEPLOY_USER="${CYBERMACHINE_DEPLOY_USER:-cyberos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -742,9 +742,9 @@ jobs:
             -o ServerAliveCountMax=4
             -o StrictHostKeyChecking=accept-new
           )
-          settings_baseline_mode="$(<"$RUNNER_TEMP/cm5-settings-baseline-mode")"
-          expected_settings_sha256="$(<"$RUNNER_TEMP/cm5-settings.sha256")"
-          ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s -- \
+          settings_baseline_mode="$(<"$RUNNER_TEMP/cybermachine-settings-baseline-mode")"
+          expected_settings_sha256="$(<"$RUNNER_TEMP/cybermachine-settings.sha256")"
+          ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" sh -s -- \
             "$RELEASE_VERSION" "$RELEASE_COMMIT_SHA" "$settings_baseline_mode" \
             "$expected_settings_sha256" <<'REMOTE'
           set -eu
@@ -932,10 +932,10 @@ jobs:
           probe_api() {
             probe_endpoint=$1
             probe_output=$2
-            printf 'CM5 API probe GET %s starting\n' "$probe_endpoint" >&2
+            printf 'cybermachine API probe GET %s starting\n' "$probe_endpoint" >&2
             curl --fail --silent --show-error --max-time 15 \
               --output "$probe_output" \
-              --write-out "CM5 API probe GET $probe_endpoint http_status=%{http_code} elapsed_seconds=%{time_total}\n" \
+              --write-out "cybermachine API probe GET $probe_endpoint http_status=%{http_code} elapsed_seconds=%{time_total}\n" \
               "http://127.0.0.1:3010$probe_endpoint" >&2
           }
 
@@ -1048,7 +1048,7 @@ jobs:
               }
               if (latencySamplesMs.at(-1) <= 1000) break;
             }
-            // CM5 storage and ARM scheduling can add short-lived latency spikes.
+            // cybermachine storage and ARM scheduling can add short-lived latency spikes.
             // Preserve the 1000ms target while failing only sustained regressions.
             const bestElapsedMs = Math.min(...latencySamplesMs);
             if (bestElapsedMs > 1000) {
@@ -1058,12 +1058,12 @@ jobs:
           NODE
           REMOTE
 
-      - name: Capture CM5 failure diagnostics
+      - name: Capture cybermachine failure diagnostics
         if: failure()
         run: |
           set -euo pipefail
 
-          CM5_DEPLOY_USER="${CM5_DEPLOY_USER:-cyberos-deploy}"
+          CYBERMACHINE_DEPLOY_USER="${CYBERMACHINE_DEPLOY_USER:-cyberos-deploy}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -1071,7 +1071,7 @@ jobs:
             -o ServerAliveCountMax=4
             -o StrictHostKeyChecking=accept-new
           )
-          ssh "${ssh_options[@]}" "$CM5_DEPLOY_USER@$CM5_HOST" sh -s <<'REMOTE'
+          ssh "${ssh_options[@]}" "$CYBERMACHINE_DEPLOY_USER@$CYBERMACHINE_HOST" sh -s <<'REMOTE'
           set -u
           for endpoint in \
             /health \

@@ -1,17 +1,17 @@
 ---
-title: Raspberry Pi CM5 部署
-description: 在 arm64 CM5 上原生构建、安装、验收和回滚 CyberOS。
+title: cybermachine 部署
+description: 在 cybermachine（Linux arm64）上原生构建、安装、验收和回滚 CyberOS。
 type: operation
 status: current
 audience: [operator]
-sourceOfTruth: [scripts/deploy-cm5.mjs, scripts/cm5-build-local.mjs, scripts/cm5-builder.Dockerfile, scripts/cm5-runtime.mjs, packaging/scripts/build-deb.sh, packaging/scripts/install.sh, packaging/scripts/cyberos-deploy, packaging/scripts/cyberos-tv-mode, packaging/systemd/cyberos-tv.target, packaging/debian/rules]
+sourceOfTruth: [scripts/deploy-cybermachine.mjs, scripts/cybermachine-build-local.mjs, scripts/cybermachine-builder.Dockerfile, scripts/cybermachine-runtime.mjs, packaging/scripts/build-deb.sh, packaging/scripts/install.sh, packaging/scripts/cyberos-deploy, packaging/scripts/cyberos-tv-mode, packaging/systemd/cyberos-tv.target, packaging/debian/rules]
 sidebar:
   order: 2
 ---
 
-CM5 的 Debian 包和原生组件必须在兼容的 Linux arm64 环境构建，以匹配 `better-sqlite3` 原生模块和 Rust 二进制。日常开发优先在 Mac 完成构建：Web 和 TypeScript 直接构建，Rust 使用 Mac 本地的 Linux arm64 Docker/OrbStack 环境，再传到 CM5 替换验证。不要复制 macOS `node_modules` 或 Mach-O 二进制到 CM5。
+cybermachine 基于 Raspberry Pi Compute Module 5，运行 Linux arm64。Debian 包和原生组件必须在兼容的 Linux arm64 环境构建，以匹配 `better-sqlite3` 原生模块和 Rust 二进制。日常开发优先在 Mac 完成构建：Web 和 TypeScript 直接构建，Rust 使用 Mac 本地的 Linux arm64 Docker/OrbStack 环境，再传到 cybermachine 替换验证。不要复制 macOS `node_modules` 或 Mach-O 二进制到 cybermachine。
 
-## CM5 前置条件
+## cybermachine 前置条件
 
 - 运行 Debian 12/bookworm 或兼容的 arm64 系统（Debian 13/trixie 也需在目标主机验收）；
 - 确认包管理的非 root `cyberos` 用户可以使用 `/home/cyberos` 和配置的 storage pools；
@@ -22,56 +22,56 @@ CM5 的 Debian 包和原生组件必须在兼容的 Linux arm64 环境构建，�
 
 ## 从 Mac 快速部署测试组件
 
-功能完成后，或需要验证 Linux、硬件和 systemd 行为时，直接向已有 CyberOS 安装的 CM5 部署相关组件。此流程已获开发者授权，每轮无需重复确认；正式版本仍使用 Debian 包和 release 流程。
+功能完成后，或需要验证 Linux、硬件和 systemd 行为时，直接向已有 CyberOS 安装的 cybermachine 部署相关组件。此流程已获开发者授权，每轮无需重复确认；正式版本仍使用 Debian 包和 release 流程。
 
-本机需要 Node.js 22.12+、Tailscale、SSH 和 rsync。Rust 构建还需要本地 Docker CLI，以及通过本机 Unix socket 运行的 Linux arm64 Docker 环境（例如 OrbStack）；首次构建会获取 builder 镜像。CM5 需要 Node.js 22.12+、rsync，以及 root 或可执行 `sudo -n` 的管理员 SSH 连接。不要扩大正式部署专用 `cyberos-deploy` 用户的 sudo 权限。
+本机需要 Node.js 22.12+、Tailscale、SSH 和 rsync。Rust 构建还需要本地 Docker CLI，以及通过本机 Unix socket 运行的 Linux arm64 Docker 环境（例如 OrbStack）；首次构建会获取 builder 镜像。cybermachine 需要 Node.js 22.12+、rsync，以及 root 或可执行 `sudo -n` 的管理员 SSH 连接。不要扩大正式部署专用 `cyberos-deploy` 用户的 sudo 权限。
 
-`--build auto` 和 `--build local` 都在 Mac 构建。Rust builder 使用 Debian bookworm（glibc 2.36）与 Rust 1.95，源码只读挂载，Cargo 依赖和构建缓存使用独立 Docker volume，不复用 macOS 的 `target`。CM5 只负责接收、备份、替换、重启和验收；Docker 用作本机构建工具，设备仍运行原生进程和 systemd units。本地 builder 不可用时会报错，不会自动转到 CM5 构建。
+`--build auto` 和 `--build local` 都在 Mac 构建。Rust builder 使用 Debian bookworm（glibc 2.36）与 Rust 1.95，源码只读挂载，Cargo 依赖和构建缓存使用独立 Docker volume，不复用 macOS 的 `target`。cybermachine 只负责接收、备份、替换、重启和验收；Docker 用作本机构建工具，设备仍运行原生进程和 systemd units。本地 builder 不可用时会报错，不会自动转到 cybermachine 构建。
 
-默认读取 `tailscale status --json`，查找 Linux 节点 `scorpius` 并使用本机 OS 用户登录，不固定设备 IP。Tailnet 策略必须允许当前身份以目标用户使用 Tailscale SSH；节点在线不代表 SSH 获准。普通 sshd 的公钥认证和 Tailscale SSH 策略分别生效：安装公钥不能解决 Tailscale SSH 策略拒绝；已有普通 SSH 管理连接可用 `--host` 显式指定。
+默认读取 `tailscale status --json`，查找 Linux 节点 `CyberMachine`（匹配时忽略大小写）并使用本机 OS 用户登录，不固定设备 IP。Tailnet 策略必须允许当前身份以目标用户使用 Tailscale SSH；节点在线不代表 SSH 获准。普通 sshd 的公钥认证和 Tailscale SSH 策略分别生效：安装公钥不能解决 Tailscale SSH 策略拒绝；已有普通 SSH 管理连接可用 `--host` 显式指定。
 
 在仓库根目录执行：
 
 ```bash
 # 先查看计划；不会连接设备或构建
-npm run deploy:cm5 -- --components web,api --dry-run
+npm run deploy:cybermachine -- --components web,api --dry-run
 
 # 默认 auto：所有构建在 Mac；Rust 使用本地 Linux arm64 builder
-npm run deploy:cm5 -- --components web,api
-npm run deploy:cm5 -- --components photos,indexer
+npm run deploy:cybermachine -- --components web,api
+npm run deploy:cybermachine -- --components photos,indexer
 
 # 共享 TypeScript 源码变更时重建所有运行消费者
-npm run deploy:cm5 -- --components runtime
+npm run deploy:cybermachine -- --components runtime
 
 # make 入口同样默认在 Mac 构建
-make deploy-cm5 ARGS='--components web'
+make deploy-cybermachine ARGS='--components web'
 
 # 显式选择 Tailnet 节点和已获准的管理用户
-npm run deploy:cm5 -- --peer scorpius --user zhubby --components web
+npm run deploy:cybermachine -- --peer cybermachine --user zhubby --components web
 
-# 仅在明确需要时，改为在 CM5 构建（设备需对应 toolchain 与依赖）
-npm run deploy:cm5 -- --components photos --build remote
+# 仅在明确需要时，改为在 cybermachine 构建（设备需对应 toolchain 与依赖）
+npm run deploy:cybermachine -- --components photos --build remote
 ```
 
-可通过 `CYBEROS_CM5_PEER` 和 `CYBEROS_CM5_USER` 设置默认节点与用户，或在本机忽略目录 `.cyberos/cm5.json` 保存 `{"peer":"scorpius","user":"zhubby"}`；用户名应对应已获准的管理身份。`--host admin@ssh-alias`、`CYBEROS_CM5_HOST` 或配置的 `host` 字段可覆盖发现流程，不保存密码和私钥。`--components all` 选择所有支持的组件，具体名称见 `--help`。
+可通过 `CYBEROS_CYBERMACHINE_PEER` 和 `CYBEROS_CYBERMACHINE_USER` 设置默认节点与用户，或在本机忽略目录 `.cyberos/cybermachine.json` 保存 `{"peer":"cybermachine","user":"zhubby"}`；用户名应对应已获准的管理身份。`--host admin@ssh-alias`、`CYBEROS_CYBERMACHINE_HOST` 或配置的 `host` 字段可覆盖发现流程，不保存密码和私钥。`--components all` 选择所有支持的组件，具体名称见 `--help`。
 
-部署先完成构建和上传，再取得与正式部署相同的锁，备份目标文件、替换组件并恢复此前运行的服务。Web 和文档无需重启 API；API 更新会处理其 worker 等依赖服务。备份、源码 commit/dirty 状态和部署记录保存在 CM5 的 `/cyberos/dev-deploy/<deployment-id>`，正式包的 `build-info.json` 保留原值；组件的实际测试来源以部署记录为准。
+部署先完成构建和上传，再取得与正式部署相同的锁，备份目标文件、替换组件并恢复此前运行的服务。Web 和文档无需重启 API；API 更新会处理其 worker 等依赖服务。备份、源码 commit/dirty 状态和部署记录保存在 cybermachine 的 `/cyberos/dev-deploy/<deployment-id>`，正式包的 `build-info.json` 保留原值；组件的实际测试来源以部署记录为准。
 
-默认保留 CM5 已安装的 Linux 原生 Node 依赖。后端部署会核对安装基线：依赖锁、schema/migration 或 packaging 变更需要走完整包升级与状态备份流程。快速替换不安装系统依赖、不运行安装器，也不修改 unit。
+默认保留 cybermachine 已安装的 Linux 原生 Node 依赖。后端部署会核对安装基线：依赖锁、schema/migration 或 packaging 变更需要走完整包升级与状态备份流程。快速替换不安装系统依赖、不运行安装器，也不修改 unit。
 
 脚本检查服务稳定性、`/health`、`/api/system/storage` 和 `/api/system/health`，并保存 journal 供排查；随后还需验证本次功能，并在交付时报告源码 commit/dirty 状态、组件、部署记录和验收结果。健康接口成功不能代替功能验收。连接失败时报告具体原因，保留已完成的本地验证。
 
 文件替换或健康检查失败时自动恢复旧组件。需要手动恢复某次部署前的组件时执行：
 
 ```bash
-npm run deploy:cm5 -- --rollback <deployment-id>
+npm run deploy:cybermachine -- --rollback <deployment-id>
 ```
 
 此回滚只恢复程序文件，不回滚数据库或用户数据。涉及数据库迁移的升级按本页“升级、保留与回滚”操作。
 
 ## 原生构建与安装
 
-在 CM5 checkout 根目录执行：
+在 cybermachine checkout 根目录执行：
 
 ```bash
 git fetch --tags origin
@@ -104,7 +104,7 @@ sudo cyberos-tv-mode status
 
 启用命令会原子记录当前 display manager 的 unit、enabled/masked 和 active 状态，只停止当前桌面会话，不改动管理员原有的 enabled/masked 配置。随后它安装仅由 CyberOS 管理的 drop-in、启用 `cyberos-tv.target`，并等待 `/api/tv/status` 最多 90 秒；Weston、Chromium 或 VOD 未就绪会自动清理 drop-in 并恢复此前桌面。标准安装器从 `/api/settings/tv` 读取设置：全新数据库使用默认开启值，已经在设置中关闭的设备在重装或升级时保持关闭。
 
-CM5 自动部署同样按数据库中的 TV 设置恢复运行状态，不能仅恢复升级前的 systemd active 状态。升级后默认开启但未运行的设备会启动 TV；已保存关闭的设备保持关闭。
+cybermachine 自动部署同样按数据库中的 TV 设置恢复运行状态，不能仅恢复升级前的 systemd active 状态。升级后默认开启但未运行的设备会启动 TV；已保存关闭的设备保持关闭。
 
 恢复桌面使用：
 
@@ -152,7 +152,7 @@ sudo dmesg --level=err,warn | tail -n 100
 
 通过条件是 Weston 选择 4K preferred mode 并使用 scale 2、`videoOutput` 为 `wayland`、播放中 `hardwareDecode` 为 `enabled`、画面无持续掉帧/撕裂、音画同步且服务没有重启。`hardwareDecode=software`、温度或 CPU 持续异常、DRM reset、黑屏、音画漂移或任一必需服务重启都应判为失败；先执行 `sudo cyberos-tv-mode disable` 恢复桌面，再保留 journal、`/run/cyberos-tv/weston.log` 和状态 JSON 排查。
 
-## CM5 验收清单
+## cybermachine 验收清单
 
 ```bash
 sudo systemctl is-active cyberos-api.service cyberos-worker@1.service
@@ -167,7 +167,7 @@ curl -fsS http://127.0.0.1:3010/api/system/health
 
 hostd 的 root 状态目录应为 `/cyberos/state/hostd/docker-daemon` 和 `/cyberos/state/hostd/network-manager`，不能声明共享父目录或共享 LogsDirectory。父目录和数据库仍由 `cyberos` 使用，两个恢复子目录为 `root:root 0700`。现有相同配置的 host drop-in 可保留，升级后检查实际合并 unit；在维护窗口按两种启动顺序验证，并观察 hostd 重启是否影响 API/worker。详见[目录所有权排查](/docs/operations/troubleshooting/#服务目录所有权与启动顺序)。
 
-CM5 无线验收先确认设备与驱动，再通过页面操作。推荐保留 `eth0` 作为独立管理链路：
+cybermachine 无线验收先确认设备与驱动，再通过页面操作。推荐保留 `eth0` 作为独立管理链路：
 
 ```bash
 nmcli general status
@@ -179,7 +179,7 @@ curl -fsS http://127.0.0.1:3010/api/system/network
 
 页面应识别 `NetworkManager`、`wlan0` 和 AP 能力。依次验证扫描、连接/断开现有 profile、创建临时 WPA2 热点、客户端获取 `10.42.x.x` 地址、停止热点恢复原客户端连接，以及 autostart 开/关。验收后删除临时热点；不要在仅有 Wi-Fi 管理链路时测试 radio 关闭或热点切换。
 
-双网口 CM5 应先保留当前管理口和默认路由，再从 Network 面板接管。发现网卡和升级只读取现有配置，未明确保存的端口显示“未托管”，不计入待应用项，也不会在安装阶段切换网络。通过网口配置弹窗“保存接管配置”后，该端口才进入待接管状态；应用只包含已保存的待生效端口，不会顺带接管其他网口。验收时确认两个永久 MAC 各自取得 DHCP 地址，主口仍持有较低 metric 的唯一默认路由；同一子网双地址会显示非对称路由警告。保存单口配置后实时地址不得变化。应用全部 pending 配置后，从备用地址重新打开页面，在 90 秒内执行“保留配置”。另做一次不确认测试，确认地址、默认路由和托管 keyfile 自动恢复。
+双网口 cybermachine 应先保留当前管理口和默认路由，再从 Network 面板接管。发现网卡和升级只读取现有配置，未明确保存的端口显示“未托管”，不计入待应用项，也不会在安装阶段切换网络。通过网口配置弹窗“保存接管配置”后，该端口才进入待接管状态；应用只包含已保存的待生效端口，不会顺带接管其他网口。验收时确认两个永久 MAC 各自取得 DHCP 地址，主口仍持有较低 metric 的唯一默认路由；同一子网双地址会显示非对称路由警告。保存单口配置后实时地址不得变化。应用全部 pending 配置后，从备用地址重新打开页面，在 90 秒内执行“保留配置”。另做一次不确认测试，确认地址、默认路由和托管 keyfile 自动恢复。
 
 首次接管前为未配置端口创建的临时外部 profile 不使用 `cyberos-` 前缀。只有在两个 CyberOS 托管 profile 已确认、重启后仍稳定恢复时，才删除已知临时 profile；不得批量删除其他 Netplan 或管理员 profile。降级前按 troubleshooting 的步骤恢复外部 profile 并移除 `cyberos-ethernet-*`。
 
@@ -191,9 +191,9 @@ CyberOS 2.x 升级会将早期 2.x 数据库中的共享密码转存到权限为
 
 ### Tailscale 自动升级 bootstrap
 
-CM5 不安装 GitHub self-hosted runner。生产升级由 GitHub-hosted ARM64 runner 构建，再由 Tailscale ephemeral node 通过 SSH 触发 CM5 上受限的部署 helper。CM5 不需要公网 IP 或端口转发，GitHub workflow 使用 Tailscale MagicDNS hostname 或 `100.x.y.z` 地址。
+cybermachine 不安装 GitHub self-hosted runner。生产升级由 GitHub-hosted ARM64 runner 构建，再由 Tailscale ephemeral node 通过 SSH 触发 cybermachine 上受限的部署 helper。cybermachine 不需要公网 IP 或端口转发，GitHub workflow 使用 Tailscale MagicDNS hostname 或 `100.x.y.z` 地址。
 
-完整的 Tailnet policy、OIDC trust credential、GitHub environment、发布命令和重试流程见[GitHub Actions 发布与 CM5 自动部署](/docs/operations/github-actions-release/)。本节只保留目标机 bootstrap。
+完整的 Tailnet policy、OIDC trust credential、GitHub environment、发布命令和重试流程见[GitHub Actions 发布与 cybermachine 自动部署](/docs/operations/github-actions-release/)。本节只保留目标机 bootstrap。
 
 首次启用自动升级时，在本地控制台或现有维护 SSH 中执行：
 
@@ -210,7 +210,7 @@ sudo -l -U cyberos-deploy
 sudo -n stat -c '%U:%G %a %n' /usr/local/sbin/cyberos-deploy /cyberos/deploy/incoming
 ```
 
-`cyberos-deploy` 只能无密码执行 `/usr/local/sbin/cyberos-deploy`（该路径由 bootstrap 链接到包内 helper）；不要给它通用 `sudo` 权限，也不要在 workflow 中保存 root 或登录密码。GitHub production environment 的 `CM5_HOST` 必须是 Tailscale 名称/IP，`CM5_DEPLOY_USER` 默认是 `cyberos-deploy`。
+`cyberos-deploy` 只能无密码执行 `/usr/local/sbin/cyberos-deploy`（该路径由 bootstrap 链接到包内 helper）；不要给它通用 `sudo` 权限，也不要在 workflow 中保存 root 或登录密码。GitHub production environment 的 `CYBERMACHINE_HOST` 必须是 Tailscale 名称/IP，`CYBERMACHINE_DEPLOY_USER` 默认是 `cyberos-deploy`。
 
 升级前停止 monitor、indexer 常驻写入者以及 maintenance、health、daily/weekly backup timers，并备份：
 
@@ -245,7 +245,7 @@ CYBEROS_BUILD_COMMIT_SHA="$SOURCE_COMMIT" \
   packaging/scripts/build-deb.sh
 ```
 
-tagged release 应同时设置 `CYBEROS_BUILD_TAG=v<version>` 和 `CYBEROS_BUILD_SOURCE=release`。普通 CM5 checkout 构建会自动记录为 `local`，无需伪装成正式发布。
+tagged release 应同时设置 `CYBEROS_BUILD_TAG=v<version>` 和 `CYBEROS_BUILD_SOURCE=release`。普通 cybermachine checkout 构建会自动记录为 `local`，无需伪装成正式发布。
 
 ## 部署后追溯验收
 
@@ -271,15 +271,15 @@ node -e '
 把结果分为“通过”“失败”“未验证”，记录版本、commit、Engine/API 版本、镜像 digest、时间与脱敏证据。一次创建成功和 HTTP `200` 只能作为冒烟通过，不代表生产验收完成。
 
 1. **基础部署**：核对 dpkg/build-info/Web 版本，检查失败 unit、重启计数、storage pool readiness、索引、终端身份及 `/docs/`。新建终端应满足 `whoami` 为 `cyberos`，`pwd`、`echo "$HOME"` 和 `cd ~; pwd` 均为 `/home/cyberos`，shell 为账号记录中的 `/bin/bash`。执行 `cd` 后刷新或重连应保留实际目录，重启标签则回到 home。
-2. **网络与镜像**：从 CM5 检查 DNS/TLS、mirror `/v2/` 和真实 pull；确认 daemon 已加载 `registry-mirrors`。使用不可变的 `rustfs/rustfs@sha256:<verified-digest>` 并确认 arm64，`latest` 仅用于探索，不作为可重复发布依据。
+2. **网络与镜像**：从 cybermachine 检查 DNS/TLS、mirror `/v2/` 和真实 pull；确认 daemon 已加载 `registry-mirrors`。使用不可变的 `rustfs/rustfs@sha256:<verified-digest>` 并确认 arm64，`latest` 仅用于探索，不作为可重复发布依据。
 3. **功能路径**：使用临时、最小权限 Registry 账号分别验证手动私有 pull、创建容器的 `missing/always`、托管 Compose App 的 `pull/up`；轮换/删除凭证后验证下一次执行使用新状态，并测试拉取失败不泄密。摘要中有镜像不能证明认证成功，匿名可拉取的公开镜像也不能验证凭证集成。
 4. **容器与应用**：通过页面创建独立测试 volume/容器和托管 Compose App，检查 `/cyberos/apps/<project-key>` 的 `0750/0640/0600` 权限、保存后的 `needsDeploy`、确认后的 Up、环境变量轮换、revision 漂移拒绝、Down 后二次确认删除。明确 `/data` 命令、非 root 用户、非 privileged、资源能力与重启策略。使用独立名字和测试端口；仅在 LAN 地址绑定 S3/console，不默认暴露到所有接口。确认 inspect、容器状态、重启数、实际日志、S3 health、浏览器登录与对象上传/下载，而非只检查“创建成功”。
 5. **删除保护与边界**：确认运行和已停止容器的 ImageID 占用都被统计；未知占用禁用 UI 删除，服务端占用冲突为 `409`。用独立未占用的多标签测试镜像检查具体 tag 删除、确认步骤、取消与失败；不要删除 RustFS 生产镜像。
 6. **持久化与恢复**：用隔离对象做 SHA-256 校验，验证测试容器重启、重建后数据保留；执行备份检查并恢复到新 volume，再读回校验。单独安排设备重启窗口，核对服务恢复、数据挂载、volume 与对象可读。执行方法见[Docker 数据备份演练](/docs/how-to/backup-restore/#docker-工作负载的数据)。
 
-CM5 的 0.3.0 初次 RustFS 冒烟中，运行版本为 `1.0.0-rc.6`：S3 `http://192.168.11.91:9000/health` 返回 `ok`；console 登录入口为 `http://192.168.11.91:9001/rustfs/console/auth/login/`，登录后进入 `/rustfs/console/browser/`。直接访问 9001 根路径可能返回 `403`，不能据此判定 console 故障。升级 RustFS 后重新核对版本对应路由；凭证不得放入 URL、截图或 Git。
+cybermachine 的 0.3.0 初次 RustFS 冒烟中，运行版本为 `1.0.0-rc.6`：S3 `http://192.168.11.91:9000/health` 返回 `ok`；console 登录入口为 `http://192.168.11.91:9001/rustfs/console/auth/login/`，登录后进入 `/rustfs/console/browser/`。直接访问 9001 根路径可能返回 `403`，不能据此判定 console 故障。升级 RustFS 后重新核对版本对应路由；凭证不得放入 URL、截图或 Git。
 
-初次运行中 Engine 26 的镜像容器数和部分内存统计为未知，且内存限制不受支持。新版从 ImageID 补齐占用，并显示/校验资源能力，不会自动启用 CM5 内核 memory controller。初次冒烟并未证明私有 Registry 全路径、设备重启、对象持久化或备份恢复成功；这四项需独立验收。
+初次运行中 Engine 26 的镜像容器数和部分内存统计为未知，且内存限制不受支持。新版从 ImageID 补齐占用，并显示/校验资源能力，不会自动启用 cybermachine 内核 memory controller。初次冒烟并未证明私有 Registry 全路径、设备重启、对象持久化或备份恢复成功；这四项需独立验收。
 
 ## 部署后观察与回滚触发
 

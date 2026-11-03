@@ -5,19 +5,19 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildLocalRust } from "./cm5-build-local.mjs";
+import { buildLocalRust } from "./cybermachine-build-local.mjs";
 
 let fixture;
 let repoRoot;
 let outputRoot;
 
 beforeEach(async () => {
-  fixture = await realpath(await mkdtemp(path.join(os.tmpdir(), "cyberos-cm5-local-build-")));
+  fixture = await realpath(await mkdtemp(path.join(os.tmpdir(), "cyberos-cybermachine-local-build-")));
   repoRoot = path.join(fixture, "source with spaces");
   outputRoot = path.join(fixture, "artifacts");
   await mkdir(path.join(repoRoot, "scripts"), { recursive: true });
   await writeFile(path.join(repoRoot, "rust-toolchain.toml"), '[toolchain]\nchannel = "1.95.0"\n');
-  await writeFile(path.join(repoRoot, "scripts/cm5-builder.Dockerfile"), "FROM rust:1.95.0-bookworm\n");
+  await writeFile(path.join(repoRoot, "scripts/cybermachine-builder.Dockerfile"), "FROM rust:1.95.0-bookworm\n");
 });
 
 afterEach(async () => {
@@ -60,8 +60,8 @@ describe("local Linux arm64 Rust builder", () => {
     expect(container).toContain("linux/arm64");
     expect(container).toContain(`type=bind,src=${repoRoot},dst=/source,readonly`);
     expect(container).toContain(`type=bind,src=${outputRoot},dst=/output`);
-    expect(container.some((arg) => /^type=volume,src=cyberos-cm5-target-[a-f0-9]+,dst=\/target$/u.test(arg))).toBe(true);
-    expect(container.some((arg) => /^type=volume,src=cyberos-cm5-cargo-[a-f0-9]+,dst=\/cargo$/u.test(arg))).toBe(true);
+    expect(container.some((arg) => /^type=volume,src=cyberos-cybermachine-target-[a-f0-9]+,dst=\/target$/u.test(arg))).toBe(true);
+    expect(container.some((arg) => /^type=volume,src=cyberos-cybermachine-cargo-[a-f0-9]+,dst=\/cargo$/u.test(arg))).toBe(true);
     expect(machine.calls.filter((call) => call.includes("build") || call.includes("run")).every((call) => call[1] === "--context" && call[2] === "orbstack")).toBe(true);
     expect(await readFile(path.join(repoRoot, "rust-toolchain.toml"), "utf8")).toContain('"1.95.0"');
   });
@@ -103,9 +103,9 @@ describe("local Linux arm64 Rust builder", () => {
     const fakeBin = path.join(fixture, "fake-bin");
     await mkdir(fakeBin);
     await writeFile(path.join(fakeBin, "rustc"), '#!/bin/sh\nprintf "rustc 1.95.0 (fixture)\\n"\n', { mode: 0o755 });
-    await writeFile(path.join(fakeBin, "cargo"), '#!/bin/sh\nprintf "%s\\n" "$@" > "$CM5_TEST_ARGS"\nexit 17\n', { mode: 0o755 });
+    await writeFile(path.join(fakeBin, "cargo"), '#!/bin/sh\nprintf "%s\\n" "$@" > "$CYBERMACHINE_TEST_ARGS"\nexit 17\n', { mode: 0o755 });
     const argsPath = path.join(fixture, "cargo-args.txt");
-    const result = spawnSync("bash", container.slice(bash + 1), { encoding: "utf8", env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, CM5_TEST_ARGS: argsPath } });
+    const result = spawnSync("bash", container.slice(bash + 1), { encoding: "utf8", env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, CYBERMACHINE_TEST_ARGS: argsPath } });
     expect(result.status).toBe(17);
     expect((await readFile(argsPath, "utf8")).trim().split("\n")).toEqual([
       "build", "--locked", "--release", "--target", "aarch64-unknown-linux-gnu",

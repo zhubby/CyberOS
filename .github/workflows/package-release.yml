@@ -365,10 +365,10 @@ jobs:
             release-manifest.json >/dev/null
           cat release-manifest.json
 
-      - name: Upload CM5 release manifest
+      - name: Upload cybermachine release manifest
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: cm5-release-manifest
+          name: cybermachine-release-manifest
           path: release-assets/release-manifest.json
           if-no-files-found: error
           retention-days: 90

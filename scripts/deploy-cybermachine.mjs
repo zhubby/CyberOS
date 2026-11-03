@@ -10,8 +10,8 @@ import os from "node:os";
 import { fileURLToPath, URL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { collectBuildInfo } from "./generate-build-info.mjs";
-import { COMPONENTS } from "./cm5-runtime.mjs";
-import { buildLocalRust } from "./cm5-build-local.mjs";
+import { COMPONENTS } from "./cybermachine-runtime.mjs";
+import { buildLocalRust } from "./cybermachine-build-local.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const runtimeComponents = ["api", "worker", "ops", "backup", "media-streamer", "mcp-cli"];
@@ -130,16 +130,16 @@ async function buildLocal(name) {
 async function main() {
   const options = parseOptions(process.argv.slice(2));
   if (options.help) {
-    console.log("Usage: npm run deploy:cm5 -- --components web,api,photos [--peer scorpius --user zhubby | --host user@cm5] [--build auto|local|remote] [--dry-run]\n       npm run deploy:cm5 -- --rollback dev-ID [--host user@cm5]\nComponents: " + [...Object.keys(COMPONENTS), "runtime", "all"].join(", "));
+    console.log("Usage: npm run deploy:cybermachine -- --components web,api,photos [--peer cybermachine --user zhubby | --host user@cybermachine] [--build auto|local|remote] [--dry-run]\n       npm run deploy:cybermachine -- --rollback dev-ID [--host user@cybermachine]\nComponents: " + [...Object.keys(COMPONENTS), "runtime", "all"].join(", "));
     return;
   }
   let config = {};
-  try { config = JSON.parse(await readFile(path.join(repoRoot, ".cyberos/cm5.json"), "utf8")); }
+  try { config = JSON.parse(await readFile(path.join(repoRoot, ".cyberos/cybermachine.json"), "utf8")); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
-  let host = options.host ?? process.env.CYBEROS_CM5_HOST ?? config.host;
+  let host = options.host ?? process.env.CYBEROS_CYBERMACHINE_HOST ?? config.host;
   if (!host) {
-    const peer = options.peer ?? process.env.CYBEROS_CM5_PEER ?? config.peer ?? "scorpius";
-    const user = options.user ?? process.env.CYBEROS_CM5_USER ?? config.user ?? os.userInfo().username;
+    const peer = options.peer ?? process.env.CYBEROS_CYBERMACHINE_PEER ?? config.peer ?? "cybermachine";
+    const user = options.user ?? process.env.CYBEROS_CYBERMACHINE_USER ?? config.user ?? os.userInfo().username;
     const status = JSON.parse(await run("tailscale", ["status", "--json"], { capture: true }));
     host = resolvePeerHost(status, { peer, user });
   }
@@ -152,18 +152,18 @@ async function main() {
   // This preflight checks administrator access without starting a service or modifying the installation.
   const probeCode = `const fs=require("node:fs"),os=require("node:os");const p="/usr/lib/cyberos/";console.log(JSON.stringify({home:os.homedir(),platform:process.platform,arch:process.arch,node:process.execPath,nodeVersion:process.versions.node,uid:process.getuid(),build:JSON.parse(fs.readFileSync(p+"build-info.json","utf8"))}));`;
   const probe = JSON.parse(await ssh(host, `set -eu; if [ "$(id -u)" -ne 0 ]; then sudo -n true; fi; node -e ${shellQuote(probeCode)}`, true));
-  if (probe.platform !== "linux" || probe.arch !== "arm64") throw new Error("CM5 target must be Linux arm64");
+  if (probe.platform !== "linux" || probe.arch !== "arm64") throw new Error("cybermachine target must be Linux arm64");
   const [nodeMajor, nodeMinor] = probe.nodeVersion.split(".").map(Number);
-  if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 12)) throw new Error("CM5 requires Node.js 22.12+");
+  if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 12)) throw new Error("cybermachine requires Node.js 22.12+");
   if (!/^\/[a-zA-Z0-9/_.-]+$/u.test(probe.home)) throw new Error("Remote home must be an absolute path without shell metacharacters");
   const id = `dev-${new Date().toISOString().replace(/[^0-9]/gu, "")}-${process.pid}`;
   const cache = path.posix.join(probe.home, ".cache/cyberos-dev-deploy");
   const remote = path.posix.join(cache, "runs", id);
-  const local = path.join(repoRoot, ".cyberos/cm5-deploy", id);
+  const local = path.join(repoRoot, ".cyberos/cybermachine-deploy", id);
   await mkdir(local, { recursive: true, mode: 0o700 });
   await ssh(host, `umask 077; mkdir -p ${shellQuote(remote)}`);
-  await sync(host, path.join(repoRoot, "scripts/cm5-runtime.mjs"), `${remote}/cm5-runtime.mjs`);
-  const invoke = (action, target) => ssh(host, `${probe.uid === 0 ? "" : "sudo -n "}flock -n /run/lock/cyberos-deploy.lock ${shellQuote(probe.node)} ${shellQuote(`${remote}/cm5-runtime.mjs`)} ${action} ${shellQuote(target)}`);
+  await sync(host, path.join(repoRoot, "scripts/cybermachine-runtime.mjs"), `${remote}/cybermachine-runtime.mjs`);
+  const invoke = (action, target) => ssh(host, `${probe.uid === 0 ? "" : "sudo -n "}flock -n /run/lock/cyberos-deploy.lock ${shellQuote(probe.node)} ${shellQuote(`${remote}/cybermachine-runtime.mjs`)} ${action} ${shellQuote(target)}`);
   if (options.rollback) {
     await invoke("rollback", options.rollback);
     await ssh(host, `rm -rf -- ${shellQuote(remote)}`);
@@ -213,9 +213,9 @@ async function main() {
   await invoke("apply", remote);
   await ssh(host, `rm -rf -- ${shellQuote(remote)}`);
   await rm(path.join(local, "payload"), { recursive: true, force: true });
-  console.log(`CM5 test deployment: ${id}\nSource: ${build.commitSha} (dirty=${build.dirty})\nComponents: ${options.components.join(", ")}\nBackup/receipt: /cyberos/dev-deploy/${id}\nRollback: npm run deploy:cm5 -- --host ${host} --rollback ${id}`);
+  console.log(`cybermachine test deployment: ${id}\nSource: ${build.commitSha} (dirty=${build.dirty})\nComponents: ${options.components.join(", ")}\nBackup/receipt: /cyberos/dev-deploy/${id}\nRollback: npm run deploy:cybermachine -- --host ${host} --rollback ${id}`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((error) => { console.error(`deploy-cm5: ${error.message}`); process.exitCode = 1; });
+  main().catch((error) => { console.error(`deploy-cybermachine: ${error.message}`); process.exitCode = 1; });
 }

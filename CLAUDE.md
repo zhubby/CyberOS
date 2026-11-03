@@ -46,12 +46,12 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
 ## Deployment Notes
 
 - After feature completion or explicit Linux/hardware validation, use the
-  authorized rapid CM5 test-deployment flow in `AGENTS.md` and
-  `docs/src/content/docs/operations/cm5.md`. Run `npm run deploy:cm5 --
+  authorized rapid cybermachine test-deployment flow in `AGENTS.md` and
+  `docs/src/content/docs/operations/cybermachine.md`. Run `npm run deploy:cybermachine --
   --components <names>`; do not ask for deployment permission each iteration.
   Prefer builds on the Mac, using local Linux arm64 Docker/OrbStack for Rust;
-  CM5 builds require explicit `--build remote`. Preserve data, verify the
-  feature on CM5, and report connection blockers.
+  cybermachine builds require explicit `--build remote`. Preserve data, verify the
+  feature on cybermachine, and report connection blockers.
 - Build Debian packages with `packaging/scripts/build-deb.sh` or `make deb`;
   build native modules on the target architecture and keep `.deb`, `.changes`,
   and `.buildinfo` artifacts.
@@ -64,7 +64,7 @@ for both `amd64` and `arm64`, and runs the docs Playwright smoke job.
   not NAS or backup readiness. Oneshot jobs normally become `inactive (dead)`
   after success, so inspect their exit status and journal.
 - CyberOS 2.0 is clean-install only. Do not add discovery, import, aliases, or
-  recovery paths for earlier products. The CM5 workflow accepts only the
+  recovery paths for earlier products. The cybermachine workflow accepts only the
   current `/cyberos` layout. Future CyberOS database migrations do not have a
   generic downgrade path.
 

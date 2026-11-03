@@ -106,7 +106,7 @@ function systemInfoFixture(): SystemInfo {
   return {
     collectedAt: "2026-10-29T00:00:00.000Z",
     identity: {
-      hostname: "cyberos-cm5",
+      hostname: "cybermachine",
       adminDisplayName: "Admin",
       authMode: "local-only",
       timezone: "Asia/Shanghai"

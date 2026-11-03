@@ -96,7 +96,7 @@ activate_runtime "$1"
     roots.push(root);
     const buildPath = path.join(root, "build-info.json");
     await writeFile(buildPath, JSON.stringify({ version: "2.0.8", source: "release", commitSha: "a".repeat(40) }));
-    const workflow = await readFile(new URL("../.github/workflows/deploy-cm5.yml", import.meta.url), "utf8");
+    const workflow = await readFile(new URL("../.github/workflows/deploy-cybermachine.yml", import.meta.url), "utf8");
     const start = workflow.indexOf('case "$package_status" in');
     const end = workflow.indexOf('[ -x /usr/local/sbin/cyberos-deploy ]', start);
     expect(start).toBeGreaterThan(0);
