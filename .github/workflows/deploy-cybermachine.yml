@@ -334,8 +334,10 @@ jobs:
           [ -x /usr/local/bin/node ]
           runtime_node_version="$(/usr/local/bin/node --version)"
           case "$runtime_node_version" in
-            v22.*) ;;
-            *) printf 'cybermachine runtime requires Node.js 22; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
+            v22.*) /usr/local/bin/node -e 'if (Number(process.versions.node.split(".")[1]) < 19) process.exit(1)' || {
+              printf 'cybermachine runtime requires Node.js 22.19.0+; found %s\n' "$runtime_node_version" >&2; exit 1;
+            } ;;
+            *) printf 'cybermachine runtime requires Node.js 22.19.0+; found %s\n' "$runtime_node_version" >&2; exit 1 ;;
           esac
           package_status="$(dpkg-query -W -f='${Status}' cyberos 2>/dev/null || true)"
           package_version="$(dpkg-query -W -f='${Version}' cyberos)"

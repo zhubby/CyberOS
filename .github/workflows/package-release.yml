@@ -189,6 +189,7 @@ jobs:
           [[ "$(command -v node)" == /usr/local/bin/node ]]
           [[ "$(command -v npm)" == /usr/local/bin/npm ]]
           node --version | grep -Eq '^v22\.'
+          node scripts/check-node-version.mjs
 
       - name: Build Debian package
         run: CYBEROS_NPM_REGISTRY=https://registry.npmjs.org packaging/scripts/build-deb.sh

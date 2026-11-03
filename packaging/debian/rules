@@ -33,6 +33,15 @@ override_dh_auto_install:
 override_dh_install:
 	dh_install
 	rm -rf debian/cyberos/usr/lib/cyberos/node_modules/@cyberos
+	# The Pi 1.4 lockfile hoists the SDK. Keep its packaged directory/symlink so
+	# upgrading the old package never requires a symlink-to-directory transition.
+	install -d debian/cyberos/usr/lib/cyberos/packages/agent/node_modules/@earendil-works
+	mv debian/cyberos/usr/lib/cyberos/node_modules/@earendil-works/pi-coding-agent debian/cyberos/usr/lib/cyberos/packages/agent/node_modules/@earendil-works/
+
+# Exercise Pi's lazy executor and WASM using only the assembled runtime tree.
+override_dh_link:
+	dh_link
+	node scripts/verify-pi-runtime.mjs debian/cyberos/usr/lib/cyberos
 
 override_dh_gencontrol:
 	dh_gencontrol -- -Vcyberos:VmDepends="$(CYBEROS_VM_DEPENDS)"

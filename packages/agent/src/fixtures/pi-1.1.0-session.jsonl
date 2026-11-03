@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"pi-1-1-restore","timestamp":"2026-10-07T00:00:00.000Z","cwd":"/workspace"}
+{"type":"model_change","id":"model-1","parentId":null,"timestamp":"2026-10-07T00:00:00.000Z","provider":"openai","modelId":"test-model"}
+{"type":"message","id":"user-1","parentId":"model-1","timestamp":"2026-10-07T00:00:00.000Z","message":{"role":"user","content":"List the workspace","timestamp":0}}
+{"type":"message","id":"assistant-1","parentId":"user-1","timestamp":"2026-10-07T00:00:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"The workspace is empty."}],"api":"openai-completions","provider":"openai","model":"test-model","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":0}}

@@ -165,7 +165,7 @@ Storage pools are discovered from real directories directly below `/cyberos/data
 
 For application development:
 
-- Node.js 22 or newer
+- Node.js 22.19.0 or newer
 - npm (the version bundled with Node.js 22 is supported)
 - Rust 1.95.0 (pinned by `rust-toolchain.toml`)
 - A compiler toolchain supported by the native `better-sqlite3` dependency when a prebuilt binary is unavailable

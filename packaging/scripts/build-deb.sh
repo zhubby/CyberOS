@@ -5,6 +5,7 @@ ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/.cyberos/deb-build"
 CYBEROS_NPM_REGISTRY=${CYBEROS_NPM_REGISTRY:-https://registry.npmmirror.com}
 export CYBEROS_NPM_REGISTRY
+node "$ROOT_DIR/scripts/check-node-version.mjs"
 
 if [ -n "${CYBEROS_CARGO_REGISTRY:-}" ]; then
   printf '%s\n' "$CYBEROS_CARGO_REGISTRY" \

@@ -208,13 +208,10 @@ apply_tv_mode_setting() {
   /usr/lib/cyberos/scripts/cyberos-tv-mode "$tv_mode_action"
 }
 
-node_major() {
-  if ! command -v node >/dev/null 2>&1; then
-    printf '0'
-    return
-  fi
-
-  node --version | sed 's/^v//' | cut -d. -f1
+node_22_supported() {
+  command -v node >/dev/null 2>&1 || return 1
+  node --version | grep -Eq '^v22\.' || return 1
+  node "$ROOT_DIR/scripts/check-node-version.mjs" >/dev/null 2>&1
 }
 
 nodejs_from_nodesource() {
@@ -254,11 +251,11 @@ configure_domestic_apt_mirrors
 CYBEROS_LOCALE="$CYBEROS_LOCALE" \
   "$ROOT_DIR/packaging/scripts/cyberos-configure-locale.sh"
 
-if [ "$(node_major)" -lt "$NODE_MAJOR_REQUIRED" ] 2>/dev/null || nodejs_from_nodesource || [ ! -x /usr/local/bin/node ]; then
+if ! node_22_supported || nodejs_from_nodesource || [ ! -x /usr/local/bin/node ]; then
   install_node_22
 fi
 
-node --version | grep -Eq '^v22\.' || die "Node.js 22 is required; found $(node --version 2>/dev/null || printf 'none')"
+node_22_supported || die "Node.js 22.19.0 or newer within 22.x is required; found $(node --version 2>/dev/null || printf 'none')"
 install_build_dependencies
 install_rust_toolchain
 # Only kernels without native LIO need external modules. Never replace a kernel

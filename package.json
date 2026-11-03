@@ -4,10 +4,14 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
+    "preinstall": "node scripts/check-node-version.mjs",
     "dev": "npm run build:metadata && concurrently -n api,worker,monitor,alerter,photos,downloader,vod-player,streamer,web -c blue,green,gray,yellow,cyan,white,magenta,gray,blue \"npm run dev -w @cyberos/api\" \"npm run dev -w @cyberos/worker\" \"cargo run -p cyberos-monitor --bin cyberos-monitor\" \"cargo run -p cyberos-alerter\" \"cargo run -p cyberos-photos\" \"cargo run -p cyberos-downloader\" \"cargo run -p cyberos-vod-player\" \"npm run dev -w @cyberos/media-streamer\" \"npm run dev -w @cyberos/web\"",
     "index": "cargo run -p cyberos-indexer -- --once",
     "backup": "npm run dev -w @cyberos/backup",
