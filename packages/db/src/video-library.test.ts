@@ -14,6 +14,7 @@ import {
   updateMediaCollection,
   listMediaCollections,
   getVideoHome,
+  getVideoFilterOptions,
   getVideoTitle,
   getNextVideoFile,
   listVideoTitles,
@@ -72,6 +73,21 @@ it("paginates the full library without dropping equal titles and binds cursors t
   expect(() =>
     listVideoTitles(db, { cursor: first.nextCursor!, query: "different" }),
   ).toThrow();
+});
+it("provides distinct filters from the full visible library, excluding disabled sources and excluded titles", () => {
+  expect(getVideoFilterOptions(db)).toEqual({ years: [], genres: [] });
+  for (let n = 0; n < 45; n++) {
+    const { title } = movie(`Movie ${n}`);
+    db.prepare("UPDATE media_titles SET year=?,genres_json=? WHERE id=?").run(
+      n === 44 ? 1999 : 2024, JSON.stringify(n === 44 ? ["Sci-Fi", "Drama"] : ["Drama"]), title.id,
+    );
+  }
+  const excluded = movie("Excluded").title;
+  db.prepare("UPDATE media_titles SET match_status='excluded',year=1900,genres_json='[\"Hidden\"]' WHERE id=?").run(excluded.id);
+  const disabledSource = createMediaSource(db, { name: "Disabled", kind: "movie", storagePoolId: "pool-1", path: "Disabled" });
+  db.prepare("UPDATE media_titles SET source_id=?,year=1901,genres_json='[\"Disabled\"]' WHERE id=?").run(disabledSource.id, movie("Disabled").title.id);
+  db.prepare("UPDATE media_sources SET enabled=0 WHERE id=?").run(disabledSource.id);
+  expect(getVideoFilterOptions(db)).toEqual({ years: [2024, 1999], genres: ["Drama", "Sci-Fi"] });
 });
 it("keeps watchlist independent from completed playback and persists state across rescans", () => {
   const { title } = movie("Arrival");

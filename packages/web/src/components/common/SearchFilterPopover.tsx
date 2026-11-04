@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 import { SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePopoverBack } from "./ModalPortal.js";
+import { isBackKey } from "../../lib/remote-keys.js";
 
 export function SearchFilterPopover({
   label,
@@ -86,7 +87,7 @@ export function SearchFilterPopover({
         }
       }}
       onKeyDown={(event) => {
-        if (!open || event.defaultPrevented || !["Escape", "BrowserBack", "GoBack"].includes(event.key)) return;
+        if (!open || event.defaultPrevented || !isBackKey(event)) return;
         event.preventDefault();
         event.stopPropagation();
         closeAndRestoreFocus();

@@ -4,6 +4,7 @@ import type {
   MediaPersonalState,
   MediaProgressRecord,
   VideoHome,
+  VideoFilterOptions,
   VideoPage,
   VideoQuery,
   VideoTitle,
@@ -160,6 +161,13 @@ export function saveEpisodeWatched(
   db.prepare(
     "INSERT INTO media_episode_state VALUES(?,?,?) ON CONFLICT(episode_id) DO UPDATE SET watched=excluded.watched,updated_at=excluded.updated_at",
   ).run(id, +watched, new Date().toISOString());
+}
+
+export function getVideoFilterOptions(db: CyberOsDatabase): VideoFilterOptions {
+  const visible = "FROM media_titles t JOIN media_sources s ON s.id=t.source_id WHERE s.enabled=1 AND t.match_status<>'excluded'";
+  const years = db.prepare(`SELECT DISTINCT t.year ${visible} AND t.year BETWEEN 1 AND 9999 ORDER BY t.year DESC`).all() as Array<{ year: number }>;
+  const genres = db.prepare(`SELECT DISTINCT g.value AS genre FROM media_titles t JOIN media_sources s ON s.id=t.source_id, json_each(t.genres_json) g WHERE s.enabled=1 AND t.match_status<>'excluded' AND g.type='text' AND length(trim(g.value))>0 ORDER BY g.value COLLATE NOCASE`).all() as Array<{ genre: string }>;
+  return { years: years.map(row => row.year), genres: genres.map(row => row.genre) };
 }
 
 export function listVideoTitles(

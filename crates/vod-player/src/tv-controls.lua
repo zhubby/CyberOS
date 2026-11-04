@@ -243,7 +243,13 @@ local function bind(key, callback, repeatable)
 end
 
 for _, key in ipairs({ "GO_BACK", "ESC", "BS" }) do bind(key, back) end
-for _, key in ipairs({ "HOMEPAGE", "HOME", "STOP" }) do bind(key, quit) end
+for _, key in ipairs({ "HOMEPAGE", "HOME" }) do
+    bind(key, function()
+        mp.commandv("script-message", "cyberos-tv-home")
+        quit()
+    end)
+end
+bind("STOP", quit)
 for _, direction in ipairs({ "left", "right", "up", "down" }) do
     bind(direction:upper(), function() navigate(direction) end, true)
 end

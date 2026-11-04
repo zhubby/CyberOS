@@ -909,6 +909,15 @@ impl Controller {
 
     async fn handle_mpv_event(&mut self, event: MpvEvent) {
         match event {
+            MpvEvent::TvHome => {
+                if self.status.owner == Some(PlaybackOwner::Video)
+                    && self.status.session_id.is_some()
+                    && self.mpv.is_some()
+                {
+                    self.status.tv_home_request_id = Some(Uuid::new_v4().to_string());
+                    self.publish();
+                }
+            }
             MpvEvent::Property { name, value } => {
                 let mut changed = false;
                 match name.as_str() {
@@ -1353,6 +1362,7 @@ fn empty_status(
     video_output: String,
 ) -> Status {
     Status {
+        tv_home_request_id: None,
         audio_delay_key: None,
         preferences: crate::preferences::PlaybackPreferences::default(),
         owner: None,
@@ -1747,6 +1757,30 @@ done
             })
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn native_home_only_marks_an_active_video_and_survives_its_exit() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut controller, _sender, _done) = test_controller(directory.path());
+        controller.handle_mpv_event(MpvEvent::TvHome).await;
+        assert!(controller.status.tv_home_request_id.is_none());
+        prepare_music_process(&mut controller, directory.path());
+        start_test_music(&mut controller).await;
+        controller.handle_mpv_event(MpvEvent::TvHome).await;
+        assert!(controller.status.tv_home_request_id.is_none());
+        controller.status.owner = Some(PlaybackOwner::Video);
+        controller.handle_mpv_event(MpvEvent::TvHome).await;
+        let request = controller.status.tv_home_request_id.clone();
+        assert!(Uuid::parse_str(request.as_deref().unwrap()).is_ok());
+        controller
+            .handle_mpv_event(MpvEvent::EndFile {
+                reason: "quit".into(),
+                error: None,
+            })
+            .await;
+        assert!(controller.status.session_id.is_none());
+        assert_eq!(controller.status.tv_home_request_id, request);
     }
 
     #[tokio::test]

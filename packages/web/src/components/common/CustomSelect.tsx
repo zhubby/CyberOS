@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { usePopoverBack } from "./ModalPortal.js";
+import { isBackKey } from "../../lib/remote-keys.js";
 
 export interface CustomSelectOption<T extends string = string> {
   value: T;
@@ -219,7 +220,7 @@ export function CustomSelect<T extends string = string>({
       return;
     }
 
-    if (event.key === "Escape" && open) {
+    if (isBackKey(event) && open) {
       event.preventDefault();
       event.stopPropagation();
       setOpen(false);

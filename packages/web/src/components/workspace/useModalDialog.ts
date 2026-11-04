@@ -1,6 +1,11 @@
 import { useContext, useEffect, useRef, type RefObject } from "react";
 import { ModalDepthContext } from "../common/ModalPortal.js";
 import { useMobileBack } from "../../mobile/MobileNavigation.js";
+import { isBackKey } from "../../lib/remote-keys.js";
+
+export function closeModalForHome(dialog: HTMLElement): boolean {
+  return dialog.dispatchEvent(new Event("cyberos:modal-home", { cancelable: true }));
+}
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -29,15 +34,20 @@ export function useModalDialog(onClose: () => void, closeDisabled = false, activ
   useEffect(() => {
     if (!active) return;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    let restoreFocus = true;
     const returnMenu = previouslyFocused?.closest<HTMLElement>("[data-focus-return]")?.dataset.focusReturn;
     const returnTarget = returnMenu ? [...document.querySelectorAll<HTMLButtonElement>("button[aria-controls]")].find((button) => button.getAttribute("aria-controls") === returnMenu) : null;
-    const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
+    });
     const handleKeyDown = (event: KeyboardEvent) => {
       const dialog = dialogRef.current;
       if (!dialog || topmostModal() !== dialog) return;
-      if (event.key === "Escape" && !closeDisabledRef.current) {
+      if (isBackKey(event)) {
         event.preventDefault();
-        onCloseRef.current();
+        event.stopPropagation();
+        if (!closeDisabledRef.current) onCloseRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -64,12 +74,20 @@ export function useModalDialog(onClose: () => void, closeDisabled = false, activ
         first.focus();
       }
     };
+    const handleHome = (event: Event) => {
+      if (closeDisabledRef.current) { event.preventDefault(); return; }
+      restoreFocus = false;
+      onCloseRef.current();
+    };
+    const dialog = dialogRef.current;
+    dialog?.addEventListener("cyberos:modal-home", handleHome);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
+      dialog?.removeEventListener("cyberos:modal-home", handleHome);
       const target = previouslyFocused?.isConnected ? previouslyFocused : returnTarget;
-      if (target?.isConnected) window.requestAnimationFrame(() => { if (target.getClientRects().length) target.focus(); });
+      if (restoreFocus && target?.isConnected) window.requestAnimationFrame(() => { if (target.getClientRects().length) target.focus(); });
     };
   }, [active]);
 

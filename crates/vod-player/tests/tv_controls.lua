@@ -81,10 +81,18 @@ local function fixture(overrides)
     }
 end
 
-for _, key in ipairs({ "GO_BACK", "ESC", "BS", "HOMEPAGE", "HOME", "STOP" }) do
+for _, key in ipairs({ "GO_BACK", "ESC", "BS", "STOP" }) do
     local player = fixture()
     player.press(key)
     assert(player.commands[1][1] == "quit", key .. " must leave native playback")
+    assert(#player.commands == 1, key .. " must preserve library context")
+end
+
+for _, key in ipairs({ "HOMEPAGE", "HOME" }) do
+    local player = fixture()
+    player.press(key)
+    assert(player.commands[1][1] == "script-message" and player.commands[1][2] == "cyberos-tv-home", key .. " must notify the library before exiting")
+    assert(player.commands[2][1] == "quit", key .. " must leave native playback")
 end
 
 local player = fixture()
@@ -147,7 +155,7 @@ player.press("RIGHT")
 player.press("RIGHT")
 player.press("ENTER")
 player.press("HOMEPAGE")
-assert(player.commands[1][1] == "quit", "Home must exit even from a track menu")
+assert(player.commands[1][1] == "script-message" and player.commands[2][1] == "quit", "Home must notify and exit even from a track menu")
 
 player = fixture({ ["track-list"] = {}, duration = 0 })
 player.press("RIGHT")

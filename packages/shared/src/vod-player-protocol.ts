@@ -163,7 +163,7 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
       "relativePath", "fileName", "mediaFileId", "videoOutput", "positionSeconds", "durationSeconds", "volume", "retryCount",
       "nextRetryAt", "audioDeviceId", "effectiveAudioDeviceId", "audioFallbackReason",
       "audioTracks", "subtitleTracks", "selectedAudioTrackId", "selectedSubtitleTrackId",
-      "capabilities", "error", "errorCode", "updatedAt", "owner", "music", "preferences", "audioDelayKey"
+      "capabilities", "error", "errorCode", "updatedAt", "owner", "music", "preferences", "audioDelayKey", "tvHomeRequestId"
     ]) ||
     !isVodPlayerState(value.state)
   ) return null;
@@ -177,6 +177,7 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     (typeof value.sessionId !== "string" && value.sessionId !== null) ||
     typeof value.serviceInstanceId !== "string" || !value.serviceInstanceId ||
     revision === null || retryCount === null ||
+    (value.tvHomeRequestId !== undefined && (typeof value.tvHomeRequestId !== "string" || !/^[a-zA-Z0-9-]{1,128}$/u.test(value.tvHomeRequestId))) ||
     (typeof value.storagePoolId !== "string" && value.storagePoolId !== null) ||
     (typeof value.relativePath !== "string" && value.relativePath !== null) ||
     (typeof value.fileName !== "string" && value.fileName !== null) ||
@@ -196,6 +197,7 @@ function parseStatus(value: unknown): VodPlayerStatus | null {
     typeof value.updatedAt !== "string"
   ) return null;
   const status: VodPlayerStatus = {
+    ...(typeof value.tvHomeRequestId === "string" ? { tvHomeRequestId: value.tvHomeRequestId } : {}),
     state: value.state,
     sessionId: value.sessionId,
     serviceInstanceId: value.serviceInstanceId,
