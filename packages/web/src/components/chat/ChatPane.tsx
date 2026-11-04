@@ -1,5 +1,5 @@
 import { ModalPortal } from "../common/ModalPortal.js";
-import { Fragment, FormEvent, KeyboardEvent, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
 import {
@@ -50,7 +50,7 @@ import { useMobileNavigation } from "../../mobile/MobileNavigation.js";
 import { useModalDialog } from "../workspace/useModalDialog.js";
 import { PanelHeaderAction, PanelHeaderActions } from "../workspace/PanelHeader.js";
 import { hasActiveAgentTurn } from "../../lib/agent-composer.js";
-import { ChatPaneSkeleton } from "./ChatPaneSkeleton.js";
+import { ChatPaneSkeleton, TranscriptSkeleton } from "./ChatPaneSkeleton.js";
 import { useTranscriptScroll } from "./useTranscriptScroll.js";
 export { composeAgentMessage, hasActiveAgentTurn } from "../../lib/agent-composer.js";
 
@@ -188,7 +188,7 @@ function SessionList({
 }
 
 export function ChatPane(props: Parameters<typeof ChatPaneContent>[0] & { initialDataLoading?: boolean }) {
-  if (props.initialDataLoading || props.transcriptPhase === "idle" || props.transcriptPhase === "loading") {
+  if (props.initialDataLoading) {
     return <ChatPaneSkeleton active={props.active} />;
   }
   return <ChatPaneContent {...props} />;
@@ -282,7 +282,8 @@ function ChatPaneContent({
   const [approvalDialog, setApprovalDialog] = useState<CapabilityApproval | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<Exclude<AgentDeliveryMode, "prompt">>("follow_up");
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  useTranscriptScroll(transcriptRef, activeSessionId, active, transcript.at(-1));
+  const transcriptLoading = transcriptPhase === "idle" || transcriptPhase === "loading";
+  useTranscriptScroll(transcriptRef, activeSessionId, active, transcript.at(-1), transcriptPhase === "ready");
   const approvalDialogRef = useRef<HTMLElement | null>(null);
   const approvalDialogTriggerRef = useRef<HTMLButtonElement | null>(null);
   const workspaceAgentTitle = t("chat.workspaceAgent");
@@ -294,7 +295,7 @@ function ChatPaneContent({
   const activeSessionCode = String((activeSessionIndex >= 0 ? activeSessionIndex : 0) + 1).padStart(2, "0");
   const composerFeedback = composerFeedbackState({ activeJobId, activeJobStatus, messageSubmitting, status });
   const activeAgentTurn = hasActiveAgentTurn(activeJobId, activeJobStatus);
-  const deleteDisabled = !activeSessionSummary || activeSessionSummary.kind === "voice" || composerFeedback !== null || status === "cancelling";
+  const deleteDisabled = transcriptLoading || !activeSessionSummary || activeSessionSummary.kind === "voice" || composerFeedback !== null || status === "cancelling";
   const composerStatusId = "composer-status";
   const ComposerIcon = composerFeedback ? LoaderCircle : Send;
   const composerIconClass = composerFeedback ? "composer-spinner" : undefined;
@@ -302,6 +303,13 @@ function ChatPaneContent({
   const modelRoute = modelSettings
     ? `${providerLabel(modelSettings.providerName, t)}/${modelSettings.model || t("settings.modelProvider.notSet")}`
     : t("settings.modelProvider.notLoaded");
+
+  useLayoutEffect(() => {
+    setDeleteConfirmOpen(false);
+    setApprovalDialog(null);
+    setDeliveryMode("follow_up");
+    approvalDialogTriggerRef.current = null;
+  }, [activeSessionId]);
 
   useEffect(() => {
     if (composerPath) {
@@ -536,10 +544,11 @@ function ChatPaneContent({
           className="transcript"
           role="log"
           aria-label={t("chat.transcript")}
-          aria-busy={false}
+          aria-busy={transcriptLoading}
         >
+          {transcriptLoading ? <span className="visually-hidden" role="status">{t("status.loading")}</span> : null}
           <div className="transcript-content">
-          {hasConversationContent ? (
+          {transcriptLoading ? <TranscriptSkeleton /> : hasConversationContent ? (
             <>
               {transcript.map((item) => (
                 <article key={item.id} className={`message message-${item.role}${item.streaming ? " is-streaming" : ""}`}>
@@ -603,7 +612,13 @@ function ChatPaneContent({
 
         <form
           className="composer"
-          onSubmit={(event) => onSubmitMessage(event, activeAgentTurn ? deliveryMode : "prompt")}
+          onSubmit={(event) => {
+            if (transcriptLoading) {
+              event.preventDefault();
+              return;
+            }
+            onSubmitMessage(event, activeAgentTurn ? deliveryMode : "prompt");
+          }}
           aria-busy={messageSubmitting}
         >
           {composerPath ? (
@@ -682,6 +697,7 @@ function ChatPaneContent({
                   className="secondary-button"
                   type="button"
                   onClick={onRetryInterruptedJob}
+                  disabled={transcriptLoading}
                   aria-label={t("chat.retryInterrupted")}
                   data-tooltip={t("chat.retryInterrupted")}
                 >
@@ -707,7 +723,7 @@ function ChatPaneContent({
                   !hasSession
                   || (!message.trim() && !composerPath)
                   || messageSubmitting
-                  || transcriptPhase === "loading"
+                  || transcriptLoading
                   || status === "cancelling"
                   || (activeJobId !== null && !activeAgentTurn)
                 }

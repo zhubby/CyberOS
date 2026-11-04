@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createElement, createRef } from "react";
+import { createElement, createRef, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AppStatus } from "../../config/status.js";
 import { initI18n } from "../../i18n/index.js";
@@ -14,6 +14,55 @@ import {
 } from "./ChatPane.js";
 
 type ComposerKeyDownEvent = Parameters<typeof shouldSubmitComposerMessage>[0];
+
+function renderSessionPane(overrides: Partial<ComponentProps<typeof ChatPane>> = {}) {
+  const session = {
+    id: "session-1",
+    storagePoolId: "root-1",
+    currentPath: ".",
+    createdAt: "2026-09-17T10:00:00.000Z",
+    updatedAt: "2026-09-17T10:00:00.000Z",
+    firstMessage: "Switch target",
+    lastMessage: null,
+    pendingApprovalCount: 0
+  };
+  const noop = () => undefined;
+  return renderToStaticMarkup(createElement(ChatPane, {
+    active: true,
+    selectedRoot: undefined,
+    activeSessionSummary: session,
+    sessions: [session],
+    activeSessionId: session.id,
+    transcript: [],
+    transcriptPhase: "ready",
+    activeCapabilityApprovals: [],
+    message: "Preserved draft",
+    composerPath: null,
+    status: "ready",
+    locale: "en",
+    modelSettings: null,
+    activeJobId: null,
+    activeJobStatus: null,
+    messageSubmitting: false,
+    hasSession: true,
+    transcriptRef: createRef<HTMLDivElement>(),
+    onCreateAgent: noop,
+    onDeleteSession: noop,
+    onOpenSettings: noop,
+    onOpenNotifications: noop,
+    onRequestSystemPower: async () => true,
+    notificationUnreadCount: 0,
+    onSelectSession: noop,
+    onApproveCapability: noop,
+    onRejectCapability: noop,
+    onSubmitMessage: noop,
+    onMessageChange: noop,
+    onClearComposerPath: noop,
+    onCancelActiveJob: noop,
+    onOpenWorkspacePath: noop,
+    ...overrides
+  }));
+}
 
 function composerEvent(key = "Enter", shiftKey = false, isComposing = false) {
   return {
@@ -382,9 +431,10 @@ describe("ChatPane agent rail", () => {
   });
 
   it.each([
-    { phase: "idle", initialDataLoading: false },
-    { phase: "loading", initialDataLoading: false },
-    { phase: "ready", initialDataLoading: true }
+    { phase: "idle", initialDataLoading: true },
+    { phase: "loading", initialDataLoading: true },
+    { phase: "ready", initialDataLoading: true },
+    { phase: "error", initialDataLoading: true }
   ] as const)("holds the entire chat behind a skeleton while $phase and initialDataLoading=$initialDataLoading", async ({ phase, initialDataLoading }) => {
     await initI18n();
     const session = {
@@ -445,6 +495,49 @@ describe("ChatPane agent rail", () => {
     expect(html).not.toContain("Partially loaded history");
     expect(html).not.toContain("Preserved draft");
     expect(html).not.toContain("Not loaded");
+  });
+
+  it.each(["idle", "loading"] as const)("loads only the transcript while switching with phase=%s", async (transcriptPhase) => {
+    await initI18n();
+    const html = renderSessionPane({
+      transcriptPhase,
+      status: "loading",
+      transcript: [{ id: "stale-message", role: "user", content: "Previous session history", createdAt: "2026-09-17T10:00:00.000Z", sequence: 1, turnSequence: 1 }],
+      retryJobId: "previous-job"
+    });
+
+    expect(html).toContain('class="session-list"');
+    expect(html).toContain('class="agent-footer"');
+    expect(html).toContain("Switch target");
+    expect(html).toContain("<textarea");
+    expect(html).toContain("Preserved draft");
+    expect(html).not.toContain('class="chat-pane chat-loading');
+    expect(html).toContain('aria-label="Transcript" aria-busy="true"');
+    expect(html).toContain('class="transcript-skeleton" aria-hidden="true"');
+    expect(html).not.toContain("Previous session history");
+    expect(html).not.toContain('class="empty-state"');
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/u);
+    expect(html).toMatch(/<button[^>]*chat-delete-session-button[^>]*disabled=""/u);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Continue the interrupted turn"/u);
+  });
+
+  it("shows an empty conversation only after messages are ready", async () => {
+    await initI18n();
+    const html = renderSessionPane();
+    expect(html).toContain('class="empty-state"');
+    expect(html).not.toContain('class="transcript-skeleton"');
+    expect(html).toContain("Preserved draft");
+    expect(html).not.toMatch(/<button[^>]*type="submit"[^>]*disabled=""/u);
+  });
+
+  it("exits the loading skeleton on failure and retains the session shell", async () => {
+    await initI18n();
+    const html = renderSessionPane({ transcriptPhase: "error", status: "error" });
+    expect(html).toContain('class="session-list"');
+    expect(html).toContain("Switch target");
+    expect(html).toContain("Preserved draft");
+    expect(html).not.toContain('class="transcript-skeleton"');
+    expect(html).not.toContain('class="empty-state"');
   });
 
   it("renders first-party capability approval provenance and revision", async () => {
