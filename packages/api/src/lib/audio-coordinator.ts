@@ -7,7 +7,7 @@ import {
 import type { AudioStatus, EffectiveAudioSettings, VoiceTurnRecord } from "@cyberos/shared";
 import { CyberAudioClient, speechChunks, type AudioServiceStatus } from "./audio-client.js";
 import type { AudioFocusRuntime } from "./audio-focus.js";
-import { unavailableAudioStatus, type AudioRuntime } from "./audio-runtime.js";
+import { unavailableAudioStatus, validateBleAudioSelection, type AudioRuntime } from "./audio-runtime.js";
 
 type AudioClient = Pick<CyberAudioClient, "test" | "transcribe" | "synthesize">;
 
@@ -61,6 +61,7 @@ export class AudioCoordinator {
   }
   async refreshStatus(): Promise<AudioStatus> { await this.tick(); return this.status(); }
   async validateSettings(settings: EffectiveAudioSettings): Promise<void> {
+    validateBleAudioSelection(settings.inputDeviceId, settings.outputDeviceId);
     if (!settings.enabled) return;
     const devices = await this.runtime.devices();
     if (!devices.inputs.some((device) => device.id === settings.inputDeviceId)) throw new Error("Select a paired trusted ATVV input");
@@ -218,6 +219,7 @@ export class AudioCoordinator {
   }
 
   private async speak(turn: VoiceTurnRecord | null, text: string, settings: EffectiveAudioSettings): Promise<void> {
+    validateBleAudioSelection(settings.inputDeviceId, settings.outputDeviceId);
     const epoch = this.epoch;
     const owner = `speech:${turn?.recordingId ?? "test"}`;
     const started = Date.now();

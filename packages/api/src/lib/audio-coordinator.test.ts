@@ -25,6 +25,46 @@ function fixture(transcript = "你好") {
 }
 
 describe("voice coordinator", () => {
+  it("rejects BLE playback directed to a different input, including output tests", async () => {
+    const { coordinator, runtime, db, played } = fixture();
+    const selected = "bluez:/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF";
+    const output = "ble-playback:/org/bluez/hci0/dev_11_22_33_44_55_66";
+    runtime.devices = async () => ({ inputs: [{ id: selected, name: "StickS3", connected: true }], outputs: [{ id: output, name: "StickS3 speaker", connected: true }] });
+    saveAudioSettings(db, { inputDeviceId: selected, outputDeviceId: output });
+    const { getAudioSettings } = await import("@cyberos/db");
+    await expect(coordinator.validateSettings(getAudioSettings(db)!)).rejects.toThrow(/same|match/i);
+    await expect(coordinator.testSpeech("test")).rejects.toThrow(/same|match/i);
+    expect(played).toEqual([]);
+  });
+  it("accepts the matching StickS3 speaker without changing the voice session", async () => {
+    const { coordinator, runtime, db, daemon } = fixture();
+    daemon.recordings = [];
+    await coordinator.settingsChanged();
+    const previousSession = coordinator.status().sessionId;
+    expect(previousSession).toBeTruthy();
+    const selected = "bluez:/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF";
+    const output = "ble-playback:/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF";
+    runtime.devices = async () => ({ inputs: [{ id: selected, name: "StickS3", connected: true }], outputs: [{ id: output, name: "StickS3 speaker", connected: true }] });
+    saveAudioSettings(db, { inputDeviceId: selected, outputDeviceId: output });
+    const { getAudioSettings } = await import("@cyberos/db");
+    await expect(coordinator.validateSettings(getAudioSettings(db)!)).resolves.toBeUndefined();
+    await coordinator.settingsChanged();
+    expect(coordinator.status().sessionId).toBe(previousSession);
+  });
+  it("never redirects synthesis that finishes after an input/output switch", async () => {
+    const { coordinator, client, db, daemon, played } = fixture();
+    daemon.recordings = [];
+    let synthesized!: (wav: Buffer) => void;
+    client.synthesize = vi.fn(() => new Promise<Buffer>((resolve) => { synthesized = resolve; }));
+    const speech = coordinator.testSpeech("old device reply");
+    const result = expect(speech).rejects.toThrow(/interrupt/i);
+    await vi.waitFor(() => expect(client.synthesize).toHaveBeenCalledOnce());
+    saveAudioSettings(db, { inputDeviceId: "bluez:/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF", outputDeviceId: "ble-playback:/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF" });
+    await coordinator.settingsChanged();
+    synthesized(Buffer.from("late reply"));
+    await result;
+    expect(played).toEqual([]);
+  });
   it("correlates final speech with the recording job, not unrelated chat output", async () => {
     const { db, coordinator, played } = fixture();
     await coordinator.tick(); await coordinator.idle();

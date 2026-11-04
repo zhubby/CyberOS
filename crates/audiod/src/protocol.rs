@@ -50,29 +50,55 @@ impl ImaAdpcm {
         let mut samples = Vec::with_capacity(bytes.len() * 2);
         for byte in bytes {
             for nibble in [byte >> 4, byte & 15] {
-                let step = STEP[self.index as usize];
-                let mut difference = step >> 3;
-                if nibble & 1 != 0 {
-                    difference += step >> 2;
-                }
-                if nibble & 2 != 0 {
-                    difference += step >> 1;
-                }
-                if nibble & 4 != 0 {
-                    difference += step;
-                }
-                self.predictor = (self.predictor
-                    + if nibble & 8 != 0 {
-                        -difference
-                    } else {
-                        difference
-                    })
-                .clamp(-32768, 32767);
-                self.index = (self.index + INDEX[(nibble & 7) as usize]).clamp(0, 88);
-                samples.push(self.predictor as i16);
+                samples.push(self.decode_nibble(nibble));
             }
         }
         samples
+    }
+    fn decode_nibble(&mut self, nibble: u8) -> i16 {
+        let step = STEP[self.index as usize];
+        let mut difference = step >> 3;
+        if nibble & 1 != 0 {
+            difference += step >> 2;
+        }
+        if nibble & 2 != 0 {
+            difference += step >> 1;
+        }
+        if nibble & 4 != 0 {
+            difference += step;
+        }
+        self.predictor = (self.predictor
+            + if nibble & 8 != 0 {
+                -difference
+            } else {
+                difference
+            })
+        .clamp(-32768, 32767);
+        self.index = (self.index + INDEX[(nibble & 7) as usize]).clamp(0, 88);
+        self.predictor as i16
+    }
+    pub fn encode(&mut self, samples: &[i16]) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(samples.len().div_ceil(2));
+        for (position, sample) in samples.iter().enumerate() {
+            let mut difference = i32::from(*sample) - self.predictor;
+            let mut nibble = if difference < 0 { 8 } else { 0 };
+            difference = difference.abs();
+            let mut step = STEP[self.index as usize];
+            for bit in [4, 2, 1] {
+                if difference >= step {
+                    nibble |= bit;
+                    difference -= step;
+                }
+                step >>= 1;
+            }
+            self.decode_nibble(nibble);
+            if position % 2 == 0 {
+                bytes.push(nibble << 4);
+            } else {
+                *bytes.last_mut().unwrap() |= nibble;
+            }
+        }
+        bytes
     }
 }
 

@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use zbus::{Connection, OwnedObjectPath, OwnedVariant, Proxy, Variant};
+use zbus::{Connection, MatchRule, MessageStream, OwnedObjectPath, OwnedVariant, Proxy, Variant};
 
 use crate::protocol::{Capabilities, Capture};
 use crate::server::{Configuration, Device, Recording, Shared};
@@ -10,10 +10,10 @@ const ATVV: &str = "ab5e0001-5a21-4f05-bc7d-af01f617b664";
 const TX: &str = "ab5e0002-5a21-4f05-bc7d-af01f617b664";
 const AUDIO: &str = "ab5e0003-5a21-4f05-bc7d-af01f617b664";
 const CONTROL: &str = "ab5e0004-5a21-4f05-bc7d-af01f617b664";
-type Properties = HashMap<String, OwnedVariant>;
-type Objects = HashMap<OwnedObjectPath, HashMap<String, Properties>>;
+pub(crate) type Properties = HashMap<String, OwnedVariant>;
+pub(crate) type Objects = HashMap<OwnedObjectPath, HashMap<String, Properties>>;
 
-async fn system_connection() -> Result<Connection, String> {
+pub(crate) async fn system_connection() -> Result<Connection, String> {
     tokio::time::timeout(
         Duration::from_secs(5),
         zbus::connection::Builder::system()
@@ -25,7 +25,7 @@ async fn system_connection() -> Result<Connection, String> {
     .map_err(|_| "System D-Bus unavailable".into())
 }
 
-async fn objects(connection: &Connection) -> Result<Objects, String> {
+pub(crate) async fn objects(connection: &Connection) -> Result<Objects, String> {
     Proxy::new(
         connection,
         "org.bluez",
@@ -38,10 +38,10 @@ async fn objects(connection: &Connection) -> Result<Objects, String> {
     .await
     .map_err(|_| "BlueZ enumeration failed".into())
 }
-fn text(properties: &Properties, key: &str) -> Option<String> {
+pub(crate) fn text(properties: &Properties, key: &str) -> Option<String> {
     properties.get(key)?.downcast_ref::<String>().ok()
 }
-fn flag(properties: &Properties, key: &str) -> bool {
+pub(crate) fn flag(properties: &Properties, key: &str) -> bool {
     properties
         .get(key)
         .and_then(|value| value.downcast_ref::<bool>().ok())
@@ -110,6 +110,43 @@ pub async fn speakers() -> Result<Vec<Device>, String> {
         }
     }
     Ok(speakers)
+}
+
+pub async fn playback_devices() -> Result<Vec<Device>, String> {
+    let connection = system_connection().await?;
+    Ok(playback_inventory(&objects(&connection).await?))
+}
+
+pub(crate) fn playback_inventory(inventory: &Objects) -> Vec<Device> {
+    let mut devices = Vec::new();
+    for (path, interfaces) in inventory {
+        let Some(properties) = interfaces.get("org.bluez.Device1") else {
+            continue;
+        };
+        if !flag(properties, "Paired") || !flag(properties, "Trusted") {
+            continue;
+        }
+        let supported = inventory.iter().any(|(child, interfaces)| {
+            child.as_str().starts_with(&format!("{path}/"))
+                && interfaces
+                    .get("org.bluez.GattService1")
+                    .and_then(|props| text(props, "UUID"))
+                    .as_deref()
+                    == Some(crate::playback::SERVICE)
+        });
+        if supported {
+            devices.push(Device {
+                id: format!("ble-playback:{path}"),
+                name: format!(
+                    "{} · StickS3 内置扬声器",
+                    text(properties, "Alias").unwrap_or_else(|| "CyberController".into())
+                ),
+                connected: flag(properties, "Connected"),
+            });
+        }
+    }
+    devices.sort_by(|left, right| left.id.cmp(&right.id));
+    devices
 }
 
 pub async fn run(state: Shared) {
@@ -216,8 +253,18 @@ async fn session(state: Shared, configuration: Configuration) -> Result<(), Stri
     )
     .await
     .map_err(|_| "ATVV control unavailable")?;
-    let mut audio_events = audio.receive_property_changed::<Vec<u8>>("Value").await;
-    let mut control_events = control.receive_property_changed::<Vec<u8>>("Value").await;
+    let rule = MatchRule::builder()
+        .msg_type(zbus::message::Type::Signal)
+        .sender("org.bluez")
+        .interface("org.freedesktop.DBus.Properties")
+        .member("PropertiesChanged")
+        .path_namespace(device_path)
+        .build()
+        .map_err(|_| "Invalid ATVV signal subscription")?;
+    let mut events =
+        MessageStream::for_match_rule(rule, &connection, std::num::NonZeroUsize::new(256))
+            .await
+            .map_err(|_| "ATVV signal subscription unavailable")?;
     control
         .call::<_, _, ()>("StartNotify", &())
         .await
@@ -236,8 +283,13 @@ async fn session(state: Shared, configuration: Configuration) -> Result<(), Stri
         let handshake = Instant::now();
         loop {
             tokio::select! {
-                notification = control_events.next() => {
-                    let data = notification.ok_or("ATVV control disconnected")?.get().await.map_err(|_| "ATVV control notification failed")?;
+                notification = events.next() => {
+                    let message = notification.ok_or("ATVV disconnected")?.map_err(|_| "ATVV notification failed")?;
+                    let Some((is_control, data)) = atvv_notification(&message, &control_path, &audio_path) else { continue; };
+                    if !is_control {
+                        if let Some(capture) = capture.as_mut() { capture.push(&data)?; }
+                        continue;
+                    }
                     match data.first().copied() {
                         Some(11) => {
                             let negotiated = Capabilities::parse(&data)?;
@@ -265,10 +317,6 @@ async fn session(state: Shared, configuration: Configuration) -> Result<(), Stri
                         _ => {}
                     }
                 }
-                notification = audio_events.next() => {
-                    let data = notification.ok_or("ATVV audio disconnected")?.get().await.map_err(|_| "ATVV audio notification failed")?;
-                    if let Some(capture) = capture.as_mut() { capture.push(&data)?; }
-                }
                 _ = timer.tick() => {
                     {
                         let current = state.lock().await;
@@ -289,6 +337,25 @@ async fn session(state: Shared, configuration: Configuration) -> Result<(), Stri
     let _ = audio.call::<_, _, ()>("StopNotify", &()).await;
     let _ = control.call::<_, _, ()>("StopNotify", &()).await;
     result
+}
+
+pub(crate) fn atvv_notification(
+    message: &zbus::Message,
+    control_path: &str,
+    audio_path: &str,
+) -> Option<(bool, Vec<u8>)> {
+    let header = message.header();
+    let path = header.path()?.as_str();
+    if path != control_path && path != audio_path {
+        return None;
+    }
+    let (interface, changed, _): (String, Properties, Vec<String>) =
+        message.body().deserialize().ok()?;
+    if interface != "org.bluez.GattCharacteristic1" {
+        return None;
+    }
+    let bytes = Vec::<u8>::try_from(changed.get("Value")?.clone()).ok()?;
+    Some((path == control_path, bytes))
 }
 
 async fn finish(state: &Shared, configuration: &Configuration, capture: Option<Capture>) {

@@ -308,6 +308,7 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn refuses_files_and_live_sockets_but_recovers_a_stale_socket() {
+        let _process_guard = crate::PROCESS_TEST_LOCK.lock().await;
         let directory = tempfile::tempdir().unwrap();
         let file = directory.path().join("regular");
         std::fs::write(&file, "preserve").unwrap();
@@ -317,6 +318,8 @@ mod tests {
         let listener = bind_socket(path.to_str().unwrap()).await.unwrap();
         assert!(bind_socket(path.to_str().unwrap()).await.is_err());
         drop(listener);
-        assert!(bind_socket(path.to_str().unwrap()).await.is_ok());
+        bind_socket(path.to_str().unwrap())
+            .await
+            .expect("stale audio socket should be replaced");
     }
 }

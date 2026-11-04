@@ -82,3 +82,39 @@ fn duration_and_notification_limits_are_enforced() {
         assert!(Capture::new(frame, seconds).is_err());
     }
 }
+
+#[test]
+fn ordered_bluez_events_preserve_sync_audio_and_release_without_truncation() {
+    let control = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF/service0001/char0004";
+    let audio = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF/service0001/char0003";
+    let mut capture = Capture::new(2, 1).unwrap();
+    let mut finished = None;
+    for (path, payload) in [
+        (control, vec![10u8, 0, 0, 1, 0, 0, 0]),
+        (audio, vec![0x12]),
+        (audio, vec![0x70]),
+        (control, vec![0]),
+    ] {
+        let changed: std::collections::HashMap<&str, zbus::Variant<'_>> =
+            std::collections::HashMap::from([("Value", zbus::Variant::from(payload))]);
+        let message =
+            zbus::Message::signal(path, "org.freedesktop.DBus.Properties", "PropertiesChanged")
+                .build(&(
+                    "org.bluez.GattCharacteristic1",
+                    changed,
+                    Vec::<String>::new(),
+                ))
+                .unwrap();
+        let (is_control, bytes) =
+            crate::bluez::atvv_notification(&message, control, audio).unwrap();
+        if !is_control {
+            capture.push(&bytes).unwrap();
+        } else if bytes[0] == 10 {
+            capture.synchronize(0, 0).unwrap();
+        } else {
+            finished = capture.wav();
+        }
+    }
+    let wav = finished.unwrap();
+    assert_eq!(&wav[44..], &[1, 0, 4, 0, 15, 0, 17, 0]);
+}

@@ -13,18 +13,20 @@ pub async fn devices() -> Result<Vec<Device>, String> {
             .kill_on_drop(true)
             .output(),
     )
-    .await
-    .map_err(|_| "Output enumeration timed out")?
-    .map_err(|_| "mpv is unavailable")?;
-    let text = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let mut devices = parse_devices(&text);
+    .await;
+    let mut devices = if let Ok(Ok(output)) = output {
+        parse_devices(&format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ))
+    } else {
+        Vec::new()
+    };
     for device in crate::bluez::speakers().await.unwrap_or_default() {
         devices.push(device);
     }
+    devices.extend(crate::bluez::playback_devices().await.unwrap_or_default());
     Ok(devices)
 }
 
@@ -75,6 +77,12 @@ pub async fn play(
     }
     let mut cancel = {
         let mut current = state.lock().await;
+        if device.starts_with("ble-playback:")
+            && (crate::playback::input_for_output(&device).is_none()
+                || crate::playback::input_for_output(&device) != current.config.input_device_id)
+        {
+            return Err("BLE output must match the same selected input".into());
+        }
         if current.playing
             || current.capture_id.is_some()
             || generation != current.generation
@@ -85,6 +93,11 @@ pub async fn play(
         current.playing = true;
         current.playback_cancel.subscribe()
     };
+    if device.starts_with("ble-playback:") {
+        let result = crate::ble_output::play(&wav, &device, volume, cancel, disconnected).await;
+        state.lock().await.playing = false;
+        return result;
+    }
     let result = async {
         let mut child = Command::new("mpv").args(["--no-config", "--no-video", "--no-terminal", "--really-quiet", "--ao=alsa", "--audio-fallback-to-null=no"])
             .arg(format!("--audio-device={device}")).arg(format!("--volume={volume}"))

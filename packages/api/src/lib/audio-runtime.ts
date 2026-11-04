@@ -20,7 +20,7 @@ export class UnixAudioRuntime implements AudioRuntime {
   async configure(config: { enabled: boolean; inputDeviceId: string | null; maxRecordingSeconds: number }): Promise<void> { await this.request({ type: "configure", config }); }
   recording(id: string): Promise<{ id: string; deviceId: string; wav: string }> { return this.request({ type: "recording", id }); }
   async ack(id: string): Promise<void> { await this.request({ type: "ack", id }); }
-  async play(wav: Buffer, device: string, volume: number, generation: number): Promise<void> { await this.request({ type: "play", wav: wav.toString("base64"), device, volume, generation }, 135_000); }
+  async play(wav: Buffer, device: string, volume: number, generation: number): Promise<void> { await this.request({ type: "play", wav: wav.toString("base64"), device, volume, generation }, device.startsWith("ble-playback:") ? 270_000 : 135_000); }
   async stop(): Promise<void> { await this.request({ type: "stop" }); }
 
   private request<Result>(request: Record<string, unknown>, timeout = 15_000): Promise<Result> {
@@ -57,6 +57,14 @@ export class UnixAudioRuntime implements AudioRuntime {
 }
 
 export function audioSocketPath(runDir: string): string { return path.join(runDir, "audiod.sock"); }
+
+export function validateBleAudioSelection(input: string | null, output: string | null): void {
+  if (!output?.startsWith("ble-playback:")) return;
+  const device = output.slice("ble-playback:".length);
+  if (!/^\/org\/bluez\/hci\d+\/dev_(?:[\da-f]{2}_){5}[\da-f]{2}$/iu.test(device) || input !== `bluez:${device}`) {
+    throw new Error("BLE playback must match the same selected StickS3 input");
+  }
+}
 
 export function unavailableAudioStatus(): AudioDaemonStatus {
   return { available: false, protocol: "unavailable", connected: false, recordingId: null, generation: 0, recordings: [], playing: false, error: "Audio daemon unavailable" };
