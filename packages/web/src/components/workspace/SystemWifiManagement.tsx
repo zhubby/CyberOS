@@ -446,6 +446,7 @@ export function SystemWifiManagement({
               <label>
                 <span className="visually-hidden">{t("workspace.management.network.wifi.device")}</span>
                 <CustomSelect
+                  className="control-compact"
                   value={selectedDevice?.id ?? ""}
                   ariaLabel={t("workspace.management.network.wifi.device")}
                   options={wifi.devices.map((device) => ({ value: device.id, label: device.name }))}

@@ -6,55 +6,9 @@
   height: 100%;
   container-type: inline-size;
 }
-.music-panel button,
-.music-dialog button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 32px;
-  min-height: 32px;
-  border: 1px solid transparent;
-  border-radius: 0;
-  color: var(--text);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-}
-.music-panel button:hover,
-.music-dialog button:hover {
-  border-color: var(--cyber-cyan);
-  background: var(--surface-hover);
-}
-.music-panel button:disabled:not([aria-busy="true"]),
-.music-dialog button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-.music-panel button[aria-pressed="true"],
-.music-dialog button[aria-pressed="true"] {
-  color: var(--accent);
-}
-.music-panel .primary-button,
-.music-dialog .primary-button,
-.music-dialog .music-play-button {
-  color: var(--accent-contrast);
-  background: var(--accent);
-  padding: 0 12px;
-  font-weight: 700;
-}
-.music-panel input,
-.music-panel select,
-.music-dialog input,
-.music-dialog select {
+.music-panel .custom-select,
+.music-dialog .custom-select {
   min-width: 0;
-  min-height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  padding: 6px 8px;
-  color: var(--text);
-  background: var(--input-deep-bg);
-  font: inherit;
 }
 .music-tabs {
   display: flex;
@@ -63,22 +17,6 @@
   gap: 0;
   overflow-x: auto;
   padding: 0 10px;
-  border-bottom: 1px solid var(--line);
-  background: var(--app-bg);
-}
-.music-tabs button {
-  flex: 0 0 auto;
-  padding: 8px 12px;
-  min-height: 38px;
-  color: var(--muted);
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-}
-.music-tabs button.is-active,
-.music-tabs button[aria-pressed="true"] {
-  color: var(--accent);
-  border-bottom-color: var(--red);
-  background: var(--surface);
 }
 .music-content {
   min-width: 0;
@@ -177,8 +115,6 @@
   justify-content: space-between;
   align-items: center;
   height: 32px;
-  color: var(--muted-2);
-  font: 10px var(--font-mono);
 }
 .music-album-meta button {
   min-height: 32px;
@@ -327,10 +263,6 @@
   gap: 6px;
   margin-top: 12px;
 }
-.music-detail-actions button {
-  padding: 0 8px;
-  font-size: 12px;
-}
 .music-playlist-list > button {
   display: flex;
   justify-content: flex-start;
@@ -353,14 +285,6 @@
   color: var(--muted);
   margin-top: 5px;
 }
-.music-empty {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-  padding: 32px 14px;
-  color: var(--muted);
-  gap: 10px;
-}
 .music-empty h3 {
   color: var(--text);
   margin: 0;
@@ -381,12 +305,7 @@
 }
 .music-error {
   margin: 0 0 10px;
-  padding: 10px;
   border-left: 3px solid var(--red);
-  color: var(--danger-text);
-  background: var(--danger-bg-soft);
-  overflow-wrap: anywhere;
-  font-size: 12px;
 }
 .music-inline-state {
   display: flex;
@@ -435,13 +354,7 @@
   accent-color: var(--accent);
 }
 .music-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
   padding: 20px;
-  background: var(--modal-backdrop);
 }
 .music-dialog {
   width: min(640px, 100%);
@@ -449,10 +362,7 @@
   overflow: auto;
   min-width: 0;
   padding: 18px;
-  border: 1px solid var(--line);
   border-top: 3px solid var(--red);
-  background: var(--dialog-bg);
-  box-shadow: 6px 6px 0 var(--app-bg);
 }
 .music-dialog > header,
 .music-source-list header {
@@ -476,19 +386,13 @@
   gap: 8px;
   margin-top: 18px;
 }
-.music-dialog footer > button {
-  border-color: var(--line);
-  padding: 0 10px;
-}
 .music-field {
-  display: grid;
-  gap: 8px;
   margin-bottom: 12px;
-  font-size: 12px;
-  color: var(--muted);
 }
-.music-field input,
-.music-field select {
+.music-field input {
+  width: 100%;
+}
+.music-field .custom-select {
   width: 100%;
 }
 .music-source-list > section {
@@ -636,10 +540,6 @@
   }
   .music-tabs {
     padding: 0 4px;
-  }
-  .music-tabs button {
-    padding: 8px;
-    font-size: 12px;
   }
   .music-track {
     gap: 2px;

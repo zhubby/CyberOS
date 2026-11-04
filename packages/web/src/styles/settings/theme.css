@@ -1,0 +1,112 @@
+/* Settings as a large system menu */
+
+.settings-backdrop,
+.session-delete-backdrop,
+.file-action-backdrop,
+.editor-backdrop,
+.photo-lightbox-backdrop,
+.management-modal-backdrop {
+  background: var(--modal-backdrop);
+  backdrop-filter: blur(2px);
+}
+
+.settings-modal {
+  grid-template-columns: 250px minmax(0, 1fr);
+}
+
+.settings-rail {
+  padding-top: 18px;
+}
+
+.settings-search input {
+  border-color: rgb(252 238 10 / 52%) !important;
+  color: var(--cyber-yellow) !important;
+  background: transparent !important;
+}
+
+.settings-search input::placeholder {
+  color: rgb(252 238 10 / 45%);
+}
+
+.settings-search svg {
+  color: var(--cyber-cyan);
+}
+
+.settings-nav button {
+  position: relative;
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.settings-nav button:hover {
+  border-color: var(--cyber-cyan);
+}
+
+.settings-nav button.is-active {
+  border-color: var(--cyber-yellow);
+}
+
+.settings-rail-footer {
+  border-top-color: rgb(252 238 10 / 34%);
+  color: rgb(252 238 10 / 56%);
+}
+
+.settings-content-header {
+  padding: 25px 32px 19px;
+  border-bottom: 2px solid var(--cyber-ink);
+}
+
+.settings-content-header p,
+.settings-section-card p,
+.settings-preference-field small {
+  color: var(--muted);
+}
+
+.settings-content-header button {
+  border: 1px solid var(--cyber-ink);
+}
+
+.settings-content-body {
+  padding: 22px 32px 32px;
+}
+
+.settings-page-grid,
+.settings-overview {
+  gap: 12px;
+}
+
+.settings-section-card {
+  position: relative;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--cyber-ink);
+}
+
+.settings-section-card::after {
+  position: absolute;
+  top: -1px;
+  right: 16px;
+  width: 48px;
+  height: 3px;
+  background: var(--cyber-red);
+  content: "";
+}
+
+.settings-section-card h3 {
+  font-size: 17px;
+  text-transform: uppercase;
+}
+
+.settings-actions {
+  border-top: 2px solid var(--cyber-ink);
+  background: #d8cc00;
+}
+
+.settings-area-list em,
+.settings-metric-grid article,
+.settings-policy-row,
+.approval-card-details div {
+  border: 1px solid var(--cyber-ink);
+  border-radius: 0;
+  background: rgb(5 10 14 / 7%);
+}

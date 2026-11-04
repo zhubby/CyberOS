@@ -1,0 +1,139 @@
+@media (max-width: 560px) {
+  .file-preview-backdrop {
+    padding: 8px;
+  }
+
+  .file-preview-dialog {
+    width: 100%;
+    height: calc(100dvh - 16px);
+  }
+
+  .file-preview-header {
+    min-height: 56px;
+    padding: 9px 10px;
+  }
+
+  .file-preview-actions {
+    gap: 4px;
+  }
+
+  .management-workload-docker {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+
+  .management-workload-docker > .management-action-cluster {
+    grid-column: 2 / -1;
+    justify-content: flex-end;
+  }
+
+  .docker-compose-app-backdrop {
+    padding: 8px;
+  }
+
+  .docker-compose-app-dialog {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .docker-compose-app-body,
+  .docker-compose-delete-confirmation {
+    padding: 13px;
+  }
+
+  .docker-compose-app-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .docker-compose-app-path {
+    grid-column: auto;
+  }
+
+  .docker-compose-editor-field textarea {
+    min-height: 220px;
+  }
+
+  .docker-compose-environment > div:first-child {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .docker-compose-environment-row {
+    grid-template-columns: minmax(0, 1fr) 28px;
+  }
+
+  .docker-compose-environment-row > label {
+    grid-column: 1;
+  }
+
+  .docker-compose-environment-row > span {
+    grid-column: 1;
+  }
+
+  .docker-compose-environment-row > button {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+
+  .docker-compose-app-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .docker-compose-app-footer > div,
+  .docker-compose-app-footer > button {
+    width: 100%;
+  }
+
+  .docker-compose-app-footer > div button {
+    flex: 1 1 120px;
+  }
+}
+
+@media (max-width: 390px) {
+  .file-preview-backdrop {
+    padding: 0;
+  }
+
+  .file-preview-dialog {
+    height: 100dvh;
+  }
+
+  .file-preview-header .preview-kind {
+    display: none;
+  }
+
+  .docker-compose-app-footer > div {
+    flex-direction: column;
+  }
+
+  .docker-compose-app-footer > div button {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-grid,
+  .workspace-panel-tab,
+  .file-row,
+  .file-row-actions {
+    transition: none;
+  }
+
+  .file-preview-backdrop,
+  .file-preview-dialog,
+  .file-row-action-menu,
+  .file-batch-toolbar {
+    animation: none;
+  }
+
+  .storage-pool-spinner,
+  .storage-pool-progress-track > span {
+    animation: none;
+  }
+
+  .storage-pool-progress-track > span {
+    transform: none;
+  }
+}
+
+/* Protocol-owned shares use the existing dashboard and viewport modal geometry. */

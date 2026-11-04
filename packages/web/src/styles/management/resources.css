@@ -1,0 +1,134 @@
+.management-workload-list,
+.management-resource-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.management-workload {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--subtle-bg);
+}
+
+.management-workload-docker {
+  grid-template-columns: 18px minmax(0, 1fr) auto minmax(118px, auto);
+}
+
+.system-storage-disk-row {
+  grid-template-columns: minmax(0, 1fr) 48px minmax(82px, auto);
+  min-height: 66px;
+}
+
+.storage-disk-identity {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.storage-disk-identity > svg {
+  color: var(--muted-2);
+}
+
+.storage-disk-name-button {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-disk-name-button:hover {
+  color: var(--accent-soft-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.storage-disk-name-button:focus-visible {
+  border-radius: 0;
+  outline: 2px solid var(--control-focus);
+  outline-offset: 3px;
+}
+
+.system-storage-disk-row > small {
+  font-size: 12px;
+}
+
+.management-workload svg[data-state="ready"] {
+  color: var(--success-text);
+}
+
+.management-workload svg[data-state="warning"] {
+  color: var(--warning-text);
+}
+
+.management-workload svg[data-state="offline"] {
+  color: var(--danger-text);
+}
+
+.management-workload svg[data-state="neutral"] {
+  color: var(--neutral-status-text);
+}
+
+.management-workload div,
+.management-workload strong,
+.management-workload span,
+.management-workload small {
+  min-width: 0;
+}
+
+.management-workload strong,
+.management-workload span,
+.management-workload small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.management-workload strong {
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.management-workload span,
+.management-workload small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.management-workload small {
+  justify-self: end;
+  color: var(--muted-2);
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.management-table-empty-state {
+  align-self: stretch;
+  color: var(--text);
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  line-height: 1.4;
+}

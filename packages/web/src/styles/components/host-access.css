@@ -1,0 +1,177 @@
+.host-access-picker {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.host-access-picker-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.host-access-picker-heading h3,
+.host-access-picker-heading p,
+.host-access-capability p {
+  margin: 0;
+}
+
+.host-access-picker-heading h3 {
+  font-size: 14px;
+}
+
+.host-access-picker-heading p,
+.host-access-capability p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.host-access-picker fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.host-access-picker legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 0;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-emphasis);
+  font-weight: 650;
+}
+
+.host-access-capability-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+
+.host-access-capability {
+  min-width: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.host-access-capability > label:first-child {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.host-access-capability > label:first-child input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.host-access-capability > label:first-child span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.host-access-capability strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.host-access-capability small {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+.host-access-capability[data-availability="degraded"] small,
+.host-access-capability[data-availability="degraded"] > p {
+  color: var(--yellow);
+}
+
+.host-access-capability:has(input:disabled) {
+  opacity: 0.68;
+}
+
+.host-access-target {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.host-access-target input {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.host-access-picker-status,
+.host-access-picker-error,
+.host-access-degraded-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.host-access-picker-error {
+  color: var(--red);
+}
+
+.host-access-degraded-confirmation {
+  align-items: flex-start;
+  color: var(--yellow);
+}
+
+.host-access-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.host-access-coverage span {
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.host-access-coverage span[data-state="requested"] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.host-access-coverage span[data-state="configured"],
+.host-access-coverage span[data-state="runtime"] {
+  border-color: var(--green);
+  color: var(--text);
+}
+
+.host-access-coverage span[data-state="degraded"] {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.host-access-coverage span[data-state="unavailable"] {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.host-access-coverage span[data-state="unsupported"] {
+  text-decoration: line-through;
+}

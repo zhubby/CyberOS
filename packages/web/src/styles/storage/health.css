@@ -1,0 +1,362 @@
+.storage-health-chart {
+  container-name: storage-health-chart;
+  container-type: inline-size;
+  min-width: 0;
+  padding: 12px 14px 14px;
+}
+
+.storage-health-plot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  min-height: 216px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.storage-health-plot {
+  --storage-health-tone: var(--neutral-status-text);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.storage-health-plot:first-child {
+  border-left: 0;
+}
+
+.storage-health-plot[data-state="ready"] {
+  --storage-health-tone: var(--success-text);
+}
+
+.storage-health-plot[data-state="warning"] {
+  --storage-health-tone: var(--warning-text);
+}
+
+.storage-health-plot[data-state="danger"] {
+  --storage-health-tone: var(--danger-text);
+}
+
+.storage-health-plot > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.storage-health-plot > header > div {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.storage-health-plot > header svg {
+  margin-top: 1px;
+  color: var(--storage-health-tone);
+}
+
+.storage-health-plot > header span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.storage-health-plot > header strong,
+.storage-health-plot > header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.storage-health-plot > header strong {
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.storage-health-plot > header small {
+  color: var(--muted-2);
+  font-size: 9.5px;
+  line-height: 1.3;
+}
+
+.storage-health-plot > header > em {
+  flex: 0 0 auto;
+  color: var(--storage-health-tone);
+  font-size: 11px;
+  font-style: normal;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.storage-health-capacity-ring {
+  position: relative;
+  align-self: center;
+  width: 112px;
+  height: 112px;
+  min-width: 0;
+  margin: 0 auto;
+}
+
+.storage-health-capacity-ring .recharts-responsive-container {
+  min-height: 0;
+}
+
+.storage-health-capacity-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  pointer-events: none;
+  text-align: center;
+}
+
+.storage-health-capacity-center strong {
+  max-width: 72px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-health-capacity-center span {
+  color: var(--muted-2);
+  font-size: 8px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.storage-health-capacity > p {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-health-smart-body,
+.storage-health-pools-body {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.storage-health-smart-track {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  overflow: hidden;
+  background: var(--surface-strong);
+}
+
+.storage-health-smart-track > span {
+  display: block;
+  min-width: 0;
+  height: 100%;
+  transition: width 140ms ease;
+}
+
+.storage-health-smart-track > span[data-state="passed"] {
+  background: var(--success-text);
+}
+
+.storage-health-smart-track > span[data-state="failed"] {
+  background: var(--danger-text);
+}
+
+.storage-health-smart-track > span[data-state="unknown"] {
+  background: var(--neutral-status-text);
+}
+
+.storage-health-smart-value,
+.storage-health-pool-value {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+
+.storage-health-smart-value strong,
+.storage-health-pool-value strong {
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.storage-health-smart-value span,
+.storage-health-pool-value span {
+  color: var(--muted-2);
+  font-size: 9px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.storage-health-legend {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.storage-health-legend li {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.storage-health-legend li > i {
+  width: 6px;
+  height: 6px;
+  background: var(--neutral-status-text);
+}
+
+.storage-health-legend li[data-state="passed"] > i {
+  background: var(--success-text);
+}
+
+.storage-health-legend li[data-state="failed"] > i {
+  background: var(--danger-text);
+}
+
+.storage-health-legend li strong {
+  color: var(--text);
+  font-family: var(--font-emphasis);
+}
+
+.storage-health-pool-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 34px;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.storage-health-pool-track > span {
+  flex: 1 1 14px;
+  width: 14px;
+  max-width: 32px;
+  height: 16px;
+  border: 1px solid var(--line);
+  background: var(--neutral-status-bg);
+}
+
+.storage-health-pool-track > span[data-state="ready"] {
+  border-color: var(--success-border);
+  background: var(--success-text);
+}
+
+.storage-health-pool-track > span[data-state="warning"] {
+  border-color: var(--warning-border);
+  background: var(--warning-text);
+}
+
+.storage-health-pool-track > span[data-state="offline"] {
+  border-color: var(--danger-border);
+  background: var(--danger-text);
+}
+
+.storage-health-pool-empty {
+  display: grid;
+  min-height: 50px;
+  place-items: center;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+.storage-pool-usage-chart {
+  position: relative;
+  width: 122px;
+  height: 122px;
+  flex: 0 0 122px;
+}
+
+.storage-pool-usage-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  pointer-events: none;
+  text-align: center;
+}
+
+.storage-pool-usage-center strong {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.storage-pool-usage-center span {
+  color: var(--muted-2);
+  font-size: 9px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.management-skeleton-storage-health {
+  min-height: 236px;
+}
+
+.management-skeleton-storage-plot {
+  min-height: 208px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storage-health-smart-track > span {
+    transition: none;
+  }
+}
+
+@container storage-health-chart (max-width: 620px) {
+  .storage-health-plot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .storage-health-plot:nth-child(3) {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line-soft);
+    border-left: 0;
+  }
+}
+
+@container storage-health-chart (max-width: 390px) {
+  .storage-health-plot-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .storage-health-plot,
+  .storage-health-plot:nth-child(3) {
+    grid-column: auto;
+    border-top: 1px solid var(--line-soft);
+    border-left: 0;
+  }
+
+  .storage-health-plot:first-child {
+    border-top: 0;
+  }
+}

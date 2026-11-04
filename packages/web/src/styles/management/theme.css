@@ -1,0 +1,70 @@
+.management-body {
+  gap: 14px;
+  padding: 18px 20px 24px;
+}
+
+.management-command-panel {
+  padding: 10px 4px 20px;
+  border: 0;
+  border-bottom: 2px solid var(--cyber-ink);
+  border-radius: 0;
+}
+
+.management-command-copy h3 {
+  font-size: 20px;
+  text-transform: uppercase;
+}
+
+.management-metric {
+  min-height: 104px;
+  border-top: 3px solid var(--cyber-ink);
+}
+
+.management-emblem {
+  border: 2px solid var(--cyber-ink);
+}
+
+.management-dashboard-grid > .react-grid-item.react-grid-placeholder {
+  border: 2px solid var(--cyber-cyan);
+  background: rgb(0 240 255 / 20%);
+}
+
+.management-skeleton-block,
+.skeleton-block {
+  border-radius: 0;
+  background-color: var(--skeleton-base);
+  background-image: linear-gradient(90deg, var(--skeleton-base), var(--skeleton-highlight), var(--skeleton-base));
+  background-size: 220% 100%;
+}
+
+.workspace-drop-overlay {
+  background: rgb(252 238 10 / 90%);
+  box-shadow: inset 0 0 0 3px var(--cyber-cyan);
+}
+
+.workspace-drop-panel {
+  border: 2px solid var(--cyber-ink);
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: 7px 7px 0 var(--cyber-red);
+}
+
+.workspace-empty-state > svg,
+.empty-state > svg,
+.preview-empty > svg {
+  border: 1px solid var(--cyber-ink);
+  border-radius: 0;
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+  box-shadow: 3px 3px 0 var(--cyber-red);
+}
+
+.empty-state strong,
+.preview-empty strong,
+.workspace-empty-state strong,
+.notification-empty strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  text-transform: uppercase;
+}

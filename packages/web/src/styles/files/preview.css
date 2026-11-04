@@ -1,0 +1,131 @@
+.preview-kind {
+  flex: 0 0 auto;
+  text-transform: capitalize;
+}
+
+.preview-tool-button {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.preview-tool-button:hover {
+  color: var(--text);
+  border-color: rgb(255 255 255 / 13%);
+  background: var(--surface-hover);
+}
+
+.preview-tool-button:focus-visible {
+  outline: 2px solid var(--control-focus);
+  outline-offset: 3px;
+}
+
+.file-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(8 9 13 / 68%);
+  backdrop-filter: blur(8px);
+  animation: file-preview-backdrop-in 140ms ease-out both;
+}
+
+.file-preview-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1120px, calc(100vw - 48px));
+  height: min(780px, calc(100dvh - 48px));
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  animation: file-preview-dialog-in 140ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.file-preview-backdrop[data-state="closing"] {
+  animation: file-preview-backdrop-out 140ms ease-in both;
+  pointer-events: none;
+}
+
+.file-preview-backdrop[data-state="closing"] .file-preview-dialog {
+  animation: file-preview-dialog-out 140ms ease-in both;
+}
+
+.file-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--channel-bg);
+}
+
+.file-preview-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.file-preview-title h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.file-preview-content {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+@keyframes file-preview-backdrop-in {
+  from { opacity: 0; }
+}
+
+@keyframes file-preview-backdrop-out {
+  to { opacity: 0; }
+}
+
+@keyframes file-preview-dialog-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+@keyframes file-preview-dialog-out {
+  to {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}

@@ -1,0 +1,297 @@
+.workspace-stage[data-panel="photos"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.photo-library {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background: var(--footer-bg);
+}
+
+.photo-query-panel {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--footer-bg);
+}
+
+.photo-query-toolbar,
+.photo-common-filters,
+.photo-advanced-heading,
+.photo-map-toolbar,
+.photo-map-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.photo-search-field {
+  display: flex;
+  flex: 1 1 260px;
+  align-items: center;
+  gap: 7px;
+  min-width: 160px;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--input-bg);
+}
+
+.photo-search-field > button {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+}
+
+.photo-search-field > button:hover,
+.photo-search-field > button:focus-visible {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.photo-search-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 11px;
+}
+
+.photo-view-switch,
+.photo-condition-mode {
+  display: inline-grid;
+  grid-auto-flow: column;
+  padding: 2px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--subtle-bg);
+}
+
+.photo-view-switch button,
+.photo-condition-mode button,
+.photo-advanced-heading > button,
+.photo-map-toolbar button,
+.photo-reveal-sensitive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.photo-view-switch button[aria-selected="true"],
+.photo-condition-mode button[aria-pressed="true"] {
+  border-color: var(--line-soft);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.photo-sort-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted-2);
+  font-size: 10px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.photo-sort-field > button,
+.photo-common-filters input,
+.photo-condition-row input {
+  height: 32px;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--input-bg);
+  font-size: 10.5px;
+}
+
+.photo-sort-field .custom-select,
+.photo-common-filters .custom-select,
+.photo-condition-row .custom-select {
+  min-width: 0;
+}
+
+.photo-sort-field .custom-select {
+  flex: 1 1 132px;
+  width: 132px;
+}
+
+.photo-sort-field > button {
+  width: 32px;
+  padding: 0;
+}
+
+.photo-common-filters {
+  align-items: end;
+  flex-wrap: wrap;
+  padding-bottom: 1px;
+}
+
+.photo-common-filters > label {
+  display: grid;
+  flex: 1 1 116px;
+  gap: 4px;
+  min-width: 108px;
+  color: var(--muted-2);
+  font-size: 9.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.photo-common-filters > label:nth-child(2),
+.photo-common-filters > label:nth-child(3) {
+  flex-basis: 150px;
+}
+
+.photo-common-filters > label:nth-child(4) {
+  flex-basis: 232px;
+}
+
+.photo-range-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.photo-range-inputs input {
+  width: 100%;
+  padding: 0 5px;
+}
+
+.photo-common-filters .photo-location-filter {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 29px;
+  padding: 0 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--input-bg);
+}
+
+.photo-common-filters .photo-location-filter input {
+  width: 13px;
+  height: 13px;
+}
+
+.photo-keyword-facets {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+}
+
+.photo-keyword-facets button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--subtle-bg);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.photo-keyword-facets button[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.photo-keyword-facets button span {
+  color: var(--muted-2);
+}
+
+.photo-advanced-builder {
+  display: grid;
+  gap: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.photo-advanced-heading {
+  justify-content: space-between;
+}
+
+.photo-advanced-heading > button,
+.photo-reveal-sensitive,
+.photo-map-toolbar button {
+  border-color: var(--line-soft);
+  background: var(--surface);
+}
+
+.photo-condition-row {
+  display: grid;
+  grid-template-areas: "field operator value value-to remove";
+  grid-template-columns: minmax(170px, 1.4fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(90px, .7fr) 29px;
+  gap: 5px;
+}
+
+.photo-condition-field {
+  grid-area: field;
+}
+
+.photo-condition-operator {
+  grid-area: operator;
+}
+
+.photo-condition-value {
+  grid-area: value;
+}
+
+.photo-condition-value-to {
+  grid-area: value-to;
+}
+
+.photo-condition-row > button {
+  grid-area: remove;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.photo-query-summary {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted-2);
+  font-size: 9.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}

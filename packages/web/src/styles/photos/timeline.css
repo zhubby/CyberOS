@@ -1,0 +1,200 @@
+.photo-timeline {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  padding: 16px;
+}
+
+.photo-day {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.photo-day > header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.photo-day h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.photo-day > header span {
+  color: var(--muted-2);
+  font-size: 10px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.photo-wall {
+  column-width: 128px;
+  column-gap: 6px;
+}
+
+.photo-tile {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 6px;
+  overflow: hidden;
+  vertical-align: top;
+  break-inside: avoid;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.photo-tile.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.photo-open {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+}
+
+.photo-open img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: filter 140ms ease;
+}
+
+.photo-media-badge {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--modal-bg);
+  font-size: 9px;
+  font-family: var(--font-emphasis);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.photo-media-badge.is-video {
+  min-width: 24px;
+  padding: 0;
+  color: var(--text);
+  background: var(--accent);
+}
+
+.photo-media-badge.is-raw {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.photo-name {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  min-width: 0;
+  padding: 5px 7px;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--modal-bg);
+  font-size: 9.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.photo-open:focus-visible .photo-name,
+.photo-tile:hover .photo-name {
+  opacity: 1;
+}
+
+.photo-select {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: white;
+  background: var(--modal-bg);
+}
+
+.photo-select > span {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--muted);
+  border-radius: 2px;
+}
+
+.photo-select[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: white;
+  background: var(--accent);
+}
+
+.photo-pagination-sentinel {
+  display: grid;
+  min-height: 40px;
+  place-items: center;
+}
+
+.photo-pagination-sentinel > span,
+.photo-pagination-error {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.photo-pagination-error .secondary-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  font-size: 10.5px;
+}
+
+.photo-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 72%);
+}

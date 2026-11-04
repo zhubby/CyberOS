@@ -253,7 +253,7 @@ export function MusicTakeoverDialog({
         <h2 id="music-takeover-title">{title}</h2>
         <p>{body}</p>
         <footer>
-          <button type="button" disabled={busy} onClick={onCancel}>
+          <button type="button" disabled={busy} onClick={onCancel} className="plain-button">
             {t("common.actions.cancel")}
           </button>
           <button

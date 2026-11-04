@@ -1,0 +1,143 @@
+@container system-wifi-section (max-width: 760px) {
+  .system-wifi-device-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .system-wifi-device-details {
+    justify-content: space-between;
+    padding-left: 49px;
+  }
+
+  .system-wifi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-wifi-list-panel + .system-wifi-list-panel {
+    padding-top: 12px;
+    padding-left: 0;
+    border-top: 1px solid var(--line-soft);
+    border-left: 0;
+  }
+}@container system-wifi-section (max-width: 620px) {
+  .system-wifi-header {
+    display: grid;
+    gap: 10px;
+  }
+
+  .system-wifi-toolbar {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .system-wifi-toolbar label {
+    flex: 1 1 120px;
+  }
+
+  .system-wifi-toolbar .custom-select {
+    width: 100%;
+  }
+
+  .system-wifi-toolbar > button:not(.management-icon-action) {
+    flex: 1 1 auto;
+  }
+
+  .system-wifi-content {
+    padding: 10px;
+  }
+
+  .system-wifi-device-details {
+    align-items: stretch;
+    flex-direction: column;
+    padding-left: 49px;
+  }
+
+  .system-wifi-device-details dl {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .system-wifi-device-details > button {
+    width: 100%;
+  }
+
+  .system-wifi-network-row,
+  .system-wifi-profile-row {
+    gap: 7px;
+  }
+
+  .system-wifi-network-row > button span {
+    display: none;
+  }
+
+  .system-wifi-network-row > button {
+    width: 32px;
+    padding: 0;
+  }
+
+  .system-wifi-profile-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+
+  .system-wifi-profile-row > svg {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .system-wifi-profile-row > div:not(.system-wifi-row-actions) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .system-wifi-profile-row > .management-status-pill {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .system-wifi-profile-row > .system-wifi-row-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .system-wifi-hotspot-bar {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+  }
+
+  .system-wifi-hotspot-bar > button:not(.management-icon-action) {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+
+  .system-wifi-hotspot-bar > .management-icon-action {
+    grid-row: 2;
+  }
+
+  .system-wifi-hotspot-bar > .management-icon-action:last-child {
+    grid-column: 3;
+  }
+}@container system-wifi-section (max-width: 520px) {
+  .system-wifi-device-details {
+    padding-left: 0;
+  }
+}@media (prefers-reduced-motion: reduce) {
+  .system-wifi-readonly-signal-track > span {
+    transition: none;
+  }
+}@media (max-width: 620px) {
+  .system-wifi-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-wifi-dialog-actions,
+  .system-wifi-confirm-dialog > footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-wifi-dialog-actions button,
+  .system-wifi-confirm-dialog > footer button {
+    width: 100%;
+    min-width: 0;
+  }
+}

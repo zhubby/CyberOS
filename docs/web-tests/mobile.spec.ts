@@ -213,8 +213,9 @@ test("browser playback survives App navigation, minimizing and breakpoint change
   await page.locator(".video-detail .primary-button").click();
   const video = page.locator(".browser-player video"); await expect(video).toBeVisible();
   await video.evaluate(async (node: HTMLVideoElement) => { node.loop = true; node.muted = true; await node.play(); Object.assign(window, { originalMobileVideo: node }); });
-  await page.locator(".browser-player .custom-select-trigger").click();
-  await page.goBack(); await expect(page.locator(".browser-player [role='listbox']")).toHaveCount(0);
+  await page.getByRole("button", { name: "Control device", exact: true }).click();
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await page.goBack(); await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(page.locator(".browser-player-backdrop")).not.toHaveClass(/is-minimized/);
   await page.getByRole("button", { name: "Minimize player", exact: true }).click();
   await expect(page.locator(".browser-player-backdrop")).toHaveClass(/is-minimized/);

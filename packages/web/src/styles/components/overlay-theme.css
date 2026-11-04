@@ -1,0 +1,79 @@
+/* Dialogs, menus, and notifications */
+
+.activity-popover {
+  border: 2px solid var(--cyber-ink);
+}
+
+.activity-popover li,
+.file-row-action-menu button {
+  border-bottom: 1px solid rgb(5 10 14 / 24%);
+  color: var(--cyber-ink);
+  background: transparent;
+}
+
+.activity-popover li:hover,
+.file-row-action-menu button:hover {
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+}
+
+.notification-drawer {
+  border-left: 2px solid var(--cyber-red);
+}
+
+.notification-drawer-header,
+.notification-tabs,
+.notification-drawer-summary {
+  border-bottom-color: rgb(252 238 10 / 34%);
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+}
+
+.notification-drawer-header h2::before {
+  color: var(--cyber-cyan);
+}
+
+.notification-drawer-actions button {
+  border: 1px solid rgb(252 238 10 / 45%);
+}
+
+.notification-item {
+  border-bottom-color: rgb(252 238 10 / 24%);
+}
+
+.notification-item:hover {
+  color: var(--cyber-ink);
+}
+
+.notification-item[data-unread="true"] {
+  color: var(--cyber-yellow);
+}
+
+.notification-item[data-unread="true"]:hover {
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+}
+
+.notification-status-icon {
+  border: 1px solid currentColor;
+  border-radius: 0;
+  color: var(--cyber-cyan);
+  background: transparent;
+}
+
+.app-notification-region {
+  z-index: 120;
+}
+
+.app-notification {
+  border: 2px solid var(--cyber-ink);
+  border-left: 6px solid var(--cyber-red);
+}
+
+.app-notification[data-tone="success"] {
+  border-left-color: #087f52;
+}
+
+.app-notification[data-tone="warning"] {
+  border-left-color: #7a5100;
+}

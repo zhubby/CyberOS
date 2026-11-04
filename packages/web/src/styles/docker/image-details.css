@@ -1,0 +1,330 @@
+.docker-registry-dialog {
+  width: min(720px, 100%);
+}
+
+.docker-image-dialog-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.docker-image-dialog-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  white-space: normal;
+}
+
+.docker-image-detail-name {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--code-font-family);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.docker-image-dialog-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.docker-image-detail-body,
+.docker-image-pull-body,
+.docker-registry-form,
+.docker-registry-list-body,
+.docker-image-confirmation {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+  background: var(--footer-bg);
+}
+
+.docker-image-detail-body,
+.docker-image-pull-body,
+.docker-registry-form,
+.docker-registry-list-body {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.docker-image-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.docker-image-detail-grid > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--channel-bg);
+}
+
+.docker-image-detail-grid > div:first-child {
+  grid-column: 1 / -1;
+}
+
+.docker-image-detail-grid dt,
+.docker-image-reference-list h3,
+.docker-registry-field > span {
+  color: var(--muted-2);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.docker-image-detail-grid dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+}
+
+.docker-image-detail-grid code,
+.docker-image-reference-list code,
+.docker-image-confirmation > code {
+  font-family: var(--code-font-family);
+  font-size: 10.5px;
+}
+
+.docker-image-reference-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.docker-image-reference-list h3 {
+  margin: 0;
+}
+
+.docker-image-reference-list code,
+.docker-image-reference-list > span {
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+  border-left: 2px solid var(--accent-soft-text);
+  color: var(--muted);
+  background: var(--code-bg);
+}
+
+.docker-image-confirmation {
+  display: grid;
+  align-content: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.docker-image-confirmation > svg {
+  color: var(--warning-text);
+}
+
+.docker-image-confirmation h3,
+.docker-image-confirmation p {
+  margin: 0;
+}
+
+.docker-image-confirmation h3 {
+  font-size: 17px;
+}
+
+.docker-image-confirmation p {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.docker-image-confirmation > label,
+.docker-image-confirmation > code,
+.docker-image-confirmation > .docker-image-error {
+  grid-column: 1 / -1;
+}
+
+.docker-image-confirmation > code {
+  overflow-wrap: anywhere;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--code-bg);
+}
+
+.docker-image-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--channel-bg);
+}
+
+.docker-registry-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.docker-registry-field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  outline: none;
+  color: var(--text);
+  background: var(--subtle-bg);
+  font: inherit;
+  font-size: 12px;
+}
+
+.docker-registry-field .custom-select,
+.docker-image-confirmation .custom-select {
+  width: 100%;
+}
+
+.docker-registry-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft-bg);
+}
+
+.docker-image-registry-match {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--muted-2);
+  background: var(--channel-bg);
+}
+
+.docker-image-registry-match[data-state="ready"] > svg {
+  color: var(--success-text);
+}
+
+.docker-image-registry-match div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.docker-image-registry-match strong,
+.docker-image-registry-match span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docker-image-registry-match strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.docker-image-registry-match span {
+  font-size: 10.5px;
+}
+
+.docker-registry-password-note,
+.docker-registry-storage-note {
+  padding: 0;
+  border: 0;
+  color: var(--success-text);
+  background: transparent;
+}
+
+.docker-registry-storage-note {
+  color: var(--muted);
+}
+
+.docker-registry-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.docker-registry-list-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.docker-registry-list,
+.docker-registry-loading {
+  display: grid;
+  gap: 8px;
+}
+
+.docker-registry-loading {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.docker-registry-list article {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--channel-bg);
+}
+
+.docker-registry-list article > svg {
+  color: var(--success-text);
+}
+
+.docker-registry-list article > div:nth-child(2) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.docker-registry-list strong,
+.docker-registry-list span,
+.docker-registry-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docker-registry-list strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.docker-registry-list span,
+.docker-registry-list small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.docker-registry-list em {
+  color: var(--success-text);
+  font-size: 10.5px;
+  font-style: normal;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  white-space: nowrap;
+}

@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
+import { readStylesheet } from "../styles/test-utils.js";
 
 describe("TV display policy", () => {
   it("keeps the HDMI shell visible while idle", async () => {
     const [component, styles] = await Promise.all([
       readFile(new URL("./TvApp.tsx", import.meta.url), "utf8"),
-      readFile(new URL("./tv.css", import.meta.url), "utf8")
+      readStylesheet(new URL("./tv.css", import.meta.url))
     ]);
 
     expect(component).not.toContain("IDLE_TIMEOUT_MS");
@@ -16,7 +17,7 @@ describe("TV display policy", () => {
   it("uses the shared dark HUD without moving focused controls", async () => {
     const [entry, styles, tokens] = await Promise.all([
       readFile(new URL("./main.tsx", import.meta.url), "utf8"),
-      readFile(new URL("./tv.css", import.meta.url), "utf8"),
+      readStylesheet(new URL("./tv.css", import.meta.url)),
       readFile(new URL("../../../shared/src/hud-tokens.css", import.meta.url), "utf8")
     ]);
 

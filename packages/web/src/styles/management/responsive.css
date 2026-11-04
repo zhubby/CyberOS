@@ -1,0 +1,74 @@
+@container workspace-stage (max-width: 620px) {
+  .management-header {
+    grid-template-areas: "icon copy actions";
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 8px;
+    min-height: 64px;
+    padding: 12px;
+  }
+
+  .panel-header-actions {
+    width: auto;
+    max-width: min(200px, 40cqw);
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+
+  .panel-header-actions::-webkit-scrollbar {
+    display: none;
+  }
+}@media (max-width: 620px) {
+
+  .management-dialog-backdrop {
+    padding: 10px;
+  }
+}@media (max-width: 1180px) {
+
+  .management-body {
+    grid-template-columns: 1fr;
+  }
+
+  .management-lower-grid {
+    grid-template-columns: 1fr;
+  }
+}@media (max-width: 1040px) {
+
+  .management-body {
+    padding: 10px;
+  }
+
+  .management-command-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .management-emblem {
+    width: 48px;
+    height: 48px;
+  }
+}@media (max-width: 560px) {
+
+  .management-row-action span {
+    display: none;
+  }
+
+  .management-fact-list,
+  .management-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .management-modal.storage-pool-modal {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+  }
+
+  .management-workload {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+
+  .management-workload small {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+}

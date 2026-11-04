@@ -230,7 +230,7 @@ export function MusicPlayerDetails({
                       );
                   }}
                   aria-label={t("music.favorite")}
-                  data-tooltip={t("music.favorite")}
+                  data-tooltip={t("music.favorite")} className="plain-button"
                 >
                   <Heart
                     size={17}
@@ -249,7 +249,7 @@ export function MusicPlayerDetails({
                     })
                   }
                   data-tooltip={t("music.shuffle")}
-                  aria-label={t("music.shuffle")}
+                  aria-label={t("music.shuffle")} className="plain-button"
                 >
                   <Shuffle size={17} />
                 </button>
@@ -270,7 +270,7 @@ export function MusicPlayerDetails({
                             : "off",
                     })
                   }
-                  aria-pressed={status.repeat !== "off"}
+                  aria-pressed={status.repeat !== "off"} className="plain-button"
                 >
                   {status.repeat === "one" ? (
                     <Repeat1 size={17} />
@@ -288,7 +288,7 @@ export function MusicPlayerDetails({
                 disabled={busy || !status.queue.length}
                 onClick={() => void execute({ type: "previous" })}
                 aria-label={t("music.previous")}
-                data-tooltip={t("music.previous")}
+                data-tooltip={t("music.previous")} className="plain-button"
               >
                 <SkipBack size={20} />
               </button>
@@ -306,7 +306,7 @@ export function MusicPlayerDetails({
                 disabled={busy || !status.queue.length}
                 onClick={() => void execute({ type: "next" })}
                 aria-label={t("music.next")}
-                data-tooltip={t("music.next")}
+                data-tooltip={t("music.next")} className="plain-button"
               >
                 <SkipForward size={20} />
               </button>
@@ -337,7 +337,7 @@ export function MusicPlayerDetails({
               onClick={() => {
                 setDrawerOpen(false);
                 onOpenBluetoothSettings();
-              }}
+              }} className="plain-button"
             >
               <Bluetooth size={16} aria-hidden="true" />
               {t("music.bluetoothSettings")}
@@ -353,7 +353,7 @@ export function MusicPlayerDetails({
               />
               <span>{Math.round(status.volume)}</span>
             </label>
-            {playback?.nas?.owner === "music" && playback.nas.sessionId ? <button disabled={busy} aria-pressed={playback.nas.preferences.musicMuted} onClick={() => void playback.control({ type: "set-muted", sessionId: playback.nas!.sessionId!, muted: !playback.nas!.preferences.musicMuted }).catch(error => setDeviceError(error instanceof Error ? error.message : String(error)))}>{t("playback.mute")}</button> : null}
+            {playback?.nas?.owner === "music" && playback.nas.sessionId ? <button disabled={busy} aria-pressed={playback.nas.preferences.musicMuted} onClick={() => void playback.control({ type: "set-muted", sessionId: playback.nas!.sessionId!, muted: !playback.nas!.preferences.musicMuted }).catch(error => setDeviceError(error instanceof Error ? error.message : String(error)))} className="plain-button">{t("playback.mute")}</button> : null}
           </div>
           {status.owner === "video" ? (
             <p className="music-inline-state">
@@ -390,14 +390,14 @@ export function MusicPlayerDetails({
             <button
               type="button"
               aria-pressed={tab === "queue"}
-              onClick={() => setTab("queue")}
+              onClick={() => setTab("queue")} className="plain-button"
             >
               {t("music.queue")} <span>{status.queue.length}</span>
             </button>
             <button
               type="button"
               aria-pressed={tab === "lyrics"}
-              onClick={() => setTab("lyrics")}
+              onClick={() => setTab("lyrics")} className="plain-button"
             >
               {t("music.lyrics")}
             </button>
@@ -447,7 +447,7 @@ export function MusicPlayerDetails({
                     </span>
                     <button
                       type="button"
-                      className="music-queue-title"
+                      className="plain-button music-queue-title"
                       data-music-reorder-title=""
                       disabled={busy}
                       aria-current={
@@ -466,7 +466,7 @@ export function MusicPlayerDetails({
                       data-tooltip={t("music.moveUp")}
                       data-music-reorder="up"
                       disabled={busy || index === 0}
-                      onClick={() => void reorder(item, -1)}
+                      onClick={() => void reorder(item, -1)} className="plain-button"
                     >
                       <ArrowUp size={15} />
                     </button>
@@ -476,7 +476,7 @@ export function MusicPlayerDetails({
                       data-tooltip={t("music.moveDown")}
                       data-music-reorder="down"
                       disabled={busy || index === status.queue.length - 1}
-                      onClick={() => void reorder(item, 1)}
+                      onClick={() => void reorder(item, 1)} className="plain-button"
                     >
                       <ArrowDown size={15} />
                     </button>
@@ -487,7 +487,7 @@ export function MusicPlayerDetails({
                       disabled={busy}
                       onClick={() =>
                         void execute({ type: "remove", itemId: item.id })
-                      }
+                      } className="plain-button"
                     >
                       <Trash2 size={15} />
                     </button>
@@ -498,14 +498,14 @@ export function MusicPlayerDetails({
                 <button
                   type="button"
                   disabled={busy || !status.queue.length}
-                  onClick={() => void execute({ type: "clear" })}
+                  onClick={() => void execute({ type: "clear" })} className="plain-button"
                 >
                   {t("music.clearQueue")}
                 </button>
                 <button
                   type="button"
                   disabled={!status.queue.length}
-                  onClick={() => setSaveOpen(true)}
+                  onClick={() => setSaveOpen(true)} className="plain-button"
                 >
                   {t("music.saveQueue")}
                 </button>

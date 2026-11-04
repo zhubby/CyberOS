@@ -1,0 +1,322 @@
+.photo-filter-popover {
+  flex: 0 0 auto;
+}
+
+.photo-runtime-alert-popover {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.photo-filter-trigger,
+.photo-runtime-alert,
+.photo-select-loaded {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.photo-filter-trigger.is-active {
+  border-color: var(--accent);
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.photo-runtime-alert {
+  cursor: pointer;
+}
+
+.photo-runtime-alert[data-tone="warning"] {
+  border-color: var(--warning-border, var(--line-soft));
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.photo-runtime-alert[data-tone="danger"] {
+  border-color: var(--danger-border, var(--line-soft));
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.photo-filter-trigger:focus-visible,
+.photo-runtime-alert:focus-visible,
+.photo-select-loaded:focus-visible {
+  outline: 2px solid var(--control-focus, var(--accent));
+  outline-offset: 3px;
+}
+
+.photo-runtime-alert-details {
+  position: absolute;
+  z-index: 42;
+  top: calc(100% + 7px);
+  right: 0;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid var(--danger-border, var(--cyberos-color-border-emphasis));
+  color: var(--text);
+  background: var(--footer-bg);
+  box-shadow: 8px 8px 0 rgb(0 0 0 / 28%);
+}
+
+.photo-runtime-alert-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.photo-runtime-alert-heading strong {
+  font-family: var(--font-emphasis);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.photo-runtime-alert-heading button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  color: var(--muted);
+  background: transparent;
+}
+
+.photo-runtime-alert-heading button:hover,
+.photo-runtime-alert-heading button:focus-visible {
+  border-color: var(--control-focus, var(--accent));
+  color: var(--text);
+  outline: 0;
+}
+
+.photo-runtime-alert-details > p {
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.photo-runtime-alert-details dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.photo-runtime-alert-details dl > div {
+  display: grid;
+  grid-template-columns: minmax(84px, .4fr) minmax(0, 1fr);
+  gap: 8px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.photo-runtime-alert-details dt,
+.photo-runtime-alert-details dd {
+  margin: 0;
+  font-size: 10px;
+}
+
+.photo-runtime-alert-details dt {
+  color: var(--muted-2);
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.photo-runtime-alert-details dd {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.photo-runtime-alert-details code {
+  color: inherit;
+  font-size: 9px;
+}
+
+.photo-filter-menu {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 6px);
+  right: 8px;
+  display: grid;
+  width: min(720px, calc(100% - 16px), calc(100vw - 24px));
+  max-height: min(680px, calc(100dvh - 170px));
+  gap: 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--dialog-bg, var(--modal-bg));
+  box-shadow: 0 18px 44px rgb(0 0 0 / 32%);
+}
+
+.photo-filter-actions {
+  position: sticky;
+  bottom: -11px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin: 0 -11px -11px;
+  padding: 9px 11px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--dialog-bg, var(--modal-bg));
+}
+
+.photo-filter-actions button {
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 0;
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.photo-map-view {
+  display: grid;
+  grid-template-rows: auto minmax(300px, 1fr) auto;
+  min-height: 100%;
+}
+
+.photo-map-toolbar {
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-family: var(--code-font-family);
+  font-size: 10px;
+}
+
+.photo-map-toolbar > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-map-canvas {
+  position: relative;
+  min-height: 300px;
+  overflow: hidden;
+  background: var(--input-deep-bg);
+}
+
+.photo-maplibre,
+.photo-coordinate-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.photo-coordinate-canvas {
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  background: var(--channel-bg);
+}
+
+.photo-coordinate-grid::before,
+.photo-coordinate-grid::after {
+  position: absolute;
+  content: "";
+  background: var(--line-soft);
+}
+
+.photo-coordinate-grid::before {
+  inset: 50% 0 auto;
+  height: 1px;
+}
+
+.photo-coordinate-grid::after {
+  inset: 0 auto 0 50%;
+  width: 1px;
+}
+
+.photo-map-loading {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform: translate(-50%, -50%);
+  color: var(--muted-2);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.photo-map-loading {
+  z-index: 4;
+  padding: 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.photo-map-download-state {
+  position: absolute;
+  z-index: 3;
+  inset: 50% auto auto 50%;
+  display: grid;
+  width: min(300px, calc(100% - 32px));
+  min-height: 154px;
+  box-sizing: border-box;
+  align-content: center;
+  justify-items: center;
+  gap: 9px;
+  padding: 18px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface);
+  text-align: center;
+}
+
+.photo-map-download-state strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.photo-map-download-state small,
+.photo-map-download-state p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted-2);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.photo-map-download-state p {
+  max-height: 44px;
+  overflow: auto;
+}
+
+.photo-map-download-state.is-error > svg {
+  color: var(--danger-text);
+}
+
+.photo-map-download-state button {
+  display: inline-flex;
+  min-width: 176px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  color: white;
+  background: var(--accent);
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}

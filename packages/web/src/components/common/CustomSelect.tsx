@@ -1,5 +1,6 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { createPortal } from "react-dom";
 import { usePopoverBack } from "./ModalPortal.js";
 import { isBackKey } from "../../lib/remote-keys.js";
 
@@ -19,6 +20,9 @@ interface CustomSelectProps<T extends string = string> {
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  required?: boolean;
+  triggerRef?: Ref<HTMLButtonElement>;
+  ariaBusy?: boolean;
 }
 
 function firstEnabledIndex<T extends string>(options: CustomSelectOption<T>[]) {
@@ -65,7 +69,10 @@ export function CustomSelect<T extends string = string>({
   ariaLabel,
   disabled = false,
   placeholder = "",
-  className
+  className,
+  required = false,
+  triggerRef: externalTriggerRef,
+  ariaBusy
 }: CustomSelectProps<T>) {
   const generatedId = useId();
   const triggerId = id ?? generatedId;
@@ -74,8 +81,10 @@ export function CustomSelect<T extends string = string>({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [validationError, setValidationError] = useState("");
+  const errorId = `${triggerId}-error`;
   usePopoverBack(open, () => { setOpen(false); triggerRef.current?.focus(); }, 7);
-  const [menuLayout, setMenuLayout] = useState({ above: false, maxHeight: 240 });
+  const [menuLayout, setMenuLayout] = useState({ above: false, maxHeight: 240, left: 0, width: 0, edge: 0 });
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
   const selectedValueSet = selectedValues ? new Set(selectedValues) : new Set([value]);
@@ -87,6 +96,7 @@ export function CustomSelect<T extends string = string>({
     "custom-select",
     open ? "is-open" : "",
     disabled ? "is-disabled" : "",
+    validationError ? "is-invalid" : "",
     className ?? ""
   ]
     .filter(Boolean)
@@ -96,6 +106,8 @@ export function CustomSelect<T extends string = string>({
     setActiveIndex(fallbackActiveIndex);
   }, [fallbackActiveIndex]);
 
+  useEffect(() => { setValidationError(""); }, [value]);
+
   useLayoutEffect(() => {
     if (!open) return;
 
@@ -104,21 +116,17 @@ export function CustomSelect<T extends string = string>({
       const menu = menuRef.current;
       if (!trigger || !menu) return;
       const rect = trigger.getBoundingClientRect();
-      let top = 0;
-      let bottom = window.innerHeight;
-      for (let parent = containerRef.current?.parentElement; parent; parent = parent.parentElement) {
-        if (!/^(auto|scroll|hidden|clip)$/.test(getComputedStyle(parent).overflowY)) continue;
-        const bounds = parent.getBoundingClientRect();
-        top = Math.max(top, bounds.top + parent.clientTop);
-        bottom = Math.min(bottom, bounds.top + parent.clientTop + parent.clientHeight);
-      }
-      const below = Math.max(0, bottom - rect.bottom - 6);
-      const above = Math.max(0, rect.top - top - 6);
+      const below = Math.max(0, window.innerHeight - rect.bottom - 18);
+      const above = Math.max(0, rect.top - 18);
       const required = Math.min(240, menu.scrollHeight + menu.offsetHeight - menu.clientHeight);
       const placeAbove = below < required && above > below;
       const maxHeight = Math.min(240, placeAbove ? above : below);
+      const width = Math.min(rect.width, window.innerWidth - 24);
+      const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+      const edge = placeAbove ? window.innerHeight - rect.top + 6 : rect.bottom + 6;
       setMenuLayout((current) => current.above === placeAbove && current.maxHeight === maxHeight
-        ? current : { above: placeAbove, maxHeight });
+        && current.left === left && current.width === width && current.edge === edge
+        ? current : { above: placeAbove, maxHeight, left, width, edge });
     }
 
     function handleScroll(event: Event) {
@@ -153,7 +161,7 @@ export function CustomSelect<T extends string = string>({
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
-      if (target instanceof Node && !containerRef.current?.contains(target)) {
+      if (target instanceof Node && !containerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setOpen(false);
       }
     }
@@ -163,6 +171,7 @@ export function CustomSelect<T extends string = string>({
   }, [open]);
 
   function selectIndex(index: number) {
+    if (triggerRef.current?.matches(":disabled")) return;
     const option = options[index];
     if (!option || option.disabled) {
       return;
@@ -240,7 +249,11 @@ export function CustomSelect<T extends string = string>({
     >
       <button
         id={triggerId}
-        ref={triggerRef}
+        ref={(element) => {
+          triggerRef.current = element;
+          if (typeof externalTriggerRef === "function") externalTriggerRef(element);
+          else if (externalTriggerRef) externalTriggerRef.current = element;
+        }}
         type="button"
         className="custom-select-trigger"
         aria-label={ariaLabel}
@@ -248,6 +261,9 @@ export function CustomSelect<T extends string = string>({
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         aria-activedescendant={activeOptionId}
+        aria-busy={ariaBusy || undefined}
+        aria-invalid={validationError ? true : undefined}
+        aria-describedby={validationError ? errorId : undefined}
         disabled={disabled || options.length === 0}
         onClick={() => {
           setActiveIndex(fallbackActiveIndex);
@@ -258,17 +274,41 @@ export function CustomSelect<T extends string = string>({
         <span className="custom-select-value">{selectedOption?.label ?? placeholder}</span>
         <ChevronDown aria-hidden="true" size={16} />
       </button>
+      {required ? <input
+        className="custom-select-validation"
+        type="text"
+        tabIndex={-1}
+        aria-hidden="true"
+        value={selectedOption?.value ?? ""}
+        required
+        disabled={disabled}
+        onChange={() => undefined}
+        onInvalid={(event) => {
+          event.preventDefault();
+          setValidationError(event.currentTarget.validationMessage);
+          triggerRef.current?.focus();
+        }}
+      /> : null}
+      {validationError ? <span id={errorId} className="field-error" role="alert">{validationError}</span> : null}
 
-      {open ? (
+      {open ? createPortal(
         <div
           ref={menuRef}
           id={listboxId}
           className="custom-select-menu"
           role="listbox"
           aria-labelledby={triggerId}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           style={{
-            top: menuLayout.above ? "auto" : undefined,
-            bottom: menuLayout.above ? "calc(100% + 6px)" : undefined,
+            position: "fixed",
+            left: menuLayout.left,
+            right: "auto",
+            width: menuLayout.width,
+            top: menuLayout.above ? "auto" : menuLayout.edge,
+            bottom: menuLayout.above ? menuLayout.edge : "auto",
             maxHeight: menuLayout.maxHeight
           }}
         >
@@ -309,7 +349,11 @@ export function CustomSelect<T extends string = string>({
               </div>
             );
           })}
-        </div>
+        </div>,
+        containerRef.current?.closest("[data-modal-layer]")
+          ?? document.fullscreenElement
+          ?? document.querySelector(".app-shell, .tv-library-shell")
+          ?? document.body
       ) : null}
     </div>
   );

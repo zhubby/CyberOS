@@ -1,0 +1,54 @@
+@media (max-width: 620px) {
+
+  .create-form-dialog {
+    max-height: calc(100dvh - 20px);
+  }
+
+  .create-form-dialog-header,
+  .create-form-dialog-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .create-form-field-grid,
+  .create-form-segmented,
+  .create-form-toggle-grid,
+  .create-form-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .create-form-stepper {
+    gap: 3px;
+  }
+
+  .create-form-stepper button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 6px 3px;
+    text-align: center;
+  }
+
+  .create-form-stepper strong {
+    max-width: 100%;
+    font-size: 10px;
+  }
+
+  .create-form-dialog-footer {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 11px 14px;
+  }
+
+  .create-form-dialog-footer > span {
+    white-space: normal;
+  }
+
+  .create-form-dialog-footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+  }
+
+  .create-form-file-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

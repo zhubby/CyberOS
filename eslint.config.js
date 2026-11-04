@@ -6,8 +6,8 @@ const modalPortalRestriction = {
   message: "Modal backdrops must use ModalPortal so dialogs center in the full viewport. See docs/src/content/docs/reference/frontend-design.md."
 };
 const filterDropdownRestriction = {
-  selector: "JSXElement:has(> JSXOpeningElement[name.name='SearchFilterPopover']) JSXOpeningElement[name.name='select']",
-  message: "Search filter dropdowns must use CustomSelect. See docs/src/content/docs/reference/frontend-design.md."
+  selector: "JSXOpeningElement[name.name='select'], JSXSelfClosingElement[name.name='select']",
+  message: "Dropdowns must use the shared CustomSelect, including forms, filters and nested dialogs. See docs/src/content/docs/reference/frontend-design.md."
 };
 const nativeTooltipRestriction = {
   selector: "JSXOpeningElement[name.name=/^[a-z]/][name.name!=iframe] > JSXAttribute[name.name=title]",
@@ -43,46 +43,6 @@ export default tseslint.config(
     files: ["packages/web/src/**/*.tsx"],
     rules: {
       "no-restricted-syntax": ["error", modalPortalRestriction, filterDropdownRestriction, nativeTooltipRestriction]
-    }
-  },
-  {
-    files: [
-      "packages/web/src/components/playback/PlaybackBar.tsx",
-      "packages/web/src/components/playback/PlaybackControls.tsx",
-      "packages/web/src/components/playback/PlaybackMenu.tsx",
-      "packages/web/src/components/playback/OutputDeviceSelect.tsx",
-      "packages/web/src/components/playback/PlaybackTargetSelect.tsx"
-    ],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        modalPortalRestriction,
-        filterDropdownRestriction,
-        nativeTooltipRestriction,
-        {
-          selector: "JSXOpeningElement[name.name='select']",
-          message: "Playback output dropdowns must use CustomSelect, including device, audio and subtitle selectors. See docs/src/content/docs/reference/frontend-design.md."
-        }
-      ]
-    }
-  },
-  {
-    files: [
-      "packages/web/src/components/settings/**/*.tsx",
-      "packages/web/src/components/workspace/SystemEthernetManagement.tsx",
-      "packages/web/src/components/workspace/SystemWifiManagement.tsx"
-    ],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        modalPortalRestriction,
-        filterDropdownRestriction,
-        nativeTooltipRestriction,
-        {
-          selector: "JSXOpeningElement[name.name='select']",
-          message: "Settings dropdowns must use CustomSelect, including nested dialogs and shared settings controls. See docs/src/content/docs/reference/frontend-design.md."
-        }
-      ]
     }
   }
 );

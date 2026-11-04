@@ -1,0 +1,351 @@
+.file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--file-actions-width) 90px 132px;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--table-border);
+  color: var(--muted);
+  background: transparent;
+  text-align: left;
+  user-select: none;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+  -webkit-user-select: none;
+}
+
+.file-row:not(.file-row-head) {
+  cursor: pointer;
+}
+
+.file-row:not(.file-row-head):hover,
+.file-row:not(.file-row-head):focus-visible,
+.file-row.is-previewed {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.file-row.is-batch-selected {
+  color: var(--text);
+  background: var(--accent-soft-bg);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.file-row.is-batch-selected .file-name svg {
+  color: var(--accent-soft-text);
+}
+
+.file-row[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.file-row.is-hidden {
+  color: var(--muted-2);
+}
+
+.file-row.is-hidden:hover,
+.file-row.is-hidden:focus-visible,
+.file-row.is-hidden.is-previewed,
+.file-row.is-hidden.is-batch-selected {
+  color: var(--muted);
+}
+
+.file-row.is-hidden .file-name svg,
+.file-row.is-hidden .file-type-label,
+.file-row.is-hidden .git-file-status {
+  color: currentColor;
+}
+
+.file-row.is-hidden .git-file-status {
+  border-color: var(--line-soft);
+  background: var(--subtle-bg-inverse);
+}
+
+.file-row-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 36px;
+  color: var(--muted-2);
+  background: var(--row-head-bg);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.file-row-head > span {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.file-actions-column {
+  padding-left: 8px;
+}
+
+.file-row > .file-column-sort {
+  overflow: visible;
+}
+
+.file-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 32px;
+  margin-left: -7px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1;
+  text-transform: inherit;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.file-sort-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-sort-button svg {
+  flex: 0 0 auto;
+}
+
+.file-column-sort[aria-sort="ascending"] .file-sort-button,
+.file-column-sort[aria-sort="descending"] .file-sort-button {
+  color: var(--text);
+}
+
+.file-sort-button:hover,
+.file-sort-button:focus-visible {
+  color: var(--text);
+  border-color: var(--line-soft);
+  background: var(--surface-hover);
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.file-name svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.file-type-icon {
+  flex: 0 0 auto;
+}
+
+.file-type-label {
+  font-size: 12px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.file-name .file-type-directory,
+.file-name .file-type-symlink,
+.file-type-label.file-type-directory,
+.file-type-label.file-type-symlink {
+  color: #8ea1ff;
+}
+
+.file-name .file-type-code,
+.file-name .file-type-shell,
+.file-type-label.file-type-code,
+.file-type-label.file-type-shell {
+  color: #6ed3f5;
+}
+
+.file-name .file-type-config,
+.file-name .file-type-package,
+.file-type-label.file-type-config,
+.file-type-label.file-type-package {
+  color: #f2c16b;
+}
+
+.file-name .file-type-json,
+.file-name .file-type-markdown,
+.file-name .file-type-text,
+.file-name .file-type-document,
+.file-name .file-type-pdf,
+.file-type-label.file-type-json,
+.file-type-label.file-type-markdown,
+.file-type-label.file-type-text,
+.file-type-label.file-type-document,
+.file-type-label.file-type-pdf {
+  color: #dbdee1;
+}
+
+.file-name .file-type-image,
+.file-type-label.file-type-image {
+  color: #8ddc9a;
+}
+
+.file-name .file-type-audio,
+.file-name .file-type-video,
+.file-type-label.file-type-audio,
+.file-type-label.file-type-video {
+  color: #cfa8ff;
+}
+
+.file-name .file-type-spreadsheet,
+.file-name .file-type-database,
+.file-type-label.file-type-spreadsheet,
+.file-type-label.file-type-database {
+  color: #78d8c8;
+}
+
+.file-name .file-type-archive,
+.file-name .file-type-font,
+.file-type-label.file-type-archive,
+.file-type-label.file-type-font {
+  color: #b5bac1;
+}
+
+.file-name .file-type-secure,
+.file-name .file-type-blocked,
+.file-type-label.file-type-secure,
+.file-type-label.file-type-blocked {
+  color: #ffb3b6;
+}
+
+.file-name .file-type-other,
+.file-type-label.file-type-other {
+  color: var(--muted-2);
+}
+
+.file-name span,
+.file-row > span:not(.file-row-actions) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-name-text {
+  min-width: 0;
+}
+
+.file-row:has(.file-name.is-search-result) {
+  min-height: 62px;
+}
+
+.file-name.is-search-result {
+  align-items: flex-start;
+  padding: 7px 0;
+}
+
+.file-name.is-search-result > svg {
+  margin-top: 2px;
+}
+
+.file-search-copy,
+.file-search-snippet {
+  display: grid;
+  min-width: 0;
+}
+
+.file-search-snippet {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--muted-2);
+  font-size: 10.5px;
+}
+
+.file-search-snippet > span {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.35;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.file-search-snippet mark {
+  border-radius: 2px;
+  padding: 0 1px;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.file-search-snippet small {
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.file-search-snippet small[data-state="error"],
+.file-search-snippet small[data-state="stale"] {
+  color: var(--warning-text);
+}
+
+.workspace-search-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+}
+
+.git-file-status {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--muted-2);
+  background: rgb(255 255 255 / 4%);
+  font-size: 10px;
+  font-family: var(--font-emphasis);
+  font-weight: 900;
+  line-height: 1;
+  overflow: visible;
+}
+
+.git-file-status-tracked {
+  color: var(--muted-2);
+}
+
+.git-file-status-staged {
+  color: #f2c16b;
+  border-color: rgb(242 193 107 / 30%);
+  background: rgb(242 193 107 / 8%);
+}
+
+.git-file-status-modified {
+  color: #ffcf7a;
+  border-color: rgb(255 207 122 / 32%);
+  background: rgb(255 207 122 / 9%);
+}
+
+.git-file-status-untracked {
+  color: #8ddc9a;
+  border-color: rgb(141 220 154 / 30%);
+  background: rgb(141 220 154 / 8%);
+}
+
+.git-file-status-conflicted {
+  color: #ffb3b6;
+  border-color: rgb(255 179 182 / 34%);
+  background: rgb(255 179 182 / 9%);
+}

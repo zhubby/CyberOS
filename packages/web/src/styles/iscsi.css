@@ -188,24 +188,21 @@
 }
 
 .iscsi-field input,
-.iscsi-field select,
 .iscsi-field textarea {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  min-height: 36px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  color: var(--text);
-  background: var(--input-bg);
-  font-size: 13px;
+}
+
+.iscsi-field .custom-select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .iscsi-field textarea {
   resize: vertical;
   font-family: var(--font-mono);
-  font-size: 12px;
 }
 
 .iscsi-field small {
@@ -233,7 +230,6 @@
 }
 
 .iscsi-error {
-  color: var(--danger-text);
   border-left: 2px solid var(--danger-text);
 }
 

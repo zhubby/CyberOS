@@ -1,0 +1,61 @@
+.docker-container-status-indicator {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  outline: none;
+}
+
+.docker-container-status-indicator .management-row-status-icon {
+  border: 1px solid currentColor;
+  border-radius: 0;
+}
+
+.docker-container-status-indicator:focus-visible .management-row-status-icon {
+  box-shadow:
+    0 0 0 2px var(--cyberos-color-canvas),
+    0 0 0 4px var(--focus-ring-soft);
+}
+
+.docker-container-status-tooltip {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 8px);
+  z-index: 4;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 48px));
+  padding: 6px 9px;
+  border: 1px solid currentColor;
+  color: var(--neutral-status-text);
+  background: var(--cyberos-color-canvas);
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 45%);
+  font-family: var(--code-font-family);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  opacity: 0;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transform: translateY(-50%);
+  visibility: hidden;
+  white-space: normal;
+}
+
+.docker-container-status-indicator[data-state="ready"] .docker-container-status-tooltip {
+  color: var(--success-text);
+}
+
+.docker-container-status-indicator[data-state="warning"] .docker-container-status-tooltip {
+  color: var(--warning-text);
+}
+
+.docker-container-status-indicator[data-state="offline"] .docker-container-status-tooltip {
+  color: var(--danger-text);
+}
+
+.docker-container-status-indicator:hover .docker-container-status-tooltip,
+.docker-container-status-indicator:focus-visible .docker-container-status-tooltip {
+  opacity: 1;
+  visibility: visible;
+}

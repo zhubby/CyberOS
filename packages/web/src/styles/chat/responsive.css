@@ -1,0 +1,34 @@
+@media (max-width: 560px) {
+
+  .chat-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 36px;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .approval-card {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .approval-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+    min-width: 0;
+  }
+
+  .approval-card-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}@media (max-width: 360px) {
+  .composer-actions .primary-button,
+  .composer-actions .secondary-button {
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+  }
+
+  .composer-actions button span {
+    display: none;
+  }
+}

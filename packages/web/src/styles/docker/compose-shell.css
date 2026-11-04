@@ -1,0 +1,30 @@
+.management-modal-backdrop.docker-compose-app-backdrop {
+  z-index: 90;
+}
+
+.docker-compose-app-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(900px, 100%);
+  max-height: min(860px, calc(100dvh - 32px));
+  border-top: 3px solid var(--accent);
+}
+
+.docker-compose-host-access {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.docker-compose-host-access > label {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.docker-compose-host-access > label .custom-select {
+  min-width: 0;
+}

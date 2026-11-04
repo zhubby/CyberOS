@@ -24,6 +24,7 @@
     "docs:browser": "npm --prefix docs run browser",
     "test:tv-browser": "node --test --test-concurrency=1 scripts/test-tv-navigation.mjs scripts/test-tv-interactions.mjs",
     "test:chat-browser": "node --test scripts/test-chat-session-switch.mjs",
+    "test:styles-browser": "node --test scripts/test-web-styles.mjs",
     "build": "npm run build:metadata && npm run build:rust && npm run build --workspaces --if-present && npm run docs:build",
     "build:rust": "cargo build --locked --release --workspace",
     "build:metadata": "node scripts/generate-build-info.mjs",

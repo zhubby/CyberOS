@@ -1,0 +1,101 @@
+.notification-drawer {
+  border-left-color: var(--cyber-red);
+}
+
+.notification-item[data-unread="true"] {
+  background: var(--cyberos-hud-red-wash);
+  box-shadow: inset 4px 0 0 var(--cyber-red);
+}
+
+.notification-unread-dot,
+.activity-unread-dot {
+  border-color: var(--cyber-ink);
+  background: var(--cyber-red);
+  box-shadow: 0 0 8px rgb(255 0 60 / 48%);
+}
+
+.activity-popover::before {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.activity-popover li,
+.activity-upload-item {
+  border-color: var(--line) !important;
+  color: var(--muted);
+  background: var(--subtle-bg) !important;
+}
+
+.app-notification {
+  border-color: var(--danger-border);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 5px 5px 0 rgb(255 0 60 / 38%), inset 4px 0 0 var(--red);
+}
+
+.editor-modal,
+.editor-header,
+.editor-footer {
+  background-color: var(--surface);
+}
+
+.editor-code-surface {
+  box-shadow: inset 4px 0 0 rgb(0 240 255 / 18%);
+}
+
+.editor-code-surface:focus-within {
+  box-shadow: inset 4px 0 0 var(--cyber-cyan);
+}
+
+.editor-textarea::selection {
+  background: var(--selection-bg);
+}
+
+.app-shell :where(
+  .settings-modal,
+  .editor-modal,
+  .management-dialog,
+  .management-modal,
+  .preview-dialog,
+  .file-preview-dialog,
+  .activity-popover,
+  .management-dashboard-widget,
+  .management-section,
+  .management-metric,
+  .management-command-panel,
+  .download-task,
+  .settings-section-card,
+  .settings-policy-row,
+  .monitoring-alert-table-wrap,
+  .monitoring-incident-list article,
+  .monitoring-incident-detail-section,
+  .settings-alerts-section,
+  .photo-query-panel,
+  .photo-search-field,
+  .photo-view-switch,
+  .photo-condition-mode,
+  .photo-lightbox-meta,
+  .photo-metadata-inspector,
+  .photo-lightbox,
+  .photo-lightbox-media,
+  .preview-sidebar,
+  .preview-surface,
+  .editor-code-surface,
+  .terminal-surface,
+  .local-terminal-frame,
+  .workspace-terminal-frame,
+  .notification-status-icon,
+  .activity-upload-icon,
+  .app-notification
+) {
+  border-radius: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after {
+    scroll-behavior: auto !important;
+  }
+}

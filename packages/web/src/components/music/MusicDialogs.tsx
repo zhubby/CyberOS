@@ -35,7 +35,7 @@ export function MusicDialog({
             type="button"
             onClick={onClose}
             aria-label={t("common.actions.close")}
-            data-tooltip={t("common.actions.close")}
+            data-tooltip={t("common.actions.close")} className="plain-button"
           >
             <X size={18} aria-hidden="true" />
           </button>
@@ -94,7 +94,7 @@ export function MusicNameDialog({
           </p>
         ) : null}
         <footer>
-          <button type="button" onClick={onClose} disabled={busy}>
+          <button type="button" onClick={onClose} disabled={busy} className="secondary-button">
             {t("common.actions.cancel")}
           </button>
           <button

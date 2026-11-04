@@ -1,0 +1,71 @@
+.status-badge,
+.management-status-pill,
+.management-row-status,
+.management-workload em {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  color: var(--neutral-status-text);
+  background: rgb(244 236 231 / 4%);
+  font-size: 11px;
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status-badge[data-state="ready"],
+.management-status-pill[data-state="ready"],
+.management-row-status[data-state="ready"],
+.management-workload em[data-state="ready"] {
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.status-badge[data-state="warning"],
+.management-status-pill[data-state="warning"],
+.management-row-status[data-state="warning"],
+.management-workload em[data-state="warning"] {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.status-badge[data-state="offline"],
+.status-badge[data-state="error"],
+.management-status-pill[data-state="offline"],
+.management-status-pill[data-state="error"],
+.management-row-status[data-state="offline"],
+.management-row-status[data-state="error"],
+.management-workload em[data-state="offline"] {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.management-row-status-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  color: var(--neutral-status-text);
+  background: var(--neutral-status-bg);
+}
+
+.management-row-status-icon[data-state="ready"] {
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.management-row-status-icon[data-state="warning"] {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.management-row-status-icon[data-state="offline"] {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}

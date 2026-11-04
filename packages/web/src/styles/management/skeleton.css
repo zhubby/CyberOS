@@ -1,0 +1,362 @@
+.management-dashboard-grid.is-loading .management-widget-skeleton,
+.management-dashboard-static.is-loading .management-widget-skeleton,
+.file-list-skeleton,
+.workspace-terminal-skeleton {
+  animation: management-skeleton-enter 280ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.management-dashboard-grid.is-loading > .react-grid-item:nth-child(2) .management-widget-skeleton,
+.management-dashboard-static.is-loading > .management-dashboard-widget:nth-child(2) .management-widget-skeleton {
+  animation-delay: 45ms;
+}
+
+.management-dashboard-grid.is-loading > .react-grid-item:nth-child(3) .management-widget-skeleton,
+.management-dashboard-static.is-loading > .management-dashboard-widget:nth-child(3) .management-widget-skeleton {
+  animation-delay: 90ms;
+}
+
+.management-dashboard-grid.is-loading > .react-grid-item:nth-child(n + 4) .management-widget-skeleton,
+.management-dashboard-static.is-loading > .management-dashboard-widget:nth-child(n + 4) .management-widget-skeleton {
+  animation-delay: 135ms;
+}
+
+.management-widget-skeleton {
+  pointer-events: none;
+}
+
+.management-skeleton-pressure-stat {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.management-skeleton-pressure-stat .management-skeleton-block:nth-child(2) {
+  height: 22px;
+  margin-top: 2px;
+}
+
+.management-skeleton-pressure-stat .management-skeleton-block:nth-child(3) {
+  height: 9px;
+}
+
+.management-skeleton-pressure-chart {
+  width: 100%;
+  height: 190px;
+  border-radius: 4px;
+}
+
+.management-skeleton-chart-body {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.management-skeleton-inventory-list {
+  gap: 1px;
+}
+
+.management-skeleton-command {
+  min-height: 176px;
+}
+
+.management-skeleton-emblem {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+}
+
+.management-skeleton-command .management-command-copy {
+  gap: 18px;
+}
+
+.management-skeleton-block {
+  display: inline-block;
+  width: var(--skeleton-width, 100%);
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(100deg, var(--surface) 18%, var(--surface-strong) 43%, var(--surface) 68%);
+  background-size: 240% 100%;
+  animation: management-skeleton-shimmer 1.65s linear infinite, management-skeleton-breathe 2.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+.management-skeleton-block:nth-child(2n) {
+  animation-delay: -.32s, -.7s;
+}
+
+.management-skeleton-block:nth-child(3n) {
+  animation-delay: -.68s, -1.4s;
+}
+
+.management-skeleton-status {
+  height: 20px;
+  border-radius: 999px;
+}
+
+.management-skeleton-title {
+  height: 18px;
+  margin-top: 9px;
+}
+
+.management-skeleton-copy-line {
+  margin-top: 9px;
+}
+
+.management-skeleton-facts {
+  margin-top: 5px;
+}
+
+.management-skeleton-facts > div {
+  display: grid;
+  gap: 7px;
+}
+
+.management-skeleton-facts .management-skeleton-block:first-child {
+  height: 8px;
+}
+
+.management-skeleton-facts .management-skeleton-block:last-child {
+  height: 11px;
+}
+
+.management-skeleton-metric {
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.management-skeleton-icon {
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+}
+
+.management-skeleton-metric-value {
+  height: 22px;
+  margin-top: 7px;
+}
+
+.management-skeleton-section-header {
+  display: block;
+}
+
+.management-skeleton-section-header > div {
+  display: grid;
+  gap: 7px;
+  width: min(420px, 100%);
+}
+
+.management-skeleton-section-title {
+  height: 14px;
+}
+
+.management-skeleton-table {
+  display: grid;
+  min-width: 760px;
+}
+
+.management-skeleton-table-row {
+  display: grid;
+  grid-template-columns: repeat(var(--skeleton-columns), minmax(0, 1fr));
+  align-items: center;
+  gap: 18px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--table-border);
+}
+
+.management-skeleton-table-row .management-skeleton-block {
+  height: 10px;
+}
+
+.management-skeleton-table-row,
+.management-skeleton-workload,
+.management-skeleton-inventory-list .docker-inventory-row,
+.file-row-skeleton,
+.management-skeleton-storage-plot {
+  animation: management-skeleton-row-enter 320ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.management-skeleton-table-row:nth-child(2),
+.management-skeleton-workload:nth-child(2),
+.management-skeleton-inventory-list .docker-inventory-row:nth-child(2),
+.file-row-skeleton:nth-child(2),
+.management-skeleton-storage-plot:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.management-skeleton-table-row:nth-child(3),
+.management-skeleton-workload:nth-child(3),
+.management-skeleton-inventory-list .docker-inventory-row:nth-child(3),
+.file-row-skeleton:nth-child(3),
+.management-skeleton-storage-plot:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.management-skeleton-table-row:nth-child(4),
+.management-skeleton-workload:nth-child(4),
+.file-row-skeleton:nth-child(4) {
+  animation-delay: 135ms;
+}
+
+.file-row-skeleton:nth-child(5) {
+  animation-delay: 180ms;
+}
+
+.file-row-skeleton:nth-child(6) {
+  animation-delay: 225ms;
+}
+
+.file-row-skeleton:nth-child(n + 7) {
+  animation-delay: 270ms;
+}
+
+.management-skeleton-list {
+  display: grid;
+  gap: 1px;
+}
+
+.management-skeleton-workload {
+  grid-template-columns: 17px minmax(0, 1fr) auto auto;
+}
+
+.management-skeleton-workload > div {
+  display: grid;
+  gap: 7px;
+}
+
+.management-skeleton-workload > div .management-skeleton-block:first-child {
+  height: 11px;
+}
+
+.management-skeleton-workload > div .management-skeleton-block:last-child {
+  height: 9px;
+}
+
+.management-skeleton-resources {
+  display: grid;
+  gap: 16px;
+  padding: 14px;
+}
+
+.management-skeleton-resource {
+  display: grid;
+  gap: 8px;
+}
+
+.management-skeleton-gauge {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.management-skeleton-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.management-skeleton-form-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.management-skeleton-form-field > .management-skeleton-block:first-child {
+  height: 8px;
+}
+
+.management-skeleton-input {
+  height: 34px;
+  border-radius: 5px;
+}
+
+.file-list-skeleton {
+  min-width: 0;
+}
+
+.file-row-skeleton {
+  pointer-events: none;
+}
+
+.file-row-skeleton .file-name {
+  gap: 9px;
+}
+
+.file-skeleton-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.file-skeleton-action {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.file-row-skeleton .file-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+@keyframes management-skeleton-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes management-skeleton-row-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes management-skeleton-cursor {
+  0%, 45% { opacity: .9; }
+  46%, 100% { opacity: .18; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .management-skeleton-block,
+  .management-widget-skeleton,
+  .file-list-skeleton,
+  .workspace-terminal-skeleton,
+  .workspace-terminal-tabs-skeleton,
+  .downloads-toolbar-skeleton,
+  .downloads-list-skeleton,
+  .download-task-row-skeleton,
+  .management-skeleton-table-row,
+  .management-skeleton-workload,
+  .management-skeleton-inventory-list .docker-inventory-row,
+  .file-row-skeleton,
+  .management-skeleton-storage-plot {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .workspace-terminal-skeleton::after {
+    animation: none;
+    opacity: .7;
+  }
+}
+
+/* Docker creation keeps the VM wizard's surface hierarchy while giving its
+   repeated resource rows enough room to remain readable. */

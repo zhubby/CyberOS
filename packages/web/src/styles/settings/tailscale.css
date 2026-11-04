@@ -1,0 +1,34 @@
+.tailscale-config,
+.tailscale-login,
+.tailscale-switches {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.tailscale-config { grid-column: 1 / -1; }
+.tailscale-settings { overflow-wrap: anywhere; }
+.tailscale-facts { display: grid; gap: 12px; margin: 0; min-width: 0; }
+.tailscale-facts > div { display: grid; gap: 4px; min-width: 0; }
+.tailscale-facts dt { color: var(--muted); font-size: 12px; }
+.tailscale-facts dd { margin: 0; font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tailscale-peers,
+.tailscale-health { list-style: none; padding: 0; margin: 0; }
+.tailscale-peers { max-height: 440px; overflow: auto; }
+.tailscale-peers > li { padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+.tailscale-peer-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.tailscale-peer-heading > strong { min-width: 0; overflow-wrap: anywhere; }
+.tailscale-peer-heading > span { color: var(--muted); font-size: 12px; }
+.tailscale-peer-heading > .is-online { color: var(--accent); }
+.tailscale-peers code { font-size: 12px; overflow-wrap: anywhere; }
+.tailscale-health > li { display: flex; gap: 8px; padding: 6px 0; color: var(--muted); font-size: 12px; }
+.tailscale-health svg { flex-shrink: 0; }
+.tailscale-auth-link { display: grid; gap: 8px; }
+.tailscale-auth-link a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+.tailscale-transaction { border-left: 3px solid var(--accent); }
+.tailscale-settings .settings-card-actions { flex-wrap: wrap; }
+.tailscale-settings .settings-card-actions > button { min-height: 44px; white-space: normal; }
+.tailscale-settings textarea { width: 100%; min-width: 0; padding: 10px; resize: vertical; border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); font-family: var(--font-mono); }
+.tailscale-confirm { width: min(480px, 100%); max-height: calc(100dvh - 36px); overflow: auto; overflow-wrap: anywhere; }
+.tailscale-confirm .settings-card-actions { flex-wrap: wrap; }
+.tailscale-confirm button { min-height: 44px; }

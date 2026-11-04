@@ -1,0 +1,122 @@
+.share-protocol-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.share-protocol-heading > svg { color: var(--accent); flex-shrink: 0; }
+.share-protocol-section .management-section-header { flex-wrap: wrap; gap: 10px; }
+.share-protocol-hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+.share-protocol-section { container: share-protocol / inline-size; }
+.share-protocol-shares { display: grid; gap: 0; }
+.share-protocol-share-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.share-protocol-share-copy { display: grid; gap: 6px; min-width: 0; }
+.share-protocol-share-name,
+.share-protocol-share-meta { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.share-protocol-share-name > svg { flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+.share-protocol-share-name strong { min-width: 0; color: var(--text); font-size: 15px; line-height: 20px; overflow-wrap: anywhere; }
+.share-protocol-share-meta { color: var(--muted); }
+.share-protocol-share-meta > svg { flex-shrink: 0; margin: 3px 1.5px 0; color: var(--muted-2); }
+.share-protocol-share-meta small,
+.share-protocol-share-meta code { min-width: 0; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.share-protocol-share-actions { display: flex; align-items: center; gap: 12px; }
+.share-protocol-share-toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.share-protocol-share-tools { display: flex; align-items: center; gap: 6px; padding-left: 12px; border-left: 1px solid var(--line); }
+.share-protocol-share-actions .management-icon-action { min-height: 32px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); }
+.share-protocol-share-actions .management-icon-action:hover:not(:disabled) { border-color: var(--cyber-cyan); color: var(--cyber-cyan); background: var(--surface-hover); }
+.share-protocol-share-actions .management-icon-action.is-danger:not(:disabled) { color: var(--danger-ui-text); }
+.share-protocol-share-actions .management-icon-action.is-danger:hover:not(:disabled) { border-color: var(--danger-ui-text); color: var(--danger-ui-text); background: var(--danger-bg-soft); }
+@container share-protocol (max-width: 520px) {
+  .share-protocol-share-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .share-protocol-share-actions { justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+  .share-protocol-share-tools { padding-left: 0; border-left: 0; }
+}
+.share-service-issues, .share-service-problem { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.share-service-problem { display: flex; gap: 6px; }
+.share-service-problem svg { flex-shrink: 0; color: var(--danger-ui-text); }
+.share-overview-facts { margin-bottom: 12px; }
+.share-editor-fields { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.management-modal.share-protocol-modal { width: min(680px, 100%); }
+.share-editor-fields .share-directory-fields,
+.share-editor-fields .share-protocol-fields {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 0;
+}
+.share-editor-fields label:not(.hud-switch, .share-media-checkbox),
+.share-editor-fields .share-media-type-group {
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.share-editor-fields label:not(.hud-switch, .share-media-checkbox) > span,
+.share-editor-fields .share-media-type-group > span {
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+/* The editor is portaled outside .workspace-share-management. */
+.share-editor-fields :where(input:not([type="checkbox"]), textarea, .custom-select-trigger) {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--input-bg);
+  font: inherit;
+  font-size: 13px;
+}
+.share-editor-fields textarea {
+  height: auto;
+  min-height: 80px;
+  padding: 10px;
+  resize: vertical;
+}
+.share-editor-fields .share-editor-options {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.share-editor-options .share-protocol-fields { gap: 8px; }
+.share-editor-options .hud-switch {
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 36px;
+}
+.share-editor-options .hud-switch-copy { margin-right: auto; }
+.share-editor-options .hud-switch-label { font-size: 12px; }
+.share-editor-fields .share-media-type-group > div { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.share-media-checkbox { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.share-delete-copy { overflow-wrap: anywhere; }
+.share-add-form-actions button.is-danger { color: var(--danger-ui-text); border-color: var(--danger-ui-text); }
+@media (max-width: 620px) {
+  .share-editor-fields label:not(.hud-switch, .share-media-checkbox),
+  .share-editor-fields .share-media-type-group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
+.share-protocol-section, .share-services-section { grid-template-rows: none; align-content: start; }
+.share-protocol-section .share-protocol-shares { padding: 0 14px; }
+.share-protocol-section .share-protocol-hint, .share-service-problem { margin: 10px 14px; }
+.share-services-section .share-overview-facts { margin: 0; padding: 0 14px; }
+.share-services-section .share-service-list { padding: 12px 14px; }
+.share-services-section .share-service-row { border-radius: 0; }
+.share-services-section .share-service-row { grid-template-columns: 16px minmax(0, 1fr) auto; }
+.share-services-section .share-service-row .management-row-status { grid-column: auto; justify-self: end; }
+.share-services-section .share-overview-facts { display: flex; flex-wrap: wrap; }
+.share-services-section .share-overview-facts > div { flex: 1 1 120px; }

@@ -1,0 +1,152 @@
+.torrent-file-selector {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--input-deep-bg);
+}
+
+.torrent-file-selector-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.torrent-file-selector-toolbar label,
+.torrent-file-list label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.torrent-file-selector input[type="checkbox"] {
+  width: 14px;
+  min-height: 14px;
+  flex: 0 0 auto;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.torrent-file-list {
+  display: grid;
+  max-height: 210px;
+  overflow: auto;
+}
+
+.torrent-file-list label {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text);
+  font-family: var(--code-font-family);
+  font-size: 10.5px;
+}
+
+.torrent-file-list label:last-child {
+  border-bottom: 0;
+}
+
+.torrent-file-list label:hover {
+  background: var(--surface-hover);
+}
+
+.torrent-file-list label > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.torrent-file-list small {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-family: var(--code-font-family);
+  font-size: 10px;
+}
+
+.download-seeding-policy {
+  grid-column: 1 / -1;
+  padding-left: 10px;
+  border-left: 2px solid var(--teal-text);
+}
+
+.download-form-field small,
+.download-target-field small {
+  color: var(--muted-2);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.download-target-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.download-target-value {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--input-deep-bg);
+}
+
+.download-target-value svg {
+  flex: 0 0 auto;
+  color: var(--accent-soft-text);
+}
+
+.download-target-value span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-target-control button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--subtle-bg);
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.download-target-control button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.download-target-field small {
+  color: var(--muted-2);
+  font-size: 10.5px;
+}
+
+.download-create-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface);
+}

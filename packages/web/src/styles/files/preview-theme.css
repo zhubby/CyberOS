@@ -1,0 +1,88 @@
+/* Preview, editor, and media */
+
+.file-preview-dialog,
+.editor-modal,
+.photo-lightbox {
+  border: 2px solid var(--cyber-yellow);
+  color: var(--cyber-white);
+  background: var(--cyber-ink);
+  box-shadow: 8px 8px 0 var(--cyber-red);
+}
+
+.file-preview-dialog:focus-visible,
+.editor-modal:focus-visible,
+.photo-lightbox:focus-visible {
+  outline: 2px solid var(--cyber-cyan);
+  outline-offset: 3px;
+}
+
+.text-preview-shell,
+.text-preview,
+.markdown-preview,
+.table-preview,
+.table-preview-note,
+.media-preview,
+.pdf-preview,
+.office-preview {
+  color: var(--cyber-white);
+  background: var(--cyber-ink);
+}
+
+.text-preview-toolbar,
+.preview-toolbar,
+.editor-header,
+.editor-footer,
+.photo-lightbox-header {
+  border-color: rgb(252 238 10 / 38%);
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+}
+
+.preview-mode-switch {
+  border: 1px solid rgb(252 238 10 / 42%);
+  background: transparent;
+}
+
+.preview-mode-switch button {
+  color: rgb(252 238 10 / 60%);
+}
+
+.preview-mode-switch button.is-active {
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: inset 0 -3px 0 var(--cyber-red);
+}
+
+.markdown-preview code {
+  color: var(--cyber-yellow);
+  background: #101920;
+}
+
+.markdown-preview :where(th, td),
+.table-preview :where(th, td) {
+  border-color: rgb(252 238 10 / 28%);
+}
+
+.markdown-preview th,
+.table-preview th {
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+}
+
+.editor-code-surface {
+  border: 1px solid rgb(252 238 10 / 30%);
+}
+
+.editor-highlight,
+.editor-textarea {
+  color: var(--cyber-white);
+  caret-color: var(--cyber-cyan);
+}
+
+.editor-textarea::selection {
+  color: var(--cyber-ink);
+}
+
+.editor-status[data-state="error"] {
+  background: var(--cyber-red);
+}

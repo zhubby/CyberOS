@@ -1,0 +1,220 @@
+.docker-daemon-settings-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(720px, 100%);
+  max-height: min(760px, calc(100dvh - 36px));
+  border-top: 3px solid var(--accent);
+}
+
+.docker-daemon-settings-dialog > header {
+  background: var(--channel-bg);
+}
+
+.docker-daemon-settings-dialog > header h2 {
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.docker-daemon-settings-body,
+.docker-daemon-confirmation {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+  background: var(--footer-bg);
+}
+
+.docker-daemon-settings-body {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.docker-daemon-settings-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.42fr);
+  gap: 8px;
+}
+
+.docker-daemon-settings-meta > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--channel-bg);
+}
+
+.docker-daemon-settings-meta span,
+.docker-daemon-editor-field > span {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.docker-daemon-settings-meta code {
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--code-font-family);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docker-daemon-settings-meta strong {
+  justify-self: start;
+  color: var(--neutral-status-text);
+  font-size: 12px;
+}
+
+.docker-daemon-settings-meta strong[data-state="ready"] {
+  color: var(--success-text);
+}
+
+.docker-daemon-settings-meta strong[data-state="warning"] {
+  color: var(--warning-text);
+}
+
+.docker-daemon-settings-meta strong[data-state="offline"] {
+  color: var(--danger-text);
+}
+
+.docker-daemon-pending-note,
+.docker-daemon-error {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--warning-border);
+  border-radius: 5px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.docker-daemon-error {
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.docker-daemon-editor-field {
+  display: grid;
+  gap: 7px;
+  min-height: 0;
+}
+
+.docker-daemon-editor-field textarea {
+  width: 100%;
+  min-height: 330px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--code-bg);
+  font-family: var(--code-font-family);
+  font-size: 12px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.docker-daemon-editor-field textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft-bg);
+}
+
+.docker-daemon-validation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--success-text);
+  font-size: 11px;
+}
+
+.docker-daemon-validation[data-state="warning"] {
+  color: var(--warning-text);
+}
+
+.docker-daemon-validation small {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-family: var(--code-font-family);
+}
+
+.docker-daemon-settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--channel-bg);
+}
+
+.docker-daemon-settings-footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+.docker-daemon-confirmation {
+  display: grid;
+  align-content: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.docker-daemon-confirmation > svg {
+  color: var(--warning-text);
+}
+
+.docker-daemon-confirmation h3,
+.docker-daemon-confirmation p {
+  margin: 0;
+}
+
+.docker-daemon-confirmation h3 {
+  font-size: 17px;
+}
+
+.docker-daemon-confirmation p {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.docker-daemon-confirmation dl,
+.docker-daemon-confirmation .docker-daemon-error {
+  grid-column: 1 / -1;
+}
+
+.docker-daemon-confirmation dl {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.docker-daemon-confirmation dl > div {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--channel-bg);
+}
+
+.docker-daemon-confirmation dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.docker-daemon-confirmation dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--code-font-family);
+  font-size: 11px;
+}

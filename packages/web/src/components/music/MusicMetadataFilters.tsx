@@ -78,7 +78,7 @@ export function MusicMetadataFilters({ sourceId, revision, year, genre, onYearCh
       ) : options === null ? (
         <div className="music-inline-state music-filter-feedback" role="alert">
           <span>{t("music.filterOptionsFailed")}</span>
-          <button type="button" onClick={() => setAttempt((value) => value + 1)}>
+          <button type="button" onClick={() => setAttempt((value) => value + 1)} className="plain-button">
             {t("music.retryFilterOptions")}
           </button>
         </div>
