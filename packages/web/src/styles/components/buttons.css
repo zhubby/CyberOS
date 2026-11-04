@@ -2,7 +2,8 @@
 .primary-button,
 .secondary-button,
 .danger-button,
-.plain-button {
+.plain-button,
+.management-icon-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -20,7 +21,8 @@
   cursor: pointer;
 }
 
-.plain-button {
+.plain-button,
+.management-icon-action {
   gap: 6px;
   min-width: var(--control-compact-height);
   min-height: var(--control-compact-height);
@@ -29,6 +31,15 @@
   background: transparent;
   font: inherit;
   text-transform: none;
+}
+
+.management-icon-action {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 var(--control-compact-height);
+  width: var(--control-compact-height);
+  height: var(--control-compact-height);
+  padding: 0;
 }
 
 .primary-button,
@@ -67,13 +78,19 @@
   box-shadow: none;
 }
 
+.management-icon-action.is-danger:not(:disabled):not([aria-busy="true"]) {
+  color: var(--danger-text);
+  background: transparent;
+}
+
 .primary-button:hover:not(:disabled):not([aria-busy="true"]) {
   color: var(--accent-contrast);
   background: var(--accent-hover);
 }
 
 .secondary-button:hover:not(:disabled):not([aria-busy="true"]),
-.plain-button:hover:not(:disabled):not([aria-busy="true"]) {
+.plain-button:hover:not(:disabled):not([aria-busy="true"]),
+.management-icon-action:hover:not(:disabled):not([aria-busy="true"]) {
   border-color: var(--control-focus);
   color: var(--control-focus);
   background: var(--surface-hover);

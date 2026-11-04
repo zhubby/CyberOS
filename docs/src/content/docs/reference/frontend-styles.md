@@ -48,7 +48,7 @@ sidebar:
 | P1 | Web 黄色菜单与 TV 灰蓝菜单不一致，TV 缺少共享变量。 | 共用 `foundation/tokens.css` 和 `select.css`，筛选容器不覆盖控件尺度，保留 TV 的遥控热区及焦点环；照片、网络工具栏与播放栏显式选择公共紧凑尺寸。 |
 | P2 | 11 个组件的 47 处原生下拉框。 | 迁移到 `CustomSelect`，保留数值转换、条件选项、禁用、必填和焦点引用；ESLint 对全部 Web TSX 禁止原生下拉。 |
 | P2 | 音乐导航选中态与公共页签不一致。 | 复用 `view-tabs` 外观，导航继续使用 `aria-current`。 |
-| P2 | 弹窗重复定义遮罩、表面、滚动与操作区。 | `modal.css` 提供公共规则，沿用 `ModalPortal` 与焦点管理；Docker/VM 创建流程复用同一模态焦点机制。 |
+| P2 | 弹窗重复定义遮罩、表面、滚动与操作区。 | `modal.css` 提供公共规则，沿用 `ModalPortal` 与焦点管理；Docker/VM 创建流程复用同一模态焦点机制。图标操作复用公共透明表面，Docker 配置弹窗不再覆盖圆角和字段焦点。 |
 | P2 | Docker 借用 `vm-create-*`。 | 统一为 `create-form-*`，共享样式独立于 VM 业务模块。 |
 | P2 | 状态、空状态、错误和元数据散落。 | 状态在 `components/status.css`，常见错误和空状态在 `components/feedback.css`；音乐、影视和文件选择器复用元数据外观。 |
 | P2 | 业务、品牌和 HUD 层反复覆盖。 | 首轮纯拆分确认声明顺序等价；随后清除在所有消费入口均被后续同一规则覆盖的 137 条历史声明，统一调整由浏览器回归覆盖。 |
